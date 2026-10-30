@@ -77,8 +77,10 @@ picks up changes to hosts.json within a few seconds. The remote host runs a
 stock Tether (`TETHER_HEADLESS=1` when it has no desktop); its sshd should set
 `ClientAliveInterval 15`.
 
-On a host with SummitFlow, `st service rebuild aico` deploys instead, and
-`st service rebuild aico --worker tether@default` deploys Tether.
+On a host with SummitFlow, `st service rebuild aico` deploys instead. It also
+restarts `tether@default` on the new release when Tether's source (`tether/`
+or its unit) changed since the release Tether runs from;
+`st service rebuild aico --worker tether@default` deploys Tether alone.
 
 Electron's sandbox needs unprivileged user namespaces. When the kernel
 restricts them, the installer offers an AppArmor profile (see the

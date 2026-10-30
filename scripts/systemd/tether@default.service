@@ -1,8 +1,9 @@
-# SummitFlow-managed tether@default, a manual worker of the aico project: only
+# SummitFlow-managed tether@default, a manual worker of the aico project:
 # `st service rebuild aico --worker tether@default` renders this (with
 # __PROJECT_ROOT__ set to the release it built) and restarts the unit, so
 # ExecStartPre installs that release into the stable path before the daemon
-# starts. A plain `st service rebuild aico` never touches it. Otherwise
+# starts. A plain `st service rebuild aico` does the same when tether/ or this
+# file changed since the release the running daemon came from. Otherwise
 # identical to tether/systemd/tether@.service (see its notes: tmux servers are
 # separate units, so a restart never stops a pane).
 [Unit]
