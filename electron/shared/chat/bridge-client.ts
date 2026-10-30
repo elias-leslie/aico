@@ -239,7 +239,9 @@ export function createBridgeClient(
       },
     },
     sessions: {
-      get: (sessionId) => call('session', { sessionId }),
+      // chat-ui's status polls ask for the summary only; a long session's messages run to MBs.
+      get: (sessionId, options) =>
+        call('session', { sessionId, includeMessages: options?.includeMessages !== false }),
       fork: () =>
         Promise.reject(
           hubError({ code: 'unsupported', message: 'Forking is not available here.' }),

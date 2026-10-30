@@ -144,6 +144,11 @@ describe('chat bridge calls', () => {
       value: ['a', 'b'],
     })
     expect(request.mock.calls[1][1]).toBe('/v1/sessions/ab12cd34/chat?messages=false')
+
+    // A status poll asks for the summary only.
+    request.mockResolvedValueOnce({ status: 200, body: { session: { id: 'hub-1' }, queued: [] } })
+    await bridge.call(sender().contents, 'session', { sessionId: 'hub-1', includeMessages: false })
+    expect(request.mock.calls[2][1]).toBe('/v1/sessions/ab12cd34/chat?messages=false')
   })
 
   it('sends a message through the follow-up queue with the session’s current generation', async () => {

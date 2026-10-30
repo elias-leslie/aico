@@ -178,7 +178,8 @@ export class FakeHub {
       if (!session) return json(404, { error: 'not_found', message: 'no such session' })
       if (req.method === 'GET' && !one[2]) {
         const summary = this.summary(session)
-        if (url.searchParams.get('include_events') === 'false') return json(200, summary)
+        // Agent Hub's default is the summary only; messages come when a caller asks for them.
+        if (url.searchParams.get('include_events') !== 'true') return json(200, summary)
         const messages = session.messages.map((content, index) => ({
           id: index + 1,
           role: 'user',

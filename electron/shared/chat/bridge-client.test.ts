@@ -168,7 +168,15 @@ describe('bridge client', () => {
     expect(await client.followUps?.pending('hub-1')).toEqual(['next'])
     expect(await client.turns.cancel('hub-1')).toMatchObject({ cancelled: true })
     expect(await client.sessions.get('hub-1')).toMatchObject({ id: 'hub-1' })
-    expect(calls.map(([method]) => method)).toEqual(['send', 'queue', 'cancel', 'session'])
+    await client.sessions.get('hub-1', { includeMessages: false })
+    expect(calls.map(([method]) => method)).toEqual([
+      'send',
+      'queue',
+      'cancel',
+      'session',
+      'session',
+    ])
+    expect(calls.slice(-2).map(([, args]) => args.includeMessages)).toEqual([true, false])
     expect(calls.every(([, args]) => args.sessionId === 'hub-1')).toBe(true)
     await nextTick()
   })

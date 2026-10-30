@@ -192,7 +192,10 @@ export async function chatCall(
     if (method === 'session' || method === 'queue') {
       const { body } = await tether.request<{ session: unknown; queued: string[] }>(
         'GET',
-        sessionPath(target.descriptor, method === 'queue' ? '?messages=false' : ''),
+        sessionPath(
+          target.descriptor,
+          method === 'queue' || input.includeMessages === false ? '?messages=false' : '',
+        ),
         undefined,
         { timeoutMs: 20_000 },
       )
