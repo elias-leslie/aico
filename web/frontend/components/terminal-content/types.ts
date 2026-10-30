@@ -6,7 +6,6 @@ import type {
 import type { UploadDone } from '@/lib/hooks/use-terminal-action-handlers'
 import type { TerminalFontSize } from '@/lib/hooks/use-terminal-settings'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
-import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
 
 export interface TerminalContentProps {
   // Terminal state
@@ -39,29 +38,18 @@ export interface TerminalContentProps {
   handleFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   handleFileSelect: (file: File, targetSessionId?: string) => void
 
-  // Mobile keyboard
+  // Phone typing, and the desktop compose box
   sessions: Array<{ id: string }>
   activeSessionId?: string | null
-  activeMode?: string
   activeStatus?: ConnectionStatus
   handleKeyboardInput: (input: string) => void
+  /** Phone: text as one bracketed paste into the active session. */
+  handleKeyboardPaste: (text: string) => void
   handleComposeInput: (
     sessionId: string,
     text: string,
     action: 'insert' | 'send',
   ) => Promise<boolean>
-
-  // Voice input
-  showVoice: boolean
-  isVoiceSupported: boolean
-  voiceFinalTranscript: string
-  voiceInterimTranscript: string
-  voiceStatus: TranscriptionStatus
-  voiceError: TranscriptionError
-  handleVoiceOpen: () => void
-  handleVoiceSend: (text: string) => void
-  handleVoiceCancel: () => void
-  handleVoiceToggle: () => void
 
   // Class name
   className?: string

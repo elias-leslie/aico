@@ -15,7 +15,7 @@ import type { TerminalContentProps } from './terminal-content/types'
 export type { TerminalContentProps }
 
 /** Desktop browsers hide the compose box until it is opened, then remember
- * it on this device. Phones always show it. */
+ * it on this device. Phones type straight into the session instead. */
 const COMPOSE_OPEN_KEY = 'a-term-compose-open'
 
 /** Wide enough for the session list beside a readable terminal. Narrower
@@ -63,20 +63,10 @@ function TerminalContentBody({
   handleFileSelect,
   sessions,
   activeSessionId,
-  activeMode,
   activeStatus,
   handleKeyboardInput,
+  handleKeyboardPaste,
   handleComposeInput,
-  showVoice,
-  isVoiceSupported,
-  voiceFinalTranscript,
-  voiceInterimTranscript,
-  voiceStatus,
-  voiceError,
-  handleVoiceOpen,
-  handleVoiceSend,
-  handleVoiceCancel,
-  handleVoiceToggle,
   className,
 }: TerminalContentProps) {
   const [composeOpen, setComposeOpen] = useLocalStorageState(
@@ -166,25 +156,14 @@ function TerminalContentBody({
           onToggleCompose={isMobile ? undefined : toggleCompose}
         />
 
-        {/* Mobile keyboard + voice panel */}
+        {/* Phone typing and key row */}
         {!chatShown && (
           <TerminalMobileSection
             sessions={sessions}
             activeSessionId={activeSessionId}
-            activeStatus={activeStatus}
-            activeMode={activeMode}
             handleKeyboardInput={handleKeyboardInput}
-            handleComposeInput={handleComposeInput}
-            isVoiceSupported={isVoiceSupported}
-            handleVoiceOpen={handleVoiceOpen}
-            showVoice={showVoice}
-            voiceFinalTranscript={voiceFinalTranscript}
-            voiceInterimTranscript={voiceInterimTranscript}
-            voiceStatus={voiceStatus}
-            voiceError={voiceError}
-            handleVoiceSend={handleVoiceSend}
-            handleVoiceCancel={handleVoiceCancel}
-            handleVoiceToggle={handleVoiceToggle}
+            handleKeyboardPaste={handleKeyboardPaste}
+            handleFileSelect={handleFileSelect}
             isMobile={isMobile}
           />
         )}

@@ -1,6 +1,3 @@
-import { useState } from 'react'
-import { getAgentHubVoiceWsUrl } from '@/lib/api-config'
-import { useTranscription } from '@/lib/voice/use-transcription'
 import { useSessionShortcuts } from './use-session-shortcuts'
 import { useTerminalActionHandlers } from './use-terminal-action-handlers'
 import { useTerminalModals } from './use-terminal-modals'
@@ -34,12 +31,6 @@ export function useTerminalOrchestration({
     setShowTerminalManager,
   } = terminalState
 
-  // Phone voice input
-  const [showVoice, setShowVoice] = useState(false)
-  const transcription = useTranscription({
-    whisperWsUrl: getAgentHubVoiceWsUrl(),
-  })
-
   const modalHandlers = useTerminalModals({ setShowTerminalManager })
 
   const slotHandlers = useTerminalSlotHandlers({
@@ -58,15 +49,10 @@ export function useTerminalOrchestration({
     slotHandlers.handleSlotSwitch,
   )
 
-  // File upload and voice input
+  // File upload
   const actionHandlers = useTerminalActionHandlers({
     terminalRefs,
     activeSessionId,
-    setShowVoice,
-    voiceStartListening: transcription.startListening,
-    voiceStopListening: transcription.stopListening,
-    voiceResetTranscript: transcription.resetTranscript,
-    voiceStatus: transcription.status,
   })
 
   return {
@@ -74,11 +60,5 @@ export function useTerminalOrchestration({
     ...modalHandlers,
     ...slotHandlers,
     ...actionHandlers,
-    showVoice,
-    voiceFinalTranscript: transcription.finalTranscript,
-    voiceInterimTranscript: transcription.interimTranscript,
-    voiceStatus: transcription.status,
-    voiceError: transcription.error,
-    isVoiceSupported: transcription.isSupported,
   }
 }

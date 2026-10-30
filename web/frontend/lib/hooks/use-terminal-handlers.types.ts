@@ -28,6 +28,7 @@ export interface UseTerminalHandlersProps {
 export interface UseTerminalHandlersReturn {
   handleStatusChange: (sessionId: string, status: ConnectionStatus) => void
   handleKeyboardInput: (data: string) => void
+  handleKeyboardPaste: (text: string) => void
   handleComposeInput: (
     sessionId: string,
     text: string,

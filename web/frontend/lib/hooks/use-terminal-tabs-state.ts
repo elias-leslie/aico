@@ -88,6 +88,7 @@ export function useTerminalTabsState({
   const {
     handleStatusChange,
     handleKeyboardInput,
+    handleKeyboardPaste,
     handleComposeInput,
     handleReconnect,
     handleNewTerminalForProject,
@@ -131,11 +132,6 @@ export function useTerminalTabsState({
   const activeStatus = resolvedActiveSessionId
     ? terminalStatuses.get(resolvedActiveSessionId)
     : undefined
-  // The active session's mode (for the key row's model picker)
-  const activeMode = useMemo<string | undefined>(() => {
-    if (!resolvedActiveSessionId) return undefined
-    return sessions.find((s) => s.id === resolvedActiveSessionId)?.mode
-  }, [resolvedActiveSessionId, sessions])
 
   const startupLaunchKeyRef = useRef<string | null>(null)
   useEffect(() => {
@@ -223,10 +219,10 @@ export function useTerminalTabsState({
     isMobile,
     showTerminalManager,
     setShowTerminalManager,
-    activeMode,
     activeStatus,
     handleStatusChange,
     handleKeyboardInput,
+    handleKeyboardPaste,
     handleComposeInput,
     handleReconnect,
     handleNewTerminalForProject,

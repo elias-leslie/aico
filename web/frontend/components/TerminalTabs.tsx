@@ -52,9 +52,9 @@ export function TerminalTabs({
     handleStatusChange,
     terminalStatuses,
     activeSessionId,
-    activeMode,
     activeStatus,
     handleKeyboardInput,
+    handleKeyboardPaste,
     handleComposeInput,
     handleNewTerminalForProject,
     showTerminalManager,
@@ -75,16 +75,6 @@ export function TerminalTabs({
     handleUploadClick,
     handleFileSelect,
     handleFileInputChange,
-    showVoice,
-    voiceFinalTranscript,
-    voiceInterimTranscript,
-    voiceStatus,
-    voiceError,
-    isVoiceSupported,
-    handleVoiceOpen,
-    handleVoiceSend,
-    handleVoiceCancel,
-    handleVoiceToggle,
   } = useTerminalOrchestration({ projectId, projectPath })
   // Opening a session clears its needs-you/finished state; the title carries
   // the count of sessions waiting on the owner.
@@ -167,20 +157,10 @@ export function TerminalTabs({
         handleFileSelect={handleFileSelect}
         sessions={sessions}
         activeSessionId={activeSessionId}
-        activeMode={activeMode}
         activeStatus={activeStatus}
         handleKeyboardInput={handleKeyboardInput}
+        handleKeyboardPaste={handleKeyboardPaste}
         handleComposeInput={handleComposeInput}
-        showVoice={showVoice}
-        isVoiceSupported={isVoiceSupported}
-        voiceFinalTranscript={voiceFinalTranscript}
-        voiceInterimTranscript={voiceInterimTranscript}
-        voiceStatus={voiceStatus}
-        voiceError={voiceError}
-        handleVoiceOpen={handleVoiceOpen}
-        handleVoiceSend={handleVoiceSend}
-        handleVoiceCancel={handleVoiceCancel}
-        handleVoiceToggle={handleVoiceToggle}
         className={className}
       />
 

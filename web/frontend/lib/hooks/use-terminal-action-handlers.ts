@@ -17,12 +17,6 @@ export interface UploadDone {
 interface UseTerminalActionHandlersParams {
   terminalRefs: MutableRefObject<Map<string, TerminalHandle | null>>
   activeSessionId: string | null
-  // Voice input
-  setShowVoice: (show: boolean) => void
-  voiceStartListening: () => void
-  voiceStopListening: () => void
-  voiceResetTranscript: () => void
-  voiceStatus: 'idle' | 'listening' | 'processing' | 'error'
 }
 
 /**
@@ -55,11 +49,6 @@ function findActiveRef(
 export function useTerminalActionHandlers({
   terminalRefs,
   activeSessionId,
-  setShowVoice,
-  voiceStartListening,
-  voiceStopListening,
-  voiceResetTranscript,
-  voiceStatus,
 }: UseTerminalActionHandlersParams) {
   // File upload functionality
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -126,59 +115,6 @@ export function useTerminalActionHandlers({
     [handleFileSelect],
   )
 
-  // Voice input handlers
-  // Track which terminal pane triggered voice input
-  const voiceTargetRef = useRef<string | null>(null)
-
-  const handleVoiceOpen = useCallback(
-    (targetSessionId?: string) => {
-      voiceTargetRef.current = targetSessionId ?? null
-      setShowVoice(true)
-      voiceStartListening()
-    },
-    [setShowVoice, voiceStartListening],
-  )
-
-  const handleVoiceSend = useCallback(
-    (text: string) => {
-      // Use the specific pane that triggered voice, fall back to active/first available
-      const terminalRef = voiceTargetRef.current
-        ? (terminalRefs.current.get(voiceTargetRef.current) ?? null)
-        : findActiveRef(terminalRefs.current, activeSessionId)
-      if (terminalRef) {
-        // Use bracketed paste so TUI apps (Claude Code, vim, etc.) recognize the input
-        terminalRef.pasteInput(text)
-        // Send Enter separately — 150ms delay gives TUI apps time to process the paste
-        setTimeout(() => terminalRef.sendInput('\r'), 150)
-      }
-      voiceTargetRef.current = null
-      voiceStopListening()
-      voiceResetTranscript()
-      setShowVoice(false)
-    },
-    [
-      activeSessionId,
-      terminalRefs,
-      voiceStopListening,
-      voiceResetTranscript,
-      setShowVoice,
-    ],
-  )
-
-  const handleVoiceCancel = useCallback(() => {
-    voiceStopListening()
-    voiceResetTranscript()
-    setShowVoice(false)
-  }, [voiceStopListening, voiceResetTranscript, setShowVoice])
-
-  const handleVoiceToggle = useCallback(() => {
-    if (voiceStatus === 'listening') {
-      voiceStopListening()
-    } else {
-      voiceStartListening()
-    }
-  }, [voiceStatus, voiceStopListening, voiceStartListening])
-
   return {
     // File upload
     fileInputRef,
@@ -191,10 +127,5 @@ export function useTerminalActionHandlers({
     handleUploadClick,
     handleFileSelect,
     handleFileInputChange,
-    // Voice input
-    handleVoiceOpen,
-    handleVoiceSend,
-    handleVoiceCancel,
-    handleVoiceToggle,
   }
 }

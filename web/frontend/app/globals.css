@@ -907,7 +907,7 @@ div.xterm .xterm-viewport {
   color: var(--mist);
 }
 
-/* Phone key ribbon. A held modifier or open panel is an amber outline. */
+/* Phone key row. A held Ctrl or open keyboard is an amber outline. */
 .lantern-key {
   display: grid;
   place-items: center;
@@ -938,9 +938,24 @@ div.xterm .xterm-viewport {
   color: var(--lantern);
 }
 
-/* Shift locked (double tap): a fuller wash than a one-key hold. */
-.lantern-key.locked {
-  background: rgb(var(--lantern-rgb) / 0.26);
+/* The phone keyboard's typing target: focusable, never seen. The session's
+   own prompt shows the text. 16px keeps iOS from zooming in on focus. */
+.phone-typing-field {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  overflow: hidden;
+  resize: none;
+  pointer-events: none;
+  font-size: 16px;
+  color: transparent;
+  background: transparent;
+  caret-color: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

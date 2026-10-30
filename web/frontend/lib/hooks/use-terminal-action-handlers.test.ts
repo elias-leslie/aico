@@ -59,11 +59,6 @@ describe('useTerminalActionHandlers', () => {
       useTerminalActionHandlers({
         terminalRefs,
         activeSessionId: 'native-session',
-        setShowVoice: vi.fn(),
-        voiceStartListening: vi.fn(),
-        voiceStopListening: vi.fn(),
-        voiceResetTranscript: vi.fn(),
-        voiceStatus: 'idle',
       }),
     )
 
@@ -101,11 +96,6 @@ describe('useTerminalActionHandlers', () => {
       useTerminalActionHandlers({
         terminalRefs,
         activeSessionId: 'active-session',
-        setShowVoice: vi.fn(),
-        voiceStartListening: vi.fn(),
-        voiceStopListening: vi.fn(),
-        voiceResetTranscript: vi.fn(),
-        voiceStatus: 'idle',
       }),
     )
     await act(async () => {
@@ -138,11 +128,6 @@ describe('useTerminalActionHandlers', () => {
       useTerminalActionHandlers({
         terminalRefs,
         activeSessionId: 'remote-session',
-        setShowVoice: vi.fn(),
-        voiceStartListening: vi.fn(),
-        voiceStopListening: vi.fn(),
-        voiceResetTranscript: vi.fn(),
-        voiceStatus: 'idle',
       }),
     )
     expect(result.current.uploadDone).toBeNull()
@@ -200,11 +185,6 @@ describe('useTerminalActionHandlers', () => {
       useTerminalActionHandlers({
         terminalRefs,
         activeSessionId: 'native-session',
-        setShowVoice: vi.fn(),
-        voiceStartListening: vi.fn(),
-        voiceStopListening: vi.fn(),
-        voiceResetTranscript: vi.fn(),
-        voiceStatus: 'idle',
       }),
     )
 

@@ -1,104 +1,125 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import type { RefObject } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { MobileKeyboard } from './MobileKeyboard'
 
-vi.mock('./ControlBar', () => ({
-  ControlBar: ({
-    minimized,
-    onToggleMinimize,
-    onArrow,
-  }: {
-    minimized: boolean
-    onToggleMinimize: () => void
-    onArrow?: (
-      direction: 'left',
-      modifiers: { shift: boolean; ctrl: boolean; alt: boolean },
-    ) => boolean
-  }) => (
-    <div>
-      <span>{minimized ? 'keyboard hidden' : 'keyboard shown'}</span>
-      <button type="button" onClick={onToggleMinimize}>
-        toggle keyboard
-      </button>
-      <button
-        type="button"
-        onClick={() =>
-          onArrow?.('left', { shift: true, ctrl: false, alt: false })
-        }
-      >
-        shift left
-      </button>
-    </div>
-  ),
-}))
-
-vi.mock('./NativeKeyboardInput', () => ({
-  isComposePending: () => false,
-  NativeKeyboardInput: ({
-    inputRef,
-    onFocusChange,
-  }: {
-    inputRef: RefObject<HTMLInputElement | null>
-    onFocusChange: (focused: boolean) => void
-  }) => (
-    <input
-      data-testid="compose"
-      ref={inputRef}
-      onFocus={() => onFocusChange(true)}
-      onBlur={() => onFocusChange(false)}
-    />
-  ),
-}))
+function setup() {
+  const onSend = vi.fn()
+  const onPaste = vi.fn()
+  const view = render(
+    <MobileKeyboard sessionId="s1" onSend={onSend} onPaste={onPaste} />,
+  )
+  const field = screen.getByLabelText(
+    'Type into the session',
+  ) as HTMLTextAreaElement
+  // What the phone keyboard does to the field: a new value, caret at its end.
+  const type = (value: string) => {
+    field.value = value
+    fireEvent.input(field)
+  }
+  const sent = () => onSend.mock.calls.map(([data]) => data).join('')
+  return { ...view, field, onSend, onPaste, type, sent }
+}
 
 describe('MobileKeyboard', () => {
-  const composeProps = {
-    sessionId: 'one',
-    onCompose: vi.fn().mockResolvedValue(true),
-  }
-
-  it('shows the compose box with the phone keyboard hidden at first', () => {
-    render(<MobileKeyboard onSend={vi.fn()} {...composeProps} />)
-
-    expect(screen.getByTestId('compose')).toBeInTheDocument()
-    expect(screen.getByText('keyboard hidden')).toBeInTheDocument()
+  it('asks the keyboard for plain typing: no autocorrect, capitals or predictions', () => {
+    const { field } = setup()
+    expect(field).toHaveAttribute('autocorrect', 'off')
+    expect(field).toHaveAttribute('autocapitalize', 'off')
+    expect(field).toHaveAttribute('autocomplete', 'off')
+    expect(field).toHaveAttribute('spellcheck', 'false')
+    expect(screen.queryByRole('button', { name: /send|insert/i })).toBeNull()
   })
 
-  it('shows and hides the phone keyboard by focusing the compose box', () => {
-    render(<MobileKeyboard onSend={vi.fn()} {...composeProps} />)
-    const toggle = screen.getByRole('button', { name: 'toggle keyboard' })
-
-    fireEvent.click(toggle)
-    expect(screen.getByTestId('compose')).toHaveFocus()
-    expect(screen.getByText('keyboard shown')).toBeInTheDocument()
-
-    fireEvent.click(toggle)
-    expect(screen.getByTestId('compose')).not.toHaveFocus()
-    expect(screen.getByText('keyboard hidden')).toBeInTheDocument()
+  it('types each letter straight into the session', () => {
+    const { type, sent } = setup()
+    type('l')
+    type('ls')
+    type('ls ')
+    expect(sent()).toBe('ls ')
   })
 
-  it('moves the compose selection when Shift+Left is tapped', () => {
-    const onSend = vi.fn()
-    render(<MobileKeyboard onSend={onSend} {...composeProps} />)
-    const input = screen.getByTestId('compose') as HTMLInputElement
-    fireEvent.focus(input)
-    fireEvent.change(input, { target: { value: 'answer' } })
-    input.setSelectionRange(6, 6)
-
-    fireEvent.click(screen.getByRole('button', { name: 'shift left' }))
-
-    expect([input.selectionStart, input.selectionEnd]).toEqual([5, 6])
-    expect(onSend).not.toHaveBeenCalled()
+  it('backspaces in the session, also past what this field holds', () => {
+    const { field, type, sent, onSend } = setup()
+    type('ab')
+    type('a')
+    type('')
+    expect(fireEvent.keyDown(field, { key: 'Backspace' })).toBe(false)
+    expect(sent()).toBe('ab\x7f\x7f\x7f')
+    onSend.mockClear()
+    // With text before the caret the keyboard's own edit is the backspace.
+    type('x')
+    expect(fireEvent.keyDown(field, { key: 'Backspace' })).toBe(true)
+    expect(sent()).toBe('x')
   })
 
-  it('hides the compose box and lets the voice panel own bottom padding while voice is active', () => {
-    const { container } = render(
-      <MobileKeyboard onSend={vi.fn()} voiceActive={true} {...composeProps} />,
+  it('runs the line only on Enter and starts the field fresh', () => {
+    const { field, type, sent } = setup()
+    type('echo hi')
+    expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(false)
+    expect(sent()).toBe('echo hi\r')
+    expect(field.value).toBe('')
+  })
+
+  it('sends a keyboard-inserted line break as Enter', () => {
+    const { field, type, sent } = setup()
+    type('hi')
+    type('hi\n')
+    expect(sent()).toBe('hi\r')
+    expect(field.value).toBe('')
+  })
+
+  it('pastes as one block and types nothing', () => {
+    const { field, onPaste, sent } = setup()
+    const event = new Event('paste', { bubbles: true, cancelable: true })
+    Object.assign(event, {
+      clipboardData: {
+        items: [],
+        files: [],
+        getData: () => 'line one\nline two',
+      },
+    })
+    field.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(onPaste).toHaveBeenCalledExactlyOnceWith('line one\nline two')
+    expect(sent()).toBe('')
+  })
+
+  it('pastes several lines the keyboard inserts at once', () => {
+    const { type, onPaste, sent } = setup()
+    type('a')
+    type('aone\ntwo')
+    expect(sent()).toBe('a')
+    expect(onPaste).toHaveBeenCalledExactlyOnceWith('one\ntwo')
+  })
+
+  it('sends Ctrl+letter once with Ctrl held, without typing the letter', () => {
+    const { field, type, sent } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'Ctrl' }))
+    type('c')
+    expect(sent()).toBe('\x03')
+    expect(field.value).toBe('')
+    expect(screen.getByRole('button', { name: 'Ctrl' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
     )
+    type('c')
+    expect(sent()).toBe('\x03c')
+  })
 
-    expect(screen.queryByTestId('compose')).not.toBeInTheDocument()
-    expect((container.firstChild as HTMLElement).style.paddingBottom).toBe(
-      '0px',
-    )
+  it('starts the field fresh after a key-row key', () => {
+    const { field, type, sent } = setup()
+    type('ab')
+    fireEvent.click(screen.getByRole('button', { name: 'Up' }))
+    expect(field.value).toBe('')
+    type('c')
+    expect(sent()).toBe('ab\x1b[Ac')
+  })
+
+  it('shows and hides the phone keyboard from the key row', () => {
+    const { field } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'Show keyboard' }))
+    expect(document.activeElement).toBe(field)
+    fireEvent.click(screen.getByRole('button', { name: 'Hide keyboard' }))
+    expect(document.activeElement).not.toBe(field)
   })
 })

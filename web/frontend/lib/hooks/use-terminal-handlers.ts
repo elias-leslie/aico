@@ -83,6 +83,16 @@ export function useTerminalHandlers({
     },
     [activeSessionId, terminalRefs],
   )
+  const handleKeyboardPaste = useCallback(
+    (text: string) => {
+      const handle =
+        (activeSessionId
+          ? terminalRefs.current.get(activeSessionId)
+          : undefined) ?? terminalRefs.current.values().next().value
+      void handle?.pasteInput(text)
+    },
+    [activeSessionId, terminalRefs],
+  )
   const handleComposeInput = useCallback(
     (sessionId: string, text: string, action: 'insert' | 'send') =>
       commitComposeInput(terminalRefs.current, sessionId, text, action),
@@ -147,6 +157,7 @@ export function useTerminalHandlers({
   return {
     handleStatusChange,
     handleKeyboardInput,
+    handleKeyboardPaste,
     handleComposeInput,
     handleReconnect,
     handleNewTerminalForProject,

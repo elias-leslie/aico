@@ -3,12 +3,11 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
-import { KEY_ROW_METRICS, keepKeyboardOpen, remSize } from './types'
+import { keepKeyboardOpen } from './types'
 
 type ComposeAction = 'insert' | 'send'
 const drafts = new Map<string, string>()
@@ -35,10 +34,6 @@ interface NativeKeyboardInputProps {
   ) => Promise<boolean>
   onFocusChange?: (focused: boolean) => void
   inputRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>
-  phone?: boolean
-  ctrlActive?: boolean
-  onCtrlLetter?: (letter: string) => void
-  onCtrlCancel?: () => void
 }
 
 function draftStorageKey(sessionId: string) {
@@ -60,20 +55,12 @@ function saveDraft(key: string, value: string) {
 /** The desktop box is one line, as the desktop mockup's. */
 const DESKTOP_COMPOSE_HEIGHT = 38
 
-export function isComposePending(sessionId: string | null | undefined) {
-  return Boolean(sessionId && pendingCommits.has(draftStorageKey(sessionId)))
-}
-
 export function NativeKeyboardInput({
   sessionId,
   connected,
   onCommit,
   onFocusChange,
   inputRef,
-  phone = false,
-  ctrlActive = false,
-  onCtrlLetter,
-  onCtrlCancel,
 }: NativeKeyboardInputProps) {
   const fallbackRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
   const resolvedRef = inputRef ?? fallbackRef
@@ -94,28 +81,10 @@ export function NativeKeyboardInput({
   const [failed, setFailed] = useState<ComposeAction | null>(null)
   const composingRef = useRef(false)
   const busyRef = useRef(false)
-  const inputHeight = remSize(KEY_ROW_METRICS.composeHeight)
 
   useEffect(() => {
     if (!pendingForSession) setValue(readDraft(storageKey))
   }, [storageKey, pendingForSession])
-
-  useLayoutEffect(() => {
-    if (!phone) return
-    const field = resolvedRef.current
-    if (!(field instanceof HTMLTextAreaElement)) return
-
-    field.style.height = 'auto'
-    if (!value) {
-      field.style.overflowY = 'hidden'
-      return
-    }
-    const maxHeight = 120
-    if (field.scrollHeight > 0) {
-      field.style.height = `${Math.min(field.scrollHeight, maxHeight)}px`
-    }
-    field.style.overflowY = field.scrollHeight > maxHeight ? 'auto' : 'hidden'
-  }, [phone, resolvedRef, value])
 
   const commit = useCallback(
     async (action: ComposeAction) => {
@@ -126,12 +95,12 @@ export function NativeKeyboardInput({
         !connected
       )
         return
-      // Read the DOM value so a phone's last autocorrect replacement is used.
+      // Read the DOM value so the last autocorrect replacement is used.
       const text = resolvedRef.current?.value ?? value
       if (!text || (action === 'send' && /[\r\n]/.test(text))) return
 
-      // The phone may commit autocorrect into the DOM just before Enter,
-      // before React has dispatched change. Retain that exact text on failure.
+      // Autocorrect may commit into the DOM just before Enter, before React
+      // has dispatched change. Retain that exact text on failure.
       const submittedRevision = saveDraft(storageKey, text)
       setValue(text)
       const operation = Symbol(storageKey)
@@ -166,26 +135,11 @@ export function NativeKeyboardInput({
   const handleChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const next = event.target.value
-      if (phone && ctrlActive && !composingRef.current) {
-        let inserted: string | undefined
-        if (next.length === value.length + 1) {
-          let index = 0
-          while (index < value.length && value[index] === next[index]) index++
-          if (next.slice(index + 1) === value.slice(index))
-            inserted = next[index]
-        }
-        if (inserted && /^[a-z]$/i.test(inserted)) {
-          onCtrlLetter?.(inserted)
-          event.target.value = value
-          return
-        }
-        onCtrlCancel?.()
-      }
       setValue(next)
       saveDraft(storageKey, next)
       setFailed(null)
     },
-    [ctrlActive, phone, onCtrlCancel, onCtrlLetter, storageKey, value],
+    [storageKey],
   )
 
   const interrupted = failed && (
@@ -198,78 +152,8 @@ export function NativeKeyboardInput({
       before retrying; your draft is saved.
     </span>
   )
-  const lineBreakHint = /\r|\n/.test(value) && (
-    <span className="px-0.5 text-xs" style={{ color: 'var(--mist)' }}>
-      Remove line breaks to send this draft.
-    </span>
-  )
   const cannotSend =
     !connected || !value || /[\r\n]/.test(value) || busy || pendingForSession
-
-  if (phone) {
-    return (
-      <div className="lantern-compose">
-        <div className="lantern-compose-row">
-          <textarea
-            ref={assignInputRef}
-            rows={1}
-            aria-label="Compose"
-            value={value}
-            readOnly={busy || pendingForSession}
-            onChange={handleChange}
-            onCompositionStart={() => {
-              composingRef.current = true
-              if (ctrlActive) onCtrlCancel?.()
-            }}
-            onCompositionEnd={() => {
-              composingRef.current = false
-            }}
-            onFocus={() => onFocusChange?.(true)}
-            onBlur={() => onFocusChange?.(false)}
-            onKeyDown={(event) => {
-              if (
-                ctrlActive &&
-                !composingRef.current &&
-                /^[a-z]$/i.test(event.key)
-              ) {
-                event.preventDefault()
-                onCtrlLetter?.(event.key)
-                return
-              }
-              if (
-                event.key !== 'Enter' ||
-                event.nativeEvent.isComposing ||
-                composingRef.current ||
-                event.keyCode === 229
-              )
-                return
-              event.preventDefault()
-              void commit('send')
-            }}
-            placeholder="Type, correct, then send"
-            autoComplete="on"
-            autoCorrect="on"
-            autoCapitalize="none"
-            spellCheck={true}
-            enterKeyHint="send"
-            style={{ minHeight: inputHeight, maxHeight: 120 }}
-          />
-          <button
-            type="button"
-            onPointerDown={keepKeyboardOpen}
-            onClick={() => void commit('send')}
-            disabled={cannotSend}
-            className="lantern-btn primary"
-            style={{ height: inputHeight }}
-          >
-            Send
-          </button>
-        </div>
-        {interrupted}
-        {lineBreakHint}
-      </div>
-    )
-  }
 
   return (
     <div className="lantern-compose">
@@ -329,7 +213,6 @@ export function NativeKeyboardInput({
         </button>
       </div>
       {interrupted}
-      {lineBreakHint}
     </div>
   )
 }

@@ -1,39 +1,19 @@
-// Terminal escape sequences for special keys
+// Terminal escape sequences for the phone key row
 export const KEY_SEQUENCES = {
-  // Control keys
   ESC: '\x1b',
   TAB: '\t',
-  SHIFT_TAB: '\x1b[Z',
   ENTER: '\r',
   BACKSPACE: '\x7f',
-  DELETE: '\x1b[3~',
-
-  // Arrow keys (ANSI escape sequences)
-  ARROW_UP: '\x1b[A',
-  ARROW_DOWN: '\x1b[B',
-  ARROW_RIGHT: '\x1b[C',
-  ARROW_LEFT: '\x1b[D',
-
-  // Navigation keys
-  HOME: '\x1b[H',
-  END: '\x1b[F',
-  PAGE_UP: '\x1b[5~',
-  PAGE_DOWN: '\x1b[6~',
-
-  // Function keys
-  F1: '\x1bOP',
-  F2: '\x1bOQ',
-  F3: '\x1bOR',
-  F4: '\x1bOS',
-  F5: '\x1b[15~',
-  F6: '\x1b[17~',
-  F7: '\x1b[18~',
-  F8: '\x1b[19~',
-  F9: '\x1b[20~',
-  F10: '\x1b[21~',
-  F11: '\x1b[23~',
-  F12: '\x1b[24~',
 } as const
+
+/**
+ * Empties the prompt box of Claude Code, Codex, Pi and a shell: end of line,
+ * then Ctrl+U until nothing is left. Ctrl+U kills to the start of the line and,
+ * at the start, joins the line above, so a typed multi-line prompt takes two
+ * per line; a long paste is one placeholder. Checked live 2026-10-30. Ctrl+C
+ * also clears these prompts but interrupts a running agent.
+ */
+export const CLEAR_PROMPT = `\x05${'\x15'.repeat(32)}`
 
 export type ArrowDirection = 'left' | 'up' | 'down' | 'right'
 
@@ -49,4 +29,9 @@ export function arrowSequence(
     (modifiers.alt ? 2 : 0) +
     (modifiers.ctrl ? 4 : 0)
   return parameter === 1 ? `\x1b[${suffix}` : `\x1b[1;${parameter}${suffix}`
+}
+
+/** The control character a Ctrl+letter sends (Ctrl+C is \x03). */
+export function ctrlLetter(letter: string): string {
+  return String.fromCharCode(letter.toLowerCase().charCodeAt(0) - 96)
 }

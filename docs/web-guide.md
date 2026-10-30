@@ -36,10 +36,6 @@ See the [Changelog](../CHANGELOG.md) for shipped changes.
 
 **`prompt cleaning`** — With Agent Hub connected, the web app can clean a draft prompt, show an original-vs-cleaned diff, take follow-up refinement instructions, let you edit the result before sending, and fall back to the original prompt if the cleaner is unavailable.
 
-**`voice input`** — Dictate commands and prompts via browser speech-to-text when your browser and microphone permissions support it. It merges cumulative browser speech chunks so dictated phrases do not repeat as interim text becomes final.
-
-On a phone, tap Talk to start dictating. Words appear while you speak, and pauses in speech keep it listening. Tap the same button to pause, then review or edit the transcript. Resume continues the same draft; Send submits it to the terminal. The Talk button only controls listening. Browser permission, microphone, or network failures still stop recording and show an error.
-
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 
 **`dual mode`** — Switch any session between raw shell and your configured AI agent with one click. Supports Claude Code, Codex, Antigravity CLI, and Pi out of the box.
@@ -48,11 +44,9 @@ On a phone, tap Talk to start dictating. Words appear while you speak, and pause
 
 **`scrollback`** — Each session is attached in tmux control mode, which seeds its history into xterm.js. Scroll up and the view holds still while output keeps arriving; a Latest button returns you to the bottom.
 
-**`mobile workspace controls`** — On a phone you type with the phone's own keyboard into a compose box that stays above a key row (Tab, Shift, voice, Esc, Ctrl, arrow keys). The first key shows or hides the phone keyboard. The visible bottom row stays in view as the keyboard opens, and a touch-friendly session switcher jumps into any session.
+**`mobile workspace controls`** — On a phone you type with the phone's own keyboard straight into the session, as in any terminal app: letters, Backspace and the keyboard's dictation go to the agent's prompt or the shell as you type, and nothing runs until Enter. Autocorrect, capitals and predictions are off. A paste arrives as one block. The key row above the keyboard has the keys a phone keyboard lacks: show/hide keyboard, Esc, Tab, Ctrl (held for the next key: Ctrl+C, Ctrl+arrow), the arrows, Enter and Clear, which empties the prompt of Claude Code, Codex, Pi or a shell (Ctrl+E, then Ctrl+U until it is empty; it never sends Ctrl+C). Long-press the session to copy or paste. The visible bottom row stays in view as the keyboard opens, and a touch-friendly session switcher jumps into any session.
 
-**`compose box`** — In a desktop browser the compose box is hidden until you press Compose in the session bar; this browser then remembers whether it is open. Write a message there and send it to the session in one go.
-
-Expand the arrow controls to find Enter, which activates a TUI selection without typing a draft. Terminal keys keep the phone keyboard and arrow controls open. With a draft focused, Left and Right move its caret; Up and Down navigate the terminal. Send submits the draft, while the toolbox's Enter sends only the Enter key and leaves the draft intact.
+**`compose box`** — In a desktop browser the compose box is hidden until you press Compose in the session bar; this browser then remembers whether it is open. Write a message there and send it to the session in one go. Phones have no compose box.
 
 **`text size`** — Settings change the terminal text size, remembered per project in this browser.
 
@@ -152,7 +146,7 @@ All core features work without any external service.
 
 **SummitFlow project catalog** — Tether reads SummitFlow's projects when SummitFlow is installed, and the web app shows those. Without SummitFlow, Tether uses its local list.
 
-**Agent Hub** (`AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies. Browser-native voice input works standalone; Agent Hub provides an optional enhanced path.
+**Agent Hub** (`AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies.
 
 </details>
 

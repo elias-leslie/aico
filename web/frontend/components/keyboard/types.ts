@@ -1,27 +1,13 @@
-// Modifier key states: off, sticky (single-tap, applies to next key), locked (double-tap, persists)
-export type ModifierState = 'off' | 'sticky' | 'locked'
-
-// State for all modifier keys
-export interface ModifierStates {
-  shift: ModifierState
-  ctrl: ModifierState
-  alt: ModifierState
-}
-
 // Terminal input handler type
 export type TerminalInputHandler = (sequence: string) => void
 
-// Sizes of the key row and compose box, in design pixels.
+// Sizes of the key row, in design pixels.
 export const KEY_ROW_METRICS = {
   buttonSize: 44,
-  arrowSize: 52,
   iconSize: 18,
-  composeHeight: 46,
-  keyGap: 5,
+  keyGap: 4,
   paddingX: 4,
   paddingY: 6,
-  rowGap: 6,
-  arrowGroupGap: 5,
 } as const
 
 /**

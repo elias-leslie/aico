@@ -121,6 +121,7 @@ describe('useTerminalTabsState', () => {
     mockUseTerminalHandlers.mockReturnValue({
       handleStatusChange: vi.fn(),
       handleKeyboardInput: vi.fn(),
+      handleKeyboardPaste: vi.fn(),
       handleComposeInput: vi.fn(),
       handleReconnect: vi.fn(),
       handleNewTerminalForProject: vi.fn(),
