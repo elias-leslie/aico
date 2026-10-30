@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react'
 import '@xterm/xterm/css/xterm.css'
+import { sizeHolderName } from '../../../electron/shared/size-holder-copy'
 import { LANTERN_TERMINAL_THEME, SCROLLBACK } from '../lib/constants/terminal'
 import type { TerminalRendererStatus } from '../lib/hooks/terminal-instance-utils'
 import { useTerminalHandle } from '../lib/hooks/use-terminal-handle'
@@ -19,7 +20,6 @@ import { useTerminalScrolling } from '../lib/hooks/use-terminal-scrolling'
 import { useTerminalSearch } from '../lib/hooks/use-terminal-search'
 import { useTerminalWebSocket } from '../lib/hooks/use-terminal-websocket'
 import { useTerminalWriteQueue } from '../lib/hooks/use-terminal-write-queue'
-import type { SizeHolderFrame } from '../lib/hooks/use-websocket-connection'
 import {
   swallowQueryReplies,
   trackSgrMouse,
@@ -44,12 +44,6 @@ type XtermFitAddon = InstanceType<typeof import('@xterm/addon-fit').FitAddon>
 const SIZE_NOTICE_DELAY_MS = 600
 /** Typing takes the size back at most this often. */
 const RECLAIM_SPACING_MS = 1500
-
-/** How "Viewing on …" names the device holding the size. */
-export function sizeHolderName(viewer: SizeHolderFrame['viewer']): string {
-  if (viewer?.app === 'desktop') return 'Aico desktop'
-  return viewer?.device || 'another device'
-}
 
 function isObserverModeEnabled(search: string): boolean {
   const value = new URLSearchParams(search).get('observer')

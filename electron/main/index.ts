@@ -217,7 +217,7 @@ const link = createTetherLink({
     shared: (data) => shares.notify(data),
     sizeHeld: (id, clientPid, viewer) => {
       ownerSurface.sizeHeld(viewer)
-      terminal.sizeHeldBy(id, clientPid)
+      terminal.sizeHeldBy(id, clientPid, viewer)
     },
     peerResync: (host) => terminal.peerResync(host),
   },

@@ -182,7 +182,7 @@ function wireSelectionToast(): void {
     // it is `hidden` is not announced consistently by assistive technology.
     toast.hidden = false
     chip.textContent = kind
-    snip.textContent = action ? snippet : snippet.slice(0, 40) // textContent, never innerHTML (untrusted)
+    snip.textContent = snippet // textContent, never innerHTML (untrusted)
     currentAction = action
     toast.classList.toggle('actionable', Boolean(action))
     actionButton.hidden = !action
@@ -207,7 +207,11 @@ function wireSelectionToast(): void {
   })
   dismissButton.addEventListener('click', () => toast.classList.remove('show'))
 
-  window.aico.selection.onToast(show)
+  // A delivered selection shows as a short snippet; a handoff in full. The
+  // window's own notices (AICO_TOAST_EVENT) are short already and show whole.
+  window.aico.selection.onToast((sel) =>
+    show(sel.action ? sel : { ...sel, snippet: sel.snippet.slice(0, 40) }),
+  )
   window.addEventListener(AICO_TOAST_EVENT, (event) => {
     show((event as CustomEvent<AicoToastDetail>).detail)
   })

@@ -3,10 +3,12 @@ import type {
   ChatCallResult,
   ChatInfo,
   ChatStreamItem,
+  HeldElsewhere,
   HostChoice,
   HostLogins,
   HostResult,
   HostRow,
+  ImagePaste,
   InstructionPrompt,
   InstructionRevision,
   InstructionsChoice,
@@ -47,9 +49,9 @@ contextBridge.exposeInMainWorld('aico', {
       ipcRenderer.on('pty:data', listener)
       return () => ipcRenderer.removeListener('pty:data', listener)
     },
-    /** Another client holds this session's size (true) or it is back here (false). */
-    onSizeOther: (cb: (other: boolean) => void) => {
-      const listener = (_event: unknown, other: boolean) => cb(other)
+    /** Another client holds this session's size (who, and at what size), or it is back here (null). */
+    onSizeOther: (cb: (held: HeldElsewhere | null) => void) => {
+      const listener = (_event: unknown, held: HeldElsewhere | null) => cb(held)
       ipcRenderer.on('pty:size-other', listener)
       return () => ipcRenderer.removeListener('pty:size-other', listener)
     },
@@ -104,7 +106,7 @@ contextBridge.exposeInMainWorld('aico', {
   },
   clipboard: {
     read: (): Promise<string> => ipcRenderer.invoke('clipboard:read'),
-    imagePath: (): Promise<string> => ipcRenderer.invoke('clipboard:image-path'),
+    imagePath: (): Promise<ImagePaste> => ipcRenderer.invoke('clipboard:image-path'),
     write: (text: string) => ipcRenderer.send('clipboard:write', text),
   },
   selection: {

@@ -22,7 +22,8 @@ export const AICO_TOAST_EVENT = 'aico:toast'
 
 export type AicoToastDetail = SelectionToast
 
-function showToast(detail: AicoToastDetail): void {
+/** Show the window's text-only status toast. */
+export function showToast(detail: AicoToastDetail): void {
   window.dispatchEvent(new CustomEvent<AicoToastDetail>(AICO_TOAST_EVENT, { detail }))
 }
 

@@ -1,7 +1,6 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
-import { createPasteGuard } from './paste-guard'
 import '@xterm/xterm/css/xterm.css'
 import {
   type AicoTerminalFontSettings,
@@ -14,19 +13,23 @@ import {
 import { hostNoticeCopy } from '../shared/host-notice'
 import { mouseReportingActive, programOwnsSelection, setupMouseShim } from '../shared/mouse-shim'
 import { BONE, INK } from '../shared/palette'
+import { SIZE_HOLDER_HINT, sizeHolderName } from '../shared/size-holder-copy'
 import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
+import { showToast } from './actions'
 import { WINDOW_CHORDS } from './chords'
 import { controlWheelAction, swallowQueryReplies, trackSgrMouse } from './control-view'
 import { wireDraftInput } from './draft-input'
 import { urlAt } from './links'
 import { pointToCell, sgrWheelSequence, wheelMouseTicks } from './mouse-wheel'
 import { osc52Text } from './osc52'
+import { createPasteGuard } from './paste-guard'
 import { terminalShouldTakeFocus } from './terminal-focus'
 import { wheelLineDelta } from './wheel'
 import { arcade, eyes, tuiSlug } from './window-frame'
 
 const host = document.getElementById('terminal')
-if (!host) {
+const screenHost = document.getElementById('terminal-screen')
+if (!host || !screenHost) {
   throw new Error('terminal mount point missing')
 }
 const terminalHost = host
@@ -37,6 +40,9 @@ let fontFamily = fontFamilyFor(terminalFontSettings.fontId)
 let fontSize = terminalFontSettings.fontSize
 let terminalLayoutReady = false
 let terminalLayoutTimer: number | undefined
+// Another client holds the session's size: the terminal is shown at it
+// instead of fitting this window (null: fit).
+let viewSize: { cols: number; rows: number } | null = null
 // Control mode feeds xterm the pane's own output, so xterm keeps the history
 // and the program's modes itself.
 const term = new Terminal({
@@ -134,6 +140,13 @@ function scheduleTerminalLayoutFit(): void {
   if (!terminalLayoutReady) return
   if (terminalLayoutTimer) clearTimeout(terminalLayoutTimer)
   terminalLayoutTimer = window.setTimeout(() => {
+    // Shown at another client's size, the terminal keeps it; this client's own
+    // size still follows the window (it is what Use here or typing claims).
+    if (viewSize) {
+      const own = fit.proposeDimensions()
+      if (own) window.aico.pty.resize({ cols: own.cols, rows: own.rows })
+      return
+    }
     fit.fit()
     window.aico.pty.resize({ cols: term.cols, rows: term.rows })
   }, 60)
@@ -154,7 +167,7 @@ async function loadTerminalFont(settings: AicoTerminalFontSettings): Promise<voi
 
 await loadTerminalFont(terminalFontSettings)
 
-term.open(host)
+term.open(screenHost)
 // Module-level so the manual Refresh can clear its glyph atlas and a context
 // loss can drop it. Undefined when WebGL is unavailable (DOM-renderer fallback).
 let webgl: WebglAddon | undefined
@@ -215,15 +228,32 @@ window.aico.pty.onData((data) => {
   pokeThinking()
 })
 
-// Another client holds the session's size: cover the cramped pane with a notice.
-// The button takes the size back deliberately; a click anywhere in the
-// terminal (the notice included) and typing do too (main). The terminal keeps keyboard focus throughout.
-const sizeNotice = document.getElementById('size-notice') as HTMLElement
-window.aico.pty.onSizeOther((other) => {
-  sizeNotice.hidden = !other
-  if (!other && terminalShouldTakeFocus(document)) term.focus()
+// Another client holds the session's size: show the session at that size
+// (scrolling when it is larger than this window, letterboxed when smaller)
+// under a slim bar naming the client. The button takes the size back
+// deliberately; a click anywhere in the terminal (the bar included), typing
+// and pasting do too (main). The terminal keeps keyboard focus throughout.
+const sizeBar = document.getElementById('size-bar') as HTMLElement
+const sizeBarName = document.getElementById('size-bar-name') as HTMLElement
+const sizeBarHint = document.getElementById('size-bar-hint') as HTMLElement
+window.aico.pty.onSizeOther((held) => {
+  sizeBar.hidden = !held
+  if (held) {
+    sizeBarName.textContent = `Sized for ${sizeHolderName(held.viewer)}`
+    sizeBarHint.textContent = SIZE_HOLDER_HINT
+  }
+  const shown = held?.size ?? null
+  viewSize = shown
+  screenHost.classList.toggle('held-elsewhere', !!shown)
+  if (shown) {
+    if (term.cols !== shown.cols || term.rows !== shown.rows) term.resize(shown.cols, shown.rows)
+  } else {
+    screenHost.scrollTo(0, 0)
+    fit.fit()
+  }
+  if (!held && terminalShouldTakeFocus(document)) term.focus()
 })
-document.getElementById('size-notice-use')?.addEventListener('click', (event) => {
+document.getElementById('size-bar-use')?.addEventListener('click', (event) => {
   event.stopPropagation()
   window.aico.pty.claimSize(true)
   term.focus()
@@ -304,7 +334,11 @@ observer.observe(host)
 function refreshTerminal(): void {
   webgl?.clearTextureAtlas()
   term.clear()
-  window.aico.pty.refresh({ cols: term.cols, rows: term.rows })
+  // Shown at another client's size, the grid to re-pair is this window's own.
+  const own = viewSize ? fit.proposeDimensions() : undefined
+  window.aico.pty.refresh(
+    own ? { cols: own.cols, rows: own.rows } : { cols: term.cols, rows: term.rows },
+  )
   term.refresh(0, term.rows - 1)
 }
 window.addEventListener('aico:refresh', refreshTerminal)
@@ -323,8 +357,11 @@ async function applyTerminalFontSettings(settings: unknown): Promise<void> {
   fontSize = next.fontSize
   term.options.fontFamily = fontFamily
   term.options.fontSize = fontSize
-  fit.fit()
-  window.aico.pty.resize({ cols: term.cols, rows: term.rows })
+  if (viewSize) scheduleTerminalLayoutFit()
+  else {
+    fit.fit()
+    window.aico.pty.resize({ cols: term.cols, rows: term.rows })
+  }
   term.focus()
 }
 
@@ -344,12 +381,20 @@ host.addEventListener('mouseup', (e) => {
 })
 
 // One gesture, one paste: see paste-guard.ts for the duplicate sources.
-// An image-only clipboard (a screenshot) is saved to a file by main and its
-// path is pasted as text: Claude Code and Codex attach an image when a pasted
-// path points at one. Ctrl+V would make the program read the clipboard itself,
-// which fails when it runs as another user with no display.
+// An image-only clipboard (a screenshot) is saved to a file by main (on the
+// session's host, for a remote session) and its path is pasted as text: Claude
+// Code and Codex attach an image when a pasted path points at one. Ctrl+V would
+// make the program read the clipboard itself, which fails when it runs as
+// another user with no display. An image that didn't get there says why.
+async function clipboardPasteText(): Promise<string> {
+  const text = await window.aico.clipboard.read()
+  if (text) return text
+  const image = await window.aico.clipboard.imagePath()
+  if (image.error) showToast({ kind: 'Paste', snippet: image.error })
+  return image.path
+}
 const pasteFromClipboard = createPasteGuard(
-  async () => (await window.aico.clipboard.read()) || (await window.aico.clipboard.imagePath()),
+  clipboardPasteText,
   // tmux pastes, bracketed when the program asked.
   (text) => window.aico.pty.paste(text),
 )
@@ -406,6 +451,8 @@ function paneOwnsSelection(): boolean {
 host.addEventListener(
   'wheel',
   (e) => {
+    // Shown at a wider client's size: Shift+wheel scrolls across it.
+    if (viewSize && e.shiftKey) return
     if (e.deltaY === 0 || !controlWheel(e)) return
     e.preventDefault()
     e.stopPropagation()

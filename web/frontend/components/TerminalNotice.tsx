@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
 import { hostNoticeCopy } from '../../../electron/shared/host-notice'
+import { SIZE_HOLDER_HINT } from '../../../electron/shared/size-holder-copy'
 
 const LOST: Partial<Record<ConnectionStatus, string>> = {
   disconnected: 'Disconnected',
@@ -115,9 +116,7 @@ export function SizeHolderNotice({
     >
       <p>
         Sized for {holder}
-        {!isMobile && (
-          <span className="d">. Type here to size it for this window.</span>
-        )}
+        {!isMobile && <span className="d">{SIZE_HOLDER_HINT}</span>}
       </p>
       <button
         type="button"

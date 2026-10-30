@@ -687,8 +687,67 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* Another client holds the session's size: the cramped pane is covered by a
-   calm notice with one way back. Typing or clicking also takes the size back. */
+/* The terminal itself. It scrolls only while the session is shown at another
+   client's size that is larger than this window. */
+#terminal-screen {
+  position: absolute;
+  inset: 6px 8px;
+  overflow: hidden;
+}
+#terminal-screen.held-elsewhere {
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--glass-rgb) / 0.3) transparent;
+}
+
+/* Another client holds the session's size: the session stays readable at that
+   size underneath a slim bar naming the client, with one way back. Typing,
+   pasting or clicking also takes the size back. As the web app's size bar. */
+.size-bar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 12px);
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--frame-edge);
+  border-radius: 8px;
+  background: rgb(var(--ink-rgb) / 0.92);
+  box-shadow: var(--shadow-rim);
+  font: 12px / 1.3 var(--font-ui);
+  color: var(--bone);
+  animation: size-bar-in 0.2s var(--ease-arrival);
+  -webkit-app-region: no-drag;
+}
+.size-bar[hidden] {
+  display: none;
+}
+.size-bar p {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.size-bar-hint {
+  color: var(--mist);
+}
+@keyframes size-bar-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .size-bar {
+    animation: none;
+  }
+}
+
+/* The session's host can't be reached: the terminal is covered by a calm
+   notice with one way back. */
 .size-notice {
   position: absolute;
   inset: 0;
@@ -738,6 +797,10 @@ body {
 .size-notice-use:focus-visible {
   outline: 2px solid var(--lantern);
   outline-offset: 2px;
+}
+.size-bar-use {
+  margin-top: 0;
+  padding: 3px 10px;
 }
 
 .draft-composer {

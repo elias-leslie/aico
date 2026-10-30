@@ -1,10 +1,12 @@
 // Shape of the preload bridge, shared by renderer code and the global Window.
 
+import type { ImagePaste } from './main/desktop-ipc'
 import type { HostLogins, HostResult, HostRow } from './main/host-panel'
+import type { HeldElsewhere } from './main/size-holder'
 import type { ChatCallResult, ChatInfo, ChatStreamItem } from './shared/chat/types'
 import type { AicoTerminalFontSettings } from './shared/font-settings'
 
-export type { HostLogins, HostResult, HostRow }
+export type { HeldElsewhere, HostLogins, HostResult, HostRow, ImagePaste }
 
 export interface SelectionToast {
   kind: string
@@ -89,9 +91,10 @@ export interface AicoApi {
     onData(cb: (data: string) => void): () => void
     /** Paste goes through tmux (bracketed when the program asks). */
     paste(text: string): void
-    /** Another client holds this session's size (true) or it is back here (false);
-     * returns an unsubscribe function. */
-    onSizeOther(cb: (other: boolean) => void): () => void
+    /** Another client holds this session's size: who, and the size the window
+     * then has (null until known); null once it is back here. Returns an
+     * unsubscribe function. */
+    onSizeOther(cb: (held: HeldElsewhere | null) => void): () => void
     /** Take the size back: deliberate for the Use here button, else a click in the terminal. */
     claimSize(deliberate?: boolean): void
     /** The host this window's session runs on (null: this computer) and its
@@ -117,9 +120,10 @@ export interface AicoApi {
   }
   clipboard: {
     read(): Promise<string>
-    /** Saves a clipboard image (e.g. a screenshot) to a file and returns its
-     * path, or '' when the clipboard holds no image. */
-    imagePath(): Promise<string>
+    /** Saves a clipboard image (e.g. a screenshot) to a file the session can
+     * read (on its host, for a remote session) and returns its path: '' when
+     * the clipboard holds no image, with `error` when it wasn't saved or sent. */
+    imagePath(): Promise<ImagePaste>
     write(text: string): void
   }
   selection: {

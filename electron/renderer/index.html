@@ -40,10 +40,10 @@
         </div>
       </section>
       <div id="terminal">
-        <div class="size-notice" id="size-notice" role="status" aria-live="polite" hidden>
-          <p class="size-notice-title">Viewing remotely</p>
-          <p class="size-notice-detail">Another device is using this session, so it is sized for that screen.</p>
-          <button class="size-notice-use" id="size-notice-use" type="button">Use here</button>
+        <div id="terminal-screen"></div>
+        <div class="size-bar" id="size-bar" role="status" aria-live="polite" hidden>
+          <p><span id="size-bar-name"></span><span class="size-bar-hint" id="size-bar-hint"></span></p>
+          <button class="size-notice-use size-bar-use" id="size-bar-use" type="button">Use here</button>
         </div>
         <div class="size-notice host-notice" id="host-notice" role="status" aria-live="polite" hidden>
           <p class="size-notice-title" id="host-notice-title"></p>

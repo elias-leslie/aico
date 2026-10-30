@@ -135,7 +135,7 @@ function setup() {
     ),
     resizeHolder: vi.fn(async (_id: string) => ({
       generation: 'g1',
-      holder: null as { clientPid: number; viewer: null } | null,
+      holder: null as { clientPid: number; viewer: { app: string; device: string } | null } | null,
     })),
     hosts: vi.fn(async () => [] as unknown[]),
   }
@@ -663,6 +663,8 @@ describe('forget', () => {
 })
 
 describe('another client holds the size', () => {
+  /** Held by an unlabelled client, the window at the link's own size (the fake's). */
+  const HELD = { viewer: null, size: { cols: 100, rows: 30 } }
   const sent = (s: Setup) =>
     s.all[0].webContents.send.mock.calls.filter(([channel]) => channel === 'pty:size-other')
   /** A claim by a client other than this window's (pid 4242), once the notice delay passes. */
@@ -679,9 +681,9 @@ describe('another client holds the size', () => {
       await vi.advanceTimersByTimeAsync(0)
       s.terminal.sizeHeldBy('aaaaaaaa', 9999)
       await vi.advanceTimersByTimeAsync(OVERLAY_DELAY_MS - 100)
-      expect(sent(s).at(-1)).toEqual(['pty:size-other', false])
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', null])
       await vi.advanceTimersByTimeAsync(200)
-      expect(sent(s).at(-1)).toEqual(['pty:size-other', true])
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', HELD])
     } finally {
       vi.useRealTimers()
     }
@@ -693,7 +695,7 @@ describe('another client holds the size', () => {
       const s = setup()
       await attached(s)
       await lostTo(s, 4242)
-      expect(sent(s).every(([, shown]) => shown === false)).toBe(true)
+      expect(sent(s).every(([, shown]) => shown === null)).toBe(true)
     } finally {
       vi.useRealTimers()
     }
@@ -705,15 +707,16 @@ describe('another client holds the size', () => {
       const s = setup()
       const link = await attached(s)
       await lostTo(s)
-      expect(sent(s).at(-1)).toEqual(['pty:size-other', true])
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', HELD])
       s.on.get('pty:claim-size')?.(s.from(s.all[0]), true) // Use here
       await vi.advanceTimersByTimeAsync(0)
       expect(s.tether.resizeClaim).toHaveBeenCalledWith('aaaaaaaa', 'g1', 4242, 100, 30, {
         app: 'desktop',
         device: 'test-host',
       })
-      expect(sent(s).at(-1)).toEqual(['pty:size-other', false])
-      expect(link.settleSize).not.toHaveBeenCalled() // nothing changed in tmux
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', null])
+      // Read again only when it was shown at the other size; the claim changed nothing in tmux.
+      expect(link.settleSize).toHaveBeenCalledTimes(1)
     } finally {
       vi.useRealTimers()
     }
@@ -728,8 +731,8 @@ describe('another client holds the size', () => {
       s.tether.resizeClaim.mockResolvedValueOnce({ applied: true, changed: true })
       s.on.get('pty:claim-size')?.(s.from(s.all[0]), true) // Use here
       await vi.advanceTimersByTimeAsync(0)
-      expect(link.settleSize).toHaveBeenCalledTimes(1)
-      expect(sent(s).at(-1)).toEqual(['pty:size-other', false])
+      expect(link.settleSize).toHaveBeenCalledTimes(2) // shown at the other size, then back
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', null])
     } finally {
       vi.useRealTimers()
     }
@@ -767,7 +770,7 @@ describe('another client holds the size', () => {
       expect(s.tether.resizeClaim).toHaveBeenCalledTimes(1) // reclaimed by itself
       s.terminal.sizeHeldBy('aaaaaaaa', 4242) // the claim landed
       await vi.advanceTimersByTimeAsync(OVERLAY_DELAY_MS * 2)
-      expect(sent(s).every(([, shown]) => shown === false)).toBe(true)
+      expect(sent(s).every(([, shown]) => shown === null)).toBe(true)
     } finally {
       vi.useRealTimers()
     }
@@ -781,7 +784,88 @@ describe('another client holds the size', () => {
       await lostTo(s)
       s.on.get('pty:start')?.(s.from(s.all[0]), { cols: 100, rows: 30 })
       await vi.advanceTimersByTimeAsync(0)
-      expect(sent(s).at(-1)).toEqual(['pty:size-other', false])
+      expect(sent(s).at(-1)).toEqual(['pty:size-other', null])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('names the holder and shows the session at the size tmux reports, reading the pane again', async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      const link = await attached(s)
+      await vi.advanceTimersByTimeAsync(0)
+      const phone = { app: 'web', device: 'Safari on iPhone' }
+      link.windowState.mockResolvedValueOnce({
+        cols: 43,
+        rows: 37,
+        pinned: true,
+        clients: [4242, 9999],
+      })
+      s.terminal.sizeHeldBy('aaaaaaaa', 9999, phone)
+      await vi.advanceTimersByTimeAsync(OVERLAY_DELAY_MS + 10)
+      expect(sent(s).at(-1)).toEqual([
+        'pty:size-other',
+        { viewer: phone, size: { cols: 43, rows: 37 } },
+      ])
+      expect(link.settleSize).toHaveBeenCalledTimes(1)
+      // The phone's keyboard opens: the new size shows at once.
+      link.windowState.mockResolvedValueOnce({
+        cols: 43,
+        rows: 20,
+        pinned: true,
+        clients: [4242, 9999],
+      })
+      s.terminal.sizeHeldBy('aaaaaaaa', 9999, phone)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(sent(s).at(-1)).toEqual([
+        'pty:size-other',
+        { viewer: phone, size: { cols: 43, rows: 20 } },
+      ])
+      expect(link.settleSize).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("at attach, shows the session at the holder's size under its name", async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      const link = await attached(s)
+      const phone = { app: 'web', device: 'Chrome on Android' }
+      link.windowState.mockResolvedValueOnce({
+        cols: 50,
+        rows: 24,
+        pinned: true,
+        clients: [4242, 9999],
+      })
+      s.tether.resizeHolder.mockResolvedValueOnce({
+        generation: 'g1',
+        holder: { clientPid: 9999, viewer: phone },
+      })
+      link.emitData('seed')
+      await vi.advanceTimersByTimeAsync(OVERLAY_DELAY_MS + 10)
+      expect(sent(s).at(-1)).toEqual([
+        'pty:size-other',
+        { viewer: phone, size: { cols: 50, rows: 24 } },
+      ])
+      expect(s.tether.resizeClaim).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('takes the size back when the owner pastes', async () => {
+    vi.useFakeTimers()
+    try {
+      const s = setup()
+      const link = await attached(s)
+      await lostTo(s)
+      s.on.get('pty:paste')?.(s.from(s.all[0]), '/home/kasadis/.cache/aico/uploads/paste-1.png')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(link.paste).toHaveBeenCalledWith('/home/kasadis/.cache/aico/uploads/paste-1.png')
+      expect(s.tether.resizeClaim).toHaveBeenCalledTimes(1)
     } finally {
       vi.useRealTimers()
     }

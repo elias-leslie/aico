@@ -1,11 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  sizeHolderName,
-  TerminalComponent,
-  type TerminalHandle,
-} from './Terminal'
+import { TerminalComponent, type TerminalHandle } from './Terminal'
 
 type TerminalHookOptions = Parameters<
   typeof import('../lib/hooks/use-terminal-websocket')['useTerminalWebSocket']
@@ -212,16 +208,6 @@ describe('TerminalComponent', () => {
     })
     expect(onSizeHolderChange).toHaveBeenLastCalledWith(null)
     vi.useRealTimers()
-  })
-
-  it('names the size holder as the notice says it', () => {
-    expect(sizeHolderName({ app: 'desktop', device: 'workstation' })).toBe(
-      'Aico desktop',
-    )
-    expect(sizeHolderName({ app: 'web', device: 'Safari on iPhone' })).toBe(
-      'Safari on iPhone',
-    )
-    expect(sizeHolderName(null)).toBe('another device')
   })
 
   it('an observer sends no size and never claims, even when typing', () => {

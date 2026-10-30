@@ -368,19 +368,22 @@ export function createTerminal(deps: TerminalDeps) {
     // size for its own attached client (Tether's active-client resize claim)
     // when the owner types, clicks or presses Use here in it, at attach only
     // when nobody holds the size yet, and on a resize (Aico's tiling) only
-    // while it holds the size. Whether another client holds the size shows in
-    // the window as a notice with a Use here button (size-holder.ts); this
-    // window's own claims clear it.
+    // while it holds the size. While another client holds it the window draws
+    // the session at that client's size under a bar with Use here
+    // (size-holder.ts), reading the pane again at each new size; this window's
+    // own claims clear it.
     const holder = createSizeHolder({
       reclaim: () => void claimSize(),
-      show: (visible) => {
-        if (!win.isDestroyed()) win.webContents.send('pty:size-other', visible)
+      show: (held) => {
+        if (win.isDestroyed()) return
+        win.webContents.send('pty:size-other', held)
+        if (held?.size && isCurrent()) pty.settleSize()
       },
       isActive: () =>
         win.isFocused() && Date.now() - (lastInput.get(winId) ?? -Infinity) < ACTIVE_WITHIN_MS,
     })
     sizeHolders.set(pty, holder)
-    if (!win.isDestroyed()) win.webContents.send('pty:size-other', false) // a fresh attach holds nothing against it
+    if (!win.isDestroyed()) win.webContents.send('pty:size-other', null) // a fresh attach holds nothing against it
     const claimSize = createSizeClaim({
       tether,
       id,
@@ -408,7 +411,11 @@ export function createTerminal(deps: TerminalDeps) {
       if (!isCurrent()) return
       if (at.claim) void claimSize()
       else if (at.holder?.clientPid === pty.pid) holder.held()
-      else holder.lost()
+      else
+        holder.lost({
+          viewer: at.holder?.viewer ?? null,
+          size: at.size ? { cols: at.size.cols, rows: at.size.rows } : null,
+        })
     }
     let attachSeen = false
     pty.onData((data) => {
@@ -559,12 +566,16 @@ export function createTerminal(deps: TerminalDeps) {
     })
 
     // Paste goes through tmux, which brackets it only when the program asked
-    // for bracketed paste.
+    // for bracketed paste. Pasting is using the window, as typing is.
     ipcMain.on('pty:paste', (event, text: unknown) => {
       if (typeof text !== 'string' || text.length === 0) return
       const widgetId = registry.senderSession(event.sender)
       if (!widgetId || deps.isReplacing(widgetId)) return
-      ptyFor(event.sender)?.paste(text)
+      const pty = ptyFor(event.sender)
+      const win = registry.senderWindow(event.sender)
+      if (win) lastInput.set(win.id, Date.now())
+      pty?.paste(text)
+      if (pty) sizeHolders.get(pty)?.activity()
     })
 
     // The owner clicked in the terminal (a deliberate Use here press, or a
@@ -647,14 +658,22 @@ export function createTerminal(deps: TerminalDeps) {
     sessionSeen,
     peerResync,
     /** A client claimed this session's size (Tether's `session.resized`): if it is
-     * not this window's own terminal, another client now holds the size. */
-    sizeHeldBy: (id: string, clientPid: number): void => {
+     * not this window's own terminal, another client now holds the size, and
+     * the window shows the session at the size tmux then reports. */
+    sizeHeldBy: (id: string, clientPid: number, viewer: ViewerLabel | null = null): void => {
       const win = registry.forSession(id)
       const pty = win ? ptys.get(win.id) : undefined
       const holder = pty ? sizeHolders.get(pty) : undefined
       if (!pty || !holder) return
-      if (pty.pid === clientPid) holder.held()
-      else holder.lost()
+      if (pty.pid === clientPid) {
+        holder.held()
+        return
+      }
+      holder.lost({ viewer, size: null })
+      void pty.windowState().then((state) => {
+        if (state && ptys.get(win?.id ?? -1) === pty && holder.isOther())
+          holder.lost({ viewer, size: { cols: state.cols, rows: state.rows } })
+      })
     },
     /** The window is gone: detach its terminal first (the session persists), then
      * drop its per-window state. An in-flight refresh entry is left, as before. */

@@ -10,9 +10,9 @@ import {
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { BrowserWindow } from 'electron'
-import { controlSocketPath } from 'tether/term'
+import { controlSocketPath, RemoteUploadError } from 'tether/term'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { registerDesktopIpc } from './desktop-ipc'
+import { type ImagePaste, registerDesktopIpc } from './desktop-ipc'
 
 function fakeWindow(id: number) {
   return {
@@ -95,6 +95,10 @@ function setup(
   return { win1, win2, settings, pastedImages, setSetting, clipboard, shell, on, handle, event }
 }
 
+/** The `clipboard:image-path` answer, through the registered handler. */
+const imagePaste = (handle: Map<string, (...args: unknown[]) => unknown>, event: unknown) =>
+  handle.get('clipboard:image-path')?.(event) as Promise<ImagePaste>
+
 describe('desktop IPC', () => {
   it('registers its eleven channels', () => {
     const { on, handle } = setup()
@@ -126,31 +130,35 @@ describe('desktop IPC', () => {
 
   it('saves a clipboard image as a PNG file and returns its path', async () => {
     const { handle, pastedImages, event } = setup()
-    const path = (await handle.get('clipboard:image-path')?.(event)) as string
+    const { path, error } = (await imagePaste(handle, event)) as ImagePaste
+    expect(error).toBeUndefined()
     expect(path.startsWith(`${pastedImages.dir}/paste-`)).toBe(true)
     expect(path.endsWith('.png')).toBe(true)
     expect(readFileSync(path)).toEqual(PNG)
     expect(statSync(path).mode & 0o777).toBe(0o644)
     expect(statSync(pastedImages.dir).mode & 0o777).toBe(0o755)
-    expect(await handle.get('clipboard:image-path')?.(event)).not.toBe(path)
+    expect(await handle.get('clipboard:image-path')?.(event)).not.toEqual({ path })
   })
 
   it('returns no path when the clipboard has no image, leaving text paste alone', async () => {
     const { handle, clipboard, pastedImages, event } = setup()
     clipboard.readImage.mockReturnValue({ isEmpty: () => true, toPNG: () => PNG })
-    expect(await handle.get('clipboard:image-path')?.(event)).toBe('')
+    expect(await handle.get('clipboard:image-path')?.(event)).toEqual({ path: '' })
     expect(existsSync(pastedImages.dir)).toBe(false)
     expect(handle.get('clipboard:read')?.()).toBe('copied')
   })
 
-  it('returns no path when the image cannot be saved', async () => {
+  it('returns no path, and says why, when the image cannot be saved', async () => {
     const { handle, pastedImages, event } = setup()
     // A folder that can't exist: its parent is a file.
     mkdirSync(dirname(pastedImages.dir), { recursive: true })
     writeFileSync(join(dirname(pastedImages.dir), 'file'), '')
     pastedImages.dir = join(dirname(pastedImages.dir), 'file', 'pasted-images')
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(await handle.get('clipboard:image-path')?.(event)).toBe('')
+    expect(await handle.get('clipboard:image-path')?.(event)).toEqual({
+      path: '',
+      error: 'Couldn’t save the pasted image.',
+    })
     expect(error).toHaveBeenCalled()
     error.mockRestore()
   })
@@ -171,7 +179,8 @@ describe('desktop IPC', () => {
         {},
         { host: 'agent-work', sendToHost, hosts: [row] },
       )
-      const path = (await handle.get('clipboard:image-path')?.(event)) as string
+      const { path, error } = (await imagePaste(handle, event)) as ImagePaste
+      expect(error).toBeUndefined()
       expect(path).toMatch(/^\/home\/agent\/up\/paste-\d+-[0-9a-f]{12}\.png$/)
       const [remote, png, , options] = sendToHost.mock.calls[0]
       expect(remote).toMatchObject({ host: 'agent-work', alias: 'agent-work-vm' })
@@ -180,21 +189,43 @@ describe('desktop IPC', () => {
       expect(existsSync(pastedImages.dir)).toBe(false)
     })
 
-    it('returns no path, and saves nothing here, when the host is offline or the send fails', async () => {
+    it('returns no path, saves nothing here, and says why, when the host is offline or the send fails', async () => {
       const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const sendToHost = vi.fn(async () => {
-        throw new Error('ssh failed')
+      const paste = async (hosts: unknown[], sendToHost: unknown) => {
+        const s = setup({}, { host: 'agent-work', sendToHost, hosts })
+        const answer = await s.handle.get('clipboard:image-path')?.(s.event)
+        expect(existsSync(s.pastedImages.dir)).toBe(false)
+        return answer
+      }
+      const unused = vi.fn()
+      expect(await paste([{ ...row, state: 'offline' }], unused)).toEqual({
+        path: '',
+        error: 'agent-work is offline, so the image wasn’t sent.',
       })
-      const offline = setup(
-        {},
-        { host: 'agent-work', sendToHost, hosts: [{ ...row, state: 'offline' }] },
-      )
-      expect(await offline.handle.get('clipboard:image-path')?.(offline.event)).toBe('')
-      expect(sendToHost).not.toHaveBeenCalled()
-      const failing = setup({}, { host: 'agent-work', sendToHost, hosts: [row] })
-      expect(await failing.handle.get('clipboard:image-path')?.(failing.event)).toBe('')
-      expect(existsSync(failing.pastedImages.dir)).toBe(false)
-      expect(error).toHaveBeenCalledTimes(2)
+      expect(await paste([], unused)).toEqual({
+        path: '',
+        error: 'agent-work isn’t linked, so the image wasn’t sent.',
+      })
+      expect(await paste([{ ...row, control: '/tmp/elsewhere.sock' }], unused)).toEqual({
+        path: '',
+        error: 'agent-work’s link looks wrong, so the image wasn’t sent.',
+      })
+      expect(unused).not.toHaveBeenCalled()
+      const dropped = vi.fn(async () => {
+        throw new RemoteUploadError('offline', 'agent-work', 'exit 255')
+      })
+      expect(await paste([row], dropped)).toEqual({
+        path: '',
+        error: 'agent-work is offline, so the image wasn’t sent.',
+      })
+      const refused = vi.fn(async () => {
+        throw new RemoteUploadError('failed', 'agent-work', 'No space left on device')
+      })
+      expect(await paste([row], refused)).toEqual({
+        path: '',
+        error: 'agent-work didn’t accept the image, so it wasn’t sent.',
+      })
+      expect(error).toHaveBeenCalledTimes(5)
       error.mockRestore()
     })
   })
