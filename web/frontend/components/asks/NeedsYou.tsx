@@ -4,7 +4,14 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
 import { Check, Copy, Inbox, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { formatAge } from '@/lib/attention'
 import { openFiles } from '@/lib/files-opener'
 import {
@@ -37,6 +44,26 @@ function takeAskFromUrl(): string | null {
   return /^[0-9a-f]{12}$/.test(id) ? id : null
 }
 
+/** One drawer for the whole page: the launcher that opened it shows it, and
+ * when that one leaves the screen (the session bar giving way to the list, the
+ * session sheet closing) another launcher still on screen takes it over. */
+interface DrawerState {
+  open: boolean
+  focus: string | null
+  owner: string | null
+}
+let drawerState: DrawerState = { open: false, focus: null, owner: null }
+const drawerListeners = new Set<() => void>()
+function setDrawer(next: Partial<DrawerState>): void {
+  drawerState = { ...drawerState, ...next }
+  for (const listener of drawerListeners) listener()
+}
+function subscribeDrawer(listener: () => void): () => void {
+  drawerListeners.add(listener)
+  return () => drawerListeners.delete(listener)
+}
+const readDrawer = () => drawerState
+
 /** Where the launcher sits: the session list header (`pill`), its folded
  * rail (`icon`), the phone's session bar (`compact`: the count alone, nothing
  * when nothing waits) or the session sheet (`row`, always there). */
@@ -47,21 +74,29 @@ type Variant = 'pill' | 'icon' | 'compact' | 'row'
 export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
   const { asks } = useOwnerAsks()
   const { approvals } = useApprovals()
-  const [open, setOpen] = useState(false)
-  const [focus, setFocus] = useState<string | null>(null)
+  const me = useId()
+  const drawer = useSyncExternalStore(subscribeDrawer, readDrawer, readDrawer)
   const waiting = openAsks(asks).length
   const taps = approvals?.taps.length ?? 0
   const count = waiting + taps
 
   // The sheet row mounts only while the sheet is open; the bar or the list
-  // that is always on screen takes the push link.
+  // that is always on screen takes the push link and an orphaned drawer.
   useEffect(() => {
     if (variant === 'row') return
     const id = takeAskFromUrl()
-    if (!id) return
-    setFocus(id)
-    setOpen(true)
+    if (id) setDrawer({ open: true, focus: id, owner: null })
   }, [variant])
+  useEffect(() => {
+    if (variant !== 'row' && drawer.open && drawer.owner === null)
+      setDrawer({ owner: me })
+  }, [variant, drawer.open, drawer.owner, me])
+  useEffect(
+    () => () => {
+      if (drawerState.owner === me) setDrawer({ owner: null })
+    },
+    [me],
+  )
 
   const summary =
     count === 0
@@ -72,7 +107,7 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
         ]
           .filter(Boolean)
           .join(' and ')} waiting for you`
-  const show = () => setOpen(true)
+  const show = () => setDrawer({ open: true, focus: null, owner: me })
 
   let button: ReactNode
   if (variant === 'row')
@@ -128,14 +163,13 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
   return (
     <>
       {button}
-      {open && (
+      {drawer.open && drawer.owner === me && (
         <NeedsYouDrawer
           open
           onOpenChange={(next) => {
-            setOpen(next)
-            if (!next) setFocus(null)
+            if (!next) setDrawer({ open: false, focus: null, owner: null })
           }}
-          focus={focus}
+          focus={drawer.focus}
         />
       )}
     </>

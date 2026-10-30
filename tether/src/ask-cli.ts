@@ -185,6 +185,7 @@ export function formatAsk(ask: AskJson): string {
   ask.options.forEach((option, index) => {
     lines.push(`  ${index + 1}. ${option}${index === ask.recommended ? '  (recommended)' : ''}`)
   })
+  if (ask.body) for (const line of ask.body.split('\n')) lines.push(`  | ${line}`)
   if (ask.command) lines.push(`  command: ${ask.command}`)
   if (ask.share) lines.push(`  share: ${ask.share}`)
   if (ask.answer !== null) lines.push(`  answer: ${ask.answer}`)

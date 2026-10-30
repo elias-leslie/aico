@@ -108,12 +108,19 @@ describe('NeedsYouLauncher', () => {
     expect(screen.queryByTestId('needs-you-pill')).toBeNull()
   })
 
-  it('opens on the push link and drops it from the address', () => {
+  it('opens on the push link, drops it from the address and survives the bar giving way to the list', () => {
     state.asks = [ask()]
     window.history.replaceState(null, '', '/?session=0123abcd&ask=abcdefabcdef')
-    render(<NeedsYouLauncher variant="compact" />)
+    const { rerender } = render(
+      <NeedsYouLauncher key="bar" variant="compact" />,
+    )
     expect(screen.getByTestId('needs-you-drawer')).toBeInTheDocument()
     expect(window.location.search).toBe('?session=0123abcd')
+    // A wide window: the session list mounts its own launcher, the bar's goes.
+    rerender(<NeedsYouLauncher key="list" />)
+    expect(screen.getAllByTestId('needs-you-drawer')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByTestId('needs-you-drawer')).toBeNull()
   })
 })
 
