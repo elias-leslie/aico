@@ -194,9 +194,10 @@ export function SessionSwitcher({
                 className="mx-auto mt-2 h-1 w-9 flex-none rounded-full"
                 style={{ backgroundColor: 'var(--paper-veil)' }}
               />
-              <div className="flex flex-none items-center gap-2 pt-3 pr-3 pb-1 pl-[18px]">
+              <div className="flex flex-none flex-wrap items-center justify-end gap-x-2 gap-y-1 pt-3 pr-3 pb-1 pl-[18px]">
+                {/* One line; the buttons wrap under it on a narrow phone. */}
                 <h2
-                  className="min-w-0 flex-1"
+                  className="mr-auto whitespace-nowrap"
                   style={{ font: '500 18px/1.2 var(--font-display)' }}
                 >
                   {sessionsHeading(allSlots.length, needsYouCount)}
