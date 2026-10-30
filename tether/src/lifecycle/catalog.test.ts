@@ -27,6 +27,7 @@ import {
   listTmuxServers,
   markTmuxServerDead,
   recordLauncher,
+  relaunchLauncher,
   removeWidgetIfOwnership,
   setCoordinator,
   setWidgetOwnership,
@@ -691,6 +692,14 @@ describe('coordinators', () => {
     // Marking a lane a coordinator by hand makes it a root: no parent.
     setCoordinator('e0000013', true)
     expect(getWidget('e0000013')?.parentId).toBeNull()
+  })
+
+  it('relaunches under the same lane while it is still in the team', () => {
+    // e0000012 is a lane of e0000011 (above); e0000013 became a root.
+    expect(relaunchLauncher('e0000011', 'e0000012')).toBe('e0000012')
+    expect(relaunchLauncher('e0000011', 'e0000013')).toBe('e0000011')
+    expect(relaunchLauncher('e0000011', 'deadbeef')).toBe('e0000011')
+    expect(relaunchLauncher('e0000011', null)).toBe('e0000011')
   })
 
   it('adopts a parent from another machine, and none from an older hub', () => {

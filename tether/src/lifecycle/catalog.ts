@@ -890,6 +890,12 @@ export function recordLauncher(id: string, launchedBy: string): string[] {
   return [id, ...claimed.changed]
 }
 
+/** Who launches a session started again for an ended one: the lane that
+ * launched it while that lane is still in the same team, else its coordinator. */
+export function relaunchLauncher(coordinatorId: string, parentId: string | null): string {
+  return parentId && getWidget(parentId)?.coordinatorId === coordinatorId ? parentId : coordinatorId
+}
+
 /** The lineage a launcher hands to the sessions it launches: its root
  * coordinator, or itself, which then becomes a coordinator (`changed` names
  * it then), and itself as their parent. Null for a launcher Tether does not

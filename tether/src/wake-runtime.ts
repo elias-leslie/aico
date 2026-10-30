@@ -17,6 +17,7 @@ import {
   joinCoordinator,
   listLanes,
   recordLauncher,
+  relaunchLauncher,
   type SessionOrigin,
   setCoordinator,
   setWidgetName,
@@ -263,13 +264,7 @@ export class WakeService {
       setCoordinator(id, true)
       for (const lane of listLanes(ended.id)) joinCoordinator(lane, id)
     } else if (ended.coordinatorId && getWidget(ended.coordinatorId)) {
-      // Back under the lane that launched it while that lane is still in the
-      // same team, else directly under the coordinator.
-      const parent =
-        ended.parentId && getWidget(ended.parentId)?.coordinatorId === ended.coordinatorId
-          ? ended.parentId
-          : ended.coordinatorId
-      recordLauncher(id, parent)
+      recordLauncher(id, relaunchLauncher(ended.coordinatorId, ended.parentId ?? null))
     }
     let started = false
     try {
