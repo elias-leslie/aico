@@ -323,8 +323,8 @@ def test_tether_decides_which_tools_can_start_a_root(monkeypatch, supported, sho
 
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
-    assert admin.main(fresh("pi")) == 1
-    assert calls == ["pi"]
+    assert admin.main(fresh("agy")) == 1
+    assert calls == ["agy"]
     assert output[0]["reason"] == "unsupported_tool"
     assert output[0].get("supportedTools") == shown
 
