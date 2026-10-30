@@ -390,14 +390,18 @@ function HostCard({
           )}
         </div>
       </div>
-      {host.error && host.state !== 'connected' && !starting && (
-        <p
-          className="mt-1.5 text-[12px] break-words"
-          style={{ color: 'var(--mist)' }}
-        >
-          {host.error}
-        </p>
-      )}
+      {/* Powered off says it all; the link's own error (connect ECONNREFUSED…) is noise. */}
+      {host.error &&
+        host.state !== 'connected' &&
+        host.state !== 'powered_off' &&
+        !starting && (
+          <p
+            className="mt-1.5 text-[12px] break-words"
+            style={{ color: 'var(--mist)' }}
+          >
+            {host.error}
+          </p>
+        )}
       {error && (
         <p role="alert" className="mt-2 text-[13px] break-words">
           {error}

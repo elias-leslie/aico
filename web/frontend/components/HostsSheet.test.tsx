@@ -155,6 +155,22 @@ describe('HostsSheet', () => {
     )
   })
 
+  it('says a powered-off host is off without the link error', async () => {
+    state.hosts = [
+      host({
+        state: 'powered_off',
+        error:
+          'connect ECONNREFUSED /run/user/1000/tether/default/control.sock',
+      }),
+    ]
+    renderSheet()
+    expect(await screen.findByTestId('host-status')).toHaveTextContent(
+      'Powered off',
+    )
+    expect(screen.queryByText(/ECONNREFUSED/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Power on' })).toBeInTheDocument()
+  })
+
   it('shows the start step while starting, with no Power on', async () => {
     state.hosts = [
       host({
