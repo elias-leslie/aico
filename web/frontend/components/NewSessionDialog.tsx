@@ -82,7 +82,14 @@ export function NewSessionDialog({
       : undefined
   // A session on another host starts in one of that host's projects.
   const remote = useHostProjects(host)
-  const { projects, isLoading, isError, refetch } = host ? remote : local
+  // A host that is off can't list them; starting there turns it on, and its
+  // projects sit at the same paths as here.
+  const away =
+    !!host &&
+    remote.isError &&
+    hosts.find((h) => h.name === host)?.state !== 'connected'
+  const { projects, isLoading, isError, refetch } =
+    host && !away ? remote : local
 
   const normalizedQuery = query.trim().toLowerCase()
   const visibleProjects = useMemo(
@@ -292,6 +299,9 @@ export function NewSessionDialog({
                 />
               </label>
             </div>
+            {away && (
+              <Note>{`${host} is off or out of reach. Starting a session there turns it on first.`}</Note>
+            )}
             {isLoading ? (
               <Note>Loading projects…</Note>
             ) : isError ? (

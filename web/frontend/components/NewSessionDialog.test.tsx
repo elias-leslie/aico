@@ -167,9 +167,32 @@ describe('NewSessionDialog', () => {
       }),
     ).toBeEnabled()
 
+    // Connected but its list fails: say why, and nothing to start in.
+    hostState.hosts[1] = { name: 'lab', state: 'connected' }
     fireEvent.click(screen.getByRole('button', { name: /^lab/ }))
     expect(screen.getByText(/lab is offline \(link down\)\./)).toBeTruthy()
     expect(screen.getByRole('button', { name: /^Start/ })).toBeDisabled()
+  })
+
+  it("starts on a host that is off in this computer's projects, which turns it on", () => {
+    hostState.hosts = [{ name: 'agent-work', state: 'offline' }]
+    delete hostProjects.lists['agent-work']
+    hostProjects.failures['agent-work'] =
+      'agent-work is offline (not reachable)'
+    const { onStart } = renderDialog('neri')
+    fireEvent.click(screen.getByRole('button', { name: /^agent-work/ }))
+    expect(screen.getByText(/agent-work is off or out of reach/)).toBeTruthy()
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Start Claude Code in Neri on agent-work',
+      }),
+    )
+    expect(onStart).toHaveBeenCalledWith(
+      'neri',
+      '/srv/neri',
+      'claude-code',
+      'agent-work',
+    )
   })
 
   it('keeps the dialog open with the reason when the host is away', async () => {

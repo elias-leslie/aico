@@ -424,8 +424,18 @@ function populateNewProjects(slug: string, withBack: boolean): void {
     // A session on another host starts in one of that host's projects.
     if (hostProjects?.host !== host) readHostProjects(host)
     const listing = hostProjects?.listing
+    const state = hostListing?.items.find((h) => h.name === host)?.state
     if (!listing) submenuEl.append(emptySubmenuRow(`Loading projects on ${host}…`))
-    else if (listing.status === 'unavailable')
+    else if (listing.status === 'unavailable' && state !== 'connected') {
+      // A host that is off can't list them; starting there turns it on, and
+      // its projects sit at the same paths as here.
+      submenuEl.append(
+        emptySubmenuRow(
+          `${host} is off or out of reach. Starting a session there turns it on first.`,
+        ),
+      )
+      for (const p of catalogs.projects) submenuEl.append(newProjectRow(slug, p))
+    } else if (listing.status === 'unavailable')
       submenuEl.append(emptySubmenuRow(`Couldn't load projects on ${host}`))
     else if (!listing.items.length) submenuEl.append(emptySubmenuRow(`No projects on ${host}`))
     else for (const p of listing.items) submenuEl.append(newProjectRow(slug, p))
