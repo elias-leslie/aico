@@ -1,7 +1,8 @@
 'use client'
 
 /** The remote host a session runs on, beside its title: a neutral chip that
- * stays readable on a phone (it gives up width before the title does). While
+ * stays readable on a phone (it keeps its width up to 12 characters and the
+ * title gives way; a longer name truncates, whole in the tooltip). While
  * the host cannot be reached its state shows in the tooltip and the chip dims. */
 export function HostBadge({
   host,
@@ -20,10 +21,9 @@ export function HostBadge({
       data-testid="host-badge"
       title={label}
       aria-label={label}
-      className="inline-block shrink truncate rounded-full px-[6px] text-[11px] leading-4 whitespace-nowrap"
+      className="inline-block flex-none truncate rounded-full px-[6px] text-[11px] leading-4 whitespace-nowrap"
       style={{
-        minWidth: '3ch',
-        maxWidth: '14ch',
+        maxWidth: 'calc(12ch + 14px)',
         border: '1px solid rgb(var(--glass-rgb) / 0.14)',
         color: 'var(--mist)',
         opacity: away ? 0.6 : 1,
