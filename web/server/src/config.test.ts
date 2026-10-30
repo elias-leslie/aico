@@ -90,6 +90,14 @@ describe('loadConfig: uploads, shares and maintenance', () => {
     expect(config.maintenance).toEqual({ enabled: false, intervalMs: 30_000, emptyPaneDays: 3 })
   })
 
+  it('reads Nightshift on its own loopback address unless told otherwise', () => {
+    expect(loadConfig({}, ID).nightshiftUrl).toBe('http://127.0.0.1:3020')
+    expect(loadConfig({ AICO_NIGHTSHIFT_URL: 'http://127.0.0.1:4000' }, ID).nightshiftUrl).toBe(
+      'http://127.0.0.1:4000',
+    )
+    expect(loadConfig({ AICO_NIGHTSHIFT_URL: 'off' }, ID).nightshiftUrl).toBeNull()
+  })
+
   it("trusts agent shares only from the owner's default Tether", () => {
     const env = { HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/7' }
     expect(loadConfig(env, ID).trustShows).toBe(true)

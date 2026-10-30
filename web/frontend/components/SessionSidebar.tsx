@@ -5,6 +5,7 @@ import { useRef, useState } from 'react'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { HostsLauncher } from './HostsButton'
+import { HealthLauncher } from './health/HealthButton'
 import { SessionList, SessionRail, sessionsHeading } from './SessionList'
 
 /** The list's width: the default, its limits, and the keyboard step. */
@@ -88,6 +89,7 @@ export function SessionSidebar({
         </header>
         {newButton}
         <HostsLauncher icon />
+        <HealthLauncher variant="icon" />
         <nav
           aria-label="Sessions"
           data-testid="session-list"
@@ -122,6 +124,7 @@ export function SessionSidebar({
         >
           {heading}
         </h2>
+        <HealthLauncher />
         <HostsLauncher icon />
         {onCollapsedChange && (
           <button

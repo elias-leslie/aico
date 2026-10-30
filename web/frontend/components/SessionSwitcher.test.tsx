@@ -12,6 +12,7 @@ vi.mock('./HostsButton', () => ({
     </button>
   ),
 }))
+vi.mock('./health/HealthButton', () => ({ HealthLauncher: () => null }))
 vi.mock('./HostsSheet', () => ({
   HostsSheet: () => <div data-testid="hosts-sheet-stub" />,
 }))

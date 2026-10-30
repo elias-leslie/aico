@@ -30,6 +30,8 @@ export interface WebConfig {
   agentHubClientId: string | null
   /** Agent Hub's port on the page's host: the browser's voice socket without a configured URL. */
   agentHubPort: number
+  /** Nightshift's web server on loopback, read for the Health panel; null: no panel data. */
+  nightshiftUrl: string | null
   uploads: UploadConfig
   maintenance: MaintenanceConfig
 }
@@ -71,6 +73,8 @@ const DEFAULT_MAINTENANCE_INTERVAL_SECONDS = 15 * 60
 const DEFAULT_EMPTY_PANE_DAYS = 7
 // The browser's own fallback (web/frontend lib/api-config.ts PORTS.agentHub).
 const DEFAULT_AGENT_HUB_PORT = 8003
+// Nightshift's own loopback address (its project.identity.json hosts.local_frontend).
+const DEFAULT_NIGHTSHIFT_URL = 'http://127.0.0.1:3020'
 
 /** The nearest project.identity.json above `from` (the repo root's). */
 export function findIdentityFile(from: string): string | null {
@@ -126,6 +130,13 @@ function list(value: string | undefined): string[] | null {
   return items.length ? items : null
 }
 
+/** AICO_NIGHTSHIFT_URL, `off` for none; Nightshift's own address otherwise. */
+function nightshiftUrl(value: string | undefined): string | null {
+  const text = value?.trim()
+  if (!text) return DEFAULT_NIGHTSHIFT_URL
+  return text.toLowerCase() === 'off' ? null : text
+}
+
 /** `~/.local/state/aico/web.db` unless `AICO_WEB_DB` says otherwise. */
 export function webDbPath(env: NodeJS.ProcessEnv = process.env): string {
   return env.AICO_WEB_DB || join(stateDir(env), 'aico', 'web.db')
@@ -177,6 +188,7 @@ export function loadConfig(
     agentHubUrl: env.AGENT_HUB_URL?.trim() || env.NEXT_PUBLIC_AGENT_HUB_URL?.trim() || null,
     agentHubClientId: env.AGENT_HUB_CLIENT_ID?.trim() || null,
     agentHubPort: DEFAULT_AGENT_HUB_PORT,
+    nightshiftUrl: nightshiftUrl(env.AICO_NIGHTSHIFT_URL),
     uploads: {
       dir: resolve(expandHome(env.UPLOAD_DIR?.trim() || join(home, uploadDirName), home)),
       remoteDir: env.AICO_REMOTE_UPLOAD_DIR?.trim() || DEFAULT_REMOTE_UPLOAD_DIR,

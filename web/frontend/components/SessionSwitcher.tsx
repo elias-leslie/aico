@@ -17,6 +17,7 @@ import { CoordinatorBadge } from './CoordinatorBadge'
 import { HostBadge } from './HostBadge'
 import { HostsButton } from './HostsButton'
 import { HostsSheet } from './HostsSheet'
+import { HealthLauncher } from './health/HealthButton'
 import { SessionList, sessionsHeading } from './SessionList'
 import { SessionTitle } from './SessionTitle'
 
@@ -157,7 +158,8 @@ export function SessionSwitcher({
           className="lantern-sheet lantern-enter absolute left-0 top-full z-50 mt-1.5 w-[380px] max-w-[90vw] rounded-xl pt-1"
         >
           {list}
-          <div className="flex justify-end px-2 pb-2">
+          <div className="flex justify-end gap-2 px-2 pb-2">
+            <HealthLauncher variant="row" />
             <HostsButton onClick={openHosts} />
           </div>
         </div>
@@ -197,6 +199,7 @@ export function SessionSwitcher({
                 >
                   {sessionsHeading(allSlots.length, needsYouCount)}
                 </h2>
+                <HealthLauncher variant="row" />
                 <HostsButton onClick={openHosts} />
               </div>
               {list}
