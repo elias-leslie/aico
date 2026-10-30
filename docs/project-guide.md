@@ -156,6 +156,10 @@ gives live, two-way access to the same sessions Aico shows.
 
 What you get on mobile is the terminal itself; Aico's desktop chrome (eyes, lantern menu) stays on the desktop.
 
+An agent's question and a new share reach the owner through Nightshift's notice contract v1 (`nightshift push
+--json`, see Nightshift's `docs/notify-contract.md`; sender: `web/server/src/notice.ts`): a question offers Answer
+and opens `?ask=<id>`, a share opens `?show=<id>`.
+
 ## Architecture
 
 ```text
