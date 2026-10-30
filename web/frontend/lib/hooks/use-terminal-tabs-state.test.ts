@@ -94,7 +94,6 @@ function buildActiveSessionState(
     adHocSessions: [sessions[2]],
     externalSessions: [],
     isLoading: false,
-    requestedSessionId: null,
     ...overrides,
   }
 }
@@ -464,14 +463,14 @@ describe('useTerminalTabsState', () => {
     expect(result.current.activeSessionId).toBe('other-agent')
   })
 
-  it('opens nothing when the URL names a session that is gone', () => {
+  it('opens no pane the user did not choose (a gone link, or none)', () => {
+    // Panes are shared: the first may be the owner's or another agent's.
     mockUseMediaQuery.mockReturnValue(true)
     const switchToSession = vi.fn()
     mockUseActiveSession.mockReturnValue(
       buildActiveSessionState({
         activeSessionId: null,
         activeSession: null,
-        requestedSessionId: 'gone',
         switchToSession,
       }),
     )

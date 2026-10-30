@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
+import type { PaneSlot } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { useTerminalSlotHandlers } from './use-terminal-slot-handlers'
 
@@ -27,81 +27,66 @@ function paneSlot(id: string): PaneSlot {
   }
 }
 
-const externalSlot: TerminalSlot = {
-  type: 'adhoc',
-  ...SLOT_BASE,
-  sessionId: 'session-agent',
-  name: 'Agent session',
-  workingDir: '/tmp',
-  sessionMode: 'shell',
-  isExternal: true,
-}
-
-function setup(
-  slots: Array<TerminalSlot | PaneSlot>,
-  nextSessionId: string | null = null,
-) {
+function setup(nextSessionId: string | null = null) {
   const switchToSession = vi.fn()
+  const clearActiveSession = vi.fn()
   const remove = vi.fn().mockResolvedValue({
     deleted: true,
     id: 'session-a',
     next_session_id: nextSessionId,
     pane_id: 'pane-a',
-    pane_deleted: true,
+    pane_deleted: nextSessionId === null,
     is_external: false,
   })
   const { result } = renderHook(
     () =>
       useTerminalSlotHandlers({
         switchToSession,
+        clearActiveSession,
         activeSessionId: 'session-a',
         reset: vi.fn(),
         remove,
         sessions: [],
-        slots,
         handleProjectModeChange: vi.fn(),
       }),
     { wrapper: createWrapper() },
   )
-  return { result, switchToSession, remove }
+  return { result, switchToSession, clearActiveSession, remove }
 }
 
 describe('useTerminalSlotHandlers', () => {
-  it("after ending the open session, shows the user's next own session", async () => {
-    const a = paneSlot('a')
-    const { result, switchToSession, remove } = setup([
-      a,
-      externalSlot,
-      paneSlot('b'),
-    ])
+  it('after ending the open session, shows no session rather than another pane', async () => {
+    // Panes are shared: the next one may be the owner's or another agent's.
+    const { result, switchToSession, clearActiveSession, remove } = setup()
 
     await act(async () => {
-      await result.current.handleSlotCloseSession(a)
+      await result.current.handleSlotCloseSession(paneSlot('a'))
     })
 
     expect(remove).toHaveBeenCalledWith('session-a', {})
-    expect(switchToSession).toHaveBeenCalledWith('session-b')
+    expect(switchToSession).not.toHaveBeenCalled()
+    expect(clearActiveSession).toHaveBeenCalled()
   })
 
-  it('prefers the session the backend names next', async () => {
-    const a = paneSlot('a')
-    const { result, switchToSession } = setup([a, paneSlot('b')], 'session-c')
+  it("shows the session's companion in its pane, as the backend names it", async () => {
+    const { result, switchToSession, clearActiveSession } = setup('session-c')
 
     await act(async () => {
-      await result.current.handleSlotCloseSession(a)
+      await result.current.handleSlotCloseSession(paneSlot('a'))
     })
 
     expect(switchToSession).toHaveBeenCalledWith('session-c')
+    expect(clearActiveSession).not.toHaveBeenCalled()
   })
 
-  it("never opens another agent's session after the last own one ends", async () => {
-    const a = paneSlot('a')
-    const { result, switchToSession } = setup([a, externalSlot])
+  it('leaves the view alone when a session that is not open ends', async () => {
+    const { result, switchToSession, clearActiveSession } = setup()
 
     await act(async () => {
-      await result.current.handleSlotCloseSession(a)
+      await result.current.handleSlotCloseSession(paneSlot('b'))
     })
 
     expect(switchToSession).not.toHaveBeenCalled()
+    expect(clearActiveSession).not.toHaveBeenCalled()
   })
 })

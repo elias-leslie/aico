@@ -12,7 +12,7 @@ import { useProjectSettings } from '@/lib/hooks/use-project-settings'
 import { useTerminalHandlers } from '@/lib/hooks/use-terminal-handlers'
 import { useTerminalPanes } from '@/lib/hooks/use-terminal-panes'
 import { useTerminalSettings } from '@/lib/hooks/use-terminal-settings'
-import { getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
+import { getSlotSessionId } from '@/lib/utils/slot'
 import {
   buildSessionSlots,
   getActiveSessionProjectId,
@@ -34,8 +34,8 @@ export function useTerminalTabsState({
   const isMobile = useMediaQuery('(max-width: 767px)')
   const {
     activeSessionId,
-    requestedSessionId,
     switchToSession,
+    clearActiveSession,
     sessions,
     projectTerminals,
     externalSessions,
@@ -115,33 +115,18 @@ export function useTerminalTabsState({
     () => buildSessionSlots(panes, sessions, projectNames),
     [panes, projectNames, sessions],
   )
-  const resolvedActiveSessionId = useMemo(() => {
-    if (
+  // Only a session the user chose (link, switcher, or the one this browser had
+  // open) is shown; nothing is picked for them. Panes are shared, so "the first
+  // pane" can be the owner's or another agent's session, and opening it takes
+  // its size.
+  const resolvedActiveSessionId = useMemo(
+    () =>
       activeSessionId &&
       terminalSlots.some((slot) => getSlotSessionId(slot) === activeSessionId)
-    ) {
-      return activeSessionId
-    }
-    // A link that names a session opens it or nothing: "Session not found".
-    if (requestedSessionId) return null
-    // Picked without the user asking: one of their own panes, never another
-    // app's or agent's session.
-    const ownSlot = terminalSlots.find(isPaneSlot)
-    return ownSlot ? getSlotSessionId(ownSlot) : null
-  }, [activeSessionId, requestedSessionId, terminalSlots])
-  useEffect(() => {
-    if (
-      !resolvedActiveSessionId ||
-      resolvedActiveSessionId === activeSessionId
-    ) {
-      return
-    }
-    // Until every list has loaded, the chosen session may simply not be
-    // listed yet.
-    if (!isLoading) {
-      switchToSession(resolvedActiveSessionId)
-    }
-  }, [activeSessionId, isLoading, resolvedActiveSessionId, switchToSession])
+        ? activeSessionId
+        : null,
+    [activeSessionId, terminalSlots],
+  )
 
   const activeStatus = resolvedActiveSessionId
     ? terminalStatuses.get(resolvedActiveSessionId)
@@ -221,6 +206,7 @@ export function useTerminalTabsState({
   return {
     activeSessionId: resolvedActiveSessionId,
     switchToSession,
+    clearActiveSession,
     sessions,
     projectTerminals,
     externalSessions,

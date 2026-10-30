@@ -87,9 +87,6 @@ export interface UseActiveSessionResult {
   /** The currently active session ID (derived from URL, never stored) */
   activeSessionId: string | null
 
-  /** The session the URL names, whether or not it exists */
-  requestedSessionId: string | null
-
   /** The active session object (for convenience) */
   activeSession: TerminalSession | null
 
@@ -98,6 +95,9 @@ export interface UseActiveSessionResult {
 
   /** Switch to a different session (updates URL) */
   switchToSession: (sessionId: string) => void
+
+  /** Show no session (drops it from the URL), e.g. once the open one ends */
+  clearActiveSession: () => void
 
   /** For project tabs: get the right session for current mode */
   getProjectActiveSession: (projectId: string) => TerminalSession | null
@@ -262,6 +262,13 @@ export function useActiveSession(
     [getLatestSearchParams, router],
   )
 
+  const clearActiveSession = useCallback(() => {
+    const params = getLatestSearchParams()
+    params.delete('session')
+    const query = params.toString()
+    router.push(query ? `?${query}` : '?', { scroll: false })
+  }, [getLatestSearchParams, router])
+
   // Get the active session for a project based on its current mode
   const getProjectActiveSession = useCallback(
     (projectId: string): TerminalSession | null => {
@@ -276,10 +283,10 @@ export function useActiveSession(
 
   return {
     activeSessionId,
-    requestedSessionId: urlSessionId,
     activeSession,
     isValid,
     switchToSession,
+    clearActiveSession,
     getProjectActiveSession,
     sessions,
     projectTerminals,

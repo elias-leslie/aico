@@ -14,6 +14,7 @@ import {
 
 interface UseTerminalSlotHandlersParams {
   switchToSession: (sessionId: string) => void
+  clearActiveSession: () => void
   activeSessionId: string | null
   reset: (sessionId: string) => Promise<TerminalSession>
   remove: (
@@ -21,7 +22,6 @@ interface UseTerminalSlotHandlersParams {
     options?: { keepCheckIns?: boolean },
   ) => Promise<DeleteSessionResult>
   sessions: TerminalSession[]
-  slots: (TerminalSlot | PaneSlot)[]
   handleProjectModeChange: (
     projectId: string,
     newMode: string,
@@ -32,11 +32,11 @@ interface UseTerminalSlotHandlersParams {
 
 export function useTerminalSlotHandlers({
   switchToSession,
+  clearActiveSession,
   activeSessionId,
   reset,
   remove,
   sessions,
-  slots,
   handleProjectModeChange,
 }: UseTerminalSlotHandlersParams) {
   const queryClient = useQueryClient()
@@ -46,19 +46,6 @@ export function useTerminalSlotHandlers({
   useEffect(() => {
     sessionsRef.current = sessions
   }, [sessions])
-
-  // The next of the user's own sessions, to show once this one ends.
-  const findNextOwnSessionId = useCallback(
-    (currentSlot: TerminalSlot | PaneSlot) => {
-      for (const slot of slots) {
-        if (slot === currentSlot || !isPaneSlot(slot)) continue
-        const sessionId = getSlotSessionId(slot)
-        if (sessionId) return sessionId
-      }
-      return null
-    },
-    [slots],
-  )
 
   const handleSlotSwitch = useCallback(
     (slot: TerminalSlot | PaneSlot) => {
@@ -95,15 +82,13 @@ export function useTerminalSlotHandlers({
       const sessionId = getSlotSessionId(slot)
       if (!sessionId) return
 
-      const nextSessionId =
-        activeSessionId === sessionId ? findNextOwnSessionId(slot) : null
       const result = await remove(sessionId, options)
-      const target = result.next_session_id ?? nextSessionId
-      if (target) {
-        switchToSession(target)
-      }
+      // Its pane's other session (the backend names it), else no session:
+      // never another pane, which may be someone else's.
+      if (result.next_session_id) switchToSession(result.next_session_id)
+      else if (activeSessionId === sessionId) clearActiveSession()
     },
-    [activeSessionId, findNextOwnSessionId, remove, switchToSession],
+    [activeSessionId, clearActiveSession, remove, switchToSession],
   )
 
   // Switch mode (shell <-> agent tool) on a project slot

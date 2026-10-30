@@ -24,6 +24,7 @@ export function useTerminalOrchestration({
   const {
     activeSessionId,
     switchToSession,
+    clearActiveSession,
     sessions,
     terminalSlots,
     terminalRefs,
@@ -43,11 +44,11 @@ export function useTerminalOrchestration({
 
   const slotHandlers = useTerminalSlotHandlers({
     switchToSession,
+    clearActiveSession,
     activeSessionId,
     reset,
     remove,
     sessions,
-    slots: terminalSlots,
     handleProjectModeChange,
   })
 
