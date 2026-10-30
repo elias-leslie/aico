@@ -11,9 +11,8 @@ import { dirname, join } from 'node:path'
 import { CLIENT_ID_HEADER, OWNER_TOKEN_HEADER, REQUEST_SOURCE_HEADER } from '@agent-hub/sdk'
 import type { AgentHubConfig } from '../agent-hub/config'
 import { HttpError, type Router, readJsonObject, sendJson } from '../http'
-import { SSH_MUX_ONLY } from '../term/remote'
 import { type HostEntry, hostsFilePath } from './hosts'
-import { linkPaths, SSH_BIN } from './link'
+import { linkPaths, SSH_BIN, SSH_MUX_ONLY } from './link'
 import { type PeerAnswer, PeerUnavailable, peerRequest } from './peer-http'
 
 /** A command's exit code (null when it could not run or timed out), its

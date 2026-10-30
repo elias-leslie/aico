@@ -10,6 +10,12 @@ import { describe, expect, it } from 'vitest'
 const SRC = import.meta.dirname
 
 describe('package boundaries', () => {
+  it('keeps the daemon and apps copies of the link-only ssh options equal', async () => {
+    const [hub, term] = await Promise.all([import('./hub/link'), import('./term/remote')])
+    expect(hub.SSH_MUX_ONLY).toEqual(term.SSH_MUX_ONLY)
+    expect(hub.SSH_BIN).toBe(term.SSH_BIN)
+  })
+
   it('builds the daemon bundle from no src/client or src/term input', async () => {
     const result = await build({
       entryPoints: [join(SRC, 'cli.ts')],

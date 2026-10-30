@@ -6,8 +6,7 @@
 
 import { spawn } from 'node:child_process'
 import { HttpError } from '../http'
-import { SSH_MUX_ONLY } from '../term/remote'
-import { SSH_BIN } from './link'
+import { SSH_BIN, SSH_MUX_ONLY } from './link'
 import type { Peer } from './peer'
 
 export type WakeStep = 'powering_on' | 'connecting' | 'checking_services'

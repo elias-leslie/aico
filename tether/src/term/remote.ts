@@ -99,7 +99,8 @@ export const SSH_SESSION_REFUSED = /Session open refused by peer|session request
 /** Options for an ssh that rides the link's master and nothing else.
  * ProxyCommand=false: when the master refuses (or is gone), ssh would otherwise
  * fall back to a direct connection to the alias, which fails with a misleading
- * reason (or worse, connects around the link). */
+ * reason (or worse, connects around the link). The daemon's copy is
+ * src/hub/link.ts (the bundles stay apart); a test keeps them equal. */
 export const SSH_MUX_ONLY = [
   '-F',
   '/dev/null',

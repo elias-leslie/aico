@@ -12,6 +12,21 @@ import { join } from 'node:path'
 import type { HostEntry } from './hosts'
 
 export const SSH_BIN = '/usr/bin/ssh'
+
+/** Options for an ssh that rides a link's master and nothing else (health
+ * checks, Hosts panel commands). ProxyCommand=false: when the master refuses
+ * another session (the host's MaxSessions) or is gone, ssh would otherwise fall
+ * back to a direct connection to the alias. The apps' copy is
+ * src/term/remote.ts (the bundles stay apart); a test keeps them equal. */
+export const SSH_MUX_ONLY = [
+  '-F',
+  '/dev/null',
+  '-T',
+  '-o',
+  'BatchMode=yes',
+  '-o',
+  'ProxyCommand=false',
+]
 export const LINK_BACKOFF_MIN_MS = 2_000
 export const LINK_BACKOFF_MAX_MS = 300_000
 /** A link up this long resets the backoff. */
