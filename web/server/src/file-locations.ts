@@ -1,6 +1,6 @@
 // Files by location: the viewer behind shared files and file paths clicked in
 // a terminal. A location is a folder (`root`, absolute) and a path inside it;
-// file-browser.ts keeps every read inside the folder and refuses secrets, and
+// tether/files keeps every read inside the folder and refuses secrets, and
 // the folder itself may not name one. The file is read where it is, never
 // copied.
 
