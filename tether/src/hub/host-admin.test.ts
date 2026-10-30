@@ -206,7 +206,12 @@ describe('sign in and out', () => {
     expect(peerCalls[1]).toEqual({
       method: 'POST',
       path: '/v1/sessions/abcd1234/inject',
-      body: { generation: 'g1', text: 'codex login --device-auth', mode: 'paste', submit: true },
+      body: {
+        generation: 'g1',
+        text: 'codex login --device-auth && exit',
+        mode: 'paste',
+        submit: true,
+      },
     })
     expect(sessions).toHaveBeenCalled()
     expect(fetches).toEqual([])
@@ -224,7 +229,9 @@ describe('sign in and out', () => {
         'X-Request-Source': 'aico-tether',
       },
     })
-    expect(peerCalls[1]?.body).toMatchObject({ text: DEFAULT_LOGINS['claude-code']?.signIn })
+    expect(peerCalls[1]?.body).toMatchObject({
+      text: `${DEFAULT_LOGINS['claude-code']?.signIn} && exit`,
+    })
   })
 
   it('opens no session when Agent Hub refuses the grant', async () => {

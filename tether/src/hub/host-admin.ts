@@ -382,7 +382,9 @@ export class HostAdmin {
     }
   }
 
-  /** A shell session on the host with `line` typed in and run. */
+  /** A shell session on the host with `line` typed in and run. The shell
+   * exits once the line succeeds, so the host can idle off; a failure keeps it
+   * open with the error on screen. */
   private async openSession(
     name: string,
     title: string,
@@ -416,7 +418,7 @@ export class HostAdmin {
     const id = descriptor.id
     const injected = await this.peer(socket, 'POST', `/v1/sessions/${id}/inject`, {
       generation: descriptor.generation,
-      text: line,
+      text: `${line} && exit`,
       mode: 'paste',
       submit: true,
     }).catch((error: Error) => ({ status: 0, body: { reason: error.message } }))

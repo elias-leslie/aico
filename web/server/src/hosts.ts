@@ -3,6 +3,7 @@
 // it through and keep Tether's own reason as the detail the app shows.
 
 import {
+  HOST_CREATE_TIMEOUT_MS,
   hostLogins,
   hostPower,
   hostSignIn,
@@ -18,8 +19,6 @@ import { HttpError, WEB_ORIGIN } from './tether'
 /** A hosts.json host name, as Tether names it. */
 const HOST_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const TOOL = /^[a-z0-9][a-z0-9-]{0,39}$/
-/** Power on answers at once; sign-in may wait for the host to come up. */
-const SIGN_IN_TIMEOUT_MS = 300_000
 
 function hostName(value: string): string {
   if (!HOST_NAME.test(value)) throw new HttpError(422, 'Unknown host')
@@ -87,7 +86,7 @@ export function registerHostRoutes(router: Router, tether: TetherClient) {
     const answer = await hostCall(() =>
       hostSignIn(tether, host, tool, body.action as 'sign_in' | 'sign_out', {
         origin: WEB_ORIGIN,
-        timeoutMs: SIGN_IN_TIMEOUT_MS,
+        timeoutMs: HOST_CREATE_TIMEOUT_MS,
       }),
     )
     return answer.session ? { ...answer, session: fromTether(answer.session, null) } : answer

@@ -5,6 +5,7 @@
 
 import type { IpcMain } from 'electron'
 import {
+  HOST_CREATE_TIMEOUT_MS,
   type HostInfo,
   type HostLogins,
   hostLogins,
@@ -19,8 +20,6 @@ import {
 /** A hosts.json host name, as the hub names it. */
 const HOST_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const TOOL = /^[a-z0-9][a-z0-9-]{0,39}$/
-/** A sign-in on a host that is off waits for it to come up. */
-const SIGN_IN_TIMEOUT_MS = 300_000
 
 export type HostRow = Pick<HostInfo, 'name' | 'state' | 'since' | 'sessions' | 'error'> & {
   wake: HostInfo['wake'] | null
@@ -104,7 +103,7 @@ export function createHostPanel(deps: HostPanelDeps) {
       return attempt(async () => {
         const answer = await hostSignIn(tether, host, tool, action, {
           origin: 'aico',
-          timeoutMs: SIGN_IN_TIMEOUT_MS,
+          timeoutMs: HOST_CREATE_TIMEOUT_MS,
         })
         const session = answer.session
         if (session) {
