@@ -142,16 +142,17 @@ export function forwardRequest(
       (answer) => {
         const status = answer.statusCode ?? 502
         const type = String(answer.headers['content-type'] ?? '')
+        // A JSON answer without a length (chunked) is still one answer:
+        // tagged unless it grows past the cap, then passed through as it is.
         const length = Number(answer.headers['content-length'] ?? Number.NaN)
-        if (
-          !type.startsWith('application/json') ||
-          !Number.isSafeInteger(length) ||
-          length > MAX_TAGGED_BYTES
-        ) {
+        const passThrough = (sent: Buffer[] = []) => {
           const passed = Object.fromEntries(
-            Object.entries(answer.headers).filter(([key]) => !HOP_HEADERS.has(key)),
+            Object.entries(answer.headers).filter(
+              ([key]) => !HOP_HEADERS.has(key) && (sent.length === 0 || key !== 'content-length'),
+            ),
           )
           res.writeHead(status, passed)
+          for (const part of sent) res.write(part)
           answer.pipe(res)
           res.once('close', () => answer.destroy())
           // The host went away mid-stream: end ours too, never hang "live".
@@ -159,15 +160,30 @@ export function forwardRequest(
             if (!answer.complete) res.destroy()
           })
           resolve(true)
+        }
+        if (
+          !type.startsWith('application/json') ||
+          (Number.isSafeInteger(length) && length > MAX_TAGGED_BYTES)
+        ) {
+          passThrough()
           return
         }
         const parts: Buffer[] = []
-        answer.on('data', (chunk: Buffer) => parts.push(chunk))
+        let bytes = 0
+        const collect = (chunk: Buffer) => {
+          parts.push(chunk)
+          bytes += chunk.length
+          if (bytes <= MAX_TAGGED_BYTES) return
+          answer.off('data', collect)
+          answer.off('end', finish)
+          passThrough(parts)
+        }
+        answer.on('data', collect)
         answer.on('error', () => {
           res.destroy()
           resolve(true)
         })
-        answer.on('end', () => {
+        const finish = () => {
           let body: unknown
           try {
             body = JSON.parse(Buffer.concat(parts).toString('utf8'))
@@ -185,7 +201,8 @@ export function forwardRequest(
           })
           res.end(text)
           resolve(true)
-        })
+        }
+        answer.on('end', finish)
       },
     )
     upstream.on('error', () => {

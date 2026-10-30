@@ -576,8 +576,13 @@ export function parseWidgetMutation(
 }
 
 function json(response: ServerResponse, status: number, value: unknown): void {
-  response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
-  response.end(JSON.stringify(value))
+  const text = JSON.stringify(value)
+  // With a length, a hub in front can tag the answer with this host.
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(text),
+  })
+  response.end(text)
 }
 
 async function body(request: IncomingMessage, limit = MAX_BODY_BYTES): Promise<unknown> {

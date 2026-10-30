@@ -128,6 +128,13 @@ class FakePeer {
       this.sessions.push(created)
       return sendJson(res, 201, created)
     }
+    if (url === '/v1/roots/root-a' && req.method === 'GET') {
+      // Chunked, without a length, as root-control answered before.
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      res.write('{"requestId":"root-a",')
+      res.end('"status":"running"}')
+      return
+    }
     if (url.startsWith('/v1/roots?') && req.method === 'GET')
       return sendJson(res, 200, { owner: 'aico', roots: this.roots })
     if (url === '/v1/roots' && req.method === 'POST')
@@ -439,6 +446,13 @@ describe('hub', () => {
       req.end()
     })
     await expect(closed).resolves.toBe('closed')
+  })
+
+  it('tags a JSON answer that came without a length with its host', async () => {
+    expect(await call('GET', '/v1/roots/root-a')).toEqual({
+      status: 200,
+      body: { requestId: 'root-a', status: 'running', host: 'vm' },
+    })
   })
 
   it('forwards per-session routes verbatim to the owning peer', async () => {
