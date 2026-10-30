@@ -146,6 +146,42 @@ describe('root origin (v1 roots API)', () => {
     expect(parseRootCreate(create('a', { lineage: { ...lineage, parentId: 'nope' } }))).toBeNull()
   })
 
+  it('refuses a bad option for a host the way a local create does, before the hub', async () => {
+    const before = remoteBodies.length
+    const refusals: Array<[Record<string, unknown>, Record<string, unknown>]> = [
+      [
+        { tool: 'pi' },
+        { error: 'invalid_body', field: 'model', reason: 'pi needs --model provider/model' },
+      ],
+      [
+        { tool: 'pi', model: 'deepseek-v4.1-flash' },
+        { error: 'invalid_body', field: 'model', reason: 'pi needs --model provider/model' },
+      ],
+      [{ tool: 'codex', model: 'gpt 6' }, { error: 'invalid_body' }],
+      [{ tool: 'codex', reasoningEffort: 'turbo' }, { error: 'invalid_body' }],
+      [{ tool: 'pi', model: 'opencode-go/x', reasoningEffort: 'none' }, { error: 'invalid_body' }],
+      [{ tool: 'shell' }, expect.objectContaining({ error: 'unsupported_tool' })],
+    ]
+    for (const [extra, body] of refusals) {
+      const local = await call(v1Socket, '/v1/roots', 'POST', create('bad-opt', extra))
+      const remote = await call(
+        v1Socket,
+        '/v1/roots',
+        'POST',
+        create('bad-opt', { ...extra, host: 'vm' }),
+      )
+      expect(local).toEqual({ status: 400, body })
+      expect(remote).toEqual(local)
+    }
+    expect(remoteBodies).toHaveLength(before)
+    const good = { tool: 'pi', model: 'opencode-go/deepseek-v4.1-flash', reasoningEffort: 'low' }
+    expect(
+      (await call(v1Socket, '/v1/roots', 'POST', create('good-opt', { ...good, host: 'vm' })))
+        .status,
+    ).toBe(202)
+    expect(remoteBodies.at(-1)).toMatchObject({ ...good, host: 'vm' })
+  })
+
   it('lists without tombstones on ended=0, keeping them by id', async () => {
     const ended = await call(v1Socket, '/v1/roots', 'POST', create('ended-root'))
     removeWidget(ended.body.hostIdentity as string)

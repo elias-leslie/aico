@@ -859,19 +859,20 @@ export function createRootHandler(
         } catch {
           value = null
         }
-        if (object(value) && value.host !== undefined && value.host !== null) {
-          if (!operations.remote) {
-            json(response, 400, { error: 'unknown_host', host: value.host })
-            return
-          }
-          await operations.remote(value, response)
+        const remoteHost = object(value) && value.host !== undefined && value.host !== null
+        if (remoteHost && !operations.remote) {
+          json(response, 400, { error: 'unknown_host', host: (value as { host: unknown }).host })
           return
         }
         try {
           unsupportedTool =
             object(value) && typeof value.tool === 'string' && !isRootCreateTool(value.tool)
           promptLimit = promptOverLimit(value)
-          parsed = parseRootCreate(value)
+          // A root for another machine is checked here the same way, so a bad
+          // option is refused before the host is woken; its Tether is the
+          // final judge of the rest (tools it has enabled, its project roots).
+          const { host: _host, ...local } = object(value) ? value : {}
+          parsed = parseRootCreate(remoteHost ? local : value)
         } catch {
           parsed = null
         }
@@ -894,6 +895,10 @@ export function createRootHandler(
               ? { error: 'invalid_body', field: 'model', reason: missing }
               : { error: 'invalid_body' },
           )
+          return
+        }
+        if (remoteHost && operations.remote) {
+          await operations.remote(value as Record<string, unknown>, response)
           return
         }
         const input = parsed
