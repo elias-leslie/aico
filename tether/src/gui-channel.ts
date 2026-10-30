@@ -52,7 +52,8 @@ export class GuiChannel {
   }
 
   /** `GET /v1/gui/channel`: a long-lived NDJSON command stream. A second
-   * connection supersedes the first. */
+   * connection supersedes the first; the route refuses one sent with
+   * `x-tether-gui-if-free: 1` while a GUI is connected. */
   attach(request: IncomingMessage, response: ServerResponse, heartbeatMs = 15_000): void {
     const previous = this.stream
     response.writeHead(200, {

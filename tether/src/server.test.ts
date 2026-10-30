@@ -235,6 +235,47 @@ describe('lifecycle API (no tmux started)', () => {
     }
   })
 
+  it('gives a GUI that asks only-if-free the channel only while no GUI holds it', async () => {
+    const open = (headers: Record<string, string>) => {
+      const req = request({
+        socketPath: paths.socket,
+        path: '/v1/gui/channel',
+        headers: { 'x-tether-client': 'aico-gui', ...headers },
+      })
+      const answer = new Promise<{ status: number; first: unknown }>((resolve) => {
+        req.on('response', (res) => {
+          res.once('data', (chunk) =>
+            resolve({
+              status: res.statusCode ?? 0,
+              first: JSON.parse(String(chunk).split('\n')[0] ?? ''),
+            }),
+          )
+        })
+      })
+      req.end()
+      return { req, answer }
+    }
+    const holder = open({})
+    expect(await holder.answer).toEqual({ status: 200, first: { type: 'hello' } })
+    const waiter = open({ 'x-tether-gui-if-free': '1' })
+    try {
+      expect(await waiter.answer).toEqual({ status: 409, first: { error: 'gui_busy' } })
+      holder.req.destroy()
+      await expect
+        .poll(async () => ((await call('GET', '/v1/health')).body as { gui: unknown }).gui)
+        .toEqual({ connected: false })
+      const reclaim = open({ 'x-tether-gui-if-free': '1' })
+      try {
+        expect(await reclaim.answer).toEqual({ status: 200, first: { type: 'hello' } })
+      } finally {
+        reclaim.req.destroy()
+      }
+    } finally {
+      holder.req.destroy()
+      waiter.req.destroy()
+    }
+  })
+
   it('validates switch-project, pane-mode and context-check', async () => {
     const generation = 'a'.repeat(64)
     expect((await call('GET', '/v1/sessions/ffffffff/pane-mode')).status).toBe(404)

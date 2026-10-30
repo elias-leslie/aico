@@ -1327,6 +1327,10 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('GET', '/v1/gui/channel', (req, res) => {
       if (req.headers['x-tether-client'] !== 'aico-gui') throw new HttpError(400, 'invalid_client')
+      // A GUI that another one superseded asks to take the channel back only
+      // while it is free, so two live apps never take it from each other.
+      if (req.headers['x-tether-gui-if-free'] === '1' && gui.connected())
+        throw new HttpError(409, 'gui_busy')
       gui.attach(req, res)
     })
     .add('POST', '/v1/gui/results/:commandId', async (req, res, params) => {

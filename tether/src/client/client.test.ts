@@ -503,18 +503,73 @@ describe('GUI channel', () => {
     expect(results).toContainEqual({ url: '/v1/gui/results/c3', body: { applied: true } })
   })
 
-  it('stops for good when another GUI supersedes it', async () => {
-    let connections = 0
-    const { client } = await fakeTether((_req, res) => {
-      connections += 1
+  it('after another GUI supersedes it, waits and takes the channel back only once it is free', async () => {
+    const asked: (string | undefined)[] = []
+    const logged: string[] = []
+    let otherGui = true
+    let held: ServerResponse | null = null
+    const { client } = await fakeTether((req, res) => {
+      if (req.url === '/v1/health') return json(res, 200, { gui: { connected: otherGui } })
+      const ifFree = req.headers['x-tether-gui-if-free'] as string | undefined
+      asked.push(ifFree)
+      if (asked.length === 1) {
+        // The first connection is superseded at once.
+        res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+        res.end(`${JSON.stringify({ type: 'hello' })}\n${JSON.stringify({ type: 'superseded' })}\n`)
+        return
+      }
+      if (otherGui) return json(res, 409, { error: 'gui_busy' })
       res.writeHead(200, { 'content-type': 'application/x-ndjson' })
-      res.end(`${JSON.stringify({ type: 'superseded' })}\n`)
+      res.write(`${JSON.stringify({ type: 'hello' })}\n`)
+      held = res
     })
-    const stop = holdGuiChannel(client, async () => ({ applied: true }))
+    const stop = holdGuiChannel(
+      client,
+      async () => ({ applied: true }),
+      (message, error) => logged.push(error === undefined ? message : `${message}!`),
+      20,
+    )
     cleanups.push(stop)
-    await expect.poll(() => connections).toBe(1)
-    await new Promise((resolve) => setTimeout(resolve, 800))
-    expect(connections).toBe(1)
+    await expect.poll(() => asked.length).toBe(1)
+    // The other GUI is still live: the health check holds every retry back.
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(asked).toEqual([undefined])
+    otherGui = false
+    await expect.poll(() => held !== null).toBe(true)
+    expect(asked).toEqual([undefined, '1'])
+    expect(logged).toEqual([
+      'GUI channel connected',
+      'GUI channel superseded by another GUI client; taking it back when that one leaves',
+      'GUI channel taken back: the other GUI client left',
+    ])
+  })
+
+  it('stays quiet while Tether answers gui_busy to a waiting reclaim', async () => {
+    const asked: (string | undefined)[] = []
+    const logged: string[] = []
+    const { client } = await fakeTether((req, res) => {
+      // Health says free but the channel is taken in between: Tether refuses.
+      if (req.url === '/v1/health') return json(res, 200, { gui: { connected: false } })
+      asked.push(req.headers['x-tether-gui-if-free'] as string | undefined)
+      if (asked.length === 1) {
+        res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+        res.end(`${JSON.stringify({ type: 'superseded' })}\n`)
+        return
+      }
+      json(res, 409, { error: 'gui_busy' })
+    })
+    const stop = holdGuiChannel(
+      client,
+      async () => ({ applied: true }),
+      (message) => logged.push(message),
+      20,
+    )
+    cleanups.push(stop)
+    await expect.poll(() => asked.length).toBeGreaterThan(3)
+    expect(new Set(asked.slice(1))).toEqual(new Set(['1']))
+    expect(logged).toEqual([
+      'GUI channel superseded by another GUI client; taking it back when that one leaves',
+    ])
   })
 })
 
