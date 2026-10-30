@@ -30,7 +30,6 @@ import re
 import select
 import selectors
 import shlex
-import shutil
 import signal
 import socket
 import subprocess
@@ -385,11 +384,22 @@ PI_MODEL = r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}"
 PI_MODEL_REASON = "pi needs --model provider/model"
 
 
+def credential_shims() -> Path:
+    """Agent Hub's credential shims, installed on agent hosts only (the workstation runs Agent Hub)."""
+    return Path.home() / ".local/lib/agent-hub/cred-bin"
+
+
 def through_credential_shim(command: str) -> bool:
-    """Whether the command on PATH is Agent Hub's credential shim (an agent host): it
-    fetches the tool's credential as it launches, so this host's own logins say nothing."""
-    found = shutil.which(command)
-    return found is not None and Path(found).parent == Path.home() / ".local/lib/agent-hub/cred-bin"
+    """Whether this host launches the command through Agent Hub's credential shim, which
+    fetches the tool's credential as it starts, so this host's own logins say nothing.
+    st runs this script with its own PATH and env, so look at the install, not PATH."""
+    return os.access(credential_shims() / command, os.X_OK)
+
+
+def agent_host() -> str | None:
+    """This agent host's name, or None on the workstation."""
+    return (os.environ.get("ST_AGENT_HOST")
+            or (socket.gethostname().partition(".")[0] if credential_shims().is_dir() else None))
 
 
 def pi_provider_unavailable(model: str | None) -> str | None:
@@ -1461,7 +1471,7 @@ def create_main(argv: list[str]) -> int:
         parser.error("conflicting prompt options")
     if args.host is not None and not re.fullmatch(HOST_NAME, args.host):
         parser.error("--host expects a host name from ~/.config/tether/hosts.json")
-    if args.host is not None and (here := os.environ.get("ST_AGENT_HOST")):
+    if args.host is not None and (here := agent_host()):
         # A host's Tether reaches no other host; the workstation's hub does.
         parser.error(f"--host works from the workstation only; on agent host {here}, "
                      "st aico create without --host starts the session on this host")

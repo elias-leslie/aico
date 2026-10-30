@@ -1,7 +1,6 @@
 """Exact root create, with private owner fixtures only; no running panes."""
 
 import json
-import os
 import shutil
 import socketserver
 import threading
@@ -549,10 +548,19 @@ def test_pi_credential_check_leaves_an_agent_hosts_shim_to_fetch_the_key(monkeyp
     shim = tmp_path / ".local/lib/agent-hub/cred-bin/pi"
     shim.parent.mkdir(parents=True)
     shim.write_text("#!/bin/sh\n")
+    assert admin.pi_provider_unavailable("opencode/sample-model") is not None  # not executable
     shim.chmod(0o755)
-    assert admin.pi_provider_unavailable("opencode/sample-model") is not None
-    monkeypatch.setenv("PATH", f"{shim.parent}:{os.environ['PATH']}")
+    # st hands the script its own PATH, so the install counts, not PATH.
     assert admin.pi_provider_unavailable("opencode/sample-model") is None
+
+
+def test_an_agent_host_is_known_by_its_credential_shims(monkeypatch, tmp_path):
+    monkeypatch.setattr(admin.Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("ST_AGENT_HOST", raising=False)
+    monkeypatch.setattr(admin.socket, "gethostname", lambda: "agent-work.lan")
+    assert admin.agent_host() is None
+    (tmp_path / ".local/lib/agent-hub/cred-bin").mkdir(parents=True)
+    assert admin.agent_host() == "agent-work"
 
 
 def test_create_on_an_agent_host_refuses_another_host(monkeypatch, capsys):
