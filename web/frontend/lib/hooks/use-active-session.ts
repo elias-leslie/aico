@@ -69,7 +69,9 @@ export function deriveActiveSessionId(
     return persistedSessionId
   }
 
-  return shown[0]?.id ?? null
+  // Never "the first session": it may be the owner's or another agent's, and
+  // the URL sync would open it (claiming its size).
+  return null
 }
 
 export function shouldSyncSessionParam(

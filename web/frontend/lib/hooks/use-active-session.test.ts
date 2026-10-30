@@ -63,10 +63,11 @@ describe('deriveActiveSessionId', () => {
     )
   })
 
-  it('never picks a free-standing View on its own: another agent may be using it', () => {
+  it("never picks a session on its own: it may be the owner's or another agent's", () => {
     const otherAgent = { ...sessions[1], id: 'other-agent', is_external: true }
+    expect(deriveActiveSessionId(sessions, null, null)).toBe(null)
     expect(deriveActiveSessionId([otherAgent, ...sessions], null, null)).toBe(
-      'session-1',
+      null,
     )
     expect(deriveActiveSessionId([otherAgent], null, null)).toBe(null)
     expect(deriveActiveSessionId([otherAgent], null, 'project-2')).toBe(null)
@@ -91,7 +92,7 @@ describe('deriveActiveSessionId', () => {
         null,
         'other-agent',
       ),
-    ).toBe('session-1')
+    ).toBe(null)
   })
 
   it('returns null when sessions array is empty', () => {
