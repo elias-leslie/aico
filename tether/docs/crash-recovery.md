@@ -20,6 +20,7 @@ These never recover:
 - **A killed child in a live pane.** On `OOMPolicy=continue` the kernel kills only the biggest process; when that is a job and the agent keeps running, nothing needs recovering.
 - **A reboot or a Tether restart.** Startup reconciliation leaves these to reboot continuity, which resumes with the reboot prompt as before.
 - **A shutdown or logout.** Nothing that ends while the host or the user manager reports `stopping` is read as a crash.
+- **A shell.** A plain shell has no conversation to resume. When its pane's process is gone (a crash, a kill, its own `exit`), Tether ends the session itself, logs it once (`ended shell <id>: its process stopped…`) and publishes `session.ended`, so an open view says "Session ended" and the session leaves the list. After a reboot or Tether restart, a shell reboot continuity relaunches is left alone; one it does not relaunch is ended at once, and one whose relaunch fails is ended when restore finishes.
 - **An agent the owner restarted by hand.** When continuity or the recovery step finds an agent running in the session again, the record is dropped and nothing is relaunched. That fallback shell is never recorded again.
 
 ## What Tether does

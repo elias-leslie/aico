@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   forgetSizeHolder,
   parseViewerLabel,
+  persistSizeHolders,
   recordSizeHolder,
   resetSizeHolders,
   sizeHolderOf,
@@ -37,6 +38,58 @@ describe('size holder', () => {
     const viewer = { app: 'desktop', device: 'davion-sidarli' }
     recordSizeHolder('aaaaaaaa', { ...claim, viewer })
     expect(sizeHolderOf('aaaaaaaa', 'g1')?.viewer).toEqual(viewer)
+  })
+})
+
+describe('saved size holders', () => {
+  beforeEach(resetSizeHolders)
+
+  function memory(initial: string | null = null) {
+    let value = initial
+    return {
+      read: () => value,
+      write: (next: string) => {
+        value = next
+      },
+      get: () => value,
+    }
+  }
+
+  it('survive a restart, so the real holder keeps the window', () => {
+    const saved = memory()
+    persistSizeHolders(saved, () => true)
+    const viewer = { app: 'web', device: 'Pixel 9' }
+    recordSizeHolder('aaaaaaaa', { ...claim, viewer }, () => new Date('2026-10-30T10:00:00Z'))
+
+    resetSizeHolders() // Tether restarts: memory is empty
+    expect(sizeHolderOf('aaaaaaaa', 'g1')).toBeNull()
+    persistSizeHolders(saved, () => true)
+    expect(sizeHolderOf('aaaaaaaa', 'g1')).toEqual({
+      ...claim,
+      viewer,
+      claimedAt: '2026-10-30T10:00:00.000Z',
+    })
+  })
+
+  it('drop a holder whose session is gone, replaced or unreadable', () => {
+    const holder = { ...claim, claimedAt: '2026-10-30T10:00:00.000Z', viewer: null }
+    const saved = memory(
+      JSON.stringify({
+        aaaaaaaa: holder,
+        bbbbbbbb: holder,
+        cccccccc: { ...holder, clientPid: 'x' },
+        dddddddd: { ...holder, viewer: { app: 'Desktop', device: 'x' } },
+      }),
+    )
+    persistSizeHolders(saved, (id) => id !== 'bbbbbbbb')
+    expect(Object.keys(JSON.parse(saved.get() ?? '{}'))).toEqual(['aaaaaaaa'])
+    expect(sizeHolderOf('aaaaaaaa', 'g2')).toBeNull()
+    expect(JSON.parse(saved.get() ?? '')).toEqual({})
+  })
+
+  it('start empty from a value that does not parse', () => {
+    persistSizeHolders(memory('{nope'), () => true)
+    expect(sizeHolderOf('aaaaaaaa', 'g1')).toBeNull()
   })
 })
 

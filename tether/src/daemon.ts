@@ -15,6 +15,7 @@ import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
 import { nodeProcFs } from './continuity'
+import { DeadShells } from './dead-shells'
 import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { GuiChannel } from './gui-channel'
@@ -33,6 +34,7 @@ import { leadName, setPersonalWorkspaceRoot } from './lifecycle/display'
 import {
   cachedSessionStatus,
   configureEngine,
+  endSession,
   flushSessionEvents,
   notifySessionChanged,
   onAbandonedScope,
@@ -62,6 +64,7 @@ import { Continuity } from './reboot'
 import { Recovery } from './recovery'
 import type { StepChatSource } from './runs-api'
 import { createTetherServer } from './server'
+import { persistSizeHolders } from './size-holder'
 import { Store } from './store'
 import { VERSION } from './version'
 import { bindWakeStore, WakeService } from './wake-runtime'
@@ -101,6 +104,9 @@ const DISMISSED_RUNS_KEY = 'dismissed_runs'
 /** The run pauses already told to their launching session (run id to the
  * pause's key and when), so a restart does not tell one again. */
 const TOLD_PAUSES_KEY = 'told_run_pauses'
+
+/** Which client holds each session's window size, so a restart keeps it. */
+const SIZE_HOLDERS_KEY = 'size_holders'
 
 function readTold(raw: string | null): Record<string, ToldPause> {
   try {
@@ -184,6 +190,13 @@ export async function startDaemon(
   bindToolSource(store)
   setGenerationFunction(generationOf)
   setSessionSnapshotFunction(sessionSnapshot)
+  persistSizeHolders(
+    {
+      read: () => store.getSetting(SIZE_HOLDERS_KEY),
+      write: (value) => store.putSetting(SIZE_HOLDERS_KEY, value, Date.now()),
+    },
+    (id) => getWidget(id) !== undefined,
+  )
   configureEngine({
     paths,
     events,
@@ -232,7 +245,20 @@ export async function startDaemon(
       },
     })
     continuity.setRecovery(recovery)
-    onAbandonedScope((event) => void recovery.onAbandoned(event))
+    const deadShells = new DeadShells({
+      awaitingRestore: (id) => continuity.isAwaitingRestore(id),
+      restorePlanned: continuity.restorePlanned,
+      restoreFinished: continuity.restoreFinished,
+      list: listWidgets,
+      status: verifySessionStatus,
+      end: endSession,
+      generationOf,
+    })
+    onAbandonedScope((event) => {
+      void recovery.onAbandoned(event)
+      deadShells.onAbandoned(event)
+    })
+    void deadShells.settleStartup(context.startedAt)
     setLaunchGuard((id) => recovery.holdsLaunch(id))
     context.continuity = continuity
     context.recovery = recovery

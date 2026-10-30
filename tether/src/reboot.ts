@@ -111,6 +111,16 @@ export class Continuity {
   private readonly awaitingRestore = new Set<string>()
   /** Crash recovery: told about each agent session on every pass. */
   private recovery: Recovery | null = null
+  private markPlanned: () => void = () => {}
+  private markFinished: () => void = () => {}
+  /** Settles once this start knows which sessions it restores (they are then
+   * awaiting restore), and once every restore has finished or failed. */
+  readonly restorePlanned = new Promise<void>((resolve) => {
+    this.markPlanned = resolve
+  })
+  readonly restoreFinished = new Promise<void>((resolve) => {
+    this.markFinished = resolve
+  })
 
   constructor(
     private readonly context: LifecycleApiContext,
@@ -129,9 +139,12 @@ export class Continuity {
   /** Restore what the last boot left running, then keep the snapshot fresh. */
   async start(): Promise<void> {
     await whenReady()
-    const restoring = this.restoreAfterStart().catch((error) =>
-      this.log(`restore failed: ${(error as Error).message}`),
-    )
+    const restoring = this.restoreAfterStart()
+      .catch((error) => this.log(`restore failed: ${(error as Error).message}`))
+      .finally(() => {
+        this.markPlanned()
+        this.markFinished()
+      })
     this.timer = setInterval(() => void this.observe().catch(() => {}), OBSERVE_INTERVAL_MS)
     this.timer.unref()
     await restoring
@@ -267,8 +280,9 @@ export class Continuity {
     const candidates = restoreCandidates(snapshot, (id) => statuses.get(id) ?? null).filter(
       (session) => !this.recovery?.retains(session.id),
     )
-    if (candidates.length === 0) return null
     for (const session of candidates) this.awaitingRestore.add(session.id)
+    this.markPlanned()
+    if (candidates.length === 0) return null
     const report: RestoreReport = {
       v: 1,
       bootId: currentBootId(),

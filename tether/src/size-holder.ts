@@ -1,7 +1,8 @@
 // Which attached client last claimed a session's shared tmux window size.
 // Every client sizes the same window (resize-claim), so the last claimer is
 // the one the window fits; the others see it at a size that is not theirs.
-// Kept in memory only: after a restart the holder is unknown until a claim.
+// Kept in Tether's settings too, so a restart does not forget who holds a
+// window that a claim pinned: the holder's tmux client outlives Tether.
 
 /** Which app on which device made a claim (`{app: 'desktop', device: <hostname>}`),
  * so the other views can say where the session is being viewed. */
@@ -40,6 +41,55 @@ export function parseViewerLabel(value: unknown): ViewerLabel | undefined | null
 
 const holders = new Map<string, SizeHolder>()
 
+/** Where the holders are saved, one JSON object keyed by session id. */
+export interface SizeHolderStorage {
+  read(): string | null
+  write(value: string): void
+}
+
+let storage: SizeHolderStorage | null = null
+
+function save(): void {
+  storage?.write(JSON.stringify(Object.fromEntries(holders)))
+}
+
+function parseHolder(value: unknown): SizeHolder | null {
+  const h = value as Record<string, unknown> | null
+  if (!h || typeof h !== 'object' || Array.isArray(h)) return null
+  const int = (v: unknown) => Number.isSafeInteger(v)
+  if (!int(h.clientPid) || !int(h.cols) || !int(h.rows)) return null
+  if (typeof h.generation !== 'string' || typeof h.claimedAt !== 'string') return null
+  const viewer = h.viewer === null ? null : parseViewerLabel(h.viewer)
+  if (viewer === undefined || (viewer === null && h.viewer !== null)) return null
+  return {
+    clientPid: h.clientPid as number,
+    cols: h.cols as number,
+    rows: h.rows as number,
+    generation: h.generation,
+    claimedAt: h.claimedAt,
+    viewer,
+  }
+}
+
+/** Load the saved holders and save every change from now on. A holder whose
+ * session is gone (`listed` says no) or that does not parse is dropped. */
+export function persistSizeHolders(next: SizeHolderStorage, listed: (id: string) => boolean): void {
+  storage = next
+  holders.clear()
+  let saved: unknown = null
+  try {
+    saved = JSON.parse(next.read() ?? 'null')
+  } catch {
+    // An unreadable value starts empty, as before a first claim.
+  }
+  const entries = saved && typeof saved === 'object' ? Object.entries(saved) : []
+  for (const [id, value] of entries) {
+    const holder = parseHolder(value)
+    if (holder && listed(id)) holders.set(id, holder)
+  }
+  if (holders.size !== entries.length) save()
+}
+
 export function recordSizeHolder(
   id: string,
   claim: {
@@ -53,6 +103,7 @@ export function recordSizeHolder(
 ): SizeHolder {
   const holder = { ...claim, claimedAt: now().toISOString(), viewer: claim.viewer ?? null }
   holders.set(id, holder)
+  save()
   return holder
 }
 
@@ -62,15 +113,17 @@ export function sizeHolderOf(id: string, generation: string): SizeHolder | null 
   if (!holder) return null
   if (holder.generation !== generation) {
     holders.delete(id)
+    save()
     return null
   }
   return holder
 }
 
 export function forgetSizeHolder(id: string): void {
-  holders.delete(id)
+  if (holders.delete(id)) save()
 }
 
 export function resetSizeHolders(): void {
   holders.clear()
+  storage = null
 }
