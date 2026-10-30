@@ -48,6 +48,8 @@ export interface PeerDeps {
   /** Whether the host is powered off, from its hosts.json `status` command;
    * null when there is none or it could not tell. */
   poweredOff?(entry: HostEntry): Promise<boolean | null>
+  /** Ask the host's link to retry now instead of waiting out its backoff. */
+  kick?(host: string): void
   /** How long a silent event stream waits before asking the peer's health,
    * and how long that ask may take (tests shorten them). */
   stall?: { afterMs: number; probeMs: number }
@@ -64,6 +66,9 @@ export const BREAKER_FAILURES = 3
 export const BREAKER_OPEN_MS = 30_000
 /** A down host's power status is asked again after this long. */
 export const POWER_PROBE_MS = 15_000
+/** After a power off from the Hosts panel, the host is taken as off without
+ * asking for this long (its status can still say running while it shuts down). */
+export const POWER_OFF_GRACE_MS = 60_000
 /** The peer's event stream sends a heartbeat every 15 s: this much silence
  * asks its health once (a VM that stopped dead never closes the link, and ssh
  * notices only after its own keepalives fail). */
@@ -130,8 +135,8 @@ export class Peer {
   private controller: AbortController | null = null
   private wakeRetry: (() => void) | null = null
   private readonly duplicates = new Set<string>()
-  /** Set by a power off from the Hosts panel: the next drop is powered off. */
-  private expectOff = false
+  /** When a power off from the Hosts panel was asked: the next drop is powered off. */
+  private expectOff: number | null = null
   /** Why the last connection was dropped for silence, if it was. */
   private stalled: string | null = null
   private power: { at: number; off: boolean | null } | null = null
@@ -236,7 +241,7 @@ export class Peer {
   setWake(progress: WakeProgress | null): void {
     this.wake = progress
     if (progress?.state === 'starting') {
-      this.expectOff = false
+      this.expectOff = null
       this.power = null
       if (!this.live && this.state !== 'identity_changed') this.setState('connecting', this.error)
     } else if (!this.live && this.state === 'connecting') void this.settleDown()
@@ -250,7 +255,7 @@ export class Peer {
 
   /** The host was just powered off on purpose (the Hosts panel). */
   poweredOff(): void {
-    this.expectOff = true
+    this.expectOff = this.deps.now()
     if (!this.live && this.state !== 'identity_changed') this.setState('powered_off', this.error)
   }
 
@@ -263,14 +268,24 @@ export class Peer {
 
   private async downState(): Promise<HostState> {
     if (this.waking()) return 'connecting'
-    if (this.expectOff) return 'powered_off'
     const probe = this.deps.poweredOff
-    if (!probe) return 'offline'
+    const offHere = this.expectOff !== null && this.deps.now() - this.expectOff < POWER_OFF_GRACE_MS
+    if (!probe || offHere) return this.expectOff !== null ? 'powered_off' : 'offline'
     if (!this.power || this.deps.now() - this.power.at >= POWER_PROBE_MS) {
+      const was = this.power?.off
       const off = await probe(this.entry).catch(() => null)
       this.power = { at: this.deps.now(), off }
+      // Up while the link is down: started outside Aico (st vm start, the Proxmox
+      // UI) or its Tether restarted. The link may be deep in its backoff (up to
+      // 5 min), so ask it to retry now; once per change, never a kick per probe.
+      if (off === false && was !== false) {
+        this.expectOff = null
+        this.deps.log(`${this.name}: its status says it is up; asking the link to retry now`)
+        this.deps.kick?.(this.name)
+      }
     }
     if (this.waking()) return 'connecting'
+    if (this.expectOff !== null) return 'powered_off'
     return this.power.off ? 'powered_off' : 'offline'
   }
 
@@ -359,7 +374,7 @@ export class Peer {
     this.since = this.deps.now()
     this.deps.log(`${this.name}: ${state}${error ? ` (${error})` : ''}`)
     if (state === 'connected') {
-      this.expectOff = false
+      this.expectOff = null
       this.power = null
       // A failed start stays shown until the host is back.
       if (this.wake?.state === 'failed') this.wake = null

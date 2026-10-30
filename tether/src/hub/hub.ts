@@ -191,6 +191,7 @@ export class Hub {
           now: this.now,
           random: this.deps.random ?? Math.random,
           poweredOff: (host) => this.poweredOff(host),
+          kick: (host) => this.gate.kick(host),
           ...(this.deps.stall ? { stall: this.deps.stall } : {}),
         },
         this.snapshots[entry.name] ?? null,

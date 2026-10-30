@@ -403,6 +403,47 @@ describe('hub', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
+  it('asks the link to retry at once when a down host says it is up (started outside Aico)', async () => {
+    hub.close()
+    writeFileSync(
+      join(dir, 'hosts.json'),
+      JSON.stringify([
+        {
+          name: 'vm',
+          ssh: 'vm',
+          socket: '/run/user/1000/tether/default/control.sock',
+          status: ['st', 'vm', 'status', '200'],
+        },
+      ]),
+    )
+    const run = vi.fn(async () => ({ code: 0, output: 'VM 200 (vm): running | CPU: 0%' }))
+    const kick = vi.fn()
+    hub = makeHub({ gate: { kick, linkGraceMs: 200, run } })
+    hub.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'))
+    expect(kick).not.toHaveBeenCalled()
+    // The link drops while the VM runs (st vm start after an idle power off,
+    // or its Tether restarted): the hub kicks the link instead of leaving it in backoff.
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('offline'))
+    await vi.waitFor(() => expect(kick).toHaveBeenCalledWith('vm'))
+    // Once per change: further retries reuse the answer and do not kick again.
+    await new Promise((resolve) => setTimeout(resolve, 1_500))
+    expect(kick).toHaveBeenCalledTimes(1)
+    await peer.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
+
+    // Just powered off from the Hosts panel: a status that still says running
+    // while the VM shuts down neither kicks nor shows it as up.
+    kick.mockClear()
+    run.mockClear()
+    hub.markPoweredOff('vm')
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('powered_off'))
+    expect(run).not.toHaveBeenCalled()
+    expect(kick).not.toHaveBeenCalled()
+  })
+
   it('goes offline soon after a host stops answering, not after three missed heartbeats', async () => {
     hub.close()
     hub = makeHub({ stall: { afterMs: 150, probeMs: 150 } })
