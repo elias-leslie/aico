@@ -589,6 +589,9 @@ function LoginRows({
           const { text, detail } = loginText(tool, data.agent_hub)
           const note = tool.state === 'signed_in' ? '' : credentialNote(tool)
           const actions = data.actions[tool.tool]
+          // Nothing to sign out of while it needs a sign-in; unknown may be signed in.
+          const canSignOut =
+            !!actions?.signOut && tool.state !== 'needs_sign_in'
           const busy = busyTool === tool.tool
           const name = toolName(tool.tool)
           return (
@@ -601,7 +604,7 @@ function LoginRows({
               <span title={detail || undefined}>
                 <Chip tone={LOGIN_TONE[tool.state]}>{text}</Chip>
               </span>
-              {(actions?.signIn || actions?.signOut) && (
+              {(actions?.signIn || canSignOut) && (
                 <span className="ml-auto flex flex-wrap gap-2">
                   {actions.signIn && (
                     <button
@@ -614,7 +617,7 @@ function LoginRows({
                       {busy ? 'Opening…' : 'Sign in'}
                     </button>
                   )}
-                  {actions.signOut && (
+                  {canSignOut && (
                     <button
                       type="button"
                       className="lantern-btn small ghost"

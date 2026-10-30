@@ -260,7 +260,7 @@ function wire(): void {
       b.setAttribute('aria-label', `Sign in to ${name} on ${row.name}`)
       controls.append(b)
     }
-    if (actions?.signOut && (tool.state === 'signed_in' || tool.state === 'expired')) {
+    if (actions?.signOut && tool.state !== 'needs_sign_in') {
       const b = button('Sign out', () => {
         ask = {
           host: row.name,

@@ -88,7 +88,7 @@ const loginsFor = (over: Json = {}): { status: number; body: Json } => ({
     ],
     actions: {
       'claude-code': { signIn: true, signOut: 'revoke' },
-      codex: { signIn: true, signOut: null },
+      codex: { signIn: true, signOut: 'command' },
     },
     ...over,
   },
@@ -274,6 +274,15 @@ describe('HostsSheet', () => {
     state.logins['agent-work'] = loginsFor()
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByTestId('login-codex')).toBeInTheDocument()
+    // Nothing to sign out of while it needs a sign-in.
+    expect(
+      screen.queryByRole('button', { name: 'Sign out of Codex on agent-work' }),
+    ).toBeNull()
+    expect(
+      screen.getByRole('button', {
+        name: 'Sign out of Claude Code on agent-work',
+      }),
+    ).toBeInTheDocument()
   })
 
   it('opens the sign-in session in the app and closes the sheet', async () => {
