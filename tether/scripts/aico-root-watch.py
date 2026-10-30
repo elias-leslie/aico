@@ -29,6 +29,7 @@ import os
 import re
 import select
 import selectors
+import shlex
 import signal
 import socket
 import subprocess
@@ -163,9 +164,18 @@ WIDGET = r"[0-9a-f]{8}"
 ROOT_OWNERS = ("aico", "a-term")
 # Agent tool slugs, as Tether's registry spells them (src/tools.ts SLUG_RE).
 TOOL_SLUG = r"[a-z0-9_-]{1,50}"
+# A remote host's name in ~/.config/tether/hosts.json, and its ssh Host alias.
+HOST_NAME = r"[a-z0-9][a-z0-9-]{0,31}"
+SSH_ALIAS = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
+SSH = "/usr/bin/ssh"
+REMOTE_TMUX = "/usr/bin/tmux"
+# A create on a host may first power it on and wait for it (hosts.json wakeTimeoutSec,
+# 240 s by default), then waits for the host's own create (tether/src/hub/hub.ts).
+HOST_CREATE_SECONDS = 420
 # Owner rejections that are definitive before any view or lifecycle effect.
 OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation", "invalid_text"}, 404: {"not_found"},
-                  409: {"stale_generation", "workload_unavailable", "busy", "owner_on_web"}, 410: {"ended"},
+                  409: {"stale_generation", "workload_unavailable", "busy", "owner_on_web",
+                        "host_unavailable"}, 410: {"ended"},
                   503: {"gui_unavailable", "position_unavailable"}}
 
 
@@ -598,7 +608,8 @@ def classify(raw: bytes, profile: str = "codex") -> tuple[dict, str]:
 class Collector:
     def __init__(self, root_socket: str, owner_socket: str, tmux_socket: str,
                  deadline: float, cancel: threading.Event, tmux: str = "tmux",
-                 discovered: bool = False, profile: str = "codex"):
+                 discovered: bool = False, profile: str = "codex",
+                 remote: tuple[str, str, str] | None = None):
         self.root_socket = root_socket
         self.owner_socket = owner_socket
         self.tmux_socket = tmux_socket
@@ -607,6 +618,9 @@ class Collector:
         self.tmux = tmux
         self.discovered = discovered
         self.profile = profile
+        # (host, ssh alias, ControlMaster socket): this root's tmux runs on that host.
+        self.remote = remote
+        self.links: dict[str, tuple[str, str, str]] = {}
 
     def remaining(self) -> float:
         remaining = self.deadline - time.monotonic()
@@ -660,7 +674,26 @@ class Collector:
         return status, {"owner": "aico", "widgetId": data.get("id"), "sessionId": data.get("ownershipId"),
                         "generation": data.get("generation"), "tmuxSessionId": tmux.get("sessionId"),
                         "paneId": tmux.get("paneId"), "tmuxServerId": tmux.get("serverId"),
-                        "tmuxSocket": tmux.get("socket"), "tool": data.get("tool")}
+                        "tmuxSocket": tmux.get("socket"), "tool": data.get("tool"),
+                        "host": data.get("host")}
+
+    def link(self, host: object) -> tuple[str, str, str]:
+        """How to reach a remote host's tmux: the alias and ControlMaster of the
+        hub's link to it (GET /v1/hosts), checked like the apps check them."""
+        if not isinstance(host, str) or not re.fullmatch(HOST_NAME, host):
+            raise Unavailable("host_unavailable")
+        if host not in self.links:
+            status, data = self.receipt(self.owner_socket, "/v1/hosts", timeout=1)
+            items = data.get("items") if status == 200 else None
+            for item in items if isinstance(items, list) else []:
+                alias = item.get("ssh") if isinstance(item, dict) else None
+                if (isinstance(item, dict) and item.get("name") == host and isinstance(alias, str)
+                        and re.fullmatch(SSH_ALIAS, alias)
+                        and item.get("control") == f"{runtime_dir()}/tether/peers/{host}/ssh.ctl"):
+                    self.links[host] = (host, alias, item["control"])
+        if host not in self.links:
+            raise Unavailable("host_unavailable")
+        return self.links[host]
 
     def owners(self, pin: Pin) -> None:
         status, root = self.receipt(self.root_socket, f"/v1/roots/{quote(pin.requestId)}")
@@ -750,6 +783,12 @@ class Collector:
             if not request_id and root.get("status") != "running":
                 continue
             record = {"requestId": key, "observation": "unavailable", "identity": "unresolved"}
+            if isinstance(root.get("host"), str):
+                record["host"] = root["host"]
+            if root.get("peer") is not None:
+                # The hub's last list for a host it cannot reach right now.
+                unavailable.append({**record, "reason": "host_unavailable"})
+                continue
             if root.get("status") != "running":
                 unavailable.append({**record, "reason": "root_not_running"})
                 continue
@@ -784,7 +823,8 @@ class Collector:
                 child = Collector(self.root_socket, self.owner_socket,
                                   socket_path(owner.get("tmuxSocket", "")),
                                   self.deadline, self.cancel, self.tmux, discovered=True,
-                                  profile=root["tool"])
+                                  profile=root["tool"],
+                                  remote=self.link(owner["host"]) if owner.get("host") else None)
                 child.owners(pin)
                 child.pane(pin)
                 resolved.append((pin, child))
@@ -803,8 +843,14 @@ class Collector:
 
     def command(self, args: list[str], limit: int) -> bytes:
         self.remaining()
+        argv = [self.tmux, "-S", self.tmux_socket, *args]
+        if self.remote:
+            # Through the hub's ssh link; the remote shell gets one quoted command.
+            _, alias, control = self.remote
+            argv = [SSH, "-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-S", control, alias, "--",
+                    shlex.join([REMOTE_TMUX, "-S", self.tmux_socket, *args])]
         try:
-            process = subprocess.Popen([self.tmux, "-S", self.tmux_socket, *args],
+            process = subprocess.Popen(argv,
                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                        stderr=subprocess.DEVNULL, start_new_session=True)
         except OSError:
@@ -814,7 +860,7 @@ class Collector:
         assert process.stdout is not None
         try:
             selector.register(process.stdout, selectors.EVENT_READ)
-            operation_end = min(self.deadline, time.monotonic() + 1)
+            operation_end = min(self.deadline, time.monotonic() + (3 if self.remote else 1))
             while selector.get_map():
                 remaining = self.remaining()
                 if time.monotonic() >= operation_end:
@@ -1244,6 +1290,29 @@ def hub_view(collector: Collector, control: str, widget: str) -> dict:
     return view
 
 
+def host_tool_unavailable(collector: Collector, endpoint: str, host: str, tool: str) -> str | None:
+    """Why the host's Tether cannot start a root with this tool, else None.
+
+    Best effort, like the local catalog checks: a host that is off or still
+    connecting can't answer, so the create goes ahead and the host's own Tether
+    refuses an unsupported tool after it is up."""
+    try:
+        status, data = collector.receipt(endpoint, f"/v1/tools?host={quote(host)}", timeout=5)
+    except Unavailable:
+        return None
+    if status == 400 and data.get("error") == "unknown_host":
+        return f"no host named {host} in ~/.config/tether/hosts.json"
+    items = data.get("items") if status == 200 else None
+    if not isinstance(items, list):
+        return None
+    tools = [item for item in items if isinstance(item, dict)]
+    match = next((item for item in tools if item.get("slug") == tool), None)
+    if match and match.get("enabled") and match.get("rootCapable"):
+        return None
+    usable = ", ".join(str(item.get("slug")) for item in tools if item.get("enabled") and item.get("rootCapable"))
+    return f"{host} cannot start --tool {tool}; tools it can start: {usable or 'none'}"
+
+
 def create_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico create", description=(
         "Create one exact owner root; native resume uses an adapter-validated session ID in a new root. "
@@ -1281,6 +1350,9 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--instructions", metavar="PROMPT[@REVISION]", help=(
         "add this Agent Hub prompt revision to the agent's instructions, kept for the session's restarts; "
         "default revision: the prompt's current one. A Blank Slate session gets only these"))
+    parser.add_argument("--host", help=(
+        "start it on this remote host from ~/.config/tether/hosts.json (powered on first if it is off); "
+        "--project-root is the host's path, which mirrors this computer's (/srv/workspaces/projects/<p>)"))
     parser.add_argument("--root-socket", type=socket_path)
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
@@ -1325,28 +1397,38 @@ def create_main(argv: list[str]) -> int:
         parser.error("invalid model identifier")
     if args.stdin and args.prompt is not None:
         parser.error("conflicting prompt options")
+    if args.host is not None and not re.fullmatch(HOST_NAME, args.host):
+        parser.error("--host expects a host name from ~/.config/tether/hosts.json")
     try:
         endpoint = owner_endpoint(args.root_socket)
     except argparse.ArgumentTypeError as error:
         parser.error(f"invalid owner transport configuration: {error}")
-    collector = Collector(endpoint, "", "", time.monotonic() + 10, threading.Event())
+    receipt_seconds = HOST_CREATE_SECONDS if args.host else 10
+    collector = Collector(endpoint, "", "", time.monotonic() + receipt_seconds + 5, threading.Event())
     output = {"owner": "aico", "requestId": args.request_id}
+    if args.host:
+        output["host"] = args.host
     try:
         prompt = admin_stdin(collector) if args.stdin else args.prompt
         if prompt is None and args.resume_session:
             prompt = "Resume this exact saved session. Reconcile current state after the crash before continuing."
         if (problem := prompt_error(prompt)) is not None:
             parser.error(problem)
-        if args.tool == "pi" and (reason := pi_provider_unavailable(args.model)):
+        if args.host:
+            # This computer's Codex and Pi logins say nothing about the host's; ask its Tether.
+            if (reason := host_tool_unavailable(collector, endpoint, args.host, args.tool)):
+                parser.error(reason)
+        elif args.tool == "pi" and (reason := pi_provider_unavailable(args.model)):
             # Nothing reaches Tether, so the same request id can be retried with the right provider.
             parser.error(reason)
-        if args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
+        if not args.host and args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
             # Nothing reaches Tether, so the same request id can be retried after the reset.
             parser.error(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
-        if args.tool == "codex" and (reason := codex_model_unavailable(args.model)):
+        if not args.host and args.tool == "codex" and (reason := codex_model_unavailable(args.model)):
             # Nothing reaches Tether, so the same request id can be retried with the right model.
             parser.error(reason)
-        if args.tool == "codex" and args.daybreak == "on" and (reason := codex_daybreak_unavailable(args.model)):
+        if (not args.host and args.tool == "codex" and args.daybreak == "on"
+                and (reason := codex_daybreak_unavailable(args.model))):
             parser.error(reason)
         instructions = None
         if args.instructions is not None:
@@ -1362,6 +1444,9 @@ def create_main(argv: list[str]) -> int:
         creator = caller_widget_id()
         if isinstance(creator, str) and re.fullmatch(WIDGET, creator):
             payload["launchedBy"] = creator
+        if args.host:
+            # Not part of the digest: the host's Tether computes it without the field.
+            payload["host"] = args.host
         fields = [args.tool, args.project, args.project_root, prompt, args.role, args.lead_root, args.facet]
         if args.resume_session:
             payload["resumeSessionId"] = args.resume_session
@@ -1385,8 +1470,13 @@ def create_main(argv: list[str]) -> int:
             payload["agentSlug"] = args.agent
             fields.append({"agentSlug": args.agent})
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
-        status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=10)
-        errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long"), 409: ("request_conflict", "recovery_pending"),
+        if args.host:
+            import sys
+            print(f"st aico create: starting on {args.host}; if it is off this waits for it to power on "
+                  f"(up to {HOST_CREATE_SECONDS // 60} min)", file=sys.stderr, flush=True)
+        status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=receipt_seconds)
+        errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long", "unknown_host"),
+                  409: ("request_conflict", "recovery_pending", "host_unavailable", "outcome_uncertain"),
                   422: ("launch_unavailable", "unknown_agent", "unknown_model"),
                   503: ("gui_unavailable", "agent_hub_unavailable")}
         if status not in (200, 202):
@@ -1401,7 +1491,10 @@ def create_main(argv: list[str]) -> int:
             if reason == "recovery_pending" and isinstance(data.get("widgetId"), str) \
                     and re.fullmatch(WIDGET, data["widgetId"]):
                 output["recoveringWidget"] = data["widgetId"]
-            raise Unavailable(reason)
+            refusal = Unavailable(reason)
+            # The hub's own words for why the host could not take it (host_unavailable).
+            refusal.detail = reason_detail(data.get("reason"))
+            raise refusal
         host = data.get("hostIdentity")
         generation = data.get("generation")
         state = data.get("status")
@@ -1443,6 +1536,8 @@ def create_main(argv: list[str]) -> int:
         parser.error("invalid prompt or UTF-8 input")
     except (Unavailable, Stopped) as error:
         output.update(status="uncertain", reason=str(error) if isinstance(error, Unavailable) else "deadline")
+        if isinstance(error, Unavailable) and error.detail:
+            output["detail"] = error.detail
         emit_unless_stopped(collector, output)
         return 1
     except BrokenPipeError:
@@ -1796,7 +1891,8 @@ def roots_main(argv: list[str]) -> int:
         resolved, unavailable = discovery.discover(args.request_id)
         collector = ResolvedCollector(discovery, resolved)
         if args.watch is None:
-            records = [{**dataclasses.asdict(pin), **collector.sample(pin)} for pin, _ in resolved]
+            records = [{**dataclasses.asdict(pin), **({"host": child.remote[0]} if child.remote else {}),
+                        **collector.sample(pin)} for pin, child in resolved]
             emit_json(collector, {"owner": "aico", "roots": records + unavailable})
             return int(any(failed(row) for row in records + unavailable))
         for record in unavailable:

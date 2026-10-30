@@ -1,0 +1,149 @@
+"""st aico on a remote host (hosts.json): create --host and the hub's remote roots."""
+
+import shlex
+
+import pytest
+from aico_cli_fixtures import admin, descriptor
+
+
+@pytest.fixture(autouse=True)
+def outside_aico(monkeypatch, tmp_path):
+    monkeypatch.delenv("AICO_WIDGET_ID", raising=False)
+    monkeypatch.setattr(admin, "PROC", tmp_path)
+    monkeypatch.setattr(admin.Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1000")
+
+
+CONTROL = "/run/user/1000/tether/peers/agent-work/ssh.ctl"
+HOSTS = {"items": [{"name": "agent-work", "ssh": "agent-work", "control": CONTROL, "state": "connected"}]}
+TOOLS = {"items": [{"slug": "claude-code", "enabled": True, "rootCapable": True},
+                   {"slug": "shell", "enabled": True, "rootCapable": False}]}
+
+
+def on_host(tool="claude-code"):
+    return ["create", "remote-1", "Start.", "--tool", tool, "--project", "aico",
+            "--project-root", "/srv/workspaces/projects/aico", "--host", "agent-work"]
+
+
+def owner(calls, create=None, tools=(200, TOOLS)):
+    def receipt(_, path, route, payload=None, **kwargs):
+        calls.append((route, payload, kwargs.get("timeout")))
+        if route.startswith("/v1/tools"):
+            return tools
+        if create:
+            return create(payload)
+        return 200, descriptor(payload)
+    return receipt
+
+
+def test_create_on_a_host_sends_the_host_outside_the_digest_and_waits_for_it(monkeypatch, capsys):
+    calls, output = [], []
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    # This computer's Codex catalog says nothing about the host's.
+    monkeypatch.setattr(admin, "codex_model_unavailable", lambda *_: pytest.fail("checked local Codex"))
+    assert admin.main(on_host()) == 0
+    assert [route for route, *_ in calls] == ["/v1/tools?host=agent-work", "/v1/roots"]
+    _, payload, timeout = calls[1]
+    assert payload["host"] == "agent-work" and timeout == admin.HOST_CREATE_SECONDS
+    # The digest the fixture computes ignores host, and the receipt matched it.
+    assert output[0]["status"] == "running" and output[0]["host"] == "agent-work"
+    assert "power on" in capsys.readouterr().err
+
+
+def test_a_tool_the_host_cannot_start_is_refused_before_the_create(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls))
+    with pytest.raises(SystemExit) as exit_info:
+        admin.main(on_host("shell"))
+    assert exit_info.value.code == 2
+    assert [route for route, *_ in calls] == ["/v1/tools?host=agent-work"]
+    assert "agent-work cannot start --tool shell; tools it can start: claude-code" in capsys.readouterr().err
+
+
+def test_an_unknown_host_is_refused_before_the_create(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls, tools=(400, {"error": "unknown_host"})))
+    with pytest.raises(SystemExit):
+        admin.main(on_host())
+    assert len(calls) == 1 and "no host named agent-work" in capsys.readouterr().err
+
+
+def test_a_host_that_cannot_list_its_tools_yet_still_gets_the_create(monkeypatch):
+    calls, output = [], []
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls, tools=(409, {"error": "host_unavailable"})))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(on_host()) == 0
+    assert calls[-1][0] == "/v1/roots"
+
+
+def test_a_host_that_does_not_come_up_says_why(monkeypatch):
+    calls, output = [], []
+    refusal = (409, {"error": "host_unavailable", "host": "agent-work",
+                     "reason": "agent-work did not come up within 240 s"})
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls, create=lambda _: refusal))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(on_host()) == 1
+    assert output[0]["reason"] == "host_unavailable"
+    assert output[0]["detail"] == "agent-work did not come up within 240 s"
+
+
+@pytest.mark.parametrize("host", ["Agent-Work", "-x", "a b", "a" * 40])
+def test_malformed_host_never_contacts_owner(monkeypatch, host):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_a, **_k: pytest.fail("contacted owner"))
+    with pytest.raises(SystemExit) as exit_info:
+        admin.main([*on_host()[:-1], host])
+    assert exit_info.value.code == 2
+
+
+def collector(hosts=(200, HOSTS)):
+    item = admin.Collector("/fixture/gui.sock", "/fixture/owner.sock", "/tmp/tmux-1000/default",
+                           admin.time.monotonic() + 5, admin.threading.Event())
+    item.receipt = lambda *_a, **_k: hosts
+    return item
+
+
+def test_the_link_to_a_host_is_the_hubs_own_control_socket():
+    assert collector().link("agent-work") == ("agent-work", "agent-work", CONTROL)
+
+
+@pytest.mark.parametrize("item", [
+    {"name": "agent-work", "ssh": "agent-work", "control": "/tmp/elsewhere.ctl"},
+    {"name": "agent-work", "ssh": "-oProxyCommand=x", "control": CONTROL},
+    {"name": "other", "ssh": "other", "control": CONTROL},
+])
+def test_a_link_that_does_not_check_out_is_unavailable(item):
+    with pytest.raises(admin.Unavailable) as error:
+        collector((200, {"items": [item]})).link("agent-work")
+    assert str(error.value) == "host_unavailable"
+
+
+def test_a_remote_roots_tmux_runs_through_the_link(monkeypatch):
+    seen = []
+
+    class Process:
+        def __init__(self, argv, **_kwargs):
+            seen.append(argv)
+            raise OSError("stop here")
+
+    monkeypatch.setattr(admin.subprocess, "Popen", Process)
+    remote = collector()
+    remote.remote = remote.link("agent-work")
+    with pytest.raises(admin.Unavailable):
+        remote.command(["display-message", "-p", "-t", "%1", "#{pane_id} x"], 100)
+    argv = seen[0]
+    assert argv[:9] == [admin.SSH, "-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-S", CONTROL, "agent-work"]
+    assert argv[9] == "--"
+    assert shlex.split(argv[10]) == [admin.REMOTE_TMUX, "-S", "/tmp/tmux-1000/default",
+                                     "display-message", "-p", "-t", "%1", "#{pane_id} x"]
+
+
+def test_roots_of_a_host_the_hub_cannot_reach_are_reported_unavailable():
+    roots = {"owner": "aico", "roots": [{"requestId": "remote-1", "status": "running", "owner": "aico",
+                                         "host": "agent-work", "peer": "offline"}]}
+    discovery = collector()
+    discovery.receipt = lambda *_a, **_k: (200, roots)
+    resolved, unavailable = discovery.discover(None)
+    assert resolved == []
+    assert unavailable == [{"requestId": "remote-1", "observation": "unavailable", "identity": "unresolved",
+                            "host": "agent-work", "reason": "host_unavailable"}]
