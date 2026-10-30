@@ -193,8 +193,8 @@ function HealthBody({ view }: { view: NightshiftOwnerView | null }) {
 function Tile({ tile }: { tile: HealthTile }) {
   const tone = STATE_TONE[tile.state]
   const word = STATE_WORD[tile.state]
-  // An OK tile's age is its result's; only a problem has been open.
-  const open = tile.state === 'ok' || tile.state === 'unkn' ? null : tile.age
+  // Only a problem (warning, critical) has been open; other ages are results'.
+  const open = tile.state === 'warn' || tile.state === 'crit' ? tile.age : null
   const when = whenText(tile.checked, open)
   return (
     <li

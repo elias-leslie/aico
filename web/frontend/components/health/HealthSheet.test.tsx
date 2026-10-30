@@ -14,7 +14,11 @@ const health = vi.hoisted(() => ({
 vi.mock('@/lib/hooks/use-health', () => ({ useHealth: () => health }))
 vi.mock('@/lib/hooks/use-media-query', () => ({ useMediaQuery: () => false }))
 
-const tile = (id: string, state: 'ok' | 'warn' | 'unkn', summary: string) => ({
+const tile = (
+  id: string,
+  state: 'ok' | 'note' | 'warn' | 'unkn',
+  summary: string,
+) => ({
   id,
   label: id,
   state,
@@ -37,6 +41,7 @@ describe('HealthSheet', () => {
         tiles: [
           tile('disk', 'ok', 'System disk: 54% used'),
           tile('pve', 'warn', 'Guests: 2 down'),
+          tile('backups', 'note', 'Backups verified'),
         ],
         findings: [
           {
@@ -81,7 +86,11 @@ describe('HealthSheet', () => {
     expect(screen.getByTestId('health-tile-disk')).toHaveTextContent(
       'checked 4 min ago',
     )
-    expect(screen.getByTestId('health-tile-disk')).not.toHaveTextContent('open')
+    // OK and Note tiles show only when they were checked: nothing is open.
+    for (const id of ['disk', 'backups'])
+      expect(screen.getByTestId(`health-tile-${id}`)).not.toHaveTextContent(
+        'open',
+      )
     const problem = screen.getByTestId('health-finding')
     expect(problem).toHaveTextContent(
       'PVE lab host · Guests · checked 4 min ago · open 17 days',
