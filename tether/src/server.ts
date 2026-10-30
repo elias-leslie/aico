@@ -6,10 +6,12 @@ import { resolveAgentHubConfig } from './agent-hub/config'
 import type { RunTracker } from './agent-hub/runs'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
+import { registerFileRoutes } from './files/api'
 import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { HostAdmin, registerHostAdminRoutes } from './hub/host-admin'
 import type { Hub } from './hub/hub'
+import { getWidget } from './lifecycle/catalog'
 import { lifecycleStatus } from './lifecycle/engine'
 import { supportsBlankSlate } from './lifecycle/tui/blank-slate'
 import { isRootCreateTool, supportsInstructions } from './lifecycle/tui/registry'
@@ -411,6 +413,10 @@ export function buildRouter(context: ServerContext): Router {
   registerLifecycleRoutes(router, context)
   if (context.runs) registerRunRoutes(router, context.runs, context.stepChats, context.hub)
   registerShowRoute(router, events, context.store, context.show ?? resolveShowConfig({}))
+  registerFileRoutes(router, (id) => {
+    const row = getWidget(id)
+    return row ? row.projectRoot : undefined
+  })
 
   return router
 }

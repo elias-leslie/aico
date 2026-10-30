@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { TetherError } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { WebStore } from './db'
 import { createLifecycle } from './lifecycle'
@@ -40,7 +41,9 @@ beforeEach(async () => {
   writeFileSync(join(shellDir, 'README.md'), 'hello')
   writeFileSync(join(agentDir, 'other.txt'), 'x')
   const life = createLifecycle({ tether: tether.client, store })
-  ;({ base, close } = await serveRoutes((router) => registerPaneFileRoutes(router, life)))
+  ;({ base, close } = await serveRoutes((router) =>
+    registerPaneFileRoutes(router, life, tether.client),
+  ))
 })
 
 afterEach(async () => {
@@ -104,7 +107,7 @@ describe('pane file routes', () => {
     expect((await get(`/api/panes/${id}/files/content?path=missing.txt`)).status).toBe(404)
   })
 
-  it("shows no files for a tab on another host, not this computer's at the same path", async () => {
+  it("reads a tab on another host there, through Tether's hub, never this computer's copy", async () => {
     const created = store.createPane({ projectId: 'aico', name: 'Aico', activeMode: 'shell' })
     const shell = tether.add({
       host: 'agent-work',
@@ -113,9 +116,58 @@ describe('pane file routes', () => {
       projectRoot: shellDir,
     })
     store.link(shell.id, created.id, 'shell')
-    expect(await get(`/api/panes/${created.id}/files/tree`)).toEqual({
+    const remote = `/v1/sessions/${shell.id}/files`
+    const listing = {
+      entries: [{ name: 'far.txt', path: 'far.txt', is_directory: false }],
+      path: '',
+      total: 1,
+    }
+    tether.hostAnswers.set(`GET ${remote}/tree`, {
+      status: 200,
+      body: { ...listing, host: 'agent-work' },
+    })
+    expect(await get(`/api/panes/${created.id}/files/tree`)).toEqual({ status: 200, body: listing })
+    tether.hostAnswers.set(`GET ${remote}/content?path=far.txt`, {
+      status: 200,
+      body: { path: 'far.txt', content: 'far away', host: 'agent-work' },
+    })
+    expect(await get(`/api/panes/${created.id}/files/content?path=far.txt`)).toEqual({
+      status: 200,
+      body: { path: 'far.txt', content: 'far away' },
+    })
+    // The host's own refusal keeps its words and status.
+    tether.hostAnswers.set(
+      `GET ${remote}/content?path=.env`,
+      new TetherError(403, 'access_denied', {
+        error: 'access_denied',
+        detail: 'Access denied: .env',
+      }),
+    )
+    expect(await get(`/api/panes/${created.id}/files/content?path=.env`)).toEqual({
+      status: 403,
+      body: { detail: 'Access denied: .env' },
+    })
+    // Off: say so, and leave Try again open.
+    tether.hostAnswers.set(
+      `GET ${remote}/tree?path=src`,
+      new TetherError(409, 'host_unavailable', {
+        error: 'host_unavailable',
+        host: 'agent-work',
+        state: 'powered_off',
+      }),
+    )
+    expect(await get(`/api/panes/${created.id}/files/tree?path=src`)).toEqual({
+      status: 503,
+      body: { detail: 'agent-work is powered off, so its files can’t be shown.' },
+    })
+    // A host whose Tether has no files routes yet.
+    tether.hostAnswers.set(
+      `GET ${remote}/tree?path=old`,
+      new TetherError(404, 'not_found', { error: 'not_found' }),
+    )
+    expect(await get(`/api/panes/${created.id}/files/tree?path=old`)).toEqual({
       status: 409,
-      body: { detail: 'Files on agent-work can’t be shown here yet.' },
+      body: { detail: 'agent-work needs an update before its files can be shown here.' },
     })
   })
 

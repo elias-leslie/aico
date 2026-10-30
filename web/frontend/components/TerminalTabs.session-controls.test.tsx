@@ -10,6 +10,10 @@ const sessions = vi.hoisted(() => ({
     Record<string, unknown>
   >,
 }))
+const slots = vi.hoisted(() => ({
+  list: [] as unknown[],
+  ending: null as unknown,
+}))
 const slot: TerminalSlot = {
   type: 'adhoc',
   ...SLOT_BASE,
@@ -23,6 +27,7 @@ vi.mock('@/lib/hooks/use-terminal-orchestration', () => ({
   useTerminalOrchestration: () => ({
     isLoading: false,
     sessions: sessions.list,
+    terminalSlots: slots.list,
     handleSlotCloseSession: endSession,
   }),
 }))
@@ -41,17 +46,61 @@ vi.mock('./TerminalContent', () => ({
   }: {
     onSlotCloseSession: (slot: TerminalSlot) => void
   }) => (
-    <button type="button" onClick={() => onSlotCloseSession(slot)}>
+    <button
+      type="button"
+      onClick={() => onSlotCloseSession((slots.ending as TerminalSlot) ?? slot)}
+    >
       End control
     </button>
   ),
 }))
 vi.mock('./NewSessionDialog', () => ({ NewSessionDialog: () => null }))
+vi.mock('@/lib/hooks/use-agent-tools', () => ({
+  useAgentTools: () => ({
+    agentTools: [{ slug: 'pi', name: 'Pi' }],
+  }),
+}))
 
 describe('TerminalTabs session controls', () => {
   beforeEach(() => {
     endSession.mockReset()
     sessions.list = [{ id: 'session-a', name: 'Work shell' }]
+    slots.list = [slot]
+    slots.ending = null
+  })
+
+  it('names the session as its row does, with its agent and host', () => {
+    // Two remote Pi sessions share a name; the second is the one to end.
+    const first: TerminalSlot = {
+      ...slot,
+      sessionId: 'session-0',
+      name: 'Agent-Hub',
+      sessionMode: 'pi',
+      host: 'agent-work',
+      createdAt: '2026-10-30T10:00:00Z',
+    }
+    const second: TerminalSlot = {
+      ...first,
+      sessionId: 'session-a',
+      createdAt: '2026-10-30T11:00:00Z',
+    }
+    slots.list = [first, second]
+    slots.ending = second
+    render(<TerminalTabs />)
+    fireEvent.click(screen.getByRole('button', { name: 'End control' }))
+    expect(
+      screen.getByText(
+        'End “Agent-Hub #2” (Pi on agent-work)? This stops its process in every view.',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    // One on this computer says so.
+    slots.list = [slot]
+    slots.ending = slot
+    fireEvent.click(screen.getByRole('button', { name: 'End control' }))
+    expect(
+      screen.getByText(/^End “Work shell” \(Shell on this computer\)\?/),
+    ).toBeInTheDocument()
   })
 
   it('requires confirmation and leaves the view available on a failed end request', async () => {

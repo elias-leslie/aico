@@ -4,9 +4,10 @@
 // session, e.g. a shell). As in Aico's tray menu, only Needs you moves a
 // session in the list (components/SessionList.tsx).
 //
-// "Seen" is this browser's own record of when the owner last had each session
-// open (localStorage). A blocked session is "needs you" until it is opened; a
-// turn that finished since it was last open is "finished".
+// "Seen" is when the owner last had each session open: this browser's own
+// record (localStorage, at once) or any device's (the server's `seen_at`,
+// shared through the session list). A blocked session is "needs you" until it
+// is opened; a turn that finished since it was last open is "finished".
 
 import type { TerminalSession } from './hooks/use-terminal-sessions'
 
@@ -157,6 +158,25 @@ export function subscribeSeen(listener: () => void): () => void {
     listeners.delete(listener)
     window.removeEventListener('storage', onStorage)
   }
+}
+
+/** The later of this browser's record and every device's (`seen_at`). */
+export function seenAtOf(
+  session: { id: string; seen_at?: number | null },
+  local: Readonly<Record<string, number>>,
+): number {
+  return Math.max(local[session.id] ?? 0, session.seen_at ?? 0)
+}
+
+/** Tell the server too, so the owner's other devices count them as opened.
+ * Best effort: this browser's own record already has them. */
+export function shareSeen(ids: readonly string[]): void {
+  if (!ids.length) return
+  void fetch('/api/sessions/seen', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  }).catch(() => {})
 }
 
 /** Record that the owner has these sessions open now. */

@@ -223,7 +223,7 @@ describe('HostsSheet', () => {
               name: 'auth',
               rotates: true,
               state: 'expired',
-              source: 'host:x',
+              source: 'host:/home/agent/.codex/auth.json',
               detail: 'token expired',
             },
           ],
@@ -257,6 +257,83 @@ describe('HostsSheet', () => {
     expect(screen.getByTestId('login-st')).toHaveTextContent(
       'Needs sign-in · Agent Hub',
     )
+  })
+
+  it('offers Sign in only where it is needed; the rest and the paths sit in Details', async () => {
+    state.hosts = [host()]
+    state.logins['agent-work'] = loginsFor({
+      tools: [
+        {
+          tool: 'codex',
+          state: 'signed_in',
+          source: 'host:/home/agent/.codex/auth.json',
+          credentials: [
+            {
+              name: 'login',
+              rotates: true,
+              state: 'signed_in',
+              source: 'host:/home/agent/.codex/auth.json',
+            },
+          ],
+        },
+        {
+          tool: 'pi',
+          state: 'signed_in',
+          source: 'agent-hub',
+          credentials: [
+            {
+              name: 'minimax',
+              rotates: false,
+              state: 'needs_sign_in',
+              source: 'agent-hub',
+            },
+            {
+              name: 'oauth',
+              rotates: true,
+              state: 'needs_sign_in',
+              source: 'host:/home/agent/.pi/agent/auth.json',
+            },
+            {
+              name: 'opencode-go',
+              rotates: false,
+              state: 'signed_in',
+              source: 'agent-hub',
+            },
+          ],
+        },
+      ],
+      actions: {
+        codex: { signIn: true, signOut: 'command' },
+        pi: { signIn: true, signOut: 'session' },
+      },
+    })
+    renderSheet()
+    const codex = await screen.findByTestId('login-codex')
+    expect(codex).toHaveTextContent('Signed in · This host')
+    // Signed in: no Sign in up front, and the path is folded away.
+    expect(
+      screen.queryByRole('button', { name: 'Sign in to Codex on agent-work' }),
+    ).toBeNull()
+    const codexDetails = codex.querySelector('details')
+    expect(codexDetails).not.toHaveAttribute('open')
+    expect(codexDetails).toHaveTextContent('/home/agent/.codex/auth.json')
+    expect(
+      within(codex).getByRole('button', {
+        name: 'Sign in to Codex on agent-work again',
+      }),
+    ).toHaveTextContent('Sign in again')
+    // Pi: one provider of three, so it says so and offers Sign in.
+    const pi = screen.getByTestId('login-pi')
+    const chip = pi.querySelector('[data-tone]')
+    expect(chip).toHaveTextContent(/^1 of 3 signed in$/)
+    expect(chip).toHaveAttribute('data-tone', 'wait')
+    expect(
+      within(pi).getByRole('button', { name: 'Sign in to pi on agent-work' }),
+    ).toBeInTheDocument()
+    const piDetails = pi.querySelector('details')
+    expect(piDetails).toHaveTextContent('minimax · Needs sign-in · Agent Hub')
+    expect(piDetails).toHaveTextContent('opencode-go · Signed in · Agent Hub')
+    expect(piDetails).toHaveTextContent('/home/agent/.pi/agent/auth.json')
   })
 
   it('says sign-in could not be checked and retries', async () => {

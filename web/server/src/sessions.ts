@@ -54,6 +54,8 @@ export interface WebSession {
   activity_previous: string
   activity_at: number | null
   activity_detail: string | null
+  /** When the owner last had it open in any browser or the phone app (ms), or null. */
+  seen_at: number | null
   can_rename: boolean
   can_respawn: boolean
   can_end: boolean
@@ -89,7 +91,11 @@ function badgeOf(descriptor: SessionDescriptor): WebSession['badge'] {
   return { kind, text, color }
 }
 
-export function fromTether(descriptor: SessionDescriptor, link: Link | null): WebSession {
+export function fromTether(
+  descriptor: SessionDescriptor,
+  link: Link | null,
+  seenAt: number | null = null,
+): WebSession {
   const mode = descriptor.tool || SHELL_MODE
   const status = typeof descriptor.status === 'string' ? descriptor.status : null
   const title = descriptor.displayTitle?.trim()
@@ -139,6 +145,7 @@ export function fromTether(descriptor: SessionDescriptor, link: Link | null): We
     activity_previous: activity(descriptor.statePrevious),
     activity_at: typeof descriptor.stateAt === 'number' ? descriptor.stateAt : null,
     activity_detail: typeof descriptor.stateDetail === 'string' ? descriptor.stateDetail : null,
+    seen_at: seenAt,
     can_rename: true,
     can_respawn: !isRoot,
     can_end: true,

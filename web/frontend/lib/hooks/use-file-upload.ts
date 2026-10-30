@@ -9,6 +9,8 @@ interface UploadResult {
   filename: string
   size: number
   mime_type: string
+  /** The host it was sent to; absent when it landed on this computer. */
+  host?: string
 }
 
 interface UploadError {

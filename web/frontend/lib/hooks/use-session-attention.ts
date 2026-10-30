@@ -7,7 +7,9 @@ import {
   attentionOf,
   markSeen,
   mostUrgent,
+  seenAtOf,
   seenSnapshot,
+  shareSeen,
   stepAttention,
   subscribeSeen,
 } from '../attention'
@@ -70,7 +72,7 @@ export function useSessionAttention(): SessionAttention {
   return useMemo(() => {
     const byId = new Map(
       sessions.map(
-        (s) => [s.id, attentionOf(s, seen[s.id] ?? 0, now)] as const,
+        (s) => [s.id, attentionOf(s, seenAtOf(s, seen), now)] as const,
       ),
     )
     return {
@@ -115,7 +117,9 @@ export function useMarkActiveSeen(activeSessionId: string | null): void {
   useEffect(() => {
     if (!ids) return
     const mark = () => {
-      if (document.visibilityState === 'visible') markSeen(ids.split(','))
+      if (document.visibilityState !== 'visible') return
+      markSeen(ids.split(','))
+      shareSeen(ids.split(','))
     }
     mark()
     document.addEventListener('visibilitychange', mark)

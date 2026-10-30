@@ -1,6 +1,8 @@
 'use client'
 
 import { AlertTriangle, X } from 'lucide-react'
+import { useEffect } from 'react'
+import type { UploadDone } from '@/lib/hooks/use-terminal-action-handlers'
 
 const TOAST_BASE_CLASSES =
   'lantern-sheet lantern-enter absolute top-14 left-1/2 z-50 w-[calc(100%-20px)] max-w-md -translate-x-1/2 rounded-xl px-3.5 py-2.5'
@@ -70,6 +72,59 @@ export function UploadErrorToast({
             <X className="h-4 w-4" strokeWidth={1.7} />
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+/** How long the confirmation stays before it goes by itself. */
+export const UPLOAD_DONE_MS = 6000
+
+/** Where a finished upload landed: its name, the host, and the path the session reads. */
+export function UploadDoneToast({
+  upload,
+  onDismiss,
+}: {
+  upload: UploadDone
+  onDismiss: () => void
+}) {
+  useEffect(() => {
+    const timer = setTimeout(onDismiss, UPLOAD_DONE_MS)
+    return () => clearTimeout(timer)
+  }, [onDismiss])
+  return (
+    <div
+      data-testid="upload-done-toast"
+      role="status"
+      className={TOAST_BASE_CLASSES}
+    >
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1 text-[13px]">
+          <p className="m-0 break-words" dir="auto">
+            {upload.host
+              ? `Sent ${upload.name} to ${upload.host}`
+              : `Uploaded ${upload.name}`}
+          </p>
+          <p
+            className="m-0 mt-1 break-all text-xs"
+            style={{ color: 'var(--mist)', fontFamily: 'var(--font-mono)' }}
+          >
+            {upload.path}
+          </p>
+          {upload.typed && (
+            <p className="m-0 mt-1 text-xs" style={{ color: 'var(--mist)' }}>
+              Path typed into the session, not sent.
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="lantern-icon-btn compact -my-1.5 -mr-1.5"
+          aria-label="Dismiss"
+        >
+          <X className="h-4 w-4" strokeWidth={1.7} />
+        </button>
       </div>
     </div>
   )

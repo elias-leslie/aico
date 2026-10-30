@@ -120,6 +120,51 @@ describe('useTerminalActionHandlers', () => {
     )
   })
 
+  it('confirms where an upload landed: its own name, the host and the typed path', async () => {
+    const pasteInput = vi.fn()
+    const terminalRefs = {
+      current: new Map<string, TerminalHandle | null>([
+        ['remote-session', { pasteInput } as unknown as TerminalHandle],
+      ]),
+    }
+    mocks.uploadFile.mockResolvedValue({
+      path: '/home/kasadis/.cache/aico/uploads/0b1c.txt',
+      filename: '0b1c.txt',
+      size: 4,
+      mime_type: 'text/plain',
+      host: 'agent-work',
+    })
+    const { result } = renderHook(() =>
+      useTerminalActionHandlers({
+        terminalRefs,
+        activeSessionId: 'remote-session',
+        setShowVoice: vi.fn(),
+        voiceStartListening: vi.fn(),
+        voiceStopListening: vi.fn(),
+        voiceResetTranscript: vi.fn(),
+        voiceStatus: 'idle',
+      }),
+    )
+    expect(result.current.uploadDone).toBeNull()
+    await act(async () => {
+      await result.current.handleFileSelect(new File(['data'], 'notes.txt'))
+    })
+    expect(result.current.uploadDone).toEqual({
+      name: 'notes.txt',
+      path: '/home/kasadis/.cache/aico/uploads/0b1c.txt',
+      host: 'agent-work',
+      typed: true,
+    })
+    act(() => result.current.clearUploadDone())
+    expect(result.current.uploadDone).toBeNull()
+    // A failed upload confirms nothing.
+    mocks.uploadFile.mockResolvedValue(null)
+    await act(async () => {
+      await result.current.handleFileSelect(new File(['data'], 'bad.txt'))
+    })
+    expect(result.current.uploadDone).toBeNull()
+  })
+
   it('pastes clipboard image upload paths into the pane where paste happened', async () => {
     const nativePasteInput = vi.fn()
     const externalPasteInput = vi.fn()

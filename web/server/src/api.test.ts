@@ -273,6 +273,22 @@ describe('sessions', () => {
     })
   })
 
+  it('shares when a session was last open with every device', async () => {
+    const session = tether.add({ id: 'abcd1234', tool: 'pi' })
+    const before = Date.now()
+    const marked = await call('POST', '/api/sessions/seen', { ids: [session.id] })
+    expect(marked.status).toBe(200)
+    expect(marked.body.seen_at).toBeGreaterThanOrEqual(before)
+    // Another browser lists it as opened.
+    const { body } = await call('GET', '/api/sessions')
+    expect(body.items[0]).toMatchObject({ id: session.id, seen_at: marked.body.seen_at })
+    expect((await call('GET', `/api/sessions/${session.id}`)).body.seen_at).toBe(
+      marked.body.seen_at,
+    )
+    expect((await call('POST', '/api/sessions/seen', { ids: ['../x'] })).status).toBe(400)
+    expect((await call('POST', '/api/sessions/seen', {})).status).toBe(400)
+  })
+
   it('renames through Tether with the session generation, and reorders the link', async () => {
     const pane = store.createPane({ projectId: null, name: 'Shell', activeMode: 'shell' })
     const session = tether.add()

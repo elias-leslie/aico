@@ -119,29 +119,53 @@ function sourceLabel(source: string): { label: string; detail: string } {
   return { label: source, detail: '' }
 }
 
-/** A tool's sign-in line: `Signed in · Agent Hub`, with Unknown saying why. */
+/** How many of a tool's credentials are signed in, when that is some but not
+ * all of them (Pi with one provider of three); null otherwise. */
+export function partialSignIn(
+  tool: ToolLogin,
+): { ready: number; total: number } | null {
+  const total = tool.credentials.length
+  const ready = tool.credentials.filter(
+    (credential) => credential.state === 'signed_in',
+  ).length
+  return tool.state === 'signed_in' && total > 1 && ready < total
+    ? { ready, total }
+    : null
+}
+
+/** A tool's sign-in line: `Signed in · Agent Hub`, `1 of 3 signed in`, with
+ * Unknown saying why. The source's file path goes to the details. */
 export function loginText(
   tool: ToolLogin,
   agentHub: string,
-): { text: string; detail: string } {
-  const source = sourceLabel(tool.source)
+): { text: string; tone: Tone } {
+  const partial = partialSignIn(tool)
+  if (partial)
+    return {
+      text: `${partial.ready} of ${partial.total} signed in`,
+      tone: 'wait',
+    }
   const cannotReach =
     tool.state === 'unknown' &&
     tool.source === 'agent-hub' &&
     agentHub !== 'reachable'
   return {
     text: `${LOGIN_LABELS[tool.state]} · ${
-      cannotReach ? 'Agent Hub can’t be reached' : source.label
+      cannotReach
+        ? 'Agent Hub can’t be reached'
+        : sourceLabel(tool.source).label
     }`,
-    detail: source.detail,
+    tone: LOGIN_TONE[tool.state],
   }
 }
 
-function credentialNote(tool: ToolLogin): string {
-  return tool.credentials
-    .filter((credential) => credential.detail)
-    .map((credential) => `${credential.name}: ${credential.detail}`)
-    .join(' · ')
+/** Whether the row offers Sign in up front: something there needs it. */
+export function needsSignIn(tool: ToolLogin): boolean {
+  return (
+    tool.state === 'needs_sign_in' ||
+    tool.state === 'expired' ||
+    partialSignIn(tool) !== null
+  )
 }
 
 type Confirm =
@@ -586,14 +610,18 @@ function LoginRows({
       )}
       <ul className="flex flex-col gap-2">
         {data.tools.map((tool) => {
-          const { text, detail } = loginText(tool, data.agent_hub)
-          const note = tool.state === 'signed_in' ? '' : credentialNote(tool)
+          const { text, tone } = loginText(tool, data.agent_hub)
           const actions = data.actions[tool.tool]
           // Nothing to sign out of while it needs a sign-in; unknown may be signed in.
           const canSignOut =
             !!actions?.signOut && tool.state !== 'needs_sign_in'
+          const signInFirst = !!actions?.signIn && needsSignIn(tool)
+          const signInLater = !!actions?.signIn && !signInFirst
           const busy = busyTool === tool.tool
           const name = toolName(tool.tool)
+          const credentials = tool.credentials.length
+            ? tool.credentials
+            : [{ name: '', state: tool.state, source: tool.source }]
           return (
             <li
               key={tool.tool}
@@ -601,43 +629,87 @@ function LoginRows({
               className="flex flex-wrap items-center gap-x-3 gap-y-1.5"
             >
               <span className="min-w-[7ch] text-[14px]">{name}</span>
-              <span title={detail || undefined}>
-                <Chip tone={LOGIN_TONE[tool.state]}>{text}</Chip>
-              </span>
-              {(actions?.signIn || canSignOut) && (
-                <span className="ml-auto flex flex-wrap gap-2">
-                  {actions.signIn && (
-                    <button
-                      type="button"
-                      className="lantern-btn small"
-                      aria-label={`Sign in to ${name} on ${host}`}
-                      disabled={busyTool !== null}
-                      onClick={() => onSignIn(tool.tool)}
-                    >
-                      {busy ? 'Opening…' : 'Sign in'}
-                    </button>
-                  )}
-                  {canSignOut && (
-                    <button
-                      type="button"
-                      className="lantern-btn small ghost"
-                      aria-label={`Sign out of ${name} on ${host}`}
-                      disabled={busyTool !== null}
-                      onClick={() => onSignOut(tool.tool)}
-                    >
-                      Sign out
-                    </button>
-                  )}
-                </span>
+              <Chip tone={tone}>{text}</Chip>
+              {signInFirst && (
+                <button
+                  type="button"
+                  className="lantern-btn small ml-auto"
+                  aria-label={`Sign in to ${name} on ${host}`}
+                  disabled={busyTool !== null}
+                  onClick={() => onSignIn(tool.tool)}
+                >
+                  {busy ? 'Opening…' : 'Sign in'}
+                </button>
               )}
-              {(detail || note) && (
-                <p
-                  className="basis-full text-[12px] break-words"
+              <details className="basis-full text-[12px]">
+                <summary
+                  className="w-fit cursor-pointer"
                   style={{ color: 'var(--mist)' }}
                 >
-                  {[detail, note].filter(Boolean).join(' · ')}
-                </p>
-              )}
+                  Details
+                </summary>
+                <ul className="mt-1.5 flex flex-col gap-1">
+                  {credentials.map((credential) => {
+                    const source = sourceLabel(credential.source)
+                    const extra =
+                      'detail' in credential ? credential.detail : undefined
+                    return (
+                      <li
+                        key={credential.name || 'tool'}
+                        className="break-words"
+                        style={{ color: 'var(--mist)' }}
+                      >
+                        {[
+                          credential.name,
+                          LOGIN_LABELS[credential.state],
+                          source.label,
+                          extra,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                        {source.detail && (
+                          <span
+                            className="block break-all"
+                            style={{ fontFamily: 'var(--font-mono)' }}
+                          >
+                            {source.detail}
+                          </span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+                {(signInLater || canSignOut) && (
+                  <span className="mt-2 flex flex-wrap gap-2">
+                    {signInLater && (
+                      <button
+                        type="button"
+                        className="lantern-btn small ghost"
+                        aria-label={`Sign in to ${name} on ${host} again`}
+                        disabled={busyTool !== null}
+                        onClick={() => onSignIn(tool.tool)}
+                      >
+                        {busy
+                          ? 'Opening…'
+                          : tool.state === 'signed_in'
+                            ? 'Sign in again'
+                            : 'Sign in'}
+                      </button>
+                    )}
+                    {canSignOut && (
+                      <button
+                        type="button"
+                        className="lantern-btn small ghost"
+                        aria-label={`Sign out of ${name} on ${host}`}
+                        disabled={busyTool !== null}
+                        onClick={() => onSignOut(tool.tool)}
+                      >
+                        Sign out
+                      </button>
+                    )}
+                  </span>
+                )}
+              </details>
             </li>
           )
         })}

@@ -1,6 +1,18 @@
-import { type MutableRefObject, useCallback, useRef } from 'react'
+import { type MutableRefObject, useCallback, useRef, useState } from 'react'
 import type { TerminalHandle } from '@/components/Terminal'
 import { useFileUpload } from '@/lib/hooks/use-file-upload'
+
+/** A finished upload, for its confirmation. */
+export interface UploadDone {
+  /** The file's own name, as picked or dropped. */
+  name: string
+  /** Where it landed, as the session reads it. */
+  path: string
+  /** The host it went to; null for this computer. */
+  host: string | null
+  /** Whether its path was typed into the session. */
+  typed: boolean
+}
 
 interface UseTerminalActionHandlersParams {
   terminalRefs: MutableRefObject<Map<string, TerminalHandle | null>>
@@ -59,6 +71,8 @@ export function useTerminalActionHandlers({
     clearError: clearUploadError,
   } = useFileUpload()
   const uploadTargetRef = useRef<string | null>(null)
+  const [uploadDone, setUploadDone] = useState<UploadDone | null>(null)
+  const clearUploadDone = useCallback(() => setUploadDone(null), [])
 
   const handleUploadClick = useCallback((targetSessionId?: string) => {
     uploadTargetRef.current = targetSessionId ?? null
@@ -75,6 +89,7 @@ export function useTerminalActionHandlers({
             ref: terminalRefs.current.get(uploadTargetSessionId) ?? null,
           }
         : findActiveTarget(terminalRefs.current, activeSessionId)
+      setUploadDone(null)
       const result = await uploadFile(file, target?.id)
       if (result) {
         // The pane is looked up again: it may have gone while the file was on its way.
@@ -84,6 +99,12 @@ export function useTerminalActionHandlers({
         if (terminalRef) {
           terminalRef.pasteInput(result.path)
         }
+        setUploadDone({
+          name: file.name || result.filename,
+          path: result.path,
+          host: result.host ?? null,
+          typed: !!terminalRef,
+        })
       }
       uploadTargetRef.current = null
     },
@@ -165,6 +186,8 @@ export function useTerminalActionHandlers({
     isUploading,
     uploadError,
     clearUploadError,
+    uploadDone,
+    clearUploadDone,
     handleUploadClick,
     handleFileSelect,
     handleFileInputChange,

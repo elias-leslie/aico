@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS session_links (
 );
 CREATE INDEX IF NOT EXISTS session_links_pane ON session_links(pane_id);
 
+-- When the owner last had each session open in any browser or the phone app
+-- (ms, this server's clock), so a session opened on one device does not read
+-- "not opened yet" on another.
+CREATE TABLE IF NOT EXISTS session_seen (
+  session_id TEXT PRIMARY KEY,
+  seen_at    INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS project_settings (
   project_id    TEXT PRIMARY KEY,
   enabled       INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
@@ -73,6 +81,9 @@ export interface ProjectSettings {
 type Row = Record<string, unknown>
 
 const now = () => new Date().toISOString()
+
+/** Seen records kept, newest first: well past the sessions anyone lists. */
+const SEEN_KEEP = 500
 
 function pane(row: Row | undefined): Pane | null {
   return row ? (row as unknown as Pane) : null
@@ -223,6 +234,25 @@ export class WebStore {
     this.db
       .prepare('UPDATE session_links SET last_accessed_at = ? WHERE session_id = ?')
       .run(now(), sessionId)
+  }
+
+  /** Record that the owner has these sessions open at `at`; keeps the newest `keep`. */
+  markSeen(sessionIds: readonly string[], at: number, keep = SEEN_KEEP): void {
+    const upsert = this.db.prepare(
+      'INSERT INTO session_seen (session_id, seen_at) VALUES (?, ?) ON CONFLICT (session_id) DO UPDATE SET seen_at = max(seen_at, excluded.seen_at)',
+    )
+    for (const id of sessionIds) upsert.run(id, at)
+    this.db
+      .prepare(
+        'DELETE FROM session_seen WHERE session_id NOT IN (SELECT session_id FROM session_seen ORDER BY seen_at DESC LIMIT ?)',
+      )
+      .run(keep)
+  }
+
+  /** When each session was last open anywhere (ms). */
+  seenAt(): Map<string, number> {
+    const rows = this.db.prepare('SELECT session_id, seen_at FROM session_seen').all() as Row[]
+    return new Map(rows.map((row) => [String(row.session_id), Number(row.seen_at)]))
   }
 
   // -- Project settings --------------------------------------------------------

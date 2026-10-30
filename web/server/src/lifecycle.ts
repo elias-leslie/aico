@@ -70,10 +70,13 @@ export function createLifecycle(deps: LifecycleDeps) {
 
   async function listSessions(): Promise<WebSession[]> {
     const links = new Map(store.listLinks().map((link) => [link.session_id, link]))
+    const seen = store.seenAt()
     const descriptors = await tetherCall(() => tether.listSessions())
     const sessions = descriptors
       .filter((descriptor) => typeof descriptor.id === 'string')
-      .map((descriptor) => fromTether(descriptor, links.get(descriptor.id) ?? null))
+      .map((descriptor) =>
+        fromTether(descriptor, links.get(descriptor.id) ?? null, seen.get(descriptor.id) ?? null),
+      )
     numberSessions(sessions)
     return sortSessions(sessions)
   }
@@ -81,7 +84,7 @@ export function createLifecycle(deps: LifecycleDeps) {
   async function getSession(id: string): Promise<WebSession> {
     const descriptor = await tetherCall(() => findSession(tether, id))
     if (!descriptor) throw new HttpError(404, `Session ${id} not found`)
-    return fromTether(descriptor, store.getLink(id))
+    return fromTether(descriptor, store.getLink(id), store.seenAt().get(id) ?? null)
   }
 
   async function sessionsById(): Promise<Map<string, WebSession>> {

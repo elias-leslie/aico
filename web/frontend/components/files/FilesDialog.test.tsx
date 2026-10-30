@@ -168,7 +168,13 @@ describe('FilesDialog', () => {
 
   it('shows a refusal from another host at once, without Try again', async () => {
     const fetchMock = vi.fn(async (_url: string) =>
-      json({ detail: 'Files on agent-work can’t be shown here yet.' }, 409),
+      json(
+        {
+          detail:
+            'agent-work needs an update before its files can be shown here.',
+        },
+        409,
+      ),
     )
     vi.stubGlobal('fetch', fetchMock)
     // The app's own retry policy, not the tests' retry: false.
@@ -186,7 +192,9 @@ describe('FilesDialog', () => {
     )
     // findByText gives up after 1 s, before a first retry would have finished.
     expect(
-      await screen.findByText('Files on agent-work can’t be shown here yet.'),
+      await screen.findByText(
+        'agent-work needs an update before its files can be shown here.',
+      ),
     ).toBeVisible()
     expect(
       fetchMock.mock.calls.filter(([url]) =>

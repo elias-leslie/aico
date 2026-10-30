@@ -35,4 +35,18 @@ describe('WebStore', () => {
       active_mode: 'codex',
     })
   })
+  it('keeps the latest seen time per session, and only the newest few', () => {
+    const store = new WebStore(':memory:')
+    store.markSeen(['aaaa0001', 'aaaa0002'], 100)
+    store.markSeen(['aaaa0001'], 50)
+    expect(store.seenAt()).toEqual(
+      new Map([
+        ['aaaa0001', 100],
+        ['aaaa0002', 100],
+      ]),
+    )
+    store.markSeen(['aaaa0003'], 200, 2)
+    expect([...store.seenAt().keys()].sort()).toHaveLength(2)
+    expect(store.seenAt().get('aaaa0003')).toBe(200)
+  })
 })

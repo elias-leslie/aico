@@ -1,11 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   attentionOf,
   formatAge,
   markSeen,
   mostUrgent,
   resetSeenForTests,
+  seenAtOf,
   seenSnapshot,
+  shareSeen,
 } from './attention'
 
 const NOW = 10 * 3_600_000
@@ -99,5 +101,26 @@ describe('seen store', () => {
     markSeen(['a0000001'], 123)
     resetSeenForTests()
     expect(seenSnapshot()).toEqual({ a0000001: 123 })
+  })
+  it('takes the later of this browser and any device, and tells the server', () => {
+    expect(seenAtOf({ id: 'a', seen_at: 500 }, { a: 100 })).toBe(500)
+    expect(seenAtOf({ id: 'a', seen_at: null }, { a: 100 })).toBe(100)
+    expect(seenAtOf({ id: 'b' }, {})).toBe(0)
+    const fetchMock = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      shareSeen(['a0000001'])
+      shareSeen([])
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/sessions/seen',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ ids: ['a0000001'] }),
+        }),
+      )
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

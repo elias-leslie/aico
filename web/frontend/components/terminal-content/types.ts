@@ -3,6 +3,7 @@ import type {
   ConnectionStatus,
   TerminalHandle,
 } from '@/components/terminal.types'
+import type { UploadDone } from '@/lib/hooks/use-terminal-action-handlers'
 import type { TerminalFontSize } from '@/lib/hooks/use-terminal-settings'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import type { TranscriptionError, TranscriptionStatus } from '@/lib/voice/types'
@@ -33,6 +34,8 @@ export interface TerminalContentProps {
   isUploading: boolean
   uploadError: { message: string } | null
   clearUploadError?: () => void
+  uploadDone?: UploadDone | null
+  clearUploadDone?: () => void
   handleFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   handleFileSelect: (file: File, targetSessionId?: string) => void
 

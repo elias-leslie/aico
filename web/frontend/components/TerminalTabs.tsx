@@ -2,6 +2,7 @@
 
 import { clsx } from 'clsx'
 import { useState } from 'react'
+import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { timesLabel } from '@/lib/hooks/use-check-ins'
 import { useSignInWatch } from '@/lib/hooks/use-host-admin'
 import {
@@ -12,13 +13,13 @@ import {
 import { useTerminalOrchestration } from '@/lib/hooks/use-terminal-orchestration'
 import { useVisualViewportHeight } from '@/lib/hooks/use-visual-viewport-height'
 import {
-  getSlotName,
   getSlotSessionId,
   type PaneSlot,
   type TerminalSlot,
 } from '@/lib/utils/slot'
 import { ConfirmationDialog } from './ConfirmationDialog'
 import { NewSessionDialog } from './NewSessionDialog'
+import { sessionWhoWhere } from './SessionList'
 import { TerminalContent } from './TerminalContent'
 import { TerminalSkeleton } from './TerminalSkeleton'
 
@@ -69,6 +70,8 @@ export function TerminalTabs({
     isUploading,
     uploadError,
     clearUploadError,
+    uploadDone,
+    clearUploadDone,
     handleUploadClick,
     handleFileSelect,
     handleFileInputChange,
@@ -107,10 +110,11 @@ export function TerminalTabs({
       setEndSessionPending(false)
     }
   }
+  const { agentTools } = useAgentTools()
   const pendingSessionId = sessionToEnd ? getSlotSessionId(sessionToEnd) : null
+  // Named as its row is, with agent and host: many sessions share a name.
   const pendingSessionName = sessionToEnd
-    ? (sessions.find((session) => session.id === pendingSessionId)?.name ??
-      getSlotName(sessionToEnd))
+    ? sessionWhoWhere(terminalSlots ?? [], sessionToEnd, agentTools)
     : ''
 
   // Ending a session cancels its check-ins unless the owner keeps them.
@@ -157,6 +161,8 @@ export function TerminalTabs({
         isUploading={isUploading}
         uploadError={uploadError}
         clearUploadError={clearUploadError}
+        uploadDone={uploadDone}
+        clearUploadDone={clearUploadDone}
         handleFileInputChange={handleFileInputChange}
         handleFileSelect={handleFileSelect}
         sessions={sessions}
@@ -181,7 +187,7 @@ export function TerminalTabs({
       <ConfirmationDialog
         isOpen={sessionToEnd !== null}
         title="End session?"
-        message={`End “${pendingSessionName}”? This stops its process in every view.${checkInNote}`}
+        message={`End ${pendingSessionName}? This stops its process in every view.${checkInNote}`}
         confirmText="End session"
         secondaryText={
           pendingCheckIns.length

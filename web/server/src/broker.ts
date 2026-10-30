@@ -7,7 +7,7 @@
 
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { realpathLoose } from './file-browser'
+import { realpathLoose } from 'tether/files'
 import type { Lifecycle } from './lifecycle'
 import { byText, SHELL_MODE, type WebSession } from './sessions'
 import { HttpError } from './tether'

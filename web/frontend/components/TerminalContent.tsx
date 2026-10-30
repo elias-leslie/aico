@@ -57,6 +57,8 @@ function TerminalContentBody({
   isUploading,
   uploadError,
   clearUploadError,
+  uploadDone,
+  clearUploadDone,
   handleFileInputChange,
   handleFileSelect,
   sessions,
@@ -153,6 +155,8 @@ function TerminalContentBody({
           isUploading={isUploading}
           uploadError={uploadError}
           clearUploadError={clearUploadError}
+          uploadDone={uploadDone}
+          clearUploadDone={clearUploadDone}
           handleFileInputChange={handleFileInputChange}
           handleFileSelect={handleFileSelect}
           activeSessionId={activeSessionId}

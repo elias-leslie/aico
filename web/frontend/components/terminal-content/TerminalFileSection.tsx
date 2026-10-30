@@ -8,9 +8,11 @@ import type {
   TerminalHandle,
 } from '@/components/terminal.types'
 import {
+  UploadDoneToast,
   UploadErrorToast,
   UploadProgressToast,
 } from '@/components/UploadStatusToast'
+import type { UploadDone } from '@/lib/hooks/use-terminal-action-handlers'
 import type { TerminalFontSize } from '@/lib/hooks/use-terminal-settings'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 
@@ -37,6 +39,8 @@ interface TerminalFileSectionProps {
   isUploading: boolean
   uploadError: { message: string } | null
   clearUploadError?: () => void
+  uploadDone?: UploadDone | null
+  clearUploadDone?: () => void
   handleFileInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   handleFileSelect: (file: File, targetSessionId?: string) => void
   activeSessionId?: string | null
@@ -65,6 +69,8 @@ export function TerminalFileSection({
   isUploading,
   uploadError,
   clearUploadError,
+  uploadDone,
+  clearUploadDone,
   handleFileInputChange,
   handleFileSelect,
   activeSessionId,
@@ -92,6 +98,9 @@ export function TerminalFileSection({
           message={uploadError.message}
           onDismiss={clearUploadError}
         />
+      )}
+      {uploadDone && !isUploading && !uploadError && clearUploadDone && (
+        <UploadDoneToast upload={uploadDone} onDismiss={clearUploadDone} />
       )}
 
       {/* The session, with drag-drop upload */}

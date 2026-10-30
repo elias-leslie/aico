@@ -41,6 +41,8 @@ const SLUG = /^[a-z0-9_-]+$/
 /** A hosts.json host name, as Tether names it. */
 const HOST_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const MAX_SESSION_NAME = 160
+/** A Tether session id. */
+const SESSION_ID = /^[0-9a-f]{8}$/
 
 export function buildApi(deps: ApiDeps): Router {
   const life = createLifecycle(deps)
@@ -201,6 +203,22 @@ export function buildApi(deps: ApiDeps): Router {
   })
 
   router.on('GET', '/api/sessions/:sessionId', (ctx) => getSession(ctx.params.sessionId))
+
+  // The owner has these sessions open now: every device's list stops calling
+  // their finished turns new.
+  router.on('POST', '/api/sessions/seen', async (ctx) => {
+    const body = objectBody(await ctx.body())
+    const ids = Array.isArray(body.ids) ? body.ids : null
+    if (
+      !ids ||
+      ids.length > 50 ||
+      !ids.every((id) => typeof id === 'string' && SESSION_ID.test(id))
+    )
+      throw new HttpError(400, 'ids must be up to 50 session ids')
+    const at = Date.now()
+    store.markSeen(ids as string[], at)
+    return { seen_at: at }
+  })
 
   router.on('PATCH', '/api/sessions/:sessionId', async (ctx) => {
     const id = ctx.params.sessionId
@@ -366,7 +384,7 @@ export function buildApi(deps: ApiDeps): Router {
   // -- Files and agent shares -------------------------------------------------------
 
   registerUploadRoutes(router, deps.uploads, uploadTargets(life, tether))
-  registerPaneFileRoutes(router, life)
+  registerPaneFileRoutes(router, life, tether)
   registerFileLocationRoutes(router)
   registerShowRoutes(router, deps.shows)
   registerCheckInRoutes(router, life, tether)

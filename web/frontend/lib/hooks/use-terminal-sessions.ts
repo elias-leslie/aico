@@ -59,6 +59,8 @@ export interface TerminalSession extends CoordinatorFields {
   activity_at?: number | null
   /** Why blocked: `permission prompt`, `input needed`, ... */
   activity_detail?: string | null
+  /** When the owner last had it open on any device (ms, the server's clock). */
+  seen_at?: number | null
   /** The session can be renamed (in Tether). */
   can_rename: boolean
   /** The session can be reset (respawned) or switch tools. */

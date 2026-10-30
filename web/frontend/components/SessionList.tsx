@@ -158,6 +158,21 @@ const toolName = (
   tools.find((tool) => tool.slug === mode)?.name ??
   (mode === 'shell' ? 'Shell' : mode)
 
+/** A session as its list row names it, with its agent and where it runs, so
+ * one of several same-named sessions can be told apart:
+ * `“Agent-Hub #3” (Pi on agent-work)`. */
+export function sessionWhoWhere(
+  slots: Array<TerminalSlot | PaneSlot>,
+  slot: TerminalSlot | PaneSlot,
+  tools: readonly { slug: string; name: string }[],
+): string {
+  const id = getSlotPanelId(slot)
+  const label =
+    sortSessionEntries(slots).find((entry) => entry.id === id)?.label ??
+    getSlotName(slot)
+  return `“${label}” (${toolName(tools, getSlotMode(slot))} on ${slot.host ?? 'this computer'})`
+}
+
 /** What a row says under its name: its agent and what it is doing. The
  * list no longer groups by state, so the row says it. */
 function rowMeta(agent: string, state: Attention | null): string {
