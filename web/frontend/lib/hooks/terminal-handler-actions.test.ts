@@ -185,4 +185,53 @@ describe('addProjectPaneAction', () => {
     expect(waitForTmuxInit).not.toHaveBeenCalled()
     expect(startAgent).not.toHaveBeenCalled()
   })
+
+  it('asks for a shell alone when the shell is chosen, on a host too', async () => {
+    const createProjectPane = vi.fn().mockResolvedValue({
+      id: 'pane-shell',
+      pane_type: 'project',
+      project_id: 'project-b',
+      pane_order: 2,
+      pane_name: 'Project-b',
+      active_mode: 'shell',
+      created_at: '2026-03-13T00:00:00Z',
+      sessions: [
+        {
+          id: 'session-shell',
+          name: 'Project B Shell',
+          mode: 'shell',
+          session_number: 1,
+          is_alive: true,
+          working_dir: '/workspace/project-b',
+          claude_state: 'not_started',
+        },
+      ],
+      width_percent: 100,
+      height_percent: 100,
+      grid_row: 0,
+      grid_col: 0,
+    })
+    const navigateToSession = vi.fn()
+
+    await addProjectPaneAction(
+      'project-b',
+      'shell',
+      '/workspace/project-b',
+      [],
+      [],
+      createProjectPane,
+      navigateToSession,
+      vi.fn(),
+      'agent-work',
+    )
+
+    expect(createProjectPane).toHaveBeenCalledWith(
+      'Project-b',
+      'project-b',
+      '/workspace/project-b',
+      'shell',
+      { host: 'agent-work' },
+    )
+    expect(navigateToSession).toHaveBeenCalledWith('session-shell')
+  })
 })

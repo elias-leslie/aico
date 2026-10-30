@@ -94,6 +94,7 @@ function buildActiveSessionState(
     adHocSessions: [sessions[2]],
     externalSessions: [],
     isLoading: false,
+    requestedSessionId: null,
     ...overrides,
   }
 }
@@ -461,6 +462,26 @@ describe('useTerminalTabsState', () => {
     }
     rerender()
     expect(result.current.activeSessionId).toBe('other-agent')
+  })
+
+  it('opens nothing when the URL names a session that is gone', () => {
+    mockUseMediaQuery.mockReturnValue(true)
+    const switchToSession = vi.fn()
+    mockUseActiveSession.mockReturnValue(
+      buildActiveSessionState({
+        activeSessionId: null,
+        activeSession: null,
+        requestedSessionId: 'gone',
+        switchToSession,
+      }),
+    )
+
+    const { result } = renderHook(() =>
+      useTerminalTabsState({ projectId: undefined, projectPath: undefined }),
+    )
+
+    expect(result.current.activeSessionId).toBe(null)
+    expect(switchToSession).not.toHaveBeenCalled()
   })
 
   it.each([false, true])(

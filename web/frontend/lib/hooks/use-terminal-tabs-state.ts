@@ -34,6 +34,7 @@ export function useTerminalTabsState({
   const isMobile = useMediaQuery('(max-width: 767px)')
   const {
     activeSessionId,
+    requestedSessionId,
     switchToSession,
     sessions,
     projectTerminals,
@@ -121,11 +122,13 @@ export function useTerminalTabsState({
     ) {
       return activeSessionId
     }
+    // A link that names a session opens it or nothing: "Session not found".
+    if (requestedSessionId) return null
     // Picked without the user asking: one of their own panes, never another
     // app's or agent's session.
     const ownSlot = terminalSlots.find(isPaneSlot)
     return ownSlot ? getSlotSessionId(ownSlot) : null
-  }, [activeSessionId, terminalSlots])
+  }, [activeSessionId, requestedSessionId, terminalSlots])
   useEffect(() => {
     if (
       !resolvedActiveSessionId ||

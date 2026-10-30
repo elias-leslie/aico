@@ -52,7 +52,12 @@ export function useTerminalHandlers({
           ? new URLSearchParams(window.location.search)
           : new URLSearchParams(searchParams.toString())
       params.set('session', sessionId)
-      router.push(`?${params.toString()}`, { scroll: false })
+      // The History API, not router.push: it updates the URL at once (Next
+      // syncs it into useSearchParams), so the New session dialog closing
+      // right after, which rewrites the URL from window.location, keeps it.
+      if (typeof window !== 'undefined')
+        window.history.pushState(null, '', `?${params.toString()}`)
+      else router.push(`?${params.toString()}`, { scroll: false })
     },
     [searchParams, router],
   )

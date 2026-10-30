@@ -105,7 +105,9 @@ export function buildApi(deps: ApiDeps): Router {
       throw new HttpError(400, 'project_id required for project panes')
     if (paneType === 'adhoc' && projectId)
       throw new HttpError(400, 'project_id must be empty for adhoc panes')
-    const agentMode = toolRef ? await requireTool(toolRef) : null
+    // `shell`: the tab holds a shell alone, with no agent beside it.
+    const agentMode =
+      toolRef === SHELL_MODE ? SHELL_MODE : toolRef ? await requireTool(toolRef) : null
     const created = await life.createPane({
       paneType,
       paneName,

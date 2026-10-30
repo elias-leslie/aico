@@ -484,6 +484,14 @@ describe('panes', () => {
       expect.objectContaining({ tool: 'shell', host: 'agent-work' }),
       expect.objectContaining({ tool: 'claude', host: 'agent-work' }),
     ])
+    // A shell alone: no agent session beside it.
+    const shell = await call('POST', '/api/panes', {
+      ...pane,
+      agent_tool_slug: 'shell',
+      host: 'agent-work',
+    })
+    expect(shell.body.active_mode).toBe('shell')
+    expect(shell.body.sessions.map((s: { mode: string }) => s.mode)).toEqual(['shell'])
     const away = await call('POST', '/api/panes', { ...pane, host: 'lab' })
     expect(away.status).toBe(409)
     expect(away.body.detail).toBe('lab is offline (link down)')

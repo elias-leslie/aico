@@ -41,8 +41,8 @@ export async function addProjectPaneAction(
   // A refused create (a host away, a project Tether won't start) reaches the
   // caller, which says why; what follows only logs.
   const paneName = generateProjectPaneName(targetProjectId, panes)
-  const toolSlug =
-    requestedMode && requestedMode !== 'shell' ? requestedMode : undefined
+  // `shell` asks for a shell alone; no mode, for the project's default agent too.
+  const toolSlug = requestedMode
   const newPane = host
     ? await createProjectPane(
         paneName,

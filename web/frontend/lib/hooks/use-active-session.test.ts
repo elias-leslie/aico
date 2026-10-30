@@ -41,10 +41,16 @@ describe('deriveActiveSessionId', () => {
     expect(deriveActiveSessionId(sessions, 'session-2', null)).toBe('session-2')
   })
 
-  it('falls back to the first live session when the URL session is stale', () => {
-    expect(deriveActiveSessionId(sessions, 'stale-session', null)).toBe(
-      'session-1',
-    )
+  it("opens nothing in place of a URL session that is gone: it may be someone else's", () => {
+    expect(deriveActiveSessionId(sessions, 'stale-session', null)).toBe(null)
+    expect(
+      deriveActiveSessionId(
+        sessions,
+        'stale-session',
+        'project-2',
+        'session-2',
+      ),
+    ).toBe(null)
   })
 
   it('uses the project session when there is no valid URL session', () => {

@@ -1,6 +1,7 @@
 'use client'
 
 import { Plus, RotateCcw } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
@@ -24,6 +25,8 @@ export function EmptySessionState({
   const attention = useSessionAttention()
   const { isError, retry } = usePaneListError()
   const failed = isError && slots.length === 0
+  // The link named a session that isn't running (or isn't listed yet).
+  const missing = useSearchParams()?.get('session') ?? null
   return (
     <div
       className="h-full w-full overflow-y-auto p-4"
@@ -54,7 +57,7 @@ export function EmptySessionState({
                 color: 'var(--bone)',
               }}
             >
-              No session open.
+              {missing ? 'Session not found.' : 'No session open.'}
             </p>
             <button
               type="button"

@@ -39,8 +39,12 @@ export function deriveActiveSessionId(
     return null
   }
 
-  if (urlSessionId && sessions.some((session) => session.id === urlSessionId)) {
-    return urlSessionId
+  if (urlSessionId) {
+    // A link names one session: open it or nothing, never another session in
+    // its place (it may be someone else's, and opening it claims its size).
+    return sessions.some((session) => session.id === urlSessionId)
+      ? urlSessionId
+      : null
   }
 
   // Picked without the user asking, so never a free-standing View (no web app
@@ -82,6 +86,9 @@ export function shouldSyncSessionParam(
 export interface UseActiveSessionResult {
   /** The currently active session ID (derived from URL, never stored) */
   activeSessionId: string | null
+
+  /** The session the URL names, whether or not it exists */
+  requestedSessionId: string | null
 
   /** The active session object (for convenience) */
   activeSession: TerminalSession | null
@@ -269,6 +276,7 @@ export function useActiveSession(
 
   return {
     activeSessionId,
+    requestedSessionId: urlSessionId,
     activeSession,
     isValid,
     switchToSession,

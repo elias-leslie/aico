@@ -52,11 +52,13 @@ export interface SessionViewProps {
   sideList?: boolean
 }
 
-/** The active session, or one of the user's own when none is chosen. */
+/** The active session, or one of the user's own when none is chosen
+ * (undefined); null shows none, as for a link to a session that is gone. */
 export function getShownSlot(
   slots: (TerminalSlot | PaneSlot)[],
   activeSessionId?: string | null,
 ): TerminalSlot | PaneSlot | undefined {
+  if (activeSessionId === null) return undefined
   const activeSlot = activeSessionId
     ? slots.find((slot) => getSlotSessionId(slot) === activeSessionId)
     : undefined
