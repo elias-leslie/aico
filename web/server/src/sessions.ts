@@ -20,6 +20,8 @@ export interface WebSession {
   badge: { kind: string; text: string; color: string } | null
   is_coordinator: boolean
   coordinator_id: string | null
+  /** The session that launched this one (a lane of the same coordinator, or the coordinator). */
+  parent_id: string | null
   user_id: null
   project_id: string | null
   working_dir: string | null
@@ -102,6 +104,7 @@ export function fromTether(descriptor: SessionDescriptor, link: Link | null): We
     badge: badgeOf(descriptor),
     is_coordinator: descriptor.coordinator === true,
     coordinator_id: typeof descriptor.coordinatorId === 'string' ? descriptor.coordinatorId : null,
+    parent_id: typeof descriptor.parentId === 'string' ? descriptor.parentId : null,
     user_id: null,
     project_id: descriptor.projectId ?? null,
     working_dir: descriptor.projectRoot ?? null,

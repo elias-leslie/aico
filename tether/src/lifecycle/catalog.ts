@@ -78,6 +78,9 @@ export interface WidgetRow {
   coordinatorId: string | null
   /** Tether: the coordinator's palette colour (its own, or its launcher's). */
   coordinatorColor: string | null
+  /** Tether: the session that launched this one (the root coordinator or one
+   * of its lanes, maybe on another machine); null when not recorded. */
+  parentId: string | null
   /** Tether: `agent-hub` rows have no pane; every tmux field stays at its
    * never-allocated default and no tmux loop sees the row (`listWidgets`). */
   backend: SessionBackend
@@ -110,6 +113,7 @@ interface Raw {
   coordinator: number | null
   coordinator_id: string | null
   coordinator_color: string | null
+  parent_id: string | null
   backend: SessionBackend | null
 }
 
@@ -148,6 +152,7 @@ function toRow(r: Raw): WidgetRow {
     coordinator: r.coordinator === 1,
     coordinatorId: r.coordinator_id ?? null,
     coordinatorColor: r.coordinator_color ?? null,
+    parentId: r.parent_id ?? null,
     backend: r.backend ?? 'tmux',
   }
 }
@@ -838,7 +843,7 @@ export function setCoordinator(id: string, coordinator: boolean): void {
       ? row.coordinatorColor
       : freeCoordinatorColor()
   db.prepare(
-    'UPDATE sessions SET coordinator = 1, coordinator_id = NULL, coordinator_color = ? WHERE id = ?',
+    'UPDATE sessions SET coordinator = 1, coordinator_id = NULL, coordinator_color = ?, parent_id = NULL WHERE id = ?',
   ).run(color, id)
 }
 
@@ -850,8 +855,9 @@ export function listLanes(id: string): string[] {
 }
 
 /** Make an existing session a lane of `coordinatorId`'s root coordinator
- * (for sessions launched before lineage was recorded). The session stops
- * being a coordinator and its own lanes move with it. Returns the ids whose
+ * (for sessions launched before lineage was recorded), with `coordinatorId`
+ * as its parent. The session stops being a coordinator and its own lanes
+ * move with it. Returns the ids whose
  * descriptors changed; empty when the coordinator is unknown or is the
  * session itself. */
 export function joinCoordinator(id: string, coordinatorId: string): string[] {
@@ -866,13 +872,16 @@ export function joinCoordinator(id: string, coordinatorId: string): string[] {
   db.prepare(
     'UPDATE sessions SET coordinator = 0, coordinator_id = ?, coordinator_color = ? WHERE id = ? OR coordinator_id = ?',
   ).run(rootId, color, id, id)
+  // The named session is now its parent; its lanes keep theirs.
+  db.prepare('UPDATE sessions SET parent_id = ? WHERE id = ?').run(lead.id, id)
   return [id, rootId, ...lanes]
 }
 
-/** Record who launched a new session: its root coordinator is the launcher's
- * coordinator, or the launcher itself, which then becomes a coordinator.
- * Returns the ids whose descriptors changed. A launcher Tether does not know
- * leaves the session without a coordinator. */
+/** Record who launched a new session: the launcher is its parent, and its
+ * root coordinator is the launcher's coordinator, or the launcher itself,
+ * which then becomes a coordinator. Returns the ids whose descriptors
+ * changed. A launcher Tether does not know leaves the session without a
+ * coordinator. */
 export function recordLauncher(id: string, launchedBy: string): string[] {
   if (launchedBy === id) return []
   const claimed = claimLauncher(launchedBy)
@@ -883,9 +892,10 @@ export function recordLauncher(id: string, launchedBy: string): string[] {
 
 /** The lineage a launcher hands to the sessions it launches: its root
  * coordinator, or itself, which then becomes a coordinator (`changed` names
- * it then). Null for a launcher Tether does not know. */
+ * it then), and itself as their parent. Null for a launcher Tether does not
+ * know. */
 export function claimLauncher(launchedBy: string): {
-  lineage: { coordinatorId: string; coordinatorColor: string | null }
+  lineage: Lineage
   changed: string[]
 } | null {
   const launcher = getWidget(launchedBy)
@@ -900,18 +910,29 @@ export function claimLauncher(launchedBy: string): {
     rootId = launcher.id
     color = getWidget(launcher.id)?.coordinatorColor ?? null
   }
-  return { lineage: { coordinatorId: rootId, coordinatorColor: color }, changed }
+  return {
+    lineage: { coordinatorId: rootId, coordinatorColor: color, parentId: launcher.id },
+    changed,
+  }
+}
+
+/** A session's root coordinator and colour, and the session that launched it
+ * (null when unknown, as from an older hub). */
+export interface Lineage {
+  coordinatorId: string
+  coordinatorColor: string | null
+  parentId?: string | null
 }
 
 /** Record a coordinator lineage on a session, also one whose coordinator runs
  * on another machine (the hub passes it on). */
-export function adoptLineage(
-  id: string,
-  lineage: { coordinatorId: string; coordinatorColor: string | null },
-): void {
-  db.prepare('UPDATE sessions SET coordinator_id = ?, coordinator_color = ? WHERE id = ?').run(
+export function adoptLineage(id: string, lineage: Lineage): void {
+  db.prepare(
+    'UPDATE sessions SET coordinator_id = ?, coordinator_color = ?, parent_id = ? WHERE id = ?',
+  ).run(
     lineage.coordinatorId,
     lineage.coordinatorColor,
+    lineage.parentId && lineage.parentId !== id ? lineage.parentId : null,
     id,
   )
 }

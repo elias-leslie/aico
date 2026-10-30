@@ -5,6 +5,8 @@ export interface CoordinatorFields {
   badge?: { kind: string; text: string; color: string } | null
   is_coordinator?: boolean
   coordinator_id?: string | null
+  /** The session that launched this one; the list nests under it. */
+  parent_id?: string | null
 }
 
 /** The chip before a session's title, as Aico draws it. */

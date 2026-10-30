@@ -31,9 +31,11 @@ export interface TrayWidget {
   detail?: string | null
   /** Pending check-ins, soonest first, with their times (`5:30 PM`). */
   checkIns?: { id: string; time: string; dueAt?: number }[]
-  /** Coordinator lineage (tether/client teams.ts): lanes fold under their coordinator. */
+  /** Coordinator lineage (tether/client teams.ts): lanes fold under the lane
+   * that launched them (`parentId`), else under their coordinator. */
   coordinator?: boolean
   coordinatorId?: string | null
+  parentId?: string | null
   /** When the state began (ms), for ordering within a team. */
   at?: number | null
   /** The session title and tool the label is made of; a lane drops the
@@ -161,6 +163,7 @@ function buildMenu(widgets: TrayWidget[]): Menu {
       ...w,
       coordinator: w.coordinator ?? false,
       coordinatorId: w.coordinatorId ?? null,
+      parentId: w.parentId ?? null,
       group: w.group ?? 'no-status',
       at: w.at ?? null,
     })),

@@ -73,7 +73,8 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
     before forwarding the create.
 - **Lineage:** when a remote root is created with `launchedBy` set to a local
   coordinator, the hub records the foreign `coordinatorId` and colour on the
-  peer.
+  peer, and the launcher as its `parentId` (peers at API 9+), so the lists
+  nest it under the session that launched it. The reverse works the same.
 - **Tools and projects:** `/v1/tools` and `/v1/projects` accept `?host=`.
 
 ### Clients (Electron, web server)

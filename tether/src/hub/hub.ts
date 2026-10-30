@@ -62,7 +62,12 @@ export interface HubDeps {
 export interface Lineage {
   coordinatorId: string
   coordinatorColor: string | null
+  /** The launcher itself; sent on only to a peer at API 9 or later. */
+  parentId?: string | null
 }
+
+/** The first API version whose `POST /v1/roots` takes `lineage.parentId`. */
+const PARENT_API_VERSION = 9
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -440,7 +445,12 @@ export class Hub {
       if (!peer.ownsSession(launcher)) {
         const lineage = this.lineageFor(launcher)
         delete forwarded.launchedBy
-        if (lineage) forwarded.lineage = lineage
+        if (lineage) {
+          // An older Tether refuses lineage keys it does not know.
+          const { parentId, ...root } = lineage
+          const knowsParent = (peer.apiVersion ?? 0) >= PARENT_API_VERSION
+          forwarded.lineage = knowsParent && parentId ? { ...root, parentId } : root
+        }
       }
     }
     let answer: Awaited<ReturnType<typeof peerRequest>>
@@ -474,7 +484,8 @@ export class Hub {
   /**
    * The coordinator lineage a session on another machine inherits from
    * `launcherId`: a local launcher's (which becomes a coordinator), or a
-   * remote launcher's from its descriptor. Null when no one knows it.
+   * remote launcher's from its descriptor, with the launcher as parent.
+   * Null when no one knows it.
    */
   lineageFor(launcherId: string): Lineage | null {
     if (this.deps.isLocalSession(launcherId)) return this.deps.claimLocal(launcherId)
@@ -484,7 +495,7 @@ export class Hub {
       const coordinatorId =
         typeof launcher.coordinatorId === 'string' ? launcher.coordinatorId : launcher.id
       const color = typeof launcher.coordinatorColor === 'string' ? launcher.coordinatorColor : null
-      return { coordinatorId, coordinatorColor: color }
+      return { coordinatorId, coordinatorColor: color, parentId: launcherId }
     }
     return null
   }

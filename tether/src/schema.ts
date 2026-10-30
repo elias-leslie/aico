@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 15
+export const SCHEMA_VERSION = 16
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -179,6 +179,14 @@ export const COORDINATOR_SQL = `
     CHECK(coordinator_id IS NULL OR (length(coordinator_id) = 8 AND coordinator_id NOT GLOB '*[^0-9a-f]*'));
   ALTER TABLE sessions ADD COLUMN coordinator_color TEXT
     CHECK(coordinator_color IS NULL OR coordinator_color GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]');
+`
+
+/** v16: the session that launched this one (`parentId`), a lane of the same
+ * root coordinator or the coordinator itself; the lists nest by it. Null on
+ * coordinators and on sessions from before it was recorded. */
+export const PARENT_SQL = `
+  ALTER TABLE sessions ADD COLUMN parent_id TEXT
+    CHECK(parent_id IS NULL OR (length(parent_id) = 8 AND parent_id NOT GLOB '*[^0-9a-f]*'));
 `
 
 /** v5: owner settings Tether keeps as data, one JSON value per key

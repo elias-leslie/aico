@@ -80,16 +80,18 @@ interface TeamEntry {
   id: string
   coordinator: boolean
   coordinatorId: string | null
+  parentId: string | null
   group: Attention['group']
   at: number | null
   entry: SessionListEntry | null
   step: RunMember | null
 }
 
-/** Fold entries into coordinator teams. A lane names its coordinator by
- * session id; rows are keyed by slot. A workflow step that is running or
- * waiting for the owner folds under the session that launched its run, like
- * any other child agent. */
+/** Fold entries into coordinator teams. A lane names its coordinator and
+ * the session that launched it by session id, and nests under that session
+ * while it is listed; rows are keyed by slot. A workflow step that is running
+ * or waiting for the owner folds under the session that launched its run,
+ * like any other child agent. */
 export function foldSessionEntries(
   entries: readonly SessionListEntry[],
   runs: readonly RunMember[] = [],
@@ -101,11 +103,14 @@ export function foldSessionEntries(
   }
   const sessions: TeamEntry[] = entries.map((entry) => {
     const lead = entry.slot.coordinatorId ?? null
+    const parent = entry.slot.parentId ?? null
     return {
       id: entry.id,
       coordinator: entry.slot.coordinator === true,
       // A coordinator that is not listed here has ended.
       coordinatorId: lead ? (rowOf.get(lead) ?? lead) : null,
+      // An unlisted launcher leaves the lane under its coordinator.
+      parentId: parent ? (rowOf.get(parent) ?? null) : null,
       group: entry.state?.group ?? 'no-status',
       at: entry.state?.at ?? null,
       entry,
@@ -116,6 +121,7 @@ export function foldSessionEntries(
     id: step.id,
     coordinator: false,
     coordinatorId: rowOf.get(step.coordinatorId) ?? step.coordinatorId,
+    parentId: null,
     group: step.group,
     at: step.at,
     entry: null,
@@ -325,6 +331,8 @@ export function SessionList({
             role="group"
             aria-label={`${name} team`}
             className="lantern-lanes"
+            // A lane's own helpers nest a step further, kept narrow for phone width.
+            style={lead ? { marginLeft: 10 } : undefined}
           >
             {row.children.map((child) => renderRow(child, row.item.entry))}
           </div>

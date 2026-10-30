@@ -40,9 +40,11 @@ interface SlotSessionFields {
   /** The session's pending check-ins, oldest first. */
   checkIns?: SessionCheckIn[]
   /** Coordinator lineage: the session coordinates lanes, or names the
-   * coordinator that launched it (the session list folds teams). */
+   * coordinator and the session that launched it (the session list folds
+   * teams, nested by launcher). */
   coordinator?: boolean
   coordinatorId?: string | null
+  parentId?: string | null
   /** When the session (or its pane) began: the session list's order. */
   createdAt?: string | null
   can: SlotCapabilities
@@ -247,6 +249,7 @@ function slotFields(
     checkIns: session.check_ins ?? [],
     coordinator: session.is_coordinator === true,
     coordinatorId: session.coordinator_id ?? null,
+    parentId: session.parent_id ?? null,
     createdAt: session.created_at,
     ...(session.backend === 'agent-hub' ? { chat: true } : {}),
     ...(session.host ? { host: session.host } : {}),

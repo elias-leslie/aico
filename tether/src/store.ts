@@ -10,6 +10,7 @@ import {
   AGENT_TOOLS_TABLE_SQL,
   COORDINATOR_SQL,
   INDEXES_SQL,
+  PARENT_SQL,
   RETIRED_SESSION_IDS_SQL,
   ROOT_ORIGIN_SQL,
   ROOT_REQUESTS_TABLE_SQL,
@@ -313,6 +314,16 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(15, now)
+      }
+      if (current < 16) {
+        // v16: the direct launcher, so lists nest lanes under the lane that launched them.
+        const hasParent = this.db
+          .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'parent_id'")
+          .get()
+        if (!hasParent) this.db.exec(PARENT_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(16, now)
       }
     })
   }

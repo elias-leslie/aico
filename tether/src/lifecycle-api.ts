@@ -246,6 +246,7 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
     coordinator: row.coordinator,
     coordinatorId: row.coordinatorId,
     coordinatorColor: row.coordinatorColor,
+    parentId: row.parentId,
     displayTitle: displayTitle(row),
     badge: badge(row),
     rootRequestId: rootRequestForWidget(row.id)?.requestId ?? null,

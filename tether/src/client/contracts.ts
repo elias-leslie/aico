@@ -74,6 +74,8 @@ export interface SessionDescriptor {
   coordinatorId?: string | null
   /** `#rrggbb`, on a coordinator and its lanes. */
   coordinatorColor?: string | null
+  /** The session that launched this one: the root coordinator or one of its lanes (9). */
+  parentId?: string | null
   /** Tether's title, `Project — Task` (docs/api-v1.md "Display title and
    * badge"); absent from an older Tether. */
   displayTitle?: string

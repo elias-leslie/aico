@@ -263,7 +263,13 @@ export class WakeService {
       setCoordinator(id, true)
       for (const lane of listLanes(ended.id)) joinCoordinator(lane, id)
     } else if (ended.coordinatorId && getWidget(ended.coordinatorId)) {
-      recordLauncher(id, ended.coordinatorId)
+      // Back under the lane that launched it while that lane is still in the
+      // same team, else directly under the coordinator.
+      const parent =
+        ended.parentId && getWidget(ended.parentId)?.coordinatorId === ended.coordinatorId
+          ? ended.parentId
+          : ended.coordinatorId
+      recordLauncher(id, parent)
     }
     let started = false
     try {
@@ -306,6 +312,7 @@ function endedSnapshotOf(row: WidgetRow, resumeId: string | null): EndedSession 
     origin: row.origin,
     coordinator: row.coordinator,
     coordinatorId: row.coordinatorId,
+    parentId: row.parentId,
     resumeId,
   }
 }

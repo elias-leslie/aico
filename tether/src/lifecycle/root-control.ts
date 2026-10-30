@@ -108,25 +108,35 @@ export interface RootCreateRequest {
 export interface RootLineage {
   coordinatorId: string
   coordinatorColor: string | null
+  /** The session that launched the root (9); absent from an older hub. */
+  parentId?: string | null
 }
+
+const LINEAGE_KEYS = new Set(['coordinatorId', 'coordinatorColor', 'parentId'])
 
 function parseLineage(value: unknown): RootLineage | null | undefined {
   if (value === undefined || value === null) return null
   if (
     !object(value) ||
-    Object.keys(value).some((key) => key !== 'coordinatorId' && key !== 'coordinatorColor') ||
+    Object.keys(value).some((key) => !LINEAGE_KEYS.has(key)) ||
     typeof value.coordinatorId !== 'string' ||
     !/^[0-9a-f]{8}$/.test(value.coordinatorId) ||
     !(
       value.coordinatorColor === undefined ||
       value.coordinatorColor === null ||
       (typeof value.coordinatorColor === 'string' && /^#[0-9a-f]{6}$/i.test(value.coordinatorColor))
+    ) ||
+    !(
+      value.parentId === undefined ||
+      value.parentId === null ||
+      (typeof value.parentId === 'string' && /^[0-9a-f]{8}$/.test(value.parentId))
     )
   )
     return undefined
   return {
     coordinatorId: value.coordinatorId,
     coordinatorColor: (value.coordinatorColor as string | null | undefined) ?? null,
+    ...(typeof value.parentId === 'string' ? { parentId: value.parentId } : {}),
   }
 }
 

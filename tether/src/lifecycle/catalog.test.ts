@@ -6,6 +6,7 @@ import { Store } from '../store'
 import {
   activateTmuxServer,
   adoptActiveLegacyTmuxServer,
+  adoptLineage,
   bindCatalog,
   bindWidgetTmuxServer,
   COORDINATOR_COLORS,
@@ -666,5 +667,42 @@ describe('coordinators', () => {
     expect(lineage('e000000a')).toEqual([false, 'e0000007', root])
     expect(joinCoordinator('e0000007', 'e0000008')).toEqual([])
     expect(joinCoordinator('e0000008', 'deadbeef')).toEqual([])
+    // The named session is the joined session's parent; its lanes keep theirs.
+    expect(getWidget('e0000008')?.parentId).toBe('e0000007')
+    expect(getWidget('e0000009')?.parentId).toBe('e0000008')
+    expect(getWidget('e000000a')?.parentId).toBe('e0000009')
+  })
+
+  it('records the direct launcher as parent, three deep, beside the root', () => {
+    for (const id of ['e0000011', 'e0000012', 'e0000013', 'e0000014']) insertWidget(id, 'codex')
+    recordLauncher('e0000012', 'e0000011')
+    recordLauncher('e0000013', 'e0000012')
+    recordLauncher('e0000014', 'e0000013')
+    const tree = ['e0000011', 'e0000012', 'e0000013', 'e0000014'].map((id) => [
+      getWidget(id)?.coordinatorId,
+      getWidget(id)?.parentId,
+    ])
+    expect(tree).toEqual([
+      [null, null],
+      ['e0000011', 'e0000011'],
+      ['e0000011', 'e0000012'],
+      ['e0000011', 'e0000013'],
+    ])
+    // Marking a lane a coordinator by hand makes it a root: no parent.
+    setCoordinator('e0000013', true)
+    expect(getWidget('e0000013')?.parentId).toBeNull()
+  })
+
+  it('adopts a parent from another machine, and none from an older hub', () => {
+    for (const id of ['e0000021', 'e0000022']) insertWidget(id, 'codex')
+    adoptLineage('e0000021', {
+      coordinatorId: 'f0000001',
+      coordinatorColor: null,
+      parentId: 'f0000002',
+    })
+    expect(getWidget('e0000021')?.parentId).toBe('f0000002')
+    adoptLineage('e0000022', { coordinatorId: 'f0000001', coordinatorColor: null })
+    expect(getWidget('e0000022')?.parentId).toBeNull()
+    expect(getWidget('e0000022')?.coordinatorId).toBe('f0000001')
   })
 })

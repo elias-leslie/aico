@@ -214,6 +214,50 @@ describe('SessionList teams', () => {
   })
 })
 
+describe('SessionList launch tree', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('nests each session under the one that launched it, three deep', () => {
+    const root = slot('root', 'Neri — Coordinator', { coordinator: true })
+    const lane = slot('lane', 'Neri — DeepSeek lead', {
+      coordinatorId: 'root',
+      parentId: 'root',
+    })
+    const helper = slot('helper', 'Neri — Hunter', {
+      coordinatorId: 'root',
+      parentId: 'lane',
+      host: 'agent-work',
+    })
+    const probe = slot('probe', 'Neri — Probe', {
+      coordinatorId: 'root',
+      parentId: 'helper',
+    })
+    // Its launcher ended: it sits under the coordinator, as before.
+    const stray = slot('stray', 'Neri — Stray', {
+      coordinatorId: 'root',
+      parentId: 'ended0',
+    })
+    const tree = [root, lane, helper, probe, stray]
+    const { container } = render(
+      <SessionList slots={tree} attention={undefined} onSelect={vi.fn()} />,
+    )
+    const team = (name: string) => screen.getByRole('group', { name })
+    // Only the coordinator is at the top; each level holds its own lanes.
+    expect(
+      container.querySelectorAll(':scope > div > div > .lantern-row'),
+    ).toHaveLength(1)
+    expect(
+      [...team('Neri — Coordinator team').children].map(
+        (el) => el.querySelector('.name')?.textContent,
+      ),
+    ).toEqual(['DeepSeek lead', 'Stray'])
+    expect(rowNames(team('DeepSeek lead team'))).toEqual(['Hunter', 'Probe'])
+    expect(rowNames(team('Hunter team'))).toEqual(['Probe'])
+    // Every session appears once.
+    expect(rowNames(container)).toHaveLength(tree.length)
+  })
+})
+
 describe('SessionRail', () => {
   it("shows the list's rows as marks: teams folded, Needs you first, a lane's team current", () => {
     const onSelect = vi.fn()

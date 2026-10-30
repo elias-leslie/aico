@@ -99,6 +99,59 @@ describe('foldTeams', () => {
       member('b', 'idle', { coordinatorId: 'a' }),
     ])
     expect(ids(rows).sort()).toEqual(['a', 'b'])
+    const parents = foldTeams([
+      member('root', 'idle', { coordinator: true }),
+      member('a', 'idle', { coordinatorId: 'root', parentId: 'b' }),
+      member('b', 'idle', { coordinatorId: 'root', parentId: 'a' }),
+    ])
+    expect(
+      parents
+        .flatMap(teamMembers)
+        .map((m) => m.id)
+        .sort(),
+    ).toEqual(['a', 'b', 'root'])
+  })
+
+  it('nests each lane under the lane that launched it, three deep', () => {
+    const rows = foldTeams([
+      member('root', 'idle', { coordinator: true }),
+      member('lane', 'working', { coordinatorId: 'root', parentId: 'root' }),
+      member('helper', 'working', { coordinatorId: 'root', parentId: 'lane' }),
+      member('hunter', 'needs-you', { coordinatorId: 'root', parentId: 'helper' }),
+      member('flat', 'idle', { coordinatorId: 'root' }),
+    ])
+    expect(ids(rows)).toEqual(['root'])
+    const [root] = rows
+    expect(ids(root.children)).toEqual(['lane', 'flat'])
+    const [lane] = root.children
+    expect(ids(lane.children)).toEqual(['helper'])
+    expect(ids(lane.children[0].children)).toEqual(['hunter'])
+    // A wait three levels down lifts every level, and summaries count the whole team.
+    expect([root.group, lane.group]).toEqual(['needs-you', 'needs-you'])
+    expect(root.summary).toBe('2 working, 1 needs you, 1 idle')
+    expect(lane.summary).toBe('1 working, 1 needs you')
+  })
+
+  it('falls back to the coordinator when the launcher is not listed', () => {
+    const rows = foldTeams([
+      member('root', 'idle', { coordinator: true }),
+      member('helper', 'working', { coordinatorId: 'root', parentId: 'ended' }),
+      member('stray', 'working', { coordinatorId: 'gone', parentId: 'also-gone' }),
+    ])
+    expect(ids(rows)).toEqual(['root', 'stray'])
+    expect(ids(rows[0].children)).toEqual(['helper'])
+    expect(rows[0].children[0].orphaned).toBe(false)
+    expect(rows[1].orphaned).toBe(true)
+  })
+
+  it('nests under a listed launcher after the coordinator ended, unmarked', () => {
+    const rows = foldTeams([
+      member('lane', 'working', { coordinatorId: 'ended', parentId: 'ended' }),
+      member('helper', 'working', { coordinatorId: 'ended', parentId: 'lane' }),
+    ])
+    expect(ids(rows)).toEqual(['lane'])
+    expect(rows[0].orphaned).toBe(true)
+    expect(rows[0].children[0].orphaned).toBe(false)
   })
 })
 

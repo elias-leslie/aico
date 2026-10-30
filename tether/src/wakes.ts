@@ -109,6 +109,8 @@ export interface EndedSession {
   origin: string
   coordinator: boolean
   coordinatorId: string | null
+  /** The session that launched it (absent on wakes kept before it was recorded). */
+  parentId?: string | null
   /** The agent's native conversation ID at End, if Tether saw one. */
   resumeId: string | null
 }

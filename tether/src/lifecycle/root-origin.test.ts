@@ -136,6 +136,14 @@ describe('root origin (v1 roots API)', () => {
     expect(parseRootCreate(create('a', { lineage, launchedBy: 'abcd1234' }))).toBeNull()
     expect(parseRootCreate(create('a', { lineage: { coordinatorId: 'nope' } }))).toBeNull()
     expect(parseRootCreate(create('a', { lineage: { ...lineage, extra: 1 } }))).toBeNull()
+    // A launcher on the other machine (9) is the new session's parent.
+    const nested = { ...lineage, parentId: 'abcd5678' }
+    const helper = await call(v1Socket, '/v1/roots', 'POST', create('helper', { lineage: nested }))
+    expect(getWidget(helper.body.hostIdentity as string)).toMatchObject({
+      coordinatorId: 'abcd1234',
+      parentId: 'abcd5678',
+    })
+    expect(parseRootCreate(create('a', { lineage: { ...lineage, parentId: 'nope' } }))).toBeNull()
   })
 
   it('lists without tombstones on ended=0, keeping them by id', async () => {

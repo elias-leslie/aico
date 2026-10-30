@@ -44,6 +44,8 @@ class FakePeer {
   server: Server | null = null
   sessions: Item[] = []
   identity: Record<string, unknown> = { name: 'vm-1', machineId: 'aaaa' }
+  /** Absent: an older Tether that names no API version in its health. */
+  apiVersion: number | undefined = undefined
   requests: { method: string; url: string; body: unknown }[] = []
   failSessions = false
   /** Health never answers (a VM that stopped dead: the socket takes the
@@ -85,7 +87,7 @@ class FakePeer {
     this.requests.push({ method: req.method ?? '', url, body: payload })
     if (url === '/v1/health') {
       if (this.hangHealth) return
-      return sendJson(res, 200, { status: 'ok', host: this.identity })
+      return sendJson(res, 200, { status: 'ok', apiVersion: this.apiVersion, host: this.identity })
     }
     if (url === '/v1/sessions' && req.method === 'GET') {
       if (this.failSessions) return sendJson(res, 500, { error: 'internal_error' })
@@ -174,7 +176,7 @@ describe('hub', () => {
       isLocalRun: () => false,
       leadName: (id) => (id === 'eeee0005' ? 'Aico — Remote hosts' : null),
       claimLocal: (id) =>
-        local.has(id) ? { coordinatorId: id, coordinatorColor: '#6fa8ff' } : null,
+        local.has(id) ? { coordinatorId: id, coordinatorColor: '#6fa8ff', parentId: id } : null,
       log: () => {},
       random: () => 0,
       gate: { kick: () => {}, linkGraceMs: 200 },
@@ -562,9 +564,25 @@ describe('hub', () => {
       requestId: 'req-2',
       launchedBy: 'aaaa0001',
     })
+    // A root here launched by a remote lane nests under that lane.
     expect(hub.lineageFor('bbbb0002')).toEqual({
       coordinatorId: 'eeee0005',
       coordinatorColor: null,
+      parentId: 'bbbb0002',
+    })
+  })
+
+  it('passes the launcher as parent only to a host that takes it', async () => {
+    // The older peer above got no parentId; one at API 9 does.
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('offline'))
+    peer.apiVersion = 9
+    await peer.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
+    await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-3', launchedBy: 'eeee0005' })
+    expect(peer.requests.filter((r) => r.url === '/v1/roots').at(-1)?.body).toEqual({
+      requestId: 'req-3',
+      lineage: { coordinatorId: 'eeee0005', coordinatorColor: '#6fa8ff', parentId: 'eeee0005' },
     })
   })
 

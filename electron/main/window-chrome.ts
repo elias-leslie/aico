@@ -70,6 +70,7 @@ export function createWindowChrome(deps: WindowChromeDeps) {
         at,
         coordinator: descriptor.coordinator === true,
         coordinatorId: descriptor.coordinatorId ?? null,
+        parentId: descriptor.parentId ?? null,
         checkIns: (descriptor.wakes ?? []).map((wake) => ({
           id: wake.id,
           time: wakePendingTime(wake.dueAt, now()),

@@ -3,9 +3,9 @@
 // fold under it. Rows keep the order they arrive in (oldest first); only Needs
 // you moves a row, to the top, so working and idle changes never reshuffle the
 // list. A team sits in Needs you when it or a lane waits on the owner. Every
-// session appears exactly once: a lane whose
-// coordinator has ended returns to the top level, marked `orphaned`, and a
-// lane that is itself a coordinator folds its own lanes one level further.
+// session appears exactly once: a lane folds under the lane that launched it
+// (`parentId`) while that one is listed, else under its coordinator; a lane
+// whose coordinator has ended too returns to the top level, marked `orphaned`.
 //
 // Pure and dependency-free: the web app bundles it as `tether/teams`.
 
@@ -17,6 +17,8 @@ export interface TeamMember {
   coordinator: boolean
   /** The coordinator that launched this session, or null. */
   coordinatorId: string | null
+  /** The session that launched it, when that is a lane of the coordinator. */
+  parentId?: string | null
   /** The session's own attention group. */
   group: TeamGroup
   /** When its state began (ms), or null. */
@@ -29,7 +31,7 @@ export interface TeamRow<T extends TeamMember> {
   group: TeamGroup
   /** Folded lanes, Needs you first, then in arrival order. */
   children: TeamRow<T>[]
-  /** `6 working, 1 needs you`; null for a row without lanes. */
+  /** `6 working, 1 needs you` over every lane below it; null for a row without lanes. */
   summary: string | null
   /** A lane whose coordinator has ended. */
   orphaned: boolean
@@ -71,17 +73,22 @@ export function teamSummary(children: readonly { group: TeamGroup }[]): string {
 /** Fold sessions into teams. Input order is kept outside Needs you. */
 export function foldTeams<T extends TeamMember>(items: readonly T[]): TeamRow<T>[] {
   const byId = new Map(items.map((item) => [item.id, item]))
-  // A lane's parent is its coordinator when listed; a loop in the lineage
-  // leaves the session at the top level rather than lose it.
+  // The listed session it folds under: its launcher, else its coordinator.
+  const listedUp = (item: T): string | null => {
+    for (const id of [item.parentId, item.coordinatorId])
+      if (id && id !== item.id && byId.has(id)) return id
+    return null
+  }
+  // A loop in the lineage leaves the session at the top level rather than lose it.
   const parentOf = (item: T): string | null => {
-    const parent = item.coordinatorId
-    if (!parent || parent === item.id || !byId.has(parent)) return null
+    const parent = listedUp(item)
+    if (!parent) return null
     const seen = new Set([item.id])
     for (let at: string | null = parent; at; ) {
       if (seen.has(at)) return null
       seen.add(at)
       const up: T | undefined = byId.get(at)
-      at = up?.coordinatorId && byId.has(up.coordinatorId) ? up.coordinatorId : null
+      at = up ? listedUp(up) : null
     }
     return parent
   }
@@ -99,8 +106,8 @@ export function foldTeams<T extends TeamMember>(items: readonly T[]): TeamRow<T>
       item,
       group: waiting ? 'needs-you' : item.group,
       children,
-      summary: children.length ? teamSummary(children) : null,
-      orphaned: !!item.coordinatorId && !byId.has(item.coordinatorId),
+      summary: children.length ? teamSummary(children.flatMap(teamMembers)) : null,
+      orphaned: !!item.coordinatorId && !byId.has(item.coordinatorId) && !parentOf(item),
     }
   }
   return top.map(build).sort(compareRows)

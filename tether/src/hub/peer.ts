@@ -125,6 +125,8 @@ export class Peer {
   pendingIdentity: PeerIdentity | null = null
   /** What a create is waiting for while it brings this host up, or why it failed. */
   wake: WakeProgress | null = null
+  /** The peer Tether's `apiVersion` from its last health answer. */
+  apiVersion: number | null = null
   private readonly sessions = new Map<string, Descriptor>()
   private readonly roots = new Set<string>()
   /** The last root list per query, kept for while the link is down. */
@@ -447,6 +449,8 @@ export class Peer {
   private async checkIdentity(): Promise<void> {
     const health = await peerRequest(this.socket, 'GET', '/v1/health', undefined, HEALTH_TIMEOUT_MS)
     if (health.status !== 200) throw new PeerUnavailable(`health answered ${health.status}`)
+    const api = record(health.body)?.apiVersion
+    this.apiVersion = typeof api === 'number' ? api : null
     const host = record(record(health.body)?.host)
     // An older Tether names no host: nothing to compare.
     if (typeof host?.name !== 'string') return

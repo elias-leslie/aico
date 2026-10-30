@@ -6,8 +6,9 @@ import { join } from 'node:path'
  * 3: session wakes; End takes `keepWakes`.
  * 4: shares link files where they are (`paths`); GET /v1/shares lists them.
  * 5: Agent Hub chat routes (`/chat`, `/chat/stream`, `/chat/cancel`, `/v1/chat/models`).
- * 6: an Agent Hub session's `inject` takes `model` (a catalog model for that turn; null for the agent's own routing). */
-export const API_VERSION = 8
+ * 6: an Agent Hub session's `inject` takes `model` (a catalog model for that turn; null for the agent's own routing).
+ * 9: `parentId` on descriptors; root `lineage` takes `parentId`. */
+export const API_VERSION = 9
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'
