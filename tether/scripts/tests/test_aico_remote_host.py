@@ -148,3 +148,92 @@ def test_roots_of_a_host_the_hub_cannot_reach_are_reported_unavailable():
     assert resolved == []
     assert unavailable == [{"requestId": "remote-1", "observation": "unavailable", "identity": "unresolved",
                             "host": "agent-work", "reason": "host_unavailable"}]
+
+
+@pytest.mark.parametrize("model", [[], ["--model", "gpt-6-sol"]])
+@pytest.mark.parametrize("host", [[], ["--host", "agent-work"]])
+def test_pi_without_a_provider_model_is_refused_with_the_reason(monkeypatch, capsys, model, host):
+    # Pi has no default model, here or on a host: say so instead of a bare invalid_body.
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_a, **_k: pytest.fail("contacted owner"))
+    argv = [*on_host("pi")[:-2], *host, *model] if host else [*on_host("pi")[:-2], *model]
+    with pytest.raises(SystemExit) as exit_info:
+        admin.main(argv)
+    assert exit_info.value.code == 2
+    assert "pi needs --model provider/model" in capsys.readouterr().err
+
+
+def test_pi_with_a_provider_model_is_sent_to_the_host(monkeypatch):
+    calls, output = [], []
+    tools = {"items": [{"slug": "pi", "enabled": True, "rootCapable": True}]}
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls, tools=(200, tools)))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main([*on_host("pi"), "--model", "openai/gpt-6-sol"]) == 0
+    assert calls[1][1]["model"] == "openai/gpt-6-sol"
+
+
+def test_the_hosts_reason_for_a_refused_model_is_printed(monkeypatch):
+    calls, output = [], []
+    tools = {"items": [{"slug": "claude-code", "enabled": True, "rootCapable": True}]}
+    refusal = (400, {"error": "invalid_body", "field": "model", "reason": "pi needs --model provider/model"})
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls, create=lambda _: refusal, tools=(200, tools)))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(on_host()) == 1
+    assert output[0]["reason"] == "invalid_body"
+    assert output[0]["detail"] == "pi needs --model provider/model"
+
+
+# root status: the host of a remote root, and whether its agent is still in the pane.
+STATUS = {"owner": "aico", "requestId": "remote-1", "hostIdentity": "aabbcc01", "logicalSessionId": "aico-root-x",
+          "surfaceLocator": "aico://widget/aabbcc01", "generation": "a" * 64, "status": "running"}
+
+
+def root_status(monkeypatch, data):
+    output = []
+
+    def receipt(_, endpoint, route, payload=None, **_options):
+        return 200, data
+
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    code = admin.main(["root", "status", "remote-1", "--root-socket", "/fixture/gui.sock"])
+    return code, output
+
+
+def test_root_status_names_the_host_of_a_remote_root(monkeypatch):
+    code, output = root_status(monkeypatch, {**STATUS, "host": "agent-work"})
+    assert code == 0 and output[0]["host"] == "agent-work"
+
+
+@pytest.mark.parametrize("host", [None, "", "-x", "A b", 7])
+def test_root_status_shows_no_host_for_a_local_root(monkeypatch, host):
+    code, output = root_status(monkeypatch, {**STATUS, "host": host})
+    assert code == 0 and "host" not in output[0]
+
+
+@pytest.mark.parametrize("foreground, agent", [("bash", "exited"), ("-bash", "exited"), ("node", "running")])
+def test_root_status_says_when_the_agent_left_the_pane(monkeypatch, foreground, agent):
+    # A Pi root that failed closed (no credential) leaves the pane at bash; the session record still runs.
+    pin = admin.Pin("remote-1", "aabbcc01", "aico-root-x", "a" * 64, "sess-1", "$1", "%2", "abcdef01")
+    shown = []
+
+    class Child:
+        def owners(self, _pin):
+            shown.append("owners")
+
+        def pane(self, _pin):
+            return foreground
+
+    monkeypatch.setattr(admin.Collector, "discover", lambda self, request_id: ([(pin, Child())], []))
+    code, output = root_status(monkeypatch, {**STATUS, "host": "agent-work", "tool": "pi"})
+    assert code == 0 and output[0]["status"] == "running" and output[0]["agent"] == agent
+    assert ("detail" in output[0]) == (agent == "exited")
+    assert output[0]["host"] == "agent-work"
+
+
+def test_root_status_without_a_readable_pane_says_nothing_about_the_agent(monkeypatch):
+    def unreachable(self, request_id):
+        raise admin.Unavailable("host_unavailable")
+
+    monkeypatch.setattr(admin.Collector, "discover", unreachable)
+    code, output = root_status(monkeypatch, {**STATUS, "host": "agent-work", "tool": "pi"})
+    assert code == 0 and output[0]["status"] == "running" and "agent" not in output[0]

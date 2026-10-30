@@ -378,6 +378,11 @@ process.stdout.write(JSON.stringify({
 """
 
 
+# Pi picks its provider from the model id, and no tool here has a default model.
+PI_MODEL = r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}"
+PI_MODEL_REASON = "pi needs --model provider/model"
+
+
 def pi_provider_unavailable(model: str | None) -> str | None:
     """Why Pi cannot authenticate this model's provider, else None.
 
@@ -603,6 +608,15 @@ def classify(raw: bytes, profile: str = "codex") -> tuple[dict, str]:
                    *[f"current_{kind}_banner" for kind in banners]]
     return {"terminal": terminal, "draft_present": draft, "low_context": low_context,
             "banners": banners, "markers": markers}, SECRET.sub("[redacted]", "\n".join(lines))
+
+
+# What tmux reports as a pane's foreground command once its agent has exited and
+# the pane is back at the login shell (the launcher runs the agent inside it).
+SHELLS = frozenset({"bash", "sh", "dash", "zsh", "fish"})
+
+
+def agent_exited(foreground: str) -> bool:
+    return foreground.lstrip("-") in SHELLS
 
 
 class Collector:
@@ -896,7 +910,8 @@ class Collector:
                 process.wait()
             process.stdout.close()
 
-    def pane(self, pin: Pin) -> None:
+    def pane(self, pin: Pin) -> str:
+        """Verify the pane is this root's; returns its foreground command ("" if tmux gave none)."""
         args = []
         for key in ("AICO_OWNER", "AICO_WORKLOAD_CLASS", "AICO_TMUX_SERVER_ID"):
             if args:
@@ -907,10 +922,12 @@ class Collector:
                        f"AICO_TMUX_SERVER_ID={pin.tmuxServerId}"):
             raise IdentityChanged()
         row = self.command(["display-message", "-p", "-t", pin.paneId,
-                            "#{session_id}\t#{pane_id}\t#{session_name}\t#{pane_dead}"], 1024)
-        if row.decode(errors="replace").strip() != (
-                f"{pin.tmuxSessionId}\t{pin.paneId}\taico-{pin.widgetId}\t0"):
+                            "#{session_id}\t#{pane_id}\t#{session_name}\t#{pane_dead}\t#{pane_current_command}"],
+                           1024)
+        fields = row.decode(errors="replace").strip("\r\n").split("\t")
+        if "\t".join(fields[:4]) != f"{pin.tmuxSessionId}\t{pin.paneId}\taico-{pin.widgetId}\t0":
             raise IdentityChanged()
+        return fields[4].strip() if len(fields) > 4 else ""
 
     def sample(self, pin: Pin | HubPin) -> dict:
         assert isinstance(pin, Pin)
@@ -920,9 +937,11 @@ class Collector:
             # No -S - / -E -: tmux's default range is the visible screen only.
             raw = self.command(["capture-pane", "-p", "-t", pin.paneId], CAPTURE_LIMIT)
             self.owners(pin)
-            self.pane(pin)
+            foreground = self.pane(pin)
             self.remaining()
             state, _ = classify(raw, self.profile)
+            if state["terminal"] == "ambiguous" and agent_exited(foreground):
+                state = {**state, "terminal": "agent_exited", "markers": ["agent_exited"]}
             return {"observation": "available", "identity": "pinned", **state}
         except IdentityChanged:
             return {"observation": "unavailable", "identity": "changed"}
@@ -1397,6 +1416,9 @@ def create_main(argv: list[str]) -> int:
         parser.error("resume requires a bounded exact native session ID")
     if args.model is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}", args.model):
         parser.error("invalid model identifier")
+    if args.tool == "pi" and not (args.model and re.fullmatch(PI_MODEL, args.model)):
+        # Pi has no default model to fall back on, here or on a host: Tether would answer invalid_body.
+        parser.error(PI_MODEL_REASON)
     if args.stdin and args.prompt is not None:
         parser.error("conflicting prompt options")
     if args.host is not None and not re.fullmatch(HOST_NAME, args.host):
@@ -1692,6 +1714,28 @@ def launch_deferral(data: dict) -> dict:
     return {"launch": {key: launch[key] for key in ("state", "reason", "checkedAt", "nextRetryAt", "attempts")}}
 
 
+def agent_view(collector: Collector, request_id: str, tool: object) -> dict:
+    """Whether the agent in a running root's pane is still there.
+
+    The root record says the session runs; it stays running after the agent exits
+    (a failed credential check, a crash) and the pane falls back to the shell.
+    Reads the pane's foreground command, on the root's host too. Best effort:
+    a root that can't be reached or read says nothing."""
+    try:
+        resolved, _ = collector.discover(request_id)
+        for pin, child in resolved:
+            if not isinstance(pin, Pin):
+                continue
+            child.owners(pin)
+            if agent_exited(child.pane(pin)):
+                return {"agent": "exited",
+                        "detail": f"{tool} is no longer running in this root; its session is back at the shell"}
+            return {"agent": "running"}
+    except (Unavailable, IdentityChanged, Ended, ValueError, TypeError, argparse.ArgumentTypeError):
+        pass
+    return {}
+
+
 def root_descriptor(data: dict, request_id: str) -> dict:
     """Project only a qualified exact retained-root identity and status."""
     host = data.get("hostIdentity")
@@ -1708,7 +1752,9 @@ def root_descriptor(data: dict, request_id: str) -> dict:
             or state == "running" and generation is None
             or state == "ended" and generation is not None):
         raise Unavailable("root_receipt_unqualified")
-    return {**{key: data[key] for key in (*ROOT_IDENTITY, "generation", "status")}, **launch_deferral(data)}
+    # A root on a remote host: the hub tags the answer with the host's name.
+    named = {"host": data["host"]} if isinstance(data.get("host"), str) and re.fullmatch(HOST_NAME, data["host"]) else {}
+    return {**{key: data[key] for key in (*ROOT_IDENTITY, "generation", "status")}, **named, **launch_deferral(data)}
 
 
 def root_main(argv: list[str]) -> int:
@@ -1756,6 +1802,8 @@ def root_main(argv: list[str]) -> int:
         if args.operation == "status":
             if data.get("tool") == "agent-hub" and pinned["status"] != "ended":
                 output.update(hub_view(collector, control, pinned["hostIdentity"]))
+            elif data.get("tool") in ("codex", "claude-code", "pi") and pinned["status"] == "running":
+                output.update(agent_view(collector, args.request_id, data["tool"]))
             emit_json(collector, output)
             return 0
         output["operation"] = args.operation

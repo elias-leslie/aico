@@ -1283,6 +1283,29 @@ describe('private root workload control', () => {
     expect(getRootRequest('prompt-limit')).toBeUndefined()
   })
 
+  it('says which model a Pi root needs instead of a bare invalid_body', async () => {
+    const pi = { ...create('pi-no-model'), tool: 'pi' }
+    const reason = 'pi needs --model provider/model'
+    expect(parseRootCreate(pi)).toBeNull()
+    expect(await call('/v1/roots', 'POST', pi)).toEqual({
+      status: 400,
+      body: { error: 'invalid_body', field: 'model', reason },
+    })
+    expect(await call('/v1/roots', 'POST', { ...pi, model: 'gpt-6-sol' })).toEqual({
+      status: 400,
+      body: { error: 'invalid_body', field: 'model', reason },
+    })
+    // Another bad field is not blamed on the model, and a tool without a provider flag never is.
+    expect(await call('/v1/roots', 'POST', { ...pi, model: 'openai/gpt-6-sol', role: '' })).toEqual(
+      { status: 400, body: { error: 'invalid_body' } },
+    )
+    expect(await call('/v1/roots', 'POST', { ...create('codex-bad'), role: '' })).toEqual({
+      status: 400,
+      body: { error: 'invalid_body' },
+    })
+    expect(getRootRequest('pi-no-model')).toBeUndefined()
+  })
+
   it('validates exact native resume and retains idempotency across resume conflicts', async () => {
     const thread = '00000000-0000-4000-8000-000000000001'
     const input = { ...create('resume-exact'), resumeSessionId: thread }

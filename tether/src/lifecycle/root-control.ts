@@ -31,6 +31,8 @@ import {
 } from './tui/registry'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+/** A provider/model id: the tool's provider flag takes the part before the slash. */
+const PROVIDER_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:/-]*$/
 const AGENT_SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/
 const MAX_BODY_BYTES = 128 * 1024
 // 2000 UTF-8 bytes can occupy 12000 bytes with JSON \uXXXX escaping,
@@ -283,6 +285,17 @@ export function isProjectRootPath(value: unknown): value is string {
   )
 }
 
+/** Why a create for a tool that picks its provider from the model id (Pi) has no
+ * usable model: there is no default to fall back on, so the caller must say
+ * which one. Null when the model is fine or the tool takes no provider/model. */
+export function missingProviderModel(value: unknown): string | null {
+  if (!object(value) || typeof value.tool !== 'string') return null
+  if (getTui(value.tool)?.modelSelection?.modelProvider === undefined) return null
+  const model = value.model
+  if (typeof model === 'string' && PROVIDER_MODEL.test(model)) return null
+  return `${value.tool} needs --model provider/model`
+}
+
 export function parseRootCreate(value: unknown): RootCreateRequest | null {
   if (
     !object(value) ||
@@ -380,8 +393,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
         agentHubContext !== null ||
         (tool === 'pi' && daybreak !== null))) ||
     (getTui(tool)?.modelSelection?.modelProvider !== undefined &&
-      (typeof model !== 'string' ||
-        !/^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:/-]*$/.test(model))) ||
+      (typeof model !== 'string' || !PROVIDER_MODEL.test(model))) ||
     (model !== null &&
       (typeof model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(model))) ||
     (reasoningEffort !== null && !getTui(tool)?.modelSelection?.reasoningEffort) ||
@@ -859,7 +871,14 @@ export function createRootHandler(
           return
         }
         if (!parsed) {
-          json(response, 400, { error: 'invalid_body' })
+          const missing = missingProviderModel(value)
+          json(
+            response,
+            400,
+            missing
+              ? { error: 'invalid_body', field: 'model', reason: missing }
+              : { error: 'invalid_body' },
+          )
           return
         }
         const input = parsed

@@ -603,6 +603,31 @@ def test_receipts_surround_visible_only_capture(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize("foreground, screen, terminal", [
+    ("bash", b"agent-hub-cred-exec: pi: Agent Hub holds no current credential for that tool\n$ \n", "agent_exited"),
+    ("-bash", b"$ \n", "agent_exited"),
+    ("node", b"$ \n", "ambiguous"),
+    # A live agent's screen wins over the foreground command.
+    ("bash", b"Working (3s \xe2\x80\xa2 esc to interrupt)\n", "busy"),
+])
+def test_an_agent_that_left_the_pane_is_reported_exited(monkeypatch, foreground, screen, terminal):
+    instance = collector()
+    fake_receipts(monkeypatch, instance)
+    fake_commands(monkeypatch, instance, screen)
+    original = instance.command
+
+    def command(args, limit):
+        row = original(args, limit)
+        if args[0] == "display-message":
+            return row.rstrip(b"\n") + b"\t" + foreground.encode() + b"\n"
+        return row
+
+    monkeypatch.setattr(instance, "command", command)
+    state = instance.sample(PIN)
+    assert state["observation"] == "available" and state["terminal"] == terminal
+    assert state["markers"] == (["agent_exited"] if terminal == "agent_exited" else state["markers"])
+
+
 def test_generation_change_during_capture_discards_evidence(monkeypatch):
     instance = collector()
     captures = fake_commands(monkeypatch, instance)

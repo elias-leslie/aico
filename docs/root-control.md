@@ -569,6 +569,15 @@ cost, or transcript screens remain `ambiguous`; the watcher cannot infer a
 native turn decision from them. Activity observations do not change the owner's
 `running` lifecycle status or authorize terminal input.
 
+`running` stays true after the agent itself exits (a Pi root that fails closed on a
+missing credential leaves its pane at the shell). `root status` therefore also reads the
+pane's foreground command, through the hub's ssh link for a remote root, and adds
+`agent: running`, or `agent: exited` with a `detail`, when it can read the pane; `roots`
+reports `terminal: agent_exited` when the pane is at the shell and the screen shows no
+agent activity. A remote root's `root status` carries its `host`. `st aico create --tool pi`
+needs `--model provider/model` (Pi has no default model); without it the create is refused
+with that reason, locally, on a host, and by Tether (`invalid_body`, `field: model`, `reason`).
+
 ## Directed delivery and terminal admin
 
 Directed delivery is deliberately unqualified. An isolated private fixture
