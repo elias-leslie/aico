@@ -470,6 +470,14 @@ needing the owner in the apps, whatever state its agent reports.
 and close. Not relayed from remote hosts; asks stay on the asking session's
 own Tether.
 
+**Tray feed.** The daemon keeps `<stateDir>/needs-you.json` (0600, written
+atomically) for the Nightshift tray: `{version: 1, writtenAt, open, blocking,
+newest: null | {id, name, blocking, createdAt, url}}`, where `name` is the
+session's title or the requester and `url` is Aico's link to the ask
+(`TETHER_AICO_URL` + `/?ask=<id>`, null when that is unset). It never holds the question. It is rewritten on every
+change, at startup and every 60 s, so a `writtenAt` older than a few minutes
+means Tether is not running.
+
 `tether ask create "<question>" [--option T]... [--recommend N] [--blocking]
 [--body T | --body-file P] [--command C] [--share ID] [--session ID | --from L]`,
 `tether ask get|done|withdraw <id>` and `tether ask list [--mine] [--all]`

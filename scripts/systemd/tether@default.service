@@ -27,6 +27,9 @@ Environment=TETHER_PROJECTS_DIR=/srv/workspaces/projects
 # Tether's memory event record in its state dir, where Nightshift reads it.
 Environment=TETHER_NIGHTSHIFT_ADMISSION=/run/nightshift/admission.json
 Environment=TETHER_NIGHTSHIFT_EVENTS=%h/.local/state/tether/default/memory-events.jsonl
+# The Aico web app's address, for the ask links in needs-you.json (the tray's
+# Aico row); the same host as hosts.browser_frontend in project.identity.json.
+Environment=TETHER_AICO_URL=https://aico.summitflow.dev
 # systemd-oomd picks this unit only when no other candidate is left.
 ManagedOOMPreference=avoid
 CPUAccounting=yes

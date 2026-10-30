@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { hostname } from 'node:os'
 import { resolveAgentHubConfig } from './agent-hub/config'
 import type { RunTracker } from './agent-hub/runs'
-import { type AskDelivery, registerAskRoutes } from './asks'
+import { type AskDelivery, type NeedsYouFeed, registerAskRoutes } from './asks'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
 import { registerFileRoutes } from './files/api'
@@ -54,6 +54,12 @@ export interface ServerContext {
   show?: ShowConfig
   /** How an owner's answer reaches the asking session; absent: asks are pull-only. */
   asks?: AskDelivery
+  /** The Nightshift tray's asks file; absent: none is written. */
+  asksFeed?: {
+    write(feed: NeedsYouFeed): void
+    nameOf(sessionId: string): string | null
+    origin?: string | null
+  }
   /** Workflow runs launched by sessions (`/v1/runs`); absent in scratch instances. */
   runs?: RunTracker
   /** Reads a step's attempt session for the read-only chat view. */
@@ -422,6 +428,7 @@ export function buildRouter(context: ServerContext): Router {
     events,
     show,
     delivery: context.asks,
+    feed: context.asksFeed,
     now: context.now,
   })
   registerFileRoutes(router, (id) => {

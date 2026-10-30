@@ -11,8 +11,10 @@ import { askCreateBody, askerOf, askListPath, formatAsk } from './ask-cli'
 import {
   type Ask,
   type AskDelivery,
+  aicoOrigin,
   answerNote,
   bindAskStore,
+  type NeedsYouFeed,
   questionHash,
   registerAskRoutes,
   sessionAsks,
@@ -31,6 +33,7 @@ let woken: { sessionId: string; note: string; id: string }[]
 let cancelled: string[]
 let changed: string[]
 let wakeable: boolean
+let feeds: NeedsYouFeed[]
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'tether-asks-'))
@@ -41,6 +44,7 @@ beforeEach(async () => {
   cancelled = []
   changed = []
   wakeable = true
+  feeds = []
   const delivery: AskDelivery = {
     wake: (sessionId, note) => {
       if (!wakeable) return null
@@ -58,6 +62,11 @@ beforeEach(async () => {
     events,
     show: { retentionDays: 30 },
     delivery,
+    feed: {
+      write: (feed) => feeds.push(feed),
+      nameOf: (id) => (id === '0123abcd' ? 'Disk merge' : null),
+      origin: 'https://aico.example',
+    },
     now: () => clock,
   })
   server = createServer((req, res) => {
@@ -247,6 +256,46 @@ describe('the descriptor overlay', () => {
       { id: open.body.id, question: 'Open?', blocking: true, createdAt: clock },
     ])
     expect(sessionAsks('99999999')).toEqual([])
+  })
+})
+
+describe('the tray feed', () => {
+  it('counts open and blocking asks and names the newest asker, never the question', async () => {
+    expect(feeds).toEqual([{ version: 1, writtenAt: clock, open: 0, blocking: 0, newest: null }])
+    const first = await ask({ session: '0123abcd', question: 'Merge the disks?', blocking: true })
+    clock += 1_000
+    const second = await ask({ requester: 'nightly', question: 'Rotate the keys later?' })
+    expect(feeds.at(-1)).toEqual({
+      version: 1,
+      writtenAt: clock,
+      open: 2,
+      blocking: 1,
+      newest: {
+        id: second.body.id,
+        name: 'nightly',
+        blocking: false,
+        createdAt: clock,
+        url: `https://aico.example/?ask=${second.body.id}`,
+      },
+    })
+    await call('POST', `/v1/asks/${second.body.id}/withdraw`)
+    expect(feeds.at(-1)).toMatchObject({
+      open: 1,
+      blocking: 1,
+      newest: { id: first.body.id, name: 'Disk merge', blocking: true },
+    })
+    expect(JSON.stringify(feeds)).not.toContain('Merge the disks')
+    await call('POST', `/v1/asks/${first.body.id}/answer`, { text: 'yes' })
+    expect(feeds.at(-1)).toMatchObject({ open: 0, blocking: 0, newest: null })
+  })
+})
+
+describe('aicoOrigin', () => {
+  it('takes an https origin only', () => {
+    expect(aicoOrigin('https://aico.example/path')).toBe('https://aico.example')
+    expect(aicoOrigin('http://aico.example')).toBeNull()
+    expect(aicoOrigin('nope')).toBeNull()
+    expect(aicoOrigin(undefined)).toBeNull()
   })
 })
 

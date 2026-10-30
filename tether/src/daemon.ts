@@ -13,9 +13,9 @@ import {
 import { RunTracker, sessionLaunchers, type ToldPause } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
-import type { AskDelivery } from './asks'
+import { type AskDelivery, aicoOrigin, type NeedsYouFeed } from './asks'
 import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
-import { nodeProcFs } from './continuity'
+import { nodeProcFs, writeJsonFile } from './continuity'
 import { DeadShells } from './dead-shells'
 import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
@@ -31,7 +31,7 @@ import {
   listSessions,
   listWidgets,
 } from './lifecycle/catalog'
-import { leadName, setPersonalWorkspaceRoot } from './lifecycle/display'
+import { displayTitle, leadName, setPersonalWorkspaceRoot } from './lifecycle/display'
 import {
   cachedSessionStatus,
   configureEngine,
@@ -220,6 +220,15 @@ export async function startDaemon(
     recovery: undefined as Recovery | undefined,
     wakes: undefined as WakeService | undefined,
     asks: undefined as AskDelivery | undefined,
+    // The Nightshift tray reads this file for its Aico row.
+    asksFeed: {
+      write: (feed: NeedsYouFeed) => writeJsonFile(join(paths.stateDir, 'needs-you.json'), feed),
+      nameOf: (id: string) => {
+        const row = getWidget(id)
+        return row ? displayTitle(row) : null
+      },
+      origin: aicoOrigin(env.TETHER_AICO_URL),
+    },
     runs: undefined as RunTracker | undefined,
     stepChats: undefined as StepChatSource | undefined,
     hub: undefined as Hub | undefined,

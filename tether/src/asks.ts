@@ -360,6 +360,25 @@ export class AskStore {
     ).map(fromRow)
   }
 
+  /** How many asks are open and how many block, with the newest open one. */
+  openSummary(): { open: number; blocking: number; newest: Ask | null } {
+    const counts = this.db
+      .prepare(
+        "SELECT COUNT(*) AS open, COALESCE(SUM(blocking), 0) AS blocking FROM asks WHERE state = 'open'",
+      )
+      .get() as { open: number; blocking: number }
+    const newest = this.db
+      .prepare(
+        "SELECT * FROM asks WHERE state = 'open' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+      )
+      .get() as unknown as AskRow | undefined
+    return {
+      open: Number(counts.open),
+      blocking: Number(counts.blocking),
+      newest: newest ? fromRow(newest) : null,
+    }
+  }
+
   /** Drop closed asks past the retention. */
   prune(before: number): void {
     this.db
@@ -386,6 +405,66 @@ export function sessionAsks(sessionId: string): Record<string, unknown>[] {
   }))
 }
 
+// --- the tray feed --------------------------------------------------------------
+
+/** How often the feed is rewritten unchanged, so a reader can tell Tether is up. */
+export const FEED_HEARTBEAT_MS = 60_000
+
+/** The Nightshift tray's view of the asks (handoffs TRAY-FEED-CONTRACT.md):
+ * counts and the newest open ask's id and asker, never the question. */
+export interface NeedsYouFeed {
+  version: 1
+  writtenAt: number
+  open: number
+  blocking: number
+  newest: {
+    id: string
+    name: string
+    blocking: boolean
+    createdAt: number
+    /** Aico's link to the ask, or null when Tether is not told where Aico is. */
+    url: string | null
+  } | null
+}
+
+/** The Aico web origin from TETHER_AICO_URL (https only), else null. */
+export function aicoOrigin(raw: string | undefined): string | null {
+  if (!raw) return null
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' ? url.origin : null
+  } catch {
+    return null
+  }
+}
+
+export function needsYouFeed(
+  summary: ReturnType<AskStore['openSummary']>,
+  nameOf: (sessionId: string) => string | null,
+  now: number,
+  origin: string | null = null,
+): NeedsYouFeed {
+  const { newest } = summary
+  return {
+    version: 1,
+    writtenAt: now,
+    open: summary.open,
+    blocking: summary.blocking,
+    newest: newest
+      ? {
+          id: newest.id,
+          name:
+            (newest.session && nameOf(newest.session)) ||
+            newest.requester ||
+            (newest.session ? `Session ${newest.session}` : 'An agent'),
+          blocking: newest.blocking,
+          createdAt: newest.createdAt,
+          url: origin ? `${origin}/?ask=${newest.id}` : null,
+        }
+      : null,
+  }
+}
+
 // --- routes ---------------------------------------------------------------------
 
 /** What the asks need from the running daemon. */
@@ -409,17 +488,37 @@ export function registerAskRoutes(
     events: EventBus
     show: ShowConfig
     delivery?: AskDelivery
+    /** Keep the tray feed: write it with this on every change and each heartbeat. */
+    feed?: {
+      write(feed: NeedsYouFeed): void
+      nameOf(sessionId: string): string | null
+      origin?: string | null
+    }
     now?: () => number
   },
 ): AskStore {
   const asks = new AskStore(options.db)
   const now = options.now ?? Date.now
-  const { events, delivery } = options
+  const { events, delivery, feed } = options
   bindAskStore(asks)
+
+  const writeFeed = () => {
+    if (!feed) return
+    try {
+      feed.write(needsYouFeed(asks.openSummary(), feed.nameOf, now(), feed.origin ?? null))
+    } catch (error) {
+      console.warn(`[tether] needs-you feed not written: ${(error as Error).message}`)
+    }
+  }
+  if (feed) {
+    writeFeed()
+    setInterval(writeFeed, FEED_HEARTBEAT_MS).unref()
+  }
 
   const changed = (ask: Ask, created = false) => {
     events.publish('asks.changed', { ask, created })
     if (ask.session) delivery?.sessionChanged(ask.session)
+    writeFeed()
   }
   const requireAsk = (id: string | undefined): Ask => {
     const ask = id && ID.test(id) ? asks.get(id) : undefined
