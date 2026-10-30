@@ -6,7 +6,7 @@
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { effectiveTuiPath } from './launch'
 import type { ContextHook, ContextStatus, TuiSpec } from './spec'
 
@@ -118,13 +118,14 @@ function canonicalRetrieval(surface: 'antigravity'): Promise<ContextStatus> {
   })
 }
 
-/** Resolve `name` with the exact PATH inherited by the no-profile/no-RC pane.
- * No login shell participates in launch: Aico explicitly writes its service
- * PATH into each tmux session/respawn environment, and a TUI may override it
- * declaratively. The verifier must therefore use that same value rather than a
- * separately sourced profile that could resolve a launcher the pane cannot. */
-function resolveLauncher(name: string, spec: TuiSpec): Promise<string | null> {
-  const pathValue = effectiveTuiPath(spec)
+/** Agent Hub's credential shims on a remote host. Each fetches its tool's
+ * credentials, then execs the next same-named command on PATH, so it sits
+ * first on the pane PATH ahead of the context launcher it hands over to. */
+function credShimDir(): string {
+  return join(homedir(), '.local', 'lib', 'agent-hub', 'cred-bin')
+}
+
+function probeLauncher(name: string, pathValue: string): Promise<string | null> {
   return new Promise((resolve) => {
     execFile(
       '/bin/sh',
@@ -137,6 +138,36 @@ function resolveLauncher(name: string, spec: TuiSpec): Promise<string | null> {
       },
     )
   })
+}
+
+/** Resolve `name` with the exact PATH inherited by the no-profile/no-RC pane.
+ * No login shell participates in launch: Aico explicitly writes its service
+ * PATH into each tmux session/respawn environment, and a TUI may override it
+ * declaratively. The verifier must therefore use that same value rather than a
+ * separately sourced profile that could resolve a launcher the pane cannot.
+ * A credential shim first on PATH is looked through to the launcher it execs;
+ * `shim` names it so the status can say so. */
+async function resolveLauncher(
+  name: string,
+  spec: TuiSpec,
+): Promise<{ path: string; shim: string | null } | null> {
+  const pathValue = effectiveTuiPath(spec)
+  const first = await probeLauncher(name, pathValue)
+  if (!first) return null
+  const shimDir = credShimDir()
+  const trim = (dir: string): string => dir.replace(/\/+$/, '')
+  if (trim(dirname(first)) !== shimDir) return { path: first, shim: null }
+  const rest = pathValue
+    .split(':')
+    .filter((entry) => trim(entry) !== shimDir)
+    .join(':')
+  const next = await probeLauncher(name, rest)
+  return next ? { path: next, shim: join(shimDir, name) } : null
+}
+
+/** "<shim> execs " when a credential shim stands in front of the launcher. */
+function viaShim(shim: string | null): string {
+  return shim ? `${shim} (Agent Hub credential shim) execs ` : ''
 }
 
 /** Claude Code: the source-linked launcher exposes exact canonical context as
@@ -157,13 +188,14 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
     }
   }
   const command = spec.command[0]
-  const launcher = command ? await resolveLauncher(command, spec) : null
-  if (!launcher) {
+  const resolvedLauncher = command ? await resolveLauncher(command, spec) : null
+  if (!resolvedLauncher) {
     return {
       state: 'missing',
       detail: `${command || 'Claude command'} not on the managed pane PATH — canonical context launcher unavailable; native Claude continues`,
     }
   }
+  const { path: launcher, shim } = resolvedLauncher
   try {
     const parsed = JSON.parse(readFileSync(settings, 'utf8')) as {
       hooks?: Record<string, Array<{ hooks?: Array<{ command?: string }> }>>
@@ -187,7 +219,7 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
     if (canonicalLauncher && additive && hasHook('SessionStart') && hasHook('SubagentStart')) {
       return {
         state: 'available',
-        detail: `${launcher} reaches the canonical additive Claude launcher with native session binding hooks installed; model receipt is unverified`,
+        detail: `${viaShim(shim)}${launcher} reaches the canonical additive Claude launcher with native session binding hooks installed; model receipt is unverified`,
       }
     }
   } catch {
@@ -195,7 +227,7 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
   }
   return {
     state: 'missing',
-    detail: `${launcher} or Claude native hooks are drifted from canonical Agent Hub sources`,
+    detail: `${viaShim(shim)}${launcher} or Claude native hooks are drifted from canonical Agent Hub sources`,
   }
 }
 
@@ -208,14 +240,15 @@ async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
 async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
   const codexConfigRepo = checkout('CODEX_CONFIG_REPO', 'codex-config')
   if (!codexConfigRepo) return unknownCheckout('CODEX_CONFIG_REPO', 'codex-config')
-  const launcher = await resolveLauncher('codex', spec)
-  if (!launcher) {
+  const resolvedLauncher = await resolveLauncher('codex', spec)
+  if (!resolvedLauncher) {
     return {
       state: 'missing',
       detail:
         'codex not on the managed pane PATH — canonical context launcher unavailable; native Codex continues',
     }
   }
+  const { path: launcher, shim } = resolvedLauncher
 
   const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
   if (!existsSync(client)) {
@@ -242,7 +275,7 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
     if (!canonicalLauncher || !additive) {
       return {
         state: 'missing',
-        detail: `${launcher} is not the canonical lossless additive Codex launcher`,
+        detail: `${viaShim(shim)}${launcher} is not the canonical lossless additive Codex launcher`,
       }
     }
   } catch {

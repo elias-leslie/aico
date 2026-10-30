@@ -378,6 +378,55 @@ describe('ensureContext', () => {
     )
   })
 
+  it('looks through the Agent Hub credential shim first on a host PATH', async () => {
+    const shimDir = join(homedir(), '.local', 'lib', 'agent-hub', 'cred-bin')
+    vi.mocked(existsSync).mockReturnValue(true)
+    vi.mocked(execFile).mockImplementation(((
+      _cmd: string,
+      _args: string[],
+      opts: { env: { PATH: string } },
+      cb: unknown,
+    ) => {
+      const first = opts.env.PATH.split(':')[0]
+      ;(cb as (e: Error | null, out: string, err: string) => void)(null, `${first}/claude\n`, '')
+      return undefined as never
+    }) as never)
+    vi.mocked(realpathSync).mockReturnValue(
+      '/opt/projects/agent-hub/integrations/context-delivery/claude/launcher',
+    )
+    vi.mocked(readFileSync).mockImplementation(((path: string) => {
+      if (path.endsWith('settings.json')) {
+        const command = '"$HOME"/.local/bin/agent-hub-context-client bind --surface claude_code'
+        return JSON.stringify({
+          hooks: {
+            SessionStart: [{ hooks: [{ command }] }],
+            SubagentStart: [{ hooks: [{ command }] }],
+          },
+        })
+      }
+      return 'CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 exec "$REAL_CLAUDE" "--add-dir" "$CONTEXT_DIR" # CLAUDE.md\n'
+    }) as never)
+    const s = await ensureContext(
+      spec({
+        command: ['claude'],
+        context: { kind: 'claude-session-start' },
+        env: { PATH: `${shimDir}/:/home/demo/.claude/bin:/usr/bin` },
+      }),
+    )
+    expect(s.state).toBe('available')
+    expect(s.detail).toBe(
+      `${shimDir}/claude (Agent Hub credential shim) execs /home/demo/.claude/bin/claude reaches the canonical additive Claude launcher with native session binding hooks installed; model receipt is unverified`,
+    )
+    expect(execFile).toHaveBeenLastCalledWith(
+      '/bin/sh',
+      expect.anything(),
+      expect.objectContaining({
+        env: expect.objectContaining({ PATH: '/home/demo/.claude/bin:/usr/bin' }),
+      }),
+      expect.any(Function),
+    )
+  })
+
   it('reports missing when the managed pane resolves the stock upstream Claude binary', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
     mockPaneResolve('/home/demo/.local/bin/claude') // a claude resolves, but not the wrapper
