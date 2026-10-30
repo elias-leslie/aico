@@ -293,7 +293,9 @@ export class Hub {
       const runs = peer.runs()
       if (!runs) continue
       merged.items.push(...runs.items.map((item) => ({ ...item, host: peer.name })))
-      const stale = !peer.live || runs.status !== 'ok'
+      // Only rows can be out of date: a host that lists none (one with no
+      // Agent Hub client id never asks) leaves this computer's runs alone.
+      const stale = runs.items.length > 0 && (!peer.live || runs.status !== 'ok')
       if (stale && merged.status === 'ok') {
         merged.status = 'stale'
         merged.error ??= peer.live ? runs.error : downReason(peer.name, peer.state)

@@ -55,6 +55,12 @@ class FakePeer {
   gui: ServerResponse | null = null
   roots: Record<string, unknown>[] = []
   guiResults: { id: string; body: unknown }[] = []
+  runs: Record<string, unknown> = {
+    status: 'ok',
+    error: null,
+    updatedAt: 1,
+    items: [{ runId: 'run-1' }],
+  }
 
   constructor(readonly socket: string) {}
 
@@ -93,13 +99,7 @@ class FakePeer {
       if (this.failSessions) return sendJson(res, 500, { error: 'internal_error' })
       return sendJson(res, 200, { items: this.sessions })
     }
-    if (url === '/v1/runs')
-      return sendJson(res, 200, {
-        status: 'ok',
-        error: null,
-        updatedAt: 1,
-        items: [{ runId: 'run-1' }],
-      })
+    if (url === '/v1/runs') return sendJson(res, 200, this.runs)
     if (url === '/v1/events') {
       res.writeHead(200, { 'content-type': 'application/x-ndjson' })
       res.write(`${JSON.stringify({ seq: 0, bootId: 'b', type: 'hello', at: 1, data: {} })}\n`)
@@ -641,6 +641,23 @@ describe('hub', () => {
     const merged = hub.mergeRuns({ status: 'ok', error: null, updatedAt: 2, items: [] })
     expect(merged.items).toEqual([{ runId: 'run-1', host: 'vm' }])
     expect((await call('POST', '/v1/runs/run-1/cancel')).body).toMatchObject({ host: 'vm' })
+  })
+
+  it('leaves the runs alone for a host that lists none (no Agent Hub client id there)', async () => {
+    hub.close()
+    peer.runs = {
+      status: 'unavailable',
+      error: 'Agent Hub client id is not set',
+      updatedAt: 1,
+      items: [],
+    }
+    hub = makeHub()
+    hub.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'))
+    expect(hub.mergeRuns({ status: 'ok', error: null, updatedAt: 2, items: [] })).toMatchObject({
+      status: 'ok',
+      error: null,
+    })
   })
 
   describe('wake and readiness gate', () => {
