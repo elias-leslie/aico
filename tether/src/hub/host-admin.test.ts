@@ -104,13 +104,15 @@ describe('login status', () => {
     const { admin, runs } = setup()
     const answer = await admin.status('vm-1')
     expect(runs[0]).toEqual(remoteArgv(ENTRY, CONTROL, 'agent-hub login status --json'))
-    expect(runs[0]?.slice(0, 9)).toEqual([
+    expect(runs[0]?.slice(0, 11)).toEqual([
       '/usr/bin/ssh',
       '-F',
       '/dev/null',
       '-T',
       '-o',
       'BatchMode=yes',
+      '-o',
+      'ProxyCommand=false',
       '-S',
       CONTROL,
       'vm-1',

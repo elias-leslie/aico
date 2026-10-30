@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path'
 import { CLIENT_ID_HEADER, OWNER_TOKEN_HEADER, REQUEST_SOURCE_HEADER } from '@agent-hub/sdk'
 import type { AgentHubConfig } from '../agent-hub/config'
 import { HttpError, type Router, readJsonObject, sendJson } from '../http'
+import { SSH_MUX_ONLY } from '../term/remote'
 import { type HostEntry, hostsFilePath } from './hosts'
 import { linkPaths, SSH_BIN } from './link'
 import { type PeerAnswer, PeerUnavailable, peerRequest } from './peer-http'
@@ -137,19 +138,7 @@ function shellQuote(word: string): string {
 /** Run one shell line on the host through the link's ControlMaster, in a login
  * shell so the host's own PATH (agent-hub, codex) applies. */
 export function remoteArgv(entry: HostEntry, control: string, line: string): string[] {
-  return [
-    SSH_BIN,
-    '-F',
-    '/dev/null',
-    '-T',
-    '-o',
-    'BatchMode=yes',
-    '-S',
-    control,
-    entry.ssh,
-    '--',
-    `bash -lc ${shellQuote(line)}`,
-  ]
+  return [SSH_BIN, ...SSH_MUX_ONLY, '-S', control, entry.ssh, '--', `bash -lc ${shellQuote(line)}`]
 }
 
 function record(value: unknown): Record<string, unknown> | null {
