@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react'
 import '@xterm/xterm/css/xterm.css'
-import { sizeHolderName } from '../../../electron/shared/size-holder-copy'
+import { sizeHolderName } from '../../../shared/size-holder-copy'
 import { LANTERN_TERMINAL_THEME, SCROLLBACK } from '../lib/constants/terminal'
 import type { TerminalRendererStatus } from '../lib/hooks/terminal-instance-utils'
 import { useTerminalHandle } from '../lib/hooks/use-terminal-handle'

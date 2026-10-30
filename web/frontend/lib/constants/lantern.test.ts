@@ -9,9 +9,7 @@ const read = (path: string) =>
 describe('Lantern tokens on the web', () => {
   it('imports the desktop tokens and fonts instead of copying them', () => {
     const globals = read('../../app/globals.css')
-    expect(globals).toContain(
-      '@import "../../../electron/renderer/tokens.css";',
-    )
+    expect(globals).toContain('@import "../../../shared/tokens.css";')
     expect(globals).toContain('@import "../../../assets/fonts/fonts.css";')
     expect(read('../../app/layout.tsx')).not.toContain('next/font')
   })
@@ -22,16 +20,16 @@ describe('Lantern tokens on the web', () => {
   })
 
   it('matches the desktop rim colour and terminal typeface', () => {
-    expect(read('../../../../electron/renderer/tokens.css')).toContain(
+    expect(read('../../../../shared/tokens.css')).toContain(
       `--rim: ${LANTERN_RIM};`,
     )
-    expect(read('../../../../electron/shared/font-settings.ts')).toContain(
+    expect(read('../../../../shared/font-settings.ts')).toContain(
       `family: "${LANTERN_MONO_FAMILY}"`,
     )
   })
 
   it('draws the search highlight in the desktop lantern amber', () => {
-    const channels = read('../../../../electron/renderer/tokens.css').match(
+    const channels = read('../../../../shared/tokens.css').match(
       /--lantern-rgb: (\d+) (\d+) (\d+);/,
     )
     expect(channels).not.toBeNull()

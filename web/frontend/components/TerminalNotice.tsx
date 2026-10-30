@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
-import { hostNoticeCopy } from '../../../electron/shared/host-notice'
-import { SIZE_HOLDER_HINT } from '../../../electron/shared/size-holder-copy'
+import { hostNoticeCopy } from '../../../shared/host-notice'
+import { SIZE_HOLDER_HINT } from '../../../shared/size-holder-copy'
 
 const LOST: Partial<Record<ConnectionStatus, string>> = {
   disconnected: 'Disconnected',

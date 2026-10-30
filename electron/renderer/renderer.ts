@@ -1,4 +1,4 @@
-import './tokens.css'
+import '../../shared/tokens.css'
 import '../../assets/fonts/fonts.css'
 import './chrome.css'
 import './control-surface.css'

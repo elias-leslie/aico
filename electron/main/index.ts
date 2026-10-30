@@ -19,7 +19,7 @@ import {
   TetherPool,
 } from 'tether/client'
 import { ControlTerminal } from 'tether/term'
-import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
+import { TERMINAL_HISTORY_LINES } from '../../shared/terminal-history'
 import { createAmbient } from './ambient'
 import { createAttentionWiring } from './attention-wiring'
 import { createBridgeTransport } from './bridge-transport'

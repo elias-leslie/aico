@@ -30,11 +30,11 @@ import {
   gitBranch,
   sessionTarget,
   stepTarget,
-} from '../shared/chat/forward'
-import type { ChatCallResult, ChatFailure, ChatInfo, ChatStreamItem } from '../shared/chat/types'
+} from '../../shared/chat/forward'
+import type { ChatCallResult, ChatFailure, ChatInfo, ChatStreamItem } from '../../shared/chat/types'
 import type { WindowRegistry } from './window-registry'
 
-export { gitBranch, MAX_CHAT_TEXT } from '../shared/chat/forward'
+export { gitBranch, MAX_CHAT_TEXT } from '../../shared/chat/forward'
 
 const MAX_STREAMS_PER_WINDOW = 4
 

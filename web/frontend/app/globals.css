@@ -1,6 +1,6 @@
 @import "tailwindcss";
-/* The Lantern tokens and typefaces are the desktop's own files, not copies. */
-@import "../../../electron/renderer/tokens.css";
+/* The Lantern tokens (shared/tokens.css) and typefaces are shared with the desktop, not copies. */
+@import "../../../shared/tokens.css";
 @import "../../../assets/fonts/fonts.css";
 
 /* The web's --term-* names, mapped onto the Lantern tokens. One dark theme;

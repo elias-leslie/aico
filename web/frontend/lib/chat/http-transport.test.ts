@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ChatStreamItem } from '../../../../electron/shared/chat/types'
+import type { ChatStreamItem } from '../../../../shared/chat/types'
 import {
   ChatInfoError,
   createHttpTransport,

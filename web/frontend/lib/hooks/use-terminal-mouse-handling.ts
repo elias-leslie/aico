@@ -2,7 +2,7 @@ import {
   mouseReportingActive,
   programOwnsSelection,
   setupMouseShim,
-} from '../../../../electron/shared/mouse-shim'
+} from '../../../../shared/mouse-shim'
 
 type XtermTerminal = InstanceType<typeof import('@xterm/xterm').Terminal>
 

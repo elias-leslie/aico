@@ -7,7 +7,7 @@ import {
   createHttpTransport,
   fetchChatInfo,
 } from '@/lib/chat/http-transport'
-import { ChatRoot } from '../../../electron/shared/chat/chat-view'
+import { ChatRoot } from '../../../shared/chat/chat-view'
 
 /** The words under a chat that did not open: what the server said, or that it was not reached. */
 function openFailure(error: unknown): string {

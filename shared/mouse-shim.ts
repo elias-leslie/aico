@@ -1,0 +1,120 @@
+import type { Terminal } from '@xterm/xterm'
+
+/** xterm's internal mouse-reporting flag — true while a TUI grabs the mouse. */
+interface XtermCoreInternal {
+  _core?: { coreMouseService?: { areMouseEventsActive: boolean } }
+}
+
+let warnedMissingCore = false
+
+/**
+ * True when the program in the terminal (e.g. Claude Code) has mouse reporting on.
+ *
+ * Reads xterm's private `_core.coreMouseService`, which is not in the public
+ * typings and can be renamed by an xterm upgrade. A bare `?? false` would then
+ * silently return false forever — disabling the drag-copy shim and the scrollback
+ * wheel-gate with no error. So distinguish "reporting off" from "internal gone"
+ * and shout once, so an upgrade that moves it is caught instead of silently
+ * breaking copy/scrollback.
+ */
+export function mouseReportingActive(term: Terminal): boolean {
+  const svc = (term as unknown as XtermCoreInternal)._core?.coreMouseService
+  if (!svc) {
+    if (!warnedMissingCore) {
+      warnedMissingCore = true
+      console.error(
+        '[aico] xterm internal _core.coreMouseService is missing — drag-copy shim ' +
+          'and scrollback gating are disabled. An xterm upgrade likely moved it; ' +
+          'fix mouse-shim.ts.',
+      )
+    }
+    return false
+  }
+  return svc.areMouseEventsActive
+}
+
+/**
+ * When a TUI enables mouse reporting, xterm sends mouse events to the program
+ * instead of doing local text selection — so you can't drag-select to copy.
+ * This re-dispatches plain (unshifted) mouse events with `shiftKey=true`, which
+ * xterm always treats as "select locally," restoring copy inside TUIs without
+ * affecting the program's own clicks. Returns a cleanup function.
+ */
+export function setupMouseShim(
+  term: Terminal,
+  container: HTMLElement,
+  /** False leaves this event to the program (it runs its own selection) or
+   * to another surface layered over the terminal. */
+  shouldForce: (e: MouseEvent) => boolean = () => true,
+): () => void {
+  const forceLocalSelection = (e: MouseEvent) => {
+    if (e.shiftKey || !e.isTrusted) return // already shifted, or our own synthetic event
+    if (!mouseReportingActive(term)) return // no TUI grabbing the mouse — let it through
+    if (e.button === 2 && e.type !== 'mousemove') {
+      // Right-click is Aico's paste gesture (contextmenu). A mouse-reporting
+      // program must never see it: Claude Code pastes the clipboard itself on
+      // a right-click, which doubled Aico's own paste. The contextmenu event
+      // still fires after the swallowed mousedown.
+      e.stopPropagation()
+      e.preventDefault()
+      return
+    }
+    if (!shouldForce(e)) return
+
+    e.stopPropagation()
+    e.preventDefault()
+    e.target?.dispatchEvent(
+      new MouseEvent(e.type, {
+        bubbles: e.bubbles,
+        cancelable: e.cancelable,
+        view: e.view,
+        detail: e.detail,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        screenX: e.screenX,
+        screenY: e.screenY,
+        ctrlKey: e.ctrlKey,
+        altKey: e.altKey,
+        shiftKey: true,
+        metaKey: e.metaKey,
+        button: e.button,
+        buttons: e.buttons,
+        relatedTarget: e.relatedTarget,
+      }),
+    )
+  }
+
+  const opts = { capture: true } as const
+  for (const type of ['mousedown', 'mouseup', 'mousemove'] as const) {
+    container.addEventListener(type, forceLocalSelection, opts)
+  }
+  return () => {
+    for (const type of ['mousedown', 'mouseup', 'mousemove'] as const) {
+      container.removeEventListener(type, forceLocalSelection, opts)
+    }
+  }
+}
+
+/**
+ * Whether the program in the pane runs its own text selection, so mouse drags
+ * should reach it untouched.
+ *
+ * Claude Code's fullscreen renderer draws in the alternate screen, grabs the
+ * mouse, and selects across its whole transcript itself: dragging to an edge
+ * auto-scrolls the conversation and release copies to the clipboard. Forcing
+ * xterm's local selection there limits a copy to the visible rows. A plain
+ * shell hands the mouse to whatever full-screen program enabled it. Other
+ * agents keep the local selection, which Shift-drag also gives anywhere.
+ */
+export function programOwnsSelection({
+  tuiSlug,
+  alternateScreen,
+  mouseReporting,
+}: {
+  tuiSlug: string
+  alternateScreen: boolean
+  mouseReporting: boolean
+}): boolean {
+  if (!alternateScreen || !mouseReporting) return false
+  return tuiSlug === 'claude-code' || tuiSlug === 'shell'
+}

@@ -13,7 +13,7 @@ import {
   type AicoTerminalFontSettings,
   DEFAULT_TERMINAL_FONT_SETTINGS,
   parseTerminalFontSettings,
-} from '../shared/font-settings'
+} from '../../shared/font-settings'
 import type {
   CheckInMenu,
   HostChoice,

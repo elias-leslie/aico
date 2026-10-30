@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { WebContents } from 'electron'
 import { type SessionDescriptor, TetherError, TetherUnavailable } from 'tether/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ChatStreamItem } from '../shared/chat/types'
+import type { ChatStreamItem } from '../../shared/chat/types'
 import { createChatBridge, gitBranch } from './chat-bridge'
 
 const SECRET = 'owner-token-0123456789abcdef'

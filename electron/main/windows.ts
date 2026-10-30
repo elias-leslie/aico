@@ -5,7 +5,7 @@
 import { join } from 'node:path'
 import type { BrowserWindow, Menu } from 'electron'
 import type { SessionDescriptor } from 'tether/client'
-import { INK } from '../shared/palette'
+import { INK } from '../../shared/palette'
 import { type Compositor, toDip } from './compositor'
 import { PERSONAL_WORKSPACE_ID } from './project'
 import type { Bounds, ViewRow } from './views'

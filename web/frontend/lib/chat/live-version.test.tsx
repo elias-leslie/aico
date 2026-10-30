@@ -1,14 +1,11 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  liveTiming,
-  useLiveVersion,
-} from '../../../../electron/shared/chat/live'
+import { liveTiming, useLiveVersion } from '../../../../shared/chat/live'
 import type {
   ChatCallResult,
   ChatInfo,
   ChatTransport,
-} from '../../../../electron/shared/chat/types'
+} from '../../../../shared/chat/types'
 
 const info = (readOnly: boolean): ChatInfo => ({
   sessionId: 'a1',

@@ -1,6 +1,6 @@
 // Agent Hub chat for the web app: the same operations the desktop's main process
 // answers over IPC (electron/main/chat-bridge.ts), here over HTTP. Both forward
-// to Tether through electron/shared/chat/forward.ts; Tether holds the Agent Hub
+// to Tether through shared/chat/forward.ts; Tether holds the Agent Hub
 // owner token and nothing here sees it, so it never reaches the browser.
 //
 //   POST /api/chat/info    {session} or {run, step}          -> {ok, value: ChatInfo}
@@ -24,8 +24,8 @@ import {
   gitBranch,
   sessionTarget,
   stepTarget,
-} from '../../../electron/shared/chat/forward'
-import type { ChatCallResult, ChatFailure } from '../../../electron/shared/chat/types'
+} from '../../../shared/chat/forward'
+import type { ChatCallResult, ChatFailure } from '../../../shared/chat/types'
 import { API_CSP } from './guard'
 import { objectBody, RAW, type Router, sendJson } from './http'
 import { findSession } from './tether'

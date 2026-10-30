@@ -1,10 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { ChatRoot } from '../../../electron/shared/chat/chat-view'
-import type {
-  ChatCallResult,
-  ChatTransport,
-} from '../../../electron/shared/chat/types'
+import { ChatRoot } from '../../../shared/chat/chat-view'
+import type { ChatCallResult, ChatTransport } from '../../../shared/chat/types'
 
 const model = (id: string, caps: Record<string, unknown>) => ({
   id,

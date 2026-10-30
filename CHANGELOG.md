@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- Code the desktop and the web app share (chat view, palette, mouse shim, font
+  settings, host and size-holder copy) and the Lantern tokens moved from
+  `electron/shared` and `electron/renderer/tokens.css` to `shared/` at the repo
+  root. The web app no longer imports anything from `electron/`.
+
 ### Removed
 
 - Tether no longer serves the old `/run/user/<uid>/aico/control.sock` and

@@ -1,10 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type {
-  ChatInfo,
-  ChatTransport,
-} from '../../../electron/shared/chat/types'
+import type { ChatInfo, ChatTransport } from '../../../shared/chat/types'
 import { AgentHubChat } from './AgentHubChat'
 
 const seen: {
@@ -12,7 +9,7 @@ const seen: {
   transport: ChatTransport
   running?: boolean
 }[] = []
-vi.mock('../../../electron/shared/chat/chat-view', () => ({
+vi.mock('../../../shared/chat/chat-view', () => ({
   ChatRoot: (props: {
     info: ChatInfo
     transport: ChatTransport

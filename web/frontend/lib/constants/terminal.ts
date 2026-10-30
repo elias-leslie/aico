@@ -1,4 +1,4 @@
-import { BONE, INK } from '../../../../electron/shared/palette'
+import { BONE, INK } from '../../../../shared/palette'
 import { LANTERN_MONO_FAMILY } from './lantern'
 
 /** WebSocket connection timeout in milliseconds */

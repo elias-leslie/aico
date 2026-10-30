@@ -1,5 +1,5 @@
 /** Lantern colours code needs outside CSS (PWA manifest, browser theme
- * colour). They are tokens in electron/renderer/tokens.css; a test keeps
+ * colour). They are tokens in shared/tokens.css; a test keeps
  * them equal. */
 export const LANTERN_RIM = '#1c1f24'
 

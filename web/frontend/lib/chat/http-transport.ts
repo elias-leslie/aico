@@ -9,7 +9,7 @@ import type {
   ChatInfo,
   ChatStreamItem,
   ChatTransport,
-} from '../../../../electron/shared/chat/types'
+} from '../../../../shared/chat/types'
 
 /** What a chat view reads: a Tether session, or a workflow step's attempt. */
 export type ChatSource =

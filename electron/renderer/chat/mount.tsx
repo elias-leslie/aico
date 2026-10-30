@@ -2,8 +2,8 @@
 // transport that reaches Agent Hub only through the preload bridge.
 
 import { createRoot } from 'react-dom/client'
-import { ChatRoot } from '../../shared/chat/chat-view'
-import type { ChatInfo } from '../../shared/chat/types'
+import { ChatRoot } from '../../../shared/chat/chat-view'
+import type { ChatInfo } from '../../../shared/chat/types'
 import { arcade, eyes } from '../window-frame'
 
 /** The eyes read along and the tray goes amber while a turn runs, as for a terminal that prints. */

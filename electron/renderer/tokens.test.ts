@@ -1,13 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { BONE, INK } from '../shared/palette'
+import { BONE, INK } from '../../shared/palette'
 import { H } from './arcade/engine'
 
 const css = (name: string) => readFileSync(new URL(name, import.meta.url), 'utf8')
 
 describe('design tokens', () => {
   it('keeps the titlebar arcade as tall as the titlebar token', () => {
-    expect(css('./tokens.css')).toContain(`--titlebar-height: ${H}px;`)
+    expect(css('../../shared/tokens.css')).toContain(`--titlebar-height: ${H}px;`)
   })
 
   it('sizes the titlebar and places the lantern menu from the titlebar token', () => {
@@ -29,7 +29,7 @@ describe('design tokens', () => {
   it('draws the window surface and terminal in the --ink and --bone tokens', () => {
     const channels = (hex: string) =>
       [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)).join(' ')
-    expect(css('./tokens.css')).toContain(`--ink-rgb: ${channels(INK)};`)
-    expect(css('./tokens.css')).toContain(`--bone-rgb: ${channels(BONE)};`)
+    expect(css('../../shared/tokens.css')).toContain(`--ink-rgb: ${channels(INK)};`)
+    expect(css('../../shared/tokens.css')).toContain(`--bone-rgb: ${channels(BONE)};`)
   })
 })

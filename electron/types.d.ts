@@ -1,10 +1,10 @@
 // Shape of the preload bridge, shared by renderer code and the global Window.
 
+import type { ChatCallResult, ChatInfo, ChatStreamItem } from '../shared/chat/types'
+import type { AicoTerminalFontSettings } from '../shared/font-settings'
 import type { ImagePaste } from './main/desktop-ipc'
 import type { HostLogins, HostResult, HostRow } from './main/host-panel'
 import type { HeldElsewhere } from './main/size-holder'
-import type { ChatCallResult, ChatInfo, ChatStreamItem } from './shared/chat/types'
-import type { AicoTerminalFontSettings } from './shared/font-settings'
 
 export type { HeldElsewhere, HostLogins, HostResult, HostRow, ImagePaste }
 
@@ -63,7 +63,7 @@ export interface OpenableSession {
   locallyOpen: boolean
 }
 
-export type { ChatCallResult, ChatFailure, ChatInfo, ChatStreamItem } from './shared/chat/types'
+export type { ChatCallResult, ChatFailure, ChatInfo, ChatStreamItem } from '../shared/chat/types'
 export interface AicoApi {
   /** The Hosts panel: remote hosts' state, power and per-tool sign-in. */
   hosts: {

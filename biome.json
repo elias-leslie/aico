@@ -10,6 +10,7 @@
     "ignoreUnknown": true,
     "includes": [
       "electron/**",
+      "shared/**",
       "scripts/**/*.{js,mjs}",
       "vitest.config.ts",
       "electron.vite.config.ts",

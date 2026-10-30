@@ -9,12 +9,12 @@ import {
   parseTerminalFontSettings,
   SYMBOLS_FACE,
   SYMBOLS_SAMPLE,
-} from '../shared/font-settings'
-import { hostNoticeCopy } from '../shared/host-notice'
-import { mouseReportingActive, programOwnsSelection, setupMouseShim } from '../shared/mouse-shim'
-import { BONE, INK } from '../shared/palette'
-import { SIZE_HOLDER_HINT, sizeHolderName } from '../shared/size-holder-copy'
-import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
+} from '../../shared/font-settings'
+import { hostNoticeCopy } from '../../shared/host-notice'
+import { mouseReportingActive, programOwnsSelection, setupMouseShim } from '../../shared/mouse-shim'
+import { BONE, INK } from '../../shared/palette'
+import { SIZE_HOLDER_HINT, sizeHolderName } from '../../shared/size-holder-copy'
+import { TERMINAL_HISTORY_LINES } from '../../shared/terminal-history'
 import { showToast } from './actions'
 import { WINDOW_CHORDS } from './chords'
 import { controlWheelAction, swallowQueryReplies, trackSgrMouse } from './control-view'

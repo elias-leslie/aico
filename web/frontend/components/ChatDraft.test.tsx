@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mergeDraft, restoreDraft } from '../../../electron/shared/chat/draft'
+import { mergeDraft, restoreDraft } from '../../../shared/chat/draft'
 
 describe('putting follow-ups back in the message box', () => {
   it('puts the waiting texts ahead of what is already typed, a blank line apart', () => {
