@@ -5,11 +5,10 @@
 // routes (file-locations.ts). Every field crosses an agent-controlled
 // boundary, so each is checked again here.
 
-import { execFile } from 'node:child_process'
 import { isAbsolute } from 'node:path'
 import type { Router } from './http'
+import { type Notice, type RunCommand, runCommand, sendNotice } from './notice'
 
-const PUSH_TIMEOUT_MS = 10_000
 /** Ids pushed already, so a replayed event never pushes twice. */
 const PUSHED_KEPT = 500
 const MAX_PATHS = 20
@@ -70,15 +69,6 @@ export function validateShare(data: unknown): Share | null {
   return null
 }
 
-export type RunPush = (argv: string[]) => Promise<void>
-
-const runPush: RunPush = (argv) =>
-  new Promise((resolve, reject) => {
-    execFile(argv[0], argv.slice(1), { timeout: PUSH_TIMEOUT_MS }, (error) =>
-      error ? reject(error) : resolve(),
-    )
-  })
-
 /** A path's last part; a shared folder's path ends in `/`. */
 const lastPart = (path: string) =>
   path
@@ -97,21 +87,22 @@ export function pushTitle(share: Share): string {
   return what ? `Shared: ${what}` : 'Shared a link'
 }
 
-/** The Nightshift notice argv. */
-export function pushArgv(share: Share, publicHost: string | null): string[] {
-  const argv = [
-    'nightshift',
-    'push',
-    '--title',
-    pushTitle(share),
-    '--severity',
-    'info',
-    '--key',
-    `show:${share.id}`,
-  ]
-  if (publicHost) argv.push('--open', `https://${publicHost}/?show=${share.id}`)
-  argv.push('Open Aico to see it.')
-  return argv
+/** The Nightshift notice for a new share: something to look at, so a tray todo that leads to the share. */
+export function showNotice(share: Share, publicHost: string | null): Notice {
+  const notice: Notice = {
+    v: 1,
+    source: 'aico',
+    kind: 'todo',
+    severity: 'info',
+    title: pushTitle(share),
+    body: 'Open Aico to see it.',
+    key: `show:${share.id}`,
+    push: 'tray',
+    actions: ['done'],
+    primary: 'done',
+  }
+  if (publicHost) notice.open = `https://${publicHost}/?show=${share.id}`
+  return notice
 }
 
 /** What Shows needs of Tether. */
@@ -126,7 +117,7 @@ export class Shows {
     private readonly options: {
       tether: ShareSource
       publicHost: string | null
-      run?: RunPush
+      run?: RunCommand
     },
   ) {}
 
@@ -140,11 +131,7 @@ export class Shows {
     if (this.pushed.has(share.id)) return
     this.pushed.add(share.id)
     if (this.pushed.size > PUSHED_KEPT) this.pushed.delete(this.pushed.values().next().value ?? '')
-    try {
-      await (this.options.run ?? runPush)(pushArgv(share, this.options.publicHost))
-    } catch (error) {
-      console.warn(`[aico-web] show push failed show_id=${share.id}: ${(error as Error).message}`)
-    }
+    await sendNotice(this.options.run ?? runCommand, showNotice(share, this.options.publicHost))
   }
 
   /** Tether's shares, oldest first; any that fail the checks are left out. */

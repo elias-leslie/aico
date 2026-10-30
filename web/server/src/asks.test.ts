@@ -3,7 +3,7 @@
 // through, and Nightshift's pending taps as links.
 
 import { describe, expect, it } from 'vitest'
-import { type Ask, Asks, askPushArgv, parsePending, validateAsk } from './asks'
+import { type Ask, Asks, askNotice, parsePending, validateAsk } from './asks'
 
 const ASK: Ask = {
   id: 'abcdefabcdef',
@@ -62,8 +62,8 @@ describe('the push', () => {
     const asks = new Asks({
       tether: fakeTether().client as never,
       publicHost: 'aico.example',
-      run: async (argv) => {
-        runs.push(argv)
+      run: async (argv, _t, input) => {
+        runs.push(input === undefined ? argv : [...argv, input])
         return ''
       },
     })
@@ -71,28 +71,51 @@ describe('the push', () => {
     await asks.receive({ ask: ASK, created: true })
     await asks.receive({ ask: { ...ASK, id: '111111111111', blocking: false }, created: true })
     await asks.receive({ ask: { ...ASK, id: '222222222222' }, created: false })
+    expect(runs).toHaveLength(1)
+    expect(runs[0]?.slice(0, 3)).toEqual(['nightshift', 'push', '--json'])
+    expect(runs[0]?.[3]).toBe(
+      JSON.stringify(askNotice(ASK, 'Disk merge & history', 'aico.example')),
+    )
+    expect(JSON.parse(String(runs[0]?.[3]))).toEqual({
+      v: 1,
+      source: 'aico',
+      kind: 'question',
+      severity: 'warning',
+      title: 'An agent is waiting on you',
+      body: '“Disk merge & history” has a question for you. Open Aico to answer it.',
+      key: 'ask:abcdefabcdef',
+      push: 'phone',
+      open: 'https://aico.example/?ask=abcdefabcdef',
+      actions: ['answer'],
+      primary: 'answer',
+    })
+    expect(runs[0]?.[3]).not.toContain(ASK.question)
+  })
+
+  it('resolves the notice when a blocking ask is answered or withdrawn', async () => {
+    const runs: string[][] = []
+    const asks = new Asks({
+      tether: fakeTether().client as never,
+      publicHost: 'aico.example',
+      run: async (argv, _t, input) => {
+        runs.push(input === undefined ? argv : [...argv, input])
+        return ''
+      },
+    })
+    await asks.receive({ ask: { ...ASK, state: 'answered' }, created: false })
+    await asks.receive({ ask: { ...ASK, id: '111111111111', state: 'withdrawn' }, created: false })
+    await asks.receive({ ask: ASK, created: false })
+    await asks.receive({ ask: { ...ASK, blocking: false, state: 'answered' }, created: false })
     expect(runs).toEqual([
-      [
-        'nightshift',
-        'push',
-        '--title',
-        'An agent is waiting on you',
-        '--severity',
-        'info',
-        '--key',
-        'ask:abcdefabcdef',
-        '--open',
-        'https://aico.example/?ask=abcdefabcdef',
-        '“Disk merge & history” has a question for you. Open Aico to answer it.',
-      ],
+      ['nightshift', 'resolve', 'ask:abcdefabcdef', '--text', 'The ask was answered.'],
+      ['nightshift', 'resolve', 'ask:111111111111', '--text', 'The ask was withdrawn.'],
     ])
-    expect(runs[0]?.join(' ')).not.toContain(ASK.question)
   })
 
   it('names the requester of an ask without a session', () => {
-    expect(
-      askPushArgv({ ...ASK, session: null, requester: 'nightly' }, 'nightly', null).at(-1),
-    ).toBe('“nightly” has a question for you. Open Aico to answer it.')
+    expect(askNotice({ ...ASK, session: null, requester: 'nightly' }, 'nightly', null).body).toBe(
+      '“nightly” has a question for you. Open Aico to answer it.',
+    )
   })
 })
 

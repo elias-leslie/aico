@@ -6,13 +6,12 @@
 // approving stays in Nightshift. Every field crosses an agent-controlled
 // boundary, so each is checked again here.
 
-import { execFile } from 'node:child_process'
 import type { TetherClient } from 'tether/client'
 import { objectBody, type Router } from './http'
 import { tetherCall } from './lifecycle'
+import { type Notice, type RunCommand, resolveNotice, runCommand, sendNotice } from './notice'
 import { HttpError } from './tether'
 
-const PUSH_TIMEOUT_MS = 10_000
 const PENDING_TIMEOUT_MS = 8_000
 /** Ids pushed already, so a replayed event never pushes twice. */
 const PUSHED_KEPT = 500
@@ -102,31 +101,30 @@ export function validateAsk(data: unknown): Ask | null {
   }
 }
 
-export type RunCommand = (argv: string[], timeoutMs: number) => Promise<string>
+export type { RunCommand }
 
-const runCommand: RunCommand = (argv, timeoutMs) =>
-  new Promise((resolve, reject) => {
-    execFile(argv[0], argv.slice(1), { timeout: timeoutMs }, (error, stdout) =>
-      error ? reject(error) : resolve(String(stdout)),
-    )
-  })
-
-/** The Nightshift notice for a new blocking ask: the session's name, never the question. */
-export function askPushArgv(ask: Ask, who: string | null, publicHost: string | null): string[] {
-  const argv = [
-    'nightshift',
-    'push',
-    '--title',
-    'An agent is waiting on you',
-    '--severity',
-    'info',
-    '--key',
-    `ask:${ask.id}`,
-  ]
-  if (publicHost) argv.push('--open', `https://${publicHost}/?ask=${ask.id}`)
-  argv.push(`${who ? `“${who}”` : 'A session'} has a question for you. Open Aico to answer it.`)
-  return argv
+/** The Nightshift notice for a new blocking ask: the session's name, never the question. A question needs the
+ * ask's own link; without the public host it goes as plain information. */
+export function askNotice(ask: Ask, who: string | null, publicHost: string | null): Notice {
+  const notice: Notice = {
+    v: 1,
+    source: 'aico',
+    kind: publicHost ? 'question' : 'info',
+    severity: 'warning',
+    title: 'An agent is waiting on you',
+    body: `${who ? `“${who}”` : 'A session'} has a question for you. Open Aico to answer it.`,
+    key: askKey(ask.id),
+    push: 'phone',
+  }
+  if (publicHost) {
+    notice.open = `https://${publicHost}/?ask=${ask.id}`
+    notice.actions = ['answer']
+    notice.primary = 'answer'
+  }
+  return notice
 }
+
+export const askKey = (id: string) => `ask:${id}`
 
 /** A Nightshift tap waiting for the owner, as a link. */
 export interface Approval {
@@ -188,8 +186,13 @@ export class Asks {
   /** An `asks.changed` event's data from the trusted Tether: push a new blocking ask once. */
   async receive(data: unknown): Promise<void> {
     const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
-    if (record.created !== true) return
     const ask = validateAsk(record.ask)
+    if (record.created !== true) {
+      // A blocking ask that is no longer open stops being a waiting notice.
+      if (ask?.blocking && ask.state !== 'open')
+        await resolveNotice(this.run, askKey(ask.id), `The ask was ${ask.state}.`)
+      return
+    }
     if (!ask) {
       console.log('[aico-web] ask rejected')
       return
@@ -207,11 +210,7 @@ export class Asks {
         // The push still goes out, naming no session.
       }
     } else who = ask.requester
-    try {
-      await this.run(askPushArgv(ask, who, this.options.publicHost), PUSH_TIMEOUT_MS)
-    } catch (error) {
-      console.warn(`[aico-web] ask push failed ask_id=${ask.id}: ${(error as Error).message}`)
-    }
+    await sendNotice(this.run, askNotice(ask, who, this.options.publicHost))
   }
 
   /** Open and answered asks plus recently closed ones; any failing the checks are left out. */

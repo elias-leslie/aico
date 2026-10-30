@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { pushArgv, pushTitle, registerShowRoutes, type Share, Shows, validateShare } from './shows'
+import {
+  pushTitle,
+  registerShowRoutes,
+  type Share,
+  Shows,
+  showNotice,
+  validateShare,
+} from './shows'
 import { serveRoutes } from './testing'
 
 const SHOW_ID = 'ab12cd34ef56'
@@ -81,19 +88,23 @@ describe('Shows', () => {
     await shows.receive(payload())
     await shows.receive({ ...payload(), id: 'not valid' })
     expect(run).toHaveBeenCalledTimes(1)
-    expect(run).toHaveBeenCalledWith([
-      'nightshift',
-      'push',
-      '--title',
-      'Shared: Report',
-      '--severity',
-      'info',
-      '--key',
-      `show:${SHOW_ID}`,
-      '--open',
-      `https://aico.example.dev/?show=${SHOW_ID}`,
-      'Open Aico to see it.',
-    ])
+    expect(run).toHaveBeenCalledWith(
+      ['nightshift', 'push', '--json'],
+      expect.any(Number),
+      JSON.stringify({
+        v: 1,
+        source: 'aico',
+        kind: 'todo',
+        severity: 'info',
+        title: 'Shared: Report',
+        body: 'Open Aico to see it.',
+        key: `show:${SHOW_ID}`,
+        push: 'tray',
+        actions: ['done'],
+        primary: 'done',
+        open: `https://aico.example.dev/?show=${SHOW_ID}`,
+      }),
+    )
   })
 
   it('names what was shared and never puts a URL in the notice', () => {
@@ -108,8 +119,8 @@ describe('Shows', () => {
       title: null,
     })
     expect(pushTitle(link)).toBe('Shared a link')
-    expect(pushArgv(link, null).join(' ')).not.toContain('secret.example')
-    expect(pushArgv(link, null)).not.toContain('--open')
+    expect(JSON.stringify(showNotice(link, null))).not.toContain('secret.example')
+    expect(showNotice(link, null)).not.toHaveProperty('open')
   })
 
   it('keeps going when a push fails', async () => {

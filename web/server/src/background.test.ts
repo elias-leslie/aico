@@ -35,8 +35,8 @@ function background(trustShows = true, forward?: (event: unknown) => void) {
     asks: new Asks({
       tether: tether.client,
       publicHost: null,
-      run: async (argv) => {
-        pushes.push(argv)
+      run: async (argv, _t, input) => {
+        pushes.push(input === undefined ? argv : [...argv, input])
         return ''
       },
     }),
@@ -182,7 +182,9 @@ describe('events', () => {
     expect(pushes).toEqual([])
     await background(true).event(event('asks.changed', { ask, created: true }))
     expect(pushes).toHaveLength(1)
-    expect(pushes[0]?.at(-1)).toBe('“nightly” has a question for you. Open Aico to answer it.')
+    expect(JSON.parse(pushes[0]?.at(-1) ?? '{}').body).toBe(
+      '“nightly” has a question for you. Open Aico to answer it.',
+    )
   })
 })
 

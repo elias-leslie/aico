@@ -43,7 +43,7 @@ is gone answers 404, shown as "This file was moved or deleted".
 File paths in the terminal (absolute, or starting with `~/`) are clickable and
 open in the same viewer.
 
-Each new share runs `nightshift push` (ten-second timeout, key `show:<id>`). Its
+Each new share sends a Nightshift notice (`nightshift push --json`, ten-second timeout, a tray todo with Done, key `show:<id>`). Its
 link `https://<hosts.browser_frontend>/?show=<id>` opens the share in Files.
 
 ## Desktop
