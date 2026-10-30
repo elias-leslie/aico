@@ -126,7 +126,7 @@ export function SessionSidebar({
         >
           {heading}
         </h2>
-        <NeedsYouLauncher />
+        <NeedsYouLauncher variant="count" />
         <HealthLauncher variant="icon" />
         <HostsLauncher icon />
         {onCollapsedChange && (

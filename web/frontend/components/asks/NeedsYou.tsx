@@ -64,10 +64,12 @@ function subscribeDrawer(listener: () => void): () => void {
 }
 const readDrawer = () => drawerState
 
-/** Where the launcher sits: the session list header (`pill`), its folded
- * rail (`icon`), the phone's session bar (`compact`: the count alone, nothing
- * when nothing waits) or the session sheet (`row`, always there). */
-type Variant = 'pill' | 'icon' | 'compact' | 'row'
+/** Where the launcher sits: the session bar on a desktop (`pill`), the
+ * session list header where Health and Hosts share the row (`count`: the pill
+ * with the count alone), its folded rail (`icon`), the phone's session bar
+ * (`compact`: the count alone, nothing when nothing waits) or the session
+ * sheet (`row`, always there). */
+type Variant = 'pill' | 'count' | 'icon' | 'compact' | 'row'
 
 /** The "N need you" pill and its drawer: questions agents asked, Nightshift
  * approvals (links only) and what was answered. */
@@ -125,7 +127,7 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
         {count > 0 ? `${count} need you` : 'Needs you'}
       </button>
     )
-  else if (variant === 'icon' || (variant === 'pill' && count === 0))
+  else if (variant === 'icon' || (variant !== 'compact' && count === 0))
     button = (
       <button
         type="button"
@@ -156,7 +158,7 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
         data-count={count}
       >
         <span aria-hidden="true" className="dot" />
-        {variant === 'compact' ? count : `${count} need you`}
+        {variant === 'pill' ? `${count} need you` : count}
       </button>
     )
 

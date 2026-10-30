@@ -98,6 +98,14 @@ describe('NeedsYouLauncher', () => {
     )
   })
 
+  it('shows the count alone in the session list header', () => {
+    state.asks = [ask()]
+    render(<NeedsYouLauncher variant="count" />)
+    const pill = screen.getByTestId('needs-you-pill')
+    expect(pill).toHaveTextContent(/^1$/)
+    expect(pill).toHaveAccessibleName('1 question waiting for you')
+  })
+
   it('stays a quiet icon when nothing waits, and off the phone bar', () => {
     const { unmount } = render(<NeedsYouLauncher />)
     expect(screen.getByTestId('needs-you-pill')).toHaveAccessibleName(
