@@ -244,8 +244,14 @@ export class FakeTether {
     return this.holder
   }
 
-  async projects() {
-    return this.projectList
+  /** Each remote host's projects (`projects(…, host)`). */
+  hostProjects: Record<string, typeof this.projectList> = {}
+
+  async projects(_refresh = false, host?: string) {
+    if (host === undefined) return this.projectList
+    const list = this.hostProjects[host]
+    if (!list) throw new TetherError(400, 'unknown_host', {})
+    return list
   }
 
   /** What `runs()` answers, and the run controls Tether is to refuse. */

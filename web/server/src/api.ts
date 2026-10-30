@@ -304,8 +304,12 @@ export function buildApi(deps: ApiDeps): Router {
     }
   }
 
-  router.on('GET', '/api/projects', async () => {
-    const projects = await tetherCall(() => tether.projects())
+  // `?host=` lists the projects on that host, for a session started there.
+  router.on('GET', '/api/projects', async (ctx) => {
+    const host = ctx.query.get('host') || undefined
+    if (host !== undefined && (host.length > 64 || !HOST_NAME.test(host)))
+      throw new HttpError(422, 'host must be a host name')
+    const projects = await tetherCall(() => tether.projects(false, host))
     const settings = store.allProjectSettings()
     return projects
       .filter((project) => project.id)

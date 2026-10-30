@@ -578,6 +578,22 @@ describe('panes', () => {
 })
 
 describe('projects, tools, Agent Hub, health', () => {
+  it("lists a host's own projects for a session started there", async () => {
+    tether.hostProjects['agent-work'] = [{ id: 'lab', name: 'Lab', root: '/home/u/lab' }]
+    expect((await call('GET', '/api/projects?host=agent-work')).body).toEqual([
+      {
+        id: 'lab',
+        name: 'Lab',
+        root_path: '/home/u/lab',
+        enabled: false,
+        mode: 'shell',
+        display_order: 0,
+      },
+    ])
+    expect((await call('GET', '/api/projects?host=nowhere')).status).toBe(400)
+    expect((await call('GET', '/api/projects?host=bad%20host')).status).toBe(422)
+  })
+
   it('merges Tether projects with tab settings and sets a mode', async () => {
     tether.projectList.push({ id: 'zeta', name: 'Zeta', root: '/z' })
     store.upsertProjectSettings('zeta', { enabled: true, displayOrder: -1, activeMode: 'claude' })

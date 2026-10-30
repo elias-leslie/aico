@@ -128,6 +128,11 @@ contextBridge.exposeInMainWorld('aico', {
     ) => ipcRenderer.send('widget:new', tool, projectId, instructions, host),
     /** The remote hosts a new session can run on ("This computer" is implied). */
     hosts: (): Promise<Listing<HostChoice>> => ipcRenderer.invoke('hosts:list'),
+    /** A remote host's projects, for a session started there. */
+    hostProjects: (
+      host: string,
+    ): Promise<Listing<{ id: string; name: string; current: boolean }>> =>
+      ipcRenderer.invoke('hosts:projects', host),
     /** Enabled Agent Hub prompts a new session can take as instructions. */
     instructionPrompts: (): Promise<Listing<InstructionPrompt>> =>
       ipcRenderer.invoke('instructions:prompts'),

@@ -96,6 +96,9 @@ function setup() {
     hosts: vi.fn(async () => [
       { name: 'agent-work', state: 'offline', ssh: 'agent-work', sessions: 2 },
     ]),
+    projects: vi.fn(async (_refresh?: boolean, _host?: string) => [
+      { id: 'lab', name: 'Lab', root: '/home/u/lab' },
+    ]),
   }
   const link = {
     tools: () => [codex],
@@ -154,7 +157,7 @@ function setup() {
 }
 
 describe('session actions', () => {
-  it('registers its sixteen channels', () => {
+  it('registers its seventeen channels', () => {
     const { on, handle } = setup()
     expect([...on.keys()].sort()).toEqual([
       'widget:hub',
@@ -166,6 +169,7 @@ describe('session actions', () => {
     ])
     expect([...handle.keys()].sort()).toEqual([
       'hosts:list',
+      'hosts:projects',
       'project:list',
       'session:cancel-check-in',
       'session:check-in',
@@ -323,6 +327,24 @@ describe('session actions', () => {
     })
     tether.hosts.mockRejectedValueOnce(new Error('down'))
     await expect(handle.get('hosts:list')?.({})).resolves.toEqual({
+      status: 'unavailable',
+      items: [],
+    })
+  })
+
+  it("hosts:projects lists a host's projects, or says they are unavailable", async () => {
+    const { handle, tether } = setup()
+    await expect(handle.get('hosts:projects')?.({}, 'agent-work')).resolves.toEqual({
+      status: 'ready',
+      items: [{ id: 'lab', name: 'Lab', current: false }],
+    })
+    expect(tether.projects).toHaveBeenCalledWith(false, 'agent-work')
+    await expect(handle.get('hosts:projects')?.({}, '../x')).resolves.toEqual({
+      status: 'unavailable',
+      items: [],
+    })
+    tether.projects.mockRejectedValueOnce(new Error('host_unavailable'))
+    await expect(handle.get('hosts:projects')?.({}, 'agent-work')).resolves.toEqual({
       status: 'unavailable',
       items: [],
     })

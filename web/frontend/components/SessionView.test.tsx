@@ -84,6 +84,9 @@ const headerProps = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 
 const sizeHolderHooks = vi.hoisted(() => ({
   change: null as ((holder: string | null) => void) | null,
+  hostChange: null as
+    | ((away: { host: string; state: string } | null) => void)
+    | null,
   claimSize: vi.fn(),
 }))
 
@@ -96,11 +99,15 @@ vi.mock('@/components/Terminal', async () => {
         sessionMode,
         isVisible,
         onSizeHolderChange,
+        onHostStateChange,
       }: {
         sessionId: string
         sessionMode?: string
         isVisible?: boolean
         onSizeHolderChange?: (holder: string | null) => void
+        onHostStateChange?: (
+          away: { host: string; state: string } | null,
+        ) => void
       },
       ref,
     ) {
@@ -109,6 +116,7 @@ vi.mock('@/components/Terminal', async () => {
       }))
       terminalProps.push({ sessionId, sessionMode, isVisible })
       sizeHolderHooks.change = onSizeHolderChange ?? null
+      sizeHolderHooks.hostChange = onHostStateChange ?? null
       return <div data-testid={`terminal-${sessionId}`} />
     }),
   }
@@ -189,6 +197,27 @@ describe('SessionView', () => {
 
     act(() => sizeHolderHooks.change?.(null))
     expect(screen.queryByTestId('size-holder-notice')).toBeNull()
+  })
+
+  it("while the session's host is away, the bar says so instead of Live", () => {
+    const statuses = new Map([['session-1', 'connected' as const]])
+    renderView({ slots: [ownSlot('1')], terminalStatuses: statuses })
+    const status = () => headerProps[headerProps.length - 1]?.connectionStatus
+    expect(status()).toBe('connected')
+
+    act(() =>
+      sizeHolderHooks.hostChange?.({ host: 'agent-work', state: 'offline' }),
+    )
+    expect(status()).toBe('disconnected')
+    expect(screen.getByText('agent-work is offline')).toBeTruthy()
+
+    act(() =>
+      sizeHolderHooks.hostChange?.({ host: 'agent-work', state: 'connecting' }),
+    )
+    expect(status()).toBe('connecting')
+
+    act(() => sizeHolderHooks.hostChange?.(null))
+    expect(status()).toBe('connected')
   })
 
   it('shows only the active session, with every session in its switcher', () => {

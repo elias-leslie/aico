@@ -5,7 +5,11 @@ import { clsx } from 'clsx'
 import { Search, X } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import { CHAT_TOOL_SLUG, useAgentTools } from '@/lib/hooks/use-agent-tools'
-import { HOST_STATE_LABELS, useHosts } from '@/lib/hooks/use-hosts'
+import {
+  HOST_STATE_LABELS,
+  useHostProjects,
+  useHosts,
+} from '@/lib/hooks/use-hosts'
 import {
   type ProjectSetting,
   useProjectSettings,
@@ -50,7 +54,7 @@ export function NewSessionDialog({
   onStart,
   isMobile = false,
 }: NewSessionDialogProps) {
-  const { projects, isLoading, isError, refetch } = useProjectSettings()
+  const local = useProjectSettings()
   const { enabledTools, defaultTool } = useAgentTools()
   const [query, setQuery] = useState('')
   const [pickedProjectId, setPickedProjectId] = useState<string | null>(null)
@@ -65,18 +69,6 @@ export function NewSessionDialog({
     isError: hostsError,
   } = useHosts(isOpen)
 
-  const normalizedQuery = query.trim().toLowerCase()
-  const visibleProjects = useMemo(
-    () => projects.filter((p) => matchesProject(p, normalizedQuery)),
-    [projects, normalizedQuery],
-  )
-  const projectId =
-    pickedProjectId ??
-    (projects.some((p) => p.id === defaultProjectId)
-      ? defaultProjectId
-      : projects[0]?.id) ??
-    null
-  const project = projects.find((p) => p.id === projectId)
   const tool =
     kind === 'agent'
       ? (enabledTools.find((t) => t.slug === pickedToolSlug) ?? defaultTool)
@@ -87,6 +79,23 @@ export function NewSessionDialog({
     hostable && hosts.some((h) => h.name === pickedHost)
       ? (pickedHost ?? undefined)
       : undefined
+  // A session on another host starts in one of that host's projects.
+  const remote = useHostProjects(host)
+  const { projects, isLoading, isError, refetch } = host ? remote : local
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const visibleProjects = useMemo(
+    () => projects.filter((p) => matchesProject(p, normalizedQuery)),
+    [projects, normalizedQuery],
+  )
+  // A pick from another host's list falls back to this list's default.
+  const projectId =
+    (projects.some((p) => p.id === pickedProjectId) ? pickedProjectId : null) ??
+    (projects.some((p) => p.id === defaultProjectId)
+      ? defaultProjectId
+      : projects[0]?.id) ??
+    null
+  const project = projects.find((p) => p.id === projectId)
 
   const close = () => {
     setQuery('')
@@ -286,7 +295,9 @@ export function NewSessionDialog({
               <Note>Loading projects…</Note>
             ) : isError ? (
               <Note>
-                Couldn't load projects.{' '}
+                {host
+                  ? `${remote.error?.message || `Couldn’t load projects on ${host}`}.`
+                  : "Couldn't load projects."}{' '}
                 <button
                   type="button"
                   onClick={() => void refetch()}
@@ -297,7 +308,7 @@ export function NewSessionDialog({
                 </button>
               </Note>
             ) : projects.length === 0 ? (
-              <Note>No projects.</Note>
+              <Note>{host ? `No projects on ${host}.` : 'No projects.'}</Note>
             ) : visibleProjects.length === 0 ? (
               <Note>No project matches “{query.trim()}”.</Note>
             ) : (

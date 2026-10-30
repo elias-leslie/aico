@@ -61,6 +61,7 @@ interface SessionActionsDeps {
     | 'addWake'
     | 'cancelWake'
     | 'hosts'
+    | 'projects'
   >
   catalog: Pick<SessionCatalog, 'get' | 'upsert' | 'list'>
   link: {
@@ -345,6 +346,21 @@ export function createSessionActions(deps: SessionActionsDeps) {
     ipcMain.handle('hosts:list', async () => {
       try {
         const items = (await tether.hosts()).map((h) => ({ name: h.name, state: h.state }))
+        return { status: 'ready', items }
+      } catch {
+        return { status: 'unavailable', items: [] }
+      }
+    })
+    // A remote host's projects, for a session started there.
+    ipcMain.handle('hosts:projects', async (_event, host?: unknown) => {
+      if (typeof host !== 'string' || !HOST_NAME.test(host))
+        return { status: 'unavailable', items: [] }
+      try {
+        const items = (await tether.projects(false, host)).map((p) => ({
+          id: p.id,
+          name: p.name,
+          current: false,
+        }))
         return { status: 'ready', items }
       } catch {
         return { status: 'unavailable', items: [] }

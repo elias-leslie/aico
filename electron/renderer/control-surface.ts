@@ -84,6 +84,8 @@ let picker: {
 // The hub's remote hosts, read each time a workspace picker opens.
 let hostListing: Listing<HostChoice> | null = null
 let hostRead = 0
+// The chosen host's projects, read when the host is picked.
+let hostProjects: { host: string; listing: Listing<ProjectInfo> | null } | null = null
 
 /** Requery Tether's sessions whenever the "Open session" flyout appears. */
 export function refreshSessions(): Promise<{ status: 'ready' | 'empty' | 'unavailable' }> {
@@ -389,7 +391,10 @@ function populateNewProjects(slug: string, withBack: boolean): void {
   const same = picker?.slug === slug
   const instructions = same && picker ? picker.instructions : null
   const host = same && picker ? picker.host : null
-  if (!same) readHosts()
+  if (!same) {
+    readHosts()
+    hostProjects = null
+  }
   picker = { slug, withBack, instructions, host, view: 'workspaces' }
   submenuEl.innerHTML = ''
   if (withBack) {
@@ -408,11 +413,23 @@ function populateNewProjects(slug: string, withBack: boolean): void {
   // A chat runs on this computer; other tools can run on a remote host.
   if (!tool?.chat && hostListing?.items.length) submenuEl.append(hostRow(host))
   if (tool?.instructions) submenuEl.append(instructionsRow(instructions))
-  if (tool?.blankSlate) {
+  // Blank Slate is a folder on this computer.
+  if (tool?.blankSlate && !host) {
     // The main process's BLANK_SLATE_ID: a new empty workspace, not a project.
     submenuEl.append(
       newProjectRow(slug, { id: '__aico_blank_slate__', name: 'Blank Slate', current: false }),
     )
+  }
+  if (host) {
+    // A session on another host starts in one of that host's projects.
+    if (hostProjects?.host !== host) readHostProjects(host)
+    const listing = hostProjects?.listing
+    if (!listing) submenuEl.append(emptySubmenuRow(`Loading projects on ${host}…`))
+    else if (listing.status === 'unavailable')
+      submenuEl.append(emptySubmenuRow(`Couldn't load projects on ${host}`))
+    else if (!listing.items.length) submenuEl.append(emptySubmenuRow(`No projects on ${host}`))
+    else for (const p of listing.items) submenuEl.append(newProjectRow(slug, p))
+    return
   }
   if (catalogs.projects.length) {
     for (const p of catalogs.projects) submenuEl.append(newProjectRow(slug, p))
@@ -421,6 +438,19 @@ function populateNewProjects(slug: string, withBack: boolean): void {
     empty.textContent = 'No projects'
     submenuEl.append(empty)
   }
+}
+
+function readHostProjects(host: string): void {
+  hostProjects = { host, listing: null }
+  void window.aico.actions
+    .hostProjects(host)
+    .catch((): Listing<ProjectInfo> => ({ status: 'unavailable', items: [] }))
+    .then((listing) => {
+      if (hostProjects?.host !== host) return
+      hostProjects = { host, listing }
+      if (!submenuEl.hidden && picker?.view === 'workspaces' && picker.host === host)
+        backToWorkspaces()
+    })
 }
 
 // ---- host -------------------------------------------------------------------

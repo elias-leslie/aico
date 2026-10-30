@@ -132,6 +132,8 @@ export interface AicoApi {
     ): void
     /** The remote hosts a new session can run on ("This computer" is implied). */
     hosts(): Promise<Listing<HostChoice>>
+    /** A remote host's projects, for a session started there. */
+    hostProjects(host: string): Promise<Listing<{ id: string; name: string; current: boolean }>>
     instructionPrompts(): Promise<Listing<InstructionPrompt>>
     instructionRevisions(slug: string): Promise<Listing<InstructionRevision>>
     /** Enabled TUIs (slug + label + accent + SVG mark), in registry order, for the picker. */

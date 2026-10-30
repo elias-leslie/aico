@@ -30,6 +30,13 @@ const hostState = vi.hoisted(() => ({
   isLoading: false,
   isError: false,
 }))
+const hostProjects = vi.hoisted(() => ({
+  lists: {} as Record<
+    string,
+    Array<{ id: string; name: string; root_path: string | null }>
+  >,
+  failures: {} as Record<string, string>,
+}))
 vi.mock('@/lib/hooks/use-hosts', () => ({
   HOST_STATE_LABELS: {
     connected: '',
@@ -39,6 +46,16 @@ vi.mock('@/lib/hooks/use-hosts', () => ({
     identity_changed: 'changed',
   },
   useHosts: () => hostState,
+  useHostProjects: (host: string | undefined) => {
+    const failure = host ? hostProjects.failures[host] : undefined
+    return {
+      projects: (host && hostProjects.lists[host]) || [],
+      isLoading: false,
+      isError: Boolean(failure),
+      error: failure ? new Error(failure) : null,
+      refetch: vi.fn(),
+    }
+  },
 }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   CHAT_TOOL_SLUG: 'agent-hub',
@@ -68,6 +85,11 @@ describe('NewSessionDialog', () => {
     projectState.isError = false
     hostState.hosts = []
     hostState.isError = false
+    hostProjects.lists = {
+      'agent-work': [{ id: 'neri', name: 'Neri', root_path: '/home/u/neri' }],
+      lab: [{ id: 'neri', name: 'Neri', root_path: '/home/u/neri' }],
+    }
+    hostProjects.failures = {}
   })
 
   it('offers no host choice when Tether links to no host', () => {
@@ -94,10 +116,34 @@ describe('NewSessionDialog', () => {
     )
     expect(onStart).toHaveBeenCalledWith(
       'neri',
-      '/srv/neri',
+      '/home/u/neri',
       'claude-code',
       'agent-work',
     )
+  })
+
+  it("lists the chosen host's projects, and says why when it can't", () => {
+    hostState.hosts = [
+      { name: 'agent-work', state: 'connected' },
+      { name: 'lab', state: 'offline' },
+    ]
+    hostProjects.lists['agent-work'] = [
+      { id: 'tools', name: 'Tools', root_path: '/home/u/tools' },
+    ]
+    delete hostProjects.lists.lab
+    hostProjects.failures.lab = 'lab is offline (link down)'
+    renderDialog('aico')
+    fireEvent.click(screen.getByRole('button', { name: 'agent-work' }))
+    expect(screen.queryByRole('radio', { name: /Aico/ })).toBeNull()
+    expect(
+      screen.getByRole('button', {
+        name: 'Start Claude Code in Tools on agent-work',
+      }),
+    ).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /^lab/ }))
+    expect(screen.getByText(/lab is offline \(link down\)\./)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Start/ })).toBeDisabled()
   })
 
   it('keeps the dialog open with the reason when the host is away', async () => {

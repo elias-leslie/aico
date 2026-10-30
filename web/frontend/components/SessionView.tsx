@@ -207,7 +207,15 @@ export function SessionView({
           allSlots={sideList ? undefined : slots}
           onSwitchTo={sideList ? undefined : onSwitch}
           searchAlwaysOpen={sideList}
-          connectionStatus={chat ? undefined : status}
+          connectionStatus={
+            chat
+              ? undefined
+              : awayHere
+                ? awayHere.state === 'connecting'
+                  ? 'connecting'
+                  : 'disconnected'
+                : status
+          }
           onSearch={
             sessionId && !chat
               ? (query, options) =>
