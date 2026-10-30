@@ -9,8 +9,8 @@ import { HealthSheet } from './HealthSheet'
 type Variant = 'icon' | 'row'
 
 /** The Health entry: a square icon with a problem count (session list header
- * and rail) or a labelled row (session switcher). Its colour is Nightshift's
- * state; the tooltip says it in words. */
+ * and rail) or a short labelled row with the count (session switcher). Its
+ * colour is Nightshift's state; the tooltip says it in words. */
 export function HealthButton({
   onClick,
   variant = 'icon',
@@ -58,12 +58,13 @@ export function HealthButton({
       data-testid="health-btn"
       data-tone={pill.tone}
     >
-      <span
-        aria-hidden="true"
-        className="h-1.5 w-1.5 flex-none rounded-full"
-        style={{ backgroundColor: color }}
-      />
+      <Activity className="h-4 w-4" strokeWidth={1.7} style={{ color }} />
       {pill.label}
+      {pill.count > 0 && (
+        <span aria-hidden="true" style={{ color }}>
+          {pill.count}
+        </span>
+      )}
     </button>
   )
 }

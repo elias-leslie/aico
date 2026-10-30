@@ -123,7 +123,7 @@ export function unknownReason(
 
 export interface PillState {
   tone: Tone
-  /** Short: fits the session list header and the phone. */
+  /** Short, beside the count: fits the phone's session sheet. */
   label: string
   /** Problems to count on the icon (critical and warnings). */
   count: number
@@ -131,7 +131,7 @@ export interface PillState {
   title: string
 }
 
-/** The Health pill: Health OK, Health: 1 warning, Health unknown. */
+/** The Health entry: Health OK, Health with a problem count, Health unknown. */
 export function pillState(
   result: NightshiftViewResult | undefined,
   loadFailed: boolean,
@@ -158,14 +158,14 @@ export function pillState(
   if (crit > 0)
     return {
       tone: 'danger',
-      label: `Health: ${crit} critical`,
+      label: 'Health',
       count: crit + warn,
       title: `Health: ${crit} critical${warn ? `, ${plural(warn, 'warning')}` : ''}`,
     }
   if (warn > 0)
     return {
       tone: 'warn',
-      label: `Health: ${plural(warn, 'warning')}`,
+      label: 'Health',
       count: warn,
       title: `Health: ${plural(warn, 'warning')}`,
     }

@@ -38,7 +38,8 @@ describe('pillState', () => {
     expect(
       pillState(ok(view({ findings: [finding()] })), false, false),
     ).toMatchObject({
-      label: 'Health: 1 warning',
+      label: 'Health',
+      title: 'Health: 1 warning',
       tone: 'warn',
       count: 1,
     })
@@ -46,7 +47,7 @@ describe('pillState', () => {
       findings: [finding({ state: 'crit' }), finding(), finding()],
     })
     expect(pillState(ok(both), false, false)).toMatchObject({
-      label: 'Health: 1 critical',
+      label: 'Health',
       tone: 'danger',
       count: 3,
       title: 'Health: 1 critical, 2 warnings',
