@@ -1,6 +1,7 @@
 """Exact root create, with private owner fixtures only; no running panes."""
 
 import json
+import os
 import shutil
 import socketserver
 import threading
@@ -542,6 +543,25 @@ def test_pi_credential_check_accepts_every_source_pi_reads(monkeypatch, pi_home,
     (tmp_path / ".env.local").unlink()
     (pi_home / "models.json").write_text(json.dumps({"providers": {"opencode": {"baseUrl": "http://fixture"}}}))
     assert check("opencode/sample-model") is None
+
+
+def test_pi_credential_check_leaves_an_agent_hosts_shim_to_fetch_the_key(monkeypatch, pi_home, tmp_path):
+    shim = tmp_path / ".local/lib/agent-hub/cred-bin/pi"
+    shim.parent.mkdir(parents=True)
+    shim.write_text("#!/bin/sh\n")
+    shim.chmod(0o755)
+    assert admin.pi_provider_unavailable("opencode/sample-model") is not None
+    monkeypatch.setenv("PATH", f"{shim.parent}:{os.environ['PATH']}")
+    assert admin.pi_provider_unavailable("opencode/sample-model") is None
+
+
+def test_create_on_an_agent_host_refuses_another_host(monkeypatch, capsys):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: pytest.fail("owner contacted"))
+    monkeypatch.setenv("ST_AGENT_HOST", "agent-work")
+    with pytest.raises(SystemExit):
+        admin.main([*PI, "--host", "agent-work"])
+    assert ("--host works from the workstation only; on agent host agent-work, st aico create without --host "
+            "starts the session on this host") in capsys.readouterr().err
 
 
 def test_pi_credential_check_launches_when_pi_cannot_be_asked(monkeypatch, pi_home, tmp_path):
