@@ -27,6 +27,9 @@ export interface Notice {
 /** Runs a command, optionally feeding stdin; rejects on a non-zero exit, with `code` on the error. */
 export type RunCommand = (argv: string[], timeoutMs: number, input?: string) => Promise<string>
 
+/** What notices need of a runner; any result is fine. */
+export type RunNotice = (argv: string[], timeoutMs: number, input?: string) => Promise<unknown>
+
 export const runCommand: RunCommand = (argv, timeoutMs, input) =>
   new Promise((resolve, reject) => {
     const child = execFile(argv[0], argv.slice(1), { timeout: timeoutMs }, (error, stdout) =>
@@ -41,7 +44,7 @@ export const runCommand: RunCommand = (argv, timeoutMs, input) =>
 export const PUSH_ARGV = ['nightshift', 'push', '--json']
 
 /** Sends the notice; logs a failure, loudly for a contract refusal, and never throws. */
-export async function sendNotice(run: RunCommand, notice: Notice): Promise<void> {
+export async function sendNotice(run: RunNotice, notice: Notice): Promise<void> {
   try {
     await run(PUSH_ARGV, PUSH_TIMEOUT_MS, JSON.stringify(notice))
   } catch (error) {
@@ -52,7 +55,7 @@ export async function sendNotice(run: RunCommand, notice: Notice): Promise<void>
 }
 
 /** Tells Nightshift the condition behind `key` is over. */
-export async function resolveNotice(run: RunCommand, key: string, text: string): Promise<void> {
+export async function resolveNotice(run: RunNotice, key: string, text: string): Promise<void> {
   try {
     await run(['nightshift', 'resolve', key, '--text', text], PUSH_TIMEOUT_MS)
   } catch (error) {

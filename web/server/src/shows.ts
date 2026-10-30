@@ -7,7 +7,7 @@
 
 import { isAbsolute } from 'node:path'
 import type { Router } from './http'
-import { type Notice, type RunCommand, runCommand, sendNotice } from './notice'
+import { type Notice, type RunNotice, runCommand, sendNotice } from './notice'
 
 /** Ids pushed already, so a replayed event never pushes twice. */
 const PUSHED_KEPT = 500
@@ -117,7 +117,7 @@ export class Shows {
     private readonly options: {
       tether: ShareSource
       publicHost: string | null
-      run?: RunCommand
+      run?: RunNotice
     },
   ) {}
 
