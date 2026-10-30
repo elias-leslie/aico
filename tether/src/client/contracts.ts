@@ -121,7 +121,22 @@ export interface HostInfo {
   listedAt: number | null
   sessions: number
   error: string | null
+  /** A create bringing this host up (powering on, connecting, checking its
+   * services), or why that failed; null otherwise. Also on `peer.state`. */
+  wake: HostWake | null
 }
+
+export interface HostWake {
+  state: 'starting' | 'failed'
+  reason: 'host_starting'
+  step: 'powering_on' | 'connecting' | 'checking_services'
+  since: number
+  error: string | null
+}
+
+/** A create on a host may first power it on and wait for it (the host's
+ * `wakeTimeoutSec`, 240 s by default) before the host's own create runs. */
+export const HOST_CREATE_TIMEOUT_MS = 420_000
 
 /** What Tether holds and last saw of an Agent Hub session. */
 export interface AgentHubInfo {

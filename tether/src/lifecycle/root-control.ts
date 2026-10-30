@@ -166,6 +166,8 @@ export interface RootControlOperations {
   adopt?(widgetId: string, lineage: RootLineage): void
   /** Tether: a create naming a remote `host`, answered by the hub. */
   remote?(body: Record<string, unknown>, response: ServerResponse): Promise<void>
+  /** Tether: the roots on remote hosts for this list query, tagged with `host`. */
+  remoteRoots?(search: string): Promise<Record<string, unknown>[]>
   /** Tether: `POST /v1/roots/:requestId/end`, the shared session End. */
   end?(widgetId: string, generation: string): Promise<RetirementResult | { status: 'busy' }>
   /** Tether: the session whose pending or held crash recovery will resume
@@ -802,17 +804,21 @@ export function createRootHandler(
           json(response, 400, { error: 'invalid_query' })
           return
         }
-        json(response, 200, {
-          owner: origin ?? 'aico',
-          available: true,
-          directedDelivery,
-          terminalAdmin,
-          roots: await Promise.all(
+        const [local, remote] = await Promise.all([
+          Promise.all(
             listRootRequests()
               .filter((root) => origin === null || root.origin === origin)
               .filter((root) => ended !== '0' || getWidget(root.widgetId) !== undefined)
               .map(describe),
           ),
+          operations.remoteRoots?.(query.toString()) ?? [],
+        ])
+        json(response, 200, {
+          owner: origin ?? 'aico',
+          available: true,
+          directedDelivery,
+          terminalAdmin,
+          roots: [...local, ...remote],
         })
         return
       }

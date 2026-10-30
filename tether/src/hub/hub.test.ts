@@ -42,6 +42,7 @@ class FakePeer {
   failSessions = false
   readonly streams = new Set<ServerResponse>()
   gui: ServerResponse | null = null
+  roots: Record<string, unknown>[] = []
   guiResults: { id: string; body: unknown }[] = []
 
   constructor(readonly socket: string) {}
@@ -110,6 +111,8 @@ class FakePeer {
       this.sessions.push(created)
       return sendJson(res, 201, created)
     }
+    if (url.startsWith('/v1/roots?') && req.method === 'GET')
+      return sendJson(res, 200, { owner: 'aico', roots: this.roots })
     if (url === '/v1/roots' && req.method === 'POST')
       return sendJson(res, 201, { requestId: 'req-1', widgetId: 'dddd0004' })
     const one = /^\/v1\/sessions\/([0-9a-f]{8})$/.exec(url)
@@ -150,6 +153,7 @@ describe('hub', () => {
         local.has(id) ? { coordinatorId: id, coordinatorColor: '#6fa8ff' } : null,
       log: () => {},
       random: () => 0,
+      gate: { kick: () => {}, linkGraceMs: 200 },
       ...overrides,
     })
   }
@@ -283,6 +287,7 @@ describe('hub', () => {
     })
     expect((await call('POST', '/v1/sessions', { host: 'vm', tool: 'shell' })).body).toMatchObject({
       error: 'host_unavailable',
+      reason: 'vm is not reachable and has no wake command',
     })
     // A restarted hub still has them.
     hub.close()
@@ -410,5 +415,152 @@ describe('hub', () => {
     const merged = hub.mergeRuns({ status: 'ok', error: null, updatedAt: 2, items: [] })
     expect(merged.items).toEqual([{ runId: 'run-1', host: 'vm' }])
     expect((await call('POST', '/v1/runs/run-1/cancel')).body).toMatchObject({ host: 'vm' })
+  })
+
+  describe('wake and readiness gate', () => {
+    let runs: string[][]
+    let health: Record<string, number>
+    /** Moves the gate's clock past its bounds without waiting them out. */
+    let skew = 0
+
+    function gatedHub(entry: Record<string, unknown>): Hub {
+      writeFileSync(
+        join(dir, 'hosts.json'),
+        JSON.stringify([
+          { name: 'vm', ssh: 'vm', socket: '/run/user/1000/tether/default/control.sock', ...entry },
+        ]),
+      )
+      return makeHub({
+        gate: {
+          run: async (argv) => {
+            runs.push(argv)
+            if (argv[0] === 'wake') {
+              await peer.start()
+              return { code: 0, output: '' }
+            }
+            if (argv[0] === 'wake-fails') return { code: 1, output: 'ERROR VM 200 is locked' }
+            const url = argv[argv.length - 1] ?? ''
+            const code = health[url] ?? 0
+            return { code, output: code ? 'curl: (7) Failed to connect' : '' }
+          },
+          kick: () => {},
+          now: () => Date.now() + skew,
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, Math.min(ms, 50))),
+          linkGraceMs: 300,
+        },
+      })
+    }
+
+    beforeEach(() => {
+      runs = []
+      health = {}
+      skew = 0
+    })
+
+    async function restart(entry: Record<string, unknown>): Promise<void> {
+      hub.close()
+      hub = gatedHub(entry)
+      hub.start()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
+    }
+
+    it('wakes a powered-off host once for concurrent creates, then creates there', async () => {
+      await restart({ wake: ['wake'], health: ['http://127.0.0.1:8003/health'] })
+      await peer.stop()
+      await vi.waitFor(() => expect(state()).toBe('offline'))
+      events = []
+      const [first, second] = await Promise.all([
+        call('POST', '/v1/sessions', { host: 'vm', tool: 'shell', origin: 'aico' }),
+        call('POST', '/v1/roots', { host: 'vm', requestId: 'req-9' }),
+      ])
+      expect(first).toMatchObject({ status: 201, body: { id: 'cccc0003', host: 'vm' } })
+      expect(second).toMatchObject({ status: 201, body: { requestId: 'req-1', host: 'vm' } })
+      expect(runs.filter((argv) => argv[0] === 'wake')).toHaveLength(1)
+      // Health ran on the host through the link's ControlMaster.
+      const check = runs.find((argv) => argv.includes('curl'))
+      expect(check?.slice(0, 9)).toEqual([
+        '/usr/bin/ssh',
+        '-F',
+        '/dev/null',
+        '-T',
+        '-o',
+        'BatchMode=yes',
+        '-S',
+        join(dir, 'tether', 'peers', 'vm', 'ssh.ctl'),
+        'vm',
+      ])
+      const steps = events
+        .filter((event) => event.type === 'peer.state')
+        .map((event) => (event.data.wake as { step?: string } | null)?.step ?? null)
+      expect(steps).toEqual(
+        expect.arrayContaining(['powering_on', 'connecting', 'checking_services']),
+      )
+      expect(steps[steps.length - 1]).toBeNull()
+      expect(hub.hosts()[0]?.wake).toBeNull()
+    })
+
+    it('answers host_unavailable with the real reason when a service does not answer', async () => {
+      await restart({ health: ['http://127.0.0.1:8003/health'] })
+      health['http://127.0.0.1:8003/health'] = 7
+      const pending = call('POST', '/v1/sessions', { host: 'vm', tool: 'shell', origin: 'aico' })
+      await vi.waitFor(() => expect(runs.length).toBeGreaterThan(0))
+      skew = 60_000
+      const answer = await pending
+      expect(answer).toEqual({
+        status: 409,
+        body: {
+          error: 'host_unavailable',
+          host: 'vm',
+          state: 'connected',
+          reason:
+            'vm is up but http://127.0.0.1:8003/health does not answer there (curl: (7) Failed to connect)',
+        },
+      })
+      expect(hub.hosts()[0]?.wake).toMatchObject({ state: 'failed', step: 'checking_services' })
+      expect(peer.requests.some((r) => r.method === 'POST')).toBe(false)
+    })
+
+    it('names the wake failure when the host never comes up', async () => {
+      await restart({ wake: ['wake-fails'], wakeTimeoutSec: 10 })
+      await peer.stop()
+      await vi.waitFor(() => expect(state()).toBe('offline'))
+      const pending = call('POST', '/v1/roots', { host: 'vm', requestId: 'req-3' })
+      await vi.waitFor(() => expect(runs.length).toBe(1))
+      skew = 11_000
+      const answer = await pending
+      expect(answer.status).toBe(409)
+      expect(answer.body).toMatchObject({
+        error: 'host_unavailable',
+        reason: 'vm did not come up within 10 s (wake: ERROR VM 200 is locked)',
+      })
+    })
+
+    it('gives a host without a wake command a short grace, then refuses', async () => {
+      await restart({})
+      await peer.stop()
+      await vi.waitFor(() => expect(state()).toBe('offline'))
+      const answer = await call('POST', '/v1/sessions', { host: 'vm', tool: 'shell' })
+      expect(answer.body).toMatchObject({
+        error: 'host_unavailable',
+        reason: 'vm is not reachable and has no wake command',
+      })
+    })
+  })
+
+  it('lists the peer roots tagged with host, and keeps them while it is down', async () => {
+    peer.roots = [{ requestId: 'root-z', hostIdentity: 'aaaa0001', status: 'running' }]
+    expect(await hub.roots('ended=0')).toEqual([
+      { requestId: 'root-z', hostIdentity: 'aaaa0001', status: 'running', host: 'vm' },
+    ])
+    expect(peer.requests.some((r) => r.url === '/v1/roots?ended=0')).toBe(true)
+    expect((await call('GET', '/v1/roots/root-z')).body).toMatchObject({ host: 'vm' })
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('offline'))
+    expect(await hub.roots('ended=0')).toEqual([
+      expect.objectContaining({
+        requestId: 'root-z',
+        peer: expect.objectContaining({ state: 'offline' }),
+      }),
+    ])
   })
 })

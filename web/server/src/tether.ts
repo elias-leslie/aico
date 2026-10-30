@@ -2,6 +2,7 @@
 // how Tether's refusals read in the app's API.
 
 import {
+  HOST_CREATE_TIMEOUT_MS,
   type SessionDescriptor,
   type TetherClient,
   TetherError,
@@ -41,7 +42,10 @@ export function createSession(
   if (input.projectRoot) body.projectRoot = input.projectRoot
   if (input.name) body.name = input.name
   return tether
-    .request<SessionDescriptor>('POST', '/v1/sessions', body, { timeoutMs: 60_000 })
+    .request<SessionDescriptor>('POST', '/v1/sessions', body, {
+      // A host that is off is powered on and waited for first.
+      timeoutMs: input.host ? HOST_CREATE_TIMEOUT_MS : 60_000,
+    })
     .then((answer) => answer.body)
 }
 

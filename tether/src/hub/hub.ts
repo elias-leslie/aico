@@ -20,6 +20,7 @@ import {
   type RunsLike,
 } from './peer'
 import { forwardRequest, PeerUnavailable, peerRequest } from './peer-http'
+import { defaultGateRuntime, type GateRuntime, readyHost } from './wake'
 
 export const LIST_TIMEOUT_MS = 1_500
 export const QUERY_TIMEOUT_MS = 10_000
@@ -50,6 +51,8 @@ export interface HubDeps {
   log?(message: string): void
   now?(): number
   random?(): number
+  /** How a create wakes a host and checks it is ready (tests replace it). */
+  gate?: Partial<GateRuntime>
 }
 
 export interface Lineage {
@@ -92,12 +95,16 @@ export class Hub {
   private readonly snapshots: Record<string, PeerSnapshot>
   private readonly log: (message: string) => void
   private readonly now: () => number
+  private readonly gate: GateRuntime
+  /** One wake and readiness check per host, shared by concurrent creates. */
+  private readonly gates = new Map<string, Promise<void>>()
 
   constructor(private readonly deps: HubDeps) {
     this.file = hostsFilePath(deps.env)
     this.log = deps.log ?? ((message) => console.log(`[tether:hub] ${message}`))
     this.now = deps.now ?? Date.now
     this.snapshots = readJson(deps.settings.get(SNAPSHOTS_KEY), {})
+    this.gate = { ...defaultGateRuntime, ...deps.gate }
   }
 
   start(): void {
@@ -217,6 +224,7 @@ export class Hub {
       listedAt: peer.listedAt,
       sessions: peer.count(),
       error: peer.error,
+      wake: peer.wake,
     }))
   }
 
@@ -255,13 +263,54 @@ export class Hub {
     return merged
   }
 
-  private requirePeer(name: unknown): Peer {
+  /** Every peer's `GET /v1/roots` items for this query, tagged with `host`. */
+  async roots(search: string): Promise<Record<string, unknown>[]> {
+    const lists = await Promise.all(
+      [...this.peers.values()].map((peer) => peer.listRoots(search, LIST_TIMEOUT_MS)),
+    )
+    return lists.flat()
+  }
+
+  private knownPeer(name: unknown): Peer {
     if (typeof name !== 'string' || !name)
       throw new HttpError(400, 'invalid_body', { field: 'host' })
     const peer = this.peers.get(name)
     if (!peer) throw new HttpError(400, 'unknown_host', { host: name })
+    return peer
+  }
+
+  private requirePeer(name: unknown): Peer {
+    const peer = this.knownPeer(name)
     if (!peer.live) throw unavailable(peer)
     return peer
+  }
+
+  /** Power a host on and wait until it is ready, as a create would (the
+   * Hosts panel's power control). Rejects with `409 host_unavailable`. */
+  async wakeHost(name: string): Promise<void> {
+    const peer = this.knownPeer(name)
+    await this.ready(peer)
+    if (!peer.live) throw unavailable(peer)
+  }
+
+  /** The registry entry of a host this hub knows, or null. */
+  hostEntry(name: string): HostEntry | null {
+    return this.peers.get(name)?.entry ?? null
+  }
+
+  /** Wake `peer` if it is down and wait until a create can go there; one
+   * gate per host, shared by every create that arrives meanwhile. */
+  private ready(peer: Peer): Promise<void> {
+    const running = this.gates.get(peer.name)
+    if (running) return running
+    if (peer.live && peer.entry.health.length === 0) return Promise.resolve()
+    const gate = readyHost(peer, this.gate, (progress) => {
+      if (progress?.state === 'failed') this.log(`${peer.name}: start failed: ${progress.error}`)
+      else if (progress) this.log(`${peer.name}: starting (${progress.step})`)
+      peer.setWake(progress)
+    }).finally(() => this.gates.delete(peer.name))
+    this.gates.set(peer.name, gate)
+    return gate
   }
 
   private ownerOf(kind: string, id: string): Peer | null {
@@ -340,14 +389,17 @@ export class Hub {
     return true
   }
 
-  /** `POST /v1/sessions` or `POST /v1/roots` with `host`: forwarded to that
-   * peer without `host` (and with lineage from a local launcher). */
+  /** `POST /v1/sessions` or `POST /v1/roots` with `host`: the host is woken
+   * and checked ready if needed, then the create is forwarded to it without
+   * `host` (and with lineage from a local launcher). */
   async create(
     res: ServerResponse,
     path: '/v1/sessions' | '/v1/roots',
     body: Record<string, unknown>,
   ): Promise<void> {
-    const peer = this.requirePeer(body.host)
+    const peer = this.knownPeer(body.host)
+    await this.ready(peer)
+    if (!peer.live) throw unavailable(peer)
     const { host: _host, ...forwarded } = body
     if (path === '/v1/roots' && typeof forwarded.launchedBy === 'string') {
       const launcher = forwarded.launchedBy

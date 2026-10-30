@@ -16,8 +16,15 @@ export interface HostEntry {
   socket: string
   /** Workstation ports exposed to the host through `-R` (loopback both ends). */
   forwards: number[]
-  /** The command that powers the host on (phase 2; never run by the link). */
+  /** The command that powers the host on: run by a create, never by the link. */
   wake: string[] | null
+  /** The command that powers the host off (the Hosts panel's power control). */
+  sleep: string[] | null
+  /** URLs a create checks on the host before it is sent there (the forwarded
+   * Agent Hub and SummitFlow health routes), e.g. `http://127.0.0.1:8003/health`. */
+  health: string[]
+  /** How long a create waits for the host to come up and answer. */
+  wakeTimeoutSec: number
   /** The remote Tether's state directory, when it is not `~/.local/state/tether`. */
   stateDir: string | null
 }
@@ -31,7 +38,20 @@ export interface HostsLoad {
 const NAME = /^[a-z0-9][a-z0-9-]{0,31}$/
 const ALIAS = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/
-const FIELDS = new Set(['name', 'ssh', 'socket', 'forwards', 'wake', 'stateDir'])
+const FIELDS = new Set([
+  'name',
+  'ssh',
+  'socket',
+  'forwards',
+  'wake',
+  'sleep',
+  'health',
+  'wakeTimeoutSec',
+  'stateDir',
+])
+/** A loopback URL on the host: safe to pass through the remote shell unquoted. */
+const HEALTH_URL = /^http:\/\/127\.0\.0\.1:\d{1,5}(\/[A-Za-z0-9._~/-]*)?$/
+export const DEFAULT_WAKE_TIMEOUT_SEC = 240
 /** sockaddr_un's sun_path limit, less the terminating NUL. */
 const MAX_SOCKET_BYTES = 107
 
@@ -58,6 +78,18 @@ function port(value: unknown): number | null {
   return typeof n === 'number' && Number.isSafeInteger(n) && n >= 1 && n <= 65_535 ? n : null
 }
 
+/** An optional argv list: null when absent, false when malformed. */
+function argv(value: unknown): string[] | null | false {
+  if (value === undefined || value === null) return null
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.some((arg) => typeof arg !== 'string' || !arg || arg.includes('\0'))
+  )
+    return false
+  return value as string[]
+}
+
 /** One entry, or why it is not usable. */
 function parseEntry(value: unknown, index: number): HostEntry | string {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -80,22 +112,32 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
     if (ports.some((p) => p === null)) return `${name}: forwards must be ports 1-65535`
     forwards = [...new Set(ports as number[])]
   }
-  let wake: string[] | null = null
-  if (raw.wake !== undefined && raw.wake !== null) {
+  const wake = argv(raw.wake)
+  if (wake === false) return `${name}: wake must be a non-empty argv list`
+  const sleep = argv(raw.sleep)
+  if (sleep === false) return `${name}: sleep must be a non-empty argv list`
+  let health: string[] = []
+  if (raw.health !== undefined) {
     if (
-      !Array.isArray(raw.wake) ||
-      raw.wake.length === 0 ||
-      raw.wake.some((arg) => typeof arg !== 'string' || !arg || arg.includes('\0'))
+      !Array.isArray(raw.health) ||
+      raw.health.some((url) => typeof url !== 'string' || !HEALTH_URL.test(url))
     )
-      return `${name}: wake must be a non-empty argv list`
-    wake = raw.wake as string[]
+      return `${name}: health must be a list of http://127.0.0.1:<port>/<path> URLs`
+    health = [...new Set(raw.health as string[])]
+  }
+  let wakeTimeoutSec = DEFAULT_WAKE_TIMEOUT_SEC
+  if (raw.wakeTimeoutSec !== undefined) {
+    const value = raw.wakeTimeoutSec
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 10 || value > 1_800)
+      return `${name}: wakeTimeoutSec must be whole seconds, 10-1800`
+    wakeTimeoutSec = value
   }
   let stateDir: string | null = null
   if (raw.stateDir !== undefined && raw.stateDir !== null) {
     stateDir = absolutePath(raw.stateDir)
     if (!stateDir) return `${name}: stateDir must be an absolute path`
   }
-  return { name, ssh, socket, forwards, wake, stateDir }
+  return { name, ssh, socket, forwards, wake, sleep, health, wakeTimeoutSec, stateDir }
 }
 
 /** Validate the registry's JSON text. Bad entries are skipped with a reason;

@@ -9,6 +9,7 @@ import type { EventType } from '../events'
 import type { GuiCommand, GuiOutcome } from '../gui-channel'
 import type { HostEntry } from './hosts'
 import { PeerUnavailable, peerRequest, peerStream } from './peer-http'
+import type { WakeProgress } from './wake'
 
 export type HostState = 'connected' | 'connecting' | 'offline' | 'powered_off' | 'identity_changed'
 
@@ -95,8 +96,12 @@ export class Peer {
   error: string | null = null
   /** The identity that answered last, kept while it differs from the trusted one. */
   pendingIdentity: PeerIdentity | null = null
+  /** What a create is waiting for while it brings this host up, or why it failed. */
+  wake: WakeProgress | null = null
   private readonly sessions = new Map<string, Descriptor>()
   private readonly roots = new Set<string>()
+  /** The last root list per query, kept for while the link is down. */
+  private readonly rootLists = new Map<string, Record<string, unknown>[]>()
   private runsAnswer: RunsLike | null = null
   private failures = 0
   private openUntil = 0
@@ -200,6 +205,43 @@ export class Peer {
     this.roots.add(requestId)
   }
 
+  /** Report a create's progress bringing this host up (null when it is done). */
+  setWake(progress: WakeProgress | null): void {
+    this.wake = progress
+    this.deps.publish('peer.state', {
+      host: this.name,
+      state: this.state,
+      since: this.since,
+      wake: progress,
+    })
+  }
+
+  /** The peer's `GET /v1/roots` items for this query, tagged; its last answer
+   * (marked) while the link is down or the read failed. */
+  async listRoots(search: string, timeoutMs: number): Promise<Record<string, unknown>[]> {
+    if (this.live) {
+      try {
+        const path = `/v1/roots${search ? `?${search}` : ''}`
+        const answer = await peerRequest(this.socket, 'GET', path, undefined, timeoutMs)
+        const roots = record(answer.body)?.roots
+        if (answer.status === 200 && Array.isArray(roots)) {
+          const items = roots.filter((item): item is Record<string, unknown> => !!record(item))
+          for (const item of items)
+            if (typeof item.requestId === 'string') this.roots.add(item.requestId)
+          this.rootLists.set(search, items)
+        }
+      } catch {
+        // Its last list, marked below.
+      }
+    }
+    const mark = this.mark()
+    return (this.rootLists.get(search) ?? []).map((item) => ({
+      ...item,
+      host: this.name,
+      ...(mark ? { peer: mark } : {}),
+    }))
+  }
+
   /** A fresh list, through the circuit breaker; the cache when the peer is
    * down, the circuit is open, or this read failed. */
   async list(timeoutMs: number): Promise<Descriptor[]> {
@@ -253,7 +295,9 @@ export class Peer {
     this.state = state
     this.since = this.deps.now()
     this.deps.log(`${this.name}: ${state}${error ? ` (${error})` : ''}`)
-    this.deps.publish('peer.state', { host: this.name, state, since: this.since })
+    // A failed start stays shown until the host is back.
+    if (state === 'connected' && this.wake?.state === 'failed') this.wake = null
+    this.deps.publish('peer.state', { host: this.name, state, since: this.since, wake: this.wake })
     // Clients upsert these, so every window learns its host went away.
     if (wasLive) for (const item of this.descriptors()) this.publishSession(item)
   }

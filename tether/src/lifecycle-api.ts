@@ -582,6 +582,7 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
         sendError(response, error)
       }
     },
+    remoteRoots: (search) => context.hub?.roots(search) ?? Promise.resolve([]),
     validate: (request) => {
       if (request.tool === AGENT_HUB_TOOL) {
         if (isHubBlankSlateRoot(request.projectRoot)) ensureBlankSlateWorkspace(request.projectRoot)

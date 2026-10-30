@@ -11,6 +11,7 @@ const VALID = {
   socket: '/run/user/1000/tether/default/control.sock',
   forwards: ['8001', 8003],
   wake: ['st', 'vm', 'start', '200'],
+  health: ['http://127.0.0.1:8001/health', 'http://127.0.0.1:8003/health'],
 }
 
 describe('hosts registry', () => {
@@ -28,6 +29,9 @@ describe('hosts registry', () => {
           socket: '/run/user/1000/tether/default/control.sock',
           forwards: [8001, 8003],
           wake: ['st', 'vm', 'start', '200'],
+          sleep: null,
+          health: ['http://127.0.0.1:8001/health', 'http://127.0.0.1:8003/health'],
+          wakeTimeoutSec: 240,
           stateDir: null,
         },
       ],
@@ -53,7 +57,11 @@ describe('hosts registry', () => {
     [{ ...VALID, forwards: ['80a'] }, 'forwards must be ports'],
     [{ ...VALID, forwards: [70_000] }, 'forwards must be ports'],
     [{ ...VALID, wake: [] }, 'wake must be a non-empty argv list'],
+    [{ ...VALID, sleep: ['st', ''] }, 'sleep must be a non-empty argv list'],
     [{ ...VALID, stateDir: 'state' }, 'stateDir must be an absolute path'],
+    [{ ...VALID, health: ['http://10.0.0.5:8001/health'] }, 'health must be a list'],
+    [{ ...VALID, health: ['http://127.0.0.1:8001/$(id)'] }, 'health must be a list'],
+    [{ ...VALID, wakeTimeoutSec: 5 }, 'wakeTimeoutSec must be'],
     [{ ...VALID, password: 'x' }, 'unknown fields password'],
   ])('skips an invalid entry with its reason (%#)', (entry, reason) => {
     const { hosts, errors } = parseHosts(JSON.stringify([entry]))

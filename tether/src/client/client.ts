@@ -14,6 +14,7 @@ import {
   type ContextHook,
   type GuiCommand,
   type GuiVerdict,
+  HOST_CREATE_TIMEOUT_MS,
   type HostInfo,
   parseAttachAnswer,
   parseContextHook,
@@ -176,7 +177,8 @@ export class TetherClient {
     /** A remote host from `hosts()`; omitted for this computer. */
     host?: string
   }): Promise<SessionDescriptor> {
-    return this.json('POST', '/v1/sessions', { ...input, origin: 'aico' }, { timeoutMs: 60_000 })
+    const timeoutMs = input.host ? HOST_CREATE_TIMEOUT_MS : 60_000
+    return this.json('POST', '/v1/sessions', { ...input, origin: 'aico' }, { timeoutMs })
   }
 
   rename(id: string, generation: string, name: string | null): Promise<SessionDescriptor> {
