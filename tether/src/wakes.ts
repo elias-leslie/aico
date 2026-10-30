@@ -416,8 +416,9 @@ function ruledInputEmpty(texts: readonly string[]): boolean {
 export interface WakeOperations {
   now(): number
   policy(): WakePolicy
-  /** The session is running an agent that is idle right now. */
-  idle(sessionId: string): Promise<boolean>
+  /** Why the session's agent cannot take a check-in right now (not running, not
+   * idle), or null when it is running and idle. */
+  busy(sessionId: string): Promise<string | null>
   /** The agent's input line holds no draft. */
   inputEmpty(sessionId: string): Promise<boolean>
   /** When an attached client last sent a key (ms), or null with none attached. */
@@ -454,6 +455,8 @@ export class WakeScheduler {
   private readonly reopened = new Set<string>()
   /** Kept wakes waiting out a failed relaunch. */
   private readonly retryAt = new Map<string, number>()
+  /** Why each session's due wakes are not delivered yet, and since when. */
+  private readonly held = new Map<string, { reason: string; since: number }>()
 
   constructor(
     private readonly store: WakeStore,
@@ -471,6 +474,11 @@ export class WakeScheduler {
     if (this.recheck) clearInterval(this.recheck)
     this.timer = null
     this.recheck = null
+  }
+
+  /** Why the session's due wakes wait, or null when none waits. */
+  heldReason(sessionId: string): string | null {
+    return this.held.get(sessionId)?.reason ?? null
   }
 
   /** Something changed (a wake, an agent state): look again soon. */
@@ -535,6 +543,7 @@ export class WakeScheduler {
         kept.set(wake.endedSession.id, [...(kept.get(wake.endedSession.id) ?? []), wake])
     }
     for (const [sessionId, wakes] of live) await this.deliverLive(sessionId, wakes)
+    for (const sessionId of this.held.keys()) if (!live.has(sessionId)) this.held.delete(sessionId)
     for (const wakes of kept.values()) await this.relaunchKept(wakes)
     for (const id of this.reopened) if (!this.store.get(id)) this.reopened.delete(id)
   }
@@ -547,11 +556,11 @@ export class WakeScheduler {
       // Now due: the apps word it as waiting rather than as a time ahead.
       this.ops.changed(sessionId)
     }
-    if (!(await this.ops.idle(sessionId))) return
-    const quietMs = this.ops.policy().quietSeconds * 1000
-    const lastKey = await this.ops.lastKeyAt(sessionId)
-    if (lastKey !== null && this.ops.now() - lastKey < quietMs) return
-    if (!(await this.ops.inputEmpty(sessionId))) return
+    const reason = await this.gate(sessionId)
+    if (reason) {
+      this.hold(sessionId, reason)
+      return
+    }
     // Re-read: a wake cancelled meanwhile must not go out.
     const current = this.store.forSession(sessionId).filter((wake) => wake.dueAt <= this.ops.now())
     if (!current.length) return
@@ -566,7 +575,36 @@ export class WakeScheduler {
       if (!delivered) for (const wake of current) this.store.restore(wake)
       this.ops.changed(sessionId)
     }
-    if (delivered) this.ops.log(`delivered ${current.length} check-in(s) to session=${sessionId}`)
+    if (!delivered) {
+      this.hold(sessionId, 'the paste did not go through')
+      return
+    }
+    const held = this.held.get(sessionId)
+    this.held.delete(sessionId)
+    const waited = held
+      ? ` after waiting ${Math.round((this.ops.now() - held.since) / 60_000)} min (last: ${held.reason})`
+      : ''
+    this.ops.log(`delivered ${current.length} check-in(s) to session=${sessionId}${waited}`)
+  }
+
+  /** The first gate a due wake fails, or null when it may go out now. */
+  private async gate(sessionId: string): Promise<string | null> {
+    const busy = await this.ops.busy(sessionId)
+    if (busy) return busy
+    const quietSeconds = this.ops.policy().quietSeconds
+    const lastKey = await this.ops.lastKeyAt(sessionId)
+    if (lastKey !== null && this.ops.now() - lastKey < quietSeconds * 1000)
+      return `someone typed in the last ${quietSeconds}s`
+    if (!(await this.ops.inputEmpty(sessionId))) return 'the input line holds a draft'
+    return null
+  }
+
+  /** Log each new reason a session's due wakes wait, once. */
+  private hold(sessionId: string, reason: string): void {
+    const before = this.held.get(sessionId)
+    if (before?.reason === reason) return
+    this.held.set(sessionId, { reason, since: before?.since ?? this.ops.now() })
+    this.ops.log(`check-in for session=${sessionId} waits: ${reason}`)
   }
 
   private async relaunchKept(wakes: Wake[]): Promise<void> {

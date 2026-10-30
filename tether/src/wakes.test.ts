@@ -261,12 +261,13 @@ describe('wake scheduler', () => {
       reopened: [] as string[],
       relaunched: [] as string[],
       changed: [] as (string | null)[],
+      lines: [] as string[],
     }
     const state = { idle: true, empty: true, lastKey: null as number | null, deliver: true }
     const ops: WakeOperations = {
       now: () => clock.now,
       policy: () => DEFAULT_WAKE_POLICY,
-      idle: async () => state.idle,
+      busy: async () => (state.idle ? null : 'the agent is working (claude-status)'),
       inputEmpty: async () => state.empty,
       lastKeyAt: async () => state.lastKey,
       deliver: async (_id, text) => {
@@ -280,7 +281,7 @@ describe('wake scheduler', () => {
         return { status: 'started', id: 'ffff0000' }
       },
       changed: (id) => log.changed.push(id),
-      log: () => {},
+      log: (line) => log.lines.push(line),
       ...overrides,
     }
     const scheduler = new WakeScheduler(wakes, ops)
@@ -322,6 +323,35 @@ describe('wake scheduler', () => {
     state.empty = true
     await scheduler.tick()
     expect(log.delivered).toHaveLength(1)
+  })
+
+  it('logs each reason an overdue wake waits, once, and delivers when it clears', async () => {
+    const { wakes, clock, log, state, scheduler, add } = harness()
+    add(9_000, 'note')
+    state.idle = false
+    await scheduler.tick()
+    await scheduler.tick()
+    expect(log.lines).toEqual([
+      `check-in for session=${SESSION} waits: the agent is working (claude-status)`,
+    ])
+    expect(scheduler.heldReason(SESSION)).toBe('the agent is working (claude-status)')
+    state.idle = true
+    state.empty = false
+    await scheduler.tick()
+    expect(log.lines.at(-1)).toBe(
+      `check-in for session=${SESSION} waits: the input line holds a draft`,
+    )
+    // An hour overdue, the gates clear and it still goes out.
+    clock.now += 3_600_000
+    state.empty = true
+    await scheduler.tick()
+    expect(log.delivered).toHaveLength(1)
+    expect(log.delivered[0]).toMatch(/60 min late\] note$/)
+    expect(log.lines.at(-1)).toBe(
+      `delivered 1 check-in(s) to session=${SESSION} after waiting 60 min (last: the input line holds a draft)`,
+    )
+    expect(scheduler.heldReason(SESSION)).toBeNull()
+    expect(wakes.list()).toEqual([])
   })
 
   it('puts the wake back when the paste did not happen', async () => {

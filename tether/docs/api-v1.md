@@ -553,6 +553,10 @@ the agent is `idle`, no attached client has sent a key for `quietSeconds`, and t
 It then pastes one message for all of the session's due wakes, oldest first, and submits it:
 `[Scheduled check-in for 5:30 PM, 12 min late] check the lane reports`. Each wake goes out at most once. A wake that
 was due while Tether or the host was down goes out when the gates next pass. Closing a window does not cancel a wake.
+While a due wake waits, its `waitingFor` names the first gate it fails (`the agent is working (claude-status)`,
+`someone typed in the last 15s`, `the input line holds a draft`, `the session is stopped`), and Tether logs each new
+reason once (`[tether:wakes] check-in for session=… waits: …`) and how long it waited when it goes out. A Claude Code
+session parked into a background job is read from the job's status file, not the pane process's frozen one.
 
 End cancels the session's wakes unless the End request says `keepWakes: true`. A kept wake outlives the session: when
 due, Tether starts a new session with the ended session's tool, project, name and coordinator lineage, resuming its
@@ -578,7 +582,8 @@ Hub session is not relaunched: it stays listed with a `lastError` until the owne
 | `GET /v1/wake-policy` | | `{policy}` |
 | `PUT /v1/wake-policy` | any subset of `policy` | `{policy}`; a bad field is `400 invalid_body` with `field` and `detail` |
 
-A wake is `{id, sessionId, dueAt, note, createdAt, createdBy, kept, attempts, lastError}`. A kept wake whose session
+A wake is `{id, sessionId, dueAt, note, createdAt, createdBy, kept, attempts, lastError, waitingFor}`; `waitingFor` is
+null unless the wake is due and held. A kept wake whose session
 ended has `sessionId: null` and `endedSession: {id, name, tool, projectId}`. Every change publishes `wakes.changed`,
 and `session.updated` for the session it belongs to.
 

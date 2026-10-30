@@ -141,24 +141,66 @@ export interface ClaudeSession {
   state: Record<string, unknown>
 }
 
+function readClaudeSession(fs: ProcFs, home: string, pid: number): ClaudeSession | null {
+  const file = join(home, '.claude', 'sessions', `${pid}.json`)
+  try {
+    const state = JSON.parse(fs.readFile(file)) as Record<string, unknown>
+    return state.pid === pid ? { pid, file, state } : null
+  } catch {
+    return null
+  }
+}
+
+/** The running background job `jobId` (`kind: bg`, under Claude's daemon):
+ * in the pane's tree when this session's own daemon hosts it, else any live
+ * session file that names it. */
+function claudeJob(fs: ProcFs, home: string, pids: number[], jobId: string): ClaudeSession | null {
+  const isJob = (session: ClaudeSession | null) =>
+    session?.state.jobId === jobId && session.state.kind === 'bg'
+  for (const pid of pids) {
+    const session = readClaudeSession(fs, home, pid)
+    if (isJob(session)) return session
+  }
+  let names: string[] = []
+  try {
+    names = fs.readdir(join(home, '.claude', 'sessions'))
+  } catch {
+    return null
+  }
+  for (const name of names) {
+    const pid = /^([1-9][0-9]*)\.json$/.exec(name)?.[1]
+    if (!pid || pids.includes(Number(pid))) continue
+    const session = readClaudeSession(fs, home, Number(pid))
+    if (!isJob(session)) continue
+    try {
+      fs.readFile(`/proc/${pid}/stat`)
+      return session
+    } catch {
+      // a file left by a job that ended
+    }
+  }
+  return null
+}
+
 /** Claude Code writes ~/.claude/sessions/<pid>.json for each interactive
  * process. Yields each pid whose file parses and names that pid (a stale file
- * left by a reused pid names another process). */
+ * left by a reused pid names another process). A session parked into a
+ * background job (`parkedJobId`) stops updating its own file: the pane shows
+ * the job, so the job's file stands in for it. */
 export function* claudeSessions(
   fs: ProcFs,
   home: string,
   pids: number[],
 ): Generator<ClaudeSession> {
+  const seen = new Set<number>()
   for (const pid of pids) {
-    const file = join(home, '.claude', 'sessions', `${pid}.json`)
-    let state: Record<string, unknown>
-    try {
-      state = JSON.parse(fs.readFile(file)) as Record<string, unknown>
-      if (state.pid !== pid) continue
-    } catch {
-      continue
-    }
-    yield { pid, file, state }
+    if (seen.has(pid)) continue
+    let session = readClaudeSession(fs, home, pid)
+    if (!session) continue
+    const parked = session.state.parkedJobId
+    if (typeof parked === 'string' && parked) session = claudeJob(fs, home, pids, parked) ?? session
+    seen.add(session.pid)
+    yield session
   }
 }
 

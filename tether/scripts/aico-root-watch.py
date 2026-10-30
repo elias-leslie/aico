@@ -2222,7 +2222,10 @@ def wake_item(wake: dict) -> dict:
     due = wake.get("dueAt")
     local = (datetime.datetime.fromtimestamp(due / 1000).astimezone().isoformat(timespec="minutes")
              if isinstance(due, int) else None)
-    return {"id": wake.get("id"), "due": local, "note": wake.get("note"), "createdBy": wake.get("createdBy")}
+    item = {"id": wake.get("id"), "due": local, "note": wake.get("note"), "createdBy": wake.get("createdBy")}
+    if isinstance(wake.get("waitingFor"), str):
+        item["waitingFor"] = wake["waitingFor"]
+    return item
 
 
 def wake_main(argv: list[str]) -> int:

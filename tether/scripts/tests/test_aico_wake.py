@@ -68,6 +68,10 @@ def test_set_explains_a_refusal(monkeypatch):
 def test_list_and_cancel_only_this_sessions_wakes(monkeypatch):
     code, _, output = run(monkeypatch, ["list"], [(200, {"items": [WAKE], "policy": {}})])
     assert code == 0 and output[0]["items"][0]["note"] == "check lanes"
+    assert "waitingFor" not in output[0]["items"][0]
+    held = {**WAKE, "waitingFor": "the agent is working (claude-status)"}
+    code, _, output = run(monkeypatch, ["list"], [(200, {"items": [held], "policy": {}})])
+    assert output[0]["items"][0]["waitingFor"] == "the agent is working (claude-status)"
     code, calls, output = run(monkeypatch, ["cancel", WAKE["id"]],
                               [(200, {"items": [WAKE]}), (200, {"deleted": True})])
     assert code == 0 and calls[1] == (f"/v1/wakes/{WAKE['id']}", None, "DELETE")

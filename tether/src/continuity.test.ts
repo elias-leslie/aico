@@ -112,6 +112,46 @@ describe('agent observation', () => {
     expect(observeClaude(procfs({ '/h/.claude/sessions/20.json': stale }), '/h', [20])).toBeNull()
   })
 
+  it('reads a parked Claude Code session from its background job', () => {
+    // Parked, the pane's process keeps its last status (busy) for good; the
+    // job, under Claude's daemon, holds the live conversation and status.
+    const JOB = '53c6069b-bd56-4fb2-9c1e-ac2b32b48b7b'
+    const front = JSON.stringify({
+      pid: 20,
+      sessionId: CLAUDE,
+      status: 'busy',
+      parkedJobId: '53c6069b',
+    })
+    const job = (pid: number, status: string) =>
+      JSON.stringify({ pid, sessionId: JOB, kind: 'bg', jobId: '53c6069b', status })
+    const parked = { resumeId: JOB, idle: true, blocked: false }
+    // The session's own daemon hosts the job, so it sits in the pane's tree.
+    expect(
+      observeClaude(
+        procfs({
+          '/h/.claude/sessions/20.json': front,
+          '/h/.claude/sessions/24.json': job(24, 'idle'),
+        }),
+        '/h',
+        [20, 21, 24],
+      ),
+    ).toEqual({ pid: 24, ...parked })
+    // A shared daemon outside the tree: any live job file that names it.
+    const shared = procfs({
+      '/h/.claude/sessions/20.json': front,
+      '/h/.claude/sessions/77.json': job(77, 'idle'),
+      '/h/.claude/sessions/78.json': job(78, 'busy'),
+      '/proc/77/stat': '77 (claude) S',
+    })
+    expect(observeClaude(shared, '/h', [20])).toEqual({ pid: 77, ...parked })
+    // No live job: the pane's own file is all there is.
+    const gone = procfs({
+      '/h/.claude/sessions/20.json': front,
+      '/h/.claude/sessions/78.json': job(78, 'idle'),
+    })
+    expect(observeClaude(gone, '/h', [20])).toMatchObject({ pid: 20, idle: false })
+  })
+
   it("takes the Codex user thread, never a subagent's", () => {
     const meta = (id: string, extra: Record<string, unknown>) =>
       `${JSON.stringify({ type: 'session_meta', payload: { id, ...extra } })}\n{"type":"event"}\n`

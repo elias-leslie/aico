@@ -126,7 +126,7 @@ export class WakeService {
     this.scheduler = new WakeScheduler(this.store, {
       now,
       policy: () => this.policy(),
-      idle: (id) => this.idle(id),
+      busy: (id) => this.busy(id),
       inputEmpty: (id) => this.inputEmpty(id),
       lastKeyAt: (id) => this.lastKeyAt(id),
       deliver: (id, text) => pasteIntoRunningSession(id, text),
@@ -162,11 +162,21 @@ export class WakeService {
     return isAgent(row.tool) && agentStateOf(row.id).state !== 'unknown'
   }
 
-  private async idle(sessionId: string): Promise<boolean> {
+  private async busy(sessionId: string): Promise<string | null> {
     const row = getWidget(sessionId)
-    if (!row || !(isHub(row) || isAgent(row.tool))) return false
-    if (agentStateOf(sessionId).state !== 'idle') return false
-    return (await verifySessionStatus(row).catch(() => 'uncertain')) === 'running'
+    if (!row) return 'the session is gone'
+    if (!(isHub(row) || isAgent(row.tool))) return `${row.tool} is not an agent`
+    const agent = agentStateOf(sessionId)
+    if (agent.state !== 'idle') return `the agent is ${agent.state} (${agent.stateSource})`
+    const status = await verifySessionStatus(row).catch(() => 'uncertain')
+    return status === 'running' ? null : `the session is ${status}`
+  }
+
+  /** A wake as the API shows it, with why it waits once due. */
+  json(wake: Wake): Record<string, unknown> {
+    const waitingFor =
+      wake.sessionId && wake.dueAt <= this.now() ? this.scheduler.heldReason(wake.sessionId) : null
+    return { ...wakeJson(wake), waitingFor }
   }
 
   private async inputEmpty(sessionId: string): Promise<boolean> {
@@ -342,12 +352,18 @@ export function registerWakeRoutes(
   const policyJson = () => ({ policy: service.policy() })
   router
     .add('GET', '/v1/wakes', (_req, res) => {
-      sendJson(res, 200, { items: service.store.list().map(wakeJson), ...policyJson() })
+      sendJson(res, 200, {
+        items: service.store.list().map((wake) => service.json(wake)),
+        ...policyJson(),
+      })
     })
     .add('GET', '/v1/sessions/:id/wakes', (_req, res, params) => {
       const row = params.id && /^[0-9a-f]{8}$/.test(params.id) ? getWidget(params.id) : undefined
       if (!row) throw new HttpError(404, 'not_found')
-      sendJson(res, 200, { items: service.store.forSession(row.id).map(wakeJson), ...policyJson() })
+      sendJson(res, 200, {
+        items: service.store.forSession(row.id).map((wake) => service.json(wake)),
+        ...policyJson(),
+      })
     })
     .add('POST', '/v1/sessions/:id/wakes', async (req, res, params) => {
       const body = await readJsonObject(req)
@@ -366,7 +382,7 @@ export function registerWakeRoutes(
         throw new HttpError(409, 'too_many_wakes', { max: policy.maxPerSession })
       const wake = service.store.add({ sessionId: row.id, dueAt: at, note, createdBy, now: now() })
       service.changed(row.id)
-      sendJson(res, 201, wakeJson(wake))
+      sendJson(res, 201, service.json(wake))
     })
     .add('PATCH', '/v1/wakes/:wakeId', async (req, res, params) => {
       const body = await readJsonObject(req)
@@ -382,7 +398,7 @@ export function registerWakeRoutes(
       const updated = service.store.update(wake.id, patch)
       if (!updated) throw new HttpError(404, 'not_found')
       service.changed(updated.sessionId)
-      sendJson(res, 200, wakeJson(updated))
+      sendJson(res, 200, service.json(updated))
     })
     .add('DELETE', '/v1/wakes/:wakeId', (_req, res, params) => {
       const wake = requireWake(service, params.wakeId)
