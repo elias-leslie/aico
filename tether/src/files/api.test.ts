@@ -66,9 +66,9 @@ describe('session file routes', () => {
       status: 403,
       body: { error: 'access_denied', detail: 'Access denied: .env' },
     })
-    expect((await get('/v1/sessions/aaaa1111/files/tree?path=../..')).body.error).toBe(
-      'access_denied',
-    )
+    expect(
+      ((await get('/v1/sessions/aaaa1111/files/tree?path=../..')).body as { error?: string }).error,
+    ).toBe('access_denied')
     expect(await get('/v1/sessions/aaaa1111/files/content?path=nope.txt')).toMatchObject({
       status: 404,
       body: { error: 'no_such_file' },
