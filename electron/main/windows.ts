@@ -306,8 +306,7 @@ export function createWindows(deps: WindowsDeps) {
     }
 
     // Renderer toggles the focused/unfocused chrome state off these. Focus also
-    // records this widget as the selection-grab target ("last-focused widget")
-    // and claims the shared tmux window size for this view (the root's hooks).
+    // claims the shared tmux window size for this view (the root's hooks).
     win.on('focus', () => {
       hooks.focused(win, registry.sessionOf(win.id))
       win.webContents.send('win:focus', true)

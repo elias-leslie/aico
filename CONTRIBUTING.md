@@ -13,8 +13,8 @@ tether/scripts/.venv/bin/pytest -q
 
 Use focused changes and keep the public install path working from a fresh clone.
 
-The repo holds the whole product: the desktop at the root (`electron/`,
-`extension/`), Tether in `tether/` and the web app in `web/`. Running Aico needs
+The repo holds the whole product: the desktop at the root (`electron/`),
+Tether in `tether/` and the web app in `web/`. Running Aico needs
 a Tether daemon; the tests do not, because they use a fake Tether socket.
 Session lifecycle changes (tmux servers, launch, End, roots) go in `tether/`;
 the front ends keep views, view state and rendering. The `st aico` client lives

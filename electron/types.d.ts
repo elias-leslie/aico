@@ -127,7 +127,7 @@ export interface AicoApi {
     write(text: string): void
   }
   selection: {
-    /** Subscribe to indicated-selection deliveries (drives the capture toast);
+    /** Subscribe to agent shares shown in this widget (drives the toast);
      * returns an unsubscribe function. */
     onToast(cb: (sel: SelectionToast) => void): () => void
     /** Show a pending handoff; main accepts only an id sent to this window. */
@@ -176,8 +176,6 @@ export interface AicoApi {
     switchProject(id: string): void
     /** Hub view: surface every widget. */
     hub(): void
-    /** Harvest the freshest selection-bus capture and deliver it. */
-    indicate(): void
     /** Retire this widget: close the window AND end its tmux session. */
     endSession(): Promise<void>
     /** Mark or unmark this session as a coordinator (titlebar label, centre tile). */

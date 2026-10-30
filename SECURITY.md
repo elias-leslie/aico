@@ -12,7 +12,6 @@ Aico is early software. Security fixes are made on `main` only. The old AppImage
 
 ## Security notes
 
-- Aico's capture listener binds only to a loopback address (`127.0.0.1:8005` by default) and refuses any other. It has no authentication, so it accepts writes only from native clients and the pinned browser extension, and only with a loopback `Host` header.
 - Tether serves its API only on a private Unix socket
   (`$XDG_RUNTIME_DIR/tether/<instance>/control.sock`: directory 0700, socket
   0600) and never listens on the network. The socket's file permissions are the

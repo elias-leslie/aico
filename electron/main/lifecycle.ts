@@ -66,7 +66,7 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
   deps.onSignal('SIGINT', () => requestGracefulSignalQuit('SIGINT'))
 
   // Single-instance lock: a second launch must not spawn a duplicate (it would
-  // fight over the listener port :8005 and re-adopt the same widget catalog). The
+  // re-adopt the same widget catalog). The
   // secondary quits immediately; the primary handles the desktop activation.
   const gotSingleInstanceLock = app.requestSingleInstanceLock()
   // --aico-activate (a launcher click) is a message to the running runtime, never a runtime of its own.

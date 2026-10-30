@@ -3,7 +3,7 @@
 useDefault = true
 
 [[allowlists]]
-description = "Public RSA key that pins the MV3 extension ID (not a secret; the private key was discarded)"
+description = "Public RSA key that pinned the removed MV3 extension ID, still in history (not a secret; the private key was discarded)"
 condition = "AND"
 paths = ['''^(.*/)?extension/manifest\.json$''']
 regexTarget = "line"

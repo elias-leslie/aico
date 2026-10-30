@@ -11,7 +11,6 @@
 - **Command palette & pinned controls** — a searchable command palette (`Ctrl+Shift+P`) and a pinned, drag-reorderable titlebar cluster, both driven by one action registry. A pin whose feature is unavailable (a tool or project Tether did not list, games not loaded) is hidden, not deleted, and comes back with it. Rename widgets inline.
 - **Native scrollback** — each widget is a tmux control-mode client, so the terminal itself holds the pane's history: wheel, drag-select and copy reach as far back as it goes.
 - **Workspace picker** — always includes a local Personal Workspace, plus the projects Tether serves (SummitFlow's catalog when installed, else Tether's local list). Claude Code, Codex and Pi also offer **Blank Slate** at the top: a new empty workspace with no first-party context ([root-control.md](root-control.md#blank-slate)). Those tools also show **Instructions** at the top: pick an Agent Hub prompt, then one of its revisions (the one marked current holds its content now), and the next session you start from that picker gets it on top of its usual context, or alone in a Blank Slate ([root-control.md](root-control.md#chosen-instructions)).
-- **Click-to-context capture** — Aico's loopback listener accepts captures from the browser extension and `st selection send` and types a compact reference at the last-focused widget's prompt (single, batch, or a capture package from `st ui grab`). Nothing is stored.
 - **Every session, one list** — the tray and **Open session** (in the lantern menu, the palette or as a pin) list every Tether session, whether started from the desktop, the web app, the `tether` CLI or a SummitFlow root, and open any of them as a widget.
 
 ## Requirements
@@ -29,7 +28,6 @@ Source installs additionally need Node.js 22+, npm and Python 3.
 Recommended for the full desktop experience:
 
 - A Wayland desktop (GNOME 50 on the reference host). Aico runs as a native Wayland client; window tiling, saved positions and focus need the desktop bridge extension, and without it windows open where the compositor puts them.
-- Chrome/Chromium if you want to load the optional browser extension.
 - Any terminal AI CLIs you want to launch (`claude`, `codex`, `agy`, `pi`). Aico does not provide accounts or API keys for those tools.
 
 ## Quickstart
@@ -92,12 +90,9 @@ Important variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AICO_SIDECAR_HOST` | `127.0.0.1` | Capture listener bind host (the old sidecar's name). Only a loopback host is accepted; anything else leaves the listener off. |
-| `AICO_SIDECAR_PORT` | `8005` | Capture listener port, for `/health` and `/selection/send`. |
 | `AICO_STATE_DIR` | `~/.local/state/aico` | App state: `aico.db` (window views and settings; sessions live in Tether). The launcher pidfile, lock, and `launcher.log` always live in `${XDG_STATE_HOME:-~/.local/state}/aico` and do not follow this variable. |
 | `AICO_PASTED_IMAGES_DIR` | `/srv/workspaces/handoffs/pasted-images` | Where Aico writes a pasted clipboard image (`paste-<time>-<random>.png`, mode `0640` in a `0750` folder) so a program running as another user, such as the agent's Tether instance, can read it. The pasted text is the file's path. Must be readable by that user. |
 | `AICO_PASTED_IMAGES_KEEP_HOURS` | `24` | Pasted images older than this are deleted whenever a new one is written. |
-| `AICO_EXTENSION_IDS` | `oejadbpdecaenbbihglcnchnkmlilmjf` | Comma-separated Chrome extension IDs the listener trusts as browser origins. A malformed ID leaves the listener off. The default is the stable ID derived from the `key` in `extension/manifest.json`; set this only for a fork or re-keyed extension. |
 | `AICO_OZONE_PLATFORM` | `wayland` | Electron display backend used by the managed foreground runner. Native Wayland keeps typing smooth on NVIDIA; `x11` forces Xwayland. Window placement on native Wayland needs the desktop bridge extension (see Desktop bridge). Does not change the desktop session or terminal environment. |
 | `TETHER_SOCKET` | unset | Tether control socket. Wins over `TETHER_INSTANCE`. |
 | `TETHER_INSTANCE` | `default` | Tether instance; the socket is `$XDG_RUNTIME_DIR/tether/<instance>/control.sock`. |
@@ -151,36 +146,6 @@ Or run the combined public gate:
 npm run check
 ```
 
-## Capture listener
-
-Aico's main process listens on `127.0.0.1:8005` by default (this replaced the
-Python sidecar and keeps its port, variable names and health identity):
-
-```bash
-curl http://127.0.0.1:8005/health
-# {"status":"ok","service":"aico-sidecar","version":"0.1.1"}
-```
-
-Endpoints:
-
-- `GET /health` — liveness and identity; SummitFlow's health check reads it.
-- `POST /selection/send` — `{"items": [{"kind": "dom"|"a11y"|"region", "snippet", "meta"}]}`, 1-50 items. The captures are typed as one compact reference at the last-focused widget's prompt. The reply is `{records, count, delivered, reason}`: `delivered` says whether the reference reached a session; when it is false, `reason` is one of `no_session`, `busy`, `session_changing`, `stale_generation` or `insert_failed`.
-
-Nothing is stored. Indicate selection in the lantern menu sends the newest capture again from memory.
-
-The listener has no authentication. It binds only to a loopback host, answers `403` to a request whose `Host` header is not `localhost` or a loopback IP such as `127.0.0.1` or `[::1]` (DNS rebinding), answers `403` to a write from any browser origin except the trusted extension IDs (`AICO_EXTENSION_IDS`), local pages included, sends CORS headers only to those IDs, answers `415` to a write whose `Content-Type` is set but is not `application/json`, and refuses bodies over 1 MiB with `413`. A blank or malformed `AICO_SIDECAR_PORT` (anything but digits 1-65535) leaves the listener off with a log line.
-
-## Optional browser extension
-
-The `extension/` directory contains a development MV3 extension that can send selected text, links, images, or page context to Aico.
-
-1. Start Aico, which listens on `127.0.0.1:8005`.
-2. Open Chrome/Chromium `chrome://extensions`.
-3. Enable **Developer mode**.
-4. **Load unpacked** and select this repo's `extension/` directory.
-
-See [`extension/README.md`](../extension/README.md) for details.
-
 ## Mobile access
 
 Every session is a tmux session on a Tether-managed absolute socket, so any
@@ -189,7 +154,7 @@ tmux-capable client on the same machine can attach: `tether sessions attach <id>
 client with an authenticated WebSocket, so opening its PWA on a phone
 gives live, two-way access to the same sessions Aico shows.
 
-What you get on mobile is the terminal itself; Aico's desktop chrome (eyes, lantern menu, capture gestures) stays on the desktop.
+What you get on mobile is the terminal itself; Aico's desktop chrome (eyes, lantern menu) stays on the desktop.
 
 ## Architecture
 
@@ -204,15 +169,14 @@ Electron main process (a Tether client)
   ├─ holds the GUI channel (/v1/gui/channel) and applies show/position/title/coordinator
   ├─ runs a tmux control-mode client per window and claims resize on focus
   ├─ stores views (geometry, open state) and settings in aico.db
-  ├─ writes ids-only `[aico:event]` journal lines (push results, retired sessions)
-  └─ listens on 127.0.0.1:8005: /health, and captures typed at a session prompt
+  └─ writes ids-only `[aico:event]` journal lines (push results, retired sessions)
 
 Electron renderer
   ├─ xterm.js terminal UI
   └─ lantern action menu and workspace picker
 ```
 
-Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane, and missing `st` capture tooling leaves core widgets working. When Tether is unreachable, open windows keep their terminals and the tray says session control is unavailable; Aico reconnects on its own.
+Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane. When Tether is unreachable, open windows keep their terminals and the tray says session control is unavailable; Aico reconnects on its own.
 
 The `st aico` extension's client is `tether/scripts/aico-root-watch.py`; SummitFlow runs it from this checkout. The root contract lives in Tether's `docs/root-control.md` ([pointer](root-control.md)). For the process-containment design and recovery, see Tether's `docs/LIFECYCLE_HARNESS.md` and [the July 2026 incident report](INCIDENT-2026-07-PROCESS-ESCAPES.md). The cutover from the old in-process owner and the Tether API gaps seen then are in [history](history/README.md).
 
@@ -221,7 +185,6 @@ The `st aico` extension's client is `tether/scripts/aico-root-watch.py`; SummitF
 - Linux desktop is the supported path. macOS and Windows packaging are not implemented.
 - X11 is the best-supported session for global shortcuts.
 - There is no packaged build (AppImage or `.deb`); the old published AppImages predate Tether and are unsupported.
-- The browser extension is loaded unpacked for development; it is not published in a browser store.
 
 ## License
 

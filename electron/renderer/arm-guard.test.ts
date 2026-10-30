@@ -28,7 +28,7 @@ describe('needsConfirm', () => {
     expect(needsConfirm('project:aico')).toBe(true)
     expect(needsConfirm('retire-widget')).toBe(true)
     expect(needsConfirm('new:codex')).toBe(false)
-    expect(needsConfirm('indicate')).toBe(false)
+    expect(needsConfirm('hub')).toBe(false)
   })
 })
 
@@ -38,7 +38,7 @@ describe('createArmGuard', () => {
 
   it('runs an unguarded action immediately without arming', () => {
     const { guard, armed } = harness()
-    expect(guard.guard('indicate', row)).toBe(false)
+    expect(guard.guard('hub', row)).toBe(false)
     expect(armed.size).toBe(0)
   })
 

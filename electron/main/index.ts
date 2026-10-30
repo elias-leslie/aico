@@ -19,7 +19,6 @@ import {
   TetherPool,
 } from 'tether/client'
 import { ControlTerminal } from 'tether/term'
-import { version } from '../../package.json'
 import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
 import { createAmbient } from './ambient'
 import { createAttentionWiring } from './attention-wiring'
@@ -38,8 +37,6 @@ import { denyAllPermissions } from './permissions'
 import { ownStartTime, removeOwnPidFile } from './process-identity'
 import { ensurePersonalWorkspaceRoot, ProjectCatalog, personalWorkspaceRoot } from './project'
 import { createRuns } from './runs'
-import { createSelectionBus } from './selection-bus'
-import { createSelectionListener } from './selection-listener'
 import { createSessionActions } from './session-actions'
 import { sessionTitle } from './session-catalog'
 import { createAgentShares } from './show'
@@ -91,7 +88,7 @@ const catalog: SessionCatalog = createSessionCatalog()
 
 // Which window shows which session, where windows go, and the windows
 // themselves. The hooks run, in this order, what the other feature modules
-// (terminal, window chrome, ambient, attention, selection) do when a window
+// (terminal, window chrome, ambient, attention) do when a window
 // loads, focuses, blurs or goes away.
 const registry = new WindowRegistry(BrowserWindow)
 // Where windows are and how they are moved: the desktop bridge on Wayland, where
@@ -144,7 +141,6 @@ const windows = createWindows({
       attention.sendTo(win)
     },
     focused: (win, widgetId) => {
-      selection.noteFocus(widgetId)
       if (widgetId) {
         attention.focused(widgetId)
         chrome.syncTray()
@@ -365,17 +361,6 @@ const terminal = createTerminal({
   viewer: { app: 'desktop', device: hostname() },
 })
 
-// The selection bus: where selections go and how they arrive.
-const selection = createSelectionBus({
-  registry,
-  catalog,
-  listViews,
-  tether,
-  isReplacing: sessions.isReplacing,
-  isQuitting: lifecycle.isQuitting,
-  raise: (win) => void compositor.raise(win),
-})
-
 const shares = createAgentShares({
   webUrl: config.webUrl,
   windowFor: (id) => (id ? registry.forSession(id) : undefined) ?? registry.sessionWindows()[0],
@@ -388,22 +373,9 @@ const shares = createAgentShares({
   dialog,
 })
 
-// The loopback listener: /health, and sends from the browser extension and
-// `st selection send`, delivered through the selection bus.
-const listener = createSelectionListener({
-  host: config.listenerHost,
-  port: config.listenerPort,
-  extensionIds: config.extensionIds,
-  // package.json's, whichever way Electron was launched (app.getVersion() is
-  // Electron's own when started on the bundle path).
-  version,
-  deliver: selection.deliver,
-})
-
 lifecycle.onQuit(() => {
   link.stop()
   compositor.stop()
-  listener.stop()
   ambient.stop()
   layout.stop({ removeFile: lifecycle.runtimeOwner })
 })
@@ -414,8 +386,6 @@ const startup = app.whenReady().then(async () => {
   initViews(config.dbPath)
   // Before any window exists: Electron would otherwise grant every request.
   denyAllPermissions(session.defaultSession)
-  // Fire-and-forget: windows work without capture; the result is logged.
-  void listener.start()
   // The bridge may appear later (the extension loads after us): the compositor
   // watches the bus name and fills its cache whenever it does.
   compositor.start()
@@ -445,7 +415,6 @@ const startup = app.whenReady().then(async () => {
   sessions.registerIpc(ipcMain)
   hostPanel.registerIpc(ipcMain)
   instructions.registerIpc(ipcMain)
-  selection.registerIpc(ipcMain)
   shares.registerIpc(ipcMain)
 
   chrome.createTray({

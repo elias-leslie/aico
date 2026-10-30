@@ -124,15 +124,6 @@ export interface Action {
 
 export const ACTIONS: Action[] = [
   {
-    id: 'indicate',
-    section: 'Capture',
-    label: 'Indicate selection',
-    shortcut: '',
-    icon: '⊹',
-    note: 'Pull the latest captured text or image into this session.',
-    run: () => window.aico.actions.indicate(),
-  },
-  {
     // Flyout-only host (no run): hovering opens the "New widget" picker — the TUI
     // list, each TUI drilling into a workspace to launch in. A launch always
     // names both, so there's no default fast path.
@@ -420,7 +411,7 @@ export function sections(): string[] {
 }
 
 /** Seeded on first run, before the user customizes anything. */
-export const DEFAULT_PINS = ['indicate']
+export const DEFAULT_PINS = ['hub']
 
 /** The pinned actions to show, in pin order: ids whose feature is unavailable
  * right now (a TUI or project the catalog did not list, games not loaded, a

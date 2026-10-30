@@ -45,7 +45,6 @@ describe('action registry', () => {
   })
 
   it('treats click-capable actions as pinnable', () => {
-    expect(isPinnable(findAction('indicate') as never)).toBe(true)
     // Runnable actions and top-level flyout hosts are pinnable; copy stays a
     // terminal chord reference, so it is not pinnable.
     expect(isPinnable(findAction('hub') as never)).toBe(true)
@@ -192,7 +191,7 @@ describe('End session', () => {
 
 describe('pinnedActions', () => {
   it('resolves ids to actions in pin order', () => {
-    expect(pinnedActions(['hub', 'indicate']).map((a) => a.id)).toEqual(['hub', 'indicate'])
+    expect(pinnedActions(['hub', 'new-widget']).map((a) => a.id)).toEqual(['hub', 'new-widget'])
   })
 
   it('skips unavailable, un-pinnable and repeated ids without changing the list', () => {
@@ -241,8 +240,8 @@ describe('prunePins', () => {
 
 describe('togglePin', () => {
   it('adds when absent and removes when present', () => {
-    expect(togglePin(['indicate'], 'hub')).toEqual(['indicate', 'hub'])
-    expect(togglePin(['indicate', 'hub'], 'indicate')).toEqual(['hub'])
+    expect(togglePin(['new-widget'], 'hub')).toEqual(['new-widget', 'hub'])
+    expect(togglePin(['new-widget', 'hub'], 'new-widget')).toEqual(['hub'])
   })
 })
 
@@ -253,8 +252,8 @@ describe('movePin', () => {
   })
 
   it('keeps hidden pins in the stored list when dragging past them', () => {
-    expect(movePin(['hub', 'arcade-next', 'indicate'], 'indicate', 'hub')).toEqual([
-      'indicate',
+    expect(movePin(['hub', 'arcade-next', 'new-widget'], 'new-widget', 'hub')).toEqual([
+      'new-widget',
       'hub',
       'arcade-next',
     ])

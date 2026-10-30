@@ -125,12 +125,6 @@ uv sync --locked --directory tether/scripts  # Python env for Tether's operator 
 tether/scripts/.venv/bin/pytest -q            # their tests, from the repo root
 ```
 
-Check the capture listener of a running Aico:
-
-```bash
-curl http://127.0.0.1:8005/health
-```
-
 Run the Electron app from the checkout:
 
 ```bash
@@ -141,7 +135,6 @@ npm start
 
 - Agent CLIs: install and authenticate `claude`, `codex`, `agy` (Antigravity), or `pi` separately; Tether's tool registry also accepts other TUI commands.
 - Project catalog: Aico lists the projects Tether serves (Tether's local list, or the author's SummitFlow catalog when it is running) plus its own Personal Workspace.
-- Browser extension: load `extension/` unpacked in Chrome/Chromium.
 
 ## Ubuntu AppArmor note
 

@@ -120,7 +120,7 @@ function wireTitle(): void {
     customName = info.name ?? ''
 
     // Static, developer-authored SVG from the TUI spec (never user input), so
-    // innerHTML is safe here — unlike the selection toast, which is untrusted.
+    // innerHTML is safe here — unlike the toast text, which is untrusted.
     iconEl.innerHTML = info.icon
     iconEl.style.color = info.accent || ''
     eyes?.setAccent(info.accent)
@@ -165,7 +165,7 @@ function wireTitle(): void {
 }
 wireTitle()
 
-// Shared text-only status toast: selection delivery and local action confirmation
+// Shared text-only status toast: agent shares and local action confirmation
 // both use this frosted pill. Content is always assigned with textContent.
 function wireSelectionToast(): void {
   const toast = document.querySelector<HTMLElement>('.selection-toast')
@@ -207,8 +207,8 @@ function wireSelectionToast(): void {
   })
   dismissButton.addEventListener('click', () => toast.classList.remove('show'))
 
-  // A delivered selection shows as a short snippet; a handoff in full. The
-  // window's own notices (AICO_TOAST_EVENT) are short already and show whole.
+  // A handoff shows in full, anything else as a short snippet. The window's own
+  // notices (AICO_TOAST_EVENT) are short already and show whole.
   window.aico.selection.onToast((sel) =>
     show(sel.action ? sel : { ...sel, snippet: sel.snippet.slice(0, 40) }),
   )

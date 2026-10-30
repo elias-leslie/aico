@@ -884,9 +884,9 @@ body {
   border-radius: 4px;
 }
 
-/* Click-to-context selection toast: a frosted pill docked low-center on the
-   widget that received an indicated selection. Soft amber glow on arrival, no
-   shadow; fades after ~2.5s (duration set in renderer.ts). */
+/* Status toast: a frosted pill docked low-center on the widget (agent shares,
+   action notices). Soft amber glow on arrival, no shadow; a plain notice fades
+   after ~2.5s (duration set in window-frame.ts). */
 .selection-toast {
   position: absolute;
   bottom: 16px;

@@ -110,8 +110,8 @@ contextBridge.exposeInMainWorld('aico', {
     write: (text: string) => ipcRenderer.send('clipboard:write', text),
   },
   selection: {
-    /** Fired when an indicated selection is delivered to this widget; drives the
-     * frosted capture toast. Returns an unsubscribe function. */
+    /** Fired when an agent share is shown in this widget; drives the frosted
+     * toast. Returns an unsubscribe function. */
     onToast: (cb: (sel: SelectionToast) => void) => {
       const listener = (_event: unknown, sel: SelectionToast) => cb(sel)
       ipcRenderer.on('selection:toast', listener)
@@ -179,8 +179,6 @@ contextBridge.exposeInMainWorld('aico', {
     switchProject: (id: string) => ipcRenderer.send('widget:switch-project', id),
     /** Hub view: surface every widget. */
     hub: () => ipcRenderer.send('widget:hub'),
-    /** Send the newest capture again to the last-focused widget (same path as the hotkey). */
-    indicate: () => ipcRenderer.send('selection:grab'),
     /** End the current session through Tether. */
     endSession: (): Promise<void> => ipcRenderer.invoke('session:end-self'),
     /** Mark or unmark this session as a coordinator (titlebar label, centre tile). */

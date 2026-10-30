@@ -7,13 +7,13 @@ Aico is a Linux companion for people working with terminal AI tools. Your agent 
 ## What it does
 
 - Runs Claude Code, Codex, Antigravity, Pi and shells in sessions that survive closed windows, browser restarts and app updates.
-- On the desktop: movable session windows that remember their place, a command palette, a workspace picker, browser selection capture, and optional arcade-style title bar scenes.
+- On the desktop: movable session windows that remember their place, a command palette, a workspace picker and optional arcade-style title bar scenes.
 - In the browser and on the phone: the same sessions with a phone keyboard, file browsing, uploads and search, installable as an app.
 - Agents can share files, folders or a link with you (`tether share`): links to where the files are, opened under Files › Shared. File paths in the web terminal are clickable too.
 
 ## Current scope
 
-Aico targets a single-user Linux machine with systemd. X11 is the best-supported desktop path for global shortcuts; Wayland has limitations. The optional browser extension is loaded unpacked. macOS, Windows and packaged builds are not available.
+Aico targets a single-user Linux machine with systemd. X11 is the best-supported desktop path for global shortcuts; Wayland has limitations. macOS, Windows and packaged builds are not available.
 
 ## Getting started
 
@@ -33,12 +33,12 @@ Then open <http://localhost:3002> for the web app. `scripts/install.sh --dry-run
 | Part | Where | What it does |
 | --- | --- | --- |
 | Tether | `tether/` | The session daemon (`tether@default`). Owns tmux servers, agent launch, End, roots and the project list. Serves a private Unix socket only. |
-| Desktop | `electron/`, `extension/` | Floating windows (`aico-shell.service`). Listens on `127.0.0.1:8005` for browser captures and `st selection send`. |
+| Desktop | `electron/` | Floating windows (`aico-shell.service`). |
 | Web app | `web/` | Browser and phone app: one Node server (`aico-web.service`, port 3002) serving the page, its API and the terminal sockets. |
 
 Tether is found at `$TETHER_SOCKET`, else `$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`. When it is down, open views keep their terminals and session actions say control is unavailable.
 
-The desktop keeps only window views and settings in `~/.local/state/aico/aico.db`; the web app keeps its tabs in `~/.local/state/aico/web.db`. Losing either loses layout, never a running session. AI provider credentials belong to each CLI. Captures are typed at the last-focused session's prompt or refused; none are stored.
+The desktop keeps only window views and settings in `~/.local/state/aico/aico.db`; the web app keeps its tabs in `~/.local/state/aico/web.db`. Losing either loses layout, never a running session. AI provider credentials belong to each CLI.
 
 ## Runtime, data, and integrations
 
@@ -60,7 +60,7 @@ uv sync --locked --directory tether/scripts   # only for Tether's Python operato
 
 ## Documentation
 
-- [Desktop guide](docs/project-guide.md), [web app guide](docs/web-guide.md), [install](docs/INSTALL.md) and [browser extension](extension/README.md).
+- [Desktop guide](docs/project-guide.md), [web app guide](docs/web-guide.md) and [install](docs/INSTALL.md).
 - [Glossary](docs/glossary.md), [root control](docs/root-control.md), [agent shares](docs/agent-shares.md), [remote access](docs/remote-access.md) and [mobile verification](docs/mobile-verification.md).
 - Tether: [README](tether/README.md), [API v1](tether/docs/api-v1.md) and the [decision records](docs/adr/).
 - [History](docs/history/README.md) and the [process incident report](docs/INCIDENT-2026-07-PROCESS-ESCAPES.md).

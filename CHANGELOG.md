@@ -8,6 +8,10 @@
   `gui-control.sock`. `st aico` and SummitFlow use Tether's own socket
   (`TETHER_SOCKET`, else `$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`);
   `AICO_CONTROL_SOCKET` and `AICO_GUI_CONTROL_SOCKET` are no longer read.
+- Selection capture is gone: the browser extension (`extension/`), the desktop
+  app's loopback listener on `127.0.0.1:8005` (`/health`, `/selection/send`)
+  and the Indicate selection action. `AICO_SIDECAR_HOST`, `AICO_SIDECAR_PORT`
+  and `AICO_EXTENSION_IDS` are no longer read. A stored Indicate pin is hidden.
 
 ## 0.2.0 - 2026-10-23
 
