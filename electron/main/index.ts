@@ -30,6 +30,7 @@ import { createBridgeCompositor, createNativeCompositor, whenReady } from './com
 import { readConfig } from './config'
 import { registerDesktopIpc } from './desktop-ipc'
 import { createGuiChannel } from './gui-channel'
+import { createHostPanel } from './host-panel'
 import { createInstructions } from './instructions'
 import { createLifecycle } from './lifecycle'
 import { createOwnerSurface } from './owner-surface'
@@ -189,7 +190,10 @@ const link = createTetherLink({
       // A window that lost its terminal reattaches once its session runs again.
       terminal.sessionSeen(descriptor)
     },
-    removed: (id) => attention.removed(id),
+    removed: (id) => {
+      attention.removed(id)
+      hostPanel.sessionRemoved(id)
+    },
     destroyWindow: (id) => windows.destroyFor(id),
     closeEnded: (id) => windows.closeEnded(id),
     retired: (id) => removeView(id),
@@ -317,6 +321,16 @@ const sessions = createSessionActions({
   personalWorkspace: { ensureRoot: ensurePersonalWorkspaceRoot, root: personalWorkspaceRoot },
 })
 
+// The Hosts panel: remote hosts' state, power and per-tool sign-in.
+const hostPanel = createHostPanel({
+  tether,
+  catalog,
+  windows,
+  broadcast: (host) => {
+    for (const win of registry.all()) win.webContents.send('hosts:changed', host)
+  },
+})
+
 // The Agent Hub prompt revisions a new session can take as instructions.
 const instructions = createInstructions({ st: config.st, execFile })
 
@@ -425,6 +439,7 @@ const startup = app.whenReady().then(async () => {
   ambient.registerIpc(ipcMain)
   chrome.registerIpc(ipcMain)
   sessions.registerIpc(ipcMain)
+  hostPanel.registerIpc(ipcMain)
   instructions.registerIpc(ipcMain)
   selection.registerIpc(ipcMain)
   shares.registerIpc(ipcMain)

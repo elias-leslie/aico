@@ -15,6 +15,8 @@ interface ConfirmationDialogProps {
   cancelText?: string
   variant?: 'danger' | 'warning'
   isPending?: boolean
+  /** The confirm button's label while pending. */
+  pendingText?: string
   error?: string | null
   onConfirm: () => void
   onCancel: () => void
@@ -34,6 +36,7 @@ export function ConfirmationDialog({
   cancelText = 'Cancel',
   variant = 'danger',
   isPending = false,
+  pendingText = 'Ending session…',
   error = null,
   onConfirm,
   onCancel,
@@ -135,7 +138,7 @@ export function ConfirmationDialog({
                   backgroundColor: `color-mix(in srgb, ${accentColor} 16%, transparent)`,
                 }}
               >
-                {isPending ? 'Ending session…' : confirmText}
+                {isPending ? pendingText : confirmText}
               </button>
             </div>
           </div>

@@ -13,7 +13,27 @@ export interface HostChoice {
     | 'offline'
     | 'powered_off'
     | 'identity_changed'
+  /** When the host entered this state (ms since the epoch). */
+  since?: number | null
+  /** Sessions running there. */
+  sessions?: number
+  /** Why the link is down, when Tether knows. */
+  error?: string | null
+  /** A start in progress, or why the last one failed. */
+  wake?: HostWake | null
 }
+
+export interface HostWake {
+  state: 'starting' | 'failed'
+  step?: 'powering_on' | 'connecting' | 'checking_services' | null
+  since?: number | null
+  error?: string | null
+}
+
+/** How often the list refreshes while a host is starting. */
+export const HOSTS_STARTING_POLL_MS = 2_000
+
+export const isStarting = (host: HostChoice) => host.wake?.state === 'starting'
 
 export const HOST_STATE_LABELS: Record<HostChoice['state'], string> = {
   connected: '',
@@ -35,11 +55,16 @@ export function useHosts(enabled = true) {
       ),
     enabled,
     staleTime: 10_000,
+    refetchInterval: (current) =>
+      current.state.data?.items.some(isStarting)
+        ? HOSTS_STARTING_POLL_MS
+        : false,
   })
   return {
     hosts: query.data?.items ?? [],
     isLoading: query.isLoading,
     isError: query.isError,
+    refetch: query.refetch,
   }
 }
 

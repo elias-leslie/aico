@@ -104,6 +104,8 @@ export class FakeTether {
   holder: { generation: string; holder: unknown } = { generation: 'g1', holder: null }
   /** The hub's linked hosts (`hosts()`). */
   hostRows: { name: string; state: string; ssh: string; sessions: number }[] = []
+  /** Answers to the hub's host routes, by `METHOD path` (an Error is thrown). */
+  hostAnswers = new Map<string, { status: number; body: unknown } | Error>()
   /** Errors the next `attach` calls throw, in order. */
   attachFailures: Error[] = []
 
@@ -312,6 +314,9 @@ export class FakeTether {
       })
       return { status: 201, body: session }
     }
+    const hostAnswer = this.hostAnswers.get(`${method} ${path}`)
+    if (hostAnswer instanceof Error) throw hostAnswer
+    if (hostAnswer) return hostAnswer
     const respawn = /^\/v1\/sessions\/([^/]+)\/respawn$/.exec(path)
     if (method === 'POST' && respawn) {
       const session = this.need(decodeURIComponent(respawn[1]))

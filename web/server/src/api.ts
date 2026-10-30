@@ -9,6 +9,7 @@ import { registerCheckInRoutes } from './check-ins'
 import type { UploadConfig } from './config'
 import type { WebStore } from './db'
 import { registerFileLocationRoutes } from './file-locations'
+import { registerHostRoutes } from './hosts'
 import {
   objectBody,
   optionalInt,
@@ -330,12 +331,7 @@ export function buildApi(deps: ApiDeps): Router {
     )
   })
 
-  // The remote hosts a new session can run on ("This computer" is implied),
-  // with their link state as the hub sees it.
-  router.on('GET', '/api/hosts', async () => {
-    const hosts = await tetherCall(() => tether.hosts())
-    return { items: hosts.map((host) => ({ name: host.name, state: host.state })) }
-  })
+  registerHostRoutes(router, tether)
 
   router.on('GET', '/api/agent-tools', async (ctx) => {
     const enabledOnly = ctx.query.get('enabled_only') === 'true'

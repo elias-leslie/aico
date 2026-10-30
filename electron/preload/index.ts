@@ -4,6 +4,9 @@ import type {
   ChatInfo,
   ChatStreamItem,
   HostChoice,
+  HostLogins,
+  HostResult,
+  HostRow,
   InstructionPrompt,
   InstructionRevision,
   InstructionsChoice,
@@ -15,6 +18,21 @@ import type {
 // Minimal, explicit bridge — no nodeIntegration in the renderer. The renderer
 // talks to the tmux-backed PTY only through these channels.
 contextBridge.exposeInMainWorld('aico', {
+  hosts: {
+    list: (): Promise<HostResult<HostRow[]>> => ipcRenderer.invoke('hosts:panel'),
+    logins: (host: string): Promise<HostResult<HostLogins>> =>
+      ipcRenderer.invoke('hosts:logins', host),
+    power: (host: string, action: 'on' | 'off', force = false): Promise<HostResult<unknown>> =>
+      ipcRenderer.invoke('hosts:power', host, action, force),
+    trust: (host: string): Promise<HostResult<void>> => ipcRenderer.invoke('hosts:trust', host),
+    sign: (host: string, tool: string, action: 'sign_in' | 'sign_out') =>
+      ipcRenderer.invoke('hosts:sign', host, tool, action),
+    onChanged: (cb: (host: string) => void) => {
+      const listener = (_event: unknown, host: string) => cb(host)
+      ipcRenderer.on('hosts:changed', listener)
+      return () => ipcRenderer.removeListener('hosts:changed', listener)
+    },
+  },
   pty: {
     start: (size: { cols: number; rows: number }) => ipcRenderer.send('pty:start', size),
     input: (data: string) => ipcRenderer.send('pty:input', data),

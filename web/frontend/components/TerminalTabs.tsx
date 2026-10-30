@@ -3,6 +3,7 @@
 import { clsx } from 'clsx'
 import { useState } from 'react'
 import { timesLabel } from '@/lib/hooks/use-check-ins'
+import { useSignInWatch } from '@/lib/hooks/use-host-admin'
 import {
   useAttentionTitle,
   useMarkActiveSeen,
@@ -86,6 +87,8 @@ export function TerminalTabs({
   // the count of sessions waiting on the owner.
   useMarkActiveSeen(activeSessionId)
   useAttentionTitle(useSessionAttention().needsYouCount)
+  // A sign-in session opened from Hosts ends: check that host's sign-in again.
+  useSignInWatch(sessions, !isLoading)
 
   const confirmEndSession = async (keepCheckIns = false) => {
     if (!sessionToEnd || endSessionPending) return

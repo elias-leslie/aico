@@ -462,8 +462,15 @@ describe('panes', () => {
     ]
     expect((await call('GET', '/api/hosts')).body).toEqual({
       items: [
-        { name: 'agent-work', state: 'connected' },
-        { name: 'lab', state: 'offline' },
+        {
+          name: 'agent-work',
+          state: 'connected',
+          since: null,
+          sessions: 0,
+          error: null,
+          wake: null,
+        },
+        { name: 'lab', state: 'offline', since: null, sessions: 1, error: null, wake: null },
       ],
     })
     const pane = { pane_type: 'project', pane_name: 'Aico', project_id: 'aico' }
@@ -481,6 +488,56 @@ describe('panes', () => {
     expect(away.status).toBe(409)
     expect(away.body.detail).toBe('lab is offline (link down)')
     expect((await call('POST', '/api/panes', { ...pane, host: '../lab' })).status).toBe(422)
+  })
+
+  it("passes a host's sign-in state, power and trust through to the hub", async () => {
+    const logins = { host: 'agent-work', agent_hub: 'reachable', tools: [], actions: {} }
+    tether.hostAnswers.set('GET /v1/hosts/agent-work/logins', { status: 200, body: logins })
+    expect((await call('GET', '/api/hosts/agent-work/logins')).body).toEqual(logins)
+
+    tether.hostAnswers.set(
+      'POST /v1/hosts/agent-work/power',
+      new TetherError(409, 'host_busy', {
+        error: 'host_busy',
+        sessions: 2,
+        reason: '2 sessions running on agent-work',
+      }),
+    )
+    const busy = await call('POST', '/api/hosts/agent-work/power', { action: 'off' })
+    expect(busy.status).toBe(409)
+    expect(busy.body.detail).toBe('2 sessions running on agent-work')
+    tether.hostAnswers.set('POST /v1/hosts/agent-work/power', {
+      status: 200,
+      body: { host: 'agent-work', state: 'powering_off', sessions: 2 },
+    })
+    await call('POST', '/api/hosts/agent-work/power', { action: 'off', force: true })
+    expect(tether.callsOf('request').at(-1)).toEqual([
+      'POST',
+      '/v1/hosts/agent-work/power',
+      { action: 'off', force: true },
+    ])
+    expect((await call('POST', '/api/hosts/agent-work/power', { action: 'nap' })).status).toBe(400)
+
+    tether.hostAnswers.set('POST /v1/hosts/agent-work/trust', { status: 200, body: {} })
+    expect((await call('POST', '/api/hosts/agent-work/trust')).body).toEqual({ trusted: true })
+    expect((await call('GET', '/api/hosts/..%2Fx/logins')).status).toBe(422)
+  })
+
+  it('opens a sign-in session on the host as a web session', async () => {
+    const session = tether.add({ host: 'agent-work', tool: 'shell', name: 'Sign in: codex' })
+    tether.hostAnswers.set('POST /v1/hosts/agent-work/logins/codex', {
+      status: 201,
+      body: { host: 'agent-work', session },
+    })
+    const { status, body } = await call('POST', '/api/hosts/agent-work/logins/codex', {
+      action: 'sign_in',
+    })
+    expect(status).toBe(200)
+    expect(body.session).toMatchObject({ id: session.id, mode: 'shell' })
+    expect(tether.callsOf('request').at(-1)?.[2]).toEqual({ action: 'sign_in', origin: 'a-term' })
+    expect(
+      (await call('POST', '/api/hosts/agent-work/logins/codex', { action: 'login' })).status,
+    ).toBe(400)
   })
 
   it('lists no hosts when Tether links to none', async () => {

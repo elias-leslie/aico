@@ -2,11 +2,13 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
+import { resolveAgentHubConfig } from './agent-hub/config'
 import type { RunTracker } from './agent-hub/runs'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
 import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
+import { HostAdmin, registerHostAdminRoutes } from './hub/host-admin'
 import type { Hub } from './hub/hub'
 import { lifecycleStatus } from './lifecycle/engine'
 import { supportsBlankSlate } from './lifecycle/tui/blank-slate'
@@ -396,6 +398,16 @@ export function buildRouter(context: ServerContext): Router {
       sendJson(res, 200, { trusted: true })
     })
 
+  let hostAdmin: HostAdmin | null = null
+  registerHostAdminRoutes(router, () => {
+    const hub = requireHub(context)
+    hostAdmin ??= new HostAdmin({
+      hub,
+      agentHub: resolveAgentHubConfig(process.env),
+      env: process.env,
+    })
+    return hostAdmin
+  })
   registerLifecycleRoutes(router, context)
   if (context.runs) registerRunRoutes(router, context.runs, context.stepChats, context.hub)
   registerShowRoute(router, events, context.store, context.show ?? resolveShowConfig({}))

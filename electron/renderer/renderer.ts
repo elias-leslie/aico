@@ -6,6 +6,7 @@ import './control-surface.css'
 // fills it depends on the session: an Agent Hub chat draws the shared chat view,
 // every other session a terminal. Main decides from the session's backend.
 import './window-frame'
+import './hosts-panel'
 
 const chat = await window.aico.chat.info()
 if (chat) {

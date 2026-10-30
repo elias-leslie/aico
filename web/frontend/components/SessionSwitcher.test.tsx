@@ -5,6 +5,16 @@ import type { PaneSlot } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { SessionSwitcher } from './SessionSwitcher'
 
+vi.mock('./HostsButton', () => ({
+  HostsButton: ({ onClick }: { onClick: () => void }) => (
+    <button type="button" onClick={onClick}>
+      Hosts
+    </button>
+  ),
+}))
+vi.mock('./HostsSheet', () => ({
+  HostsSheet: () => <div data-testid="hosts-sheet-stub" />,
+}))
 vi.mock('./KeptCheckIns', () => ({ KeptCheckIns: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
@@ -215,5 +225,21 @@ describe('SessionSwitcher attention', () => {
     )
     expect(chips).toHaveLength(1)
     expect(chips[0]).toHaveTextContent('Check-in Tue 5:30 PM')
+  })
+
+  it('opens the Hosts sheet from the phone sheet and folds the list away', () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    render(
+      <SessionSwitcher
+        currentSlot={slotA}
+        allSlots={[slotA]}
+        onSwitchTo={vi.fn()}
+        isMobile={true}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('session-switcher'))
+    fireEvent.click(screen.getByRole('button', { name: 'Hosts' }))
+    expect(screen.getByTestId('hosts-sheet-stub')).toBeInTheDocument()
+    expect(screen.queryByTestId('session-sheet')).toBeNull()
   })
 })

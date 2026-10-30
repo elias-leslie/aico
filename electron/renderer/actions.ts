@@ -162,6 +162,15 @@ export const ACTIONS: Action[] = [
     run: () => window.aico.actions.hub(),
   },
   {
+    id: 'hosts',
+    section: 'Session',
+    label: 'Hosts',
+    shortcut: '',
+    icon: '⌂',
+    note: 'Other machines that run sessions: power, and sign-in for each agent tool.',
+    run: () => window.dispatchEvent(new CustomEvent('aico:hosts-open')),
+  },
+  {
     id: 'palette',
     section: 'Session',
     label: 'Command palette',

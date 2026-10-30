@@ -1,0 +1,201 @@
+/* Hosts panel: a sheet over the window, on the palette's surface. */
+.aico-hosts[hidden] {
+  display: none;
+}
+.aico-hosts {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 48px;
+  background: var(--scrim);
+  border-radius: 14px;
+  -webkit-app-region: no-drag;
+}
+.aico-hosts-box {
+  display: flex;
+  flex-direction: column;
+  width: 480px;
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 64px);
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgb(var(--umber-rgb) / 0.96);
+  backdrop-filter: blur(30px);
+  box-shadow:
+    var(--shadow-soft),
+    0 0 0 1px rgb(var(--glass-rgb) / 0.07);
+  font-family: var(--font-ui);
+  color: var(--bone);
+  animation: aico-hosts-in 0.18s var(--ease-arrival);
+}
+@keyframes aico-hosts-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.aico-hosts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid rgb(var(--glass-rgb) / 0.06);
+}
+.aico-hosts-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.aico-hosts-body {
+  overflow-y: auto;
+  padding: 8px;
+}
+.aico-hosts-status {
+  margin: 0;
+  padding: 0 16px;
+  font-size: 12px;
+  color: var(--mist);
+}
+.aico-hosts-status:not(:empty) {
+  padding: 8px 16px 10px;
+  border-top: 1px solid rgb(var(--glass-rgb) / 0.06);
+}
+.aico-hosts-card {
+  padding: 10px 10px 8px;
+  border-radius: 10px;
+  background: rgb(var(--glass-rgb) / 0.03);
+}
+.aico-hosts-card + .aico-hosts-card {
+  margin-top: 8px;
+}
+.aico-hosts-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.aico-hosts-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.aico-hosts-actions {
+  margin-left: auto;
+}
+.aico-hosts-meta,
+.aico-hosts-detail,
+.aico-hosts-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mist);
+  overflow-wrap: anywhere;
+}
+.aico-hosts-chip {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--mist);
+  background: rgb(var(--glass-rgb) / 0.06);
+}
+.aico-hosts-chip.good {
+  color: var(--jade);
+  background: color-mix(in srgb, var(--jade) 12%, transparent);
+}
+.aico-hosts-chip.wait,
+.aico-hosts-chip.warn {
+  color: var(--lantern);
+  background: rgb(var(--lantern-rgb) / 0.14);
+}
+.aico-hosts-logins {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgb(var(--glass-rgb) / 0.05);
+}
+.aico-hosts-tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.aico-hosts-tool-name {
+  min-width: 88px;
+}
+.aico-hosts-tool-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.aico-hosts-source {
+  color: var(--mist);
+  font-size: 11px;
+}
+.aico-hosts-tool-actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.aico-hosts-btn {
+  padding: 3px 10px;
+  border: 1px solid rgb(var(--glass-rgb) / 0.12);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--bone);
+  font: 12px var(--font-ui);
+  cursor: pointer;
+  transition:
+    background 0.15s var(--ease-arrival),
+    border-color 0.15s var(--ease-arrival);
+}
+.aico-hosts-btn:hover:not(:disabled) {
+  border-color: rgb(var(--lantern-rgb) / 0.5);
+  background: rgb(var(--lantern-rgb) / 0.1);
+}
+.aico-hosts-btn:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: 1px;
+}
+.aico-hosts-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.aico-hosts-btn.danger {
+  border-color: color-mix(in srgb, var(--ember) 60%, transparent);
+  color: var(--ember);
+}
+.aico-hosts-btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ember) 12%, transparent);
+  border-color: var(--ember);
+}
+.aico-hosts-btn.close {
+  border: none;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--mist);
+}
+.aico-hosts-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgb(var(--glass-rgb) / 0.04);
+}
+.aico-hosts-ask-text {
+  flex-basis: 100%;
+  margin: 0 0 2px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aico-hosts-box {
+    animation: none;
+  }
+}

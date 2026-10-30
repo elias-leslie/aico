@@ -15,6 +15,8 @@ import {
 import { NeedsYouCount } from './AttentionBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
 import { HostBadge } from './HostBadge'
+import { HostsButton } from './HostsButton'
+import { HostsSheet } from './HostsSheet'
 import { SessionList, sessionsHeading } from './SessionList'
 import { SessionTitle } from './SessionTitle'
 
@@ -42,6 +44,7 @@ export function SessionSwitcher({
   attention,
 }: SessionSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [hostsOpen, setHostsOpen] = useState(false)
   const triggerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const currentName = getSlotName(currentSlot)
@@ -60,6 +63,12 @@ export function SessionSwitcher({
     },
     [onSwitchTo],
   )
+
+  // The Hosts sheet outlives the list: opening it folds the list away.
+  const openHosts = useCallback(() => {
+    setIsOpen(false)
+    setHostsOpen(true)
+  }, [])
 
   useEffect(() => {
     if (!isOpen) return
@@ -144,6 +153,9 @@ export function SessionSwitcher({
           className="lantern-sheet lantern-enter absolute left-0 top-full z-50 mt-1.5 w-[380px] max-w-[90vw] rounded-xl pt-1"
         >
           {list}
+          <div className="flex justify-end px-2 pb-2">
+            <HostsButton onClick={openHosts} />
+          </div>
         </div>
       )}
 
@@ -174,17 +186,22 @@ export function SessionSwitcher({
                 className="mx-auto mt-2 h-1 w-9 flex-none rounded-full"
                 style={{ backgroundColor: 'var(--paper-veil)' }}
               />
-              <h2
-                className="flex-none px-[18px] pt-3 pb-1"
-                style={{ font: '500 18px/1.2 var(--font-display)' }}
-              >
-                {sessionsHeading(allSlots.length, needsYouCount)}
-              </h2>
+              <div className="flex flex-none items-center gap-2 pt-3 pr-3 pb-1 pl-[18px]">
+                <h2
+                  className="min-w-0 flex-1"
+                  style={{ font: '500 18px/1.2 var(--font-display)' }}
+                >
+                  {sessionsHeading(allSlots.length, needsYouCount)}
+                </h2>
+                <HostsButton onClick={openHosts} />
+              </div>
               {list}
             </div>
           </div>,
           document.body,
         )}
+
+      {hostsOpen && <HostsSheet open onOpenChange={setHostsOpen} />}
     </div>
   )
 }

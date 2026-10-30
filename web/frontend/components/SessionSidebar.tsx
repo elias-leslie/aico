@@ -4,6 +4,7 @@ import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
+import { HostsLauncher } from './HostsButton'
 import { SessionList, SessionRail, sessionsHeading } from './SessionList'
 
 /** The list's width: the default, its limits, and the keyboard step. */
@@ -86,6 +87,7 @@ export function SessionSidebar({
           </button>
         </header>
         {newButton}
+        <HostsLauncher icon />
         <nav
           aria-label="Sessions"
           data-testid="session-list"
@@ -120,6 +122,7 @@ export function SessionSidebar({
         >
           {heading}
         </h2>
+        <HostsLauncher icon />
         {onCollapsedChange && (
           <button
             type="button"

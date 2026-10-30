@@ -1,7 +1,10 @@
 // Shape of the preload bridge, shared by renderer code and the global Window.
 
+import type { HostLogins, HostResult, HostRow } from './main/host-panel'
 import type { ChatCallResult, ChatInfo, ChatStreamItem } from './shared/chat/types'
 import type { AicoTerminalFontSettings } from './shared/font-settings'
+
+export type { HostLogins, HostResult, HostRow }
 
 export interface SelectionToast {
   kind: string
@@ -60,6 +63,21 @@ export interface OpenableSession {
 
 export type { ChatCallResult, ChatFailure, ChatInfo, ChatStreamItem } from './shared/chat/types'
 export interface AicoApi {
+  /** The Hosts panel: remote hosts' state, power and per-tool sign-in. */
+  hosts: {
+    list(): Promise<HostResult<HostRow[]>>
+    logins(host: string): Promise<HostResult<HostLogins>>
+    power(host: string, action: 'on' | 'off', force?: boolean): Promise<HostResult<unknown>>
+    trust(host: string): Promise<HostResult<void>>
+    /** Sign in or out of a tool there; a sign-in opens its session in a window. */
+    sign(
+      host: string,
+      tool: string,
+      action: 'sign_in' | 'sign_out',
+    ): Promise<HostResult<{ signedOut: boolean; note: string | null; opened: boolean }>>
+    /** A host's sign-in may have changed (its sign-in session ended). */
+    onChanged(cb: (host: string) => void): () => void
+  }
   pty: {
     start(size: { cols: number; rows: number }): void
     input(data: string): void
