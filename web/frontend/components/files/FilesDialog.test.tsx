@@ -167,7 +167,7 @@ describe('FilesDialog', () => {
   })
 
   it('shows a refusal from another host at once, without Try again', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_url: string) =>
       json({ detail: 'Files on agent-work can’t be shown here yet.' }, 409),
     )
     vi.stubGlobal('fetch', fetchMock)

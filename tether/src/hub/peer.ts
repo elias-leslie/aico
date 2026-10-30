@@ -256,8 +256,13 @@ export class Peer {
 
   /** What a host whose link is down is: being brought up (connecting), powered
    * off (on purpose, or as its `status` command says), or offline. */
+  /** Read through a call: a wake can start while a probe is out. */
+  private waking(): boolean {
+    return this.wake?.state === 'starting'
+  }
+
   private async downState(): Promise<HostState> {
-    if (this.wake?.state === 'starting') return 'connecting'
+    if (this.waking()) return 'connecting'
     if (this.expectOff) return 'powered_off'
     const probe = this.deps.poweredOff
     if (!probe) return 'offline'
@@ -265,7 +270,7 @@ export class Peer {
       const off = await probe(this.entry).catch(() => null)
       this.power = { at: this.deps.now(), off }
     }
-    if (this.wake?.state === 'starting') return 'connecting'
+    if (this.waking()) return 'connecting'
     return this.power.off ? 'powered_off' : 'offline'
   }
 

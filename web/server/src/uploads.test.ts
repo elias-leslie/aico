@@ -68,7 +68,12 @@ describe('upload routes', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
     dir = join(mkdtempSync(join(tmpdir(), 'aico-uploads-')), 'uploads')
     server = await serveRoutes((router) =>
-      registerUploadRoutes(router, { dir, maxBytes: 1024, maxAgeMs: 60_000 }),
+      registerUploadRoutes(router, {
+        dir,
+        remoteDir: '~/.cache/aico/uploads',
+        maxBytes: 1024,
+        maxAgeMs: 60_000,
+      }),
     )
   })
 
@@ -275,7 +280,12 @@ describe('cleanupOldUploads', () => {
   it('deletes old files at any depth and prunes emptied directories, never the root', async () => {
     write('nested/deeper/old.txt', 3600)
     write('fresh.txt', 10)
-    const stats = await cleanupOldUploads({ dir, maxBytes: 1, maxAgeMs: 300_000 })
+    const stats = await cleanupOldUploads({
+      dir,
+      remoteDir: '~/.cache/aico/uploads',
+      maxBytes: 1,
+      maxAgeMs: 300_000,
+    })
     expect(stats).toEqual({
       scanned_files: 2,
       deleted_files: 1,
@@ -289,6 +299,7 @@ describe('cleanupOldUploads', () => {
   it('reports nothing for a missing upload dir', async () => {
     const stats = await cleanupOldUploads({
       dir: join(dir, 'missing'),
+      remoteDir: '~/.cache/aico/uploads',
       maxBytes: 1,
       maxAgeMs: 60_000,
     })
