@@ -64,6 +64,7 @@ export type TerminalLink = Pick<
   | 'resize'
   | 'settleSize'
   | 'kill'
+  | 'refusedByHost'
   | 'onData'
   | 'onExit'
   | 'delivered'
@@ -420,6 +421,13 @@ export class TerminalHub {
         // A remote link tries again here; a local one has the page reconnect.
         close: () => {
           if (link !== current) return
+          if (host && current.refusedByHost) {
+            // The host's sshd has no room for another session: retrying at
+            // once cannot help, so say so and wait for Reconnect.
+            link = null
+            retries = REMOTE_RETRIES
+            return hostState('refused')
+          }
           void sessionGone(tether, sessionId).then((gone) => {
             if (!open || link !== current) return
             if (gone) return dead('Session ended')

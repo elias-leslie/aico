@@ -132,12 +132,22 @@ export class Hub {
     }
     if (stamp === this.fileStamp && this.reloadTimer) return
     this.fileStamp = stamp
-    const { hosts, errors } = loadHosts(this.file)
+    const { hosts, errors, readable, held } = loadHosts(this.file)
     for (const error of errors) this.log(`hosts.json: ${error}`)
+    // A file that does not parse (often an editor's half-written save) changes
+    // nothing: dropping its hosts would close every window on them.
+    if (!readable) {
+      if (this.peers.size) this.log('hosts.json: keeping the hosts already loaded')
+      return
+    }
     const wanted = new Map(hosts.map((host) => [host.name, host]))
     for (const [name, peer] of this.peers) {
       const entry = wanted.get(name)
       if (entry && sameEntry(entry, peer.entry)) continue
+      if (!entry && held.includes(name)) {
+        this.log(`hosts.json: ${name}: keeping the running link until its entry is valid again`)
+        continue
+      }
       peer.stop()
       this.peers.delete(name)
       if (!entry) {

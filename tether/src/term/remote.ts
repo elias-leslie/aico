@@ -92,21 +92,28 @@ export function remoteAttachArgv(
   ]
 }
 
+/** ssh's own words when the host's sshd refuses another session on the link's
+ * master (its MaxSessions is reached): the host is up, it just has no room. */
+export const SSH_SESSION_REFUSED = /Session open refused by peer|session request failed/
+
+/** Options for an ssh that rides the link's master and nothing else.
+ * ProxyCommand=false: when the master refuses (or is gone), ssh would otherwise
+ * fall back to a direct connection to the alias, which fails with a misleading
+ * reason (or worse, connects around the link). */
+export const SSH_MUX_ONLY = [
+  '-F',
+  '/dev/null',
+  '-T',
+  '-o',
+  'BatchMode=yes',
+  '-o',
+  'ProxyCommand=false',
+]
+
 function sshPrefix(remote: RemoteHost): string[] {
   // -F /dev/null: no user config can redirect it; the master already holds
   // the connection, so the alias only names it.
-  return [
-    SSH_BIN,
-    '-F',
-    '/dev/null',
-    '-T',
-    '-o',
-    'BatchMode=yes',
-    '-S',
-    remote.control,
-    remote.alias,
-    '--',
-  ]
+  return [SSH_BIN, ...SSH_MUX_ONLY, '-S', remote.control, remote.alias, '--']
 }
 
 /** Where the tmux binary sits in an attach argv: first, or after ssh's `--`. */

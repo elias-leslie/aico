@@ -55,6 +55,7 @@ function fakeLink(size: { cols: number; rows: number }) {
   const exits: (() => void)[] = []
   return {
     pid: 4242,
+    refusedByHost: false,
     cols: size.cols,
     rows: size.rows,
     write: vi.fn(),
@@ -832,6 +833,19 @@ describe('sessions on another host', () => {
     expect(hostSends(s.all[0]).at(-1)).toEqual({ host: HOST, state: 'disconnected' })
     // Reconnect tries once more, now successfully.
     s.tether.attach.mockResolvedValue(remoteTarget())
+    s.on.get('pty:reconnect')?.(s.from(s.all[0]))
+    await vi.waitFor(() => expect(s.links).toHaveLength(2))
+    expect(hostSends(s.all[0]).at(-1)).toEqual({ host: HOST, state: 'live' })
+  })
+
+  it('a host with no room for another session says so and waits for Reconnect', async () => {
+    const s = setup()
+    const link = await attachedRemote(s)
+    link.refusedByHost = true
+    link.emitExit()
+    expect(hostSends(s.all[0]).at(-1)).toEqual({ host: HOST, state: 'refused' })
+    expect(s.timers.size).toBe(0)
+    expect(s.tether.attach).toHaveBeenCalledTimes(1)
     s.on.get('pty:reconnect')?.(s.from(s.all[0]))
     await vi.waitFor(() => expect(s.links).toHaveLength(2))
     expect(hostSends(s.all[0]).at(-1)).toEqual({ host: HOST, state: 'live' })

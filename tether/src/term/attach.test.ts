@@ -125,6 +125,8 @@ describe('remote attach target', () => {
       '-T',
       '-o',
       'BatchMode=yes',
+      '-o',
+      'ProxyCommand=false',
       '-S',
       control,
       'agent-work',

@@ -23,6 +23,7 @@ class FakeLink {
   cols: number
   rows: number
   closed = false
+  refusedByHost = false
   readonly written: string[] = []
   readonly pasted: string[] = []
   readonly resized: Size[] = []
@@ -421,6 +422,24 @@ describe('a session on another host', () => {
     await until(() => hostStates(view).at(-1) === 'live')
     view.ws.send('back')
     await until(() => links[1].written.includes('back'))
+    view.ws.close()
+  })
+
+  it('a host with no room for another session says so, then waits for Reconnect', async () => {
+    const session = tether.add({ host: HOST })
+    const view = open(session.id)
+    await start(view)
+    await until(() => links.length === 1)
+    await until(() => hostStates(view).at(-1) === 'live')
+    links[0].refusedByHost = true
+    links[0].kill()
+    await until(() => hostStates(view).at(-1) === 'refused')
+    await new Promise((r) => setTimeout(r, 20))
+    expect(tether.callsOf('attach')).toHaveLength(1)
+    expect(view.ws.readyState).toBe(WebSocket.OPEN)
+    view.ws.send(ctrl({ reconnect: true }))
+    await until(() => links.length === 2)
+    await until(() => hostStates(view).at(-1) === 'live')
     view.ws.close()
   })
 

@@ -155,11 +155,11 @@ describe('controlArgv', () => {
 
   it('puts -C after the remote tmux, never after ssh (its compression flag)', () => {
     const argv = controlArgv(remoteArgv)
-    expect(argv.slice(0, 13)).toEqual(remoteArgv.slice(0, 13))
-    expect(argv.slice(13, 15)).toEqual(['-C', '-u'])
-    expect(argv.indexOf('-C')).toBe(13)
+    expect(argv.slice(0, 15)).toEqual(remoteArgv.slice(0, 15))
+    expect(argv.slice(15, 17)).toEqual(['-C', '-u'])
+    expect(argv.indexOf('-C')).toBe(15)
     expect(argv.slice(-2)).toEqual(['-f', 'pause-after=5'])
-    expect(() => controlArgv([...remoteArgv.slice(0, 10), 'tmux', 'attach'])).toThrow()
+    expect(() => controlArgv([...remoteArgv.slice(0, 12), 'tmux', 'attach'])).toThrow()
   })
 })
 
@@ -170,6 +170,8 @@ const remoteArgv = [
   '-T',
   '-o',
   'BatchMode=yes',
+  '-o',
+  'ProxyCommand=false',
   '-S',
   '/run/user/1000/tether/peers/w/ssh.ctl',
   'w',
@@ -205,7 +207,7 @@ describe('tmuxCommandArgv', () => {
       ),
     ).toEqual(['/usr/bin/tmux', '-S', '/s', 'load-buffer', '-'])
     expect(tmuxCommandArgv(remoteArgv, ['load-buffer', '-b', "a'b", '-'])).toEqual([
-      ...remoteArgv.slice(0, 13),
+      ...remoteArgv.slice(0, 15),
       '-u',
       '-S',
       "'/home/k/s.sock'",

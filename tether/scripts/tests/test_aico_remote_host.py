@@ -132,9 +132,10 @@ def test_a_remote_roots_tmux_runs_through_the_link(monkeypatch):
     with pytest.raises(admin.Unavailable):
         remote.command(["display-message", "-p", "-t", "%1", "#{pane_id} x"], 100)
     argv = seen[0]
-    assert argv[:9] == [admin.SSH, "-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-S", CONTROL, "agent-work"]
-    assert argv[9] == "--"
-    assert shlex.split(argv[10]) == [admin.REMOTE_TMUX, "-S", "/tmp/tmux-1000/default",
+    assert argv[:11] == [admin.SSH, "-F", "/dev/null", "-T", "-o", "BatchMode=yes",
+                         "-o", "ProxyCommand=false", "-S", CONTROL, "agent-work"]
+    assert argv[11] == "--"
+    assert shlex.split(argv[12]) == [admin.REMOTE_TMUX, "-S", "/tmp/tmux-1000/default",
                                      "display-message", "-p", "-t", "%1", "#{pane_id} x"]
 
 

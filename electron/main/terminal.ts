@@ -37,6 +37,7 @@ export type WindowHostState =
   | 'powered_off'
   | 'identity_changed'
   | 'disconnected'
+  | 'refused'
 
 /** Reattach tries after a remote link drops while its host still counts as
  * up; then the window waits for the hub's resync (or Reconnect). */
@@ -372,7 +373,14 @@ export function createTerminal(deps: TerminalDeps) {
           if (!win.isDestroyed()) {
             linkLost.set(winId, { generation: target.generation, size: lastSize })
             // Over ssh the link can drop with the session still running there.
-            if (target.host) retryRemote(win, target.host, lastSize, Date.now() - attachedAt)
+            if (target.host && pty.refusedByHost) {
+              // The host's sshd has no room for another session: retrying at
+              // once cannot help, so say so and wait for Reconnect.
+              const previous = remoteRetries.get(winId)
+              if (previous?.timer !== undefined) clearTimer(previous.timer)
+              remoteRetries.set(winId, { attempt: REMOTE_RETRIES, host: target.host })
+              showHost(win, target.host, 'refused')
+            } else if (target.host) retryRemote(win, target.host, lastSize, Date.now() - attachedAt)
           }
           deps.requestRefresh()
         }

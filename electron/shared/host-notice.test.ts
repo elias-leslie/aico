@@ -11,6 +11,7 @@ describe('hostNoticeCopy', () => {
       'powered_off',
       'identity_changed',
       'disconnected',
+      'refused',
     ])
       expect(hostNoticeCopy('agent-work', state)?.title).toContain('agent-work')
   })
@@ -18,6 +19,7 @@ describe('hostNoticeCopy', () => {
   it('offers Reconnect where trying again can help', () => {
     expect(hostNoticeCopy('w', 'offline')?.reconnect).toBe(true)
     expect(hostNoticeCopy('w', 'disconnected')?.reconnect).toBe(true)
+    expect(hostNoticeCopy('w', 'refused')?.reconnect).toBe(true)
     expect(hostNoticeCopy('w', 'connecting')?.reconnect).toBe(false)
     expect(hostNoticeCopy('w', 'identity_changed')?.reconnect).toBe(false)
   })

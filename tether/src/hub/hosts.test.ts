@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { hostsFilePath, loadHosts, parseHosts, peerDir } from './hosts'
 import { LINK_BACKOFF_MAX_MS, linkArgv, linkBackoff, linkPaths } from './link'
+import { kickArgv } from './wake'
 
 const VALID = {
   name: 'agent-work',
@@ -36,15 +37,27 @@ describe('hosts registry', () => {
         },
       ],
       errors: [],
+      readable: true,
+      held: [],
     })
   })
 
   it('treats a missing file as no hosts and no error', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-hosts-'))
     dirs.push(dir)
-    expect(loadHosts(join(dir, 'hosts.json'))).toEqual({ hosts: [], errors: [] })
+    expect(loadHosts(join(dir, 'hosts.json'))).toEqual({
+      hosts: [],
+      errors: [],
+      readable: true,
+      held: [],
+    })
     writeFileSync(join(dir, 'hosts.json'), '{nope')
-    expect(loadHosts(join(dir, 'hosts.json')).errors).toEqual(['hosts.json is not valid JSON'])
+    expect(loadHosts(join(dir, 'hosts.json'))).toMatchObject({
+      errors: ['hosts.json is not valid JSON'],
+      readable: false,
+    })
+    writeFileSync(join(dir, 'hosts.json'), '{}')
+    expect(loadHosts(join(dir, 'hosts.json')).readable).toBe(false)
   })
 
   it.each([
@@ -62,11 +75,20 @@ describe('hosts registry', () => {
     [{ ...VALID, health: ['http://10.0.0.5:8001/health'] }, 'health must be a list'],
     [{ ...VALID, health: ['http://127.0.0.1:8001/$(id)'] }, 'health must be a list'],
     [{ ...VALID, wakeTimeoutSec: 5 }, 'wakeTimeoutSec must be'],
-    [{ ...VALID, password: 'x' }, 'unknown fields password'],
   ])('skips an invalid entry with its reason (%#)', (entry, reason) => {
-    const { hosts, errors } = parseHosts(JSON.stringify([entry]))
+    const { hosts, errors, held } = parseHosts(JSON.stringify([entry]))
     expect(hosts).toEqual([])
     expect(errors[0]).toContain(reason)
+    expect(held).toEqual(/name must be/.test(reason) ? [] : ['agent-work'])
+  })
+
+  it('keeps an entry with fields it does not know, and says which', () => {
+    const { hosts, errors, held } = parseHosts(
+      JSON.stringify([{ ...VALID, password: 'x', later: 1 }]),
+    )
+    expect(hosts.map((host) => host.name)).toEqual(['agent-work'])
+    expect(errors).toEqual(['agent-work: ignoring unknown fields password, later'])
+    expect(held).toEqual([])
   })
 
   it('keeps the first of two entries with one name', () => {
@@ -78,6 +100,18 @@ describe('hosts registry', () => {
       ['b', 'agent-work'],
     ])
     expect(errors).toEqual(['agent-work: duplicate name; the first entry is used'])
+  })
+
+  it('kicks only the link process, never its ssh (ssh exits on SIGUSR1)', () => {
+    expect(kickArgv('agent-work')).toEqual([
+      'systemctl',
+      '--user',
+      'kill',
+      '--kill-whom=main',
+      '-s',
+      'USR1',
+      'tether-link@agent-work.service',
+    ])
   })
 
   it('resolves the registry and peer paths from the environment', () => {

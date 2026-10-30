@@ -438,11 +438,16 @@ export class Peer {
     const answer = await peerRequest(this.socket, 'GET', '/v1/sessions', undefined, SYNC_TIMEOUT_MS)
     if (answer.status !== 200) throw new PeerUnavailable(`sessions answered ${answer.status}`)
     if (signal.aborted) return
+    const before = [...this.sessions.keys()]
     this.replace(answer.body)
     this.failures = 0
     this.openUntil = 0
     await this.refreshRuns()
     this.setState('connected')
+    // Ended while the link was down (or the host was rolled back): the host's
+    // own session.ended never reached us, so say it from its fresh list.
+    for (const id of before)
+      if (!this.sessions.has(id)) this.deps.publish('session.ended', { id, host: this.name })
     for (const item of this.descriptors()) this.publishSession(item)
     this.deps.publish('peer.resync', { host: this.name })
   }

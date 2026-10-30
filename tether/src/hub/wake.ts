@@ -6,6 +6,7 @@
 
 import { spawn } from 'node:child_process'
 import { HttpError } from '../http'
+import { SSH_MUX_ONLY } from '../term/remote'
 import { SSH_BIN } from './link'
 import type { Peer } from './peer'
 
@@ -76,12 +77,8 @@ export const defaultGateRuntime: GateRuntime = {
       })
     }),
   kick: (host) => {
-    // SIGUSR1 makes `tether link` retry at once (tether-link@.service).
-    const child = spawn(
-      'systemctl',
-      ['--user', 'kill', '-s', 'USR1', `tether-link@${host}.service`],
-      { stdio: 'ignore' },
-    )
+    const [command = 'systemctl', ...args] = kickArgv(host)
+    const child = spawn(command, args, { stdio: 'ignore' })
     child.once('error', () => {})
   },
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -89,15 +86,27 @@ export const defaultGateRuntime: GateRuntime = {
   linkGraceMs: 10_000,
 }
 
+/** SIGUSR1 makes `tether link` retry at once (tether-link@.service). Only the
+ * unit's main process: `systemctl kill` signals every process by default, and
+ * ssh exits on SIGUSR1, which would drop a live link and every remote terminal
+ * on it. A link that is up ignores the kick. */
+export function kickArgv(host: string): string[] {
+  return [
+    'systemctl',
+    '--user',
+    'kill',
+    '--kill-whom=main',
+    '-s',
+    'USR1',
+    `tether-link@${host}.service`,
+  ]
+}
+
 /** The argv that fetches one health URL on the host, through the link's ControlMaster. */
 export function healthArgv(peer: Peer, url: string): string[] {
   return [
     SSH_BIN,
-    '-F',
-    '/dev/null',
-    '-T',
-    '-o',
-    'BatchMode=yes',
+    ...SSH_MUX_ONLY,
     '-S',
     peer.control,
     peer.entry.ssh,

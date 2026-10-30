@@ -154,6 +154,10 @@ export function forwardRequest(
           res.writeHead(status, passed)
           answer.pipe(res)
           res.once('close', () => answer.destroy())
+          // The host went away mid-stream: end ours too, never hang "live".
+          answer.once('close', () => {
+            if (!answer.complete) res.destroy()
+          })
           resolve(true)
           return
         }
@@ -184,7 +188,10 @@ export function forwardRequest(
         })
       },
     )
-    upstream.on('error', () => resolve(res.headersSent))
+    upstream.on('error', () => {
+      if (res.headersSent) res.destroy()
+      resolve(res.headersSent)
+    })
     // A client that goes away mid-stream ends the peer side too.
     res.once('close', () => upstream.destroy())
     req.pipe(upstream)

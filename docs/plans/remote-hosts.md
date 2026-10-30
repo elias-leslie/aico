@@ -79,7 +79,7 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
 ### Clients (Electron, web server)
 
 - **Attach:** when the descriptor has a `host`, the client builds
-  `/usr/bin/ssh -F /dev/null -T -o BatchMode=yes -S <ctl> <alias> -- env LANG=C.UTF-8 /usr/bin/tmux -u -C -S '<sock>' attach-session -t '<target>'`.
+  `/usr/bin/ssh -F /dev/null -T -o BatchMode=yes -o ProxyCommand=false -S <ctl> <alias> -- env LANG=C.UTF-8 /usr/bin/tmux -u -C -S '<sock>' attach-session -t '<target>'`.
   - The inputs come from hosts.json and from Tether's answer. Each remote
     argument is shell-quoted.
   - `controlArgv` and `socketArgsOf` know about the ssh prefix. Paste

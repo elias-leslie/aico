@@ -845,9 +845,11 @@ class Collector:
         self.remaining()
         argv = [self.tmux, "-S", self.tmux_socket, *args]
         if self.remote:
-            # Through the hub's ssh link; the remote shell gets one quoted command.
+            # Through the hub's ssh link only (ProxyCommand=false: no direct-connect
+            # fallback when the master refuses); the remote shell gets one quoted command.
             _, alias, control = self.remote
-            argv = [SSH, "-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-S", control, alias, "--",
+            argv = [SSH, "-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-o", "ProxyCommand=false",
+                    "-S", control, alias, "--",
                     shlex.join([REMOTE_TMUX, "-S", self.tmux_socket, *args])]
         try:
             process = subprocess.Popen(argv,

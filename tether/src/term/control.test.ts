@@ -80,6 +80,41 @@ describe('ControlTerminal pid', () => {
     expect(term.pid).toBe(4321)
   })
 
+  it("over ssh tells a host's refused session (its MaxSessions) from a dropped link", async () => {
+    const ssh = [
+      '/usr/bin/ssh',
+      '-S',
+      '/c',
+      'h',
+      '--',
+      '/usr/bin/tmux',
+      '-S',
+      "'/s'",
+      'attach',
+      '-t',
+      "'$1'",
+    ]
+    const exits: boolean[] = []
+    for (const stderr of [
+      'mux_client_request_session: session request failed: Session open refused by peer\nConnection closed by UNKNOWN port 65535\n',
+      'Connection to h closed by remote host.\n',
+    ]) {
+      const tmux = fakeTmux()
+      const remote = new ControlTerminal(ssh, {}, null, {
+        historyLines: 100,
+        spawn: () => tmux.child,
+      })
+      links.push(remote)
+      const exited = new Promise<void>((resolve) => remote.onExit(resolve))
+      ;(tmux.child.stderr as PassThrough).write(stderr)
+      tmux.child.emit('exit', 255)
+      ;(tmux.child.stderr as PassThrough).end()
+      await exited
+      exits.push(remote.refusedByHost)
+    }
+    expect(exits).toEqual([true, false])
+  })
+
   it('over ssh knows no pid until tmux on the host says (the child is ssh)', async () => {
     const tmux = fakeTmux()
     const remote = new ControlTerminal(

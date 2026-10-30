@@ -41,6 +41,12 @@ export function hostNoticeCopy(host: string, state: string): HostNoticeCopy | nu
         detail: 'Aico tries again when the link to the host comes back.',
         reconnect: true,
       }
+    case 'refused':
+      return {
+        title: `${host} has no room for another session`,
+        detail: `Too many sessions are open on ${host}. Close one, then Reconnect.`,
+        reconnect: true,
+      }
     default:
       return null
   }

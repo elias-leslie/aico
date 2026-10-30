@@ -1,5 +1,11 @@
 import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import {
+  createServer,
+  type IncomingMessage,
+  request,
+  type Server,
+  type ServerResponse,
+} from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -103,6 +109,11 @@ class FakePeer {
     if (result?.[1]) {
       this.guiResults.push({ id: result[1], body: payload })
       return sendJson(res, 200, { accepted: true })
+    }
+    if (/^\/v1\/sessions\/[0-9a-f]{8}\/chat\/stream$/.test(url)) {
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+      res.write(`${JSON.stringify({ type: 'hello' })}\n`)
+      return
     }
     if (/^\/v1\/sessions\/[0-9a-f]{8}\/attach$/.test(url))
       return sendJson(res, 200, { generation: 'g', argv: ['/usr/bin/tmux'], env: {} })
@@ -261,6 +272,36 @@ describe('hub', () => {
     expect((await hub.sessions()).map((item) => item.id)).toEqual(['aaaa0001'])
   })
 
+  it('keeps its hosts through a hosts.json it cannot read, and drops one only when a clean file omits it', async () => {
+    const file = join(dir, 'hosts.json')
+    const ids = async () => (await hub.sessions()).map((item) => item.id)
+    expect(await ids()).toEqual(['aaaa0001', 'bbbb0002'])
+    events = []
+    // An editor's half-written save.
+    writeFileSync(file, '[{"name": "vm", "ssh": ')
+    hub.reload()
+    // An entry this Tether cannot use yet (bad value): the running link stays.
+    writeFileSync(file, JSON.stringify([{ name: 'vm', ssh: 'vm', socket: 'relative.sock' }]))
+    hub.reload()
+    // A newer Tether's field: ignored, the entry is unchanged.
+    writeFileSync(
+      file,
+      JSON.stringify([
+        { name: 'vm', ssh: 'vm', socket: '/run/user/1000/tether/default/control.sock', later: 1 },
+      ]),
+    )
+    hub.reload()
+    expect(state()).toBe('connected')
+    expect(await ids()).toEqual(['aaaa0001', 'bbbb0002'])
+    expect(events.map((event) => event.type)).not.toContain('peer.resync')
+    // A clean file without the host drops it.
+    writeFileSync(file, '[]')
+    hub.reload()
+    expect(hub.hosts()).toEqual([])
+    expect(await ids()).toEqual([])
+    expect(events).toContainEqual({ type: 'peer.resync', data: { host: 'vm' } })
+  })
+
   it('keeps a down peer’s sessions as stale, never gone, and resyncs on return', async () => {
     events = []
     await peer.stop()
@@ -302,6 +343,37 @@ describe('hub', () => {
     await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
     expect(events.map((event) => event.type)).toContain('peer.resync')
     expect((await hub.sessions()).map((item) => item.peer)).toEqual([undefined, undefined])
+  })
+
+  it('ends sessions that vanished while the host was away (a rollback), then resyncs', async () => {
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('offline'))
+    peer.sessions = peer.sessions.filter((item) => item.id !== 'bbbb0002')
+    events = []
+    await peer.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
+    const types = events.map((event) => event.type)
+    expect(events.filter((event) => event.type === 'session.ended')).toEqual([
+      { type: 'session.ended', data: { id: 'bbbb0002', host: 'vm' } },
+    ])
+    expect(types.indexOf('session.ended')).toBeLessThan(types.indexOf('peer.resync'))
+    expect((await hub.sessions()).map((item) => item.id)).toEqual(['aaaa0001'])
+  })
+
+  it('ends a forwarded stream when the host goes away mid-stream', async () => {
+    const closed = new Promise<string>((resolve, reject) => {
+      const req = request(
+        { socketPath: frontSocket, method: 'GET', path: '/v1/sessions/aaaa0001/chat/stream' },
+        (res) => {
+          res.once('data', () => void peer.stop())
+          res.on('error', () => {})
+          res.once('close', () => resolve('closed'))
+        },
+      )
+      req.on('error', reject)
+      req.end()
+    })
+    await expect(closed).resolves.toBe('closed')
   })
 
   it('forwards per-session routes verbatim to the owning peer', async () => {
@@ -478,13 +550,15 @@ describe('hub', () => {
       expect(runs.filter((argv) => argv[0] === 'wake')).toHaveLength(1)
       // Health ran on the host through the link's ControlMaster.
       const check = runs.find((argv) => argv.includes('curl'))
-      expect(check?.slice(0, 9)).toEqual([
+      expect(check?.slice(0, 11)).toEqual([
         '/usr/bin/ssh',
         '-F',
         '/dev/null',
         '-T',
         '-o',
         'BatchMode=yes',
+        '-o',
+        'ProxyCommand=false',
         '-S',
         join(dir, 'tether', 'peers', 'vm', 'ssh.ctl'),
         'vm',

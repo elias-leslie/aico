@@ -33,6 +33,12 @@ export interface HostsLoad {
   hosts: HostEntry[]
   /** One plain line per entry (or the file) that was not usable. */
   errors: string[]
+  /** False when the file as a whole could not be read or parsed (often a
+   * half-written save): the hub then keeps the hosts it already has. */
+  readable: boolean
+  /** Names of entries that are listed but not usable right now: the hub keeps
+   * a running peer of that name instead of dropping it. */
+  held: string[]
 }
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,31}$/
@@ -90,13 +96,19 @@ function argv(value: unknown): string[] | null | false {
   return value as string[]
 }
 
-/** One entry, or why it is not usable. */
+/** An entry's name when it is a valid one, so a bad entry can still hold its peer. */
+function entryName(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const name = (value as Record<string, unknown>).name
+  return typeof name === 'string' && NAME.test(name) && name !== 'local' ? name : null
+}
+
+/** One entry, or why it is not usable. Unknown fields are ignored (a newer
+ * Tether's fields must not drop the host from an older one): see `unknownFields`. */
 function parseEntry(value: unknown, index: number): HostEntry | string {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     return `entry ${index} is not an object`
   const raw = value as Record<string, unknown>
-  const unknown = Object.keys(raw).filter((key) => !FIELDS.has(key))
-  if (unknown.length) return `entry ${index}: unknown fields ${unknown.join(', ')}`
   const { name, ssh } = raw
   if (typeof name !== 'string' || !NAME.test(name) || name === 'local')
     return `entry ${index}: name must be 1-32 of a-z, 0-9, '-'`
@@ -140,26 +152,46 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
   return { name, ssh, socket, forwards, wake, sleep, health, wakeTimeoutSec, stateDir }
 }
 
-/** Validate the registry's JSON text. Bad entries are skipped with a reason;
- * a duplicate name keeps the first entry. */
+function unknownFields(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+  return Object.keys(value).filter((key) => !FIELDS.has(key))
+}
+
+/** Validate the registry's JSON text. Bad entries are skipped with a reason
+ * (their names are `held`); a duplicate name keeps the first entry. */
 export function parseHosts(text: string): HostsLoad {
   let value: unknown
   try {
     value = JSON.parse(text)
   } catch {
-    return { hosts: [], errors: ['hosts.json is not valid JSON'] }
+    return { hosts: [], errors: ['hosts.json is not valid JSON'], readable: false, held: [] }
   }
-  if (!Array.isArray(value)) return { hosts: [], errors: ['hosts.json must be a list'] }
+  if (!Array.isArray(value))
+    return { hosts: [], errors: ['hosts.json must be a list'], readable: false, held: [] }
   const hosts: HostEntry[] = []
   const errors: string[] = []
+  const held: string[] = []
   value.forEach((item, index) => {
     const entry = parseEntry(item, index)
-    if (typeof entry === 'string') errors.push(entry)
-    else if (hosts.some((host) => host.name === entry.name))
+    const extra = unknownFields(item)
+    if (extra.length)
+      errors.push(
+        `${entryName(item) ?? `entry ${index}`}: ignoring unknown fields ${extra.join(', ')}`,
+      )
+    if (typeof entry === 'string') {
+      errors.push(entry)
+      const name = entryName(item)
+      if (name && !held.includes(name)) held.push(name)
+    } else if (hosts.some((host) => host.name === entry.name))
       errors.push(`${entry.name}: duplicate name; the first entry is used`)
     else hosts.push(entry)
   })
-  return { hosts, errors }
+  return {
+    hosts,
+    errors,
+    readable: true,
+    held: held.filter((name) => !hosts.some((host) => host.name === name)),
+  }
 }
 
 /** Read the registry. A missing file is no hosts and no error. */
@@ -168,8 +200,14 @@ export function loadHosts(path: string): HostsLoad {
   try {
     text = readFileSync(path, 'utf8')
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { hosts: [], errors: [] }
-    return { hosts: [], errors: [`hosts.json could not be read: ${(error as Error).message}`] }
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      return { hosts: [], errors: [], readable: true, held: [] }
+    return {
+      hosts: [],
+      errors: [`hosts.json could not be read: ${(error as Error).message}`],
+      readable: false,
+      held: [],
+    }
   }
   return parseHosts(text)
 }

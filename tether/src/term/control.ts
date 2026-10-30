@@ -32,7 +32,7 @@ import {
   SEED_FLAGS,
   tmuxCommandArgv,
 } from './protocol'
-import { SSH_BIN } from './remote'
+import { SSH_BIN, SSH_SESSION_REFUSED } from './remote'
 
 /** What a viewer uses of its terminal link. */
 export interface TerminalLink {
@@ -49,9 +49,17 @@ export interface TerminalLink {
    * it and this one took it back): read the pane again once typing pauses. */
   settleSize(): void
   kill(): void
+  /** After exit: the host's sshd refused another session on the link (its
+   * MaxSessions), so trying again at once cannot help. */
+  readonly refusedByHost: boolean
   onData(listener: (data: string) => void): void
   onExit(listener: () => void): void
 }
+
+/** How long an exit waits for the child's last stderr (ssh's reason). */
+const STDERR_DRAIN_MS = 250
+/** The tail of stderr kept for that reason. */
+const STDERR_TAIL_BYTES = 2048
 
 /** Wait after the last resize before re-reading the pane from tmux. */
 const RESEED_AFTER_RESIZE_MS = 300
@@ -134,6 +142,7 @@ export class ControlTerminal implements TerminalLink {
   private pendingOutput = ''
   private frameTimer: NodeJS.Timeout | undefined
   private clientPid = -1
+  private stderrTail = ''
   cols: number
   rows: number
 
@@ -162,9 +171,24 @@ export class ControlTerminal implements TerminalLink {
       this.protocol.feed(chunk)
       this.flushOutput(false)
     })
-    this.child.stderr.on('data', () => {})
+    this.child.stderr.on('data', (chunk: Buffer) => {
+      this.stderrTail = (this.stderrTail + chunk.toString('utf8')).slice(-STDERR_TAIL_BYTES)
+    })
     this.child.stdin.on('error', () => {})
-    this.child.on('exit', () => this.finish())
+    this.child.on('exit', () => {
+      // ssh prints why it failed just before it exits; read that first.
+      const stderr = this.child.stderr
+      if (stderr.readableEnded || stderr.destroyed) return this.finish()
+      const timer = setTimeout(() => this.finish(), STDERR_DRAIN_MS)
+      stderr.once('close', () => {
+        clearTimeout(timer)
+        this.finish()
+      })
+      stderr.once('end', () => {
+        clearTimeout(timer)
+        this.finish()
+      })
+    })
     this.child.on('error', () => this.finish())
     if (size) this.send([`refresh-client -C ${this.cols}x${this.rows}`])
     this.reseed(false, 'attach')
@@ -176,6 +200,12 @@ export class ControlTerminal implements TerminalLink {
   get pid(): number {
     if (this.clientPid > 0) return this.clientPid
     return this.attachArgv[0] === SSH_BIN ? -1 : (this.child.pid ?? -1)
+  }
+
+  get refusedByHost(): boolean {
+    return (
+      this.exited && this.attachArgv[0] === SSH_BIN && SSH_SESSION_REFUSED.test(this.stderrTail)
+    )
   }
 
   get closed(): boolean {

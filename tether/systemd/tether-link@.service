@@ -8,8 +8,9 @@
 # $XDG_RUNTIME_DIR/tether/peers/<host>/ssh.ctl, forwards the host's Tether
 # socket to control.sock beside it, and retries quietly with jittered backoff
 # (capped at 5 min, reset once a link stayed up) while the host is down. It
-# never powers a host on. SIGUSR1 retries at once:
-#   systemctl --user kill -s USR1 tether-link@agent-work
+# never powers a host on. SIGUSR1 to the main process retries at once (ssh
+# itself exits on SIGUSR1, so never signal the whole unit):
+#   systemctl --user kill --kill-whom=main -s USR1 tether-link@agent-work
 [Unit]
 Description=Tether link to %i
 Documentation=https://github.com/elias-leslie/tether
