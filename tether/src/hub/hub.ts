@@ -290,7 +290,7 @@ export class Hub {
       const stale = !peer.live || runs.status !== 'ok'
       if (stale && merged.status === 'ok') {
         merged.status = 'stale'
-        merged.error ??= peer.live ? runs.error : `${peer.name} is not reachable`
+        merged.error ??= peer.live ? runs.error : downReason(peer.name, peer.state)
       }
     }
     return merged

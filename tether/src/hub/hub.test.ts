@@ -389,6 +389,9 @@ describe('hub', () => {
       state: 'powered_off',
       reason: 'vm is powered off',
     })
+    expect(hub.mergeRuns({ status: 'ok', error: null, updatedAt: 2, items: [] }).error).toBe(
+      'vm is powered off',
+    )
     await peer.start()
     await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
 
