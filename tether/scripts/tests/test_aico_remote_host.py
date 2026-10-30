@@ -235,11 +235,33 @@ def test_root_status_says_when_the_agent_left_the_pane(monkeypatch, foreground, 
             assert pgid == 4242
             return group
 
+        def command(self, args, _limit):
+            assert args == ["capture-pane", "-p", "-t", "%2"]
+            return b"$ pi --model nope/nope\nError: Unknown provider \"nope\".\nkasadis@agent-work:~$ \n\n"
+
     monkeypatch.setattr(admin.Collector, "discover", lambda self, request_id: ([(pin, Child())], []))
-    code, output = root_status(monkeypatch, {**STATUS, "host": "agent-work", "tool": "pi"})
+    code, output = root_status(monkeypatch, {**STATUS, "host": "agent-work", "tool": "pi",
+                                             "agentExit": {"status": 1}})
     assert code == 0 and output[0]["status"] == "running" and output[0]["agent"] == agent
-    assert ("detail" in output[0]) == (agent == "exited")
     assert output[0]["host"] == "agent-work"
+    if agent == "exited":
+        assert output[0]["detail"] == "pi exited with status 1; this root's session is back at the shell"
+        assert output[0]["reason"] == 'Error: Unknown provider "nope".'
+    else:
+        assert "detail" not in output[0] and "reason" not in output[0]
+
+
+@pytest.mark.parametrize("agent_exit, words", [
+    ({"status": 0}, " with status 0"), ({"signal": "KILL"}, " on signal KILL"),
+    (None, ""), ({"signal": "kill; rm"}, ""), ({"status": "1"}, ""),
+])
+def test_exit_words_trust_only_a_well_formed_exit(agent_exit, words):
+    assert admin.exit_words(agent_exit) == words
+
+
+def test_last_words_skip_prompts_and_blank_lines():
+    assert admin.last_words(b"Error: no key\n\x1b[1m$ \n# \n\n") == "Error: no key"
+    assert admin.last_words(b"$ \n\n") is None
 
 
 def test_root_status_without_a_readable_pane_says_nothing_about_the_agent(monkeypatch):

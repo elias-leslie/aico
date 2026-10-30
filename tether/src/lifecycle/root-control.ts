@@ -151,13 +151,14 @@ export type WidgetMutation =
 /** Tether: a view mutation is forwarded to the GUI client, which can be absent
  * (`503 gui_unavailable`) or silent (`409 outcome_uncertain`). `false` keeps
  * Aico's meaning: nothing applied because the workload is not running. */
-export type MutationRejection = { status: number; error: string }
+export type MutationRejection = { status: number; error: string; reason?: string }
 
 export interface RootControlOperations {
   available(): boolean
   validate(request: RootCreateRequest): boolean
   /** Tether: an async refusal before the root is reserved (Agent Hub: unknown
-   * agent, Agent Hub unreachable). `null` lets the create go ahead. */
+   * agent, Agent Hub unreachable; a model the tool does not list). `null` lets
+   * the create go ahead. */
   refuse?(request: RootCreateRequest): Promise<MutationRejection | null>
   ensure(
     widgetId: string,
@@ -187,6 +188,8 @@ export interface RootControlOperations {
   resumeOwner?(resumeSessionId: string): string | null
   /** Tether: why host admission deferred this widget's last launch, if it did. */
   launchDeferral?(widgetId: string): string | null
+  /** Tether: how the root's agent ended, once its pane supervisor recorded it. */
+  agentExit?(row: WidgetRow): { status: number } | { signal: string } | null
 }
 
 /** How often a launch host admission deferred is tried again. */
@@ -719,6 +722,8 @@ export function createRootHandler(
       status: row ? await operations.status(row) : 'ended',
       // Why a pending root has not started yet, and when it is tried again.
       launch: row ? describeLaunch(root.requestId) : null,
+      // How the agent ended while its pane stays (back at the shell).
+      agentExit: row ? (operations.agentExit?.(row) ?? null) : null,
       tool: row?.tool ?? null,
       // Tether: bounds belong to the GUI's view, not the session catalog.
       bounds: null,
@@ -929,7 +934,10 @@ export function createRootHandler(
             }
             const refused = await operations.refuse?.(input)
             if (refused) {
-              json(response, refused.status, { error: refused.error })
+              json(response, refused.status, {
+                error: refused.error,
+                ...(refused.reason ? { reason: refused.reason } : {}),
+              })
               return
             }
             root = reserveRootRequest(

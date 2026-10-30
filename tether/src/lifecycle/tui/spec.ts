@@ -86,5 +86,8 @@ export interface TuiSpec {
     modelProvider?: string[]
     reasoningEffort?: { arguments: string[]; key?: string }
     daybreak?: { arguments: string[]; key: string } | { environment: true }
+    /** Fixed flags that print the models this host can run as a table whose
+     * first two columns are provider and model, under a `provider` header. */
+    listModels?: string[]
   }
 }

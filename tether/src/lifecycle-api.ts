@@ -5,6 +5,7 @@
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { hostname } from 'node:os'
 import { promisify } from 'node:util'
 import { registerChatRoutes } from './agent-hub/chat-api'
 import { resolveDefaultChatAgent } from './agent-hub/config'
@@ -35,6 +36,7 @@ import {
 } from './lifecycle/catalog'
 import { badge, displayTitle, rememberProjects } from './lifecycle/display'
 import {
+  agentExitOf,
   cachedSessionStatus,
   contextStatus,
   discardNeverAllocated,
@@ -103,6 +105,7 @@ import {
   sessionInstructions,
   withInstructions,
 } from './lifecycle/tui/instructions'
+import { listsModel } from './lifecycle/tui/models'
 import { AGENT_HUB_TOOL, getTui, supportsInstructions } from './lifecycle/tui/registry'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { Project, ProjectProvider } from './projects'
@@ -593,7 +596,17 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
       return Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot))
     },
     refuse: async (request) => {
-      if (request.tool !== AGENT_HUB_TOOL || !request.agentSlug) return null
+      if (request.tool !== AGENT_HUB_TOOL) {
+        const spec = getTui(request.tool)
+        if (!spec || !request.model || (await listsModel(spec, request.model)) !== false)
+          return null
+        return {
+          status: 422,
+          error: 'unknown_model',
+          reason: `${request.tool} on ${hostname()} has no model ${request.model} (${[spec.command[0], ...(spec.modelSelection?.listModels ?? [])].join(' ')})`,
+        }
+      }
+      if (!request.agentSlug) return null
       if (!agentHub) return { status: 503, error: 'agent_hub_unavailable' }
       try {
         await agentHub.check(request.agentSlug, request.model ?? null)
@@ -606,6 +619,12 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
       return null
     },
     resumeOwner: (resumeSessionId) => context.recovery?.resumeOwner(resumeSessionId) ?? null,
+    agentExit: (row) => {
+      const marker = agentExitOf(row)
+      if (marker?.state === 'exit') return { status: marker.status }
+      if (marker?.state === 'signal') return { signal: marker.signal }
+      return null
+    },
     launchDeferral: (widgetId) => {
       const failure = lastEnsureFailure(widgetId)
       return failure?.code === 'admission_denied' ? failure.reason : null

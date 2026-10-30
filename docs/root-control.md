@@ -572,11 +572,15 @@ native turn decision from them. Activity observations do not change the owner's
 `running` stays true after the agent itself exits (a Pi root that fails closed on a
 missing credential leaves its pane at the shell). `root status` therefore also reads the
 pane's foreground command, through the hub's ssh link for a remote root, and adds
-`agent: running`, or `agent: exited` with a `detail`, when it can read the pane; `roots`
+`agent: running`, or `agent: exited` with a `detail` (the exit status or signal Tether's
+pane supervisor recorded) and a `reason` (the last line the pane shows above its prompt,
+such as Pi's `Unknown provider`), when it can read the pane; `roots`
 reports `terminal: agent_exited` when the pane is at the shell and the screen shows no
 agent activity. A remote root's `root status` carries its `host`. `st aico create --tool pi`
 needs `--model provider/model` (Pi has no default model); without it the create is refused
 with that reason, locally, on a host, and by Tether (`invalid_body`, `field: model`, `reason`).
+A model Pi does not list (`pi --list-models` on the host that runs it) is refused before
+anything starts (`422 unknown_model` with that host and command in `reason`).
 
 ## Directed delivery and terminal admin
 

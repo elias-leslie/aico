@@ -22,6 +22,11 @@ describe('root origin (v1 roots API)', () => {
     status: async () => 'running',
     mutate: async () => true,
     adopt: (widgetId, lineage) => adoptLineage(widgetId, lineage),
+    agentExit: (row) => (row.tool === 'pi' ? { status: 1 } : null),
+    refuse: async (request) =>
+      request.model === 'nope/nope'
+        ? { status: 422, error: 'unknown_model', reason: 'pi on vm has no model nope/nope' }
+        : null,
     remote: async (body, response) => {
       remoteBodies.push(body)
       response.writeHead(202, { 'content-type': 'application/json' })
@@ -110,7 +115,7 @@ describe('root origin (v1 roots API)', () => {
     const session = getWidget(web.body.hostIdentity as string)
     expect(session).toMatchObject({ origin: 'a-term', aTermSessionId: WEB_SESSION_ID })
     const aico = await call(v1Socket, '/v1/roots', 'POST', create('from-aico'))
-    expect(aico.body).toMatchObject({ owner: 'aico', origin: 'aico' })
+    expect(aico.body).toMatchObject({ owner: 'aico', origin: 'aico', agentExit: null })
 
     const filtered = await call(v1Socket, '/v1/roots?origin=a-term')
     expect(filtered.body.owner).toBe('a-term')
@@ -180,6 +185,19 @@ describe('root origin (v1 roots API)', () => {
         .status,
     ).toBe(202)
     expect(remoteBodies.at(-1)).toMatchObject({ ...good, host: 'vm' })
+    // Here, the same pi starts, and its root says how the agent ended.
+    expect((await call(v1Socket, '/v1/roots', 'POST', create('good-pi', good))).body).toMatchObject(
+      { status: 'running', agentExit: { status: 1 } },
+    )
+  })
+
+  it('passes on the reason a refusal gives, and reserves nothing', async () => {
+    const pi = create('pi-bogus', { tool: 'pi', model: 'nope/nope' })
+    expect(await call(v1Socket, '/v1/roots', 'POST', pi)).toEqual({
+      status: 422,
+      body: { error: 'unknown_model', reason: 'pi on vm has no model nope/nope' },
+    })
+    expect((await call(v1Socket, '/v1/roots/pi-bogus')).status).toBe(404)
   })
 
   it('lists without tombstones on ended=0, keeping them by id', async () => {

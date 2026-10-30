@@ -158,7 +158,13 @@ import { ensureBlankSlateWorkspace, forWorkspace, isBlankSlateRoot } from './tui
 import { ensureContext, finalizeContext } from './tui/context'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
 import { withInstructions } from './tui/instructions'
-import { launchLine, paneCommand, paneGatePath } from './tui/launch'
+import {
+  type AgentExitMarker,
+  launchLine,
+  paneCommand,
+  paneGatePath,
+  parseAgentExitMarker,
+} from './tui/launch'
 import { agentProcessNames, getTui, listTuis } from './tui/registry'
 import type { ContextStatus, TuiSpec } from './tui/spec'
 
@@ -386,6 +392,18 @@ async function serializeTmuxServerAllocation<T>(operation: () => Promise<T>): Pr
 /** Where pane supervisors record each agent's fate (crash recovery reads it). */
 function supervisorExitDir(): string | null {
   return config ? agentExitMarkerDir(config.paths) : null
+}
+
+/** What the pane supervisor last recorded for the session's agent, or null
+ * when it recorded nothing (a shell, or no pane). */
+export function agentExitOf(row: WidgetRow): AgentExitMarker | null {
+  const dir = supervisorExitDir()
+  if (!dir || !row.scopeUnit) return null
+  try {
+    return parseAgentExitMarker(readFileSync(join(dir, row.scopeUnit), 'utf8'))
+  } catch {
+    return null
+  }
 }
 
 /** Tether: `/run/user/<uid>/aico` on `default`, the instance's own

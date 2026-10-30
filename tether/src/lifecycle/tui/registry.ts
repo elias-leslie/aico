@@ -101,6 +101,7 @@ export function toolSpec(tool: AgentTool): TuiSpec {
       model: ['--model'],
       modelProvider: ['--provider'],
       reasoningEffort: { arguments: ['--thinking'] },
+      listModels: ['--list-models'],
       daybreak: { environment: true },
     }
   }

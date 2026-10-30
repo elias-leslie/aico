@@ -1744,12 +1744,32 @@ def launch_deferral(data: dict) -> dict:
     return {"launch": {key: launch[key] for key in ("state", "reason", "checkedAt", "nextRetryAt", "attempts")}}
 
 
-def agent_view(collector: Collector, request_id: str, tool: object) -> dict:
+def exit_words(agent_exit: object) -> str:
+    """How the root's agent ended, as Tether's pane supervisor recorded it."""
+    if isinstance(agent_exit, dict):
+        if type(agent_exit.get("status")) is int:
+            return f" with status {agent_exit['status']}"
+        if isinstance(agent_exit.get("signal"), str) and re.fullmatch(r"[A-Z]{2,8}", agent_exit["signal"]):
+            return f" on signal {agent_exit['signal']}"
+    return ""
+
+
+def last_words(screen: bytes) -> str | None:
+    """The last line the pane shows above its shell prompt: usually why the agent stopped."""
+    for line in reversed(screen.decode(errors="replace").splitlines()):
+        text = re.sub(r"[^\x20-\x7e]", "", line).strip()
+        if text and not text.endswith(("$", "#", "%", ">")):
+            return text[:300]
+    return None
+
+
+def agent_view(collector: Collector, request_id: str, tool: object, agent_exit: object = None) -> dict:
     """Whether the agent in a running root's pane is still there.
 
     The root record says the session runs; it stays running after the agent exits
-    (a failed credential check, a crash) and the pane falls back to the shell.
-    Reads the pane's foreground command, on the root's host too. Best effort:
+    (a failed credential check, an unknown model, a crash) and the pane falls back
+    to the shell. Reads the pane's foreground command, on the root's host too, and
+    when the agent is gone, its exit status and the last line it left. Best effort:
     a root that can't be reached or read says nothing."""
     try:
         resolved, _ = collector.discover(request_id)
@@ -1758,8 +1778,13 @@ def agent_view(collector: Collector, request_id: str, tool: object) -> dict:
                 continue
             child.owners(pin)
             if child.agent_exited(child.pane(pin)):
-                return {"agent": "exited",
-                        "detail": f"{tool} is no longer running in this root; its session is back at the shell"}
+                view = {"agent": "exited",
+                        "detail": f"{tool} exited{exit_words(agent_exit)}; this root's session is back at the shell"}
+                try:
+                    reason = last_words(child.command(["capture-pane", "-p", "-t", pin.paneId], CAPTURE_LIMIT))
+                except Unavailable:
+                    reason = None
+                return {**view, "reason": reason} if reason else view
             return {"agent": "running"}
     except (Unavailable, IdentityChanged, Ended, ValueError, TypeError, argparse.ArgumentTypeError):
         pass
@@ -1833,7 +1858,7 @@ def root_main(argv: list[str]) -> int:
             if data.get("tool") == "agent-hub" and pinned["status"] != "ended":
                 output.update(hub_view(collector, control, pinned["hostIdentity"]))
             elif data.get("tool") in ("codex", "claude-code", "pi") and pinned["status"] == "running":
-                output.update(agent_view(collector, args.request_id, data["tool"]))
+                output.update(agent_view(collector, args.request_id, data["tool"], data.get("agentExit")))
             emit_json(collector, output)
             return 0
         output["operation"] = args.operation
