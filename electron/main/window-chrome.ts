@@ -162,6 +162,7 @@ export function createWindowChrome(deps: WindowChromeDeps) {
         sessionId: descriptor.tmux.sessionId,
         coordinator: descriptor.coordinator ?? false,
         chip: coordinatorChip(descriptor),
+        host: descriptor.host ?? null,
       })
       layout.noteCoordinator(win, descriptor.coordinator ?? false)
     }

@@ -5,6 +5,7 @@ import { clsx } from 'clsx'
 import { Search, X } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import { CHAT_TOOL_SLUG, useAgentTools } from '@/lib/hooks/use-agent-tools'
+import { HOST_STATE_LABELS, useHosts } from '@/lib/hooks/use-hosts'
 import {
   type ProjectSetting,
   useProjectSettings,
@@ -18,8 +19,15 @@ interface NewSessionDialogProps {
   onClose: () => void
   /** Preselected project, e.g. the open session's. */
   defaultProjectId?: string | null
-  /** `mode` is an agent tool's slug, or `shell`. */
-  onStart: (projectId: string, rootPath: string | null, mode: string) => void
+  /** `mode` is an agent tool's slug, or `shell`; `host` a Tether peer, or
+   * absent for this computer. A rejection keeps the dialog open with its
+   * reason. */
+  onStart: (
+    projectId: string,
+    rootPath: string | null,
+    mode: string,
+    host?: string,
+  ) => void | Promise<void>
   isMobile?: boolean
 }
 
@@ -48,6 +56,14 @@ export function NewSessionDialog({
   const [pickedProjectId, setPickedProjectId] = useState<string | null>(null)
   const [kind, setKind] = useState<'agent' | 'shell'>('agent')
   const [pickedToolSlug, setPickedToolSlug] = useState<string | null>(null)
+  const [pickedHost, setPickedHost] = useState<string | null>(null)
+  const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+  const {
+    hosts,
+    isLoading: hostsLoading,
+    isError: hostsError,
+  } = useHosts(isOpen)
 
   const normalizedQuery = query.trim().toLowerCase()
   const visibleProjects = useMemo(
@@ -65,18 +81,46 @@ export function NewSessionDialog({
     kind === 'agent'
       ? (enabledTools.find((t) => t.slug === pickedToolSlug) ?? defaultTool)
       : undefined
+  // Agent Hub chats run here; everything else may run on a linked host.
+  const hostable = tool?.slug !== CHAT_TOOL_SLUG
+  const host =
+    hostable && hosts.some((h) => h.name === pickedHost)
+      ? (pickedHost ?? undefined)
+      : undefined
 
   const close = () => {
     setQuery('')
     setPickedProjectId(null)
     setKind('agent')
     setPickedToolSlug(null)
+    setPickedHost(null)
+    setStartError(null)
+    setStarting(false)
     onClose()
   }
-  const start = () => {
-    if (!project) return
-    onStart(project.id, project.root_path, tool ? tool.slug : SHELL_MODE)
-    close()
+  const start = async () => {
+    if (!project || starting) return
+    const mode = tool ? tool.slug : SHELL_MODE
+    const started = host
+      ? onStart(project.id, project.root_path, mode, host)
+      : onStart(project.id, project.root_path, mode)
+    if (!(started instanceof Promise)) {
+      close()
+      return
+    }
+    setStarting(true)
+    setStartError(null)
+    try {
+      await started
+      close()
+    } catch (error) {
+      setStarting(false)
+      setStartError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Couldn’t start the session.',
+      )
+    }
   }
 
   const startLabel = !project
@@ -84,6 +128,7 @@ export function NewSessionDialog({
     : tool
       ? `Start ${tool.name} in ${project.name}`
       : `Start a shell in ${project.name}`
+  const startText = host ? `${startLabel} on ${host}` : startLabel
 
   return (
     <Dialog.Root
@@ -175,6 +220,53 @@ export function NewSessionDialog({
             </div>
           </div>
 
+          {hostable && (hosts.length > 0 || hostsError) && (
+            <div className="flex-none pb-1">
+              <SectionTitle>Runs on</SectionTitle>
+              {hostsError ? (
+                <Note>Couldn’t load hosts. New sessions run here.</Note>
+              ) : (
+                <fieldset
+                  aria-label="Runs on"
+                  className="lantern-tools mx-[18px]"
+                  data-testid="new-session-hosts"
+                >
+                  {[{ name: null, state: 'connected' as const }, ...hosts].map(
+                    (h) => {
+                      const note = h.name ? HOST_STATE_LABELS[h.state] : ''
+                      return (
+                        <button
+                          key={h.name ?? ''}
+                          type="button"
+                          aria-pressed={(h.name ?? undefined) === host}
+                          onClick={() => setPickedHost(h.name)}
+                          className="lantern-tool"
+                        >
+                          <span className="truncate">
+                            {h.name ?? 'This computer'}
+                          </span>
+                          {note && (
+                            <span
+                              className="ml-auto flex-none text-xs"
+                              style={{ color: 'var(--mist)' }}
+                            >
+                              {note}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    },
+                  )}
+                </fieldset>
+              )}
+            </div>
+          )}
+          {hostable && hostsLoading && hosts.length === 0 && (
+            <p className="sr-only" aria-live="polite">
+              Loading hosts…
+            </p>
+          )}
+
           <div className="flex-1 overflow-y-auto overscroll-contain pb-2">
             <SectionTitle>Project</SectionTitle>
             <div className="px-[18px]">
@@ -242,13 +334,23 @@ export function NewSessionDialog({
             className="flex-none px-[18px] pt-2.5 pb-[18px]"
             style={{ borderTop: '1px solid var(--paper)' }}
           >
+            {startError && (
+              <p
+                role="alert"
+                className="mb-2 text-sm"
+                style={{ color: 'var(--bone)' }}
+                data-testid="new-session-error"
+              >
+                {startError}
+              </p>
+            )}
             <button
               type="button"
-              onClick={start}
-              disabled={!project}
+              onClick={() => void start()}
+              disabled={!project || starting}
               className="lantern-btn primary h-11! w-full text-sm!"
             >
-              {startLabel}
+              {starting ? 'Starting…' : startText}
             </button>
           </div>
         </Dialog.Content>

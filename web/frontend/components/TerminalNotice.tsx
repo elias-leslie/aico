@@ -1,6 +1,7 @@
 'use client'
 
-import type { ConnectionStatus } from '@/components/terminal.types'
+import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
+import { hostNoticeCopy } from '../../../electron/shared/host-notice'
 
 const LOST: Partial<Record<ConnectionStatus, string>> = {
   disconnected: 'Disconnected',
@@ -119,6 +120,38 @@ export function SizeHolderNotice({
       <button type="button" className="lantern-btn primary" onClick={onUseHere}>
         Use here
       </button>
+    </div>
+  )
+}
+
+interface HostNoticeProps {
+  away: HostAway
+  onReconnect: () => void
+}
+
+/** A remote session's host can't be reached: say which host and why, keep
+ * the session's last output covered, and offer Reconnect where it helps. */
+export function HostNotice({ away, onReconnect }: HostNoticeProps) {
+  const copy = hostNoticeCopy(away.host, away.state)
+  if (!copy) return null
+  return (
+    <div
+      className="lantern-term-notice"
+      role="status"
+      aria-live="polite"
+      data-testid="host-notice"
+    >
+      <p className="t">{copy.title}</p>
+      <p className="d">{copy.detail}</p>
+      {copy.reconnect && (
+        <button
+          type="button"
+          className="lantern-btn primary"
+          onClick={onReconnect}
+        >
+          Reconnect
+        </button>
+      )}
     </div>
   )
 }

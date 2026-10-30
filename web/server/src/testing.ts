@@ -60,6 +60,26 @@ export function attachAnswer(generation = 'g1') {
   }
 }
 
+/** The hub's attach answer for a session on `host`: the peer's own answer
+ * plus that host's ssh link. */
+export function remoteAttachAnswer(host: string, generation = 'g1') {
+  const runtime = process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`
+  return {
+    generation,
+    argv: [
+      '/usr/bin/tmux',
+      '-S',
+      `/home/peer/.local/state/tether/default/tmux/${'1'.repeat(32)}/server.sock`,
+      'attach-session',
+      '-t',
+      '$1',
+    ],
+    env: { TERM: 'xterm-256color' },
+    host,
+    ssh: { alias: host, control: `${runtime}/tether/peers/${host}/ssh.ctl` },
+  }
+}
+
 const notFound = () => new TetherError(404, 'not_found', {})
 
 export class FakeTether {
@@ -82,6 +102,10 @@ export class FakeTether {
   /** Fail `createSession` for this tool. */
   failTool: string | null = null
   holder: { generation: string; holder: unknown } = { generation: 'g1', holder: null }
+  /** The hub's linked hosts (`hosts()`). */
+  hostRows: { name: string; state: string; ssh: string; sessions: number }[] = []
+  /** Errors the next `attach` calls throw, in order. */
+  attachFailures: Error[] = []
 
   add(fields: Partial<SessionDescriptor> = {}): SessionDescriptor {
     const session = descriptor(fields)
@@ -190,7 +214,17 @@ export class FakeTether {
 
   async attach(id: string) {
     this.record('attach', id)
-    return attachAnswer(this.need(id).generation)
+    const failure = this.attachFailures.shift()
+    if (failure) throw failure
+    const session = this.need(id)
+    return session.host
+      ? remoteAttachAnswer(session.host, session.generation)
+      : attachAnswer(session.generation)
+  }
+
+  async hosts() {
+    this.record('hosts')
+    return this.hostRows
   }
 
   async resizeClaim(
@@ -252,7 +286,19 @@ export class FakeTether {
     if (method === 'POST' && path === '/v1/sessions') {
       const input = body as Record<string, unknown>
       if (input.tool === this.failTool) throw new TetherError(409, 'admission_denied', {})
+      if (typeof input.host === 'string') {
+        const row = this.hostRows.find((h) => h.name === input.host)
+        if (!row) throw new TetherError(400, 'unknown_host', { error: 'unknown_host' })
+        if (row.state !== 'connected')
+          throw new TetherError(409, 'host_unavailable', {
+            error: 'host_unavailable',
+            host: row.name,
+            state: row.state,
+            reason: 'link down',
+          })
+      }
       const session = this.add({
+        host: typeof input.host === 'string' ? input.host : null,
         tool: String(input.tool),
         projectId: (input.projectId as string) ?? null,
         projectRoot: (input.projectRoot as string) ?? null,

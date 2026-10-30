@@ -16,6 +16,7 @@ interface UseTerminalHandleOptions {
   reconnect: () => void
   sendInput: (data: string) => void
   claimSize: () => void
+  reconnectHost: () => void
   status: ConnectionStatus
   terminalRef: React.RefObject<XtermTerminal | null>
   search: (
@@ -34,6 +35,7 @@ export function useTerminalHandle(
     reconnect,
     sendInput,
     claimSize,
+    reconnectHost,
     status,
     terminalRef,
     search,
@@ -48,6 +50,7 @@ export function useTerminalHandle(
     () => ({
       reconnect,
       claimSize,
+      reconnectHost,
       getContent: () => getTerminalContent(terminalRef.current),
       sendInput,
       pasteInput,
@@ -55,6 +58,15 @@ export function useTerminalHandle(
       clearSearch,
       status,
     }),
-    [clearSearch, pasteInput, reconnect, search, sendInput, status, claimSize],
+    [
+      clearSearch,
+      pasteInput,
+      reconnect,
+      search,
+      sendInput,
+      status,
+      claimSize,
+      reconnectHost,
+    ],
   )
 }

@@ -30,8 +30,9 @@ import {
   inputCommands,
   parseSeedFlags,
   SEED_FLAGS,
-  socketArgsOf,
+  tmuxCommandArgv,
 } from './protocol'
+import { SSH_BIN } from './remote'
 
 /** What a viewer uses of its terminal link. */
 export interface TerminalLink {
@@ -132,6 +133,7 @@ export class ControlTerminal implements TerminalLink {
   /** Live output from the current stdout read, emitted as one piece. */
   private pendingOutput = ''
   private frameTimer: NodeJS.Timeout | undefined
+  private clientPid = -1
   cols: number
   rows: number
 
@@ -168,8 +170,12 @@ export class ControlTerminal implements TerminalLink {
     this.reseed(false, 'attach')
   }
 
+  /** The tmux client's own pid, which size claims name, read with the first
+   * seed. Locally that is the child; over ssh the child is ssh and the client
+   * runs on the host, so it is -1 until tmux says. */
   get pid(): number {
-    return this.child.pid ?? -1
+    if (this.clientPid > 0) return this.clientPid
+    return this.attachArgv[0] === SSH_BIN ? -1 : (this.child.pid ?? -1)
   }
 
   get closed(): boolean {
@@ -215,12 +221,8 @@ export class ControlTerminal implements TerminalLink {
       if (!this.paneId || this.phase === 'closed') return
       const name = `aico-paste-${this.pid}-${++this.pasteSeq}`
       const loaded = await new Promise<boolean>((resolve) => {
-        const load = execFile(
-          this.attachArgv[0],
-          [...socketArgsOf(this.attachArgv), 'load-buffer', '-b', name, '-'],
-          { env: this.env },
-          (error) => resolve(!error),
-        )
+        const argv = tmuxCommandArgv(this.attachArgv, ['load-buffer', '-b', name, '-'])
+        const load = execFile(argv[0], argv.slice(1), { env: this.env }, (error) => resolve(!error))
         load.stdin?.on('error', () => {})
         load.stdin?.end(text)
       })
@@ -293,6 +295,7 @@ export class ControlTerminal implements TerminalLink {
           return
         }
         this.paneId = flags.paneId
+        if (flags.client_pid > 0) this.clientPid = flags.client_pid
         const seed = buildSeed(flags, mainBlock.lines, altBlock.error ? [] : altBlock.lines)
         this.goLive(seed + (partialBlock.error ? '' : partialBlock.lines.join('')))
       },

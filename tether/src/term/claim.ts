@@ -37,7 +37,8 @@ export interface SizeClaimDeps {
   id: string
   /** The session generation to claim under (the latest known). */
   generation(): string
-  /** The control client's pid, and the size it asks for. */
+  /** The tmux client's pid (on the host, for a remote link; -1 while not
+   * known), and the size it asks for. */
   link: { readonly pid: number; readonly cols: number; readonly rows: number }
   /** Names this app and device on the claim ("Viewing on …" elsewhere). */
   viewer?: ViewerLabel
@@ -59,6 +60,9 @@ export function createSizeClaim(deps: SizeClaimDeps): () => Promise<void> {
   const { tether, id, link } = deps
   return coalesceTrailingAsync(async () => {
     for (let attempt = 0; attempt < CLAIM_ATTEMPTS && deps.isCurrent(); attempt += 1) {
+      // A remote link's pid is known once tmux on the host answers: the
+      // claim after the first seed carries it.
+      if (link.pid <= 0) return
       try {
         const result = await tether.resizeClaim(
           id,

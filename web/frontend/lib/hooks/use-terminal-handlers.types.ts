@@ -20,6 +20,7 @@ export interface UseTerminalHandlersProps {
     projectId: string,
     workingDir?: string,
     agentToolSlug?: string,
+    options?: { host?: string },
   ) => Promise<TerminalPane>
   setActiveMode: (paneId: string, mode: string) => Promise<TerminalPane>
 }
@@ -37,6 +38,7 @@ export interface UseTerminalHandlersReturn {
     projectId: string,
     mode?: string,
     rootPath?: string | null,
+    host?: string,
   ) => Promise<void>
   handleProjectModeChange: (
     projectId: string,

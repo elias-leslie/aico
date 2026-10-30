@@ -20,9 +20,11 @@ export async function addProjectPaneAction(
     projectId: string,
     workingDir?: string,
     agentToolSlug?: string,
+    options?: { host?: string },
   ) => Promise<TerminalPane>,
   navigateToSession: (sessionId: string) => void,
   startAgent: (sessionId: string) => Promise<boolean>,
+  host?: string,
 ): Promise<void> {
   const requestedMode = mode ?? undefined
 
@@ -36,14 +38,26 @@ export async function addProjectPaneAction(
     workingDir = project.rootPath
   }
 
+  // A refused create (a host away, a project Tether won't start) reaches the
+  // caller, which says why; what follows only logs.
+  const paneName = generateProjectPaneName(targetProjectId, panes)
+  const toolSlug =
+    requestedMode && requestedMode !== 'shell' ? requestedMode : undefined
+  const newPane = host
+    ? await createProjectPane(
+        paneName,
+        targetProjectId,
+        workingDir ?? undefined,
+        toolSlug,
+        { host },
+      )
+    : await createProjectPane(
+        paneName,
+        targetProjectId,
+        workingDir ?? undefined,
+        toolSlug,
+      )
   try {
-    const paneName = generateProjectPaneName(targetProjectId, panes)
-    const newPane = await createProjectPane(
-      paneName,
-      targetProjectId,
-      workingDir ?? undefined,
-      requestedMode && requestedMode !== 'shell' ? requestedMode : undefined,
-    )
     const targetMode = requestedMode ?? newPane.active_mode
 
     const targetSession = findSessionByMode(newPane, targetMode)

@@ -17,6 +17,7 @@
         </span>
         <span class="tag" id="tag">
           <span class="role-chip" id="role-chip" hidden>Coordinator</span>
+          <span class="host-chip" id="host-chip" hidden></span>
           <button class="wname" id="wname" type="button" title="Rename this session">aico</button>
           <input class="wname-input" id="wname-input" type="text" aria-label="Session name" maxlength="160" spellcheck="false" hidden />
         </span>
@@ -43,6 +44,11 @@
           <p class="size-notice-title">Viewing remotely</p>
           <p class="size-notice-detail">Another device is using this session, so it is sized for that screen.</p>
           <button class="size-notice-use" id="size-notice-use" type="button">Use here</button>
+        </div>
+        <div class="size-notice host-notice" id="host-notice" role="status" aria-live="polite" hidden>
+          <p class="size-notice-title" id="host-notice-title"></p>
+          <p class="size-notice-detail" id="host-notice-detail"></p>
+          <button class="size-notice-use" id="host-notice-reconnect" type="button" hidden>Reconnect</button>
         </div>
       </div>
       <div id="chat-root" class="aico-chat" hidden></div>

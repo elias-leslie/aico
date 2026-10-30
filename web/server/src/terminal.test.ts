@@ -1,5 +1,6 @@
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { TetherError } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { WebSocket } from 'ws'
 import { Router } from './http'
@@ -8,6 +9,7 @@ import {
   deviceLabel,
   parseClientMessage,
   RECONNECT_CODE,
+  retryDelay,
   SESSION_DEAD_CODE,
   type Size,
   sizeOf,
@@ -83,6 +85,7 @@ beforeEach(async () => {
     tether: tether.client,
     historyLines: 123,
     touched: () => {},
+    retryDelay: () => 5,
     openLink: (argv, _env, size) => {
       const link = new FakeLink(argv, size)
       links.push(link)
@@ -331,5 +334,116 @@ describe('terminal socket', () => {
     const error = await new Promise<Error>((resolve) => view.ws.on('error', resolve))
     expect(error.message).toMatch(/403/)
     expect(tether.callsOf('attach')).toEqual([])
+  })
+})
+
+describe('a session on another host', () => {
+  const HOST = 'agent-work'
+  const peer = (state: string) => ({ state, since: 1, listedAt: 1 }) as never
+  const hostStates = (view: Frames) =>
+    view.controls
+      .filter((f) => 'host_state' in f)
+      .map((f) => (f.host_state as { state: string }).state)
+  // The socket attaches once the page sends its first size.
+  const start = async (view: Frames, size = { cols: 80, rows: 24 }) => {
+    await view.next((f) => f.transport === 'control')
+    view.ws.send(ctrl({ resize: size }))
+  }
+  const peerEvent = (type: 'peer.state' | 'peer.resync', data: Record<string, unknown>) =>
+    hub.event({ seq: 9, bootId: 'b', type, at: 0, data: { host: HOST, ...data } })
+
+  it('backs off exponentially, capped and jittered', () => {
+    expect(retryDelay(0, () => 0.5)).toBe(1_000)
+    expect(retryDelay(4, () => 0.5)).toBe(16_000)
+    expect(retryDelay(9, () => 0)).toBe(15_000)
+  })
+
+  it('attaches over ssh and says the session is live on its host', async () => {
+    const session = tether.add({ host: HOST })
+    const view = open(session.id)
+    await start(view)
+    await until(() => links.length === 1)
+    expect(links[0].argv[0]).toBe('/usr/bin/ssh')
+    await view.next((f) => 'host_state' in f)
+    expect(hostStates(view)).toEqual(['live'])
+    view.ws.close()
+  })
+
+  it('waits for an offline host with no link, then attaches when the hub resyncs', async () => {
+    const session = tether.add({ host: HOST, peer: peer('offline') })
+    const view = open(session.id)
+    await start(view)
+    await view.next((f) => 'host_state' in f)
+    expect(hostStates(view)).toEqual(['offline'])
+    view.ws.send('typed while away')
+    view.ws.send(ctrl({ resize: { cols: 90, rows: 30 } }))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(links).toHaveLength(0)
+    expect(tether.callsOf('attach')).toHaveLength(0)
+    // Another host's resync is not this one's.
+    hub.event({ seq: 9, bootId: 'b', type: 'peer.resync', at: 0, data: { host: 'other' } })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(links).toHaveLength(0)
+    peerEvent('peer.resync', {})
+    await until(() => links.length === 1)
+    expect(links[0].size).toEqual({ cols: 90, rows: 30 })
+    expect(links[0].written).toEqual([])
+    await until(() => hostStates(view).at(-1) === 'live')
+    view.ws.close()
+  })
+
+  it('a host going away drops the link and keeps the socket open', async () => {
+    const session = tether.add({ host: HOST })
+    const view = open(session.id)
+    await start(view)
+    await until(() => links.length === 1)
+    peerEvent('peer.state', { state: 'powered_off' })
+    await until(() => hostStates(view).at(-1) === 'powered_off')
+    expect(links[0].closed).toBe(true)
+    expect(view.ws.readyState).toBe(WebSocket.OPEN)
+    view.ws.close()
+  })
+
+  it('a dropped link retries a bounded number of times, then waits for Reconnect', async () => {
+    const session = tether.add({ host: HOST })
+    const view = open(session.id)
+    await start(view)
+    await until(() => links.length === 1)
+    await until(() => hostStates(view).at(-1) === 'live')
+    tether.attachFailures.push(...Array.from({ length: 6 }, () => new Error('ssh failed')))
+    links[0].kill()
+    await until(() => hostStates(view).at(-1) === 'disconnected')
+    expect(tether.callsOf('attach')).toHaveLength(7)
+    expect(hostStates(view)).toEqual(['live', 'connecting', 'disconnected'])
+    expect(view.ws.readyState).toBe(WebSocket.OPEN)
+    view.ws.send(ctrl({ reconnect: true }))
+    await until(() => links.length === 2)
+    await until(() => hostStates(view).at(-1) === 'live')
+    view.ws.send('back')
+    await until(() => links[1].written.includes('back'))
+    view.ws.close()
+  })
+
+  it('a host_unavailable refusal shows the host state instead of closing', async () => {
+    const session = tether.add({ host: HOST })
+    tether.attachFailures.push(
+      new TetherError(409, 'host_unavailable', { host: HOST, state: 'connecting' }),
+    )
+    const view = open(session.id)
+    await start(view)
+    await until(() => hostStates(view).at(-1) === 'connecting')
+    expect(links).toHaveLength(0)
+    expect(view.ws.readyState).toBe(WebSocket.OPEN)
+    view.ws.close()
+  })
+
+  it('answers a resume probe even while the host is away', async () => {
+    const session = tether.add({ host: HOST, peer: peer('offline') })
+    const view = open(session.id)
+    await start(view)
+    await view.next((f) => 'host_state' in f)
+    view.ws.send(ctrl({ ping: true, probe: true }))
+    await view.next((f) => f.pong === true)
+    view.ws.close()
   })
 })

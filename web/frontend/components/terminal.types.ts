@@ -10,6 +10,14 @@ export interface TerminalProps {
   onFilePaste?: (file: File, sessionId: string) => void | Promise<void>
   /** Another device holds the shared size: its name, or null when this view does. */
   onSizeHolderChange?: (holder: string | null) => void
+  /** A remote session's host can't be reached: its name and why, or null
+   * while the session is live. */
+  onHostStateChange?: (away: HostAway | null) => void
+}
+
+export interface HostAway {
+  host: string
+  state: string
 }
 
 export type ConnectionStatus =
@@ -38,6 +46,8 @@ export interface TerminalHandle {
   reconnect: () => void
   /** Take the shared size for this view ("Use here"). */
   claimSize: () => void
+  /** Ask the server to attach again to a remote session's host now. */
+  reconnectHost: () => void
   getContent: () => string
   sendInput: (data: string) => void
   /** Send text wrapped in bracketed paste sequences — needed for TUI apps like Claude Code */

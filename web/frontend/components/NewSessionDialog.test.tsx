@@ -1,6 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NewSessionDialog } from './NewSessionDialog'
+
+type Start = ComponentProps<typeof NewSessionDialog>['onStart']
 
 const projectState = vi.hoisted(() => ({
   projects: [] as Array<{ id: string; name: string; root_path: string | null }>,
@@ -22,13 +25,27 @@ const tools = [
 vi.mock('@/lib/hooks/use-project-settings', () => ({
   useProjectSettings: () => projectState,
 }))
+const hostState = vi.hoisted(() => ({
+  hosts: [] as Array<{ name: string; state: string }>,
+  isLoading: false,
+  isError: false,
+}))
+vi.mock('@/lib/hooks/use-hosts', () => ({
+  HOST_STATE_LABELS: {
+    connected: '',
+    connecting: 'connecting',
+    offline: 'offline',
+    powered_off: 'powered off',
+    identity_changed: 'changed',
+  },
+  useHosts: () => hostState,
+}))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   CHAT_TOOL_SLUG: 'agent-hub',
   useAgentTools: () => ({ enabledTools: tools, defaultTool: tools[0] }),
 }))
 
-function renderDialog(defaultProjectId?: string) {
-  const onStart = vi.fn()
+function renderDialog(defaultProjectId?: string, onStart = vi.fn<Start>()) {
   const onClose = vi.fn()
   render(
     <NewSessionDialog
@@ -49,6 +66,68 @@ describe('NewSessionDialog', () => {
     ]
     projectState.isLoading = false
     projectState.isError = false
+    hostState.hosts = []
+    hostState.isError = false
+  })
+
+  it('offers no host choice when Tether links to no host', () => {
+    renderDialog()
+    expect(screen.queryByRole('group', { name: 'Runs on' })).toBeNull()
+  })
+
+  it('starts on a chosen host, with This computer as the default', () => {
+    hostState.hosts = [
+      { name: 'agent-work', state: 'connected' },
+      { name: 'lab', state: 'offline' },
+    ]
+    const { onStart } = renderDialog('neri')
+    const hosts = screen.getByRole('group', { name: 'Runs on' })
+    expect(
+      screen.getByRole('button', { name: 'This computer' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(hosts).toHaveTextContent('offline')
+    fireEvent.click(screen.getByRole('button', { name: 'agent-work' }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Start Claude Code in Neri on agent-work',
+      }),
+    )
+    expect(onStart).toHaveBeenCalledWith(
+      'neri',
+      '/srv/neri',
+      'claude-code',
+      'agent-work',
+    )
+  })
+
+  it('keeps the dialog open with the reason when the host is away', async () => {
+    hostState.hosts = [{ name: 'lab', state: 'offline' }]
+    const onStart = vi.fn<Start>(() =>
+      Promise.reject(new Error('lab is offline (link down)')),
+    )
+    const { onClose } = renderDialog('neri', onStart)
+    fireEvent.click(screen.getByRole('button', { name: /^lab/ }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start Claude Code in Neri on lab' }),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'lab is offline (link down)',
+      ),
+    )
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('hides the host choice for an Agent Hub chat, which runs here', () => {
+    hostState.hosts = [{ name: 'agent-work', state: 'connected' }]
+    const { onStart } = renderDialog('neri')
+    fireEvent.click(screen.getByRole('button', { name: 'agent-work' }))
+    fireEvent.click(screen.getByRole('button', { name: /Agent Hub/ }))
+    expect(screen.queryByRole('group', { name: 'Runs on' })).toBeNull()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start Agent Hub in Neri' }),
+    )
+    expect(onStart).toHaveBeenCalledWith('neri', '/srv/neri', 'agent-hub')
   })
 
   it("starts the default agent in the open session's project", () => {

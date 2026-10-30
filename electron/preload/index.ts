@@ -3,6 +3,7 @@ import type {
   ChatCallResult,
   ChatInfo,
   ChatStreamItem,
+  HostChoice,
   InstructionPrompt,
   InstructionRevision,
   InstructionsChoice,
@@ -36,6 +37,14 @@ contextBridge.exposeInMainWorld('aico', {
     },
     /** Take the size back: deliberate for the Use here button, else a click in the terminal. */
     claimSize: (deliberate = false) => ipcRenderer.send('pty:claim-size', deliberate),
+    /** The host this window's session runs on, and whether it can be reached. */
+    onHost: (cb: (info: { host: string | null; state: string }) => void) => {
+      const listener = (_event: unknown, info: { host: string | null; state: string }) => cb(info)
+      ipcRenderer.on('pty:host', listener)
+      return () => ipcRenderer.removeListener('pty:host', listener)
+    },
+    /** Try the host again now (the Reconnect button). */
+    reconnect: () => ipcRenderer.send('pty:reconnect'),
   },
   chat: {
     /** The Agent Hub session this window shows as a chat, or null for a terminal window. */
@@ -111,8 +120,14 @@ contextBridge.exposeInMainWorld('aico', {
   actions: {
     /** Create a new widget running `tool` (TUI slug) in workspace `projectId`.
      * Both are explicit — a launch always names its tool and workspace. */
-    newWidget: (tool: string, projectId: string, instructions?: InstructionsChoice) =>
-      ipcRenderer.send('widget:new', tool, projectId, instructions),
+    newWidget: (
+      tool: string,
+      projectId: string,
+      instructions?: InstructionsChoice,
+      host?: string,
+    ) => ipcRenderer.send('widget:new', tool, projectId, instructions, host),
+    /** The remote hosts a new session can run on ("This computer" is implied). */
+    hosts: (): Promise<Listing<HostChoice>> => ipcRenderer.invoke('hosts:list'),
     /** Enabled Agent Hub prompts a new session can take as instructions. */
     instructionPrompts: (): Promise<Listing<InstructionPrompt>> =>
       ipcRenderer.invoke('instructions:prompts'),
@@ -198,6 +213,8 @@ contextBridge.exposeInMainWorld('aico', {
         coordinator: boolean
         /** `Coordinator` or `↳ <coordinator>`, in the coordinator's colour. */
         chip: { text: string; color: string } | null
+        /** The host the session runs on; null on this computer. */
+        host: string | null
       }) => void,
     ) => {
       const listener = (
@@ -213,6 +230,8 @@ contextBridge.exposeInMainWorld('aico', {
           coordinator: boolean
           /** `Coordinator` or `↳ <coordinator>`, in the coordinator's colour. */
           chip: { text: string; color: string } | null
+          /** The Tether peer the session runs on; null on this computer. */
+          host: string | null
         },
       ) => cb(info)
       ipcRenderer.on('win:title', listener)

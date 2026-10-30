@@ -16,6 +16,7 @@ import {
 } from '../shared/font-settings'
 import type {
   CheckInMenu,
+  HostChoice,
   InstructionPrompt,
   InstructionRevision,
   Listing,
@@ -76,8 +77,13 @@ let picker: {
   slug: string
   withBack: boolean
   instructions: ChosenInstructions | null
-  view: 'workspaces' | 'prompts' | InstructionPrompt
+  /** The remote host to start on; null for this computer. */
+  host: string | null
+  view: 'workspaces' | 'prompts' | 'hosts' | InstructionPrompt
 } | null = null
+// The hub's remote hosts, read each time a workspace picker opens.
+let hostListing: Listing<HostChoice> | null = null
+let hostRead = 0
 
 /** Requery Tether's sessions whenever the "Open session" flyout appears. */
 export function refreshSessions(): Promise<{ status: 'ready' | 'empty' | 'unavailable' }> {
@@ -362,11 +368,13 @@ function newProjectRow(slug: string, p: ProjectInfo): HTMLElement {
   item.append(dot, lbl)
   item.addEventListener('click', () => {
     const chosen = picker?.instructions
+    const host = picker?.host ?? undefined
     closeMenu() // tidies up in both the drilled-menu and standalone-popup cases
     window.aico.actions.newWidget(
       slug,
       p.id,
       chosen ? { prompt: chosen.prompt, revision: chosen.revision } : undefined,
+      host,
     )
   })
   return item
@@ -378,8 +386,11 @@ function newProjectRow(slug: string, p: ProjectInfo): HTMLElement {
 // nothing to go back to.
 function populateNewProjects(slug: string, withBack: boolean): void {
   // A choice made for this tool stays while its picker is open.
-  const instructions = picker?.slug === slug ? picker.instructions : null
-  picker = { slug, withBack, instructions, view: 'workspaces' }
+  const same = picker?.slug === slug
+  const instructions = same && picker ? picker.instructions : null
+  const host = same && picker ? picker.host : null
+  if (!same) readHosts()
+  picker = { slug, withBack, instructions, host, view: 'workspaces' }
   submenuEl.innerHTML = ''
   if (withBack) {
     const back = make('div', 'aico-sub-row aico-sub-back runnable')
@@ -394,6 +405,8 @@ function populateNewProjects(slug: string, withBack: boolean): void {
     submenuEl.append(back)
   }
   const tool = catalogs.tuis.find((t) => t.slug === slug)
+  // A chat runs on this computer; other tools can run on a remote host.
+  if (!tool?.chat && hostListing?.items.length) submenuEl.append(hostRow(host))
   if (tool?.instructions) submenuEl.append(instructionsRow(instructions))
   if (tool?.blankSlate) {
     // The main process's BLANK_SLATE_ID: a new empty workspace, not a project.
@@ -408,6 +421,79 @@ function populateNewProjects(slug: string, withBack: boolean): void {
     empty.textContent = 'No projects'
     submenuEl.append(empty)
   }
+}
+
+// ---- host -------------------------------------------------------------------
+// With remote hosts configured, the workspace picker's top row picks where the
+// session runs: This computer (the default) or one of the hub's hosts.
+
+function readHosts(): void {
+  const read = ++hostRead
+  void window.aico.actions
+    .hosts()
+    .catch((): Listing<HostChoice> => ({ status: 'unavailable', items: [] }))
+    .then((listing) => {
+      if (read !== hostRead) return
+      const had = hostListing?.items.length ?? 0
+      hostListing = listing
+      if (submenuEl.hidden || !picker) return
+      if (picker.view === 'hosts') renderHosts()
+      else if (picker.view === 'workspaces' && had !== listing.items.length) backToWorkspaces()
+    })
+}
+
+const HOST_STATE_LABELS: Record<HostChoice['state'], string> = {
+  connected: '',
+  connecting: 'connecting',
+  offline: 'offline',
+  powered_off: 'powered off',
+  identity_changed: 'changed',
+}
+
+function hostRow(host: string | null): HTMLElement {
+  const item = drillRow('Runs on', () => renderHosts(), 'aico-sub-instructions')
+  const dot = make('span', 'aico-sub-dot project')
+  dot.classList.toggle('current', host !== null)
+  const value = make('span', 'aico-sub-time aico-sub-note aico-sub-value')
+  const name = make('span', 'aico-sub-value-name')
+  name.textContent = host ?? 'This computer'
+  value.append(name)
+  item.title = host ? `Start the session on ${host}` : 'Start the session on this computer'
+  const caret = make('span', 'aico-caret')
+  caret.textContent = '▸'
+  item.prepend(dot)
+  item.append(value, caret)
+  return item
+}
+
+function renderHosts(): void {
+  if (!picker) return
+  picker.view = 'hosts'
+  submenuEl.innerHTML = ''
+  submenuEl.append(drillRow('‹ Workspaces', backToWorkspaces, 'aico-sub-back'))
+  const choose = (host: string | null) => {
+    if (picker) picker.host = host
+    backToWorkspaces()
+  }
+  const row = (label: string, host: string | null, note: string) => {
+    const item = drillRow(label, () => choose(host))
+    const dot = make('span', 'aico-sub-dot project')
+    dot.classList.toggle('current', picker?.host === host)
+    item.prepend(dot)
+    if (note) {
+      const state = make('span', 'aico-sub-time aico-sub-note')
+      state.textContent = note
+      item.append(state)
+    }
+    return item
+  }
+  submenuEl.append(row('This computer', null, ''))
+  if (!hostListing) submenuEl.append(emptySubmenuRow('Loading hosts…'))
+  else if (hostListing.status === 'unavailable')
+    submenuEl.append(emptySubmenuRow("Couldn't load hosts from Tether"))
+  for (const h of hostListing?.items ?? [])
+    submenuEl.append(row(h.name, h.name, HOST_STATE_LABELS[h.state] ?? h.state))
+  replaceSubmenu()
 }
 
 // ---- chosen instructions ----------------------------------------------------

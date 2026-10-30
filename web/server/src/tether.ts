@@ -31,9 +31,12 @@ export function createSession(
     projectRoot?: string | null
     name?: string | null
     size: { cols: number; rows: number }
+    /** A remote host from Tether's hosts; omitted for this computer. */
+    host?: string | null
   },
 ): Promise<SessionDescriptor> {
   const body: Record<string, unknown> = { origin: WEB_ORIGIN, tool: input.tool, size: input.size }
+  if (input.host) body.host = input.host
   if (input.projectId) body.projectId = input.projectId
   if (input.projectRoot) body.projectRoot = input.projectRoot
   if (input.name) body.name = input.name
@@ -109,6 +112,8 @@ const DETAILS: Record<string, [number, string]> = {
   not_allowed: [409, 'That is not possible now'],
   agent_hub_unavailable: [503, 'Agent Hub is not reachable'],
   agent_hub_refused: [409, 'Agent Hub did not accept it'],
+  host_unavailable: [409, 'That host is not reachable'],
+  unknown_host: [400, 'Tether does not know that host'],
 }
 
 export const UNAVAILABLE_DETAIL =
@@ -125,6 +130,7 @@ export function toHttpError(error: unknown, notFound?: string): HttpError {
       `Tether error: ${error.code}`,
     ]
     let detail = error.code === 'not_found' && notFound ? notFound : knownDetail
+    if (error.code === 'host_unavailable') detail = hostUnavailable(error)
     if (
       (error.code === 'blocked' ||
         error.code === 'admission_denied' ||
@@ -136,4 +142,18 @@ export function toHttpError(error: unknown, notFound?: string): HttpError {
     return new HttpError(status, detail, error)
   }
   throw error
+}
+
+const HOST_STATES: Record<string, string> = {
+  offline: 'offline',
+  connecting: 'still connecting',
+  powered_off: 'powered off',
+  identity_changed: 'not the same machine as before',
+}
+
+/** `agent-work is offline (link down)`: Tether's own reason, in plain words. */
+function hostUnavailable(error: TetherError): string {
+  const host = typeof error.body.host === 'string' ? error.body.host : 'That host'
+  const state = HOST_STATES[String(error.body.state)] ?? 'not reachable'
+  return `${host} is ${state}${error.reason ? ` (${error.reason})` : ''}`
 }

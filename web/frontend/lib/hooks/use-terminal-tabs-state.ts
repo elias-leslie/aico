@@ -66,9 +66,11 @@ export function useTerminalTabsState({
       targetProjectId: string,
       workingDir?: string,
       agentToolSlug?: string,
+      options?: { host?: string },
     ) =>
       createProjectPane(paneName, targetProjectId, workingDir, agentToolSlug, {
         detached: true,
+        host: options?.host,
       }),
     [createProjectPane],
   )

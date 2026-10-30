@@ -2,6 +2,8 @@
 // and the pane state a seed is built from. Pure functions and the line parser;
 // the client that runs tmux is control.ts.
 
+import { SSH_BIN, shellQuote, tmuxIndex } from './remote'
+
 /** Seconds tmux may fall behind before it pauses the pane (then the client reseeds). */
 export const PAUSE_AFTER_SECONDS = 5
 /** Bytes per send-keys command; keeps each command line short. */
@@ -32,6 +34,8 @@ export const SEED_FLAGS = [
   'mouse_sgr_flag',
   'scroll_region_upper',
   'scroll_region_lower',
+  // Not pane state: the reading client's own pid (the remote one over ssh).
+  'client_pid',
 ] as const
 
 export type SeedFlags = { paneId: string } & Record<
@@ -114,11 +118,20 @@ export function buildSeed(
   return seed
 }
 
-/** `tmux … attach-session -t X` from Tether, as a control-mode client. */
+/** `tmux … attach-session -t X` from Tether, as a control-mode client. On a
+ * remote host the argv is ssh's and tmux follows its `--`: `-C` goes after
+ * tmux, never after ssh (where it would ask for compression). */
 export function controlArgv(attachArgv: readonly string[]): string[] {
+  const tmuxAt = tmuxIndex(attachArgv)
   const at = attachArgv.findIndex((arg) => arg === 'attach-session' || arg === 'attach')
-  if (at < 1) throw new Error('attach argv has no attach-session command')
-  return [attachArgv[0], '-C', ...attachArgv.slice(1), '-f', `pause-after=${PAUSE_AFTER_SECONDS}`]
+  if (at <= tmuxAt) throw new Error('attach argv has no attach-session command')
+  return [
+    ...attachArgv.slice(0, tmuxAt + 1),
+    '-C',
+    ...attachArgv.slice(tmuxAt + 1),
+    '-f',
+    `pause-after=${PAUSE_AFTER_SECONDS}`,
+  ]
 }
 
 /** send-keys commands typing `bytes` into `paneId` as hex key codes. */
@@ -133,13 +146,26 @@ export function inputCommands(paneId: string, bytes: Buffer): string[] {
   return commands
 }
 
-/** The `-S socket` / `-L name` arguments of a tmux argv. */
+/** The `-S socket` / `-L name` arguments of a tmux argv (local or over ssh). */
 export function socketArgsOf(argv: readonly string[]): string[] {
   const out: string[] = []
-  for (let i = 1; i < argv.length - 1; i += 1) {
+  for (let i = tmuxIndex(argv) + 1; i < argv.length - 1; i += 1) {
     if (argv[i] === '-S' || argv[i] === '-L') out.push(argv[i], argv[i + 1])
   }
   return out
+}
+
+/** A one-shot tmux command (`args`) on the attach argv's server, through the
+ * same ssh prefix when it is remote. */
+export function tmuxCommandArgv(attachArgv: readonly string[], args: readonly string[]): string[] {
+  const tmuxAt = tmuxIndex(attachArgv)
+  const remote = attachArgv[0] === SSH_BIN
+  return [
+    ...attachArgv.slice(0, tmuxAt + 1),
+    ...(remote ? ['-u'] : []),
+    ...socketArgsOf(attachArgv),
+    ...(remote ? args.map(shellQuote) : args),
+  ]
 }
 
 export type Block = { lines: string[]; error: boolean }

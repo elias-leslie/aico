@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConnectionStatus } from '../../components/Terminal'
 import {
+  type HostStateFrame,
   openWebSocketConnection,
   type SizeHolderFrame,
 } from './use-websocket-connection'
+
+/** How long a socket that looks open may stay silent after the app returns
+ * to the foreground before it is replaced. */
+const RESUME_PROBE_MS = 2_500
 
 interface UseTerminalWebSocketOptions {
   sessionId: string
@@ -19,6 +24,8 @@ interface UseTerminalWebSocketOptions {
   onMessage?: (data: string) => void
   /** Called when the server says who holds the shared size */
   onSizeHolder?: (holder: SizeHolderFrame) => void
+  /** Called when the server says whether a remote session's host can be reached */
+  onHostState?: (frame: HostStateFrame) => void
   /** Called with how much history the server's seed carries (sent before the seed) */
   onHistoryLines?: (historyLines: number) => void
   /** Called before reconnect data arrives — clear terminal buffer to prevent duplicates */
@@ -60,6 +67,7 @@ export function useTerminalWebSocket({
   onDisconnect,
   onMessage,
   onSizeHolder,
+  onHostState,
   onHistoryLines,
   onBeforeReconnectData,
   getDimensions,
@@ -80,6 +88,7 @@ export function useTerminalWebSocket({
   const onDisconnectRef = useRef(onDisconnect)
   const onMessageRef = useRef(onMessage)
   const onSizeHolderRef = useRef(onSizeHolder)
+  const onHostStateRef = useRef(onHostState)
   const onHistoryLinesRef = useRef(onHistoryLines)
   const onBeforeReconnectDataRef = useRef(onBeforeReconnectData)
   const getDimensionsRef = useRef(getDimensions)
@@ -90,6 +99,7 @@ export function useTerminalWebSocket({
     onDisconnectRef.current = onDisconnect
     onMessageRef.current = onMessage
     onSizeHolderRef.current = onSizeHolder
+    onHostStateRef.current = onHostState
     onHistoryLinesRef.current = onHistoryLines
     onBeforeReconnectDataRef.current = onBeforeReconnectData
     getDimensionsRef.current = getDimensions
@@ -98,6 +108,7 @@ export function useTerminalWebSocket({
     onDisconnect,
     onMessage,
     onSizeHolder,
+    onHostState,
     onHistoryLines,
     onBeforeReconnectData,
     getDimensions,
@@ -136,6 +147,7 @@ export function useTerminalWebSocket({
       },
       {
         onSizeHolder: (holder) => onSizeHolderRef.current?.(holder),
+        onHostState: (frame) => onHostStateRef.current?.(frame),
         onMessage: (data) => onMessageRef.current?.(data),
         onHistoryLines: (historyLines) =>
           onHistoryLinesRef.current?.(historyLines),
@@ -198,7 +210,21 @@ export function useTerminalWebSocket({
         ws.readyState === WebSocket.CLOSING
       ) {
         reconnect()
+        return
       }
+      if (ws.readyState !== WebSocket.OPEN) return
+      // A socket can look open after the phone slept and still be dead:
+      // ask the server for a word, and replace the socket if none comes.
+      let heard = false
+      const listener = () => {
+        heard = true
+      }
+      ws.addEventListener('message', listener)
+      ws.send(JSON.stringify({ __ctrl: true, ping: true, probe: true }))
+      setTimeout(() => {
+        ws.removeEventListener('message', listener)
+        if (!heard && mountedRef.current && wsRef.current === ws) reconnect()
+      }, RESUME_PROBE_MS)
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () =>

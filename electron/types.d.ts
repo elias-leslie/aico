@@ -38,6 +38,12 @@ export interface InstructionsChoice {
   revision: string
 }
 
+/** A remote host for a new session, and its link state as the hub sees it. */
+export interface HostChoice {
+  name: string
+  state: 'connected' | 'connecting' | 'offline' | 'powered_off' | 'identity_changed'
+}
+
 export type Listing<T> = { status: 'ready'; items: T[] } | { status: 'unavailable'; items: [] }
 
 export interface OpenableSession {
@@ -70,6 +76,12 @@ export interface AicoApi {
     onSizeOther(cb: (other: boolean) => void): () => void
     /** Take the size back: deliberate for the Use here button, else a click in the terminal. */
     claimSize(deliberate?: boolean): void
+    /** The host this window's session runs on (null: this computer) and its
+     * state: `live`, or why the terminal is covered (`connecting`, `offline`,
+     * `powered_off`, `identity_changed`, `disconnected`). */
+    onHost(cb: (info: { host: string | null; state: string }) => void): () => void
+    /** Try the host again now (the Reconnect button). */
+    reconnect(): void
   }
   chat: {
     /** The Agent Hub session this window shows as a chat, or null for a terminal window. */
@@ -112,7 +124,14 @@ export interface AicoApi {
   actions: {
     /** Create a new widget running `tool` (TUI slug) in workspace `projectId`,
      * optionally with a chosen Agent Hub prompt revision as instructions. */
-    newWidget(tool: string, projectId: string, instructions?: InstructionsChoice): void
+    newWidget(
+      tool: string,
+      projectId: string,
+      instructions?: InstructionsChoice,
+      host?: string,
+    ): void
+    /** The remote hosts a new session can run on ("This computer" is implied). */
+    hosts(): Promise<Listing<HostChoice>>
     instructionPrompts(): Promise<Listing<InstructionPrompt>>
     instructionRevisions(slug: string): Promise<Listing<InstructionRevision>>
     /** Enabled TUIs (slug + label + accent + SVG mark), in registry order, for the picker. */
@@ -182,6 +201,8 @@ export interface AicoApi {
         coordinator: boolean
         /** `Coordinator` or `↳ <coordinator>`, in the coordinator's colour. */
         chip: { text: string; color: string } | null
+        /** The host the session runs on; null on this computer. */
+        host: string | null
       }) => void,
     ): () => void
     /** Subscribe to focus/blur; returns an unsubscribe function. */

@@ -13,6 +13,7 @@
 
 import type { IncomingMessage } from 'node:http'
 import {
+  type SessionDescriptor,
   type TetherClient,
   TetherError,
   type TetherEvent,
@@ -74,6 +75,8 @@ export interface TerminalDeps {
   touched(sessionId: string): void
   historyLines: number
   openLink?(argv: string[], env: Record<string, string>, size: Size | null): TerminalLink
+  /** The wait before remote reattach try `attempt`; tests shorten it. */
+  retryDelay?(attempt: number): number
 }
 
 export type ClientMessage =
@@ -143,6 +146,26 @@ interface View {
   sizeHeld(clientPid: number, viewer: ViewerLabel | null): void
   ended(): void
   close(code: number, reason: string): void
+  /** The remote host the session runs on; null on this computer. */
+  host: string | null
+  /** The hub's link to that host changed state. */
+  peer(state: string): void
+  /** The hub's link to that host is back: attach again if the link is gone. */
+  resync(): void
+}
+
+/** Reattach tries after a remote link drops while its host still counts as
+ * up; then the socket waits for the hub's resync (or the page's Reconnect). */
+const REMOTE_RETRIES = 6
+const REMOTE_RETRY_BASE_MS = 1_000
+const REMOTE_RETRY_CAP_MS = 30_000
+/** A link that stayed up this long starts its retries from the first again. */
+const REMOTE_STABLE_MS = 30_000
+
+/** Capped exponential backoff, jittered to 50–150% so sockets don't retry in step. */
+export function retryDelay(attempt: number, random: () => number = Math.random): number {
+  const base = Math.min(REMOTE_RETRY_CAP_MS, REMOTE_RETRY_BASE_MS * 2 ** attempt)
+  return Math.round(base * (0.5 + random()))
 }
 
 const defaultOpenLink =
@@ -172,6 +195,17 @@ export class TerminalHub {
 
   /** One Tether event (size holders, ended sessions) for the open sockets; the server's stream feeds it. */
   event(event: TetherEvent): void {
+    if (event.type === 'peer.state' || event.type === 'peer.resync') {
+      const host = typeof event.data.host === 'string' ? event.data.host : null
+      if (!host) return
+      for (const views of this.views.values())
+        for (const view of views) {
+          if (view.host !== host) continue
+          if (event.type === 'peer.resync') view.resync()
+          else if (typeof event.data.state === 'string') view.peer(event.data.state)
+        }
+      return
+    }
     const id = typeof event.data.id === 'string' ? event.data.id : null
     const views = id ? this.views.get(id) : undefined
     if (!views) return
@@ -243,12 +277,14 @@ export class TerminalHub {
       }
     })
 
+    let descriptor: SessionDescriptor | null
     try {
-      if (!(await findSession(tether, sessionId))) return dead('Session not found')
+      descriptor = await findSession(tether, sessionId)
     } catch (error) {
       if (open) ws.close(1011, unavailable(error))
       return
     }
+    if (!descriptor) return dead('Session not found')
     if (!open) return
     ws.send(
       controlFrame({ __ctrl: true, transport: 'control', history_lines: this.deps.historyLines }),
@@ -268,25 +304,25 @@ export class TerminalHub {
       if (message.kind === 'control') size = sizeOf(message.message) ?? size
     }
 
-    let target: ReturnType<typeof ownAttachTarget>
-    try {
-      target = ownAttachTarget(await tether.attach(sessionId))
-    } catch (error) {
-      if (!open) return
-      if (
-        error instanceof TetherError &&
-        (error.status === 404 || error.code === 'workload_unavailable')
-      )
-        return dead('Session is not running')
-      ws.close(1011, unavailable(error))
-      return
-    }
-    if (!open) return
-
-    const link = this.openLink(target.argv, attachEnvironment(target), size)
-    let generation = target.generation
-    const isCurrent = () => open && !link.closed
+    // A session on a remote host can lose its link (the host went down, or
+    // ssh dropped) while this socket stays open: the page then shows the
+    // host's state and this socket attaches again when the host is back.
+    const host = typeof descriptor.host === 'string' ? descriptor.host : null
+    let link: TerminalLink | null = null
+    let generation = descriptor.generation ?? ''
+    let detach = () => {}
+    let claimed = false
     let lastNotice = ''
+    let lastHostState = ''
+    let retries = 0
+    let retryTimer: NodeJS.Timeout | undefined
+    let attaching = false
+    const isCurrent = () => open && link !== null && !link.closed
+    const hostState = (state: string) => {
+      if (!open || !host || state === lastHostState) return
+      lastHostState = state
+      ws.send(controlFrame({ __ctrl: true, host_state: { host, state } }))
+    }
     const notice = (here: boolean, label: ViewerLabel | null) => {
       const holder = { here, viewer: here ? viewer : label }
       const key = JSON.stringify(holder)
@@ -294,87 +330,194 @@ export class TerminalHub {
       lastNotice = key
       ws.send(controlFrame({ __ctrl: true, size_holder: holder }))
     }
-    const claim = createSizeClaim({
-      tether,
-      id: sessionId,
-      generation: () => generation,
-      link,
-      viewer,
-      isCurrent,
-      refresh: async () => {
-        const descriptor = await findSession(tether, sessionId)
-        if (descriptor?.generation) generation = descriptor.generation
-      },
-      applied: (changed) => {
-        notice(true, viewer)
-        if (changed && isCurrent()) link.settleSize()
-      },
-    })
-    const claimWhenReady = () => void link.ready.then(() => (isCurrent() ? claim() : undefined))
+    /** Drop the link (if any) and show why: the host cannot be reached. */
+    const waitForHost = (state: string) => {
+      clearTimeout(retryTimer)
+      retryTimer = undefined
+      const current = link
+      link = null
+      detach()
+      detach = () => {}
+      current?.kill()
+      hostState(state)
+    }
+    /** A remote link dropped with the host still up: try again, jittered and bounded. */
+    const retryRemote = () => {
+      if (!open) return
+      if (retries >= REMOTE_RETRIES) return hostState('disconnected')
+      hostState('connecting')
+      const delay = (this.deps.retryDelay ?? retryDelay)(retries)
+      retries += 1
+      clearTimeout(retryTimer)
+      retryTimer = setTimeout(() => {
+        retryTimer = undefined
+        void attach()
+      }, delay)
+    }
+    let claim: () => Promise<void> = async () => {}
+    const claimWhenReady = () => {
+      const current = link
+      if (current) void current.ready.then(() => (isCurrent() ? claim() : undefined))
+    }
 
-    const detach = streamToViewer(link, {
-      send: (frame, done) => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(frame, { binary: true }, done)
-        else done()
-      },
-      // The control client exited: when the session's process did too (the
-      // shell's `exit`), say the session ended so the page stops retrying.
-      // Otherwise the page reconnects and attaches again.
-      close: () => {
-        void sessionGone(tether, sessionId).then((gone) => {
-          if (!open) return
-          if (gone) dead('Session ended')
-          else ws.close(RECONNECT_CODE, 'reattach')
+    const attach = async (): Promise<void> => {
+      if (!open || attaching || isCurrent()) return
+      attaching = true
+      try {
+        await attachOnce()
+      } finally {
+        attaching = false
+      }
+    }
+    const attachOnce = async (): Promise<void> => {
+      let target: ReturnType<typeof ownAttachTarget>
+      try {
+        target = ownAttachTarget(await tether.attach(sessionId), process.env, host)
+      } catch (error) {
+        if (!open) return
+        if (host && error instanceof TetherError && error.code === 'host_unavailable')
+          return waitForHost(hostStateOf(error.body.state))
+        if (
+          error instanceof TetherError &&
+          (error.status === 404 || error.code === 'workload_unavailable')
+        )
+          return dead('Session is not running')
+        if (host && lastHostState) return retryRemote()
+        ws.close(1011, unavailable(error))
+        return
+      }
+      if (!open) return
+
+      const current = this.openLink(target.argv, attachEnvironment(target), size)
+      link = current
+      generation = target.generation
+      this.deps.touched(sessionId)
+      lastNotice = ''
+      const attachedAt = Date.now()
+      claim = createSizeClaim({
+        tether,
+        id: sessionId,
+        generation: () => generation,
+        link: current,
+        viewer,
+        isCurrent,
+        refresh: async () => {
+          const latest = await findSession(tether, sessionId)
+          if (latest?.generation) generation = latest.generation
+        },
+        applied: (changed) => {
+          notice(true, viewer)
+          if (changed && isCurrent()) current.settleSize()
+        },
+      })
+      detach = streamToViewer(current, {
+        send: (frame, done) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(frame, { binary: true }, done)
+          else done()
+        },
+        // The control client exited: when the session's process did too (the
+        // shell's `exit`), say the session ended so the page stops retrying.
+        // A remote link tries again here; a local one has the page reconnect.
+        close: () => {
+          if (link !== current) return
+          void sessionGone(tether, sessionId).then((gone) => {
+            if (!open || link !== current) return
+            if (gone) return dead('Session ended')
+            if (!host) return ws.close(RECONNECT_CODE, 'reattach')
+            link = null
+            if (Date.now() - attachedAt >= REMOTE_STABLE_MS) retries = 0
+            retryRemote()
+          })
+        },
+      })
+      void current.ready.then(() => {
+        if (link !== current || !open) return
+        hostState('live')
+      })
+      if (claimed) claimWhenReady()
+      else {
+        // Say who holds the size now, unless this socket is claiming it anyway.
+        void current.ready.then(async () => {
+          if (claimed || !isCurrent() || link !== current) return
+          try {
+            const answer = await tether.resizeHolder(sessionId)
+            if (answer.holder && answer.generation === generation)
+              notice(answer.holder.clientPid === current.pid, answer.holder.viewer)
+          } catch {
+            // No holder notice: Tether will say on the next claim.
+          }
         })
-      },
-    })
+      }
+    }
+
     const view: View = {
-      sizeHeld: (clientPid, label) => notice(clientPid === link.pid, label),
+      sizeHeld: (clientPid, label) => {
+        if (link) notice(clientPid === link.pid, label)
+      },
       ended: () => {
         if (open) dead('Session ended')
       },
       close: (code, reason) => ws.close(code, reason),
+      host,
+      peer: (state) => {
+        if (state === 'connected') return
+        waitForHost(state)
+      },
+      resync: () => {
+        if (isCurrent()) return
+        clearTimeout(retryTimer)
+        retryTimer = undefined
+        retries = 0
+        void attach()
+      },
     }
     this.add(sessionId, view)
     cleanup = () => {
       this.remove(sessionId, view)
+      clearTimeout(retryTimer)
       detach()
     }
-    this.deps.touched(sessionId)
 
-    let claimed = false
-    dispatch = (message) => {
-      if (!isCurrent()) return
+    const handle = (message: ClientMessage) => {
+      const control = message.kind === 'control' ? message.message : null
+      if (control && 'resize' in control) size = sizeOf(control) ?? size
+      // A claim made while the host is away applies once a link is back.
+      if (control?.claim === true) claimed = true
+      // The page came back to the foreground and asks whether this socket
+      // still carries frames: answer even while the host is away.
+      if (control?.probe === true && ws.readyState === WebSocket.OPEN)
+        ws.send(controlFrame({ __ctrl: true, pong: true }))
+      if (control?.reconnect === true && !isCurrent()) {
+        // The page's Reconnect: try once more now.
+        retries = 0
+        void attach()
+        return
+      }
+      if (!isCurrent() || !link) return
       if (message.kind === 'data') {
         link.write(message.text)
         return
       }
-      const control = message.message
-      if ('resize' in control) {
-        const next = sizeOf(control)
-        if (next) link.resize(next.cols, next.rows)
-      }
-      if (control.claim === true) {
-        claimed = true
-        claimWhenReady()
-      }
+      if (!control) return
+      if ('resize' in control && size) link.resize(size.cols, size.rows)
+      if (control.claim === true) claimWhenReady()
       if (typeof control.paste === 'string' && control.paste) link.paste(control.paste)
       if (control.refresh) link.reseed()
     }
-    for (const message of early.splice(0)) dispatch(message)
 
-    // Say who holds the size now, unless this socket is claiming it anyway.
-    void link.ready.then(async () => {
-      if (claimed || !isCurrent()) return
-      try {
-        const answer = await tether.resizeHolder(sessionId)
-        if (answer.holder && answer.generation === generation)
-          notice(answer.holder.clientPid === link.pid, answer.holder.viewer)
-      } catch {
-        // No holder notice: Tether will say on the next claim.
-      }
-    })
+    if (host && descriptor.peer) waitForHost(descriptor.peer.state)
+    else await attach()
+    if (!open) return
+    dispatch = handle
+    for (const message of early.splice(0)) handle(message)
   }
+}
+
+/** A `host_unavailable` refusal's state, as the page shows it. */
+function hostStateOf(value: unknown): string {
+  return value === 'powered_off' || value === 'identity_changed' || value === 'connecting'
+    ? value
+    : 'offline'
 }
 
 /** The session no longer runs: Tether doesn't know it, it ended, or its pane has no workload. */

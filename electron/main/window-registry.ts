@@ -18,6 +18,8 @@ export interface PendingCreate {
   projectId: string
   /** An Agent Hub prompt revision added to the tool's instructions. */
   instructions?: { prompt: string; revision: string }
+  /** The remote host to start it on; absent for this computer. */
+  host?: string
 }
 
 /** A window that reads one workflow step's latest attempt, with no session of its own. */

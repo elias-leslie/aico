@@ -245,6 +245,7 @@ export function useTerminalPanes() {
         working_dir: workingDir,
         agent_tool_slug: agentToolSlug,
         detached: options?.detached,
+        host: options?.host,
       }),
     [createMutation],
   )

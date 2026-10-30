@@ -94,7 +94,12 @@ export function useTerminalHandlers({
     terminalRefs.current.values().next().value?.reconnect()
   }, [activeSessionId, terminalRefs])
   const handleNewTerminalForProject = useCallback(
-    (targetProjectId: string, mode?: string, rootPath?: string | null) =>
+    (
+      targetProjectId: string,
+      mode?: string,
+      rootPath?: string | null,
+      host?: string,
+    ) =>
       addProjectPaneAction(
         targetProjectId,
         mode,
@@ -104,6 +109,7 @@ export function useTerminalHandlers({
         createProjectPane,
         navigateToSession,
         startAgent,
+        host,
       ),
     [projectTerminals, panes, createProjectPane, navigateToSession, startAgent],
   )

@@ -92,6 +92,15 @@ function showCoordinator(coordinator: boolean, chip: { text: string; color: stri
   setCoordinatorAction(coordinator)
 }
 
+// A session on another host names that host in the titlebar.
+function showHostChip(host: string | null): void {
+  const el = document.querySelector<HTMLElement>('#host-chip')
+  if (!el) return
+  el.hidden = !host
+  el.textContent = host ?? ''
+  el.title = host ? `Runs on ${host}` : ''
+}
+
 // Titlebar identity (so several open widgets are distinguishable at a glance):
 // the TUI's SVG mark (in its accent) set between the eyes, and a click-to-rename
 // widget name in the available title lane. Fed by main over win:title; the OS window
@@ -120,6 +129,7 @@ function wireTitle(): void {
 
     document.title = [info.label, info.tuiName].filter(Boolean).join(' · ')
     showCoordinator(info.coordinator, info.chip)
+    showHostChip(info.host)
   })
 
   // Click the name to rename: swap the button for an input prefilled with the

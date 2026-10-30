@@ -9,6 +9,7 @@ import {
   SEED_FLAGS,
   type SeedFlags,
   socketArgsOf,
+  tmuxCommandArgv,
 } from './protocol'
 
 const ESC = '\x1b'
@@ -34,6 +35,7 @@ function flags(overrides: Partial<SeedFlags> = {}): SeedFlags {
     mouse_sgr_flag: 0,
     scroll_region_upper: 0,
     scroll_region_lower: 23,
+    client_pid: 4242,
     ...overrides,
   }
 }
@@ -60,7 +62,8 @@ describe('parseSeedFlags', () => {
     expect(parsed?.paneId).toBe('%7')
     expect(parsed?.pane_height).toBe(1)
     expect(parsed?.alternate_on).toBe(2)
-    expect(parsed?.scroll_region_lower).toBe(SEED_FLAGS.length - 1)
+    expect(parsed?.scroll_region_lower).toBe(SEED_FLAGS.length - 2)
+    expect(parsed?.client_pid).toBe(SEED_FLAGS.length - 1)
   })
 
   it('rejects a malformed or short line', () => {
@@ -149,12 +152,68 @@ describe('controlArgv', () => {
   it('refuses an argv that does not attach', () => {
     expect(() => controlArgv(['tmux', 'new-session'])).toThrow()
   })
+
+  it('puts -C after the remote tmux, never after ssh (its compression flag)', () => {
+    const argv = controlArgv(remoteArgv)
+    expect(argv.slice(0, 13)).toEqual(remoteArgv.slice(0, 13))
+    expect(argv.slice(13, 15)).toEqual(['-C', '-u'])
+    expect(argv.indexOf('-C')).toBe(13)
+    expect(argv.slice(-2)).toEqual(['-f', 'pause-after=5'])
+    expect(() => controlArgv([...remoteArgv.slice(0, 10), 'tmux', 'attach'])).toThrow()
+  })
 })
+
+const remoteArgv = [
+  '/usr/bin/ssh',
+  '-F',
+  '/dev/null',
+  '-T',
+  '-o',
+  'BatchMode=yes',
+  '-S',
+  '/run/user/1000/tether/peers/w/ssh.ctl',
+  'w',
+  '--',
+  'env',
+  'LANG=C.UTF-8',
+  '/usr/bin/tmux',
+  '-u',
+  '-S',
+  "'/home/k/s.sock'",
+  'attach-session',
+  '-t',
+  "'$3'",
+]
 
 describe('socketArgsOf', () => {
   it('keeps only the socket arguments', () => {
     expect(socketArgsOf(['tmux', '-S', '/s', 'attach-session', '-t', 'x'])).toEqual(['-S', '/s'])
     expect(socketArgsOf(['tmux', '-L', 'n', 'attach'])).toEqual(['-L', 'n'])
+  })
+
+  it("reads the remote tmux's, not ssh's -S", () => {
+    expect(socketArgsOf(remoteArgv)).toEqual(['-S', "'/home/k/s.sock'"])
+  })
+})
+
+describe('tmuxCommandArgv', () => {
+  it('runs a one-shot command on the same server, locally or over the same ssh', () => {
+    expect(
+      tmuxCommandArgv(
+        ['/usr/bin/tmux', '-S', '/s', 'attach-session', '-t', 'x'],
+        ['load-buffer', '-'],
+      ),
+    ).toEqual(['/usr/bin/tmux', '-S', '/s', 'load-buffer', '-'])
+    expect(tmuxCommandArgv(remoteArgv, ['load-buffer', '-b', "a'b", '-'])).toEqual([
+      ...remoteArgv.slice(0, 13),
+      '-u',
+      '-S',
+      "'/home/k/s.sock'",
+      "'load-buffer'",
+      "'-b'",
+      `'a'\\''b'`,
+      "'-'",
+    ])
   })
 })
 

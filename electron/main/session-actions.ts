@@ -45,6 +45,8 @@ function timesLabel(times: string[]): string {
     : (times[0] ?? '')
 }
 
+/** A hosts.json host name, as the hub names it. */
+const HOST_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 interface SessionActionsDeps {
   tether: Pick<
     TetherClient,
@@ -58,6 +60,7 @@ interface SessionActionsDeps {
     | 'sessionWakes'
     | 'addWake'
     | 'cancelWake'
+    | 'hosts'
   >
   catalog: Pick<SessionCatalog, 'get' | 'upsert' | 'list'>
   link: {
@@ -69,7 +72,12 @@ interface SessionActionsDeps {
   }
   registry: Pick<WindowRegistry, 'forSession' | 'senderSession'>
   windows: {
-    openNew(tool: string, projectId: string, instructions?: InstructionsChoice): unknown
+    openNew(
+      tool: string,
+      projectId: string,
+      instructions?: InstructionsChoice,
+      host?: string,
+    ): unknown
     showAll(): void
     focusOrReopen(id: string): void
   }
@@ -322,15 +330,26 @@ export function createSessionActions(deps: SessionActionsDeps) {
     // Chosen instructions are optional; malformed ones refuse the launch.
     ipcMain.on(
       'widget:new',
-      (_event, tool?: unknown, projectId?: unknown, instructions?: unknown) => {
+      (_event, tool?: unknown, projectId?: unknown, instructions?: unknown, host?: unknown) => {
         const choice = instructions == null ? undefined : parseChoice(instructions)
         if (choice === null) return
+        if (host != null && (typeof host !== 'string' || !HOST_NAME.test(host))) return
         if (typeof tool === 'string' && tool && typeof projectId === 'string' && projectId) {
-          if (choice) windows.openNew(tool, projectId, choice)
+          if (host) windows.openNew(tool, projectId, choice, host)
+          else if (choice) windows.openNew(tool, projectId, choice)
           else windows.openNew(tool, projectId)
         }
       },
     )
+    // The remote hosts a new session can run on, as the hub lists them.
+    ipcMain.handle('hosts:list', async () => {
+      try {
+        const items = (await tether.hosts()).map((h) => ({ name: h.name, state: h.state }))
+        return { status: 'ready', items }
+      } catch {
+        return { status: 'unavailable', items: [] }
+      }
+    })
     ipcMain.on('widget:hub', windows.showAll)
 
     // End this session from the widget itself: Tether ends the workload and the

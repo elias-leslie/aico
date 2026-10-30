@@ -48,6 +48,10 @@ interface SlotSessionFields {
   can: SlotCapabilities
   /** An Agent Hub chat: the view shows its transcript, not a terminal. */
   chat?: boolean
+  /** The remote host the session runs on; absent on this computer. */
+  host?: string
+  /** Why that host cannot be reached right now (`offline`, ...); absent when live. */
+  hostState?: string
   /** The header shows the session title (`Project — Task`) in place of the
    * project switcher. */
   showsSessionTitle: boolean
@@ -245,6 +249,10 @@ function slotFields(
     coordinatorId: session.coordinator_id ?? null,
     createdAt: session.created_at,
     ...(session.backend === 'agent-hub' ? { chat: true } : {}),
+    ...(session.host ? { host: session.host } : {}),
+    ...(session.host && session.peer?.state
+      ? { hostState: session.peer.state }
+      : {}),
     can: {
       rename: session.can_rename,
       // A free-standing View never offers Reset: closing it only detaches.

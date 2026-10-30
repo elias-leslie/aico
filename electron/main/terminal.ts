@@ -7,6 +7,7 @@ import {
   type SessionCatalog,
   type SessionDescriptor,
   type TetherClient,
+  TetherError,
   TetherUnavailable,
   type ViewerLabel,
 } from 'tether/client'
@@ -25,6 +26,30 @@ import type { PendingCreate, WindowRegistry } from './window-registry'
 interface PtySize {
   cols: number
   rows: number
+}
+
+/** What a window shows about the host its session runs on (`pty:host`):
+ * `live` clears it; anything else covers the terminal, which takes no input. */
+export type WindowHostState =
+  | 'live'
+  | 'connecting'
+  | 'offline'
+  | 'powered_off'
+  | 'identity_changed'
+  | 'disconnected'
+
+/** Reattach tries after a remote link drops while its host still counts as
+ * up; then the window waits for the hub's resync (or Reconnect). */
+const REMOTE_RETRIES = 6
+const REMOTE_RETRY_BASE_MS = 1_000
+const REMOTE_RETRY_CAP_MS = 30_000
+/** A link that stayed up this long starts its retries from the first again. */
+const REMOTE_STABLE_MS = 30_000
+
+/** Capped exponential backoff, jittered to 50–150% so windows don't retry in step. */
+export function retryDelay(attempt: number, random: () => number = Math.random): number {
+  const base = Math.min(REMOTE_RETRY_CAP_MS, REMOTE_RETRY_BASE_MS * 2 ** attempt)
+  return Math.round(base * (0.5 + random()))
 }
 
 // Clamp renderer-supplied terminal geometry to sane integers before it reaches
@@ -78,6 +103,10 @@ interface TerminalDeps {
   isQuitting(): boolean
   /** Names this app and device on its size claims ("Viewing on …" elsewhere). */
   viewer: ViewerLabel
+  /** Timers for remote reattach tries; tests pass fakes. */
+  setTimer?(fn: () => void, ms: number): unknown
+  clearTimer?(handle: unknown): void
+  random?(): number
 }
 
 export function createTerminal(deps: TerminalDeps) {
@@ -100,12 +129,83 @@ export function createTerminal(deps: TerminalDeps) {
   // different generation (crash recovery, reboot restore), the same window
   // reattaches. One attempt per generation, so a failing attach cannot loop.
   const linkLost = new Map<number, { generation: string | undefined; size: PtySize }>()
+  // Windows whose session's host is not reachable (the hub marks it with
+  // `peer`), with their last grid: no terminal link, no input, until the host
+  // is back.
+  const hostWaits = new Map<number, { host: string; size: PtySize }>()
+  // Remote windows whose link dropped while the host still counted as up:
+  // tries so far and the pending one.
+  const remoteRetries = new Map<number, { attempt: number; timer?: unknown; host: string }>()
+  const setTimer = deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms))
+  const clearTimer =
+    deps.clearTimer ?? ((handle: unknown) => clearTimeout(handle as NodeJS.Timeout))
+
+  function showHost(win: BrowserWindow, host: string | null, state: WindowHostState): void {
+    if (!win.isDestroyed()) win.webContents.send('pty:host', { host, state })
+  }
+
+  function cancelRetry(winId: number): void {
+    const retry = remoteRetries.get(winId)
+    if (retry?.timer !== undefined) clearTimer(retry.timer)
+    remoteRetries.delete(winId)
+  }
+
+  /** The session's host is marked unreachable: drop any link and wait for it. */
+  function waitForHost(
+    win: BrowserWindow,
+    host: string,
+    state: Exclude<WindowHostState, 'live'>,
+    size: PtySize,
+  ): void {
+    const existing = ptys.get(win.id)
+    if (existing) {
+      sizeHolders.get(existing)?.dispose()
+      ptys.delete(win.id)
+      existing.kill()
+    }
+    cancelRetry(win.id)
+    linkLost.delete(win.id)
+    hostWaits.set(win.id, { host, size })
+    showHost(win, host, state)
+  }
+
+  /** A remote link dropped while its host still counts as up: try again
+   * after a jittered backoff, a bounded number of times. */
+  function retryRemote(win: BrowserWindow, host: string, size: PtySize, stableFor: number): void {
+    const previous = remoteRetries.get(win.id)
+    const attempt = previous && stableFor < REMOTE_STABLE_MS ? previous.attempt : 0
+    if (previous?.timer !== undefined) clearTimer(previous.timer)
+    if (attempt >= REMOTE_RETRIES) {
+      remoteRetries.set(win.id, { attempt, host })
+      showHost(win, host, 'disconnected')
+      return
+    }
+    showHost(win, host, 'connecting')
+    const timer = setTimer(
+      () => {
+        const retry = remoteRetries.get(win.id)
+        if (!retry || retry.timer !== timer) return
+        retry.timer = undefined
+        if (win.isDestroyed() || deps.isQuitting() || ptys.has(win.id) || !linkLost.has(win.id))
+          return
+        console.log(`[aico] reattaching window=${win.id} on ${host}: try ${attempt + 1}`)
+        void startPty(win, size, { keepRetries: true })
+          .then(() => deps.titles())
+          .catch((error) => console.error('[aico] PTY reattach failed:', error))
+      },
+      retryDelay(attempt, deps.random),
+    )
+    remoteRetries.set(win.id, { attempt: attempt + 1, timer, host })
+  }
 
   async function createRequest(pending: PendingCreate, size: PtySize) {
     // The chosen revision is read now, so the session keeps what was picked.
-    const instructions = pending.instructions
-      ? { instructions: await deps.instructionsSnapshot(pending.instructions) }
-      : {}
+    const instructions = {
+      ...(pending.instructions
+        ? { instructions: await deps.instructionsSnapshot(pending.instructions) }
+        : {}),
+      ...(pending.host ? { host: pending.host } : {}),
+    }
     if (pending.projectId === BLANK_SLATE_ID)
       return { tool: pending.tool, blankSlate: true as const, ...instructions, size }
     if (pending.projectId === PERSONAL_WORKSPACE_ID) {
@@ -115,7 +215,11 @@ export function createTerminal(deps: TerminalDeps) {
     return { tool: pending.tool, projectId: pending.projectId, ...instructions, size }
   }
 
-  async function startPty(win: BrowserWindow, size: PtySize): Promise<void> {
+  async function startPty(
+    win: BrowserWindow,
+    size: PtySize,
+    options: { keepRetries?: boolean } = {},
+  ): Promise<void> {
     const winId = win.id
     const generation = (ptyStartGenerations.get(winId) ?? 0) + 1
     ptyStartGenerations.set(winId, generation)
@@ -128,6 +232,8 @@ export function createTerminal(deps: TerminalDeps) {
     }
     awaitingTether.delete(winId)
     linkLost.delete(winId)
+    hostWaits.delete(winId)
+    if (!options.keepRetries) cancelRetry(winId)
 
     let widgetId = registry.sessionOf(winId)
     if (!widgetId) {
@@ -162,10 +268,30 @@ export function createTerminal(deps: TerminalDeps) {
     }
     if (!stillCurrent()) return
 
+    // A session on a host the hub cannot reach: say so, and wait for it.
+    const known = catalog.get(widgetId)
+    const host = known ? (known.host ?? null) : undefined
+    if (host && known?.peer) {
+      waitForHost(win, host, known.peer.state, size)
+      return
+    }
+
     let target: AttachTarget
     try {
-      target = ownAttachTarget(await tether.attach(widgetId))
+      target = ownAttachTarget(await tether.attach(widgetId), process.env, host)
     } catch (error) {
+      if (host && error instanceof TetherError && error.code === 'host_unavailable') {
+        if (stillCurrent()) waitForHost(win, host, hostStateOf(error.body.state), size)
+        return
+      }
+      if (host && remoteRetries.has(winId) && !(error instanceof TetherUnavailable)) {
+        // A try of a dropped remote link failed: the next waits longer.
+        if (stillCurrent()) {
+          linkLost.set(winId, { generation: known?.generation, size })
+          retryRemote(win, host, size, 0)
+        }
+        return
+      }
       if (error instanceof TetherUnavailable) awaitingTether.set(winId, size)
       else if (stillCurrent())
         linkLost.set(winId, { generation: catalog.get(widgetId)?.generation, size })
@@ -187,6 +313,8 @@ export function createTerminal(deps: TerminalDeps) {
       pty.kill()
       return
     }
+    const attachedAt = Date.now()
+    showHost(win, target.host, 'live')
     const isCurrent = () =>
       !deps.isQuitting() &&
       !win.isDestroyed() &&
@@ -240,11 +368,12 @@ export function createTerminal(deps: TerminalDeps) {
       if (ptys.get(winId) === pty) {
         ptys.delete(winId)
         if (!deps.isQuitting()) {
-          if (!win.isDestroyed())
-            linkLost.set(winId, {
-              generation: target.generation,
-              size: { cols: pty.cols, rows: pty.rows },
-            })
+          const lastSize = { cols: pty.cols, rows: pty.rows }
+          if (!win.isDestroyed()) {
+            linkLost.set(winId, { generation: target.generation, size: lastSize })
+            // Over ssh the link can drop with the session still running there.
+            if (target.host) retryRemote(win, target.host, lastSize, Date.now() - attachedAt)
+          }
           deps.requestRefresh()
         }
       }
@@ -268,9 +397,33 @@ export function createTerminal(deps: TerminalDeps) {
   /** Tether reported this session: if its window lost its terminal link and the
    * session is running again under a new generation, reattach that window. */
   function sessionSeen(descriptor: SessionDescriptor): void {
-    if (descriptor.status !== 'running' || deps.isQuitting()) return
+    if (deps.isQuitting()) return
     const win = registry.forSession(descriptor.id)
     if (!win || win.isDestroyed()) return
+    const host = descriptor.host ?? null
+    if (host && descriptor.peer) {
+      // The hub lost the host: stop any link and tries, and wait for it.
+      const wait = hostWaits.get(win.id)
+      if (wait?.host === host) {
+        showHost(win, host, descriptor.peer.state)
+        return
+      }
+      const pty = ptys.get(win.id)
+      const lostSize = linkLost.get(win.id)?.size
+      const size = pty ? { cols: pty.cols, rows: pty.rows } : lostSize
+      if (size) waitForHost(win, host, descriptor.peer.state, size)
+      return
+    }
+    const wait = hostWaits.get(win.id)
+    if (wait) {
+      // The host is back.
+      console.log(`[aico] reattaching widget=${descriptor.id}: ${wait.host} is back`)
+      void startPty(win, wait.size)
+        .then(() => deps.titles())
+        .catch((error) => console.error('[aico] PTY reattach failed:', error))
+      return
+    }
+    if (descriptor.status !== 'running') return
     const lost = linkLost.get(win.id)
     if (!lost || lost.generation === descriptor.generation) return
     if (ptys.has(win.id)) return
@@ -279,6 +432,29 @@ export function createTerminal(deps: TerminalDeps) {
     void startPty(win, lost.size)
       .then(() => deps.titles())
       .catch((error) => console.error('[aico] PTY reattach failed:', error))
+  }
+
+  /** The hub's link to `host` came back (`peer.resync`, after its list was
+   * read again): every window of that host that lost its link or waits for
+   * the host attaches now, its tries starting over. */
+  function peerResync(host: string): void {
+    if (deps.isQuitting()) return
+    const waiting = new Map<number, PtySize>()
+    for (const [winId, wait] of hostWaits) if (wait.host === host) waiting.set(winId, wait.size)
+    for (const [winId, retry] of remoteRetries) {
+      const lost = linkLost.get(winId)
+      if (retry.host === host && lost && !ptys.has(winId)) waiting.set(winId, lost.size)
+    }
+    for (const [winId, size] of waiting) {
+      const win = registry.byId(winId)
+      if (!win || win.isDestroyed()) continue
+      const id = registry.sessionOf(winId)
+      if (id && catalog.get(id)?.peer) continue // still marked: sessionSeen attaches when it clears
+      console.log(`[aico] reattaching window=${winId}: ${host} resynced`)
+      void startPty(win, size)
+        .then(() => deps.titles())
+        .catch((error) => console.error('[aico] PTY reattach failed:', error))
+    }
   }
 
   function ptyFor(sender: Electron.WebContents): TerminalLink | undefined {
@@ -294,6 +470,18 @@ export function createTerminal(deps: TerminalDeps) {
           .then(() => deps.titles()) // fill the titlebar once the session is attached
           .catch((error) => console.error('[aico] PTY start failed:', error))
       }
+    })
+
+    // The owner pressed Reconnect on a window that waits for its host or ran
+    // out of tries: try once more now.
+    ipcMain.on('pty:reconnect', (event) => {
+      const win = registry.senderWindow(event.sender)
+      if (!win || ptys.has(win.id) || deps.isQuitting()) return
+      const size = hostWaits.get(win.id)?.size ?? linkLost.get(win.id)?.size
+      if (!size) return
+      void startPty(win, size)
+        .then(() => deps.titles())
+        .catch((error) => console.error('[aico] PTY reconnect failed:', error))
     })
 
     ipcMain.on('pty:input', (event, data: unknown) => {
@@ -393,6 +581,7 @@ export function createTerminal(deps: TerminalDeps) {
     resumeAwaiting: resumeAwaitingAttaches,
     /** Tether reported this session (event or complete list). */
     sessionSeen,
+    peerResync,
     /** A client claimed this session's size (Tether's `session.resized`): if it is
      * not this window's own terminal, another client now holds the size. */
     sizeHeldBy: (id: string, clientPid: number): void => {
@@ -420,8 +609,17 @@ export function createTerminal(deps: TerminalDeps) {
       lastInput.delete(winId)
       awaitingTether.delete(winId)
       linkLost.delete(winId)
+      hostWaits.delete(winId)
+      cancelRetry(winId)
       ptyStartGenerations.delete(winId)
     },
     registerIpc,
   }
+}
+
+/** A `host_unavailable` refusal's state, as a window shows it. */
+function hostStateOf(value: unknown): Exclude<WindowHostState, 'live'> {
+  return value === 'powered_off' || value === 'identity_changed' || value === 'connecting'
+    ? value
+    : 'offline'
 }

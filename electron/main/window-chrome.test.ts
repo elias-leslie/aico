@@ -119,6 +119,7 @@ describe('pushTitles', () => {
       sessionId: '$1',
       coordinator: false,
       chip: null,
+      host: null,
     })
     // Window 2 has no session yet (Tether is still creating it): no title.
     expect(win2.webContents.send).not.toHaveBeenCalledWith('win:title', expect.anything())
@@ -163,6 +164,18 @@ describe('pushTitles', () => {
       }),
     )
     expect(layout.noteCoordinator).toHaveBeenCalledWith(win, true)
+  })
+
+  it('names the host a remote session runs on', () => {
+    const win = fakeWindow(1)
+    const { chrome, registry, catalog } = setup({ windows: [win] })
+    registry.bindSession(1, 'aaaaaaaa')
+    catalog.upsert(descriptor('aaaaaaaa', { host: 'agent-work' }))
+    chrome.pushTitles()
+    expect(win.webContents.send).toHaveBeenCalledWith(
+      'win:title',
+      expect.objectContaining({ host: 'agent-work' }),
+    )
   })
 })
 

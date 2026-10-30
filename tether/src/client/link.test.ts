@@ -113,6 +113,7 @@ function setup(
     connected: vi.fn(() => calls.push('connected')),
     shared: vi.fn(),
     sizeHeld: vi.fn(),
+    peerResync: vi.fn(),
   }
   const link = createTetherLink({
     tether: tether as unknown as TetherClient,
@@ -209,6 +210,24 @@ describe('Tether events', () => {
     subscriber.onEvent(event('session.created', { id: 'aaaaaaaa' }))
     await vi.waitFor(() => expect(tether.listSessions).toHaveBeenCalledTimes(1))
     await vi.waitFor(() => expect(catalog.get('aaaaaaaa')).toBeDefined())
+  })
+
+  it('peer.state re-lists; peer.resync re-lists, then reattaches that host', async () => {
+    const offline = { state: 'offline' as const, since: 1, listedAt: 1 }
+    const { connect, tether, catalog, hooks } = setup({
+      list: [descriptor('aaaaaaaa', { host: 'agent-work', peer: offline })],
+    })
+    const subscriber = connect()
+    subscriber.onEvent(event('peer.state', { host: 'agent-work', state: 'offline' }))
+    await vi.waitFor(() => expect(catalog.get('aaaaaaaa')?.peer).toEqual(offline))
+    // The host's window is kept while it is away.
+    expect(hooks.destroyWindow).not.toHaveBeenCalled()
+    const listed = tether.listSessions.mock.calls.length
+    tether.listSessions.mockResolvedValue([descriptor('aaaaaaaa', { host: 'agent-work' })])
+    subscriber.onEvent(event('peer.resync', { host: 'agent-work' }))
+    await vi.waitFor(() => expect(hooks.peerResync).toHaveBeenCalledWith('agent-work'))
+    expect(tether.listSessions.mock.calls.length).toBeGreaterThan(listed)
+    expect(catalog.get('aaaaaaaa')?.peer).toBeUndefined()
   })
 
   it('session.ended runs removed, closeEnded, retired, then tray, journals it, and re-lists', async () => {

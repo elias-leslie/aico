@@ -79,6 +79,7 @@ describe('attach target', () => {
       generation: answer.generation,
       argv: ['/usr/bin/tmux', '-S', ownSocket, 'attach-session', '-t', '$3'],
       env: { TERM: 'xterm-256color', LANG: 'C.UTF-8', COLORTERM: 'truecolor' },
+      host: null,
     })
     expect(attachEnvironment(target)).toEqual(target.env)
   })
@@ -99,5 +100,87 @@ describe('attach target', () => {
       '-t',
       '$3',
     ])
+  })
+})
+
+describe('remote attach target', () => {
+  const runtime = { ...env, XDG_RUNTIME_DIR: '/run/user/1000' }
+  const control = '/run/user/1000/tether/peers/agent-work/ssh.ctl'
+  const remoteSocket = `/home/kasadis/.local/state/tether/default/tmux/${hex}/server.sock`
+  const answer = {
+    generation: 'a'.repeat(64),
+    argv: ['/usr/bin/tmux', '-S', remoteSocket, 'attach-session', '-t', '$3'],
+    env: { TERM: 'xterm-256color' },
+    host: 'agent-work',
+    ssh: { alias: 'agent-work', control },
+  }
+
+  it('runs tmux on the host over the link, every remote word quoted', () => {
+    const target = ownAttachTarget(answer, runtime, 'agent-work')
+    expect(target.host).toBe('agent-work')
+    expect(target.argv).toEqual([
+      '/usr/bin/ssh',
+      '-F',
+      '/dev/null',
+      '-T',
+      '-o',
+      'BatchMode=yes',
+      '-S',
+      control,
+      'agent-work',
+      '--',
+      'env',
+      'LANG=C.UTF-8',
+      '/usr/bin/tmux',
+      '-u',
+      '-S',
+      `'${remoteSocket}'`,
+      'attach-session',
+      '-t',
+      "'$3'",
+    ])
+  })
+
+  it("takes the host's state dir when the hub names one", () => {
+    const socket = `/srv/state/tether/default/tmux/${hex}/server.sock`
+    const target = ownAttachTarget(
+      {
+        ...answer,
+        argv: ['/usr/bin/tmux', '-S', socket, 'attach', '-t', '$3'],
+        ssh: { ...answer.ssh, stateDir: '/srv/state' },
+      },
+      runtime,
+    )
+    expect(target.argv).toContain(`'${socket}'`)
+    expect(() => ownAttachTarget(answer, { ...runtime }, null)).toThrow(TetherUnavailable)
+  })
+
+  it('refuses a host, alias, link or socket it cannot trust', () => {
+    const bad = (change: Record<string, unknown>, expected?: string | null) =>
+      expect(() => ownAttachTarget({ ...answer, ...change }, runtime, expected)).toThrow(
+        TetherUnavailable,
+      )
+    bad({}, null) // the catalog says this session is local
+    bad({}, 'other-host')
+    bad({ host: 'a b' })
+    bad({ host: '../x' })
+    bad({ ssh: undefined })
+    bad({ ssh: { ...answer.ssh, alias: '-oProxyCommand=id' } })
+    bad({ ssh: { ...answer.ssh, alias: '10.20.0.114' } })
+    bad({ ssh: { ...answer.ssh, control: '/tmp/ssh.ctl' } })
+    bad({ ssh: { ...answer.ssh, control: '/run/user/1000/tether/peers/other/ssh.ctl' } })
+    bad({ ssh: { ...answer.ssh, stateDir: '/srv/../etc' } })
+    bad({ argv: ['/usr/bin/tmux', '-S', '/tmp/evil.sock', 'attach-session', '-t', '$3'] })
+    bad({
+      argv: [
+        '/usr/bin/tmux',
+        '-S',
+        `/etc/tether/default/tmux/${hex}/server.sock`,
+        'attach',
+        '-t',
+        '$3',
+      ],
+    })
+    bad({ argv: ['/usr/bin/tmux', '-S', remoteSocket, 'attach-session', '-t', "$3'; id; '"] })
   })
 })

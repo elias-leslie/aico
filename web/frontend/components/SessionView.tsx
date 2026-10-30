@@ -7,8 +7,12 @@ import { FilesDialog } from '@/components/files/FilesDialog'
 import type { TerminalMode } from '@/components/ModeToggle'
 import { StepView, useStepViewer } from '@/components/StepViewer'
 import { TerminalComponent, type TerminalHandle } from '@/components/Terminal'
-import { ConnectionNotice, SizeHolderNotice } from '@/components/TerminalNotice'
-import type { ConnectionStatus } from '@/components/terminal.types'
+import {
+  ConnectionNotice,
+  HostNotice,
+  SizeHolderNotice,
+} from '@/components/TerminalNotice'
+import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
 import { UnifiedTerminalHeaderContent as UnifiedTerminalHeader } from '@/components/terminal-header'
 import { type FilesRequest, setFilesOpener } from '@/lib/files-opener'
 import type { TerminalFontSize } from '@/lib/hooks/use-terminal-settings'
@@ -122,6 +126,15 @@ export function SessionView({
       setSizeHolder(name === null ? null : { key: termKey, name }),
     [termKey],
   )
+  // A remote session's host can't be reached right now.
+  const [hostAway, setHostAway] = useState<(HostAway & { key: string }) | null>(
+    null,
+  )
+  const onHostStateChange = useCallback(
+    (away: HostAway | null) =>
+      setHostAway(away === null ? null : { ...away, key: termKey }),
+    [termKey],
+  )
   useEffect(() => {
     if (status === 'connected') setConnectedKey(termKey)
   }, [status, termKey])
@@ -153,6 +166,10 @@ export function SessionView({
   const workingDir = getSlotWorkingDir(slot)
   // An Agent Hub session is a chat; it has no terminal to refit, search or type keys into.
   const chat = slot.chat === true
+  const awayHere =
+    !chat && hostAway?.key === termKey && status === 'connected'
+      ? hostAway
+      : null
 
   return (
     <div className="h-full w-full" style={{ backgroundColor: 'var(--rim)' }}>
@@ -243,6 +260,7 @@ export function SessionView({
                   : undefined
               }
               onSizeHolderChange={onSizeHolderChange}
+              onHostStateChange={onHostStateChange}
             />
           )}
           {sessionId && !chat && (
@@ -253,13 +271,22 @@ export function SessionView({
               onNewSession={onNewSession}
             />
           )}
-          {!chat && sizeHolder?.key === termKey && status === 'connected' && (
-            <SizeHolderNotice
-              holder={sizeHolder.name}
-              onUseHere={() => handleRef.current?.claimSize()}
-              isMobile={isMobile}
+          {awayHere && (
+            <HostNotice
+              away={awayHere}
+              onReconnect={() => handleRef.current?.reconnectHost()}
             />
           )}
+          {!chat &&
+            !awayHere &&
+            sizeHolder?.key === termKey &&
+            status === 'connected' && (
+              <SizeHolderNotice
+                holder={sizeHolder.name}
+                onUseHere={() => handleRef.current?.claimSize()}
+                isMobile={isMobile}
+              />
+            )}
         </div>
         {files && sessionId && (
           <FilesDialog

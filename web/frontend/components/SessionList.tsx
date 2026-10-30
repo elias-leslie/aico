@@ -25,6 +25,7 @@ import {
 import { AgentIcon, getAgentColor } from './AgentIcon'
 import { CheckInBadge } from './CheckInBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
+import { HostBadge } from './HostBadge'
 import { KeptCheckIns } from './KeptCheckIns'
 import { useStepViewer } from './StepViewer'
 
@@ -296,6 +297,7 @@ export function SessionList({
             {!(lead && slot?.badge?.label.startsWith('↳')) && (
               <CoordinatorBadge badge={slot?.badge} ownLine />
             )}
+            <HostBadge host={slot?.host} state={slot?.hostState} />
             <span className="truncate">{meta}</span>
             <CheckInBadge checkIns={checkIns} />
           </span>

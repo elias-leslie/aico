@@ -11,6 +11,7 @@ import {
   SYMBOLS_FACE,
   SYMBOLS_SAMPLE,
 } from '../shared/font-settings'
+import { hostNoticeCopy } from '../shared/host-notice'
 import { mouseReportingActive, programOwnsSelection, setupMouseShim } from '../shared/mouse-shim'
 import { BONE, INK } from '../shared/palette'
 import { TERMINAL_HISTORY_LINES } from '../shared/terminal-history'
@@ -228,6 +229,25 @@ document.getElementById('size-notice-use')?.addEventListener('click', (event) =>
   term.focus()
 })
 host.addEventListener('mousedown', () => window.aico.pty.claimSize(false))
+
+// The session runs on another host that cannot be reached right now: the
+// terminal is covered and takes no input until the host is back.
+const hostNotice = document.getElementById('host-notice') as HTMLElement
+const hostTitle = document.getElementById('host-notice-title') as HTMLElement
+const hostDetail = document.getElementById('host-notice-detail') as HTMLElement
+const hostReconnect = document.getElementById('host-notice-reconnect') as HTMLButtonElement
+window.aico.pty.onHost(({ host, state }) => {
+  const copy = host ? hostNoticeCopy(host, state) : null
+  hostNotice.hidden = !copy
+  if (!copy) return
+  hostTitle.textContent = copy.title
+  hostDetail.textContent = copy.detail
+  hostReconnect.hidden = !copy.reconnect
+})
+hostReconnect.addEventListener('click', (event) => {
+  event.stopPropagation()
+  window.aico.pty.reconnect()
+})
 
 // (Re)attach the tmux session for this window at the current viewport size.
 // On a renderer reload this fires again and re-attaches the same session.

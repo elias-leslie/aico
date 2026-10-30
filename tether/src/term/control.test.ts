@@ -70,6 +70,44 @@ afterEach(() => {
   for (const term of links.splice(0)) term.kill()
 })
 
+describe('ControlTerminal pid', () => {
+  it("names the tmux client's own pid from the seed, not the child's", async () => {
+    const { term, tmux } = link()
+    expect(term.pid).toBe(777)
+    tmux.reply([])
+    tmux.reply([flagsLine({ client_pid: 4321 })], [], [], [])
+    await flush()
+    expect(term.pid).toBe(4321)
+  })
+
+  it('over ssh knows no pid until tmux on the host says (the child is ssh)', async () => {
+    const tmux = fakeTmux()
+    const remote = new ControlTerminal(
+      [
+        '/usr/bin/ssh',
+        '-S',
+        '/c',
+        'h',
+        '--',
+        '/usr/bin/tmux',
+        '-S',
+        "'/s'",
+        'attach',
+        '-t',
+        "'$1'",
+      ],
+      {},
+      null,
+      { historyLines: 100, spawn: () => tmux.child },
+    )
+    links.push(remote)
+    expect(remote.pid).toBe(-1)
+    tmux.reply([flagsLine({ client_pid: 55 })], [], [], [])
+    await flush()
+    expect(remote.pid).toBe(55)
+  })
+})
+
 describe('ControlTerminal seed', () => {
   it('sizes the client, then reads flags, both captures and the unfinished escape at once', async () => {
     const { tmux } = link()

@@ -14,6 +14,7 @@ import {
 } from '@/lib/utils/slot'
 import { NeedsYouCount } from './AttentionBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
+import { HostBadge } from './HostBadge'
 import { SessionList, sessionsHeading } from './SessionList'
 import { SessionTitle } from './SessionTitle'
 
@@ -113,6 +114,7 @@ export function SessionSwitcher({
         aria-expanded={isOpen}
       >
         <CoordinatorBadge badge={currentSlot.badge} dot={isMobile} />
+        <HostBadge host={currentSlot.host} state={currentSlot.hostState} />
         <SessionTitle name={currentName} task={currentSlot.task} />
         {isMobile && currentState && (
           <span

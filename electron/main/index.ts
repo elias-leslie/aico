@@ -216,6 +216,7 @@ const link = createTetherLink({
       ownerSurface.sizeHeld(viewer)
       terminal.sizeHeldBy(id, clientPid)
     },
+    peerResync: (host) => terminal.peerResync(host),
   },
 })
 
@@ -297,9 +298,9 @@ const launchChat = createChatLauncher({
   show: windows.focusOrReopen,
   fail: (message) => void dialog.showMessageBox({ type: 'error', message, buttons: ['OK'] }),
 })
-const newSession: typeof windows.openNew = (tool, projectId, instructions) => {
+const newSession: typeof windows.openNew = (tool, projectId, instructions, host) => {
   if (tool === CHAT_TOOL) void launchChat(projectId)
-  else windows.openNew(tool, projectId, instructions)
+  else windows.openNew(tool, projectId, instructions, host)
 }
 
 // What the owner can do to a session, all through Tether.

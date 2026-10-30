@@ -9,6 +9,13 @@ export function writeNotice(win: BrowserWindow | undefined, message: string, col
     win.webContents.send('pty:data', `\r\n\u001b[${color}m${message}\u001b[0m\r\n`)
 }
 
+const HOST_STATE_WORDS: Record<string, string> = {
+  offline: 'offline',
+  connecting: 'still connecting',
+  powered_off: 'powered off',
+  identity_changed: 'not the same machine as before',
+}
+
 /** Plain words for a Tether refusal, shown in the session's own terminal. */
 export function describeFailure(action: string, error: unknown): string {
   if (error instanceof TetherUnavailable)
@@ -28,6 +35,13 @@ export function describeFailure(action: string, error: unknown): string {
         return `${action}: the session is not running${error.reason ? ` (${error.reason})` : ''}.`
       case 'instructions_unsupported':
         return `${action}: this tool can't take instructions. Nothing was started.`
+      case 'host_unavailable': {
+        const host = typeof error.body.host === 'string' ? error.body.host : 'The host'
+        const state = HOST_STATE_WORDS[String(error.body.state)] ?? 'not reachable'
+        return `${action}: ${host} is ${state}${error.reason ? ` (${error.reason})` : ''}. Nothing was started.`
+      }
+      case 'unknown_host':
+        return `${action}: Tether does not know that host. Nothing was started.`
       case 'outcome_uncertain':
         return `${action}: the outcome is unknown. Check the session before trying again.`
       default:

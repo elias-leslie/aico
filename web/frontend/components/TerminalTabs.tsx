@@ -205,8 +205,8 @@ export function TerminalTabs({
         defaultProjectId={
           sessions.find((session) => session.id === activeSessionId)?.project_id
         }
-        onStart={(projectId, rootPath, mode) =>
-          handleNewTerminalForProject(projectId, mode, rootPath)
+        onStart={(projectId, rootPath, mode, host) =>
+          handleNewTerminalForProject(projectId, mode, rootPath, host)
         }
         isMobile={isMobile}
       />

@@ -69,6 +69,7 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
       isVisible = true,
       onFilePaste,
       onSizeHolderChange,
+      onHostStateChange,
     },
     ref,
   ) {
@@ -153,6 +154,11 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     const heldElsewhereRef = useRef(false)
     const lastReclaimRef = useRef(0)
     const reclaimRef = useRef<() => void>(() => {})
+    // A remote session's host is away: the terminal shows no output and
+    // takes no input until it is live again.
+    const hostAwayRef = useRef(false)
+    const onHostStateChangeRef = useRef(onHostStateChange)
+    onHostStateChangeRef.current = onHostStateChange
 
     const { status, wsRef, reconnect, sendInput, connect, disconnect } =
       useTerminalWebSocket({
@@ -176,6 +182,10 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
         onSizeHolder: ({ here, viewer }) => {
           heldElsewhereRef.current = !here
           setHeldBy(here ? null : sizeHolderName(viewer))
+        },
+        onHostState: (frame) => {
+          hostAwayRef.current = frame.state !== 'live'
+          onHostStateChangeRef.current?.(hostAwayRef.current ? frame : null)
         },
         getDimensions: () =>
           ownsResize && fitAddonRef.current
@@ -247,7 +257,7 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally empty deps — reads refs at call time
     const handleTerminalData = useCallback(
       (data: string) => {
-        if (!isFocusedRef.current) return
+        if (!isFocusedRef.current || hostAwayRef.current) return
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           sendInput(data)
           const now = Date.now()
@@ -304,10 +314,16 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
 
     reclaimRef.current = handleResize
 
+    const reconnectHost = useCallback(() => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN) return
+      wsRef.current.send(JSON.stringify({ __ctrl: true, reconnect: true }))
+    }, [wsRef])
+
     useTerminalHandle(ref, {
       reconnect,
       sendInput,
       claimSize: handleResize,
+      reconnectHost,
       status,
       terminalRef,
       search,
@@ -319,6 +335,10 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
       if (status === 'connected') return
       heldElsewhereRef.current = false
       setHeldBy(null)
+      if (hostAwayRef.current) {
+        hostAwayRef.current = false
+        onHostStateChangeRef.current?.(null)
+      }
     }, [status])
 
     useEffect(() => {

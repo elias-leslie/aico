@@ -15,6 +15,7 @@ const Harness = forwardRef<
     reconnect: vi.fn(),
     sendInput,
     claimSize: vi.fn(),
+    reconnectHost: vi.fn(),
     status: 'connected',
     terminalRef: { current: null },
     search,

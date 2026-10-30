@@ -150,6 +150,7 @@ export function createLifecycle(deps: LifecycleDeps) {
     projectId: string | null
     workingDir: string | null
     name?: string | null
+    host?: string | null
   }): Promise<WebSession> {
     const descriptor = await tetherCall(() =>
       createSession(tether, {
@@ -158,6 +159,7 @@ export function createLifecycle(deps: LifecycleDeps) {
         projectRoot: projectRoot(input.workingDir),
         name: input.name,
         size,
+        host: input.host,
       }),
     )
     const link = store.link(descriptor.id, input.paneId, descriptor.tool || input.mode)
@@ -203,6 +205,8 @@ export function createLifecycle(deps: LifecycleDeps) {
     projectId: string | null
     workingDir: string | null
     agentMode: string | null
+    /** A remote host for its sessions; null for this computer. */
+    host?: string | null
   }): Promise<PaneView> {
     const { paneType, paneName, projectId, workingDir } = input
     const modes = [SHELL_MODE]
@@ -227,6 +231,7 @@ export function createLifecycle(deps: LifecycleDeps) {
             projectId,
             workingDir,
             name: projectId ? null : paneName,
+            host: input.host,
           }),
         )
     } catch (error) {

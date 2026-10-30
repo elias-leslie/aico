@@ -5,6 +5,7 @@ import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { getSlotName, type PaneSlot, type TerminalSlot } from '@/lib/utils/slot'
 import { AttentionBadge } from '../AttentionBadge'
 import { CoordinatorBadge } from '../CoordinatorBadge'
+import { HostBadge } from '../HostBadge'
 import { SessionSwitcher } from '../SessionSwitcher'
 import { SessionTitle } from '../SessionTitle'
 
@@ -117,6 +118,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   return (
     <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
       <CoordinatorBadge badge={slot.badge} dot={isMobile} />
+      <HostBadge host={slot.host} state={slot.hostState} />
       <span
         className="flex min-w-0 max-w-[320px] items-center overflow-hidden px-1.5 py-0.5"
         style={{ color: textColor, font: '450 15px/1.2 var(--font-display)' }}

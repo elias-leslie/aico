@@ -455,6 +455,38 @@ describe('panes', () => {
     expect(store.listPanes()).toEqual([])
   })
 
+  it('starts a tab on a linked host, and says why when the host is away', async () => {
+    tether.hostRows = [
+      { name: 'agent-work', state: 'connected', ssh: 'agent-work', sessions: 0 },
+      { name: 'lab', state: 'offline', ssh: 'lab', sessions: 1 },
+    ]
+    expect((await call('GET', '/api/hosts')).body).toEqual({
+      items: [
+        { name: 'agent-work', state: 'connected' },
+        { name: 'lab', state: 'offline' },
+      ],
+    })
+    const pane = { pane_type: 'project', pane_name: 'Aico', project_id: 'aico' }
+    const { status } = await call('POST', '/api/panes', { ...pane, host: 'agent-work' })
+    expect(status).toBe(200)
+    const creates = tether
+      .callsOf('request')
+      .filter(([method, path]) => method === 'POST' && path === '/v1/sessions')
+      .map(([, , input]) => input)
+    expect(creates).toEqual([
+      expect.objectContaining({ tool: 'shell', host: 'agent-work' }),
+      expect.objectContaining({ tool: 'claude', host: 'agent-work' }),
+    ])
+    const away = await call('POST', '/api/panes', { ...pane, host: 'lab' })
+    expect(away.status).toBe(409)
+    expect(away.body.detail).toBe('lab is offline (link down)')
+    expect((await call('POST', '/api/panes', { ...pane, host: '../lab' })).status).toBe(422)
+  })
+
+  it('lists no hosts when Tether links to none', async () => {
+    expect((await call('GET', '/api/hosts')).body).toEqual({ items: [] })
+  })
+
   it('validates the request and the tool', async () => {
     expect(
       (await call('POST', '/api/panes', { pane_type: 'project', pane_name: 'x' })).status,

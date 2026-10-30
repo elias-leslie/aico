@@ -37,6 +37,8 @@ export interface ApiDeps {
 }
 
 const SLUG = /^[a-z0-9_-]+$/
+/** A hosts.json host name, as Tether names it. */
+const HOST_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const MAX_SESSION_NAME = 160
 
 export function buildApi(deps: ApiDeps): Router {
@@ -97,12 +99,20 @@ export function buildApi(deps: ApiDeps): Router {
     const projectId = optionalString(body, 'project_id', { max: 128 }) || null
     const workingDir = optionalString(body, 'working_dir', { max: 4096 }) || null
     const toolRef = optionalString(body, 'agent_tool_slug', { max: 100, pattern: SLUG })
+    const host = optionalString(body, 'host', { max: 64, pattern: HOST_NAME }) || null
     if (paneType === 'project' && !projectId)
       throw new HttpError(400, 'project_id required for project panes')
     if (paneType === 'adhoc' && projectId)
       throw new HttpError(400, 'project_id must be empty for adhoc panes')
     const agentMode = toolRef ? await requireTool(toolRef) : null
-    const created = await life.createPane({ paneType, paneName, projectId, workingDir, agentMode })
+    const created = await life.createPane({
+      paneType,
+      paneName,
+      projectId,
+      workingDir,
+      agentMode,
+      host,
+    })
     const { pane: view, order } = await paneById(created.id, false)
     return paneResponse(view, order)
   })
@@ -314,6 +324,13 @@ export function buildApi(deps: ApiDeps): Router {
       projects.find((project) => project.id === id),
       store.allProjectSettings(),
     )
+  })
+
+  // The remote hosts a new session can run on ("This computer" is implied),
+  // with their link state as the hub sees it.
+  router.on('GET', '/api/hosts', async () => {
+    const hosts = await tetherCall(() => tether.hosts())
+    return { items: hosts.map((host) => ({ name: host.name, state: host.state })) }
   })
 
   router.on('GET', '/api/agent-tools', async (ctx) => {

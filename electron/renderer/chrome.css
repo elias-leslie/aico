@@ -69,6 +69,26 @@ body {
 .role-chip[hidden] {
   display: none;
 }
+/* The host a remote session runs on: neutral, beside the name. */
+.host-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+  padding: 0 6px;
+  border: 1px solid rgb(var(--glass-rgb) / 0.14);
+  border-radius: 9px;
+  color: var(--mist);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 16px;
+}
+.host-chip[hidden] {
+  display: none;
+}
 
 /* Unfocused windows are NOT dimmed — several open widgets stay equally
    readable. The eyes in the titlebar tell you which window has focus. */

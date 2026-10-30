@@ -367,8 +367,14 @@ export function createWindows(deps: WindowsDeps) {
     tool: string,
     projectId: string,
     instructions?: PendingCreate['instructions'],
+    host?: string,
   ): void {
-    createWidgetWindow(null, { tool, projectId, ...(instructions ? { instructions } : {}) })
+    createWidgetWindow(null, {
+      tool,
+      projectId,
+      ...(instructions ? { instructions } : {}),
+      ...(host ? { host } : {}),
+    })
   }
 
   /** Read a workflow step's latest attempt in a window of its own (no input).

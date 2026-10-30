@@ -6,10 +6,11 @@ import {
   TetherError,
   TetherUnavailable,
 } from 'tether/client'
+import { controlSocketPath } from 'tether/term'
 import { describe, expect, it, vi } from 'vitest'
 import { BLANK_SLATE_ID, PERSONAL_WORKSPACE_ID } from './project'
 import { OVERLAY_DELAY_MS, RECLAIM_SPACING_MS } from './size-holder'
-import { clampSize, createTerminal } from './terminal'
+import { clampSize, createTerminal, retryDelay } from './terminal'
 import { WindowRegistry } from './window-registry'
 
 function descriptor(id: string, extra: Partial<SessionDescriptor> = {}): SessionDescriptor {
@@ -126,7 +127,19 @@ function setup() {
     ),
   }
   const state = { replacing: new Set<string>(), quitting: false, arranged: false }
+  // Remote reattach tries: pending timers, run by hand.
+  const timers = new Map<number, { fn: () => void; ms: number }>()
+  let nextTimer = 0
   const deps = {
+    setTimer: (fn: () => void, ms: number) => {
+      nextTimer += 1
+      timers.set(nextTimer, { fn, ms })
+      return nextTimer
+    },
+    clearTimer: (handle: unknown) => {
+      timers.delete(handle as number)
+    },
+    random: () => 0.5,
     tether,
     catalog,
     registry,
@@ -182,6 +195,7 @@ function setup() {
     on,
     handle,
     from,
+    timers,
   }
 }
 
@@ -215,6 +229,7 @@ describe('terminal channels', () => {
       'pty:claim-size',
       'pty:input',
       'pty:paste',
+      'pty:reconnect',
       'pty:refresh',
       'pty:resize',
       'pty:start',
@@ -691,5 +706,157 @@ describe('another client holds the size', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('sessions on another host', () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+  const HOST = 'agent-work'
+  const REMOTE_SOCKET = `/home/kasadis/.local/state/tether/default/tmux/${'cd'.repeat(16)}/server.sock`
+  const remote = (extra: Partial<SessionDescriptor> = {}) =>
+    descriptor('aaaaaaaa', { host: HOST, ...extra })
+  const peer = (state: 'offline' | 'connecting' | 'powered_off') => ({
+    state,
+    since: 1,
+    listedAt: 1,
+  })
+  function remoteTarget(generation = 'g1'): AttachAnswer {
+    return {
+      generation,
+      argv: ['/usr/bin/tmux', '-S', REMOTE_SOCKET, 'attach-session', '-t', '$1'],
+      env: { TERM: 'xterm-256color' },
+      host: HOST,
+      ssh: { alias: HOST, control: controlSocketPath(HOST) },
+    } as AttachAnswer
+  }
+  const hostSends = (win: FakeWindow) =>
+    win.webContents.send.mock.calls.filter(([channel]) => channel === 'pty:host').map(([, v]) => v)
+  const runTimers = (s: Setup) => {
+    const pending = [...s.timers.entries()]
+    for (const [id, timer] of pending) {
+      s.timers.delete(id)
+      timer.fn()
+    }
+    return pending.map(([, timer]) => timer.ms)
+  }
+
+  async function attachedRemote(s: Setup) {
+    s.catalog.upsert(remote())
+    s.registry.bindSession(1, 'aaaaaaaa')
+    s.tether.attach.mockResolvedValue(remoteTarget())
+    s.on.get('pty:start')?.(s.from(s.all[0]), { cols: 100, rows: 30 })
+    await vi.waitFor(() => expect(s.links).toHaveLength(1))
+    return s.links[0]
+  }
+
+  it('backs off exponentially, capped and jittered', () => {
+    expect(retryDelay(0, () => 0.5)).toBe(1_000)
+    expect(retryDelay(3, () => 0.5)).toBe(8_000)
+    expect(retryDelay(10, () => 0.5)).toBe(30_000)
+    expect(retryDelay(0, () => 0)).toBe(500)
+    expect(retryDelay(10, () => 0.999)).toBe(44_970)
+  })
+
+  it('runs tmux on the host over ssh and says the session is live there', async () => {
+    const s = setup()
+    await attachedRemote(s)
+    const [argv] = s.deps.controlTerminal.mock.calls[0]
+    expect(argv.slice(0, 2)).toEqual(['/usr/bin/ssh', '-F'])
+    expect(argv).toContain(`'${REMOTE_SOCKET}'`)
+    expect(hostSends(s.all[0])).toEqual([{ host: HOST, state: 'live' }])
+  })
+
+  it('waits for an offline host without attaching, then attaches when it is back', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const s = setup()
+    s.catalog.upsert(remote({ peer: peer('offline') }))
+    s.registry.bindSession(1, 'aaaaaaaa')
+    s.on.get('pty:start')?.(s.from(s.all[0]), { cols: 90, rows: 25 })
+    await vi.waitFor(() => expect(hostSends(s.all[0])).toEqual([{ host: HOST, state: 'offline' }]))
+    expect(s.tether.attach).not.toHaveBeenCalled()
+    expect(s.all[0].isDestroyed()).toBe(false)
+    // Still away, now powered off: the notice follows, still no attach.
+    s.terminal.sessionSeen(remote({ peer: peer('powered_off') }))
+    await settle()
+    expect(s.tether.attach).not.toHaveBeenCalled()
+    expect(hostSends(s.all[0]).at(-1)).toEqual({ host: HOST, state: 'powered_off' })
+    // Back: attach at the window's last grid.
+    s.catalog.upsert(remote())
+    s.tether.attach.mockResolvedValue(remoteTarget())
+    s.terminal.sessionSeen(remote())
+    await vi.waitFor(() => expect(s.links).toHaveLength(1))
+    expect(s.links[0].cols).toBe(90)
+    expect(hostSends(s.all[0]).at(-1)).toEqual({ host: HOST, state: 'live' })
+  })
+
+  it('a host that goes away drops the live link, and input stops', async () => {
+    const s = setup()
+    const link = await attachedRemote(s)
+    s.terminal.sessionSeen(remote({ peer: peer('offline') }))
+    expect(link.kill).toHaveBeenCalled()
+    expect(hostSends(s.all[0]).at(-1)).toEqual({ host: HOST, state: 'offline' })
+    s.on.get('pty:input')?.(s.from(s.all[0]), 'x')
+    expect(link.write).not.toHaveBeenCalled()
+  })
+
+  it('a host_unavailable refusal waits for the host with its state', async () => {
+    const s = setup()
+    s.catalog.upsert(remote())
+    s.registry.bindSession(1, 'aaaaaaaa')
+    s.tether.attach.mockRejectedValueOnce(
+      new TetherError(409, 'host_unavailable', { host: HOST, state: 'powered_off' }),
+    )
+    s.on.get('pty:start')?.(s.from(s.all[0]), { cols: 90, rows: 25 })
+    await vi.waitFor(() =>
+      expect(hostSends(s.all[0])).toEqual([{ host: HOST, state: 'powered_off' }]),
+    )
+    expect(s.links).toHaveLength(0)
+    expect(s.timers.size).toBe(0)
+  })
+
+  it('a dropped link retries with growing waits, then stops and waits for Reconnect', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const s = setup()
+    const link = await attachedRemote(s)
+    s.tether.attach.mockRejectedValue(new Error('ssh: connect failed'))
+    link.emitExit()
+    expect(hostSends(s.all[0]).at(-1)).toEqual({ host: HOST, state: 'connecting' })
+    const waits: number[] = []
+    for (let i = 0; i < 8 && s.timers.size > 0; i += 1) {
+      waits.push(...runTimers(s))
+      await settle()
+      await settle()
+    }
+    expect(waits).toEqual([1_000, 2_000, 4_000, 8_000, 16_000, 30_000])
+    expect(s.tether.attach).toHaveBeenCalledTimes(7)
+    expect(hostSends(s.all[0]).at(-1)).toEqual({ host: HOST, state: 'disconnected' })
+    // Reconnect tries once more, now successfully.
+    s.tether.attach.mockResolvedValue(remoteTarget())
+    s.on.get('pty:reconnect')?.(s.from(s.all[0]))
+    await vi.waitFor(() => expect(s.links).toHaveLength(2))
+    expect(hostSends(s.all[0]).at(-1)).toEqual({ host: HOST, state: 'live' })
+  })
+
+  it("the hub's resync reattaches a window between tries, its tries starting over", async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const s = setup()
+    const link = await attachedRemote(s)
+    link.emitExit()
+    expect(s.timers.size).toBe(1)
+    s.terminal.peerResync('other-host')
+    await settle()
+    expect(s.tether.attach).toHaveBeenCalledTimes(1)
+    s.terminal.peerResync(HOST)
+    await vi.waitFor(() => expect(s.links).toHaveLength(2))
+    expect(s.timers.size).toBe(0)
+  })
+
+  it('a forgotten window drops its pending try', async () => {
+    const s = setup()
+    const link = await attachedRemote(s)
+    link.emitExit()
+    expect(s.timers.size).toBe(1)
+    s.terminal.forget(1)
+    expect(s.timers.size).toBe(0)
   })
 })

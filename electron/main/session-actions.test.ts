@@ -93,6 +93,9 @@ function setup() {
       dueAt: input.dueAt,
     })),
     cancelWake: vi.fn(async () => ({ deleted: true })),
+    hosts: vi.fn(async () => [
+      { name: 'agent-work', state: 'offline', ssh: 'agent-work', sessions: 2 },
+    ]),
   }
   const link = {
     tools: () => [codex],
@@ -151,7 +154,7 @@ function setup() {
 }
 
 describe('session actions', () => {
-  it('registers its fifteen channels', () => {
+  it('registers its sixteen channels', () => {
     const { on, handle } = setup()
     expect([...on.keys()].sort()).toEqual([
       'widget:hub',
@@ -162,6 +165,7 @@ describe('session actions', () => {
       'widget:toggle-coordinator',
     ])
     expect([...handle.keys()].sort()).toEqual([
+      'hosts:list',
       'project:list',
       'session:cancel-check-in',
       'session:check-in',
@@ -299,6 +303,28 @@ describe('session actions', () => {
     expect(windows.openNew).toHaveBeenCalledWith('codex', 'p1', {
       prompt: 'code-reviewer',
       revision,
+    })
+  })
+
+  it('widget:new passes a chosen host and refuses a malformed one', () => {
+    const { on, windows } = setup()
+    on.get('widget:new')?.({}, 'codex', 'p1', null, '../agent-work')
+    on.get('widget:new')?.({}, 'codex', 'p1', null, 7)
+    expect(windows.openNew).not.toHaveBeenCalled()
+    on.get('widget:new')?.({}, 'codex', 'p1', null, 'agent-work')
+    expect(windows.openNew).toHaveBeenCalledWith('codex', 'p1', undefined, 'agent-work')
+  })
+
+  it('hosts:list names each host and its state, or says Tether is unavailable', async () => {
+    const { handle, tether } = setup()
+    await expect(handle.get('hosts:list')?.({})).resolves.toEqual({
+      status: 'ready',
+      items: [{ name: 'agent-work', state: 'offline' }],
+    })
+    tether.hosts.mockRejectedValueOnce(new Error('down'))
+    await expect(handle.get('hosts:list')?.({})).resolves.toEqual({
+      status: 'unavailable',
+      items: [],
     })
   })
 

@@ -31,6 +31,8 @@ export interface CreatePaneRequest {
   working_dir?: string
   agent_tool_slug?: string
   detached?: boolean
+  /** A Tether peer to start the session on; absent for this computer. */
+  host?: string
 }
 
 export interface UpdatePaneRequest {
@@ -40,4 +42,5 @@ export interface UpdatePaneRequest {
 
 export interface PanePlacementOptions {
   detached?: boolean
+  host?: string
 }

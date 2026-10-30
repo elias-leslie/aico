@@ -27,9 +27,17 @@ export interface SizeHolderFrame {
   viewer: { app: string; device: string } | null
 }
 
+/** The host a remote session runs on and whether it can be reached (the
+ * server's `host_state`): `live`, or why the terminal is covered. */
+export interface HostStateFrame {
+  host: string
+  state: string
+}
+
 export interface WebSocketConnectionCallbacks {
   onMessage?: (data: string) => void
   onSizeHolder?: (holder: SizeHolderFrame) => void
+  onHostState?: (frame: HostStateFrame) => void
   /** How much history the server's seed carries (sent before the seed). */
   onHistoryLines?: (historyLines: number) => void
   onBeforeReconnectData?: () => void
@@ -303,6 +311,17 @@ export function dispatchControlMessage(
             ? { app: viewer.app, device: viewer.device }
             : null,
       })
+      return true
+    }
+
+    const hostState = control.host_state as Record<string, unknown> | undefined
+    if (
+      hostState &&
+      typeof hostState === 'object' &&
+      typeof hostState.host === 'string' &&
+      typeof hostState.state === 'string'
+    ) {
+      callbacks.onHostState?.({ host: hostState.host, state: hostState.state })
       return true
     }
 

@@ -1,6 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { ConnectionNotice, SizeHolderNotice } from './TerminalNotice'
+import {
+  ConnectionNotice,
+  HostNotice,
+  SizeHolderNotice,
+} from './TerminalNotice'
 
 describe('ConnectionNotice', () => {
   it('says it is connecting only before the first output', () => {
@@ -64,5 +68,34 @@ describe('SizeHolderNotice', () => {
     expect(screen.getByRole('status')).toHaveTextContent('this phone')
     fireEvent.click(screen.getByRole('button', { name: 'Use here' }))
     expect(onUseHere).toHaveBeenCalledOnce()
+  })
+})
+
+describe('HostNotice', () => {
+  it('names the host and why, with Reconnect only where it helps', () => {
+    const onReconnect = vi.fn()
+    const { rerender } = render(
+      <HostNotice
+        away={{ host: 'agent-work', state: 'offline' }}
+        onReconnect={onReconnect}
+      />,
+    )
+    expect(screen.getByText('agent-work is offline')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }))
+    expect(onReconnect).toHaveBeenCalledTimes(1)
+    rerender(
+      <HostNotice
+        away={{ host: 'agent-work', state: 'identity_changed' }}
+        onReconnect={onReconnect}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull()
+    rerender(
+      <HostNotice
+        away={{ host: 'agent-work', state: 'live' }}
+        onReconnect={onReconnect}
+      />,
+    )
+    expect(screen.queryByTestId('host-notice')).toBeNull()
   })
 })

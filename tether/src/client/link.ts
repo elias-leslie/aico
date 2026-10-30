@@ -65,6 +65,9 @@ interface LinkHooks {
   /** A client claimed this session's shared window size; `viewer` names its
    * app and device (null when the claimer sent none). */
   sizeHeld(id: string, clientPid: number, viewer: ViewerLabel | null): void
+  /** The hub's link to a host came back and its sessions were listed again:
+   * windows of that host that lost their link attach again. */
+  peerResync?(host: string): void
 }
 
 interface TetherLinkDeps {
@@ -180,6 +183,19 @@ export function createTetherLink(deps: TetherLinkDeps) {
       case 'root.updated':
         requestSessionRefresh()
         break
+      // A host's link changed state: its sessions carry the new `peer` mark.
+      case 'peer.state':
+        requestSessionRefresh()
+        break
+      case 'peer.resync': {
+        const host = typeof event.data.host === 'string' ? event.data.host : null
+        void refreshSessions()
+          .catch(() => {})
+          .then(() => {
+            if (host) hooks.peerResync?.(host)
+          })
+        break
+      }
       case 'runs.changed':
         requestRunsRefresh()
         break

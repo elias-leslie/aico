@@ -117,6 +117,24 @@ describe('dispatchControlMessage', () => {
     ).toBe(true)
     expect(callbacks.onHistoryLines).toHaveBeenCalledWith(20000)
   })
+
+  it("reports a remote session's host state", () => {
+    const onHostState = vi.fn()
+    const callbacks = { ...buildCallbacks(), onHostState }
+
+    expect(
+      dispatchControlMessage(
+        '{"__ctrl":true,"host_state":{"host":"agent-work","state":"offline"}}',
+        callbacks,
+      ),
+    ).toBe(true)
+    expect(onHostState).toHaveBeenCalledWith({
+      host: 'agent-work',
+      state: 'offline',
+    })
+    dispatchControlMessage('{"__ctrl":true,"host_state":{"host":7}}', callbacks)
+    expect(onHostState).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('openWebSocketConnection', () => {
