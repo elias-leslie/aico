@@ -14,14 +14,17 @@ import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { GuiChannel } from './gui-channel'
 import { listenPrivateSocket } from './http'
+import { Hub } from './hub/hub'
 import {
   bindCatalog,
+  claimLauncher,
   getAgentHubSession,
+  getRootRequest,
   getWidget,
   listSessions,
   listWidgets,
 } from './lifecycle/catalog'
-import { setPersonalWorkspaceRoot } from './lifecycle/display'
+import { leadName, setPersonalWorkspaceRoot } from './lifecycle/display'
 import {
   cachedSessionStatus,
   configureEngine,
@@ -66,9 +69,17 @@ export interface RunningDaemon {
   gui: GuiChannel
   /** The Agent Hub session kind's runtime (polls only where Tether observes sessions). */
   agentHub: AgentHubRuntime
+  /** The hub over the remote hosts this instance federates; null when off. */
+  hosts: Hub | null
   /** Resolves when startup reconciliation has finished (or was skipped). */
   ready: Promise<void>
   close(): Promise<void>
+}
+
+/** The hub federates hosts.json's remote Tethers wherever Tether observes
+ * sessions, or where a test names its own registry (`TETHER_HOSTS_FILE`). */
+export function hubEnabled(env: NodeJS.ProcessEnv): boolean {
+  return reconcileEnabled(env) || Boolean(env.TETHER_HOSTS_FILE)
 }
 
 /** `TETHER_RECONCILE=off` keeps a scratch/test instance from observing,
@@ -191,6 +202,7 @@ export async function startDaemon(
     wakes: undefined as WakeService | undefined,
     runs: undefined as RunTracker | undefined,
     stepChats: undefined as StepChatSource | undefined,
+    hub: undefined as Hub | undefined,
     memoryPolicy: startMemoryGuard(paths, store, env, {
       foreground: foregroundPaneScope,
       sessionOf: () =>
@@ -274,6 +286,28 @@ export async function startDaemon(
     session: (id) => hub().sessions.get(id, { includeMessages: true }),
     attach: (id, afterSeq, signal) => hub().turns.attach(id, { afterSeq, signal }),
   }
+  const hosts = hubEnabled(env)
+    ? new Hub({
+        env,
+        uid: process.getuid?.(),
+        publish: (type, data) => events.publish(type, data),
+        gui,
+        settings: {
+          get: (key) => store.getSetting(key),
+          put: (key, value) => store.putSetting(key, value, Date.now()),
+        },
+        isLocalSession: (id) => getWidget(id) !== undefined,
+        isLocalRoot: (requestId) => getRootRequest(requestId) !== undefined,
+        isLocalRun: (runId) => runs.snapshot().items.some((item) => item.runId === runId),
+        leadName,
+        claimLocal: (launcherId) => {
+          const claimed = claimLauncher(launcherId)
+          for (const id of claimed?.changed ?? []) notifySessionChanged(id, { force: true })
+          return claimed?.lineage ?? null
+        },
+      })
+    : null
+  if (hosts) context.hub = hosts
   const server = createTetherServer(context)
   try {
     await listenPrivateSocket(server, paths.socket)
@@ -282,6 +316,7 @@ export async function startDaemon(
     throw error
   }
   const ready = startLifecycle({ reconcile: reconcileEnabled(env) })
+  hosts?.start()
   // Agent state: hook reports always; the poll only where Tether observes tmux.
   const agentStates = new AgentStateTracker((id) => {
     notifySessionChanged(id, { force: true })
@@ -347,8 +382,10 @@ export async function startDaemon(
     events,
     gui,
     agentHub: hubRuntime,
+    hosts,
     ready,
     close: async () => {
+      hosts?.close()
       stopLifecycle()
       context.memoryPolicy.stop()
       clearInterval(projectNames)

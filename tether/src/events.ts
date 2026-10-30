@@ -22,6 +22,8 @@ export type EventType =
   | 'show.requested'
   | 'wakes.changed'
   | 'runs.changed'
+  | 'peer.state'
+  | 'peer.resync'
 
 export interface TetherEvent {
   seq: number

@@ -15,7 +15,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 - Bodies are JSON (`content-type: application/json`, at most 128 KiB) and must be objects. Unknown fields are rejected with `400 invalid_body`, never ignored. Field names are camelCase.
 - Errors are `{"error": "<code>", ...}` and the codes are stable API. A 4xx or 503 means nothing was applied. A 2xx or `409 outcome_uncertain` may have applied.
 - No route retries anything on the caller's behalf. Clients must not retry an uncertain mutation with a different identity.
-- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)). 6: `inject` takes `model` for an Agent Hub session. 7: `inject` takes `thinkingLevel` for an Agent Hub session.
+- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)). 6: `inject` takes `model` for an Agent Hub session. 7: `inject` takes `thinkingLevel` for an Agent Hub session. 8: [remote hosts](#remote-hosts): `host` on descriptors, create, roots, tools and projects; `peer` marks; `GET /v1/hosts`; the `peer.state` and `peer.resync` events; root `lineage`.
 - Times are Unix epoch milliseconds.
 
 ## Identity
@@ -92,6 +92,8 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 
 `wakes` *(post-cutover)* lists the session's scheduled check-ins, oldest first; see [Wakes](#wakes).
 
+`host` (8) is null for a session on this computer and names the remote host for one the hub federates; `peer` (8) appears only while that host's link is not live. See [Remote hosts](#remote-hosts).
+
 ### Agent Hub sessions
 
 A session of tool `agent-hub` is a chat on an Agent Hub agent, not a terminal. Tether holds the Agent Hub session id instead of a pane, so there is no tmux session. Its descriptor adds `backend: "agent-hub"` (tmux sessions carry no `backend` field) and `agentHub: {sessionId, agentSlug, requestedModel, model, turnState, turnPhase, queued, reachable, created, promptSent}` (`sessionId` is the Agent Hub session id, `model` the one Agent Hub last reported, `turnState` `running`, `idle` or null before the first look, `turnPhase` Agent Hub's phase of a running turn, `queued` the follow-ups waiting for the turn to end, `reachable` whether Agent Hub answered the last poll). The `tmux` object keeps its shape with null fields, so existing readers do not break. `status` is `running` while Agent Hub reports the session active, `pending` until the Agent Hub session exists and the first prompt is posted (Agent Hub down at create; Tether keeps retrying), and `uncertain` when Agent Hub cannot be reached or has closed it. The agent state is `working` while a turn runs, `idle` between turns and `unknown` when Agent Hub is unreachable (`stateSource: "agent-hub"`).
@@ -125,7 +127,7 @@ Sending a message uses the existing `inject` route (`mode: "paste"`, `submit: tr
 | Method and route | Body | Result |
 | --- | --- | --- |
 | `GET /v1/sessions` | none; query `project`, `origin`, `tool` | `{items: Descriptor[]}` from the catalog, with status from the last verification. A session whose current generation has never been verified (a fresh root or replacement) is verified first, so the list agrees with `GET /v1/sessions/:id` *(post-cutover)*. |
-| `POST /v1/sessions` | `{tool?, projectId?, projectRoot?, blankSlate?, instructions?, name?, origin, aTermSessionId?, size: {cols, rows}}` | `201` running or `202` pending/uncertain descriptor. A `202` also carries `failure: {code, reason} \| null` (`workload_unavailable`, `outcome_uncertain`). `origin` is `aico`, `a-term` or `cli`; `aTermSessionId` (a UUID) is accepted only with `a-term`. `projectRoot` follows the `POST /v1/roots` path rule (absolute, normalized: no `.`/`..` segments or repeated `/`, no NUL; otherwise `400 invalid_body` with `field: projectRoot`) and must be an existing directory (`400 unknown_project`). With both `projectId` and `projectRoot`, the root is used as given and is not compared with the project's registered root. |
+| `POST /v1/sessions` | `{tool?, projectId?, projectRoot?, blankSlate?, instructions?, name?, origin, aTermSessionId?, size: {cols, rows}, host?}` | `201` running or `202` pending/uncertain descriptor. A `202` also carries `failure: {code, reason} \| null` (`workload_unavailable`, `outcome_uncertain`). `origin` is `aico`, `a-term` or `cli`; `aTermSessionId` (a UUID) is accepted only with `a-term`. `projectRoot` follows the `POST /v1/roots` path rule (absolute, normalized: no `.`/`..` segments or repeated `/`, no NUL; otherwise `400 invalid_body` with `field: projectRoot`) and must be an existing directory (`400 unknown_project`). With both `projectId` and `projectRoot`, the root is used as given and is not compared with the project's registered root. `host` (8) creates on a remote host ([Remote hosts](#remote-hosts)). |
 | `GET /v1/sessions/:id` | none | live-verified descriptor. Rechecks the generation after the async verification and returns `409 identity_changed` if it moved. |
 | `PATCH /v1/sessions/:id` | `{generation, name}` | rename. `name: null` clears to the default label. The label follows the root title rules (trimmed, 1–160 UTF-8 bytes, no control characters). |
 | `POST /v1/sessions/:id/end` | `{generation, keepWakes?}` | `200 {status:"ended", keptWakes}`. Exact containment retirement: stops only the owned pane scope and uses `cgroup.kill` fallback. End cancels the session's wakes; `keepWakes: true` *(apiVersion 3)* keeps them, and they relaunch the conversation when due (see [Wakes](#wakes)). |
@@ -251,7 +253,7 @@ A root is a session created through the root contract with a stable caller `requ
 | Method and route | Body | Result |
 | --- | --- | --- |
 | `GET /v1/roots` | query `origin=aico\|a-term` *(3a)*, `ended=0\|1` *(post-cutover)* | `{owner, available, directedDelivery, roots: Descriptor[]}`. `owner` is the `origin` filter, else `"aico"`. `ended=0` leaves out ended tombstones (they stay readable at `GET /v1/roots/:requestId`). `400 invalid_query` for another origin or `ended` value. |
-| `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, model?, agentSlug?, origin?, aTermSessionId?, launchedBy?}` | Existing or reserved root descriptor. Tool `agent-hub` starts an Agent Hub chat session ([Agent Hub sessions](#agent-hub-sessions)): `agentSlug` is required for it (and refused for any other tool), `model` is optional, `resumeSessionId`, `reasoningEffort` and `daybreak` are refused, and `projectRoot` only has to be an existing directory. `422 unknown_agent` or `unknown_model` when Agent Hub does not know the agent or model, `503 agent_hub_unavailable` when it cannot be reached (nothing is reserved). `200` for running or ended, `202` for pending or uncertain. `400 unsupported_tool` with `supported: slug[]` for a tool that can't start a root (`rootCapable: false`). `400 prompt_too_long` with `limit` when `initialPrompt` exceeds 14 KiB fresh or 2000 bytes on resume ([root-control.md](../../docs/root-control.md)). `409 request_conflict` if the same key arrives with a different digest. `409 recovery_pending` with `widgetId` when a new request's `resumeSessionId` is a conversation that [crash recovery](crash-recovery.md) is about to resume, or holds, in that session. |
+| `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, model?, agentSlug?, origin?, aTermSessionId?, launchedBy?, lineage?, host?}` | Existing or reserved root descriptor. `host` and `lineage` (8): see [Remote hosts](#remote-hosts). Tool `agent-hub` starts an Agent Hub chat session ([Agent Hub sessions](#agent-hub-sessions)): `agentSlug` is required for it (and refused for any other tool), `model` is optional, `resumeSessionId`, `reasoningEffort` and `daybreak` are refused, and `projectRoot` only has to be an existing directory. `422 unknown_agent` or `unknown_model` when Agent Hub does not know the agent or model, `503 agent_hub_unavailable` when it cannot be reached (nothing is reserved). `200` for running or ended, `202` for pending or uncertain. `400 unsupported_tool` with `supported: slug[]` for a tool that can't start a root (`rootCapable: false`). `400 prompt_too_long` with `limit` when `initialPrompt` exceeds 14 KiB fresh or 2000 bytes on resume ([root-control.md](../../docs/root-control.md)). `409 request_conflict` if the same key arrives with a different digest. `409 recovery_pending` with `widgetId` when a new request's `resumeSessionId` is a conversation that [crash recovery](crash-recovery.md) is about to resume, or holds, in that session. |
 | `GET /v1/roots/:requestId` | none | Current descriptor, including ended tombstones (`status: "ended"`, `generation: null`). Every root descriptor carries `launch`: null, or `{state: "deferred", reason, checkedAt, nextRetryAt, attempts}` while host admission holds a pending launch back. Tether tries it again every 30 s, the same way as repeating the create, until it starts or the root ends. The record lives in memory, so a Tether restart drops it; repeat the create then. |
 | `POST /v1/roots/:requestId/show` | `{generation}` | Forwarded to the GUI |
 | `POST /v1/roots/:requestId/position` | `{generation, bounds: {x, y, width, height}}` | Forwarded to the GUI |
@@ -432,6 +434,9 @@ Event types:
 - `gui.connected`, `gui.disconnected`
 - `wakes.changed` (`{sessionId}`; null for a kept wake of an ended session)
 - `runs.changed` (`{}`; the listed workflow runs changed, re-read `GET /v1/runs`)
+- `peer.state` (8, `{host, state, since}`) and `peer.resync` (8, `{host}`): see [Remote hosts](#remote-hosts)
+
+A remote host's relayed events carry `data.host` (and `host` on `data.session`); this computer's own events have no `data.host`.
 
 `session.created` and `session.updated` carry `session` *(post-cutover)*: the session descriptor as `GET /v1/sessions` would list it, with a status verified for the exact generation the event announces. Clients can apply it instead of fetching the descriptor; one that sees no `session` (an older Tether) re-reads. Session events are published in order through one queue. `session.ended` carries the ID (and generation) only; `session.resized` adds the size holder as above.
 
@@ -530,6 +535,35 @@ and `session.updated` for the session it belongs to.
 
 Absent when the daemon runs with `TETHER_RECONCILE=off`.
 
+## Remote hosts
+
+Tether can be a hub over other machines' Tethers (docs/plans/remote-hosts.md). Every client keeps talking to its one local socket and sees remote sessions with no federation logic of its own. Without `~/.config/tether/hosts.json` (or `$TETHER_HOSTS_FILE`) there are no peers and nothing below changes an answer, except `host: null` on descriptors.
+
+**Registry.** `hosts.json` is a list of `{name, ssh, socket, forwards?, wake?, stateDir?}`: `name` is 1-32 of `a-z0-9-` (not `local`), `ssh` an ssh Host alias (never an address), `socket` the remote Tether's control socket, `forwards` workstation ports the link exposes on the host's loopback, `wake` the command that powers it on (not used yet), `stateDir` the remote Tether's state directory when it is not the default. An invalid entry is skipped and logged. Tether rereads the file when it changes.
+
+**Link.** `tether-link@<name>.service` runs `tether link <name>`: one ssh ControlMaster at `$XDG_RUNTIME_DIR/tether/peers/<name>/ssh.ctl` that forwards the remote socket to `control.sock` beside it (`-L`) and each `forwards` port back (`-R 127.0.0.1:<p>:127.0.0.1:<p>`), with `ExitOnForwardFailure`, `StreamLocalBindUnlink`, `ServerAliveInterval=15` (three misses close it), `ConnectTimeout=5` and `BatchMode`. While the host is down it retries quietly with jittered backoff capped at 5 minutes, reset once a link stayed up for a minute. It never powers a host on; `SIGUSR1` retries at once.
+
+**Peers.** The hub follows each peer's event stream on the forwarded socket. On every link-up it first compares the peer's `GET /v1/health` `host` (`{name, machineId}`) with the one it trusted before (the first one seen is trusted). A different machine marks the host `identity_changed`: nothing is merged or routed for it until the owner accepts it with `POST /v1/hosts/:name/trust`. Then it lists the peer's sessions and runs, reports `connected` and publishes `peer.resync`. Retries use jittered backoff up to 30 s and try at once when the link re-creates its socket.
+
+| Route | Answer |
+| --- | --- |
+| `GET /v1/hosts` | `{items: [{name, ssh, control, stateDir?, state, since, listedAt, sessions, error}]}`. `state` is `connected`, `connecting`, `offline` or `identity_changed` (`powered_off` is reserved for power control). `control` is the link's ssh ControlMaster socket; `listedAt` is when the host's list was last fresh; `error` says why it is not connected. This computer is implied, not listed. |
+| `POST /v1/hosts/:name/trust` | `{trusted: true}` and reconnect, after `identity_changed`. `404 unknown_host`; `409 identity_unchanged` when there is nothing to accept. |
+
+**Lists.** `GET /v1/sessions` adds every peer's sessions, asked in parallel with a 1.5 s limit; three failed reads in a row open that peer's circuit for 30 s, and it answers from its last list meanwhile. Filters apply to remote sessions too. A peer's own remote sessions are never merged (no transitive federation). An id that also exists here is logged and the local session wins. `GET /v1/runs` adds each peer's runs with `host`; a host that is not connected makes the answer `stale`.
+
+**Stale, never gone.** While a host is not `connected`, its last-known sessions stay listed with `peer: {state, since, listedAt}`; the hub keeps them across its own restart. When the link drops, the hub publishes `peer.state` and a `session.updated` for each of them with the `peer` mark. It never publishes `session.ended` for them: only the peer's own `session.ended` (relayed) means a session ended. After `peer.resync`, clients re-list; a session missing from that list is no longer running on the host.
+
+**Routing.** `/v1/sessions/:id/…`, `/v1/widgets/:id/…`, `/v1/roots/:requestId/…`, `/v1/wakes/:id` and `/v1/runs/:runId/…` for an id a peer owns are forwarded verbatim (method, path, query, headers, body; streams too). A JSON answer gains `host` (and `host` on each item of `items`); a descriptor answer gets the same `host`/`peer` as a listed one. A forwarded attach answer also carries `ssh: {alias, control, stateDir?}`; the client attaches through that ControlMaster. For a host that is not connected, these routes answer `409 host_unavailable {host, state, reason}`, never 404.
+
+**Create.** `POST /v1/sessions` and `POST /v1/roots` accept `host`: null or absent is this computer; a name sends the create to that host without `host`. An unknown name is `400 unknown_host`; a host that is not connected is `409 host_unavailable` (nothing was created); a link that breaks mid-create is `409 outcome_uncertain`. `GET /v1/tools?host=` and `GET /v1/projects?host=` answer with that host's tools and projects (`host` added).
+
+**Lineage.** A root created on a host with `launchedBy` naming a session here: the hub makes that session a coordinator as usual and sends the host `lineage: {coordinatorId, coordinatorColor}` instead of `launchedBy`. `POST /v1/roots` accepts `lineage` (not with `launchedBy`, not part of the digest) and records it on the new session. A remote lane launched by a coordinator here shows `↳ <coordinator>` in its badge. A root here launched by a remote session takes that session's lineage from the hub. `launchedBy` naming a session on the same host is passed through.
+
+**Events.** Relayed: `session.*`, `root.updated`, `tools.changed`, `projects.changed`, `wakes.changed` and `runs.changed`, each with `data.host`. Not relayed: a peer's `gui.*`, `show.requested` and `memory-policy.changed`.
+
+**GUI channel.** While a host is connected, the hub holds its `GET /v1/gui/channel` as that host's GUI and applies each command through this Tether's own GUI channel ([GUI view-mutation forwarding](#gui-view-mutation-forwarding)), so an agent on the host can show or place its window here. A command with no GUI here is answered `gui_unavailable`, one the GUI did not answer in time `gui_timeout`.
+
 ## Health and version
 
 `GET /v1/health` never touches tmux. It returns:
@@ -537,8 +571,10 @@ Absent when the daemon runs with `TETHER_RECONCILE=off`.
 ```json
 {"status":"ok","name":"tether","instance":"default","version":"0.1.0","apiVersion":5,"schemaVersion":12,
  "uptimeMs":966,"bootId":"uuid","eventSeq":0,"catalog":{"sessions":0,"tmuxServersActive":0,"rootRequests":0},
- "gui":{"connected":false},"lifecycle":"ready"}
+ "gui":{"connected":false},"lifecycle":"ready","host":{"name":"davion-sidarli","machineId":"<16 hex>"}}
 ```
+
+`host` (8) names the machine: its host name and a hash of `/etc/machine-id`. A hub compares it on every link-up ([Remote hosts](#remote-hosts)).
 
 `lifecycle` is `"reconciling"` until startup reconciliation finishes, then `"ready"`. It is `"disabled"` when the daemon runs with `TETHER_RECONCILE=off` (tests and catalog inspection): startup never observes, adopts or stops a tmux server and the pane-exit watcher is off. Use it only for tests and read-only inspection of a catalog.
 

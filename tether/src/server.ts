@@ -1,9 +1,13 @@
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { hostname } from 'node:os'
 import type { RunTracker } from './agent-hub/runs'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
 import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
+import type { Hub } from './hub/hub'
 import { lifecycleStatus } from './lifecycle/engine'
 import { supportsBlankSlate } from './lifecycle/tui/blank-slate'
 import { isRootCreateTool, supportsInstructions } from './lifecycle/tui/registry'
@@ -47,6 +51,31 @@ export interface ServerContext {
   runs?: RunTracker
   /** Reads a step's attempt session for the read-only chat view. */
   stepChats?: StepChatSource
+  /** The remote hosts this Tether federates (docs/api-v1.md "Remote hosts"). */
+  hub?: Hub
+}
+
+/** Which machine answers on this socket: a hub compares it on every link-up,
+ * so a cloned VM or a reused alias is not mistaken for the host it knew. */
+let machine: { name: string; machineId: string | null } | null = null
+export function machineIdentity(): { name: string; machineId: string | null } {
+  if (machine) return machine
+  let machineId: string | null = null
+  try {
+    const raw = readFileSync('/etc/machine-id', 'utf8').trim()
+    if (raw) machineId = createHash('sha256').update(raw).digest('hex').slice(0, 16)
+  } catch {
+    machineId = null
+  }
+  machine = { name: hostname(), machineId }
+  return machine
+}
+
+/** The request path without `host` in its query, for asking that host. */
+function withoutHost(path: string, query: URLSearchParams): string {
+  const rest = new URLSearchParams(query)
+  rest.delete('host')
+  return rest.size ? `${path}?${rest}` : path
 }
 
 /** `rootCapable`: the tool can be started as a root (`POST /v1/roots`).
@@ -175,6 +204,11 @@ function streamEvents(
   response.once('close', stop)
 }
 
+function requireHub(context: ServerContext): Hub {
+  if (!context.hub) throw new HttpError(400, 'unknown_host')
+  return context.hub
+}
+
 function memoryPolicyJson(service: MemoryPolicyService): Record<string, unknown> {
   return {
     policy: service.get(),
@@ -207,6 +241,7 @@ export function buildRouter(context: ServerContext): Router {
         catalog: store.counts(),
         gui: { connected: context.gui.connected() },
         lifecycle: lifecycleStatus(),
+        host: machineIdentity(),
       })
     })
     .add('GET', '/v1/version', (_req, res) => {
@@ -219,6 +254,8 @@ export function buildRouter(context: ServerContext): Router {
       })
     })
     .add('GET', '/v1/projects', async (_req, res, _params, query) => {
+      const host = query.get('host')
+      if (host) return requireHub(context).query(res, host, withoutHost('/v1/projects', query))
       const list = await projects.list({ refresh: query.get('refresh') === '1' })
       learnProjects(context, list.projects)
       sendJson(res, 200, withActiveProject(list, context.activeProjectFile ?? null))
@@ -278,7 +315,9 @@ export function buildRouter(context: ServerContext): Router {
         events.publish('tools.changed', { change: 'imported' })
       sendJson(res, 200, { applied: !dryRun, ...result })
     })
-    .add('GET', '/v1/tools', (_req, res, _params, query) => {
+    .add('GET', '/v1/tools', async (_req, res, _params, query) => {
+      const host = query.get('host')
+      if (host) return requireHub(context).query(res, host, withoutHost('/v1/tools', query))
       const enabledOnly = query.get('enabled') === '1' || query.get('enabled') === 'true'
       const tools = store.listTools({ enabledOnly })
       sendJson(res, 200, {
@@ -349,9 +388,16 @@ export function buildRouter(context: ServerContext): Router {
     .add('GET', '/v1/events', (req, res, _params, query) => {
       streamEvents(context, req, res, query)
     })
+    .add('GET', '/v1/hosts', (_req, res) => {
+      sendJson(res, 200, { items: context.hub?.hosts() ?? [] })
+    })
+    .add('POST', '/v1/hosts/:name/trust', (_req, res, params) => {
+      requireHub(context).trust(params.name ?? '')
+      sendJson(res, 200, { trusted: true })
+    })
 
   registerLifecycleRoutes(router, context)
-  if (context.runs) registerRunRoutes(router, context.runs, context.stepChats)
+  if (context.runs) registerRunRoutes(router, context.runs, context.stepChats, context.hub)
   registerShowRoute(router, events, context.store, context.show ?? resolveShowConfig({}))
 
   return router
@@ -360,6 +406,8 @@ export function buildRouter(context: ServerContext): Router {
 export function createTetherServer(context: ServerContext): Server {
   const router = buildRouter(context)
   return createServer((request, response) => {
+    // A session, root, wake or run a remote host owns goes there verbatim.
+    if (context.hub?.forward(request, response)) return
     router.dispatch(request, response).catch((error: unknown) => {
       if (response.headersSent) {
         response.destroy()

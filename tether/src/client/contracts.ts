@@ -87,6 +87,40 @@ export interface SessionDescriptor {
   backend?: 'agent-hub'
   /** The Agent Hub side of such a session (tether docs/api-v1.md "Agent Hub sessions"). */
   agentHub?: AgentHubInfo | null
+  /** The remote host that runs this session (tether docs/api-v1.md "Remote
+   * hosts"); null or absent for a session on this computer. */
+  host?: string | null
+  /** Present only while the owning host's link is not live: the descriptor is
+   * the last one the hub saw, never proof the session is gone. */
+  peer?: PeerMark | null
+}
+
+/** A remote host's link state as the hub sees it. `powered_off` is reserved
+ * for power control (not reported yet). */
+export type HostState = 'connected' | 'connecting' | 'offline' | 'powered_off' | 'identity_changed'
+
+/** Why a remote session's descriptor is not live, and since when. */
+export interface PeerMark {
+  state: Exclude<HostState, 'connected'>
+  since: number
+  /** When that host's session list was last fresh, or null. */
+  listedAt: number | null
+}
+
+/** One remote host from `GET /v1/hosts` ("This computer" is implied, not listed). */
+export interface HostInfo {
+  name: string
+  /** The ssh Host alias the link uses. */
+  ssh: string
+  /** The link's ssh ControlMaster socket (`$XDG_RUNTIME_DIR/tether/peers/<name>/ssh.ctl`). */
+  control: string
+  /** The host's Tether state directory, when hosts.json names one. */
+  stateDir?: string
+  state: HostState
+  since: number | null
+  listedAt: number | null
+  sessions: number
+  error: string | null
 }
 
 /** What Tether holds and last saw of an Agent Hub session. */
@@ -194,6 +228,10 @@ export interface AttachAnswer {
   generation: string
   argv: string[]
   env: Record<string, string>
+  /** The remote host of a forwarded session; absent for a local one. */
+  host?: string | null
+  /** How to reach that host through its link (the hub's hosts.json entry). */
+  ssh?: { alias: string; control: string; stateDir?: string }
 }
 
 export interface TetherTool {
@@ -350,7 +388,14 @@ export function parseAttachAnswer(body: unknown): AttachAnswer {
     !Object.values(value.env).every((item) => typeof item === 'string')
   )
     throw new TetherUnavailable('Tether returned an invalid attach target')
-  return { generation: value.generation, argv: value.argv, env: value.env }
+  // `host` and `ssh` pass through untouched; the remote attach validates them.
+  return {
+    generation: value.generation,
+    argv: value.argv,
+    env: value.env,
+    ...(value.host !== undefined ? { host: value.host } : {}),
+    ...(value.ssh !== undefined ? { ssh: value.ssh } : {}),
+  }
 }
 
 export type GuiMutationCommand = DaemonGuiMutation & { commandId: string }

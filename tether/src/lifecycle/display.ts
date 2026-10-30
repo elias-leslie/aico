@@ -68,8 +68,14 @@ export function badge(row: WidgetRow): Badge | null {
   const color = row.coordinatorColor ?? FALLBACK_BADGE_COLOR
   if (row.coordinator) return { kind: 'coordinator', text: 'Coordinator', color }
   if (!row.coordinatorId) return null
-  const lead = getWidget(row.coordinatorId)
-  const leadProject = lead ? projectName(lead) : null
-  const name = (lead && (task(lead, leadProject) ?? leadProject)) || 'Coordinator'
-  return { kind: 'child', text: `↳ ${name}`, color }
+  return { kind: 'child', text: `↳ ${leadName(row.coordinatorId) ?? 'Coordinator'}`, color }
+}
+
+/** What a lane's badge calls its coordinator `id`: the lead's task or
+ * project; null when the lead is unknown here or unnamed. */
+export function leadName(id: string): string | null {
+  const lead = getWidget(id)
+  if (!lead) return null
+  const project = projectName(lead)
+  return (task(lead, project) ?? project) || null
 }

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { listenPrivateSocket } from '../http'
 import { opensRootWindow } from '../lifecycle-api'
-import { getWidget, removeWidget } from './catalog'
+import { adoptLineage, getWidget, removeWidget } from './catalog'
 import { createRootHandler, parseRootCreate, type RootControlOperations } from './root-control'
 import { initStore, registerBuiltinTuis } from './testing'
 
@@ -14,12 +14,19 @@ const WEB_SESSION_ID = '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d'
 describe('root origin (v1 roots API)', () => {
   const fixture = mkdtempSync(join(tmpdir(), 'tether-root-origin-'))
   const v1Socket = join(fixture, 'v1', 'control.sock')
+  const remoteBodies: Record<string, unknown>[] = []
   const operations: RootControlOperations = {
     available: () => true,
     validate: () => true,
     ensure: async () => {},
     status: async () => 'running',
     mutate: async () => true,
+    adopt: (widgetId, lineage) => adoptLineage(widgetId, lineage),
+    remote: async (body, response) => {
+      remoteBodies.push(body)
+      response.writeHead(202, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ forwarded: body.host }))
+    },
   }
   const handle = createRootHandler(operations)
   const server = createServer((req, res) => {
@@ -111,6 +118,24 @@ describe('root origin (v1 roots API)', () => {
       'from-web',
     ])
     expect((await call(v1Socket, '/v1/roots?origin=x')).body).toEqual({ error: 'invalid_query' })
+  })
+
+  it('hands a create naming a host to the hub, and records a foreign lineage', async () => {
+    expect(await call(v1Socket, '/v1/roots', 'POST', create('remote', { host: 'vm' }))).toEqual({
+      status: 202,
+      body: { forwarded: 'vm' },
+    })
+    expect(remoteBodies).toEqual([expect.objectContaining({ requestId: 'remote', host: 'vm' })])
+    const lineage = { coordinatorId: 'abcd1234', coordinatorColor: '#6fa8ff' }
+    const lane = await call(v1Socket, '/v1/roots', 'POST', create('lane', { lineage }))
+    expect(getWidget(lane.body.hostIdentity as string)).toMatchObject({
+      coordinatorId: 'abcd1234',
+      coordinatorColor: '#6fa8ff',
+    })
+    expect(parseRootCreate(create('a', { host: null }))?.requestId).toBe('a')
+    expect(parseRootCreate(create('a', { lineage, launchedBy: 'abcd1234' }))).toBeNull()
+    expect(parseRootCreate(create('a', { lineage: { coordinatorId: 'nope' } }))).toBeNull()
+    expect(parseRootCreate(create('a', { lineage: { ...lineage, extra: 1 } }))).toBeNull()
   })
 
   it('lists without tombstones on ended=0, keeping them by id', async () => {

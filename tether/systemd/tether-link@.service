@@ -1,0 +1,29 @@
+# The ssh link from this workstation's Tether hub to one remote host:
+# tether-link@agent-work, ... (docs/plans/remote-hosts.md "Link"). Installed by
+# the repo's scripts/install.sh into ~/.config/systemd/user/; enable one per
+# host in ~/.config/tether/hosts.json:
+#   systemctl --user enable --now tether-link@agent-work
+#
+# `tether link` holds an ssh ControlMaster at
+# $XDG_RUNTIME_DIR/tether/peers/<host>/ssh.ctl, forwards the host's Tether
+# socket to control.sock beside it, and retries quietly with jittered backoff
+# (capped at 5 min, reset once a link stayed up) while the host is down. It
+# never powers a host on. SIGUSR1 retries at once:
+#   systemctl --user kill -s USR1 tether-link@agent-work
+[Unit]
+Description=Tether link to %i
+Documentation=https://github.com/elias-leslie/tether
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Slice=app.slice
+ExecStart=%h/.local/lib/tether/bin/tether link %i
+# The helper handles its own retries; this only covers the helper failing.
+Restart=on-failure
+RestartSec=10
+UMask=0077
+
+[Install]
+WantedBy=default.target

@@ -7,6 +7,7 @@ import { guarded, parseAfterSeq, streamTurn } from './agent-hub/chat-api'
 import { RunControlError, type RunTracker, type StepSession } from './agent-hub/runs'
 import { classifyHubError } from './agent-hub/runtime'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import type { Hub } from './hub/hub'
 
 /** What Tether asks Agent Hub to read a step's attempt session. */
 export interface StepChatSource {
@@ -44,6 +45,8 @@ export function registerRunRoutes(
   router: Router,
   tracker: RunTracker,
   chats?: StepChatSource | null,
+  /** Merges the remote hosts' runs into the list. */
+  hub?: Pick<Hub, 'mergeRuns'> | null,
 ): void {
   const runId = (value: string | undefined): string => {
     if (!value || value.length > 80) throw new HttpError(404, 'unknown_run')
@@ -78,7 +81,8 @@ export function registerRunRoutes(
   }
   router
     .add('GET', '/v1/runs', (_req, res) => {
-      sendJson(res, 200, tracker.snapshot())
+      const local = tracker.snapshot()
+      sendJson(res, 200, hub ? hub.mergeRuns(local) : local)
     })
     .add('POST', '/v1/runs/:id/resume', async (req, res, params) => {
       const body = await readJsonObject(req)

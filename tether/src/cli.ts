@@ -4,6 +4,8 @@ import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { startDaemon } from './daemon'
 import { runDoctor } from './doctor'
+import { hostsFilePath, loadHosts, peerDir } from './hub/hosts'
+import { linkPaths, runLink } from './hub/link'
 import { applyImport, formatPlan, planImportForPath, summarize } from './importer'
 import { Store } from './store'
 import { VERSION } from './version'
@@ -45,6 +47,9 @@ Commands:
   tools default|enable|disable <slug>
   tools rm <slug>
   projects [--refresh]          project list (SummitFlow, else local)
+  hosts                         remote hosts this Tether federates, with link state
+  link <host>                   hold the ssh link to a host in hosts.json (used by
+                                tether-link@<host>.service; never powers it on)
 
 The instance defaults to $TETHER_INSTANCE or "default".`
 
@@ -455,6 +460,20 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           store.close()
         }
         return 0
+      }
+      case 'hosts':
+        return api(io, paths, json, 'GET', '/v1/hosts')
+      case 'link': {
+        const { hosts, errors } = loadHosts(hostsFilePath(process.env))
+        const host = hosts.find((entry) => entry.name === sub)
+        if (!host) {
+          for (const error of errors) io.err(`tether link: hosts.json: ${error}`)
+          io.err(
+            `tether link: no host ${JSON.stringify(sub ?? '')} in ${hostsFilePath(process.env)}`,
+          )
+          return 2
+        }
+        return runLink(host, linkPaths(peerDir(process.env, process.getuid?.(), host.name)))
       }
       case 'roots':
         if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/roots')

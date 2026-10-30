@@ -1,0 +1,405 @@
+// The hub (docs/plans/remote-hosts.md "Hub"): this Tether federates the remote
+// Tethers in hosts.json, so every client keeps talking to its one local socket.
+// Lists merge the peers' sessions (tagged `host`), per-session routes go
+// verbatim to the owning peer, peer events are relayed with `host`, and create
+// takes a `host`. A down peer's sessions stay listed as stale, never gone.
+
+import { statSync } from 'node:fs'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { EventType } from '../events'
+import type { GuiCommand, GuiOutcome } from '../gui-channel'
+import { HttpError, sendJson } from '../http'
+import { type HostEntry, hostsFilePath, loadHosts, peerDir } from './hosts'
+import { linkPaths } from './link'
+import {
+  type Descriptor,
+  isDescriptor,
+  Peer,
+  type PeerIdentity,
+  type PeerSnapshot,
+  type RunsLike,
+} from './peer'
+import { forwardRequest, PeerUnavailable, peerRequest } from './peer-http'
+
+export const LIST_TIMEOUT_MS = 1_500
+export const QUERY_TIMEOUT_MS = 10_000
+/** Create waits for the peer's own launch (agent admission can be slow). */
+export const CREATE_TIMEOUT_MS = 120_000
+const RELOAD_MS = 5_000
+const PERSIST_DEBOUNCE_MS = 2_000
+const IDENTITIES_KEY = 'peer_identities'
+const SNAPSHOTS_KEY = 'peer_sessions'
+
+const SESSION_ID = /^[0-9a-f]{8}$/
+const ROUTE = /^\/v1\/(sessions|widgets|roots|wakes|runs)\/([^/?]+)(\/[^?]*)?$/
+
+export interface HubDeps {
+  env: NodeJS.ProcessEnv
+  uid?: number
+  publish(type: EventType, data: Record<string, unknown>): void
+  gui: { send(command: GuiCommand): Promise<GuiOutcome> }
+  settings: { get(key: string): string | null; put(key: string, value: string): void }
+  isLocalSession(id: string): boolean
+  isLocalRoot(requestId: string): boolean
+  isLocalRun(runId: string): boolean
+  /** The badge name of a local coordinator (`↳ <name>` on a remote lane), or null. */
+  leadName(id: string): string | null
+  /** Make a local session a coordinator and return the lineage its lanes on
+   * other machines carry; null when it is unknown. */
+  claimLocal(launcherId: string): Lineage | null
+  log?(message: string): void
+  now?(): number
+  random?(): number
+}
+
+export interface Lineage {
+  coordinatorId: string
+  coordinatorColor: string | null
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function readJson<T>(raw: string | null, fallback: T): T {
+  try {
+    return raw ? (JSON.parse(raw) as T) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function sameEntry(a: HostEntry, b: HostEntry): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+function unavailable(peer: Peer): HttpError {
+  const reason =
+    peer.state === 'identity_changed'
+      ? (peer.error ?? `${peer.name} answers as a different machine`)
+      : `${peer.name} is ${peer.state === 'connecting' ? 'still connecting' : 'not reachable'}`
+  return new HttpError(409, 'host_unavailable', { host: peer.name, state: peer.state, reason })
+}
+
+export class Hub {
+  private readonly peers = new Map<string, Peer>()
+  private readonly file: string
+  private fileStamp: string | null = null
+  private reloadTimer: NodeJS.Timeout | null = null
+  private persistTimer: NodeJS.Timeout | null = null
+  private readonly snapshots: Record<string, PeerSnapshot>
+  private readonly log: (message: string) => void
+  private readonly now: () => number
+
+  constructor(private readonly deps: HubDeps) {
+    this.file = hostsFilePath(deps.env)
+    this.log = deps.log ?? ((message) => console.log(`[tether:hub] ${message}`))
+    this.now = deps.now ?? Date.now
+    this.snapshots = readJson(deps.settings.get(SNAPSHOTS_KEY), {})
+  }
+
+  start(): void {
+    this.reload()
+    this.reloadTimer = setInterval(() => this.reload(), RELOAD_MS)
+    this.reloadTimer.unref()
+  }
+
+  close(): void {
+    if (this.reloadTimer) clearInterval(this.reloadTimer)
+    this.reloadTimer = null
+    for (const peer of this.peers.values()) peer.stop()
+    this.peers.clear()
+    this.flush()
+  }
+
+  /** Re-read hosts.json when it changed: start, restart or drop peers. */
+  reload(): void {
+    let stamp: string | null = null
+    try {
+      const stat = statSync(this.file)
+      stamp = `${stat.ino}:${stat.mtimeMs}:${stat.size}`
+    } catch {
+      stamp = null
+    }
+    if (stamp === this.fileStamp && this.reloadTimer) return
+    this.fileStamp = stamp
+    const { hosts, errors } = loadHosts(this.file)
+    for (const error of errors) this.log(`hosts.json: ${error}`)
+    const wanted = new Map(hosts.map((host) => [host.name, host]))
+    for (const [name, peer] of this.peers) {
+      const entry = wanted.get(name)
+      if (entry && sameEntry(entry, peer.entry)) continue
+      peer.stop()
+      this.peers.delete(name)
+      if (!entry) {
+        delete this.snapshots[name]
+        this.schedulePersist()
+        this.deps.publish('peer.resync', { host: name })
+      }
+    }
+    for (const entry of hosts) {
+      if (this.peers.has(entry.name)) continue
+      const paths = linkPaths(peerDir(this.deps.env, this.deps.uid, entry.name))
+      const peer = new Peer(
+        entry,
+        paths.forwarded,
+        paths.control,
+        {
+          publish: this.deps.publish,
+          gui: this.deps.gui,
+          isLocal: this.deps.isLocalSession,
+          identity: {
+            get: (name) => this.identities()[name] ?? null,
+            set: (name, id) =>
+              this.deps.settings.put(
+                IDENTITIES_KEY,
+                JSON.stringify({ ...this.identities(), [name]: id }),
+              ),
+          },
+          persist: (name, snapshot) => {
+            this.snapshots[name] = snapshot
+            this.schedulePersist()
+          },
+          present: (owner, item) => this.present(owner, item),
+          log: this.log,
+          now: this.now,
+          random: this.deps.random ?? Math.random,
+        },
+        this.snapshots[entry.name] ?? null,
+      )
+      this.peers.set(entry.name, peer)
+      peer.start()
+    }
+  }
+
+  private identities(): Record<string, PeerIdentity> {
+    return readJson(this.deps.settings.get(IDENTITIES_KEY), {})
+  }
+
+  private schedulePersist(): void {
+    if (this.persistTimer) return
+    this.persistTimer = setTimeout(() => this.flush(), PERSIST_DEBOUNCE_MS)
+    this.persistTimer.unref()
+  }
+
+  private flush(): void {
+    if (this.persistTimer) clearTimeout(this.persistTimer)
+    this.persistTimer = null
+    this.deps.settings.put(SNAPSHOTS_KEY, JSON.stringify(this.snapshots))
+  }
+
+  /** A peer's descriptor as clients see it. */
+  private present(peer: Peer, item: Descriptor): Descriptor {
+    const out: Descriptor = { ...item, host: peer.name }
+    const mark = peer.mark()
+    if (mark) out.peer = mark
+    else delete out.peer
+    // A lane launched by a coordinator on this computer names it.
+    const badge = record(item.badge)
+    if (badge?.kind === 'child' && typeof item.coordinatorId === 'string') {
+      const name = this.deps.leadName(item.coordinatorId)
+      if (name) out.badge = { ...badge, text: `↳ ${name}` }
+    }
+    return out
+  }
+
+  /** `GET /v1/hosts`. */
+  hosts(): Record<string, unknown>[] {
+    return [...this.peers.values()].map((peer) => ({
+      name: peer.name,
+      ssh: peer.entry.ssh,
+      control: peer.control,
+      ...(peer.entry.stateDir ? { stateDir: peer.entry.stateDir } : {}),
+      state: peer.state,
+      since: peer.since,
+      listedAt: peer.listedAt,
+      sessions: peer.count(),
+      error: peer.error,
+    }))
+  }
+
+  /** Accept the machine that now answers for `name` (after identity_changed). */
+  trust(name: string): void {
+    const peer = this.peers.get(name)
+    if (!peer) throw new HttpError(404, 'unknown_host', { host: name })
+    if (!peer.trust()) throw new HttpError(409, 'identity_unchanged', { host: name })
+  }
+
+  /** Every peer's sessions, queried in parallel (bounded by a short timeout
+   * and each peer's circuit breaker); a peer that cannot answer contributes
+   * its last-known descriptors, marked. */
+  async sessions(): Promise<Descriptor[]> {
+    const lists = await Promise.all(
+      [...this.peers.values()].map((peer) => peer.list(LIST_TIMEOUT_MS)),
+    )
+    return lists.flat()
+  }
+
+  /** Local runs plus each peer's, tagged; a peer that is down makes the answer stale. */
+  mergeRuns<T extends { status: RunsLike['status']; error: string | null; items: object[] }>(
+    local: T,
+  ): T {
+    const merged: T = { ...local, items: [...local.items] }
+    for (const peer of this.peers.values()) {
+      const runs = peer.runs()
+      if (!runs) continue
+      merged.items.push(...runs.items.map((item) => ({ ...item, host: peer.name })))
+      const stale = !peer.live || runs.status !== 'ok'
+      if (stale && merged.status === 'ok') {
+        merged.status = 'stale'
+        merged.error ??= peer.live ? runs.error : `${peer.name} is not reachable`
+      }
+    }
+    return merged
+  }
+
+  private requirePeer(name: unknown): Peer {
+    if (typeof name !== 'string' || !name)
+      throw new HttpError(400, 'invalid_body', { field: 'host' })
+    const peer = this.peers.get(name)
+    if (!peer) throw new HttpError(400, 'unknown_host', { host: name })
+    if (!peer.live) throw unavailable(peer)
+    return peer
+  }
+
+  private ownerOf(kind: string, id: string): Peer | null {
+    for (const peer of this.peers.values()) {
+      if (kind === 'sessions' || kind === 'widgets') {
+        if (SESSION_ID.test(id) && !this.deps.isLocalSession(id) && peer.ownsSession(id))
+          return peer
+      } else if (kind === 'roots') {
+        if (!this.deps.isLocalRoot(id) && peer.ownsRoot(id)) return peer
+      } else if (kind === 'wakes') {
+        if (peer.ownsWake(id)) return peer
+      } else if (kind === 'runs') {
+        if (!this.deps.isLocalRun(id) && peer.ownsRun(id)) return peer
+      }
+    }
+    return null
+  }
+
+  /** The JSON a peer answered, as clients see it: `host` on the answer and on
+   * each listed item; a descriptor refreshes the cache. */
+  private rewrite(peer: Peer, status: number, body: unknown, attach = false): unknown {
+    const value = record(body)
+    if (!value) return body
+    if (status < 300 && isDescriptor(value)) {
+      peer.upsert(value)
+      return this.present(peer, value)
+    }
+    const out: Record<string, unknown> = { ...value, host: peer.name }
+    if (Array.isArray(value.items))
+      out.items = value.items.map((item) =>
+        typeof record(item)?.id === 'string' ? { ...(item as object), host: peer.name } : item,
+      )
+    if (typeof value.requestId === 'string') peer.rememberRoot(value.requestId)
+    if (attach && status === 200)
+      out.ssh = {
+        alias: peer.entry.ssh,
+        control: peer.control,
+        ...(peer.entry.stateDir ? { stateDir: peer.entry.stateDir } : {}),
+      }
+    return out
+  }
+
+  /**
+   * Take a per-session request owned by a peer: forwarded verbatim; a peer
+   * that is down answers `409 host_unavailable`, never 404. False when the
+   * route is not a peer's (the local router handles it).
+   */
+  forward(req: IncomingMessage, res: ServerResponse): boolean {
+    if (this.peers.size === 0) return false
+    const path = (req.url ?? '/').split('?')[0] ?? '/'
+    const match = ROUTE.exec(path)
+    if (!match) return false
+    const [, kind, rawId, rest = ''] = match
+    let id: string
+    try {
+      id = decodeURIComponent(rawId ?? '')
+    } catch {
+      return false
+    }
+    const peer = this.ownerOf(kind ?? '', id)
+    if (!peer) return false
+    if (!peer.live) {
+      req.resume()
+      const error = unavailable(peer)
+      sendJson(res, error.status, { error: error.code, ...error.extra })
+      return true
+    }
+    const attach = kind === 'sessions' && rest === '/attach'
+    void forwardRequest(peer.socket, req, res, (status, body) =>
+      this.rewrite(peer, status, body, attach),
+    ).then((reached) => {
+      if (reached || res.headersSent) return
+      const error = unavailable(peer)
+      sendJson(res, error.status, { error: error.code, ...error.extra })
+    })
+    return true
+  }
+
+  /** `POST /v1/sessions` or `POST /v1/roots` with `host`: forwarded to that
+   * peer without `host` (and with lineage from a local launcher). */
+  async create(
+    res: ServerResponse,
+    path: '/v1/sessions' | '/v1/roots',
+    body: Record<string, unknown>,
+  ): Promise<void> {
+    const peer = this.requirePeer(body.host)
+    const { host: _host, ...forwarded } = body
+    if (path === '/v1/roots' && typeof forwarded.launchedBy === 'string') {
+      const launcher = forwarded.launchedBy
+      if (!peer.ownsSession(launcher)) {
+        const lineage = this.lineageFor(launcher)
+        delete forwarded.launchedBy
+        if (lineage) forwarded.lineage = lineage
+      }
+    }
+    let answer: Awaited<ReturnType<typeof peerRequest>>
+    try {
+      answer = await peerRequest(peer.socket, 'POST', path, forwarded, CREATE_TIMEOUT_MS)
+    } catch (error) {
+      const message = (error as Error).message
+      // Refused before anything was sent: nothing was created.
+      if (/ECONNREFUSED|ENOENT/.test(message)) throw unavailable(peer)
+      throw new HttpError(409, 'outcome_uncertain', { host: peer.name, reason: message })
+    }
+    if (path === '/v1/roots' && typeof forwarded.requestId === 'string' && answer.status < 300)
+      peer.rememberRoot(forwarded.requestId)
+    sendJson(res, answer.status, this.rewrite(peer, answer.status, answer.body))
+  }
+
+  /** `GET /v1/tools?host=` and `/v1/projects?host=`: the peer's answer. */
+  async query(res: ServerResponse, host: string, path: string): Promise<void> {
+    const peer = this.requirePeer(host)
+    let answer: Awaited<ReturnType<typeof peerRequest>>
+    try {
+      answer = await peerRequest(peer.socket, 'GET', path, undefined, QUERY_TIMEOUT_MS)
+    } catch (error) {
+      if (error instanceof PeerUnavailable) throw unavailable(peer)
+      throw error
+    }
+    const value = record(answer.body)
+    sendJson(res, answer.status, value ? { ...value, host: peer.name } : answer.body)
+  }
+
+  /**
+   * The coordinator lineage a session on another machine inherits from
+   * `launcherId`: a local launcher's (which becomes a coordinator), or a
+   * remote launcher's from its descriptor. Null when no one knows it.
+   */
+  lineageFor(launcherId: string): Lineage | null {
+    if (this.deps.isLocalSession(launcherId)) return this.deps.claimLocal(launcherId)
+    for (const peer of this.peers.values()) {
+      const launcher = peer.session(launcherId)
+      if (!launcher) continue
+      const coordinatorId =
+        typeof launcher.coordinatorId === 'string' ? launcher.coordinatorId : launcher.id
+      const color = typeof launcher.coordinatorColor === 'string' ? launcher.coordinatorColor : null
+      return { coordinatorId, coordinatorColor: color }
+    }
+    return null
+  }
+}

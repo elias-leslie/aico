@@ -1,0 +1,133 @@
+// The hosts registry (docs/plans/remote-hosts.md "Hosts registry"):
+// `~/.config/tether/hosts.json` lists the remote Tethers this hub federates
+// and how `tether-link@<host>` reaches them. It is data, validated here; a
+// missing file means no peers, which is exactly a standalone Tether.
+
+import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { isAbsolute, join, normalize } from 'node:path'
+
+export interface HostEntry {
+  /** Registry name: the `host` field on descriptors and the link unit's instance. */
+  name: string
+  /** An ssh Host alias (never an address). */
+  ssh: string
+  /** The remote Tether's control socket. */
+  socket: string
+  /** Workstation ports exposed to the host through `-R` (loopback both ends). */
+  forwards: number[]
+  /** The command that powers the host on (phase 2; never run by the link). */
+  wake: string[] | null
+  /** The remote Tether's state directory, when it is not `~/.local/state/tether`. */
+  stateDir: string | null
+}
+
+export interface HostsLoad {
+  hosts: HostEntry[]
+  /** One plain line per entry (or the file) that was not usable. */
+  errors: string[]
+}
+
+const NAME = /^[a-z0-9][a-z0-9-]{0,31}$/
+const ALIAS = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/
+const FIELDS = new Set(['name', 'ssh', 'socket', 'forwards', 'wake', 'stateDir'])
+/** sockaddr_un's sun_path limit, less the terminating NUL. */
+const MAX_SOCKET_BYTES = 107
+
+/** `$TETHER_HOSTS_FILE`, else `$XDG_CONFIG_HOME/tether/hosts.json`. */
+export function hostsFilePath(env: NodeJS.ProcessEnv): string {
+  if (env.TETHER_HOSTS_FILE) return env.TETHER_HOSTS_FILE
+  const configRoot = env.XDG_CONFIG_HOME || join(env.HOME ?? homedir(), '.config')
+  return join(configRoot, 'tether', 'hosts.json')
+}
+
+/** `$XDG_RUNTIME_DIR/tether/peers/<name>`: the link's ssh.ctl and forwarded control.sock. */
+export function peerDir(env: NodeJS.ProcessEnv, uid: number | undefined, name: string): string {
+  const runtime = env.XDG_RUNTIME_DIR || `/run/user/${uid ?? process.getuid?.() ?? 0}`
+  return join(runtime, 'tether', 'peers', name)
+}
+
+function absolutePath(value: unknown): string | null {
+  if (typeof value !== 'string' || !isAbsolute(value) || normalize(value) !== value) return null
+  return /[\s\0]/.test(value) ? null : value
+}
+
+function port(value: unknown): number | null {
+  const n = typeof value === 'string' && /^\d{1,5}$/.test(value) ? Number(value) : value
+  return typeof n === 'number' && Number.isSafeInteger(n) && n >= 1 && n <= 65_535 ? n : null
+}
+
+/** One entry, or why it is not usable. */
+function parseEntry(value: unknown, index: number): HostEntry | string {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return `entry ${index} is not an object`
+  const raw = value as Record<string, unknown>
+  const unknown = Object.keys(raw).filter((key) => !FIELDS.has(key))
+  if (unknown.length) return `entry ${index}: unknown fields ${unknown.join(', ')}`
+  const { name, ssh } = raw
+  if (typeof name !== 'string' || !NAME.test(name) || name === 'local')
+    return `entry ${index}: name must be 1-32 of a-z, 0-9, '-'`
+  if (typeof ssh !== 'string' || !ALIAS.test(ssh) || IPV4.test(ssh))
+    return `${name}: ssh must be an ssh Host alias, not an address`
+  const socket = absolutePath(raw.socket)
+  if (!socket || Buffer.byteLength(socket) > MAX_SOCKET_BYTES)
+    return `${name}: socket must be an absolute path`
+  let forwards: number[] = []
+  if (raw.forwards !== undefined) {
+    if (!Array.isArray(raw.forwards)) return `${name}: forwards must be a list of ports`
+    const ports = raw.forwards.map(port)
+    if (ports.some((p) => p === null)) return `${name}: forwards must be ports 1-65535`
+    forwards = [...new Set(ports as number[])]
+  }
+  let wake: string[] | null = null
+  if (raw.wake !== undefined && raw.wake !== null) {
+    if (
+      !Array.isArray(raw.wake) ||
+      raw.wake.length === 0 ||
+      raw.wake.some((arg) => typeof arg !== 'string' || !arg || arg.includes('\0'))
+    )
+      return `${name}: wake must be a non-empty argv list`
+    wake = raw.wake as string[]
+  }
+  let stateDir: string | null = null
+  if (raw.stateDir !== undefined && raw.stateDir !== null) {
+    stateDir = absolutePath(raw.stateDir)
+    if (!stateDir) return `${name}: stateDir must be an absolute path`
+  }
+  return { name, ssh, socket, forwards, wake, stateDir }
+}
+
+/** Validate the registry's JSON text. Bad entries are skipped with a reason;
+ * a duplicate name keeps the first entry. */
+export function parseHosts(text: string): HostsLoad {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    return { hosts: [], errors: ['hosts.json is not valid JSON'] }
+  }
+  if (!Array.isArray(value)) return { hosts: [], errors: ['hosts.json must be a list'] }
+  const hosts: HostEntry[] = []
+  const errors: string[] = []
+  value.forEach((item, index) => {
+    const entry = parseEntry(item, index)
+    if (typeof entry === 'string') errors.push(entry)
+    else if (hosts.some((host) => host.name === entry.name))
+      errors.push(`${entry.name}: duplicate name; the first entry is used`)
+    else hosts.push(entry)
+  })
+  return { hosts, errors }
+}
+
+/** Read the registry. A missing file is no hosts and no error. */
+export function loadHosts(path: string): HostsLoad {
+  let text: string
+  try {
+    text = readFileSync(path, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { hosts: [], errors: [] }
+    return { hosts: [], errors: [`hosts.json could not be read: ${(error as Error).message}`] }
+  }
+  return parseHosts(text)
+}

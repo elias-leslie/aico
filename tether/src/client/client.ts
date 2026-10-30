@@ -14,6 +14,7 @@ import {
   type ContextHook,
   type GuiCommand,
   type GuiVerdict,
+  type HostInfo,
   parseAttachAnswer,
   parseContextHook,
   parseGuiCommand,
@@ -172,6 +173,8 @@ export class TetherClient {
       content: string
     }
     size: { cols: number; rows: number }
+    /** A remote host from `hosts()`; omitted for this computer. */
+    host?: string
   }): Promise<SessionDescriptor> {
     return this.json('POST', '/v1/sessions', { ...input, origin: 'aico' }, { timeoutMs: 60_000 })
   }
@@ -346,16 +349,33 @@ export class TetherClient {
     return this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/resize-claim`)
   }
 
-  async tools(): Promise<{ items: TetherTool[]; defaultSlug: string | null }> {
-    return this.json('GET', '/v1/tools?enabled=1')
+  /** The enabled tools, of this computer or of a remote `host`. */
+  async tools(host?: string): Promise<{ items: TetherTool[]; defaultSlug: string | null }> {
+    const query = new URLSearchParams({ enabled: '1', ...(host ? { host } : {}) })
+    return this.json('GET', `/v1/tools?${query}`)
   }
 
-  async projects(refresh = false): Promise<TetherProject[]> {
+  /** The projects of this computer or of a remote `host`. */
+  async projects(refresh = false, host?: string): Promise<TetherProject[]> {
+    const query = new URLSearchParams({
+      ...(refresh ? { refresh: '1' } : {}),
+      ...(host ? { host } : {}),
+    })
     const body = await this.json<{ projects: TetherProject[] }>(
       'GET',
-      refresh ? '/v1/projects?refresh=1' : '/v1/projects',
+      query.size ? `/v1/projects?${query}` : '/v1/projects',
     )
     return body.projects
+  }
+
+  /** The remote hosts the hub federates; empty from a Tether without hosts. */
+  async hosts(): Promise<HostInfo[]> {
+    try {
+      return (await this.json<{ items: HostInfo[] }>('GET', '/v1/hosts')).items
+    } catch (error) {
+      if (error instanceof TetherError && error.status === 404) return []
+      throw error
+    }
   }
 
   guiResult(commandId: string, result: GuiVerdict): Promise<unknown> {

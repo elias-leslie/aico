@@ -12,7 +12,8 @@
 # Installs (rerunning changes only what differs):
 #   node_modules and the desktop/Tether/web builds
 #   ~/.local/lib/tether (Tether's bundle, CLI and shims), ~/.local/bin/tether
-#   user units from scripts/systemd/ plus tether/systemd/tether@.service
+#   user units from scripts/systemd/ plus tether/systemd/tether@.service and
+#   tether-link@.service
 #   ~/.local/share/applications/aico.desktop
 #   ~/.pi/agent/extensions/st-coord.ts, only when SummitFlow is installed
 #
@@ -374,6 +375,8 @@ install_units() {
   done
   # The generic template, for test instances such as tether@dev.
   install_content "$(cat tether/systemd/tether@.service)" "$UNIT_DIR/tether@.service" 0644 && changed=1
+  # One ssh link per remote host in ~/.config/tether/hosts.json (enabled per host).
+  install_content "$(cat tether/systemd/tether-link@.service)" "$UNIT_DIR/tether-link@.service" 0644 && changed=1
   if [ "$changed" = 1 ]; then
     run systemctl --user daemon-reload ||
       echo "systemd: could not reach the user manager; run 'systemctl --user daemon-reload' later." >&2

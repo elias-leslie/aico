@@ -98,6 +98,34 @@ export interface RootCreateRequest {
    * Sets the root's coordinator (docs/api-v1.md Coordinators). Not part of
    * the digest. */
   launchedBy: string | null
+  /** Tether: the coordinator lineage of a launcher on another machine (the
+   * hub sends it instead of `launchedBy`). Not part of the digest. */
+  lineage?: RootLineage | null
+}
+
+export interface RootLineage {
+  coordinatorId: string
+  coordinatorColor: string | null
+}
+
+function parseLineage(value: unknown): RootLineage | null | undefined {
+  if (value === undefined || value === null) return null
+  if (
+    !object(value) ||
+    Object.keys(value).some((key) => key !== 'coordinatorId' && key !== 'coordinatorColor') ||
+    typeof value.coordinatorId !== 'string' ||
+    !/^[0-9a-f]{8}$/.test(value.coordinatorId) ||
+    !(
+      value.coordinatorColor === undefined ||
+      value.coordinatorColor === null ||
+      (typeof value.coordinatorColor === 'string' && /^#[0-9a-f]{6}$/i.test(value.coordinatorColor))
+    )
+  )
+    return undefined
+  return {
+    coordinatorId: value.coordinatorId,
+    coordinatorColor: (value.coordinatorColor as string | null | undefined) ?? null,
+  }
 }
 
 /** One canonical view mutation, shared by retained-root and ordinary-widget routes. */
@@ -133,6 +161,11 @@ export interface RootControlOperations {
   ): Promise<boolean | MutationRejection>
   /** Tether: record the launcher of a newly reserved root. */
   launched?(widgetId: string, launchedBy: string): void
+  /** Tether: record a coordinator lineage from another machine on a newly
+   * reserved root. */
+  adopt?(widgetId: string, lineage: RootLineage): void
+  /** Tether: a create naming a remote `host`, answered by the hub. */
+  remote?(body: Record<string, unknown>, response: ServerResponse): Promise<void>
   /** Tether: `POST /v1/roots/:requestId/end`, the shared session End. */
   end?(widgetId: string, generation: string): Promise<RetirementResult | { status: 'busy' }>
   /** Tether: the session whose pending or held crash recovery will resume
@@ -274,6 +307,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'origin',
           'aTermSessionId',
           'launchedBy',
+          'lineage',
+          'host',
         ].includes(key),
     )
   )
@@ -299,7 +334,9 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     origin = 'aico',
     aTermSessionId = null,
     launchedBy = null,
+    host = null,
   } = value
+  const lineage = parseLineage(value.lineage)
   const instructions = rawInstructions === null ? null : parseInstructions(rawInstructions)
   const hub = tool === AGENT_HUB_TOOL
   if (
@@ -307,6 +344,10 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     (origin !== 'aico' && origin !== 'a-term') ||
     (launchedBy !== null &&
       (typeof launchedBy !== 'string' || !/^[0-9a-f]{8}$/.test(launchedBy))) ||
+    // A root that names a host never gets here (the hub takes it).
+    host !== null ||
+    lineage === undefined ||
+    (lineage !== null && launchedBy !== null) ||
     (aTermSessionId !== null &&
       (origin !== 'a-term' ||
         typeof aTermSessionId !== 'string' ||
@@ -401,6 +442,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     origin,
     aTermSessionId: (aTermSessionId as string | null) ?? null,
     launchedBy: (launchedBy as string | null) ?? null,
+    ...(lineage ? { lineage } : {}),
   }
 }
 
@@ -778,8 +820,21 @@ export function createRootHandler(
         let parsed: RootCreateRequest | null
         let unsupportedTool = false
         let promptLimit: number | null = null
+        let value: unknown
         try {
-          const value = await body(request)
+          value = await body(request)
+        } catch {
+          value = null
+        }
+        if (object(value) && value.host !== undefined && value.host !== null) {
+          if (!operations.remote) {
+            json(response, 400, { error: 'unknown_host', host: value.host })
+            return
+          }
+          await operations.remote(value, response)
+          return
+        }
+        try {
           unsupportedTool =
             object(value) && typeof value.tool === 'string' && !isRootCreateTool(value.tool)
           promptLimit = promptOverLimit(value)
@@ -863,6 +918,7 @@ export function createRootHandler(
               return
             }
             if (input.launchedBy) operations.launched?.(root.widgetId, input.launchedBy)
+            else if (input.lineage) operations.adopt?.(root.widgetId, input.lineage)
           }
           if (getWidget(root.widgetId)) {
             // Before the first launch; the digest already pins the revision.

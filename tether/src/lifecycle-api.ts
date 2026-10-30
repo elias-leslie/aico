@@ -13,8 +13,10 @@ import type { AgentStateTracker, HookReport } from './agent-state'
 import type { TetherPaths } from './config'
 import type { EventBus } from './events'
 import type { GuiChannel, GuiMutationCommand } from './gui-channel'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import { HttpError, type Router, readJsonObject, sendError, sendJson } from './http'
+import type { Hub } from './hub/hub'
 import {
+  adoptLineage,
   allocateWidgetId,
   getTmuxServer,
   getWidget,
@@ -153,6 +155,8 @@ export interface LifecycleApiContext {
   recovery?: Recovery
   /** Session wakes (scheduled check-ins); absent in route-only tests. */
   wakes?: WakeService
+  /** The remote hosts this Tether federates; absent in route-only tests. */
+  hub?: Hub
 }
 
 /** The daemon's agent-state tracker; unbound in tests and scratch instances. */
@@ -262,6 +266,8 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
     // An Agent Hub session has no pane (its `tmux` fields stay null) and says
     // which Agent Hub session it is; a tmux session carries neither field.
     ...(hub ? { backend: row.backend, agentHub: agentHub?.describe(row.id) ?? null } : {}),
+    // This computer's own session; the hub tags a remote host's with its name.
+    host: null,
   }
 }
 
@@ -554,8 +560,27 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
   return {
     available: () => true,
     launched: (widgetId, launchedBy) => {
-      for (const id of recordLauncher(widgetId, launchedBy))
-        notifySessionChanged(id, { force: true })
+      // A launcher on another machine hands down the lineage the hub knows.
+      const remote = getWidget(launchedBy) ? null : (context.hub?.lineageFor(launchedBy) ?? null)
+      if (remote) adoptLineage(widgetId, remote)
+      const changed = remote ? [widgetId] : recordLauncher(widgetId, launchedBy)
+      for (const id of changed) notifySessionChanged(id, { force: true })
+    },
+    adopt: (widgetId, lineage) => {
+      adoptLineage(widgetId, lineage)
+      notifySessionChanged(widgetId, { force: true })
+    },
+    remote: async (body, response) => {
+      if (!context.hub) {
+        sendJson(response, 400, { error: 'unknown_host', host: body.host })
+        return
+      }
+      try {
+        await context.hub.create(response, '/v1/roots', body)
+      } catch (error) {
+        if (!(error instanceof HttpError)) throw error
+        sendError(response, error)
+      }
     },
     validate: (request) => {
       if (request.tool === AGENT_HUB_TOOL) {
@@ -763,12 +788,13 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const project = query.get('project')
       const origin = query.get('origin')
       const tool = query.get('tool')
-      const rows = listSessions().filter(
-        (row) =>
-          (project === null || row.projectId === project) &&
-          (origin === null || row.origin === origin) &&
-          (tool === null || row.tool === tool),
-      )
+      const wanted = (row: { projectId: unknown; origin: unknown; tool: unknown }) =>
+        (project === null || row.projectId === project) &&
+        (origin === null || row.origin === origin) &&
+        (tool === null || row.tool === tool)
+      const rows = listSessions().filter(wanted)
+      // Remote hosts' sessions, asked in parallel with this computer's.
+      const remote = context.hub?.sessions() ?? Promise.resolve([])
       // A session whose current generation was never verified (a fresh root
       // or replacement) is verified here, so the list agrees with a GET.
       const items = await Promise.all(
@@ -779,7 +805,10 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           return descriptor(getWidget(row.id) ?? row, status)
         }),
       )
-      sendJson(res, 200, { items })
+      const remoteItems = (await remote).filter((item) =>
+        wanted({ projectId: item.projectId, origin: item.origin, tool: item.tool }),
+      )
+      sendJson(res, 200, { items: [...items, ...remoteItems] })
     })
     .add('POST', '/v1/sessions', async (req, res) => {
       const body = await readJsonObject(req)
@@ -795,7 +824,13 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         'size',
         'agentSlug',
         'model',
+        'host',
       ])
+      if (body.host !== undefined && body.host !== null) {
+        if (!context.hub) throw new HttpError(400, 'unknown_host', { host: body.host })
+        await context.hub.create(res, '/v1/sessions', body)
+        return
+      }
       const origin = body.origin
       if (typeof origin !== 'string' || !ORIGINS.includes(origin as SessionOrigin)) {
         throw new HttpError(400, 'invalid_body', { field: 'origin' })

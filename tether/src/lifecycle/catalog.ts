@@ -874,9 +874,23 @@ export function joinCoordinator(id: string, coordinatorId: string): string[] {
  * Returns the ids whose descriptors changed. A launcher Tether does not know
  * leaves the session without a coordinator. */
 export function recordLauncher(id: string, launchedBy: string): string[] {
+  if (launchedBy === id) return []
+  const claimed = claimLauncher(launchedBy)
+  if (!claimed) return []
+  adoptLineage(id, claimed.lineage)
+  return [id, ...claimed.changed]
+}
+
+/** The lineage a launcher hands to the sessions it launches: its root
+ * coordinator, or itself, which then becomes a coordinator (`changed` names
+ * it then). Null for a launcher Tether does not know. */
+export function claimLauncher(launchedBy: string): {
+  lineage: { coordinatorId: string; coordinatorColor: string | null }
+  changed: string[]
+} | null {
   const launcher = getWidget(launchedBy)
-  if (!launcher || launcher.id === id) return []
-  const changed = [id]
+  if (!launcher) return null
+  const changed: string[] = []
   let rootId = launcher.coordinatorId
   let color = launcher.coordinatorColor
   // A lane hands down its root coordinator, even one that has ended.
@@ -886,12 +900,20 @@ export function recordLauncher(id: string, launchedBy: string): string[] {
     rootId = launcher.id
     color = getWidget(launcher.id)?.coordinatorColor ?? null
   }
+  return { lineage: { coordinatorId: rootId, coordinatorColor: color }, changed }
+}
+
+/** Record a coordinator lineage on a session, also one whose coordinator runs
+ * on another machine (the hub passes it on). */
+export function adoptLineage(
+  id: string,
+  lineage: { coordinatorId: string; coordinatorColor: string | null },
+): void {
   db.prepare('UPDATE sessions SET coordinator_id = ?, coordinator_color = ? WHERE id = ?').run(
-    rootId,
-    color,
+    lineage.coordinatorId,
+    lineage.coordinatorColor,
     id,
   )
-  return changed
 }
 
 /** Set (or clear, with null/empty) a widget's user-chosen title-bar name. */

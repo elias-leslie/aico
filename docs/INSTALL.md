@@ -51,6 +51,32 @@ rewrites only files whose content changed. Rerun it after moving the checkout.
 A test Tether instance runs with `systemctl --user start tether@dev` and is never
 enabled at boot.
 
+### Remote hosts
+
+Tether can also show and run sessions on other machines that run their own
+Tether (docs/plans/remote-hosts.md). List them in `~/.config/tether/hosts.json`;
+without that file Tether works exactly as before.
+
+```json
+[{ "name": "agent-work", "ssh": "agent-work",
+   "socket": "/run/user/1000/tether/default/control.sock",
+   "forwards": ["8001", "8003"] }]
+```
+
+`ssh` is a Host alias from `~/.ssh/config` that logs in without a prompt.
+`forwards` (optional) lists workstation ports the host may reach on its own
+loopback. Then turn on the link for each host:
+
+```bash
+systemctl --user enable --now tether-link@agent-work
+tether hosts        # link state and session count per host
+```
+
+The link retries quietly while the host is down and never powers it on. Tether
+picks up changes to hosts.json within a few seconds. The remote host runs a
+stock Tether (`TETHER_HEADLESS=1` when it has no desktop); its sshd should set
+`ClientAliveInterval 15`.
+
 On a host with SummitFlow, `st service rebuild aico` deploys instead, and
 `st service rebuild aico --worker tether@default` deploys Tether.
 
