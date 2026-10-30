@@ -7,6 +7,7 @@ import {
   type PaneFileTreeResponse,
   sourceKey,
 } from '@/lib/api/pane-files'
+import { isPermanentRefusal } from '@/lib/api-fetch'
 
 const fileQueryKeys = {
   all: ['pane-files'] as const,
@@ -16,12 +17,19 @@ const fileQueryKeys = {
     [...fileQueryKeys.all, 'content', sourceKey(source), path] as const,
 }
 
+/** A permanent refusal (another host's files, a path that is gone) shows at
+ * once; anything else is retried as usual. */
+function retryFiles(failures: number, error: Error): boolean {
+  return !isPermanentRefusal(error) && failures < 3
+}
+
 export function useFileTree(source: FilesSource, path = '', enabled = true) {
   return useQuery<PaneFileTreeResponse>({
     queryKey: fileQueryKeys.tree(source, path),
     queryFn: () => fetchFileTree(source, path),
     enabled,
     staleTime: 10_000,
+    retry: retryFiles,
   })
 }
 
@@ -35,5 +43,6 @@ export function useFileContent(
     queryFn: () => fetchFileContent(source, path!),
     enabled: enabled && !!path,
     staleTime: 10_000,
+    retry: retryFiles,
   })
 }

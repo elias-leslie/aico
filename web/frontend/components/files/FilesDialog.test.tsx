@@ -165,4 +165,34 @@ describe('FilesDialog', () => {
     expect(await screen.findByText(/Nothing shared yet/)).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Project' })).toBeNull()
   })
+
+  it('shows a refusal from another host at once, without Try again', async () => {
+    const fetchMock = vi.fn(async () =>
+      json({ detail: 'Files on agent-work can’t be shown here yet.' }, 409),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    // The app's own retry policy, not the tests' retry: false.
+    const client = new QueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <FilesDialog
+          isOpen
+          paneId="pane-remote"
+          request={null}
+          onClose={vi.fn()}
+          onInsertPath={vi.fn()}
+        />
+      </QueryClientProvider>,
+    )
+    // findByText gives up after 1 s, before a first retry would have finished.
+    expect(
+      await screen.findByText('Files on agent-work can’t be shown here yet.'),
+    ).toBeVisible()
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).startsWith('/api/panes/pane-remote/files/tree'),
+      ),
+    ).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+  })
 })

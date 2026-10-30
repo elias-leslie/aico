@@ -20,6 +20,7 @@ import {
   type PaneFileTreeEntry,
   rawFileUrl,
 } from '@/lib/api/pane-files'
+import { isPermanentRefusal } from '@/lib/api-fetch'
 import { useFileContent, useFileTree } from '@/lib/hooks/use-pane-files'
 
 const CODE_EXTENSIONS = new Set([
@@ -264,13 +265,15 @@ export function FileBrowser({
         ) : tree.isError ? (
           <div className="files-state">
             <p>{tree.error?.message || 'Couldn’t load the files.'}</p>
-            <button
-              type="button"
-              className="lantern-btn mt-3"
-              onClick={() => void tree.refetch()}
-            >
-              Try again
-            </button>
+            {isPermanentRefusal(tree.error) ? null : (
+              <button
+                type="button"
+                className="lantern-btn mt-3"
+                onClick={() => void tree.refetch()}
+              >
+                Try again
+              </button>
+            )}
           </div>
         ) : tree.data?.entries.length ? (
           <ul className="m-0 list-none p-0">
@@ -308,13 +311,15 @@ export function FileBrowser({
         ) : content.isError ? (
           <div className="files-state m-auto">
             <p>{content.error?.message || 'Couldn’t open this file.'}</p>
-            <button
-              type="button"
-              className="lantern-btn mt-3"
-              onClick={() => void content.refetch()}
-            >
-              Try again
-            </button>
+            {isPermanentRefusal(content.error) ? null : (
+              <button
+                type="button"
+                className="lantern-btn mt-3"
+                onClick={() => void content.refetch()}
+              >
+                Try again
+              </button>
+            )}
           </div>
         ) : content.data ? (
           <>
