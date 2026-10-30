@@ -1,6 +1,7 @@
 // Attention wiring: flash a window and badge the tray when a session needs the
 // owner (attention.ts), show it on the window's own eyes, and after 2 minutes
-// unanswered send one Nightshift push to the phone.
+// unanswered send one Nightshift notice (contract v1, tray only); it is resolved
+// once the session no longer waits (answered, seen or gone).
 
 import type { ExecFileException } from 'node:child_process'
 import type { BrowserWindow } from 'electron'
@@ -33,7 +34,7 @@ interface AttentionWiringDeps {
     args: string[],
     options: { timeout: number },
     callback: (error: ExecFileException | null, stdout: string | Buffer) => void,
-  ): unknown
+  ): { stdin?: { end(data: string): void } | null } | undefined
   nightshift: string
   webUrl: string
 }
@@ -64,61 +65,63 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
       else attending.set(id, { mode, stage })
       const win = registry.forSession(id)
       if (win) sendAttention(win)
-    },
-    push: (id) => {
-      const run = deps.run?.(id)
-      if (run) {
-        // A workflow run asking for an answer: the same push, opening its page. Its coordinator
-        // has been told too and will ask here.
+      const key = pushed.get(id)
+      if (key && mode !== 'blocked') {
+        pushed.delete(id)
         deps.execFile(
           deps.nightshift,
-          [
-            'push',
-            run.headline ?? 'The run is waiting for your answer.',
-            '--title',
-            `Workflow waiting: ${run.title.slice(0, 80)}`,
-            '--severity',
-            'warning',
-            '--open',
-            run.url,
-          ],
+          ['resolve', key, '--text', 'The session no longer waits on you.'],
           { timeout: 30_000 },
-          (error, stdout) => {
-            console.log(pushEventLine(id, pushOutcome(error, String(stdout ?? ''))))
+          (error) => {
+            if (error) console.log(`[aico:event] needs_you_resolve result=failed widget=${id}`)
           },
         )
-        return
       }
-      const descriptor = catalog.get(id)
-      if (!descriptor) return
-      const title = sessionTitle(descriptor)
-      const tools = deps.tools()
-      const agent = agentName(
-        descriptor.stateSource,
-        tools,
-        toolDisplayName(descriptor.tool, tools),
-      )
-      // Nightshift's own Web Push to the owner's PWA. Nightshift keys repeats by
-      // the --open link (one per session) and keeps them quiet for an hour.
-      deps.execFile(
+    },
+    push: (id) => {
+      const notice = noticeFor(id)
+      if (!notice) return
+      pushed.set(id, notice.key)
+      // Nightshift's notice contract v1 on stdin: the desktop tray and panel, never the phone.
+      const child = deps.execFile(
         deps.nightshift,
-        [
-          'push',
-          'Open it in Aico to answer.',
-          '--title',
-          pushTitle(agent, title),
-          '--severity',
-          'warning',
-          '--open',
-          `${deps.webUrl}/?session=${encodeURIComponent(id)}`,
-        ],
+        ['push', '--json'],
         { timeout: 30_000 },
         (error, stdout) => {
+          if (error?.code === 2)
+            console.error(`[aico] Nightshift refused the notice (a bug): ${error.message}`)
           console.log(pushEventLine(id, pushOutcome(error, String(stdout ?? ''))))
         },
       )
+      child?.stdin?.end(JSON.stringify(notice))
     },
   })
+
+  /** Sessions with an open notice, by the key it was sent with. */
+  const pushed = new Map<string, string>()
+
+  function noticeFor(id: string): WaitingNotice | undefined {
+    const run = deps.run?.(id)
+    if (run) {
+      // A workflow run asking for an answer, opening its page. Its coordinator has been told too and will ask here.
+      return waitingNotice({
+        key: `aico-run:${id}`,
+        title: `Workflow waiting: ${run.title.slice(0, 80)}`,
+        body: run.headline ?? 'The run is waiting for your answer.',
+        open: run.url.startsWith(`${deps.webUrl}/`) ? run.url : undefined,
+      })
+    }
+    const descriptor = catalog.get(id)
+    if (!descriptor) return undefined
+    const tools = deps.tools()
+    const agent = agentName(descriptor.stateSource, tools, toolDisplayName(descriptor.tool, tools))
+    return waitingNotice({
+      key: `aico-waiting:${id}`,
+      title: pushTitle(agent, sessionTitle(descriptor)),
+      body: 'Open it in Aico to answer.',
+      open: `${deps.webUrl}/?session=${encodeURIComponent(id)}`,
+    })
+  }
 
   return {
     /** Where a session sits in the tray: needs you, working or idle (window-chrome). */
@@ -136,5 +139,41 @@ export function createAttentionWiring(deps: AttentionWiringDeps) {
     focused: (id: string): void => attention.focused(id),
     /** Resend a (re)loaded window what it shows on itself. */
     sendTo: sendAttention,
+  }
+}
+
+export interface WaitingNotice {
+  v: 1
+  source: 'aico'
+  kind: 'todo'
+  severity: 'warning'
+  title: string
+  body: string
+  key: string
+  open?: string
+  actions: ['open']
+  primary: 'open'
+  push: 'tray'
+}
+
+/** A session or run waiting on the owner, as a Nightshift notice (contract v1). */
+export function waitingNotice(parts: {
+  key: string
+  title: string
+  body: string
+  open?: string
+}): WaitingNotice {
+  return {
+    v: 1,
+    source: 'aico',
+    kind: 'todo',
+    severity: 'warning',
+    title: parts.title.slice(0, 200),
+    body: parts.body.slice(0, 1000),
+    key: parts.key.replace(/[^A-Za-z0-9_.:/@+=,-]/g, '-').slice(0, 200),
+    ...(parts.open?.startsWith('https://') ? { open: parts.open } : {}),
+    actions: ['open'],
+    primary: 'open',
+    push: 'tray',
   }
 }

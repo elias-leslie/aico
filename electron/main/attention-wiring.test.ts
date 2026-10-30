@@ -1,9 +1,9 @@
-import type { ExecFileException } from 'node:child_process'
+import { type ExecFileException, execFileSync } from 'node:child_process'
 import type { BrowserWindow } from 'electron'
 import { createSessionCatalog, type SessionDescriptor, type TetherTool } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PUSH_AFTER_MS } from './attention'
-import { createAttentionWiring } from './attention-wiring'
+import { createAttentionWiring, waitingNotice } from './attention-wiring'
 import { WindowRegistry } from './window-registry'
 
 function fakeWindow(id: number) {
@@ -78,9 +78,11 @@ function setup(windows: FakeWindow[] = [], tools: TetherTool[] = [claudeCode, co
   const catalog = createSessionCatalog()
   const setNeedsYou = vi.fn()
   const pushes: { file: string; args: string[]; options: unknown; done: PushCallback }[] = []
+  const stdin: string[] = []
   const execFile = vi.fn(
     (file: string, args: string[], options: { timeout: number }, done: PushCallback) => {
       pushes.push({ file, args, options, done })
+      return { stdin: { end: (data: string) => void stdin.push(data) } }
     },
   )
   const wiring = createAttentionWiring({
@@ -91,9 +93,10 @@ function setup(windows: FakeWindow[] = [], tools: TetherTool[] = [claudeCode, co
     setNeedsYou,
     execFile,
     nightshift: '/usr/local/bin/nightshift',
-    webUrl: 'http://web.test',
+    webUrl: 'https://web.test',
   })
-  return { wiring, registry, catalog, setNeedsYou, execFile, pushes }
+  const notice = (n = 0) => JSON.parse(stdin[n] ?? 'null')
+  return { wiring, registry, catalog, setNeedsYou, execFile, pushes, notice }
 }
 
 const asWin = (w: FakeWindow) => w as unknown as BrowserWindow
@@ -137,9 +140,9 @@ describe('attention wiring', () => {
     expect(win.flashFrame).not.toHaveBeenCalled()
   })
 
-  it('pushes once through Nightshift after two minutes unanswered', () => {
+  it('sends one tray notice through Nightshift after two minutes unanswered', () => {
     const win = fakeWindow(1)
-    const { wiring, registry, catalog, execFile } = setup([win])
+    const { wiring, registry, catalog, execFile, notice } = setup([win])
     registry.bindSession(1, 'aaaaaaaa')
     const d = descriptor('aaaaaaaa', { state: 'blocked', stateSource: 'claude-hook' })
     catalog.upsert(d)
@@ -152,19 +155,23 @@ describe('attention wiring', () => {
     expect(execFile).toHaveBeenCalledTimes(1)
     expect(execFile).toHaveBeenCalledWith(
       '/usr/local/bin/nightshift',
-      [
-        'push',
-        'Open it in Aico to answer.',
-        '--title',
-        'Claude Code waiting in Docs',
-        '--severity',
-        'warning',
-        '--open',
-        'http://web.test/?session=aaaaaaaa',
-      ],
+      ['push', '--json'],
       { timeout: 30_000 },
       expect.any(Function),
     )
+    expect(notice()).toEqual({
+      v: 1,
+      source: 'aico',
+      kind: 'todo',
+      severity: 'warning',
+      title: 'Claude Code waiting in Docs',
+      body: 'Open it in Aico to answer.',
+      key: 'aico-waiting:aaaaaaaa',
+      open: 'https://web.test/?session=aaaaaaaa',
+      actions: ['open'],
+      primary: 'open',
+      push: 'tray',
+    })
     expect(win.webContents.send).toHaveBeenLastCalledWith('eyes:attention', {
       mode: 'blocked',
       stage: 'urgent',
@@ -173,17 +180,17 @@ describe('attention wiring', () => {
   })
 
   it('falls back to the tool name when the state source is not a known agent', () => {
-    const { wiring, catalog, execFile } = setup()
+    const { wiring, catalog, notice } = setup()
     const d = descriptor('aaaaaaaa', { state: 'blocked' })
     catalog.upsert(d)
     wiring.update(d)
     vi.advanceTimersByTime(PUSH_AFTER_MS)
-    expect(execFile.mock.calls[0]?.[1][3]).toBe('Codex waiting in Docs')
+    expect(notice().title).toBe('Codex waiting in Docs')
   })
 
   it("names the agent by Aico's built-in name while Tether's tool list is unavailable", () => {
     const win = fakeWindow(1)
-    const { wiring, registry, catalog, execFile } = setup([win], [])
+    const { wiring, registry, catalog, notice } = setup([win], [])
     registry.bindSession(1, 'aaaaaaaa')
     const d = descriptor('aaaaaaaa', {
       tool: 'claude-code',
@@ -193,16 +200,16 @@ describe('attention wiring', () => {
     catalog.upsert(d)
     wiring.update(d)
     vi.advanceTimersByTime(PUSH_AFTER_MS)
-    expect(execFile.mock.calls[0]?.[1][3]).toBe('Claude Code waiting in Docs')
+    expect(notice().title).toBe('Claude Code waiting in Docs')
   })
 
-  it('pushes a workflow run that needs the owner with its page to open', () => {
-    const { execFile } = setup()
+  it('sends a workflow run that needs the owner, opening its page when Aico serves it', () => {
+    const { execFile, notice } = setup()
     const run = {
       id: 'run:r1',
       title: 'Ship it',
       headline: 'build needs a decision',
-      url: 'http://hub.test/workflow-runs/r1',
+      url: 'https://web.test/workflow-runs/r1',
     }
     const withRun = createAttentionWiring({
       registry: new WindowRegistry({
@@ -218,21 +225,19 @@ describe('attention wiring', () => {
       setNeedsYou: vi.fn(),
       execFile,
       nightshift: '/usr/local/bin/nightshift',
-      webUrl: 'http://web.test',
+      webUrl: 'https://web.test',
     })
     withRun.updateId('run:r1', 'blocked', 5)
     vi.advanceTimersByTime(PUSH_AFTER_MS)
     expect(execFile).toHaveBeenCalledTimes(1)
-    expect(execFile.mock.calls[0]?.[1]).toEqual([
-      'push',
-      'build needs a decision',
-      '--title',
-      'Workflow waiting: Ship it',
-      '--severity',
-      'warning',
-      '--open',
-      'http://hub.test/workflow-runs/r1',
-    ])
+    expect(execFile.mock.calls[0]?.[1]).toEqual(['push', '--json'])
+    expect(notice()).toMatchObject({
+      key: 'aico-run:run:r1',
+      title: 'Workflow waiting: Ship it',
+      body: 'build needs a decision',
+      open: 'https://web.test/workflow-runs/r1',
+      push: 'tray',
+    })
     expect(withRun.group('run:r1').group).toBe('needs-you')
   })
 
@@ -262,6 +267,34 @@ describe('attention wiring', () => {
     expect(log).toHaveBeenCalledWith(
       '[aico:event] needs_you_push result=suppressed widget=aaaaaaaa nightshift=suppressed',
     )
+  })
+
+  it('a tray-only result counts as sent', () => {
+    const { wiring, catalog, pushes } = setup()
+    const d = descriptor('aaaaaaaa', { state: 'blocked' })
+    catalog.upsert(d)
+    wiring.update(d)
+    vi.advanceTimersByTime(PUSH_AFTER_MS)
+    pushes[0]?.done(null, 'desktop-popup\n')
+    expect(log).toHaveBeenCalledWith(
+      '[aico:event] needs_you_push result=sent widget=aaaaaaaa nightshift=desktop-popup',
+    )
+  })
+
+  it('resolves the notice once the session no longer waits, and only once', () => {
+    const { wiring, catalog, execFile } = setup()
+    const d = descriptor('aaaaaaaa', { state: 'blocked' })
+    catalog.upsert(d)
+    wiring.update(d)
+    vi.advanceTimersByTime(PUSH_AFTER_MS)
+    const working = descriptor('aaaaaaaa', { state: 'working' })
+    catalog.upsert(working)
+    wiring.update(working)
+    wiring.update(working)
+    const resolves = execFile.mock.calls.filter((call) => call[1][0] === 'resolve')
+    expect(resolves.map((call) => call[1])).toEqual([
+      ['resolve', 'aico-waiting:aaaaaaaa', '--text', 'The session no longer waits on you.'],
+    ])
   })
 
   it('no push for a session that left the catalog', () => {
@@ -338,5 +371,41 @@ describe('attention wiring', () => {
       mode: 'finished',
       stage: 'fresh',
     })
+  })
+})
+
+const hasNightshift = (() => {
+  try {
+    execFileSync('nightshift', ['push', '--schema'], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+})()
+
+describe('waiting notices meet Nightshift notice contract v1', () => {
+  it.skipIf(!hasNightshift).each([
+    [
+      'session',
+      waitingNotice({
+        key: 'aico-waiting:aaaaaaaa',
+        title: 'Claude Code waiting in Docs',
+        body: 'Open it in Aico to answer.',
+        open: 'https://aico.summitflow.dev/?session=aaaaaaaa',
+      }),
+    ],
+    [
+      'run without a page',
+      waitingNotice({
+        key: 'aico-run:run:r1',
+        title: 'Workflow waiting: Ship it',
+        body: 'build needs a decision',
+      }),
+    ],
+  ])('Nightshift accepts the %s notice', (_name, notice) => {
+    const out = execFileSync('nightshift', ['push', '--json', '--dry-run'], {
+      input: JSON.stringify(notice),
+    })
+    expect(JSON.parse(String(out))).toMatchObject({ source: 'aico', push: 'tray', primary: 'open' })
   })
 })

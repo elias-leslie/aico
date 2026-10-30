@@ -327,7 +327,7 @@ export function pushOutcome(
   // Only a Nightshift result word goes in the journal, never other output.
   const word = /^[a-z][a-z0-9 ,:/-]{0,39}$/.test(last) ? last.replace(/ /g, '_') : undefined
   const result =
-    !error && (last.startsWith('sent ') || last === 'spooled')
+    !error && (last.startsWith('sent ') || ['spooled', 'tray', 'desktop-popup'].includes(last))
       ? 'sent'
       : !error && last === 'suppressed'
         ? 'suppressed'
