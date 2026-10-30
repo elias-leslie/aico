@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api-fetch'
+import { SESSION_REFRESH_MS } from './use-terminal-sessions'
 
 /** A question an agent put to the owner (tether docs/api-v1.md "Asks"). */
 export interface OwnerAsk {
@@ -40,7 +41,8 @@ export interface Approvals {
 
 const ASKS_KEY = ['owner-asks'] as const
 const APPROVALS_KEY = ['owner-approvals'] as const
-const POLL_MS = 10_000
+/** As often as the session list, so a new ask and its session's mark arrive together. */
+const POLL_MS = SESSION_REFRESH_MS
 /** Answered and closed asks stay in the Answered tab this long. */
 export const ANSWERED_KEPT_MS = 24 * 60 * 60 * 1000
 

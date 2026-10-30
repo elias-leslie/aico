@@ -29,12 +29,18 @@ vi.mock('@/lib/hooks/use-asks', async (importOriginal) => ({
   }),
   useAskReply: () => ({
     mutate: (value: unknown) => state.sent.push(value),
+    mutateAsync: async (value: { id: string }) => {
+      state.sent.push(value)
+      const saved = state.asks.find((item) => item.id === value.id)
+      return { ask: { ...saved, state: 'answered', delivery: 'wake' } }
+    },
     isPending: false,
     isError: false,
     error: null,
   }),
 }))
 vi.mock('@/lib/hooks/use-terminal-sessions', () => ({
+  SESSION_REFRESH_MS: 5_000,
   useTerminalSessions: () => ({
     sessions: [{ id: '0123abcd', name: 'Disk merge' }],
   }),
@@ -94,22 +100,22 @@ describe('NeedsYouLauncher', () => {
     const pill = screen.getByTestId('needs-you-pill')
     expect(pill).toHaveTextContent('2 need you')
     expect(pill).toHaveAccessibleName(
-      '1 question and 1 approval waiting for you',
+      'Needs you: 1 agent question and 1 approval waiting',
     )
   })
 
-  it('shows the count alone in the session list header', () => {
+  it('is a labelled tool with its count in the session list', () => {
     state.asks = [ask()]
-    render(<NeedsYouLauncher variant="count" />)
+    render(<NeedsYouLauncher variant="tool" />)
     const pill = screen.getByTestId('needs-you-pill')
-    expect(pill).toHaveTextContent(/^1$/)
-    expect(pill).toHaveAccessibleName('1 question waiting for you')
+    expect(pill).toHaveTextContent(/^Needs you1$/)
+    expect(pill).toHaveAccessibleName('Needs you: 1 agent question waiting')
   })
 
   it('stays a quiet icon when nothing waits, and off the phone bar', () => {
     const { unmount } = render(<NeedsYouLauncher />)
     expect(screen.getByTestId('needs-you-pill')).toHaveAccessibleName(
-      'Needs you: nothing waiting',
+      'Needs you: no agent questions or approvals waiting',
     )
     unmount()
     render(<NeedsYouLauncher variant="compact" />)
@@ -133,7 +139,7 @@ describe('NeedsYouLauncher', () => {
 })
 
 describe('NeedsYouDrawer', () => {
-  it('marks the recommendation and sends the pick with the note', () => {
+  it('marks the recommendation and sends the pick with the note', async () => {
     state.asks = [ask()]
     render(<NeedsYouDrawer open onOpenChange={() => {}} />)
     const card = screen.getByTestId('ask-card')
@@ -160,12 +166,18 @@ describe('NeedsYouDrawer', () => {
         reply: { kind: 'answer', option: 1, note: 'after the backup' },
       },
     ])
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Sent to “Disk merge”: Stop here, “after the backup”. See Answered',
+    )
   })
 
-  it('offers Mark done for a question without choices, and opens the session', () => {
+  it('replies Done for a question without choices, and opens the session', () => {
     state.asks = [ask({ options: [], recommended: null, command: null })]
     render(<NeedsYouDrawer open onOpenChange={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Mark done' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reply “Done”' }))
+    expect(
+      screen.getByRole('button', { name: 'Reply “Not now”' }),
+    ).toHaveAttribute('title', 'Tells the agent: Not now')
     expect(state.sent).toEqual([
       { id: 'abcdefabcdef', reply: { kind: 'answer', text: 'Done' } },
     ])
@@ -217,7 +229,7 @@ describe('NeedsYouDrawer', () => {
     expect(screen.getByText(/Couldn’t load questions/)).toBeInTheDocument()
     state.isError = false
     rerender(<NeedsYouDrawer open onOpenChange={() => {}} />)
-    expect(screen.getByText(/No questions waiting/)).toBeInTheDocument()
+    expect(screen.getByText(/No agent questions waiting/)).toBeInTheDocument()
   })
 
   it('shows what was answered and how it reaches the agent', () => {

@@ -194,7 +194,7 @@ export function SessionSwitcher({
                 className="mx-auto mt-2 h-1 w-9 flex-none rounded-full"
                 style={{ backgroundColor: 'var(--paper-veil)' }}
               />
-              <div className="flex flex-none flex-wrap items-center justify-end gap-x-2 gap-y-1 pt-3 pr-3 pb-1 pl-[18px]">
+              <div className="lantern-sheet-tools flex flex-none flex-wrap items-center justify-end gap-x-2 gap-y-1 pt-3 pr-3 pb-1 pl-[18px]">
                 {/* One line; the buttons wrap under it on a narrow phone. */}
                 <h2
                   className="mr-auto whitespace-nowrap"

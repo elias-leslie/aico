@@ -65,11 +65,11 @@ function subscribeDrawer(listener: () => void): () => void {
 const readDrawer = () => drawerState
 
 /** Where the launcher sits: the session bar on a desktop (`pill`), the
- * session list header where Health and Hosts share the row (`count`: the pill
- * with the count alone), its folded rail (`icon`), the phone's session bar
- * (`compact`: the count alone, nothing when nothing waits) or the session
- * sheet (`row`, always there). */
-type Variant = 'pill' | 'count' | 'icon' | 'compact' | 'row'
+ * session list's tool row beside Health and Hosts (`tool`: labelled), its
+ * folded rail (`icon`), the phone's session bar (`compact`: the count alone,
+ * nothing when nothing waits) or the session sheet (`row`: labelled, mounted
+ * only while the sheet is open). */
+type Variant = 'pill' | 'tool' | 'icon' | 'compact' | 'row'
 
 /** The "N need you" pill and its drawer: questions agents asked, Nightshift
  * approvals (links only) and what was answered. */
@@ -100,19 +100,21 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
     [me],
   )
 
+  // Agents' questions and Nightshift approvals only; Nightshift's checks
+  // count under Health.
   const summary =
     count === 0
-      ? 'Needs you: nothing waiting'
-      : `${[
-          waiting ? plural(waiting, 'question') : null,
+      ? 'Needs you: no agent questions or approvals waiting'
+      : `Needs you: ${[
+          waiting ? plural(waiting, 'agent question') : null,
           taps ? plural(taps, 'approval') : null,
         ]
           .filter(Boolean)
-          .join(' and ')} waiting for you`
+          .join(' and ')} waiting`
   const show = () => setDrawer({ open: true, focus: null, owner: me })
 
   let button: ReactNode
-  if (variant === 'row')
+  if (variant === 'row' || variant === 'tool')
     button = (
       <button
         type="button"
@@ -123,8 +125,13 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
         data-testid="needs-you-pill"
         data-count={count}
       >
-        <Inbox className="h-4 w-4" strokeWidth={1.7} />
-        {count > 0 ? `${count} need you` : 'Needs you'}
+        <Inbox className="h-4 w-4" strokeWidth={1.7} aria-hidden="true" />
+        Needs you
+        {count > 0 && (
+          <span aria-hidden="true" style={{ color: 'var(--lantern)' }}>
+            {count}
+          </span>
+        )}
       </button>
     )
   else if (variant === 'icon' || (variant !== 'compact' && count === 0))
@@ -199,6 +206,13 @@ export function NeedsYouDrawer({
     focused && focused.state !== 'open' ? 'answered' : 'asks',
   )
   const taps = approvals?.taps ?? []
+  /** What the last Send said, until the owner moves on. */
+  const [sent, setSent] = useState<string | null>(null)
+  useEffect(() => {
+    if (!sent) return
+    const timer = window.setTimeout(() => setSent(null), 8000)
+    return () => window.clearTimeout(timer)
+  }, [sent])
   const blockedSessions = new Set(
     waiting.filter((ask) => ask.blocking && ask.session).map((a) => a.session),
   ).size
@@ -244,9 +258,9 @@ export function NeedsYouDrawer({
             >
               Needs you
             </Dialog.Title>
-            <span className="text-[11px]" style={{ color: 'var(--mist)' }}>
+            <span className="text-[12px]" style={{ color: 'var(--mist)' }}>
               {[
-                plural(waiting.length, 'question'),
+                plural(waiting.length, 'agent question'),
                 blockedSessions
                   ? plural(blockedSessions, 'waiting session')
                   : null,
@@ -310,24 +324,47 @@ export function NeedsYouDrawer({
                 </button>
               </Note>
             ) : tab === 'asks' ? (
-              waiting.length === 0 ? (
-                <Note>
-                  No questions waiting. Agents’ questions show up here.
-                </Note>
-              ) : (
-                <ul className="flex flex-col gap-2.5" aria-label="Questions">
-                  {orderFocused(waiting, focus).map((ask) => (
-                    <AskCard
-                      key={ask.id}
-                      ask={ask}
-                      now={now}
-                      onOpenSession={
-                        isMobile ? () => onOpenChange(false) : undefined
-                      }
-                    />
-                  ))}
-                </ul>
-              )
+              <>
+                {sent && (
+                  <p
+                    role="status"
+                    className="mb-2.5 rounded-md px-2.5 py-2 text-[13px]"
+                    style={{
+                      backgroundColor: 'rgb(var(--lantern-rgb) / 0.12)',
+                    }}
+                  >
+                    {sent}{' '}
+                    <button
+                      type="button"
+                      className="underline"
+                      style={{ color: 'var(--lantern)' }}
+                      onClick={() => setTab('answered')}
+                    >
+                      See Answered
+                    </button>
+                  </p>
+                )}
+                {waiting.length === 0 ? (
+                  <Note>
+                    No agent questions waiting. Nightshift’s own checks are
+                    under Health.
+                  </Note>
+                ) : (
+                  <ul className="flex flex-col gap-2.5" aria-label="Questions">
+                    {orderFocused(waiting, focus).map((ask) => (
+                      <AskCard
+                        key={ask.id}
+                        ask={ask}
+                        now={now}
+                        onSent={setSent}
+                        onOpenSession={
+                          isMobile ? () => onOpenChange(false) : undefined
+                        }
+                      />
+                    ))}
+                  </ul>
+                )}
+              </>
             ) : answered.length === 0 ? (
               <Note>Nothing answered in the last day.</Note>
             ) : (
@@ -398,7 +435,7 @@ function useAsker(ask: OwnerAsk): { name: string; sessionId: string | null } {
 function Meta({ children }: { children: ReactNode }) {
   return (
     <div
-      className="mb-1.5 flex min-w-0 items-center gap-1.5 text-[11px]"
+      className="mb-1.5 flex min-w-0 items-center gap-1.5 text-[12px]"
       style={{ color: 'var(--mist)' }}
     >
       {children}
@@ -435,10 +472,13 @@ function OpenSession({
 function AskCard({
   ask,
   now,
+  onSent,
   onOpenSession,
 }: {
   ask: OwnerAsk
   now: number
+  /** Called with what was said once the answer is saved. */
+  onSent?: (text: string) => void
   onOpenSession?: () => void
 }) {
   const asker = useAsker(ask)
@@ -446,7 +486,18 @@ function AskCard({
   const [choice, setChoice] = useState<number | null>(null)
   const [note, setNote] = useState('')
   const hasOptions = ask.options.length > 0
-  const send = (answer: AskReply) => reply.mutate({ id: ask.id, reply: answer })
+  // The card leaves the list once the answer is saved, so the drawer says it.
+  const send = (answer: AskReply, said: string) =>
+    reply
+      .mutateAsync({ id: ask.id, reply: answer })
+      .then(({ ask: saved }) =>
+        onSent?.(
+          `${saved.delivery === 'wake' ? 'Sent to' : 'Saved for'} “${asker.name}”: ${said}.`,
+        ),
+      )
+      .catch(() => {
+        // reply.error shows under the card.
+      })
   const noteText = note.trim()
   const canSend = !reply.isPending && (choice !== null || noteText.length > 0)
 
@@ -471,7 +522,7 @@ function AskCard({
       </p>
       {ask.body && (
         <p
-          className="mb-2 text-[12.5px] whitespace-pre-wrap"
+          className="mb-2 text-[13.5px] whitespace-pre-wrap"
           style={{
             color: 'rgb(var(--bone-rgb) / 0.72)',
             overflowWrap: 'anywhere',
@@ -509,7 +560,7 @@ function AskCard({
               data-recommended={ask.recommended === index ? 'true' : undefined}
               onClick={() => setChoice(choice === index ? null : index)}
             >
-              <b aria-hidden="true">{String.fromCharCode(65 + index)}</b>
+              <b aria-hidden="true">{index + 1}</b>
               <span className="min-w-0 flex-1">{option}</span>
               {ask.recommended === index && <em>recommended</em>}
             </button>
@@ -521,14 +572,18 @@ function AskCard({
         onSubmit={(event) => {
           event.preventDefault()
           if (!canSend) return
-          send({
-            kind: 'answer',
-            ...(choice !== null ? { option: choice } : {}),
-            ...(noteText ? { note: noteText } : {}),
-          })
+          const picked = choice !== null ? ask.options[choice] : undefined
+          send(
+            {
+              kind: 'answer',
+              ...(choice !== null ? { option: choice } : {}),
+              ...(noteText ? { note: noteText } : {}),
+            },
+            [picked, noteText && `“${noteText}”`].filter(Boolean).join(', '),
+          )
         }}
       >
-        <label className="lantern-field h-[30px] min-w-0 flex-1 px-2">
+        <label className="lantern-field lantern-ask-note min-w-0 flex-1 px-2">
           <span className="sr-only">
             {hasOptions ? 'Note to the agent' : 'Reply to the agent'}
           </span>
@@ -539,7 +594,7 @@ function AskCard({
               hasOptions ? 'Optional note to the agent…' : 'Reply to the agent…'
             }
             maxLength={1000}
-            className="text-[12.5px]"
+            className="text-[13px]"
           />
         </label>
         <button
@@ -556,18 +611,20 @@ function AskCard({
             type="button"
             className="lantern-btn small"
             disabled={reply.isPending}
-            onClick={() => send({ kind: 'answer', text: 'Done' })}
+            onClick={() => send({ kind: 'answer', text: 'Done' }, 'Done')}
+            title="Tells the agent: Done"
           >
-            Mark done
+            Reply “Done”
           </button>
         )}
         <button
           type="button"
           className="lantern-btn ghost small"
           disabled={reply.isPending}
-          onClick={() => send({ kind: 'answer', text: 'Not now' })}
+          onClick={() => send({ kind: 'answer', text: 'Not now' }, 'Not now')}
+          title="Tells the agent: Not now"
         >
-          Not now
+          Reply “Not now”
         </button>
         <OpenSession sessionId={asker.sessionId} onOpen={onOpenSession} />
       </div>
@@ -639,7 +696,7 @@ function AnsweredCard({ ask, now }: { ask: OwnerAsk; now: number }) {
       <p className="mb-1 font-semibold" style={{ overflowWrap: 'anywhere' }}>
         {ask.question}
       </p>
-      <p className="text-[12.5px]" style={{ overflowWrap: 'anywhere' }}>
+      <p className="text-[13.5px]" style={{ overflowWrap: 'anywhere' }}>
         {ask.answer ? (
           <>
             You answered <b>{ask.answer}</b>
@@ -649,7 +706,7 @@ function AnsweredCard({ ask, now }: { ask: OwnerAsk; now: number }) {
         )}
         {ask.note ? `: “${ask.note}”` : ''}
       </p>
-      <p className="mt-1 text-[11.5px]" style={{ color: 'var(--mist)' }}>
+      <p className="mt-1 text-[12.5px]" style={{ color: 'var(--mist)' }}>
         {deliveryText(ask)}
       </p>
       {ask.state === 'answered' && (
@@ -693,7 +750,7 @@ function ApprovalCard({ tap }: { tap: Approval }) {
         href={tap.url}
         target="_blank"
         rel="noreferrer noopener"
-        className="text-[12.5px]"
+        className="text-[13.5px]"
         style={{ color: 'var(--lantern)' }}
       >
         Approve in Nightshift →

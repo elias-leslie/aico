@@ -126,9 +126,6 @@ export function SessionSidebar({
         >
           {heading}
         </h2>
-        <NeedsYouLauncher variant="count" />
-        <HealthLauncher variant="icon" />
-        <HostsLauncher icon />
         {onCollapsedChange && (
           <button
             type="button"
@@ -142,6 +139,12 @@ export function SessionSidebar({
         )}
         {newButton}
       </header>
+      {/* Labelled, under the heading, so the heading keeps its width. */}
+      <div className="flex flex-none flex-wrap items-center gap-1 px-1.5 pb-1.5">
+        <NeedsYouLauncher variant="tool" />
+        <HealthLauncher variant="row" />
+        <HostsLauncher />
+      </div>
       <nav
         aria-label="Sessions"
         data-testid="session-list"
