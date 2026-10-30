@@ -20,7 +20,9 @@ interface PaneStatusBadgeProps {
 }
 
 /** The session's connection state in the session bar. After a dropped
- * connection the terminal area offers Reconnect. */
+ * connection the terminal area offers Reconnect. On a narrow bar the word
+ * truncates down to the dot once the title and host chip are at their
+ * minimum, rather than running over them. */
 export function PaneStatusBadge({
   status,
   compact = false,
@@ -33,17 +35,19 @@ export function PaneStatusBadge({
     <span
       role="status"
       data-testid="connection-status"
-      className="inline-flex flex-none items-center gap-[5px] whitespace-nowrap text-xs"
+      className="inline-flex min-w-1.5 items-center gap-[5px] overflow-hidden whitespace-nowrap text-xs"
       style={{ color: 'var(--mist)' }}
       title={`Connection: ${meta.label}`}
       aria-label={`Connection: ${meta.label}`}
     >
       <span
         aria-hidden="true"
-        className="h-1.5 w-1.5 rounded-full"
+        className="h-1.5 w-1.5 flex-none rounded-full"
         style={{ backgroundColor: meta.dot }}
       />
-      {!(compact && status === 'connected') && meta.label}
+      {!(compact && status === 'connected') && (
+        <span className="truncate">{meta.label}</span>
+      )}
     </span>
   )
 }

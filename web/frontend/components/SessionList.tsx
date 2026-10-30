@@ -298,7 +298,9 @@ export function SessionList({
               <CoordinatorBadge badge={slot?.badge} ownLine />
             )}
             <HostBadge host={slot?.host} state={slot?.hostState} />
-            <span className="truncate">{meta}</span>
+            <span className="truncate" style={{ flexShrink: 100 }}>
+              {meta}
+            </span>
             <CheckInBadge checkIns={checkIns} />
           </span>
         </button>

@@ -129,7 +129,11 @@ export function SessionSwitcher({
           <span
             data-testid="session-state"
             className="min-w-[3ch] truncate whitespace-nowrap"
-            style={{ color: 'var(--mist)', font: '400 12px/1 var(--font-ui)' }}
+            style={{
+              flexShrink: 100,
+              color: 'var(--mist)',
+              font: '400 12px/1 var(--font-ui)',
+            }}
           >
             {currentState}
           </span>

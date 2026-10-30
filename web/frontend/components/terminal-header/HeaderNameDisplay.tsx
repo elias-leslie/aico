@@ -121,7 +121,11 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
       <HostBadge host={slot.host} state={slot.hostState} />
       <span
         className="flex min-w-0 max-w-[320px] items-center overflow-hidden px-1.5 py-0.5"
-        style={{ color: textColor, font: '450 15px/1.2 var(--font-display)' }}
+        style={{
+          flexShrink: 100,
+          color: textColor,
+          font: '450 15px/1.2 var(--font-display)',
+        }}
         title={name}
       >
         <SessionTitle name={name} task={slot.task} />
