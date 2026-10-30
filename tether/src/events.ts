@@ -20,6 +20,7 @@ export type EventType =
   | 'gui.connected'
   | 'gui.disconnected'
   | 'show.requested'
+  | 'asks.changed'
   | 'wakes.changed'
   | 'runs.changed'
   | 'peer.state'

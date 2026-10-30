@@ -8,6 +8,7 @@ import {
   AGENT_HUB_QUEUE_THINKING_SQL,
   AGENT_HUB_SQL,
   AGENT_TOOLS_TABLE_SQL,
+  ASKS_SQL,
   COORDINATOR_SQL,
   INDEXES_SQL,
   PARENT_SQL,
@@ -324,6 +325,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(16, now)
+      }
+      if (current < 17) {
+        // v17: owner asks.
+        this.db.exec(ASKS_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(17, now)
       }
     })
   }

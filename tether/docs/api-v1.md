@@ -423,6 +423,59 @@ Controls, each `{ok: true}` or an error; Tether controls only a run it lists (`4
 
 Following a run: each look reads one page of Agent Hub's newest runs and keeps those launched by a live session; a session Tether has not seen before is also asked for by its id once, so an older run of it is found, and a run that has dropped off the page is followed by its id while it is going. Looks come every `TETHER_AGENT_HUB_RUNS_POLL_MS` (default 3000) while a run is going or just after a session's agent changed state, every `TETHER_AGENT_HUB_RUNS_IDLE_MS` (30000) otherwise, and back off with jitter up to `TETHER_AGENT_HUB_RUNS_BACKOFF_MAX_MS` (5 minutes) while Agent Hub fails. Without an Agent Hub client id no call is made and runs read `unavailable` with that reason. `TETHER_AGENT_HUB_RUNS_ENDED_MS` (an ended run stays listed this long after its last activity unless dismissed; default 30 minutes), `TETHER_AGENT_HUB_RUNS_LIMIT` (the page size, 100) and `TETHER_AGENT_HUB_RUNS_CONCURRENCY` (new sessions asked at once, 4). The run page address is `TETHER_AGENT_HUB_FRONTEND_URL`, else `AGENT_HUB_FRONTEND_URL` (as `st workflow` reads it), else the API host on port 3003. Plan changes (follow-up) are not an Aico control: the coordinator makes them with `st workflow add-step`, `revise` and `remove-step`.
 
+## Asks *(post-cutover)*
+
+An ask is a question an agent puts to the owner once, in Aico's Needs you
+drawer, with the answer coming back to the agent. Agents use `tether ask`
+(below), so any harness can ask through its shell.
+
+| Method and route | Body | Result |
+| --- | --- | --- |
+| `POST /v1/asks` | `{session?, requester?, question, options?, recommended?, body?, command?, share?, blocking?}` | `201` a new ask, or `200` the asker's existing ask with the same question: an open one takes the new fields, an answered one comes back unchanged so the asker reads the answer. |
+| `GET /v1/asks?session=&requester=&state=open,answered` | — | `200 {items}`: up to 200, most recently changed first. |
+| `GET /v1/asks/:id` | — | `200` the ask. |
+| `POST /v1/asks/:id/answer` | `{option?, text?, note?}`: a choice's index or a one-line text (not both), and/or a note | `200` the ask, `answered`. `409 ask_closed` once done or withdrawn. Answering again replaces the answer. |
+| `POST /v1/asks/:id/done` | — | `200`, state `done` (the agent acted on it). |
+| `POST /v1/asks/:id/withdraw` | — | `200`, state `withdrawn` (the question no longer applies). |
+
+The ask: `{id, session, requester, question, options, recommended, body,
+command, share, blocking, state, answer, note, delivery, createdAt, updatedAt,
+answeredAt}` (times in ms). `session` is the asking session's ID (the pane's
+`AICO_WIDGET_ID`); without one, `requester` (one line, at most 60 characters)
+names the asker. `question` is one line of at most 200 characters that stands
+alone; `options` up to 5 one-line choices of at most 100 characters,
+`recommended` the index of one. `body` (4000) and `command` (2000) may span
+lines. `share` is a `tether share` ID. `blocking` says the agent stopped and
+waits: the owner's app marks the session as needing them and pushes once.
+`state` is `open`, `answered`, `done` or `withdrawn`. One ask per asker and
+question while it is open or answered (question compared without case or
+extra spaces). Done and withdrawn asks go after `TETHER_SHARE_RETENTION_DAYS`.
+
+**The answer reaches the agent.** On an answer, Tether adds a wake that is due
+now on the asking session ([Wakes](#wakes-post-cutover): delivered when the
+agent is idle, its input line empty and the owner quiet), whose note carries
+the question and the answer within `noteMaxChars` and ends with
+`tether ask get <id>` and `tether ask done <id>`. `delivery` is then `wake`.
+A session Tether cannot wake (it has ended, it is a shell, or its agent has no
+state reader: Antigravity today) gets `delivery: "pull"`: the agent reads the
+answer with `tether ask get` or `tether ask list --mine`. Claude Code, Codex,
+Pi and Agent Hub sessions are woken. Done, withdraw and a new answer cancel a
+check-in that has not gone out yet.
+
+**Session descriptor.** `asks`: the session's open asks, oldest first,
+`[{id, question, blocking, createdAt}]`. A blocking one marks the session as
+needing the owner in the apps, whatever state its agent reports.
+
+**Events.** `asks.changed` `{ask, created}` on every create, update, answer
+and close. Not relayed from remote hosts; asks stay on the asking session's
+own Tether.
+
+`tether ask create "<question>" [--option T]... [--recommend N] [--blocking]
+[--body T | --body-file P] [--command C] [--share ID] [--session ID | --from L]`,
+`tether ask get|done|withdraw <id>` and `tether ask list [--mine] [--all]`
+(`tether ask --help`). There is no blocking wait: the answer arrives as a
+message.
+
 ## Events
 
 `GET /v1/events?since=<seq>&bootId=<id>` streams NDJSON (`application/x-ndjson`), one event per line:
@@ -447,6 +500,7 @@ Event types:
 - `gui.connected`, `gui.disconnected`
 - `wakes.changed` (`{sessionId}`; null for a kept wake of an ended session)
 - `runs.changed` (`{}`; the listed workflow runs changed, re-read `GET /v1/runs`)
+- `asks.changed` (`{ask, created}`): see [Asks](#asks-post-cutover)
 - `peer.state` (8, `{host, state, since}`) and `peer.resync` (8, `{host}`): see [Remote hosts](#remote-hosts)
 
 A remote host's relayed events carry `data.host` (and `host` on `data.session`); this computer's own events have no `data.host`.

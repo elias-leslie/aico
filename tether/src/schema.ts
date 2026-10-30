@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 16
+export const SCHEMA_VERSION = 17
 
 /** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -313,4 +313,42 @@ export const AGENT_HUB_SQL = `
     DELETE FROM agent_hub_queue WHERE session_id = old.id;
     DELETE FROM agent_hub_sessions WHERE session_id = old.id;
   END;
+`
+
+/**
+ * v17: owner asks (src/asks.ts). A question an agent puts to the owner, with
+ * optional choices, and the owner's answer. `session_id` is the asking session
+ * (no foreign key: an ask outlives its session, read with `tether ask get`);
+ * without one, `requester` names who asked. One open ask per asker and
+ * question (`question_hash`). `wake_id` is the check-in that carries the
+ * answer to the session until it is delivered.
+ */
+export const ASKS_SQL = `
+  CREATE TABLE IF NOT EXISTS asks (
+    id            TEXT PRIMARY KEY
+                    CHECK(length(id) = 12 AND id NOT GLOB '*[^0-9a-f]*'),
+    session_id    TEXT
+                    CHECK(session_id IS NULL OR (length(session_id) = 8 AND session_id NOT GLOB '*[^0-9a-f]*')),
+    requester     TEXT CHECK(requester IS NULL OR length(requester) BETWEEN 1 AND 60),
+    question_hash TEXT NOT NULL,
+    question      TEXT NOT NULL CHECK(length(question) BETWEEN 1 AND 200),
+    options       TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(options)),
+    recommended   INTEGER,
+    body          TEXT,
+    command       TEXT,
+    share_id      TEXT,
+    blocking      INTEGER NOT NULL DEFAULT 0 CHECK(blocking IN (0, 1)),
+    state         TEXT NOT NULL DEFAULT 'open'
+                    CHECK(state IN ('open', 'answered', 'done', 'withdrawn')),
+    answer        TEXT,
+    note          TEXT,
+    wake_id       TEXT,
+    delivery      TEXT CHECK(delivery IS NULL OR delivery IN ('wake', 'pull')),
+    created_at    INTEGER NOT NULL CHECK(created_at >= 0),
+    updated_at    INTEGER NOT NULL CHECK(updated_at >= 0),
+    answered_at   INTEGER,
+    CHECK(session_id IS NOT NULL OR requester IS NOT NULL)
+  );
+  CREATE INDEX IF NOT EXISTS asks_state ON asks(state, updated_at);
+  CREATE INDEX IF NOT EXISTS asks_session ON asks(session_id);
 `

@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { hostname } from 'node:os'
 import { resolveAgentHubConfig } from './agent-hub/config'
 import type { RunTracker } from './agent-hub/runs'
+import { type AskDelivery, registerAskRoutes } from './asks'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
 import { registerFileRoutes } from './files/api'
@@ -51,6 +52,8 @@ export interface ServerContext {
   /** Agent-pane memory policy (pane cap, runaway job kills). */
   memoryPolicy?: MemoryPolicyService
   show?: ShowConfig
+  /** How an owner's answer reaches the asking session; absent: asks are pull-only. */
+  asks?: AskDelivery
   /** Workflow runs launched by sessions (`/v1/runs`); absent in scratch instances. */
   runs?: RunTracker
   /** Reads a step's attempt session for the read-only chat view. */
@@ -412,7 +415,15 @@ export function buildRouter(context: ServerContext): Router {
   })
   registerLifecycleRoutes(router, context)
   if (context.runs) registerRunRoutes(router, context.runs, context.stepChats, context.hub)
-  registerShowRoute(router, events, context.store, context.show ?? resolveShowConfig({}))
+  const show = context.show ?? resolveShowConfig({})
+  registerShowRoute(router, events, context.store, show)
+  registerAskRoutes(router, {
+    db: context.store.db,
+    events,
+    show,
+    delivery: context.asks,
+    now: context.now,
+  })
   registerFileRoutes(router, (id) => {
     const row = getWidget(id)
     return row ? row.projectRoot : undefined

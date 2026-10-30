@@ -11,6 +11,7 @@ import { registerChatRoutes } from './agent-hub/chat-api'
 import { resolveDefaultChatAgent } from './agent-hub/config'
 import { type AgentHubRuntime, HubError } from './agent-hub/runtime'
 import type { AgentStateTracker, HookReport } from './agent-state'
+import { sessionAsks } from './asks'
 import type { TetherPaths } from './config'
 import type { EventBus } from './events'
 import type { GuiChannel, GuiMutationCommand } from './gui-channel'
@@ -266,6 +267,7 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
     instructions: sessionInstructions(row.id),
     ...agentStateOf(row.id),
     wakes: sessionWakes(row.id),
+    asks: sessionAsks(row.id),
     createdAt: row.createdAt,
     // An Agent Hub session has no pane (its `tmux` fields stay null) and says
     // which Agent Hub session it is; a tmux session carries neither field.

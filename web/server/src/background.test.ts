@@ -1,5 +1,6 @@
 import { followEvents, TetherUnavailable } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Asks } from './asks'
 import { Background, reconcileLinks } from './background'
 import { WebStore } from './db'
 import { Shows } from './shows'
@@ -31,6 +32,14 @@ function background(trustShows = true, forward?: (event: unknown) => void) {
     tether: tether.client,
     store,
     shows,
+    asks: new Asks({
+      tether: tether.client,
+      publicHost: null,
+      run: async (argv) => {
+        pushes.push(argv)
+        return ''
+      },
+    }),
     trustShows,
     uploads: { dir: '/nonexistent/uploads', remoteDir: '~/uploads', maxBytes: 1, maxAgeMs: 1 },
     maintenance: { enabled: false, intervalMs: 1000, emptyPaneDays: 7 },
@@ -147,6 +156,33 @@ describe('events', () => {
     expect(pushes).toEqual([])
     await background(true).event(event('show.requested', share))
     expect(pushes).toHaveLength(1)
+  })
+
+  it("pushes a new blocking ask only from the owner's default Tether", async () => {
+    const ask = {
+      id: 'ab12cd34ef56',
+      session: null,
+      requester: 'nightly',
+      question: 'Run the cleanup?',
+      options: [],
+      recommended: null,
+      body: null,
+      command: null,
+      share: null,
+      blocking: true,
+      state: 'open',
+      answer: null,
+      note: null,
+      delivery: null,
+      createdAt: 1,
+      updatedAt: 1,
+      answeredAt: null,
+    }
+    await background(false).event(event('asks.changed', { ask, created: true }))
+    expect(pushes).toEqual([])
+    await background(true).event(event('asks.changed', { ask, created: true }))
+    expect(pushes).toHaveLength(1)
+    expect(pushes[0]?.at(-1)).toBe('“nightly” has a question for you. Open Aico to answer it.')
   })
 })
 

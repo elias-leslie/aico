@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { isAbsolute, resolve } from 'node:path'
+import { ASK_USAGE, runAsk } from './ask-cli'
 import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { startDaemon } from './daemon'
@@ -37,6 +38,9 @@ Commands:
   share --url <url> [--title T]
                                 the session is this pane's own; --session ID
                                 overrides it
+  ask create|get|list|done|withdraw
+                                put a question to the owner in Aico and read
+                                the answer (tether ask --help)
   import-aico --from PATH [--apply]
                                 copy a pre-Tether Aico catalog (an archived
                                 aico.db; dry-run unless --apply; opened
@@ -480,6 +484,12 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         if (sub === 'show' && rest[0])
           return api(io, paths, json, 'GET', `/v1/roots/${encodeURIComponent(rest[0])}`)
         break
+      case 'ask':
+        if (sub === undefined || sub === '--help' || sub === 'help') {
+          io.out(ASK_USAGE)
+          return sub === undefined ? 2 : 0
+        }
+        return runAsk(io, paths, json, parsed.args.slice(1), process.env, process.cwd())
       case 'share': {
         const body = shareBody(parsed.args.slice(1), process.env, process.cwd())
         if (typeof body === 'string') {

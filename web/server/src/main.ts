@@ -4,10 +4,12 @@
 
 import { TetherClient } from 'tether/client'
 import { buildApi } from './api'
+import { Asks } from './asks'
 import { Background } from './background'
 import { CLI_COMMANDS, runCli } from './cli'
 import { HISTORY_LINES, loadConfig } from './config'
 import { WebStore } from './db'
+import { registerNightshiftRoutes } from './nightshift'
 import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
@@ -24,18 +26,22 @@ function serve(): void {
     touched: (id) => store.touchLink(id),
   })
   const shows = new Shows({ tether, publicHost: config.publicHost })
+  const asks = new Asks({ tether, publicHost: config.publicHost })
   const background = new Background({
     tether,
     store,
     shows,
+    asks,
     trustShows: config.trustShows,
     uploads: config.uploads,
     maintenance: config.maintenance,
     forward: (event) => terminals.event(event),
   })
+  const api = buildApi({ tether, store, config, uploads: config.uploads, shows, asks })
+  registerNightshiftRoutes(api, config)
   const server = createWebServer(
     config,
-    buildApi({ tether, store, config, uploads: config.uploads, shows }),
+    api,
     terminals,
     createStaticSite(config.staticDir, {
       agentHubUrl: config.agentHubUrl,

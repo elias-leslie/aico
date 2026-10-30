@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import { TetherError } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildApi } from './api'
+import { Asks } from './asks'
 import { MAX_CHAT_STREAMS } from './chat'
 import { WebStore } from './db'
 import { createWebServer } from './server'
@@ -104,6 +105,7 @@ beforeEach(async () => {
       maxAgeMs: 1000,
     },
     shows: new Shows({ tether: tether.client, publicHost: null, run: async () => {} }),
+    asks: new Asks({ tether: tether.client, publicHost: null, run: async () => '' }),
   })
   const hub = new TerminalHub({ tether: tether.client, historyLines: 100, touched: () => {} })
   server = createWebServer(guard, api, hub)

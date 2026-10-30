@@ -13,6 +13,7 @@ import {
 import { RunTracker, sessionLaunchers, type ToldPause } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
+import type { AskDelivery } from './asks'
 import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
 import { nodeProcFs } from './continuity'
 import { DeadShells } from './dead-shells'
@@ -218,6 +219,7 @@ export async function startDaemon(
     continuity: undefined as Continuity | undefined,
     recovery: undefined as Recovery | undefined,
     wakes: undefined as WakeService | undefined,
+    asks: undefined as AskDelivery | undefined,
     runs: undefined as RunTracker | undefined,
     stepChats: undefined as StepChatSource | undefined,
     hub: undefined as Hub | undefined,
@@ -266,6 +268,28 @@ export async function startDaemon(
   const wakes = new WakeService(context)
   context.wakes = wakes
   bindWakeStore(wakes.store)
+  // An owner's answer to an ask goes to the asking session as a check-in that
+  // is due now; a session Tether cannot wake reads it with `tether ask get`.
+  context.asks = {
+    wake: (sessionId, text) => {
+      const row = getWidget(sessionId)
+      if (!row || !wakes.supports(row)) return null
+      const note = cleanNote(text, wakes.policy().noteMaxChars)
+      if (note === null) return null
+      const now = Date.now()
+      const wake = wakes.store.add({ sessionId: row.id, dueAt: now, note, createdBy: 'owner', now })
+      wakes.changed(row.id)
+      return wake.id
+    },
+    cancel: (wakeId) => {
+      const wake = wakes.store.get(wakeId)
+      if (wake && wakes.store.remove(wakeId)) wakes.changed(wake.sessionId)
+    },
+    noteMaxChars: () => wakes.policy().noteMaxChars,
+    sessionChanged: (sessionId) => {
+      if (getWidget(sessionId)) notifySessionChanged(sessionId, { force: true })
+    },
+  }
   // One Agent Hub client for the session kind and for the workflow runs.
   let hubApi: HubApi | null = null
   let hubConfig: AgentHubConfig | null = null

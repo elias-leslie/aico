@@ -44,6 +44,8 @@ export interface WebSession {
   is_root: boolean
   /** Pending check-ins, oldest first; `time` reads `5:30 PM` (weekday when not today). */
   check_ins: { id: string; due_at: number; time: string }[]
+  /** Open owner asks from this session; a blocking one means it needs the owner. */
+  asks: { id: string; question: string; blocking: boolean; created_at: number }[]
   is_legacy: false
   source: 'tether'
   origin: string | null
@@ -134,6 +136,12 @@ export function fromTether(
       id: wake.id,
       due_at: wake.dueAt,
       time: wakeClock(wake.dueAt),
+    })),
+    asks: (descriptor.asks ?? []).map((ask) => ({
+      id: ask.id,
+      question: ask.question,
+      blocking: ask.blocking === true,
+      created_at: ask.createdAt,
     })),
     is_legacy: false,
     source: 'tether',

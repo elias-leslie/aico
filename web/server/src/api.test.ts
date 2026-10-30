@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import { TetherError, wakeChoices } from 'tether/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApi } from './api'
+import { Asks } from './asks'
 import { WebStore } from './db'
 import { createWebServer } from './server'
 import { Shows } from './shows'
@@ -56,6 +57,7 @@ beforeEach(async () => {
       publicHost: null,
       run: async () => {},
     }),
+    asks: new Asks({ tether: tether.client, publicHost: null, run: async () => '' }),
   })
   const hub = new TerminalHub({ tether: tether.client, historyLines: 100, touched: () => {} })
   server = createWebServer(guard, api, hub)

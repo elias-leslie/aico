@@ -64,6 +64,7 @@ describe('Store schema', () => {
       'agent_hub_queue',
       'agent_hub_sessions',
       'agent_tools',
+      'asks',
       'retired_session_ids',
       'root_requests',
       'schema_version',

@@ -83,6 +83,9 @@ export interface SessionDescriptor {
   badge?: { kind: 'coordinator' | 'child'; text: string; color: string } | null
   /** Pending wakes (scheduled check-ins), oldest first; absent from an older Tether. */
   wakes?: SessionWake[]
+  /** Open owner asks from this session, oldest first (docs/api-v1.md "Asks"); a
+   * blocking one means the session needs the owner. Absent from an older Tether. */
+  asks?: SessionAsk[]
   /** Present on a 202 create: why the session is not running yet. */
   failure?: { code: string; reason?: string } | null
   /** `agent-hub` for a chat on an Agent Hub agent (no pane); absent on a tmux session. */
@@ -159,6 +162,13 @@ export interface AgentHubInfo {
 }
 
 /** A session's pending wake as its descriptor carries it. */
+export interface SessionAsk {
+  id: string
+  question: string
+  blocking: boolean
+  createdAt: number
+}
+
 export interface SessionWake {
   id: string
   dueAt: number

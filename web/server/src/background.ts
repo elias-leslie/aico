@@ -14,6 +14,7 @@ import {
   type TetherEvent,
   TetherUnavailable,
 } from 'tether/client'
+import type { Asks } from './asks'
 import type { MaintenanceConfig, UploadConfig } from './config'
 import type { WebStore } from './db'
 import type { Shows } from './shows'
@@ -59,7 +60,9 @@ export interface BackgroundDeps {
   tether: TetherClient
   store: WebStore
   shows: Shows
-  /** Agent shares are taken only from the owner's tether@default. */
+  /** Absent: asks push nothing (tests, older wiring). */
+  asks?: Asks
+  /** Agent shares and asks are taken only from the owner's tether@default. */
   trustShows: boolean
   uploads: UploadConfig
   maintenance: MaintenanceConfig
@@ -122,6 +125,8 @@ export class Background {
     const id = typeof data.id === 'string' ? data.id : null
     if (event.type === 'show.requested') {
       if (this.deps.trustShows) await this.deps.shows.receive(data)
+    } else if (event.type === 'asks.changed') {
+      if (this.deps.trustShows) await this.deps.asks?.receive(data)
     } else if (event.type === 'session.ended') {
       if (id && store.unlink(id))
         console.log(`[aico-web] view link dropped session=${id} reason=session.ended`)
