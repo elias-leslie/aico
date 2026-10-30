@@ -69,9 +69,8 @@ export function sourceLabel(source: string): string {
 export function toolDetail(tool: Tool): string {
   return tool.credentials
     .map((c) => {
-      const where = c.source.startsWith('host:') ? c.source.slice(5) : sourceLabel(c.source)
       const state = toolSummary({ ...tool, state: c.state }).label
-      return `${c.name}: ${state} · ${where}${c.detail ? ` (${c.detail})` : ''}`
+      return `${c.name}: ${state} · ${sourceLabel(c.source)}${c.detail ? ` (${c.detail})` : ''}`
     })
     .join('\n')
 }

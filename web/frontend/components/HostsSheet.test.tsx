@@ -268,7 +268,8 @@ describe('HostsSheet', () => {
     )
     const codex = screen.getByTestId('login-codex')
     expect(codex).toHaveTextContent('Expired · This host')
-    expect(codex).toHaveTextContent('/home/agent/.codex/auth.json')
+    // The file the login lives in is never shown, only where: This host.
+    expect(codex).not.toHaveTextContent('/home/agent/.codex/auth.json')
     expect(codex).toHaveTextContent('token expired')
     expect(screen.getByTestId('login-st')).toHaveTextContent(
       'Needs sign-in · Agent Hub',
@@ -326,13 +327,13 @@ describe('HostsSheet', () => {
     renderSheet()
     const codex = await screen.findByTestId('login-codex')
     expect(codex).toHaveTextContent('Signed in · This host')
-    // Signed in: no Sign in up front, and the path is folded away.
+    // Signed in: no Sign in up front; the credentials fold into Details.
     expect(
       screen.queryByRole('button', { name: 'Sign in to Codex on agent-work' }),
     ).toBeNull()
     const codexDetails = codex.querySelector('details')
     expect(codexDetails).not.toHaveAttribute('open')
-    expect(codexDetails).toHaveTextContent('/home/agent/.codex/auth.json')
+    expect(codexDetails).toHaveTextContent('Signed in · This host')
     expect(
       within(codex).getByRole('button', {
         name: 'Sign in to Codex on agent-work again',
@@ -349,7 +350,8 @@ describe('HostsSheet', () => {
     const piDetails = pi.querySelector('details')
     expect(piDetails).toHaveTextContent('minimax · Needs sign-in · Agent Hub')
     expect(piDetails).toHaveTextContent('opencode-go · Signed in · Agent Hub')
-    expect(piDetails).toHaveTextContent('/home/agent/.pi/agent/auth.json')
+    expect(piDetails).toHaveTextContent('oauth · Needs sign-in · This host')
+    expect(piDetails).not.toHaveTextContent('auth.json')
   })
 
   it('says sign-in could not be checked and retries', async () => {

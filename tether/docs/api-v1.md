@@ -309,7 +309,7 @@ A coordinator is a session that launches and steers other sessions (lanes). The 
 
 Tether names every session once, and the desktop, the web app and `st` show these fields as they are, without composing their own.
 
-- `displayTitle` is `Project — Task`: the project's name from the project list (Aico's Personal Workspace root is "Personal Workspace") and the session's `name`. Either one alone when the other is missing or the task only repeats the project; `Session <n>` when both are missing.
+- `displayTitle` is `Project — Task`: the project's name from the project list (Aico's Personal Workspace root is "Personal Workspace") and the session's `name` (an unnamed root uses its `--work-role-name`, else its request ID). Either one alone when the other is missing or the task only repeats the project; `Session <n>` when both are missing.
 - `badge` is `{kind, text, color}` or null. A coordinator has `{kind: "coordinator", text: "Coordinator"}`. A session it launched has `{kind: "child", text: "↳ <coordinator>"}`, naming the root coordinator by its task, else its project, else "Coordinator" (ended). `color` is `coordinatorColor`, or `#6fa8ff` for sessions from before colours.
 - A rename, a project switch or a changed project name publishes `session.updated` for the session. A renamed coordinator also publishes its lanes, whose badge text changed. Tether rereads project names every five minutes.
 

@@ -5,7 +5,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Project } from '../projects'
-import { getWidget, type WidgetRow } from './catalog'
+import { getWidget, rootRequestForWidget, type WidgetRow } from './catalog'
 import { instructionsLabel, sessionInstructions } from './tui/instructions'
 
 export const PERSONAL_WORKSPACE_NAME = 'Personal Workspace'
@@ -46,11 +46,18 @@ export function projectName(row: WidgetRow): string | null {
   return namesByRoot.get(row.projectRoot) ?? null
 }
 
-/** The session's task: its name, unless that only repeats the project. */
+/** The session's task: its name, unless that only repeats the project. An
+ * unnamed root goes by its work-role name, else its request ID, so roots a
+ * coordinator started are told apart before anyone titles them. */
 function task(row: WidgetRow, project: string | null): string | null {
-  const name = row.name?.trim()
+  const name = row.name?.trim() || rootName(row.id)
   if (!name || (project && name.toLowerCase() === project.toLowerCase())) return null
   return name
+}
+
+function rootName(id: string): string | null {
+  const root = rootRequestForWidget(id)
+  return root ? root.workRoleDisplayName?.trim() || root.requestId : null
 }
 
 /** `Project — Task`; either alone when the other is missing; else `Session <n>`.

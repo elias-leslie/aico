@@ -79,7 +79,7 @@ describe('tool sign-in', () => {
       ] as never[]),
     )
     expect(detail).toBe(
-      'login: Needs sign-in · /home/u/.codex/auth.json\nkey: Unknown · Agent Hub (Agent Hub unreachable)',
+      'login: Needs sign-in · This host\nkey: Unknown · Agent Hub (Agent Hub unreachable)',
     )
   })
 })

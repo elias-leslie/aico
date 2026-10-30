@@ -112,11 +112,10 @@ function Chip({
   )
 }
 
-function sourceLabel(source: string): { label: string; detail: string } {
-  if (source === 'agent-hub') return { label: 'Agent Hub', detail: '' }
-  if (source.startsWith('host:'))
-    return { label: 'This host', detail: source.slice(5) }
-  return { label: source, detail: '' }
+function sourceLabel(source: string): { label: string } {
+  if (source === 'agent-hub') return { label: 'Agent Hub' }
+  if (source.startsWith('host:')) return { label: 'This host' }
+  return { label: source }
 }
 
 /** How many of a tool's credentials are signed in, when that is some but not
@@ -134,7 +133,7 @@ export function partialSignIn(
 }
 
 /** A tool's sign-in line: `Signed in · Agent Hub`, `1 of 3 signed in`, with
- * Unknown saying why. The source's file path goes to the details. */
+ * Unknown saying why. */
 export function loginText(
   tool: ToolLogin,
   agentHub: string,
@@ -671,14 +670,6 @@ function LoginRows({
                         ]
                           .filter(Boolean)
                           .join(' · ')}
-                        {source.detail && (
-                          <span
-                            className="block break-all"
-                            style={{ fontFamily: 'var(--font-mono)' }}
-                          >
-                            {source.detail}
-                          </span>
-                        )}
                       </li>
                     )
                   })}

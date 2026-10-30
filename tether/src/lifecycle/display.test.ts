@@ -6,6 +6,7 @@ import {
   getWidget,
   insertWidget,
   recordLauncher,
+  reserveRootRequest,
   setWidgetName,
   setWidgetProject,
   type WidgetRow,
@@ -52,6 +53,35 @@ describe('display title', () => {
     setWidgetProject('d0000001', null, PERSONAL)
     setWidgetName('d0000001', null)
     expect(displayTitle(row('d0000001'))).toBe('Personal Workspace')
+  })
+
+  it('names an untitled root by its work-role name, else its request ID', () => {
+    const root = (requestId: string, widgetId: string, workRoleDisplayName: string | null) =>
+      reserveRootRequest(
+        {
+          requestId,
+          digest: 'd'.repeat(64),
+          widgetId,
+          logicalSessionId: `logical-${widgetId}`,
+          role: 'portfolio-root',
+          workRole: 'implementation',
+          workRoleDisplayName,
+          leadRootReference: null,
+          facetCapsuleRef: null,
+          createdAt: Date.now(),
+          origin: 'aico',
+        },
+        'pi',
+        'agent-hub',
+        '/srv/agent-hub',
+      )
+    root('rh-14', 'd0000010', null)
+    root('rh-15', 'd0000011', ' Files lane ')
+    expect(displayTitle(row('d0000010'))).toBe('Agent Hub — rh-14')
+    expect(displayTitle(row('d0000011'))).toBe('Agent Hub — Files lane')
+    // A title set later wins.
+    setWidgetName('d0000010', 'Session files')
+    expect(displayTitle(row('d0000010'))).toBe('Agent Hub — Session files')
   })
 
   it('reports whether project names changed', () => {
