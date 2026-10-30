@@ -348,7 +348,7 @@ describe('wake scheduler', () => {
     expect(log.delivered).toHaveLength(1)
     expect(log.delivered[0]).toMatch(/60 min late\] note$/)
     expect(log.lines.at(-1)).toBe(
-      `delivered 1 check-in(s) to session=${SESSION} after waiting 60 min (last: the input line holds a draft)`,
+      `delivered 1 check-in(s) to session=${SESSION}, 60 min after due (held: the input line holds a draft)`,
     )
     expect(scheduler.heldReason(SESSION)).toBeNull()
     expect(wakes.list()).toEqual([])

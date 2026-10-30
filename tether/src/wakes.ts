@@ -455,8 +455,8 @@ export class WakeScheduler {
   private readonly reopened = new Set<string>()
   /** Kept wakes waiting out a failed relaunch. */
   private readonly retryAt = new Map<string, number>()
-  /** Why each session's due wakes are not delivered yet, and since when. */
-  private readonly held = new Map<string, { reason: string; since: number }>()
+  /** Why each session's due wakes are not delivered yet. */
+  private readonly held = new Map<string, string>()
 
   constructor(
     private readonly store: WakeStore,
@@ -478,7 +478,7 @@ export class WakeScheduler {
 
   /** Why the session's due wakes wait, or null when none waits. */
   heldReason(sessionId: string): string | null {
-    return this.held.get(sessionId)?.reason ?? null
+    return this.held.get(sessionId) ?? null
   }
 
   /** Something changed (a wake, an agent state): look again soon. */
@@ -581,10 +581,11 @@ export class WakeScheduler {
     }
     const held = this.held.get(sessionId)
     this.held.delete(sessionId)
-    const waited = held
-      ? ` after waiting ${Math.round((this.ops.now() - held.since) / 60_000)} min (last: ${held.reason})`
-      : ''
-    this.ops.log(`delivered ${current.length} check-in(s) to session=${sessionId}${waited}`)
+    const late = Math.floor((this.ops.now() - (current[0]?.dueAt ?? 0)) / 60_000)
+    this.ops.log(
+      `delivered ${current.length} check-in(s) to session=${sessionId}` +
+        (held ? `, ${late} min after due (held: ${held})` : ''),
+    )
   }
 
   /** The first gate a due wake fails, or null when it may go out now. */
@@ -601,9 +602,8 @@ export class WakeScheduler {
 
   /** Log each new reason a session's due wakes wait, once. */
   private hold(sessionId: string, reason: string): void {
-    const before = this.held.get(sessionId)
-    if (before?.reason === reason) return
-    this.held.set(sessionId, { reason, since: before?.since ?? this.ops.now() })
+    if (this.held.get(sessionId) === reason) return
+    this.held.set(sessionId, reason)
     this.ops.log(`check-in for session=${sessionId} waits: ${reason}`)
   }
 
