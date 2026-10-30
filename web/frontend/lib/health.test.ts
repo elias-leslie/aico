@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { view } from '../test-stubs/health-view'
 import {
+  callsText,
   type HealthFinding,
   handledBy,
   type NightshiftOwnerView,
   type NightshiftViewResult,
   pillState,
   unknownReason,
+  whenText,
 } from './health'
 
 const finding = (over: Partial<HealthFinding> = {}): HealthFinding => ({
@@ -80,5 +82,31 @@ describe('handledBy', () => {
     expect(handledBy(finding({ who: 'Nightshift' }))).toBe(
       'Nightshift fixes this itself.',
     )
+    expect(handledBy(finding({ owner: true, who: 'You', calls: 2 }))).toBe(
+      '2 calls for you here. You answer them in Nightshift.',
+    )
+  })
+})
+
+describe('callsText', () => {
+  it('adds up with the calls in the problems listed', () => {
+    const owner = finding({ owner: true, who: 'You', calls: 2 })
+    expect(callsText(view({ needs_you: 2, findings: [owner] }))).toBe(
+      'Nightshift has 2 calls waiting for you.',
+    )
+    expect(callsText(view({ needs_you: 4, findings: [owner] }))).toBe(
+      'Nightshift has 4 calls waiting for you, 2 in the problems below.',
+    )
+    expect(callsText(view({ needs_you: 1 }))).toBe(
+      'Nightshift has 1 call waiting for you, none in the problems below.',
+    )
+  })
+})
+
+describe('whenText', () => {
+  it('keeps how old the data is apart from how long it has been open', () => {
+    expect(whenText(240, 1_468_800)).toBe('checked 4 min ago · open 17 days')
+    expect(whenText(null, 3600)).toBe('open 1 h')
+    expect(whenText(undefined, null)).toBe('')
   })
 })

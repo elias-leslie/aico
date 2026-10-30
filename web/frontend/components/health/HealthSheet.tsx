@@ -6,6 +6,7 @@ import { ExternalLink, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import {
   ageText,
+  callsText,
   type HealthFinding,
   type HealthTile,
   handledBy,
@@ -16,6 +17,7 @@ import {
   TONE_COLOR,
   type Tone,
   unknownReason,
+  whenText,
 } from '@/lib/health'
 import { useHealth } from '@/lib/hooks/use-health'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
@@ -67,7 +69,7 @@ export function HealthSheet({
               style={{ color: 'var(--mist)' }}
             >
               {view?.snapshot.state === 'fresh'
-                ? `From Nightshift · checked ${ageText(view.snapshot.age)} ago`
+                ? `From Nightshift · updated ${ageText(view.snapshot.age)} ago`
                 : 'From Nightshift'}
             </span>
             {view?.links.status && (
@@ -87,7 +89,7 @@ export function HealthSheet({
                     {unknown}{' '}
                     <button
                       type="button"
-                      className="underline underline-offset-2"
+                      className="inline-flex min-h-11 items-center underline underline-offset-2 md:min-h-0"
                       style={{ color: 'var(--lantern)' }}
                       onClick={() => void refetch()}
                     >
@@ -136,11 +138,7 @@ function HealthBody({ view }: { view: NightshiftOwnerView | null }) {
         <section aria-label="Waiting on you" className="flex flex-col gap-2">
           {view.needs_you > 0 && (
             <Row>
-              <span className="flex-1">
-                {view.needs_you === 1
-                  ? '1 check needs your call.'
-                  : `${view.needs_you} checks need your call.`}
-              </span>
+              <span className="flex-1">{callsText(view)}</span>
               <OutLink href={view.links.needs_you}>
                 Answer in Nightshift
               </OutLink>
@@ -195,6 +193,9 @@ function HealthBody({ view }: { view: NightshiftOwnerView | null }) {
 function Tile({ tile }: { tile: HealthTile }) {
   const tone = STATE_TONE[tile.state]
   const word = STATE_WORD[tile.state]
+  // An OK tile's age is its result's; only a problem has been open.
+  const open = tile.state === 'ok' || tile.state === 'unkn' ? null : tile.age
+  const when = whenText(tile.checked, open)
   return (
     <li
       data-testid={`health-tile-${tile.id}`}
@@ -213,9 +214,14 @@ function Tile({ tile }: { tile: HealthTile }) {
         <span className="min-w-0 flex-1 truncate">{tile.label}</span>
         <Chip tone={tone}>{word}</Chip>
       </div>
-      <p className="mt-1 line-clamp-3 text-[13px] leading-[1.35] break-words">
+      <p className="mt-1 text-[13px] leading-[1.35] break-words">
         {tile.summary}
       </p>
+      {when && (
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--mist)' }}>
+          {when}
+        </p>
+      )}
     </li>
   )
 }
@@ -232,8 +238,13 @@ function Finding({ finding }: { finding: HealthFinding }) {
           {STATE_WORD[finding.state]}
         </Chip>
         <span className="text-[12px]" style={{ color: 'var(--mist)' }}>
-          {finding.host_label} · {finding.check}
-          {finding.age != null ? ` · ${ageText(finding.age)}` : ''}
+          {[
+            finding.host_label,
+            finding.check,
+            whenText(finding.checked, finding.age),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </span>
       </div>
       <p className="text-[13px] leading-[1.4] break-words">{finding.summary}</p>
@@ -297,7 +308,7 @@ function OutLink({ href, children }: { href: string; children: ReactNode }) {
       href={href}
       target="_blank"
       rel="noopener"
-      className="inline-flex flex-none items-center gap-1 text-[12px] underline-offset-2 hover:underline"
+      className="inline-flex min-h-11 flex-none items-center gap-1 text-[12px] underline-offset-2 hover:underline md:min-h-0"
       style={{ color: 'var(--lantern)' }}
     >
       {children}

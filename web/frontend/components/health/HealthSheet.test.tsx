@@ -19,7 +19,8 @@ const tile = (id: string, state: 'ok' | 'warn' | 'unkn', summary: string) => ({
   label: id,
   state,
   summary,
-  age: 60,
+  age: 1_468_800,
+  checked: 240,
   link: '',
 })
 
@@ -48,7 +49,9 @@ describe('HealthSheet', () => {
             who: 'You',
             owner: true,
             next: '',
-            age: 3600,
+            age: 1_468_800,
+            checked: 240,
+            calls: 1,
             link: 'https://ns.example/#needs-you',
           },
         ],
@@ -68,8 +71,21 @@ describe('HealthSheet', () => {
       'data-state',
       'ok',
     )
-    expect(screen.getByText('1 check needs your call.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Nightshift has 1 call waiting for you.'),
+    ).toBeInTheDocument()
+    // How old the data is, apart from how long the problem has been open.
+    expect(screen.getByTestId('health-tile-pve')).toHaveTextContent(
+      'checked 4 min ago · open 17 days',
+    )
+    expect(screen.getByTestId('health-tile-disk')).toHaveTextContent(
+      'checked 4 min ago',
+    )
+    expect(screen.getByTestId('health-tile-disk')).not.toHaveTextContent('open')
     const problem = screen.getByTestId('health-finding')
+    expect(problem).toHaveTextContent(
+      'PVE lab host · Guests · checked 4 min ago · open 17 days',
+    )
     expect(within(problem).getByText(/your call/)).toBeInTheDocument()
     expect(
       within(problem).getByRole('link', { name: /Answer in Nightshift/ }),

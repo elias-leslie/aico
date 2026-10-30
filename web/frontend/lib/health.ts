@@ -10,8 +10,10 @@ export interface HealthTile {
   label: string
   state: CheckState
   summary: string
-  /** Seconds since the shown result began, when known. */
+  /** Seconds a problem has been open (an OK tile: since its result), when known. */
   age: number | null
+  /** Seconds since the shown result was observed: how old the data is. */
+  checked?: number | null
   link: string
 }
 
@@ -27,7 +29,12 @@ export interface HealthFinding {
   owner: boolean
   /** What Nightshift or its agent does next ('' for the owner's own calls). */
   next: string
+  /** Seconds the problem has been open. */
   age: number | null
+  /** Seconds since its result was observed. */
+  checked?: number | null
+  /** The owner calls it holds, counted like needs_you. */
+  calls?: number
   link: string
 }
 
@@ -172,9 +179,37 @@ export function pillState(
   return { tone: 'good', label: 'Health OK', count: 0, title: 'Health OK' }
 }
 
+/** `checked 4 min ago · open 17 days`: how old the data is, apart from how
+ * long the problem has been open. */
+export function whenText(
+  checked: number | null | undefined,
+  open: number | null | undefined,
+): string {
+  return [
+    checked != null ? `checked ${ageText(checked)} ago` : null,
+    open != null ? `open ${ageText(open)}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+/** The Nightshift calls line; it adds up with the problems listed below it. */
+export function callsText(view: NightshiftOwnerView): string {
+  const total = view.needs_you
+  const listed = view.findings.reduce((n, f) => n + (f.calls ?? 0), 0)
+  const head = `Nightshift has ${plural(total, 'call')} waiting for you`
+  if (listed === total) return `${head}.`
+  return listed === 0
+    ? `${head}, none in the problems below.`
+    : `${head}, ${listed} in the problems below.`
+}
+
 /** Who has a finding, in the owner's words. */
 export function handledBy(finding: HealthFinding): string {
-  if (finding.owner) return 'Needs your call. You answer it in Nightshift.'
+  if (finding.owner)
+    return (finding.calls ?? 1) > 1
+      ? `${finding.calls} calls for you here. You answer them in Nightshift.`
+      : 'Needs your call. You answer it in Nightshift.'
   if (finding.who === 'Agent') return 'A steward agent is on it.'
   if (finding.who === 'Nightshift') return 'Nightshift fixes this itself.'
   return 'Nightshift is watching it.'
