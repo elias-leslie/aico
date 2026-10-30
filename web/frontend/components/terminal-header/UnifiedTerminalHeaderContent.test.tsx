@@ -11,6 +11,7 @@ const { renamePane, updateSession } = vi.hoisted(() => ({
 
 vi.mock('../HostsButton', () => ({ HostsButton: () => null }))
 vi.mock('../health/HealthButton', () => ({ HealthLauncher: () => null }))
+vi.mock('../asks/NeedsYou', () => ({ NeedsYouLauncher: () => null }))
 vi.mock('../KeptCheckIns', () => ({ KeptCheckIns: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ enabledTools: [], agentTools: [] }),

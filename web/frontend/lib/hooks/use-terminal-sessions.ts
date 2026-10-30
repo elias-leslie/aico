@@ -20,6 +20,13 @@ export interface SessionCheckIn {
   time: string
 }
 
+export interface SessionAsk {
+  id: string
+  question: string
+  blocking: boolean
+  created_at: number
+}
+
 export interface TerminalSession extends CoordinatorFields {
   id: string
   /** `Project — Task`, the title Aico shows; `task` is Tether's name alone. */
@@ -44,6 +51,8 @@ export interface TerminalSession extends CoordinatorFields {
   is_root?: boolean
   /** Pending check-ins, oldest first. */
   check_ins?: SessionCheckIn[]
+  /** Open owner asks from this session, oldest first; a blocking one means it needs the owner. */
+  asks?: SessionAsk[]
   source?: string | null
   /** The app that created the session in Tether ('a-term', 'aico', ...). */
   origin?: string | null

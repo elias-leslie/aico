@@ -4,6 +4,7 @@ import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
+import { NeedsYouLauncher } from './asks/NeedsYou'
 import { HostsLauncher } from './HostsButton'
 import { HealthLauncher } from './health/HealthButton'
 import { SessionList, SessionRail, sessionsHeading } from './SessionList'
@@ -88,6 +89,7 @@ export function SessionSidebar({
           </button>
         </header>
         {newButton}
+        <NeedsYouLauncher variant="icon" />
         <HostsLauncher icon />
         <HealthLauncher variant="icon" />
         <nav
@@ -124,6 +126,7 @@ export function SessionSidebar({
         >
           {heading}
         </h2>
+        <NeedsYouLauncher />
         <HealthLauncher />
         <HostsLauncher icon />
         {onCollapsedChange && (

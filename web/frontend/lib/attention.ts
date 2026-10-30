@@ -7,7 +7,9 @@
 // "Seen" is when the owner last had each session open: this browser's own
 // record (localStorage, at once) or any device's (the server's `seen_at`,
 // shared through the session list). A blocked session is "needs you" until it
-// is opened; a turn that finished since it was last open is "finished".
+// is opened; a turn that finished since it was last open is "finished". A
+// session with an open blocking ask (Tether's `asks`) needs you until the
+// owner answers it.
 
 import type { TerminalSession } from './hooks/use-terminal-sessions'
 
@@ -33,7 +35,8 @@ export interface Attention {
 type ActivitySession = Pick<
   TerminalSession,
   'activity' | 'activity_previous' | 'activity_at'
->
+> &
+  Partial<Pick<TerminalSession, 'asks'>>
 
 /** Compact age: `<1m`, `3m`, `2h`, `4d`. */
 export function formatAge(ms: number): string {
@@ -51,6 +54,19 @@ export function attentionOf(
   now: number,
 ): Attention {
   const activity = (session.activity ?? 'unknown') as Activity
+  // An open blocking ask needs the owner until it is answered, whatever the
+  // agent reports and whether or not the session was opened since.
+  const asking = session.asks?.find((ask) => ask.blocking)
+  if (asking) {
+    const age = formatAge(now - asking.created_at)
+    return {
+      group: 'needs-you',
+      activity,
+      at: asking.created_at,
+      detail: `asks you ${age}`,
+      age,
+    }
+  }
   const at = session.activity_at ?? null
   const unseen = at !== null && at > seenAt
   const previous = session.activity_previous ?? 'unknown'

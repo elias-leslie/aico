@@ -32,6 +32,27 @@ describe('attentionOf', () => {
     })
   })
 
+  it('needs you while a blocking ask is open, even after it was opened', () => {
+    const asking = {
+      activity: 'idle' as const,
+      activity_previous: 'working' as const,
+      activity_at: at(10),
+      asks: [
+        { id: 'a1', question: 'Later?', blocking: false, created_at: at(9) },
+        { id: 'a2', question: 'Finish it?', blocking: true, created_at: at(4) },
+      ],
+    }
+    expect(attentionOf(asking, at(1), NOW)).toMatchObject({
+      group: 'needs-you',
+      activity: 'idle',
+      detail: 'asks you 4m',
+    })
+    // A question the agent asked without stopping does not move the session.
+    expect(
+      attentionOf({ ...asking, asks: [asking.asks[0]] }, at(1), NOW).group,
+    ).toBe('idle')
+  })
+
   it('is finished only for a turn that ended since it was last open', () => {
     const done = {
       activity: 'idle',

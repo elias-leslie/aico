@@ -7,6 +7,7 @@ vi.mock('@/lib/hooks/use-session-attention', () => ({
 }))
 vi.mock('./HostsButton', () => ({ HostsLauncher: () => null }))
 vi.mock('./health/HealthButton', () => ({ HealthLauncher: () => null }))
+vi.mock('./asks/NeedsYou', () => ({ NeedsYouLauncher: () => null }))
 vi.mock('./SessionList', () => ({
   SessionList: () => <p>Full list</p>,
   SessionRail: () => <p>Rail marks</p>,
