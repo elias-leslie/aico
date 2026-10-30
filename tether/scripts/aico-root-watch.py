@@ -169,6 +169,7 @@ HOST_NAME = r"[a-z0-9][a-z0-9-]{0,31}"
 SSH_ALIAS = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
 SSH = "/usr/bin/ssh"
 REMOTE_TMUX = "/usr/bin/tmux"
+PGREP = "/usr/bin/pgrep"
 # A create on a host may first power it on and wait for it (hosts.json wakeTimeoutSec,
 # 240 s by default), then waits for the host's own create (tether/src/hub/hub.ts).
 HOST_CREATE_SECONDS = 420
@@ -611,12 +612,21 @@ def classify(raw: bytes, profile: str = "codex") -> tuple[dict, str]:
 
 
 # What tmux reports as a pane's foreground command once its agent has exited and
-# the pane is back at the login shell (the launcher runs the agent inside it).
+# the pane is back at the login shell. The launch wrapper is a shell too, and it
+# leads the process group the agent runs in, so a shell there is only a hint:
+# the agent is gone when every process in that group is a shell.
 SHELLS = frozenset({"bash", "sh", "dash", "zsh", "fish"})
 
 
-def agent_exited(foreground: str) -> bool:
-    return foreground.lstrip("-") in SHELLS
+def is_shell(name: str) -> bool:
+    return name.lstrip("-") in SHELLS
+
+
+def group_is_shells(listing: str) -> bool:
+    """pgrep -l output (pid, name per line) for the pane's foreground group."""
+    names = [line.split(None, 1)[1] if len(line.split(None, 1)) == 2 else ""
+             for line in listing.splitlines() if line.strip()]
+    return bool(names) and all(is_shell(name) for name in names)
 
 
 class Collector:
@@ -856,15 +866,33 @@ class Collector:
         return resolved, unavailable
 
     def command(self, args: list[str], limit: int) -> bytes:
+        return self.run([self.tmux, "-S", self.tmux_socket, *args],
+                        [REMOTE_TMUX, "-S", self.tmux_socket, *args], limit)
+
+    def group(self, pgid: int) -> str:
+        """The processes in one process group on the root's host, as pgrep -l lists them."""
+        argv = [PGREP, "-g", str(pgid), "-l"]
+        return self.run(argv, argv, 64 * 1024).decode(errors="replace")
+
+    def agent_exited(self, pane: tuple[str, int]) -> bool:
+        """Whether the pane is back at its shell: tmux names only the foreground
+        group's leader, which is the launch wrapper's shell while the agent runs."""
+        foreground, pgid = pane
+        if not is_shell(foreground):
+            return False
+        try:
+            return group_is_shells(self.group(pgid))
+        except Unavailable:
+            return False
+
+    def run(self, argv: list[str], remote_argv: list[str], limit: int) -> bytes:
         self.remaining()
-        argv = [self.tmux, "-S", self.tmux_socket, *args]
         if self.remote:
             # Through the hub's ssh link only (ProxyCommand=false: no direct-connect
             # fallback when the master refuses); the remote shell gets one quoted command.
             _, alias, control = self.remote
             argv = [SSH, "-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-o", "ProxyCommand=false",
-                    "-S", control, alias, "--",
-                    shlex.join([REMOTE_TMUX, "-S", self.tmux_socket, *args])]
+                    "-S", control, alias, "--", shlex.join(remote_argv)]
         try:
             process = subprocess.Popen(argv,
                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -910,8 +938,9 @@ class Collector:
                 process.wait()
             process.stdout.close()
 
-    def pane(self, pin: Pin) -> str:
-        """Verify the pane is this root's; returns its foreground command ("" if tmux gave none)."""
+    def pane(self, pin: Pin) -> tuple[str, int]:
+        """Verify the pane is this root's; returns its foreground command ("" if tmux gave none)
+        and the pane's process (the leader of the group the launcher runs the agent in)."""
         args = []
         for key in ("AICO_OWNER", "AICO_WORKLOAD_CLASS", "AICO_TMUX_SERVER_ID"):
             if args:
@@ -922,12 +951,13 @@ class Collector:
                        f"AICO_TMUX_SERVER_ID={pin.tmuxServerId}"):
             raise IdentityChanged()
         row = self.command(["display-message", "-p", "-t", pin.paneId,
-                            "#{session_id}\t#{pane_id}\t#{session_name}\t#{pane_dead}\t#{pane_current_command}"],
+                            "#{session_id}\t#{pane_id}\t#{session_name}\t#{pane_dead}\t#{pane_pid}\t#{pane_current_command}"],
                            1024)
         fields = row.decode(errors="replace").strip("\r\n").split("\t")
-        if "\t".join(fields[:4]) != f"{pin.tmuxSessionId}\t{pin.paneId}\taico-{pin.widgetId}\t0":
+        if ("\t".join(fields[:4]) != f"{pin.tmuxSessionId}\t{pin.paneId}\taico-{pin.widgetId}\t0"
+                or len(fields) < 5 or not re.fullmatch(r"[1-9][0-9]{0,9}", fields[4])):
             raise IdentityChanged()
-        return fields[4].strip() if len(fields) > 4 else ""
+        return (fields[5].strip() if len(fields) > 5 else ""), int(fields[4])
 
     def sample(self, pin: Pin | HubPin) -> dict:
         assert isinstance(pin, Pin)
@@ -937,10 +967,10 @@ class Collector:
             # No -S - / -E -: tmux's default range is the visible screen only.
             raw = self.command(["capture-pane", "-p", "-t", pin.paneId], CAPTURE_LIMIT)
             self.owners(pin)
-            foreground = self.pane(pin)
+            pane = self.pane(pin)
             self.remaining()
             state, _ = classify(raw, self.profile)
-            if state["terminal"] == "ambiguous" and agent_exited(foreground):
+            if state["terminal"] == "ambiguous" and self.agent_exited(pane):
                 state = {**state, "terminal": "agent_exited", "markers": ["agent_exited"]}
             return {"observation": "available", "identity": "pinned", **state}
         except IdentityChanged:
@@ -1727,7 +1757,7 @@ def agent_view(collector: Collector, request_id: str, tool: object) -> dict:
             if not isinstance(pin, Pin):
                 continue
             child.owners(pin)
-            if agent_exited(child.pane(pin)):
+            if child.agent_exited(child.pane(pin)):
                 return {"agent": "exited",
                         "detail": f"{tool} is no longer running in this root; its session is back at the shell"}
             return {"agent": "running"}

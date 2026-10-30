@@ -570,7 +570,7 @@ def fake_commands(monkeypatch, instance, screen=b"Worked for 15s\n\xe2\x80\xba \
             return ("AICO_OWNER=aico\nAICO_WORKLOAD_CLASS=durable-tmux-server\n"
                     f"AICO_TMUX_SERVER_ID={PIN.tmuxServerId}\n").encode()
         if args[0] == "display-message":
-            return f"$1\t%2\taico-{PIN.widgetId}\t0\n".encode()
+            return f"$1\t%2\taico-{PIN.widgetId}\t0\t4242\n".encode()
         assert args == ["capture-pane", "-p", "-t", PIN.paneId]
         assert limit == watcher.CAPTURE_LIMIT
         return screen
@@ -603,14 +603,24 @@ def test_receipts_surround_visible_only_capture(monkeypatch):
     ]
 
 
-@pytest.mark.parametrize("foreground, screen, terminal", [
-    ("bash", b"agent-hub-cred-exec: pi: Agent Hub holds no current credential for that tool\n$ \n", "agent_exited"),
-    ("-bash", b"$ \n", "agent_exited"),
-    ("node", b"$ \n", "ambiguous"),
+SHELL_ONLY = "4242 bash\n"
+# The launch wrapper leads the pane's group; the agent runs inside it.
+AGENT_IN_GROUP = "4242 bash\n4250 bash\n4251 claude\n"
+
+
+@pytest.mark.parametrize("foreground, group, screen, terminal", [
+    ("bash", SHELL_ONLY,
+     b"agent-hub-cred-exec: pi: Agent Hub holds no current credential for that tool\n$ \n", "agent_exited"),
+    ("-bash", SHELL_ONLY, b"$ \n", "agent_exited"),
+    ("node", SHELL_ONLY, b"$ \n", "ambiguous"),
+    # tmux names the wrapper's shell while the agent runs under it.
+    ("bash", AGENT_IN_GROUP, b"$ \n", "ambiguous"),
+    # A group that can't be listed proves nothing.
+    ("bash", None, b"$ \n", "ambiguous"),
     # A live agent's screen wins over the foreground command.
-    ("bash", b"Working (3s \xe2\x80\xa2 esc to interrupt)\n", "busy"),
+    ("bash", SHELL_ONLY, b"Working (3s \xe2\x80\xa2 esc to interrupt)\n", "busy"),
 ])
-def test_an_agent_that_left_the_pane_is_reported_exited(monkeypatch, foreground, screen, terminal):
+def test_an_agent_that_left_the_pane_is_reported_exited(monkeypatch, foreground, group, screen, terminal):
     instance = collector()
     fake_receipts(monkeypatch, instance)
     fake_commands(monkeypatch, instance, screen)
@@ -622,7 +632,14 @@ def test_an_agent_that_left_the_pane_is_reported_exited(monkeypatch, foreground,
             return row.rstrip(b"\n") + b"\t" + foreground.encode() + b"\n"
         return row
 
+    def listing(pgid):
+        assert pgid == 4242
+        if group is None:
+            raise watcher.Unavailable("tmux_unavailable")
+        return group
+
     monkeypatch.setattr(instance, "command", command)
+    monkeypatch.setattr(instance, "group", listing)
     state = instance.sample(PIN)
     assert state["observation"] == "available" and state["terminal"] == terminal
     assert state["markers"] == (["agent_exited"] if terminal == "agent_exited" else state["markers"])
@@ -1043,3 +1060,26 @@ def test_cli_does_not_print_invalid_secret_configuration(capsys):
                       "--tmux-socket", "/tmp/tmux", "--root", '{"api_key":"private-secret"}',
                       "--duration", "1"])
     assert "private-secret" not in capsys.readouterr().err
+
+
+def test_group_lists_the_pane_group_through_the_link_for_a_remote_root(monkeypatch):
+    instance = collector()
+    instance.remote = ("agent-work", "agent-work", "/run/user/1000/tether/peers/agent-work/ssh.ctl")
+    seen = []
+
+    def run(argv, remote_argv, limit):
+        seen.append((argv, remote_argv))
+        return b"4242 bash\n4251 pi\n"
+
+    monkeypatch.setattr(instance, "run", run)
+    assert instance.group(4242) == "4242 bash\n4251 pi\n"
+    assert seen == [([watcher.PGREP, "-g", "4242", "-l"], [watcher.PGREP, "-g", "4242", "-l"])]
+    assert instance.agent_exited(("bash", 4242)) is False
+    assert instance.agent_exited(("claude", 4242)) is False
+
+
+def test_group_is_shells_needs_a_listing_of_only_shells():
+    assert watcher.group_is_shells("4242 bash\n")
+    assert watcher.group_is_shells("4242 -bash\n4243 sh\n")
+    assert not watcher.group_is_shells("4242 bash\n4251 claude\n")
+    assert not watcher.group_is_shells("")

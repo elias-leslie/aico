@@ -210,18 +210,30 @@ def test_root_status_shows_no_host_for_a_local_root(monkeypatch, host):
     assert code == 0 and "host" not in output[0]
 
 
-@pytest.mark.parametrize("foreground, agent", [("bash", "exited"), ("-bash", "exited"), ("node", "running")])
-def test_root_status_says_when_the_agent_left_the_pane(monkeypatch, foreground, agent):
+@pytest.mark.parametrize("foreground, group, agent", [
+    ("bash", "4242 bash\n", "exited"),
+    ("-bash", "4242 -bash\n", "exited"),
+    ("node", "4242 node\n", "running"),
+    # tmux names the launch wrapper's shell while the agent runs inside its group.
+    ("bash", "4242 bash\n4250 bash\n4251 pi\n", "running"),
+])
+def test_root_status_says_when_the_agent_left_the_pane(monkeypatch, foreground, group, agent):
     # A Pi root that failed closed (no credential) leaves the pane at bash; the session record still runs.
     pin = admin.Pin("remote-1", "aabbcc01", "aico-root-x", "a" * 64, "sess-1", "$1", "%2", "abcdef01")
     shown = []
 
     class Child:
+        agent_exited = admin.Collector.agent_exited
+
         def owners(self, _pin):
             shown.append("owners")
 
         def pane(self, _pin):
-            return foreground
+            return foreground, 4242
+
+        def group(self, pgid):
+            assert pgid == 4242
+            return group
 
     monkeypatch.setattr(admin.Collector, "discover", lambda self, request_id: ([(pin, Child())], []))
     code, output = root_status(monkeypatch, {**STATUS, "host": "agent-work", "tool": "pi"})
