@@ -33,7 +33,9 @@ beforeEach(async () => {
   const tracker = new RunTracker({
     api: () =>
       ({
-        list: async () => ({ runs: [{ id: 'r1', state: 'running', launched_by: 'x' }] }),
+        list: async () => ({
+          runs: [{ id: 'r1', state: 'running', launched_by: 'aico-widget-c0d0ae59' }],
+        }),
         get: async () =>
           runView([
             {
@@ -51,6 +53,8 @@ beforeEach(async () => {
     launchers: () => [{ id: 'c0d0ae59', ownershipId: 'aico-widget-c0d0ae59' }],
     config: {
       pollMs: 1000,
+      idleMs: 30_000,
+      backoffMaxMs: 300_000,
       endedRetentionMs: 60_000,
       listLimit: 30,
       concurrency: 1,

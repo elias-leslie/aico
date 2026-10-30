@@ -4,7 +4,12 @@ import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHubApi } from './agent-hub/client'
-import { resolveAgentHubConfig, resolveRunsConfig, resolveSettleMs } from './agent-hub/config'
+import {
+  type AgentHubConfig,
+  resolveAgentHubConfig,
+  resolveRunsConfig,
+  resolveSettleMs,
+} from './agent-hub/config'
 import { RunTracker, sessionLaunchers, type ToldPause } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
@@ -237,12 +242,20 @@ export async function startDaemon(
   bindWakeStore(wakes.store)
   // One Agent Hub client for the session kind and for the workflow runs.
   let hubApi: HubApi | null = null
+  let hubConfig: AgentHubConfig | null = null
   const hub = (): HubApi => {
-    hubApi ??= createHubApi(resolveAgentHubConfig(env))
+    hubConfig ??= resolveAgentHubConfig(env)
+    hubApi ??= createHubApi(hubConfig)
     return hubApi
   }
   const runs = new RunTracker({
     api: () => hub().workflowRuns,
+    // Agent Hub refuses every call without a client id (a host whose Tether
+    // reaches the workstation's Agent Hub through a forward, for one).
+    unusable: () => {
+      hubConfig ??= resolveAgentHubConfig(env)
+      return hubConfig.clientId ? null : 'Agent Hub client id is not set'
+    },
     launchers: () => sessionLaunchers(listSessions(), (id) => getAgentHubSession(id)?.hubSessionId),
     config: resolveRunsConfig(env),
     dismissed: {
@@ -321,6 +334,7 @@ export async function startDaemon(
   const agentStates = new AgentStateTracker((id) => {
     notifySessionChanged(id, { force: true })
     wakes.scheduler.nudge()
+    runs.poke()
   })
   bindAgentStates(agentStates)
   // Agent Hub sessions have no pane: their own state tracker, runtime and
@@ -330,6 +344,7 @@ export async function startDaemon(
     states: new AgentStateTracker((id) => {
       notifySessionChanged(id, { force: true })
       wakes.scheduler.nudge()
+      runs.poke()
     }),
     notify: (id) => notifySessionChanged(id, { force: true }),
     verifyStatus: verifySessionStatus,

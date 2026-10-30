@@ -2,11 +2,18 @@
 //
 // A run records `launched_by`, the AICO_SESSION_ID of the session that created
 // it (`st workflow create`), which is the launching session's ownership id.
-// Tether asks Agent Hub, through the SDK, for the runs of each live session by
-// that id, reads the full view of every run that is active (and of an ended one
-// once), and keeps the result as team members (runs-view.ts).
+// Each look asks Agent Hub, through the SDK, for one page of its newest runs and
+// keeps those launched by a live session; a session Tether has not seen before
+// is asked for by its id once, so an older run of it is found too. Tether reads
+// the full view of every run that is active (and of an ended one once), and
+// keeps the result as team members (runs-view.ts).
 //
-// - Active runs are read on every poll, for their live phase.
+// Looks come every `pollMs` while a run is active or soon after a session's
+// agent changed state (`poke`, when a run is most likely created), every
+// `idleMs` otherwise, and back off up to `backoffMaxMs` while Agent Hub fails.
+// Without a client id Agent Hub refuses every call, so none is made.
+//
+// - Active runs are read on every look, for their live phase.
 // - An ended run drops off on its own `endedRetentionMs` after its last activity
 //   (or at once when dismissed through the API; dismissals are kept across restarts).
 // - A run whose launching session has ended stays while it is active, so a
@@ -110,6 +117,8 @@ export interface StepSession {
 
 export interface RunTrackerOptions {
   api: () => RunsApi
+  /** Why Agent Hub cannot be asked at all (no client id), else null. */
+  unusable?: () => string | null
   /** The sessions to look for runs of. */
   launchers: () => Launcher[]
   config: RunsConfig
@@ -142,7 +151,13 @@ export class RunTracker {
   private readonly log: (message: string) => void
   private dismissed: Record<string, number>
   private told: Record<string, ToldPause>
-  private timer: ReturnType<typeof setInterval> | null = null
+  private timer: ReturnType<typeof setTimeout> | null = null
+  private dueAt = 0
+  private lookedAt: number | null = null
+  private failures = 0
+  private poked = false
+  /** Launcher ids already asked for by id; a new one is asked once. */
+  private asked = new Set<string>()
   private ticking = false
   private stopped = false
   private lastOk: number | null = null
@@ -159,15 +174,45 @@ export class RunTracker {
   start(): void {
     if (this.timer) return
     this.stopped = false
-    void this.tick()
-    this.timer = setInterval(() => void this.tick(), this.options.config.pollMs)
-    this.timer.unref()
+    this.schedule(0)
   }
 
   stop(): void {
     this.stopped = true
-    if (this.timer) clearInterval(this.timer)
+    if (this.timer) clearTimeout(this.timer)
     this.timer = null
+  }
+
+  /** A session's agent changed state, the moment a run is most likely created
+   * or answered: look within `pollMs` instead of the idle delay. */
+  poke(): void {
+    if (this.stopped || !this.timer || this.failures) return
+    this.poked = true
+    const at = (this.lookedAt ?? 0) + this.options.config.pollMs
+    if (at < this.dueAt) this.schedule(Math.max(0, at - this.now()))
+  }
+
+  private schedule(delayMs: number): void {
+    if (this.timer) clearTimeout(this.timer)
+    this.dueAt = this.now() + delayMs
+    this.timer = setTimeout(() => {
+      void this.tick().finally(() => {
+        if (!this.stopped) this.schedule(this.nextDelay())
+      })
+    }, delayMs)
+    this.timer.unref()
+  }
+
+  /** The wait before the next look: backed off while failing, short while a
+   * run is going or a session was just busy, else the idle delay. */
+  nextDelay(random: () => number = Math.random): number {
+    const { pollMs, idleMs, backoffMaxMs } = this.options.config
+    if (this.failures) {
+      const ceiling = Math.min(backoffMaxMs, pollMs * 2 ** Math.min(this.failures, 16))
+      return Math.round(ceiling / 2 + (ceiling / 2) * random())
+    }
+    const active = [...this.tracked.values()].some((entry) => isActiveRun(entry.view.state))
+    return active || this.poked ? pollMs : idleMs
   }
 
   /** The runs and steps to show, runs oldest first. */
@@ -194,8 +239,14 @@ export class RunTracker {
   async tick(): Promise<void> {
     if (this.ticking || this.stopped) return
     this.ticking = true
+    this.poked = false
+    this.lookedAt = this.now()
     try {
-      await this.poll()
+      const unusable = this.options.unusable?.() ?? null
+      if (unusable) {
+        if (this.lastError !== unusable) this.log(`not asking Agent Hub: ${unusable}`)
+        this.lastError = unusable
+      } else await this.poll()
     } catch (error) {
       this.fail(error)
     } finally {
@@ -207,7 +258,9 @@ export class RunTracker {
   private fail(error: unknown): void {
     const failure = classifyHubError(error)
     this.lastError = FAILURE_WORDS[failure.code] ?? failure.message
-    this.log(`look failed: ${failure.code}`)
+    // Logged when it starts failing, not on every backed-off retry.
+    if (!this.failures) this.log(`look failed: ${failure.code}`)
+    this.failures += 1
   }
 
   private async poll(): Promise<void> {
@@ -215,38 +268,45 @@ export class RunTracker {
     const api = apiOf()
     const launchers = this.options.launchers()
     const live = new Set(launchers.map((launcher) => launcher.id))
+    const ownerOf = new Map<string, string>()
+    for (const launcher of launchers)
+      for (const ownedAs of [launcher.ownershipId, ...(launcher.alsoOwnedAs ?? [])])
+        ownerOf.set(ownedAs, launcher.id)
     const listed = new Map<string, { item: RunListItem; launcherId: string }>()
-    const reached = new Set<string>()
-    const missed = new Set<string>()
+    const take = (items: readonly RunListItem[]) => {
+      for (const item of items) {
+        const launcherId = item.launched_by ? ownerOf.get(item.launched_by) : undefined
+        if (launcherId) listed.set(item.id, { item, launcherId })
+      }
+    }
     let failure: unknown = null
 
-    const queue = launchers.flatMap((launcher) =>
-      [launcher.ownershipId, ...(launcher.alsoOwnedAs ?? [])].map((ownedAs) => ({
-        launcherId: launcher.id,
-        ownedAs,
-      })),
-    )
+    // One page of the newest runs answers for every session at once.
+    const page: RunList = await api.list({ limit: config.listLimit })
+    take(page.runs)
+    // A page shorter than the limit holds every run; otherwise a run older
+    // than its oldest one may simply be off the page.
+    const complete = page.runs.length < config.listLimit
+    const oldest = Math.min(...page.runs.map((item) => parseTime(item.created_at) ?? 0))
+    const offPage = (view: RunView) => !complete && (parseTime(view.created_at) ?? 0) < oldest
+
+    // A session not seen before is asked for once by its id, for a run of it
+    // that is older than the page.
+    for (const ownedAs of this.asked) if (!ownerOf.has(ownedAs)) this.asked.delete(ownedAs)
+    const queue = [...ownerOf.keys()].filter((ownedAs) => !this.asked.has(ownedAs))
     await Promise.all(
       Array.from({ length: Math.min(config.concurrency, queue.length) }, async () => {
-        for (let look = queue.shift(); look; look = queue.shift()) {
+        for (let ownedAs = queue.shift(); ownedAs; ownedAs = queue.shift()) {
           if (this.stopped) return
           try {
-            const answer: RunList = await api.list({
-              launched_by: look.ownedAs,
-              limit: config.listLimit,
-            })
-            reached.add(look.launcherId)
-            for (const item of answer.runs)
-              listed.set(item.id, { item, launcherId: look.launcherId })
+            take((await api.list({ launched_by: ownedAs, limit: config.listLimit })).runs)
+            this.asked.add(ownedAs)
           } catch (error) {
-            missed.add(look.launcherId)
             failure ??= error
           }
         }
       }),
     )
-    // A launcher is reached only when every id of it answered.
-    for (const id of missed) reached.delete(id)
     if (this.stopped) return
 
     const reads: Promise<void>[] = []
@@ -287,15 +347,16 @@ export class RunTracker {
     }
     for (const [runId, entry] of this.tracked) {
       if (listed.has(runId)) continue
-      if (reached.has(entry.launcherId)) {
-        // Its launcher answered and no longer lists it.
-        this.tracked.delete(runId)
-      } else if (!live.has(entry.launcherId)) {
-        // The launcher ended: follow the run only while it is active.
+      if (!live.has(entry.launcherId) || offPage(entry.view)) {
+        // The launcher ended, or the run is older than the page: follow it by
+        // its id while it is active, and keep an ended one until it lapses.
         if (isActiveRun(entry.view.state)) read(runId, entry.launcherId)
-        else this.tracked.delete(runId)
+        else if (!live.has(entry.launcherId) || !this.visible(entry.view))
+          this.tracked.delete(runId)
+      } else {
+        // Agent Hub answered and no longer has it.
+        this.tracked.delete(runId)
       }
-      // A launcher that is live but could not be asked keeps its runs, stale.
     }
     await Promise.all(reads)
     this.pruneDismissed()
@@ -305,6 +366,7 @@ export class RunTracker {
     else {
       this.lastOk = this.now()
       this.lastError = null
+      this.failures = 0
     }
   }
 

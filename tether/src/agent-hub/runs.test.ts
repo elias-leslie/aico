@@ -1,5 +1,5 @@
 import type { RunList, RunListItem, RunView, StepView } from '@agent-hub/sdk'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { childAgents } from '../client/run-text'
 import type { RunsConfig } from './config'
 import { resolveRunsConfig } from './config'
@@ -250,6 +250,8 @@ describe('runMembers', () => {
 
 const CONFIG: RunsConfig = {
   pollMs: 1_000,
+  idleMs: 30_000,
+  backoffMaxMs: 300_000,
   endedRetentionMs: 3_600_000,
   listLimit: 30,
   concurrency: 2,
@@ -275,10 +277,18 @@ class FakeRuns {
 
   api: RunsApi = {
     list: async (params) => {
-      this.listCalls.push(String(params?.launched_by))
+      this.listCalls.push(params?.launched_by ?? 'page')
       if (this.down) throw Object.assign(new Error('down'), { status: 0, code: 'network_error' })
-      const runs = [...this.runs.values()].filter((r) => r.launched_by === params?.launched_by)
-      return { runs: runs.map(item), total: runs.length, limit: 30, offset: 0 } as RunList
+      const limit = params?.limit ?? 50
+      const runs = [...this.runs.values()]
+        .filter((r) => !params?.launched_by || r.launched_by === params.launched_by)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      return {
+        runs: runs.slice(0, limit).map(item),
+        total: runs.length,
+        limit,
+        offset: 0,
+      } as RunList
     },
     get: async (id) => {
       this.gets.push(id)
@@ -301,14 +311,20 @@ class FakeRuns {
   }
 }
 
-function tracker(fake: FakeRuns, launchers: Launcher[], clock: { now: number } = { now: NOW }) {
+function tracker(
+  fake: FakeRuns,
+  launchers: Launcher[],
+  clock: { now: number } = { now: NOW },
+  more: { config?: RunsConfig; unusable?: () => string | null } = {},
+) {
   let dismissed: Record<string, number> = {}
   const store: DismissedStore = { read: () => dismissed, write: (d) => (dismissed = { ...d }) }
   const notified: number[] = []
   const instance = new RunTracker({
     api: () => fake.api,
+    ...(more.unusable ? { unusable: more.unusable } : {}),
     launchers: () => launchers,
-    config: CONFIG,
+    config: more.config ?? CONFIG,
     dismissed: store,
     notify: () => notified.push(clock.now),
     now: () => clock.now,
@@ -326,7 +342,7 @@ describe('RunTracker', () => {
     fake.runs.set('r2', view('r2', 'running', [], { launched_by: null }))
     const { instance, notified } = tracker(fake, LAUNCHER)
     await instance.tick()
-    expect(fake.listCalls).toEqual(['aico-widget-c0d0ae59'])
+    expect(fake.listCalls).toEqual(['page', 'aico-widget-c0d0ae59'])
     const answer = instance.snapshot()
     expect(answer.status).toBe('ok')
     expect(answer.items.map((m) => m.id)).toEqual(['run:r1', 'step:r1:a'])
@@ -334,6 +350,8 @@ describe('RunTracker', () => {
     expect(notified).toHaveLength(1)
     await instance.tick()
     expect(notified).toHaveLength(1)
+    // After the first look, one page answers for every session.
+    expect(fake.listCalls).toEqual(['page', 'aico-widget-c0d0ae59', 'page'])
   })
 
   it('reads an ended run once, and an active run every poll', async () => {
@@ -591,6 +609,7 @@ describe('an Agent Hub chat session as a launcher', () => {
       'aico-widget-c0d0ae59',
       'aico-widget-chat1',
       'hub-session-1',
+      'page',
     ])
     const children = childAgents(instance.snapshot().items)
     expect(children.map((m) => [m.kind, m.stepKey, m.coordinatorId])).toEqual([
@@ -605,20 +624,22 @@ describe('an Agent Hub chat session as a launcher', () => {
     expect(childAgents(instance.snapshot().items)).toEqual([])
   })
 
-  it('keeps a run when one of its launcher ids could not be asked', async () => {
+  it('keeps a run when a new launcher id could not be asked', async () => {
     const fake = new FakeRuns()
     fake.runs.set(
       'r1',
       view('r1', 'running', [step('a', 'running')], { launched_by: 'hub-session-1' }),
     )
-    const { instance } = tracker(fake, CHAT)
+    const launchers = [...CHAT]
+    const { instance } = tracker(fake, launchers)
     await instance.tick()
     const list = fake.api.list
     fake.api.list = async (params) => {
-      if (params?.launched_by === 'aico-widget-chat1')
+      if (params?.launched_by === 'aico-widget-new')
         throw Object.assign(new Error('down'), { status: 500 })
       return list(params)
     }
+    launchers.push({ id: 'new', ownershipId: 'aico-widget-new' })
     await instance.tick()
     expect(instance.snapshot().items.map((m) => m.id)).toEqual(['run:r1', 'step:r1:a'])
     expect(instance.snapshot().status).toBe('stale')
@@ -861,6 +882,128 @@ describe('taking back a note whose pause is over', () => {
     fake.runs.delete('r1')
     await t.tick()
     expect(p.withdrawn).toHaveLength(0)
+  })
+})
+
+describe('asking Agent Hub sparingly', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const many = Array.from({ length: 12 }, (_, i) => ({
+    id: `s${i}`,
+    ownershipId: `aico-widget-s${i}`,
+  }))
+
+  it('asks one page per look however many sessions there are', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('r1', view('r1', 'running', [], { launched_by: 'aico-widget-s3' }))
+    const { instance } = tracker(fake, many)
+    await instance.tick()
+    expect(fake.listCalls).toHaveLength(13)
+    fake.listCalls = []
+    for (let i = 0; i < 5; i++) await instance.tick()
+    expect(fake.listCalls).toEqual(['page', 'page', 'page', 'page', 'page'])
+    expect(instance.snapshot().items[0]).toMatchObject({ id: 'run:r1', coordinatorId: 's3' })
+  })
+
+  it('finds a run older than the page by asking for a new session once, and follows it by id', async () => {
+    const fake = new FakeRuns()
+    const config = { ...CONFIG, listLimit: 2 }
+    fake.runs.set('old', view('old', 'running', [], { created_at: '2026-10-20T00:00:00+00:00' }))
+    const t = tracker(fake, LAUNCHER, { now: NOW }, { config })
+    for (const id of ['n1', 'n2'])
+      fake.runs.set(id, view(id, 'completed', [], { launched_by: 'someone-else' }))
+    await t.instance.tick()
+    expect(t.instance.snapshot().items.map((m) => m.id)).toEqual(['run:old'])
+    fake.gets = []
+    await t.instance.tick()
+    expect(fake.listCalls.filter((c) => c !== 'page')).toEqual(['aico-widget-c0d0ae59'])
+    expect(fake.gets).toEqual(['old'])
+    expect(t.instance.snapshot().items.map((m) => m.id)).toEqual(['run:old'])
+    // Ended and off the page: kept until it lapses, without reading it again.
+    fake.runs.set('old', { ...(fake.runs.get('old') as RunView), state: 'completed' })
+    await t.instance.tick()
+    fake.gets = []
+    await t.instance.tick()
+    expect(fake.gets).toEqual([])
+    expect(t.instance.snapshot().items.map((m) => m.id)).toEqual(['run:old'])
+    // A run no longer on a page that holds every run is gone.
+    fake.runs.clear()
+    await t.instance.tick()
+    expect(t.instance.snapshot().items).toEqual([])
+  })
+
+  it('waits the idle delay with nothing going, the short one while a run goes, and backs off on failure', async () => {
+    const fake = new FakeRuns()
+    const { instance } = tracker(fake, LAUNCHER)
+    await instance.tick()
+    expect(instance.nextDelay()).toBe(CONFIG.idleMs)
+    fake.runs.set('r1', view('r1', 'running', []))
+    await instance.tick()
+    expect(instance.nextDelay()).toBe(CONFIG.pollMs)
+    fake.down = 'network'
+    const delays: number[] = []
+    for (let i = 0; i < 12; i++) {
+      await instance.tick()
+      delays.push(instance.nextDelay(() => 1))
+    }
+    expect(delays.slice(0, 4)).toEqual([2_000, 4_000, 8_000, 16_000])
+    expect(delays.at(-1)).toBe(CONFIG.backoffMaxMs)
+    expect(instance.nextDelay(() => 0)).toBe(CONFIG.backoffMaxMs / 2)
+    fake.down = null
+    await instance.tick()
+    expect(instance.nextDelay()).toBe(CONFIG.pollMs)
+  })
+
+  it('looks soon after a session was busy, at most once per poll interval', async () => {
+    vi.useFakeTimers({ now: NOW })
+    const fake = new FakeRuns()
+    const t = tracker(fake, LAUNCHER, { now: NOW })
+    const clock = t.clock
+    const advance = async (ms: number) => {
+      clock.now += ms
+      await vi.advanceTimersByTimeAsync(ms)
+    }
+    t.instance.start()
+    await advance(0)
+    const pages = () => fake.listCalls.filter((c) => c === 'page').length
+    expect(pages()).toBe(1)
+    await advance(10_000)
+    expect(pages()).toBe(1)
+    t.instance.poke()
+    t.instance.poke()
+    await advance(0)
+    expect(pages()).toBe(2)
+    t.instance.poke()
+    await advance(500)
+    expect(pages()).toBe(2)
+    await advance(500)
+    expect(pages()).toBe(3)
+    await advance(29_999)
+    expect(pages()).toBe(3)
+    await advance(1)
+    expect(pages()).toBe(4)
+    t.instance.stop()
+  })
+
+  it('makes no call without a client id and says why', async () => {
+    const fake = new FakeRuns()
+    const { instance } = tracker(
+      fake,
+      LAUNCHER,
+      { now: NOW },
+      {
+        unusable: () => 'Agent Hub client id is not set',
+      },
+    )
+    await instance.tick()
+    expect(fake.listCalls).toEqual([])
+    expect(instance.snapshot()).toMatchObject({
+      status: 'unavailable',
+      error: 'Agent Hub client id is not set',
+    })
+    expect(instance.nextDelay()).toBe(CONFIG.idleMs)
   })
 })
 

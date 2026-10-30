@@ -81,22 +81,29 @@ export function resolveSettleMs(env: NodeJS.ProcessEnv = process.env): number | 
 
 /** How Tether follows the workflow runs its sessions launch. */
 export interface RunsConfig {
-  /** How often the runs are looked at (ms). */
+  /** How often the runs are looked at while one is going or a session was
+   * just busy (ms). */
   pollMs: number
+  /** How often they are looked at otherwise (ms). */
+  idleMs: number
+  /** The longest wait between looks while Agent Hub fails (ms). */
+  backoffMaxMs: number
   /** How long an ended run stays listed, from its last activity (ms). */
   endedRetentionMs: number
-  /** Runs asked for per launching session. */
+  /** Newest runs asked for per look (and for a new session by its id). */
   listLimit: number
-  /** Launching sessions asked at once. */
+  /** New sessions asked for by their id at once. */
   concurrency: number
   /** The Agent Hub web app, where a run's page lives. */
   frontendUrl: string
 }
 
 export const DEFAULT_RUNS_POLL_MS = 3_000
+export const DEFAULT_RUNS_IDLE_MS = 30_000
+export const DEFAULT_RUNS_BACKOFF_MAX_MS = 5 * 60_000
 /** An ended run drops off the lists on its own this long after its last activity. */
 export const DEFAULT_RUNS_ENDED_RETENTION_MS = 30 * 60_000
-export const DEFAULT_RUNS_LIST_LIMIT = 30
+export const DEFAULT_RUNS_LIST_LIMIT = 100
 export const DEFAULT_RUNS_CONCURRENCY = 4
 /** The web app's port on the API's host, as `st workflow` assumes. */
 export const DEFAULT_FRONTEND_PORT = '3003'
@@ -106,7 +113,8 @@ function positive(value: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
 }
 
-/** `TETHER_AGENT_HUB_RUNS_POLL_MS`, `..._RUNS_ENDED_MS`, `..._RUNS_LIMIT`,
+/** `TETHER_AGENT_HUB_RUNS_POLL_MS`, `..._RUNS_IDLE_MS`, `..._RUNS_BACKOFF_MAX_MS`,
+ * `..._RUNS_ENDED_MS`, `..._RUNS_LIMIT`,
  * `..._RUNS_CONCURRENCY` and the page address: `TETHER_AGENT_HUB_FRONTEND_URL`,
  * else `AGENT_HUB_FRONTEND_URL` (env or `~/.env.local`, as `st workflow` reads
  * it), else the API's host on the web app's port. */
@@ -134,6 +142,8 @@ export function resolveRunsConfig(
   }
   return {
     pollMs: positive(env.TETHER_AGENT_HUB_RUNS_POLL_MS, DEFAULT_RUNS_POLL_MS),
+    idleMs: positive(env.TETHER_AGENT_HUB_RUNS_IDLE_MS, DEFAULT_RUNS_IDLE_MS),
+    backoffMaxMs: positive(env.TETHER_AGENT_HUB_RUNS_BACKOFF_MAX_MS, DEFAULT_RUNS_BACKOFF_MAX_MS),
     endedRetentionMs: positive(env.TETHER_AGENT_HUB_RUNS_ENDED_MS, DEFAULT_RUNS_ENDED_RETENTION_MS),
     listLimit: Math.min(200, positive(env.TETHER_AGENT_HUB_RUNS_LIMIT, DEFAULT_RUNS_LIST_LIMIT)),
     concurrency: positive(env.TETHER_AGENT_HUB_RUNS_CONCURRENCY, DEFAULT_RUNS_CONCURRENCY),
