@@ -2,11 +2,13 @@
 // active-client resize claim), retried while the claim cannot land yet.
 
 import {
+  type SizeHolder,
   type TetherClient,
   TetherError,
   TetherUnavailable,
   type ViewerLabel,
 } from '../client/index'
+import type { WindowState } from './control'
 
 /** Merge overlapping signals, then repeat once for the latest state. */
 export function coalesceTrailingAsync(work: () => Promise<void>): () => Promise<void> {
@@ -91,4 +93,36 @@ export function createSizeClaim(deps: SizeClaimDeps): () => Promise<void> {
       await new Promise((resolve) => setTimeout(resolve, CLAIM_RETRY_MS))
     }
   })
+}
+
+/** What a viewer that just attached should do about the shared size. */
+export interface SizeAtAttach {
+  /** Nobody holds the size: this viewer takes it. */
+  claim: boolean
+  holder: SizeHolder | null
+  size: WindowState | null
+}
+
+/**
+ * Looking at a session does not take its size: a viewer claims at attach only
+ * when nobody holds it, so a new session fits its first viewer and a window
+ * that reattaches (Aico restarted) takes back what its old client held.
+ * Nobody holds it when the holder's tmux client has gone, or, with no holder
+ * known, when no claim has pinned the window. Otherwise the viewer is told who
+ * holds the size and at what size, and claims only once it is used. Anything
+ * unknown counts as held.
+ */
+export async function sizeAtAttach(deps: {
+  tether: Pick<TetherClient, 'resizeHolder'>
+  id: string
+  generation(): string
+  link: { windowState(): Promise<WindowState | null> }
+}): Promise<SizeAtAttach> {
+  const [answer, size] = await Promise.all([
+    deps.tether.resizeHolder(deps.id).catch(() => null),
+    deps.link.windowState(),
+  ])
+  const holder = answer?.holder && answer.generation === deps.generation() ? answer.holder : null
+  const claim = !!size && (holder ? !size.clients.includes(holder.clientPid) : !size.pinned)
+  return { claim, holder, size }
 }

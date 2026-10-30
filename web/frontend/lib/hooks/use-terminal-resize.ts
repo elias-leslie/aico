@@ -14,7 +14,13 @@ export interface TerminalResizeOptions {
   fitAddonRef: React.MutableRefObject<InstanceType<typeof FitAddon> | null>
   containerRef: React.RefObject<HTMLDivElement | null>
   wsRef: React.MutableRefObject<WebSocket | null>
-  sendBackendResize?: boolean
+  /** This view may claim the shared size at all (not an observer). */
+  canClaim?: boolean
+  /** This view holds the shared size: its own size changes claim again. */
+  holdsSize?: boolean
+  /** Another client holds the size: show the session at this size instead of
+   * fitting this view's container (null: fit). */
+  viewSize?: { cols: number; rows: number } | null
 }
 
 export type ViewportEventTarget = Pick<
@@ -55,13 +61,15 @@ export function attachViewportResizeListeners(
  * the size it just fitted. A container too small to be a terminal is neither
  * fitted nor claimed.
  *
- * Only the active view (visible, focused, connected: `sendBackendResize`)
- * sends anything, and every size it sends is also a claim on the shared tmux
- * window. The view's own container changes size without the view changing
- * activity (phone accessory bar or keyboard, address-bar collapse, rotation,
- * desktop drag); if those only resized this view's PTY client, tmux would keep
- * the older claimed window size and fill the difference with its dot pattern.
- * Identical sizes are deduped. Inactive views never claim.
+ * Looking does not claim. Only the view that holds the size (`holdsSize`)
+ * sends its size changes, and every size it sends is also a claim on the
+ * shared tmux window. The holder's container changes size without the owner
+ * doing anything (phone accessory bar or keyboard, address-bar collapse,
+ * rotation, desktop drag); if those only resized this view's PTY client, tmux
+ * would keep the older claimed window size and fill the difference with its
+ * dot pattern. Identical sizes are deduped. A view that does not hold the size
+ * shows the session at its size (`viewSize`) and claims only through
+ * `handleResize` (the owner typed, pasted or pressed Use here).
  */
 export function useTerminalResize(options: TerminalResizeOptions) {
   const {
@@ -69,8 +77,12 @@ export function useTerminalResize(options: TerminalResizeOptions) {
     fitAddonRef,
     containerRef,
     wsRef,
-    sendBackendResize = true,
+    canClaim = true,
+    holdsSize = true,
+    viewSize = null,
   } = options
+  const viewSizeRef = useRef(viewSize)
+  viewSizeRef.current = viewSize
   // Last size this view claimed on the current socket. A new socket or a new
   // activation always claims again (see handleResize).
   const lastClaimRef = useRef<{
@@ -81,7 +93,7 @@ export function useTerminalResize(options: TerminalResizeOptions) {
 
   const sendClaim = useCallback(
     (force: boolean): void => {
-      if (!sendBackendResize) return
+      if (!canClaim) return
       const ws = wsRef.current
       if (ws?.readyState !== WebSocket.OPEN) return
       const dims = fitAddonRef.current
@@ -105,28 +117,35 @@ export function useTerminalResize(options: TerminalResizeOptions) {
         }),
       )
     },
-    [fitAddonRef, sendBackendResize, wsRef],
+    [canClaim, fitAddonRef, wsRef],
   )
 
-  // Imperative resize used when the view becomes active (visible, focused and
-  // connected): fit and claim the shared tmux window size for this view, even
-  // if the size equals the last claim (another client may have claimed since).
+  // The owner used this view (typed, pasted, Use here): fit it and claim the
+  // shared tmux window size for it, even if the size equals the last claim
+  // (another client may have claimed since).
   const handleResize = useCallback(() => {
     if (!fitAddonRef.current || !terminalRef.current) return
     if (!fitTerminal(fitAddonRef.current)) return
     sendClaim(true)
   }, [terminalRef, fitAddonRef, sendClaim])
 
-  // Claim again once the layout has settled (the view became active): a window
-  // that regains focus is usually mid-resize (the focus event can arrive
-  // before the resize that caused it, and an immediate fit would claim the
-  // old size, then the new one 150 ms later, redrawing the program twice).
-  const scheduleRef = useRef<(() => void) | null>(null)
-  const forceClaimRef = useRef(false)
-  const requestClaim = useCallback(() => {
-    forceClaimRef.current = true
-    scheduleRef.current?.()
-  }, [])
+  // Show the session at the holder's size; once it is no longer shown at it,
+  // fit this view again.
+  const viewCols = viewSize?.cols ?? 0
+  const viewRows = viewSize?.rows ?? 0
+  const shownRef = useRef(false)
+  useEffect(() => {
+    const term = terminalRef.current
+    if (!term) return
+    if (viewCols > 0 && viewRows > 0) {
+      shownRef.current = true
+      if (term.cols !== viewCols || term.rows !== viewRows)
+        term.resize(viewCols, viewRows)
+    } else if (shownRef.current) {
+      shownRef.current = false
+      if (fitAddonRef.current) fitTerminal(fitAddonRef.current)
+    }
+  }, [fitAddonRef, terminalRef, viewCols, viewRows])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -138,6 +157,8 @@ export function useTerminalResize(options: TerminalResizeOptions) {
 
     const fitNow = () => {
       if (!fitAddonRef.current || !terminalRef.current) return
+      // Shown at the holder's size: this container's size changes nothing.
+      if (viewSizeRef.current) return
       const started = performance.now()
       fitTerminal(fitAddonRef.current)
       lastFitMs = performance.now() - started
@@ -150,9 +171,7 @@ export function useTerminalResize(options: TerminalResizeOptions) {
         fitTimer = null
         fitNow()
       }
-      const force = forceClaimRef.current
-      forceClaimRef.current = false
-      sendClaim(force)
+      if (holdsSize && !viewSizeRef.current) sendClaim(false)
     }
 
     const scheduleResize = () => {
@@ -169,7 +188,6 @@ export function useTerminalResize(options: TerminalResizeOptions) {
       ptyTimer = setTimeout(flushPtyResize, PTY_RESIZE_DEBOUNCE_MS)
     }
 
-    scheduleRef.current = scheduleResize
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (!entry) return
@@ -184,13 +202,12 @@ export function useTerminalResize(options: TerminalResizeOptions) {
     const viewportCleanup = attachViewportResizeListeners(scheduleResize)
 
     return () => {
-      scheduleRef.current = null
       if (fitTimer) clearTimeout(fitTimer)
       if (ptyTimer) clearTimeout(ptyTimer)
       viewportCleanup()
       resizeObserver.disconnect()
     }
-  }, [terminalRef, containerRef, fitAddonRef, sendClaim])
+  }, [terminalRef, containerRef, fitAddonRef, holdsSize, sendClaim])
 
-  return { handleResize, requestClaim }
+  return { handleResize }
 }

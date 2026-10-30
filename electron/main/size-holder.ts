@@ -2,8 +2,8 @@
 // Every attached client sizes the same window, so when another client (a phone
 // in a browser, say) claims it, this window keeps its full-width terminal over a
 // narrow pane. While another client holds the size the window shows a notice
-// with a way to take it back, and takes it back by itself when the owner comes
-// back to the window: focus, a click in the terminal, or typing.
+// with a way to take it back, and takes it back when the owner uses the
+// window: a click in the terminal, or typing. Focus alone only looks.
 //
 // The notice is slow to appear and quick to go: it shows only once another
 // client has held the size for OVERLAY_DELAY_MS, so a claim that is taken back
@@ -74,7 +74,7 @@ export function createSizeHolder(deps: SizeHolderDeps) {
       timer = undefined
       setVisible(false)
     },
-    /** The owner focused, clicked or typed in this window. */
+    /** The owner clicked or typed in this window. */
     activity(): void {
       if (other) auto()
     },

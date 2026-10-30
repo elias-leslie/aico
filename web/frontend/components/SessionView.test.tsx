@@ -191,7 +191,9 @@ describe('SessionView', () => {
     expect(screen.queryByTestId('size-holder-notice')).toBeNull()
 
     act(() => sizeHolderHooks.change?.('Chrome on Android'))
-    expect(screen.getByText('Viewing on Chrome on Android')).toBeTruthy()
+    expect(screen.getByTestId('size-holder-notice')).toHaveTextContent(
+      'Sized for Chrome on Android',
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Use here' }))
     expect(sizeHolderHooks.claimSize).toHaveBeenCalledTimes(1)
 

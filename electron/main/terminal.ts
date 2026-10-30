@@ -16,6 +16,7 @@ import {
   attachEnvironment,
   createSizeClaim,
   ownAttachTarget,
+  sizeAtAttach,
   type TerminalLink,
 } from 'tether/term'
 import { describeFailure, writeNotice } from './notices'
@@ -73,7 +74,7 @@ export function clampSize(size: PtySize): PtySize {
 }
 
 interface TerminalDeps {
-  tether: Pick<TetherClient, 'createSession' | 'attach' | 'resizeClaim' | 'hosts'>
+  tether: Pick<TetherClient, 'createSession' | 'attach' | 'resizeClaim' | 'resizeHolder' | 'hosts'>
   catalog: Pick<SessionCatalog, 'get' | 'upsert'>
   registry: Pick<
     WindowRegistry,
@@ -363,11 +364,13 @@ export function createTerminal(deps: TerminalDeps) {
       ptys.get(winId) === pty &&
       ptyStartGenerations.get(winId) === generation &&
       !deps.isReplacing(id)
-    // Desktop auto-resize: a window claims the shared tmux window size for its
-    // own attached client (Tether's active-client resize claim) when it attaches,
-    // gains focus, or is resized by Aico's tiling. Callers pick the moment.
-    // Whether another client holds the size shows in the window as a notice with
-    // a Use here button (size-holder.ts); this window's own claims clear it.
+    // Looking does not take the size: a window claims the shared tmux window
+    // size for its own attached client (Tether's active-client resize claim)
+    // when the owner types, clicks or presses Use here in it, at attach only
+    // when nobody holds the size yet, and on a resize (Aico's tiling) only
+    // while it holds the size. Whether another client holds the size shows in
+    // the window as a notice with a Use here button (size-holder.ts); this
+    // window's own claims clear it.
     const holder = createSizeHolder({
       reclaim: () => void claimSize(),
       show: (visible) => {
@@ -394,11 +397,24 @@ export function createTerminal(deps: TerminalDeps) {
       },
     })
     sizeClaims.set(pty, claimSize)
-    let claimAfterAttach = true
+    // The first data is the seed: the pane is known, ask who holds the size.
+    const sizeAfterAttach = async () => {
+      const at = await sizeAtAttach({
+        tether,
+        id,
+        generation: () => catalog.get(id)?.generation ?? target.generation,
+        link: pty,
+      })
+      if (!isCurrent()) return
+      if (at.claim) void claimSize()
+      else if (at.holder?.clientPid === pty.pid) holder.held()
+      else holder.lost()
+    }
+    let attachSeen = false
     pty.onData((data) => {
-      if (claimAfterAttach && isCurrent()) {
-        claimAfterAttach = false
-        void claimSize()
+      if (!attachSeen && isCurrent()) {
+        attachSeen = true
+        void sizeAfterAttach()
       }
       if (!win.isDestroyed()) win.webContents.send('pty:data', data)
     })
@@ -427,7 +443,6 @@ export function createTerminal(deps: TerminalDeps) {
       }
     })
     ptys.set(winId, pty)
-    if (win.isFocused()) void claimSize()
   }
 
   function resumeAwaitingAttaches(): void {
@@ -570,7 +585,8 @@ export function createTerminal(deps: TerminalDeps) {
         try {
           pty.resize(cols, rows)
           const arranged = win ? deps.recentlyArranged(win.id) : false
-          if (win?.isFocused() || arranged) void sizeClaims.get(pty)?.()
+          const heldElsewhere = sizeHolders.get(pty)?.isOther() ?? false
+          if (!heldElsewhere && (win?.isFocused() || arranged)) void sizeClaims.get(pty)?.()
         } catch (err) {
           console.warn('[aico] pty resize failed:', err)
         }
@@ -639,11 +655,6 @@ export function createTerminal(deps: TerminalDeps) {
       if (!pty || !holder) return
       if (pty.pid === clientPid) holder.held()
       else holder.lost()
-    },
-    /** The window gained focus: claim the session's size for its terminal. */
-    claimSize: (winId: number): void => {
-      const pty = ptys.get(winId)
-      if (pty) void sizeClaims.get(pty)?.()
     },
     /** The window is gone: detach its terminal first (the session persists), then
      * drop its per-window state. An in-flight refresh entry is left, as before. */

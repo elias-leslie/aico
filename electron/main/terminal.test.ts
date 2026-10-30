@@ -62,6 +62,13 @@ function fakeLink(size: { cols: number; rows: number }) {
     paste: vi.fn(),
     reseed: vi.fn(),
     settleSize: vi.fn(),
+    // Nobody has claimed the window yet unless a test says so.
+    windowState: vi.fn(async () => ({
+      cols: size.cols,
+      rows: size.rows,
+      pinned: false,
+      clients: [4242] as number[],
+    })),
     resize: vi.fn(function (this: { cols: number; rows: number }, cols: number, rows: number) {
       this.cols = cols
       this.rows = rows
@@ -126,6 +133,10 @@ function setup() {
     resizeClaim: vi.fn(
       async () => ({ applied: true }) as { applied: boolean; changed?: boolean; reason?: string },
     ),
+    resizeHolder: vi.fn(async (_id: string) => ({
+      generation: 'g1',
+      holder: null as { clientPid: number; viewer: null } | null,
+    })),
     hosts: vi.fn(async () => [] as unknown[]),
   }
   const state = { replacing: new Set<string>(), quitting: false, arranged: false }
@@ -268,7 +279,7 @@ describe('terminal input', () => {
     expect(link.paste.mock.calls).toEqual([['pasted']])
   })
 
-  it('sends terminal bytes to the window and claims the size on first output', async () => {
+  it('sends terminal bytes to the window and, nobody holding the size, claims it on first output', async () => {
     const s = setup()
     const link = await attached(s)
     expect(s.tether.resizeClaim).not.toHaveBeenCalled()
@@ -296,11 +307,50 @@ describe('terminal input', () => {
     await vi.waitFor(() => expect(s.tether.resizeClaim).toHaveBeenCalledTimes(1))
   })
 
-  it('a focus claims the size for that window', async () => {
+  it('looking does not take the size another client holds', async () => {
     const s = setup()
-    await attached(s)
-    s.terminal.claimSize(1)
-    s.terminal.claimSize(2) // no link: nothing
+    const link = await attached(s)
+    link.windowState.mockResolvedValueOnce({
+      cols: 40,
+      rows: 20,
+      pinned: true,
+      clients: [4242, 9999],
+    })
+    s.tether.resizeHolder.mockResolvedValueOnce({
+      generation: 'g1',
+      holder: { clientPid: 9999, viewer: null },
+    })
+    link.emitData('seed')
+    await vi.waitFor(() => expect(link.windowState).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    // Focus and a tiling resize only look too.
+    s.all[0].focused = true
+    s.state.arranged = true
+    s.on.get('pty:resize')?.(s.from(s.all[0]), { cols: 80, rows: 20 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(link.resize).toHaveBeenCalledWith(80, 20)
+    expect(s.tether.resizeClaim).not.toHaveBeenCalled()
+  })
+
+  it('a pinned window with no known holder counts as held', async () => {
+    const s = setup()
+    const link = await attached(s)
+    link.windowState.mockResolvedValueOnce({ cols: 40, rows: 20, pinned: true, clients: [4242] })
+    link.emitData('seed')
+    await vi.waitFor(() => expect(link.windowState).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(s.tether.resizeClaim).not.toHaveBeenCalled()
+  })
+
+  it("takes the size back when its holder's client has gone (Aico restarted)", async () => {
+    const s = setup()
+    const link = await attached(s)
+    link.windowState.mockResolvedValueOnce({ cols: 40, rows: 20, pinned: true, clients: [4242] })
+    s.tether.resizeHolder.mockResolvedValueOnce({
+      generation: 'g1',
+      holder: { clientPid: 1111, viewer: null },
+    })
+    link.emitData('seed')
     await vi.waitFor(() => expect(s.tether.resizeClaim).toHaveBeenCalledTimes(1))
   })
 
@@ -308,7 +358,7 @@ describe('terminal input', () => {
     const s = setup()
     await attached(s)
     s.tether.resizeClaim.mockRejectedValueOnce(new TetherError(409, 'stale_generation', {}))
-    s.terminal.claimSize(1)
+    s.on.get('pty:claim-size')?.(s.from(s.all[0]), true) // Use here
     await vi.waitFor(() => expect(s.tether.resizeClaim).toHaveBeenCalledTimes(2))
     expect(s.deps.refresh).toHaveBeenCalledTimes(1)
   })
@@ -676,7 +726,7 @@ describe('another client holds the size', () => {
       const link = await attached(s)
       await lostTo(s)
       s.tether.resizeClaim.mockResolvedValueOnce({ applied: true, changed: true })
-      s.terminal.claimSize(1) // the window gained focus
+      s.on.get('pty:claim-size')?.(s.from(s.all[0]), true) // Use here
       await vi.advanceTimersByTimeAsync(0)
       expect(link.settleSize).toHaveBeenCalledTimes(1)
       expect(sent(s).at(-1)).toEqual(['pty:size-other', false])

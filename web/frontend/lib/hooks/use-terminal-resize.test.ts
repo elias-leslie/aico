@@ -80,7 +80,13 @@ describe('useTerminalResize shared-size claim', () => {
     vi.useRealTimers()
   })
 
-  function setup(sendBackendResize = true) {
+  function setup(
+    claimState: {
+      canClaim?: boolean
+      holdsSize?: boolean
+      viewSize?: { cols: number; rows: number } | null
+    } = {},
+  ) {
     let observerCallback: ResizeObserverCallback | null = null
     globalThis.ResizeObserver = class {
       constructor(callback: ResizeObserverCallback) {
@@ -93,16 +99,20 @@ describe('useTerminalResize shared-size claim', () => {
     let dims = { cols: 80, rows: 24 }
     const send = vi.fn()
     const fit = vi.fn()
+    const term = { cols: 80, rows: 24, resize: vi.fn() }
     const options = {
-      terminalRef: { current: {} as never },
+      terminalRef: { current: term as never },
       fitAddonRef: {
         current: { fit, proposeDimensions: () => dims } as never,
       },
       containerRef: { current: document.createElement('div') },
       wsRef: { current: { readyState: WebSocket.OPEN, send } as never },
-      sendBackendResize,
+      ...claimState,
     }
-    const { result } = renderHook(() => useTerminalResize(options))
+    const { result, rerender } = renderHook(
+      (props: typeof claimState) => useTerminalResize({ ...options, ...props }),
+      { initialProps: claimState },
+    )
     const observe = (width: number, height: number, next: typeof dims) => {
       dims = next
       observerCallback?.(
@@ -112,7 +122,7 @@ describe('useTerminalResize shared-size claim', () => {
     }
     const messages = () =>
       send.mock.calls.map(([raw]) => JSON.parse(raw as string))
-    return { result, observe, messages, fit }
+    return { result, rerender, observe, messages, fit, term }
   }
 
   it('re-claims the shared size whenever the active view refits', () => {
@@ -177,9 +187,25 @@ describe('useTerminalResize shared-size claim', () => {
     expect(messages()).toHaveLength(2)
   })
 
-  it('sends nothing while another view owns the size', () => {
+  it('a view that does not hold the size claims nothing as its container changes, only when used', () => {
     vi.useFakeTimers()
-    const { result, observe, messages } = setup(false)
+    const { result, observe, messages } = setup({ holdsSize: false })
+
+    // Phone keyboard, rotation, a second window's drag: looking only.
+    observe(800, 600, { cols: 100, rows: 30 })
+    vi.advanceTimersByTime(1000)
+    expect(messages()).toEqual([])
+
+    // Typed, pasted or Use here.
+    result.current.handleResize()
+    expect(messages()).toEqual([
+      { __ctrl: true, resize: { cols: 100, rows: 30 }, claim: true },
+    ])
+  })
+
+  it('an observer never claims, even when used', () => {
+    vi.useFakeTimers()
+    const { result, observe, messages } = setup({ canClaim: false })
 
     result.current.handleResize()
     observe(800, 600, { cols: 100, rows: 30 })
@@ -242,30 +268,22 @@ describe('useTerminalResize shared-size claim', () => {
     now.mockRestore()
   })
 
-  it('claims on activation only after the layout settles, so a resize that follows is not preceded by a stale claim', () => {
+  it("shows the session at the holder's size instead of fitting its own container", () => {
     vi.useFakeTimers()
-    const { result, observe, messages } = setup()
+    const { rerender, observe, messages, fit, term } = setup({
+      holdsSize: false,
+      viewSize: { cols: 120, rows: 40 },
+    })
+    expect(term.resize).toHaveBeenCalledWith(120, 40)
 
-    // The window regained focus; its resize arrives a few ms later.
-    result.current.requestClaim()
+    fit.mockClear()
+    observe(400, 800, { cols: 46, rows: 44 })
+    vi.advanceTimersByTime(1000)
+    expect(fit).not.toHaveBeenCalled()
     expect(messages()).toEqual([])
-    vi.advanceTimersByTime(3)
-    observe(600, 700, { cols: 107, rows: 64 })
-    vi.advanceTimersByTime(PTY_RESIZE_DEBOUNCE_MS + 1000)
 
-    expect(messages()).toEqual([
-      { __ctrl: true, resize: { cols: 107, rows: 64 }, claim: true },
-    ])
-  })
-
-  it('still claims on activation when the size did not change', () => {
-    vi.useFakeTimers()
-    const { result, messages } = setup()
-
-    result.current.handleResize()
-    result.current.requestClaim()
-    vi.advanceTimersByTime(PTY_RESIZE_DEBOUNCE_MS + 1000)
-
-    expect(messages()).toHaveLength(2)
+    // This view took the size: it fits its container again.
+    rerender({ holdsSize: true, viewSize: null })
+    expect(fit).toHaveBeenCalled()
   })
 })

@@ -63,9 +63,8 @@ describe('SizeHolderNotice', () => {
       <SizeHolderNotice holder="Aico desktop" onUseHere={onUseHere} isMobile />,
     )
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Viewing on Aico desktop',
+      'Sized for Aico desktop',
     )
-    expect(screen.getByRole('status')).toHaveTextContent('this phone')
     fireEvent.click(screen.getByRole('button', { name: 'Use here' }))
     expect(onUseHere).toHaveBeenCalledOnce()
   })

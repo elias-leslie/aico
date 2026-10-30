@@ -55,6 +55,9 @@ class FakeLink {
     this.resized.push({ cols, rows })
   }
   settleSize() {}
+  async windowState() {
+    return windowState
+  }
   delivered() {}
   kill() {
     if (this.closed) return
@@ -75,6 +78,8 @@ class FakeLink {
 let tether: FakeTether
 let hub: TerminalHub
 let links: FakeLink[]
+/** What tmux says of the session's window: unclaimed unless a test says so. */
+let windowState: { cols: number; rows: number; pinned: boolean; clients: number[] } | null
 let server: Server
 let port: number
 const ORIGIN = 'http://127.0.0.1:3002'
@@ -82,6 +87,7 @@ const ORIGIN = 'http://127.0.0.1:3002'
 beforeEach(async () => {
   tether = new FakeTether()
   links = []
+  windowState = { cols: 80, rows: 24, pinned: false, clients: [4242] }
   hub = new TerminalHub({
     tether: tether.client,
     historyLines: 123,
@@ -200,7 +206,7 @@ describe('frames', () => {
 })
 
 describe('terminal socket', () => {
-  it('starts at the first size, relays input and output, and claims with its label', async () => {
+  it('starts at the first size, relays input and output, and takes a size nobody holds', async () => {
     const session = tether.add()
     const view = open(session.id, {
       Origin: ORIGIN,
@@ -208,9 +214,7 @@ describe('terminal socket', () => {
     })
     const transport = await view.next((f) => f.transport === 'control')
     expect(transport).toEqual({ __ctrl: true, transport: 'control', history_lines: 123 })
-    view.ws.send(
-      ctrl({ resize: { cols: 100, rows: 40 }, claim: true, capabilities: ['binary_protocol'] }),
-    )
+    view.ws.send(ctrl({ resize: { cols: 100, rows: 40 }, capabilities: ['binary_protocol'] }))
     await until(() => links.length === 1)
     const link = links[0]
     expect(link.size).toEqual({ cols: 100, rows: 40 })
@@ -259,7 +263,11 @@ describe('terminal socket', () => {
     const other = await view.next(
       (f) => (f.size_holder as { here?: boolean } | undefined)?.here === false,
     )
-    expect(other.size_holder).toEqual({ here: false, viewer: { app: 'desktop', device: 'davion' } })
+    expect(other.size_holder).toEqual({
+      here: false,
+      viewer: { app: 'desktop', device: 'davion' },
+      size: { cols: 50, rows: 20 },
+    })
 
     // "Use here": a claim at the current size.
     view.ws.send(ctrl({ resize: { cols: 80, rows: 24 }, claim: true }))
@@ -283,14 +291,79 @@ describe('terminal socket', () => {
         viewer: { app: 'desktop', device: 'box' },
       },
     }
+    windowState = { cols: 90, rows: 30, pinned: true, clients: [4242, 7] }
     const view = open(session.id)
     await view.next((f) => f.transport === 'control')
     view.ws.send('typed early')
     const held = await view.next((f) => 'size_holder' in f)
-    expect(held.size_holder).toEqual({ here: false, viewer: { app: 'desktop', device: 'box' } })
+    expect(held.size_holder).toEqual({
+      here: false,
+      viewer: { app: 'desktop', device: 'box' },
+      size: { cols: 90, rows: 30 },
+    })
     expect(links[0].size).toBeNull()
     expect(links[0].written).toEqual(['typed early'])
     view.ws.close()
+  })
+
+  it('looking at a session another client holds takes nothing; a claim from the page does', async () => {
+    const session = tether.add()
+    tether.holder = {
+      generation: 'g1',
+      holder: {
+        clientPid: 7,
+        cols: 120,
+        rows: 40,
+        generation: 'g1',
+        claimedAt: '',
+        viewer: { app: 'desktop', device: 'box' },
+      },
+    }
+    windowState = { cols: 120, rows: 40, pinned: true, clients: [4242, 7] }
+    const view = open(session.id)
+    await view.next((f) => f.transport === 'control')
+    view.ws.send(ctrl({ resize: { cols: 44, rows: 30 }, capabilities: ['binary_protocol'] }))
+    const held = await view.next((f) => 'size_holder' in f)
+    expect(held.size_holder).toEqual({
+      here: false,
+      viewer: { app: 'desktop', device: 'box' },
+      size: { cols: 120, rows: 40 },
+    })
+    view.ws.send('x')
+    await until(() => links[0].written.length === 1)
+    expect(tether.callsOf('resizeClaim')).toHaveLength(0)
+    // The page claims once it is used (typing, Use here).
+    view.ws.send(ctrl({ resize: { cols: 44, rows: 30 }, claim: true }))
+    await until(() => tether.callsOf('resizeClaim').length === 1)
+    view.ws.close()
+  })
+
+  it('a pinned window with no known holder counts as held; a gone holder does not', async () => {
+    const session = tether.add()
+    windowState = { cols: 120, rows: 40, pinned: true, clients: [4242] }
+    const first = open(session.id)
+    await first.next((f) => f.transport === 'control')
+    first.ws.send(ctrl({ resize: { cols: 44, rows: 30 } }))
+    const held = await first.next((f) => 'size_holder' in f)
+    expect(held.size_holder).toEqual({ here: false, viewer: null, size: { cols: 120, rows: 40 } })
+    first.ws.close()
+
+    tether.holder = {
+      generation: 'g1',
+      holder: {
+        clientPid: 7,
+        cols: 120,
+        rows: 40,
+        generation: 'g1',
+        claimedAt: '',
+        viewer: { app: 'desktop', device: 'box' },
+      },
+    }
+    const second = open(session.id)
+    await second.next((f) => f.transport === 'control')
+    second.ws.send(ctrl({ resize: { cols: 44, rows: 30 } }))
+    await until(() => tether.callsOf('resizeClaim').length === 1)
+    second.ws.close()
   })
 
   it('closes 4000 for a session Tether does not have, and when it ends', async () => {

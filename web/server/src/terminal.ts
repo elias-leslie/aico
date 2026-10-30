@@ -6,10 +6,13 @@
 //
 // A socket's first control message carries the viewer's size: the client
 // starts at that size, or unsized (leaving the window's size to the other
-// clients) when none arrives in time. `claim: true` claims the shared window
-// size for this socket's client, labelled `{app: 'web', device}`; whenever the
-// holder changes, the page gets a `size_holder` notice saying whether this
-// socket holds it and, if not, which app and device does ("Viewing on …").
+// clients) when none arrives in time. Looking does not take the size: the
+// socket claims the shared window size at attach only when nobody holds it yet
+// (sizeAtAttach), and otherwise when the page sends `claim: true` (the owner
+// typed, pasted or pressed Use here). Claims are labelled `{app: 'web',
+// device}`; whenever the holder changes, the page gets a `size_holder` notice
+// saying whether this socket holds it and, if not, which app and device does
+// ("Viewing on …") and the session's size, which the page then shows.
 
 import type { IncomingMessage } from 'node:http'
 import {
@@ -27,6 +30,7 @@ import {
   createSizeClaim,
   ownAttachTarget,
   parseViewerFrame,
+  sizeAtAttach,
   streamToViewer,
   VIEWER_CREDIT_BYTES,
 } from 'tether/term'
@@ -63,6 +67,7 @@ export type TerminalLink = Pick<
   | 'reseed'
   | 'resize'
   | 'settleSize'
+  | 'windowState'
   | 'kill'
   | 'refusedByHost'
   | 'onData'
@@ -144,7 +149,7 @@ export function deviceLabel(userAgent: string | undefined): string {
 }
 
 interface View {
-  sizeHeld(clientPid: number, viewer: ViewerLabel | null): void
+  sizeHeld(clientPid: number, viewer: ViewerLabel | null, size: Size | null): void
   ended(): void
   close(code: number, reason: string): void
   /** The remote host the session runs on; null on this computer. */
@@ -212,7 +217,12 @@ export class TerminalHub {
     if (!views) return
     if (event.type === 'session.resized' && typeof event.data.clientPid === 'number') {
       const viewer = (event.data.viewer as ViewerLabel | undefined) ?? null
-      for (const view of views) view.sizeHeld(event.data.clientPid, viewer)
+      const { cols, rows } = event.data
+      const size =
+        typeof cols === 'number' && typeof rows === 'number' && cols > 0 && rows > 0
+          ? { cols, rows }
+          : null
+      for (const view of views) view.sizeHeld(event.data.clientPid, viewer, size)
     } else if (event.type === 'session.ended') {
       for (const view of views) view.ended()
     }
@@ -324,8 +334,12 @@ export class TerminalHub {
       lastHostState = state
       ws.send(controlFrame({ __ctrl: true, host_state: { host, state } }))
     }
-    const notice = (here: boolean, label: ViewerLabel | null) => {
-      const holder = { here, viewer: here ? viewer : label }
+    const notice = (here: boolean, label: ViewerLabel | null, held: Size | null = null) => {
+      const holder = {
+        here,
+        viewer: here ? viewer : label,
+        ...(!here && held ? { size: { cols: held.cols, rows: held.rows } } : {}),
+      }
       const key = JSON.stringify(holder)
       if (!isCurrent() || key === lastNotice) return
       lastNotice = key
@@ -444,23 +458,34 @@ export class TerminalHub {
       })
       if (claimed) claimWhenReady()
       else {
-        // Say who holds the size now, unless this socket is claiming it anyway.
+        // Nobody holds the size yet: this sized viewer takes it. Otherwise
+        // say who holds it and at what size, unless this socket claims anyway.
         void current.ready.then(async () => {
           if (claimed || !isCurrent() || link !== current) return
-          try {
-            const answer = await tether.resizeHolder(sessionId)
-            if (answer.holder && answer.generation === generation)
-              notice(answer.holder.clientPid === current.pid, answer.holder.viewer)
-          } catch {
-            // No holder notice: Tether will say on the next claim.
-          }
+          const at = await sizeAtAttach({
+            tether,
+            id: sessionId,
+            generation: () => generation,
+            link: current,
+          })
+          if (claimed || !isCurrent() || link !== current) return
+          // An unsized socket (an observer) never claims.
+          if (at.claim && current.cols > 0) {
+            claimed = true
+            void claim()
+          } else if (at.holder)
+            notice(at.holder.clientPid === current.pid, at.holder.viewer, at.size)
+          else if (at.size) notice(false, null, at.size)
         })
       }
     }
 
     const view: View = {
-      sizeHeld: (clientPid, label) => {
-        if (link) notice(clientPid === link.pid, label)
+      sizeHeld: (clientPid, label, held) => {
+        if (!link) return
+        // Another client took the size: a reattach no longer claims it back.
+        if (clientPid !== link.pid) claimed = false
+        notice(clientPid === link.pid, label, held)
       },
       ended: () => {
         if (open) dead('Session ended')

@@ -1,6 +1,11 @@
 import { act, render, waitFor } from '@testing-library/react'
+import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { sizeHolderName, TerminalComponent } from './Terminal'
+import {
+  sizeHolderName,
+  TerminalComponent,
+  type TerminalHandle,
+} from './Terminal'
 
 type TerminalHookOptions = Parameters<
   typeof import('../lib/hooks/use-terminal-websocket')['useTerminalWebSocket']
@@ -119,7 +124,7 @@ vi.mock('../lib/hooks/use-terminal-resize', () => ({
     resizeHookOptions = options as Parameters<
       typeof import('../lib/hooks/use-terminal-resize')['useTerminalResize']
     >[0]
-    return { handleResize: resizeHandle, requestClaim: resizeHandle }
+    return { handleResize: resizeHandle }
   }),
 }))
 
@@ -189,6 +194,7 @@ describe('TerminalComponent', () => {
       websocketState.options?.onSizeHolder?.({
         here: false,
         viewer: { app: 'web', device: 'Chrome on Android' },
+        size: null,
       })
     })
     expect(onSizeHolderChange).not.toHaveBeenCalled()
@@ -198,7 +204,11 @@ describe('TerminalComponent', () => {
     expect(onSizeHolderChange).toHaveBeenLastCalledWith('Chrome on Android')
 
     act(() => {
-      websocketState.options?.onSizeHolder?.({ here: true, viewer: null })
+      websocketState.options?.onSizeHolder?.({
+        here: true,
+        viewer: null,
+        size: null,
+      })
     })
     expect(onSizeHolderChange).toHaveBeenLastCalledWith(null)
     vi.useRealTimers()
@@ -214,68 +224,102 @@ describe('TerminalComponent', () => {
     expect(sizeHolderName(null)).toBe('another device')
   })
 
-  it('suppresses shared resize writes in observer mode', () => {
+  it('an observer sends no size and never claims, even when typing', () => {
     window.history.replaceState({}, '', '/?observer=1')
+    websocketState.wsRefCurrent = { readyState: WebSocket.OPEN, send: vi.fn() }
 
     render(<TerminalComponent sessionId="session-observer" isVisible />)
+    act(() => terminalInstanceOptions?.onData('x'))
 
     expect(websocketState.options?.sendInitialResize).toBe(false)
-    expect(resizeHookOptions?.sendBackendResize).toBe(false)
-  })
-
-  it('keeps shared resize writes enabled on normal pages', () => {
-    render(<TerminalComponent sessionId="session-standard" isVisible />)
-
-    expect(websocketState.options?.sendInitialResize).toBe(true)
-    expect(resizeHookOptions?.sendBackendResize).toBe(true)
-  })
-
-  it('claims the shared size again (handleResize) only when the view regains focus', () => {
-    render(<TerminalComponent sessionId="session-shared" isVisible />)
-    const initialResizes = resizeHandle.mock.calls.length
-
-    act(() => window.dispatchEvent(new Event('blur')))
-    expect(resizeHookOptions?.sendBackendResize).toBe(false)
     expect(websocketState.options?.getDimensions?.()).toBeNull()
-    expect(resizeHandle).toHaveBeenCalledTimes(initialResizes)
+    expect(resizeHookOptions?.canClaim).toBe(false)
+    expect(resizeHandle).not.toHaveBeenCalled()
+  })
 
+  it('opening, focusing or showing a session claims nothing; it offers its size unclaimed', () => {
+    render(<TerminalComponent sessionId="session-look" isVisible />)
+    act(() => window.dispatchEvent(new Event('blur')))
     act(() => window.dispatchEvent(new Event('focus')))
-    expect(resizeHookOptions?.sendBackendResize).toBe(true)
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+
+    expect(resizeHandle).not.toHaveBeenCalled()
+    expect(resizeHookOptions?.holdsSize).toBe(false)
+    expect(websocketState.options?.sendInitialResize).toBe(true)
     expect(websocketState.options?.getDimensions?.()).toEqual({
       cols: 80,
       rows: 24,
     })
-    expect(resizeHandle).toHaveBeenCalledTimes(initialResizes + 1)
   })
 
-  it('does not send shared resizes while the page is hidden', () => {
-    const visibility = vi.spyOn(document, 'visibilityState', 'get')
-    render(<TerminalComponent sessionId="session-hidden" isVisible />)
-    const initialResizes = resizeHandle.mock.calls.length
+  it("shows the session at the holder's size until this view takes it", () => {
+    render(<TerminalComponent sessionId="session-view" isVisible />)
+    act(() =>
+      websocketState.options?.onSizeHolder?.({
+        here: false,
+        viewer: { app: 'desktop', device: 'box' },
+        size: { cols: 200, rows: 60 },
+      }),
+    )
+    expect(resizeHookOptions?.viewSize).toEqual({ cols: 200, rows: 60 })
+    expect(resizeHookOptions?.holdsSize).toBe(false)
 
-    visibility.mockReturnValue('hidden')
-    act(() => document.dispatchEvent(new Event('visibilitychange')))
-    expect(resizeHookOptions?.sendBackendResize).toBe(false)
-    expect(websocketState.options?.getDimensions?.()).toBeNull()
-
-    visibility.mockReturnValue('visible')
-    act(() => document.dispatchEvent(new Event('visibilitychange')))
-    expect(resizeHookOptions?.sendBackendResize).toBe(true)
-    expect(resizeHandle).toHaveBeenCalledTimes(initialResizes + 1)
-    visibility.mockRestore()
+    act(() =>
+      websocketState.options?.onSizeHolder?.({
+        here: true,
+        viewer: null,
+        size: null,
+      }),
+    )
+    expect(resizeHookOptions?.viewSize).toBeNull()
+    expect(resizeHookOptions?.holdsSize).toBe(true)
   })
 
-  it('keeps observer views passive after they regain focus', () => {
-    window.history.replaceState({}, '', '/?observer=1')
-    render(<TerminalComponent sessionId="session-observer" isVisible />)
-    resizeHandle.mockClear()
+  it('the first input claims the size, spaced out, and not once this view holds it', () => {
+    vi.useFakeTimers()
+    websocketState.wsRefCurrent = { readyState: WebSocket.OPEN, send: vi.fn() }
+    const ref = createRef<TerminalHandle>()
+    render(<TerminalComponent ref={ref} sessionId="session-use" isVisible />)
+    act(() =>
+      websocketState.options?.onSizeHolder?.({
+        here: false,
+        viewer: null,
+        size: { cols: 200, rows: 60 },
+      }),
+    )
 
-    act(() => window.dispatchEvent(new Event('blur')))
-    act(() => window.dispatchEvent(new Event('focus')))
+    act(() => terminalInstanceOptions?.onData('l'))
+    act(() => terminalInstanceOptions?.onData('s'))
+    expect(websocketState.sendInput.mock.calls).toEqual([['l'], ['s']])
+    expect(resizeHandle).toHaveBeenCalledTimes(1)
+    expect(resizeHookOptions?.viewSize).toBeNull()
 
-    expect(resizeHookOptions?.sendBackendResize).toBe(false)
-    expect(websocketState.options?.getDimensions?.()).toBeNull()
-    expect(resizeHandle).not.toHaveBeenCalled()
+    // Toolbar keys and compose go through the handle; a paste too.
+    act(() => vi.advanceTimersByTime(1600))
+    act(() => ref.current?.sendInput('\r'))
+    expect(resizeHandle).toHaveBeenCalledTimes(2)
+
+    act(() =>
+      websocketState.options?.onSizeHolder?.({
+        here: true,
+        viewer: null,
+        size: null,
+      }),
+    )
+    act(() => vi.advanceTimersByTime(1600))
+    act(() => terminalInstanceOptions?.onData('x'))
+    void ref.current?.pasteInput('y')
+    expect(resizeHandle).toHaveBeenCalledTimes(2)
+    vi.useRealTimers()
+  })
+
+  it('Use here claims at once', () => {
+    const ref = createRef<TerminalHandle>()
+    render(
+      <TerminalComponent ref={ref} sessionId="session-use-here" isVisible />,
+    )
+    act(() => ref.current?.claimSize())
+    expect(resizeHandle).toHaveBeenCalledTimes(1)
   })
 
   it('drops in-flight write side effects after resetting before reconnect sync', async () => {
@@ -399,21 +443,6 @@ describe('TerminalComponent', () => {
     rerender(<TerminalComponent sessionId="session-ready" isVisible />)
 
     expect(websocketState.connectCalls).toBeGreaterThanOrEqual(1)
-  })
-
-  it('replays a resize once a connected terminal becomes ready', () => {
-    terminalInstanceReady = false
-
-    const { rerender } = render(
-      <TerminalComponent sessionId="session-resize" isVisible />,
-    )
-
-    expect(resizeHandle).not.toHaveBeenCalled()
-
-    terminalInstanceReady = true
-    rerender(<TerminalComponent sessionId="session-resize" isVisible />)
-
-    expect(resizeHandle).toHaveBeenCalledTimes(1)
   })
 
   it('disconnects hidden terminals and reconnects them when visible again', () => {

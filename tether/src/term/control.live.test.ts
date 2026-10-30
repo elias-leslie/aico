@@ -379,6 +379,20 @@ describe.skipIf(!hasTmux)('ControlTerminal against tmux', () => {
     expect(screenOf(fast)).toEqual(tmuxScreen(24))
   }, 40_000)
 
+  it('reports the window size, whether a claim pinned it, and the attached clients', async () => {
+    const v = view(70, 20)
+    await settle(v)
+    const before = await v.link.windowState()
+    expect(before).toMatchObject({ cols: 70, rows: 20, pinned: false })
+    expect(before?.clients).toContain(v.link.pid)
+    // A claim's resize-window pins the window: a sized client no longer moves it.
+    tmux('resize-window', '-t', 't', '-x', '90', '-y', '30')
+    v.link.resize(60, 18)
+    await settle(v)
+    expect(await v.link.windowState()).toMatchObject({ cols: 90, rows: 30, pinned: true })
+    tmux('set-option', '-wu', '-t', 't', 'window-size')
+  })
+
   it('reports exit when the session goes away', async () => {
     const v = view(50, 16)
     await settle(v)

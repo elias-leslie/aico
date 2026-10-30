@@ -149,7 +149,6 @@ const windows = createWindows({
         attention.focused(widgetId)
         chrome.syncTray()
       }
-      terminal.claimSize(win.id)
       ambient.focused(win.id)
     },
     blurred: (win) => ambient.blurred(win.id),

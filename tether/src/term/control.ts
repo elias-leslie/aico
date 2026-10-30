@@ -48,12 +48,26 @@ export interface TerminalLink {
   /** The shared window's size changed under this client (another client held
    * it and this one took it back): read the pane again once typing pauses. */
   settleSize(): void
+  /** The shared window's size, whether a claim has pinned it, and the tmux
+   * clients attached to the session; null when tmux does not answer. */
+  windowState(): Promise<WindowState | null>
   kill(): void
   /** After exit: the host's sshd refused another session on the link (its
    * MaxSessions), so trying again at once cannot help. */
   readonly refusedByHost: boolean
   onData(listener: (data: string) => void): void
   onExit(listener: () => void): void
+}
+
+/** The session's one tmux window: its size, whether a viewer's claim set it,
+ * and the pids of the clients attached to the session. A claim's
+ * `resize-window` pins the window (`window-size manual`); until then tmux
+ * sizes it to the latest sized client, so nobody holds it yet. */
+export interface WindowState {
+  cols: number
+  rows: number
+  pinned: boolean
+  clients: number[]
 }
 
 /** How long an exit waits for the child's last stderr (ssh's reason). */
@@ -138,6 +152,8 @@ export class ControlTerminal implements TerminalLink {
   private exited = false
   private outstanding = 0
   private stalled = false
+  /** windowState() calls waiting on tmux; answered null if the link closes first. */
+  private readonly sizeQueries = new Set<(state: WindowState | null) => void>()
   /** Live output from the current stdout read, emitted as one piece. */
   private pendingOutput = ''
   private frameTimer: NodeJS.Timeout | undefined
@@ -276,6 +292,45 @@ export class ControlTerminal implements TerminalLink {
     this.reseedTimer = setTimeout(() => this.reseedAfterTyping(), RESEED_AFTER_RESIZE_MS)
   }
 
+  windowState(): Promise<WindowState | null> {
+    if (this.phase === 'closed' || !this.child.stdin.writable) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      const answer = (state: WindowState | null) => {
+        this.sizeQueries.delete(answer)
+        resolve(state)
+      }
+      this.sizeQueries.add(answer)
+      const target = this.paneId ? ` -t ${this.paneId}` : ''
+      this.sendList(
+        [
+          `display-message -p${target} '#{window_width} #{window_height} #{window-size}'`,
+          `list-clients${target} -F '#{client_pid}'`,
+        ],
+        ([sizeBlock, clientsBlock]) => {
+          const [cols, rows, mode] = (sizeBlock.error ? '' : (sizeBlock.lines[0] ?? ''))
+            .trim()
+            .split(' ')
+          const state = {
+            cols: Number(cols),
+            rows: Number(rows),
+            pinned: mode === 'manual',
+            clients: clientsBlock.error
+              ? []
+              : clientsBlock.lines
+                  .map(Number)
+                  .filter((pid) => Number.isSafeInteger(pid) && pid > 0),
+          }
+          const sized =
+            Number.isSafeInteger(state.cols) &&
+            state.cols > 0 &&
+            Number.isSafeInteger(state.rows) &&
+            state.rows > 0
+          answer(sized ? state : null)
+        },
+      )
+    })
+  }
+
   /** A resize's reseed, held back while the owner is typing. */
   private reseedAfterTyping(): void {
     const now = Date.now()
@@ -339,6 +394,7 @@ export class ControlTerminal implements TerminalLink {
     if (this.reseedTimer) clearTimeout(this.reseedTimer)
     if (this.frameTimer) clearTimeout(this.frameTimer)
     this.markReady()
+    this.answerSizeQueries()
     try {
       this.child.stdin.end()
       this.child.kill()
@@ -416,6 +472,10 @@ export class ControlTerminal implements TerminalLink {
     this.child.stdin.write(`${commands.join(' ; ')}\n`)
   }
 
+  private answerSizeQueries(): void {
+    for (const answer of [...this.sizeQueries]) answer(null)
+  }
+
   private finish(): void {
     if (this.exited) return
     this.exited = true
@@ -423,6 +483,7 @@ export class ControlTerminal implements TerminalLink {
     this.phase = 'closed'
     if (this.reseedTimer) clearTimeout(this.reseedTimer)
     this.markReady()
+    this.answerSizeQueries()
     for (const listener of this.exitListeners) listener()
   }
 }

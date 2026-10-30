@@ -761,8 +761,8 @@ div.xterm .xterm-viewport {
 
 /* ---- The session's terminal area ---- */
 
-/* Notices that cover the terminal: connection lost, session ended, another
-   device holding the size. As the desktop's size notice. */
+/* Notices that cover the terminal: connection lost, session ended, the
+   host away. */
 .lantern-term-notice {
   position: absolute;
   inset: 0;
@@ -796,6 +796,40 @@ div.xterm .xterm-viewport {
 
 .lantern-term-notice .lantern-btn {
   margin-top: 10px;
+}
+
+/* Another device holds the size: a slim bar over the session, which stays
+   readable at that device's size underneath. */
+.lantern-size-bar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 12px);
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--frame-edge);
+  border-radius: 8px;
+  background: rgb(var(--ink-rgb) / 0.92);
+  box-shadow: var(--shadow-rim);
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--bone);
+  animation: lantern-fade 0.2s var(--ease-arrival);
+}
+
+.lantern-size-bar p {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lantern-size-bar .d {
+  color: var(--mist);
 }
 
 /* Connecting for the first time: a word on the empty terminal, no cover. */
@@ -912,7 +946,8 @@ div.xterm .xterm-viewport {
 @media (prefers-reduced-motion: reduce) {
   .lantern-enter,
   .lantern-rise,
-  .lantern-term-notice {
+  .lantern-term-notice,
+  .lantern-size-bar {
     animation: none;
   }
 }

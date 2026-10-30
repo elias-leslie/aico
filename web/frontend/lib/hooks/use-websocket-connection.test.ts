@@ -155,7 +155,7 @@ describe('openWebSocketConnection', () => {
     })
   })
 
-  it('claims the shared size on connect when the view owns resize', () => {
+  it('offers its size on connect without claiming it: opening does not resize', () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', MockWebSocket)
     const refs = buildRefs()
@@ -165,10 +165,10 @@ describe('openWebSocketConnection', () => {
     connect(refs, callbacks)
     sockets[0].emitOpen()
 
-    expect(JSON.parse(sockets[0].sent[0] as string)).toMatchObject({
+    expect(JSON.parse(sockets[0].sent[0] as string)).toEqual({
       __ctrl: true,
       resize: { cols: 120, rows: 40 },
-      claim: true,
+      capabilities: ['binary_protocol'],
     })
   })
 
@@ -341,17 +341,23 @@ describe('size holder', () => {
   it('reports who holds the shared size', () => {
     const callbacks = buildCallbacks()
     dispatchControlMessage(
-      '{"__ctrl":true,"size_holder":{"here":false,"viewer":{"app":"web","device":"Chrome on Android"}}}',
+      '{"__ctrl":true,"size_holder":{"here":false,"viewer":{"app":"web","device":"Chrome on Android"},"size":{"cols":120,"rows":40}}}',
       callbacks,
     )
     dispatchControlMessage(
-      '{"__ctrl":true,"size_holder":{"here":true,"viewer":{"app":1}}}',
+      '{"__ctrl":true,"size_holder":{"here":true,"viewer":{"app":1},"size":{"cols":0,"rows":4}}}',
       callbacks,
     )
     dispatchControlMessage('{"__ctrl":true,"size_holder":{}}', callbacks)
     expect(callbacks.onSizeHolder.mock.calls).toEqual([
-      [{ here: false, viewer: { app: 'web', device: 'Chrome on Android' } }],
-      [{ here: true, viewer: null }],
+      [
+        {
+          here: false,
+          viewer: { app: 'web', device: 'Chrome on Android' },
+          size: { cols: 120, rows: 40 },
+        },
+      ],
+      [{ here: true, viewer: null, size: null }],
     ])
   })
 })

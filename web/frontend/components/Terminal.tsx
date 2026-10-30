@@ -79,37 +79,13 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     const isFocusedRef = useRef(false)
     const isVisibleRef = useRef(isVisible)
     const rendererStatusRef = useRef<TerminalRendererStatus | null>(null)
-    const suppressSharedResize = useMemo(
+    // An observer (`?observer=1`) never sizes the session, even when typing.
+    const isObserver = useMemo(
       () =>
         typeof window !== 'undefined' &&
         isObserverModeEnabled(window.location.search),
       [],
     )
-    const [isWindowFocused, setIsWindowFocused] = useState(
-      () => typeof document === 'undefined' || document.hasFocus(),
-    )
-    const [isPageVisible, setIsPageVisible] = useState(
-      () =>
-        typeof document === 'undefined' ||
-        document.visibilityState !== 'hidden',
-    )
-    const ownsResize =
-      !suppressSharedResize && isVisible && isWindowFocused && isPageVisible
-
-    useEffect(() => {
-      const handleFocus = () => setIsWindowFocused(true)
-      const handleBlur = () => setIsWindowFocused(false)
-      const handleVisibilityChange = () =>
-        setIsPageVisible(document.visibilityState !== 'hidden')
-      window.addEventListener('focus', handleFocus)
-      window.addEventListener('blur', handleBlur)
-      document.addEventListener('visibilitychange', handleVisibilityChange)
-      return () => {
-        window.removeEventListener('focus', handleFocus)
-        window.removeEventListener('blur', handleBlur)
-        document.removeEventListener('visibilitychange', handleVisibilityChange)
-      }
-    }, [])
 
     useEffect(() => {
       isVisibleRef.current = isVisible
@@ -148,10 +124,16 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
         reseed: reseedSource,
       })
 
-    // Another device holds the shared size: its name (null while this view
-    // holds it, or nobody has said). Typing takes the size back.
+    // Looking does not take the shared size; using the view does. Another
+    // device holds it: its name (null while this view holds it, or nobody has
+    // said), and the session's size, which this view then shows.
     const [heldBy, setHeldBy] = useState<string | null>(null)
-    const heldElsewhereRef = useRef(false)
+    const [holdsSize, setHoldsSize] = useState(false)
+    const holdsSizeRef = useRef(false)
+    const [viewSize, setViewSize] = useState<{
+      cols: number
+      rows: number
+    } | null>(null)
     const lastReclaimRef = useRef(0)
     const reclaimRef = useRef<() => void>(() => {})
     // A remote session's host is away: the terminal shows no output and
@@ -164,7 +146,7 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
       useTerminalWebSocket({
         sessionId,
         workingDir,
-        sendInitialResize: !suppressSharedResize,
+        sendInitialResize: !isObserver,
         onHistoryLines: (historyLines) => {
           // Size the buffer now, before the seed is written, not on the
           // next render.
@@ -179,16 +161,20 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
           if (!terminalRef.current) return
           enqueueWrite(data)
         },
-        onSizeHolder: ({ here, viewer }) => {
-          heldElsewhereRef.current = !here
+        onSizeHolder: ({ here, viewer, size }) => {
+          holdsSizeRef.current = here
+          setHoldsSize(here)
           setHeldBy(here ? null : sizeHolderName(viewer))
+          setViewSize(here ? null : size)
         },
         onHostState: (frame) => {
           hostAwayRef.current = frame.state !== 'live'
           onHostStateChangeRef.current?.(hostAwayRef.current ? frame : null)
         },
+        // The size this view would take, sent unclaimed at connect: the
+        // server claims with it only when nobody holds the size yet.
         getDimensions: () =>
-          ownsResize && fitAddonRef.current
+          !isObserver && isVisibleRef.current && fitAddonRef.current
             ? usableDimensions(fitAddonRef.current)
             : null,
       })
@@ -226,6 +212,24 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
 
     const { clearSearch, search } = useTerminalSearch({ terminalRef })
 
+    // Input from this view (keys, paste, toolbar, compose, an uploaded file's
+    // path) takes the size when another view holds it, at most this often.
+    const claimOnInput = useCallback(() => {
+      if (isObserver || holdsSizeRef.current) return
+      const now = Date.now()
+      if (now - lastReclaimRef.current < RECLAIM_SPACING_MS) return
+      lastReclaimRef.current = now
+      reclaimRef.current()
+    }, [isObserver])
+    const sendUsedInput = useCallback(
+      (data: string) => {
+        if (wsRef.current?.readyState !== WebSocket.OPEN) return
+        sendInput(data)
+        claimOnInput()
+      },
+      [claimOnInput, sendInput, wsRef],
+    )
+
     // Paste goes through tmux, which brackets the text only when the program
     // enabled bracketed paste.
     const pasteInput = useCallback(
@@ -233,10 +237,11 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
         const text = data.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
         if (text && wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(JSON.stringify({ __ctrl: true, paste: text }))
+          claimOnInput()
         }
         return Promise.resolve()
       },
-      [wsRef],
+      [claimOnInput, wsRef],
     )
     const pasteFile = useCallback(
       (file: File) => {
@@ -254,23 +259,12 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
       isSgrMouse,
     })
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally empty deps — reads refs at call time
     const handleTerminalData = useCallback(
       (data: string) => {
         if (!isFocusedRef.current || hostAwayRef.current) return
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          sendInput(data)
-          const now = Date.now()
-          if (
-            heldElsewhereRef.current &&
-            now - lastReclaimRef.current >= RECLAIM_SPACING_MS
-          ) {
-            lastReclaimRef.current = now
-            reclaimRef.current()
-          }
-        }
+        sendUsedInput(data)
       },
-      [sendInput],
+      [sendUsedInput],
     )
 
     const { isReady } = useTerminalInstance(
@@ -304,15 +298,30 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
       }
     }, [isReady, onViewportMoved])
 
-    const { handleResize, requestClaim } = useTerminalResize({
+    const { handleResize } = useTerminalResize({
       terminalRef,
       fitAddonRef,
       containerRef,
       wsRef,
-      sendBackendResize: ownsResize,
+      canClaim: !isObserver && isVisible,
+      holdsSize,
+      viewSize,
     })
 
-    reclaimRef.current = handleResize
+    // Claiming fits this view at once; the holder notice confirms it.
+    const claimSize = useCallback(() => {
+      setViewSize(null)
+      handleResize()
+    }, [handleResize])
+    reclaimRef.current = claimSize
+
+    // Shown at another size than before: the pane is read again at it.
+    const viewCols = viewSize?.cols ?? 0
+    const viewRows = viewSize?.rows ?? 0
+    // biome-ignore lint/correctness/useExhaustiveDependencies: repaint when the shown size changes
+    useEffect(() => {
+      if (viewCols > 0 && status === 'connected') reseedSource.request()
+    }, [viewCols, viewRows])
 
     const reconnectHost = useCallback(() => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) return
@@ -321,8 +330,8 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
 
     useTerminalHandle(ref, {
       reconnect,
-      sendInput,
-      claimSize: handleResize,
+      sendInput: sendUsedInput,
+      claimSize,
       reconnectHost,
       status,
       terminalRef,
@@ -333,7 +342,8 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     // A new connection hears the holder afresh.
     useEffect(() => {
       if (status === 'connected') return
-      heldElsewhereRef.current = false
+      holdsSizeRef.current = false
+      setHoldsSize(false)
       setHeldBy(null)
       if (hostAwayRef.current) {
         hostAwayRef.current = false
@@ -361,11 +371,6 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
       disconnect()
     }, [connect, disconnect, isReady, isVisible])
 
-    useEffect(() => {
-      if (!ownsResize || !isReady || status !== 'connected') return
-      requestClaim()
-    }, [requestClaim, isReady, ownsResize, status])
-
     return (
       <div
         className={clsx(
@@ -376,7 +381,13 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
         <div
           ref={containerRef}
           data-testid="terminal-live-container"
-          className="h-full min-h-0 min-w-0 overflow-hidden"
+          data-view-size={
+            viewSize ? `${viewSize.cols}x${viewSize.rows}` : undefined
+          }
+          className={clsx(
+            'h-full min-h-0 min-w-0',
+            viewSize ? 'overflow-auto' : 'overflow-hidden',
+          )}
           style={{
             backgroundColor: LANTERN_TERMINAL_THEME.background,
             width: '100%',

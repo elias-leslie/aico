@@ -98,8 +98,9 @@ interface SizeHolderNoticeProps {
   isMobile?: boolean
 }
 
-/** Another device holds the one shared terminal size: name it and offer to
- * take it back, as the desktop's notice. */
+/** Another device holds the one shared terminal size: the session shows at
+ * that size, under a slim bar naming the device, with a way to take the size.
+ * Looking never takes it; typing here or Use here does. */
 export function SizeHolderNotice({
   holder,
   onUseHere,
@@ -107,18 +108,22 @@ export function SizeHolderNotice({
 }: SizeHolderNoticeProps) {
   return (
     <div
-      className="lantern-term-notice"
+      className="lantern-size-bar"
       role="status"
       aria-live="polite"
       data-testid="size-holder-notice"
     >
-      <p className="t">Viewing on {holder}</p>
-      <p className="d">
-        {isMobile
-          ? 'Sized for that screen. Tap Use here or start typing to size it for this phone.'
-          : 'Sized for that screen. Click Use here or start typing to size it for this window.'}
+      <p>
+        Sized for {holder}
+        {!isMobile && (
+          <span className="d">. Type here to size it for this window.</span>
+        )}
       </p>
-      <button type="button" className="lantern-btn primary" onClick={onUseHere}>
+      <button
+        type="button"
+        className="lantern-btn small primary"
+        onClick={onUseHere}
+      >
         Use here
       </button>
     </div>

@@ -21,10 +21,12 @@ export interface WebSocketConnectionRefs {
 }
 
 /** Who holds the session's one shared size (the server's `size_holder`
- * notice): this view, or the app and device that claimed it last. */
+ * notice): this view, or the app and device that claimed it last and the
+ * session's size, when known. */
 export interface SizeHolderFrame {
   here: boolean
   viewer: { app: string; device: string } | null
+  size: { cols: number; rows: number } | null
 }
 
 /** The host a remote session runs on and whether it can be reached (the
@@ -185,16 +187,14 @@ export function openWebSocketConnection(
       }
     }, WS_CLIENT_PING_INTERVAL)
 
-    // Negotiate capabilities even when this view must not claim tmux geometry.
-    // getDimensions only answers while this view owns resize (active and
-    // focused), so a connect-time size is also a claim on the shared window.
+    // Negotiate capabilities, with this view's size but no claim: opening a
+    // session does not take its size. The server claims with this size only
+    // when nobody holds it yet; an observer sends none.
     const dims = sendInitialResize ? getDimensions?.() : null
     ws.send(
       JSON.stringify({
         __ctrl: true,
-        ...(dims
-          ? { resize: { cols: dims.cols, rows: dims.rows }, claim: true }
-          : {}),
+        ...(dims ? { resize: { cols: dims.cols, rows: dims.rows } } : {}),
         capabilities: CLIENT_CAPABILITIES,
       }),
     )
@@ -302,6 +302,7 @@ export function dispatchControlMessage(
       typeof holder.here === 'boolean'
     ) {
       const viewer = holder.viewer as Record<string, unknown> | null | undefined
+      const size = holder.size as Record<string, unknown> | null | undefined
       callbacks.onSizeHolder?.({
         here: holder.here,
         viewer:
@@ -309,6 +310,14 @@ export function dispatchControlMessage(
           typeof viewer.app === 'string' &&
           typeof viewer.device === 'string'
             ? { app: viewer.app, device: viewer.device }
+            : null,
+        size:
+          size &&
+          Number.isSafeInteger(size.cols) &&
+          Number.isSafeInteger(size.rows) &&
+          (size.cols as number) > 0 &&
+          (size.rows as number) > 0
+            ? { cols: size.cols as number, rows: size.rows as number }
             : null,
       })
       return true
