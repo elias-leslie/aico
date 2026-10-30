@@ -13,8 +13,10 @@ import { type HostEntry, hostsFilePath, loadHosts, peerDir } from './hosts'
 import { linkPaths } from './link'
 import {
   type Descriptor,
+  downReason,
   isDescriptor,
   Peer,
+  type PeerDeps,
   type PeerIdentity,
   type PeerSnapshot,
   type RunsLike,
@@ -53,6 +55,8 @@ export interface HubDeps {
   random?(): number
   /** How a create wakes a host and checks it is ready (tests replace it). */
   gate?: Partial<GateRuntime>
+  /** A silent peer stream's health check timing (tests shorten it). */
+  stall?: PeerDeps['stall']
 }
 
 export interface Lineage {
@@ -78,11 +82,14 @@ function sameEntry(a: HostEntry, b: HostEntry): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
+/** How long a host's `status` command may take. */
+const STATUS_RUN_MS = 8_000
+
 function unavailable(peer: Peer): HttpError {
   const reason =
     peer.state === 'identity_changed'
       ? (peer.error ?? `${peer.name} answers as a different machine`)
-      : `${peer.name} is ${peer.state === 'connecting' ? 'still connecting' : 'not reachable'}`
+      : downReason(peer.name, peer.state)
   return new HttpError(409, 'host_unavailable', { host: peer.name, state: peer.state, reason })
 }
 
@@ -183,12 +190,28 @@ export class Hub {
           log: this.log,
           now: this.now,
           random: this.deps.random ?? Math.random,
+          poweredOff: (host) => this.poweredOff(host),
+          ...(this.deps.stall ? { stall: this.deps.stall } : {}),
         },
         this.snapshots[entry.name] ?? null,
       )
       this.peers.set(entry.name, peer)
       peer.start()
     }
+  }
+
+  /** The host's `status` command, read: powered off when its output matches
+   * `statusOff`; null when there is no command or it failed. */
+  private async poweredOff(entry: HostEntry): Promise<boolean | null> {
+    if (!entry.status) return null
+    const result = await this.gate.run(entry.status, STATUS_RUN_MS)
+    if (result.code !== 0) return null
+    return new RegExp(entry.statusOff).test(result.output)
+  }
+
+  /** A host was powered off on purpose (the Hosts panel). */
+  markPoweredOff(name: string): void {
+    this.peers.get(name)?.poweredOff()
   }
 
   private identities(): Record<string, PeerIdentity> {

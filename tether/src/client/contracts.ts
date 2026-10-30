@@ -95,8 +95,8 @@ export interface SessionDescriptor {
   peer?: PeerMark | null
 }
 
-/** A remote host's link state as the hub sees it. `powered_off` is reserved
- * for power control (not reported yet). */
+/** A remote host's link state as the hub sees it. `powered_off`: the Hosts
+ * panel powered it off, or its hosts.json `status` command says it is off. */
 export type HostState = 'connected' | 'connecting' | 'offline' | 'powered_off' | 'identity_changed'
 
 /** Why a remote session's descriptor is not live, and since when. */

@@ -49,7 +49,7 @@ export function linkArgv(host: HostEntry, paths: LinkPaths): string[] {
     'ExitOnForwardFailure=yes',
     'StreamLocalBindUnlink=yes',
     'StreamLocalBindMask=0177',
-    'ServerAliveInterval=15',
+    'ServerAliveInterval=5',
     'ServerAliveCountMax=3',
     'ConnectTimeout=5',
     'BatchMode=yes',

@@ -13,6 +13,7 @@ import type { AgentHubConfig } from '../agent-hub/config'
 import { HttpError, type Router, readJsonObject, sendJson } from '../http'
 import { type HostEntry, hostsFilePath } from './hosts'
 import { linkPaths, SSH_BIN, SSH_MUX_ONLY } from './link'
+import { downReason } from './peer'
 import { type PeerAnswer, PeerUnavailable, peerRequest } from './peer-http'
 
 /** A command's exit code (null when it could not run or timed out), its
@@ -120,6 +121,8 @@ export interface HubView {
   hostEntry(name: string): HostEntry | null
   wakeHost(name: string): Promise<void>
   sessions(): Promise<Record<string, unknown>[]>
+  /** The host was powered off on purpose: show it so once its link drops. */
+  markPoweredOff(name: string): void
 }
 
 export interface HostAdminDeps {
@@ -205,7 +208,7 @@ export class HostAdmin {
       throw new HttpError(409, 'host_unavailable', {
         host: name,
         state: info.state,
-        reason: `${name} is ${info.state === 'connecting' ? 'still connecting' : 'not reachable'}`,
+        reason: downReason(name, String(info.state)),
       })
     const control = String(info.control)
     return { entry, control, socket: linkPaths(dirname(control)).forwarded }
@@ -265,25 +268,54 @@ export class HostAdmin {
         reason: `hosts.json has no sleep command for ${name}`,
       })
     const running = await this.runningSessions(name)
-    if (running > 0 && !force)
+    const count = running.length
+    if (count > 0 && !force)
       throw new HttpError(409, 'host_busy', {
         host: name,
-        sessions: running,
-        reason: `${running} session${running === 1 ? '' : 's'} running on ${name}`,
+        sessions: count,
+        reason: `${count} session${count === 1 ? '' : 's'} running on ${name}`,
       })
+    if (count > 0 && info.state === 'connected') await this.endSessions(name, running)
     const result = await this.run(entry.sleep, SLEEP_TIMEOUT_MS)
     if (result.code !== 0)
       throw new HttpError(502, 'power_failed', {
         host: name,
         reason: result.output || `exit ${result.code ?? 'error'}`,
       })
-    this.log(`${name}: powered off${running ? ` with ${running} session(s) running` : ''}`)
-    return [200, { host: name, state: 'powering_off', sessions: running }]
+    this.deps.hub.markPoweredOff(name)
+    this.log(`${name}: powered off${count ? ` after ending ${count} session(s)` : ''}`)
+    return [200, { host: name, state: 'powering_off', sessions: count }]
   }
 
-  private async runningSessions(name: string): Promise<number> {
+  private async runningSessions(name: string): Promise<Record<string, unknown>[]> {
     const items = await this.deps.hub.sessions()
-    return items.filter((item) => item.host === name && item.status !== 'ended').length
+    return items.filter((item) => item.host === name && item.status !== 'ended')
+  }
+
+  /** End the host's sessions before it powers off, as the warning says: the
+   * host restores what was running when it boots (reboot continuity), so a
+   * session left to the power-off would be listed again. One that will not
+   * end keeps the host on. */
+  private async endSessions(name: string, sessions: Record<string, unknown>[]): Promise<void> {
+    const { socket } = this.live(name)
+    const failed: string[] = []
+    for (const item of sessions) {
+      const id = String(item.id)
+      const answer = await this.peer(socket, 'POST', `/v1/sessions/${encodeURIComponent(id)}/end`, {
+        generation: item.generation,
+      }).catch((error: Error) => ({ status: 0, body: { reason: error.message } }))
+      // Already gone counts as ended.
+      if (answer.status !== 200 && answer.status !== 404) {
+        const why = record(answer.body)
+        failed.push(`${id} (${String(why?.reason ?? why?.error ?? answer.status)})`)
+      }
+    }
+    await this.deps.hub.sessions()
+    if (failed.length)
+      throw new HttpError(409, 'end_failed', {
+        host: name,
+        reason: `${name} was left on: ${failed.length === 1 ? 'a session' : `${failed.length} sessions`} there would not end (${failed.join(', ')})`,
+      })
   }
 
   /** `POST /v1/hosts/:name/logins/:tool`: sign in or out. A 201 answer's

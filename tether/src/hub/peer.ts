@@ -45,6 +45,12 @@ export interface PeerDeps {
   log(message: string): void
   now(): number
   random(): number
+  /** Whether the host is powered off, from its hosts.json `status` command;
+   * null when there is none or it could not tell. */
+  poweredOff?(entry: HostEntry): Promise<boolean | null>
+  /** How long a silent event stream waits before asking the peer's health,
+   * and how long that ask may take (tests shorten them). */
+  stall?: { afterMs: number; probeMs: number }
 }
 
 export const HEALTH_TIMEOUT_MS = 3_000
@@ -56,6 +62,15 @@ export const STABLE_MS = 60_000
 /** Consecutive failed list reads that open the circuit, and for how long. */
 export const BREAKER_FAILURES = 3
 export const BREAKER_OPEN_MS = 30_000
+/** A down host's power status is asked again after this long. */
+export const POWER_PROBE_MS = 15_000
+/** The peer's event stream sends a heartbeat every 15 s: this much silence
+ * asks its health once (a VM that stopped dead never closes the link, and ssh
+ * notices only after its own keepalives fail). */
+export const STALL_MS = 20_000
+const STALL_CHECK_MS = 2_500
+/** The health check after a silence: generous, so a busy host is not dropped. */
+const STALL_PROBE_MS = 5_000
 
 const RELAYED = new Set<string>([
   'session.created',
@@ -79,6 +94,13 @@ function record(value: unknown): Record<string, unknown> | null {
 export function isDescriptor(value: unknown): value is Descriptor {
   const item = record(value)
   return typeof item?.id === 'string' && typeof item.generation === 'string'
+}
+
+/** Why a host cannot take a request now, in a few words. */
+export function downReason(name: string, state: string): string {
+  if (state === 'connecting') return `${name} is still connecting`
+  if (state === 'powered_off') return `${name} is powered off`
+  return `${name} is not reachable`
 }
 
 /** Jittered, capped exponential retry delay. */
@@ -108,6 +130,11 @@ export class Peer {
   private controller: AbortController | null = null
   private wakeRetry: (() => void) | null = null
   private readonly duplicates = new Set<string>()
+  /** Set by a power off from the Hosts panel: the next drop is powered off. */
+  private expectOff = false
+  /** Why the last connection was dropped for silence, if it was. */
+  private stalled: string | null = null
+  private power: { at: number; off: boolean | null } | null = null
 
   constructor(
     readonly entry: HostEntry,
@@ -208,12 +235,43 @@ export class Peer {
   /** Report a create's progress bringing this host up (null when it is done). */
   setWake(progress: WakeProgress | null): void {
     this.wake = progress
+    if (progress?.state === 'starting') {
+      this.expectOff = false
+      this.power = null
+      if (!this.live && this.state !== 'identity_changed') this.setState('connecting', this.error)
+    } else if (!this.live && this.state === 'connecting') void this.settleDown()
     this.deps.publish('peer.state', {
       host: this.name,
       state: this.state,
       since: this.since,
       wake: progress,
     })
+  }
+
+  /** The host was just powered off on purpose (the Hosts panel). */
+  poweredOff(): void {
+    this.expectOff = true
+    if (!this.live && this.state !== 'identity_changed') this.setState('powered_off', this.error)
+  }
+
+  /** What a host whose link is down is: being brought up (connecting), powered
+   * off (on purpose, or as its `status` command says), or offline. */
+  private async downState(): Promise<HostState> {
+    if (this.wake?.state === 'starting') return 'connecting'
+    if (this.expectOff) return 'powered_off'
+    const probe = this.deps.poweredOff
+    if (!probe) return 'offline'
+    if (!this.power || this.deps.now() - this.power.at >= POWER_PROBE_MS) {
+      const off = await probe(this.entry).catch(() => null)
+      this.power = { at: this.deps.now(), off }
+    }
+    if (this.wake?.state === 'starting') return 'connecting'
+    return this.power.off ? 'powered_off' : 'offline'
+  }
+
+  private async settleDown(): Promise<void> {
+    const state = await this.downState()
+    if (!this.live && this.state !== 'identity_changed') this.setState(state, this.error)
   }
 
   /** The peer's `GET /v1/roots` items for this query, tagged; its last answer
@@ -295,8 +353,12 @@ export class Peer {
     this.state = state
     this.since = this.deps.now()
     this.deps.log(`${this.name}: ${state}${error ? ` (${error})` : ''}`)
-    // A failed start stays shown until the host is back.
-    if (state === 'connected' && this.wake?.state === 'failed') this.wake = null
+    if (state === 'connected') {
+      this.expectOff = false
+      this.power = null
+      // A failed start stays shown until the host is back.
+      if (this.wake?.state === 'failed') this.wake = null
+    }
     this.deps.publish('peer.state', { host: this.name, state, since: this.since, wake: this.wake })
     // Clients upsert these, so every window learns its host went away.
     if (wasLive) for (const item of this.descriptors()) this.publishSession(item)
@@ -310,14 +372,21 @@ export class Peer {
     let attempt = 0
     while (!signal.aborted) {
       const up = { at: null as number | null }
+      let why: string | null = null
       try {
         await this.connect(signal, () => {
           up.at = this.deps.now()
         })
-        if (!signal.aborted) this.setState('offline', 'the link closed')
+        why = this.stalled ?? 'the link closed'
       } catch (error) {
+        if (!(error instanceof IdentityChanged)) why = (error as Error).message
+      }
+      this.stalled = null
+      if (signal.aborted) return
+      if (why !== null) {
+        const down = await this.downState()
         if (signal.aborted) return
-        if (!(error instanceof IdentityChanged)) this.setState('offline', (error as Error).message)
+        this.setState(down, why)
       }
       if (signal.aborted) return
       const stable = up.at !== null && this.deps.now() - up.at >= STABLE_MS
@@ -400,11 +469,34 @@ export class Peer {
     signal.addEventListener('abort', stop, { once: true })
     let synced = false
     const early: Record<string, unknown>[] = []
+    const stall = this.deps.stall ?? { afterMs: STALL_MS, probeMs: STALL_PROBE_MS }
+    let heardAt = this.deps.now()
+    let probing = false
+    const watch = setInterval(
+      () => {
+        if (probing || this.deps.now() - heardAt < stall.afterMs) return
+        probing = true
+        void peerRequest(this.socket, 'GET', '/v1/health', undefined, stall.probeMs)
+          .then(() => {
+            heardAt = this.deps.now()
+          })
+          .catch((error: Error) => {
+            this.stalled = `${this.name} stopped answering (${error.message})`
+            connection.abort()
+          })
+          .finally(() => {
+            probing = false
+          })
+      },
+      Math.min(STALL_CHECK_MS, stall.afterMs / 4),
+    )
+    watch.unref?.()
     try {
       await peerStream(
         this.socket,
         '/v1/events',
         (line) => {
+          heardAt = this.deps.now()
           const event = record(line)
           if (!event || typeof event.type !== 'string') return
           if (event.type === 'hello') {
@@ -428,6 +520,7 @@ export class Peer {
         connection.signal,
       )
     } finally {
+      clearInterval(watch)
       connection.abort()
       signal.removeEventListener('abort', stop)
     }

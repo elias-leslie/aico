@@ -20,6 +20,11 @@ export interface HostEntry {
   wake: string[] | null
   /** The command that powers the host off (the Hosts panel's power control). */
   sleep: string[] | null
+  /** A read-only command that says whether the host is powered on, e.g.
+   * `st vm status 200`; asked only while the link is down. */
+  status: string[] | null
+  /** What in `status`'s output means powered off (a regular expression). */
+  statusOff: string
   /** URLs a create checks on the host before it is sent there (the forwarded
    * Agent Hub and SummitFlow health routes), e.g. `http://127.0.0.1:8003/health`. */
   health: string[]
@@ -51,6 +56,8 @@ const FIELDS = new Set([
   'forwards',
   'wake',
   'sleep',
+  'status',
+  'statusOff',
   'health',
   'wakeTimeoutSec',
   'stateDir',
@@ -58,6 +65,8 @@ const FIELDS = new Set([
 /** A loopback URL on the host: safe to pass through the remote shell unquoted. */
 const HEALTH_URL = /^http:\/\/127\.0\.0\.1:\d{1,5}(\/[A-Za-z0-9._~/-]*)?$/
 export const DEFAULT_WAKE_TIMEOUT_SEC = 240
+/** How `st vm status` says a VM is off ("VM 200 (agent-work): stopped | …"). */
+export const DEFAULT_STATUS_OFF = '\\bstopped\\b'
 /** sockaddr_un's sun_path limit, less the terminating NUL. */
 const MAX_SOCKET_BYTES = 107
 
@@ -82,6 +91,15 @@ function absolutePath(value: unknown): string | null {
 function port(value: unknown): number | null {
   const n = typeof value === 'string' && /^\d{1,5}$/.test(value) ? Number(value) : value
   return typeof n === 'number' && Number.isSafeInteger(n) && n >= 1 && n <= 65_535 ? n : null
+}
+
+function compiles(pattern: string): boolean {
+  try {
+    new RegExp(pattern)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** An optional argv list: null when absent, false when malformed. */
@@ -128,6 +146,14 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
   if (wake === false) return `${name}: wake must be a non-empty argv list`
   const sleep = argv(raw.sleep)
   if (sleep === false) return `${name}: sleep must be a non-empty argv list`
+  const status = argv(raw.status)
+  if (status === false) return `${name}: status must be a non-empty argv list`
+  let statusOff = DEFAULT_STATUS_OFF
+  if (raw.statusOff !== undefined) {
+    if (typeof raw.statusOff !== 'string' || !raw.statusOff || !compiles(raw.statusOff))
+      return `${name}: statusOff must be a regular expression`
+    statusOff = raw.statusOff
+  }
   let health: string[] = []
   if (raw.health !== undefined) {
     if (
@@ -149,7 +175,19 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
     stateDir = absolutePath(raw.stateDir)
     if (!stateDir) return `${name}: stateDir must be an absolute path`
   }
-  return { name, ssh, socket, forwards, wake, sleep, health, wakeTimeoutSec, stateDir }
+  return {
+    name,
+    ssh,
+    socket,
+    forwards,
+    wake,
+    sleep,
+    status,
+    statusOff,
+    health,
+    wakeTimeoutSec,
+    stateDir,
+  }
 }
 
 function unknownFields(value: unknown): string[] {

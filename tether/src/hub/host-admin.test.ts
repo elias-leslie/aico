@@ -19,6 +19,8 @@ const ENTRY: HostEntry = {
   forwards: [],
   wake: ['st', 'vm', 'start', '200'],
   sleep: ['st', 'vm', 'shutdown', '200'],
+  status: null,
+  statusOff: '\\bstopped\\b',
   health: [],
   wakeTimeoutSec: 240,
   stateDir: null,
@@ -45,6 +47,7 @@ function setup(
   const fetches: { url: string; method: string; headers: Record<string, string> }[] = []
   const wakeHost = vi.fn(async () => {})
   const sessions = vi.fn(async () => options.sessions ?? [])
+  const markPoweredOff = vi.fn()
   const timers: (() => void)[] = []
   const deps: HostAdminDeps = {
     setTimer: (fn) => timers.push(fn),
@@ -53,6 +56,7 @@ function setup(
       hostEntry: (name) => (name === 'vm-1' ? ENTRY : null),
       wakeHost,
       sessions,
+      markPoweredOff,
     },
     agentHub: {
       baseUrl: 'http://127.0.0.1:8003',
@@ -96,6 +100,7 @@ function setup(
     fetches,
     wakeHost,
     sessions,
+    markPoweredOff,
   }
 }
 
@@ -172,20 +177,47 @@ describe('power', () => {
 
   it('refuses power off while sessions run there, unless forced', async () => {
     const sessions = [
-      { id: 'a', host: 'vm-1', status: 'running' },
+      { id: 'a', host: 'vm-1', status: 'running', generation: 'ga' },
       { id: 'b', host: 'vm-1', status: 'ended' },
       { id: 'c', host: null, status: 'running' },
     ]
-    const { admin, runs } = setup({ sessions })
+    const { admin, runs, peerCalls, markPoweredOff } = setup({ sessions })
     const error = await refusal(admin.power('vm-1', 'off', false))
     expect(error.status).toBe(409)
     expect(error.code).toBe('host_busy')
     expect(error.extra).toMatchObject({ sessions: 1, reason: '1 session running on vm-1' })
     expect(runs).toEqual([])
+    expect(peerCalls).toEqual([])
     const [status, answer] = await admin.power('vm-1', 'off', true)
     expect(status).toBe(200)
     expect(answer).toMatchObject({ state: 'powering_off', sessions: 1 })
+    // The session is ended first, so the host does not restore it on boot.
+    expect(peerCalls).toEqual([
+      { method: 'POST', path: '/v1/sessions/a/end', body: { generation: 'ga' } },
+    ])
     expect(runs).toEqual([['st', 'vm', 'shutdown', '200']])
+    expect(markPoweredOff).toHaveBeenCalledWith('vm-1')
+  })
+
+  it('leaves the host on when a session there will not end', async () => {
+    const sessions = [
+      { id: 'a', host: 'vm-1', status: 'running', generation: 'ga' },
+      { id: 'd', host: 'vm-1', status: 'uncertain', generation: 'gd' },
+    ]
+    const { admin, runs, markPoweredOff } = setup({
+      sessions,
+      peer: (_method, path) =>
+        path === '/v1/sessions/a/end'
+          ? { status: 409, body: { error: 'busy' } }
+          : { status: 404, body: { error: 'not_found' } },
+    })
+    const error = await refusal(admin.power('vm-1', 'off', true))
+    expect(error.code).toBe('end_failed')
+    expect(error.extra).toMatchObject({
+      reason: 'vm-1 was left on: a session there would not end (a (busy))',
+    })
+    expect(runs).toEqual([])
+    expect(markPoweredOff).not.toHaveBeenCalled()
   })
 
   it('reports a failed sleep command', async () => {

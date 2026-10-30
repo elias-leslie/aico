@@ -31,6 +31,8 @@ describe('hosts registry', () => {
           forwards: [8001, 8003],
           wake: ['st', 'vm', 'start', '200'],
           sleep: null,
+          status: null,
+          statusOff: '\\bstopped\\b',
           health: ['http://127.0.0.1:8001/health', 'http://127.0.0.1:8003/health'],
           wakeTimeoutSec: 240,
           stateDir: null,
@@ -71,6 +73,8 @@ describe('hosts registry', () => {
     [{ ...VALID, forwards: [70_000] }, 'forwards must be ports'],
     [{ ...VALID, wake: [] }, 'wake must be a non-empty argv list'],
     [{ ...VALID, sleep: ['st', ''] }, 'sleep must be a non-empty argv list'],
+    [{ ...VALID, status: 'st vm status 200' }, 'status must be a non-empty argv list'],
+    [{ ...VALID, statusOff: '(' }, 'statusOff must be a regular expression'],
     [{ ...VALID, stateDir: 'state' }, 'stateDir must be an absolute path'],
     [{ ...VALID, health: ['http://10.0.0.5:8001/health'] }, 'health must be a list'],
     [{ ...VALID, health: ['http://127.0.0.1:8001/$(id)'] }, 'health must be a list'],
@@ -80,6 +84,18 @@ describe('hosts registry', () => {
     expect(hosts).toEqual([])
     expect(errors[0]).toContain(reason)
     expect(held).toEqual(/name must be/.test(reason) ? [] : ['agent-work'])
+  })
+
+  it('reads the power status command and what its output says for off', () => {
+    const { hosts } = parseHosts(
+      JSON.stringify([
+        { ...VALID, status: ['st', 'vm', 'status', '200'], statusOff: 'state: (off|stopped)' },
+      ]),
+    )
+    expect(hosts[0]).toMatchObject({
+      status: ['st', 'vm', 'status', '200'],
+      statusOff: 'state: (off|stopped)',
+    })
   })
 
   it('keeps an entry with fields it does not know, and says which', () => {
@@ -143,7 +159,7 @@ describe('link', () => {
       '-o',
       'StreamLocalBindMask=0177',
       '-o',
-      'ServerAliveInterval=15',
+      'ServerAliveInterval=5',
       '-o',
       'ServerAliveCountMax=3',
       '-o',

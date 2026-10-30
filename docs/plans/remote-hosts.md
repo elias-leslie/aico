@@ -43,7 +43,7 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
   `-L .../<host>/control.sock:<socket>` and the
   `-R 127.0.0.1:<p>:127.0.0.1:<p>` forwards.
 - ssh options: `ExitOnForwardFailure=yes`, `StreamLocalBindUnlink=yes`,
-  `ServerAliveInterval=15`, `ConnectTimeout=5` and `BatchMode=yes`.
+  `ServerAliveInterval=5`, `ConnectTimeout=5` and `BatchMode=yes`.
 - It restarts quietly with backoff. It never powers a host on.
 - On the VM side, sshd uses `ClientAliveInterval 15`.
 

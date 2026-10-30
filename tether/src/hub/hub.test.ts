@@ -46,6 +46,9 @@ class FakePeer {
   identity: Record<string, unknown> = { name: 'vm-1', machineId: 'aaaa' }
   requests: { method: string; url: string; body: unknown }[] = []
   failSessions = false
+  /** Health never answers (a VM that stopped dead: the socket takes the
+   * connection, nothing comes back). */
+  hangHealth = false
   readonly streams = new Set<ServerResponse>()
   gui: ServerResponse | null = null
   roots: Record<string, unknown>[] = []
@@ -80,7 +83,10 @@ class FakePeer {
     const url = req.url ?? '/'
     const payload = req.method === 'POST' ? await body(req) : undefined
     this.requests.push({ method: req.method ?? '', url, body: payload })
-    if (url === '/v1/health') return sendJson(res, 200, { status: 'ok', host: this.identity })
+    if (url === '/v1/health') {
+      if (this.hangHealth) return
+      return sendJson(res, 200, { status: 'ok', host: this.identity })
+    }
     if (url === '/v1/sessions' && req.method === 'GET') {
       if (this.failSessions) return sendJson(res, 500, { error: 'internal_error' })
       return sendJson(res, 200, { items: this.sessions })
@@ -343,6 +349,65 @@ describe('hub', () => {
     await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
     expect(events.map((event) => event.type)).toContain('peer.resync')
     expect((await hub.sessions()).map((item) => item.peer)).toEqual([undefined, undefined])
+  })
+
+  it('says powered off when the host status says so, and when it was powered off here', async () => {
+    hub.close()
+    writeFileSync(
+      join(dir, 'hosts.json'),
+      JSON.stringify([
+        {
+          name: 'vm',
+          ssh: 'vm',
+          socket: '/run/user/1000/tether/default/control.sock',
+          status: ['st', 'vm', 'status', '200'],
+        },
+      ]),
+    )
+    let power = 'running'
+    const run = vi.fn(async () => ({ code: 0, output: `VM 200 (vm): ${power} | CPU: 0%` }))
+    hub = makeHub({ gate: { kick: () => {}, linkGraceMs: 200, run } })
+    hub.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'))
+    // Up: the status command is never asked.
+    expect(run).not.toHaveBeenCalled()
+    power = 'stopped'
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('powered_off'))
+    expect(run).toHaveBeenCalledWith(['st', 'vm', 'status', '200'], expect.any(Number))
+    // The raw link error stays as detail; the state is the headline.
+    expect(hub.hosts()[0]?.error).toBeTruthy()
+    expect((await hub.sessions())[0]?.peer).toMatchObject({ state: 'powered_off' })
+    expect((await call('GET', '/v1/sessions/aaaa0001/attach')).body).toMatchObject({
+      state: 'powered_off',
+      reason: 'vm is powered off',
+    })
+    await peer.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
+
+    // Powered off from the Hosts panel: known without asking.
+    run.mockClear()
+    hub.markPoweredOff('vm')
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('powered_off'))
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('goes offline soon after a host stops answering, not after three missed heartbeats', async () => {
+    hub.close()
+    hub = makeHub({ stall: { afterMs: 150, probeMs: 150 } })
+    hub.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'))
+    // A quiet host that answers its health stays connected.
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(state()).toBe('connected')
+    events = []
+    peer.hangHealth = true
+    await vi.waitFor(() => expect(state()).toBe('offline'), { timeout: 2_000 })
+    expect(hub.hosts()[0]?.error).toContain('vm stopped answering')
+    expect(events.some((event) => event.type === 'session.updated')).toBe(true)
+    peer.hangHealth = false
+    await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
   })
 
   it('ends sessions that vanished while the host was away (a rollback), then resyncs', async () => {
