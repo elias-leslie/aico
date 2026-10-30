@@ -66,4 +66,36 @@ describe('useFileUpload', () => {
       'File too large (12.3MB). Maximum size: 10MB',
     )
   })
+
+  it('names the session the file is for', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ max_bytes: 2 * 1024 * 1024 })),
+      ),
+    )
+    const xhrOpen = vi.fn()
+    vi.stubGlobal(
+      'XMLHttpRequest',
+      class {
+        upload = { addEventListener: vi.fn() }
+        addEventListener = vi.fn()
+        open = xhrOpen
+        send = vi.fn()
+        abort = vi.fn()
+      },
+    )
+    const { result } = renderHook(() => useFileUpload(), { wrapper })
+    await act(async () => {
+      void result.current.uploadFile(fileOfSize(1), 'abc 1')
+    })
+    await act(async () => {
+      void result.current.uploadFile(fileOfSize(1))
+    })
+    expect(xhrOpen.mock.calls).toEqual([
+      ['POST', '/api/files?session_id=abc%201'],
+      ['POST', '/api/files'],
+    ])
+  })
 })

@@ -431,6 +431,11 @@ const startup = app.whenReady().then(async () => {
     compositor,
     clipboard,
     pastedImages: config.pastedImages,
+    sessionHost: (sender) => {
+      const id = registry.senderSession(sender)
+      return (id && catalog.get(id)?.host) || null
+    },
+    hosts: () => tether.hosts(),
     shell,
     registry,
     getSetting,

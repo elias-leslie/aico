@@ -25,7 +25,7 @@ import { registerRunRoutes } from './runs'
 import { byText, SHELL_MODE } from './sessions'
 import { registerShowRoutes, type Shows } from './shows'
 import { HttpError, listTools } from './tether'
-import { registerUploadRoutes } from './uploads'
+import { registerUploadRoutes, uploadTargets } from './uploads'
 
 export interface ApiDeps {
   tether: TetherClient
@@ -365,7 +365,7 @@ export function buildApi(deps: ApiDeps): Router {
 
   // -- Files and agent shares -------------------------------------------------------
 
-  registerUploadRoutes(router, deps.uploads)
+  registerUploadRoutes(router, deps.uploads, uploadTargets(life, tether))
   registerPaneFileRoutes(router, life)
   registerFileLocationRoutes(router)
   registerShowRoutes(router, deps.shows)

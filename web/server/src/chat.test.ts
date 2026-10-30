@@ -97,7 +97,12 @@ beforeEach(async () => {
     tether: tether.client,
     store,
     config: { agentHubUrl: null, agentHubClientId: null },
-    uploads: { dir: '/nonexistent/uploads', maxBytes: 1024, maxAgeMs: 1000 },
+    uploads: {
+      dir: '/nonexistent/uploads',
+      remoteDir: '~/uploads',
+      maxBytes: 1024,
+      maxAgeMs: 1000,
+    },
     shows: new Shows({ tether: tether.client, publicHost: null, run: async () => {} }),
   })
   const hub = new TerminalHub({ tether: tether.client, historyLines: 100, touched: () => {} })

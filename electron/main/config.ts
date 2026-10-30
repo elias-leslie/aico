@@ -4,6 +4,7 @@
 
 import { join } from 'node:path'
 import { defaultTetherSocketPath, knownTetherSockets, tetherSocketPath } from 'tether/client'
+import { DEFAULT_REMOTE_UPLOAD_DIR } from 'tether/term'
 
 export type DisplayBackend = 'wayland' | 'x11'
 
@@ -37,7 +38,12 @@ export interface AicoConfig {
   readonly shareTetherSocket: string
   readonly exchangeRoot: string
   /** Where a pasted clipboard image is written for the terminal program to read (AICO_PASTED_IMAGES_DIR, AICO_PASTED_IMAGES_KEEP_HOURS). */
-  readonly pastedImages: { readonly dir: string; readonly maxAgeMs: number }
+  readonly pastedImages: {
+    readonly dir: string
+    readonly maxAgeMs: number
+    /** Where the image goes on the host of a session that runs elsewhere (AICO_REMOTE_UPLOAD_DIR; `~/` is that host's home). */
+    readonly remoteDir: string
+  }
   readonly nightshift: string
   /** ST, for the Agent Hub prompts a new session can take as instructions. */
   readonly st: string
@@ -89,6 +95,7 @@ export function readConfig(
     pastedImages: {
       dir: env.AICO_PASTED_IMAGES_DIR || join(exchangeRoot, 'owner', 'pasted-images'),
       maxAgeMs: pastedImageMaxAgeMs(env.AICO_PASTED_IMAGES_KEEP_HOURS),
+      remoteDir: env.AICO_REMOTE_UPLOAD_DIR?.trim() || DEFAULT_REMOTE_UPLOAD_DIR,
     },
     nightshift: join(home, '.local/bin/nightshift'),
     st: join(home, 'bin/st'),

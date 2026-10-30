@@ -9,8 +9,11 @@ import type { IncomingMessage } from 'node:http'
 import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
 import { Readable, Transform } from 'node:stream'
+import type { TetherClient } from 'tether/client'
+import { type RemoteHost, RemoteUploadError, remoteHostOf, uploadToHost } from 'tether/term'
 import type { UploadConfig } from './config'
 import { RAW, type Router, sendJson } from './http'
+import { type Lifecycle, tetherCall } from './lifecycle'
 import { HttpError } from './tether'
 
 const ALLOWED_MIME_TYPES = [
@@ -137,7 +140,46 @@ export class RateLimiter {
   }
 }
 
-export function registerUploadRoutes(router: Router, config: UploadConfig): void {
+/** Where an upload for a session goes: the host it runs on, or null for this computer. */
+export interface UploadTargets {
+  hostOf(sessionId: string): Promise<RemoteHost | null>
+  /** Tests pass a fake for the ssh send. */
+  send?: typeof uploadToHost
+}
+
+/** The host a session runs on, from Tether's hosts; throws the plain-words refusal when it can't be reached. */
+export function uploadTargets(
+  life: Pick<Lifecycle, 'getSession'>,
+  tether: TetherClient,
+): UploadTargets {
+  return {
+    async hostOf(sessionId) {
+      const session = await life.getSession(sessionId)
+      const host = session.host
+      if (!host) return null
+      const row = (await tetherCall(() => tether.hosts())).find((item) => item.name === host)
+      if (!row) throw new HttpError(502, `${host} isn’t linked, so the file wasn’t sent.`)
+      if (session.peer || row.state !== 'connected') throw offline(host)
+      try {
+        return remoteHostOf({
+          host,
+          ssh: { alias: row.ssh, control: row.control, stateDir: row.stateDir },
+        })
+      } catch (error) {
+        console.error(`[aico-web] unexpected link details for host=${host}:`, error)
+        throw new HttpError(502, `${host}’s link looks wrong, so the file wasn’t sent.`)
+      }
+    },
+  }
+}
+
+const offline = (host: string) => new HttpError(502, `${host} is offline, so the file wasn’t sent.`)
+
+export function registerUploadRoutes(
+  router: Router,
+  config: UploadConfig,
+  targets?: UploadTargets,
+): void {
   const limiter = new RateLimiter()
 
   router.on('GET', '/api/files/limits', () => ({ max_bytes: config.maxBytes }))
@@ -152,8 +194,31 @@ export function registerUploadRoutes(router: Router, config: UploadConfig): void
     const content = new Uint8Array(await file.arrayBuffer())
     if (content.length === 0) throw new HttpError(400, 'Empty file not allowed')
     const mime = validateMimeType(content, file.type || 'application/octet-stream')
-    await mkdir(config.dir, { recursive: true, mode: 0o700 })
     const filename = `${randomUUID()}${MIME_TO_EXTENSION[mime] ?? ''}`
+    // A session on another host reads files there: send it the file, not this computer.
+    const sessionId = ctx.query.get('session_id')
+    const remote = sessionId && targets ? await targets.hostOf(sessionId) : null
+    if (remote) {
+      try {
+        const sent = await (targets?.send ?? uploadToHost)(remote, content, filename, {
+          dir: config.remoteDir,
+          maxAgeMs: config.maxAgeMs,
+        })
+        console.log(
+          `[aico-web] file sent host=${remote.host} filename=${filename} size=${content.length} mime_type=${mime}`,
+        )
+        return { path: sent, filename, size: content.length, mime_type: mime, host: remote.host }
+      } catch (error) {
+        if (!(error instanceof RemoteUploadError)) throw error
+        console.error(
+          `[aico-web] file send failed host=${remote.host} kind=${error.kind}: ${error.message}`,
+        )
+        throw error.kind === 'offline'
+          ? offline(remote.host)
+          : new HttpError(502, `${remote.host} didn’t accept the file, so it wasn’t sent.`)
+      }
+    }
+    await mkdir(config.dir, { recursive: true, mode: 0o700 })
     const path = join(config.dir, filename)
     await writeFile(path, content, { flag: 'wx', mode: 0o600 })
     console.log(

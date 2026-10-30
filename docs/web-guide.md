@@ -91,6 +91,8 @@ AICO_WEB_PORT=3002
 
 # Uploads and maintenance
 MAX_FILE_SIZE_MB=10
+# Folder on another host for files sent to a session there (default: ~/.cache/aico/uploads on that host)
+AICO_REMOTE_UPLOAD_DIR=~/.cache/aico/uploads
 MAINTENANCE_INTERVAL_SECONDS=900
 MAINTENANCE_SESSION_PURGE_DAYS=7
 

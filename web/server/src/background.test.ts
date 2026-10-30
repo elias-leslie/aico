@@ -32,7 +32,7 @@ function background(trustShows = true, forward?: (event: unknown) => void) {
     store,
     shows,
     trustShows,
-    uploads: { dir: '/nonexistent/uploads', maxBytes: 1, maxAgeMs: 1 },
+    uploads: { dir: '/nonexistent/uploads', remoteDir: '~/uploads', maxBytes: 1, maxAgeMs: 1 },
     maintenance: { enabled: false, intervalMs: 1000, emptyPaneDays: 7 },
   })
 }

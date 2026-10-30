@@ -60,6 +60,7 @@ describe('loadConfig: uploads, shares and maintenance', () => {
     const config = loadConfig({ HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/7' }, ID)
     expect(config.uploads).toEqual({
       dir: '/home/u/aico-uploads',
+      remoteDir: '~/.cache/aico/uploads',
       maxBytes: 10 * 1024 * 1024,
       maxAgeMs: 86_400_000,
     })
@@ -71,6 +72,7 @@ describe('loadConfig: uploads, shares and maintenance', () => {
       {
         HOME: '/home/u',
         UPLOAD_DIR: '~/drops',
+        AICO_REMOTE_UPLOAD_DIR: '/srv/drops',
         MAX_FILE_SIZE_MB: '2',
         UPLOAD_MAX_AGE_SECONDS: '60',
         MAINTENANCE_ENABLED: 'false',
@@ -81,6 +83,7 @@ describe('loadConfig: uploads, shares and maintenance', () => {
     )
     expect(config.uploads).toEqual({
       dir: '/home/u/drops',
+      remoteDir: '/srv/drops',
       maxBytes: 2 * 1024 * 1024,
       maxAgeMs: 60_000,
     })

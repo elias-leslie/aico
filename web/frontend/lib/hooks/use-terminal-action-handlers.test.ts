@@ -77,6 +77,47 @@ describe('useTerminalActionHandlers', () => {
 
     expect(externalPasteInput).toHaveBeenCalledWith('/tmp/uploaded.txt')
     expect(nativePasteInput).not.toHaveBeenCalled()
+    // The upload names the session it is for, so a remote one is stored on its host.
+    expect(mocks.uploadFile).toHaveBeenCalledWith(
+      expect.any(File),
+      'external-session',
+    )
+  })
+
+  it('uploads for the active session when no pane was picked', async () => {
+    const pasteInput = vi.fn()
+    const terminalRefs = {
+      current: new Map<string, TerminalHandle | null>([
+        ['active-session', { pasteInput } as unknown as TerminalHandle],
+      ]),
+    }
+    mocks.uploadFile.mockResolvedValue({
+      path: '/home/agent/.cache/aico/uploads/x.png',
+      filename: 'x.png',
+      size: 1,
+      mime_type: 'image/png',
+    })
+    const { result } = renderHook(() =>
+      useTerminalActionHandlers({
+        terminalRefs,
+        activeSessionId: 'active-session',
+        setShowVoice: vi.fn(),
+        voiceStartListening: vi.fn(),
+        voiceStopListening: vi.fn(),
+        voiceResetTranscript: vi.fn(),
+        voiceStatus: 'idle',
+      }),
+    )
+    await act(async () => {
+      await result.current.handleFileSelect(new File(['x'], 'x.png'))
+    })
+    expect(mocks.uploadFile).toHaveBeenCalledWith(
+      expect.any(File),
+      'active-session',
+    )
+    expect(pasteInput).toHaveBeenCalledWith(
+      '/home/agent/.cache/aico/uploads/x.png',
+    )
   })
 
   it('pastes clipboard image upload paths into the pane where paste happened', async () => {

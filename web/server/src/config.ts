@@ -7,6 +7,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultTetherSocketPath, tetherSocketPath } from 'tether/client'
+import { DEFAULT_REMOTE_UPLOAD_DIR } from 'tether/term'
 
 export interface WebConfig {
   /** Loopback only: the app has no login of its own (Access gates the edge). */
@@ -35,6 +36,8 @@ export interface WebConfig {
 
 export interface UploadConfig {
   dir: string
+  /** Where a file for a session on another host is stored, on that host (`~/` is its home). */
+  remoteDir: string
   maxBytes: number
   /** Uploads older than this are deleted by maintenance. */
   maxAgeMs: number
@@ -176,6 +179,7 @@ export function loadConfig(
     agentHubPort: DEFAULT_AGENT_HUB_PORT,
     uploads: {
       dir: resolve(expandHome(env.UPLOAD_DIR?.trim() || join(home, uploadDirName), home)),
+      remoteDir: env.AICO_REMOTE_UPLOAD_DIR?.trim() || DEFAULT_REMOTE_UPLOAD_DIR,
       maxBytes: positiveInt(env.MAX_FILE_SIZE_MB, DEFAULT_MAX_UPLOAD_MB) * 1024 * 1024,
       maxAgeMs: positiveInt(env.UPLOAD_MAX_AGE_SECONDS, DEFAULT_UPLOAD_MAX_AGE_SECONDS) * 1000,
     },

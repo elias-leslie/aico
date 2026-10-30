@@ -17,8 +17,11 @@ interface UploadError {
 }
 
 interface UseFileUploadReturn {
-  /** Upload a file to the server */
-  uploadFile: (file: File) => Promise<UploadResult | null>
+  /** Upload a file for a session: the server stores it where that session reads files (its own host's folder when it runs elsewhere). */
+  uploadFile: (
+    file: File,
+    sessionId?: string | null,
+  ) => Promise<UploadResult | null>
   /** Upload progress (0-100) */
   progress: number
   /** Whether upload is in progress */
@@ -70,7 +73,10 @@ export function useFileUpload(): UseFileUploadReturn {
   const maxBytes = limits?.max_bytes
 
   const uploadFile = useCallback(
-    async (file: File): Promise<UploadResult | null> => {
+    async (
+      file: File,
+      sessionId?: string | null,
+    ): Promise<UploadResult | null> => {
       if (maxBytes !== undefined && file.size > maxBytes) {
         setError({ message: fileTooLargeMessage(file.size, maxBytes) })
         return null
@@ -136,7 +142,12 @@ export function useFileUpload(): UseFileUploadReturn {
           resolve(null)
         })
 
-        xhr.open('POST', '/api/files')
+        xhr.open(
+          'POST',
+          sessionId
+            ? `/api/files?session_id=${encodeURIComponent(sessionId)}`
+            : '/api/files',
+        )
         xhr.send(formData)
       })
     },

@@ -10,6 +10,7 @@ import {
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { BrowserWindow } from 'electron'
+import { controlSocketPath } from 'tether/term'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { registerDesktopIpc } from './desktop-ipc'
 
@@ -34,7 +35,10 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
-function setup(stored: Record<string, string> = {}) {
+function setup(
+  stored: Record<string, string> = {},
+  remote: { host: string | null; sendToHost?: unknown; hosts?: unknown[] } = { host: null },
+) {
   const win1 = fakeWindow(1)
   const win2 = fakeWindow(2)
   const all = [win1, win2]
@@ -44,7 +48,11 @@ function setup(stored: Record<string, string> = {}) {
   })
   const root = mkdtempSync(join(tmpdir(), 'aico-desktop-ipc-'))
   roots.push(root)
-  const pastedImages = { dir: join(root, 'pasted-images'), maxAgeMs: 86_400_000 }
+  const pastedImages = {
+    dir: join(root, 'pasted-images'),
+    maxAgeMs: 86_400_000,
+    remoteDir: '~/.cache/aico/uploads',
+  }
   const clipboard = {
     readText: vi.fn(() => 'copied'),
     readImage: vi.fn((): { isEmpty(): boolean; toPNG(): Buffer } => ({
@@ -68,6 +76,9 @@ function setup(stored: Record<string, string> = {}) {
     {
       clipboard: clipboard as never,
       pastedImages,
+      sessionHost: () => remote.host,
+      hosts: async () => (remote.hosts ?? []) as never,
+      sendToHost: remote.sendToHost as never,
       shell,
       compositor: { isMaximized: (win) => (win as unknown as { maximized: boolean }).maximized },
       registry: {
@@ -113,35 +124,79 @@ describe('desktop IPC', () => {
     expect(clipboard.writeText).toHaveBeenCalledWith('hello')
   })
 
-  it('saves a clipboard image as a PNG file and returns its path', () => {
-    const { handle, pastedImages } = setup()
-    const path = handle.get('clipboard:image-path')?.() as string
+  it('saves a clipboard image as a PNG file and returns its path', async () => {
+    const { handle, pastedImages, event } = setup()
+    const path = (await handle.get('clipboard:image-path')?.(event)) as string
     expect(path.startsWith(`${pastedImages.dir}/paste-`)).toBe(true)
     expect(path.endsWith('.png')).toBe(true)
     expect(readFileSync(path)).toEqual(PNG)
     expect(statSync(path).mode & 0o777).toBe(0o644)
     expect(statSync(pastedImages.dir).mode & 0o777).toBe(0o755)
-    expect(handle.get('clipboard:image-path')?.()).not.toBe(path)
+    expect(await handle.get('clipboard:image-path')?.(event)).not.toBe(path)
   })
 
-  it('returns no path when the clipboard has no image, leaving text paste alone', () => {
-    const { handle, clipboard, pastedImages } = setup()
+  it('returns no path when the clipboard has no image, leaving text paste alone', async () => {
+    const { handle, clipboard, pastedImages, event } = setup()
     clipboard.readImage.mockReturnValue({ isEmpty: () => true, toPNG: () => PNG })
-    expect(handle.get('clipboard:image-path')?.()).toBe('')
+    expect(await handle.get('clipboard:image-path')?.(event)).toBe('')
     expect(existsSync(pastedImages.dir)).toBe(false)
     expect(handle.get('clipboard:read')?.()).toBe('copied')
   })
 
-  it('returns no path when the image cannot be saved', () => {
-    const { handle, pastedImages } = setup()
+  it('returns no path when the image cannot be saved', async () => {
+    const { handle, pastedImages, event } = setup()
     // A folder that can't exist: its parent is a file.
     mkdirSync(dirname(pastedImages.dir), { recursive: true })
     writeFileSync(join(dirname(pastedImages.dir), 'file'), '')
     pastedImages.dir = join(dirname(pastedImages.dir), 'file', 'pasted-images')
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(handle.get('clipboard:image-path')?.()).toBe('')
+    expect(await handle.get('clipboard:image-path')?.(event)).toBe('')
     expect(error).toHaveBeenCalled()
     error.mockRestore()
+  })
+
+  describe('in a window whose session runs on another host', () => {
+    const row = {
+      name: 'agent-work',
+      state: 'connected',
+      ssh: 'agent-work-vm',
+      control: controlSocketPath('agent-work'),
+    }
+
+    it('sends the image there, returns the host path, and keeps no copy here', async () => {
+      const sendToHost = vi.fn(
+        async (_remote, _png, name: string, _options: unknown) => `/home/agent/up/${name}`,
+      )
+      const { handle, pastedImages, event } = setup(
+        {},
+        { host: 'agent-work', sendToHost, hosts: [row] },
+      )
+      const path = (await handle.get('clipboard:image-path')?.(event)) as string
+      expect(path).toMatch(/^\/home\/agent\/up\/paste-\d+-[0-9a-f]{12}\.png$/)
+      const [remote, png, , options] = sendToHost.mock.calls[0]
+      expect(remote).toMatchObject({ host: 'agent-work', alias: 'agent-work-vm' })
+      expect(Buffer.from(png)).toEqual(PNG)
+      expect(options).toEqual({ dir: '~/.cache/aico/uploads', maxAgeMs: 86_400_000 })
+      expect(existsSync(pastedImages.dir)).toBe(false)
+    })
+
+    it('returns no path, and saves nothing here, when the host is offline or the send fails', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const sendToHost = vi.fn(async () => {
+        throw new Error('ssh failed')
+      })
+      const offline = setup(
+        {},
+        { host: 'agent-work', sendToHost, hosts: [{ ...row, state: 'offline' }] },
+      )
+      expect(await offline.handle.get('clipboard:image-path')?.(offline.event)).toBe('')
+      expect(sendToHost).not.toHaveBeenCalled()
+      const failing = setup({}, { host: 'agent-work', sendToHost, hosts: [row] })
+      expect(await failing.handle.get('clipboard:image-path')?.(failing.event)).toBe('')
+      expect(existsSync(failing.pastedImages.dir)).toBe(false)
+      expect(error).toHaveBeenCalledTimes(2)
+      error.mockRestore()
+    })
   })
 
   it('opens only http(s) links of at most 8192 characters', () => {

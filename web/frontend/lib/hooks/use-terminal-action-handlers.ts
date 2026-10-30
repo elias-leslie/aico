@@ -14,23 +14,30 @@ interface UseTerminalActionHandlersParams {
 }
 
 /**
- * Find the active terminal ref. Tries activeSessionId first (URL-derived),
+ * Find the active terminal ref and its session. Tries activeSessionId first (URL-derived),
  * falls back to the first available ref (handles stale URL, e.g. when
  * pane mode is 'claude' but URL still points to the shell session).
  */
+function findActiveTarget(
+  terminalRefs: Map<string, TerminalHandle | null>,
+  activeSessionId: string | null,
+): { id: string; ref: TerminalHandle } | null {
+  if (activeSessionId) {
+    const ref = terminalRefs.get(activeSessionId)
+    if (ref) return { id: activeSessionId, ref }
+  }
+  // Fallback: first available ref (handles URL/slot desync on initial load)
+  for (const [id, ref] of terminalRefs) {
+    if (ref) return { id, ref }
+  }
+  return null
+}
+
 function findActiveRef(
   terminalRefs: Map<string, TerminalHandle | null>,
   activeSessionId: string | null,
 ): TerminalHandle | null {
-  if (activeSessionId) {
-    const ref = terminalRefs.get(activeSessionId)
-    if (ref) return ref
-  }
-  // Fallback: first available ref (handles URL/slot desync on initial load)
-  for (const ref of terminalRefs.values()) {
-    if (ref) return ref
-  }
-  return null
+  return findActiveTarget(terminalRefs, activeSessionId)?.ref ?? null
 }
 
 export function useTerminalActionHandlers({
@@ -61,8 +68,16 @@ export function useTerminalActionHandlers({
   const handleFileSelect = useCallback(
     async (file: File, targetSessionId?: string) => {
       const uploadTargetSessionId = targetSessionId ?? uploadTargetRef.current
-      const result = await uploadFile(file)
+      // The session that gets the path, so the server stores the file where it can read it.
+      const target = uploadTargetSessionId
+        ? {
+            id: uploadTargetSessionId,
+            ref: terminalRefs.current.get(uploadTargetSessionId) ?? null,
+          }
+        : findActiveTarget(terminalRefs.current, activeSessionId)
+      const result = await uploadFile(file, target?.id)
       if (result) {
+        // The pane is looked up again: it may have gone while the file was on its way.
         const terminalRef = uploadTargetSessionId
           ? (terminalRefs.current.get(uploadTargetSessionId) ?? null)
           : findActiveRef(terminalRefs.current, activeSessionId)

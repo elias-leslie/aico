@@ -9,14 +9,17 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { controlSocketPath, RemoteUploadError, type uploadToHost } from 'tether/term'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { serveRoutes } from './testing'
+import { FakeTether, serveRoutes } from './testing'
+import { HttpError } from './tether'
 import {
   cleanupOldUploads,
   detectMimeType,
   RateLimiter,
   registerUploadRoutes,
   shellPath,
+  uploadTargets,
 } from './uploads'
 
 const PNG = Buffer.concat([Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'), Buffer.alloc(100)])
@@ -121,6 +124,133 @@ describe('upload routes', () => {
     const limited = await upload('hi', 'a.txt', 'text/plain')
     expect(limited.status).toBe(429)
     expect(await limited.json()).toEqual({ detail: 'Rate limit exceeded: 10 per 1 minute' })
+  })
+})
+
+describe('upload for a session on another host', () => {
+  let dir: string
+  let server: Awaited<ReturnType<typeof serveRoutes>>
+  let tether: FakeTether
+  let sessions: Record<
+    string,
+    { host: string | null; peer: { state: string; since: number } | null }
+  >
+  let send: ReturnType<typeof vi.fn>
+
+  function upload(sessionId?: string) {
+    const form = new FormData()
+    form.append('file', new Blob([PNG], { type: 'image/png' }), 'shot.png')
+    const query = sessionId ? `?session_id=${sessionId}` : ''
+    return fetch(`${server.base}/api/files${query}`, { method: 'POST', body: form })
+  }
+
+  beforeEach(async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    dir = join(mkdtempSync(join(tmpdir(), 'aico-uploads-')), 'uploads')
+    tether = new FakeTether()
+    ;(tether.hostRows as unknown[]).push({
+      name: 'agent-work',
+      state: 'connected',
+      ssh: 'agent-work-vm',
+      control: controlSocketPath('agent-work'),
+      sessions: 1,
+    })
+    sessions = {
+      here: { host: null, peer: null },
+      there: { host: 'agent-work', peer: null },
+      away: { host: 'agent-work', peer: { state: 'offline', since: 1 } },
+      lost: { host: 'elsewhere', peer: null },
+    }
+    send = vi.fn(
+      async (_remote, _content, name: string) => `/home/agent/.cache/aico/uploads/${name}`,
+    )
+    const life = {
+      getSession: async (id: string) => {
+        if (!sessions[id]) throw new HttpError(404, `Session ${id} not found`)
+        return sessions[id]
+      },
+    }
+    server = await serveRoutes((router) =>
+      registerUploadRoutes(
+        router,
+        { dir, remoteDir: '~/.cache/aico/uploads', maxBytes: 1024, maxAgeMs: 60_000 },
+        {
+          ...uploadTargets(life as never, tether as never),
+          send: send as unknown as typeof uploadToHost,
+        },
+      ),
+    )
+  })
+
+  afterEach(async () => {
+    await server.close()
+    rmSync(dirname(dir), { recursive: true, force: true })
+    vi.restoreAllMocks()
+  })
+
+  it('sends the file to the session’s host and answers the path there, keeping no local copy', async () => {
+    const response = await upload('there')
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { path: string; filename: string; host: string }
+    expect(body.path).toBe(`/home/agent/.cache/aico/uploads/${body.filename}`)
+    expect(body.host).toBe('agent-work')
+    expect(send).toHaveBeenCalledOnce()
+    const [remote, content, name, options] = send.mock.calls[0]
+    expect(remote).toMatchObject({
+      host: 'agent-work',
+      alias: 'agent-work-vm',
+      control: controlSocketPath('agent-work'),
+    })
+    expect(Buffer.from(content).equals(PNG)).toBe(true)
+    expect(name).toBe(body.filename)
+    expect(options).toEqual({ dir: '~/.cache/aico/uploads', maxAgeMs: 60_000 })
+    expect(() => readdirSync(dir)).toThrow()
+  })
+
+  it('stores a local session’s file here, as before', async () => {
+    const response = await upload('here')
+    const body = (await response.json()) as { path: string; filename: string }
+    expect(body.path).toBe(join(dir, body.filename))
+    expect(send).not.toHaveBeenCalled()
+    expect((await upload()).status).toBe(200)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('says the host is offline, and sends nothing, when the link is down', async () => {
+    const response = await upload('away')
+    expect(response.status).toBe(502)
+    expect(await response.json()).toEqual({
+      detail: 'agent-work is offline, so the file wasn’t sent.',
+    })
+    tether.hostRows[0].state = 'offline'
+    sessions.away.peer = null
+    expect((await upload('there')).status).toBe(502)
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('says so when ssh fails or the host refuses the file', async () => {
+    send.mockRejectedValueOnce(new RemoteUploadError('offline', 'agent-work', 'Connection closed'))
+    const offline = await upload('there')
+    expect(await offline.json()).toEqual({
+      detail: 'agent-work is offline, so the file wasn’t sent.',
+    })
+    send.mockRejectedValueOnce(new RemoteUploadError('failed', 'agent-work', 'exit 1'))
+    const failed = await upload('there')
+    expect(failed.status).toBe(502)
+    expect(await failed.json()).toEqual({
+      detail: 'agent-work didn’t accept the file, so it wasn’t sent.',
+    })
+  })
+
+  it('does not fall back to this computer for an unknown session or host', async () => {
+    expect((await upload('nope')).status).toBe(404)
+    const lost = await upload('lost')
+    expect(lost.status).toBe(502)
+    expect(await lost.json()).toEqual({
+      detail: 'elsewhere isn’t linked, so the file wasn’t sent.',
+    })
+    expect(() => readdirSync(dir)).toThrow()
   })
 })
 
