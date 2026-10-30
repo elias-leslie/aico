@@ -26,7 +26,7 @@ vi.mock('@/lib/hooks/use-project-settings', () => ({
   useProjectSettings: () => projectState,
 }))
 const hostState = vi.hoisted(() => ({
-  hosts: [] as Array<{ name: string; state: string }>,
+  hosts: [] as Array<{ name: string; state: string; wake?: unknown }>,
   isLoading: false,
   isError: false,
 }))
@@ -37,7 +37,10 @@ const hostProjects = vi.hoisted(() => ({
   >,
   failures: {} as Record<string, string>,
 }))
-vi.mock('@/lib/hooks/use-hosts', () => ({
+vi.mock('@/lib/hooks/use-hosts', async (importOriginal) => ({
+  startingLabel: (
+    await importOriginal<typeof import('@/lib/hooks/use-hosts')>()
+  ).startingLabel,
   HOST_STATE_LABELS: {
     connected: '',
     connecting: 'connecting',
@@ -120,6 +123,29 @@ describe('NewSessionDialog', () => {
       'claude-code',
       'agent-work',
     )
+  })
+
+  it('shows the host starting while a create waits on it', async () => {
+    hostState.hosts = [
+      {
+        name: 'agent-work',
+        state: 'powered_off',
+        wake: { state: 'starting', step: 'powering_on' },
+      },
+    ]
+    renderDialog(
+      'neri',
+      vi.fn<Start>(() => new Promise<void>(() => {})),
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^agent-work/ }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Start Claude Code in Neri on agent-work',
+      }),
+    )
+    expect(
+      await screen.findByText('Starting agent-work… powering on'),
+    ).toBeInTheDocument()
   })
 
   it("lists the chosen host's projects, and says why when it can't", () => {

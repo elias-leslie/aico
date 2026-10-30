@@ -35,6 +35,19 @@ export const HOSTS_STARTING_POLL_MS = 2_000
 
 export const isStarting = (host: HostChoice) => host.wake?.state === 'starting'
 
+export const WAKE_STEP_LABELS = {
+  powering_on: 'powering on',
+  connecting: 'connecting',
+  checking_services: 'checking services',
+} as const
+
+/** What a create waiting on a host shows: `Starting agent-work… connecting`. */
+export function startingLabel(host: HostChoice | undefined): string | null {
+  if (!host || !isStarting(host)) return null
+  const step = host.wake?.step ? WAKE_STEP_LABELS[host.wake.step] : null
+  return `Starting ${host.name}…${step ? ` ${step}` : ''}`
+}
+
 export const HOST_STATE_LABELS: Record<HostChoice['state'], string> = {
   connected: '',
   connecting: 'connecting',
@@ -44,7 +57,8 @@ export const HOST_STATE_LABELS: Record<HostChoice['state'], string> = {
 }
 
 /** The hosts Tether links to; empty when it links to none. */
-export function useHosts(enabled = true) {
+/** `watch`: poll as if starting, e.g. while a create waits on a host. */
+export function useHosts(enabled = true, watch = false) {
   const query = useQuery({
     queryKey: ['hosts'],
     queryFn: () =>
@@ -56,7 +70,7 @@ export function useHosts(enabled = true) {
     enabled,
     staleTime: 10_000,
     refetchInterval: (current) =>
-      current.state.data?.items.some(isStarting)
+      watch || current.state.data?.items.some(isStarting)
         ? HOSTS_STARTING_POLL_MS
         : false,
   })

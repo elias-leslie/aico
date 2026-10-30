@@ -18,15 +18,14 @@ import {
   useOpenSession,
   watchSignIn,
 } from '@/lib/hooks/use-host-admin'
-import { type HostChoice, isStarting, useHosts } from '@/lib/hooks/use-hosts'
+import {
+  type HostChoice,
+  isStarting,
+  useHosts,
+  WAKE_STEP_LABELS,
+} from '@/lib/hooks/use-hosts'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { ConfirmationDialog } from './ConfirmationDialog'
-
-const STEP_LABELS = {
-  powering_on: 'powering on',
-  connecting: 'connecting',
-  checking_services: 'checking services',
-} as const
 
 const LOGIN_LABELS: Record<LoginState, string> = {
   signed_in: 'Signed in',
@@ -55,7 +54,7 @@ const plural = (count: number, one: string) =>
 export function hostStatus(host: HostChoice): { text: string; tone: Tone } {
   const wake = host.wake
   if (wake?.state === 'starting') {
-    const step = wake.step ? STEP_LABELS[wake.step] : null
+    const step = wake.step ? WAKE_STEP_LABELS[wake.step] : null
     return { text: step ? `Starting… ${step}` : 'Starting…', tone: 'wait' }
   }
   if (wake?.state === 'failed') {

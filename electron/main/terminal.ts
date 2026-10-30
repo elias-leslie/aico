@@ -23,6 +23,14 @@ import { BLANK_SLATE_ID, PERSONAL_WORKSPACE_ID } from './project'
 import { ACTIVE_WITHIN_MS, createSizeHolder, type SizeHolder } from './size-holder'
 import type { PendingCreate, WindowRegistry } from './window-registry'
 
+/** How often a create waiting on a host checks the hub's start progress. */
+const HOST_START_POLL_MS = 2_000
+const HOST_START_STEPS: Record<string, string> = {
+  powering_on: 'powering on',
+  connecting: 'connecting',
+  checking_services: 'checking services',
+}
+
 interface PtySize {
   cols: number
   rows: number
@@ -65,7 +73,7 @@ export function clampSize(size: PtySize): PtySize {
 }
 
 interface TerminalDeps {
-  tether: Pick<TetherClient, 'createSession' | 'attach' | 'resizeClaim'>
+  tether: Pick<TetherClient, 'createSession' | 'attach' | 'resizeClaim' | 'hosts'>
   catalog: Pick<SessionCatalog, 'get' | 'upsert'>
   registry: Pick<
     WindowRegistry,
@@ -199,6 +207,35 @@ export function createTerminal(deps: TerminalDeps) {
     remoteRetries.set(win.id, { attempt: attempt + 1, timer, host })
   }
 
+  /** While a create waits on a host the hub is bringing up, say which step
+   * it is on in the window ("Starting agent-work… connecting"). */
+  function watchHostStart(win: BrowserWindow, host: string, stillCurrent: () => boolean) {
+    let last = ''
+    let stopped = false
+    let timer: unknown
+    const look = () => {
+      tether
+        .hosts()
+        .then((hosts) => {
+          const wake = hosts.find((item) => item.name === host)?.wake
+          if (stopped || wake?.state !== 'starting' || !stillCurrent()) return
+          const step = wake.step ? ` ${HOST_START_STEPS[wake.step] ?? wake.step}` : ''
+          const line = `Starting ${host}…${step}`
+          if (line !== last) writeNotice(win, line, 90)
+          last = line
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (!stopped) timer = setTimer(look, HOST_START_POLL_MS)
+        })
+    }
+    timer = setTimer(look, HOST_START_POLL_MS)
+    return () => {
+      stopped = true
+      clearTimer(timer)
+    }
+  }
+
   async function createRequest(pending: PendingCreate, size: PtySize) {
     // The chosen revision is read now, so the session keeps what was picked.
     const instructions = {
@@ -241,12 +278,15 @@ export function createTerminal(deps: TerminalDeps) {
       const pending = registry.pending(winId)
       if (!pending) return
       let created: SessionDescriptor
+      const stopWatch = pending.host ? watchHostStart(win, pending.host, stillCurrent) : null
       try {
         created = await tether.createSession(await createRequest(pending, size))
       } catch (error) {
         if (error instanceof TetherUnavailable) awaitingTether.set(winId, size)
         if (stillCurrent()) writeNotice(win, describeFailure('Could not start the session', error))
         return
+      } finally {
+        stopWatch?.()
       }
       if (win.isDestroyed()) {
         // The window closed during the create: the session keeps running and is

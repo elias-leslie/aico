@@ -126,6 +126,7 @@ function setup() {
     resizeClaim: vi.fn(
       async () => ({ applied: true }) as { applied: boolean; changed?: boolean; reason?: string },
     ),
+    hosts: vi.fn(async () => [] as unknown[]),
   }
   const state = { replacing: new Set<string>(), quitting: false, arranged: false }
   // Remote reattach tries: pending timers, run by hand.
@@ -369,6 +370,33 @@ describe('starting a session', () => {
     expect(s.deps.bind).toHaveBeenCalledTimes(1)
     expect(s.tether.attach).toHaveBeenCalledWith('bbbbbbbb')
     await vi.waitFor(() => expect(s.deps.titles).toHaveBeenCalledTimes(1))
+  })
+
+  it('says which step a host is on while a create waits for it to start', async () => {
+    const s = setup()
+    let finish: (d: SessionDescriptor) => void = () => {}
+    s.tether.createSession.mockImplementationOnce(
+      () => new Promise<SessionDescriptor>((resolve) => (finish = resolve)),
+    )
+    s.tether.hosts.mockResolvedValue([
+      { name: 'agent-work', wake: { state: 'starting', step: 'connecting' } },
+    ])
+    s.registry.setPending(1, { tool: 'codex', projectId: 'aico', host: 'agent-work' })
+    s.on.get('pty:start')?.(s.from(s.all[0]), { cols: 100, rows: 30 })
+    await vi.waitFor(() => expect(s.timers.size).toBe(1))
+    const [id, look] = [...s.timers][0] ?? []
+    s.timers.delete(id as number)
+    look?.fn()
+    await vi.waitFor(() =>
+      expect(s.all[0].webContents.send).toHaveBeenCalledWith(
+        'pty:data',
+        expect.stringContaining('Starting agent-work… connecting'),
+      ),
+    )
+    await vi.waitFor(() => expect(s.timers.size).toBe(1))
+    finish(descriptor('bbbbbbbb'))
+    await vi.waitFor(() => expect(s.links).toHaveLength(1))
+    expect(s.timers.size).toBe(0)
   })
 
   it('sends the chosen revision as a snapshot, also for Blank Slate', async () => {

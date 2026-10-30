@@ -7,6 +7,7 @@ import { type ReactNode, useMemo, useState } from 'react'
 import { CHAT_TOOL_SLUG, useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HOST_STATE_LABELS,
+  startingLabel,
   useHostProjects,
   useHosts,
 } from '@/lib/hooks/use-hosts'
@@ -67,7 +68,7 @@ export function NewSessionDialog({
     hosts,
     isLoading: hostsLoading,
     isError: hostsError,
-  } = useHosts(isOpen)
+  } = useHosts(isOpen, starting && !!pickedHost)
 
   const tool =
     kind === 'agent'
@@ -361,7 +362,10 @@ export function NewSessionDialog({
               disabled={!project || starting}
               className="lantern-btn primary h-11! w-full text-sm!"
             >
-              {starting ? 'Starting…' : startText}
+              {starting
+                ? (startingLabel(hosts.find((h) => h.name === host)) ??
+                  'Starting…')
+                : startText}
             </button>
           </div>
         </Dialog.Content>
