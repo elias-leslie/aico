@@ -78,7 +78,21 @@ describe('pillState', () => {
 describe('handledBy', () => {
   it('says who has each problem', () => {
     expect(handledBy(finding({ owner: true, who: 'You' }))).toMatch(/your call/)
-    expect(handledBy(finding())).toBe('A steward agent is on it.')
+    // older Nightshift: 'Agent' only meant no rule fixes it; never claims an agent is on it
+    expect(handledBy(finding())).toBe('No automatic fix yet.')
+    // Nightshift's own words for what is actually happening win (work classes)
+    expect(
+      handledBy(
+        finding({
+          who: 'Daily pass',
+          class: 'daily',
+          handled: "Queued for tonight's pass.",
+        }),
+      ),
+    ).toBe("Queued for tonight's pass.")
+    expect(
+      handledBy(finding({ owner: true, who: 'You', handled: 'Needs you.' })),
+    ).toMatch(/your call/)
     expect(handledBy(finding({ who: 'Nightshift' }))).toBe(
       'Nightshift fixes this itself.',
     )

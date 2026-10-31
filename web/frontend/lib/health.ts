@@ -24,9 +24,14 @@ export interface HealthFinding {
   check: string
   state: CheckState
   summary: string
-  /** 'You', 'Agent', 'Nightshift' or ''. */
+  /** 'You', 'Agent' (only while an agent's hand-off is open), 'Nightshift', 'Daily pass' or ''. */
   who: string
   owner: boolean
+  /** Nightshift's work class: auto, record, daily, now or owner. Older Nightshift: absent. */
+  class?: string
+  /** What is actually happening to it, in the owner's words ("Queued for tonight's pass."). Older Nightshift:
+   * absent. */
+  handled?: string
   /** What Nightshift or its agent does next ('' for the owner's own calls). */
   next: string
   /** Seconds the problem has been open. */
@@ -215,7 +220,9 @@ export function handledBy(finding: HealthFinding): string {
     return (finding.calls ?? 1) > 1
       ? `${finding.calls} calls for you here. You answer them in Nightshift.`
       : 'Needs your call. You answer it in Nightshift.'
-  if (finding.who === 'Agent') return 'A steward agent is on it.'
+  if (finding.handled) return finding.handled
+  // Older Nightshift: 'Agent' meant only that no rule fixes it, never that an agent was working on it.
+  if (finding.who === 'Agent') return 'No automatic fix yet.'
   if (finding.who === 'Nightshift') return 'Nightshift fixes this itself.'
   return 'Nightshift is watching it.'
 }
