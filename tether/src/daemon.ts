@@ -14,9 +14,15 @@ import { RunTracker, readOverRuns, sessionLaunchers, type ToldPause } from './ag
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { type AskDelivery, AskStore, aicoOrigin, handOffAsks, type NeedsYouFeed } from './asks'
-import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
+import {
+  agentExitMarkerDir,
+  resolveEntryScanConfig,
+  resolveShowConfig,
+  type TetherPaths,
+} from './config'
 import { nodeProcFs, observeAgent, writeJsonFile } from './continuity'
 import { DeadShells } from './dead-shells'
+import { configureEntryScan } from './entry-files'
 import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { listenPrivateSocket } from './http'
@@ -205,6 +211,7 @@ export async function startDaemon(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<RunningDaemon> {
   const show = resolveShowConfig(env)
+  configureEntryScan(resolveEntryScanConfig(env))
   mkdirSync(paths.stateDir, { recursive: true, mode: 0o700 })
   chmodSync(paths.stateDir, 0o700)
   mkdirSync(agentExitMarkerDir(paths), { recursive: true, mode: 0o700 })

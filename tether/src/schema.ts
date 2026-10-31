@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 22
+export const SCHEMA_VERSION = 23
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -529,6 +529,27 @@ export const SESSION_ENTRIES_SQL = `
   CREATE TRIGGER IF NOT EXISTS sessions_end_entry AFTER DELETE ON sessions
   BEGIN
     DELETE FROM session_entries WHERE session_id = old.id;
+  END;
+`
+
+/**
+ * v23: a root's explicit launch options (`model`, `reasoningEffort`,
+ * `daybreak`, `agentHubContext` on `POST /v1/roots`), so crash recovery,
+ * restart, wakes and reboot restore launch the agent with them as the create
+ * did. Written once, with the root's reservation; null fields were not given.
+ */
+export const SESSION_LAUNCH_OPTIONS_SQL = `
+  CREATE TABLE IF NOT EXISTS session_launch_options (
+    session_id        TEXT PRIMARY KEY
+                        CHECK(length(session_id) = 8 AND session_id NOT GLOB '*[^0-9a-f]*'),
+    model             TEXT CHECK(model IS NULL OR length(model) BETWEEN 1 AND 200),
+    reasoning_effort  TEXT CHECK(reasoning_effort IS NULL OR length(reasoning_effort) BETWEEN 1 AND 40),
+    daybreak          INTEGER CHECK(daybreak IS NULL OR daybreak IN (0, 1)),
+    agent_hub_context INTEGER CHECK(agent_hub_context IS NULL OR agent_hub_context IN (0, 1))
+  );
+  CREATE TRIGGER IF NOT EXISTS sessions_end_launch_options AFTER DELETE ON sessions
+  BEGIN
+    DELETE FROM session_launch_options WHERE session_id = old.id;
   END;
 `
 

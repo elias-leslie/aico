@@ -126,6 +126,7 @@ import {
 import {
   hasLaunchPrompt,
   initialLaunchLine,
+  relaunchLine,
   rootLaunchEnvironment,
   rootPromptReady,
 } from './root-launch'
@@ -167,13 +168,7 @@ import { ensureBlankSlateWorkspace, forWorkspace, isBlankSlateRoot } from './tui
 import { ensureContext, finalizeContext } from './tui/context'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
 import { withInstructions } from './tui/instructions'
-import {
-  type AgentExitMarker,
-  launchLine,
-  paneCommand,
-  paneGatePath,
-  parseAgentExitMarker,
-} from './tui/launch'
+import { type AgentExitMarker, paneCommand, paneGatePath, parseAgentExitMarker } from './tui/launch'
 import { agentProcessNames, getTui, listTuis } from './tui/registry'
 import type { ContextStatus, TuiSpec } from './tui/spec'
 
@@ -2497,7 +2492,7 @@ export async function respawnAndRelaunch(
         launched
           ? options.initialLaunch
             ? initialLaunchLine(widgetId, launched)
-            : launchLine(launched)
+            : relaunchLine(widgetId, launched)
           : null,
       )
       let promoted: ManagedPaneProcess | null = null

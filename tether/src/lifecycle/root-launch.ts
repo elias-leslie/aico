@@ -1,5 +1,5 @@
 import { AGENT_SESSION_ENV } from '../continuity'
-import { getWidget, rootRequestForWidget } from './catalog'
+import { getLaunchOptions, getWidget, rootRequestForWidget } from './catalog'
 import type { RootLaunchOptions } from './root-control'
 import { isResumeSessionId, launchLine, resumeLaunchLine } from './tui/launch'
 import { getTui } from './tui/registry'
@@ -8,7 +8,9 @@ import type { TuiSpec } from './tui/spec'
 // Prompt bytes exist here only during an exact create/reconcile request (a
 // root, or any session Tether restores after a reboot). Once a pane exists its
 // immutable gate environment carries launch intent through a crash. No prompt
-// is saved in the catalog or sent to a running TUI.
+// is saved in the catalog or sent to a running TUI. A root's explicit launch
+// options are (catalog getLaunchOptions), so every later launch of its agent
+// (recovery, restart, wake, reboot restore) gets the same model and effort.
 const prompts = new Map<string, string>()
 const resumeSessions = new Map<string, string>()
 const launchOptions = new Map<string, RootLaunchOptions>()
@@ -54,6 +56,7 @@ export function rootLaunchEnvironment(widgetId: string): Record<string, string> 
   const root = rootRequestForWidget(widgetId)
   if (!root && !plainSessionPrompt(widgetId)) return {}
   const prompt = prompts.get(widgetId)
+  const options = launchOptions.get(widgetId) ?? (root ? getLaunchOptions(widgetId) : null)
   return {
     ...(root ? { ST_SESSION_ID: root.logicalSessionId } : {}),
     ST_WORK_ROLE: root?.workRole ?? '',
@@ -63,10 +66,10 @@ export function rootLaunchEnvironment(widgetId: string): Record<string, string> 
     AICO_ROOT_INITIAL_LAUNCH: prompt === undefined ? '0' : '1',
     AICO_ROOT_INITIAL_PROMPT: prompt ?? '',
     AICO_ROOT_RESUME_SESSION_ID: resumeSessions.get(widgetId) ?? '',
-    AICO_ROOT_MODEL: launchOptions.get(widgetId)?.model ?? '',
-    AICO_ROOT_REASONING_EFFORT: launchOptions.get(widgetId)?.reasoningEffort ?? '',
-    AICO_ROOT_DAYBREAK: launchOptions.get(widgetId)?.daybreak?.toString() ?? '',
-    AICO_ROOT_AGENT_HUB_CONTEXT: launchOptions.get(widgetId)?.agentHubContext?.toString() ?? '',
+    AICO_ROOT_MODEL: options?.model ?? '',
+    AICO_ROOT_REASONING_EFFORT: options?.reasoningEffort ?? '',
+    AICO_ROOT_DAYBREAK: options?.daybreak?.toString() ?? '',
+    AICO_ROOT_AGENT_HUB_CONTEXT: options?.agentHubContext?.toString() ?? '',
   }
 }
 
@@ -79,18 +82,9 @@ export function rootPromptReady(widgetId: string): boolean {
   return !rootRequestForWidget(widgetId) || prompts.has(widgetId)
 }
 
-export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | null {
-  const line = launchLine(tool)
-  if (!line || (!rootRequestForWidget(widgetId) && !plainSessionPrompt(widgetId))) return line
-  // Fixed shell bytes, quoted argv expansion. Even control characters and
-  // shell metacharacters in the prompt cannot act as gate input or shell code.
-  // Pi's native extension consumes only the explicit per-session selection.
-  // Prompt bytes are always removed; other tools receive no Pi metadata.
-  const clean =
-    '/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u AICO_ROOT_REASONING_EFFORT' +
-    (tool.slug === 'pi'
-      ? ''
-      : ' -u AICO_ROOT_MODEL -u AICO_ROOT_DAYBREAK -u AICO_ROOT_AGENT_HUB_CONTEXT')
+/** Fixed adapter flags from the quoted AICO_ROOT_* values (model, effort,
+ * Daybreak), appended to "$@"; empty for a tool without model selection. */
+function selectionFlags(tool: TuiSpec): string {
   // Fixed adapter flags and quoted environment values. Configure before resume's
   // subcommand so both fresh and resumed native launches receive the overrides.
   const selection = tool.modelSelection
@@ -111,6 +105,37 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
     selection?.daybreak && 'arguments' in selection.daybreak
       ? `if [ -n "$AICO_ROOT_DAYBREAK" ]; then set -- "$@" ${selection.daybreak.arguments.join(' ')} "${selection.daybreak.key}=$AICO_ROOT_DAYBREAK"; fi; `
       : ''
+  return `${flags}${daybreak}`
+}
+
+/** Prompt bytes are always removed; other tools receive no Pi metadata. */
+function cleanEnvironment(tool: TuiSpec): string {
+  return (
+    '/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u AICO_ROOT_REASONING_EFFORT' +
+    (tool.slug === 'pi'
+      ? ''
+      : ' -u AICO_ROOT_MODEL -u AICO_ROOT_DAYBREAK -u AICO_ROOT_AGENT_HUB_CONTEXT')
+  )
+}
+
+/** The agent's launch with no launch prompt (restart, a wake or reboot with
+ * nothing to resume): plain, unless the root was created with explicit
+ * launch options, which it then gets again. */
+export function relaunchLine(widgetId: string, tool: TuiSpec): string | null {
+  const line = launchLine(tool)
+  if (!line || !tool.modelSelection || !rootRequestForWidget(widgetId)) return line
+  if (!getLaunchOptions(widgetId)) return line
+  return `set --; ${selectionFlags(tool)}${cleanEnvironment(tool)} ${line} "$@"`
+}
+
+export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | null {
+  const line = launchLine(tool)
+  if (!line || (!rootRequestForWidget(widgetId) && !plainSessionPrompt(widgetId))) return line
+  // Fixed shell bytes, quoted argv expansion. Even control characters and
+  // shell metacharacters in the prompt cannot act as gate input or shell code.
+  // Pi's native extension consumes only the explicit per-session selection.
+  const clean = cleanEnvironment(tool)
+  const selection = selectionFlags(tool)
   const projectTrust =
     tool.slug === 'pi' && !tool.command.includes('--approve') ? 'set -- "$@" --approve; ' : ''
   // A tool that keeps no observable session record starts under an ID Tether
@@ -127,5 +152,5 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
     ? `${clean}${agentEnv} ${selected} ${tool.resume?.arguments.join(' ')} "$AICO_ROOT_RESUME_SESSION_ID" -- "$AICO_ROOT_INITIAL_PROMPT"`
     : 'exit 64'
   const launch = `if [ -n "$AICO_ROOT_RESUME_SESSION_ID" ]; then ${resumed}; else ${initial} -- "$AICO_ROOT_INITIAL_PROMPT"; fi`
-  return `if [ "$AICO_ROOT_INITIAL_LAUNCH" = 1 ]; then set --; ${flags}${daybreak}${projectTrust}${chosen}${launch}; else ${line}; fi`
+  return `if [ "$AICO_ROOT_INITIAL_LAUNCH" = 1 ]; then set --; ${selection}${projectTrust}${chosen}${launch}; else ${relaunchLine(widgetId, tool)}; fi`
 }

@@ -1611,6 +1611,9 @@ def create_main(argv: list[str]) -> int:
         if (local_codex and args.daybreak == "on"
                 and (reason := codex_daybreak_unavailable(args.model))):
             refuse(reason)
+        # The hub forwards an entry only when it runs entries for this tool itself.
+        if args.entry is not None and (reason := entry_api_refusal(collector, endpoint, args.tool)):
+            refuse(reason)
         instructions = None
         if args.instructions is not None:
             try:
@@ -2050,6 +2053,20 @@ def root_main(argv: list[str]) -> int:
 
 # Tether API that takes inject `from` (general waits); an older one refuses the field.
 SEND_FROM_API = 13
+# Tether API that runs a root's `entry` for each tool: Claude Code since 15, Codex since 19.
+ENTRY_API = {"claude-code": 15, "codex": 19}
+
+
+def entry_api_refusal(collector: Collector, endpoint: str, tool: str) -> str | None:
+    """Why this computer's Tether cannot take an entry for `tool`, or None. An older one would
+    refuse the body without saying that its version is why."""
+    status, data = collector.receipt(endpoint, "/v1/version", timeout=5)
+    version = data.get("apiVersion") if status == 200 else None
+    needed = ENTRY_API[tool]
+    if isinstance(version, int) and version >= needed:
+        return None
+    shown = f"API {version}" if isinstance(version, int) else "no API version"
+    return f"--entry for {tool} needs Tether API {needed} or later; this computer's Tether answers {shown}"
 
 
 def send_origin(collector: Collector, control: str, target: str, session: dict) -> str | None:

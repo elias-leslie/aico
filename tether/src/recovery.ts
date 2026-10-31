@@ -37,13 +37,20 @@ import {
   UUID_RE,
   writeJsonFile,
 } from './continuity'
+import { entryHomeFiles } from './entry-files'
 import { HttpError, type Router, sendJson } from './http'
 import {
   admissionOverrideFromEnv,
   nightshiftAdmissionPath,
   readNightshiftAdmission,
 } from './lifecycle/agent-admission'
-import { getWidget, listWidgets, rootRequestForWidget, type WidgetRow } from './lifecycle/catalog'
+import {
+  getSessionEntry,
+  getWidget,
+  listWidgets,
+  rootRequestForWidget,
+  type WidgetRow,
+} from './lifecycle/catalog'
 import {
   type AbandonedScope,
   ensureSessionSerialized,
@@ -1020,15 +1027,15 @@ export class Recovery {
     if (!this.transcripts.has(key)) {
       let facts: TranscriptFacts | null = null
       if (record.resumeId && getTui(row.tool)?.slug === 'claude-code') {
-        const home = sessionEntryHome(row.id) ?? this.home
-        const path = findClaudeTranscript(nodeFileReader, home, record.resumeId)
-        if (path)
-          facts = claudeTranscriptFacts(
-            nodeFileReader,
-            path,
-            record.diedAt,
-            process.getuid?.() ?? 1000,
-          )
+        // An entry session's transcript is read only inside its home (none
+        // when the entry no longer resolves), never the host's.
+        const entryHome = getSessionEntry(row.id) ? sessionEntryHome(row.id) : undefined
+        const contained = entryHome ? entryHomeFiles(entryHome) : null
+        const files = entryHome === undefined ? nodeFileReader : contained?.reader
+        const home = contained?.home ?? this.home
+        const path = files ? findClaudeTranscript(files, home, record.resumeId) : null
+        if (files && path)
+          facts = claudeTranscriptFacts(files, path, record.diedAt, process.getuid?.() ?? 1000)
       }
       this.transcripts.set(key, facts)
     }

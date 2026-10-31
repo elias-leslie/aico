@@ -22,6 +22,7 @@ import {
   ROOT_WORK_ROLE_SQL,
   SCHEMA_VERSION,
   SESSION_ENTRIES_SQL,
+  SESSION_LAUNCH_OPTIONS_SQL,
   SESSIONS_TABLE_SQL,
   SETTINGS_SQL,
   SHARES_SQL,
@@ -384,6 +385,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(22, now)
+      }
+      if (current < 23) {
+        // v23: a root's explicit launch options, kept for every relaunch.
+        this.db.exec(SESSION_LAUNCH_OPTIONS_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(23, now)
       }
     })
   }

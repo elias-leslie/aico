@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { MAX_UNIX_SOCKET_PATH_BYTES } from '../config'
 import { durableTmuxServerUnit, MANAGED_LIFECYCLE_VERSION } from './ownership'
+import type { RootLaunchOptions } from './root-control'
 
 // Session catalog, extracted from Aico's electron/main/store.ts. Aico's
 // `widgets` identity columns live in Tether's `sessions` table with identical
@@ -727,6 +728,7 @@ export function reserveRootRequest(
   aTermSessionId: string | null = null,
   agentHub: NewAgentHubSession | null = null,
   entry: SessionEntry | null = null,
+  launch: RootLaunchOptions | null = null,
 ): RootRequestRow {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -747,6 +749,7 @@ export function reserveRootRequest(
         entry.name,
         entry.arg,
       )
+    if (launch) saveLaunchOptions(request.widgetId, launch)
     setWidgetProject(request.widgetId, projectId, projectRoot)
     db.prepare(`INSERT INTO root_requests
       (request_id, digest, widget_id, logical_session_id, role, lead_root_reference, facet_capsule_ref, created_at, origin, work_role, work_role_display_name)
@@ -785,6 +788,45 @@ export function getSessionEntry(sessionId: string): SessionEntry | null {
     .prepare('SELECT name, arg FROM session_entries WHERE session_id = ?')
     .get(sessionId) as { name: string; arg: string } | undefined
   return row ? { name: row.name, arg: row.arg } : null
+}
+
+// --- Root launch options (src/lifecycle/root-launch.ts) ----------------------
+
+const flag = (value: boolean | null | undefined) => (value == null ? null : value ? 1 : 0)
+
+function saveLaunchOptions(sessionId: string, options: RootLaunchOptions): void {
+  db.prepare(`INSERT OR IGNORE INTO session_launch_options
+    (session_id, model, reasoning_effort, daybreak, agent_hub_context) VALUES (?, ?, ?, ?, ?)`).run(
+    sessionId,
+    options.model || null,
+    options.reasoningEffort || null,
+    flag(options.daybreak),
+    flag(options.agentHubContext),
+  )
+}
+
+/** The explicit launch options a root was created with, or null (none given,
+ * or created before schema 23). */
+export function getLaunchOptions(sessionId: string): RootLaunchOptions | null {
+  const row = db
+    .prepare(
+      'SELECT model, reasoning_effort, daybreak, agent_hub_context FROM session_launch_options WHERE session_id = ?',
+    )
+    .get(sessionId) as
+    | {
+        model: string | null
+        reasoning_effort: string | null
+        daybreak: number | null
+        agent_hub_context: number | null
+      }
+    | undefined
+  if (!row) return null
+  return {
+    model: row.model,
+    reasoningEffort: row.reasoning_effort,
+    ...(row.daybreak === null ? {} : { daybreak: row.daybreak === 1 }),
+    ...(row.agent_hub_context === null ? {} : { agentHubContext: row.agent_hub_context === 1 }),
+  }
 }
 
 /** A chat started from a menu rather than a root request: the widget row, its

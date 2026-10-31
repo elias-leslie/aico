@@ -24,6 +24,9 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
+import type { FileTail } from './agent-state'
+import { ENTRY_SCAN_DEFAULTS, type EntryScanConfig } from './config'
+import { type EntryHomeFiles, entryHomeFiles } from './entry-files'
 
 export const RESUME_PROMPT =
   'Tether resumed this session after a host reboot. Continue where you left off. ' +
@@ -81,6 +84,9 @@ export interface ProcFs {
   /** Last modification time in ms; null when the file is gone. Readers that
    * pick the newest file (entry homes) use it; without it they go by name. */
   mtimeMs?(path: string): number | null
+  /** Readers that never leave an entry home (entry-files.ts); null when the
+   * home is not a real directory. The host's ProcFs has them. */
+  entryHome?(home: string): EntryHomeFiles | null
 }
 
 export const nodeProcFs: ProcFs = {
@@ -103,6 +109,7 @@ export const nodeProcFs: ProcFs = {
       return null
     }
   },
+  entryHome: (home) => entryHomeFiles(home),
 }
 
 /** The pane process and all its descendants (bounded). */
@@ -310,6 +317,23 @@ export function findEntryProcess(fs: ProcFs, pids: number[]): EntryProcess | nul
   return null
 }
 
+/** How an entry home is read: through the ProcFs's contained readers when it
+ * has them (the host's: no read leaves the home, src/entry-files.ts), else as
+ * given (a test's fake fs). null: the home is refused, read nothing. */
+export interface EntryReaders {
+  /** The home to build paths from. */
+  home: string
+  fs: ProcFs
+  /** The contained tail for a file found here; null: the reader's own. */
+  tail: FileTail | null
+  scan: EntryScanConfig
+}
+
+export function entryReaders(fs: ProcFs, home: string): EntryReaders | null {
+  if (!fs.entryHome) return { home, fs, tail: null, scan: ENTRY_SCAN_DEFAULTS }
+  return fs.entryHome(home)
+}
+
 function claudeFileTime(state: Record<string, unknown>): number {
   const times = [state.updatedAt, state.statusUpdatedAt, state.startedAt].filter(
     (value): value is number => typeof value === 'number' && Number.isFinite(value),
@@ -348,11 +372,6 @@ export function entryClaudeSession(fs: ProcFs, home: string): ClaudeSession | nu
   return best
 }
 
-/** At most this many rollouts are looked at per read of an entry home. */
-const ENTRY_ROLLOUT_LIMIT = 2000
-/** At most this many of the newest are opened to find the user thread. */
-const ENTRY_ROLLOUT_OPEN = 32
-
 /** The user thread's rollout in an entry home's `.codex/sessions`
  * (YYYY/MM/DD/rollout-*.jsonl). Codex in the container holds it open, but
  * its fds are not this host's to read, and one agent runs per home: so it is
@@ -361,6 +380,7 @@ const ENTRY_ROLLOUT_OPEN = 32
 export function entryCodexRollout(
   fs: ProcFs,
   home: string,
+  scan: EntryScanConfig = ENTRY_SCAN_DEFAULTS,
 ): { path: string; threadId: string | null } | null {
   const root = join(home, '.codex', 'sessions')
   const files: string[] = []
@@ -372,7 +392,7 @@ export function entryCodexRollout(
       return
     }
     for (const name of names) {
-      if (files.length >= ENTRY_ROLLOUT_LIMIT) return
+      if (files.length >= scan.rolloutScan) return
       if (name.startsWith('.') || name.includes('/')) continue
       const path = `${dir}/${name}`
       if (depth === 3) {
@@ -384,7 +404,7 @@ export function entryCodexRollout(
   const when = new Map(files.map((path) => [path, fs.mtimeMs?.(path) ?? null]))
   // Newest first by write time; by name (creation time) without it.
   files.sort((a, b) => (when.get(b) ?? 0) - (when.get(a) ?? 0) || (a < b ? 1 : a > b ? -1 : 0))
-  for (const path of files.slice(0, ENTRY_ROLLOUT_OPEN)) {
+  for (const path of files.slice(0, scan.rolloutOpen)) {
     if (fs.mtimeMs && when.get(path) === null) continue
     const user = codexUserThread(fs, path)
     if (user) return { path, threadId: user.threadId }
@@ -395,12 +415,13 @@ export function entryCodexRollout(
 /** An entry session's agent: its state from the entry home, standing on the
  * entry process (the pane's agent exits when it does). Never the host home. */
 export function observeEntryAgent(fs: ProcFs, entry: EntryProcess): AgentObservation | null {
+  const readers = entry.tool ? entryReaders(fs, entry.home) : null
+  if (!readers) return null
   if (entry.tool === 'codex') {
-    const threadId = entryCodexRollout(fs, entry.home)?.threadId
+    const threadId = entryCodexRollout(readers.fs, readers.home, readers.scan)?.threadId
     return threadId ? { pid: entry.pid, resumeId: threadId, idle: null, blocked: false } : null
   }
-  if (entry.tool !== 'claude-code') return null
-  const session = entryClaudeSession(fs, entry.home)
+  const session = entryClaudeSession(readers.fs, readers.home)
   const state = session?.state
   if (!state || typeof state.sessionId !== 'string' || !UUID_RE.test(state.sessionId)) return null
   return {

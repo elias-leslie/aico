@@ -15,7 +15,7 @@
 // A hook's `blocked` holds until the user answers: a UserPromptSubmit report,
 // or a poll whose status changed after the hook fired and is no longer waiting.
 
-import { closeSync, fstatSync, openSync, readSync } from 'node:fs'
+import { openSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import {
   type CodexRolloutFile,
@@ -23,12 +23,14 @@ import {
   codexUserRollouts,
   entryClaudeSession,
   entryCodexRollout,
+  entryReaders,
   findEntryProcess,
   observeChosenSession,
   type ProcFs,
   processTree,
   UUID_RE,
 } from './continuity'
+import { fileTail } from './entry-files'
 
 export const AGENT_STATES = ['working', 'idle', 'blocked', 'unknown'] as const
 export type AgentState = (typeof AGENT_STATES)[number]
@@ -255,37 +257,7 @@ export interface FileTail {
   range(path: string, start: number, end: number): Buffer
 }
 
-export const nodeFileTail: FileTail = {
-  read(path, offset, max) {
-    const fd = openSync(path, 'r')
-    try {
-      const size = fstatSync(fd).size
-      let start = offset > size ? 0 : offset
-      if (size - start > max) start = size - max
-      const buffer = Buffer.alloc(size - start)
-      const read = readSync(fd, buffer, 0, buffer.length, start)
-      const text = buffer.subarray(0, read).toString('utf8')
-      // Hold back a partial last line until it is complete.
-      const end = text.lastIndexOf('\n') + 1
-      return {
-        text: text.slice(0, end),
-        offset: start + Buffer.byteLength(text.slice(0, end)),
-        size,
-      }
-    } finally {
-      closeSync(fd)
-    }
-  },
-  range(path, start, end) {
-    const fd = openSync(path, 'r')
-    try {
-      const buffer = Buffer.alloc(Math.max(0, end - start))
-      return buffer.subarray(0, readSync(fd, buffer, 0, buffer.length, start))
-    } finally {
-      closeSync(fd)
-    }
-  },
-}
+export const nodeFileTail: FileTail = fileTail((path) => openSync(path, 'r'))
 
 /** Incremental reader of one rollout file. */
 export class CodexRollout {
@@ -907,7 +879,7 @@ export class AgentStateTracker {
 
 /** What the poller found in one session's pane. */
 type Found =
-  | { kind: 'claude'; pid: number; file: string }
+  | { kind: 'claude'; pid: number; file: string; files?: ProcFs }
   | { kind: 'codex'; pid: number; rollout: CodexRollout }
   | { kind: 'pi'; pid: number; sessionId: string; session: PiSession | null }
   | { kind: 'agy'; pid: number; conversation: AgyConversation | null }
@@ -1021,19 +993,26 @@ export class AgentStatePoller {
     const pids = processTree(this.fs, panePid)
     // An entry session: its agent's files in the entry home (never the host
     // home), alive with the entry process.
+    // Every read there stays inside the home (entryReaders).
     const entry = findEntryProcess(this.fs, pids)
     if (entry) {
+      const readers = entry.tool ? entryReaders(this.fs, entry.home) : null
+      if (!readers) return { kind: 'none' }
       if (entry.tool === 'claude-code') {
-        const session = entryClaudeSession(this.fs, entry.home)
-        return session ? { kind: 'claude', pid: entry.pid, file: session.file } : { kind: 'none' }
+        const session = entryClaudeSession(readers.fs, readers.home)
+        return session
+          ? { kind: 'claude', pid: entry.pid, file: session.file, files: readers.fs }
+          : { kind: 'none' }
       }
-      const rollout = entry.tool === 'codex' ? entryCodexRollout(this.fs, entry.home) : null
-      return rollout ? this.codexFound(entry.pid, rollout, previous) : { kind: 'none' }
+      const rollout = entryCodexRollout(readers.fs, readers.home, readers.scan)
+      return rollout
+        ? this.codexFound(entry.pid, rollout, previous, readers.tail ?? this.options.tail)
+        : { kind: 'none' }
     }
     const claude = findClaude(this.fs, this.home, pids)
     if (claude) return { kind: 'claude', ...claude }
     const codex = findCodexRollout(this.fs, pids)
-    if (codex) return this.codexFound(codex.pid, codex, previous)
+    if (codex) return this.codexFound(codex.pid, codex, previous, this.options.tail)
     const pi = findPiSession(this.fs, this.home, pids)
     if (pi) {
       if (previous.kind === 'pi' && previous.session?.path === pi.path)
@@ -1054,13 +1033,14 @@ export class AgentStatePoller {
     pid: number,
     codex: { path: string; threadId: string | null },
     previous: Found,
+    tail: FileTail | undefined,
   ): Found {
     if (previous.kind === 'codex' && previous.rollout.path === codex.path)
       return { kind: 'codex', pid, rollout: previous.rollout }
     return {
       kind: 'codex',
       pid,
-      rollout: new CodexRollout(codex.path, codex.threadId, this.options.tail),
+      rollout: new CodexRollout(codex.path, codex.threadId, tail),
     }
   }
 
@@ -1082,7 +1062,7 @@ export class AgentStatePoller {
   private read(found: Found): AgentSignal | null {
     if (found.kind === 'claude') {
       try {
-        return claudeSignal(this.fs.readFile(found.file))
+        return claudeSignal((found.files ?? this.fs).readFile(found.file))
       } catch {
         return null
       }

@@ -61,6 +61,23 @@ export interface RootLaunchOptions {
   agentHubContext?: boolean | null
 }
 
+/** The explicit launch options a create asked for, or null for none. */
+export function rootLaunchOptions(input: RootCreateRequest): RootLaunchOptions | null {
+  if (
+    !input.model &&
+    !input.reasoningEffort &&
+    input.daybreak == null &&
+    input.agentHubContext == null
+  )
+    return null
+  return {
+    model: input.model ?? null,
+    reasoningEffort: input.reasoningEffort ?? null,
+    ...(input.daybreak != null ? { daybreak: input.daybreak } : {}),
+    ...(input.agentHubContext != null ? { agentHubContext: input.agentHubContext } : {}),
+  }
+}
+
 export interface RootCreateRequest {
   requestId: string
   /** A root-capable tool slug (`ROOT_CREATE_TOOLS`). */
@@ -648,18 +665,9 @@ export function createRootHandler(
     // Do not disclose the launch error or prompt; identity/state is the
     // reconciliation receipt, including an ambiguous launch outcome.
     try {
-      if (
-        input.model ||
-        input.reasoningEffort ||
-        input.daybreak != null ||
-        input.agentHubContext != null
-      )
-        await operations.ensure(widgetId, input.initialPrompt, input.resumeSessionId, {
-          model: input.model ?? null,
-          reasoningEffort: input.reasoningEffort ?? null,
-          ...(input.daybreak != null ? { daybreak: input.daybreak } : {}),
-          ...(input.agentHubContext != null ? { agentHubContext: input.agentHubContext } : {}),
-        })
+      const options = rootLaunchOptions(input)
+      if (options)
+        await operations.ensure(widgetId, input.initialPrompt, input.resumeSessionId, options)
       else await operations.ensure(widgetId, input.initialPrompt, input.resumeSessionId)
     } catch {
       /* reconcile below */
@@ -803,6 +811,7 @@ export function createRootHandler(
               }
             : null,
           input.entry ?? null,
+          input.tool === AGENT_HUB_TOOL ? null : rootLaunchOptions(input),
         )
         if (root.digest !== digest) {
           json(response, 409, { error: 'request_conflict' })

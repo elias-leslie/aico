@@ -4,17 +4,10 @@
 // (git, leases). Everything here is pure parsing plus bounded reads, so the
 // synopsis prompt and the detail file can be tested from fixtures.
 
-import {
-  closeSync,
-  fstatSync,
-  openSync,
-  readdirSync,
-  readFileSync,
-  readSync,
-  statSync,
-} from 'node:fs'
+import { closeSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { CHECKPOINT_PROMPT, RESUME_PROMPT } from './continuity'
+import { readFdTail } from './entry-files'
 
 /** Cause for a tmux server that vanished while its agent was running. tmux
  * runs as a non-main process of an ExitType=cgroup unit, so systemd records no
@@ -281,12 +274,7 @@ export interface FileReader {
 function readTail(path: string, maxBytes: number): string {
   const fd = openSync(path, 'r')
   try {
-    const size = fstatSync(fd).size
-    if (size <= maxBytes) return readFileSync(fd, 'utf8')
-    const buffer = Buffer.alloc(maxBytes)
-    const read = readSync(fd, buffer, 0, maxBytes, size - maxBytes)
-    const text = buffer.subarray(0, read).toString('utf8')
-    return text.slice(text.indexOf('\n') + 1)
+    return readFdTail(fd, maxBytes)
   } finally {
     closeSync(fd)
   }

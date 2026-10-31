@@ -34,6 +34,7 @@ import {
 } from './root-control'
 import {
   initialLaunchLine,
+  relaunchLine,
   rootLaunchEnvironment,
   rootPromptReady,
   withRootPrompt,
@@ -41,6 +42,7 @@ import {
 import { codexTui, initStore, registerBuiltinTuis } from './testing'
 import { blankSlateBase } from './tui/blank-slate'
 import { sessionInstructions } from './tui/instructions'
+import { launchLine } from './tui/launch'
 import { getTui } from './tui/registry'
 
 const RETRY_MS = 40
@@ -977,7 +979,30 @@ describe('private root workload control', () => {
         resume,
         { model: 'gpt-6.1-sol', reasoningEffort: 'high', daybreak: false },
       )
-    expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_MODEL).toBe('')
+    // Kept for every later launch (recovery, restart, wake, reboot): with no
+    // launch prompt the agent starts again with the created model and effort.
+    const later = rootLaunchEnvironment(root.widgetId)
+    expect(later).toMatchObject({
+      AICO_ROOT_INITIAL_LAUNCH: '0',
+      AICO_ROOT_INITIAL_PROMPT: '',
+      AICO_ROOT_MODEL: 'gpt-6.1-sol',
+      AICO_ROOT_REASONING_EFFORT: 'high',
+      AICO_ROOT_DAYBREAK: '',
+    })
+    for (const line of [initialLaunchLine(root.widgetId, tool), relaunchLine(root.widgetId, tool)])
+      expect(
+        JSON.parse(
+          execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', present(line)], {
+            env: { PATH: '/usr/bin:/bin', ...later },
+            encoding: 'utf8',
+          }),
+        ),
+      ).toEqual({ args: ['--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort="high"'] })
+    // A root created without options relaunches exactly as before.
+    expect((await call('/v1/roots', 'POST', create('no-selection'))).status).toBe(200)
+    const plain = present(getRootRequest('no-selection'))
+    expect(relaunchLine(plain.widgetId, tool)).toBe(launchLine(tool))
+    expect(rootLaunchEnvironment(plain.widgetId).AICO_ROOT_MODEL).toBe('')
   })
 
   it.each([
@@ -1165,8 +1190,24 @@ describe('private root workload control', () => {
           resume,
           { model: input.model, reasoningEffort: 'xhigh', daybreak, agentHubContext: false },
         )
-    expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_DAYBREAK).toBe('')
-    expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_AGENT_HUB_CONTEXT).toBe('')
+    // Later launches get the created selection back, never a prompt.
+    const later = rootLaunchEnvironment(root.widgetId)
+    expect(later.AICO_ROOT_DAYBREAK).toBe('true')
+    expect(later.AICO_ROOT_AGENT_HUB_CONTEXT).toBe('false')
+    expect(
+      JSON.parse(
+        execFileSync(
+          '/bin/bash',
+          ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+          { env: { PATH: '/usr/bin:/bin', ...later }, encoding: 'utf8' },
+        ),
+      ),
+    ).toEqual({
+      args: ['--provider', 'openai', '--model', 'gpt-6-sol', '--thinking', 'xhigh'],
+      model: input.model,
+      daybreak: 'true',
+      context: 'false',
+    })
   })
 
   it('launches Pi with one --approve and carries its chosen session ID to the agent', async () => {

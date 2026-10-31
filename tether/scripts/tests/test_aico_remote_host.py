@@ -26,11 +26,13 @@ def on_host(tool="claude-code"):
             "--project-root", "/srv/workspaces/projects/aico", "--host", "agent-work"]
 
 
-def owner(calls, create=None, tools=(200, TOOLS)):
+def owner(calls, create=None, tools=(200, TOOLS), version=(200, {"apiVersion": 19})):
     def receipt(_, path, route, payload=None, **kwargs):
         calls.append((route, payload, kwargs.get("timeout")))
         if route.startswith("/v1/tools"):
             return tools
+        if route == "/v1/version":
+            return version
         if create:
             return create(payload)
         return 200, descriptor(payload)
@@ -385,6 +387,28 @@ def test_entry_is_claude_code_or_codex_only_and_its_refusals_carry_the_reason(mo
     assert admin.main([*on_host("codex"), "--entry", "neri-hunt-box:slot-1"]) == 1
     assert output[0]["reason"] == "entry_unsupported"
     assert "claude-code only (API 18)" in output[0]["detail"]
+
+
+def test_entry_is_gated_on_this_computers_tether_api(monkeypatch, capsys):
+    # Codex entries need API 19 and Claude entries 15; nothing is created otherwise.
+    tools = {"items": [*TOOLS["items"], {"slug": "codex", "enabled": True, "rootCapable": True}]}
+    for tool, version, ok in (("codex", 18, False), ("codex", 19, True), ("claude-code", 14, False),
+                              ("claude-code", 15, True)):
+        calls = []
+        monkeypatch.setattr(admin.Collector, "receipt",
+                            owner(calls, tools=(200, tools), version=(200, {"apiVersion": version})))
+        monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+        argv = [*on_host(tool), "--entry", "neri-hunt-box:slot-1"]
+        if ok:
+            assert admin.main(argv) == 0
+            assert calls[-1][0] == "/v1/roots"
+            continue
+        with pytest.raises(SystemExit):
+            admin.main(argv)
+        needed = 19 if tool == "codex" else 15
+        assert (f"--entry for {tool} needs Tether API {needed} or later; "
+                f"this computer's Tether answers API {version}") in capsys.readouterr().err
+        assert all(route != "/v1/roots" for route, *_ in calls)
 
 
 def test_at_capacity_is_a_refusal_with_each_hosts_reason(monkeypatch):

@@ -4,6 +4,19 @@
 
 ### Added
 
+- Entry home containment: Tether's host-side reads of an entry home (Claude
+  session files, Codex rollouts and their tail, crash-recovery transcripts)
+  open without following a last-component symlink or blocking on a FIFO and
+  check the open descriptor is a regular file or directory inside the home
+  before reading; the tailed rollout is re-checked on every read. A link or
+  swapped path leading outside reads as nothing. Rollout scan limits are
+  `TETHER_ENTRY_ROLLOUT_SCAN` / `TETHER_ENTRY_ROLLOUT_OPEN` (2000 / 32).
+- A root's explicit launch options are kept (schema 23,
+  `session_launch_options`): crash recovery, restart, wakes and reboot
+  restore launch its agent with the created model, effort, Daybreak and
+  Agent Hub context, for every tool, entry or not. `st aico create --entry`
+  checks `/v1/version` first (15 for Claude Code, 19 for Codex).
+
 - Codex roots through a per-session entry (Tether API 19): `POST /v1/roots`
   and `st aico create --tool codex --entry NAME:ARG` run Codex through the
   host's entries.json program on every launch (first, restart, crash

@@ -59,7 +59,7 @@ describe('control socket', () => {
       status: 'ok',
       instance: 'test',
       apiVersion: 19,
-      schemaVersion: 22,
+      schemaVersion: 23,
       lifecycle: 'disabled',
     })
     const version = await call('GET', '/v1/version')
