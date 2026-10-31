@@ -265,6 +265,7 @@ export async function startDaemon(
     hub: undefined as Hub | undefined,
     placement: undefined as Placement | undefined,
     lanes: undefined as LaneReporter | undefined,
+    waits: undefined as WaitService | undefined,
     memoryPolicy: startMemoryGuard(paths, store, env, {
       foreground: foregroundPaneScope,
       sessionOf: () =>

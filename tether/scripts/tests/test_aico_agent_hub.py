@@ -157,6 +157,7 @@ def test_send_reports_whether_the_follow_up_was_queued(monkeypatch, queued):
 
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    monkeypatch.setattr(admin, "caller_widget_id", lambda: None)  # not run from an Aico pane: no version probe
     assert admin.main(["root", "send", "hub-1", "More.", "--generation", GENERATION,
                        "--root-socket", "/fixture/gui.sock", "--owner-socket", "/fixture/control.sock"]) == 0
     assert calls[-1] == "/v1/sessions/aabbcc01/inject"

@@ -140,3 +140,35 @@ def test_wait_time_is_a_wake(monkeypatch):
     wake = {"id": "5f1c0a9b2e7d", "dueAt": 1_793_000_000_000, "note": "check", "createdBy": "agent"}
     code, calls, _ = run(monkeypatch, ["wait", "time", "+1h", "check"], [(201, wake)])
     assert code == 0 and calls[0][0] == "/v1/sessions/0a1b2c3d/wakes"
+
+
+def test_block_exits_4_when_the_session_ended_first(monkeypatch, capsys):
+    gone = {**WAIT, "waiter": None, "state": "fired", "outcome": "gone", "line": "[Wait over] x"}
+    code, _, _ = run(monkeypatch, ["wait", "get", WAIT["id"], "--block"], [(200, gone)])
+    assert code == 4 and capsys.readouterr().out.strip() == "[Wait over] x"
+
+
+def test_block_refuses_a_key(monkeypatch, capsys):
+    with pytest.raises(SystemExit):
+        run(monkeypatch, ["wait", "session", "bbbb0001", "--block", "--key", "k"], [])
+    assert "wait get" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("waiter, cancels", [(None, True), ("0a1b2c3d", False)])
+def test_an_interrupt_cancels_only_a_wait_this_command_armed(monkeypatch, capsys, waiter, cancels):
+    deleted = []
+    monkeypatch.setattr(admin, "wait_cancel_quietly", lambda _socket, wait_id: deleted.append(wait_id))
+    code, _, _ = run(monkeypatch, ["wait", "get", WAIT["id"], "--block"],
+                     [(200, {**WAIT, "waiter": waiter}), admin.WaitInterrupted()])
+    assert code == 130 and deleted == ([WAIT["id"]] if cancels else [])
+
+
+def test_a_server_error_is_not_a_refusal(monkeypatch):
+    code, _, output = run(monkeypatch, ["wait", "session", "bbbb0001"], [(500, {"error": "internal_error"})])
+    assert code == 1 and output[0]["applied"] is None and output[0]["reason"] == "internal_error"
+
+
+def test_a_key_conflict_is_explained(monkeypatch):
+    code, _, output = run(monkeypatch, ["wait", "session", "bbbb0001", "--key", "k"],
+                          [(409, {"error": "key_conflict", "waitId": WAIT["id"]})])
+    assert code == 1 and "another key" in output[0]["detail"]

@@ -182,13 +182,12 @@ export class WaitStore {
     return raw ? toWait(raw) : undefined
   }
 
-  /** The wait a waiter's key names (armed or over, not cancelled). */
-  byKey(waiter: string | null, key: string): Wait | undefined {
+  /** The armed wait a waiter's key names. A key is let go when its wait is
+   * over or kept, so it can be used again. */
+  byKey(waiter: string, key: string): Wait | undefined {
     const raw = this.db
-      .prepare(
-        "SELECT * FROM waits WHERE coalesce(waiter, '') = ? AND key = ? AND state <> 'cancelled'",
-      )
-      .get(waiter ?? '', key) as RawWait | undefined
+      .prepare("SELECT * FROM waits WHERE waiter = ? AND key = ? AND state = 'armed'")
+      .get(waiter, key) as RawWait | undefined
     return raw ? toWait(raw) : undefined
   }
 
@@ -258,7 +257,7 @@ export class WaitStore {
     return (
       this.db
         .prepare(
-          `UPDATE waits SET seq = seq + 1, state = ?, outcome = ?, line = ?, fired_at = ?
+          `UPDATE waits SET seq = seq + 1, state = ?, outcome = ?, line = ?, fired_at = ?, key = NULL
            WHERE id = ? AND seq = ? AND state = 'armed'`,
         )
         .run(state, outcome, line, now, wait.id, wait.seq).changes === 1
@@ -276,12 +275,14 @@ export class WaitStore {
     return row.n
   }
 
-  /** Mark a session's armed waits to outlive its End. Returns how many. */
+  /** Mark a session's armed waits to outlive its End. Returns how many. Their
+   * keys go: the session that set them is gone, and kept waits of different
+   * ended sessions must not collide once their waiter is cleared. */
   keep(waiter: string, ended: EndedSession): number {
     return Number(
       this.db
         .prepare(
-          "UPDATE waits SET kept = 1, ended_session = ? WHERE waiter = ? AND state = 'armed'",
+          "UPDATE waits SET kept = 1, ended_session = ?, key = NULL WHERE waiter = ? AND state = 'armed'",
         )
         .run(JSON.stringify(ended), waiter).changes,
     )
@@ -330,11 +331,6 @@ export type WaitPolicy = Pick<
   | 'waitKeepDays'
 >
 
-/** The agent's own time of the state (Tether's observation where it gives none). */
-function agentAt(view: LaneView): number {
-  return view.stateAgentAt || view.stateAt
-}
-
 /**
  * Whether a session wait's condition holds now: `until`, `gone` (the target
  * ended before it held), or null with when to look again (a state that has
@@ -357,8 +353,10 @@ export function sessionVerdict(
       : { outcome: null, recheckAt: at }
   }
   if (wait.until === 'finished') {
-    // A turn that ended after `since`, and the agent waits on nothing of its own.
-    if (target.state === 'idle' && agentAt(target) > wait.since && !target.waitingOn)
+    // A turn that ended after `since` by the agent's own clock (0, a first
+    // sighting with no agent time, is no known turn), and the agent waits on
+    // nothing of its own.
+    if (target.state === 'idle' && target.stateAgentAt > wait.since && !target.waitingOn)
       return settle(policy.laneSettleSeconds)
   } else if (wait.until === 'idle') {
     if (target.state === 'idle') return settle(policy.laneSettleSeconds)
@@ -563,8 +561,14 @@ export class WaitService {
       }
     }
     if (input.key) {
+      // A blocking client has no session to hold its keys; it asks again by id.
+      if (input.waiter === null) throw new WaitRefused(400, 'invalid_body', { field: 'key' })
       const existing = this.store.byKey(input.waiter, input.key)
-      if (existing) return { wait: existing, created: false }
+      if (existing) {
+        if (existing.until !== input.until || !this.sameTarget(existing, input.ref))
+          throw new WaitRefused(409, 'key_conflict', { waitId: existing.id })
+        return { wait: existing, created: false }
+      }
     }
     const target = this.ops.resolve(input.ref)
     if (!target) throw new WaitRefused(404, 'not_found', { field: 'ref' })
@@ -581,10 +585,17 @@ export class WaitService {
     if (!view) throw new WaitRefused(404, 'not_found', { field: 'ref' })
     const by = input.by ?? input.waiter
     let since = input.since
-    if (since === null && by !== null && target.host === null)
-      since = this.store.lastSend(by, target.id)
-    // The launcher's prompt is its first send.
-    if (since === null && by !== null && view.parentId === by && view.launched)
+    if (since === null && by !== null) since = this.store.lastSend(by, target.id)
+    // The launcher's prompt is its first send. Not for a session on another
+    // host: a follow-up sent there goes through the hub unrecorded, and the
+    // turn before it would read as finished.
+    if (
+      since === null &&
+      by !== null &&
+      target.host === null &&
+      view.parentId === by &&
+      view.launched
+    )
       since = view.createdAt
     const wait = this.store.insert({
       waiter: input.waiter,
@@ -610,6 +621,12 @@ export class WaitService {
     return { wait: this.store.get(wait.id) as Wait, created: true }
   }
 
+  private sameTarget(wait: Wait, ref: string): boolean {
+    if (wait.ref === ref) return true
+    const target = this.ops.resolve(ref)
+    return target !== null && target.id === wait.ref && target.host === wait.host
+  }
+
   /** Cancel an armed wait: quiet, no line. False when it was not armed. */
   cancel(id: string): { cancelled: boolean; wait: Wait | undefined } {
     const wait = this.store.get(id)
@@ -626,7 +643,9 @@ export class WaitService {
   /** The wait once it is no longer armed, or as it is after `ms`. */
   async waitFor(id: string, ms: number, aborted?: AbortSignal): Promise<Wait | undefined> {
     const now = this.store.get(id)
-    if (now?.state !== 'armed' || ms <= 0 || this.stopped) return now
+    // Held also before start (Tether is still starting): an answer at once
+    // would set a blocking client polling in a tight loop.
+    if (now?.state !== 'armed' || ms <= 0) return now
     await new Promise<void>((resolve) => {
       let set = this.listeners.get(id)
       if (!set) {
@@ -668,13 +687,19 @@ export class WaitService {
         this.ops.log(`wait=${wait.id} check failed: ${(error as Error).message}`)
       }
     }
-    if (!ids) this.store.prune(now - this.ops.policy().waitKeepDays * 24 * 3600_000)
+    if (!ids) {
+      this.lastFullCheck = now
+      this.store.prune(now - this.ops.policy().waitKeepDays * 24 * 3600_000)
+    }
     this.schedule()
   }
 
   /** When each armed wait next needs a look: the settle time of a state not
    * held long enough yet. */
   private readonly recheckAt = new Map<string, number>()
+  /** A look at every armed wait at least every RECHECK_MS, however often a
+   * poke looks at some of them. */
+  private lastFullCheck = 0
 
   private evaluate(wait: Wait): void {
     const now = this.ops.now()
@@ -712,15 +737,18 @@ export class WaitService {
         !this.store.settle(wait, outcome === 'timeout' ? 'timed_out' : 'fired', outcome, line, now)
       )
         return false
-      if (wait.waiter) this.ops.deliver(wait.waiter, `wait:${wait.id}`, line)
-      else if (wait.kept && wait.endedSession && outcome === 'until')
-        this.ops.relaunch(wait.endedSession, line)
+      // A kept wait relaunches (also while its End is still deleting the
+      // waiter, whose queue goes with it); a timeout or gone is only recorded.
+      if (wait.kept && wait.endedSession) {
+        if (outcome === 'until') this.ops.relaunch(wait.endedSession, line)
+      } else if (wait.waiter) this.ops.deliver(wait.waiter, `wait:${wait.id}`, line)
       return true
     })
     if (!fired) return
     this.recheckAt.delete(wait.id)
-    const to =
-      wait.waiter ?? (wait.kept ? `kept (${wait.endedSession?.id ?? '?'})` : 'a blocking client')
+    const to = wait.kept
+      ? `kept (${wait.endedSession?.id ?? '?'})`
+      : (wait.waiter ?? 'a blocking client')
     this.ops.log(`wait=${wait.id} on session=${where(wait)} ${outcome} -> ${to}`)
     this.notify(wait.id)
     this.ops.changed(wait.waiter)
@@ -731,7 +759,7 @@ export class WaitService {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
     const now = this.ops.now()
-    let next = now + RECHECK_MS
+    let next = Math.max(now, this.lastFullCheck + RECHECK_MS)
     const armed = this.store.armed()
     if (!armed.length) return
     for (const wait of armed) {

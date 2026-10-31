@@ -193,23 +193,27 @@ def test_send_queues_one_fenced_followup_into_the_pinned_root(monkeypatch):
     assert "Private" not in json.dumps(output)
 
 
-@pytest.mark.parametrize("version, sent_from", [(13, "0a1b2c3d"), (12, None)])
-def test_send_names_the_sending_session_only_to_a_tether_that_takes_it(monkeypatch, version, sent_from):
-    replies = [(200, PI_BLANK_SLATE), (200, SESSION), (200, {"apiVersion": version}),
-               (200, {"generation": GENERATION, "delivered": True})]
+@pytest.mark.parametrize("version, host, sent_from", [(13, None, "0a1b2c3d"), (12, None, None),
+                                                     (13, "neri-vm", None)])
+def test_send_names_the_sending_session_only_to_a_tether_that_takes_it(monkeypatch, version, host, sent_from):
+    """Never to a session on another host: the hub forwards the body to that host's Tether."""
+    replies = {f"/v1/roots/{ROOT}": (200, PI_BLANK_SLATE), "/v1/sessions/aabbcc01": (200, {**SESSION, "host": host}),
+               "/v1/version": (200, {"apiVersion": version}),
+               "/v1/sessions/aabbcc01/inject": (200, {"generation": GENERATION, "delivered": True})}
     monkeypatch.setattr(admin, "caller_widget_id", lambda: "0a1b2c3d")
     calls = []
 
     def receipt(_, endpoint, route, payload=None, **_options):
         calls.append((route, payload))
-        return replies[len(calls) - 1]
+        return replies[route]
 
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
     monkeypatch.setattr(admin, "emit_json", lambda *_: None)
     code = admin.main(["root", "send", ROOT, FOLLOWUP, "--generation", GENERATION,
                        "--root-socket", "/fixture/gui.sock", "--owner-socket", "/fixture/control.sock"])
-    assert code == 0 and calls[2] == ("/v1/version", None)
-    assert calls[3][1].get("from") == sent_from
+    assert code == 0
+    sent = next(payload for route, payload in calls if route.endswith("/inject"))
+    assert sent.get("from") == sent_from
 
 
 def test_send_reads_the_followup_from_stdin(monkeypatch):

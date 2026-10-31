@@ -124,10 +124,10 @@ describe('sessionVerdict', () => {
     expect(sessionVerdict(wait, waiting, false, policy, T0 + SETTLE).outcome).toBeNull()
   })
 
-  it('finished uses Tether time when the agent gives none', () => {
+  it('an idle with no agent time (a first sighting after a restart) is no finished turn', () => {
     const wait = { until: 'finished' as const, since: T0 }
     const idle = view({ state: 'idle', stateAt: T0 + 5, stateAgentAt: 0 })
-    expect(sessionVerdict(wait, idle, false, policy, T0 + 5 + SETTLE).outcome).toBe('until')
+    expect(sessionVerdict(wait, idle, false, policy, T0 + 5 + SETTLE).outcome).toBeNull()
   })
 
   it('blocked: a prompt or question held, never a dialog', () => {
@@ -279,14 +279,59 @@ describe('WaitService', () => {
     expect(h.waits.store.get(wait.id)?.line).toBe('x')
   })
 
-  it('the same key returns the same wait until it is cancelled', async () => {
+  it('the same key returns the armed wait; once over or cancelled it arms a new one', async () => {
     const h = harness()
     const first = await h.arm({ key: 'lane-1' })
-    const again = await h.arm({ key: 'lane-1', until: 'idle' })
+    const again = await h.arm({ key: 'lane-1', ref: 'test-lane' })
     expect(again.created).toBe(false)
     expect(again.wait.id).toBe(first.wait.id)
+    await expect(h.arm({ key: 'lane-1', until: 'idle' })).rejects.toMatchObject({
+      code: 'key_conflict',
+    })
     h.waits.cancel(first.wait.id)
+    const second = await h.arm({ key: 'lane-1' })
+    expect(second.created).toBe(true)
+    h.set({ state: 'idle', stateAt: T0 - SETTLE, stateAgentAt: T0 + 1 })
+    expect(h.waits.store.get(second.wait.id)?.state).toBe('fired')
     expect((await h.arm({ key: 'lane-1' })).created).toBe(true)
+    // A blocking client has no session to keep keys for.
+    await expect(h.arm({ waiter: null, key: 'x' })).rejects.toMatchObject({ code: 'invalid_body' })
+  })
+
+  it('a kept wait that fires while its End still runs relaunches, never pastes', async () => {
+    const h = harness()
+    const { wait } = await h.arm({ key: 'k' })
+    const ended = {
+      id: WAITER,
+      tool: 'claude-code',
+      projectId: null,
+      projectRoot: '/tmp',
+      name: null,
+      origin: 'aico',
+      coordinator: true,
+      coordinatorId: null,
+      resumeId: null,
+    }
+    h.waits.keep(WAITER, ended)
+    expect(h.waits.store.get(wait.id)?.key).toBeNull()
+    h.set({ state: 'idle', stateAt: T0 - SETTLE, stateAgentAt: T0 + 1 })
+    expect(h.relaunched).toHaveLength(1)
+    expect(h.delivered).toHaveLength(0)
+  })
+
+  it('a long poll before start holds instead of answering at once', async () => {
+    const h = harness()
+    const { wait } = await h.arm()
+    h.waits.stop()
+    let answered = false
+    const answer = h.waits.waitFor(wait.id, 5_000).then(() => {
+      answered = true
+    })
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(answered).toBe(false)
+    await vi.advanceTimersByTimeAsync(4_100)
+    await answer
+    expect(answered).toBe(true)
   })
 
   it('refuses itself, a non-agent waiter, a provable subagent and too many', async () => {

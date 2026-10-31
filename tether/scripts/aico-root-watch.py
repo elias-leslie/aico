@@ -2023,10 +2023,11 @@ def root_main(argv: list[str]) -> int:
 SEND_FROM_API = 13
 
 
-def send_origin(collector: Collector, control: str, target: str) -> str | None:
-    """The calling session for inject `from`, only when it is another session and Tether takes the field."""
+def send_origin(collector: Collector, control: str, target: str, session: dict) -> str | None:
+    """The calling session for inject `from`, only when it is another session and Tether takes the field.
+    Never to a session on another host: the hub forwards the body to that host's Tether, which may be older."""
     sender = caller_widget_id()
-    if not sender or not re.fullmatch(WIDGET, sender) or sender == target:
+    if not sender or not re.fullmatch(WIDGET, sender) or sender == target or session.get("host"):
         return None
     try:
         status, data = collector.receipt(control, "/v1/version", timeout=1)
@@ -2081,7 +2082,7 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
             raise Refused("stale_generation")
         payload = {"generation": args.generation, "text": text, "mode": "paste", "submit": True}
         # The sender: a wait it sets on this root counts turns from this send.
-        if (sender := send_origin(collector, control, widget)) is not None:
+        if (sender := send_origin(collector, control, widget, session)) is not None:
             payload["from"] = sender
         sent = True
         status, data = collector.receipt(control, f"/v1/sessions/{widget}/inject", payload, timeout=5)
@@ -2416,6 +2417,8 @@ WAIT_UNTILS = ("finished", "idle", "blocked", "ended")
 WAIT_POLL_SECONDS = 55
 # A --block client keeps asking through a Tether restart this long before it gives up.
 WAIT_UNREACHABLE_SECONDS = 120
+# Tether's largest waitMaxMinutes (30 days), plus room: a --block client never outlives its wait.
+WAIT_CLIENT_SECONDS = 31 * 86400
 WAIT_REFUSALS = {
     "wait_unsupported": ("this session does not take wait lines (waits need a Claude Code, Codex, Pi or Agent "
                          "Hub session); outside one, use --block"),
@@ -2425,6 +2428,7 @@ WAIT_REFUSALS = {
     "too_many_waits": "this session already has its maximum number of armed waits; cancel one first",
     "not_found": "no such session or wait",
     "not_armed": "that wait is already over (fired, timed out or cancelled)",
+    "key_conflict": "this session already has an armed wait with that key on another session or --until; use another key",
     "waits_unavailable": "waits are off on this Tether",
 }
 
@@ -2461,21 +2465,42 @@ class WaitInterrupted(Exception):
     pass
 
 
+WAIT_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
+
+def wait_interrupted(*_: object) -> typing.NoReturn:
+    raise WaitInterrupted()
+
+
+def wait_cancel_quietly(socket_name: str, wait_id: str) -> None:
+    """Cancel the wait this --block client armed, ignoring further signals while it does."""
+    previous = {s: signal.signal(s, signal.SIG_IGN) for s in WAIT_SIGNALS}
+    try:
+        Collector("", socket_name, "", time.monotonic() + 5, threading.Event()).receipt(
+            socket_name, f"/v1/waits/{wait_id}", timeout=2, method="DELETE")
+    except (Unavailable, Stopped):
+        pass
+    finally:
+        for s, handler in previous.items():
+            signal.signal(s, handler)
+
+
 def wait_block(collector: Collector, socket_name: str, wait: dict) -> int:
-    """Hold until the wait is over and print its line: 0 ready (or the session is gone), 3 timed out,
-    1 cancelled, 2 Tether unreachable. Ctrl-C or SIGTERM cancels the wait."""
+    """Hold until the wait is over and print its line: 0 ready, 4 the session ended first (gone),
+    3 timed out, 1 cancelled, 2 Tether unreachable. A signal cancels a wait with no session waiter
+    (one this command armed), never a session's own wait."""
     wait_id = wait["id"]
-
-    def interrupted(*_: object) -> typing.NoReturn:
-        raise WaitInterrupted()
-
-    handlers = {s: signal.signal(s, interrupted) for s in (signal.SIGINT, signal.SIGTERM)}
     unreachable_since: float | None = None
     try:
         while wait.get("state") == "armed":
+            asked = time.monotonic()
             try:
                 status, data = collector.receipt(socket_name, f"/v1/waits/{wait_id}?wait={WAIT_POLL_SECONDS}",
                                                  timeout=WAIT_POLL_SECONDS + 10)
+            except Stopped:
+                print(f"gave up holding; wait {wait_id} may still be armed. "
+                      f"Ask again: st aico wait get {wait_id} --block", file=sys.stderr)
+                return 2
             except Unavailable:
                 now = time.monotonic()
                 unreachable_since = unreachable_since or now
@@ -2490,22 +2515,20 @@ def wait_block(collector: Collector, socket_name: str, wait: dict) -> int:
                 print(f"wait {wait_id}: {data.get('error', 'unavailable')}", file=sys.stderr)
                 return 1
             wait = data
+            if wait.get("state") == "armed" and time.monotonic() - asked < 1:
+                time.sleep(1)  # Tether answered at once (shutting down): don't spin.
     except WaitInterrupted:
-        try:
-            Collector("", socket_name, "", time.monotonic() + 5, threading.Event()).receipt(
-                socket_name, f"/v1/waits/{wait_id}", timeout=2, method="DELETE")
-        except (Unavailable, Stopped):
-            pass
-        print(f"stopped; wait {wait_id} cancelled", file=sys.stderr)
+        if wait.get("waiter") is None:
+            wait_cancel_quietly(socket_name, wait_id)
+            print(f"stopped; wait {wait_id} cancelled", file=sys.stderr)
+        else:
+            print(f"stopped; wait {wait_id} is still armed for its session", file=sys.stderr)
         return 130
-    finally:
-        for s, handler in handlers.items():
-            signal.signal(s, handler)
     if wait.get("state") == "cancelled":
         print(f"wait {wait_id} was cancelled", file=sys.stderr)
         return 1
     print(wait.get("line") or f"wait {wait_id} is {wait.get('state')}", flush=True)
-    return 3 if wait.get("state") == "timed_out" else 0
+    return {"timed_out": 3}.get(wait.get("state"), 4 if wait.get("outcome") == "gone" else 0)
 
 
 def wait_main(argv: list[str]) -> int:
@@ -2534,8 +2557,9 @@ def wait_main(argv: list[str]) -> int:
         parser.add_argument("--key", help="the same key from this session returns the wait already set")
     if operation in ("session", "get"):
         parser.add_argument("--block", action="store_true", help=(
-            "hold this command until the wait is over and print the line (exit 0 ready, 3 timed out, "
-            "2 Tether unreachable); for subagents and agents outside Aico, run it in a background shell"))
+            "hold this command until the wait is over and print the line (exit 0 ready, 4 the session ended "
+            "first, 3 timed out, 1 cancelled, 2 Tether unreachable, 130 interrupted, which cancels a wait it "
+            "armed); for subagents and agents outside Aico, run it in a background shell"))
     if operation in ("get", "cancel"):
         parser.add_argument("wait_id")
     if operation == "list":
@@ -2553,10 +2577,14 @@ def wait_main(argv: list[str]) -> int:
             parser.error("expected a session id or a root request id")
         if args.key is not None and not re.fullmatch(WAIT_KEY, args.key):
             parser.error("--key: letters, digits and . _ : - (at most 64)")
+        if args.key is not None and block:
+            parser.error("--key needs a session wait; with --block, ask again with st aico wait get WAIT_ID --block")
         if args.note is not None and not 0 < len(args.note.strip()) <= 200:
             parser.error("--note: one line, at most 200 characters")
-    collector = Collector("", args.owner_socket, "", time.monotonic() + 7 * 86400 + 600, threading.Event())
+    collector = Collector("", args.owner_socket, "", time.monotonic() + WAIT_CLIENT_SECONDS, threading.Event())
     output: dict = {"owner": "aico", "operation": "waits" if operation == "list" else f"wait {operation}"}
+    # With --block a signal cancels the wait this command arms (wait_block).
+    previous = {s: signal.signal(s, wait_interrupted) for s in WAIT_SIGNALS} if block else {}
     try:
         if operation == "session":
             payload: dict = {"kind": "session", "ref": args.ref, "until": args.until}
@@ -2570,7 +2598,13 @@ def wait_main(argv: list[str]) -> int:
             for name, field in (("timeout", "timeoutMinutes"), ("note", "note"), ("key", "key")):
                 if getattr(args, name) is not None:
                     payload[field] = getattr(args, name)
-            status, data = collector.receipt(args.owner_socket, "/v1/waits", payload, timeout=10)
+            try:
+                status, data = collector.receipt(args.owner_socket, "/v1/waits", payload, timeout=10)
+            except WaitInterrupted:
+                print("stopped before the wait was armed; if it was, it times out on its own", file=sys.stderr)
+                return 130
+            if status >= 500:
+                raise Unavailable(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
             if status not in (200, 201):
                 if isinstance(data.get("field"), str):
                     output["field"] = data["field"]
@@ -2580,7 +2614,7 @@ def wait_main(argv: list[str]) -> int:
             if block:
                 return wait_block(collector, args.owner_socket, data)
             output.update(applied=True, created=data.get("created") is True, wait=wait_item(data))
-            if data.get("state") != "armed":
+            if data.get("created") is True and data.get("state") != "armed":
                 output["note"] = "already over: its line is on the way to this session"
         elif operation == "get":
             status, data = collector.receipt(args.owner_socket, f"/v1/waits/{args.wait_id}", timeout=5)
@@ -2611,11 +2645,17 @@ def wait_main(argv: list[str]) -> int:
         if reason in WAIT_REFUSALS:
             output["detail"] = WAIT_REFUSALS[reason]
         elif output.get("field") == "timeoutMinutes":
-            output["detail"] = f"--timeout is at most {output.get('max', 10080) // 1440}d"
+            most = output.get("max", 10080)
+            output["detail"] = f"--timeout is at most {most // 1440}d" if most % 1440 == 0 else f"--timeout is at most {most}m"
         emit_unless_stopped(collector, output)
         return 2 if block and not isinstance(error, Refused) else 1
     except BrokenPipeError:
         return 0
+    except WaitInterrupted:
+        return 130
+    finally:
+        for s, handler in previous.items():
+            signal.signal(s, handler)
 
 
 WINDOWS_RETIRED = "Aico has no desktop windows any more; sessions show in Aico web. Nothing to arrange or show."
