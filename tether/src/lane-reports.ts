@@ -404,7 +404,7 @@ export interface LaneReportOperations {
   now(): number
   policy(): LaneReportPolicy
   /** A session on this computer that can take lane reports: an agent Tether
-   * delivers to (Claude Code, Codex, Pi, Agent Hub), not a shell or agy. */
+   * delivers to (Claude Code, Codex, Pi, agy, Agent Hub), not a shell. */
   receiver(id: string): boolean
   /** Local sessions' lineage (watch cycles, lineage receivers). */
   sessions(): LocalLineage[]

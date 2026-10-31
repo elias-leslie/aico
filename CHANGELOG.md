@@ -4,6 +4,15 @@
 
 ### Added
 
+- Antigravity (agy) state: Tether reads an agy session's conversation database
+  (`~/.gemini/antigravity-cli/conversations/<id>.db`, the conversation the
+  pane's agy holds open) read-only each poll: a step waiting on the user is
+  blocked (`input needed`), a step still going or a newest step no finished
+  executor run covers is working, else idle (`stateSource`
+  `agy-conversation`). agy sessions now take lane reports (via
+  `st aico watch`), waits, deliveries and ask answers by the gated paste;
+  `wait_unsupported` / `delivery_unsupported` no longer apply to them. agy's
+  bare `>` prompt reads as an empty input line.
 - `TETHER_LIFETIME_BOUNDARY=container`: a Tether inside a supervised long-lived
   container treats the container as the lifetime boundary instead of host
   logind Linger, once it verifies it is in a container, its user manager is up

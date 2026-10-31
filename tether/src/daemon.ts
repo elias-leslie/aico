@@ -54,7 +54,7 @@ import {
 } from './lifecycle/engine'
 import { setLifecycleInstance } from './lifecycle/ownership'
 import { configureTmuxPaths } from './lifecycle/tmux'
-import { bindToolSource, isRootCreateTool } from './lifecycle/tui/registry'
+import { bindToolSource } from './lifecycle/tui/registry'
 import {
   bindAgentHub,
   bindAgentStates,
@@ -522,10 +522,7 @@ export async function startDaemon(
     ? new LaneReporter(new LaneReportStore(store.db), {
         now: Date.now,
         policy: () => wakes.policy(),
-        receiver: (id) => {
-          const row = getWidget(id)
-          return Boolean(row && (row.backend === 'agent-hub' || isRootCreateTool(row.tool)))
-        },
+        receiver: (id) => wakes.receiver(id),
         sessions: () =>
           listSessions().map((row) => ({
             id: row.id,
@@ -659,10 +656,7 @@ export async function startDaemon(
             (exit?.state === 'exit' && exit.status === 0) || Boolean(context.recovery?.isHeld(id))
           )
         },
-        receiver: (id) => {
-          const row = getWidget(id)
-          return Boolean(row && (row.backend === 'agent-hub' || isRootCreateTool(row.tool)))
-        },
+        receiver: (id) => wakes.receiver(id),
         notMainAgent: async (waiter, thread) => {
           // Codex sets CODEX_THREAD_ID per thread: a subagent's differs from the
           // session's own conversation. Claude subagents share the parent's ids.

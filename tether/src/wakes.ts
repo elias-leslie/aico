@@ -517,8 +517,9 @@ export function cleanNote(value: unknown, max: number): string | null {
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: escape sequences are what it parses
 const ESCAPE = /\x1b\[([0-9;:?]*)([A-Za-z])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g
-/** Claude Code draws `❯`, Codex `›`, older Claude Code `│ >`. */
-const PROMPT = /^[\s│]*(?:❯|›|>(?=\s))/
+/** Claude Code draws `❯`, Codex `›`, older Claude Code `│ >`, agy a bare `>`
+ * (nothing after it while the input is empty). */
+const PROMPT = /^[\s│]*(?:❯|›|>(?=\s|$))/
 const RULE = /^[\s│╭╰╮╯]*[─━]{8,}/
 /** A line that is only a rule: Pi's editor borders. A border carrying text
  * (Pi's `── ⠧ Working ──`, `─── ↑ 2 more ───`) is not one. */

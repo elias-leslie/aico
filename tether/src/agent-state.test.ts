@@ -1,16 +1,24 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
 import {
   AgentStatePoller,
   type AgentStateRecord,
   AgentStateTracker,
+  type AgySnapshot,
+  agySignal,
   CodexRollout,
   CodexTurn,
   claudeSignal,
   type FileTail,
+  findAgyConversation,
   findClaude,
   findCodexRollout,
   findPiSession,
   hookState,
+  nodeAgyRead,
   PiSession,
 } from './agent-state'
 import { observeCodex, type ProcFs } from './continuity'
@@ -602,5 +610,208 @@ describe('Pi session file', () => {
     file.content += `${reply('stop')}\n`
     await poller.poll()
     expect(t.get('p').state).toBe('idle')
+  })
+})
+
+// --- Antigravity (agy) ---------------------------------------------------------
+
+const AGY = 'b336953c-6476-4378-b345-b0b3e6f89938'
+const AGY_DB = `/h/.gemini/antigravity-cli/conversations/${AGY}.db`
+
+function pbVarint(n: number): number[] {
+  const out: number[] = []
+  let value = n
+  while (value >= 0x80) {
+    out.push((value % 0x80) | 0x80)
+    value = Math.floor(value / 0x80)
+  }
+  out.push(value)
+  return out
+}
+function pbBytes(field: number, bytes: number[]): number[] {
+  return [...pbVarint(field * 8 + 2), ...pbVarint(bytes.length), ...bytes]
+}
+function pbInt(field: number, value: number): number[] {
+  return [...pbVarint(field * 8), ...pbVarint(value)]
+}
+/** CortexStepMetadata with created_at (1) and completed_at (8), in seconds. */
+function stepMeta(created: number, completed?: number): Uint8Array {
+  const stamp = (seconds: number) => [...pbInt(1, seconds), ...pbInt(2, 500_000_000)]
+  return Uint8Array.from([
+    ...pbBytes(1, stamp(created)),
+    ...pbInt(3, 2),
+    ...(completed ? pbBytes(8, stamp(completed)) : []),
+  ])
+}
+/** ExecutorMetadata: termination_reason 1, num_generator_invocations 2, last_step_idx 3. */
+function executor(lastStep: number, reason = 4): Uint8Array {
+  return Uint8Array.from([
+    ...pbInt(1, reason),
+    ...pbInt(2, 1),
+    ...(lastStep ? pbInt(3, lastStep) : []),
+  ])
+}
+
+describe('agy conversation', () => {
+  const snap = (over: Partial<AgySnapshot>): AgySnapshot => ({
+    maxIdx: 7,
+    open: [],
+    lastMetadata: stepMeta(1_800_000_010, 1_800_000_020),
+    executorLastStep: 7,
+    ...over,
+  })
+
+  it('reads steps and executor runs as working, blocked and idle', () => {
+    expect(agySignal(snap({ maxIdx: null, executorLastStep: null }), AGY)).toBeNull()
+    // The user's prompt is in, no executor run has ended on it: thinking.
+    expect(agySignal(snap({ maxIdx: 8, executorLastStep: 7 }), AGY)).toMatchObject({
+      state: 'working',
+      at: 1_800_000_010_500,
+    })
+    expect(agySignal(snap({ executorLastStep: null }), AGY)?.state).toBe('working')
+    // A step still going: generating (8), running (2).
+    for (const status of [1, 2, 8, 11])
+      expect(agySignal(snap({ open: [{ idx: 7, status, metadata: null }] }), AGY)?.state).toBe(
+        'working',
+      )
+    // A background command still running after its executor run ended.
+    expect(
+      agySignal(snap({ open: [{ idx: 4, status: 2, metadata: null }], executorLastStep: 7 }), AGY)
+        ?.state,
+    ).toBe('working')
+    // ask_question waits on the user.
+    expect(
+      agySignal(
+        snap({ open: [{ idx: 7, status: 9, metadata: stepMeta(1_800_000_030) }], maxIdx: 7 }),
+        AGY,
+      ),
+    ).toMatchObject({ state: 'blocked', detail: 'input needed', at: 1_800_000_030_500 })
+    // The run covering the newest step ended: idle, at its completion.
+    expect(agySignal(snap({}), AGY)).toEqual({
+      state: 'idle',
+      source: 'agy-conversation',
+      detail: null,
+      at: 1_800_000_020_500,
+      agentSessionId: AGY,
+    })
+  })
+
+  it('reads a real database in agy 1.4.9 schema, read-only', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agy-db-'))
+    try {
+      const path = join(dir, `${AGY}.db`)
+      const db = new DatabaseSync(path)
+      db.exec('PRAGMA journal_mode=WAL')
+      db.exec(
+        'CREATE TABLE `steps` (`idx` integer,`step_type` integer NOT NULL DEFAULT 0,`status` integer NOT NULL DEFAULT 0,`has_subtrajectory` numeric NOT NULL DEFAULT false,`metadata` blob,`error_details` blob,`permissions` blob,`task_details` blob,`render_info` blob,`step_payload` blob,`step_format` integer NOT NULL DEFAULT 0,PRIMARY KEY (`idx`));' +
+          'CREATE INDEX `idx_steps_status` ON `steps`(`status`);' +
+          'CREATE TABLE `executor_metadata` (`idx` integer,`data` blob,PRIMARY KEY (`idx`));',
+      )
+      const step = db.prepare(
+        'INSERT INTO steps (idx, step_type, status, metadata) VALUES (?, ?, ?, ?)',
+      )
+      const run = db.prepare('INSERT INTO executor_metadata (idx, data) VALUES (?, ?)')
+      const read = () => agySignal(nodeAgyRead(path), AGY)
+      expect(read()).toBeNull()
+      step.run(0, 14, 3, stepMeta(1_800_000_000, 1_800_000_001))
+      expect(read()?.state).toBe('working')
+      step.run(1, 15, 8, stepMeta(1_800_000_002))
+      expect(read()?.state).toBe('working')
+      db.exec('UPDATE steps SET status = 3 WHERE idx = 1')
+      // A turn cancelled at its first step still ends a run (last_step_idx 0 encodes nothing).
+      run.run(0, executor(0, 2))
+      expect(read()?.state).toBe('working')
+      run.run(1, executor(1))
+      expect(read()).toMatchObject({ state: 'idle', at: 1_800_000_002_500 })
+      db.exec(
+        `UPDATE steps SET metadata = X'${Buffer.from(stepMeta(1_800_000_002, 1_800_000_009)).toString('hex')}' WHERE idx = 1`,
+      )
+      expect(read()).toMatchObject({ state: 'idle', at: 1_800_000_009_500 })
+      step.run(2, 132, 9, stepMeta(1_800_000_010))
+      expect(read()).toMatchObject({ state: 'blocked', detail: 'input needed' })
+      db.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("finds the agy process's conversation by its presence lock, and agy before its first prompt", () => {
+    const files = { '/proc/40/comm': 'agy\n', '/proc/41/comm': 'bash\n' }
+    const lock = { '/proc/40/fd/9': `/h/.gemini/antigravity-cli/presence/${AGY}.lock` }
+    const log = { '/proc/40/fd/1': '/h/.gemini/antigravity-cli/log/cli.log' }
+    expect(findAgyConversation(procfs(files, log), '/h', [41, 40])).toEqual({
+      pid: 40,
+      conversationId: null,
+      path: null,
+    })
+    expect(findAgyConversation(procfs(files, { ...log, ...lock }), '/h', [41, 40])).toEqual({
+      pid: 40,
+      conversationId: AGY,
+      path: AGY_DB,
+    })
+    // The db itself held open counts too; another home's file does not.
+    expect(
+      findAgyConversation(procfs(files, { '/proc/40/fd/3': AGY_DB }), '/h', [40])?.conversationId,
+    ).toBe(AGY)
+    expect(
+      findAgyConversation(procfs(files, { '/proc/40/fd/3': `/x${AGY_DB}` }), '/h', [40])
+        ?.conversationId,
+    ).toBeNull()
+    // A process not named agy is not agy.
+    expect(
+      findAgyConversation(
+        procfs({ '/proc/41/comm': 'bash\n' }, { '/proc/41/fd/9': lock['/proc/40/fd/9'] }),
+        '/h',
+        [41],
+      ),
+    ).toBeNull()
+  })
+
+  it('feeds the tracker from the poller: idle with no time before the first prompt, then the conversation', async () => {
+    const files: Record<string, string> = {
+      '/proc/10/task/10/children': '40',
+      '/proc/40/task/40/children': '',
+      '/proc/40/stat': '40 (agy)',
+      '/proc/40/comm': 'agy\n',
+    }
+    const links: Record<string, string> = {
+      '/proc/40/fd/1': '/h/.gemini/antigravity-cli/log/x.log',
+    }
+    let snapshot: AgySnapshot = {
+      maxIdx: 0,
+      open: [],
+      lastMetadata: stepMeta(1_800_000_000, 1_800_000_000),
+      executorLastStep: null,
+    }
+    const reads: string[] = []
+    const { t } = tracker()
+    let now = 0
+    const poller = new AgentStatePoller(
+      t,
+      { sessions: () => [{ id: 'g', generation: 'g', panePid: async () => 10 }] },
+      procfs(files, links),
+      '/h',
+      {
+        now: () => now,
+        agyRead: (path) => {
+          reads.push(path)
+          return snapshot
+        },
+      },
+    )
+    await poller.poll()
+    expect(t.get('g')).toMatchObject({
+      state: 'idle',
+      stateSource: 'agy-conversation',
+      stateAgentAt: 0,
+    })
+    links['/proc/40/fd/9'] = `/h/.gemini/antigravity-cli/presence/${AGY}.lock`
+    now = 20_000
+    await poller.poll()
+    expect(t.get('g').state).toBe('working')
+    expect(reads).toEqual([AGY_DB])
+    snapshot = { ...snapshot, executorLastStep: 0 }
+    await poller.poll()
+    expect(t.get('g')).toMatchObject({ state: 'idle', stateAgentAt: 1_800_000_000_500 })
   })
 })

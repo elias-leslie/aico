@@ -6,8 +6,9 @@
 // - a poll of each agent's own state: Claude Code's ~/.claude/sessions/<pid>.json
 //   (`status` busy | waiting | idle, plus `waitingFor`), the tail of the
 //   Codex thread's rollout file (task_started / task_complete, an unanswered
-//   request_user_input call) and the tail of Pi's session file (the last
-//   message: a finished assistant reply is idle);
+//   request_user_input call), the tail of Pi's session file (the last
+//   message: a finished assistant reply is idle) and agy's conversation
+//   database (its steps' status and executor runs);
 // - hook reports (`POST /v1/sessions/:id/agent-event`) from Claude Code's
 //   Notification and UserPromptSubmit hooks, which arrive before the next poll.
 //
@@ -15,6 +16,7 @@
 // or a poll whose status changed after the hook fired and is no longer waiting.
 
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
 import {
   type CodexRolloutFile,
   claudeSessions,
@@ -33,7 +35,7 @@ export type AgentState = (typeof AGENT_STATES)[number]
 export interface AgentStateRecord {
   state: AgentState
   /** What said so: `claude-status`, `claude-hook`, `codex-rollout`, `codex-hook`,
-   * `pi-session`, or `none`. */
+   * `pi-session`, `agy-conversation`, or `none`. */
   stateSource: string
   /** When the state last changed (ms since the epoch). */
   stateAt: number
@@ -479,6 +481,230 @@ export class PiSession {
   }
 }
 
+// --- Antigravity (agy) ----------------------------------------------------------
+
+/** agy's CortexStepStatus values (enum numbers from agy 1.4.9's embedded proto
+ * descriptor, checked live): a step still going, and a step waiting on the user
+ * (its ask_question tool). DONE 3, CANCELED 6, ERROR 7, INTERRUPTED 12 are over. */
+const AGY_STEP_GOING = new Set([1, 2, 8, 11]) // PENDING, RUNNING, GENERATING, QUEUED
+const AGY_STEP_WAITING = 9
+
+/** What one look at an agy conversation database finds. */
+export interface AgySnapshot {
+  /** The newest step's index; null before any step. */
+  maxIdx: number | null
+  /** Steps not over yet (status in AGY_STEP_GOING or WAITING). */
+  open: { idx: number; status: number; metadata: Uint8Array | null }[]
+  /** The newest step's metadata (CortexStepMetadata). */
+  lastMetadata: Uint8Array | null
+  /** The newest executor run's `last_step_idx` (ExecutorMetadata field 3):
+   * agy writes the row when the run ends, so it covering the newest step means
+   * the turn is over. Null with no run yet. */
+  executorLastStep: number | null
+}
+
+export type AgyRead = (path: string) => AgySnapshot
+
+const AGY_CONVERSATION_RE =
+  /\/\.gemini\/antigravity-cli\/(?:presence|conversations)\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.(?:lock|db)$/
+
+/** The agy process in the pane and the conversation it holds: agy keeps
+ * `presence/<id>.lock` (and, while it writes, `conversations/<id>.db`) open.
+ * `conversationId` is null before the first prompt, when agy has none yet. */
+export function findAgyConversation(
+  fs: ProcFs,
+  home: string,
+  pids: number[],
+): { pid: number; conversationId: string | null; path: string | null } | null {
+  let fresh: { pid: number; conversationId: null; path: null } | null = null
+  for (const pid of pids) {
+    let comm: string
+    try {
+      comm = fs.readFile(`/proc/${pid}/comm`).trim()
+    } catch {
+      continue
+    }
+    if (comm !== 'agy') continue
+    let fds: string[]
+    try {
+      fds = fs.readdir(`/proc/${pid}/fd`)
+    } catch {
+      continue
+    }
+    for (const fd of fds) {
+      let target: string
+      try {
+        target = fs.readlink(`/proc/${pid}/fd/${fd}`)
+      } catch {
+        continue
+      }
+      const match = AGY_CONVERSATION_RE.exec(target)
+      if (!match?.[1] || !target.startsWith(`${home}/`)) continue
+      const conversationId = match[1]
+      return {
+        pid,
+        conversationId,
+        path: `${home}/.gemini/antigravity-cli/conversations/${conversationId}.db`,
+      }
+    }
+    fresh ??= { pid, conversationId: null, path: null }
+  }
+  return fresh
+}
+
+function varint(bytes: Uint8Array, start: number): [number, number] | null {
+  let value = 0
+  let scale = 1
+  for (let index = start; index < bytes.length && index < start + 10; index += 1) {
+    const byte = bytes[index] as number
+    value += (byte & 0x7f) * scale
+    if (byte < 0x80) return [value, index + 1]
+    scale *= 128
+  }
+  return null
+}
+
+/** The top-level fields of a protobuf message: varints as numbers,
+ * length-delimited fields as bytes. Fixed-width fields are skipped. */
+export function protoFields(bytes: Uint8Array): Map<number, number | Uint8Array> {
+  const out = new Map<number, number | Uint8Array>()
+  let index = 0
+  while (index < bytes.length) {
+    const key = varint(bytes, index)
+    if (!key) break
+    const [tag, next] = key
+    const field = Math.floor(tag / 8)
+    const wire = tag % 8
+    index = next
+    if (wire === 0) {
+      const value = varint(bytes, index)
+      if (!value) break
+      out.set(field, value[0])
+      index = value[1]
+    } else if (wire === 2) {
+      const length = varint(bytes, index)
+      if (!length || length[1] + length[0] > bytes.length) break
+      out.set(field, bytes.subarray(length[1], length[1] + length[0]))
+      index = length[1] + length[0]
+    } else if (wire === 1) index += 8
+    else if (wire === 5) index += 4
+    else break
+  }
+  return out
+}
+
+/** A google.protobuf.Timestamp field of a step's metadata, in ms. */
+function agyTime(metadata: Uint8Array | null, field: number): number | null {
+  if (!metadata) return null
+  const stamp = protoFields(metadata).get(field)
+  if (!(stamp instanceof Uint8Array)) return null
+  const parts = protoFields(stamp)
+  const seconds = parts.get(1)
+  if (typeof seconds !== 'number' || seconds <= 0) return null
+  const nanos = parts.get(2)
+  return seconds * 1000 + Math.floor((typeof nanos === 'number' ? nanos : 0) / 1e6)
+}
+
+/** CortexStepMetadata: created_at 1, completed_at 8. */
+const AGY_CREATED_AT = 1
+const AGY_COMPLETED_AT = 8
+
+/** agy's state from its conversation: a step waiting on the user (its
+ * ask_question tool) is blocked; a step still going, or a newest step no
+ * finished executor run covers yet (the model is thinking between steps), is
+ * working; else the turn is over (finished, cancelled or failed) and agy is
+ * idle. Tether runs agy with --dangerously-skip-permissions, so it never waits
+ * on a permission prompt. */
+export function agySignal(snapshot: AgySnapshot, conversationId: string): AgentSignal | null {
+  if (snapshot.maxIdx === null) return null
+  const base = { source: 'agy-conversation', agentSessionId: conversationId }
+  const waiting = snapshot.open.find((step) => step.status === AGY_STEP_WAITING)
+  if (waiting)
+    return {
+      ...base,
+      state: 'blocked',
+      detail: 'input needed',
+      at: agyTime(waiting.metadata, AGY_CREATED_AT),
+    }
+  const going = snapshot.open.some((step) => AGY_STEP_GOING.has(step.status))
+  if (going || snapshot.executorLastStep === null || snapshot.executorLastStep < snapshot.maxIdx)
+    return {
+      ...base,
+      state: 'working',
+      detail: null,
+      at: agyTime(snapshot.lastMetadata, AGY_CREATED_AT),
+    }
+  return {
+    ...base,
+    state: 'idle',
+    detail: null,
+    at:
+      agyTime(snapshot.lastMetadata, AGY_COMPLETED_AT) ??
+      agyTime(snapshot.lastMetadata, AGY_CREATED_AT),
+  }
+}
+
+/** Reads an agy conversation database, read-only, one short connection per
+ * look (agy writes it in WAL mode; nothing is held open between polls). */
+export const nodeAgyRead: AgyRead = (path) => {
+  const db = new DatabaseSync(path, { readOnly: true, timeout: 200 })
+  try {
+    const top = db.prepare('SELECT max(idx) AS idx FROM steps').get() as { idx: number | null }
+    const maxIdx = typeof top?.idx === 'number' ? top.idx : null
+    const open = db
+      .prepare(
+        `SELECT idx, status, metadata FROM steps WHERE status IN (${[...AGY_STEP_GOING, AGY_STEP_WAITING].join(',')}) ORDER BY idx`,
+      )
+      .all() as { idx: number; status: number; metadata: Uint8Array | null }[]
+    const last =
+      maxIdx === null
+        ? null
+        : (db.prepare('SELECT metadata FROM steps WHERE idx = ?').get(maxIdx) as
+            | { metadata: Uint8Array | null }
+            | undefined)
+    const run = db.prepare('SELECT data FROM executor_metadata ORDER BY idx DESC LIMIT 1').get() as
+      | { data: Uint8Array | null }
+      | undefined
+    const lastStep = run?.data ? protoFields(run.data).get(3) : undefined
+    return {
+      maxIdx,
+      open,
+      lastMetadata: last?.metadata ?? null,
+      // An executor that ended at step 0 encodes no field 3 (proto3 default).
+      executorLastStep: run?.data ? (typeof lastStep === 'number' ? lastStep : 0) : null,
+    }
+  } finally {
+    db.close()
+  }
+}
+
+/** agy before its first prompt: at its input, with no conversation yet. No
+ * time of its own, so it never reads as a finished turn. */
+const AGY_FRESH: AgentSignal = {
+  state: 'idle',
+  source: 'agy-conversation',
+  detail: null,
+  at: null,
+  agentSessionId: null,
+}
+
+/** Reader of one agy conversation. */
+export class AgyConversation {
+  constructor(
+    readonly path: string,
+    readonly conversationId: string,
+    private readonly read: AgyRead = nodeAgyRead,
+  ) {}
+
+  poll(): AgentSignal | null {
+    try {
+      return agySignal(this.read(this.path), this.conversationId)
+    } catch {
+      return null
+    }
+  }
+}
+
 // --- hook reports -------------------------------------------------------------
 
 export interface HookReport {
@@ -659,6 +885,7 @@ type Found =
   | { kind: 'claude'; pid: number; file: string }
   | { kind: 'codex'; pid: number; rollout: CodexRollout }
   | { kind: 'pi'; pid: number; sessionId: string; session: PiSession | null }
+  | { kind: 'agy'; pid: number; conversation: AgyConversation | null }
   | { kind: 'none' }
 
 interface Watched {
@@ -691,6 +918,7 @@ export class AgentStatePoller {
       now?: () => number
       tail?: FileTail
       alive?: (pid: number) => boolean
+      agyRead?: AgyRead
     } = {},
   ) {}
 
@@ -792,6 +1020,19 @@ export class AgentStatePoller {
         session: pi.path ? new PiSession(pi.path, pi.sessionId, this.options.tail) : null,
       }
     }
+    const agy = findAgyConversation(this.fs, this.home, pids)
+    if (agy) {
+      if (previous.kind === 'agy' && (previous.conversation?.path ?? null) === agy.path)
+        return { ...previous, pid: agy.pid }
+      return {
+        kind: 'agy',
+        pid: agy.pid,
+        conversation:
+          agy.path && agy.conversationId
+            ? new AgyConversation(agy.path, agy.conversationId, this.options.agyRead)
+            : null,
+      }
+    }
     return { kind: 'none' }
   }
 
@@ -805,6 +1046,7 @@ export class AgentStatePoller {
     }
     if (found.kind === 'codex') return found.rollout.poll()
     if (found.kind === 'pi') return found.session?.poll() ?? null
+    if (found.kind === 'agy') return found.conversation ? found.conversation.poll() : AGY_FRESH
     return null
   }
 }

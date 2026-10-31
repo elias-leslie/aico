@@ -57,6 +57,13 @@ export function isRootCreateTool(slug: unknown): slug is string {
   return isRootTool(slug) || slug === AGENT_HUB_TOOL
 }
 
+/** Pane tools Tether delivers event lines to (lane reports, waits, deliveries)
+ * by its gated paste: the root tools, and agy, whose state Tether reads
+ * (agent-state.ts) but which has no resume adapter, so it is no root tool. */
+export function isDeliveryTool(slug: unknown): slug is string {
+  return isRootTool(slug) || slug === 'agy'
+}
+
 function contextHook(hook: ToolContextHook | null): ContextHook | undefined {
   switch (hook) {
     case 'claude-session-start':

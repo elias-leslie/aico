@@ -45,7 +45,7 @@ import { terminalClientEnv } from './lifecycle/terminal-env'
 import { captureVisibleTargetArgs, clientActivityTargetArgs } from './lifecycle/tmux'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './lifecycle/tui/blank-slate'
 import { isResumeSessionId } from './lifecycle/tui/launch'
-import { AGENT_HUB_TOOL, getTui, isRootCreateTool } from './lifecycle/tui/registry'
+import { AGENT_HUB_TOOL, getTui, isDeliveryTool } from './lifecycle/tui/registry'
 import { agentStateOf, type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
 import {
   applyWakePolicyPatch,
@@ -183,11 +183,11 @@ export class WakeService {
   }
 
   /** Whether event lines (lane reports, waits, deliveries) go to this
-   * session: an agent session Tether delivers to (Claude Code, Codex, Pi,
+   * session: an agent session Tether delivers to (Claude Code, Codex, Pi, agy,
    * Agent Hub). */
   receiver(id: string): boolean {
     const row = getWidget(id)
-    return Boolean(row && (isHub(row) || isRootCreateTool(row.tool)))
+    return Boolean(row && (isHub(row) || isDeliveryTool(row.tool)))
   }
 
   /** Queue an event line due now on a session (coalesced by source while

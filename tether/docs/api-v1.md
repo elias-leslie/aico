@@ -481,10 +481,10 @@ with 2 open asks to the owner (…); the answers come to you · …`), never a
 silent orphan. A launcher that ends hands on the asks it holds the same way
 (their `launcher` becomes the coordinator), and an answer already queued to a
 session that ends before it goes out is queued again to the next session up.
-A session Tether cannot wake (it has ended, it is a shell, or its agent has no
-state reader: Antigravity today) gets `delivery: "pull"`: the agent reads the
+A session Tether cannot wake (it has ended, it is a shell, or its agent's state
+is unknown) gets `delivery: "pull"`: the agent reads the
 answer with `tether ask get` or `tether ask list --mine`. Claude Code, Codex,
-Pi and Agent Hub sessions are woken. Done, withdraw and a new answer cancel a
+Pi, Antigravity and Agent Hub sessions are woken. Done, withdraw and a new answer cancel a
 check-in that has not gone out yet.
 
 **Session descriptor.** `asks`: the session's open asks, oldest first,
@@ -740,7 +740,7 @@ the `waits` table, apart from wakes, and survive Tether restarts.
 
 | Route | Request | Response |
 |---|---|---|
-| `POST /v1/waits` | `{waiter, by?, kind, ref, until?, since?, timeoutMinutes?, key?, note?, thread?}` (`until` defaults to the kind's first) | `201` the wait with `created: true`, or `200` with `created: false` when the same `waiter` already has an armed wait with that `key` on the same session and `until` (a different one is `409 key_conflict {waitId}`). A key is let go when its wait is over or kept, so it can be used again; a wait with no `waiter` takes no `key` (`400`). `ref` is a session id or a root request id, here or on a connected host. `400 invalid_body {field}`; `404 not_found`; `409 wait_unsupported` (the waiter is not an agent session Tether delivers to: agy, a shell), `409 not_main_agent`, `409 self_wait`, `409 too_many_waits {max}` (`maxWaitsPerSession` armed), `409 waits_unavailable` without lifecycle |
+| `POST /v1/waits` | `{waiter, by?, kind, ref, until?, since?, timeoutMinutes?, key?, note?, thread?}` (`until` defaults to the kind's first) | `201` the wait with `created: true`, or `200` with `created: false` when the same `waiter` already has an armed wait with that `key` on the same session and `until` (a different one is `409 key_conflict {waitId}`). A key is let go when its wait is over or kept, so it can be used again; a wait with no `waiter` takes no `key` (`400`). `ref` is a session id or a root request id, here or on a connected host. `400 invalid_body {field}`; `404 not_found`; `409 wait_unsupported` (the waiter is not an agent session Tether delivers to: a shell), `409 not_main_agent`, `409 self_wait`, `409 too_many_waits {max}` (`maxWaitsPerSession` armed), `409 waits_unavailable` without lifecycle |
 | `POST /v1/waits/check` | `{kind, ref?}` | `200 {kind, ref, armed}`: a nudge. Tether re-reads the armed waits of that kind (on `ref` when given) now, and for a job asks its owner at once. A hint only: no outcome, no text; a lost nudge costs at most the 60 s look. `400 invalid_body` |
 | `GET /v1/waits/:waitId` | `?wait=0..55` seconds | the wait, once it is no longer armed or the seconds are up; `404 not_found`, `400 invalid_query` |
 | `DELETE /v1/waits/:waitId` | | `200 {cancelled: true, ...wait}`; `409 not_armed {state}` |
@@ -795,8 +795,8 @@ Each line goes out once, whichever way.
 - **`source`** is `<owner>:<what>` (`coord:cc:1c7a9f`). A line queued with the source of one still undelivered on the
   same session replaces it (`coalesced: true`, the same id). Tether's own sources (`lane:`, `wait:`, `run:`, `ask:`) are
   refused.
-- **Receivers** are agent sessions Tether delivers to: Claude Code, Codex, Pi and Agent Hub chats. A shell or agy is
-  `409 delivery_unsupported`; the producer keeps its own path for those.
+- **Receivers** are agent sessions Tether delivers to: Claude Code, Codex, Pi, Antigravity (agy) and Agent Hub chats. A
+  shell is `409 delivery_unsupported`; the producer keeps its own path for those.
 - **State.** `queued` while the row waits or is being pasted, `delivered` with `via` (`paste`, `turn` or `native`) and `deliveredAt`, or
   `dropped` when the row went without a delivery (the session ended). Records stay 7 days.
 

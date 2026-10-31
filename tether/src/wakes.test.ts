@@ -216,6 +216,21 @@ describe('input line', () => {
     expect(inputLineEmpty(claude('', ['  pasted below']))).toBe(false)
   })
 
+  // agy draws a 256-color `>` between two rules, with nothing after it while empty.
+  const agy = (input: string) =>
+    [
+      '\x1b[38;5;109m  ⎿  Interrupted · What should Antigravity CLI do instead?\x1b[39m',
+      `\x1b[38;5;238m${'─'.repeat(40)}\x1b[39m`,
+      `\x1b[38;5;111m>\x1b[39m${input}`,
+      `\x1b[38;5;238m${'─'.repeat(40)}\x1b[39m`,
+      '\x1b[38;5;109m? for shortcuts\x1b[39m          \x1b[38;5;109mGemini 3.8 Flash · high',
+    ].join('\n')
+
+  it("reads agy's input line", () => {
+    expect(inputLineEmpty(agy(''))).toBe(true)
+    expect(inputLineEmpty(agy(' half a thought'))).toBe(false)
+  })
+
   it('waits when there is no prompt line', () => {
     expect(inputLineEmpty('Working… (esc to interrupt)')).toBe(false)
     expect(inputLineEmpty('')).toBe(false)
