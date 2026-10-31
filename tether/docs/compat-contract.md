@@ -103,7 +103,16 @@ Correction to the migration plan: `AICO_TMUX_SOCKET` is not a pane marker. Aico 
 
 ## Host prerequisites
 
-- `Linger=yes`. Durable work is refused without it.
+- `Linger=yes`. Durable work is refused without it. Exception: a Tether inside a
+  long-lived container that its supervisor owns sets `TETHER_LIFETIME_BOUNDARY=container`.
+  The container is then the lifetime boundary and logind is not asked; durable work is
+  allowed only while the process is in a container (`/run/.containerenv`, or systemd's
+  `container=` record), `systemctl --user is-system-running` answers a state other than
+  `offline` or `unknown`, and Tether's own cgroup is under
+  `/user.slice/user-UID.slice/user@UID.service/` for its UID. Otherwise new sessions get
+  `503 linger_required` with the failed check as `reason`. The journal says `durable user
+  manager: container boundary` when it holds. Unset keeps the Linger check; any other value
+  refuses daemon startup. `tether doctor` still checks Linger.
 - systemd 254 or later.
 - Unified cgroup v2.
 - `/usr/bin/tmux`.

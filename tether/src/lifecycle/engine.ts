@@ -9,10 +9,11 @@
 // One daemon process serves one instance, so module state here is per instance
 // (exactly as it was per Electron process). There is ONE LifecycleOwnerLock.
 
-import { execFile, execFileSync } from 'node:child_process'
+import { execFile, execFileSync, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import {
   chmodSync,
+  existsSync,
   type FSWatcher,
   mkdirSync,
   readdirSync,
@@ -84,6 +85,13 @@ import {
   type ManagedGateState,
   mayClearMatchingPendingScope,
 } from './lifecycle-guard'
+import {
+  type BoundaryVerdict,
+  LIFETIME_BOUNDARY_ENV,
+  type LifetimeBoundary,
+  parseLifetimeBoundary,
+  verifyDurableUserManager,
+} from './lifetime-boundary'
 import {
   ownershipGeneration,
   type RetirementOperations,
@@ -197,6 +205,7 @@ interface EngineConfig {
 }
 
 let config: EngineConfig | null = null
+let lifetimeBoundary: LifetimeBoundary = 'logind'
 
 function cfg(): EngineConfig {
   if (!config) throw new Error('lifecycle engine is not configured')
@@ -213,6 +222,8 @@ function tmuxConfPath(): string {
 
 /** Bind the instance. The daemon calls this once before `startLifecycle`. */
 export function configureEngine(next: EngineConfig): void {
+  // An unsupported TETHER_LIFETIME_BOUNDARY refuses daemon startup here.
+  lifetimeBoundary = parseLifetimeBoundary(next.env[LIFETIME_BOUNDARY_ENV])
   config = next
 }
 
@@ -277,20 +288,50 @@ export const lifecycleOwners = new LifecycleOwnerLock()
 const widgetRetireIntents = new CoalescedLifecycleIntent()
 let quitting = false
 let durableUserManager = false
+let durableUnavailableReason = 'user linger is not enabled'
 
-function detectDurableUserManager(): boolean {
-  const uid = process.getuid?.()
-  if (uid === undefined) return false
+function readTextOrNull(path: string): string | null {
   try {
-    return (
-      execFileSync(LOGINCTL_BIN, ['show-user', String(uid), '--property=Linger', '--value'], {
-        encoding: 'utf8',
-        timeout: SYSTEMD_QUERY_TIMEOUT_MS,
-      }).trim() === 'yes'
-    )
+    return readFileSync(path, 'utf8')
   } catch {
-    return false
+    return null
   }
+}
+
+function detectDurableUserManager(): BoundaryVerdict {
+  const uid = process.getuid?.()
+  if (uid === undefined) {
+    const reason = lifetimeBoundary === 'container' ? 'uid unavailable' : durableUnavailableReason
+    return { durable: false, reason }
+  }
+  return verifyDurableUserManager(lifetimeBoundary, {
+    linger: () => {
+      try {
+        return execFileSync(
+          LOGINCTL_BIN,
+          ['show-user', String(uid), '--property=Linger', '--value'],
+          { encoding: 'utf8', timeout: SYSTEMD_QUERY_TIMEOUT_MS },
+        )
+      } catch {
+        return null
+      }
+    },
+    container: {
+      uid,
+      containerEnvFile: () => existsSync('/run/.containerenv'),
+      systemdContainer: () =>
+        readTextOrNull('/run/systemd/container') || cfg().env.container || null,
+      userManagerState: () => {
+        // Exits non-zero for every state but running; the state is on stdout.
+        const result = spawnSync(SYSTEMCTL_BIN, ['--user', 'is-system-running'], {
+          encoding: 'utf8',
+          timeout: SYSTEMD_QUERY_TIMEOUT_MS,
+        })
+        return result.error ? null : result.stdout
+      },
+      ownCgroup: () => readTextOrNull('/proc/self/cgroup'),
+    },
+  })
 }
 
 function logWidgetEvent(widgetId: string, event: string, data: Record<string, unknown>): void {
@@ -1821,7 +1862,9 @@ export async function sessionDiagnostics(widgetId: string): Promise<Record<strin
   const warnings: string[] = []
   if (!durableUserManager) {
     warnings.push(
-      'User linger is disabled or unverified; new durable sessions are blocked because logout could destroy them.',
+      lifetimeBoundary === 'container'
+        ? `The container boundary is unverified (${durableUnavailableReason}); new durable sessions are blocked.`
+        : 'User linger is disabled or unverified; new durable sessions are blocked because logout could destroy them.',
     )
   }
   if (sessionState === 'unknown') {
@@ -2080,9 +2123,11 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
   }
   if (!durableUserManager) {
     console.error(
-      '[tether:lifecycle] user linger is not enabled; refusing a session that would die on logout',
+      lifetimeBoundary === 'container'
+        ? `[tether:lifecycle] container boundary unverified (${durableUnavailableReason}); refusing a new session`
+        : '[tether:lifecycle] user linger is not enabled; refusing a session that would die on logout',
     )
-    return fail(widgetId, { code: 'linger_required', reason: 'user linger is not enabled' })
+    return fail(widgetId, { code: 'linger_required', reason: durableUnavailableReason })
   }
   const cwd = cwdForWidget(widgetId)
   // Lifecycle ordering is deliberate: create a bare pane first, let tmux move it
@@ -3214,12 +3259,18 @@ export function lingerEnabled(): boolean {
 export function startLifecycle(options: { reconcile: boolean }): Promise<void> {
   quitting = false
   ensureTmuxConf()
-  durableUserManager = detectDurableUserManager()
-  console.log(
-    `[tether:lifecycle] durable user manager: ${
-      durableUserManager ? 'linger enabled' : 'unavailable; new sessions blocked'
-    }`,
-  )
+  const verdict = detectDurableUserManager()
+  durableUserManager = verdict.durable
+  if (!verdict.durable) durableUnavailableReason = verdict.reason
+  const detail =
+    lifetimeBoundary === 'container'
+      ? verdict.durable
+        ? 'container boundary'
+        : `unavailable (container boundary: ${verdict.reason}); new sessions blocked`
+      : verdict.durable
+        ? 'linger enabled'
+        : 'unavailable; new sessions blocked'
+  console.log(`[tether:lifecycle] durable user manager: ${detail}`)
   for (const row of listSessions()) publishedGenerations.set(row.id, generationOf(row))
   if (!options.reconcile) {
     lifecycleState = 'disabled'

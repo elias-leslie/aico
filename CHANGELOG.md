@@ -4,6 +4,12 @@
 
 ### Added
 
+- `TETHER_LIFETIME_BOUNDARY=container`: a Tether inside a supervised long-lived
+  container treats the container as the lifetime boundary instead of host
+  logind Linger, once it verifies it is in a container, its user manager is up
+  and its own cgroup is under its UID's `user@UID.service`. Managed pane and
+  cgroup ownership checks are unchanged. Unset keeps the Linger check; any
+  other value refuses startup.
 - Deliveries (Tether API 16): `POST /v1/sessions/:id/deliveries {source, line}`
   queues one line on a session's gated delivery queue (the one lane reports and
   waits ride), coalesced by source while undelivered; `GET /v1/deliveries/:id`
