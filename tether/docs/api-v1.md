@@ -694,11 +694,14 @@ to that lane (a lane watching its own coordinator), which would loop, `409 lane_
 A wait tells an agent when something it waits on is ready, instead of a check-in at a guessed time. Kind `session`:
 another session finished a turn, is idle, is blocked on the user, or ended. Lanes an agent launched report on their own
 ([Lane reports](#lane-reports)); a wait is for anything else. The pull kinds (API 17, below) wait on a service job, a
-request, a workflow run, an owner ask, a host or a Nightshift tap. The CLI is `st aico wait session ID|REQ
+request, a workflow run, an owner ask, a host or a Nightshift tap; `cmd` (API 18) runs a bounded watcher command of
+the waiter's own. The CLI is `st aico wait session ID|REQ
 [--until finished|idle|blocked|ended] [--timeout 2h] [--note T] [--key K] [--block]`, `st aico wait job|reply|run|ask|
-host|tap REF [--until …]` with the same options, `st aico waits [--recent]`, `st aico wait cancel WAIT`,
+host|tap REF [--until …]` with the same options, `st aico wait cmd [--timeout 6h] [--note T] [--key K] [--block] --
+ARGV...`, `st aico waits [--recent]`, `st aico wait cancel WAIT`,
 `st aico wait get WAIT [--block]`, `st aico wait time WHEN NOTE` (the same as `st aico wake`) and `st aico nudge KIND
-REF`. The CLI asks `/v1/version` before it sends a pull kind or a nudge and says so when Tether is older. Waits live in
+REF`. The CLI asks `/v1/version` before it sends a pull kind or a nudge (API 17; `cmd` API 18) and says so when
+Tether is older. Waits live in
 the `waits` table, apart from wakes, and survive Tether restarts.
 
 - **Level-triggered.** The condition is checked when the wait is armed: a session that already finished after `since`
@@ -740,7 +743,7 @@ the `waits` table, apart from wakes, and survive Tether restarts.
 
 | Route | Request | Response |
 |---|---|---|
-| `POST /v1/waits` | `{waiter, by?, kind, ref, until?, since?, timeoutMinutes?, key?, note?, thread?}` (`until` defaults to the kind's first) | `201` the wait with `created: true`, or `200` with `created: false` when the same `waiter` already has an armed wait with that `key` on the same session and `until` (a different one is `409 key_conflict {waitId}`). A key is let go when its wait is over or kept, so it can be used again; a wait with no `waiter` takes no `key` (`400`). `ref` is a session id or a root request id, here or on a connected host. `400 invalid_body {field}`; `404 not_found`; `409 wait_unsupported` (the waiter is not an agent session Tether delivers to: a shell), `409 not_main_agent`, `409 self_wait`, `409 too_many_waits {max}` (`maxWaitsPerSession` armed), `409 waits_unavailable` without lifecycle |
+| `POST /v1/waits` | `{waiter, by?, kind, ref, until?, since?, timeoutMinutes?, key?, note?, thread?}` (`until` defaults to the kind's first); kind `cmd` sends `{argv, cwd}` instead of `ref` | `201` the wait with `created: true`, or `200` with `created: false` when the same `waiter` already has an armed wait with that `key` on the same session and `until` (a different one is `409 key_conflict {waitId}`). A key is let go when its wait is over or kept, so it can be used again; a wait with no `waiter` takes no `key` (`400`). `ref` is a session id or a root request id, here or on a connected host. `400 invalid_body {field}`; `404 not_found`; `409 wait_unsupported` (the waiter is not an agent session Tether delivers to: a shell), `409 not_main_agent`, `409 self_wait`, `409 too_many_waits {max}` (`maxWaitsPerSession` armed), `409 waits_unavailable` without lifecycle |
 | `POST /v1/waits/check` | `{kind, ref?}` | `200 {kind, ref, armed}`: a nudge. Tether re-reads the armed waits of that kind (on `ref` when given) now, and for a job asks its owner at once. A hint only: no outcome, no text; a lost nudge costs at most the 60 s look. `400 invalid_body` |
 | `GET /v1/waits/:waitId` | `?wait=0..55` seconds | the wait, once it is no longer armed or the seconds are up; `404 not_found`, `400 invalid_query` |
 | `DELETE /v1/waits/:waitId` | | `200 {cancelled: true, ...wait}`; `409 not_armed {state}` |
@@ -766,6 +769,21 @@ watch, an event), on a nudge, at every 60 s look and at start. A ref the owner d
 | `ask` | an owner ask id | `answered` | Tether's asks | `withdrawn` is `gone` |
 | `host` | a remote host this hub federates | `connected` | the hub's peer state (`peer.state`) | |
 | `tap` | a Nightshift tap or agent request id (32 hex) | `decided` | `/var/lib/nightshift/bypass/out/<id>.resp.json` and `/var/lib/nightshift/agent-responses/<id>.resp.json` (`TETHER_WAIT_TAP_DIRS`, colon-separated) | any outcome but `pending` |
+| `cmd` | none sent: Tether makes a 12-hex ref | `succeeded` | the watcher's own unit (below) | exit 0 is `until`; any other end is `gone` (`failed (exit N)`, `failed (signal SIG)`, `failed (timeout)`, `failed (oom-kill)`, `could not start`) |
+
+**`cmd`** (API 18). The waiter sends `argv` (1-64 strings, 16 KB in all, no NUL) and an absolute `cwd`; the CLI sends
+the words after `--` untouched and its own directory, with `--timeout` defaulting to 6h. Tether records it under
+`<state>/wait-cmd/<ref>.json` and runs it as the transient user unit `aico-wait-<ref>` (`systemd-run --user
+--collect --expand-environment=no`, `CPUWeight=idle`, `IOWeight=10`, `MemoryMax=512M`, `RuntimeMaxSec` the time
+left to the wait's deadline plus 60 s, so the wait times out first with the watcher still `running`). It is not
+started while Nightshift admission is red: the 60 s look (or a nudge) starts it once it is not. The unit's
+`ExecStopPost` writes systemd's own words for how it ended (`$SERVICE_RESULT $EXIT_CODE $EXIT_STATUS`) to
+`<ref>.result`, which Tether reads on the directory watch and at start, so an end while Tether was down is seen. When
+the wait is over (fired, timed out, cancelled) Tether stops the unit if it still runs and drops its files; at the 60 s
+look it does the same for watchers whose wait is gone (its waiter ended). A `key` returns the armed wait with the same
+argv. Lines: `[Ready] command "sleep 20" (aico-wait-<ref>) succeeded · journalctl --user -u aico-wait-<ref>`,
+`[Wait over] command "false" (aico-wait-<ref>) failed (exit 1) · …`. `--block` exits 0 on success and 4 on a failure.
+`500 cmd_unavailable` when the record cannot be written.
 
 Lines name the thing by typed values only and end with the command that shows it, e.g. `[Ready] service job 66d97c21
 (aico) succeeded · st service result <id>`, `[Ready] request fd315b to cc:1c7a9f answered: yes · st sessions inbox`,
@@ -795,10 +813,14 @@ Each line goes out once, whichever way.
 - **`source`** is `<owner>:<what>` (`coord:cc:1c7a9f`). A line queued with the source of one still undelivered on the
   same session replaces it (`coalesced: true`, the same id). Tether's own sources (`lane:`, `wait:`, `run:`, `ask:`) are
   refused.
+- **Withdraw** (API 18). `DELETE /v1/sessions/:id/deliveries?source=` takes back the source's line that has not gone
+  out, e.g. SummitFlow's turn hook when the inbox has nothing waiting any more, so a stale `[Message]` line is never
+  pasted. A paste already going out cannot be stopped (`sending: true`); if it fails, the line does not come back.
+  Tether withdraws an ask's `[Ask] filed` line to the launcher itself once the ask is answered, done or withdrawn.
 - **Receivers** are agent sessions Tether delivers to: Claude Code, Codex, Pi, Antigravity (agy) and Agent Hub chats. A
   shell is `409 delivery_unsupported`; the producer keeps its own path for those.
 - **State.** `queued` while the row waits or is being pasted, `delivered` with `via` (`paste`, `turn` or `native`) and `deliveredAt`, or
-  `dropped` when the row went without a delivery (the session ended). Records stay 7 days.
+  `dropped` when the row went without a delivery (the session ended, or the line was withdrawn). Records stay 7 days.
 
 **Native pullers.** Claude Code's asyncRewake hook (`hooks/aico-due.sh` in claude-config, which runs
 `tether/scripts/aico-due.py`, one poller per session by a lock in `$XDG_RUNTIME_DIR/aico-due/`, ending with the Claude
@@ -818,6 +840,7 @@ nothing.
 | Route | Request | Response |
 |---|---|---|
 | `POST /v1/sessions/:id/deliveries` | `{source, line}` | `201` (or `200` when it coalesced) `{id, sessionId, source, state: "queued", queuedAt, deliveredAt: null, via: null, coalesced}`; `400 invalid_body {field, detail}`; `404 not_found`; `409 delivery_unsupported` |
+| `DELETE /v1/sessions/:id/deliveries` | `?source=<owner>:<what>` | `200 {sessionId, source, withdrawn, sending}`: how many undelivered lines went, and whether one is being pasted now; `400 invalid_query {field: "source"}` (missing, or one of Tether's own); `404 not_found` |
 | `GET /v1/deliveries/:deliveryId` | | `{id, sessionId, source, state, queuedAt, deliveredAt, via}`; `404 not_found` (unknown or older than 7 days) |
 | `GET /v1/sessions/:id/due` | `?wait=0..55` seconds | `{text}`: the next delivery's text once the session's due lines may go to this puller, or `{text: null}` when the seconds are up; `409 delivery_unsupported`, `400 invalid_query` |
 

@@ -233,3 +233,52 @@ def test_tether_down_is_unreachable_not_too_old(monkeypatch):
     code, calls, output = run(monkeypatch, ["nudge", "job", JOB], [admin.Unavailable("owner_unavailable")])
     assert code == 1 and len(calls) == 1
     assert output[0]["reason"] == "owner_unavailable" and output[0]["applied"] is None
+
+
+VERSION_18 = (200, {"apiVersion": 18})
+CMD_REF = "abcdef012345"
+
+
+def test_a_cmd_wait_sends_the_command_untouched_with_its_directory(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    armed = {**WAIT, "kind": "cmd", "ref": CMD_REF, "until": "succeeded", "created": True}
+    code, calls, output = run(monkeypatch, ["wait", "cmd", "--note", "port up", "--", "sh", "-c",
+                                            "curl -fs localhost:1 --max-time 1", "--timeout"],
+                              [VERSION_18, (201, armed)])
+    assert code == 0 and calls[0][0] == "/v1/version"
+    assert calls[1][1] == {"kind": "cmd", "argv": ["sh", "-c", "curl -fs localhost:1 --max-time 1", "--timeout"],
+                           "cwd": str(tmp_path), "until": "succeeded", "waiter": "0a1b2c3d",
+                           "timeoutMinutes": 360, "note": "port up"}
+    assert output[0]["wait"]["ref"] == CMD_REF
+
+
+def test_a_cmd_wait_on_api_17_is_refused_before_arming(monkeypatch):
+    code, calls, output = run(monkeypatch, ["wait", "cmd", "--", "true"], [VERSION_17])
+    assert code == 1 and len(calls) == 1 and output[0]["reason"] == "wait_kind_unsupported"
+
+
+def test_a_cmd_wait_needs_the_dashes(monkeypatch):
+    code, calls, _ = run(monkeypatch, ["wait", "cmd", "true"], [])
+    assert code == 2 and calls == []
+
+
+@pytest.mark.parametrize("argv", [["wait", "cmd", "--"], ["wait", "cmd", "--", ""]])
+def test_a_cmd_wait_needs_a_command_after_the_dashes(monkeypatch, argv):
+    with pytest.raises(SystemExit):
+        run(monkeypatch, argv, [])
+
+
+def test_a_failed_cmd_blocks_to_exit_4(monkeypatch, capsys):
+    armed = {**WAIT, "kind": "cmd", "ref": CMD_REF, "until": "succeeded", "waiter": None, "created": True}
+    over = {**armed, "state": "fired", "outcome": "gone",
+            "line": f'[Wait over] command "false" (aico-wait-{CMD_REF}) failed (exit 1)'}
+    code, calls, _ = run(monkeypatch, ["wait", "cmd", "--block", "--timeout", "5m", "--", "false"],
+                         [VERSION_18, (201, armed), (200, over)])
+    assert code == 4 and calls[1][1]["timeoutMinutes"] == 5 and calls[1][1]["waiter"] is None
+    assert "failed (exit 1)" in capsys.readouterr().out
+
+
+def test_nudge_takes_a_cmd_ref_on_api_18(monkeypatch):
+    code, calls, _ = run(monkeypatch, ["nudge", "cmd", CMD_REF],
+                         [VERSION_18, (200, {"kind": "cmd", "ref": CMD_REF, "armed": 1})])
+    assert code == 0 and calls[1][1] == {"kind": "cmd", "ref": CMD_REF}

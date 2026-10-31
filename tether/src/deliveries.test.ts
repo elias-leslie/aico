@@ -172,6 +172,23 @@ describe('native pullers', () => {
     expect(scheduler.inFlight(wake.id)).toBe(false)
   })
 
+  it('a line withdrawn while its paste is out does not come back if the paste fails', async () => {
+    let release: (ok: boolean) => void = () => {}
+    scheduler = new WakeScheduler(
+      wakes,
+      ops({ deliver: () => new Promise<boolean>((resolve) => (release = resolve)) }),
+    )
+    scheduler.start()
+    const wake = wakes.addEvent({ sessionId: SESSION, source: 'coord:x', note: 'one', now: 1 })
+    const pass = scheduler.tick()
+    for (let i = 0; i < 20 && !scheduler.inFlight(wake.id); i += 1)
+      await new Promise((resolve) => setImmediate(resolve))
+    expect(scheduler.withdraw(SESSION, 'coord:x')).toEqual({ withdrawn: [], sending: true })
+    release(false)
+    await pass
+    expect(wakes.forSession(SESSION)).toEqual([])
+  })
+
   it('never hands a line to a client that can no longer be answered', async () => {
     scheduler.start()
     let open = true
@@ -207,6 +224,10 @@ describe('delivery routes', () => {
       maxChars: () => 500,
       queue: (id, source, line) =>
         wakes.addEvent({ sessionId: id, source, note: line, now: clock.now }),
+      withdraw: (id, source) => {
+        const { withdrawn, sending } = scheduler.withdraw(id, source)
+        return { withdrawn: withdrawn.length, sending }
+      },
       pending: (id) => wakes.get(id) !== undefined,
       pull: (id, ms, aborted) => scheduler.pull(id, ms, aborted),
       now: () => clock.now,
@@ -264,6 +285,36 @@ describe('delivery routes', () => {
     })
     wakes.remove(queued.body.id as string)
     expect((await call('GET', `/v1/deliveries/${queued.body.id}`)).body.state).toBe('dropped')
+  })
+
+  it('withdraws a stale line by source: it is never pasted, others stay', async () => {
+    const stale = await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
+      source: 'coord:cc:1c7a9f',
+      line: '[Message] 1 request from cc:1c7a9f',
+    })
+    await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
+      source: 'coord:other',
+      line: 'keep',
+    })
+    const gone = await call(
+      'DELETE',
+      `/v1/sessions/${SESSION}/deliveries?source=${encodeURIComponent('coord:cc:1c7a9f')}`,
+    )
+    expect(gone).toMatchObject({ status: 200, body: { withdrawn: 1, sending: false } })
+    expect(
+      (await call('DELETE', `/v1/sessions/${SESSION}/deliveries?source=coord:cc:1c7a9f`)).body,
+    ).toMatchObject({ withdrawn: 0 })
+    scheduler.start()
+    await scheduler.tick()
+    expect(pasted).toEqual(['keep'])
+    expect((await call('GET', `/v1/deliveries/${stale.body.id}`)).body.state).toBe('dropped')
+    expect((await call('DELETE', `/v1/sessions/${SESSION}/deliveries?source=wait:x`)).status).toBe(
+      400,
+    )
+    expect((await call('DELETE', `/v1/sessions/${SESSION}/deliveries`)).status).toBe(400)
+    expect((await call('DELETE', '/v1/sessions/ffffffff/deliveries?source=coord:x')).status).toBe(
+      404,
+    )
   })
 
   it('refuses bad bodies, shells and unknown sessions', async () => {

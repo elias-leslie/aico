@@ -11,12 +11,14 @@
 //   ask    an ask to the owner (`tether ask create`): answered
 //   host   a remote host of this hub: connected
 //   tap    a Nightshift owner tap or agent request: decided
+//   cmd    a bounded watcher command Tether runs as a transient user unit
+//          (`aico-wait-<ref>`): succeeded (exit 0); any other end is over
 //
 // `session` (another Aico session) lives in waits.ts.
 
 import { laneTitle } from './lane-reports'
 
-export const PULL_KINDS = ['job', 'reply', 'run', 'ask', 'host', 'tap'] as const
+export const PULL_KINDS = ['job', 'reply', 'run', 'ask', 'host', 'tap', 'cmd'] as const
 export type PullKind = (typeof PULL_KINDS)[number]
 
 export const PULL_UNTILS: Readonly<Record<PullKind, readonly string[]>> = Object.freeze({
@@ -26,6 +28,7 @@ export const PULL_UNTILS: Readonly<Record<PullKind, readonly string[]>> = Object
   ask: ['answered'],
   host: ['connected'],
   tap: ['decided'],
+  cmd: ['succeeded'],
 })
 
 /** What a ref looks like, per kind (`job` takes an 8+ hex prefix). */
@@ -36,6 +39,7 @@ export const PULL_REFS: Readonly<Record<PullKind, RegExp>> = Object.freeze({
   ask: /^[0-9a-f]{12}$/,
   host: /^[a-z0-9][a-z0-9-]{0,63}$/,
   tap: /^[0-9a-f]{32}$/,
+  cmd: /^[0-9a-f]{12}$/,
 })
 
 export function isPullKind(kind: string): kind is PullKind {
@@ -92,6 +96,9 @@ export function pullVerdict(
       return state === 'connected' ? 'until' : null
     case 'tap':
       return TAP_PENDING.has(state) ? null : 'until'
+    case 'cmd':
+      if (state === 'succeeded') return 'until'
+      return state === 'failed' ? 'gone' : null
   }
 }
 
@@ -130,8 +137,16 @@ function names(kind: PullKind, ref: string, title: string | null): { name: strin
       return { name: `host ${ref}`, look: 'st aico placement' }
     case 'tap':
       return { name: `tap ${ref.slice(0, 8)}`, look: 'nightshift pending' }
+    case 'cmd':
+      return {
+        name: `command${label ? ` "${label}"` : ''} (${CMD_UNIT_PREFIX}${ref})`,
+        look: `journalctl --user -u ${CMD_UNIT_PREFIX}${ref}`,
+      }
   }
 }
+
+/** A `cmd` wait's transient unit is `aico-wait-<ref>`. */
+export const CMD_UNIT_PREFIX = 'aico-wait-'
 
 const NOT_WORDS: Record<string, string> = {
   done: 'not done',
@@ -142,6 +157,7 @@ const NOT_WORDS: Record<string, string> = {
   answered: 'not answered',
   connected: 'not connected',
   decided: 'not decided',
+  succeeded: 'not finished',
 }
 
 function readyWords(kind: PullKind, until: string, reading: PullReading | null): string {
@@ -165,6 +181,8 @@ function readyWords(kind: PullKind, until: string, reading: PullReading | null):
       return 'connected'
     case 'tap':
       return tapWord(state)
+    case 'cmd':
+      return 'succeeded'
   }
 }
 
@@ -177,6 +195,12 @@ function goneWords(kind: PullKind, until: string, reading: PullReading | null): 
       return `ended without needing the owner: ${word(reading.state, 'over')}`
     case 'ask':
       return 'was withdrawn'
+    case 'cmd':
+      // Typed systemd words (wait-readers.ts cmdDetail): exit-1, signal-TERM,
+      // timeout, oom-kill, start-failed.
+      return reading.detail === 'start-failed'
+        ? 'could not start'
+        : `failed (${word(reading.detail, 'failed').replace('-', ' ')})`
     default:
       return `is over: ${word(reading.state, 'over')} (${until})`
   }
@@ -208,5 +232,6 @@ export function pullLine(
 /** What a waiter's descriptor says it waits on. */
 export function pullWaitingOn(kind: PullKind, ref: string, until: string): string {
   const short = kind === 'job' || kind === 'tap' ? ref.slice(0, 8) : ref
+  if (kind === 'cmd') return `a wait on command ${CMD_UNIT_PREFIX}${ref} (${until})`
   return `a wait on ${kind} ${short} (${until})`
 }

@@ -539,6 +539,9 @@ export interface AskDelivery {
   nameOf?(sessionId: string): string | null
   /** Cancel a check-in not yet delivered. */
   cancel(wakeId: string): void
+  /** Take back undelivered lines by source on any session (an `[Ask] filed`
+   * line once its ask is answered or closed). */
+  withdraw?(source: string): void
   noteMaxChars(): number
   /** The session's descriptor changed (its `asks`). */
   sessionChanged(sessionId: string): void
@@ -691,6 +694,8 @@ export function registerAskRoutes(
   const cancelWake = (id: string) => {
     const wakeId = asks.wakeOf(id)
     if (wakeId) delivery?.cancel(wakeId)
+    // The launcher's "[Ask] filed" line is stale once the ask is settled.
+    delivery?.withdraw?.(`ask:${id}:filed`)
   }
   const shareExists = (id: string) =>
     Boolean(options.db.prepare('SELECT 1 FROM shares WHERE id = ?').get(id))

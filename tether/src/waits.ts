@@ -14,10 +14,12 @@
 //
 // Kind `session`: another session (here or relayed from a host) finished a
 // turn since `since`, is idle, is blocked on a prompt, or ended. The pull
-// kinds (src/wait-kinds.ts: job, reply, run, ask, host, tap) read their
+// kinds (src/wait-kinds.ts: job, reply, run, ask, host, tap, cmd) read their
 // owner's state at arm, when it changes (a file watch, an event, a nudge),
 // every 60 s and at start. Lines are built from typed values only: never
-// agent reply text or an owner's free text.
+// agent reply text or an owner's free text. A `cmd` wait names no ref: the
+// waiter sends the command (`argv`, `cwd`) and Tether runs it as a transient
+// unit under a ref it makes (src/wait-readers.ts), stopped once the wait is over.
 
 import { randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
@@ -518,6 +520,16 @@ export interface WaitOperations {
    * the session that asked, a run's pause told to the session that launched
    * it. The wait fires without a second line. */
   told?(wait: Wait): boolean
+  /** Record and start a `cmd` wait's watcher (throws when it can't). */
+  createCmd?(ref: string, spec: { argv: string[]; cwd: string; deadline: number }): void
+  /** The argv a `cmd` wait runs, or null (a key's same-target check). */
+  cmdArgv?(ref: string): string[] | null
+  /** A pull wait is over (fired, timed out, cancelled): its owner may let go
+   * of what it holds for it (a `cmd` watcher's unit and files). */
+  settled?(wait: Wait): void
+  /** The full look: `cmd` watchers whose wait is no longer armed (a waiter
+   * that ended takes its waits) are stopped and dropped. */
+  sweepCmd?(armed: ReadonlySet<string>): void
   /** A local session's agent left its pane for good (a clean exit, or crash
    * recovery holds it). */
   agentGone(id: string): boolean
@@ -550,6 +562,8 @@ export interface ArmInput {
   key: string | null
   note: string | null
   thread: string | null
+  /** Kind `cmd`: what to run (no ref; Tether makes one). */
+  cmd?: { argv: string[]; cwd: string } | null
 }
 
 export class WaitRefused extends Error {
@@ -656,7 +670,9 @@ export class WaitService {
         if (
           existing.kind !== input.kind ||
           existing.until !== input.until ||
-          !this.sameTarget(existing, input.ref)
+          !(input.kind === 'cmd'
+            ? this.sameCmd(existing, input.cmd ?? null)
+            : this.sameTarget(existing, input.ref))
         )
           throw new WaitRefused(409, 'key_conflict', { waitId: existing.id })
         return { wait: existing, created: false }
@@ -669,6 +685,7 @@ export class WaitService {
       })
     if (input.waiter !== null && this.store.countArmed(input.waiter) >= policy.maxWaitsPerSession)
       throw new WaitRefused(409, 'too_many_waits', { max: policy.maxWaitsPerSession })
+    if (input.kind === 'cmd') return this.armCmd(input, now)
     if (isPullKind(input.kind)) return this.armPull(input, input.kind, now)
     const target = this.ops.resolve(input.ref)
     if (!target) {
@@ -717,12 +734,47 @@ export class WaitService {
     )
   }
 
+  /** A `cmd` wait: Tether makes the ref, records and starts the watcher
+   * (deferred while admission is red), then arms on it. */
+  private armCmd(input: ArmInput, now: number): { wait: Wait; created: boolean } {
+    const cmd = input.cmd
+    if (!cmd) throw new WaitRefused(400, 'invalid_body', { field: 'argv' })
+    if (!this.ops.createCmd) throw new WaitRefused(409, 'waits_unavailable')
+    const ref = randomBytes(6).toString('hex')
+    const deadline = now + this.timeoutOf(input) * 60_000
+    try {
+      this.ops.createCmd(ref, { argv: cmd.argv, cwd: cmd.cwd, deadline })
+    } catch (error) {
+      this.ops.log(`cmd ${ref}: could not record it: ${(error as Error).message}`)
+      throw new WaitRefused(500, 'cmd_unavailable')
+    }
+    const reading = this.ops.read('cmd', ref)
+    return this.armed(
+      input,
+      { ref, since: now, cursor: reading ? readingCursor(reading) : null },
+      now,
+    )
+  }
+
+  private timeoutOf(input: ArmInput): number {
+    return input.timeoutMinutes ?? this.ops.policy().waitDefaultMinutes
+  }
+
+  private sameCmd(wait: Wait, cmd: { argv: string[] } | null): boolean {
+    const argv = this.ops.cmdArgv?.(wait.ref) ?? null
+    return (
+      cmd !== null &&
+      argv !== null &&
+      argv.length === cmd.argv.length &&
+      argv.every((part, index) => part === cmd.argv[index])
+    )
+  }
+
   private armed(
     input: ArmInput,
     target: { ref: string; host?: string | null; since: number; cursor: WaitCursor | null },
     now: number,
   ): { wait: Wait; created: boolean } {
-    const policy = this.ops.policy()
     const wait = this.store.insert({
       waiter: input.waiter,
       kind: input.kind,
@@ -730,7 +782,7 @@ export class WaitService {
       host: target.host ?? null,
       until: input.until,
       since: target.since,
-      deadline: now + (input.timeoutMinutes ?? policy.waitDefaultMinutes) * 60_000,
+      deadline: now + this.timeoutOf(input) * 60_000,
       key: input.key,
       note: input.note,
       armedAt: now,
@@ -761,6 +813,7 @@ export class WaitService {
     const cancelled = this.store.settle(wait, 'cancelled', null, null, this.ops.now())
     if (cancelled) {
       this.ops.log(`cancelled wait=${id}`)
+      this.letGo(wait)
       this.notify(id)
       this.ops.changed(wait.waiter)
     }
@@ -825,6 +878,18 @@ export class WaitService {
     }
     if (!ids) {
       this.lastFullCheck = now
+      try {
+        this.ops.sweepCmd?.(
+          new Set(
+            this.store
+              .armed()
+              .filter((wait) => wait.kind === 'cmd')
+              .map((wait) => wait.ref),
+          ),
+        )
+      } catch (error) {
+        this.ops.log(`cmd sweep failed: ${(error as Error).message}`)
+      }
       this.store.prune(now - this.ops.policy().waitKeepDays * 24 * 3600_000)
     }
     this.schedule()
@@ -916,6 +981,7 @@ export class WaitService {
     })
     if (!fired) return
     this.recheckAt.delete(wait.id)
+    this.letGo(wait)
     const to = quiet
       ? 'told already'
       : wait.kept
@@ -924,6 +990,15 @@ export class WaitService {
     this.ops.log(`wait=${wait.id} on ${where(wait)} ${outcome} -> ${to}`)
     this.notify(wait.id)
     this.ops.changed(wait.waiter)
+  }
+
+  private letGo(wait: Wait): void {
+    if (!isPullKind(wait.kind)) return
+    try {
+      this.ops.settled?.(wait)
+    } catch (error) {
+      this.ops.log(`wait=${wait.id} let-go failed: ${(error as Error).message}`)
+    }
   }
 
   private schedule(): void {
@@ -1002,6 +1077,39 @@ function waitRef(kind: WaitKind, value: unknown): string {
   return value as string
 }
 
+const ARGV_MAX_ITEMS = 64
+const ARGV_MAX_ITEM_CHARS = 4096
+const ARGV_MAX_TOTAL_CHARS = 16_384
+
+/** A `cmd` wait's body: `argv` (no ref) and an absolute `cwd`. Whether the
+ * directory exists is the unit's to find (it fails to start: `start-failed`). */
+function cmdBody(body: Record<string, unknown>): { argv: string[]; cwd: string } {
+  if (body.ref !== undefined && body.ref !== null)
+    throw new HttpError(400, 'invalid_body', { field: 'ref' })
+  const argv = body.argv
+  if (
+    !Array.isArray(argv) ||
+    !argv.length ||
+    argv.length > ARGV_MAX_ITEMS ||
+    !argv.every(
+      (part) =>
+        typeof part === 'string' && part.length <= ARGV_MAX_ITEM_CHARS && !part.includes('\0'),
+    ) ||
+    !(argv[0] as string).length ||
+    argv.reduce((total: number, part: string) => total + part.length, 0) > ARGV_MAX_TOTAL_CHARS
+  )
+    throw new HttpError(400, 'invalid_body', { field: 'argv' })
+  const cwd = body.cwd
+  if (
+    typeof cwd !== 'string' ||
+    !cwd.startsWith('/') ||
+    cwd.length > ARGV_MAX_ITEM_CHARS ||
+    /[\0\n\r]/.test(cwd)
+  )
+    throw new HttpError(400, 'invalid_body', { field: 'cwd' })
+  return { argv: argv as string[], cwd }
+}
+
 function untilsOf(kind: WaitKind): readonly string[] {
   return isPullKind(kind) ? PULL_UNTILS[kind] : SESSION_UNTILS
 }
@@ -1040,11 +1148,19 @@ export function registerWaitRoutes(
         'key',
         'note',
         'thread',
+        'argv',
+        'cwd',
       ])
       const waiter = optionalSession(body.waiter, 'waiter')
       const by = optionalSession(body.by, 'by')
       const kind = waitKind(body.kind)
-      const ref = waitRef(kind, body.ref)
+      // A `cmd` wait sends what to run instead of a ref; other kinds take no argv.
+      const cmd = kind === 'cmd' ? cmdBody(body) : null
+      if (kind !== 'cmd' && (body.argv !== undefined || body.cwd !== undefined))
+        throw new HttpError(400, 'invalid_body', {
+          field: body.argv !== undefined ? 'argv' : 'cwd',
+        })
+      const ref = cmd ? '' : waitRef(kind, body.ref)
       const untils = untilsOf(kind)
       const until = body.until ?? untils[0]
       if (!untils.includes(until as string))
@@ -1089,6 +1205,7 @@ export function registerWaitRoutes(
           key,
           note,
           thread,
+          cmd,
         })
         sendJson(res, created ? 201 : 200, { ...waitJson(wait), created })
       } catch (error) {

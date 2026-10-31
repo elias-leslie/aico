@@ -4,6 +4,20 @@
 
 ### Added
 
+- `st aico wait cmd [--timeout 6h] [--note T] [--key K] [--block] -- ARGV...`
+  (Tether API 18): Tether runs the waiter's watcher command as the transient
+  user unit `aico-wait-<ref>` (idle CPU weight, 512M, bounded by the wait's
+  deadline), not started while Nightshift admission is red, and reads how it
+  ended from the unit's ExecStopPost record on exit and at start: exit 0 is
+  `[Ready] … succeeded`, any other end `[Wait over] … failed (exit N / signal /
+  timeout / oom-kill)` or `could not start`. The unit is stopped and its files
+  dropped once the wait is over or its waiter ended. The CLI gates it on
+  `/v1/version` >= 18; `st aico nudge cmd REF` starts a deferred one now.
+- Stale-line withdraw (Tether API 18): `DELETE
+  /v1/sessions/:id/deliveries?source=` takes back a producer's undelivered
+  line (one being pasted cannot be stopped, but does not come back if that
+  paste fails). An ask's `[Ask] filed` line to the launcher is withdrawn once
+  the ask is answered, done or withdrawn.
 - Antigravity (agy) state: Tether reads an agy session's conversation database
   (`~/.gemini/antigravity-cli/conversations/<id>.db`, the conversation the
   pane's agy holds open) read-only each poll: a step waiting on the user is

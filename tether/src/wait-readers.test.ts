@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { PullKind } from './wait-kinds'
-import { PullReaders, parseJobResult } from './wait-readers'
+import { type CmdSpec, type CmdUnits, cmdResult, PullReaders, parseJobResult } from './wait-readers'
 
 const JOB = '0123456789abcdef0123456789abcdef'
 const TAP = 'fedcba9876543210fedcba9876543210'
@@ -14,6 +14,18 @@ let probes: string[]
 let probeAnswer: string | null
 let red: boolean
 let clock: number
+let started: { ref: string; spec: CmdSpec; result: string; runtime: number }[]
+let stopped: string[]
+let startAnswer: 'started' | 'exists' | 'failed'
+const units: CmdUnits = {
+  start: async (ref, spec, result, runtime) => {
+    started.push({ ref, spec, result, runtime })
+    return startAnswer
+  },
+  stop: async (ref) => {
+    stopped.push(ref)
+  },
+}
 
 function readers(): PullReaders {
   return new PullReaders({
@@ -21,6 +33,7 @@ function readers(): PullReaders {
       jobsDir: join(dir, 'jobs'),
       ledger: join(dir, 'leases', '_coord.json'),
       tapDirs: [join(dir, 'out'), join(dir, 'agent')],
+      cmdDir: join(dir, 'cmd'),
     },
     run: (id) =>
       id === 'run-1'
@@ -31,6 +44,7 @@ function readers(): PullReaders {
     ask: (id) => (id === 'c'.repeat(12) ? { state: 'answered' } : undefined),
     host: (name) => (name === 'gem' ? 'connected' : null),
     admissionRed: () => red,
+    cmdUnits: units,
     probeJob: async (id) => {
       probes.push(id)
       return probeAnswer
@@ -55,6 +69,9 @@ beforeEach(() => {
   probeAnswer = null
   red = false
   clock = 1_000_000
+  started = []
+  stopped = []
+  startAnswer = 'started'
 })
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
@@ -158,6 +175,64 @@ describe('PullReaders', () => {
     } finally {
       r.stop()
     }
+  })
+
+  it('starts a cmd watcher once, never on red admission, and reads how it ended', async () => {
+    const r = readers()
+    const REF = 'abcdef012345'
+    red = true
+    r.createCmd(REF, { argv: ['sleep', '20'], cwd: '/srv/x', deadline: clock + 600_000 })
+    expect(started).toEqual([])
+    expect(r.read('cmd', REF)).toEqual({ state: 'waiting', detail: null, title: 'sleep 20' })
+    expect(r.pullRef('cmd', REF)).toBe(REF)
+    expect(r.cmdArgv(REF)).toEqual(['sleep', '20'])
+    red = false
+    r.refresh('cmd', REF, false)
+    r.refresh('cmd', REF, false)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(started).toHaveLength(1)
+    expect(started[0]).toMatchObject({
+      ref: REF,
+      result: join(dir, 'cmd', `${REF}.result`),
+      runtime: 660,
+    })
+    expect(pokes).toContain(`cmd:${REF}`)
+    expect(r.read('cmd', REF)?.state).toBe('running')
+    r.refresh('cmd', REF, true)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(started).toHaveLength(1)
+    writeFileSync(join(dir, 'cmd', `${REF}.result`), 'exit-code exited 1\n')
+    expect(r.read('cmd', REF)).toEqual({ state: 'failed', detail: 'exit-1', title: 'sleep 20' })
+    r.endCmd(REF)
+    expect(stopped).toEqual([])
+    expect(r.read('cmd', REF)).toBeNull()
+    expect(r.pullRef('cmd', REF)).toBeNull()
+  })
+
+  it('a watcher that cannot start is failed; one still running is stopped when let go', async () => {
+    const r = readers()
+    startAnswer = 'failed'
+    r.createCmd('111111111111', { argv: ['x'], cwd: '/', deadline: clock + 60_000 })
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(r.read('cmd', '111111111111')).toMatchObject({ state: 'failed', detail: 'start-failed' })
+    startAnswer = 'started'
+    r.createCmd('222222222222', { argv: ['y'], cwd: '/', deadline: clock + 60_000 })
+    await new Promise((resolve) => setImmediate(resolve))
+    r.sweepCmd(new Set(['111111111111']))
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(stopped).toEqual(['222222222222'])
+    expect(r.read('cmd', '222222222222')).toBeNull()
+    expect(r.read('cmd', '111111111111')?.state).toBe('failed')
+  })
+
+  it('reads systemd result words as typed details', () => {
+    expect(cmdResult('success exited 0')).toEqual({ state: 'succeeded', detail: 'exit-0' })
+    expect(cmdResult('exit-code exited 3')).toEqual({ state: 'failed', detail: 'exit-3' })
+    expect(cmdResult('signal killed TERM')).toEqual({ state: 'failed', detail: 'signal-TERM' })
+    expect(cmdResult('timeout killed TERM')).toEqual({ state: 'failed', detail: 'timeout' })
+    expect(cmdResult('oom-kill killed KILL')).toEqual({ state: 'failed', detail: 'oom-kill' })
+    expect(cmdResult('start-failed')).toEqual({ state: 'failed', detail: 'start-failed' })
+    expect(cmdResult('')).toEqual({ state: 'failed', detail: 'failed' })
   })
 
   it('parses the owner CLI result', () => {

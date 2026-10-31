@@ -198,6 +198,20 @@ export class WakeService {
     return wake
   }
 
+  /** Take back a source's undelivered line(s) (docs/api-v1.md "Deliveries"). */
+  withdrawEvents(
+    sessionId: string | null,
+    source: string,
+  ): { withdrawn: number; sending: boolean } {
+    const { withdrawn, sending } = this.scheduler.withdraw(sessionId, source)
+    for (const id of new Set(withdrawn.map((wake) => wake.sessionId))) if (id) this.changed(id)
+    if (withdrawn.length)
+      console.log(
+        `[tether:wakes] withdrew ${withdrawn.length} line(s) from ${source}${sessionId ? ` on session=${sessionId}` : ''}`,
+      )
+    return { withdrawn: withdrawn.length, sending }
+  }
+
   /** Whether wakes can be delivered to this session: an agent whose state
    * Tether reads (a shell reports none, so idle would never come). */
   supports(row: WidgetRow): boolean {
@@ -399,6 +413,7 @@ export function registerWakeRoutes(
     receiver: (id) => service.receiver(id),
     maxChars: () => service.policy().noteMaxChars,
     queue: (id, source, line) => service.queueEvent(id, source, line),
+    withdraw: (id, source) => service.withdrawEvents(id, source),
     pending: (id) => service.store.get(id) !== undefined || service.scheduler.inFlight(id),
     pull: (id, ms, aborted, alive) => service.scheduler.pull(id, ms, aborted, alive),
     now,

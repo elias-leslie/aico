@@ -290,6 +290,20 @@ export class WakeStore {
     return this.get(id) as Wake
   }
 
+  /** Take back the undelivered event line(s) a source queued (on one session,
+   * or on any with null). Returns the rows taken. */
+  removeEvents(sessionId: string | null, source: string): Wake[] {
+    const rows = (
+      sessionId === null
+        ? this.db.prepare("SELECT * FROM wakes WHERE kind = 'event' AND source = ?").all(source)
+        : this.db
+            .prepare("SELECT * FROM wakes WHERE kind = 'event' AND session_id = ? AND source = ?")
+            .all(sessionId, source)
+    ).map((raw) => toWake(raw as unknown as RawWake))
+    for (const row of rows) this.remove(row.id)
+    return rows
+  }
+
   /** A kept check-in due now for an ended session (a kept wait that became
    * ready): the scheduler relaunches its conversation with the note. */
   addKept(input: { ended: EndedSession; note: string; now: number }): Wake {
@@ -648,7 +662,10 @@ export class WakeScheduler {
   /** Native pullers attached now, one per session (the newest wins). */
   private readonly pullers = new Map<string, Puller>()
   /** Rows taken out for a delivery that has not settled yet. */
-  private readonly sending = new Set<string>()
+  private readonly sending = new Map<string, Wake>()
+  /** Rows in flight whose source took them back: not restored if the
+   * delivery fails. */
+  private readonly withdrawn = new Set<string>()
   /** When each session's native puller was last attached. */
   private readonly pulledAt = new Map<string, number>()
 
@@ -679,6 +696,25 @@ export class WakeScheduler {
    * is neither queued nor dropped. */
   inFlight(wakeId: string): boolean {
     return this.sending.has(wakeId)
+  }
+
+  /** A producer takes back its undelivered line (source `<owner>:<what>`) on
+   * a session, or on every session with null: the queued rows go; a row in a
+   * paste going out now cannot be stopped (`sending`), but does not come back
+   * if that paste fails. */
+  withdraw(sessionId: string | null, source: string): { withdrawn: Wake[]; sending: boolean } {
+    const withdrawn = this.store.removeEvents(sessionId, source)
+    let sending = false
+    for (const wake of this.sending.values())
+      if (
+        wake.kind === 'event' &&
+        wake.source === source &&
+        (sessionId === null || wake.sessionId === sessionId)
+      ) {
+        this.withdrawn.add(wake.id)
+        sending = true
+      }
+    return { withdrawn, sending }
   }
 
   /** Whether a native puller is attached to the session, or was within the
@@ -844,15 +880,19 @@ export class WakeScheduler {
     // At most once: the rows go before the paste and come back only when it
     // certainly did not happen.
     for (const wake of current) {
-      this.sending.add(wake.id)
+      this.sending.set(wake.id, wake)
       this.store.remove(wake.id)
     }
     let delivered = false
     try {
       delivered = puller ? puller.take(message) : await this.ops.deliver(sessionId, message)
     } finally {
-      if (!delivered) for (const wake of current) this.store.restore(wake)
-      for (const wake of current) this.sending.delete(wake.id)
+      if (!delivered)
+        for (const wake of current) if (!this.withdrawn.has(wake.id)) this.store.restore(wake)
+      for (const wake of current) {
+        this.sending.delete(wake.id)
+        this.withdrawn.delete(wake.id)
+      }
       this.ops.changed(sessionId)
     }
     if (!delivered) {

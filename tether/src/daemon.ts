@@ -73,7 +73,7 @@ import { persistSizeHolders } from './size-holder'
 import { Store } from './store'
 import { VERSION } from './version'
 import type { PullKind } from './wait-kinds'
-import { PullReaders, systemdProbe } from './wait-readers'
+import { PullReaders, systemdCmdUnits, systemdProbe } from './wait-readers'
 import { readWaitingState, WAIT_NOTICE_MS, WaitingNotices } from './waiting'
 import { WaitService, WaitStore } from './waits'
 import { bindWaitingOn, bindWakeStore, WakeService } from './wake-runtime'
@@ -362,6 +362,9 @@ export async function startDaemon(
       const wake = wakes.store.get(wakeId)
       if (wake && wakes.store.remove(wakeId)) wakes.changed(wake.sessionId)
     },
+    withdraw: (source) => {
+      wakes.withdrawEvents(null, source)
+    },
     noteMaxChars: () => wakes.policy().noteMaxChars,
     sessionChanged: (sessionId) => {
       if (getWidget(sessionId)) notifySessionChanged(sessionId, { force: true })
@@ -583,7 +586,9 @@ export async function startDaemon(
       )
         .split(':')
         .filter((dir) => dir.startsWith('/')),
+      cmdDir: join(paths.stateDir, 'wait-cmd'),
     },
+    cmdUnits: systemdCmdUnits(env),
     run: (runId) => runs.runState(runId),
     ask: (id) => askStore.get(id),
     host: (name) => hosts?.peerView(name)?.state ?? null,
@@ -624,6 +629,12 @@ export async function startDaemon(
         pullRef: (kind, ref) => readers.pullRef(kind, ref),
         read: (kind, ref) => readers.read(kind, ref),
         refresh: (kind, ref, force) => readers.refresh(kind, ref, force),
+        createCmd: (ref, spec) => readers.createCmd(ref, spec),
+        cmdArgv: (ref) => readers.cmdArgv(ref),
+        settled: (wait) => {
+          if (wait.kind === 'cmd') readers.endCmd(wait.ref)
+        },
+        sweepCmd: (armed) => readers.sweepCmd(armed),
         told: (wait) => {
           // The waiter has this line already from its owner: the ask's
           // answer queued to it, the run's pause told to it as launcher.

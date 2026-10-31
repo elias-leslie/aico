@@ -6,13 +6,35 @@
 // may have died is asked of its owner's CLI (`st service result`) as an
 // idle-weight transient unit, at most once a minute per job, never while
 // admission is red.
+//
+// A `cmd` wait's watcher runs as a transient user unit `aico-wait-<ref>`
+// (idle CPU weight, 512M, bounded by the wait's deadline), started only while
+// admission is not red. Its ExecStopPost writes systemd's own result words to
+// `<cmdDir>/<ref>.result`, so Tether reads how it ended on exit (the
+// directory watch) and after a restart, whether or not the unit is still loaded.
 
 import { execFile } from 'node:child_process'
-import { type FSWatcher, readdirSync, readFileSync, statSync, watch } from 'node:fs'
+import {
+  type FSWatcher,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  watch,
+  writeFileSync,
+} from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { JOB_FINAL, type PullKind, type PullRead } from './wait-kinds'
+import { CMD_UNIT_PREFIX, JOB_FINAL, type PullKind, type PullRead } from './wait-kinds'
 
 const JOB_ID = /^[0-9a-f]{32}$/
+const CMD_REF = /^[0-9a-f]{12}$/
+/** A path systemd's Exec line and sh both take as it is. */
+const PLAIN_PATH = /^\/[A-Za-z0-9/._-]+$/
+/** A unit outlives its wait's deadline by this much: the wait times out first,
+ * with the watcher's state, then stops it. */
+const CMD_GRACE_SECONDS = 60
 const TAP_ID = /^[0-9a-f]{32}$/
 /** A probe of one job at most this often (a nudge skips it). */
 const PROBE_EVERY_MS = 60_000
@@ -24,6 +46,29 @@ export interface PullReaderPaths {
   ledger: string
   /** Nightshift's tap answers (`<32 hex>.resp.json`): owner taps, agent requests. */
   tapDirs: readonly string[]
+  /** Tether's own `cmd` watcher records: `<ref>.json` (what to run),
+   * `<ref>.started`, `<ref>.result` (systemd's words for how it ended). */
+  cmdDir: string
+}
+
+/** What a `cmd` wait runs: the waiter's own argv, in its directory. */
+export interface CmdSpec {
+  argv: string[]
+  cwd: string
+  /** The wait's deadline (ms); the unit's RuntimeMaxSec is measured to it. */
+  deadline: number
+}
+
+/** Starts and stops `cmd` watcher units (systemdCmdUnits; a fake in tests). */
+export interface CmdUnits {
+  /** `exists`: a unit by that name is running already (started before a restart). */
+  start(
+    ref: string,
+    spec: CmdSpec,
+    resultPath: string,
+    runtimeSeconds: number,
+  ): Promise<'started' | 'exists' | 'failed'>
+  stop(ref: string): Promise<void>
 }
 
 export interface PullReaderDeps {
@@ -38,6 +83,8 @@ export interface PullReaderDeps {
   admissionRed(): boolean
   /** Run the job's owner CLI: stdout, or null when it could not answer. */
   probeJob?(jobId: string): Promise<string | null>
+  /** `cmd` watcher units; without it a `cmd` wait cannot start (`start-failed`). */
+  cmdUnits?: CmdUnits
   /** Something a kind reads changed. */
   poke(kind: PullKind, ref?: string): void
   now(): number
@@ -90,12 +137,85 @@ export function systemdProbe(env: NodeJS.ProcessEnv): (jobId: string) => Promise
     })
 }
 
+/** `cmd` watchers as transient user units, outside Tether's cgroup. */
+export function systemdCmdUnits(env: NodeJS.ProcessEnv): CmdUnits {
+  return {
+    start: (ref, spec, resultPath, runtimeSeconds) =>
+      new Promise((resolve) => {
+        if (!CMD_REF.test(ref) || !PLAIN_PATH.test(resultPath)) return resolve('failed')
+        const temp = `${resultPath}.tmp`
+        // systemd turns $$ into $; sh then reads the variables systemd sets for ExecStopPost.
+        const record = `ExecStopPost=/bin/sh -c 'echo "$$SERVICE_RESULT $$EXIT_CODE $$EXIT_STATUS" > ${temp} && mv ${temp} ${resultPath}'`
+        execFile(
+          'systemd-run',
+          [
+            '--user',
+            '--no-ask-password',
+            '--quiet',
+            '--collect',
+            '--expand-environment=no',
+            `--unit=${CMD_UNIT_PREFIX}${ref}`,
+            `--working-directory=${spec.cwd}`,
+            '-p',
+            'CPUWeight=idle',
+            '-p',
+            'IOWeight=10',
+            '-p',
+            'MemoryMax=512M',
+            '-p',
+            `RuntimeMaxSec=${runtimeSeconds}`,
+            '-p',
+            record,
+            '--',
+            ...spec.argv,
+          ],
+          { env, timeout: 30_000 },
+          (error, _stdout, stderr) =>
+            resolve(
+              !error
+                ? 'started'
+                : /already exists|already loaded/i.test(stderr)
+                  ? 'exists'
+                  : 'failed',
+            ),
+        )
+      }),
+    stop: (ref) =>
+      new Promise((resolve) => {
+        if (!CMD_REF.test(ref)) return resolve()
+        execFile(
+          'systemctl',
+          ['--user', '--no-ask-password', 'stop', `${CMD_UNIT_PREFIX}${ref}.service`],
+          { env, timeout: 30_000 },
+          () => resolve(),
+        )
+      }),
+  }
+}
+
+/** systemd's words for how a unit ended (`$SERVICE_RESULT $EXIT_CODE
+ * $EXIT_STATUS`), as a `cmd` reading: exit 0 succeeded, anything else failed
+ * with a typed detail (exit-1, signal-TERM, timeout, oom-kill, start-failed). */
+export function cmdResult(text: string): { state: 'succeeded' | 'failed'; detail: string } {
+  const [result = '', code = '', status = ''] = text.trim().split(/\s+/)
+  if (code === 'exited' && status === '0') return { state: 'succeeded', detail: 'exit-0' }
+  const clean = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 20)
+  if (result && result !== 'success' && result !== 'exit-code' && result !== 'signal')
+    return { state: 'failed', detail: clean(result) || 'failed' }
+  if (code === 'exited') return { state: 'failed', detail: `exit-${clean(status) || '?'}` }
+  if (code === 'killed' || code === 'dumped')
+    return { state: 'failed', detail: `signal-${clean(status) || '?'}` }
+  return { state: 'failed', detail: 'failed' }
+}
+
 export class PullReaders {
   private ledgerCache: Cached<Map<string, Record<string, unknown>> | null> | null = null
   private readonly probed = new Map<string, { state: string; exit: string | null }>()
   private readonly probing = new Set<string>()
   private readonly probedAt = new Map<string, number>()
   private readonly watchers: FSWatcher[] = []
+  private readonly starting = new Set<string>()
+  private readonly deferredLogged = new Set<string>()
 
   constructor(private readonly deps: PullReaderDeps) {}
 
@@ -115,6 +235,15 @@ export class PullReaders {
         const id = name.endsWith('.resp.json') ? name.slice(0, -10) : ''
         if (TAP_ID.test(id)) this.deps.poke('tap', id)
       })
+    try {
+      mkdirSync(paths.cmdDir, { recursive: true, mode: 0o700 })
+    } catch {
+      // Unwritable: a cmd wait then refuses to arm (createCmd).
+    }
+    this.watchDir(paths.cmdDir, (name) => {
+      const ref = name.endsWith('.result') ? name.slice(0, -7) : ''
+      if (CMD_REF.test(ref)) this.deps.poke('cmd', ref)
+    })
   }
 
   private watchDir(dir: string, changed: (name: string) => void): void {
@@ -148,6 +277,8 @@ export class PullReaders {
         return this.deps.host(ref) !== null ? ref : null
       case 'tap':
         return TAP_ID.test(ref) ? ref : null
+      case 'cmd':
+        return this.cmdSpec(ref) ? ref : null
     }
   }
 
@@ -172,12 +303,19 @@ export class PullReaders {
       }
       case 'tap':
         return this.readTap(ref)
+      case 'cmd':
+        return this.readCmd(ref)
     }
   }
 
   /** Ask a job's owner where its file may be stale (a runner killed before it
-   * wrote its end): only for a job its file says is still going. */
+   * wrote its end): only for a job its file says is still going. A `cmd`
+   * watcher not started yet (admission was red, Tether restarted) starts. */
   refresh(kind: PullKind, ref: string, force: boolean): void {
+    if (kind === 'cmd') {
+      this.startCmd(ref)
+      return
+    }
     if (kind === 'reply' && force) this.ledgerCache = null
     if (kind !== 'job' || !this.deps.probeJob || this.probing.has(ref)) return
     const file = this.jobFile(ref)
@@ -298,6 +436,140 @@ export class PullReaders {
     }
   }
 
+  /** Record a `cmd` wait's watcher and start it (unless admission is red:
+   * then the 60 s look starts it later). Throws when the record can't be written. */
+  createCmd(ref: string, spec: CmdSpec): void {
+    if (!CMD_REF.test(ref)) throw new Error('bad cmd ref')
+    const dir = this.deps.paths.cmdDir
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const path = cmdFile(dir, ref, 'json')
+    writeFileSync(`${path}.tmp`, JSON.stringify(spec), { mode: 0o600 })
+    renameSync(`${path}.tmp`, path)
+    this.startCmd(ref)
+  }
+
+  /** The argv a `cmd` wait runs (a key's same-target check). */
+  cmdArgv(ref: string): string[] | null {
+    return this.cmdSpec(ref)?.argv ?? null
+  }
+
+  private cmdSpec(ref: string): CmdSpec | null {
+    if (!CMD_REF.test(ref)) return null
+    try {
+      const raw = readJson(cmdFile(this.deps.paths.cmdDir, ref, 'json')) as Record<string, unknown>
+      const argv = raw.argv
+      if (!Array.isArray(argv) || !argv.length || !argv.every((part) => typeof part === 'string'))
+        return null
+      if (typeof raw.cwd !== 'string' || typeof raw.deadline !== 'number') return null
+      return { argv: argv as string[], cwd: raw.cwd, deadline: raw.deadline }
+    } catch {
+      return null
+    }
+  }
+
+  private exists(path: string): boolean {
+    try {
+      statSync(path)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private readCmd(ref: string): PullRead {
+    const spec = this.cmdSpec(ref)
+    if (!spec) return null
+    const dir = this.deps.paths.cmdDir
+    const title = spec.argv.join(' ')
+    let text: string | null = null
+    try {
+      text = readFileSync(cmdFile(dir, ref, 'result'), 'utf8')
+    } catch {
+      text = null
+    }
+    if (text?.trim()) {
+      const result = cmdResult(text)
+      return { state: result.state, detail: result.detail, title }
+    }
+    const started = this.exists(cmdFile(dir, ref, 'started'))
+    return { state: started ? 'running' : 'waiting', detail: null, title }
+  }
+
+  /** Start the watcher unit once: not while admission is red, never twice. */
+  private startCmd(ref: string): void {
+    const dir = this.deps.paths.cmdDir
+    if (this.starting.has(ref)) return
+    const spec = this.cmdSpec(ref)
+    if (!spec) return
+    if (this.exists(cmdFile(dir, ref, 'result')) || this.exists(cmdFile(dir, ref, 'started')))
+      return
+    if (this.deps.admissionRed()) {
+      if (!this.deferredLogged.has(ref))
+        this.deps.log(`cmd ${ref}: admission is red, start deferred`)
+      this.deferredLogged.add(ref)
+      return
+    }
+    this.deferredLogged.delete(ref)
+    const units = this.deps.cmdUnits
+    this.starting.add(ref)
+    const runtime = Math.max(
+      1,
+      Math.ceil((spec.deadline - this.deps.now()) / 1000) + CMD_GRACE_SECONDS,
+    )
+    const started = units
+      ? units.start(ref, spec, cmdFile(dir, ref, 'result'), runtime)
+      : Promise.resolve('failed' as const)
+    started
+      .then((outcome) => {
+        if (outcome === 'failed') {
+          writeFileSync(cmdFile(dir, ref, 'result'), 'start-failed\n', { mode: 0o600 })
+          this.deps.log(`cmd ${ref}: the unit did not start`)
+        } else writeFileSync(cmdFile(dir, ref, 'started'), '', { mode: 0o600 })
+      })
+      .catch((error) => this.deps.log(`cmd ${ref}: start failed: ${error}`))
+      .finally(() => {
+        this.starting.delete(ref)
+        this.deps.poke('cmd', ref)
+      })
+  }
+
+  /** A `cmd` wait is over (fired, timed out, cancelled, its waiter ended):
+   * stop its unit if it still runs and drop its files. */
+  endCmd(ref: string): void {
+    if (!CMD_REF.test(ref)) return
+    const dir = this.deps.paths.cmdDir
+    const running =
+      this.exists(cmdFile(dir, ref, 'started')) && !this.exists(cmdFile(dir, ref, 'result'))
+    const drop = () => {
+      for (const ending of ['json', 'started', 'result'] as const)
+        rmSync(cmdFile(dir, ref, ending), { force: true })
+      rmSync(`${cmdFile(dir, ref, 'result')}.tmp`, { force: true })
+    }
+    this.deferredLogged.delete(ref)
+    if (running && this.deps.cmdUnits) {
+      this.deps.log(`cmd ${ref}: stopping its unit`)
+      this.deps.cmdUnits
+        .stop(ref)
+        .catch(() => {})
+        .finally(drop)
+    } else drop()
+  }
+
+  /** Watchers whose wait is no longer armed (a waiter that ended takes its
+   * waits with it): stop and drop them. */
+  sweepCmd(armed: ReadonlySet<string>): void {
+    let names: string[]
+    try {
+      names = readdirSync(this.deps.paths.cmdDir)
+    } catch {
+      return
+    }
+    for (const name of names) {
+      const ref = name.endsWith('.json') ? name.slice(0, -5) : ''
+      if (CMD_REF.test(ref) && !armed.has(ref) && !this.starting.has(ref)) this.endCmd(ref)
+    }
+  }
+
   private readTap(id: string): PullRead {
     for (const dir of this.deps.paths.tapDirs) {
       let raw: Record<string, unknown>
@@ -313,6 +585,10 @@ export class PullReaders {
     return undefined
   }
 }
+
+/** The `cmd` watchers' files, one set per ref. */
+const cmdFile = (dir: string, ref: string, ending: 'json' | 'started' | 'result') =>
+  join(dir, `${ref}.${ending}`)
 
 /** `st --no-compact service result` output: the job's state and exit code. */
 export function parseJobResult(stdout: string): { state: string; exit: string | null } | null {

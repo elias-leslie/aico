@@ -18,8 +18,10 @@ import { join } from 'node:path'
  * 16: deliveries (`POST /v1/sessions/:id/deliveries`, `GET /v1/deliveries/:id`,
  *     `GET /v1/sessions/:id/due`).
  * 17: wait kinds job, reply, run, ask, host and tap; `POST /v1/waits/check`
- *     (nudge); asks carry `answerTo`. */
-export const API_VERSION = 17
+ *     (nudge); asks carry `answerTo`.
+ * 18: wait kind `cmd` (`argv`, `cwd`); `DELETE /v1/sessions/:id/deliveries?source=`
+ *     (withdraw); agy sessions take event lines. */
+export const API_VERSION = 18
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

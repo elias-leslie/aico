@@ -70,6 +70,9 @@ function harness() {
   const pulls = new Map<string, PullRead>()
   const told = new Set<string>()
   const refreshed: string[] = []
+  const cmds = new Map<string, { argv: string[]; cwd: string; deadline: number }>()
+  const settled: string[] = []
+  const swept: string[][] = []
   const ops: WaitOperations = {
     now: () => Date.now(),
     policy: () => DEFAULT_WAKE_POLICY,
@@ -87,6 +90,13 @@ function harness() {
     },
     read: (kind, ref) => pulls.get(`${kind}:${ref}`),
     refresh: (kind, ref, force) => refreshed.push(`${kind}:${ref}:${force}`),
+    createCmd: (ref, spec) => {
+      cmds.set(ref, spec)
+      pulls.set(`cmd:${ref}`, { state: 'waiting', detail: null, title: spec.argv.join(' ') })
+    },
+    cmdArgv: (ref) => cmds.get(ref)?.argv ?? null,
+    settled: (wait) => settled.push(`${wait.kind}:${wait.ref}`),
+    sweepCmd: (armed) => swept.push([...armed]),
     told: (wait) => told.has(wait.id),
     agentGone: (id) => gone.has(id),
     receiver: (id) => id === WAITER || id === OTHER,
@@ -134,6 +144,9 @@ function harness() {
     pulls,
     told,
     refreshed,
+    cmds,
+    settled,
+    swept,
     set,
     pull,
     arm,
@@ -517,6 +530,81 @@ describe('WaitService', () => {
     vi.setSystemTime(T0 + DEFAULT_WAKE_POLICY.waitKeepDays * 24 * 3600_000 + 1)
     await vi.advanceTimersByTimeAsync(3600_000 + 100)
     expect(h.waits.store.get(wait.id)).toBeUndefined()
+  })
+})
+
+describe('cmd waits', () => {
+  const cmdArm = (h: ReturnType<typeof harness>, argv: string[], extra = {}) =>
+    h.arm({
+      kind: 'cmd',
+      ref: '',
+      until: 'succeeded',
+      cmd: { argv, cwd: '/srv/x' },
+      ...extra,
+    })
+
+  it('records the command under a ref Tether makes, deadline included', async () => {
+    const h = harness()
+    const { wait } = await cmdArm(h, ['sleep', '20'], { timeoutMinutes: 10 })
+    expect(wait).toMatchObject({ kind: 'cmd', state: 'armed', until: 'succeeded' })
+    expect(wait.ref).toMatch(/^[0-9a-f]{12}$/)
+    expect(h.cmds.get(wait.ref)).toEqual({
+      argv: ['sleep', '20'],
+      cwd: '/srv/x',
+      deadline: wait.deadline,
+    })
+    expect(wait.deadline - wait.armedAt).toBe(600_000)
+    expect(h.waits.waitingOn(WAITER)).toBe(`a wait on command aico-wait-${wait.ref} (succeeded)`)
+  })
+
+  it('exit 0 is ready; anything else is over as failed; the watcher is let go', async () => {
+    const h = harness()
+    const ok = await cmdArm(h, ['sleep', '20'], { note: 'build up' })
+    h.pull('cmd', ok.wait.ref, { state: 'succeeded', detail: 'exit-0', title: 'sleep 20' })
+    expect(h.delivered[0]?.line).toBe(
+      `[Ready] command "sleep 20" (aico-wait-${ok.wait.ref}) succeeded · re: "build up" · journalctl --user -u aico-wait-${ok.wait.ref}`,
+    )
+    const bad = await cmdArm(h, ['false'])
+    h.pull('cmd', bad.wait.ref, { state: 'failed', detail: 'exit-1', title: 'false' })
+    expect(h.waits.store.get(bad.wait.id)).toMatchObject({ state: 'fired', outcome: 'gone' })
+    expect(h.delivered[1]?.line).toBe(
+      `[Wait over] command "false" (aico-wait-${bad.wait.ref}) failed (exit 1) · journalctl --user -u aico-wait-${bad.wait.ref}`,
+    )
+    const never = await cmdArm(h, ['nope'])
+    h.pull('cmd', never.wait.ref, { state: 'failed', detail: 'start-failed', title: 'nope' })
+    expect(h.delivered[2]?.line).toContain('could not start')
+    expect(h.settled).toEqual([
+      `cmd:${ok.wait.ref}`,
+      `cmd:${bad.wait.ref}`,
+      `cmd:${never.wait.ref}`,
+    ])
+  })
+
+  it('a cancel or a timeout lets the watcher go; the full look sweeps the rest', async () => {
+    const h = harness()
+    const a = await cmdArm(h, ['sleep', '99'])
+    h.waits.cancel(a.wait.id)
+    expect(h.settled).toEqual([`cmd:${a.wait.ref}`])
+    const b = await cmdArm(h, ['sleep', '99'], { timeoutMinutes: 1 })
+    h.pulls.set(`cmd:${b.wait.ref}`, { state: 'running', detail: null, title: 'sleep 99' })
+    vi.setSystemTime(T0 + 61_000)
+    h.waits.check()
+    expect(h.delivered[0]?.line).toBe(
+      `[Wait timed out] command "sleep 99" (aico-wait-${b.wait.ref}) not finished after 1m: it is running · journalctl --user -u aico-wait-${b.wait.ref}`,
+    )
+    expect(h.settled).toContain(`cmd:${b.wait.ref}`)
+    expect(h.swept.at(-1)).toEqual([])
+  })
+
+  it('a key returns the same command wait; another command conflicts', async () => {
+    const h = harness()
+    const first = await cmdArm(h, ['sleep', '20'], { key: 'build' })
+    const again = await cmdArm(h, ['sleep', '20'], { key: 'build' })
+    expect(again).toMatchObject({ created: false, wait: { id: first.wait.id } })
+    expect(h.cmds.size).toBe(1)
+    await expect(cmdArm(h, ['sleep', '21'], { key: 'build' })).rejects.toMatchObject({
+      code: 'key_conflict',
+    })
   })
 })
 

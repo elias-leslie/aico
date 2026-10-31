@@ -41,6 +41,7 @@ let launchers: Map<string, string>
 let coordinators: Map<string, string>
 let lost: Set<string>
 let lines: { to: string; source: string | undefined; note: string }[]
+let withdrawn: string[]
 let delivery: AskDelivery
 
 beforeEach(async () => {
@@ -58,6 +59,7 @@ beforeEach(async () => {
   coordinators = new Map()
   lost = new Set()
   lines = []
+  withdrawn = []
   delivery = {
     wake: (sessionId, note, source) => {
       if (!wakeable) return null
@@ -73,6 +75,7 @@ beforeEach(async () => {
     lost: (wakeId) => lost.has(wakeId),
     nameOf: (id) => (id === '0123abcd' ? 'Disk merge' : null),
     cancel: (id) => cancelled.push(id),
+    withdraw: (source) => withdrawn.push(source),
     noteMaxChars: () => 500,
     sessionChanged: (id) => changed.push(id),
   }
@@ -468,6 +471,17 @@ describe('asks from ended lanes', () => {
     ])
     await ask({ session: LANE, question: 'Merge the disks?' })
     expect(lines).toHaveLength(1)
+  })
+
+  it("takes back the launcher's filed line once the ask is answered or closed", async () => {
+    launchers.set(LANE, COORD)
+    const a = (await ask({ session: LANE, question: 'One?' })).body.id as string
+    const b = (await ask({ session: LANE, question: 'Two?' })).body.id as string
+    const c = (await ask({ session: LANE, question: 'Three?' })).body.id as string
+    await call('POST', `/v1/asks/${a}/answer`, { text: 'Yes' })
+    await call('POST', `/v1/asks/${b}/done`)
+    await call('POST', `/v1/asks/${c}/withdraw`)
+    expect(withdrawn).toEqual([`ask:${a}:filed`, `ask:${b}:filed`, `ask:${c}:filed`])
   })
 
   it('answers the launcher once the asker has ended, and says so on the card', async () => {

@@ -8,6 +8,10 @@
 //
 // `GET /v1/sessions/:id/due?wait=N` is the native puller's long poll: it
 // answers with the session's next delivery as text, at most once.
+//
+// `DELETE /v1/sessions/:id/deliveries?source=` takes back a producer's line
+// that has not gone out (it went stale: the inbox has nothing waiting any
+// more); a paste already going out cannot be stopped and says so.
 
 import type { DatabaseSync } from 'node:sqlite'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
@@ -109,6 +113,8 @@ export interface DeliveryRouteDeps {
   maxChars(): number
   /** Queue the line due now (coalesced by source while undelivered). */
   queue(sessionId: string, source: string, line: string): Wake
+  /** Take back the source's undelivered line(s) on the session. */
+  withdraw(sessionId: string, source: string): { withdrawn: number; sending: boolean }
   /** Whether the queue still holds this row. */
   pending(id: string): boolean
   /** The native puller's long poll (WakeScheduler.pull). */
@@ -177,6 +183,18 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
         ...deliveryJson(log.get(wake.id) as Delivery, true),
         coalesced: !fresh,
       })
+    })
+    .add('DELETE', '/v1/sessions/:id/deliveries', (_req, res, params, query) => {
+      const id = session(params.id)
+      const source = deliverySource(query.get('source'))
+      if (source === null)
+        throw new HttpError(400, 'invalid_query', {
+          field: 'source',
+          detail: '<owner>:<what>, not one of Tether’s own',
+        })
+      current()
+      const { withdrawn, sending } = deps.withdraw(id, source)
+      sendJson(res, 200, { sessionId: id, source, withdrawn, sending })
     })
     .add('GET', '/v1/deliveries/:deliveryId', (_req, res, params) => {
       const id = params.deliveryId
