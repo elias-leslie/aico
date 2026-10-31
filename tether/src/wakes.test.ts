@@ -321,6 +321,28 @@ describe('wake scheduler', () => {
     expect(log.delivered).toHaveLength(1)
   })
 
+  it('event lines go first, and nothing else is pasted within the quiet window after a delivery', async () => {
+    const { wakes, clock, log, scheduler, add } = harness()
+    add(9_000, 'check the lanes')
+    wakes.addEvent({
+      sessionId: SESSION,
+      source: 'lane:x:finished',
+      note: '[Ready] lane',
+      now: 9_000,
+    })
+    await scheduler.tick()
+    expect(log.delivered).toEqual([
+      expect.stringMatching(/^\[Ready\] lane \/ \[Scheduled check-in/),
+    ])
+    expect(log.lines).toContain(`delivered 1 check-in(s) and 1 event line(s) to session=${SESSION}`)
+    wakes.addEvent({ sessionId: SESSION, source: 'lane:x:ended', note: 'ended', now: clock.now })
+    await scheduler.tick()
+    expect(log.delivered).toHaveLength(1)
+    clock.now += DEFAULT_WAKE_POLICY.quietSeconds * 1000
+    await scheduler.tick()
+    expect(log.delivered).toHaveLength(2)
+  })
+
   it('logs each reason an overdue wake waits, once, and delivers when it clears', async () => {
     const { wakes, clock, log, state, scheduler, add } = harness()
     add(9_000, 'note')

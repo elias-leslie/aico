@@ -25,9 +25,11 @@ import {
   parsePool,
   UnknownPool,
 } from './hub/placement'
+import { type LaneReporter, registerLaneRoutes } from './lane-reports'
 import {
   adoptLineage,
   allocateWidgetId,
+  clearLaunched,
   getTmuxServer,
   getWidget,
   insertAgentHubChat,
@@ -120,7 +122,12 @@ import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
 import { parseViewerLabel, recordSizeHolder, sizeHolderOf } from './size-holder'
 import type { Store } from './store'
-import { registerWakeRoutes, sessionWakes, type WakeService } from './wake-runtime'
+import {
+  registerWakeRoutes,
+  sessionWaitingOn,
+  sessionWakes,
+  type WakeService,
+} from './wake-runtime'
 
 const execFileAsync = promisify(execFile)
 const TMUX_BIN = '/usr/bin/tmux'
@@ -168,6 +175,8 @@ export interface LifecycleApiContext {
   hub?: Hub
   /** `host: "auto"` placement; absent in route-only tests. */
   placement?: Placement
+  /** Lane reports; absent where Tether does not observe sessions. */
+  lanes?: LaneReporter
 }
 
 const NEEDS_SHAPE =
@@ -221,8 +230,9 @@ export function agentStateOf(id: string): Record<string, unknown> {
       stateAt: 0,
       stateDetail: null,
       statePrevious: 'unknown',
+      stateAgentAt: 0,
     }
-  return { ...record, stateAt: record.stateAt || null }
+  return { ...record, stateAt: record.stateAt || null, stateAgentAt: record.stateAgentAt || null }
 }
 
 /** The session's opaque fence (Aico `sessionGeneration`). */
@@ -302,6 +312,8 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
     instructions: sessionInstructions(row.id),
     ...agentStateOf(row.id),
     wakes: sessionWakes(row.id),
+    waitingOn: sessionWaitingOn(row.id),
+    launched: row.launched,
     asks: sessionAsks(row.id),
     createdAt: row.createdAt,
     // An Agent Hub session has no pane (its `tmux` fields stay null) and says
@@ -511,8 +523,11 @@ function requireTmuxBackend(row: WidgetRow): void {
 /** Mark, unmark, or join a coordinator, and publish every changed session. */
 function applyCoordinator(id: string, coordinator: boolean | string): void {
   const changed = [id]
-  if (typeof coordinator === 'string') changed.push(...joinCoordinator(id, coordinator))
-  else setCoordinator(id, coordinator)
+  if (typeof coordinator === 'string') {
+    changed.push(...joinCoordinator(id, coordinator))
+    // The owner's join: the session does not report to its new coordinator.
+    clearLaunched(id)
+  } else setCoordinator(id, coordinator)
   for (const changedId of new Set(changed)) notifySessionChanged(changedId, { force: true })
 }
 
@@ -791,6 +806,11 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
   if (context.continuity) registerRebootRoutes(router, context.continuity)
   if (context.recovery) registerRecoveryRoutes(router, context.recovery)
   if (context.wakes) registerWakeRoutes(router, context.wakes)
+  registerLaneRoutes(
+    router,
+    () => context.lanes ?? null,
+    (id) => getWidget(id) !== undefined,
+  )
   registerChatRoutes(router, {
     runtime: () => agentHub,
     requireSession,
@@ -1006,7 +1026,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       let kept = 0
       if (body.keepWakes === true && context.wakes && generationOf(row) === generation) {
         const wakes = context.wakes
-        if (wakes.store.forSession(row.id).length)
+        if (wakes.store.checkIns(row.id).length)
           kept = wakes.store.keep(row.id, await wakes.endedSnapshot(row))
       }
       const result = await endSession(params.id as string, generation)

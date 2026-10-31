@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 17
+export const SCHEMA_VERSION = 18
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -351,4 +351,102 @@ export const ASKS_SQL = `
   );
   CREATE INDEX IF NOT EXISTS asks_state ON asks(state, updated_at);
   CREATE INDEX IF NOT EXISTS asks_session ON asks(session_id);
+`
+
+/**
+ * v18: lane reports (src/lane-reports.ts). A lane launched with
+ * `st aico create` tells whoever launched it when it finishes a turn, is
+ * blocked or ends.
+ * - `sessions.launched`: the lineage came from `launchedBy` (a launch, a
+ *   kept-wake relaunch or the hub's lineage), not an owner's mark or join.
+ *   Rows from before v18 stay 0, so nothing is backfilled.
+ * - `wakes.kind`/`source`: a delivery row is a scheduled check-in (`time`) or
+ *   an event line (`event`, `source` names what it reports). Only `time` rows
+ *   count against the cap and show as check-ins.
+ * - `lane_reports`: the per-lane cursor (per host; '' is this computer). The
+ *   agent's own time of the last finished turn reported or absorbed, when the
+ *   last finished line was queued, the last blocked episode reported, the
+ *   generation, and the title and lineage snapshot an `ended` line needs.
+ * - `lane_watches`: `st aico watch` (an explicit watch) and `st aico unwatch`
+ *   (an exception to lineage). They go with the watcher.
+ * - `lane_outbox`: an `ended` written by the delete trigger in the same
+ *   transaction as the delete, so a crash cannot lose it; the reporter turns
+ *   it into delivery rows.
+ */
+export const LANE_REPORTS_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
+  {
+    table: 'wakes',
+    column: 'kind',
+    sql: "ALTER TABLE wakes ADD COLUMN kind TEXT NOT NULL DEFAULT 'time' CHECK(kind IN ('time', 'event'))",
+  },
+  {
+    table: 'wakes',
+    column: 'source',
+    sql: 'ALTER TABLE wakes ADD COLUMN source TEXT CHECK(source IS NULL OR length(source) BETWEEN 1 AND 120)',
+  },
+  {
+    table: 'sessions',
+    column: 'launched',
+    sql: 'ALTER TABLE sessions ADD COLUMN launched INTEGER NOT NULL DEFAULT 0 CHECK(launched IN (0, 1))',
+  },
+]
+
+export const LANE_REPORTS_SQL = `
+  CREATE TABLE IF NOT EXISTS lane_reports (
+    host             TEXT NOT NULL DEFAULT '' CHECK(length(host) <= 64),
+    lane             TEXT NOT NULL CHECK(length(lane) = 8 AND lane NOT GLOB '*[^0-9a-f]*'),
+    generation       TEXT,
+    finished_at      INTEGER NOT NULL DEFAULT 0,
+    finished_sent_at INTEGER NOT NULL DEFAULT 0,
+    blocked_at       INTEGER NOT NULL DEFAULT 0,
+    reset            INTEGER NOT NULL DEFAULT 1 CHECK(reset IN (0, 1)),
+    ended            INTEGER NOT NULL DEFAULT 0 CHECK(ended IN (0, 1)),
+    title            TEXT,
+    request_id       TEXT,
+    coordinator_id   TEXT,
+    parent_id        TEXT,
+    launched         INTEGER NOT NULL DEFAULT 0 CHECK(launched IN (0, 1)),
+    updated_at       INTEGER NOT NULL CHECK(updated_at >= 0),
+    PRIMARY KEY (host, lane)
+  );
+  CREATE TABLE IF NOT EXISTS lane_watches (
+    watcher    TEXT NOT NULL CHECK(length(watcher) = 8 AND watcher NOT GLOB '*[^0-9a-f]*'),
+    lane       TEXT NOT NULL CHECK(length(lane) = 8 AND lane NOT GLOB '*[^0-9a-f]*'),
+    mode       TEXT NOT NULL CHECK(mode IN ('watch', 'unwatch')),
+    created_at INTEGER NOT NULL CHECK(created_at >= 0),
+    PRIMARY KEY (watcher, lane),
+    CHECK(watcher <> lane)
+  );
+  CREATE TABLE IF NOT EXISTS lane_outbox (
+    id             INTEGER PRIMARY KEY,
+    lane           TEXT NOT NULL,
+    at             INTEGER NOT NULL,
+    coordinator_id TEXT,
+    parent_id      TEXT,
+    launched       INTEGER NOT NULL,
+    title          TEXT,
+    request_id     TEXT
+  );
+  CREATE TRIGGER IF NOT EXISTS sessions_end_lane AFTER DELETE ON sessions
+  WHEN (old.launched = 1 AND old.coordinator_id IS NOT NULL)
+    OR EXISTS (SELECT 1 FROM lane_watches WHERE lane = old.id AND mode = 'watch')
+  BEGIN
+    INSERT INTO lane_outbox (lane, at, coordinator_id, parent_id, launched, title, request_id)
+      VALUES (
+        old.id,
+        CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+        old.coordinator_id,
+        old.parent_id,
+        old.launched,
+        COALESCE((SELECT title FROM lane_reports WHERE host = '' AND lane = old.id), old.name),
+        COALESCE(
+          (SELECT request_id FROM lane_reports WHERE host = '' AND lane = old.id),
+          (SELECT request_id FROM root_requests WHERE widget_id = old.id)
+        )
+      );
+  END;
+  CREATE TRIGGER IF NOT EXISTS sessions_end_lane_watches AFTER DELETE ON sessions
+  BEGIN
+    DELETE FROM lane_watches WHERE watcher = old.id;
+  END;
 `

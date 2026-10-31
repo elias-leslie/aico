@@ -11,6 +11,8 @@ import {
   ASKS_SQL,
   COORDINATOR_SQL,
   INDEXES_SQL,
+  LANE_REPORTS_COLUMNS,
+  LANE_REPORTS_SQL,
   PARENT_SQL,
   RETIRED_SESSION_IDS_SQL,
   ROOT_ORIGIN_SQL,
@@ -332,6 +334,19 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(17, now)
+      }
+      if (current < 18) {
+        // v18: lane reports (launched flag, delivery kinds, cursor, watches, outbox).
+        for (const { table, column, sql } of LANE_REPORTS_COLUMNS) {
+          const has = this.db
+            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
+            .get(table, column)
+          if (!has) this.db.exec(sql)
+        }
+        this.db.exec(LANE_REPORTS_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(18, now)
       }
     })
   }

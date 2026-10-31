@@ -15,7 +15,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 - Bodies are JSON (`content-type: application/json`, at most 128 KiB) and must be objects. Unknown fields are rejected with `400 invalid_body`, never ignored. Field names are camelCase.
 - Errors are `{"error": "<code>", ...}` and the codes are stable API. A 4xx or 503 means nothing was applied. A 2xx or `409 outcome_uncertain` may have applied.
 - No route retries anything on the caller's behalf. Clients must not retry an uncertain mutation with a different identity.
-- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)). 6: `inject` takes `model` for an Agent Hub session. 7: `inject` takes `thinkingLevel` for an Agent Hub session. 8: [remote hosts](#remote-hosts): `host` on descriptors, create, roots, tools and projects; `peer` marks; `GET /v1/hosts`; the `peer.state` and `peer.resync` events; root `lineage`. 9: `parentId` on descriptors and in root `lineage` ([Coordinators](#coordinators)). 10: [placement](#remote-hosts): `host: "auto"` with `needs` on `POST /v1/roots`, `GET /v1/placement`. 11: placement `pool` on both.
+- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)). 6: `inject` takes `model` for an Agent Hub session. 7: `inject` takes `thinkingLevel` for an Agent Hub session. 8: [remote hosts](#remote-hosts): `host` on descriptors, create, roots, tools and projects; `peer` marks; `GET /v1/hosts`; the `peer.state` and `peer.resync` events; root `lineage`. 9: `parentId` on descriptors and in root `lineage` ([Coordinators](#coordinators)). 10: [placement](#remote-hosts): `host: "auto"` with `needs` on `POST /v1/roots`, `GET /v1/placement`. 11: placement `pool` on both. 12: [lane reports](#lane-reports): `stateAgentAt`, `waitingOn` and `launched` on descriptors, `/v1/sessions/:id/watches`, and wake lists show check-ins only.
 - Times are Unix epoch milliseconds.
 
 ## Identity
@@ -68,6 +68,9 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
   "stateAt": 1791690000000,
   "stateDetail": "permission prompt",
   "statePrevious": "working",
+  "stateAgentAt": 1791689998000,
+  "waitingOn": null,
+  "launched": true,
   "wakes": [{"id": "5f1c0a9b2e7d", "dueAt": 1791693000000, "note": "check the lane reports", "createdBy": "agent"}],
   "createdAt": 1791686790237
 }
@@ -90,6 +93,8 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 `contextHook` *(post-cutover)* is Tether's latest check of the tool's Agent Hub context hook (see [Agent tools](#agent-tools)). `state` is `available`, `missing`, `unsupported`, `not_applicable`, or `unknown` when no check for the session's current `tool` has finished yet. `applicable` is false for a tool with no context mechanism (the bare shell). Tether checks after every launch, respawn, tool load and project switch, after its own restart (running sessions, one at a time, in the background) and on `POST /v1/sessions/:id/context-check`. A changed result publishes `session.updated`. The check is an independent probe: it never blocks the native tool, and it does not claim what an already-running session received.
 
 `state` is the agent's state: `working`, `idle`, `blocked` (waiting on the user: a permission prompt or a question) or `unknown` (no agent found, or the session is not running). `stateSource` names what said so (`claude-status`, `claude-hook`, `codex-rollout`, `codex-hook`, `pi-session`, `none`), `stateAt` is when the state last changed (null while unknown), `stateDetail` says why it is blocked, and `statePrevious` is the state before (so `working` → `idle` is a finished turn, while `unknown` → `idle` is an agent Tether only just found). A change publishes `session.updated`. See [agent-state.md](agent-state.md).
+
+`stateAgentAt` (12) is the agent's own time of its latest state (Claude Code's `statusUpdatedAt`, the Codex turn line, the Pi message; Tether's clock when the agent gives none), null while unknown. It only moves forward, and a later one while `idle` publishes `session.updated`: a turn ended, even one shorter than the poll. `waitingOn` (12) is null, or names the session's own pending check-in (`a check-in at 5:30 PM`, `a check-in that is due`), so a lane waiting on its own check-in is not taken for finished. `launched` (12) is true when the session's lineage came from a launch (`launchedBy`, a kept wake's relaunch, the hub's `lineage`), false for an owner's mark or join and for sessions from before v12. See [Lane reports](#lane-reports).
 
 `wakes` *(post-cutover)* lists the session's scheduled check-ins, oldest first; see [Wakes](#wakes).
 
@@ -559,8 +564,10 @@ survives Tether restarts and reboots. The design is in `docs/plans/session-wakes
 
 When a wake is due, Tether republishes it as due (`wakes.changed`) and waits until
 the agent is `idle`, no attached client has sent a key for `quietSeconds`, and the agent's input line holds no draft.
-It then pastes one message for all of the session's due wakes, oldest first, and submits it:
-`[Scheduled check-in for 5:30 PM, 12 min late] check the lane reports`. Each wake goes out at most once. A wake that
+It then pastes one line for all of the session's due wakes, oldest first, and submits it:
+`[Scheduled check-in for 5:30 PM, 12 min late] check the lane reports`. [Lane report](#lane-reports) lines queued for
+the session go first, joined with ` / `. One paste stays under 1800 bytes; rows that don't fit wait for the next paste
+(a single oversized row is cut to fit), and no second paste goes to a session within `quietSeconds` of the last. Each wake goes out at most once. A wake that
 was due while Tether or the host was down goes out when the gates next pass. Closing a view does not cancel a wake.
 While a due wake waits, its `waitingFor` names the first gate it fails (`the agent is working (claude-status)`,
 `someone typed in the last 15s`, `the input line holds a draft`, `the session is stopped`), and Tether logs each new
@@ -574,8 +581,8 @@ already holds that conversation, the wake moves to it instead. A relaunch the ho
 waits a minute and tries again; one that fails counts an attempt, and after `relaunchAttempts` the wake stays listed
 with its `lastError` until the owner moves or cancels it.
 
-Wakes need an agent whose state Tether reads (Claude Code, Codex). Pi and the shell report no state, so setting a wake
-on them is `409 wake_unsupported`.
+Wakes need an agent whose state Tether reads (Claude Code, Codex, Pi) and currently knows. A shell, or an agent whose
+state is `unknown` (Pi before its first prompt, an agent that left for the shell), is `409 wake_unsupported`.
 
 An Agent Hub session ([Agent Hub sessions](#agent-hub-sessions)) takes wakes too. It has no window, keys or draft, so
 the only gate is that its turn is `idle`; the message then goes out as a follow-up turn. A kept wake of an ended Agent
@@ -590,6 +597,9 @@ Hub session is not relaunched: it stays listed with a `lastError` until the owne
 | `DELETE /v1/wakes/:wakeId` | | `200 {deleted: true}` |
 | `GET /v1/wake-policy` | | `{policy}` |
 | `PUT /v1/wake-policy` | any subset of `policy` | `{policy}`; a bad field is `400 invalid_body` with `field` and `detail` |
+
+The lists, the descriptor's `wakes`, `maxPerSession` and the wake routes cover check-ins only; lane report lines on
+the same queue are not listed and cannot be patched or deleted (404).
 
 A wake is `{id, sessionId, dueAt, note, createdAt, createdBy, kept, attempts, lastError, waitingFor}`; `waitingFor` is
 null unless the wake is due and held. A kept wake whose session
@@ -606,6 +616,55 @@ and `session.updated` for the session it belongs to.
 | `quietSeconds` | 15 | no key from an attached client for this long before a delivery (0-300) |
 | `lateNoticeMinutes` | 5 | a later delivery says how late it is (1-1440) |
 | `relaunchAttempts` | 15 | failed relaunches of a kept wake before it waits for the owner (1-100) |
+| `laneSettleSeconds` | 12 | a lane must stay idle this long before `finished` goes out (0-300) |
+| `laneBlockedSeconds` | 3 | a lane must stay blocked this long before `blocked` goes out (0-300) |
+| `laneFinishedFloorSeconds` | 120 | at most one `finished` per lane in this long; later ones fold into the next (0-3600) |
+
+## Lane reports
+
+A lane started with `st aico create` (or `POST /v1/roots` with `launchedBy`) tells whoever launched it when it
+finishes a turn, is blocked on the user, or ends. Nobody subscribes and no check-in is scheduled. Each report is one
+line on the receiver's delivery queue ([Wakes](#wakes)), pasted under the same gates (or sent as an Agent Hub
+follow-up turn):
+
+`[Ready] lane "Store lane" (req neri-r1) finished after 6m · st aico root status neri-r1`
+`[Ready] lane "Store lane" on neri-vm is blocked: permission prompt · st aico widget status --widget-id 1a2b3c4d`
+`[Ready] lane "Store lane" ended (its agent exited) · st aico root status neri-r1`
+
+The line carries the lane's title (control, bidi and zero-width characters, brackets, quotes, backticks and a leading
+`/` or `!` removed, at most 60 characters), its host, its request id and the command that shows it; never the agent's
+reply text. An undelivered line for the same lane and outcome is replaced by the newer one.
+
+- **Who hears it**, worked out when the report fires from the lane's current lineage: `finished` goes to the lane's
+  `parentId` (the coordinator, or the lane that started this helper), or to `coordinatorId` when the parent can't take
+  it; `blocked` and `ended` go to both. A receiver must be a session on this computer that Tether can deliver to
+  (Claude Code, Codex, Pi, Agent Hub), never a shell. Only `launched` lineage counts: a lane an owner marked or joined
+  reports nothing, and nothing is backfilled for sessions from before v12.
+- **finished**: the lane is `idle` with a `stateAgentAt` later than the last one reported, held `laneSettleSeconds`.
+  It catches turns too short for the poll and turns during a Tether restart; the per-lane cursor is kept in the
+  database, so a restart never repeats one. A lane whose `waitingOn` is set is not finished. A new generation
+  (crash recovery, respawn, reboot restore), or a lane first seen idle, resets the cursor without a report. At most one
+  per `laneFinishedFloorSeconds`.
+- **blocked**: `permission prompt` or `input needed` held `laneBlockedSeconds`, once per episode. `dialog open` (the
+  owner opening a menu in the lane) is not reported.
+- **ended**, once: the session ended (End, a failed launch, a host that dropped it), or its agent left the pane for
+  good (exit 0, or crash recovery holds it) and stayed gone `laneSettleSeconds`. Tether writes the intent in the same
+  transaction as the session's delete, so a crash cannot lose it. A remote lane's `ended` comes from the hub, which
+  relays each ended id it knew once.
+
+Explicit watches, from the watching session (`:id` is the watcher, normally the caller's own session):
+
+| Route | Request | Response |
+|---|---|---|
+| `GET /v1/sessions/:id/watches` | | `{items: [{lane, mode, createdAt}]}` |
+| `POST /v1/sessions/:id/watches` | `{lane, mode}` | `200 {watcher, lane, mode, hears}` |
+
+`mode: "watch"` adds the watcher as a receiver of that lane's reports (a lane nobody launched included);
+`mode: "unwatch"` drops it, also when lineage would make it one. `hears` says how the watcher hears the lane now:
+`lineage`, `watch` or `none`. `409 self_watch` for the watcher itself, `409 watch_cycle` when the lane already reports
+to the watcher through another lane, `409 lane_reports_unavailable` when the daemon runs without lifecycle
+(`TETHER_RECONCILE=off`), `404` for an unknown watcher. A watcher's watches end with it. The CLI is
+`st aico watch LANE`, `st aico unwatch LANE` and `st aico watch list`.
 
 ## Crash recovery
 

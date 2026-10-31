@@ -582,7 +582,9 @@ export class Peer {
     const data = { ...(record(event.data) ?? {}) }
     const session = isDescriptor(data.session) ? (data.session as Descriptor) : null
     if (type === 'session.ended' && typeof data.id === 'string') {
-      this.sessions.delete(data.id)
+      // Once per session: the reconnect sweep may already have said it, and an
+      // id this hub never had is nobody's lane here (lane reports).
+      if (!this.sessions.delete(data.id)) return
       this.persist()
     } else if (session && (type === 'session.created' || type === 'session.updated')) {
       if (this.deps.isLocal(session.id)) return

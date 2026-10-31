@@ -43,7 +43,7 @@ def run(monkeypatch, argv, replies):
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
     monkeypatch.setattr(admin, "emit_json", lambda _, value: output.append(value))
     monkeypatch.setattr(admin, "emit_unless_stopped", lambda _, value: output.append(value))
-    return admin.main(["wake", *argv]), calls, output
+    return admin.main(argv if argv[:1] in (["watch"], ["unwatch"]) else ["wake", *argv]), calls, output
 
 
 WAKE = {"id": "5f1c0a9b2e7d", "dueAt": 1_793_000_000_000, "note": "check lanes", "createdBy": "agent"}
@@ -62,7 +62,7 @@ def test_set_explains_a_refusal(monkeypatch):
     code, _, output = run(monkeypatch, ["set", "+1h", "x"], [(409, {"error": "wake_unsupported"})])
     assert code == 1
     assert output[0]["applied"] is False and output[0]["reason"] == "wake_unsupported"
-    assert "Claude Code or Codex" in output[0]["detail"]
+    assert "Claude Code, Codex or Pi" in output[0]["detail"]
 
 
 def test_list_and_cancel_only_this_sessions_wakes(monkeypatch):
@@ -83,3 +83,28 @@ def test_needs_a_session(monkeypatch):
     monkeypatch.setattr(admin, "caller_widget_id", lambda: None)
     with pytest.raises(SystemExit):
         admin.wake_main(["list", "--widget-id", "nope"])
+
+
+def test_watch_and_unwatch_post_for_the_callers_session(monkeypatch):
+    code, calls, output = run(monkeypatch, ["watch", "bbbb0001"],
+                              [(200, {"watcher": "0a1b2c3d", "lane": "bbbb0001", "mode": "watch", "hears": "watch"})])
+    assert code == 0
+    assert calls[0] == ("/v1/sessions/0a1b2c3d/watches", {"lane": "bbbb0001", "mode": "watch"}, None)
+    assert output[0] == {"owner": "aico", "widgetId": "0a1b2c3d", "operation": "watch", "applied": True,
+                         "lane": "bbbb0001", "hears": "watch"}
+    code, calls, output = run(monkeypatch, ["unwatch", "bbbb0001"], [(200, {"hears": "none"})])
+    assert calls[0][1] == {"lane": "bbbb0001", "mode": "unwatch"} and output[0]["hears"] == "none"
+
+
+def test_watch_explains_a_refusal_and_lists(monkeypatch):
+    code, _, output = run(monkeypatch, ["watch", "bbbb0001"], [(409, {"error": "watch_cycle"})])
+    assert code == 1 and output[0]["reason"] == "watch_cycle" and "loop" in output[0]["detail"]
+    code, calls, output = run(monkeypatch, ["watch", "list"],
+                              [(200, {"items": [{"lane": "bbbb0001", "mode": "unwatch", "createdAt": 1}]})])
+    assert code == 0 and calls[0][1] is None
+    assert output[0]["items"] == [{"lane": "bbbb0001", "mode": "unwatch"}]
+
+
+def test_watch_refuses_a_bad_lane_id(monkeypatch):
+    with pytest.raises(SystemExit):
+        run(monkeypatch, ["watch", "BBBB"], [])

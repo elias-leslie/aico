@@ -16,6 +16,13 @@
   placement.json `pools.neri-hunt` lists; without `--pool` the default pool
   (`order`) is used as before and leaves pooled hosts out. An unknown pool is
   refused with `unknown_pool` and the pools there are. Tether API 11.
+- Lane reports: a lane started with `st aico create` tells whoever launched it
+  when it finishes a turn, is blocked on a prompt, or ends, as one line pasted
+  once the receiver is idle (`[Ready] lane "Store lane" finished after 6m ·
+  st aico root status neri-r1`). No subscription and no check-in needed;
+  turns shorter than the poll and turns during a Tether restart count, nothing
+  repeats after a restart. `st aico watch LANE` / `st aico unwatch LANE` add
+  or drop a receiver. Tether API 12.
 
 ### Fixed
 
@@ -28,6 +35,10 @@
 
 ### Changed
 
+- One wake paste stays under 1800 bytes (the rest waits for the next paste),
+  and no second paste goes to a session within `quietSeconds` of the last.
+- `st aico wake` on a Pi session works once Pi's state is known; the docs said
+  Pi was refused.
 - Code the desktop and the web app share (chat view, palette, mouse shim, font
   settings, host and size-holder copy) and the Lantern tokens moved from
   `electron/shared` and `electron/renderer/tokens.css` to `shared/` at the repo

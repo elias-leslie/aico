@@ -22,6 +22,7 @@ import { EventBus } from './events'
 import { listenPrivateSocket } from './http'
 import { Hub } from './hub/hub'
 import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
+import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
 import {
   bindCatalog,
   claimLauncher,
@@ -51,7 +52,7 @@ import {
 } from './lifecycle/engine'
 import { setLifecycleInstance } from './lifecycle/ownership'
 import { configureTmuxPaths } from './lifecycle/tmux'
-import { bindToolSource } from './lifecycle/tui/registry'
+import { bindToolSource, isRootCreateTool } from './lifecycle/tui/registry'
 import {
   bindAgentHub,
   bindAgentStates,
@@ -262,6 +263,7 @@ export async function startDaemon(
     stepChats: undefined as StepChatSource | undefined,
     hub: undefined as Hub | undefined,
     placement: undefined as Placement | undefined,
+    lanes: undefined as LaneReporter | undefined,
     memoryPolicy: startMemoryGuard(paths, store, env, {
       foreground: foregroundPaneScope,
       sessionOf: () =>
@@ -466,6 +468,57 @@ export async function startDaemon(
       }
     })
   }
+  // Lane reports: a launched lane tells its launcher it finished, is blocked
+  // or ended (src/lane-reports.ts); only where Tether observes sessions, since
+  // the lines are pasted.
+  const lanes = reconcileEnabled(env)
+    ? new LaneReporter(new LaneReportStore(store.db), {
+        now: Date.now,
+        policy: () => wakes.policy(),
+        receiver: (id) => {
+          const row = getWidget(id)
+          return Boolean(row && (row.backend === 'agent-hub' || isRootCreateTool(row.tool)))
+        },
+        sessions: () =>
+          listSessions().map((row) => ({
+            id: row.id,
+            coordinatorId: row.coordinatorId,
+            parentId: row.parentId,
+            launched: row.launched,
+          })),
+        deliver: (receiver, source, line) => {
+          const now = Date.now()
+          wakes.store.addEvent({ sessionId: receiver, source, note: line, now })
+          wakes.changed(receiver)
+        },
+        agentGone: (id) => {
+          const row = getWidget(id)
+          if (!row || row.backend === 'agent-hub') return false
+          const exit = agentExitOf(row)
+          return (
+            (exit?.state === 'exit' && exit.status === 0) || Boolean(context.recovery?.isHeld(id))
+          )
+        },
+        log: (message) => console.log(`[tether:lanes] ${message}`),
+      })
+    : null
+  if (lanes) {
+    context.lanes = lanes
+    events.subscribe((event) => {
+      try {
+        const host = typeof event.data.host === 'string' ? event.data.host : null
+        if (event.type === 'session.created' || event.type === 'session.updated') {
+          const view = laneView(event.data.session, host)
+          if (view) lanes.observe(view)
+        } else if (event.type === 'session.ended' && typeof event.data.id === 'string') {
+          if (host) lanes.ended(event.data.id, host)
+          else lanes.drainOutbox()
+        }
+      } catch (error) {
+        console.error('[tether:lanes] report failed:', error)
+      }
+    })
+  }
   const server = createTetherServer(context)
   try {
     await listenPrivateSocket(server, paths.socket)
@@ -520,6 +573,17 @@ export async function startDaemon(
   if (reconcileEnabled(env)) void ready.then(() => runs.start()).catch(() => {})
   // Wakes paste into sessions, so only where Tether observes tmux.
   if (reconcileEnabled(env)) void ready.then(() => wakes.scheduler.start()).catch(() => {})
+  if (lanes)
+    void ready
+      .then(() => {
+        // Ended while Tether was down, then every lane as it is now.
+        lanes.drainOutbox()
+        for (const row of listSessions()) {
+          const view = laneView(sessionSnapshot(row), null)
+          if (view) lanes.observe(view)
+        }
+      })
+      .catch(() => {})
   // Display titles name each session's project: learn names now and keep
   // up with renames in SummitFlow.
   setPersonalWorkspaceRoot(
@@ -563,6 +627,7 @@ export async function startDaemon(
       bindAgentHub(null)
       setHubBackend(null)
       wakes.scheduler.stop()
+      lanes?.stop()
       bindWakeStore(null)
       bindAgentStates(null)
       context.continuity?.stop()

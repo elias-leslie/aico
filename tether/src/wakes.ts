@@ -27,6 +27,13 @@ export interface WakePolicy {
   lateNoticeMinutes: number
   /** Failed relaunches of a kept wake before it stops trying. */
   relaunchAttempts: number
+  /** Lane reports: a lane counts as finished once idle has held this long
+   * (Claude's Stop hooks can leave a short idle blip mid-turn). */
+  laneSettleSeconds: number
+  /** Lane reports: a permission prompt or question held this long is `blocked`. */
+  laneBlockedSeconds: number
+  /** Lane reports: at most one `finished` per lane this often; later ones fold into it. */
+  laneFinishedFloorSeconds: number
 }
 
 export const DEFAULT_WAKE_POLICY: Readonly<WakePolicy> = Object.freeze({
@@ -38,6 +45,9 @@ export const DEFAULT_WAKE_POLICY: Readonly<WakePolicy> = Object.freeze({
   quietSeconds: 15,
   lateNoticeMinutes: 5,
   relaunchAttempts: 15,
+  laneSettleSeconds: 12,
+  laneBlockedSeconds: 3,
+  laneFinishedFloorSeconds: 120,
 })
 
 export const WAKE_POLICY_BOUNDS: Readonly<Record<keyof WakePolicy, { min: number; max: number }>> =
@@ -50,6 +60,9 @@ export const WAKE_POLICY_BOUNDS: Readonly<Record<keyof WakePolicy, { min: number
     quietSeconds: { min: 0, max: 300 },
     lateNoticeMinutes: { min: 1, max: 1440 },
     relaunchAttempts: { min: 1, max: 100 },
+    laneSettleSeconds: { min: 0, max: 300 },
+    laneBlockedSeconds: { min: 0, max: 300 },
+    laneFinishedFloorSeconds: { min: 0, max: 3600 },
   })
 
 export class WakePolicyError extends Error {
@@ -115,8 +128,16 @@ export interface EndedSession {
   resumeId: string | null
 }
 
+/** A delivery row's kind: a scheduled check-in, or an event line Tether
+ * queued (a lane report). Only check-ins count against the cap, show in the
+ * check-in lists and can be kept past End. */
+export type WakeKind = 'time' | 'event'
+
 export interface Wake {
   id: string
+  kind: WakeKind
+  /** What an event reports (`lane:<id>:finished`); null on a check-in. */
+  source: string | null
   /** The session; null once a kept wake outlived it (see `endedSession`). */
   sessionId: string | null
   dueAt: number
@@ -131,6 +152,8 @@ export interface Wake {
 
 interface RawWake {
   id: string
+  kind: WakeKind | null
+  source: string | null
   session_id: string | null
   due_at: number
   note: string
@@ -151,6 +174,8 @@ function toWake(raw: RawWake): Wake {
   }
   return {
     id: raw.id,
+    kind: raw.kind ?? 'time',
+    source: raw.source ?? null,
     sessionId: raw.session_id,
     dueAt: raw.due_at,
     note: raw.note,
@@ -197,18 +222,53 @@ export class WakeStore {
     private readonly random: () => string = () => randomBytes(6).toString('hex'),
   ) {}
 
+  /** Every row, check-ins and events: what the scheduler delivers. */
   list(): Wake[] {
     return (
       this.db.prepare('SELECT * FROM wakes ORDER BY due_at, id').all() as unknown as RawWake[]
     ).map(toWake)
   }
 
+  /** Every row of a session, check-ins and events. */
   forSession(sessionId: string): Wake[] {
     return (
       this.db
         .prepare('SELECT * FROM wakes WHERE session_id = ? ORDER BY due_at, id')
         .all(sessionId) as unknown as RawWake[]
     ).map(toWake)
+  }
+
+  /** The check-ins only (`kind = 'time'`): the lists, the cap, End's keep. */
+  checkIns(sessionId?: string): Wake[] {
+    return (
+      sessionId === undefined
+        ? this.db.prepare("SELECT * FROM wakes WHERE kind = 'time' ORDER BY due_at, id").all()
+        : this.db
+            .prepare(
+              "SELECT * FROM wakes WHERE kind = 'time' AND session_id = ? ORDER BY due_at, id",
+            )
+            .all(sessionId)
+    ).map((raw) => toWake(raw as unknown as RawWake))
+  }
+
+  /** Queue an event line for a session, due now. An undelivered row with the
+   * same source takes the newer line instead (coalescing). */
+  addEvent(input: { sessionId: string; source: string; note: string; now: number }): Wake {
+    const pending = this.db
+      .prepare("SELECT id FROM wakes WHERE kind = 'event' AND session_id = ? AND source = ?")
+      .get(input.sessionId, input.source) as { id: string } | undefined
+    if (pending) {
+      this.db.prepare('UPDATE wakes SET note = ? WHERE id = ?').run(input.note, pending.id)
+      return this.get(pending.id) as Wake
+    }
+    const id = this.random()
+    this.db
+      .prepare(
+        `INSERT INTO wakes (id, session_id, due_at, note, created_at, created_by, kind, source)
+         VALUES (?, ?, ?, ?, ?, 'agent', 'event', ?)`,
+      )
+      .run(id, input.sessionId, input.now, input.note, input.now, input.source)
+    return this.get(id) as Wake
   }
 
   get(id: string): Wake | undefined {
@@ -237,8 +297,8 @@ export class WakeStore {
     this.db
       .prepare(
         `INSERT OR IGNORE INTO wakes (id, session_id, due_at, note, created_at, created_by, kept,
-           ended_session, attempts, last_error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ended_session, attempts, last_error, kind, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         wake.id,
@@ -251,6 +311,8 @@ export class WakeStore {
         wake.endedSession ? JSON.stringify(wake.endedSession) : null,
         wake.attempts,
         wake.lastError,
+        wake.kind,
+        wake.source,
       )
   }
 
@@ -269,12 +331,14 @@ export class WakeStore {
     return this.db.prepare('DELETE FROM wakes WHERE id = ?').run(id).changes === 1
   }
 
-  /** Mark a session's wakes to outlive its End, with what a relaunch needs.
-   * Returns how many. */
+  /** Mark a session's check-ins to outlive its End, with what a relaunch
+   * needs (event lines go with the session). Returns how many. */
   keep(sessionId: string, ended: EndedSession): number {
     return Number(
       this.db
-        .prepare('UPDATE wakes SET kept = 1, ended_session = ? WHERE session_id = ?')
+        .prepare(
+          "UPDATE wakes SET kept = 1, ended_session = ? WHERE session_id = ? AND kind = 'time'",
+        )
         .run(JSON.stringify(ended), sessionId).changes,
     )
   }
@@ -311,7 +375,80 @@ export function clockLabel(at: number, now: number): string {
   return `${new Date(at).toLocaleDateString('en-US', { weekday: 'short' })} ${time}`
 }
 
-/** What the agent receives for its due wakes, oldest first. */
+/** One paste stays under this many bytes (the terminal paste cap is 2000,
+ * lifecycle/tmux.ts `isBoundedTerminalText`); what does not fit waits for the
+ * next delivery. */
+export const DELIVERY_BUDGET_BYTES = 1800
+const SEPARATOR = ' / '
+const ELLIPSIS = '…'
+
+function bytes(text: string): number {
+  return Buffer.byteLength(text, 'utf8')
+}
+
+/** `text` cut to at most `max` bytes, ending in an ellipsis when cut. */
+export function cutToBytes(text: string, max: number): string {
+  if (bytes(text) <= max) return text
+  const room = max - bytes(ELLIPSIS)
+  let out = ''
+  for (const character of text) {
+    if (bytes(out + character) > room) break
+    out += character
+  }
+  return out + ELLIPSIS
+}
+
+/** One paste for a session's due rows: event lines first (oldest first),
+ * then the check-ins under their `[Scheduled check-in …]` header, all on one
+ * line joined with ` / `, under `budget` bytes. `taken` are the rows it
+ * carries; the rest stay queued. The first row always goes, cut to fit, so an
+ * oversized row can never wedge the session's deliveries. */
+export function composeDelivery(
+  rows: readonly Wake[],
+  now: number,
+  policy: WakePolicy,
+  budget = DELIVERY_BUDGET_BYTES,
+): { text: string; taken: Wake[] } {
+  const events = rows.filter((row) => row.kind === 'event')
+  const checkIns = rows.filter((row) => row.kind !== 'event')
+  const header = checkIns[0] ? checkInHeader(checkIns[0].dueAt, now, policy) : ''
+  const pieces = [
+    ...events.map((row) => ({ row, text: row.note })),
+    ...checkIns.map((row, index) => ({
+      row,
+      text: index === 0 ? `${header} ${row.note}` : row.note,
+    })),
+  ]
+  let text = ''
+  const taken: Wake[] = []
+  for (const piece of pieces) {
+    const next = text ? `${text}${SEPARATOR}${piece.text}` : piece.text
+    if (bytes(next) <= budget) {
+      text = next
+      taken.push(piece.row)
+    } else if (!taken.length) {
+      text = cutToBytes(piece.text, budget)
+      taken.push(piece.row)
+    } else break
+  }
+  return { text, taken }
+}
+
+function checkInHeader(
+  dueAt: number,
+  now: number,
+  policy: WakePolicy,
+  options: { resumed?: boolean } = {},
+): string {
+  const parts = [`[Scheduled check-in for ${clockLabel(dueAt, now)}`]
+  const lateMinutes = Math.floor((now - dueAt) / 60_000)
+  if (lateMinutes > policy.lateNoticeMinutes) parts.push(`${lateMinutes} min late`)
+  if (options.resumed) parts.push('resumed after End')
+  return `${parts.join(', ')}]`
+}
+
+/** What the agent receives for its due wakes, oldest first (a kept wake's
+ * relaunch prompt, which is not pasted). */
 export function wakeMessage(
   wakes: readonly Wake[],
   now: number,
@@ -320,11 +457,7 @@ export function wakeMessage(
 ): string {
   const first = wakes[0]
   if (!first) return ''
-  const parts = [`[Scheduled check-in for ${clockLabel(first.dueAt, now)}`]
-  const lateMinutes = Math.floor((now - first.dueAt) / 60_000)
-  if (lateMinutes > policy.lateNoticeMinutes) parts.push(`${lateMinutes} min late`)
-  if (options.resumed) parts.push('resumed after End')
-  return `${parts.join(', ')}] ${wakes.map((wake) => wake.note).join(' / ')}`
+  return `${checkInHeader(first.dueAt, now, policy, options)} ${wakes.map((wake) => wake.note).join(SEPARATOR)}`
 }
 
 /** A note as stored: one line, trimmed, at most `max` characters. Null when
@@ -455,6 +588,9 @@ export class WakeScheduler {
   private readonly retryAt = new Map<string, number>()
   /** Why each session's due wakes are not delivered yet. */
   private readonly held = new Map<string, string>()
+  /** When each session last took a paste: what did not fit waits for the
+   * agent to take that one first, never a second paste on a stale idle. */
+  private readonly deliveredAt = new Map<string, number>()
 
   constructor(
     private readonly store: WakeStore,
@@ -542,6 +678,8 @@ export class WakeScheduler {
     }
     for (const [sessionId, wakes] of live) await this.deliverLive(sessionId, wakes)
     for (const sessionId of this.held.keys()) if (!live.has(sessionId)) this.held.delete(sessionId)
+    for (const [sessionId, at] of this.deliveredAt)
+      if (now - at > 3_600_000) this.deliveredAt.delete(sessionId)
     for (const wakes of kept.values()) await this.relaunchKept(wakes)
     for (const id of this.announced) if (!this.store.get(id)) this.announced.delete(id)
   }
@@ -559,9 +697,13 @@ export class WakeScheduler {
       return
     }
     // Re-read: a wake cancelled meanwhile must not go out.
-    const current = this.store.forSession(sessionId).filter((wake) => wake.dueAt <= this.ops.now())
-    if (!current.length) return
-    const message = wakeMessage(current, this.ops.now(), this.ops.policy())
+    const due = this.store.forSession(sessionId).filter((wake) => wake.dueAt <= this.ops.now())
+    if (!due.length) return
+    const { text: message, taken: current } = composeDelivery(
+      due,
+      this.ops.now(),
+      this.ops.policy(),
+    )
     // At most once: the rows go before the paste and come back only when it
     // certainly did not happen.
     for (const wake of current) this.store.remove(wake.id)
@@ -579,10 +721,15 @@ export class WakeScheduler {
     const held = this.held.get(sessionId)
     this.held.delete(sessionId)
     const late = Math.floor((this.ops.now() - (current[0]?.dueAt ?? 0)) / 60_000)
+    const events = current.filter((wake) => wake.kind === 'event').length
     this.ops.log(
-      `delivered ${current.length} check-in(s) to session=${sessionId}` +
-        (held ? `, ${late} min after due (held: ${held})` : ''),
+      `delivered ${current.length - events} check-in(s)${events ? ` and ${events} event line(s)` : ''} to session=${sessionId}` +
+        (held ? `, ${late} min after due (held: ${held})` : '') +
+        (current.length < due.length
+          ? `; ${due.length - current.length} left for the next paste`
+          : ''),
     )
+    this.deliveredAt.set(sessionId, this.ops.now())
   }
 
   /** The first gate a due wake fails, or null when it may go out now. */
@@ -590,6 +737,9 @@ export class WakeScheduler {
     const busy = await this.ops.busy(sessionId)
     if (busy) return busy
     const quietSeconds = this.ops.policy().quietSeconds
+    const last = this.deliveredAt.get(sessionId)
+    if (last !== undefined && this.ops.now() - last < quietSeconds * 1000)
+      return `a delivery went out in the last ${quietSeconds}s`
     const lastKey = await this.ops.lastKeyAt(sessionId)
     if (lastKey !== null && this.ops.now() - lastKey < quietSeconds * 1000)
       return `someone typed in the last ${quietSeconds}s`

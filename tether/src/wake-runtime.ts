@@ -47,6 +47,7 @@ import { agentStateOf, type LifecycleApiContext, pasteIntoRunningSession } from 
 import {
   applyWakePolicyPatch,
   cleanNote,
+  clockLabel,
   type EndedSession,
   inputLineEmpty,
   parseStoredWakePolicy,
@@ -96,12 +97,22 @@ export function bindWakeStore(store: WakeStore | null): void {
 }
 
 export function sessionWakes(sessionId: string): Record<string, unknown>[] {
-  return (bound?.forSession(sessionId) ?? []).map((wake) => ({
+  return (bound?.checkIns(sessionId) ?? []).map((wake) => ({
     id: wake.id,
     dueAt: wake.dueAt,
     note: wake.note,
     createdBy: wake.createdBy,
   }))
+}
+
+/** What the session's agent waits on, for its descriptor (`waitingOn`): its
+ * earliest check-in. A lane that waits is not reported as finished. */
+export function sessionWaitingOn(sessionId: string, now = Date.now()): string | null {
+  const first = bound?.checkIns(sessionId)[0]
+  if (!first) return null
+  return first.dueAt <= now
+    ? 'a check-in that is due'
+    : `a check-in at ${clockLabel(first.dueAt, now)}`
 }
 
 export class WakeService {
@@ -319,7 +330,8 @@ function dueAt(value: unknown, now: number): number {
 
 function requireWake(service: WakeService, id: string | undefined): Wake {
   const wake = id && WAKE_ID.test(id) ? service.store.get(id) : undefined
-  if (!wake) throw new HttpError(404, 'not_found')
+  // Event lines are Tether's, not check-ins: not listed, moved or cancelled.
+  if (wake?.kind !== 'time') throw new HttpError(404, 'not_found')
   return wake
 }
 
@@ -332,7 +344,7 @@ export function registerWakeRoutes(
   router
     .add('GET', '/v1/wakes', (_req, res) => {
       sendJson(res, 200, {
-        items: service.store.list().map((wake) => service.json(wake)),
+        items: service.store.checkIns().map((wake) => service.json(wake)),
         ...policyJson(),
       })
     })
@@ -340,7 +352,7 @@ export function registerWakeRoutes(
       const row = params.id && /^[0-9a-f]{8}$/.test(params.id) ? getWidget(params.id) : undefined
       if (!row) throw new HttpError(404, 'not_found')
       sendJson(res, 200, {
-        items: service.store.forSession(row.id).map((wake) => service.json(wake)),
+        items: service.store.checkIns(row.id).map((wake) => service.json(wake)),
         ...policyJson(),
       })
     })
@@ -357,7 +369,7 @@ export function registerWakeRoutes(
       const row = params.id && /^[0-9a-f]{8}$/.test(params.id) ? getWidget(params.id) : undefined
       if (!row) throw new HttpError(404, 'not_found')
       if (!service.supports(row)) throw new HttpError(409, 'wake_unsupported')
-      if (service.store.forSession(row.id).length >= policy.maxPerSession)
+      if (service.store.checkIns(row.id).length >= policy.maxPerSession)
         throw new HttpError(409, 'too_many_wakes', { max: policy.maxPerSession })
       const wake = service.store.add({ sessionId: row.id, dueAt: at, note, createdBy, now: now() })
       service.changed(row.id)

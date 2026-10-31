@@ -8,8 +8,10 @@ import { join } from 'node:path'
  * 5: Agent Hub chat routes (`/chat`, `/chat/stream`, `/chat/cancel`, `/v1/chat/models`).
  * 6: an Agent Hub session's `inject` takes `model` (a catalog model for that turn; null for the agent's own routing).
  * 9: `parentId` on descriptors; root `lineage` takes `parentId`.
- * 10: `host: "auto"` with `needs` on `POST /v1/roots`; `GET /v1/placement`. */
-export const API_VERSION = 11
+ * 10: `host: "auto"` with `needs` on `POST /v1/roots`; `GET /v1/placement`.
+ * 12: lane reports: descriptors carry `stateAgentAt`, `waitingOn` and `launched`;
+ *     `/v1/sessions/:id/watches`; wake lists show check-ins only. */
+export const API_VERSION = 12
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

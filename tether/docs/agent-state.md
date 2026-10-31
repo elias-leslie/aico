@@ -1,8 +1,10 @@
 # Agent state
 
-Tether keeps one agent state per session: `working`, `idle`, `blocked` or `unknown`. It is on the session descriptor (`state`, `stateSource`, `stateAt`, `stateDetail`, `statePrevious`), on every `session.updated` event, and in `tether sessions diagnostics`. Aico web groups its session list by it, and Tether sends the Nightshift "waiting" notice for a session that stays `blocked`; `st sessions wait --until` uses it to wait for another session.
+Tether keeps one agent state per session: `working`, `idle`, `blocked` or `unknown`. It is on the session descriptor (`state`, `stateSource`, `stateAt`, `stateDetail`, `statePrevious`, `stateAgentAt`), on every `session.updated` event, and in `tether sessions diagnostics`. Aico web groups its session list by it, and Tether sends the Nightshift "waiting" notice for a session that stays `blocked`; `st sessions wait --until` uses it to wait for another session.
 
 The state lives in the daemon's memory only. After a Tether restart it is rebuilt from the agents' own files within a poll.
+
+`stateAgentAt` is the agent's own time of its latest state: Claude Code's `statusUpdatedAt`, the time of the Codex turn line, the Pi message's time. A hook report or an Agent Hub poll carries none, so Tether uses its own clock for a change it sees, except on a first sighting after a restart, which keeps the earlier value (0) rather than invent a turn. It only moves forward. A later time while `idle` publishes `session.updated` even though the state did not change: a turn started and ended between two polls. [Lane reports](api-v1.md#lane-reports) use it to say `finished`.
 
 ## Inputs
 

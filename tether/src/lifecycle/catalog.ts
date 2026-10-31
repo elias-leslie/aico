@@ -81,6 +81,10 @@ export interface WidgetRow {
   /** Tether: the session that launched this one (the root coordinator or one
    * of its lanes, maybe on another machine); null when not recorded. */
   parentId: string | null
+  /** Tether: the lineage came from a launch (`launchedBy`, a kept-wake
+   * relaunch or the hub's lineage), not an owner's mark or join; only such a
+   * lane reports to its launcher (src/lane-reports.ts). */
+  launched: boolean
   /** Tether: `agent-hub` rows have no pane; every tmux field stays at its
    * never-allocated default and no tmux loop sees the row (`listWidgets`). */
   backend: SessionBackend
@@ -114,6 +118,7 @@ interface Raw {
   coordinator_id: string | null
   coordinator_color: string | null
   parent_id: string | null
+  launched: number | null
   backend: SessionBackend | null
 }
 
@@ -153,6 +158,7 @@ function toRow(r: Raw): WidgetRow {
     coordinatorId: r.coordinator_id ?? null,
     coordinatorColor: r.coordinator_color ?? null,
     parentId: r.parent_id ?? null,
+    launched: r.launched === 1,
     backend: r.backend ?? 'tmux',
   }
 }
@@ -843,7 +849,7 @@ export function setCoordinator(id: string, coordinator: boolean): void {
       ? row.coordinatorColor
       : freeCoordinatorColor()
   db.prepare(
-    'UPDATE sessions SET coordinator = 1, coordinator_id = NULL, coordinator_color = ?, parent_id = NULL WHERE id = ?',
+    'UPDATE sessions SET coordinator = 1, coordinator_id = NULL, coordinator_color = ?, parent_id = NULL, launched = 0 WHERE id = ?',
   ).run(color, id)
 }
 
@@ -875,6 +881,12 @@ export function joinCoordinator(id: string, coordinatorId: string): string[] {
   // The named session is now its parent; its lanes keep theirs.
   db.prepare('UPDATE sessions SET parent_id = ? WHERE id = ?').run(lead.id, id)
   return [id, rootId, ...lanes]
+}
+
+/** An owner's join is not a launch: the joined session stops being `launched`
+ * (its own lanes keep theirs). */
+export function clearLaunched(id: string): void {
+  db.prepare('UPDATE sessions SET launched = 0 WHERE id = ?').run(id)
 }
 
 /** Record who launched a new session: the launcher is its parent, and its
@@ -931,10 +943,11 @@ export interface Lineage {
 }
 
 /** Record a coordinator lineage on a session, also one whose coordinator runs
- * on another machine (the hub passes it on). */
+ * on another machine (the hub passes it on). The lineage came from a launch,
+ * so the session is `launched`. */
 export function adoptLineage(id: string, lineage: Lineage): void {
   db.prepare(
-    'UPDATE sessions SET coordinator_id = ?, coordinator_color = ?, parent_id = ? WHERE id = ?',
+    'UPDATE sessions SET coordinator_id = ?, coordinator_color = ?, parent_id = ?, launched = 1 WHERE id = ?',
   ).run(
     lineage.coordinatorId,
     lineage.coordinatorColor,

@@ -2193,7 +2193,7 @@ def sessions_main(argv: list[str]) -> int:
 
 WAKE_ID = r"[0-9a-f]{12}"
 WAKE_REFUSALS = {
-    "wake_unsupported": "this session's tool does not report when it is idle; check-ins need Claude Code or Codex",
+    "wake_unsupported": "this session's tool does not report when it is idle; check-ins need Claude Code, Codex or Pi with its state known, or an Agent Hub session",
     "too_many_wakes": "this session already has its maximum number of check-ins; cancel one first",
     "not_found": "no such session or check-in",
 }
@@ -2334,6 +2334,58 @@ def wake_main(argv: list[str]) -> int:
         return 0
 
 
+WATCH_REFUSALS = {
+    "self_watch": "a session cannot watch itself",
+    "watch_cycle": "that lane already reports to this session through another lane; watching it would loop",
+    "lane_reports_unavailable": "lane reports are off on this Tether",
+    "not_found": "no such session",
+}
+
+
+def watch_main(argv: list[str], mode: str) -> int:
+    """`st aico watch LANE|list` / `st aico unwatch LANE`: lane reports beyond lineage."""
+    listing = mode == "watch" and argv[:1] == ["list"]
+    parser = argparse.ArgumentParser(prog=f"st aico {mode}", description=(
+        "Hear a lane's finished, blocked and ended reports in this session (watch), or stop hearing them "
+        "(unwatch). A lane you launched reports to you already; `st aico watch list` shows your watches."))
+    parser.add_argument("--widget-id", default=caller_widget_id())
+    parser.add_argument("--owner-socket", type=socket_path, default=tether_socket())
+    if not listing:
+        parser.add_argument("lane", help="the lane's session id (eight hex characters)")
+    args = parser.parse_args(argv[1:] if listing else argv)
+    if not isinstance(args.widget_id, str) or not re.fullmatch(WIDGET, args.widget_id):
+        parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters")
+    if not listing and not re.fullmatch(WIDGET, args.lane):
+        parser.error("expected the lane's session id: exactly eight lowercase hex characters")
+    collector = Collector("", args.owner_socket, "", time.monotonic() + 10, threading.Event())
+    route = f"/v1/sessions/{args.widget_id}/watches"
+    output: dict = {"owner": "aico", "widgetId": args.widget_id, "operation": "list" if listing else mode}
+    try:
+        if listing:
+            status, data = collector.receipt(args.owner_socket, route, timeout=2)
+            if status != 200 or not isinstance(data.get("items"), list):
+                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "watch_unavailable")
+            output["items"] = [{"lane": item.get("lane"), "mode": item.get("mode")}
+                               for item in data["items"] if isinstance(item, dict)]
+        else:
+            status, data = collector.receipt(args.owner_socket, route, {"lane": args.lane, "mode": mode},
+                                             timeout=2)
+            if status != 200:
+                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "watch_unavailable")
+            output.update(applied=True, lane=args.lane, hears=data.get("hears"))
+        emit_json(collector, output)
+        return 0
+    except (Unavailable, Stopped) as error:
+        reason = str(error) if isinstance(error, Unavailable) else "deadline"
+        output.update(applied=False if isinstance(error, Refused) else None, reason=reason)
+        if reason in WATCH_REFUSALS:
+            output["detail"] = WATCH_REFUSALS[reason]
+        emit_unless_stopped(collector, output)
+        return 1
+    except BrokenPipeError:
+        return 0
+
+
 WINDOWS_RETIRED = "Aico has no desktop windows any more; sessions show in Aico web. Nothing to arrange or show."
 
 
@@ -2363,6 +2415,8 @@ def main(argv: list[str] | None = None) -> int:
         return root_main(argv[1:])
     if argv and argv[0] == "wake":
         return wake_main(argv[1:])
+    if argv and argv[0] in ("watch", "unwatch"):
+        return watch_main(argv[1:], argv[0])
     if argv and argv[0] == "placement":
         return placement_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)

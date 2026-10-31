@@ -515,6 +515,12 @@ export class Recovery {
     return Boolean(record && ACTIVE.has(record.state))
   }
 
+  /** Crash recovery holds this session: it will not bring the agent back on
+   * its own (lane reports count the lane ended). */
+  isHeld(id: string): boolean {
+    return this.records.get(id)?.state === 'held'
+  }
+
   /** A fresh start of this session must wait for crash recovery's resume. */
   holdsLaunch(id: string): boolean {
     return this.retains(id)

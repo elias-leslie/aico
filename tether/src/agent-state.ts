@@ -40,6 +40,11 @@ export interface AgentStateRecord {
   /** The state before this one, so a client can tell a finished turn
    * (working → idle) from an idle agent Tether only just found. */
   statePrevious: AgentState
+  /** The agent's own time of its latest state (Claude's `statusUpdatedAt`,
+   * the Codex turn line, the Pi message), else when Tether saw the change; 0
+   * while unknown. It only moves forward. A later time while idle means a turn
+   * ended, even one too short for the poll to see working (lane reports). */
+  stateAgentAt: number
 }
 
 /** One observation of an agent's own state. `at` is when the agent last
@@ -536,6 +541,7 @@ export class AgentStateTracker {
         stateAt: 0,
         stateDetail: null,
         statePrevious: 'unknown',
+        stateAgentAt: 0,
       }
     )
   }
@@ -555,19 +561,31 @@ export class AgentStateTracker {
     state: AgentState,
     source: string,
     detail: string | null,
+    at: number | null = null,
   ): void {
     const before = entry.record
+    const now = this.now()
     if (before.state === state && before.stateDetail === detail) {
       // Same state; keep its time, but name the latest source.
-      entry.record = { ...before, stateSource: source }
+      const agentAt =
+        state !== 'unknown' && at !== null && at > before.stateAgentAt ? at : before.stateAgentAt
+      entry.record = { ...before, stateSource: source, stateAgentAt: agentAt }
+      // Idle again, later by the agent's own clock: a turn ended between polls.
+      if (state === 'idle' && agentAt !== before.stateAgentAt) this.onChange(id, entry.record)
       return
     }
     entry.record = {
       state,
       stateSource: source,
-      stateAt: this.now(),
+      stateAt: now,
       stateDetail: detail,
       statePrevious: before.state,
+      // Without the agent's own time, a first sighting (Tether just started)
+      // keeps the old time: it may be a turn that ended long ago.
+      stateAgentAt:
+        state === 'unknown' || (at === null && before.state === 'unknown')
+          ? before.stateAgentAt
+          : Math.max(at ?? now, before.stateAgentAt),
     }
     this.onChange(id, entry.record)
   }
@@ -600,7 +618,7 @@ export class AgentStateTracker {
       }
       entry.hold = null
     }
-    this.set(id, entry, signal.state, signal.source, signal.detail)
+    this.set(id, entry, signal.state, signal.source, signal.detail, signal.at)
   }
 
   /** A hook report. Returns false when it was ignored. */

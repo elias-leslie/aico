@@ -93,6 +93,40 @@ describe('hook reports', () => {
 })
 
 describe('AgentStateTracker', () => {
+  it('keeps the agent’s own time, and a later idle is a change (a turn between polls)', () => {
+    const { t, changes, tick } = tracker()
+    t.observe('a', claudeSignal(claudeFile('idle', 900)))
+    expect(t.get('a').stateAgentAt).toBe(900)
+    tick(10)
+    t.observe('a', claudeSignal(claudeFile('idle', 900)))
+    expect(changes).toHaveLength(1)
+    t.observe('a', claudeSignal(claudeFile('idle', 1_500)))
+    expect(changes).toHaveLength(2)
+    expect(t.get('a')).toMatchObject({ state: 'idle', stateAgentAt: 1_500, stateAt: 1000 })
+    t.observe('a', claudeSignal(claudeFile('idle', 1_200)))
+    expect(t.get('a').stateAgentAt).toBe(1_500)
+    t.observe('a', null)
+    expect(t.get('a')).toMatchObject({ state: 'unknown', stateAgentAt: 1_500 })
+  })
+
+  it('a first sighting without the agent’s time does not invent a finished turn', () => {
+    const { t, tick } = tracker()
+    const hub = (state: 'idle' | 'working') => ({
+      state,
+      source: 'agent-hub',
+      detail: null,
+      at: null,
+      agentSessionId: null,
+    })
+    t.observe('a', hub('idle'))
+    expect(t.get('a').stateAgentAt).toBe(0)
+    tick(10)
+    t.observe('a', hub('working'))
+    tick(10)
+    t.observe('a', hub('idle'))
+    expect(t.get('a').stateAgentAt).toBe(1020)
+  })
+
   it('starts unknown and publishes each change once', () => {
     const { t, changes, tick } = tracker()
     expect(t.get('a').state).toBe('unknown')
@@ -104,6 +138,7 @@ describe('AgentStateTracker', () => {
       state: 'working',
       stateSource: 'claude-status',
       stateAt: 1000,
+      stateAgentAt: 900,
       stateDetail: null,
       statePrevious: 'unknown',
     })
