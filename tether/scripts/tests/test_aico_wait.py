@@ -172,3 +172,58 @@ def test_a_key_conflict_is_explained(monkeypatch):
     code, _, output = run(monkeypatch, ["wait", "session", "bbbb0001", "--key", "k"],
                           [(409, {"error": "key_conflict", "waitId": WAIT["id"]})])
     assert code == 1 and "another key" in output[0]["detail"]
+
+
+VERSION_17 = (200, {"name": "tether", "apiVersion": 17})
+JOB = "0123456789abcdef0123456789abcdef"
+
+
+def test_a_job_wait_checks_the_api_then_arms(monkeypatch):
+    job = {**WAIT, "kind": "job", "ref": JOB, "until": "done", "created": True}
+    code, calls, output = run(monkeypatch, ["wait", "job", JOB[:8], "--note", "aico deploy"],
+                              [VERSION_17, (201, job)])
+    assert code == 0
+    assert calls[0][0] == "/v1/version"
+    assert calls[1][1] == {"kind": "job", "ref": JOB[:8], "until": "done", "waiter": "0a1b2c3d",
+                           "note": "aico deploy"}
+    assert output[0]["wait"]["kind"] == "job"
+
+
+def test_a_pull_kind_on_an_older_tether_is_refused_before_arming(monkeypatch):
+    code, calls, output = run(monkeypatch, ["wait", "reply", "abc123"], [(200, {"apiVersion": 16})])
+    assert code == 1 and len(calls) == 1
+    assert output[0]["reason"] == "wait_kind_unsupported" and "rebuild" in output[0]["detail"]
+
+
+@pytest.mark.parametrize("argv", [
+    ["wait", "job", "xyz"],
+    ["wait", "ask", "abc"],
+    ["wait", "tap", "1234"],
+    ["wait", "reply", "abc123", "--until", "done"],
+])
+def test_pull_refs_and_untils_are_checked_locally(monkeypatch, argv):
+    with pytest.raises(SystemExit):
+        run(monkeypatch, argv, [])
+
+
+def test_reply_wait_takes_closed_and_blocks(monkeypatch, capsys):
+    armed = {**WAIT, "kind": "reply", "ref": "abc123", "until": "closed", "waiter": None, "created": True}
+    over = {**armed, "state": "fired", "outcome": "until", "line": "[Ready] request abc123 closed · st sessions inbox"}
+    code, calls, _ = run(monkeypatch, ["wait", "reply", "abc123", "--until", "closed", "--block"],
+                         [VERSION_17, (201, armed), (200, over)])
+    assert code == 0 and calls[1][1]["waiter"] is None and calls[1][1]["by"] == "0a1b2c3d"
+    assert "request abc123 closed" in capsys.readouterr().out
+
+
+def test_nudge_posts_a_hint(monkeypatch):
+    code, calls, output = run(monkeypatch, ["nudge", "job", JOB],
+                              [VERSION_17, (200, {"kind": "job", "ref": JOB, "armed": 1})])
+    assert code == 0
+    assert calls[1][:2] == ("/v1/waits/check", {"kind": "job", "ref": JOB})
+    assert output[0] == {"owner": "aico", "operation": "nudge", "kind": "job", "ref": JOB, "applied": True,
+                         "armed": 1}
+
+
+def test_nudge_on_an_older_tether_says_so(monkeypatch):
+    code, calls, output = run(monkeypatch, ["nudge", "reply", "abc123"], [(200, {"apiVersion": 16})])
+    assert code == 1 and len(calls) == 1 and output[0]["reason"] == "wait_kind_unsupported"

@@ -2439,6 +2439,17 @@ WAIT_REF = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}"
 WAIT_KEY = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}"
 CODEX_THREAD = r"[0-9A-Za-z-]{8,64}"
 WAIT_UNTILS = ("finished", "idle", "blocked", "ended")
+# Tether API with the pull kinds and POST /v1/waits/check; an older one refuses the kind.
+WAIT_KINDS_API = 17
+# kind -> (its --until choices, the ref pattern, the ref help) (tether/src/wait-kinds.ts).
+PULL_WAITS = {
+    "job": (("done",), r"[0-9a-f]{8,32}", "a SummitFlow service job id (8+ hex; st service rebuild --detach)"),
+    "reply": (("acked", "closed"), r"[0-9a-f]{6,12}", "a request you sent with st sessions send (its id)"),
+    "run": (("finished", "needs-you"), r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}", "an Agent Hub workflow run id"),
+    "ask": (("answered",), r"[0-9a-f]{12}", "an owner ask id (tether ask create)"),
+    "host": (("connected",), r"[a-z0-9][a-z0-9-]{0,63}", "a remote host name (st aico placement)"),
+    "tap": (("decided",), r"[0-9a-f]{32}", "a Nightshift tap or request id"),
+}
 # GET /v1/waits/:id?wait= holds at most this long (tether/src/waits.ts LONG_POLL_MAX_SECONDS).
 WAIT_POLL_SECONDS = 55
 # A --block client keeps asking through a Tether restart this long before it gives up.
@@ -2452,7 +2463,8 @@ WAIT_REFUSALS = {
                        "use --block in a background shell"),
     "self_wait": "a session cannot wait on itself",
     "too_many_waits": "this session already has its maximum number of armed waits; cancel one first",
-    "not_found": "no such session or wait",
+    "not_found": "no such session, job, request, run, ask, host or wait",
+    "wait_kind_unsupported": "this Tether is older than that wait kind; it arrives with the next aico rebuild",
     "not_armed": "that wait is already over (fired, timed out or cancelled)",
     "key_conflict": "this session already has an armed wait with that key on another session or --until; use another key",
     "waits_unavailable": "waits are off on this Tether",
@@ -2475,7 +2487,8 @@ def wait_item(wait: dict) -> dict:
     def local(value: object) -> str | None:
         return (datetime.datetime.fromtimestamp(value / 1000).astimezone().isoformat(timespec="minutes")
                 if isinstance(value, int) else None)
-    item = {key: wait.get(key) for key in ("id", "ref", "host", "until", "note", "key", "state", "outcome", "line")}
+    item = {key: wait.get(key) for key in ("id", "kind", "ref", "host", "until", "note", "key", "state", "outcome",
+                                           "line")}
     item["deadline"] = local(wait.get("deadline"))
     if wait.get("firedAt") is not None:
         item["over"] = local(wait.get("firedAt"))
@@ -2557,34 +2570,89 @@ def wait_block(collector: Collector, socket_name: str, wait: dict) -> int:
     return {"timed_out": 3}.get(wait.get("state"), 4 if wait.get("outcome") == "gone" else 0)
 
 
+def kinds_api(collector: Collector, control: str) -> bool:
+    """Whether Tether takes the pull kinds and the nudge (API 17)."""
+    try:
+        status, data = collector.receipt(control, "/v1/version", timeout=2)
+    except Unavailable:
+        return False
+    version = data.get("apiVersion")
+    return status == 200 and isinstance(version, int) and version >= WAIT_KINDS_API
+
+
+def nudge_main(argv: list[str]) -> int:
+    """`st aico nudge KIND REF`: ask Tether to re-read the waits on REF now (a hint, no outcome)."""
+    parser = argparse.ArgumentParser(prog="st aico nudge", description=(
+        "Tell Tether the thing a wait reads may have changed, so it looks now instead of at its next "
+        "minute. A hint only: it carries no outcome and changes nothing else."))
+    parser.add_argument("kind", choices=("session", *PULL_WAITS))
+    parser.add_argument("ref")
+    parser.add_argument("--owner-socket", type=socket_path, default=tether_socket())
+    args = parser.parse_args(argv)
+    pattern = WAIT_REF if args.kind == "session" else PULL_WAITS[args.kind][1]
+    if not re.fullmatch(pattern, args.ref):
+        parser.error(f"expected {'a session id or a root request id' if args.kind == 'session' else PULL_WAITS[args.kind][2]}")
+    collector = Collector("", args.owner_socket, "", time.monotonic() + 10, threading.Event())
+    output: dict = {"owner": "aico", "operation": "nudge", "kind": args.kind, "ref": args.ref}
+    try:
+        if not kinds_api(collector, args.owner_socket):
+            raise Refused("wait_kind_unsupported")
+        status, data = collector.receipt(args.owner_socket, "/v1/waits/check",
+                                         {"kind": args.kind, "ref": args.ref}, timeout=5)
+        if status != 200:
+            raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
+        output.update(applied=True, armed=data.get("armed"))
+        emit_json(collector, output)
+        return 0
+    except (Unavailable, Stopped) as error:
+        reason = str(error) if isinstance(error, Unavailable) else "deadline"
+        output.update(applied=False if isinstance(error, Refused) else None, reason=reason)
+        if reason in WAIT_REFUSALS:
+            output["detail"] = WAIT_REFUSALS[reason]
+        emit_unless_stopped(collector, output)
+        return 1
+    except BrokenPipeError:
+        return 0
+
+
 def wait_main(argv: list[str]) -> int:
-    """`st aico wait session|time|get|cancel` and `st aico waits`."""
+    """`st aico wait session|job|reply|run|ask|host|tap|time|get|cancel` and `st aico waits`."""
     operation = argv[0] if argv else ""
     if operation == "time":
         return wake_main(["set", *argv[1:]])
-    if operation not in ("session", "get", "cancel", "list"):
-        print("usage: st aico wait session ID|REQ [--until finished|idle|blocked|ended] [--timeout 2h] "
-              "[--note T] [--key K] [--block] | wait time WHEN NOTE | wait get WAIT [--block] | "
-              "wait cancel WAIT | waits [--recent]", file=sys.stderr)
+    if operation not in ("session", *PULL_WAITS, "get", "cancel", "list"):
+        print("usage: st aico wait session ID|REQ [--until finished|idle|blocked|ended] | "
+              "wait job ID | wait reply ID [--until acked|closed] | wait run ID [--until finished|needs-you] | "
+              "wait ask ID | wait host NAME | wait tap ID  [--timeout 2h] [--note T] [--key K] [--block] | "
+              "wait time WHEN NOTE | wait get WAIT [--block] | wait cancel WAIT | waits [--recent]",
+              file=sys.stderr)
         return 2
+    pull = PULL_WAITS.get(operation)
+    arming = operation == "session" or pull is not None
     prog = "st aico waits" if operation == "list" else f"st aico wait {operation}"
     parser = argparse.ArgumentParser(prog=prog, description=(
-        "Wait for a session to finish its turn, go idle, get blocked or end: you get one line when it is "
-        "ready or the wait times out, and nothing after a cancel. Lanes you launch report on their own; "
-        "use this for anything else you wait on. Subagents and agents outside Aico: --block."))
+        "Wait for a session (finished, idle, blocked, ended), a service job (done), a request you sent "
+        "(acked, closed), a workflow run (finished, needs-you), an owner ask (answered), a host (connected) "
+        "or a Nightshift tap (decided): you get one line when it is ready, over or timed out, and nothing "
+        "after a cancel. Lanes you launch report on their own; use this for anything else you wait on. "
+        "Subagents and agents outside Aico: --block."))
     parser.add_argument("--widget-id", default=caller_widget_id())
     parser.add_argument("--owner-socket", type=socket_path, default=tether_socket())
+    if pull is not None:
+        parser.add_argument("ref", help=pull[2])
+        parser.add_argument("--until", choices=pull[0], default=pull[0][0])
     if operation == "session":
         parser.add_argument("ref", help="the session id (eight hex characters) or its root request id")
         parser.add_argument("--until", choices=WAIT_UNTILS, default="finished")
+    if arming:
         parser.add_argument("--timeout", type=wait_minutes, metavar="SPAN",
                             help="give up after this long and say so (default 24h, at most 7d)")
         parser.add_argument("--note", help="your words, shown on the line (at most 200 characters)")
         parser.add_argument("--key", help="the same key from this session returns the wait already set")
-    if operation in ("session", "get"):
+    if arming or operation == "get":
         parser.add_argument("--block", action="store_true", help=(
-            "hold this command until the wait is over and print the line (exit 0 ready, 4 the session ended "
-            "first, 3 timed out, 1 cancelled, 2 Tether unreachable, 130 interrupted, which cancels a wait it "
+            "hold this command until the wait is over and print the line (exit 0 ready, 4 it was over "
+            "first (ended, gone, closed without an answer), 3 timed out, 1 cancelled, 2 Tether unreachable, 130 interrupted, which cancels a wait it "
             "armed); for subagents and agents outside Aico, run it in a background shell"))
     if operation in ("get", "cancel"):
         parser.add_argument("wait_id")
@@ -2593,14 +2661,14 @@ def wait_main(argv: list[str]) -> int:
     args = parser.parse_args(argv[1:])
     widget = args.widget_id if isinstance(args.widget_id, str) and re.fullmatch(WIDGET, args.widget_id) else None
     block = getattr(args, "block", False)
-    if operation in ("session", "list") and widget is None and not block:
+    if (arming or operation == "list") and widget is None and not block:
         parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters"
-                     + ("; outside an Aico session use --block" if operation == "session" else ""))
+                     + ("; outside an Aico session use --block" if arming else ""))
     if operation in ("get", "cancel") and not re.fullmatch(WAIT_ID, args.wait_id):
         parser.error("expected a wait ID from st aico waits (12 lowercase hex characters)")
-    if operation == "session":
-        if not re.fullmatch(WAIT_REF, args.ref):
-            parser.error("expected a session id or a root request id")
+    if arming:
+        if not re.fullmatch(WAIT_REF if pull is None else pull[1], args.ref):
+            parser.error("expected a session id or a root request id" if pull is None else f"expected {pull[2]}")
         if args.key is not None and not re.fullmatch(WAIT_KEY, args.key):
             parser.error("--key: letters, digits and . _ : - (at most 64)")
         if args.key is not None and block:
@@ -2612,8 +2680,10 @@ def wait_main(argv: list[str]) -> int:
     # With --block a signal cancels the wait this command arms (wait_block).
     previous = {s: signal.signal(s, wait_interrupted) for s in WAIT_SIGNALS} if block else {}
     try:
-        if operation == "session":
-            payload: dict = {"kind": "session", "ref": args.ref, "until": args.until}
+        if arming:
+            if pull is not None and not kinds_api(collector, args.owner_socket):
+                raise Refused("wait_kind_unsupported")
+            payload: dict = {"kind": operation, "ref": args.ref, "until": args.until}
             if block:
                 payload.update(waiter=None, by=widget)
             else:
@@ -2719,6 +2789,8 @@ def main(argv: list[str] | None = None) -> int:
         return wait_main(argv[1:])
     if argv and argv[0] == "waits":
         return wait_main(["list", *argv[1:]])
+    if argv and argv[0] == "nudge":
+        return nudge_main(argv[1:])
     if argv and argv[0] == "placement":
         return placement_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)

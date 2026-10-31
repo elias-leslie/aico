@@ -12,6 +12,22 @@
   pullers: `GET /v1/sessions/:id/due?wait=55` hands a session's due lines to
   Claude Code's asyncRewake hook or Pi's extension while one is attached,
   instead of pasting. Schema v21.
+- Wait pull kinds (Tether API 17): `st aico wait job|reply|run|ask|host|tap
+  REF` waits on a SummitFlow service job (`done`), a coordination request you
+  sent (`acked`, `closed`), a workflow run (`finished`, `needs-you`), an owner
+  ask (`answered`), a hub host (`connected`) or a Nightshift tap (`decided`),
+  read from each owner read-only (files watched, a 60 s look; a job whose
+  runner died is asked of `st service result` as an idle-weight unit, never on
+  red admission). `POST /v1/waits/check` / `st aico nudge KIND REF` re-reads at
+  once. A run's pause and an ask's answer now ride the event queue, and a wait
+  on the same thing by the session already told fires without a second line.
+  `--until ended` on a session that already ended fires at once instead of
+  `404`; waits that are over are pruned also with nothing armed. Aico web's End
+  dialog offers keeping waits alone.
+- Asks from ended lanes (schema v22): an ask records the session that launched
+  the asker; its answer goes there once the asker has ended (`answerTo`, shown
+  on the ask card); a lane filing an ask tells its launcher in one line; a
+  session ending with open asks hands them to its launcher in one line.
 - The native pullers themselves: `tether/scripts/aico-due.py`, run by
   claude-config's `hooks/aico-due.sh` asyncRewake hook (exit 2 with the lines
   wakes Claude), and Pi's `tether/integrations/pi/aico-due.ts` extension

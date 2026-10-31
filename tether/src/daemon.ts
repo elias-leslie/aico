@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync } from 'node:fs'
 import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -13,7 +13,7 @@ import {
 import { RunTracker, sessionLaunchers, type ToldPause } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
-import { type AskDelivery, aicoOrigin, type NeedsYouFeed } from './asks'
+import { type AskDelivery, AskStore, aicoOrigin, handOffAsks, type NeedsYouFeed } from './asks'
 import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
 import { nodeProcFs, observeAgent, writeJsonFile } from './continuity'
 import { DeadShells } from './dead-shells'
@@ -23,12 +23,14 @@ import { listenPrivateSocket } from './http'
 import { Hub } from './hub/hub'
 import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
 import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
+import { nightshiftAdmissionPath, parseNightshiftAdmission } from './lifecycle/agent-admission'
 import {
   bindCatalog,
   claimLauncher,
   getAgentHubSession,
   getRootRequest,
   getWidget,
+  isRetiredSessionId,
   listSessions,
   listWidgets,
 } from './lifecycle/catalog'
@@ -70,6 +72,8 @@ import { createTetherServer } from './server'
 import { persistSizeHolders } from './size-holder'
 import { Store } from './store'
 import { VERSION } from './version'
+import type { PullKind } from './wait-kinds'
+import { PullReaders, systemdProbe } from './wait-readers'
 import { readWaitingState, WAIT_NOTICE_MS, WaitingNotices } from './waiting'
 import { WaitService, WaitStore } from './waits'
 import { bindWaitingOn, bindWakeStore, WakeService } from './wake-runtime'
@@ -311,18 +315,39 @@ export async function startDaemon(
   const wakes = new WakeService(context)
   context.wakes = wakes
   bindWakeStore(wakes.store)
-  // An owner's answer to an ask goes to the asking session as a check-in that
-  // is due now; a session Tether cannot wake reads it with `tether ask get`.
+  // An owner's answer to an ask goes to the asking session as an event line
+  // on its delivery queue, or to the session that launched it once the asker
+  // has ended; a session Tether cannot deliver to reads it with `tether ask get`.
+  const askReceiver = (id: string): boolean => {
+    const row = getWidget(id)
+    return Boolean(row && wakes.supports(row))
+  }
   context.asks = {
-    wake: (sessionId, text) => {
+    wake: (sessionId, text, source) => {
       const row = getWidget(sessionId)
       if (!row || !wakes.supports(row)) return null
       const note = cleanNote(text, wakes.policy().noteMaxChars)
       if (note === null) return null
       const now = Date.now()
-      const wake = wakes.store.add({ sessionId: row.id, dueAt: now, note, createdBy: 'owner', now })
+      const wake = wakes.store.addEvent({
+        sessionId: row.id,
+        source: source ?? `ask:${now}`,
+        note,
+        now,
+      })
       wakes.changed(row.id)
       return wake.id
+    },
+    receiver: askReceiver,
+    launcherOf: (sessionId) => {
+      // Only lineage from a launch, as lane reports read it.
+      const row = getWidget(sessionId)
+      if (!row?.launched) return null
+      return row.parentId ?? row.coordinatorId ?? null
+    },
+    nameOf: (id) => {
+      const row = getWidget(id)
+      return row ? displayTitle(row) : null
     },
     cancel: (wakeId) => {
       const wake = wakes.store.get(wakeId)
@@ -364,17 +389,18 @@ export async function startDaemon(
         write: (told) => store.putSetting(TOLD_PAUSES_KEY, JSON.stringify(told), Date.now()),
       },
       maxChars: () => wakes.policy().noteMaxChars,
-      tell: (launcherId, notice) => {
+      tell: (launcherId, notice, runId) => {
         const row = getWidget(launcherId)
         if (!row || !wakes.supports(row)) return false
         const note = cleanNote(notice.text, wakes.policy().noteMaxChars)
         if (note === null) return false
         const now = Date.now()
-        const wake = wakes.store.add({
+        // An event line (not a check-in): a `run` wait on the same pause by
+        // the same session fires without a second line (WaitOperations.told).
+        const wake = wakes.store.addEvent({
           sessionId: row.id,
-          dueAt: now,
+          source: `run:${runId}:needs-you`,
           note,
-          createdBy: 'agent',
           now,
         })
         wakes.changed(row.id)
@@ -521,9 +547,45 @@ export async function startDaemon(
       }
     })
   }
-  // General waits: an agent's wait on another session fires once, as one line
-  // on its delivery queue (src/waits.ts); pasted, so only where Tether
-  // observes sessions.
+  // General waits: an agent's wait on another session, a job, a request, a
+  // run, an ask, a host or a tap fires once, as one line on its delivery
+  // queue (src/waits.ts); pasted, so only where Tether observes sessions.
+  const askStore = new AskStore(store.db)
+  let pokeWaits: (kind: PullKind, ref?: string) => void = () => {}
+  const summitflowRoot =
+    env.SUMMITFLOW_SERVICE_STATE_ROOT || join(env.HOME ?? homedir(), '.summitflow', 'services')
+  const admissionPath = nightshiftAdmissionPath(env)
+  const readers = new PullReaders({
+    paths: {
+      jobsDir: env.TETHER_WAIT_JOBS_DIR || join(summitflowRoot, 'jobs'),
+      ledger:
+        env.TETHER_WAIT_LEDGER ||
+        join(env.HOME ?? homedir(), '.summitflow', 'leases', '_coord.json'),
+      tapDirs: (
+        env.TETHER_WAIT_TAP_DIRS ||
+        '/var/lib/nightshift/bypass/out:/var/lib/nightshift/agent-responses'
+      )
+        .split(':')
+        .filter((dir) => dir.startsWith('/')),
+    },
+    run: (runId) => runs.runState(runId),
+    ask: (id) => askStore.get(id),
+    host: (name) => hosts?.peerView(name)?.state ?? null,
+    admissionRed: () => {
+      if (!admissionPath) return false
+      try {
+        return (
+          parseNightshiftAdmission(readFileSync(admissionPath, 'utf8'), Date.now())?.state === 'red'
+        )
+      } catch {
+        return false
+      }
+    },
+    probeJob: systemdProbe(env),
+    poke: (kind, ref) => pokeWaits(kind, ref),
+    now: Date.now,
+    log: (message) => console.log(`[tether:waits] ${message}`),
+  })
   const waits = reconcileEnabled(env)
     ? new WaitService(new WaitStore(store.db), {
         now: Date.now,
@@ -536,6 +598,28 @@ export async function startDaemon(
           return remote && typeof remote.session.id === 'string'
             ? { id: remote.session.id, host: remote.host }
             : null
+        },
+        endedSession: (ref) => {
+          // A session id Tether retired, or a root request's tombstone.
+          if (/^[0-9a-f]{8}$/.test(ref)) return isRetiredSessionId(ref) ? ref : null
+          const root = getRootRequest(ref)
+          return root?.widgetId && !getWidget(root.widgetId) ? root.widgetId : null
+        },
+        pullRef: (kind, ref) => readers.pullRef(kind, ref),
+        read: (kind, ref) => readers.read(kind, ref),
+        refresh: (kind, ref, force) => readers.refresh(kind, ref, force),
+        told: (wait) => {
+          // The waiter has this line already from its owner: the ask's
+          // answer queued to it, the run's pause told to it as launcher.
+          if (wait.kind === 'ask') {
+            const ask = askStore.get(wait.ref)
+            return Boolean(ask && ask.delivery === 'wake' && ask.answerTo === wait.waiter)
+          }
+          if (wait.kind === 'run' && wait.until === 'needs-you') {
+            const run = runs.runState(wait.ref)
+            return Boolean(run?.launcherId && run.launcherId === wait.waiter)
+          }
+          return false
         },
         view: (id, host) => {
           if (host === null) {
@@ -583,11 +667,31 @@ export async function startDaemon(
   if (waits) {
     context.waits = waits
     bindWaitingOn((id) => waits.waitingOn(id))
+    pokeWaits = (kind, ref) => waits.pokeKind(kind, ref)
+    readers.watch()
     events.subscribe((event) => {
       if (event.type.startsWith('session.') && typeof event.data.id === 'string')
         waits.poke(event.data.id)
+      else if (event.type === 'runs.changed') waits.pokeKind('run')
+      else if (event.type === 'peer.state') waits.pokeKind('host')
+      else if (event.type === 'asks.changed') {
+        const ask = event.data.ask as { id?: unknown } | undefined
+        if (typeof ask?.id === 'string') waits.pokeKind('ask', ask.id)
+      }
     })
   }
+  // A session that ends with open asks hands them to its launcher (one
+  // line); their answers go there (src/asks.ts handOffAsks).
+  events.subscribe((event) => {
+    if (event.type !== 'session.ended' || typeof event.data.id !== 'string') return
+    if (typeof event.data.host === 'string' || !context.asks) return
+    try {
+      for (const ask of handOffAsks(askStore, context.asks, event.data.id, null))
+        events.publish('asks.changed', { ask: { ...ask, answerTo: ask.launcher }, created: false })
+    } catch (error) {
+      console.error('[tether:asks] hand-off failed:', error)
+    }
+  })
   const server = createTetherServer(context)
   try {
     await listenPrivateSocket(server, paths.socket)

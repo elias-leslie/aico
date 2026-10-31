@@ -8,6 +8,7 @@ import {
   AGENT_HUB_QUEUE_THINKING_SQL,
   AGENT_HUB_SQL,
   AGENT_TOOLS_TABLE_SQL,
+  ASK_HANDOFF_COLUMNS,
   ASKS_SQL,
   COORDINATOR_SQL,
   DELIVERIES_SQL,
@@ -371,6 +372,18 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(21, now)
+      }
+      if (current < 22) {
+        // v22: an ask's launcher and where its answer went (asks from ended lanes).
+        for (const { table, column, sql } of ASK_HANDOFF_COLUMNS) {
+          const has = this.db
+            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
+            .get(table, column)
+          if (!has) this.db.exec(sql)
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(22, now)
       }
     })
   }

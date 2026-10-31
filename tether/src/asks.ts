@@ -43,8 +43,14 @@ export interface Ask {
   state: AskState
   answer: string | null
   note: string | null
-  /** How the answer travels: `wake` (a check-in to the session) or `pull`. */
+  /** How the answer travels: `wake` (a line queued to a session) or `pull`. */
   delivery: 'wake' | 'pull' | null
+  /** The session that launched the asker (asks from ended lanes). */
+  launcher: string | null
+  /** The session the answer goes to: while open, where it would go now (the
+   * asker, or its launcher once the asker has ended); once answered, where
+   * it went. Null: no session gets it (read with `tether ask get`). */
+  answerTo: string | null
   createdAt: number
   updatedAt: number
   answeredAt: number | null
@@ -79,6 +85,8 @@ interface AskRow {
   note: string | null
   wake_id: string | null
   delivery: 'wake' | 'pull' | null
+  launcher_id: string | null
+  answer_to: string | null
   created_at: number
   updated_at: number
   answered_at: number | null
@@ -107,6 +115,8 @@ function fromRow(row: AskRow): Ask {
     answer: row.answer,
     note: row.note,
     delivery: row.delivery,
+    launcher: row.launcher_id ?? null,
+    answerTo: row.answer_to ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     answeredAt: row.answered_at,
@@ -210,10 +220,11 @@ export function parseAsk(body: Record<string, unknown>): AskRequest {
   }
 }
 
-/** The check-in note that carries an answer: the question and the answer in
- * one line, at most `max` characters, always ending with how to read it whole
- * and close it. */
-export function answerNote(ask: Ask, max: number): string {
+/** The line that carries an answer: the question and the answer in one
+ * line, at most `max` characters, always ending with how to read it whole and
+ * close it. `handedFrom` names the ended session that asked when the answer
+ * goes to its launcher. */
+export function answerNote(ask: Ask, max: number, handedFrom: string | null = null): string {
   const tail = ` (full: tether ask get ${ask.id}; when handled: tether ask done ${ask.id})`
   const reply = [
     ask.answer ? `"${ask.answer}"` : null,
@@ -221,7 +232,8 @@ export function answerNote(ask: Ask, max: number): string {
   ]
     .filter(Boolean)
     .join(', ')
-  const head = `Owner answered ask ${ask.id} "${ask.question}": ${reply}`
+  const from = handedFrom ? ` (asked by ended session ${handedFrom})` : ''
+  const head = `Owner answered ask ${ask.id}${from} "${ask.question}": ${reply}`
   const room = max - chars(tail)
   if (chars(head) <= room) return `${head}${tail}`
   return `${Array.from(head)
@@ -311,10 +323,15 @@ export class AskStore {
     return this.get(id)
   }
 
-  delivered(id: string, wakeId: string | null): void {
+  delivered(id: string, wakeId: string | null, to: string | null = null): void {
     this.db
-      .prepare('UPDATE asks SET wake_id = ?, delivery = ? WHERE id = ?')
-      .run(wakeId, wakeId ? 'wake' : 'pull', id)
+      .prepare('UPDATE asks SET wake_id = ?, delivery = ?, answer_to = ? WHERE id = ?')
+      .run(wakeId, wakeId ? 'wake' : 'pull', wakeId ? to : null, id)
+  }
+
+  /** Record the session that launched the asker. */
+  setLauncher(id: string, launcher: string | null): void {
+    this.db.prepare('UPDATE asks SET launcher_id = ? WHERE id = ?').run(launcher, id)
   }
 
   close(id: string, state: 'done' | 'withdrawn', now: number): Ask | undefined {
@@ -469,9 +486,17 @@ export function needsYouFeed(
 
 /** What the asks need from the running daemon. */
 export interface AskDelivery {
-  /** Queue the note as a due-now check-in on the session; the wake id, or
-   * null when the session cannot be woken (gone, a shell, no state reader). */
-  wake(sessionId: string, note: string): string | null
+  /** Queue the note as a due-now line on the session (`source` coalesces
+   * it); the queued row's id, or null when the session cannot take it (gone,
+   * a shell, no state reader). */
+  wake(sessionId: string, note: string, source?: string): string | null
+  /** A session that takes lines now (a live agent session). Without it, the
+   * asker is always the one answered. */
+  receiver?(sessionId: string): boolean
+  /** The session that launched this one (its lineage from a launch), or null. */
+  launcherOf?(sessionId: string): string | null
+  /** A short name for a session in a line. */
+  nameOf?(sessionId: string): string | null
   /** Cancel a check-in not yet delivered. */
   cancel(wakeId: string): void
   noteMaxChars(): number
@@ -480,6 +505,67 @@ export interface AskDelivery {
 }
 
 const STATES: readonly AskState[] = ['open', 'answered', 'done', 'withdrawn']
+
+/** Where an ask's answer goes now: the asker while it takes lines, else the
+ * session that launched it, else nobody (the asker reads it). */
+export function answerTarget(ask: Ask, delivery: AskDelivery | undefined): string | null {
+  if (!ask.session || !delivery) return null
+  if (!delivery.receiver) return ask.session
+  if (delivery.receiver(ask.session)) return ask.session
+  if (ask.launcher && ask.launcher !== ask.session && delivery.receiver(ask.launcher))
+    return ask.launcher
+  return null
+}
+
+/** The asker's name in a line: its name when known, else its id. */
+function askerName(sessionId: string, delivery: AskDelivery | undefined): string {
+  const name = delivery?.nameOf?.(sessionId)
+  return name ? `"${clipLine(name, 40)}" (${sessionId})` : sessionId
+}
+
+function clipLine(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  const all = Array.from(flat)
+  return all.length <= max ? flat : `${all.slice(0, max - 1).join('')}…`
+}
+
+/** The line a lane's launcher gets when the lane files an ask: relay it or
+ * close it, never ask the owner again. */
+export function askFiledLine(ask: Ask, name: string, max: number): string {
+  const tail = ` · relay or close it, don't ask again: tether ask get ${ask.id}`
+  const head = `[Ask] session ${name} asked the owner (${ask.id}): `
+  const room = Math.max(10, max - chars(head) - chars(tail) - 2)
+  return `${head}"${clipLine(ask.question, Math.min(room, 120))}"${tail}`
+}
+
+/** The one line a launcher gets when a session ends with open asks. */
+export function askHandOffLine(asks: readonly Ask[], name: string): string {
+  const ids = asks.slice(0, 5).map((ask) => ask.id)
+  const more = asks.length > ids.length ? ` and ${asks.length - ids.length} more` : ''
+  const which = asks.length === 1 ? 'an open ask' : `${asks.length} open asks`
+  return `[Asks handed over] session ${name} ended with ${which} to the owner (${ids.join(', ')}${more}); the answers come to you · tether ask get ${ids[0]}`
+}
+
+/**
+ * A session ended: its open asks are handed to its launcher, with one line,
+ * never left as orphans. Returns the asks handed over (their `answerTo`
+ * changed), empty when there were none or no launcher takes them.
+ */
+export function handOffAsks(
+  asks: AskStore,
+  delivery: AskDelivery,
+  sessionId: string,
+  name: string | null,
+): Ask[] {
+  const open = asks.openFor(sessionId)
+  if (!open.length) return []
+  const launcher = open.find((ask) => ask.launcher)?.launcher ?? null
+  if (!launcher || launcher === sessionId || !delivery.receiver?.(launcher)) return []
+  for (const ask of open) if (!ask.launcher) asks.setLauncher(ask.id, launcher)
+  const shown = name ? `"${clipLine(name, 40)}" (${sessionId})` : sessionId
+  delivery.wake(launcher, askHandOffLine(open, shown), `ask:handoff:${sessionId}`)
+  return open.map((ask) => asks.get(ask.id) as Ask)
+}
 
 export function registerAskRoutes(
   router: Router,
@@ -515,8 +601,11 @@ export function registerAskRoutes(
     setInterval(writeFeed, FEED_HEARTBEAT_MS).unref()
   }
 
+  /** An ask as the API shows it: an open one says where its answer would go now. */
+  const present = (ask: Ask): Ask =>
+    ask.state === 'open' ? { ...ask, answerTo: answerTarget(ask, delivery) } : ask
   const changed = (ask: Ask, created = false) => {
-    events.publish('asks.changed', { ask, created })
+    events.publish('asks.changed', { ask: present(ask), created })
     if (ask.session) delivery?.sessionChanged(ask.session)
     writeFeed()
   }
@@ -539,9 +628,28 @@ export function registerAskRoutes(
         throw new HttpError(400, 'invalid_body', { field: 'share', detail: 'no such share' })
       const at = now()
       asks.prune(at - options.show.retentionDays * 24 * 60 * 60 * 1000)
-      const { ask, created } = asks.add(request, at)
+      let { ask, created } = asks.add(request, at)
+      if (created && ask.session) {
+        // Lineage when filed; the launcher hears of it so it relays or closes
+        // the ask instead of asking the owner again.
+        const launcher = delivery?.launcherOf?.(ask.session) ?? null
+        if (launcher && launcher !== ask.session) {
+          asks.setLauncher(ask.id, launcher)
+          ask = asks.get(ask.id) as Ask
+          if (delivery?.receiver?.(launcher))
+            delivery.wake(
+              launcher,
+              askFiledLine(
+                ask,
+                askerName(ask.session as string, delivery),
+                delivery.noteMaxChars(),
+              ),
+              `ask:${ask.id}:filed`,
+            )
+        }
+      }
       if (created || ask.state === 'open') changed(ask, created)
-      sendJson(res, created ? 201 : 200, ask)
+      sendJson(res, created ? 201 : 200, present(ask))
     })
     .add('GET', '/v1/asks', (_req, res, _params, query) => {
       const session = query.get('session') ?? undefined
@@ -551,10 +659,10 @@ export function registerAskRoutes(
       const states = (query.get('state') ?? '').split(',').filter(Boolean) as AskState[]
       if (!states.every((state) => STATES.includes(state)))
         throw new HttpError(400, 'invalid_query', { field: 'state' })
-      sendJson(res, 200, { items: asks.list({ session, requester, states }) })
+      sendJson(res, 200, { items: asks.list({ session, requester, states }).map(present) })
     })
     .add('GET', '/v1/asks/:id', (_req, res, params) => {
-      sendJson(res, 200, requireAsk(params.id))
+      sendJson(res, 200, present(requireAsk(params.id)))
     })
     .add('POST', '/v1/asks/:id/answer', async (req, res, params) => {
       const body = await readJsonObject(req)
@@ -584,11 +692,21 @@ export function registerAskRoutes(
         throw new HttpError(400, 'invalid_body', { detail: 'give an answer or a note' })
       cancelWake(ask.id)
       let answered = asks.answer(ask.id, { answer, note }, now()) as Ask
-      const wakeId =
-        answered.session && delivery
-          ? delivery.wake(answered.session, answerNote(answered, delivery.noteMaxChars()))
+      // The asker, or its launcher once the asker has ended (worked out now).
+      const to = answerTarget(answered, delivery)
+      const handedFrom =
+        to && answered.session && to !== answered.session
+          ? askerName(answered.session, delivery)
           : null
-      asks.delivered(ask.id, wakeId)
+      const wakeId =
+        to && delivery
+          ? delivery.wake(
+              to,
+              answerNote(answered, delivery.noteMaxChars(), handedFrom),
+              `ask:${ask.id}`,
+            )
+          : null
+      asks.delivered(ask.id, wakeId, to)
       answered = asks.get(ask.id) as Ask
       changed(answered)
       sendJson(res, 200, answered)

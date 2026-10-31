@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 21
+export const SCHEMA_VERSION = 22
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -552,3 +552,22 @@ export const DELIVERIES_SQL = `
   );
   CREATE INDEX IF NOT EXISTS deliveries_queued_at ON deliveries(queued_at);
 `
+
+/**
+ * v22: where an ask's answer goes once its session has ended (src/asks.ts).
+ * `launcher_id` is the session that launched the asker (its lineage when the
+ * ask was filed, or when the asker ended with it open: the hand-off);
+ * `answer_to` the session the answer was queued to.
+ */
+export const ASK_HANDOFF_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
+  {
+    table: 'asks',
+    column: 'launcher_id',
+    sql: "ALTER TABLE asks ADD COLUMN launcher_id TEXT CHECK(launcher_id IS NULL OR (length(launcher_id) = 8 AND launcher_id NOT GLOB '*[^0-9a-f]*'))",
+  },
+  {
+    table: 'asks',
+    column: 'answer_to',
+    sql: "ALTER TABLE asks ADD COLUMN answer_to TEXT CHECK(answer_to IS NULL OR (length(answer_to) = 8 AND answer_to NOT GLOB '*[^0-9a-f]*'))",
+  },
+]

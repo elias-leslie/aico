@@ -101,7 +101,11 @@ export interface PauseNotices {
   maxChars: () => number
   /** Hand the note to the session; the queued note's id once it is queued for
    * it, false when the session cannot take one now (tried again at the next look). */
-  tell(launcherId: string, notice: PauseNotice): string | false | Promise<string | false>
+  tell(
+    launcherId: string,
+    notice: PauseNotice,
+    runId: string,
+  ): string | false | Promise<string | false>
   /** Take back a note not yet delivered: the pause it told of is over. */
   withdraw(launcherId: string, noteId: string): void
 }
@@ -137,6 +141,9 @@ interface Tracked {
   members: RunMember[]
 }
 
+/** How long a run no longer followed is remembered for the waits on it. */
+const OVER_KEEP_MS = 86_400_000
+
 /** Dismissals older than this are forgotten; the run itself is long past retention. */
 const DISMISSED_KEEP_MS = 30 * 86_400_000
 
@@ -151,6 +158,8 @@ export class RunTracker {
   private readonly log: (message: string) => void
   private dismissed: Record<string, number>
   private told: Record<string, ToldPause>
+  /** Runs no longer followed, for the waits on them: their last state. */
+  private readonly over = new Map<string, { state: string | null; at: number }>()
   private timer: ReturnType<typeof setTimeout> | null = null
   private dueAt = 0
   private lookedAt: number | null = null
@@ -315,12 +324,12 @@ export class RunTracker {
         api.get(runId).then(
           (view) => {
             // A run left by its launcher is followed only while it is going.
-            if (!live.has(launcherId) && !isActiveRun(view.state)) this.tracked.delete(runId)
+            if (!live.has(launcherId) && !isActiveRun(view.state)) this.drop(runId, view.state)
             else this.accept(launcherId, view)
           },
           (error) => {
             const status = (error as { status?: number })?.status
-            if (status === 404) this.tracked.delete(runId)
+            if (status === 404) this.drop(runId, null)
             else failure ??= error
           },
         ),
@@ -334,7 +343,7 @@ export class RunTracker {
         this.options.dismissed.write(this.dismissed)
       }
       if (!this.visible(item)) {
-        this.tracked.delete(runId)
+        this.drop(runId, item.state)
         continue
       }
       const unchanged =
@@ -352,10 +361,10 @@ export class RunTracker {
         // its id while it is active, and keep an ended one until it lapses.
         if (isActiveRun(entry.view.state)) read(runId, entry.launcherId)
         else if (!live.has(entry.launcherId) || !this.visible(entry.view))
-          this.tracked.delete(runId)
+          this.drop(runId, entry.view.state)
       } else {
         // Agent Hub answered and no longer has it.
-        this.tracked.delete(runId)
+        this.drop(runId, null)
       }
     }
     await Promise.all(reads)
@@ -368,6 +377,30 @@ export class RunTracker {
       this.lastError = null
       this.failures = 0
     }
+  }
+
+  /** Stop following a run, remembering how it ended (null: Agent Hub no
+   * longer has it) for the waits on it. */
+  private drop(runId: string, state: string | null): void {
+    const entry = this.tracked.get(runId)
+    if (!entry) return
+    this.tracked.delete(runId)
+    this.over.set(runId, { state: state ?? null, at: this.now() })
+    const cutoff = this.now() - OVER_KEEP_MS
+    for (const [id, { at }] of this.over) if (at < cutoff) this.over.delete(id)
+  }
+
+  /**
+   * A run as a wait reads it (src/wait-kinds.ts): its state and the session
+   * that launched it while Tether follows it; how it ended once it is no
+   * longer followed (`state` null: Agent Hub no longer has it); undefined for
+   * a run Tether never followed.
+   */
+  runState(runId: string): { state: string | null; launcherId: string | null } | undefined {
+    const entry = this.tracked.get(runId)
+    if (entry) return { state: entry.view.state, launcherId: entry.launcherId }
+    const over = this.over.get(runId)
+    return over ? { state: over.state, launcherId: null } : undefined
   }
 
   private accept(launcherId: string, view: RunView): void {
@@ -409,7 +442,7 @@ export class RunTracker {
       forget(runId)
       let note: string | false = false
       try {
-        note = await pauses.tell(entry.launcherId, notice)
+        note = await pauses.tell(entry.launcherId, notice, runId)
       } catch (error) {
         this.log(`could not tell the session about a paused run: ${(error as Error).message}`)
       }
@@ -490,7 +523,7 @@ export class RunTracker {
     try {
       this.accept(launcherId, await this.options.api().get(runId))
     } catch (error) {
-      if ((error as { status?: number })?.status === 404) this.tracked.delete(runId)
+      if ((error as { status?: number })?.status === 404) this.drop(runId, null)
     }
     this.publish()
   }

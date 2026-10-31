@@ -11,9 +11,11 @@ import { askCreateBody, askerOf, askListPath, formatAsk } from './ask-cli'
 import {
   type Ask,
   type AskDelivery,
+  AskStore,
   aicoOrigin,
   answerNote,
   bindAskStore,
+  handOffAsks,
   type NeedsYouFeed,
   questionHash,
   registerAskRoutes,
@@ -34,6 +36,10 @@ let cancelled: string[]
 let changed: string[]
 let wakeable: boolean
 let feeds: NeedsYouFeed[]
+let live: Set<string> | null
+let launchers: Map<string, string>
+let lines: { to: string; source: string | undefined; note: string }[]
+let delivery: AskDelivery
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'tether-asks-'))
@@ -45,13 +51,21 @@ beforeEach(async () => {
   changed = []
   wakeable = true
   feeds = []
-  const delivery: AskDelivery = {
-    wake: (sessionId, note) => {
+  live = null
+  launchers = new Map()
+  lines = []
+  delivery = {
+    wake: (sessionId, note, source) => {
       if (!wakeable) return null
+      lines.push({ to: sessionId, source, note })
+      if (source?.startsWith('ask:') && source.split(':').length > 2) return 'f00000000000'
       const id = `00000000000${woken.length}`.slice(-12)
       woken.push({ sessionId, note, id })
       return id
     },
+    receiver: (id) => live === null || live.has(id),
+    launcherOf: (id) => launchers.get(id) ?? null,
+    nameOf: (id) => (id === '0123abcd' ? 'Disk merge' : null),
     cancel: (id) => cancelled.push(id),
     noteMaxChars: () => 500,
     sessionChanged: (id) => changed.push(id),
@@ -315,6 +329,8 @@ describe('answerNote', () => {
     answer: 'Yes',
     note: null,
     delivery: null,
+    launcher: null,
+    answerTo: null,
     createdAt: 0,
     updatedAt: 0,
     answeredAt: 0,
@@ -424,5 +440,70 @@ describe('tether ask', () => {
         '  when handled: tether ask done abcdefabcdef',
       ].join('\n'),
     )
+  })
+})
+
+describe('asks from ended lanes', () => {
+  const LANE = '0123abcd'
+  const COORD = '9999aaaa'
+
+  it('tells the launcher when its lane files an ask, once', async () => {
+    launchers.set(LANE, COORD)
+    const created = await ask({ session: LANE, question: 'Merge the disks?' })
+    const id = created.body.id as string
+    expect(created.body).toMatchObject({ launcher: COORD, answerTo: LANE })
+    expect(lines).toEqual([
+      {
+        to: COORD,
+        source: `ask:${id}:filed`,
+        note: `[Ask] session "Disk merge" (${LANE}) asked the owner (${id}): "Merge the disks?" · relay or close it, don't ask again: tether ask get ${id}`,
+      },
+    ])
+    await ask({ session: LANE, question: 'Merge the disks?' })
+    expect(lines).toHaveLength(1)
+  })
+
+  it('answers the launcher once the asker has ended, and says so on the card', async () => {
+    launchers.set(LANE, COORD)
+    const created = await ask({ session: LANE, question: 'Go?' })
+    const id = created.body.id as string
+    live = new Set([COORD])
+    expect((await call('GET', `/v1/asks/${id}`)).body.answerTo).toBe(COORD)
+    const answered = await call('POST', `/v1/asks/${id}/answer`, { text: 'Yes' })
+    expect(answered.body).toMatchObject({ answerTo: COORD, delivery: 'wake' })
+    expect(lines.at(-1)).toEqual({
+      to: COORD,
+      source: `ask:${id}`,
+      note: `Owner answered ask ${id} (asked by ended session "Disk merge" (${LANE})) "Go?": "Yes" (full: tether ask get ${id}; when handled: tether ask done ${id})`,
+    })
+  })
+
+  it('no live asker or launcher: nobody is answered, the asker reads it', async () => {
+    const created = await ask({ session: LANE, question: 'Go?' })
+    live = new Set()
+    expect((await call('GET', `/v1/asks/${created.body.id}`)).body.answerTo).toBeNull()
+    const answered = await call('POST', `/v1/asks/${created.body.id}/answer`, { text: 'Yes' })
+    expect(answered.body).toMatchObject({ answerTo: null, delivery: 'pull' })
+  })
+
+  it('an ending session hands its open asks to its launcher in one line', async () => {
+    launchers.set(LANE, COORD)
+    const a = await ask({ session: LANE, question: 'One?' })
+    const b = await ask({ session: LANE, question: 'Two?' })
+    lines = []
+    live = new Set([COORD])
+    const handed = handOffAsks(new AskStore(store.db), delivery, LANE, null)
+    expect(handed.map((item) => item.id).sort()).toEqual([a.body.id, b.body.id].sort())
+    expect(lines).toEqual([
+      {
+        to: COORD,
+        source: `ask:handoff:${LANE}`,
+        note: `[Asks handed over] session ${LANE} ended with 2 open asks to the owner (${a.body.id}, ${b.body.id}); the answers come to you · tether ask get ${a.body.id}`,
+      },
+    ])
+    // Nothing open, or no launcher that takes lines: nothing is sent.
+    expect(handOffAsks(new AskStore(store.db), delivery, '7777bbbb', null)).toEqual([])
+    live = new Set()
+    expect(handOffAsks(new AskStore(store.db), delivery, LANE, null)).toEqual([])
   })
 })

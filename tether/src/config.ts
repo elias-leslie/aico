@@ -16,9 +16,10 @@ import { join } from 'node:path'
  * 14: placement `room: "local"` hosts; `needs` with a named `host`.
  * 15: `entry` on `POST /v1/roots` (per-session entries.json program).
  * 16: deliveries (`POST /v1/sessions/:id/deliveries`, `GET /v1/deliveries/:id`,
- *     `GET /v1/sessions/:id/due`); wait kinds job, reply, run, ask, host and
- *     tap; `POST /v1/waits/check` (nudge). */
-export const API_VERSION = 16
+ *     `GET /v1/sessions/:id/due`).
+ * 17: wait kinds job, reply, run, ask, host and tap; `POST /v1/waits/check`
+ *     (nudge); asks carry `answerTo`. */
+export const API_VERSION = 17
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

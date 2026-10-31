@@ -613,6 +613,12 @@ export function allocateWidgetId(
   throw new Error('could not allocate an unused widget ID')
 }
 
+/** A session ID that belonged to a session that has ended (End deletes the
+ * row; the retired ID stays). */
+export function isRetiredSessionId(id: string): boolean {
+  return db.prepare('SELECT 1 FROM retired_session_ids WHERE id = ?').get(id) !== undefined
+}
+
 export function hasWidget(id: string): boolean {
   return db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(id) !== undefined
 }

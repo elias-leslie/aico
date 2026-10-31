@@ -12,17 +12,32 @@
 // fired. A wait kept past End (keepWakes) that becomes ready queues a kept
 // check-in, which relaunches the conversation like a kept wake.
 //
-// P1b has one kind, `session`: another session (here or relayed from a host)
-// finished a turn since `since`, is idle, is blocked on a prompt, or ended.
-// Lines are built from typed values only: never agent reply text.
+// Kind `session`: another session (here or relayed from a host) finished a
+// turn since `since`, is idle, is blocked on a prompt, or ended. The pull
+// kinds (src/wait-kinds.ts: job, reply, run, ask, host, tap) read their
+// owner's state at arm, when it changes (a file watch, an event, a nudge),
+// every 60 s and at start. Lines are built from typed values only: never
+// agent reply text or an owner's free text.
 
 import { randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { BLOCKING_DETAILS, type LaneView, laneTitle, lineNames } from './lane-reports'
+import {
+  isPullKind,
+  PULL_KINDS,
+  PULL_REFS,
+  PULL_UNTILS,
+  type PullKind,
+  type PullRead,
+  type PullReading,
+  pullLine,
+  pullVerdict,
+  pullWaitingOn,
+} from './wait-kinds'
 import type { EndedSession, WakePolicy } from './wakes'
 
-export const WAIT_KINDS = ['session'] as const
+export const WAIT_KINDS = ['session', ...PULL_KINDS] as const
 export type WaitKind = (typeof WAIT_KINDS)[number]
 export const SESSION_UNTILS = ['finished', 'idle', 'blocked', 'ended'] as const
 export type SessionUntil = (typeof SESSION_UNTILS)[number]
@@ -39,6 +54,8 @@ const NOTE_MAX_CHARS = 200
 export const LONG_POLL_MAX_SECONDS = 55
 /** Armed waits are looked at again at least this often. */
 const RECHECK_MS = 60_000
+/** With nothing armed, waits that are over are still pruned this often. */
+const PRUNE_MS = 3600_000
 /** A wait that is over shows in `--recent` this long. */
 const RECENT_MS = 24 * 3600_000
 const RECENT_MAX = 20
@@ -59,7 +76,8 @@ export interface Wait {
   ref: string
   /** null on this computer; the peer's name for a relayed session. */
   host: string | null
-  until: SessionUntil
+  /** A SessionUntil for `session`, else one of PULL_UNTILS[kind]. */
+  until: string
   since: number
   deadline: number
   key: string | null
@@ -112,7 +130,7 @@ function toWait(raw: RawWait): Wait {
     kind: raw.kind as WaitKind,
     ref: raw.ref,
     host: raw.host || null,
-    until: raw.until as SessionUntil,
+    until: raw.until,
     since: raw.since,
     deadline: raw.deadline,
     key: raw.key,
@@ -338,7 +356,7 @@ export type WaitPolicy = Pick<
  * `exited` that its agent left its pane for good.
  */
 export function sessionVerdict(
-  wait: Pick<Wait, 'until' | 'since'>,
+  wait: { until: string; since: number },
   target: LaneView | null,
   exited: boolean,
   policy: WaitPolicy,
@@ -398,18 +416,19 @@ export function waitLine(
   now: number,
 ): string {
   const cursor = wait.cursor
+  const until = wait.until as SessionUntil
   const { name, look } = lineNames({
     id: wait.ref,
     host: wait.host,
     title: cursor?.title ?? wait.ref,
     requestId: cursor?.requestId ?? null,
   })
-  const words = UNTIL_WORDS[wait.until]
+  const words = UNTIL_WORDS[until]
   const detail =
     cursor?.detail && BLOCKING_DETAILS.has(cursor.detail) ? cursor.detail : 'waiting on input'
   let head: string
   if (outcome === 'until')
-    head = `[Ready] session ${name} ${wait.until === 'blocked' ? `is blocked: ${detail}` : words.ready}`
+    head = `[Ready] session ${name} ${until === 'blocked' ? `is blocked: ${detail}` : words.ready}`
   else if (outcome === 'gone') head = `[Wait over] session ${name} ${words.gone}`
   else {
     const state =
@@ -420,6 +439,37 @@ export function waitLine(
   }
   const note = wait.note ? ` · re: "${laneTitle(wait.note, NOTE_MAX_CHARS)}"` : ''
   return `${head}${note} · ${look}`
+}
+
+/** A pull wait's line: the reading as fired, or the last one seen when the
+ * thing is gone or the wait timed out without a reading. */
+export function pullWaitLine(
+  wait: Pick<Wait, 'kind' | 'ref' | 'until' | 'note' | 'armedAt' | 'cursor'>,
+  outcome: WaitOutcome,
+  reading: PullRead,
+  now: number,
+): string {
+  const last: PullReading | null = wait.cursor
+    ? { state: wait.cursor.state, detail: wait.cursor.detail, title: wait.cursor.title }
+    : null
+  const shown = outcome === 'gone' && reading === null ? null : (reading ?? last)
+  return pullLine(
+    { kind: wait.kind as PullKind, ref: wait.ref, until: wait.until, note: wait.note },
+    outcome,
+    shown,
+    last?.title ?? null,
+    spanLabel(now - wait.armedAt),
+    NOTE_MAX_CHARS,
+  )
+}
+
+function readingCursor(reading: PullReading): WaitCursor {
+  return {
+    state: reading.state,
+    detail: reading.detail,
+    title: reading.title ?? '',
+    requestId: null,
+  }
 }
 
 function cursorOf(view: LaneView): WaitCursor {
@@ -451,6 +501,23 @@ export interface WaitOperations {
   resolve(ref: string): { id: string; host: string | null } | null
   /** The session as it is now; null when it is gone. */
   view(id: string, host: string | null): LaneView | null
+  /** A session that `ref` named and that has ended (its id, retired or a
+   * root request's tombstone); null when `ref` never named one here. */
+  endedSession(ref: string): string | null
+  /** The full ref a pull wait keeps (a job id prefix made whole), or null
+   * when it names nothing (an unknown or ambiguous prefix). */
+  pullRef(kind: PullKind, ref: string): string | null
+  /** The owner's state now (src/wait-kinds.ts PullRead). Cheap: files and
+   * Tether's own state, read at once. */
+  read(kind: PullKind, ref: string): PullRead
+  /** Look again beyond `read` where the owner needs a probe (a job whose
+   * runner may have been killed: its owner's CLI, as an idle-weight unit),
+   * then poke the waits on it. `force` (a nudge) skips the throttle. */
+  refresh?(kind: PullKind, ref: string, force: boolean): void
+  /** The waiter already has this line another way: an ask's answer queued to
+   * the session that asked, a run's pause told to the session that launched
+   * it. The wait fires without a second line. */
+  told?(wait: Wait): boolean
   /** A local session's agent left its pane for good (a clean exit, or crash
    * recovery holds it). */
   agentGone(id: string): boolean
@@ -477,7 +544,7 @@ export interface ArmInput {
   by: string | null
   kind: WaitKind
   ref: string
-  until: SessionUntil
+  until: string
   since: number | null
   timeoutMinutes: number | null
   key: string | null
@@ -525,12 +592,32 @@ export class WaitService {
    * soon (all of them with no id). Never inside the caller's stack, which may
    * hold a transaction. */
   poke(id?: string): void {
+    this.pokeKind('session', id)
+  }
+
+  /** Something a kind's waits read changed (a file, an event): look at the
+   * waits of that kind soon, on `ref` only when given. */
+  pokeKind(kind: WaitKind, ref?: string): void {
     if (this.stopped) return
-    if (id === undefined) this.pendingAll = true
-    else {
-      this.pending ??= new Set()
-      this.pending.add(id)
-    }
+    this.pending ??= new Set()
+    this.pending.add(ref === undefined ? `${kind}:*` : `${kind}:${ref}`)
+    this.later()
+  }
+
+  /** A producer's nudge (`POST /v1/waits/check`): re-read now. It carries no
+   * outcome; a lost one costs the 60 s re-read. Returns the armed waits it
+   * looks at. */
+  nudge(kind: WaitKind, ref?: string): number {
+    const armed = this.store
+      .armed()
+      .filter((wait) => wait.kind === kind && (ref === undefined || wait.ref === ref))
+    if (isPullKind(kind)) for (const wait of armed) this.ops.refresh?.(kind, wait.ref, true)
+    this.pokeKind(kind, ref)
+    return armed.length
+  }
+
+  private later(all = false): void {
+    if (all) this.pendingAll = true
     if (this.scheduled) return
     this.scheduled = true
     setImmediate(() => {
@@ -546,6 +633,7 @@ export class WaitService {
   waitingOn(waiter: string): string | null {
     const first = this.store.forWaiter(waiter)[0]
     if (!first) return null
+    if (isPullKind(first.kind)) return pullWaitingOn(first.kind, first.ref, first.until)
     const title = laneTitle(first.cursor?.title ?? first.ref)
     return `a wait on session "${title}" (${first.until})`
   }
@@ -565,22 +653,33 @@ export class WaitService {
       if (input.waiter === null) throw new WaitRefused(400, 'invalid_body', { field: 'key' })
       const existing = this.store.byKey(input.waiter, input.key)
       if (existing) {
-        if (existing.until !== input.until || !this.sameTarget(existing, input.ref))
+        if (
+          existing.kind !== input.kind ||
+          existing.until !== input.until ||
+          !this.sameTarget(existing, input.ref)
+        )
           throw new WaitRefused(409, 'key_conflict', { waitId: existing.id })
         return { wait: existing, created: false }
       }
     }
-    const target = this.ops.resolve(input.ref)
-    if (!target) throw new WaitRefused(404, 'not_found', { field: 'ref' })
-    if (target.host === null && (target.id === input.waiter || target.id === input.by))
-      throw new WaitRefused(409, 'self_wait')
-    if (input.waiter !== null && this.store.countArmed(input.waiter) >= policy.maxWaitsPerSession)
-      throw new WaitRefused(409, 'too_many_waits', { max: policy.maxWaitsPerSession })
     if (input.timeoutMinutes !== null && input.timeoutMinutes > policy.waitMaxMinutes)
       throw new WaitRefused(400, 'invalid_body', {
         field: 'timeoutMinutes',
         max: policy.waitMaxMinutes,
       })
+    if (input.waiter !== null && this.store.countArmed(input.waiter) >= policy.maxWaitsPerSession)
+      throw new WaitRefused(409, 'too_many_waits', { max: policy.maxWaitsPerSession })
+    if (isPullKind(input.kind)) return this.armPull(input, input.kind, now)
+    const target = this.ops.resolve(input.ref)
+    if (!target) {
+      // A session that already ended is over at once, not unknown.
+      const ended = this.ops.endedSession(input.ref)
+      if (ended === null) throw new WaitRefused(404, 'not_found', { field: 'ref' })
+      if (ended === input.waiter || ended === input.by) throw new WaitRefused(409, 'self_wait')
+      return this.armed(input, { ref: ended, since: input.since ?? now, cursor: null }, now)
+    }
+    if (target.host === null && (target.id === input.waiter || target.id === input.by))
+      throw new WaitRefused(409, 'self_wait')
     const view = this.ops.view(target.id, target.host)
     if (!view) throw new WaitRefused(404, 'not_found', { field: 'ref' })
     const by = input.by ?? input.waiter
@@ -597,23 +696,50 @@ export class WaitService {
       view.launched
     )
       since = view.createdAt
+    return this.armed(
+      input,
+      { ref: target.id, host: target.host, since: since ?? now, cursor: cursorOf(view) },
+      now,
+    )
+  }
+
+  /** A pull kind: the ref names something its owner knows now (a job, a
+   * request, a run, an ask, a host), or a tap not taken in yet. */
+  private armPull(input: ArmInput, kind: PullKind, now: number): { wait: Wait; created: boolean } {
+    const ref = this.ops.pullRef(kind, input.ref)
+    if (ref === null) throw new WaitRefused(404, 'not_found', { field: 'ref' })
+    const reading = this.ops.read(kind, ref)
+    if (reading === null) throw new WaitRefused(404, 'not_found', { field: 'ref' })
+    return this.armed(
+      input,
+      { ref, since: now, cursor: reading ? readingCursor(reading) : null },
+      now,
+    )
+  }
+
+  private armed(
+    input: ArmInput,
+    target: { ref: string; host?: string | null; since: number; cursor: WaitCursor | null },
+    now: number,
+  ): { wait: Wait; created: boolean } {
+    const policy = this.ops.policy()
     const wait = this.store.insert({
       waiter: input.waiter,
       kind: input.kind,
-      ref: target.id,
-      host: target.host,
+      ref: target.ref,
+      host: target.host ?? null,
       until: input.until,
-      since: since ?? now,
+      since: target.since,
       deadline: now + (input.timeoutMinutes ?? policy.waitDefaultMinutes) * 60_000,
       key: input.key,
       note: input.note,
       armedAt: now,
-      cursor: cursorOf(view),
+      cursor: target.cursor,
       kept: false,
       endedSession: null,
     })
     this.ops.log(
-      `armed wait=${wait.id} by ${wait.waiter ?? 'a blocking client'} on session=${where(wait)} until ${wait.until}`,
+      `armed wait=${wait.id} by ${wait.waiter ?? 'a blocking client'} on ${where(wait)} until ${wait.until}`,
     )
     this.evaluate(wait)
     this.ops.changed(wait.waiter)
@@ -623,6 +749,7 @@ export class WaitService {
 
   private sameTarget(wait: Wait, ref: string): boolean {
     if (wait.ref === ref) return true
+    if (isPullKind(wait.kind)) return this.ops.pullRef(wait.kind, ref) === wait.ref
     const target = this.ops.resolve(ref)
     return target !== null && target.id === wait.ref && target.host === wait.host
   }
@@ -680,8 +807,17 @@ export class WaitService {
     if (this.stopped) return
     const now = this.ops.now()
     for (const wait of this.store.armed()) {
-      if (ids && !ids.has(wait.ref) && wait.deadline > now) continue
+      if (
+        ids &&
+        !ids.has(`${wait.kind}:${wait.ref}`) &&
+        !ids.has(`${wait.kind}:*`) &&
+        wait.deadline > now
+      )
+        continue
       try {
+        // The 60 s look also asks owners that need a probe (a job whose
+        // runner may have died); the probe pokes the wait when it answers.
+        if (!ids && isPullKind(wait.kind)) this.ops.refresh?.(wait.kind, wait.ref, false)
         this.evaluate(wait)
       } catch (error) {
         this.ops.log(`wait=${wait.id} check failed: ${(error as Error).message}`)
@@ -705,6 +841,10 @@ export class WaitService {
     const now = this.ops.now()
     const policy = this.ops.policy()
     this.recheckAt.delete(wait.id)
+    if (isPullKind(wait.kind)) {
+      this.evaluatePull(wait, wait.kind, now)
+      return
+    }
     const view = this.ops.view(wait.ref, wait.host)
     if (view) {
       const cursor = cursorOf(view)
@@ -730,8 +870,36 @@ export class WaitService {
     if (verdict.recheckAt !== null) this.recheckAt.set(wait.id, verdict.recheckAt)
   }
 
-  private fire(wait: Wait, outcome: WaitOutcome, now: number): void {
-    const line = waitLine(wait, outcome, now)
+  private evaluatePull(wait: Wait, kind: PullKind, now: number): void {
+    const reading = this.ops.read(kind, wait.ref)
+    if (reading) {
+      const cursor = readingCursor(reading)
+      if (!sameCursor(wait.cursor, cursor)) {
+        this.store.saveCursor(wait.id, cursor)
+        wait.cursor = cursor
+      }
+    }
+    const verdict = pullVerdict(kind, wait.until, reading)
+    if (verdict) {
+      // Told another way already (an ask's answer to the asker, a run's
+      // pause to its launcher): over, without a second line.
+      const quiet = verdict === 'until' && !wait.kept && (this.ops.told?.(wait) ?? false)
+      this.fire(wait, verdict, now, reading, quiet)
+      return
+    }
+    if (wait.deadline <= now) this.fire(wait, 'timeout', now, reading)
+  }
+
+  private fire(
+    wait: Wait,
+    outcome: WaitOutcome,
+    now: number,
+    reading?: PullRead,
+    quiet = false,
+  ): void {
+    const line = isPullKind(wait.kind)
+      ? pullWaitLine(wait, outcome, reading, now)
+      : waitLine(wait, outcome, now)
     const fired = this.store.transaction(() => {
       if (
         !this.store.settle(wait, outcome === 'timeout' ? 'timed_out' : 'fired', outcome, line, now)
@@ -739,17 +907,21 @@ export class WaitService {
         return false
       // A kept wait relaunches (also while its End is still deleting the
       // waiter, whose queue goes with it); a timeout or gone is only recorded.
-      if (wait.kept && wait.endedSession) {
+      if (quiet) {
+        // The waiter has this line already.
+      } else if (wait.kept && wait.endedSession) {
         if (outcome === 'until') this.ops.relaunch(wait.endedSession, line)
       } else if (wait.waiter) this.ops.deliver(wait.waiter, `wait:${wait.id}`, line)
       return true
     })
     if (!fired) return
     this.recheckAt.delete(wait.id)
-    const to = wait.kept
-      ? `kept (${wait.endedSession?.id ?? '?'})`
-      : (wait.waiter ?? 'a blocking client')
-    this.ops.log(`wait=${wait.id} on session=${where(wait)} ${outcome} -> ${to}`)
+    const to = quiet
+      ? 'told already'
+      : wait.kept
+        ? `kept (${wait.endedSession?.id ?? '?'})`
+        : (wait.waiter ?? 'a blocking client')
+    this.ops.log(`wait=${wait.id} on ${where(wait)} ${outcome} -> ${to}`)
     this.notify(wait.id)
     this.ops.changed(wait.waiter)
   }
@@ -759,9 +931,9 @@ export class WaitService {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
     const now = this.ops.now()
-    let next = Math.max(now, this.lastFullCheck + RECHECK_MS)
     const armed = this.store.armed()
-    if (!armed.length) return
+    // Nothing armed: still look (and prune) now and then.
+    let next = Math.max(now, this.lastFullCheck + (armed.length ? RECHECK_MS : PRUNE_MS))
     for (const wait of armed) {
       next = Math.min(next, wait.deadline, this.recheckAt.get(wait.id) ?? Number.POSITIVE_INFINITY)
     }
@@ -786,8 +958,8 @@ export class WaitService {
   }
 }
 
-function where(wait: Pick<Wait, 'ref' | 'host'>): string {
-  return wait.host ? `${wait.host}/${wait.ref}` : wait.ref
+function where(wait: Pick<Wait, 'kind' | 'ref' | 'host'>): string {
+  return `${wait.kind}=${wait.host ? `${wait.host}/${wait.ref}` : wait.ref}`
 }
 
 // --- routes ------------------------------------------------------------------------------
@@ -814,9 +986,30 @@ function waitNote(value: unknown): string | null {
   return note
 }
 
+function waitKind(value: unknown): WaitKind {
+  if (!(WAIT_KINDS as readonly unknown[]).includes(value))
+    throw new HttpError(400, 'invalid_body', { field: 'kind', kinds: WAIT_KINDS })
+  return value as WaitKind
+}
+
+function waitRef(kind: WaitKind, value: unknown): string {
+  const ok =
+    typeof value === 'string' &&
+    (isPullKind(kind)
+      ? PULL_REFS[kind].test(value)
+      : SESSION_ID.test(value) || REQUEST_ID.test(value))
+  if (!ok) throw new HttpError(400, 'invalid_body', { field: 'ref' })
+  return value as string
+}
+
+function untilsOf(kind: WaitKind): readonly string[] {
+  return isPullKind(kind) ? PULL_UNTILS[kind] : SESSION_UNTILS
+}
+
 /**
- * `POST /v1/waits`, `GET /v1/waits/:id[?wait=N]`, `DELETE /v1/waits/:id` and
- * `GET /v1/sessions/:id/waits[?recent=1]` (docs/api-v1.md "Waits").
+ * `POST /v1/waits`, `POST /v1/waits/check`, `GET /v1/waits/:id[?wait=N]`,
+ * `DELETE /v1/waits/:id` and `GET /v1/sessions/:id/waits[?recent=1]`
+ * (docs/api-v1.md "Waits").
  */
 export function registerWaitRoutes(
   router: Router,
@@ -850,13 +1043,12 @@ export function registerWaitRoutes(
       ])
       const waiter = optionalSession(body.waiter, 'waiter')
       const by = optionalSession(body.by, 'by')
-      if (!(WAIT_KINDS as readonly unknown[]).includes(body.kind))
-        throw new HttpError(400, 'invalid_body', { field: 'kind', kinds: WAIT_KINDS })
-      if (typeof body.ref !== 'string' || !(SESSION_ID.test(body.ref) || REQUEST_ID.test(body.ref)))
-        throw new HttpError(400, 'invalid_body', { field: 'ref' })
-      const until = body.until ?? 'finished'
-      if (!(SESSION_UNTILS as readonly unknown[]).includes(until))
-        throw new HttpError(400, 'invalid_body', { field: 'until', untils: SESSION_UNTILS })
+      const kind = waitKind(body.kind)
+      const ref = waitRef(kind, body.ref)
+      const untils = untilsOf(kind)
+      const until = body.until ?? untils[0]
+      if (!untils.includes(until as string))
+        throw new HttpError(400, 'invalid_body', { field: 'until', untils })
       let since: number | null = null
       if (body.since !== undefined && body.since !== null) {
         if (!Number.isSafeInteger(body.since) || (body.since as number) < 0)
@@ -889,9 +1081,9 @@ export function registerWaitRoutes(
         const { wait, created } = await waits.arm({
           waiter,
           by,
-          kind: body.kind as WaitKind,
-          ref: body.ref,
-          until: until as SessionUntil,
+          kind,
+          ref,
+          until: until as string,
           since,
           timeoutMinutes,
           key,
@@ -904,6 +1096,14 @@ export function registerWaitRoutes(
           throw new HttpError(error.status, error.code, error.detail)
         throw error
       }
+    })
+    .add('POST', '/v1/waits/check', async (req, res) => {
+      // A nudge: re-read now. A hint only; it carries no outcome or text.
+      const body = await readJsonObject(req)
+      only(body, ['kind', 'ref'])
+      const kind = waitKind(body.kind)
+      const ref = body.ref === undefined || body.ref === null ? undefined : waitRef(kind, body.ref)
+      sendJson(res, 200, { kind, ref: ref ?? null, armed: current().nudge(kind, ref) })
     })
     .add('GET', '/v1/waits/:waitId', async (_req, res, params, query) => {
       const waits = current()

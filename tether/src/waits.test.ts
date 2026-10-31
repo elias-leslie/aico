@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LaneView } from './lane-reports'
 import { bindCatalog, insertWidget, removeWidget } from './lifecycle/catalog'
 import { Store } from './store'
+import type { PullRead } from './wait-kinds'
 import {
   sessionVerdict,
   spanLabel,
@@ -65,6 +66,10 @@ function harness() {
   const changed: (string | null)[] = []
   const gone = new Set<string>()
   const notMain = new Map<string, string>()
+  const ended = new Set<string>()
+  const pulls = new Map<string, PullRead>()
+  const told = new Set<string>()
+  const refreshed: string[] = []
   const ops: WaitOperations = {
     now: () => Date.now(),
     policy: () => DEFAULT_WAKE_POLICY,
@@ -74,6 +79,15 @@ function harness() {
       return null
     },
     view: (id) => views.get(id) ?? null,
+    endedSession: (ref) => (ended.has(ref) ? ref : null),
+    pullRef: (kind, ref) => {
+      if (kind === 'job')
+        for (const key of pulls.keys()) if (key.startsWith(`job:${ref}`)) return key.slice(4)
+      return pulls.has(`${kind}:${ref}`) ? ref : null
+    },
+    read: (kind, ref) => pulls.get(`${kind}:${ref}`),
+    refresh: (kind, ref, force) => refreshed.push(`${kind}:${ref}:${force}`),
+    told: (wait) => told.has(wait.id),
     agentGone: (id) => gone.has(id),
     receiver: (id) => id === WAITER || id === OTHER,
     notMainAgent: async (waiter, thread) => notMain.get(`${waiter}/${thread}`) ?? null,
@@ -87,7 +101,7 @@ function harness() {
   waits.start()
   const set = (overrides: Partial<LaneView> | null) => {
     views.set(LANE, overrides === null ? null : view(overrides))
-    waits.check(new Set([LANE]))
+    waits.check(new Set([`session:${LANE}`]))
   }
   const arm = (input: Partial<Parameters<WaitService['arm']>[0]> = {}) =>
     waits.arm({
@@ -103,7 +117,27 @@ function harness() {
       thread: null,
       ...input,
     })
-  return { store, waits, views, delivered, relaunched, changed, gone, notMain, set, arm }
+  const pull = (kind: string, ref: string, reading: PullRead) => {
+    pulls.set(`${kind}:${ref}`, reading)
+    waits.check(new Set([`${kind}:${ref}`]))
+  }
+  return {
+    store,
+    waits,
+    views,
+    delivered,
+    relaunched,
+    changed,
+    gone,
+    notMain,
+    ended,
+    pulls,
+    told,
+    refreshed,
+    set,
+    pull,
+    arm,
+  }
 }
 
 describe('sessionVerdict', () => {
@@ -464,5 +498,124 @@ describe('WaitService', () => {
     expect(h.waits.store.get(wait.id)?.state).toBe('armed')
     await vi.advanceTimersByTimeAsync(1)
     expect(h.waits.store.get(wait.id)?.state).toBe('fired')
+  })
+
+  it('a session that already ended fires at arm, not unknown', async () => {
+    const h = harness()
+    h.ended.add('dddd0001')
+    const { wait } = await h.arm({ ref: 'dddd0001', until: 'ended' })
+    expect(wait).toMatchObject({ state: 'fired', outcome: 'until' })
+    const gone = await h.arm({ ref: 'dddd0001', until: 'finished' })
+    expect(gone.wait).toMatchObject({ state: 'fired', outcome: 'gone' })
+    await expect(h.arm({ ref: 'eeee0001' })).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('prunes waits that are over even when nothing is armed', async () => {
+    const h = harness()
+    const { wait } = await h.arm()
+    h.waits.cancel(wait.id)
+    vi.setSystemTime(T0 + DEFAULT_WAKE_POLICY.waitKeepDays * 24 * 3600_000 + 1)
+    await vi.advanceTimersByTimeAsync(3600_000 + 100)
+    expect(h.waits.store.get(wait.id)).toBeUndefined()
+  })
+})
+
+describe('pull kinds', () => {
+  const JOB = 'a'.repeat(32)
+  const pullArm = (h: ReturnType<typeof harness>, kind: string, ref: string, until: string) =>
+    h.arm({ kind: kind as Wait['kind'], ref, until })
+
+  it('a job wait takes an id prefix, fires once on its final state', async () => {
+    const h = harness()
+    h.pulls.set(`job:${JOB}`, { state: 'running', detail: null, title: 'aico' })
+    const { wait } = await pullArm(h, 'job', JOB.slice(0, 8), 'done')
+    expect(wait).toMatchObject({ ref: JOB, state: 'armed' })
+    h.pull('job', JOB, { state: 'failed', detail: '2', title: 'aico' })
+    expect(h.delivered).toEqual([
+      {
+        to: WAITER,
+        source: `wait:${wait.id}`,
+        line: `[Ready] service job aaaaaaaa (aico) failed (exit 2) · st service result ${JOB}`,
+      },
+    ])
+    h.pull('job', JOB, { state: 'failed', detail: '2', title: 'aico' })
+    expect(h.delivered).toHaveLength(1)
+  })
+
+  it('refuses a ref its owner does not know, and a bad until', async () => {
+    const h = harness()
+    await expect(pullArm(h, 'job', JOB, 'done')).rejects.toMatchObject({ code: 'not_found' })
+    h.pulls.set('reply:abc123', null)
+    await expect(pullArm(h, 'reply', 'abc123', 'acked')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('a reply wait fires on an answer; closed without one is gone', async () => {
+    const h = harness()
+    h.pulls.set('reply:abc123', { state: 'open', detail: null, title: 'cc:1c7a9f' })
+    const a = await pullArm(h, 'reply', 'abc123', 'acked')
+    h.pull('reply', 'abc123', { state: 'acked', detail: 'yes', title: 'cc:1c7a9f' })
+    expect(h.delivered[0]?.line).toBe(
+      '[Ready] request abc123 to cc:1c7a9f answered: yes · st sessions inbox',
+    )
+    h.pulls.set('reply:def456', { state: 'open', detail: null, title: 'cc:1' })
+    const b = await pullArm(h, 'reply', 'def456', 'acked')
+    h.pull('reply', 'def456', { state: 'closed', detail: null, title: 'cc:1' })
+    expect(h.waits.store.get(b.wait.id)?.outcome).toBe('gone')
+    expect(h.waits.store.get(a.wait.id)?.outcome).toBe('until')
+  })
+
+  it('a tap not taken in yet arms and waits; a timeout says so', async () => {
+    const h = harness()
+    const TAP = 'b'.repeat(32)
+    h.pulls.set(`tap:${TAP}`, undefined)
+    const { wait } = await h.arm({ kind: 'tap', ref: TAP, until: 'decided', timeoutMinutes: 1 })
+    expect(wait.state).toBe('armed')
+    vi.setSystemTime(T0 + 61_000)
+    h.waits.check()
+    expect(h.delivered[0]?.line).toBe(
+      '[Wait timed out] tap bbbbbbbb not decided after 1m · nightshift pending',
+    )
+  })
+
+  it('an ask answered to the waiter itself fires without a second line', async () => {
+    const h = harness()
+    const ASK = 'c'.repeat(12)
+    h.pulls.set(`ask:${ASK}`, { state: 'open', detail: null, title: null })
+    const { wait } = await pullArm(h, 'ask', ASK, 'answered')
+    h.told.add(wait.id)
+    h.pull('ask', ASK, { state: 'answered', detail: null, title: null })
+    expect(h.waits.store.get(wait.id)).toMatchObject({ state: 'fired', outcome: 'until' })
+    expect(h.delivered).toEqual([])
+  })
+
+  it('a run that ends without needing the owner is gone for needs-you', async () => {
+    const h = harness()
+    h.pulls.set('run:run-1', { state: 'running', detail: null, title: null })
+    const { wait } = await pullArm(h, 'run', 'run-1', 'needs-you')
+    h.pull('run', 'run-1', { state: 'succeeded', detail: null, title: null })
+    expect(h.waits.store.get(wait.id)?.line).toBe(
+      '[Wait over] workflow run run-1 ended without needing the owner: succeeded · st workflow get run-1',
+    )
+  })
+
+  it('a nudge re-reads the waits of that kind and ref at once, forcing the probe', async () => {
+    const h = harness()
+    h.pulls.set(`job:${JOB}`, { state: 'running', detail: null, title: null })
+    const { wait } = await pullArm(h, 'job', JOB, 'done')
+    h.pulls.set(`job:${JOB}`, { state: 'succeeded', detail: '0', title: null })
+    expect(h.waits.nudge('job', JOB)).toBe(1)
+    expect(h.refreshed).toContain(`job:${JOB}:true`)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(h.waits.store.get(wait.id)?.outcome).toBe('until')
+    expect(h.waits.nudge('job', JOB)).toBe(0)
+  })
+
+  it('waitingOn names the kind and the ref', async () => {
+    const h = harness()
+    h.pulls.set('host:gem', { state: 'offline', detail: null, title: null })
+    await pullArm(h, 'host', 'gem', 'connected')
+    expect(h.waits.waitingOn(WAITER)).toBe('a wait on host gem (connected)')
   })
 })

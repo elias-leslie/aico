@@ -38,8 +38,11 @@ _Avoid_: Restart, recreate
 A scheduled check-in on a session: a time and a note Tether pastes into the idle agent when due. End cancels it unless the owner keeps it; a kept wake starts the conversation again in a new session, never the ended one.
 _Avoid_: Reminder, alarm, timer
 
+**Delivery**:
+One line another owner (SummitFlow's coordination inbox) queues on a session's delivery queue. It rides with wait lines and lane reports and goes out once: pasted, as an Agent Hub turn, or to a native puller (Claude's asyncRewake hook, Pi's extension).
+
 **Wait**:
-An agent's request to hear once when something it waits on is ready (P1b: another session finished, idle, blocked or ended), or that it timed out. Its line rides the wake delivery queue; it is not a wake and is not listed or counted with check-ins.
+An agent's request to hear once when something it waits on is ready (another session finished, idle, blocked or ended; a service job, request, workflow run, owner ask, host or Nightshift tap, read from its owner), or that it timed out. Its line rides the wake delivery queue; it is not a wake and is not listed or counted with check-ins.
 _Avoid_: subscription, watch (a watch is a lane report receiver)
 
 **Lane report**:

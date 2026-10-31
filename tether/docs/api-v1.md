@@ -448,8 +448,8 @@ drawer, with the answer coming back to the agent. Agents use `tether ask`
 | `POST /v1/asks/:id/withdraw` | — | `200`, state `withdrawn` (the question no longer applies). |
 
 The ask: `{id, session, requester, question, options, recommended, body,
-command, share, blocking, state, answer, note, delivery, createdAt, updatedAt,
-answeredAt}` (times in ms). `session` is the asking session's ID (the pane's
+command, share, blocking, state, answer, note, delivery, launcher, answerTo,
+createdAt, updatedAt, answeredAt}` (times in ms). `session` is the asking session's ID (the pane's
 `AICO_WIDGET_ID`); without one, `requester` (one line, at most 60 characters)
 names the asker. `question` is one line of at most 200 characters that stands
 alone; `options` up to 5 one-line choices of at most 100 characters,
@@ -460,11 +460,23 @@ waits: the owner's app marks the session as needing them and pushes once.
 question while it is open or answered (question compared without case or
 extra spaces). Done and withdrawn asks go after `TETHER_SHARE_RETENTION_DAYS`.
 
-**The answer reaches the agent.** On an answer, Tether adds a wake that is due
-now on the asking session ([Wakes](#wakes-post-cutover): delivered when the
-agent is idle, its input line empty and the owner quiet), whose note carries
-the question and the answer within `noteMaxChars` and ends with
+**The answer reaches the agent.** On an answer, Tether queues an event line
+(source `ask:<id>`) on the session the answer goes to (`answerTo`, below;
+delivered when the agent is idle, its input line empty and the owner quiet),
+which carries the question and the answer within `noteMaxChars` and ends with
 `tether ask get <id>` and `tether ask done <id>`. `delivery` is then `wake`.
+
+**Asks from ended lanes** (API 17). `launcher` is the session that launched
+the asker (its lineage from a launch, recorded when the ask is filed);
+`answerTo` is where the answer goes: while open, the asker while it takes
+lines, else its launcher, else null (worked out when the answer comes); once
+answered, where it went. The ask card in Aico says which session gets it. A
+lane that files an ask sends its launcher one line (source `ask:<id>:filed`):
+`[Ask] session "Disk merge" (0123abcd) asked the owner (<id>): "…" · relay or
+close it, don't ask again: tether ask get <id>`. A session that ends with open
+asks hands them to its launcher in one line (`[Asks handed over] session … ended
+with 2 open asks to the owner (…); the answers come to you · …`), never a
+silent orphan.
 A session Tether cannot wake (it has ended, it is a shell, or its agent has no
 state reader: Antigravity today) gets `delivery: "pull"`: the agent reads the
 answer with `tether ask get` or `tether ask list --mine`. Claude Code, Codex,
@@ -675,12 +687,15 @@ to that lane (a lane watching its own coordinator), which would loop, `409 lane_
 
 ## Waits
 
-A wait tells an agent when something it waits on is ready, instead of a check-in at a guessed time. P1b has one kind,
-`session`: another session finished a turn, is idle, is blocked on the user, or ended. Lanes an agent launched report on
-their own ([Lane reports](#lane-reports)); a wait is for anything else. The CLI is `st aico wait session ID|REQ
-[--until finished|idle|blocked|ended] [--timeout 2h] [--note T] [--key K] [--block]`, `st aico waits [--recent]`,
-`st aico wait cancel WAIT`, `st aico wait get WAIT [--block]`, and `st aico wait time WHEN NOTE` (the same as
-`st aico wake`). Waits live in the `waits` table, apart from wakes, and survive Tether restarts.
+A wait tells an agent when something it waits on is ready, instead of a check-in at a guessed time. Kind `session`:
+another session finished a turn, is idle, is blocked on the user, or ended. Lanes an agent launched report on their own
+([Lane reports](#lane-reports)); a wait is for anything else. The pull kinds (API 17, below) wait on a service job, a
+request, a workflow run, an owner ask, a host or a Nightshift tap. The CLI is `st aico wait session ID|REQ
+[--until finished|idle|blocked|ended] [--timeout 2h] [--note T] [--key K] [--block]`, `st aico wait job|reply|run|ask|
+host|tap REF [--until …]` with the same options, `st aico waits [--recent]`, `st aico wait cancel WAIT`,
+`st aico wait get WAIT [--block]`, `st aico wait time WHEN NOTE` (the same as `st aico wake`) and `st aico nudge KIND
+REF`. The CLI asks `/v1/version` before it sends a pull kind or a nudge and says so when Tether is older. Waits live in
+the `waits` table, apart from wakes, and survive Tether restarts.
 
 - **Level-triggered.** The condition is checked when the wait is armed: a session that already finished after `since`
   fires at once. `since` defaults to the waiter's last `inject` with `from` to that session, else the launch for the
@@ -691,7 +706,9 @@ their own ([Lane reports](#lane-reports)); a wait is for anything else. The CLI 
   time, is no turn), held `laneSettleSeconds`, and `waitingOn` null;
   **idle** is `idle` held `laneSettleSeconds`; **blocked** is `permission prompt` or `input needed` held
   `laneBlockedSeconds` (never `dialog open`); **ended** is the session gone, or for a local one its agent left the pane
-  for good. A session that ends before any other condition holds fires `gone`.
+  for good. A session that ends before any other condition holds fires `gone`. A session that had already ended when
+  the wait is armed (a retired id, or a root request's tombstone) fires at once: `until` for `ended`, `gone` for the
+  rest; an id Tether never knew is `404`.
 - **Once.** Firing moves the wait out of `armed` with a compare-and-set on `seq` and queues the line in the same
   transaction, so it fires once across restarts.
 - **Never silent.** A wait past its deadline (default `waitDefaultMinutes`, at most `waitMaxMinutes`) fires `timeout`
@@ -706,7 +723,7 @@ their own ([Lane reports](#lane-reports)); a wait is for anything else. The CLI 
 - **End.** A waiter's waits end with it, unless End says `keepWakes: true`: then its armed waits are kept, and one that
   becomes ready relaunches the conversation like a kept wake (also when it fires while the End is still running); one
   that times out or whose session is gone is recorded and relaunches nothing. Aico web's End dialog offers keeping
-  only when the session has check-ins.
+  when the session has check-ins, waits or both.
 - **Subagents.** A session wait pastes into the waiter's main agent. When the caller provably is not it (a Codex session
   whose conversation id differs from the caller's `CODEX_THREAD_ID`), the CLI's `thread` makes it `409
   not_main_agent`. Subagents, Workflow agents and agents outside Aico use `--block`.
@@ -719,7 +736,8 @@ their own ([Lane reports](#lane-reports)); a wait is for anything else. The CLI 
 
 | Route | Request | Response |
 |---|---|---|
-| `POST /v1/waits` | `{waiter, by?, kind: "session", ref, until?, since?, timeoutMinutes?, key?, note?, thread?}` | `201` the wait with `created: true`, or `200` with `created: false` when the same `waiter` already has an armed wait with that `key` on the same session and `until` (a different one is `409 key_conflict {waitId}`). A key is let go when its wait is over or kept, so it can be used again; a wait with no `waiter` takes no `key` (`400`). `ref` is a session id or a root request id, here or on a connected host. `400 invalid_body {field}`; `404 not_found`; `409 wait_unsupported` (the waiter is not an agent session Tether delivers to: agy, a shell), `409 not_main_agent`, `409 self_wait`, `409 too_many_waits {max}` (`maxWaitsPerSession` armed), `409 waits_unavailable` without lifecycle |
+| `POST /v1/waits` | `{waiter, by?, kind, ref, until?, since?, timeoutMinutes?, key?, note?, thread?}` (`until` defaults to the kind's first) | `201` the wait with `created: true`, or `200` with `created: false` when the same `waiter` already has an armed wait with that `key` on the same session and `until` (a different one is `409 key_conflict {waitId}`). A key is let go when its wait is over or kept, so it can be used again; a wait with no `waiter` takes no `key` (`400`). `ref` is a session id or a root request id, here or on a connected host. `400 invalid_body {field}`; `404 not_found`; `409 wait_unsupported` (the waiter is not an agent session Tether delivers to: agy, a shell), `409 not_main_agent`, `409 self_wait`, `409 too_many_waits {max}` (`maxWaitsPerSession` armed), `409 waits_unavailable` without lifecycle |
+| `POST /v1/waits/check` | `{kind, ref?}` | `200 {kind, ref, armed}`: a nudge. Tether re-reads the armed waits of that kind (on `ref` when given) now, and for a job asks its owner at once. A hint only: no outcome, no text; a lost nudge costs at most the 60 s look. `400 invalid_body` |
 | `GET /v1/waits/:waitId` | `?wait=0..55` seconds | the wait, once it is no longer armed or the seconds are up; `404 not_found`, `400 invalid_query` |
 | `DELETE /v1/waits/:waitId` | | `200 {cancelled: true, ...wait}`; `409 not_armed {state}` |
 | `GET /v1/sessions/:id/waits` | `?recent=1` | `{items}`: armed waits, oldest first; with `recent` also those over in the last day (at most 20) |
@@ -727,7 +745,31 @@ their own ([Lane reports](#lane-reports)); a wait is for anything else. The CLI 
 A wait is `{id, waiter, kind, ref, host, until, since, deadline, key, note, armedAt, state, outcome, line, firedAt,
 observed: {state, detail, title}, kept}`; `state` is `armed`, `fired`, `timed_out` or `cancelled`, `outcome` is
 `until`, `timeout` or `gone`. Waits that are over are pruned after `waitKeepDays`. Each fire is logged as
-`[tether:waits] wait=… on session=… until -> <waiter>`.
+`[tether:waits] wait=… on <kind>=<ref> until -> <waiter>`. Waits that are over are pruned also while nothing is
+armed (at least hourly).
+
+### Pull kinds
+
+The truth stays with each thing's owner; Tether reads it read-only when the wait is armed, when it changes (a directory
+watch, an event), on a nudge, at every 60 s look and at start. A ref the owner does not know is `404 not_found` at arm
+(a tap may not be taken in yet, so a tap is never `404` or gone).
+
+| Kind | `ref` | `until` | Read from | Fires |
+|---|---|---|---|---|
+| `job` | a SummitFlow service job id, or a unique prefix of 8+ hex (kept whole) | `done` | `~/.summitflow/services/jobs/<id>.json` (`SUMMITFLOW_SERVICE_STATE_ROOT`, or `TETHER_WAIT_JOBS_DIR`); while the file says `queued`/`running`, `st --no-compact service result <id>` at most once a minute (at once on a nudge) as an idle-weight transient unit, never while Nightshift admission is red, so a killed runner reads `interrupted` | `succeeded`, `failed` (with its exit code), `interrupted`; a job file that goes is `gone` |
+| `reply` | a coordination request id you sent (`st sessions send`) | `acked` (answered with an intent, also when closed), `closed` | the coordination ledger `~/.summitflow/leases/_coord.json` (`TETHER_WAIT_LEDGER`): its id, state, intent, recipient and withdrawn only, never its text | closed or withdrawn without an answer is `gone` for `acked` |
+| `run` | an Agent Hub workflow run Tether follows (launched from an Aico session) | `finished`, `needs-you` | Tether's run tracker; a run no longer followed is remembered a day with its last state | `needs-you` that ends without needing the owner is `gone` |
+| `ask` | an owner ask id | `answered` | Tether's asks | `withdrawn` is `gone` |
+| `host` | a remote host this hub federates | `connected` | the hub's peer state (`peer.state`) | |
+| `tap` | a Nightshift tap or agent request id (32 hex) | `decided` | `/var/lib/nightshift/bypass/out/<id>.resp.json` and `/var/lib/nightshift/agent-responses/<id>.resp.json` (`TETHER_WAIT_TAP_DIRS`, colon-separated) | any outcome but `pending` |
+
+Lines name the thing by typed values only and end with the command that shows it, e.g. `[Ready] service job 66d97c21
+(aico) succeeded · st service result <id>`, `[Ready] request fd315b to cc:1c7a9f answered: yes · st sessions inbox`,
+`[Wait over] workflow run R ended without needing the owner: succeeded · st workflow get R`, `[Wait timed out] tap
+0942… not decided after 2h · nightshift pending`. **Told once.** A run's pause is told to the session that launched it
+as an event line (source `run:<id>:needs-you`), and an ask's answer to the session it goes to (source `ask:<id>`); a
+`run --until needs-you` wait by that launcher, or an `ask` wait by the session the answer went to, fires without a
+second line.
 
 | Policy field | Default | Meaning |
 |---|---|---|
