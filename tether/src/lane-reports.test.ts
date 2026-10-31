@@ -50,6 +50,8 @@ function view(overrides: Partial<LaneView> = {}): LaneView {
     stateAt: Date.now(),
     stateDetail: null,
     stateAgentAt: 0,
+    statePrevious: 'idle',
+    createdAt: 0,
     coordinatorId: ROOT,
     parentId: ROOT,
     launched: true,
@@ -228,6 +230,31 @@ describe('finished', () => {
     expect(delivered.map((d) => d.to)).toEqual([HELPER_PARENT, ROOT])
   })
 
+  it('a remote helper whose launcher is on its own host is not the root’s to hear', () => {
+    const { reporter, delivered } = harness()
+    const remote = { host: 'neri-vm', parentId: 'eeee0001' }
+    step(reporter, { ...remote, state: 'working', stateAgentAt: 100 })
+    step(reporter, { ...remote, stateAgentAt: 200 }, SETTLE)
+    expect(delivered).toEqual([])
+  })
+
+  it('a lane launched while Tether runs reports a first turn the poll never saw working', () => {
+    const { reporter, delivered } = harness()
+    const createdAt = Date.now()
+    step(reporter, { createdAt, generation: 'g0', state: 'unknown' })
+    step(reporter, { createdAt, generation: 'g1', state: 'unknown' }) // the launch's own
+    step(reporter, { createdAt, generation: 'g1', stateAgentAt: createdAt + 5_000 }, SETTLE)
+    expect(delivered.map((d) => d.source)).toEqual([`lane:${LANE}:finished`])
+  })
+
+  it('closing a dialog the owner opened is not a finished turn', () => {
+    const { reporter, delivered } = harness()
+    step(reporter, { stateAgentAt: 100 })
+    step(reporter, { state: 'blocked', stateDetail: 'dialog open', stateAgentAt: 200 }, 5_000)
+    step(reporter, { stateAgentAt: 300 }, SETTLE * 2)
+    expect(delivered).toEqual([])
+  })
+
   it('lineage an owner set (not launched) reports nothing', () => {
     const { reporter, delivered } = harness()
     step(reporter, { launched: false, state: 'working', stateAgentAt: 100 })
@@ -255,6 +282,20 @@ describe('blocked', () => {
       60_000,
     )
     expect(delivered).toHaveLength(2)
+  })
+
+  it('the same prompt seen again after a Tether restart is not reported twice', () => {
+    const first = harness()
+    const blocked = { state: 'blocked' as const, stateDetail: 'input needed', stateAt: Date.now() }
+    step(first.reporter, { ...blocked, statePrevious: 'working' }, 5_000)
+    expect(first.delivered).toHaveLength(1)
+    first.reporter.stop()
+    const again = harness({ store: first.store })
+    step(again.reporter, { ...blocked, statePrevious: 'unknown', stateAt: Date.now() }, 60_000)
+    expect(again.delivered).toHaveLength(0)
+    step(again.reporter, { state: 'working', stateAgentAt: 500 })
+    step(again.reporter, { ...blocked, statePrevious: 'working', stateAt: Date.now() }, 5_000)
+    expect(again.delivered).toHaveLength(1)
   })
 
   it('ignores dialog open and a prompt answered within the hold', () => {
@@ -311,6 +352,28 @@ describe('ended', () => {
     expect(delivered).toHaveLength(1)
   })
 
+  it('a lane that stopped being reported leaves no cursor behind when it ends', () => {
+    const { reporter, store } = harness()
+    insertWidget(LANE, 'claude-code', 1_000)
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    step(reporter, { launched: false, state: 'working', stateAgentAt: 100 })
+    removeWidget(LANE)
+    reporter.drainOutbox()
+    expect(new LaneReportStore(store.db).cursors()).toEqual([])
+  })
+
+  it('an agent that comes back in the same session reports again', () => {
+    const { reporter, delivered, gone } = harness()
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    gone.add(LANE)
+    step(reporter, { state: 'unknown', stateAgentAt: 100 }, SETTLE)
+    gone.delete(LANE)
+    step(reporter, { state: 'idle', stateAgentAt: 200 }, SETTLE) // resumed: absorbed
+    step(reporter, { state: 'working', stateAgentAt: 300 })
+    step(reporter, { state: 'idle', stateAgentAt: 400 }, SETTLE)
+    expect(delivered.map((d) => d.source)).toEqual([`lane:${LANE}:ended`, `lane:${LANE}:finished`])
+  })
+
   it('a relayed lane ends once on the hub', () => {
     const { reporter, delivered } = harness()
     step(reporter, { host: 'neri-vm', title: 'Remote' })
@@ -341,6 +404,17 @@ describe('watch and unwatch', () => {
     expect(reporter.watchesOf(ROOT)).toMatchObject([{ lane: LANE, mode: 'unwatch' }])
     expect(reporter.setWatch(ROOT, LANE, 'watch')).toBe('lineage')
     expect(reporter.watchesOf(ROOT)).toEqual([])
+  })
+
+  it('a root watching a helper adds its finished; unwatching it drops blocked and ended', () => {
+    const sessions: LocalLineage[] = [
+      { id: LANE, coordinatorId: ROOT, parentId: HELPER_PARENT, launched: true },
+    ]
+    const { reporter } = harness({ sessions })
+    expect(reporter.setWatch(ROOT, LANE, 'watch')).toBe('watch')
+    expect(reporter.setWatch(HELPER_PARENT, LANE, 'watch')).toBe('lineage')
+    expect(reporter.setWatch(ROOT, LANE, 'unwatch')).toBe('none')
+    expect(reporter.watchesOf(ROOT)).toMatchObject([{ lane: LANE, mode: 'unwatch' }])
   })
 
   it('a watch makes a lane nobody launched report', () => {
@@ -429,6 +503,15 @@ describe('delivery rows', () => {
         .filter((w) => w.kind === 'event')
         .map((w) => w.note),
     ).toEqual(['two', 'three'])
+  })
+
+  it('a failed paste does not bring back a line a newer one replaced', () => {
+    const wakes = wakeStore()
+    const old = wakes.addEvent({ sessionId: ROOT, source: 'lane:x:finished', note: 'old', now: 1 })
+    wakes.remove(old.id)
+    wakes.addEvent({ sessionId: ROOT, source: 'lane:x:finished', note: 'new', now: 2 })
+    wakes.restore(old)
+    expect(wakes.list().map((w) => w.note)).toEqual(['new'])
   })
 
   const row = (note: string, kind: 'time' | 'event', dueAt = 0): Wake =>

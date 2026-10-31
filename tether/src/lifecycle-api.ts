@@ -525,8 +525,9 @@ function applyCoordinator(id: string, coordinator: boolean | string): void {
   const changed = [id]
   if (typeof coordinator === 'string') {
     changed.push(...joinCoordinator(id, coordinator))
-    // The owner's join: the session does not report to its new coordinator.
-    clearLaunched(id)
+    // The owner's join: neither the session nor the lanes that moved with it
+    // report to their new coordinator.
+    for (const changedId of changed) clearLaunched(changedId)
   } else setCoordinator(id, coordinator)
   for (const changedId of new Set(changed)) notifySessionChanged(changedId, { force: true })
 }

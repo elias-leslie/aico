@@ -12,6 +12,7 @@ import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { AgentAdmissionDenied } from './lifecycle/agent-admission'
 import {
   allocateWidgetId,
+  clearLaunched,
   getWidget,
   insertWidget,
   joinCoordinator,
@@ -284,6 +285,8 @@ export class WakeService {
     }
     if (!started) {
       const failure = lastEnsureFailure(id)
+      // It never ran: its delete must not tell the coordinator a lane ended.
+      clearLaunched(id)
       if (discardNeverAllocated(id)) notifySessionChanged(id, { ended: true })
       const reason = failure?.reason ?? 'launch did not start'
       return failure?.code === 'admission_denied' || failure?.code === 'linger_required'

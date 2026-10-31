@@ -294,6 +294,14 @@ export class WakeStore {
 
   /** Put back a wake taken for a delivery that did not happen. */
   restore(wake: Wake): void {
+    // A newer line for the same report arrived while the paste was out.
+    if (
+      wake.kind === 'event' &&
+      this.db
+        .prepare("SELECT 1 FROM wakes WHERE kind = 'event' AND session_id = ? AND source = ?")
+        .get(wake.sessionId, wake.source)
+    )
+      return
     this.db
       .prepare(
         `INSERT OR IGNORE INTO wakes (id, session_id, due_at, note, created_at, created_by, kept,

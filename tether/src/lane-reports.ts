@@ -57,6 +57,8 @@ export interface LaneView {
   stateAt: number
   stateDetail: string | null
   stateAgentAt: number
+  statePrevious: AgentState
+  createdAt: number
   coordinatorId: string | null
   parentId: string | null
   launched: boolean
@@ -80,9 +82,9 @@ export function laneView(session: unknown, host: string | null): LaneView | null
   const id = str(s.id)
   const generation = str(s.generation)
   if (!id || !SESSION_ID.test(id) || !generation) return null
-  const state = (AGENT_STATES as readonly unknown[]).includes(s.state)
-    ? (s.state as AgentState)
-    : 'unknown'
+  const stateOf = (value: unknown): AgentState =>
+    (AGENT_STATES as readonly unknown[]).includes(value) ? (value as AgentState) : 'unknown'
+  const state = stateOf(s.state)
   const coordinatorId = str(s.coordinatorId)
   const parentId = str(s.parentId)
   return {
@@ -93,6 +95,8 @@ export function laneView(session: unknown, host: string | null): LaneView | null
     stateAt: num(s.stateAt),
     stateDetail: str(s.stateDetail),
     stateAgentAt: num(s.stateAgentAt),
+    statePrevious: stateOf(s.statePrevious),
+    createdAt: num(s.createdAt),
     coordinatorId: coordinatorId && SESSION_ID.test(coordinatorId) ? coordinatorId : null,
     parentId: parentId && SESSION_ID.test(parentId) ? parentId : null,
     launched: s.launched === true,
@@ -353,6 +357,17 @@ export class LaneReportStore {
   takeOutbox(id: number): void {
     this.db.prepare('DELETE FROM lane_outbox WHERE id = ?').run(id)
   }
+
+  /** Cursors of local sessions that ended without an `ended` to send (a lane
+   * that stopped being reported, such as one an owner marked coordinator). */
+  pruneLocal(): void {
+    this.db
+      .prepare(
+        `DELETE FROM lane_reports WHERE host = ''
+           AND lane NOT IN (SELECT id FROM sessions) AND lane NOT IN (SELECT lane FROM lane_outbox)`,
+      )
+      .run()
+  }
 }
 
 // --- the reporter ------------------------------------------------------------------------
@@ -394,6 +409,8 @@ interface Memory {
   seenAt: number
   /** When this turn was first seen working (for "finished after Nm"). */
   workingSeenAt: number | null
+  /** A state other than unknown was seen (in this generation or before). */
+  known: boolean
   timer: NodeJS.Timeout | null
 }
 
@@ -436,11 +453,14 @@ export class LaneReporter {
   /** Lanes with an explicit watch (any host). */
   private watched = new Set<string>()
   private stopped = false
+  /** Lanes created after this saw their whole life here. */
+  private readonly startedAt: number
 
   constructor(
     readonly store: LaneReportStore,
     private readonly ops: LaneReportOperations,
   ) {
+    this.startedAt = ops.now()
     this.refreshWatched()
   }
 
@@ -471,18 +491,28 @@ export class LaneReporter {
     const now = this.ops.now()
     const host = view.host ?? ''
     let cursor = this.store.get(host, view.id)
-    if (cursor?.ended) return
     let dirty = false
+    if (cursor?.ended) {
+      // Its agent left (exit or held recovery), and has come back in the same
+      // session (`tether recovery resume`): report it again from here on.
+      if (view.state === 'unknown' || (view.host === null && this.ops.agentGone(view.id))) return
+      cursor.ended = false
+      cursor.reset = true
+      dirty = true
+    }
     if (!cursor) {
-      // A lane seen for the first time: its current idle (if any) is absorbed.
+      // A lane launched while Tether runs: every turn counts, its first
+      // included, even one that ended before the poll found the agent. One
+      // seen for the first time otherwise (at startup): its idle is absorbed.
+      const fresh = view.createdAt >= this.startedAt
       cursor = {
         host,
         lane: view.id,
         generation: view.generation,
-        finishedAt: 0,
+        finishedAt: fresh ? view.createdAt : 0,
         finishedSentAt: 0,
         blockedAt: 0,
-        reset: true,
+        reset: !fresh,
         ended: false,
         title: null,
         requestId: null,
@@ -492,10 +522,14 @@ export class LaneReporter {
       }
       dirty = true
     }
+    const stateKey = `${view.state}|${view.stateDetail ?? ''}|${view.stateAgentAt}|${view.stateAt}`
+    let memory = this.memory.get(key)
+    const before = memory?.view ?? null
     if (cursor.generation !== view.generation) {
-      // Recovery, respawn or reboot restore: quietly, never "finished".
+      // Recovery, respawn or reboot restore: quietly, never "finished". A
+      // launch's own generation changes (before any agent state) are not one.
       cursor.generation = view.generation
-      cursor.reset = true
+      if (!memory || memory.known) cursor.reset = true
       dirty = true
     }
     const snapshot = snapshotOf(view)
@@ -513,23 +547,52 @@ export class LaneReporter {
       cursor.launched = snapshot.launched
       dirty = true
     }
-    const stateKey = `${view.state}|${view.stateDetail ?? ''}|${view.stateAgentAt}|${view.stateAt}`
-    let memory = this.memory.get(key)
     if (!memory) {
-      memory = { view, key: stateKey, seenAt: now, workingSeenAt: null, timer: null }
+      memory = { view, key: stateKey, seenAt: now, workingSeenAt: null, known: false, timer: null }
       this.memory.set(key, memory)
     } else if (memory.key !== stateKey) {
       memory.key = stateKey
       memory.seenAt = now
     }
     memory.view = view
-    if (view.state === 'working' || view.state === 'blocked') {
+    if (view.state !== 'unknown') memory.known = true
+    const blocking =
+      view.state === 'blocked' &&
+      view.stateDetail !== null &&
+      BLOCKING_DETAILS.has(view.stateDetail)
+    if (view.state === 'working' || blocking) {
       // The agent is in a turn: the next idle is a real one.
       if (cursor.reset) {
         cursor.reset = false
         dirty = true
       }
       memory.workingSeenAt ??= now
+    }
+    if ((view.state === 'working' || view.state === 'idle') && cursor.blockedAt !== 0) {
+      // The reported blocked episode is over; the next one is new.
+      cursor.blockedAt = 0
+      dirty = true
+    }
+    if (
+      blocking &&
+      view.statePrevious === 'unknown' &&
+      cursor.blockedAt > 0 &&
+      view.stateAt > cursor.blockedAt
+    ) {
+      // Still the episode reported before Tether (or the lane's host) restarted.
+      cursor.blockedAt = view.stateAt
+      dirty = true
+    }
+    if (
+      view.state === 'idle' &&
+      before?.state === 'blocked' &&
+      !(before.stateDetail !== null && BLOCKING_DETAILS.has(before.stateDetail)) &&
+      memory.workingSeenAt === null &&
+      view.stateAgentAt > cursor.finishedAt
+    ) {
+      // A dialog the owner opened and closed (`/model`), not a turn.
+      cursor.finishedAt = view.stateAgentAt
+      dirty = true
     }
     if (dirty) this.store.save(cursor, now)
     this.evaluate(key)
@@ -619,8 +682,13 @@ export class LaneReporter {
     if (lane.launched && lane.coordinatorId) {
       const root = lane.coordinatorId
       const parent = lane.parentId ?? root
-      if (outcome === 'finished') out.add(this.ops.receiver(parent) ? parent : root)
-      else {
+      if (outcome === 'finished') {
+        // The root stands in for a launcher here that can't take it; a
+        // launcher on the lane's own host hears it from that host's Tether.
+        if (this.ops.receiver(parent)) out.add(parent)
+        else if (lane.host === null || this.ops.sessions().some((s) => s.id === parent))
+          out.add(root)
+      } else {
         out.add(root)
         out.add(parent)
       }
@@ -671,6 +739,7 @@ export class LaneReporter {
       })
       this.drop(memoryKey(null, row.lane))
     }
+    this.store.pruneLocal()
     this.refreshWatched()
   }
 
@@ -689,13 +758,18 @@ export class LaneReporter {
 
   // --- watch / unwatch ---------------------------------------------------------
 
-  /** Whether `watcher` gets this lane's reports through lineage. */
-  private lineageReceiver(watcher: string, lane: string): boolean {
+  /** Whether `watcher` gets this lane's reports through lineage: all of them
+   * (it is the launcher), or `some` (blocked and ended, as its root). */
+  private lineageReceiver(watcher: string, lane: string, some: boolean): boolean {
     const local = this.ops.sessions().find((session) => session.id === lane)
     const lineages: { coordinatorId: string | null; parentId: string | null; launched: boolean }[] =
       local ? [local] : this.store.cursors().filter((cursor) => cursor.lane === lane)
     return lineages.some(
-      (item) => item.launched && (item.coordinatorId === watcher || item.parentId === watcher),
+      (item) =>
+        item.launched &&
+        item.coordinatorId !== null &&
+        ((item.parentId ?? item.coordinatorId) === watcher ||
+          (some && item.coordinatorId === watcher)),
     )
   }
 
@@ -726,7 +800,7 @@ export class LaneReporter {
   setWatch(watcher: string, lane: string, mode: WatchMode): 'lineage' | 'watch' | 'none' {
     if (watcher === lane) throw new WatchRefused('self_watch')
     const now = this.ops.now()
-    const lineage = this.lineageReceiver(watcher, lane)
+    const lineage = this.lineageReceiver(watcher, lane, mode === 'unwatch')
     if (mode === 'watch') {
       if (lineage) {
         this.store.setWatch(watcher, lane, null, now)

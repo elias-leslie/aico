@@ -94,7 +94,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 
 `state` is the agent's state: `working`, `idle`, `blocked` (waiting on the user: a permission prompt or a question) or `unknown` (no agent found, or the session is not running). `stateSource` names what said so (`claude-status`, `claude-hook`, `codex-rollout`, `codex-hook`, `pi-session`, `none`), `stateAt` is when the state last changed (null while unknown), `stateDetail` says why it is blocked, and `statePrevious` is the state before (so `working` → `idle` is a finished turn, while `unknown` → `idle` is an agent Tether only just found). A change publishes `session.updated`. See [agent-state.md](agent-state.md).
 
-`stateAgentAt` (12) is the agent's own time of its latest state (Claude Code's `statusUpdatedAt`, the Codex turn line, the Pi message; Tether's clock when the agent gives none), null while unknown. It only moves forward, and a later one while `idle` publishes `session.updated`: a turn ended, even one shorter than the poll. `waitingOn` (12) is null, or names the session's own pending check-in (`a check-in at 5:30 PM`, `a check-in that is due`), so a lane waiting on its own check-in is not taken for finished. `launched` (12) is true when the session's lineage came from a launch (`launchedBy`, a kept wake's relaunch, the hub's `lineage`), false for an owner's mark or join and for sessions from before v12. See [Lane reports](#lane-reports).
+`stateAgentAt` (12) is the agent's own time of its latest state (Claude Code's `statusUpdatedAt`, the Codex turn line, the Pi message; Tether's clock when the agent gives none), null until Tether has seen the agent's state; it keeps its last value after the agent leaves. It only moves forward, and a later one while `idle` publishes `session.updated`: a turn ended, even one shorter than the poll. `waitingOn` (12) is null, or names the session's own pending check-in (`a check-in at 5:30 PM`, `a check-in that is due`), so a lane waiting on its own check-in is not taken for finished. `launched` (12) is true when the session's lineage came from a launch (`launchedBy`, a kept wake's relaunch, the hub's `lineage`), false for an owner's mark or join and for sessions from before v12. See [Lane reports](#lane-reports).
 
 `wakes` *(post-cutover)* lists the session's scheduled check-ins, oldest first; see [Wakes](#wakes).
 
@@ -642,13 +642,17 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
   reports nothing, and nothing is backfilled for sessions from before v12.
 - **finished**: the lane is `idle` with a `stateAgentAt` later than the last one reported, held `laneSettleSeconds`.
   It catches turns too short for the poll and turns during a Tether restart; the per-lane cursor is kept in the
-  database, so a restart never repeats one. A lane whose `waitingOn` is set is not finished. A new generation
-  (crash recovery, respawn, reboot restore), or a lane first seen idle, resets the cursor without a report. At most one
-  per `laneFinishedFloorSeconds`.
-- **blocked**: `permission prompt` or `input needed` held `laneBlockedSeconds`, once per episode. `dialog open` (the
+  database, so a restart never repeats one. A lane whose `waitingOn` is set is not finished. A lane launched
+  while Tether runs counts every turn, its first included, even one that ended before the poll found the agent. A new
+  generation (crash recovery, respawn, reboot restore), or a lane Tether first sees idle at its own start, resets the
+  cursor without a report, and so does closing a dialog the owner opened (`/model`). At most one per
+  `laneFinishedFloorSeconds`.
+- **blocked**: `permission prompt` or `input needed` held `laneBlockedSeconds`, once per episode (a Tether restart
+  during the episode does not repeat it). `dialog open` (the
   owner opening a menu in the lane) is not reported.
-- **ended**, once: the session ended (End, a failed launch, a host that dropped it), or its agent left the pane for
-  good (exit 0, or crash recovery holds it) and stayed gone `laneSettleSeconds`. Tether writes the intent in the same
+- **ended**, once: the session ended (End, a failed launch, a host that dropped it), or, for a lane on the receiver's
+  computer, its agent left the pane for good (exit 0, or crash recovery holds it) and stayed gone `laneSettleSeconds`.
+  An agent that comes back in the same session (`tether recovery resume`) reports again. Tether writes the intent in the same
   transaction as the session's delete, so a crash cannot lose it. A remote lane's `ended` comes from the hub, which
   relays each ended id it knew once.
 
@@ -659,10 +663,11 @@ Explicit watches, from the watching session (`:id` is the watcher, normally the 
 | `GET /v1/sessions/:id/watches` | | `{items: [{lane, mode, createdAt}]}` |
 | `POST /v1/sessions/:id/watches` | `{lane, mode}` | `200 {watcher, lane, mode, hears}` |
 
-`mode: "watch"` adds the watcher as a receiver of that lane's reports (a lane nobody launched included);
+`mode: "watch"` adds the watcher as a receiver of all that lane's reports (a lane nobody launched included; a root
+watching a helper adds its `finished`);
 `mode: "unwatch"` drops it, also when lineage would make it one. `hears` says how the watcher hears the lane now:
-`lineage`, `watch` or `none`. `409 self_watch` for the watcher itself, `409 watch_cycle` when the lane already reports
-to the watcher through another lane, `409 lane_reports_unavailable` when the daemon runs without lifecycle
+`lineage`, `watch` or `none`. `409 self_watch` for the watcher itself, `409 watch_cycle` when the watcher already reports
+to that lane (a lane watching its own coordinator), which would loop, `409 lane_reports_unavailable` when the daemon runs without lifecycle
 (`TETHER_RECONCILE=off`), `404` for an unknown watcher. A watcher's watches end with it. The CLI is
 `st aico watch LANE`, `st aico unwatch LANE` and `st aico watch list`.
 

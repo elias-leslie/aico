@@ -2336,7 +2336,7 @@ def wake_main(argv: list[str]) -> int:
 
 WATCH_REFUSALS = {
     "self_watch": "a session cannot watch itself",
-    "watch_cycle": "that lane already reports to this session through another lane; watching it would loop",
+    "watch_cycle": "this session already reports to that lane (for example, it is your coordinator); watching it would loop",
     "lane_reports_unavailable": "lane reports are off on this Tether",
     "not_found": "no such session",
 }
