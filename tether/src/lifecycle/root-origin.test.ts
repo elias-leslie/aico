@@ -32,14 +32,16 @@ describe('root origin (v1 roots API)', () => {
       response.end(JSON.stringify({ forwarded: body.host }))
     },
     // Stub placement: 1 byte fits here, 2 on vm, anything else is at capacity.
-    place: async (requestId, needs, pool) => {
+    // A named host keeps its name ('local' = here).
+    place: async (requestId, needs, pool, host) => {
       placeCalls.push(requestId)
       placePools.push(pool)
+      placeHosts.push(host)
       const mem = (needs as { memBytes?: unknown } | undefined)?.memBytes
       if (mem === 1 || mem === 2)
         return {
           kind: 'placed',
-          host: mem === 1 ? null : 'vm',
+          host: host !== undefined ? (host === 'local' ? null : host) : mem === 1 ? null : 'vm',
           done: () => placeDone.push(requestId),
         }
       return {
@@ -51,6 +53,7 @@ describe('root origin (v1 roots API)', () => {
   }
   const placeCalls: string[] = []
   const placePools: unknown[] = []
+  const placeHosts: unknown[] = []
   const placeDone: string[] = []
   const handle = createRootHandler(operations)
   const server = createServer((req, res) => {
@@ -273,6 +276,62 @@ describe('root origin (v1 roots API)', () => {
       body: { error: 'invalid_body', field: 'pool', reason: 'pool goes with host "auto"' },
     })
     expect(placeCalls).toHaveLength(calls)
+  })
+
+  it('rechecks and reserves a named host with needs, and sends the host no needs', async () => {
+    const before = remoteBodies.length
+    const there = await call(
+      v1Socket,
+      '/v1/roots',
+      'POST',
+      create('named-box', { host: 'box', needs: { memBytes: 2 } }),
+    )
+    expect(there).toEqual({ status: 202, body: { forwarded: 'box' } })
+    expect(placeCalls.at(-1)).toBe('named-box')
+    expect(placeHosts.at(-1)).toBe('box')
+    expect(placePools.at(-1)).toBeUndefined()
+    expect(remoteBodies.slice(before)).toEqual([
+      expect.not.objectContaining({ needs: expect.anything() }),
+    ])
+    expect(remoteBodies.at(-1)).toMatchObject({ requestId: 'named-box', host: 'box' })
+    expect(placeDone.at(-1)).toBe('named-box')
+    // No room there: the refusal goes back and nothing is sent to the host.
+    const sent = remoteBodies.length
+    expect(
+      await call(
+        v1Socket,
+        '/v1/roots',
+        'POST',
+        create('named-full', { host: 'box', needs: { memBytes: 9 } }),
+      ),
+    ).toEqual({
+      status: 409,
+      body: { error: 'at_capacity', hosts: [{ host: 'local', reason: 'needs more' }] },
+    })
+    expect(remoteBodies).toHaveLength(sent)
+    // `local` with needs starts here; a named host without needs is not placed.
+    const here = await call(
+      v1Socket,
+      '/v1/roots',
+      'POST',
+      create('named-here', { host: 'local', needs: { memBytes: 1 } }),
+    )
+    expect(here).toMatchObject({ status: 200, body: { requestId: 'named-here' } })
+    const calls = placeCalls.length
+    await call(v1Socket, '/v1/roots', 'POST', create('named-plain', { host: 'box' }))
+    expect(placeCalls).toHaveLength(calls)
+    expect(remoteBodies.at(-1)).toMatchObject({ requestId: 'named-plain', host: 'box' })
+    // pool still goes only with auto.
+    expect(
+      (
+        await call(
+          v1Socket,
+          '/v1/roots',
+          'POST',
+          create('named-pool', { host: 'box', pool: 'hunt', needs: { memBytes: 2 } }),
+        )
+      ).body,
+    ).toMatchObject({ field: 'pool' })
   })
 
   it('passes on the reason a refusal gives, and reserves nothing', async () => {

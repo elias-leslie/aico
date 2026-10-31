@@ -10,6 +10,11 @@
 // link's ssh master, plus its Proxmox node's free memory and storage (clones
 // and ballooning draw on them). A powered-off VM counts only when Proxmox has
 // room to start it; the create path then wakes it with hosts.json `wake`.
+// A host with `room: "local"` (a container on this computer) is judged by this
+// computer's reading and reserve, its reservations shared with `local`'s.
+//
+// A create naming its host with `needs` is judged on that host alone and
+// reserved there the same way (or refused at_capacity), never moved elsewhere.
 //
 // Reservations are held per placed root and released only on a definite end
 // reported by the Tether that owns the root (no such root, ended, or its agent
@@ -83,12 +88,18 @@ export interface ProxmoxRef {
   minFreeStorageBytes: number
 }
 
+/** The only shared room so far: this computer's. */
+export type Room = typeof LOCAL_HOST
+
 export interface HostPlacement {
   /** Memory the owner keeps free on this host. */
   reserveBytes: number
   /** CPUs the owner keeps free on this host. */
   reserveCpu: number
   proxmox: ProxmoxRef | null
+  /** `local`: the host lives on this computer (a container), so this
+   * computer's reading, reserve and reservations judge it; null otherwise. */
+  room: Room | null
 }
 
 export interface CapabilityProbe {
@@ -110,8 +121,20 @@ export interface PlacementConfig {
 }
 
 /** Overridable defaults; the owner's values live in placement.json. */
-export const DEFAULT_LOCAL: HostPlacement = { reserveBytes: 6 * GIB, reserveCpu: 2, proxmox: null }
-export const DEFAULT_REMOTE: HostPlacement = { reserveBytes: 2 * GIB, reserveCpu: 1, proxmox: null }
+export const DEFAULT_LOCAL: HostPlacement = {
+  reserveBytes: 6 * GIB,
+  reserveCpu: 2,
+  proxmox: null,
+  room: null,
+}
+export const DEFAULT_REMOTE: HostPlacement = {
+  reserveBytes: 2 * GIB,
+  reserveCpu: 1,
+  proxmox: null,
+  room: null,
+}
+/** A `room: "local"` host's own reserve, taken on top of this computer's. */
+export const DEFAULT_ROOM_LOCAL = { reserveBytes: 0, reserveCpu: 0 }
 const DEFAULT_PVE_RESERVE = 2 * GIB
 const DEFAULT_MIN_STORAGE = 20 * GIB
 /** Neri's live-ready marker (plan contract 4). */
@@ -227,22 +250,32 @@ export function parsePlacement(text: string | null, hostNames: string[]): Placem
       continue
     }
     const value = record(entry)
-    const reserveBytes = gib(value?.reserveGiB, fallback.reserveBytes)
-    const reserveCpu = count(value?.reserveCpu, fallback.reserveCpu)
+    const room = value?.room === undefined || value.room === null ? null : value.room
+    const shared = room === LOCAL_HOST && name !== LOCAL_HOST
+    const own = shared ? DEFAULT_ROOM_LOCAL : fallback
+    const reserveBytes = gib(value?.reserveGiB, own.reserveBytes)
+    const reserveCpu = count(value?.reserveCpu, own.reserveCpu)
     const proxmox = parseProxmoxRef(value?.proxmox)
     const problem = !value
       ? 'must be an object'
-      : reserveBytes === null
-        ? 'reserveGiB must be 0-4096'
-        : reserveCpu === null
-          ? 'reserveCpu must be 0-1024'
-          : typeof proxmox === 'string'
-            ? proxmox
-            : name === LOCAL_HOST && proxmox
-              ? 'proxmox is for remote hosts'
-              : null
+      : room !== null && !shared
+        ? name === LOCAL_HOST
+          ? 'room is for hosts that share this computer'
+          : 'room must be "local"'
+        : reserveBytes === null
+          ? 'reserveGiB must be 0-4096'
+          : reserveCpu === null
+            ? 'reserveCpu must be 0-1024'
+            : typeof proxmox === 'string'
+              ? proxmox
+              : name === LOCAL_HOST && proxmox
+                ? 'proxmox is for remote hosts'
+                : shared && proxmox
+                  ? 'room and proxmox do not go together'
+                  : null
     if (problem) {
-      // A broken entry keeps the defaults' reserve, so nothing is placed more freely.
+      // A broken entry keeps the defaults' reserve, so nothing is placed more
+      // freely; a host that meant to share this computer stays unknown.
       errors.push(`hosts.${name}: ${problem}; using the defaults`)
       hosts[name] = { ...fallback }
     } else
@@ -250,6 +283,7 @@ export function parsePlacement(text: string | null, hostNames: string[]): Placem
         reserveBytes: reserveBytes as number,
         reserveCpu: reserveCpu as number,
         proxmox: proxmox as ProxmoxRef | null,
+        room: shared ? LOCAL_HOST : null,
       }
   }
   const capabilities: Record<string, CapabilityProbe> = { ...DEFAULT_CAPABILITIES }
@@ -497,6 +531,10 @@ export type PlaceResult =
   | { kind: 'placed'; host: string | null; verdicts: HostVerdict[]; done(): void }
   | { kind: 'at_capacity'; verdicts: HostVerdict[] }
   | { kind: 'unknown_pool'; pools: string[]; verdicts: [] }
+  /** The named host is neither `local` nor in hosts.json. */
+  | { kind: 'unknown_host'; host: string; verdicts: [] }
+  /** The request is already placed on (or held by) another host. */
+  | { kind: 'placed_elsewhere'; host: string; verdicts: [] }
 
 /** A pool placement.json does not define; `pools` names the ones it does. */
 export class UnknownPool extends Error {
@@ -647,6 +685,11 @@ export class Placement {
     return { mem, cpu }
   }
 
+  /** This computer and every `room: "local"` host: one room, counted once. */
+  private inLocalRoom(config: PlacementConfig): (name: string) => boolean {
+    return (name) => name === LOCAL_HOST || config.hosts[name]?.room === LOCAL_HOST
+  }
+
   /** Hosts on the same Proxmox node, whose reservations all draw on it. */
   private onNode(config: PlacementConfig, ref: ProxmoxRef): (name: string) => boolean {
     return (name) => {
@@ -696,13 +739,29 @@ export class Placement {
     return null
   }
 
-  private async judgeLocal(config: PlacementConfig, needs: Needs): Promise<HostVerdict> {
+  /** This computer's room as Nightshift reads it, less its reserve and the
+   * reservations on it and on every host that shares it; or why it is unknown. */
+  private async localRoom(
+    config: PlacementConfig,
+  ): Promise<{ mem: number; cpu: number; detail: string } | string> {
     const path = nightshiftAdmissionPath(this.deps.env)
     let reading: LocalAdmission | null = null
     if (path) reading = parseLocalAdmission(await this.readText(path).catch(() => ''), this.now())
-    if (!reading) return this.unknown(LOCAL_HOST, "Nightshift's memory reading is missing or stale")
-    if (reading.state !== 'green')
-      return this.unknown(LOCAL_HOST, `Nightshift says ${reading.state}: ${reading.reason}`)
+    if (!reading) return "Nightshift's memory reading is missing or stale"
+    if (reading.state !== 'green') return `Nightshift says ${reading.state}: ${reading.reason}`
+    const own = config.hosts[LOCAL_HOST] ?? DEFAULT_LOCAL
+    const held = this.held(this.inLocalRoom(config))
+    const cpu = this.cpu()
+    return {
+      mem: reading.memAvailableBytes - own.reserveBytes - held.mem,
+      cpu: cpu.cpus - cpu.load5 - own.reserveCpu - held.cpu,
+      detail: `${g(reading.memAvailableBytes)} free - ${g(own.reserveBytes)} reserve - ${g(held.mem)} held`,
+    }
+  }
+
+  private async judgeLocal(config: PlacementConfig, needs: Needs): Promise<HostVerdict> {
+    const room = await this.localRoom(config)
+    if (typeof room === 'string') return this.unknown(LOCAL_HOST, room)
     const home = this.deps.env.HOME ?? homedir()
     const missing = await this.capabilities(config, needs, async (probe) => {
       const markerPath = isAbsolute(probe.marker) ? probe.marker : join(home, probe.marker)
@@ -712,18 +771,56 @@ export class Placement {
       return [marker, current]
     })
     if (missing) return this.unknown(LOCAL_HOST, missing)
-    const own = config.hosts[LOCAL_HOST] ?? DEFAULT_LOCAL
-    const held = this.held((name) => name === LOCAL_HOST)
-    const cpu = this.cpu()
-    return this.verdict(
-      LOCAL_HOST,
-      needs,
-      {
-        mem: reading.memAvailableBytes - own.reserveBytes - held.mem,
-        cpu: cpu.cpus - cpu.load5 - own.reserveCpu - held.cpu,
-      },
-      `${g(reading.memAvailableBytes)} free - ${g(own.reserveBytes)} reserve - ${g(held.mem)} held`,
-    )
+    return this.verdict(LOCAL_HOST, needs, room, room.detail)
+  }
+
+  /** Capabilities read on a host over its link. */
+  private remoteCapabilities(
+    config: PlacementConfig,
+    peer: PeerView,
+    needs: Needs,
+  ): Promise<string | null> {
+    return this.capabilities(config, needs, async (probe) => {
+      const markerPath = isAbsolute(probe.marker) ? probe.marker : `"$HOME"/${probe.marker}`
+      const markerRun = await this.readGuest(peer, `cat ${markerPath}`)
+      const marker = markerRun.code === 0 ? markerRun.stdout : null
+      const current =
+        marker !== null && probe.fingerprint
+          ? await this.readGuest(peer, probe.fingerprint.map(shellQuote).join(' '))
+          : null
+      return [marker, current]
+    })
+  }
+
+  /** A host in this computer's room (a container): its own /proc would show
+   * this computer's memory again, so Nightshift's reading judges it, less the
+   * local reserve, the room's reservations and the host's own reserve. A
+   * powered-off one with `wake` fits by that room; capabilities are read
+   * only once it runs. */
+  private async judgeLocalRoom(
+    config: PlacementConfig,
+    name: string,
+    needs: Needs,
+  ): Promise<HostVerdict> {
+    const peer = this.deps.peer(name)
+    if (!peer) return this.unknown(name, 'not in hosts.json')
+    const local = await this.localRoom(config)
+    if (typeof local === 'string') return this.unknown(name, `shares this computer: ${local}`)
+    const own = config.hosts[name] ?? { ...DEFAULT_REMOTE, ...DEFAULT_ROOM_LOCAL }
+    const room = { mem: local.mem - own.reserveBytes, cpu: local.cpu - own.reserveCpu }
+    const extra = own.reserveBytes > 0 ? ` - ${g(own.reserveBytes)} own reserve` : ''
+    const detail = `this computer's room: ${local.detail}${extra}`
+    if (!peer.live) {
+      if (peer.state !== 'powered_off')
+        return this.unknown(name, `running but its link is ${peer.state.replace('_', ' ')}`)
+      if (needs.caps.length)
+        return this.unknown(name, `powered off, so ${needs.caps.join(', ')} cannot be checked`)
+      if (!peer.entry.wake) return this.unknown(name, 'powered off and hosts.json has no wake')
+      return this.verdict(name, needs, room, `powered off, starts in ${detail}`, true)
+    }
+    const missing = await this.remoteCapabilities(config, peer, needs)
+    if (missing) return this.unknown(name, missing)
+    return this.verdict(name, needs, room, detail)
   }
 
   private async readGuest(peer: PeerView, line: string): Promise<RunResult> {
@@ -815,16 +912,7 @@ export class Placement {
         name,
         `memory pressure (PSI some avg60 ${psi.someAvg60}, full avg10 ${psi.fullAvg10})`,
       )
-    const missing = await this.capabilities(config, needs, async (probe) => {
-      const markerPath = isAbsolute(probe.marker) ? probe.marker : `"$HOME"/${probe.marker}`
-      const markerRun = await this.readGuest(peer, `cat ${markerPath}`)
-      const marker = markerRun.code === 0 ? markerRun.stdout : null
-      const current =
-        marker !== null && probe.fingerprint
-          ? await this.readGuest(peer, probe.fingerprint.map(shellQuote).join(' '))
-          : null
-      return [marker, current]
-    })
+    const missing = await this.remoteCapabilities(config, peer, needs)
     if (missing) return this.unknown(name, missing)
     const guestRoom = guest.memAvailableBytes - own.reserveBytes - held.mem
     return this.verdict(
@@ -840,9 +928,10 @@ export class Placement {
 
   private async judge(config: PlacementConfig, name: string, needs: Needs): Promise<HostVerdict> {
     try {
-      return name === LOCAL_HOST
-        ? await this.judgeLocal(config, needs)
-        : await this.judgeRemote(config, name, needs)
+      if (name === LOCAL_HOST) return await this.judgeLocal(config, needs)
+      if (config.hosts[name]?.room === LOCAL_HOST)
+        return await this.judgeLocalRoom(config, name, needs)
+      return await this.judgeRemote(config, name, needs)
     } catch (error) {
       return this.unknown(name, `its reading failed: ${(error as Error).message}`)
     }
@@ -870,27 +959,43 @@ export class Placement {
   /**
    * Pick a host from the pool and reserve the needs there, as one serialized
    * step. The first host in the pool's order that fits wins; the rest are not
-   * read. Reservations are per host, whatever pool placed them. A request
-   * already placed (a retry) goes to the same host without a new reservation.
+   * read. With `host` (a create that names its host) only that host is judged,
+   * and the pool is not used. Reservations are per host, whatever pool placed
+   * them. A request already placed (a retry) goes to the same host without a
+   * new reservation; one naming a different host than it holds is refused.
    * Call `done()` once the create has answered, whatever the answer.
    */
-  place(requestId: string, needs: Needs, pool = DEFAULT_POOL): Promise<PlaceResult> {
+  place(requestId: string, needs: Needs, pool = DEFAULT_POOL, host?: string): Promise<PlaceResult> {
     return this.locked(async () => {
       const config = this.config()
       let order: string[]
-      try {
-        order = this.poolOrder(config, pool)
-      } catch (error) {
-        if (error instanceof UnknownPool)
-          return { kind: 'unknown_pool', pools: error.pools, verdicts: [] } as const
-        throw error
-      }
+      if (host !== undefined) {
+        if (host !== LOCAL_HOST && !this.deps.peer(host))
+          return { kind: 'unknown_host', host, verdicts: [] } as const
+        order = [host]
+      } else
+        try {
+          order = this.poolOrder(config, pool)
+        } catch (error) {
+          if (error instanceof UnknownPool)
+            return { kind: 'unknown_pool', pools: error.pools, verdicts: [] } as const
+          throw error
+        }
       const existing = this.reservations.find((item) => item.requestId === requestId)
       const known = existing ? existing.host : this.deps.existingHost(requestId)
       if (known !== undefined) {
-        const host = known === LOCAL_HOST ? null : known
-        return { kind: 'placed', host, verdicts: [], done: () => {} } as const
+        const name = known ?? LOCAL_HOST
+        if (host !== undefined && name !== host)
+          return { kind: 'placed_elsewhere', host: name, verdicts: [] } as const
+        return {
+          kind: 'placed',
+          host: name === LOCAL_HOST ? null : name,
+          verdicts: [],
+          done: () => {},
+        } as const
       }
+      const where =
+        host !== undefined ? ' (named host)' : pool === DEFAULT_POOL ? '' : ` (pool ${pool})`
       await this.reconcile()
       const verdicts: HostVerdict[] = []
       for (const name of order) {
@@ -908,7 +1013,7 @@ export class Placement {
         this.reservations.push(reservation)
         this.persist()
         this.log(
-          `placed ${requestId} on ${name}${pool === DEFAULT_POOL ? '' : ` (pool ${pool})`}: ${g(needs.memBytes)} GiB, ${c(needs.cpu)} CPUs (${verdict.reason})`,
+          `placed ${requestId} on ${name}${where}: ${g(needs.memBytes)} GiB, ${c(needs.cpu)} CPUs (${verdict.reason})`,
         )
         let finished = false
         return {
@@ -926,7 +1031,7 @@ export class Placement {
         } as const
       }
       this.log(
-        `at capacity for ${requestId}${pool === DEFAULT_POOL ? '' : ` in pool ${pool}`}: ${verdicts.map((v) => `${v.host}: ${v.reason}`).join(' | ')}`,
+        `at capacity for ${requestId}${where}: ${verdicts.map((v) => `${v.host}: ${v.reason}`).join(' | ')}`,
       )
       return { kind: 'at_capacity', verdicts } as const
     })

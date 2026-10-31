@@ -4,12 +4,14 @@ import { isAbsolute, normalize } from 'node:path'
 import {
   allocateWidgetId,
   getRootRequest,
+  getSessionEntry,
   getWidget,
   listRootRequests,
   type RootRequestRow,
   reserveRootRequest,
   type WidgetRow,
 } from './catalog'
+import { entryProblem, parseEntry, resolveEntry, type SessionEntry } from './entries'
 import type { LifecycleOwnerToken, ManagedGateState } from './lifecycle-guard'
 import type { RetirementResult } from './owner-retirement'
 import { sessionGeneration } from './owner-retirement'
@@ -83,6 +85,9 @@ export interface RootCreateRequest {
   /** An Agent Hub prompt revision added to the tool's prompt (tui/instructions.ts).
    * The digest covers its revision id. */
   instructions?: InstructionsSnapshot | null
+  /** The entries.json program the agent runs through on every launch
+   * (src/lifecycle/entries.ts). Part of the digest; kept on the session. */
+  entry?: SessionEntry | null
   /** Tether: which app requested the root. Not part of the digest. */
   origin: 'aico' | 'a-term'
   /** Tether: A-Term's session UUID (pane `A_TERM_SESSION_ID`); a-term only. */
@@ -170,8 +175,9 @@ export interface RootControlOperations {
   remoteRoots?(search: string): Promise<Record<string, unknown>[]>
   /** Tether: `host: "auto"` picks a host from `pool` (absent = default) for
    * these `needs` and reserves them there (src/hub/placement.ts), or refuses
-   * with each host's reason. */
-  place?(requestId: string, needs: unknown, pool: unknown): Promise<RootPlacement>
+   * with each host's reason. With `host` (a create naming its host with
+   * `needs`) only that host is judged and reserved. */
+  place?(requestId: string, needs: unknown, pool: unknown, host?: string): Promise<RootPlacement>
   /** Tether: `POST /v1/roots/:requestId/end`, the shared session End. */
   end?(widgetId: string, generation: string): Promise<RetirementResult | { status: 'busy' }>
   /** Tether: the session whose pending or held crash recovery will resume
@@ -183,7 +189,7 @@ export interface RootControlOperations {
   agentExit?(row: WidgetRow): { status: number } | { signal: string } | null
 }
 
-/** Where `host: "auto"` put a root (null host = this computer); `done()`
+/** Where placement put a root (null host = this computer); `done()`
  * once the create has answered. Or the refusal to send instead. */
 export type RootPlacement =
   | { kind: 'placed'; host: string | null; done(): void }
@@ -329,6 +335,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'agentHubContext',
           'agentSlug',
           'instructions',
+          'entry',
           'origin',
           'aTermSessionId',
           'launchedBy',
@@ -362,6 +369,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     host = null,
   } = value
   const lineage = parseLineage(value.lineage)
+  const entry = parseEntry(value.entry)
   const instructions = rawInstructions === null ? null : parseInstructions(rawInstructions)
   const hub = tool === AGENT_HUB_TOOL
   if (
@@ -373,6 +381,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     host !== null ||
     lineage === undefined ||
     (lineage !== null && launchedBy !== null) ||
+    entry === undefined ||
+    (entry !== null && entryRefusal(tool, rawInstructions) !== null) ||
     (aTermSessionId !== null &&
       (origin !== 'a-term' ||
         typeof aTermSessionId !== 'string' ||
@@ -467,7 +477,29 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     aTermSessionId: (aTermSessionId as string | null) ?? null,
     launchedBy: (launchedBy as string | null) ?? null,
     ...(lineage ? { lineage } : {}),
+    ...(entry ? { entry } : {}),
   }
+}
+
+/** Why a create with an entry is refused for this tool and these options:
+ * Tether reads only Claude Code's state from an entry home, and an
+ * instructions file on the host is not readable through the entry. */
+function entryRefusal(tool: unknown, instructions: unknown): string | null {
+  if (tool !== 'claude-code') return 'entry runs claude-code sessions only'
+  if (instructions !== null && instructions !== undefined) return 'entry does not take instructions'
+  return null
+}
+
+/** A root descriptor's `entry`, present only when the session has one. */
+function entryField(widgetId: string): { entry?: SessionEntry } {
+  const entry = getSessionEntry(widgetId)
+  return entry ? { entry } : {}
+}
+
+/** Why a create body's `entry` is refused, or null. */
+export function entryBodyProblem(value: unknown): string | null {
+  if (!object(value) || value.entry === undefined || value.entry === null) return null
+  return entryProblem(value.entry) ?? entryRefusal(value.tool, value.instructions ?? null)
 }
 
 export function rootRequestDigest(request: RootCreateRequest): string {
@@ -507,6 +539,7 @@ export function rootRequestDigest(request: RootCreateRequest): string {
           : []),
         ...(request.instructions ? [{ instructions: request.instructions.revision }] : []),
         ...(request.agentSlug ? [{ agentSlug: request.agentSlug }] : []),
+        ...(request.entry ? [{ entry: [request.entry.name, request.entry.arg] }] : []),
       ]),
     )
     .digest('hex')
@@ -686,6 +719,7 @@ export function createRootHandler(
       workRoleDisplayName: root.workRoleDisplayName ?? null,
       leadRootReference: root.leadRootReference,
       facetCapsuleRef: root.facetCapsuleRef,
+      ...entryField(root.widgetId),
       status: row ? await operations.status(row) : 'ended',
       // Why a pending root has not started yet, and when it is tried again.
       launch: row ? describeLaunch(root.requestId) : null,
@@ -724,6 +758,17 @@ export function createRootHandler(
           json(response, 422, { error: 'launch_unavailable' })
           return
         }
+        if (input.entry) {
+          const found = resolveEntry(input.entry)
+          if (found.kind !== 'ok') {
+            json(response, found.kind === 'unknown_entry' ? 400 : 422, {
+              error: found.kind === 'unknown_entry' ? 'unknown_entry' : 'entry_unavailable',
+              entry: input.entry.name,
+              reason: found.reason,
+            })
+            return
+          }
+        }
         const refused = await operations.refuse?.(input)
         if (refused) {
           json(response, refused.status, {
@@ -757,6 +802,7 @@ export function createRootHandler(
                 model: input.model ?? null,
               }
             : null,
+          input.entry ?? null,
         )
         if (root.digest !== digest) {
           json(response, 409, { error: 'request_conflict' })
@@ -920,7 +966,13 @@ export function createRootHandler(
         const remoteHost = object(value) && value.host !== undefined && value.host !== null
         // `host: "auto"` with `needs` (and `pool`): placement picks the host below.
         const auto = object(value) && value.host === 'auto'
-        if (remoteHost && !(auto ? operations.place : operations.remote)) {
+        // A named host with `needs`: placement rechecks that host and reserves there.
+        const named =
+          !auto && object(value) && typeof value.host === 'string' && value.needs !== undefined
+            ? value.host
+            : null
+        const placing = auto || named !== null
+        if (remoteHost && !(placing ? operations.place : operations.remote)) {
           json(response, 400, { error: 'unknown_host', host: (value as { host: unknown }).host })
           return
         }
@@ -940,10 +992,8 @@ export function createRootHandler(
           // option is refused before the host is woken; its Tether is the
           // final judge of the rest (tools it has enabled, its project roots).
           const { host: _host, ...local } = object(value) ? value : {}
-          if (auto) {
-            delete local.needs
-            delete local.pool
-          }
+          if (auto) delete local.pool
+          if (placing) delete local.needs
           parsed = parseRootCreate(remoteHost ? local : value)
         } catch {
           parsed = null
@@ -960,21 +1010,25 @@ export function createRootHandler(
         }
         if (!parsed) {
           const missing = missingProviderModel(value)
+          const entry = entryBodyProblem(value)
           json(
             response,
             400,
             missing
               ? { error: 'invalid_body', field: 'model', reason: missing }
-              : { error: 'invalid_body' },
+              : entry
+                ? { error: 'invalid_body', field: 'entry', reason: entry }
+                : { error: 'invalid_body' },
           )
           return
         }
         let placed: Extract<RootPlacement, { kind: 'placed' }> | null = null
-        if (auto && operations.place) {
+        if (placing && operations.place) {
           const placement = await operations.place(
             parsed.requestId,
             (value as Record<string, unknown>).needs,
             (value as Record<string, unknown>).pool,
+            named ?? undefined,
           )
           if (placement.kind === 'refused') {
             json(response, placement.status, placement.body)

@@ -720,6 +720,7 @@ export function reserveRootRequest(
   projectRoot: string,
   aTermSessionId: string | null = null,
   agentHub: NewAgentHubSession | null = null,
+  entry: SessionEntry | null = null,
 ): RootRequestRow {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -734,6 +735,12 @@ export function reserveRootRequest(
       ...(agentHub ? { backend: 'agent-hub' as const } : {}),
     })
     if (agentHub) insertAgentHubSession(request.widgetId, agentHub)
+    if (entry)
+      db.prepare('INSERT INTO session_entries (session_id, name, arg) VALUES (?, ?, ?)').run(
+        request.widgetId,
+        entry.name,
+        entry.arg,
+      )
     setWidgetProject(request.widgetId, projectId, projectRoot)
     db.prepare(`INSERT INTO root_requests
       (request_id, digest, widget_id, logical_session_id, role, lead_root_reference, facet_capsule_ref, created_at, origin, work_role, work_role_display_name)
@@ -756,6 +763,22 @@ export function reserveRootRequest(
     db.exec('ROLLBACK')
     throw error
   }
+}
+
+// --- Per-session entries (src/lifecycle/entries.ts) --------------------------
+
+/** A root's `entry`: an entries.json name and its one-word argument. */
+export interface SessionEntry {
+  name: string
+  arg: string
+}
+
+/** The entry a session's agent runs through, or null for a normal session. */
+export function getSessionEntry(sessionId: string): SessionEntry | null {
+  const row = db
+    .prepare('SELECT name, arg FROM session_entries WHERE session_id = ?')
+    .get(sessionId) as { name: string; arg: string } | undefined
+  return row ? { name: row.name, arg: row.arg } : null
 }
 
 /** A chat started from a menu rather than a root request: the widget row, its

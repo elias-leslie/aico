@@ -22,7 +22,7 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 
 export const RESUME_PROMPT =
   'Tether resumed this session after a host reboot. Continue where you left off. ' +
@@ -249,6 +249,89 @@ export function* codexUserRollouts(fs: ProcFs, pids: number[]): Generator<CodexR
   }
 }
 
+// --- entry sessions (src/lifecycle/entries.ts) ---------------------------------
+
+/** Set by Tether on a session's entry process only: the host path of the
+ * agent's home. Not passed into the entry's container by Tether. */
+export const ENTRY_HOME_ENV = 'TETHER_ENTRY_HOME'
+
+export interface EntryProcess {
+  /** The entry process on this host: alive exactly while the agent runs. */
+  pid: number
+  /** Host path of the agent's home. */
+  home: string
+}
+
+/** The pane's entry process, the first in pane order marked with the home. */
+export function findEntryProcess(fs: ProcFs, pids: number[]): EntryProcess | null {
+  for (const pid of pids) {
+    let environ: string
+    try {
+      environ = fs.readFile(`/proc/${pid}/environ`)
+    } catch {
+      continue
+    }
+    for (const entry of environ.split('\0')) {
+      if (!entry.startsWith(`${ENTRY_HOME_ENV}=`)) continue
+      const home = entry.slice(ENTRY_HOME_ENV.length + 1)
+      if (isAbsolute(home)) return { pid, home }
+    }
+  }
+  return null
+}
+
+function claudeFileTime(state: Record<string, unknown>): number {
+  const times = [state.updatedAt, state.statusUpdatedAt, state.startedAt].filter(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value),
+  )
+  return times.length ? Math.max(...times) : 0
+}
+
+/** The live Claude session file in an entry home. Its pid is the container's,
+ * so it cannot be matched against the pane's processes: one agent runs per
+ * home, so it is the interactive file updated last (a stale file left by an
+ * earlier process is older). A session parked into a background job is
+ * represented by that job's file, as in `claudeSessions`. */
+export function entryClaudeSession(fs: ProcFs, home: string): ClaudeSession | null {
+  const dir = join(home, '.claude', 'sessions')
+  let names: string[] = []
+  try {
+    names = fs.readdir(dir)
+  } catch {
+    return null
+  }
+  const sessions: ClaudeSession[] = []
+  for (const name of names) {
+    const pid = /^([1-9][0-9]*)\.json$/.exec(name)?.[1]
+    if (!pid) continue
+    const session = readClaudeSession(fs, home, Number(pid))
+    if (session) sessions.push(session)
+  }
+  let best: ClaudeSession | null = null
+  for (const session of sessions) {
+    if (session.state.kind === 'bg') continue
+    if (!best || claudeFileTime(session.state) > claudeFileTime(best.state)) best = session
+  }
+  const parked = best?.state.parkedJobId
+  if (best && typeof parked === 'string' && parked)
+    return sessions.find((job) => job.state.jobId === parked && job.state.kind === 'bg') ?? best
+  return best
+}
+
+/** An entry session's agent: Claude's state from the entry home, standing on
+ * the entry process (the pane's agent exits when it does). */
+export function observeEntryClaude(fs: ProcFs, entry: EntryProcess): AgentObservation | null {
+  const session = entryClaudeSession(fs, entry.home)
+  const state = session?.state
+  if (!state || typeof state.sessionId !== 'string' || !UUID_RE.test(state.sessionId)) return null
+  return {
+    pid: entry.pid,
+    resumeId: state.sessionId,
+    idle: state.status !== 'busy',
+    blocked: state.status === 'waiting',
+  }
+}
+
 /** The first Claude Code session in `pids` with a resumable session ID. */
 export function observeClaude(fs: ProcFs, home: string, pids: number[]): AgentObservation | null {
   for (const { pid, state } of claudeSessions(fs, home, pids)) {
@@ -296,6 +379,9 @@ export function observeChosenSession(fs: ProcFs, pids: number[]): AgentObservati
 
 export function observeAgent(fs: ProcFs, home: string, panePid: number): AgentObservation | null {
   const pids = processTree(fs, panePid)
+  // A session that runs through an entry is read only from the entry's home.
+  const entry = findEntryProcess(fs, pids)
+  if (entry) return observeEntryClaude(fs, entry)
   return observeClaude(fs, home, pids) ?? observeCodex(fs, pids) ?? observeChosenSession(fs, pids)
 }
 

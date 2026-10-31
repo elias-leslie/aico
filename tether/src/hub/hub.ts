@@ -67,6 +67,8 @@ export interface Lineage {
 
 /** The first API version whose `POST /v1/roots` takes `lineage.parentId`. */
 const PARENT_API_VERSION = 9
+/** The first Tether API that runs a root through its host's entries.json. */
+const ENTRY_API_VERSION = 15
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -476,6 +478,17 @@ export class Hub {
     await this.ready(peer)
     if (!peer.live) throw unavailable(peer)
     const { host: _host, ...forwarded } = body
+    // An older Tether would refuse the key as a bare invalid_body.
+    if (
+      path === '/v1/roots' &&
+      forwarded.entry !== undefined &&
+      forwarded.entry !== null &&
+      (peer.apiVersion ?? 0) < ENTRY_API_VERSION
+    )
+      throw new HttpError(400, 'entry_unsupported', {
+        host: peer.name,
+        reason: `${peer.name} runs a Tether without session entries (API ${peer.apiVersion ?? 'unknown'})`,
+      })
     if (path === '/v1/roots' && typeof forwarded.launchedBy === 'string') {
       const launcher = forwarded.launchedBy
       if (!peer.ownsSession(launcher)) {

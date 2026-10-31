@@ -73,6 +73,7 @@ import {
   type WidgetRow,
 } from './catalog'
 import { displayTitle } from './display'
+import { sessionLaunchLine } from './entries'
 import {
   CoalescedLifecycleIntent,
   decideManagedGateRecovery,
@@ -1699,7 +1700,7 @@ async function recoverInterruptedManagedPane(
         forWorkspace(getTui(current.tool ?? 'shell'), current.projectRoot),
         current.id,
       )
-      const line = tool ? initialLaunchLine(current.id, tool) : null
+      const line = sessionLaunchLine(current.id, tool ? initialLaunchLine(current.id, tool) : null)
       // Re-observe immediately before the one-time transition out of the gate.
       const immediatelyCurrent = await verifiedCurrentManagedPane(current)
       if (
@@ -2092,7 +2093,7 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
     forWorkspace(getTui(rowBeforeCreate.tool ?? 'shell'), rowBeforeCreate.projectRoot),
     widgetId,
   )
-  const line = tool ? initialLaunchLine(widgetId, tool) : null
+  const line = sessionLaunchLine(widgetId, tool ? initialLaunchLine(widgetId, tool) : null)
   if (hasPersistedScopeCleanupEvidence(rowBeforeCreate)) {
     console.error(
       `[tether:lifecycle] refusing to recreate absent ${widgetId}: persisted scope cleanup is unresolved`,
@@ -2446,11 +2447,14 @@ export async function respawnAndRelaunch(
         forWorkspace(tool, options.cwd ?? previous.projectRoot),
         widgetId,
       )
-      const line = launched
-        ? options.initialLaunch
-          ? initialLaunchLine(widgetId, launched)
-          : launchLine(launched)
-        : null
+      const line = sessionLaunchLine(
+        widgetId,
+        launched
+          ? options.initialLaunch
+            ? initialLaunchLine(widgetId, launched)
+            : launchLine(launched)
+          : null,
+      )
       let promoted: ManagedPaneProcess | null = null
       let sameScopeReplacementProven = false
       try {

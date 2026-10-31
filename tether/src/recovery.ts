@@ -29,6 +29,7 @@ import { agentExitMarkerDir } from './config'
 import {
   type ContinuitySnapshot,
   currentBootId,
+  findEntryProcess,
   nodeProcFs,
   observeAgent,
   processTree,
@@ -54,6 +55,7 @@ import {
   respawnAndRelaunch,
   verifiedCurrentManagedPane,
 } from './lifecycle/engine'
+import { sessionEntryHome } from './lifecycle/entries'
 import { isNamedProcess, processEnvironment } from './lifecycle/procfs'
 import { launchingResume, withRootPrompt } from './lifecycle/root-launch'
 import { paneExitedEventPath } from './lifecycle/tmux'
@@ -247,6 +249,9 @@ export interface RecoveryOptions {
 function agentInPane(home: string, panePid: number, tool: string): AgentSeen | null {
   const observed = observeAgent(nodeProcFs, home, panePid)
   if (observed) return { pid: observed.pid, resumeId: observed.resumeId }
+  // An entry session's agent runs while its entry process does.
+  const entry = findEntryProcess(nodeProcFs, processTree(nodeProcFs, panePid))
+  if (entry) return { pid: entry.pid, resumeId: null }
   // An agent that has no conversation yet still counts as running.
   const name = getTui(tool)?.processName
   if (!name) return null
@@ -1015,7 +1020,8 @@ export class Recovery {
     if (!this.transcripts.has(key)) {
       let facts: TranscriptFacts | null = null
       if (record.resumeId && getTui(row.tool)?.slug === 'claude-code') {
-        const path = findClaudeTranscript(nodeFileReader, this.home, record.resumeId)
+        const home = sessionEntryHome(row.id) ?? this.home
+        const path = findClaudeTranscript(nodeFileReader, home, record.resumeId)
         if (path)
           facts = claudeTranscriptFacts(
             nodeFileReader,

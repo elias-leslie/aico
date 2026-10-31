@@ -69,6 +69,14 @@ const ENTRY: HostEntry = {
   stateDir: null,
 }
 
+const BOX: HostEntry = {
+  ...ENTRY,
+  name: 'box',
+  ssh: 'box',
+  wake: ['neri-hunt-box', 'up', '1'],
+  status: ['neri-hunt-box', 'status', '1'],
+}
+
 const PVE = { ssh: 'pve', node: 'pve', vmid: 200, storage: 'local-lvm' }
 
 interface World {
@@ -77,6 +85,8 @@ interface World {
   proxmox: string
   peerLive: boolean
   peerState: string
+  hosts: string[]
+  box: { live: boolean; state: string; entry: HostEntry }
   files: Record<string, string>
   fingerprint: RunResult
   local: Record<string, RootFate>
@@ -103,6 +113,8 @@ describe('placement', () => {
       proxmox: proxmox(20),
       peerLive: true,
       peerState: 'connected',
+      hosts: ['vm'],
+      box: { live: true, state: 'connected', entry: BOX },
       files: {},
       fingerprint: { code: 0, stdout: 'fp-1\n', output: '' },
       local: {},
@@ -119,7 +131,7 @@ describe('placement', () => {
     }
     const deps = (): PlacementDeps => ({
       env,
-      hostNames: () => ['vm'],
+      hostNames: () => world.hosts,
       peer: (name): PeerView | null =>
         name === 'vm'
           ? {
@@ -129,7 +141,9 @@ describe('placement', () => {
               socket: '/sock',
               control: '/ctl',
             }
-          : null,
+          : name === 'box' && world.hosts.includes('box')
+            ? { ...world.box, socket: '/box-sock', control: '/box-ctl' }
+            : null,
       localRoot: (id) => world.local[id] ?? 'live',
       existingHost: (id) => (id in world.existing ? world.existing[id] : undefined),
       settings: {
@@ -149,7 +163,7 @@ describe('placement', () => {
           return { code: 0, stdout: world.proxmox, output: '' }
         if (line.includes(GUEST_LINE)) return { code: 0, stdout: world.guest, output: '' }
         if (line.includes('cat ') && line.includes('live-ready.json')) {
-          const marker = world.files['vm:live-ready']
+          const marker = world.files[argv.includes('box') ? 'box:live-ready' : 'vm:live-ready']
           return marker === undefined
             ? { code: 1, stdout: '', output: 'No such file' }
             : { code: 0, stdout: marker, output: '' }
@@ -158,7 +172,10 @@ describe('placement', () => {
       },
       cpu: () => ({ cpus: 16, load5: 2 }),
       limits: () => DEFAULT_AGENT_ADMISSION_LIMITS,
-      remoteRoot: async (_peer, id) => (world.peerLive ? (world.remote[id] ?? 'live') : 'unknown'),
+      remoteRoot: async (peer, id) =>
+        (peer.entry.name === 'box' ? world.box.live : world.peerLive)
+          ? (world.remote[id] ?? 'live')
+          : 'unknown',
       now: () => NOW,
       log: () => {},
     })
@@ -486,5 +503,207 @@ describe('placement', () => {
         output: '',
       }),
     ).toEqual({ ok: true })
+  })
+
+  const ROOM = {
+    order: ['local'],
+    pools: { hunt: ['box'] },
+    hosts: { local: { reserveGiB: 6, reserveCpu: 2 }, box: { room: 'local' } },
+  }
+
+  it('reads room "local" for hosts on this computer, with no reserve of their own by default', () => {
+    const config = parsePlacement(
+      JSON.stringify({ ...ROOM, hosts: { ...ROOM.hosts, big: { room: 'local', reserveGiB: 1 } } }),
+      ['box', 'big', 'vm'],
+    )
+    expect(config.hosts.box).toEqual({
+      reserveBytes: 0,
+      reserveCpu: 0,
+      proxmox: null,
+      room: 'local',
+    })
+    expect(config.hosts.big?.reserveBytes).toBe(GIB)
+    expect(config.hosts.vm?.room).toBeNull()
+    expect(config.hosts.local?.room).toBeNull()
+    expect(config.errors).toEqual([])
+    const bad = parsePlacement(
+      JSON.stringify({
+        hosts: {
+          local: { room: 'local' },
+          a: { room: 'pve' },
+          b: { room: 'local', proxmox: PVE },
+        },
+      }),
+      ['a', 'b'],
+    )
+    expect(bad.errors).toEqual([
+      'hosts.local: room is for hosts that share this computer; using the defaults',
+      'hosts.a: room must be "local"; using the defaults',
+      'hosts.b: room and proxmox do not go together; using the defaults',
+    ])
+    // A broken room entry is an ordinary remote host at the remote defaults.
+    expect(bad.hosts.b).toEqual({ reserveBytes: 2 * GIB, reserveCpu: 1, proxmox: null, room: null })
+  })
+
+  it('judges a room "local" host by this computer, holding one room across it and local', async () => {
+    const { world, placement } = setup(ROOM, { hosts: ['vm', 'box'] })
+    const box = await placement.place('b1', needs(4), 'hunt')
+    expect(box).toMatchObject({ kind: 'placed', host: 'box' })
+    expect(box.verdicts).toEqual([
+      {
+        host: 'box',
+        fits: true,
+        reason:
+          "14.0 GiB and 12 CPUs room (this computer's room: 20.0 free - 6.0 reserve - 0.0 held)",
+        room: { memGiB: 14, cpu: 12 },
+      },
+    ])
+    // Its own /proc would show this computer again: never read.
+    expect(world.runs.some((argv) => (argv.at(-1) ?? '').includes(GUEST_LINE))).toBe(false)
+    if (box.kind === 'placed') box.done()
+    // This computer sees the box's reservation, and the box sees this computer's.
+    const local = await placement.place('l1', needs(8))
+    expect(local).toMatchObject({ kind: 'placed', host: null })
+    expect(local.verdicts[0]?.reason).toBe(
+      '10.0 GiB and 11 CPUs room (20.0 free - 6.0 reserve - 4.0 held)',
+    )
+    const full = await placement.place('b2', needs(4), 'hunt')
+    expect(full).toEqual({
+      kind: 'at_capacity',
+      verdicts: [
+        expect.objectContaining({
+          host: 'box',
+          reason:
+            "needs 4.0 GiB, has 2.0 GiB room (this computer's room: 20.0 free - 6.0 reserve - 12.0 held)",
+        }),
+      ],
+    })
+    // Ended on the box's own Tether: released like any host's.
+    world.remote.b1 = 'ended'
+    expect(await placement.place('b2', needs(4), 'hunt')).toMatchObject({ host: 'box' })
+    expect(placement.list().map((item) => item.requestId)).toEqual(['l1', 'b2'])
+  })
+
+  it('takes its own reserve on top, and is unknown when this computer is', async () => {
+    const own = setup(
+      { ...ROOM, hosts: { ...ROOM.hosts, box: { room: 'local', reserveGiB: 1, reserveCpu: 1 } } },
+      { hosts: ['box'] },
+    )
+    expect((await own.placement.check(needs(1), 'hunt'))[0]).toMatchObject({
+      fits: true,
+      reason:
+        "13.0 GiB and 11 CPUs room (this computer's room: 20.0 free - 6.0 reserve - 0.0 held - 1.0 own reserve)",
+    })
+    const amber = setup(ROOM, { hosts: ['box'], admission: admission('amber', 20) })
+    expect((await amber.placement.check(needs(1), 'hunt'))[0]).toEqual({
+      host: 'box',
+      fits: false,
+      reason: 'shares this computer: Nightshift says amber: amber test',
+      room: null,
+    })
+    const missing = setup(ROOM, { hosts: [] })
+    expect((await missing.placement.check(needs(1), 'hunt'))[0]?.reason).toBe('not in hosts.json')
+  })
+
+  it('fits a sleeping room "local" host by this computer when it can be woken', async () => {
+    const asleep = { live: false, state: 'powered_off', entry: BOX }
+    const woken = setup(ROOM, { hosts: ['box'], box: asleep })
+    const placed = await woken.placement.place('w', needs(4), 'hunt')
+    expect(placed).toMatchObject({ kind: 'placed', host: 'box' })
+    expect(placed.verdicts[0]).toMatchObject({
+      wake: true,
+      reason:
+        "14.0 GiB and 12 CPUs room (powered off, starts in this computer's room: 20.0 free - 6.0 reserve - 0.0 held)",
+    })
+    const reasons = async (box: World['box'], caps: string[] = []) =>
+      (await setup(ROOM, { hosts: ['box'], box }).placement.check(needs(1, 1, caps), 'hunt'))[0]
+        ?.reason
+    expect(await reasons(asleep, ['live-ready'])).toBe(
+      'powered off, so live-ready cannot be checked',
+    )
+    expect(await reasons({ ...asleep, entry: { ...BOX, wake: null } })).toBe(
+      'powered off and hosts.json has no wake',
+    )
+    expect(await reasons({ ...asleep, state: 'offline' })).toBe('running but its link is offline')
+  })
+
+  it('reads a running room "local" host\'s capabilities over its link', async () => {
+    const caps = {
+      'live-ready': {
+        marker: '.local/state/neri-proxy/live-ready.json',
+        fingerprint: ['neri', 'fingerprint'],
+      },
+    }
+    const marker = JSON.stringify({ fingerprint: 'fp-1' })
+    const ready = setup(
+      { ...ROOM, capabilities: caps },
+      { hosts: ['box'], files: { 'box:live-ready': marker } },
+    )
+    expect(await ready.placement.place('c', needs(1, 1, ['live-ready']), 'hunt')).toMatchObject({
+      kind: 'placed',
+      host: 'box',
+    })
+    const none = setup({ ...ROOM, capabilities: caps }, { hosts: ['box'] })
+    expect((await none.placement.check(needs(1, 1, ['live-ready']), 'hunt'))[0]?.reason).toBe(
+      'not live-ready: no marker',
+    )
+  })
+
+  it('judges and reserves only a named host, whatever the pool order', async () => {
+    const { world, placement } = setup(CONFIG)
+    const named = await placement.place('n1', needs(4), undefined, 'vm')
+    // `local` fits first in order, but the create named the VM.
+    expect(named).toMatchObject({ kind: 'placed', host: 'vm' })
+    expect(named.verdicts.map((v) => v.host)).toEqual(['vm'])
+    if (named.kind === 'placed') named.done()
+    expect(placement.list()).toEqual([expect.objectContaining({ requestId: 'n1', host: 'vm' })])
+    // A retry to the same host holds nothing new; one naming another host is refused.
+    expect(await placement.place('n1', needs(4), undefined, 'vm')).toMatchObject({
+      kind: 'placed',
+      host: 'vm',
+      verdicts: [],
+    })
+    expect(await placement.place('n1', needs(4), undefined, 'local')).toEqual({
+      kind: 'placed_elsewhere',
+      host: 'vm',
+      verdicts: [],
+    })
+    expect(placement.list()).toHaveLength(1)
+    // No room there: at capacity with that host's reason only, nothing held.
+    const full = await placement.place('n2', needs(100), undefined, 'vm')
+    expect(full).toEqual({
+      kind: 'at_capacity',
+      verdicts: [expect.objectContaining({ host: 'vm', fits: false })],
+    })
+    expect(full.verdicts[0]?.reason).toMatch(/^needs 100.0 GiB, has 6.0 GiB room/)
+    expect(await placement.place('n3', needs(1), undefined, 'nope')).toEqual({
+      kind: 'unknown_host',
+      host: 'nope',
+      verdicts: [],
+    })
+    expect(await placement.place('n4', needs(1), undefined, 'local')).toMatchObject({
+      kind: 'placed',
+      host: null,
+    })
+    // Released only on a definite end from the host that owns it.
+    world.remote.n1 = 'exited'
+    await placement.check(needs(1))
+    expect(placement.list().map((item) => item.requestId)).toEqual(['n4'])
+  })
+
+  it('wakes a named sleeping VM like auto does, and names a room "local" host the same way', async () => {
+    const vm = setup(
+      { ...CONFIG, order: ['vm'], skip: ['local'] },
+      { peerLive: false, peerState: 'powered_off', proxmox: proxmox(19, 'stopped') },
+    )
+    expect((await vm.placement.place('v', needs(6), undefined, 'vm')).verdicts[0]).toMatchObject({
+      host: 'vm',
+      fits: true,
+      wake: true,
+    })
+    const box = setup(ROOM, { hosts: ['vm', 'box'] })
+    const placed = await box.placement.place('b', needs(4), undefined, 'box')
+    expect(placed).toMatchObject({ kind: 'placed', host: 'box' })
+    expect(placed.verdicts.map((v) => v.host)).toEqual(['box'])
   })
 })

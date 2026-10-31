@@ -182,6 +182,15 @@ host in `~/.config/tether/placement.json` order whose live room fits, or answers
 - **Reservations** are held per placed root until its own Tether says it is
   gone, ended or its agent exited. Never on a timer; kept across restarts.
   Decisions are serialized in the hub (every create goes through it).
+- **This computer's room** (2026-10-31): placement.json `hosts.<name>: {room: "local"}`
+  marks a host that runs on this computer (a Neri hunt container). It is judged
+  by Nightshift's reading and this computer's reserve, never its own /proc, and
+  its reservations and `local`'s are one room, counted once. Asleep with a
+  `wake`, it fits by that room and the create wakes it.
+- **Named host with needs** (2026-10-31): `st aico create --host NAME --needs ...`
+  rechecks that host and holds its reservation before the create is sent, or
+  answers `at_capacity` with its reason (Neri: dry run, set up the host, then
+  create there). Tether API 14.
 - `st aico placement --needs ... [--pool NAME]` shows the decision without starting anything.
 - Details and the config fields: tether/docs/api-v1.md "Placement".
 

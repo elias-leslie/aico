@@ -19,6 +19,7 @@ import {
   ROOT_REQUESTS_TABLE_SQL,
   ROOT_WORK_ROLE_SQL,
   SCHEMA_VERSION,
+  SESSION_ENTRIES_SQL,
   SESSIONS_TABLE_SQL,
   SETTINGS_SQL,
   SHARES_SQL,
@@ -355,6 +356,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(19, now)
+      }
+      if (current < 20) {
+        // v20: per-session entries (a root's agent runs through a host program).
+        this.db.exec(SESSION_ENTRIES_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(20, now)
       }
     })
   }

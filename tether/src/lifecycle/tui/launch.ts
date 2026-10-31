@@ -15,7 +15,7 @@ export function effectiveTuiPath(spec: TuiSpec, base: NodeJS.ProcessEnv = proces
   return spec.env?.PATH ?? paneGatePath(base)
 }
 
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
   return /^[A-Za-z0-9_@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`
 }
 

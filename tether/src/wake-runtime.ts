@@ -13,6 +13,7 @@ import { AgentAdmissionDenied } from './lifecycle/agent-admission'
 import {
   allocateWidgetId,
   clearLaunched,
+  getSessionEntry,
   getWidget,
   insertWidget,
   joinCoordinator,
@@ -262,6 +263,12 @@ export class WakeService {
     // was closed with its End.
     if (ended.tool === AGENT_HUB_TOOL)
       return { status: 'failed', reason: 'an ended Agent Hub session cannot be started again' }
+    // Never on this host: its agent ran through an entry that ended with it.
+    if (ended.entry)
+      return {
+        status: 'failed',
+        reason: `a session that ran through entry ${ended.entry.name} cannot be started again`,
+      }
     if (!lingerEnabled()) return { status: 'retry', reason: 'linger is not enabled' }
     const tool = this.context.store.resolveTool(ended.tool)
     const spec = tool?.enabled ? getTui(tool.slug) : undefined
@@ -322,7 +329,13 @@ function endedSnapshotOf(row: WidgetRow, resumeId: string | null): EndedSession 
     coordinatorId: row.coordinatorId,
     parentId: row.parentId,
     resumeId,
+    ...entrySnapshot(row.id),
   }
+}
+
+function entrySnapshot(id: string): { entry?: { name: string; arg: string } } {
+  const entry = getSessionEntry(id)
+  return entry ? { entry } : {}
 }
 
 function only(body: Record<string, unknown>, allowed: readonly string[]): void {

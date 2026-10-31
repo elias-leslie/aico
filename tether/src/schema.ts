@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 19
+export const SCHEMA_VERSION = 20
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -510,5 +510,24 @@ export const WAITS_SQL = `
     DELETE FROM waits WHERE waiter = old.id AND kept = 0;
     UPDATE waits SET waiter = NULL WHERE waiter = old.id;
     DELETE FROM session_sends WHERE sender = old.id OR target = old.id;
+  END;
+`
+
+/**
+ * v20: per-session entries (src/lifecycle/entries.ts). A root created with
+ * `entry` runs its agent through that program from this host's entries.json
+ * (`<argv> <arg> -- /bin/sh -c '<line>'`), on every launch: restart, crash
+ * recovery and reboot restore read it here. It goes with the session.
+ */
+export const SESSION_ENTRIES_SQL = `
+  CREATE TABLE IF NOT EXISTS session_entries (
+    session_id TEXT PRIMARY KEY
+                 CHECK(length(session_id) = 8 AND session_id NOT GLOB '*[^0-9a-f]*'),
+    name       TEXT NOT NULL CHECK(length(name) BETWEEN 1 AND 64),
+    arg        TEXT NOT NULL CHECK(length(arg) BETWEEN 1 AND 80)
+  );
+  CREATE TRIGGER IF NOT EXISTS sessions_end_entry AFTER DELETE ON sessions
+  BEGIN
+    DELETE FROM session_entries WHERE session_id = old.id;
   END;
 `

@@ -16,6 +16,25 @@
   placement.json `pools.neri-hunt` lists; without `--pool` the default pool
   (`order`) is used as before and leaves pooled hosts out. An unknown pool is
   refused with `unknown_pool` and the pools there are. Tether API 11.
+- Placement on this computer's containers and on a named host:
+  placement.json `hosts.<name>.room: "local"` judges a host that runs on this
+  computer (a Neri hunt container) by Nightshift's reading and this computer's
+  reserve, with its reservations and this computer's counted once as one room;
+  a sleeping one with `wake` fits by that room and is woken by the create.
+  `st aico create --host NAME --needs ...` (`POST /v1/roots` `host` + `needs`)
+  rechecks that host and holds its reservation before the create goes there,
+  or answers `at_capacity` with its reason; release is unchanged (only on a
+  definite end). Default-pool behaviour is unchanged. Tether API 14.
+- Per-session entry: `POST /v1/roots` `entry: {name, arg}` runs a Claude
+  Code root through the program `~/.config/tether/entries.json` names on the
+  host that runs it (`<argv> <arg> -- /bin/sh -c '<line>'`), on every launch
+  including restart, crash recovery and reboot restore, so a Neri hunter runs
+  inside its hunt container from its first instruction. Its state, resume id
+  and transcript are read from the entry's `home` (container pids, no hooks);
+  an unknown name is `unknown_entry`, a malformed one is refused with the
+  reason, and a launch whose entry left entries.json exits instead of running
+  on the host. Kept wakes never restart such a session. Schema v20, Tether
+  API 15.
 - Lane reports: a lane started with `st aico create` tells whoever launched it
   when it finishes a turn, is blocked on a prompt, or ends, as one line pasted
   once the receiver is idle (`[Ready] lane "Store lane" finished after 6m ·

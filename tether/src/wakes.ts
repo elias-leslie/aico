@@ -142,6 +142,9 @@ export interface EndedSession {
   parentId?: string | null
   /** The agent's native conversation ID at End, if Tether saw one. */
   resumeId: string | null
+  /** The session ran through an entry (src/lifecycle/entries.ts): it is never
+   * started again, since the place the entry led to is gone with End. */
+  entry?: { name: string; arg: string } | null
 }
 
 /** A delivery row's kind: a scheduled check-in, or an event line Tether

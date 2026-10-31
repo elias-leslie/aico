@@ -320,6 +320,20 @@ def test_host_auto_sends_the_needs_and_reports_where_tether_put_it(monkeypatch):
     assert output[1]["host"] == "local"
 
 
+def test_a_named_host_takes_needs_and_tether_rechecks_it(monkeypatch):
+    calls, output = [], []
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls, create=lambda _: (
+        409, {"error": "at_capacity", "hosts": [{"host": "neri-box-1", "reason": "needs 6.0 GiB"}]})))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    argv = [*auto()[:-4], "--host", "neri-box-1", "--needs", "mem=6G,cpu=2"]
+    assert admin.main(argv) == 1
+    payload = next(body for route, body, *_ in calls if route == "/v1/roots")
+    assert payload["host"] == "neri-box-1" and "pool" not in payload
+    assert payload["needs"] == {"memBytes": 6 * 1024 ** 3, "cpu": 2, "caps": []}
+    assert output[-1]["reason"] == "at_capacity"
+    assert output[-1]["hosts"] == [{"host": "neri-box-1", "reason": "needs 6.0 GiB"}]
+
+
 def test_at_capacity_is_a_refusal_with_each_hosts_reason(monkeypatch):
     output = []
     hosts = [{"host": "local", "reason": "Nightshift says amber: builds running"},
@@ -335,7 +349,7 @@ def test_at_capacity_is_a_refusal_with_each_hosts_reason(monkeypatch):
 
 @pytest.mark.parametrize(("argv", "message"), [
     (["--host", "auto"], "--host auto needs --needs"),
-    (["--needs", "mem=6G"], "--needs goes with --host auto"),
+    (["--needs", "mem=6G"], "--needs goes with --host auto or --host NAME"),
     (["--host", "auto", "--needs", "cpu=2"], "needs must include mem"),
     (["--host", "auto", "--needs", "mem=lots"], "mem takes a size"),
     (["--host", "auto", "--needs", "mem=6G,gpu=1"], "unknown need 'gpu'"),

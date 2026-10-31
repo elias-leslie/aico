@@ -591,7 +591,7 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
         sendError(response, error)
       }
     },
-    place: async (requestId, raw, rawPool) => {
+    place: async (requestId, raw, rawPool, host) => {
       const needs = parseNeeds(raw)
       if (!needs)
         return {
@@ -607,9 +607,25 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
           body: { error: 'invalid_body', field: 'pool', reason: POOL_SHAPE },
         }
       if (!context.placement)
-        return { kind: 'refused', status: 400, body: { error: 'unknown_host', host: AUTO_HOST } }
-      const placed = await context.placement.place(requestId, needs, pool)
+        return {
+          kind: 'refused',
+          status: 400,
+          body: { error: 'unknown_host', host: host ?? AUTO_HOST },
+        }
+      const placed = await context.placement.place(requestId, needs, pool, host)
       if (placed.kind === 'placed') return placed
+      if (placed.kind === 'unknown_host')
+        return { kind: 'refused', status: 400, body: { error: 'unknown_host', host: placed.host } }
+      if (placed.kind === 'placed_elsewhere')
+        return {
+          kind: 'refused',
+          status: 409,
+          body: {
+            error: 'request_conflict',
+            host: placed.host,
+            reason: `this request is already on ${placed.host}`,
+          },
+        }
       if (placed.kind === 'unknown_pool')
         return {
           kind: 'refused',

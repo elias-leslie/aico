@@ -568,6 +568,31 @@ describe('hub', () => {
     })
   })
 
+  it('forwards a root entry only to a host whose Tether runs entries', async () => {
+    const entry = { name: 'neri-hunt', arg: 'case-1' }
+    // A peer below API 15 (this fixture's reports none): refused here, nothing sent.
+    const before = peer.requests.filter((r) => r.url === '/v1/roots').length
+    expect(await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-e1', entry })).toEqual({
+      status: 400,
+      body: {
+        error: 'entry_unsupported',
+        host: 'vm',
+        reason: expect.stringContaining('vm runs a Tether without session entries'),
+      },
+    })
+    expect(peer.requests.filter((r) => r.url === '/v1/roots')).toHaveLength(before)
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('offline'))
+    peer.apiVersion = 15
+    await peer.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
+    await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-e2', entry })
+    expect(peer.requests.filter((r) => r.url === '/v1/roots').at(-1)?.body).toEqual({
+      requestId: 'req-e2',
+      entry,
+    })
+  })
+
   it('serves the cache while a failing list has its circuit open', async () => {
     peer.failSessions = true
     const before = peer.requests.length

@@ -19,6 +19,8 @@ import {
   type CodexRolloutFile,
   claudeSessions,
   codexUserRollouts,
+  entryClaudeSession,
+  findEntryProcess,
   observeChosenSession,
   type ProcFs,
   processTree,
@@ -760,6 +762,12 @@ export class AgentStatePoller {
 
   private search(panePid: number, previous: Found): Found {
     const pids = processTree(this.fs, panePid)
+    // An entry session: Claude's file in the entry home, alive with the entry.
+    const entry = findEntryProcess(this.fs, pids)
+    if (entry) {
+      const session = entryClaudeSession(this.fs, entry.home)
+      return session ? { kind: 'claude', pid: entry.pid, file: session.file } : { kind: 'none' }
+    }
     const claude = findClaude(this.fs, this.home, pids)
     if (claude) return { kind: 'claude', ...claude }
     const codex = findCodexRollout(this.fs, pids)

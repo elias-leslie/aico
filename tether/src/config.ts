@@ -12,8 +12,10 @@ import { join } from 'node:path'
  * 12: lane reports: descriptors carry `stateAgentAt`, `waitingOn` and `launched`;
  *     `/v1/sessions/:id/watches`; wake lists show check-ins only.
  * 13: general waits (`/v1/waits`, `/v1/sessions/:id/waits`); `inject` takes
- *     `from`; End answers `keptWaits`. */
-export const API_VERSION = 13
+ *     `from`; End answers `keptWaits`.
+ * 14: placement `room: "local"` hosts; `needs` with a named `host`.
+ * 15: `entry` on `POST /v1/roots` (per-session entries.json program). */
+export const API_VERSION = 15
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'
