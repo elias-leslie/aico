@@ -1,8 +1,7 @@
 // An Agent Hub client for the chat view that talks only to a chat transport:
-// Electron's preload bridge (`window.aico.chat`) or the web app's HTTP. It has
-// the shape the shared chat component expects of an `@agent-hub/sdk` client,
-// but nothing here knows where Agent Hub is, who the owner is or which session
-// other than this view's: the other end answers for the view's own session
+// the web app's HTTP. It has the shape the shared chat component expects of an
+// `@agent-hub/sdk` client, but nothing here knows where Agent Hub is, who the
+// owner is or which session other than this view's: the other end answers for the view's own session
 // through Tether, and Tether holds the credentials.
 
 import type { ChatHubClient } from '@agent-hub/chat-ui'

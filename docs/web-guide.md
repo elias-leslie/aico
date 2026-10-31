@@ -1,6 +1,6 @@
 # Web app guide
 
-The web app is Aico in a browser or on a phone: the same Tether sessions as the desktop, one session on screen at a time. [Project overview](../README.md). Run shell commands from the repository root unless a step changes directory.
+The web app is Aico in a browser or on a phone: the Tether sessions, one session on screen at a time. [Project overview](../README.md). Run shell commands from the repository root unless a step changes directory.
 
 ## Quickstart
 
@@ -20,11 +20,11 @@ See the [Changelog](../CHANGELOG.md) for shipped changes.
 
 ## Features
 
-**`persistent sessions`** — Sessions live in Tether, not in the web app, so they survive browser closes, web app restarts, and network drops. Reconnect exactly where you left off. The same sessions show up in the desktop app, and sessions started there show up here.
+**`persistent sessions`** — Sessions live in Tether, not in the web app, so they survive browser closes, web app restarts, and network drops. Reconnect exactly where you left off. Sessions started from the `tether` CLI or by an agent show up here too.
 
 **`stable scrollback rendering`** — Terminal panes render with the xterm.js WebGL renderer with DOM fallback, so history keeps font metrics, wrap points, and columns aligned.
 
-**`one session at a time`** — The session bar's title opens every running session in the order they started, with any that need you on top (each row says whether it is working, idle or finished); pick one to switch. Ctrl+Tab and Ctrl+Shift+Tab step through them and Ctrl+1 to Ctrl+9 jump to one (not while you are typing in a text box). New session starts an agent or a shell in a project you pick. In a wide desktop window the list sits beside the session; drag its right edge to resize it (double-click for the default width), or Collapse session list folds it to a rail of agent marks that still shows who needs you and switches sessions; the rail's top button opens the list again, with a count of sessions that need you (both remembered on that device). The session menu's Redraw remounts the view without restarting the session. Several devices can show one session; the one you use last claims the session's window size.
+**`one session at a time`** — The session bar's title opens every running session in the order they started, with any that need you on top (each row says whether it is working, idle or finished); pick one to switch. Ctrl+Tab and Ctrl+Shift+Tab step through them and Ctrl+1 to Ctrl+9 jump to one (not while you are typing in a text box). In a normal Chrome tab, Chrome takes Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Tab and Ctrl+1 to Ctrl+9 before the page sees them, so those chords do not reach Aico or the terminal there. The installed app window passes more of them to the page; use the session list to switch when a chord is taken. New session starts an agent or a shell in a project you pick. In a wide desktop window the list sits beside the session; drag its right edge to resize it (double-click for the default width), or Collapse session list folds it to a rail of agent marks that still shows who needs you and switches sessions; the rail's top button opens the list again, with a count of sessions that need you (both remembered on that device). The session menu's Redraw remounts the view without restarting the session. Several devices can show one session; the one you use last claims the session's window size.
 
 **`check-ins`** — The session menu's Check in later has an agent session (Claude Code, Codex or Pi) report back at a time you pick: In 1 hour, Tonight, Tomorrow morning or your own. The session list shows a Check-in chip with the next time; the menu lists each pending one with Cancel. Closing the page changes nothing, and Tether wakes the session when it is idle and its input line is empty. End session cancels its check-ins; End, keep check-in resumes the conversation in a new session at the time, and a Kept check-ins list at the bottom of the session list cancels those.
 
@@ -100,7 +100,7 @@ AGENT_HUB_URL=http://localhost:8003
 <details>
 <summary><strong>Terminal launchers</strong></summary>
 
-`web/scripts/tclaude`, `tcodex` and `tsession` (Node, sharing the server's code and `web.db`) open a project's agent session from a terminal: they reuse the most recently used Tether session for that project and tool, or create one (it also appears in the web app and the desktop), then attach with `tether sessions attach`. Run outside tmux, it attaches directly. Inside a tmux client on the same Tether server it switches the client. Inside a different tmux server (for example your default one), tmux cannot switch across servers, so it attaches nested after printing a notice; detach the inner client with its prefix key then `d`. `tsession open --tool codex --project myapp --attach --print` prints Tether's attach target instead. The `tether` CLI must be on `PATH` (or set `TETHER_BIN`).
+`web/scripts/tclaude`, `tcodex` and `tsession` (Node, sharing the server's code and `web.db`) open a project's agent session from a terminal: they reuse the most recently used Tether session for that project and tool, or create one (it also appears in the web app), then attach with `tether sessions attach`. Run outside tmux, it attaches directly. Inside a tmux client on the same Tether server it switches the client. Inside a different tmux server (for example your default one), tmux cannot switch across servers, so it attaches nested after printing a notice; detach the inner client with its prefix key then `d`. `tsession open --tool codex --project myapp --attach --print` prints Tether's attach target instead. The `tether` CLI must be on `PATH` (or set `TETHER_BIN`).
 
 </details>
 

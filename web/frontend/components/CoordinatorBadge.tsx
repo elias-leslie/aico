@@ -1,7 +1,6 @@
 import type { CoordinatorBadgeInfo } from '@/lib/utils/coordinator-badge'
 
-/** A coordinator or lane chip in its coordinator's colour, drawn like the
- * desktop's role chip. */
+/** A coordinator or lane chip in its coordinator's colour. */
 export function CoordinatorBadge({
   badge,
   ownLine = false,

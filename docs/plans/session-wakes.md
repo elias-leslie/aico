@@ -5,7 +5,7 @@ A session can hold a short list of scheduled wakes. At the time, the wake messag
 session's agent; the desktop reopens the session's window if it had one.
 
 Fixed by the owner: **X (close window/tab) = pause, wakes still fire. End session = done, cancels wakes unless
-the owner picks "Keep check-in".** Same rules on desktop (Electron), web and phone. Tether is the only
+the owner picks "Keep check-in".** Same rules on web and phone. Tether is the only
 scheduler. No new Web Push: the existing "waiting in Aico" push covers the owner hearing about it once the
 agent stops.
 

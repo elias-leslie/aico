@@ -1,4 +1,4 @@
-// The Agent Hub chat view, drawn the same in the desktop window and the web app:
+// The Agent Hub chat view, drawn in the web app:
 // the shared chat component (transcript layout) on a client that reaches Agent
 // Hub only through a chat transport, plus the model and effort selects in its composer.
 

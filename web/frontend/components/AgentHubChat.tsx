@@ -17,7 +17,7 @@ function openFailure(error: unknown): string {
 }
 
 /**
- * An Agent Hub session's chat, drawn the way the desktop app draws it. A
+ * An Agent Hub session's chat, drawn in Aico's own look. A
  * session shows its history, the running turn, and a message box; a workflow
  * step (`run` and `step`) shows its latest attempt read-only. The view asks
  * this app's server, which asks Tether; no token reaches the page.

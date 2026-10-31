@@ -1,7 +1,6 @@
 // The chat view's transport in the browser: HTTP to this app's own server
-// (web/server/src/chat.ts), which forwards to Tether. The same two
-// operations the desktop's preload bridge offers, so the shared chat view
-// cannot tell them apart. No token or Agent Hub address is ever in the page.
+// (web/server/src/chat.ts), which forwards to Tether, so the shared chat view
+// never reaches Agent Hub itself. No token or Agent Hub address is ever in the page.
 
 import type {
   ChatCallResult,

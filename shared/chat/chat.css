@@ -1,4 +1,4 @@
-/* The chat view in Aico's own colours, in the desktop window and the web app. The
+/* The chat view in Aico's own colours, in the web app. The
    shared chat component reads these variables (its defaults sit in :where(:root),
    so these win); nothing here is a second palette: every value is a Lantern
    token (shared/tokens.css). */

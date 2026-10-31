@@ -11,6 +11,14 @@
 
 ### Removed
 
+- The Electron desktop app is gone: floating windows, tiling and saved
+  positions, the tray icon, the arcade and eyes, `aico-shell.service`, the
+  `.desktop` entry, the launch and stop scripts and the Electron steps of
+  `scripts/install.sh` (sandbox profile, `chrome-sandbox`). Aico is the web and
+  phone app over Tether. The 2-minute waiting notice now comes from Tether.
+  `AICO_STATE_DIR`, `AICO_OZONE_PLATFORM` and `AICO_PASTED_IMAGES_*` are no
+  longer read. The root package no longer depends on Electron, electron-vite,
+  dbus-native, resvg or the xterm add-ons.
 - Tether no longer serves the old `/run/user/<uid>/aico/control.sock` and
   `gui-control.sock`. `st aico` and SummitFlow use Tether's own socket
   (`TETHER_SOCKET`, else `$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`);

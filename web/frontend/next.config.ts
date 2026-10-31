@@ -13,7 +13,7 @@ function hasPassportClient(): boolean {
 // A static export: web/server serves `out/` with the API, the terminal
 // WebSocket and every response header (CSP from scripts/csp-hashes.mjs).
 const nextConfig: NextConfig = {
-  // tether/teams: the session-list team rule, shared with the desktop tray.
+  // tether/teams: the session-list team rule.
   transpilePackages: [
     'tether',
     ...(hasPassportClient() ? ['@agent-hub/passport-client'] : []),

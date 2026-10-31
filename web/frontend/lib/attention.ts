@@ -1,7 +1,7 @@
 // Which sessions need the owner, from Tether's per-session agent state
 // (`activity` on each session; tether docs/agent-state.md): Needs you,
 // Finished, Working, Idle, or No status (Tether reads no state for the
-// session, e.g. a shell). As in Aico's tray menu, only Needs you moves a
+// session, e.g. a shell). Only Needs you moves a
 // session in the list (components/SessionList.tsx).
 //
 // "Seen" is when the owner last had each session open: this browser's own

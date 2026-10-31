@@ -12,7 +12,7 @@ ones. Heavy builds and labs run off the workstation.
 ## Shape
 
 The local Tether daemon is the hub. Each remote host runs a stock Tether.
-Every client keeps talking to its one local socket: Electron, the web server
+Every client keeps talking to its one local socket: the web server
 (the PWA path), `st aico` and SummitFlow's `tether.py`. That way all of them
 see remote sessions without any federation logic of their own, as ADR 0001
 intends (Tether owns sessions).
@@ -77,7 +77,7 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
   nest it under the session that launched it. The reverse works the same.
 - **Tools and projects:** `/v1/tools` and `/v1/projects` accept `?host=`.
 
-### Clients (Electron, web server)
+### Clients (web server)
 
 - **Attach:** when the descriptor has a `host`, the client builds
   `/usr/bin/ssh -F /dev/null -T -o BatchMode=yes -o ProxyCommand=false -S <ctl> <alias> -- env LANG=C.UTF-8 /usr/bin/tmux -u -C -S '<sock>' attach-session -t '<target>'`.
@@ -167,7 +167,7 @@ The `_coord.json` ledger stays per host.
 
 1. **Hub, link and client attach.**
    - 1a: the Tether daemon hub and the link unit.
-   - 1b: Electron and web attach over ssh, the remote pid, reattach, the
+   - 1b: the web app attaches over ssh, the remote pid, reattach, the
      badge and the picker.
 2. **Create on a host:** wake, readiness gate, lineage, `st aico create --host`
    and VM bring-up.

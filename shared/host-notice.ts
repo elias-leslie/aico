@@ -1,5 +1,5 @@
-// What a window shows while its session's host cannot be reached, worded the
-// same on the desktop and the web app. `live` (or an unknown state) shows
+// What a view shows while its session's host cannot be reached, worded the
+// same everywhere. `live` (or an unknown state) shows
 // nothing: the terminal is in use.
 
 type Notice = Omit<HostNoticeCopy, 'powerOn'> & { powerOn?: boolean }

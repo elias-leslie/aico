@@ -1,6 +1,5 @@
-// Agent Hub chat for the web app: the same operations the desktop's main process
-// answers over IPC (electron/main/chat-bridge.ts), here over HTTP. Both forward
-// to Tether through shared/chat/forward.ts; Tether holds the Agent Hub
+// Agent Hub chat for the web app, over HTTP. It forwards to Tether through
+// shared/chat/forward.ts; Tether holds the Agent Hub
 // owner token and nothing here sees it, so it never reaches the browser.
 //
 //   POST /api/chat/info    {session} or {run, step}          -> {ok, value: ChatInfo}
@@ -10,7 +9,7 @@
 //                                  -> text/event-stream; each `data:` is a ChatStreamItem
 //
 // A request names the Tether session (or the run and step) the view shows, the
-// way an Electron window is bound to its own. The guard (guard.ts) has already
+// way a view is bound to its own. The guard (guard.ts) has already
 // refused foreign hosts and, for POST, foreign origins before a route runs.
 
 import type { TetherClient } from 'tether/client'

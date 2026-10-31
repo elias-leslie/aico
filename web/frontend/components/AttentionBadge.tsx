@@ -2,7 +2,7 @@
 
 import type { Attention, AttentionGroup } from '@/lib/attention'
 
-/** Tones per attention group, as on the desktop: beacon waits on the owner,
+/** Tones per attention group: beacon waits on the owner,
  * jade is finished, the rest stay quiet. */
 const TONE: Record<AttentionGroup, string> = {
   'needs-you': 'var(--beacon)',

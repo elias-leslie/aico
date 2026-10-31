@@ -21,7 +21,7 @@
   --lantern-glow: rgb(var(--lantern-rgb) / 0.35); /* amber halo — toast accents */
 
   /* Frame edge: one steady hairline. A dim brass from the lantern family —
-     warm enough to separate tiled widgets from each other and the desktop, too
+     warm enough to separate panes from each other, too
      quiet to read as a status or compete with the amber accent. */
   --frame-edge: rgb(var(--lantern-rgb) / 0.26);
   /* A window waiting on the owner (attention, eyes.ts): a brighter amber than
@@ -34,16 +34,10 @@
   --helm-tint: rgba(111, 168, 255, 0.16);
   --jade: #7ad68a; /* solid calm green — "good" status (context-injecting badge) */
 
-  /* Frame: slim opaque window margin around the shell, so tiled widgets sit
-     nearly edge to edge. */
+  /* Frame: slim opaque margin around the shell. */
   --frame-inset: 3px;
-  /* A taller top margin gives the titlebar arcade headroom: jumps and flights
-     leave the bar and rise into it. Keep in step with SPILL_UP in
-     arcade/engine.ts. */
   --frame-top: 8px;
-  /* Titlebar: room for the titlebar arcade's characters plus a line of their
-     dialogue; the lantern menu opens just below it. Keep in step with H in
-     arcade/engine.ts. */
+  /* Titlebar height. */
   --titlebar-height: 36px;
 
   /* Type */

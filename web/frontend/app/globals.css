@@ -1,5 +1,5 @@
 @import "tailwindcss";
-/* The Lantern tokens (shared/tokens.css) and typefaces are shared with the desktop, not copies. */
+/* The Lantern tokens (shared/tokens.css) and typefaces are shared, not copies. */
 @import "../../../shared/tokens.css";
 @import "../../../assets/fonts/fonts.css";
 
@@ -7,8 +7,7 @@
    colours live in tokens.css only. */
 :root {
   color-scheme: dark;
-  /* The web's mono is JetBrains Mono (lib/constants/lantern.ts), not the
-     desktop's Iosevka. */
+  /* The web's mono is JetBrains Mono (lib/constants/lantern.ts). */
   --font-mono: "JetBrains Mono", "FreeMono Symbols", ui-monospace, monospace;
   --terminal-viewport-height: 100dvh;
 
@@ -119,7 +118,7 @@ select {
 }
 
 /* Buttons: quiet by default; the primary action is an amber outline on an
-   amber wash, as the desktop's Use here. */
+   amber wash. */
 .lantern-btn {
   display: inline-flex;
   align-items: center;

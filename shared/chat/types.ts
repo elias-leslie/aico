@@ -1,5 +1,5 @@
-// What an Agent Hub chat view and whatever carries its I/O (Electron's preload
-// bridge, the web app's HTTP) say to each other. Nothing here knows where Agent
+// What an Agent Hub chat view and whatever carries its I/O (the web app's HTTP)
+// say to each other. Nothing here knows where Agent
 // Hub is or who the owner is.
 
 /** What the chat view is told about the session it shows. */

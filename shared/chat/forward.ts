@@ -1,5 +1,4 @@
-// The owner-side half of an Agent Hub chat, shared by the desktop's main
-// process and the web server: given the session (or workflow step) a view
+// The owner-side half of an Agent Hub chat, for the web server: given the session (or workflow step) a view
 // shows, it forwards the view's requests to Tether over its private socket
 // and turns Tether's stream into chat stream items.
 //

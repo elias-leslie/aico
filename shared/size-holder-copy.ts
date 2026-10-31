@@ -1,5 +1,5 @@
-// How a window names the device holding a session's shared size, worded the
-// same on the desktop and the web app ("Sized for …").
+// How a view names the device holding a session's shared size, worded the
+// same everywhere ("Sized for …").
 
 /** Which app on which device holds the size; null when the claimer sent none. */
 export interface SizeHolderViewer {
