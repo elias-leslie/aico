@@ -17,6 +17,7 @@ import {
   parseLocalAdmission,
   parseNeeds,
   parsePlacement,
+  parsePool,
   type RootFate,
 } from './placement'
 
@@ -213,6 +214,66 @@ describe('placement', () => {
     expect(broken.hosts.vm?.reserveBytes).toBe(2 * GIB)
     expect(broken.errors).toEqual(['hosts.vm: reserveGiB must be 0-4096; using the defaults'])
     expect(parsePlacement('{', []).errors).toEqual(['placement.json is not valid JSON'])
+  })
+
+  it('reads named pools: each holds only its hosts, and default leaves pooled hosts out', () => {
+    const config = parsePlacement(
+      JSON.stringify({ order: ['local'], pools: { 'neri-hunt': ['vm', 'gone'] }, skip: ['gone'] }),
+      ['vm', 'other'],
+    )
+    expect(config.pools).toEqual({ 'neri-hunt': ['vm'], default: ['local', 'other'] })
+    expect(config.order).toEqual(['local', 'other'])
+    expect(config.hosts.vm?.reserveBytes).toBe(2 * GIB)
+    expect(config.errors).toEqual([])
+    // A pool may also be listed in default on purpose.
+    const both = parsePlacement(
+      JSON.stringify({ pools: { default: ['local', 'vm'], hunt: ['vm'] } }),
+      ['vm'],
+    )
+    expect(both.pools).toEqual({ hunt: ['vm'], default: ['local', 'vm'] })
+    const bad = parsePlacement(
+      JSON.stringify({
+        order: ['vm'],
+        pools: { default: ['local'], 'Bad Pool': ['vm'], ok: 'vm' },
+      }),
+      ['vm'],
+    )
+    expect(bad.pools).toEqual({ default: ['local', 'vm'] })
+    expect(bad.errors).toEqual([
+      'pools.Bad Pool: a pool name is lowercase letters, digits and dashes',
+      'pools.ok must be a list of host names',
+      'order and pools.default are both set; using pools.default',
+    ])
+  })
+
+  it('places from the chosen pool only, shares reservations across pools, and refuses an unknown pool', async () => {
+    const { placement, world } = setup({ ...CONFIG, order: ['local'], pools: { hunt: ['vm'] } })
+    // Default never reaches the pooled VM, even with no room here.
+    world.admission = admission('green', 7)
+    const general = await placement.place('g1', needs(4))
+    expect(general.kind).toBe('at_capacity')
+    expect(general.verdicts.map((v) => v.host)).toEqual(['local'])
+    const hunt = await placement.place('h1', needs(4), 'hunt')
+    expect(hunt).toMatchObject({ kind: 'placed', host: 'vm' })
+    expect(hunt.verdicts.map((v) => v.host)).toEqual(['vm'])
+    // 12 free - 2 reserve - 4 held (h1) = 6 room.
+    expect((await placement.check(needs(4), 'hunt'))[0]?.room?.memGiB).toBe(6)
+    expect(await placement.place('h2', needs(1), 'nope')).toEqual({
+      kind: 'unknown_pool',
+      pools: ['default', 'hunt'],
+      verdicts: [],
+    })
+    await expect(placement.check(needs(1), 'nope')).rejects.toMatchObject({
+      pool: 'nope',
+      pools: ['default', 'hunt'],
+    })
+    expect(placement.list().map((item) => item.requestId)).toEqual(['h1'])
+    expect([parsePool(undefined), parsePool('neri-hunt'), parsePool('Bad'), parsePool(3)]).toEqual([
+      'default',
+      'neri-hunt',
+      null,
+      null,
+    ])
   })
 
   it('reads the Nightshift file only while it is fresh', () => {

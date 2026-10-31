@@ -185,6 +185,9 @@ CAPABILITY = r"[a-z0-9][a-z0-9-]{0,31}"
 MEMORY_UNITS = {"k": 1024, "m": 1024 ** 2, "g": 1024 ** 3, "t": 1024 ** 4}
 # At most this many hosts' reasons in an at-capacity answer (Tether sends no more).
 MAX_PLACEMENT_HOSTS = 16
+# A placement pool from ~/.config/tether/placement.json `pools` (default: `order`).
+POOL = r"[a-z0-9][a-z0-9-]{0,31}"
+MAX_POOLS = 32
 # Owner rejections that are definitive before any view or lifecycle effect.
 OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation", "invalid_text"}, 404: {"not_found"},
                   409: {"stale_generation", "workload_unavailable", "busy", "host_unavailable"},
@@ -230,6 +233,19 @@ def placement_hosts(value: object) -> list[dict]:
             if isinstance(item, dict) and isinstance(item.get("host"), str)
             and re.fullmatch(HOST_NAME, item["host"]) and isinstance(item.get("reason"), str)
             and re.fullmatch(r"[\x20-\x7e\u2026]{1,300}", item["reason"])]
+
+
+def pool_name(value: str) -> str:
+    if not re.fullmatch(POOL, value):
+        raise argparse.ArgumentTypeError("expected a pool name from ~/.config/tether/placement.json pools")
+    return value
+
+
+def pool_names(value: object) -> list[str]:
+    """The pools an unknown_pool answer lists, checked and bounded."""
+    if not isinstance(value, list):
+        return []
+    return [name for name in value[:MAX_POOLS] if isinstance(name, str) and re.fullmatch(POOL, name)]
 
 
 def view_label(value: object) -> str | None:
@@ -1464,6 +1480,9 @@ def create_main(argv: list[str]) -> int:
         "at_capacity with each host's reason (st aico placement shows it without starting anything)"))
     parser.add_argument("--needs", metavar="mem=6G,cpu=2[,cap=live-ready]", help=(
         "with --host auto: what the session needs; held for it on that host until it ends"))
+    parser.add_argument("--pool", type=pool_name, metavar="NAME", help=(
+        "with --host auto: pick only from this placement pool (placement.json pools, e.g. neri-hunt); "
+        "default: the default pool"))
     parser.add_argument("--root-socket", type=socket_path)
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
@@ -1529,6 +1548,8 @@ def create_main(argv: list[str]) -> int:
             needs = parse_needs(args.needs)
         except ValueError as error:
             refuse(f"--needs: {error}")
+    if args.pool is not None and not auto:
+        refuse("--pool goes with --host auto")
     if args.host is not None and (here := agent_host()):
         # A host's Tether reaches no other host; the workstation's hub does.
         refuse(f"--host works from the workstation only; on agent host {here}, "
@@ -1583,6 +1604,8 @@ def create_main(argv: list[str]) -> int:
             payload["host"] = args.host
         if needs is not None:
             payload["needs"] = needs
+        if args.pool is not None:
+            payload["pool"] = args.pool
         fields = [args.tool, args.project, args.project_root, prompt, args.role, args.lead_root, args.facet]
         if args.resume_session:
             payload["resumeSessionId"] = args.resume_session
@@ -1618,7 +1641,8 @@ def create_main(argv: list[str]) -> int:
             status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=receipt_seconds)
         finally:
             waiting.cancel()
-        errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long", "unknown_host"),
+        errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long", "unknown_host",
+                        "unknown_pool"),
                   409: ("request_conflict", "recovery_pending", "host_unavailable", "outcome_uncertain",
                         "at_capacity"),
                   422: ("launch_unavailable", "unknown_agent", "unknown_model"),
@@ -1638,6 +1662,8 @@ def create_main(argv: list[str]) -> int:
             if reason == "at_capacity":
                 # Nothing was reserved or created: the same create can be repeated.
                 output["hosts"] = placement_hosts(data.get("hosts"))
+            if reason == "unknown_pool":
+                output["pools"] = pool_names(data.get("pools"))
             refusal = Unavailable(reason)
             # The hub's own words for why the host could not take it (host_unavailable).
             refusal.detail = reason_detail(data.get("reason"))
@@ -2209,6 +2235,8 @@ def placement_main(argv: list[str]) -> int:
         "Show where --host auto would start a session with these needs, with each host's room or reason. "
         "Starts and reserves nothing."))
     parser.add_argument("--needs", required=True, metavar="mem=6G,cpu=2[,cap=live-ready]")
+    parser.add_argument("--pool", type=pool_name, metavar="NAME", help=(
+        "the placement pool to pick from (placement.json pools); default: the default pool"))
     parser.add_argument("--root-socket", type=socket_path)
     args = parser.parse_args(argv)
     try:
@@ -2221,11 +2249,17 @@ def placement_main(argv: list[str]) -> int:
         parser.error(f"invalid owner transport configuration: {error}")
     query = [("mem", str(needs["memBytes"])), ("cpu", str(needs["cpu"]))]
     query += [("cap", cap) for cap in needs["caps"]]
+    if args.pool is not None:
+        query.append(("pool", args.pool))
     collector = Collector(endpoint, "", "", time.monotonic() + 60, threading.Event())
     try:
         status, data = collector.receipt(endpoint, f"/v1/placement?{urlencode(query)}", timeout=55)
     except (Unavailable, Stopped) as error:
         emit_unless_stopped(collector, {"status": "unavailable", "reason": str(error)})
+        return 1
+    if status == 400 and data.get("error") == "unknown_pool":
+        emit_unless_stopped(collector, {"status": "refused", "reason": "unknown_pool", "pool": args.pool,
+                                        "pools": pool_names(data.get("pools"))})
         return 1
     if status != 200 or not isinstance(data.get("hosts"), list):
         emit_unless_stopped(collector, {"status": "unavailable",
@@ -2235,7 +2269,9 @@ def placement_main(argv: list[str]) -> int:
              for item in data["hosts"][:MAX_PLACEMENT_HOSTS] if isinstance(item, dict)
              and isinstance(item.get("host"), str) and re.fullmatch(HOST_NAME, item["host"])]
     picked = data.get("host")
-    emit_json(collector, {"needs": needs, "host": picked if isinstance(picked, str) else None, "hosts": hosts})
+    pool = data.get("pool") if isinstance(data.get("pool"), str) and re.fullmatch(POOL, data["pool"]) else None
+    emit_json(collector, {"needs": needs, "pool": pool or args.pool or "default",
+                          "host": picked if isinstance(picked, str) else None, "hosts": hosts})
     return 0 if isinstance(picked, str) else 1
 
 

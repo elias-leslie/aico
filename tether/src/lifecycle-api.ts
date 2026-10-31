@@ -22,6 +22,8 @@ import {
   type Needs,
   type Placement,
   parseNeeds,
+  parsePool,
+  UnknownPool,
 } from './hub/placement'
 import {
   adoptLineage,
@@ -170,6 +172,8 @@ export interface LifecycleApiContext {
 
 const NEEDS_SHAPE =
   'needs is {memBytes, cpu?, caps?}: whole bytes, CPUs 0-1024, up to 8 capability names'
+const POOL_SHAPE =
+  'pool is a placement pool name from placement.json (lowercase letters, digits, dashes)'
 /** At most this many hosts' reasons in one answer. */
 const MAX_VERDICTS = 16
 
@@ -568,7 +572,7 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
         sendError(response, error)
       }
     },
-    place: async (requestId, raw) => {
+    place: async (requestId, raw, rawPool) => {
       const needs = parseNeeds(raw)
       if (!needs)
         return {
@@ -576,10 +580,23 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
           status: 400,
           body: { error: 'invalid_body', field: 'needs', reason: NEEDS_SHAPE },
         }
+      const pool = parsePool(rawPool)
+      if (!pool)
+        return {
+          kind: 'refused',
+          status: 400,
+          body: { error: 'invalid_body', field: 'pool', reason: POOL_SHAPE },
+        }
       if (!context.placement)
         return { kind: 'refused', status: 400, body: { error: 'unknown_host', host: AUTO_HOST } }
-      const placed = await context.placement.place(requestId, needs)
+      const placed = await context.placement.place(requestId, needs, pool)
       if (placed.kind === 'placed') return placed
+      if (placed.kind === 'unknown_pool')
+        return {
+          kind: 'refused',
+          status: 400,
+          body: { error: 'unknown_pool', pool, pools: placed.pools },
+        }
       // Nothing was reserved or created: the same create can be repeated.
       return {
         kind: 'refused',
@@ -791,10 +808,20 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     .add('GET', '/v1/placement', async (_req, res, _params, query) => {
       const needs = needsFromQuery(query)
       if (!needs) throw new HttpError(400, 'invalid_body', { field: 'needs', reason: NEEDS_SHAPE })
+      const pool = parsePool(query.get('pool') ?? undefined)
+      if (!pool) throw new HttpError(400, 'invalid_body', { field: 'pool', reason: POOL_SHAPE })
       if (!context.placement) throw new HttpError(400, 'unknown_host', { host: AUTO_HOST })
-      const hosts = (await context.placement.check(needs)).slice(0, MAX_VERDICTS)
+      let verdicts: HostVerdict[]
+      try {
+        verdicts = await context.placement.check(needs, pool)
+      } catch (error) {
+        if (!(error instanceof UnknownPool)) throw error
+        throw new HttpError(400, 'unknown_pool', { pool, pools: error.pools })
+      }
+      const hosts = verdicts.slice(0, MAX_VERDICTS)
       sendJson(res, 200, {
         needs,
+        pool,
         host: hosts.find((verdict) => verdict.fits)?.host ?? null,
         hosts,
         reservations: context.placement.list(),

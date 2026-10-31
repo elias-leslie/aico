@@ -1,7 +1,7 @@
 // Host placement for agent launches (docs/plans/remote-hosts.md "Placement"):
 // `POST /v1/roots` with `host: "auto"` and `needs` picks the first host, in the
-// configured order, whose live room fits the needs, or refuses with each host's
-// reason. room = live free - owner reserve - open reservations. A host whose
+// order of the chosen pool (`default` unless the create names one), whose live
+// room fits the needs, or refuses with each host's reason. room = live free - owner reserve - open reservations. A host whose
 // reading is missing, stale or failed is unknown and never placed on. There is
 // no agent count anywhere: only memory, CPU and capabilities.
 //
@@ -37,6 +37,8 @@ const GIB = 1024 ** 3
 export const AUTO_HOST = 'auto'
 /** This computer in placement config and answers. */
 export const LOCAL_HOST = 'local'
+/** The pool a create without `pool` uses: `order`, plus hosts no pool lists. */
+export const DEFAULT_POOL = 'default'
 const SETTINGS_KEY = 'placement_reservations'
 const READ_MS = 10_000
 const ROOT_QUERY_MS = 5_000
@@ -97,8 +99,10 @@ export interface CapabilityProbe {
 }
 
 export interface PlacementConfig {
-  /** Hosts in the order they are tried; `local` is this computer. */
+  /** The default pool's hosts in the order they are tried; `local` is this computer. */
   order: string[]
+  /** Every pool's hosts in order, `default` (= `order`) included. */
+  pools: Record<string, string[]>
   hosts: Record<string, HostPlacement>
   capabilities: Record<string, CapabilityProbe>
   /** One plain line per thing in the file that was not usable. */
@@ -184,16 +188,38 @@ export function parsePlacement(text: string | null, hostNames: string[]): Placem
     errors.push(`${field} must be a list of host names`)
     return null
   }
-  // Listed hosts first; a host the list leaves out follows in hosts.json
-  // order, so a new host is tried rather than silently ignored. `skip` leaves
-  // a host out on purpose.
-  const listed = names(raw?.order, 'order') ?? []
+  // Named pools hold exactly the hosts they list, in that order.
   const skip = new Set(names(raw?.skip, 'skip') ?? [])
-  const order = [...new Set([...listed, ...fallbackOrder])].filter((name) => !skip.has(name))
+  const rawPools = record(raw?.pools) ?? {}
+  if (raw?.pools !== undefined && !record(raw.pools)) errors.push('pools must be an object')
+  const pools: Record<string, string[]> = {}
+  for (const [pool, value] of Object.entries(rawPools)) {
+    if (pool === DEFAULT_POOL) continue
+    if (!CAP.test(pool)) {
+      errors.push(`pools.${clean(pool, 40)}: a pool name is lowercase letters, digits and dashes`)
+      continue
+    }
+    const members = names(value, `pools.${pool}`)
+    if (members) pools[pool] = members.filter((name) => !skip.has(name))
+  }
+  // The default pool: `pools.default` (else `order`) first; a host no list
+  // names follows in hosts.json order, so a new host is tried rather than
+  // silently ignored. `skip` leaves a host out on purpose.
+  const pooled = new Set(Object.values(pools).flat())
+  const listed =
+    (rawPools[DEFAULT_POOL] !== undefined
+      ? names(rawPools[DEFAULT_POOL], `pools.${DEFAULT_POOL}`)
+      : names(raw?.order, 'order')) ?? []
+  if (rawPools[DEFAULT_POOL] !== undefined && raw?.order !== undefined)
+    errors.push(`order and pools.${DEFAULT_POOL} are both set; using pools.${DEFAULT_POOL}`)
+  const order = [
+    ...new Set([...listed, ...fallbackOrder.filter((name) => !pooled.has(name))]),
+  ].filter((name) => !skip.has(name))
+  pools[DEFAULT_POOL] = order
   const hosts: Record<string, HostPlacement> = {}
   const rawHosts = record(raw?.hosts) ?? {}
   if (raw?.hosts !== undefined && !record(raw.hosts)) errors.push('hosts must be an object')
-  for (const name of new Set([...order, ...Object.keys(rawHosts)])) {
+  for (const name of new Set([...Object.values(pools).flat(), ...Object.keys(rawHosts)])) {
     const fallback = name === LOCAL_HOST ? DEFAULT_LOCAL : DEFAULT_REMOTE
     const entry = rawHosts[name]
     if (entry === undefined) {
@@ -249,7 +275,7 @@ export function parsePlacement(text: string | null, hostNames: string[]): Placem
     }
     capabilities[name] = { marker: marker as string, fingerprint: fingerprint as string[] | null }
   }
-  return { order, hosts, capabilities, errors }
+  return { order, pools, hosts, capabilities, errors }
 }
 
 export function loadPlacement(path: string, hostNames: string[]): PlacementConfig {
@@ -470,6 +496,23 @@ export interface PlacementDeps {
 export type PlaceResult =
   | { kind: 'placed'; host: string | null; verdicts: HostVerdict[]; done(): void }
   | { kind: 'at_capacity'; verdicts: HostVerdict[] }
+  | { kind: 'unknown_pool'; pools: string[]; verdicts: [] }
+
+/** A pool placement.json does not define; `pools` names the ones it does. */
+export class UnknownPool extends Error {
+  constructor(
+    readonly pool: string,
+    readonly pools: string[],
+  ) {
+    super(`no placement pool ${pool}`)
+  }
+}
+
+/** `pool` on the wire: a pool name, or null when malformed. Absent = default. */
+export function parsePool(value: unknown): string | null {
+  if (value === undefined) return DEFAULT_POOL
+  return typeof value === 'string' && CAP.test(value) ? value : null
+}
 
 function clean(text: string, max = MAX_REASON): string {
   const line = text.replace(/[^\x20-\x7e]+/g, ' ').trim()
@@ -805,25 +848,43 @@ export class Placement {
     }
   }
 
-  /** Every host's verdict in order, without reserving (the dry run). */
-  check(needs: Needs): Promise<HostVerdict[]> {
+  private poolOrder(config: PlacementConfig, pool: string): string[] {
+    const order = Object.hasOwn(config.pools, pool) ? config.pools[pool] : undefined
+    if (!order) throw new UnknownPool(pool, Object.keys(config.pools).sort())
+    return order
+  }
+
+  /** Every host's verdict in the pool's order, without reserving (the dry
+   * run). Rejects with UnknownPool for a pool placement.json lacks. */
+  check(needs: Needs, pool = DEFAULT_POOL): Promise<HostVerdict[]> {
     return this.locked(async () => {
-      await this.reconcile()
       const config = this.config()
+      const order = this.poolOrder(config, pool)
+      await this.reconcile()
       const verdicts: HostVerdict[] = []
-      for (const name of config.order) verdicts.push(await this.judge(config, name, needs))
+      for (const name of order) verdicts.push(await this.judge(config, name, needs))
       return verdicts
     })
   }
 
   /**
-   * Pick a host and reserve the needs there, as one serialized step. The
-   * first host in order that fits wins; the rest are not read. A request
+   * Pick a host from the pool and reserve the needs there, as one serialized
+   * step. The first host in the pool's order that fits wins; the rest are not
+   * read. Reservations are per host, whatever pool placed them. A request
    * already placed (a retry) goes to the same host without a new reservation.
    * Call `done()` once the create has answered, whatever the answer.
    */
-  place(requestId: string, needs: Needs): Promise<PlaceResult> {
+  place(requestId: string, needs: Needs, pool = DEFAULT_POOL): Promise<PlaceResult> {
     return this.locked(async () => {
+      const config = this.config()
+      let order: string[]
+      try {
+        order = this.poolOrder(config, pool)
+      } catch (error) {
+        if (error instanceof UnknownPool)
+          return { kind: 'unknown_pool', pools: error.pools, verdicts: [] } as const
+        throw error
+      }
       const existing = this.reservations.find((item) => item.requestId === requestId)
       const known = existing ? existing.host : this.deps.existingHost(requestId)
       if (known !== undefined) {
@@ -831,9 +892,8 @@ export class Placement {
         return { kind: 'placed', host, verdicts: [], done: () => {} } as const
       }
       await this.reconcile()
-      const config = this.config()
       const verdicts: HostVerdict[] = []
-      for (const name of config.order) {
+      for (const name of order) {
         const verdict = await this.judge(config, name, needs)
         verdicts.push(verdict)
         if (!verdict.fits) continue
@@ -848,7 +908,7 @@ export class Placement {
         this.reservations.push(reservation)
         this.persist()
         this.log(
-          `placed ${requestId} on ${name}: ${g(needs.memBytes)} GiB, ${c(needs.cpu)} CPUs (${verdict.reason})`,
+          `placed ${requestId} on ${name}${pool === DEFAULT_POOL ? '' : ` (pool ${pool})`}: ${g(needs.memBytes)} GiB, ${c(needs.cpu)} CPUs (${verdict.reason})`,
         )
         let finished = false
         return {
@@ -866,7 +926,7 @@ export class Placement {
         } as const
       }
       this.log(
-        `at capacity for ${requestId}: ${verdicts.map((v) => `${v.host}: ${v.reason}`).join(' | ')}`,
+        `at capacity for ${requestId}${pool === DEFAULT_POOL ? '' : ` in pool ${pool}`}: ${verdicts.map((v) => `${v.host}: ${v.reason}`).join(' | ')}`,
       )
       return { kind: 'at_capacity', verdicts } as const
     })

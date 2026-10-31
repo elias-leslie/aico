@@ -164,6 +164,13 @@ mem=6G,cpu=2[,cap=live-ready]` (Neri plan contract 3). Tether picks the first
 host in `~/.config/tether/placement.json` order whose live room fits, or answers
 `at_capacity` with each host's reason. There is no agent count.
 
+- **Pools** (2026-10-31): `--pool NAME` picks only from `pools.<NAME>` in
+  placement.json, exactly the hosts listed; no `--pool` is the `default` pool
+  (`order`, plus hosts no pool lists). Neri hunts use `--pool neri-hunt`
+  (the `neri-hunters` VM; this computer joins once it runs hunt containers),
+  so general work never lands on the hunter VM and hunts never on agent-work.
+  Reservations are per host, whatever pool placed them.
+
 - **Room** = live free − owner reserve − open reservations, per host. This
   computer reads Nightshift's admission file (green and fresh, else unknown).
   A VM reads its own MemAvailable, PSI, CPUs and load over the link, and its
@@ -175,7 +182,7 @@ host in `~/.config/tether/placement.json` order whose live room fits, or answers
 - **Reservations** are held per placed root until its own Tether says it is
   gone, ended or its agent exited. Never on a timer; kept across restarts.
   Decisions are serialized in the hub (every create goes through it).
-- `st aico placement --needs ...` shows the decision without starting anything.
+- `st aico placement --needs ... [--pool NAME]` shows the decision without starting anything.
 - Details and the config fields: tether/docs/api-v1.md "Placement".
 
 ### Cross-host messaging

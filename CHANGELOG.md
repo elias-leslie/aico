@@ -11,6 +11,20 @@
   refuses with `at_capacity` and each host's reason. Order and reserves live in
   `~/.config/tether/placement.json`. `st aico placement --needs ...` shows the
   decision. Tether API 10.
+- Placement pools: `st aico create --host auto --pool neri-hunt --needs ...`
+  (and `st aico placement --pool`) pick only from the hosts that
+  placement.json `pools.neri-hunt` lists; without `--pool` the default pool
+  (`order`) is used as before and leaves pooled hosts out. An unknown pool is
+  refused with `unknown_pool` and the pools there are. Tether API 11.
+
+### Fixed
+
+- The first create on a VM that `st vm rollback` had just powered off no
+  longer fails with `host_unavailable` ("went away while its services were
+  checked"): the create now wakes the host and goes ahead.
+- Blank Slate Claude Code sessions keep the user's Bypass Permissions
+  acceptance (`skipDangerousModePermissionPrompt`), so they no longer stop at
+  the accept screen.
 
 ### Changed
 

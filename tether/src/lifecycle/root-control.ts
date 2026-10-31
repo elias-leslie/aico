@@ -168,9 +168,10 @@ export interface RootControlOperations {
   remote?(body: Record<string, unknown>, response: ServerResponse): Promise<void>
   /** Tether: the roots on remote hosts for this list query, tagged with `host`. */
   remoteRoots?(search: string): Promise<Record<string, unknown>[]>
-  /** Tether: `host: "auto"` picks a host for these `needs` and reserves them
-   * there (src/hub/placement.ts), or refuses with each host's reason. */
-  place?(requestId: string, needs: unknown): Promise<RootPlacement>
+  /** Tether: `host: "auto"` picks a host from `pool` (absent = default) for
+   * these `needs` and reserves them there (src/hub/placement.ts), or refuses
+   * with each host's reason. */
+  place?(requestId: string, needs: unknown, pool: unknown): Promise<RootPlacement>
   /** Tether: `POST /v1/roots/:requestId/end`, the shared session End. */
   end?(widgetId: string, generation: string): Promise<RetirementResult | { status: 'busy' }>
   /** Tether: the session whose pending or held crash recovery will resume
@@ -917,10 +918,18 @@ export function createRootHandler(
           value = null
         }
         const remoteHost = object(value) && value.host !== undefined && value.host !== null
-        // `host: "auto"` with `needs`: placement picks the host below.
+        // `host: "auto"` with `needs` (and `pool`): placement picks the host below.
         const auto = object(value) && value.host === 'auto'
         if (remoteHost && !(auto ? operations.place : operations.remote)) {
           json(response, 400, { error: 'unknown_host', host: (value as { host: unknown }).host })
+          return
+        }
+        if (!auto && object(value) && value.pool !== undefined) {
+          json(response, 400, {
+            error: 'invalid_body',
+            field: 'pool',
+            reason: 'pool goes with host "auto"',
+          })
           return
         }
         try {
@@ -931,7 +940,10 @@ export function createRootHandler(
           // option is refused before the host is woken; its Tether is the
           // final judge of the rest (tools it has enabled, its project roots).
           const { host: _host, ...local } = object(value) ? value : {}
-          if (auto) delete local.needs
+          if (auto) {
+            delete local.needs
+            delete local.pool
+          }
           parsed = parseRootCreate(remoteHost ? local : value)
         } catch {
           parsed = null
@@ -962,6 +974,7 @@ export function createRootHandler(
           const placement = await operations.place(
             parsed.requestId,
             (value as Record<string, unknown>).needs,
+            (value as Record<string, unknown>).pool,
           )
           if (placement.kind === 'refused') {
             json(response, placement.status, placement.body)
@@ -970,7 +983,7 @@ export function createRootHandler(
           placed = placement
         }
         try {
-          const { needs: _needs, ...body } = value as Record<string, unknown>
+          const { needs: _needs, pool: _pool, ...body } = value as Record<string, unknown>
           if (placed?.host) {
             if (operations.remote) await operations.remote({ ...body, host: placed.host }, response)
             else json(response, 400, { error: 'unknown_host', host: placed.host })

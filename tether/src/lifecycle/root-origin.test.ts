@@ -32,8 +32,9 @@ describe('root origin (v1 roots API)', () => {
       response.end(JSON.stringify({ forwarded: body.host }))
     },
     // Stub placement: 1 byte fits here, 2 on vm, anything else is at capacity.
-    place: async (requestId, needs) => {
+    place: async (requestId, needs, pool) => {
       placeCalls.push(requestId)
+      placePools.push(pool)
       const mem = (needs as { memBytes?: unknown } | undefined)?.memBytes
       if (mem === 1 || mem === 2)
         return {
@@ -49,6 +50,7 @@ describe('root origin (v1 roots API)', () => {
     },
   }
   const placeCalls: string[] = []
+  const placePools: unknown[] = []
   const placeDone: string[] = []
   const handle = createRootHandler(operations)
   const server = createServer((req, res) => {
@@ -248,6 +250,29 @@ describe('root origin (v1 roots API)', () => {
     expect(
       await call(v1Socket, '/v1/roots', 'POST', create('needs-alone', { needs: { memBytes: 1 } })),
     ).toEqual({ status: 400, body: { error: 'invalid_body' } })
+  })
+
+  it('hands placement the pool, keeps it off the host, and takes it only with host auto', async () => {
+    const before = remoteBodies.length
+    const there = await call(
+      v1Socket,
+      '/v1/roots',
+      'POST',
+      create('auto-pool', { host: 'auto', pool: 'neri-hunt', needs: { memBytes: 2 } }),
+    )
+    expect(there).toEqual({ status: 202, body: { forwarded: 'vm' } })
+    expect(placePools.at(-1)).toBe('neri-hunt')
+    expect(remoteBodies.slice(before)).toEqual([
+      expect.not.objectContaining({ pool: expect.anything(), needs: expect.anything() }),
+    ])
+    const calls = placeCalls.length
+    expect(
+      await call(v1Socket, '/v1/roots', 'POST', create('pool-alone', { pool: 'neri-hunt' })),
+    ).toEqual({
+      status: 400,
+      body: { error: 'invalid_body', field: 'pool', reason: 'pool goes with host "auto"' },
+    })
+    expect(placeCalls).toHaveLength(calls)
   })
 
   it('passes on the reason a refusal gives, and reserves nothing', async () => {

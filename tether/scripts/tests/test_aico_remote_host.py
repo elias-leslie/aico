@@ -340,6 +340,9 @@ def test_at_capacity_is_a_refusal_with_each_hosts_reason(monkeypatch):
     (["--host", "auto", "--needs", "mem=lots"], "mem takes a size"),
     (["--host", "auto", "--needs", "mem=6G,gpu=1"], "unknown need 'gpu'"),
     (["--host", "auto", "--needs", "mem=6G,cap=Live Ready"], "cap takes a capability name"),
+    (["--pool", "neri-hunt"], "--pool goes with --host auto"),
+    (["--host", "agent-work", "--pool", "neri-hunt"], "--pool goes with --host auto"),
+    (["--host", "auto", "--needs", "mem=6G", "--pool", "Neri Hunt"], "expected a pool name"),
 ])
 def test_bad_needs_never_contact_the_owner(monkeypatch, capsys, argv, message):
     monkeypatch.setattr(admin.Collector, "receipt", lambda *_, **__: pytest.fail("contacted owner"))
@@ -364,3 +367,44 @@ def test_placement_shows_each_hosts_room_and_starts_nothing(monkeypatch):
     assert admin.main(["placement", "--needs", "mem=16G,cpu=2,cap=live-ready"]) == 0
     assert calls == [(f"/v1/placement?mem={16 * 1024 ** 3}&cpu=2&cap=live-ready", None)]
     assert output[0]["host"] == "agent-work" and output[0]["hosts"] == answer["hosts"]
+
+
+def test_host_auto_sends_the_pool_and_reports_an_unknown_one(monkeypatch):
+    calls, output = [], []
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls, create=lambda payload: (
+        200, {**descriptor(payload), "host": "neri-hunters"})))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main([*auto("mem=4G"), "--pool", "neri-hunt"]) == 0
+    assert calls[0][1]["pool"] == "neri-hunt" and calls[0][1]["host"] == "auto"
+    assert output[0]["host"] == "neri-hunters"
+    calls.clear()
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls))
+    assert admin.main(auto("mem=4G")) == 0
+    assert "pool" not in calls[0][1]
+    monkeypatch.setattr(admin.Collector, "receipt", owner([], create=lambda _: (
+        400, {"error": "unknown_pool", "pool": "hunt", "pools": ["default", "neri-hunt", "Bad"]})))
+    assert admin.main([*auto("mem=4G"), "--pool", "hunt"]) == 1
+    assert output[-1]["status"] == "refused" and output[-1]["reason"] == "unknown_pool"
+    assert output[-1]["pools"] == ["default", "neri-hunt"]
+
+
+def test_placement_asks_for_the_pool(monkeypatch):
+    calls, output = [], []
+    answers = iter([
+        (200, {"pool": "neri-hunt", "host": "neri-hunters", "hosts": [
+            {"host": "neri-hunters", "fits": True, "reason": "6.0 GiB room", "room": None, "wake": True}]}),
+        (400, {"error": "unknown_pool", "pool": "hunt", "pools": ["default", "neri-hunt"]}),
+    ])
+
+    def receipt(_, path, route, payload=None, **kwargs):
+        calls.append(route)
+        return next(answers)
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    monkeypatch.setattr(admin, "emit_unless_stopped", lambda _, record: output.append(record))
+    assert admin.main(["placement", "--needs", "mem=4G", "--pool", "neri-hunt"]) == 0
+    assert calls[0] == f"/v1/placement?mem={4 * 1024 ** 3}&cpu=0&pool=neri-hunt"
+    assert output[0]["pool"] == "neri-hunt" and output[0]["host"] == "neri-hunters"
+    assert admin.main(["placement", "--needs", "mem=4G", "--pool", "hunt"]) == 1
+    assert output[1] == {"status": "refused", "reason": "unknown_pool", "pool": "hunt",
+                         "pools": ["default", "neri-hunt"]}
