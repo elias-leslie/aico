@@ -186,7 +186,9 @@ host in `~/.config/tether/placement.json` order whose live room fits, or answers
   marks a host that runs on this computer (a Neri hunt container). It is judged
   by Nightshift's reading and this computer's reserve, never its own /proc, and
   its reservations and `local`'s are one room, counted once. Asleep with a
-  `wake`, it fits by that room and the create wakes it.
+  `wake`, it fits by that room and the create wakes it. `capabilitiesOn:
+  "local"` probes its capabilities (live-ready) on this computer, which owns
+  the slot's C2 sandbox and proxy, so a sleeping slot can take a live hunt.
 - **Named host with needs** (2026-10-31): `st aico create --host NAME --needs ...`
   rechecks that host and holds its reservation before the create is sent, or
   answers `at_capacity` with its reason (Neri: dry run, set up the host, then

@@ -21,6 +21,8 @@
   computer (a Neri hunt container) by Nightshift's reading and this computer's
   reserve, with its reservations and this computer's counted once as one room;
   a sleeping one with `wake` fits by that room and is woken by the create.
+  With `capabilitiesOn: "local"` its capabilities (live-ready) are probed on
+  this computer, which owns the slot's sandbox and proxy, asleep or running.
   `st aico create --host NAME --needs ...` (`POST /v1/roots` `host` + `needs`)
   rechecks that host and holds its reservation before the create goes there,
   or answers `at_capacity` with its reason; release is unchanged (only on a

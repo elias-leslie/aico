@@ -11,7 +11,9 @@
 // and ballooning draw on them). A powered-off VM counts only when Proxmox has
 // room to start it; the create path then wakes it with hosts.json `wake`.
 // A host with `room: "local"` (a container on this computer) is judged by this
-// computer's reading and reserve, its reservations shared with `local`'s.
+// computer's reading and reserve, its reservations shared with `local`'s; with
+// `capabilitiesOn: "local"` its capabilities are this computer's (the sandbox
+// that owns its proxy and firewall runs here), read even while it sleeps.
 //
 // A create naming its host with `needs` is judged on that host alone and
 // reserved there the same way (or refused at_capacity), never moved elsewhere.
@@ -100,6 +102,9 @@ export interface HostPlacement {
   /** `local`: the host lives on this computer (a container), so this
    * computer's reading, reserve and reservations judge it; null otherwise. */
   room: Room | null
+  /** `local`: this host's capabilities are probed on this computer, which owns
+   * its sandbox (a container slot in a pod made here); null = on the host. */
+  capabilitiesOn: Room | null
 }
 
 export interface CapabilityProbe {
@@ -126,12 +131,14 @@ export const DEFAULT_LOCAL: HostPlacement = {
   reserveCpu: 2,
   proxmox: null,
   room: null,
+  capabilitiesOn: null,
 }
 export const DEFAULT_REMOTE: HostPlacement = {
   reserveBytes: 2 * GIB,
   reserveCpu: 1,
   proxmox: null,
   room: null,
+  capabilitiesOn: null,
 }
 /** A `room: "local"` host's own reserve, taken on top of this computer's. */
 export const DEFAULT_ROOM_LOCAL = { reserveBytes: 0, reserveCpu: 0 }
@@ -252,6 +259,10 @@ export function parsePlacement(text: string | null, hostNames: string[]): Placem
     const value = record(entry)
     const room = value?.room === undefined || value.room === null ? null : value.room
     const shared = room === LOCAL_HOST && name !== LOCAL_HOST
+    const capsOn =
+      value?.capabilitiesOn === undefined || value.capabilitiesOn === null
+        ? null
+        : value.capabilitiesOn
     const own = shared ? DEFAULT_ROOM_LOCAL : fallback
     const reserveBytes = gib(value?.reserveGiB, own.reserveBytes)
     const reserveCpu = count(value?.reserveCpu, own.reserveCpu)
@@ -272,7 +283,11 @@ export function parsePlacement(text: string | null, hostNames: string[]): Placem
                 ? 'proxmox is for remote hosts'
                 : shared && proxmox
                   ? 'room and proxmox do not go together'
-                  : null
+                  : capsOn !== null && capsOn !== LOCAL_HOST
+                    ? 'capabilitiesOn must be "local"'
+                    : capsOn !== null && !shared
+                      ? 'capabilitiesOn "local" goes with room "local"'
+                      : null
     if (problem) {
       // A broken entry keeps the defaults' reserve, so nothing is placed more
       // freely; a host that meant to share this computer stays unknown.
@@ -284,6 +299,7 @@ export function parsePlacement(text: string | null, hostNames: string[]): Placem
         reserveCpu: reserveCpu as number,
         proxmox: proxmox as ProxmoxRef | null,
         room: shared ? LOCAL_HOST : null,
+        capabilitiesOn: capsOn === LOCAL_HOST ? LOCAL_HOST : null,
       }
   }
   const capabilities: Record<string, CapabilityProbe> = { ...DEFAULT_CAPABILITIES }
@@ -759,17 +775,22 @@ export class Placement {
     }
   }
 
-  private async judgeLocal(config: PlacementConfig, needs: Needs): Promise<HostVerdict> {
-    const room = await this.localRoom(config)
-    if (typeof room === 'string') return this.unknown(LOCAL_HOST, room)
+  /** Capabilities read on this computer: its marker and its fingerprint command. */
+  private localCapabilities(config: PlacementConfig, needs: Needs): Promise<string | null> {
     const home = this.deps.env.HOME ?? homedir()
-    const missing = await this.capabilities(config, needs, async (probe) => {
+    return this.capabilities(config, needs, async (probe) => {
       const markerPath = isAbsolute(probe.marker) ? probe.marker : join(home, probe.marker)
       const marker = await this.readText(markerPath).catch(() => null)
       const current =
         marker !== null && probe.fingerprint ? await this.run(probe.fingerprint, READ_MS) : null
       return [marker, current]
     })
+  }
+
+  private async judgeLocal(config: PlacementConfig, needs: Needs): Promise<HostVerdict> {
+    const room = await this.localRoom(config)
+    if (typeof room === 'string') return this.unknown(LOCAL_HOST, room)
+    const missing = await this.localCapabilities(config, needs)
     if (missing) return this.unknown(LOCAL_HOST, missing)
     return this.verdict(LOCAL_HOST, needs, room, room.detail)
   }
@@ -795,8 +816,9 @@ export class Placement {
   /** A host in this computer's room (a container): its own /proc would show
    * this computer's memory again, so Nightshift's reading judges it, less the
    * local reserve, the room's reservations and the host's own reserve. A
-   * powered-off one with `wake` fits by that room; capabilities are read
-   * only once it runs. */
+   * powered-off one with `wake` fits by that room. Capabilities are read on
+   * this computer with `capabilitiesOn: "local"` (asleep too), else over the
+   * host's link once it runs. */
   private async judgeLocalRoom(
     config: PlacementConfig,
     name: string,
@@ -810,16 +832,23 @@ export class Placement {
     const room = { mem: local.mem - own.reserveBytes, cpu: local.cpu - own.reserveCpu }
     const extra = own.reserveBytes > 0 ? ` - ${g(own.reserveBytes)} own reserve` : ''
     const detail = `this computer's room: ${local.detail}${extra}`
+    const capsHere = own.capabilitiesOn === LOCAL_HOST
+    if (capsHere && needs.caps.length) {
+      const missing = await this.localCapabilities(config, needs)
+      if (missing) return this.unknown(name, `checked on this computer: ${missing}`)
+    }
     if (!peer.live) {
       if (peer.state !== 'powered_off')
         return this.unknown(name, `running but its link is ${peer.state.replace('_', ' ')}`)
-      if (needs.caps.length)
+      if (needs.caps.length && !capsHere)
         return this.unknown(name, `powered off, so ${needs.caps.join(', ')} cannot be checked`)
       if (!peer.entry.wake) return this.unknown(name, 'powered off and hosts.json has no wake')
       return this.verdict(name, needs, room, `powered off, starts in ${detail}`, true)
     }
-    const missing = await this.remoteCapabilities(config, peer, needs)
-    if (missing) return this.unknown(name, missing)
+    if (!capsHere) {
+      const missing = await this.remoteCapabilities(config, peer, needs)
+      if (missing) return this.unknown(name, missing)
+    }
     return this.verdict(name, needs, room, detail)
   }
 

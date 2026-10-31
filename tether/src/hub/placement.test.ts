@@ -521,6 +521,7 @@ describe('placement', () => {
       reserveCpu: 0,
       proxmox: null,
       room: 'local',
+      capabilitiesOn: null,
     })
     expect(config.hosts.big?.reserveBytes).toBe(GIB)
     expect(config.hosts.vm?.room).toBeNull()
@@ -532,17 +533,29 @@ describe('placement', () => {
           local: { room: 'local' },
           a: { room: 'pve' },
           b: { room: 'local', proxmox: PVE },
+          c: { room: 'local', capabilitiesOn: 'vm' },
+          d: { capabilitiesOn: 'local' },
+          e: { room: 'local', capabilitiesOn: 'local' },
         },
       }),
-      ['a', 'b'],
+      ['a', 'b', 'c', 'd', 'e'],
     )
     expect(bad.errors).toEqual([
       'hosts.local: room is for hosts that share this computer; using the defaults',
       'hosts.a: room must be "local"; using the defaults',
       'hosts.b: room and proxmox do not go together; using the defaults',
+      'hosts.c: capabilitiesOn must be "local"; using the defaults',
+      'hosts.d: capabilitiesOn "local" goes with room "local"; using the defaults',
     ])
+    expect(bad.hosts.e).toMatchObject({ room: 'local', capabilitiesOn: 'local' })
     // A broken room entry is an ordinary remote host at the remote defaults.
-    expect(bad.hosts.b).toEqual({ reserveBytes: 2 * GIB, reserveCpu: 1, proxmox: null, room: null })
+    expect(bad.hosts.b).toEqual({
+      reserveBytes: 2 * GIB,
+      reserveCpu: 1,
+      proxmox: null,
+      room: null,
+      capabilitiesOn: null,
+    })
   })
 
   it('judges a room "local" host by this computer, holding one room across it and local', async () => {
@@ -647,6 +660,59 @@ describe('placement', () => {
     expect((await none.placement.check(needs(1, 1, ['live-ready']), 'hunt'))[0]?.reason).toBe(
       'not live-ready: no marker',
     )
+  })
+
+  it('probes this computer for a room "local" host whose capabilities it owns, asleep too', async () => {
+    const caps = {
+      'live-ready': {
+        marker: '.local/state/neri-proxy/live-ready.json',
+        fingerprint: ['neri', 'fingerprint'],
+      },
+    }
+    const config = {
+      ...ROOM,
+      hosts: { ...ROOM.hosts, box: { room: 'local', capabilitiesOn: 'local' } },
+      capabilities: caps,
+    }
+    const here = '/home/test/.local/state/neri-proxy/live-ready.json'
+    const marker = JSON.stringify({ v: 1, suite_version: '1', passed_at: 1, fingerprint: 'fp-1' })
+    const asleep = { live: false, state: 'powered_off', entry: BOX }
+    const live = needs(2, 1, ['live-ready'])
+    // Matching marker on this computer: a sleeping slot fits and is woken.
+    const sleeping = setup(config, { hosts: ['box'], box: asleep, files: { [here]: marker } })
+    const placed = await sleeping.placement.place('cap-1', live, undefined, 'box')
+    expect(placed).toMatchObject({ kind: 'placed', host: 'box' })
+    expect(placed.verdicts[0]).toMatchObject({ fits: true, wake: true })
+    expect(sleeping.world.runs).toEqual([['neri', 'fingerprint']])
+    // Running: still this computer's marker; the slot's own is never read.
+    const running = setup(config, {
+      hosts: ['box'],
+      files: { [here]: marker, 'box:live-ready': marker.replace('fp-1', 'fp-0') },
+    })
+    expect((await running.placement.check(live, 'hunt'))[0]).toMatchObject({ fits: true })
+    expect(running.world.runs.some((argv) => argv.includes('box'))).toBe(false)
+    // Missing or stale on this computer: unknown, asleep or not, whatever the slot has.
+    const reason = async (world: Partial<World>) =>
+      (await setup(config, { hosts: ['box'], ...world }).placement.check(live, 'hunt'))[0]
+    expect(await reason({ box: asleep, files: { 'box:live-ready': marker } })).toEqual({
+      host: 'box',
+      fits: false,
+      reason: 'checked on this computer: not live-ready: no marker',
+      room: null,
+    })
+    const stale = await reason({ files: { [here]: marker.replace('fp-1', 'fp-0') } })
+    expect(stale?.reason).toBe(
+      'checked on this computer: not live-ready: the fingerprint changed since the suite passed',
+    )
+    const failed = { code: 1, stdout: '', output: 'proxy gone' }
+    const broken = await reason({ box: asleep, files: { [here]: marker }, fingerprint: failed })
+    expect(broken?.reason).toBe(
+      'checked on this computer: not live-ready: the fingerprint command failed (proxy gone)',
+    )
+    // Without needs caps nothing is probed; without capabilitiesOn the slot's link is.
+    const plain = setup(config, { hosts: ['box'], box: asleep })
+    await plain.placement.check(needs(1), 'hunt')
+    expect(plain.world.runs).toEqual([])
   })
 
   it('judges and reserves only a named host, whatever the pool order', async () => {
