@@ -80,6 +80,13 @@ Admission (memory and PSI thresholds) moved to Tether with the rest of the
 session lifecycle; configure it there. A deferred launch reaches Aico as a
 create failure and is shown in the new-session dialog.
 
+Placement across hosts (`st aico create --host auto --needs mem=6G,cpu=2`)
+also lives in Tether: it picks the first host with room from live readings, or
+answers `at_capacity` with each host's reason. Order, owner reserves and the
+Proxmox node per host are data in `~/.config/tether/placement.json`; see
+tether/docs/api-v1.md "Placement". `st aico placement --needs ...` shows the
+decision without starting anything.
+
 ## Test, lint, typecheck, build
 
 After `npm ci`:

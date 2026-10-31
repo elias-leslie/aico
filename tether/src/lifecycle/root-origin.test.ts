@@ -31,7 +31,25 @@ describe('root origin (v1 roots API)', () => {
       response.writeHead(202, { 'content-type': 'application/json' })
       response.end(JSON.stringify({ forwarded: body.host }))
     },
+    // Stub placement: 1 byte fits here, 2 on vm, anything else is at capacity.
+    place: async (requestId, needs) => {
+      placeCalls.push(requestId)
+      const mem = (needs as { memBytes?: unknown } | undefined)?.memBytes
+      if (mem === 1 || mem === 2)
+        return {
+          kind: 'placed',
+          host: mem === 1 ? null : 'vm',
+          done: () => placeDone.push(requestId),
+        }
+      return {
+        kind: 'refused',
+        status: 409,
+        body: { error: 'at_capacity', hosts: [{ host: 'local', reason: 'needs more' }] },
+      }
+    },
   }
+  const placeCalls: string[] = []
+  const placeDone: string[] = []
   const handle = createRootHandler(operations)
   const server = createServer((req, res) => {
     void handle(req, res)
@@ -188,6 +206,48 @@ describe('root origin (v1 roots API)', () => {
     expect((await call(v1Socket, '/v1/roots', 'POST', create('good-pi', good))).body).toMatchObject(
       { status: 'running', agentExit: { status: 1 } },
     )
+  })
+
+  it('places host auto by its needs: here, on a host, or at capacity', async () => {
+    const here = await call(
+      v1Socket,
+      '/v1/roots',
+      'POST',
+      create('auto-here', { host: 'auto', needs: { memBytes: 1 } }),
+    )
+    expect(here).toMatchObject({ status: 200, body: { requestId: 'auto-here', status: 'running' } })
+    expect(getWidget(here.body.hostIdentity as string)).toBeDefined()
+    const before = remoteBodies.length
+    const there = await call(
+      v1Socket,
+      '/v1/roots',
+      'POST',
+      create('auto-vm', { host: 'auto', needs: { memBytes: 2 } }),
+    )
+    expect(there).toEqual({ status: 202, body: { forwarded: 'vm' } })
+    // The host gets the create without needs, named like any --host create.
+    expect(remoteBodies.slice(before)).toEqual([
+      expect.not.objectContaining({ needs: expect.anything() }),
+    ])
+    expect(remoteBodies.at(-1)).toMatchObject({ requestId: 'auto-vm', host: 'vm' })
+    expect(placeDone).toEqual(['auto-here', 'auto-vm'])
+    expect(
+      await call(v1Socket, '/v1/roots', 'POST', create('auto-full', { host: 'auto', needs: {} })),
+    ).toEqual({
+      status: 409,
+      body: { error: 'at_capacity', hosts: [{ host: 'local', reason: 'needs more' }] },
+    })
+    expect((await call(v1Socket, '/v1/roots/auto-full')).status).toBe(404)
+    // A bad option is refused before placement; needs only go with host auto.
+    const calls = placeCalls.length
+    expect(
+      (await call(v1Socket, '/v1/roots', 'POST', create('auto-bad', { host: 'auto', tool: 7 })))
+        .status,
+    ).toBe(400)
+    expect(placeCalls).toHaveLength(calls)
+    expect(
+      await call(v1Socket, '/v1/roots', 'POST', create('needs-alone', { needs: { memBytes: 1 } })),
+    ).toEqual({ status: 400, body: { error: 'invalid_body' } })
   })
 
   it('passes on the reason a refusal gives, and reserves nothing', async () => {

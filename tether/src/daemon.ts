@@ -21,6 +21,7 @@ import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { listenPrivateSocket } from './http'
 import { Hub } from './hub/hub'
+import { LOCAL_HOST, Placement } from './hub/placement'
 import {
   bindCatalog,
   claimLauncher,
@@ -32,6 +33,7 @@ import {
 } from './lifecycle/catalog'
 import { displayTitle, leadName, setPersonalWorkspaceRoot } from './lifecycle/display'
 import {
+  agentExitOf,
   cachedSessionStatus,
   configureEngine,
   endSession,
@@ -259,6 +261,7 @@ export async function startDaemon(
     waiting: undefined as WaitingNotices | undefined,
     stepChats: undefined as StepChatSource | undefined,
     hub: undefined as Hub | undefined,
+    placement: undefined as Placement | undefined,
     memoryPolicy: startMemoryGuard(paths, store, env, {
       foreground: foregroundPaneScope,
       sessionOf: () =>
@@ -406,6 +409,27 @@ export async function startDaemon(
       })
     : null
   if (hosts) context.hub = hosts
+  // `--host auto`: pick a host with room from live readings (src/hub/placement.ts).
+  context.placement = new Placement({
+    env,
+    hostNames: () => hosts?.hostNames() ?? [],
+    peer: (name) => hosts?.peerView(name) ?? null,
+    localRoot: (requestId) => {
+      const root = getRootRequest(requestId)
+      if (!root) return 'missing'
+      const row = getWidget(root.widgetId)
+      if (!row) return 'ended'
+      return agentExitOf(row) ? 'exited' : 'live'
+    },
+    existingHost: (requestId) => {
+      if (getRootRequest(requestId)) return LOCAL_HOST
+      return hosts?.rootOwner(requestId) ?? undefined
+    },
+    settings: {
+      get: (key) => store.getSetting(key),
+      put: (key, value) => store.putSetting(key, value, Date.now()),
+    },
+  })
   // The owner's waiting notice: only the Tether that knows where Aico is.
   const aicoUrl = aicoOrigin(env.TETHER_AICO_URL)
   const waiting =

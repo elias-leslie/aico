@@ -138,7 +138,7 @@ export interface HostAdminDeps {
   setTimer?: (fn: () => void, ms: number) => unknown
 }
 
-function shellQuote(word: string): string {
+export function shellQuote(word: string): string {
   return `'${word.replace(/'/g, `'\\''`)}'`
 }
 

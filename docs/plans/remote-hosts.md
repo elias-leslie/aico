@@ -157,6 +157,27 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
   - low load;
   - no ssh sessions other than the link.
 
+### Placement (`--host auto`, built 2026-10-31)
+
+Coordinators start hunters with `st aico create ... --host auto --needs
+mem=6G,cpu=2[,cap=live-ready]` (Neri plan contract 3). Tether picks the first
+host in `~/.config/tether/placement.json` order whose live room fits, or answers
+`at_capacity` with each host's reason. There is no agent count.
+
+- **Room** = live free − owner reserve − open reservations, per host. This
+  computer reads Nightshift's admission file (green and fresh, else unknown).
+  A VM reads its own MemAvailable, PSI, CPUs and load over the link, and its
+  Proxmox node's available memory and storage over `ssh <node> pvesh`. The
+  smaller of VM and node room counts. A powered-off VM counts only when the
+  node can start it; the create then wakes it as above.
+- **Capabilities**: the live-ready marker (contract 4) on the host, its
+  `fingerprint` compared with what the configured command prints now.
+- **Reservations** are held per placed root until its own Tether says it is
+  gone, ended or its agent exited. Never on a timer; kept across restarts.
+  Decisions are serialized in the hub (every create goes through it).
+- `st aico placement --needs ...` shows the decision without starting anything.
+- Details and the config fields: tether/docs/api-v1.md "Placement".
+
 ### Cross-host messaging
 
 `st sessions send` to a remote agent goes through the hub's

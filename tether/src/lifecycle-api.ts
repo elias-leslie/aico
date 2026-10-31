@@ -17,6 +17,13 @@ import type { EventBus } from './events'
 import { HttpError, type Router, readJsonObject, sendError, sendJson } from './http'
 import type { Hub } from './hub/hub'
 import {
+  AUTO_HOST,
+  type HostVerdict,
+  type Needs,
+  type Placement,
+  parseNeeds,
+} from './hub/placement'
+import {
   adoptLineage,
   allocateWidgetId,
   getTmuxServer,
@@ -157,6 +164,34 @@ export interface LifecycleApiContext {
   wakes?: WakeService
   /** The remote hosts this Tether federates; absent in route-only tests. */
   hub?: Hub
+  /** `host: "auto"` placement; absent in route-only tests. */
+  placement?: Placement
+}
+
+const NEEDS_SHAPE =
+  'needs is {memBytes, cpu?, caps?}: whole bytes, CPUs 0-1024, up to 8 capability names'
+/** At most this many hosts' reasons in one answer. */
+const MAX_VERDICTS = 16
+
+function atCapacityLine(verdict: HostVerdict): { host: string; reason: string } {
+  return { host: verdict.host, reason: verdict.reason }
+}
+
+/** `GET /v1/placement?mem=<bytes>&cpu=<n>&cap=<name>`: needs from a query, or null. */
+export function needsFromQuery(query: URLSearchParams): Needs | null {
+  const mem = query.get('mem')
+  const cpu = query.get('cpu')
+  if (
+    mem === null ||
+    !/^\d{1,16}$/.test(mem) ||
+    (cpu !== null && !/^\d{1,4}(\.\d{1,2})?$/.test(cpu))
+  )
+    return null
+  return parseNeeds({
+    memBytes: Number(mem),
+    cpu: cpu === null ? 0 : Number(cpu),
+    caps: query.getAll('cap'),
+  })
 }
 
 /** The daemon's agent-state tracker; unbound in tests and scratch instances. */
@@ -533,6 +568,28 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
         sendError(response, error)
       }
     },
+    place: async (requestId, raw) => {
+      const needs = parseNeeds(raw)
+      if (!needs)
+        return {
+          kind: 'refused',
+          status: 400,
+          body: { error: 'invalid_body', field: 'needs', reason: NEEDS_SHAPE },
+        }
+      if (!context.placement)
+        return { kind: 'refused', status: 400, body: { error: 'unknown_host', host: AUTO_HOST } }
+      const placed = await context.placement.place(requestId, needs)
+      if (placed.kind === 'placed') return placed
+      // Nothing was reserved or created: the same create can be repeated.
+      return {
+        kind: 'refused',
+        status: 409,
+        body: {
+          error: 'at_capacity',
+          hosts: placed.verdicts.slice(0, MAX_VERDICTS).map(atCapacityLine),
+        },
+      }
+    },
     remoteRoots: (search) => context.hub?.roots(search) ?? Promise.resolve([]),
     validate: (request) => {
       if (request.tool === AGENT_HUB_TOOL) {
@@ -730,6 +787,19 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
 
   router
+    // Where `host: "auto"` would put these needs now; reserves nothing.
+    .add('GET', '/v1/placement', async (_req, res, _params, query) => {
+      const needs = needsFromQuery(query)
+      if (!needs) throw new HttpError(400, 'invalid_body', { field: 'needs', reason: NEEDS_SHAPE })
+      if (!context.placement) throw new HttpError(400, 'unknown_host', { host: AUTO_HOST })
+      const hosts = (await context.placement.check(needs)).slice(0, MAX_VERDICTS)
+      sendJson(res, 200, {
+        needs,
+        host: hosts.find((verdict) => verdict.fits)?.host ?? null,
+        hosts,
+        reservations: context.placement.list(),
+      })
+    })
     .add('GET', '/v1/sessions', async (_req, res, _params, query) => {
       const project = query.get('project')
       const origin = query.get('origin')

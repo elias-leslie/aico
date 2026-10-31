@@ -21,6 +21,7 @@ import {
   type RunsLike,
 } from './peer'
 import { forwardRequest, PeerUnavailable, peerRequest } from './peer-http'
+import type { PeerView } from './placement'
 import { defaultGateRuntime, type GateRuntime, readyHost } from './wake'
 
 export const LIST_TIMEOUT_MS = 1_500
@@ -329,6 +330,30 @@ export class Hub {
     const peer = this.knownPeer(name)
     await this.ready(peer)
     if (!peer.live) throw unavailable(peer)
+  }
+
+  /** The hosts this hub knows, in hosts.json order. */
+  hostNames(): string[] {
+    return [...this.peers.keys()]
+  }
+
+  /** What placement reads about a host (src/hub/placement.ts), or null. */
+  peerView(name: string): PeerView | null {
+    const peer = this.peers.get(name)
+    if (!peer) return null
+    return {
+      entry: peer.entry,
+      live: peer.live,
+      state: peer.state,
+      socket: peer.socket,
+      control: peer.control,
+    }
+  }
+
+  /** The host that owns a root request, or null when none is known to. */
+  rootOwner(requestId: string): string | null {
+    for (const peer of this.peers.values()) if (peer.ownsRoot(requestId)) return peer.name
+    return null
   }
 
   /** The registry entry of a host this hub knows, or null. */

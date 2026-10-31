@@ -47,6 +47,8 @@ export interface HostsLoad {
 }
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,31}$/
+/** `local` is this computer and `auto` asks placement to pick a host. */
+const RESERVED = new Set(['local', 'auto'])
 const ALIAS = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/
 const FIELDS = new Set([
@@ -118,7 +120,7 @@ function argv(value: unknown): string[] | null | false {
 function entryName(value: unknown): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const name = (value as Record<string, unknown>).name
-  return typeof name === 'string' && NAME.test(name) && name !== 'local' ? name : null
+  return typeof name === 'string' && NAME.test(name) && !RESERVED.has(name) ? name : null
 }
 
 /** One entry, or why it is not usable. Unknown fields are ignored (a newer
@@ -128,8 +130,8 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
     return `entry ${index} is not an object`
   const raw = value as Record<string, unknown>
   const { name, ssh } = raw
-  if (typeof name !== 'string' || !NAME.test(name) || name === 'local')
-    return `entry ${index}: name must be 1-32 of a-z, 0-9, '-'`
+  if (typeof name !== 'string' || !NAME.test(name) || RESERVED.has(name))
+    return `entry ${index}: name must be 1-32 of a-z, 0-9, '-', and not local or auto`
   if (typeof ssh !== 'string' || !ALIAS.test(ssh) || IPV4.test(ssh))
     return `${name}: ssh must be an ssh Host alias, not an address`
   const socket = absolutePath(raw.socket)

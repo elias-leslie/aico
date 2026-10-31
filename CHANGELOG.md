@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- `st aico create --host auto --needs mem=6G,cpu=2[,cap=live-ready]`: Tether
+  picks the first host with room from live readings (Nightshift's admission
+  file here; a VM's memory, PSI and CPUs plus its Proxmox node's memory and
+  storage), less the owner's reserve and what placed sessions still hold, or
+  refuses with `at_capacity` and each host's reason. Order and reserves live in
+  `~/.config/tether/placement.json`. `st aico placement --needs ...` shows the
+  decision. Tether API 10.
+
 ### Changed
 
 - Code the desktop and the web app share (chat view, palette, mouse shim, font

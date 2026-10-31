@@ -58,12 +58,12 @@ describe('control socket', () => {
     expect(health.body).toMatchObject({
       status: 'ok',
       instance: 'test',
-      apiVersion: 9,
+      apiVersion: 10,
       schemaVersion: 17,
       lifecycle: 'disabled',
     })
     const version = await call('GET', '/v1/version')
-    expect(version.body).toMatchObject({ name: 'tether', apiVersion: 9, minApiVersion: 1 })
+    expect(version.body).toMatchObject({ name: 'tether', apiVersion: 10, minApiVersion: 1 })
   })
 
   it('returns 404 and 405 with stable error codes', async () => {
@@ -356,7 +356,7 @@ describe('event stream', () => {
     await call('PATCH', '/v1/tools/pi', { enabled: false })
     await new Promise((resolve) => setTimeout(resolve, 50))
     req.destroy()
-    expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 9, instance: 'test' } })
+    expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 10, instance: 'test' } })
     expect(lines[1]).toMatchObject({ type: 'tools.changed', seq: 1, data: { slug: 'pi' } })
 
     const gap = await new Promise<string>((resolve) => {

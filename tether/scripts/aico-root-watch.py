@@ -40,7 +40,7 @@ import tomllib
 import typing
 from collections.abc import Callable
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
 
 CAPTURE_LIMIT = 32 * 1024
 RECEIPT_LIMIT = 16 * 1024
@@ -178,11 +178,58 @@ HOST_CREATE_SECONDS = 420
 # How long a --host create waits for an answer before saying the host may be powering on.
 HOST_WAIT_NOTICE_SECONDS = 3
 # Refusals besides every 400 and 422: the owner created nothing.
-REFUSED_CREATES = frozenset({"request_conflict", "recovery_pending", "agent_hub_unavailable"})
+REFUSED_CREATES = frozenset({"request_conflict", "recovery_pending", "agent_hub_unavailable", "at_capacity"})
+# `--host auto`: Tether picks the host from live readings (tether/src/hub/placement.ts).
+AUTO_HOST = "auto"
+CAPABILITY = r"[a-z0-9][a-z0-9-]{0,31}"
+MEMORY_UNITS = {"k": 1024, "m": 1024 ** 2, "g": 1024 ** 3, "t": 1024 ** 4}
+# At most this many hosts' reasons in an at-capacity answer (Tether sends no more).
+MAX_PLACEMENT_HOSTS = 16
 # Owner rejections that are definitive before any view or lifecycle effect.
 OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation", "invalid_text"}, 404: {"not_found"},
                   409: {"stale_generation", "workload_unavailable", "busy", "host_unavailable"},
                   410: {"ended"}, 503: {"unavailable"}}
+
+
+def parse_needs(text: str) -> dict:
+    """`mem=6G,cpu=2,cap=live-ready` as Tether's `needs` ({memBytes, cpu, caps});
+    memory takes K, M, G or T (binary, an optional i/iB/B), and cap may repeat."""
+    needs: dict = {"memBytes": None, "cpu": 0, "caps": []}
+    for part in text.split(","):
+        key, sep, value = part.strip().partition("=")
+        if not sep or not value:
+            raise ValueError(f"expected key=value, got {part.strip()!r}")
+        if key == "mem":
+            match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*([KMGTkmgt])(?:i?B?)?", value)
+            if not match:
+                raise ValueError("mem takes a size like 6G or 512M")
+            needs["memBytes"] = round(float(match[1]) * MEMORY_UNITS[match[2].lower()])
+        elif key == "cpu":
+            if not re.fullmatch(r"[0-9]{1,4}(?:\.[0-9]{1,2})?", value) or float(value) > 1024:
+                raise ValueError("cpu takes a number of CPUs, up to 1024")
+            needs["cpu"] = float(value) if "." in value else int(value)
+        elif key == "cap":
+            if not re.fullmatch(CAPABILITY, value):
+                raise ValueError("cap takes a capability name such as live-ready")
+            if value not in needs["caps"]:
+                needs["caps"].append(value)
+        else:
+            raise ValueError(f"unknown need {key!r}; use mem, cpu and cap")
+    if needs["memBytes"] is None:
+        raise ValueError("needs must include mem")
+    if len(needs["caps"]) > 8:
+        raise ValueError("at most 8 capabilities")
+    return needs
+
+
+def placement_hosts(value: object) -> list[dict]:
+    """Each host's reason from an at-capacity answer, checked and bounded."""
+    if not isinstance(value, list):
+        return []
+    return [{"host": item["host"], "reason": item["reason"]} for item in value[:MAX_PLACEMENT_HOSTS]
+            if isinstance(item, dict) and isinstance(item.get("host"), str)
+            and re.fullmatch(HOST_NAME, item["host"]) and isinstance(item.get("reason"), str)
+            and re.fullmatch(r"[\x20-\x7e\u2026]{1,300}", item["reason"])]
 
 
 def view_label(value: object) -> str | None:
@@ -1412,7 +1459,11 @@ def create_main(argv: list[str]) -> int:
         "default revision: the prompt's current one. A Blank Slate session gets only these"))
     parser.add_argument("--host", help=(
         "start it on this remote host from ~/.config/tether/hosts.json (powered on first if it is off); "
-        "--project-root is the host's path, which mirrors this computer's (/srv/workspaces/projects/<p>)"))
+        "--project-root is the host's path, which mirrors this computer's (/srv/workspaces/projects/<p>). "
+        "auto: Tether picks the first host with room for --needs from live readings, or answers "
+        "at_capacity with each host's reason (st aico placement shows it without starting anything)"))
+    parser.add_argument("--needs", metavar="mem=6G,cpu=2[,cap=live-ready]", help=(
+        "with --host auto: what the session needs; held for it on that host until it ends"))
     parser.add_argument("--root-socket", type=socket_path)
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
@@ -1467,6 +1518,17 @@ def create_main(argv: list[str]) -> int:
         refuse("conflicting prompt options")
     if args.host is not None and not re.fullmatch(HOST_NAME, args.host):
         refuse("--host expects a host name from ~/.config/tether/hosts.json")
+    auto = args.host == AUTO_HOST
+    needs = None
+    if auto and args.needs is None:
+        refuse("--host auto needs --needs mem=6G,cpu=2[,cap=live-ready]")
+    if args.needs is not None:
+        if not auto:
+            refuse("--needs goes with --host auto")
+        try:
+            needs = parse_needs(args.needs)
+        except ValueError as error:
+            refuse(f"--needs: {error}")
     if args.host is not None and (here := agent_host()):
         # A host's Tether reaches no other host; the workstation's hub does.
         refuse(f"--host works from the workstation only; on agent host {here}, "
@@ -1486,7 +1548,7 @@ def create_main(argv: list[str]) -> int:
             prompt = "Resume this exact saved session. Reconcile current state after the crash before continuing."
         if (problem := prompt_error(prompt)) is not None:
             refuse(problem)
-        if args.host:
+        if args.host and not auto:
             # This computer's Codex and Pi logins say nothing about the host's; ask its Tether.
             if (reason := host_tool_unavailable(collector, endpoint, args.host, args.tool)):
                 refuse(reason)
@@ -1519,6 +1581,8 @@ def create_main(argv: list[str]) -> int:
         if args.host:
             # Not part of the digest: the host's Tether computes it without the field.
             payload["host"] = args.host
+        if needs is not None:
+            payload["needs"] = needs
         fields = [args.tool, args.project, args.project_root, prompt, args.role, args.lead_root, args.facet]
         if args.resume_session:
             payload["resumeSessionId"] = args.resume_session
@@ -1544,7 +1608,8 @@ def create_main(argv: list[str]) -> int:
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
         # Said only once the host is slow to answer (powering on): a refusal comes back at once.
         waiting = threading.Timer(HOST_WAIT_NOTICE_SECONDS, lambda: print(
-            f"st aico create: starting on {args.host}; if it is off this waits for it to power on "
+            f"st aico create: starting on {'the host Tether picks' if auto else args.host}; "
+            "if it is off this waits for it to power on "
             f"(up to {HOST_CREATE_SECONDS // 60} min)", file=sys.stderr, flush=True))
         if args.host:
             waiting.daemon = True
@@ -1554,7 +1619,8 @@ def create_main(argv: list[str]) -> int:
         finally:
             waiting.cancel()
         errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long", "unknown_host"),
-                  409: ("request_conflict", "recovery_pending", "host_unavailable", "outcome_uncertain"),
+                  409: ("request_conflict", "recovery_pending", "host_unavailable", "outcome_uncertain",
+                        "at_capacity"),
                   422: ("launch_unavailable", "unknown_agent", "unknown_model"),
                   503: ("unavailable", "agent_hub_unavailable")}
         if status not in (200, 202):
@@ -1569,6 +1635,9 @@ def create_main(argv: list[str]) -> int:
             if reason == "recovery_pending" and isinstance(data.get("widgetId"), str) \
                     and re.fullmatch(WIDGET, data["widgetId"]):
                 output["recoveringWidget"] = data["widgetId"]
+            if reason == "at_capacity":
+                # Nothing was reserved or created: the same create can be repeated.
+                output["hosts"] = placement_hosts(data.get("hosts"))
             refusal = Unavailable(reason)
             # The hub's own words for why the host could not take it (host_unavailable).
             refusal.detail = reason_detail(data.get("reason"))
@@ -1591,6 +1660,10 @@ def create_main(argv: list[str]) -> int:
                 or state == "ended" and generation is not None):
             raise Unavailable("create_receipt_unqualified")
         output.update({key: data[key] for key in ("digest", "hostIdentity", "logicalSessionId", "generation", "surfaceLocator", "status")})
+        if auto:
+            # Where Tether put it: a remote root's answer names its host.
+            picked = data.get("host")
+            output["host"] = picked if isinstance(picked, str) and re.fullmatch(HOST_NAME, picked) else "local"
         output.update(launch_deferral(data))
         output.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
         if "launchedBy" in payload:
@@ -2130,6 +2203,42 @@ def wake_item(wake: dict) -> dict:
     return item
 
 
+def placement_main(argv: list[str]) -> int:
+    """Where `st aico create --host auto` would start a session with these needs now."""
+    parser = argparse.ArgumentParser(prog="st aico placement", description=(
+        "Show where --host auto would start a session with these needs, with each host's room or reason. "
+        "Starts and reserves nothing."))
+    parser.add_argument("--needs", required=True, metavar="mem=6G,cpu=2[,cap=live-ready]")
+    parser.add_argument("--root-socket", type=socket_path)
+    args = parser.parse_args(argv)
+    try:
+        needs = parse_needs(args.needs)
+    except ValueError as error:
+        parser.error(f"--needs: {error}")
+    try:
+        endpoint = owner_endpoint(args.root_socket)
+    except argparse.ArgumentTypeError as error:
+        parser.error(f"invalid owner transport configuration: {error}")
+    query = [("mem", str(needs["memBytes"])), ("cpu", str(needs["cpu"]))]
+    query += [("cap", cap) for cap in needs["caps"]]
+    collector = Collector(endpoint, "", "", time.monotonic() + 60, threading.Event())
+    try:
+        status, data = collector.receipt(endpoint, f"/v1/placement?{urlencode(query)}", timeout=55)
+    except (Unavailable, Stopped) as error:
+        emit_unless_stopped(collector, {"status": "unavailable", "reason": str(error)})
+        return 1
+    if status != 200 or not isinstance(data.get("hosts"), list):
+        emit_unless_stopped(collector, {"status": "unavailable",
+                                        "reason": data.get("error") if isinstance(data.get("error"), str) else "placement_unavailable"})
+        return 1
+    hosts = [{key: item[key] for key in ("host", "fits", "reason", "room", "wake") if key in item}
+             for item in data["hosts"][:MAX_PLACEMENT_HOSTS] if isinstance(item, dict)
+             and isinstance(item.get("host"), str) and re.fullmatch(HOST_NAME, item["host"])]
+    picked = data.get("host")
+    emit_json(collector, {"needs": needs, "host": picked if isinstance(picked, str) else None, "hosts": hosts})
+    return 0 if isinstance(picked, str) else 1
+
+
 def wake_main(argv: list[str]) -> int:
     operation = argv[0] if argv and argv[0] in ("set", "list", "cancel") else "set"
     if argv and argv[0] == operation:
@@ -2218,6 +2327,8 @@ def main(argv: list[str] | None = None) -> int:
         return root_main(argv[1:])
     if argv and argv[0] == "wake":
         return wake_main(argv[1:])
+    if argv and argv[0] == "placement":
+        return placement_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "owner", "tmux"):
         parser.add_argument(f"--{name}-socket", required=True, type=socket_path)

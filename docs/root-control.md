@@ -526,6 +526,17 @@ brief in a file and pass a short prompt naming its path; inlining it with
 metadata. `--root-socket` selects Tether's socket. Tether must already be
 running; the command does not start it.
 
+`--host NAME` starts the root on a host from `~/.config/tether/hosts.json`.
+`--host auto --needs mem=6G,cpu=2[,cap=live-ready]` lets Tether pick the host:
+the first in placement order with room for those needs from live readings
+(Nightshift's admission file here; a VM's own memory, PSI and CPUs plus its
+Proxmox node's memory and storage), less the owner's reserve and what earlier
+placed roots still hold. The output's `host` names where it went (`local` is
+this computer). When nothing fits it is refused with `reason: at_capacity` and
+`hosts: [{host, reason}]`; nothing was reserved, so repeat it later.
+`st aico placement --needs ...` prints the same decision without starting
+anything ([api-v1.md](../tether/docs/api-v1.md) "Placement").
+
 Create is explicit recovery. Automatic reboot recovery is a separate path
 ([reboot-continuity.md](../tether/docs/reboot-continuity.md)). The catalog stores the request
 digest rather than a native thread binding or prompt, and ended requests remain

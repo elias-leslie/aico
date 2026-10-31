@@ -168,6 +168,9 @@ export interface RootControlOperations {
   remote?(body: Record<string, unknown>, response: ServerResponse): Promise<void>
   /** Tether: the roots on remote hosts for this list query, tagged with `host`. */
   remoteRoots?(search: string): Promise<Record<string, unknown>[]>
+  /** Tether: `host: "auto"` picks a host for these `needs` and reserves them
+   * there (src/hub/placement.ts), or refuses with each host's reason. */
+  place?(requestId: string, needs: unknown): Promise<RootPlacement>
   /** Tether: `POST /v1/roots/:requestId/end`, the shared session End. */
   end?(widgetId: string, generation: string): Promise<RetirementResult | { status: 'busy' }>
   /** Tether: the session whose pending or held crash recovery will resume
@@ -178,6 +181,12 @@ export interface RootControlOperations {
   /** Tether: how the root's agent ended, once its pane supervisor recorded it. */
   agentExit?(row: WidgetRow): { status: number } | { signal: string } | null
 }
+
+/** Where `host: "auto"` put a root (null host = this computer); `done()`
+ * once the create has answered. Or the refusal to send instead. */
+export type RootPlacement =
+  | { kind: 'placed'; host: string | null; done(): void }
+  | { kind: 'refused'; status: number; body: Record<string, unknown> }
 
 /** How often a launch host admission deferred is tried again. */
 export const DEFERRED_LAUNCH_RETRY_MS = 30_000
@@ -687,6 +696,87 @@ export function createRootHandler(
       directedDelivery,
     }
   }
+  // A root on this computer: reserve, launch and describe it.
+  const createLocal = (input: RootCreateRequest, response: ServerResponse) =>
+    serialize(input.requestId, async () => {
+      const digest = rootRequestDigest(input)
+      let root = getRootRequest(input.requestId)
+      if (root && root.digest !== digest) {
+        json(response, 409, { error: 'request_conflict' })
+        return
+      }
+      if (!root) {
+        if (!input.workRole) {
+          json(response, 400, { error: 'work_role_required' })
+          return
+        }
+        // Two agents must never resume one conversation: crash recovery
+        // resumes it in its own session.
+        const owner = input.resumeSessionId
+          ? (operations.resumeOwner?.(input.resumeSessionId) ?? null)
+          : null
+        if (owner) {
+          json(response, 409, { error: 'recovery_pending', widgetId: owner })
+          return
+        }
+        if (!operations.validate(input)) {
+          json(response, 422, { error: 'launch_unavailable' })
+          return
+        }
+        const refused = await operations.refuse?.(input)
+        if (refused) {
+          json(response, refused.status, {
+            error: refused.error,
+            ...(refused.reason ? { reason: refused.reason } : {}),
+          })
+          return
+        }
+        root = reserveRootRequest(
+          {
+            requestId: input.requestId,
+            digest,
+            widgetId: allocateWidgetId(),
+            logicalSessionId: `aico-root-${randomUUID()}`,
+            role: input.role,
+            workRole: input.workRole,
+            workRoleDisplayName: input.workRoleDisplayName,
+            leadRootReference: input.leadRootReference,
+            facetCapsuleRef: input.facetCapsuleRef,
+            createdAt: Date.now(),
+            origin: input.origin,
+          },
+          input.tool,
+          input.projectId,
+          input.projectRoot,
+          input.aTermSessionId,
+          input.tool === AGENT_HUB_TOOL && input.agentSlug
+            ? {
+                hubSessionId: randomUUID(),
+                agentSlug: input.agentSlug,
+                model: input.model ?? null,
+              }
+            : null,
+        )
+        if (root.digest !== digest) {
+          json(response, 409, { error: 'request_conflict' })
+          return
+        }
+        if (input.launchedBy) operations.launched?.(root.widgetId, input.launchedBy)
+        else if (input.lineage) operations.adopt?.(root.widgetId, input.lineage)
+      }
+      if (getWidget(root.widgetId)) {
+        // Before the first launch; the digest already pins the revision.
+        if (input.instructions && !sessionInstructions(root.widgetId))
+          saveInstructions(root.widgetId, input.instructions)
+        await launchRoot(root.widgetId, input)
+      }
+      const descriptor = await describe(root)
+      json(
+        response,
+        descriptor.status === 'running' || descriptor.status === 'ended' ? 200 : 202,
+        descriptor,
+      )
+    })
   const describeWidget = async (row: WidgetRow) => {
     const generation = sessionGeneration(row)
     const status = await operations.status(row)
@@ -827,7 +917,9 @@ export function createRootHandler(
           value = null
         }
         const remoteHost = object(value) && value.host !== undefined && value.host !== null
-        if (remoteHost && !operations.remote) {
+        // `host: "auto"` with `needs`: placement picks the host below.
+        const auto = object(value) && value.host === 'auto'
+        if (remoteHost && !(auto ? operations.place : operations.remote)) {
           json(response, 400, { error: 'unknown_host', host: (value as { host: unknown }).host })
           return
         }
@@ -839,6 +931,7 @@ export function createRootHandler(
           // option is refused before the host is woken; its Tether is the
           // final judge of the rest (tools it has enabled, its project roots).
           const { host: _host, ...local } = object(value) ? value : {}
+          if (auto) delete local.needs
           parsed = parseRootCreate(remoteHost ? local : value)
         } catch {
           parsed = null
@@ -864,90 +957,33 @@ export function createRootHandler(
           )
           return
         }
-        if (remoteHost && operations.remote) {
-          await operations.remote(value as Record<string, unknown>, response)
-          return
-        }
-        const input = parsed
-        await serialize(input.requestId, async () => {
-          const digest = rootRequestDigest(input)
-          let root = getRootRequest(input.requestId)
-          if (root && root.digest !== digest) {
-            json(response, 409, { error: 'request_conflict' })
+        let placed: Extract<RootPlacement, { kind: 'placed' }> | null = null
+        if (auto && operations.place) {
+          const placement = await operations.place(
+            parsed.requestId,
+            (value as Record<string, unknown>).needs,
+          )
+          if (placement.kind === 'refused') {
+            json(response, placement.status, placement.body)
             return
           }
-          if (!root) {
-            if (!input.workRole) {
-              json(response, 400, { error: 'work_role_required' })
-              return
-            }
-            // Two agents must never resume one conversation: crash recovery
-            // resumes it in its own session.
-            const owner = input.resumeSessionId
-              ? (operations.resumeOwner?.(input.resumeSessionId) ?? null)
-              : null
-            if (owner) {
-              json(response, 409, { error: 'recovery_pending', widgetId: owner })
-              return
-            }
-            if (!operations.validate(input)) {
-              json(response, 422, { error: 'launch_unavailable' })
-              return
-            }
-            const refused = await operations.refuse?.(input)
-            if (refused) {
-              json(response, refused.status, {
-                error: refused.error,
-                ...(refused.reason ? { reason: refused.reason } : {}),
-              })
-              return
-            }
-            root = reserveRootRequest(
-              {
-                requestId: input.requestId,
-                digest,
-                widgetId: allocateWidgetId(),
-                logicalSessionId: `aico-root-${randomUUID()}`,
-                role: input.role,
-                workRole: input.workRole,
-                workRoleDisplayName: input.workRoleDisplayName,
-                leadRootReference: input.leadRootReference,
-                facetCapsuleRef: input.facetCapsuleRef,
-                createdAt: Date.now(),
-                origin: input.origin,
-              },
-              input.tool,
-              input.projectId,
-              input.projectRoot,
-              input.aTermSessionId,
-              input.tool === AGENT_HUB_TOOL && input.agentSlug
-                ? {
-                    hubSessionId: randomUUID(),
-                    agentSlug: input.agentSlug,
-                    model: input.model ?? null,
-                  }
-                : null,
-            )
-            if (root.digest !== digest) {
-              json(response, 409, { error: 'request_conflict' })
-              return
-            }
-            if (input.launchedBy) operations.launched?.(root.widgetId, input.launchedBy)
-            else if (input.lineage) operations.adopt?.(root.widgetId, input.lineage)
+          placed = placement
+        }
+        try {
+          const { needs: _needs, ...body } = value as Record<string, unknown>
+          if (placed?.host) {
+            if (operations.remote) await operations.remote({ ...body, host: placed.host }, response)
+            else json(response, 400, { error: 'unknown_host', host: placed.host })
+            return
           }
-          if (getWidget(root.widgetId)) {
-            // Before the first launch; the digest already pins the revision.
-            if (input.instructions && !sessionInstructions(root.widgetId))
-              saveInstructions(root.widgetId, input.instructions)
-            await launchRoot(root.widgetId, input)
+          if (remoteHost && !placed && operations.remote) {
+            await operations.remote(value as Record<string, unknown>, response)
+            return
           }
-          const descriptor = await describe(root)
-          json(
-            response,
-            descriptor.status === 'running' || descriptor.status === 'ended' ? 200 : 202,
-            descriptor,
-          )
-        })
+          await createLocal(parsed, response)
+        } finally {
+          placed?.done()
+        }
         return
       }
       const match =

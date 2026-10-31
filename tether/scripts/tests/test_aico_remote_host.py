@@ -294,3 +294,73 @@ def test_root_status_without_a_readable_pane_says_nothing_about_the_agent(monkey
     monkeypatch.setattr(admin.Collector, "discover", unreachable)
     code, output = root_status(monkeypatch, {**STATUS, "host": "agent-work", "tool": "pi"})
     assert code == 0 and output[0]["status"] == "running" and "agent" not in output[0]
+
+
+def auto(needs="mem=6G,cpu=2,cap=live-ready"):
+    return ["create", "auto-1", "Start.", "--tool", "claude-code", "--project", "aico",
+            "--project-root", "/srv/workspaces/projects/aico", "--host", "auto", "--needs", needs]
+
+
+def test_host_auto_sends_the_needs_and_reports_where_tether_put_it(monkeypatch):
+    calls, output = [], []
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls, create=lambda payload: (
+        200, {**descriptor(payload), "host": "agent-work"})))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(auto()) == 0
+    # No host is known before Tether picks one, so no host's tools are asked.
+    assert [route for route, *_ in calls] == ["/v1/roots"]
+    payload = calls[0][1]
+    assert payload["host"] == "auto"
+    assert payload["needs"] == {"memBytes": 6 * 1024 ** 3, "cpu": 2, "caps": ["live-ready"]}
+    assert output[0]["host"] == "agent-work"
+    calls.clear()
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls))
+    assert admin.main(auto("mem=512M")) == 0
+    assert calls[0][1]["needs"] == {"memBytes": 512 * 1024 ** 2, "cpu": 0, "caps": []}
+    assert output[1]["host"] == "local"
+
+
+def test_at_capacity_is_a_refusal_with_each_hosts_reason(monkeypatch):
+    output = []
+    hosts = [{"host": "local", "reason": "Nightshift says amber: builds running"},
+             {"host": "agent-work", "reason": "needs 6.0 GiB, has 2.0 GiB room (...)"},
+             {"host": "Bad Name", "reason": "dropped"}]
+    monkeypatch.setattr(admin.Collector, "receipt", owner(
+        [], create=lambda _: (409, {"error": "at_capacity", "hosts": hosts})))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(auto()) == 1
+    assert output[0]["status"] == "refused" and output[0]["reason"] == "at_capacity"
+    assert output[0]["hosts"] == hosts[:2]
+
+
+@pytest.mark.parametrize(("argv", "message"), [
+    (["--host", "auto"], "--host auto needs --needs"),
+    (["--needs", "mem=6G"], "--needs goes with --host auto"),
+    (["--host", "auto", "--needs", "cpu=2"], "needs must include mem"),
+    (["--host", "auto", "--needs", "mem=lots"], "mem takes a size"),
+    (["--host", "auto", "--needs", "mem=6G,gpu=1"], "unknown need 'gpu'"),
+    (["--host", "auto", "--needs", "mem=6G,cap=Live Ready"], "cap takes a capability name"),
+])
+def test_bad_needs_never_contact_the_owner(monkeypatch, capsys, argv, message):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_, **__: pytest.fail("contacted owner"))
+    with pytest.raises(SystemExit) as exit_info:
+        admin.main(["create", "n-1", "Start.", "--tool", "claude-code", "--project", "aico",
+                    "--project-root", "/srv/workspaces/projects/aico", *argv])
+    assert exit_info.value.code == 2 and message in capsys.readouterr().err
+
+
+def test_placement_shows_each_hosts_room_and_starts_nothing(monkeypatch):
+    calls, output = [], []
+    answer = {"host": "agent-work", "hosts": [
+        {"host": "local", "fits": False, "reason": "needs 16.0 GiB, has 14.0 GiB room", "room": {"memGiB": 14, "cpu": 12}},
+        {"host": "agent-work", "fits": True, "reason": "18.0 GiB room", "room": {"memGiB": 18, "cpu": 7}, "wake": True}],
+        "reservations": [{"requestId": "x"}]}
+
+    def receipt(_, path, route, payload=None, **kwargs):
+        calls.append((route, payload))
+        return 200, answer
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(["placement", "--needs", "mem=16G,cpu=2,cap=live-ready"]) == 0
+    assert calls == [(f"/v1/placement?mem={16 * 1024 ** 3}&cpu=2&cap=live-ready", None)]
+    assert output[0]["host"] == "agent-work" and output[0]["hosts"] == answer["hosts"]
