@@ -2571,11 +2571,9 @@ def wait_block(collector: Collector, socket_name: str, wait: dict) -> int:
 
 
 def kinds_api(collector: Collector, control: str) -> bool:
-    """Whether Tether takes the pull kinds and the nudge (API 17)."""
-    try:
-        status, data = collector.receipt(control, "/v1/version", timeout=2)
-    except Unavailable:
-        return False
+    """Whether Tether takes the pull kinds and the nudge (API 17). Tether not
+    answering raises Unavailable, as the call it guards would: unreachable, not old."""
+    status, data = collector.receipt(control, "/v1/version", timeout=5)
     version = data.get("apiVersion")
     return status == 200 and isinstance(version, int) and version >= WAIT_KINDS_API
 

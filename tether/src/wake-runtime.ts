@@ -399,8 +399,8 @@ export function registerWakeRoutes(
     receiver: (id) => service.receiver(id),
     maxChars: () => service.policy().noteMaxChars,
     queue: (id, source, line) => service.queueEvent(id, source, line),
-    pending: (id) => service.store.get(id) !== undefined,
-    pull: (id, ms, aborted) => service.scheduler.pull(id, ms, aborted),
+    pending: (id) => service.store.get(id) !== undefined || service.scheduler.inFlight(id),
+    pull: (id, ms, aborted, alive) => service.scheduler.pull(id, ms, aborted, alive),
     now,
   })
   router

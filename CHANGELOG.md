@@ -83,6 +83,7 @@
 
 ### Fixed
 
+- Agent waits P2 review fixes (Tether API 17, schema v22): an ask's answer goes up the chain (asker while it is there, even with its state unknown; else its launcher; else its coordinator, now recorded); a launcher that ends hands on the asks it holds; an answer queued to a session that ends before it goes out is queued again to the next one up. A run a wait is armed on is read by id after its launcher ended or Tether restarted, and how runs ended is kept across restarts; a `needs-you` run wait goes quiet only once the pause note is queued to the waiter. A delivery being pasted reads `queued`, not `dropped`; a native poll whose client has gone takes no line; `due?wait=0` holds nothing; a source over 120 characters is a 400. The hand-off line fits `noteMaxChars`. `st aico wait`/`nudge` report Tether down as unreachable, not too old. Pi's puller runs only interactive, one per session, waits after an empty answer, and hands Pi a line Tether already gave it even while stopping.
 - The first create on a VM that `st vm rollback` had just powered off no
   longer fails with `host_unavailable` ("went away while its services were
   checked"): the create now wakes the host and goes ahead.

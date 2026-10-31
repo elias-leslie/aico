@@ -129,6 +129,15 @@ export interface RunTrackerOptions {
   dismissed: DismissedStore
   /** Tell the launching session when a run waits for the owner. */
   pauses?: PauseNotices
+  /** Runs no longer followed and how they ended, kept across restarts for
+   * the waits on them. */
+  over?: {
+    read(): Record<string, OverRun>
+    write(over: Record<string, OverRun>): void
+  }
+  /** Runs waits are armed on: followed by their id even when their launcher
+   * has ended or Tether restarted since. */
+  watched?: () => readonly string[]
   /** The listed runs changed. */
   notify: () => void
   now?: () => number
@@ -139,6 +148,33 @@ interface Tracked {
   launcherId: string
   view: RunView
   members: RunMember[]
+}
+
+/** A run no longer followed: its last state (null: Agent Hub no longer has
+ * it) and when it was let go. */
+export interface OverRun {
+  state: string | null
+  at: number
+}
+
+/** The kept `over` runs, malformed entries left out. */
+export function readOverRuns(raw: string | null | undefined): Record<string, OverRun> {
+  const out: Record<string, OverRun> = {}
+  try {
+    const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+    for (const [id, value] of Object.entries(parsed)) {
+      const entry = value as Partial<OverRun> | null
+      if (
+        entry &&
+        typeof entry.at === 'number' &&
+        (entry.state === null || typeof entry.state === 'string')
+      )
+        out[id] = { state: entry.state, at: entry.at }
+    }
+  } catch {
+    // Unreadable: start over.
+  }
+  return out
 }
 
 /** How long a run no longer followed is remembered for the waits on it. */
@@ -159,7 +195,7 @@ export class RunTracker {
   private dismissed: Record<string, number>
   private told: Record<string, ToldPause>
   /** Runs no longer followed, for the waits on them: their last state. */
-  private readonly over = new Map<string, { state: string | null; at: number }>()
+  private readonly over = new Map<string, OverRun>()
   private timer: ReturnType<typeof setTimeout> | null = null
   private dueAt = 0
   private lookedAt: number | null = null
@@ -178,6 +214,7 @@ export class RunTracker {
     this.log = options.log ?? ((message) => console.log(`[tether:runs] ${message}`))
     this.dismissed = options.dismissed.read()
     this.told = options.pauses?.store.read() ?? {}
+    for (const [id, entry] of Object.entries(options.over?.read() ?? {})) this.over.set(id, entry)
   }
 
   start(): void {
@@ -367,6 +404,24 @@ export class RunTracker {
         this.drop(runId, null)
       }
     }
+    // Runs a wait is armed on that nothing above follows (their launcher has
+    // ended, or Tether restarted since): read them by id.
+    for (const runId of this.options.watched?.() ?? []) {
+      if (this.tracked.has(runId) || listed.has(runId) || this.over.has(runId)) continue
+      reads.push(
+        api.get(runId).then(
+          (view) => {
+            if (isActiveRun(view.state))
+              this.accept(ownerOf.get(view.launched_by ?? '') ?? '', view)
+            else this.remember(runId, view.state)
+          },
+          (error) => {
+            if ((error as { status?: number })?.status === 404) this.remember(runId, null)
+            else failure ??= error
+          },
+        ),
+      )
+    }
     await Promise.all(reads)
     this.pruneDismissed()
     await this.tellPauses(live)
@@ -385,9 +440,18 @@ export class RunTracker {
     const entry = this.tracked.get(runId)
     if (!entry) return
     this.tracked.delete(runId)
+    this.remember(runId, state)
+  }
+
+  private remember(runId: string, state: string | null): void {
     this.over.set(runId, { state: state ?? null, at: this.now() })
     const cutoff = this.now() - OVER_KEEP_MS
     for (const [id, { at }] of this.over) if (at < cutoff) this.over.delete(id)
+    try {
+      this.options.over?.write(Object.fromEntries(this.over))
+    } catch (error) {
+      this.log(`could not keep how a run ended: ${(error as Error).message}`)
+    }
   }
 
   /**
@@ -401,6 +465,11 @@ export class RunTracker {
     if (entry) return { state: entry.view.state, launcherId: entry.launcherId }
     const over = this.over.get(runId)
     return over ? { state: over.state, launcherId: null } : undefined
+  }
+
+  /** The session told of the run's current pause (its note queued), if any. */
+  toldTo(runId: string): string | null {
+    return this.told[runId]?.to ?? null
   }
 
   private accept(launcherId: string, view: RunView): void {

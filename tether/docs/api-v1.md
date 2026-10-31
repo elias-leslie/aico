@@ -467,16 +467,20 @@ which carries the question and the answer within `noteMaxChars` and ends with
 `tether ask get <id>` and `tether ask done <id>`. `delivery` is then `wake`.
 
 **Asks from ended lanes** (API 17). `launcher` is the session that launched
-the asker (its lineage from a launch, recorded when the ask is filed);
-`answerTo` is where the answer goes: while open, the asker while it takes
-lines, else its launcher, else null (worked out when the answer comes); once
-answered, where it went. The ask card in Aico says which session gets it. A
+the asker and `coordinator` its coordinator (lineage from a launch, recorded
+when the ask is filed); `answerTo` is where the answer goes: while open, the
+asker while it is there (even while its state is unknown), else its launcher,
+else its coordinator, else null (worked out when the answer comes); once
+answered, where it went. A launcher on another host is not reached: the card
+then says no session gets it. The ask card in Aico says which session gets it. A
 lane that files an ask sends its launcher one line (source `ask:<id>:filed`):
 `[Ask] session "Disk merge" (0123abcd) asked the owner (<id>): "…" · relay or
 close it, don't ask again: tether ask get <id>`. A session that ends with open
 asks hands them to its launcher in one line (`[Asks handed over] session … ended
 with 2 open asks to the owner (…); the answers come to you · …`), never a
-silent orphan.
+silent orphan. A launcher that ends hands on the asks it holds the same way
+(their `launcher` becomes the coordinator), and an answer already queued to a
+session that ends before it goes out is queued again to the next session up.
 A session Tether cannot wake (it has ended, it is a shell, or its agent has no
 state reader: Antigravity today) gets `delivery: "pull"`: the agent reads the
 answer with `tether ask get` or `tether ask list --mine`. Claude Code, Codex,
@@ -758,7 +762,7 @@ watch, an event), on a nudge, at every 60 s look and at start. A ref the owner d
 |---|---|---|---|---|
 | `job` | a SummitFlow service job id, or a unique prefix of 8+ hex (kept whole) | `done` | `~/.summitflow/services/jobs/<id>.json` (`SUMMITFLOW_SERVICE_STATE_ROOT`, or `TETHER_WAIT_JOBS_DIR`); while the file says `queued`/`running`, `st --no-compact service result <id>` at most once a minute (at once on a nudge) as an idle-weight transient unit, never while Nightshift admission is red, so a killed runner reads `interrupted` | `succeeded`, `failed` (with its exit code), `interrupted`; a job file that goes is `gone` |
 | `reply` | a coordination request id you sent (`st sessions send`) | `acked` (answered with an intent, also when closed), `closed` | the coordination ledger `~/.summitflow/leases/_coord.json` (`TETHER_WAIT_LEDGER`): its id, state, intent, recipient and withdrawn only, never its text | closed or withdrawn without an answer is `gone` for `acked` |
-| `run` | an Agent Hub workflow run Tether follows (launched from an Aico session) | `finished`, `needs-you` | Tether's run tracker; a run no longer followed is remembered a day with its last state | `needs-you` that ends without needing the owner is `gone` |
+| `run` | an Agent Hub workflow run Tether follows (launched from an Aico session) | `finished`, `needs-you` | Tether's run tracker; a run a wait is armed on is read by its id even after its launcher ended or Tether restarted, and a run no longer followed is remembered a day with its last state, across restarts | `needs-you` that ends without needing the owner is `gone` |
 | `ask` | an owner ask id | `answered` | Tether's asks | `withdrawn` is `gone` |
 | `host` | a remote host this hub federates | `connected` | the hub's peer state (`peer.state`) | |
 | `tap` | a Nightshift tap or agent request id (32 hex) | `decided` | `/var/lib/nightshift/bypass/out/<id>.resp.json` and `/var/lib/nightshift/agent-responses/<id>.resp.json` (`TETHER_WAIT_TAP_DIRS`, colon-separated) | any outcome but `pending` |
@@ -793,7 +797,7 @@ Each line goes out once, whichever way.
   refused.
 - **Receivers** are agent sessions Tether delivers to: Claude Code, Codex, Pi and Agent Hub chats. A shell or agy is
   `409 delivery_unsupported`; the producer keeps its own path for those.
-- **State.** `queued` while the row waits, `delivered` with `via` (`paste`, `turn` or `native`) and `deliveredAt`, or
+- **State.** `queued` while the row waits or is being pasted, `delivered` with `via` (`paste`, `turn` or `native`) and `deliveredAt`, or
   `dropped` when the row went without a delivery (the session ended). Records stay 7 days.
 
 **Native pullers.** Claude Code's asyncRewake hook (`hooks/aico-due.sh` in claude-config, which runs
@@ -805,7 +809,9 @@ attached, and for 30 s after each poll so it can poll again, the session's due l
 the same rows, order and 1800-byte budget as a paste, gated only on the agent being idle and the post-delivery
 `quietSeconds` (the harness shows a notice, never text in the owner's input). Claude exits its hook with code 2 and
 the lines (a "Tether" notice that wakes the session); Pi calls `sendUserMessage(lines, {deliverAs: "followUp"})`. A
-newer poll on the same session replaces an older one, which answers `{text: null}`. With no puller attached the gated
+newer poll on the same session replaces an older one, which answers `{text: null}`. A poll with `wait=0` answers
+`{text: null}` at once and holds nothing. A line is never handed to a poll whose client has gone. Only an interactive
+Pi polls (not print or RPC mode), one per session by a pid file in `$XDG_RUNTIME_DIR/aico-due/`. With no puller attached the gated
 paste delivers as before, so an older hook, a Tether without the route (API < 16, `404`) or a dead puller loses
 nothing.
 

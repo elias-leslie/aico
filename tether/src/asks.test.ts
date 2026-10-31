@@ -38,6 +38,8 @@ let wakeable: boolean
 let feeds: NeedsYouFeed[]
 let live: Set<string> | null
 let launchers: Map<string, string>
+let coordinators: Map<string, string>
+let lost: Set<string>
 let lines: { to: string; source: string | undefined; note: string }[]
 let delivery: AskDelivery
 
@@ -53,6 +55,8 @@ beforeEach(async () => {
   feeds = []
   live = null
   launchers = new Map()
+  coordinators = new Map()
+  lost = new Set()
   lines = []
   delivery = {
     wake: (sessionId, note, source) => {
@@ -65,6 +69,8 @@ beforeEach(async () => {
     },
     receiver: (id) => live === null || live.has(id),
     launcherOf: (id) => launchers.get(id) ?? null,
+    coordinatorOf: (id) => coordinators.get(id) ?? null,
+    lost: (wakeId) => lost.has(wakeId),
     nameOf: (id) => (id === '0123abcd' ? 'Disk merge' : null),
     cancel: (id) => cancelled.push(id),
     noteMaxChars: () => 500,
@@ -330,6 +336,7 @@ describe('answerNote', () => {
     note: null,
     delivery: null,
     launcher: null,
+    coordinator: null,
     answerTo: null,
     createdAt: 0,
     updatedAt: 0,
@@ -505,5 +512,69 @@ describe('asks from ended lanes', () => {
     expect(handOffAsks(new AskStore(store.db), delivery, '7777bbbb', null)).toEqual([])
     live = new Set()
     expect(handOffAsks(new AskStore(store.db), delivery, LANE, null)).toEqual([])
+  })
+
+  it('goes up the chain: launcher, then coordinator, as each ends', async () => {
+    const MID = '5555cccc'
+    launchers.set(LANE, MID)
+    coordinators.set(LANE, COORD)
+    const created = await ask({ session: LANE, question: 'Go?' })
+    const id = created.body.id as string
+    expect(created.body).toMatchObject({ launcher: MID, coordinator: COORD })
+    lines = []
+    // The lane ends: its launcher holds the ask.
+    live = new Set([MID, COORD])
+    expect(handOffAsks(new AskStore(store.db), delivery, LANE, null)).toMatchObject([
+      { id, answerTo: MID },
+    ])
+    expect(lines.map((line) => line.to)).toEqual([MID])
+    // Then the launcher ends: the coordinator holds it, told in one line.
+    live = new Set([COORD])
+    lines = []
+    expect(handOffAsks(new AskStore(store.db), delivery, MID, null)).toMatchObject([
+      { id, launcher: COORD, answerTo: COORD },
+    ])
+    expect(lines).toMatchObject([{ to: COORD, source: `ask:handoff:${MID}` }])
+    const answered = await call('POST', `/v1/asks/${id}/answer`, { text: 'Yes' })
+    expect(answered.body).toMatchObject({ answerTo: COORD, delivery: 'wake' })
+  })
+
+  it('a launcher that ends while its lane lives passes the lane on quietly', async () => {
+    const MID = '5555cccc'
+    launchers.set(LANE, MID)
+    coordinators.set(LANE, COORD)
+    const created = await ask({ session: LANE, question: 'Go?' })
+    lines = []
+    live = new Set([LANE, COORD])
+    expect(handOffAsks(new AskStore(store.db), delivery, MID, null)).toEqual([])
+    expect(lines).toEqual([])
+    expect((await call('GET', `/v1/asks/${created.body.id}`)).body).toMatchObject({
+      launcher: COORD,
+      answerTo: LANE,
+    })
+  })
+
+  it('an answer queued to an asker that ends before it lands goes up the chain', async () => {
+    launchers.set(LANE, COORD)
+    const created = await ask({ session: LANE, question: 'Go?' })
+    const id = created.body.id as string
+    const answered = await call('POST', `/v1/asks/${id}/answer`, { text: 'Yes' })
+    expect(answered.body).toMatchObject({ answerTo: LANE })
+    const queued = new AskStore(store.db).wakeOf(id) as string
+    live = new Set([COORD])
+    lines = []
+    // Delivered before the end: nothing to do.
+    expect(handOffAsks(new AskStore(store.db), delivery, LANE, null)).toEqual([])
+    lost.add(queued)
+    expect(handOffAsks(new AskStore(store.db), delivery, LANE, null)).toMatchObject([
+      { id, answerTo: COORD, delivery: 'wake' },
+    ])
+    expect(lines).toEqual([
+      {
+        to: COORD,
+        source: `ask:${id}`,
+        note: `Owner answered ask ${id} (asked by ended session "Disk merge" (${LANE})) "Go?": "Yes" (full: tether ask get ${id}; when handled: tether ask done ${id})`,
+      },
+    ])
   })
 })

@@ -557,7 +557,8 @@ export const DELIVERIES_SQL = `
  * v22: where an ask's answer goes once its session has ended (src/asks.ts).
  * `launcher_id` is the session that launched the asker (its lineage when the
  * ask was filed, or when the asker ended with it open: the hand-off);
- * `answer_to` the session the answer was queued to.
+ * `answer_to` the session the answer was queued to; `coordinator_id` the
+ * asker's coordinator when filed, the last one up the chain to take it.
  */
 export const ASK_HANDOFF_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
   {
@@ -569,5 +570,10 @@ export const ASK_HANDOFF_COLUMNS: readonly { table: string; column: string; sql:
     table: 'asks',
     column: 'answer_to',
     sql: "ALTER TABLE asks ADD COLUMN answer_to TEXT CHECK(answer_to IS NULL OR (length(answer_to) = 8 AND answer_to NOT GLOB '*[^0-9a-f]*'))",
+  },
+  {
+    table: 'asks',
+    column: 'coordinator_id',
+    sql: "ALTER TABLE asks ADD COLUMN coordinator_id TEXT CHECK(coordinator_id IS NULL OR (length(coordinator_id) = 8 AND coordinator_id NOT GLOB '*[^0-9a-f]*'))",
   },
 ]

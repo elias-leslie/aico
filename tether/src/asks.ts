@@ -47,6 +47,9 @@ export interface Ask {
   delivery: 'wake' | 'pull' | null
   /** The session that launched the asker (asks from ended lanes). */
   launcher: string | null
+  /** The asker's coordinator when filed: where the answer goes when the asker
+   * and its launcher have both ended. */
+  coordinator: string | null
   /** The session the answer goes to: while open, where it would go now (the
    * asker, or its launcher once the asker has ended); once answered, where
    * it went. Null: no session gets it (read with `tether ask get`). */
@@ -87,6 +90,7 @@ interface AskRow {
   delivery: 'wake' | 'pull' | null
   launcher_id: string | null
   answer_to: string | null
+  coordinator_id?: string | null
   created_at: number
   updated_at: number
   answered_at: number | null
@@ -116,6 +120,7 @@ function fromRow(row: AskRow): Ask {
     note: row.note,
     delivery: row.delivery,
     launcher: row.launcher_id ?? null,
+    coordinator: row.coordinator_id ?? null,
     answerTo: row.answer_to ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -334,6 +339,37 @@ export class AskStore {
     this.db.prepare('UPDATE asks SET launcher_id = ? WHERE id = ?').run(launcher, id)
   }
 
+  /** Record the asker's lineage when filed: its launcher and coordinator. */
+  setLineage(id: string, launcher: string | null, coordinator: string | null): void {
+    this.db
+      .prepare('UPDATE asks SET launcher_id = ?, coordinator_id = ? WHERE id = ?')
+      .run(launcher, coordinator, id)
+  }
+
+  /** Open asks another session filed that this one holds as launcher. */
+  openLaunchedBy(sessionId: string): Ask[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT * FROM asks WHERE launcher_id = ? AND state = 'open'
+             AND (session_id IS NULL OR session_id != ?) ORDER BY created_at, rowid`,
+        )
+        .all(sessionId, sessionId) as unknown as AskRow[]
+    ).map(fromRow)
+  }
+
+  /** Answered asks whose answer line was queued to this session. */
+  answeredTo(sessionId: string): Ask[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT * FROM asks WHERE answer_to = ? AND state = 'answered' AND delivery = 'wake'
+             AND wake_id IS NOT NULL ORDER BY answered_at, rowid`,
+        )
+        .all(sessionId) as unknown as AskRow[]
+    ).map(fromRow)
+  }
+
   close(id: string, state: 'done' | 'withdrawn', now: number): Ask | undefined {
     this.db
       .prepare('UPDATE asks SET state = ?, wake_id = NULL, updated_at = ? WHERE id = ?')
@@ -495,6 +531,10 @@ export interface AskDelivery {
   receiver?(sessionId: string): boolean
   /** The session that launched this one (its lineage from a launch), or null. */
   launcherOf?(sessionId: string): string | null
+  /** This session's coordinator (lineage from a launch), or null. */
+  coordinatorOf?(sessionId: string): string | null
+  /** A line queued with `wake` that is gone undelivered (its session ended). */
+  lost?(wakeId: string): boolean
   /** A short name for a session in a line. */
   nameOf?(sessionId: string): string | null
   /** Cancel a check-in not yet delivered. */
@@ -506,14 +546,14 @@ export interface AskDelivery {
 
 const STATES: readonly AskState[] = ['open', 'answered', 'done', 'withdrawn']
 
-/** Where an ask's answer goes now: the asker while it takes lines, else the
- * session that launched it, else nobody (the asker reads it). */
+/** Where an ask's answer goes now: the asker while it is there, else the
+ * session that launched it, else its coordinator, else nobody (read it with
+ * `tether ask get`). */
 export function answerTarget(ask: Ask, delivery: AskDelivery | undefined): string | null {
   if (!ask.session || !delivery) return null
   if (!delivery.receiver) return ask.session
-  if (delivery.receiver(ask.session)) return ask.session
-  if (ask.launcher && ask.launcher !== ask.session && delivery.receiver(ask.launcher))
-    return ask.launcher
+  for (const id of [ask.session, ask.launcher, ask.coordinator])
+    if (id && delivery.receiver(id)) return id
   return null
 }
 
@@ -547,9 +587,14 @@ export function askHandOffLine(asks: readonly Ask[], name: string): string {
 }
 
 /**
- * A session ended: its open asks are handed to its launcher, with one line,
- * never left as orphans. Returns the asks handed over (their `answerTo`
- * changed), empty when there were none or no launcher takes them.
+ * A session ended (its row is gone): never leave an answer an orphan.
+ * - Its open asks go up the chain (launcher, else coordinator), one line to
+ *   each session that takes some.
+ * - Open asks it held as launcher move to their coordinator; ones whose asker
+ *   has ended too are handed on the same way.
+ * - An answer already queued to it but not delivered is queued again to the
+ *   next session up the chain.
+ * Returns the asks whose `answerTo` changed, as the API shows them.
  */
 export function handOffAsks(
   asks: AskStore,
@@ -557,14 +602,43 @@ export function handOffAsks(
   sessionId: string,
   name: string | null,
 ): Ask[] {
-  const open = asks.openFor(sessionId)
-  if (!open.length) return []
-  const launcher = open.find((ask) => ask.launcher)?.launcher ?? null
-  if (!launcher || launcher === sessionId || !delivery.receiver?.(launcher)) return []
-  for (const ask of open) if (!ask.launcher) asks.setLauncher(ask.id, launcher)
+  const changed = new Map<string, Ask>()
+  const handed: Ask[] = asks.openFor(sessionId)
+  for (const held of asks.openLaunchedBy(sessionId)) {
+    const next = held.coordinator && held.coordinator !== sessionId ? held.coordinator : null
+    asks.setLauncher(held.id, next)
+    const ask = asks.get(held.id) as Ask
+    if (ask.session && !delivery.receiver?.(ask.session)) handed.push(ask)
+  }
+  const byTarget = new Map<string, Ask[]>()
+  for (const ask of handed) {
+    const to = answerTarget(ask, delivery)
+    if (!to || to === sessionId) continue
+    byTarget.set(to, [...(byTarget.get(to) ?? []), ask])
+    changed.set(ask.id, { ...ask, answerTo: to })
+  }
   const shown = name ? `"${clipLine(name, 40)}" (${sessionId})` : sessionId
-  delivery.wake(launcher, askHandOffLine(open, shown), `ask:handoff:${sessionId}`)
-  return open.map((ask) => asks.get(ask.id) as Ask)
+  for (const [to, list] of byTarget)
+    delivery.wake(
+      to,
+      clipLine(askHandOffLine(list, shown), delivery.noteMaxChars()),
+      `ask:handoff:${sessionId}`,
+    )
+  for (const ask of asks.answeredTo(sessionId)) {
+    const queued = asks.wakeOf(ask.id)
+    if (!ask.session || !queued || !delivery.lost?.(queued)) continue
+    const to = answerTarget(ask, delivery)
+    if (!to || to === sessionId) continue
+    const handedFrom = to !== ask.session ? askerName(ask.session, delivery) : null
+    const wakeId = delivery.wake(
+      to,
+      answerNote(ask, delivery.noteMaxChars(), handedFrom),
+      `ask:${ask.id}`,
+    )
+    asks.delivered(ask.id, wakeId, to)
+    changed.set(ask.id, asks.get(ask.id) as Ask)
+  }
+  return [...changed.values()]
 }
 
 export function registerAskRoutes(
@@ -633,9 +707,16 @@ export function registerAskRoutes(
         // Lineage when filed; the launcher hears of it so it relays or closes
         // the ask instead of asking the owner again.
         const launcher = delivery?.launcherOf?.(ask.session) ?? null
-        if (launcher && launcher !== ask.session) {
-          asks.setLauncher(ask.id, launcher)
+        const coordinator = delivery?.coordinatorOf?.(ask.session) ?? null
+        if (launcher || coordinator) {
+          asks.setLineage(
+            ask.id,
+            launcher !== ask.session ? launcher : null,
+            coordinator !== ask.session ? coordinator : null,
+          )
           ask = asks.get(ask.id) as Ask
+        }
+        if (launcher && launcher !== ask.session) {
           if (delivery?.receiver?.(launcher))
             delivery.wake(
               launcher,

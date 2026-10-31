@@ -16,7 +16,7 @@ import type { Wake } from './wakes'
 const SESSION_ID = /^[0-9a-f]{8}$/
 const DELIVERY_ID = /^[0-9a-f]{12}$/
 /** `<owner>:<what>`, e.g. `coord:cc:1c7a9f`. */
-const SOURCE = /^[a-z][a-z0-9-]{0,19}:[A-Za-z0-9._:@-]{1,100}$/
+const SOURCE = /^[a-z][a-z0-9-]{0,18}:[A-Za-z0-9._:@-]{1,100}$/
 /** Sources Tether writes itself: a producer may not replace those lines. */
 const RESERVED_SOURCES = ['lane:', 'wait:', 'run:', 'ask:', 'kind:', 'time:']
 const ONE_LINE_BAD = /[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/u
@@ -112,7 +112,12 @@ export interface DeliveryRouteDeps {
   /** Whether the queue still holds this row. */
   pending(id: string): boolean
   /** The native puller's long poll (WakeScheduler.pull). */
-  pull(sessionId: string, ms: number, aborted: AbortSignal): Promise<string | null>
+  pull(
+    sessionId: string,
+    ms: number,
+    aborted: AbortSignal,
+    alive: () => boolean,
+  ): Promise<string | null>
   now(): number
 }
 
@@ -193,7 +198,12 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
       const onClose = () => abort.abort()
       res.on('close', onClose)
       try {
-        const text = await deps.pull(id, seconds * 1000, abort.signal)
+        const text = await deps.pull(
+          id,
+          seconds * 1000,
+          abort.signal,
+          () => !res.destroyed && res.writable,
+        )
         if (!res.destroyed) sendJson(res, 200, { text: text || null })
       } finally {
         res.off('close', onClose)

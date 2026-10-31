@@ -6,6 +6,7 @@ import { resolveRunsConfig } from './config'
 import {
   type DismissedStore,
   type Launcher,
+  type OverRun,
   type PauseNoticeStore,
   RunControlError,
   type RunsApi,
@@ -336,6 +337,34 @@ function tracker(
 const LAUNCHER = [{ id: 'c0d0ae59', ownershipId: 'aico-widget-c0d0ae59' }]
 
 describe('RunTracker', () => {
+  it('follows a run a wait is armed on, and remembers how it ended across a restart', async () => {
+    const fake = new FakeRuns()
+    fake.runs.set('w', view('w', 'running', [], { launched_by: 'aico-widget-deadbeef' }))
+    let over: Record<string, OverRun> = {}
+    const make = () =>
+      new RunTracker({
+        api: () => fake.api,
+        launchers: () => LAUNCHER,
+        config: CONFIG,
+        dismissed: { read: () => ({}), write: () => {} },
+        over: { read: () => over, write: (next) => (over = { ...next }) },
+        watched: () => ['w', 'gone'],
+        notify: () => {},
+        now: () => NOW,
+        log: () => {},
+      })
+    const first = make()
+    await first.tick()
+    expect(first.runState('w')).toEqual({ state: 'running', launcherId: '' })
+    expect(first.runState('gone')).toEqual({ state: null, launcherId: null })
+    fake.runs.set('w', view('w', 'completed', [], { launched_by: 'aico-widget-deadbeef' }))
+    await first.tick()
+    expect(first.runState('w')).toEqual({ state: 'completed', launcherId: null })
+    // Tether restarts: a new tracker still knows.
+    const again = make()
+    expect(again.runState('w')).toEqual({ state: 'completed', launcherId: null })
+  })
+
   it('lists the runs a session launched, asks by its ownership id, and ignores other runs', async () => {
     const fake = new FakeRuns()
     fake.runs.set('r1', view('r1', 'running', [step('a', 'running')]))

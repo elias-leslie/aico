@@ -127,7 +127,10 @@ describe('native pullers', () => {
 
   it('holds the paste while a puller is between polls, then pastes after the grace', async () => {
     scheduler.start()
+    // A poll that does not wait holds nothing.
     expect(await scheduler.pull(SESSION, 0)).toBeNull()
+    expect(scheduler.pulling(SESSION)).toBe(false)
+    expect(await scheduler.pull(SESSION, 1)).toBeNull()
     wakes.addEvent({ sessionId: SESSION, source: 'coord:x', note: 'one', now: 1 })
     await scheduler.tick()
     expect(pasted).toEqual([])
@@ -149,6 +152,35 @@ describe('native pullers', () => {
     const next = scheduler.pull(SESSION, 5_000)
     await scheduler.tick()
     expect(await next).toBe('one')
+  })
+
+  it('a line being pasted is in flight, not dropped', async () => {
+    let release: (ok: boolean) => void = () => {}
+    scheduler = new WakeScheduler(
+      wakes,
+      ops({ deliver: () => new Promise<boolean>((resolve) => (release = resolve)) }),
+    )
+    scheduler.start()
+    const wake = wakes.addEvent({ sessionId: SESSION, source: 'coord:x', note: 'one', now: 1 })
+    const pass = scheduler.tick()
+    for (let i = 0; i < 20 && !scheduler.inFlight(wake.id); i += 1)
+      await new Promise((resolve) => setImmediate(resolve))
+    expect(wakes.get(wake.id)).toBeUndefined()
+    expect(scheduler.inFlight(wake.id)).toBe(true)
+    release(true)
+    await pass
+    expect(scheduler.inFlight(wake.id)).toBe(false)
+  })
+
+  it('never hands a line to a client that can no longer be answered', async () => {
+    scheduler.start()
+    let open = true
+    const pulled = scheduler.pull(SESSION, 5_000, undefined, () => open)
+    open = false
+    wakes.addEvent({ sessionId: SESSION, source: 'coord:x', note: 'one', now: 1 })
+    await scheduler.tick()
+    expect(wakes.forSession(SESSION)).toHaveLength(1)
+    expect(await pulled).toBeNull()
   })
 
   it('a newer puller replaces the older one, which ends empty', async () => {

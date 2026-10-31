@@ -227,3 +227,9 @@ def test_nudge_posts_a_hint(monkeypatch):
 def test_nudge_on_an_older_tether_says_so(monkeypatch):
     code, calls, output = run(monkeypatch, ["nudge", "reply", "abc123"], [(200, {"apiVersion": 16})])
     assert code == 1 and len(calls) == 1 and output[0]["reason"] == "wait_kind_unsupported"
+
+
+def test_tether_down_is_unreachable_not_too_old(monkeypatch):
+    code, calls, output = run(monkeypatch, ["nudge", "job", JOB], [admin.Unavailable("owner_unavailable")])
+    assert code == 1 and len(calls) == 1
+    assert output[0]["reason"] == "owner_unavailable" and output[0]["applied"] is None

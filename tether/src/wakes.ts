@@ -646,6 +646,8 @@ export class WakeScheduler {
   private readonly deliveredAt = new Map<string, number>()
   /** Native pullers attached now, one per session (the newest wins). */
   private readonly pullers = new Map<string, Puller>()
+  /** Rows taken out for a delivery that has not settled yet. */
+  private readonly sending = new Set<string>()
   /** When each session's native puller was last attached. */
   private readonly pulledAt = new Map<string, number>()
 
@@ -672,6 +674,12 @@ export class WakeScheduler {
     return this.held.get(sessionId) ?? null
   }
 
+  /** Whether this queued row is going out right now (a paste in flight): it
+   * is neither queued nor dropped. */
+  inFlight(wakeId: string): boolean {
+    return this.sending.has(wakeId)
+  }
+
   /** Whether a native puller is attached to the session, or was within the
    * grace (between two long polls). */
   pulling(sessionId: string): boolean {
@@ -686,9 +694,17 @@ export class WakeScheduler {
    * being idle but not on typing or the input line: the harness shows it as a
    * notice, never in the owner's input), or null after `ms` or an abort. While
    * one is attached, and for PULLER_GRACE_MS after, nothing is pasted to the
-   * session. A newer puller replaces an older one, which gets null.
+   * session. A newer puller replaces an older one, which gets null. A poll
+   * that does not wait (`ms` 0) gets null and holds nothing. `alive` says the
+   * client can still be answered; a line is never taken for one that cannot.
    */
-  pull(sessionId: string, ms: number, aborted?: AbortSignal): Promise<string | null> {
+  pull(
+    sessionId: string,
+    ms: number,
+    aborted?: AbortSignal,
+    alive?: () => boolean,
+  ): Promise<string | null> {
+    if (ms <= 0) return Promise.resolve(null)
     return new Promise((resolve) => {
       let done = false
       const finish = (text: string | null): boolean => {
@@ -701,9 +717,16 @@ export class WakeScheduler {
         resolve(text)
         return true
       }
-      const puller: Puller = { take: (text) => !aborted?.aborted && finish(text) }
+      const puller: Puller = {
+        take: (text) => {
+          if (aborted?.aborted) return false
+          // The client went away unnoticed: end this poll, keep the line.
+          if (alive && !alive()) return finish(null) && false
+          return finish(text)
+        },
+      }
       const onAbort = () => finish(null)
-      const timer = setTimeout(() => finish(null), Math.max(0, ms))
+      const timer = setTimeout(() => finish(null), ms)
       timer.unref?.()
       if (aborted?.aborted) {
         finish(null)
@@ -819,12 +842,16 @@ export class WakeScheduler {
     )
     // At most once: the rows go before the paste and come back only when it
     // certainly did not happen.
-    for (const wake of current) this.store.remove(wake.id)
+    for (const wake of current) {
+      this.sending.add(wake.id)
+      this.store.remove(wake.id)
+    }
     let delivered = false
     try {
       delivered = puller ? puller.take(message) : await this.ops.deliver(sessionId, message)
     } finally {
       if (!delivered) for (const wake of current) this.store.restore(wake)
+      for (const wake of current) this.sending.delete(wake.id)
       this.ops.changed(sessionId)
     }
     if (!delivered) {

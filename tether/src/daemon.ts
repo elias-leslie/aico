@@ -10,7 +10,7 @@ import {
   resolveRunsConfig,
   resolveSettleMs,
 } from './agent-hub/config'
-import { RunTracker, sessionLaunchers, type ToldPause } from './agent-hub/runs'
+import { RunTracker, readOverRuns, sessionLaunchers, type ToldPause } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { type AskDelivery, AskStore, aicoOrigin, handOffAsks, type NeedsYouFeed } from './asks'
@@ -108,6 +108,8 @@ const PROJECT_NAMES_MS = 300_000
 
 /** The dismissed workflow runs, kept as one JSON setting (run id to when). */
 const DISMISSED_RUNS_KEY = 'dismissed_runs'
+/** Runs no longer followed and how they ended, for the waits on them. */
+const OVER_RUNS_KEY = 'over_runs'
 
 /** The run pauses already told to their launching session (run id to the
  * pause's key and when), so a restart does not tell one again. */
@@ -318,10 +320,8 @@ export async function startDaemon(
   // An owner's answer to an ask goes to the asking session as an event line
   // on its delivery queue, or to the session that launched it once the asker
   // has ended; a session Tether cannot deliver to reads it with `tether ask get`.
-  const askReceiver = (id: string): boolean => {
-    const row = getWidget(id)
-    return Boolean(row && wakes.supports(row))
-  }
+  // A session that is there (not ended), even while its state is unknown.
+  const askReceiver = (id: string): boolean => Boolean(getWidget(id))
   context.asks = {
     wake: (sessionId, text, source) => {
       const row = getWidget(sessionId)
@@ -335,8 +335,17 @@ export async function startDaemon(
         note,
         now,
       })
+      // Logged like a producer's line, so an answer whose session ended
+      // before it went out can be queued again (handOffAsks).
+      wakes.deliveries.record({ id: wake.id, sessionId: row.id, source: wake.source ?? 'ask', now })
       wakes.changed(row.id)
       return wake.id
+    },
+    lost: (wakeId) =>
+      !wakes.store.get(wakeId) && wakes.deliveries.get(wakeId)?.deliveredAt === null,
+    coordinatorOf: (sessionId) => {
+      const row = getWidget(sessionId)
+      return row?.launched ? (row.coordinatorId ?? null) : null
     },
     receiver: askReceiver,
     launcherOf: (sessionId) => {
@@ -381,6 +390,16 @@ export async function startDaemon(
       write: (dismissed) =>
         store.putSetting(DISMISSED_RUNS_KEY, JSON.stringify(dismissed), Date.now()),
     },
+    over: {
+      read: () => readOverRuns(store.getSetting(OVER_RUNS_KEY)),
+      write: (over) => store.putSetting(OVER_RUNS_KEY, JSON.stringify(over), Date.now()),
+    },
+    watched: () =>
+      (
+        store.db
+          .prepare("SELECT DISTINCT ref FROM waits WHERE kind = 'run' AND state = 'armed'")
+          .all() as { ref: string }[]
+      ).map((row) => row.ref),
     // A run that waits for the owner is told to the session that launched it
     // as a check-in that is due now, delivered when the agent is idle.
     pauses: {
@@ -616,8 +635,9 @@ export async function startDaemon(
             return Boolean(ask && ask.delivery === 'wake' && ask.answerTo === wait.waiter)
           }
           if (wait.kind === 'run' && wait.until === 'needs-you') {
-            const run = runs.runState(wait.ref)
-            return Boolean(run?.launcherId && run.launcherId === wait.waiter)
+            // Only once the pause's note is queued to the waiter, not
+            // between a look seeing the pause and the note going out.
+            return Boolean(wait.waiter && runs.toldTo(wait.ref) === wait.waiter)
           }
           return false
         },
@@ -687,7 +707,7 @@ export async function startDaemon(
     if (typeof event.data.host === 'string' || !context.asks) return
     try {
       for (const ask of handOffAsks(askStore, context.asks, event.data.id, null))
-        events.publish('asks.changed', { ask: { ...ask, answerTo: ask.launcher }, created: false })
+        events.publish('asks.changed', { ask, created: false })
     } catch (error) {
       console.error('[tether:asks] hand-off failed:', error)
     }
