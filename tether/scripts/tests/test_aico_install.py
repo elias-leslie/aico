@@ -68,11 +68,11 @@ def test_dry_run_prints_each_step_and_writes_nothing(env: dict[str, str], home: 
         "would run: npm run build",
         f"would run: env TETHER_LIB_DIR={home}/.local/lib/tether tether/scripts/install-release.sh",
         f"would run: ln -sfn {home}/.local/lib/tether/bin/tether {home}/.local/bin/tether",
-        f"would write {home}/.local/share/applications/aico.desktop",
         "Dry run: nothing was changed.",
     ):
         assert line in out
     assert "systemd" not in out  # --skip-systemd: no units
+    assert "aico.desktop" not in out  # no desktop app any more
     assert "st-coord" not in out  # no SummitFlow here
     assert files_under(home) == []
 
