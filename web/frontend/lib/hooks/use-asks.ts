@@ -21,6 +21,12 @@ export interface OwnerAsk {
   note: string | null
   /** `wake`: sent to the session; `pull`: the agent reads it when it checks. */
   delivery: 'wake' | 'pull' | null
+  /** The session that launched the asker; absent from an older Tether. */
+  launcher?: string | null
+  /** The session the answer goes to (while open, where it would go now; once
+   * answered, where it went); null: no session gets it, the agent reads it.
+   * Absent (undefined) from an older Tether: say nothing. */
+  answerTo?: string | null
   createdAt: number
   updatedAt: number
   answeredAt: number | null

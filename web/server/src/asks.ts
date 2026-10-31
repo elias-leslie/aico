@@ -38,6 +38,11 @@ export interface Ask {
   answer: string | null
   note: string | null
   delivery: 'wake' | 'pull' | null
+  /** The session that launched the asker (Tether API 17); absent from an older Tether. */
+  launcher?: string | null
+  /** The session the answer goes to (while open, where it would go now; once
+   * answered, where it went); null: no session gets it. Absent from an older Tether. */
+  answerTo?: string | null
   createdAt: number
   updatedAt: number
   answeredAt: number | null
@@ -78,6 +83,15 @@ export function validateAsk(data: unknown): Ask | null {
   if (typeof a.blocking !== 'boolean') return null
   if (!STATES.includes(a.state as Ask['state'])) return null
   if (a.delivery !== null && a.delivery !== 'wake' && a.delivery !== 'pull') return null
+  for (const key of ['launcher', 'answerTo'] as const) {
+    const value = a[key]
+    if (
+      value !== undefined &&
+      value !== null &&
+      (typeof value !== 'string' || !SESSION.test(value))
+    )
+      return null
+  }
   if (!time(a.createdAt) || !time(a.updatedAt) || (a.answeredAt !== null && !time(a.answeredAt)))
     return null
   return {
@@ -95,6 +109,8 @@ export function validateAsk(data: unknown): Ask | null {
     answer: a.answer as string | null,
     note: a.note,
     delivery: a.delivery as Ask['delivery'],
+    ...(a.launcher !== undefined ? { launcher: a.launcher as string | null } : {}),
+    ...(a.answerTo !== undefined ? { answerTo: a.answerTo as string | null } : {}),
     createdAt: a.createdAt as number,
     updatedAt: a.updatedAt as number,
     answeredAt: a.answeredAt as number | null,

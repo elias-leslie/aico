@@ -51,8 +51,24 @@ describe('validateAsk', () => {
       { body: 'bell\u0007' },
       { session: null, requester: null },
       { answer: 'x'.repeat(101) },
+      { launcher: 'not-a-session' },
+      { answerTo: 12345678 },
     ])
       expect(validateAsk({ ...ASK, ...patch }), JSON.stringify(patch)).toBeNull()
+  })
+})
+
+describe('where the answer goes (Tether API 17)', () => {
+  it('passes launcher and answerTo through, and leaves them out for an older Tether', () => {
+    const routed = { ...ASK, launcher: '89abcdef', answerTo: '89abcdef' }
+    expect(validateAsk(routed)).toEqual(routed)
+    expect(validateAsk({ ...ASK, launcher: null, answerTo: null })).toMatchObject({
+      launcher: null,
+      answerTo: null,
+    })
+    const older = validateAsk(ASK)
+    expect(older && 'answerTo' in older).toBe(false)
+    expect(older && 'launcher' in older).toBe(false)
   })
 })
 

@@ -42,7 +42,10 @@ vi.mock('@/lib/hooks/use-asks', async (importOriginal) => ({
 vi.mock('@/lib/hooks/use-terminal-sessions', () => ({
   SESSION_REFRESH_MS: 5_000,
   useTerminalSessions: () => ({
-    sessions: [{ id: '0123abcd', name: 'Disk merge' }],
+    sessions: [
+      { id: '0123abcd', name: 'Disk merge' },
+      { id: '89abcdef', name: 'Disk coordinator' },
+    ],
   }),
 }))
 vi.mock('@/lib/hooks/use-media-query', () => ({ useMediaQuery: () => false }))
@@ -230,6 +233,50 @@ describe('NeedsYouDrawer', () => {
     state.isError = false
     rerender(<NeedsYouDrawer open onOpenChange={() => {}} />)
     expect(screen.getByText(/No agent questions waiting/)).toBeInTheDocument()
+  })
+
+  it('says which session gets the answer, and nothing on an older Tether', () => {
+    const routeOf = (patch: Partial<OwnerAsk>) => {
+      state.asks = [ask(patch)]
+      const { unmount } = render(
+        <NeedsYouDrawer open onOpenChange={() => {}} />,
+      )
+      const line = screen.queryByTestId('answer-route')
+      const seen = line && {
+        text: line.textContent,
+        title: line.getAttribute('title'),
+      }
+      unmount()
+      return seen
+    }
+    expect(routeOf({ answerTo: '0123abcd' })?.text).toBe(
+      'Answer goes to “Disk merge”',
+    )
+    expect(routeOf({ launcher: '89abcdef', answerTo: '89abcdef' })).toEqual({
+      text: 'Answer goes to “Disk coordinator” (asker ended)',
+      title:
+        'Answer goes to “Disk coordinator” (asker ended). The session that asked has ended, so the session that launched it gets the answer.',
+    })
+    expect(routeOf({ answerTo: 'fedcba98' })?.text).toBe(
+      'Answer goes to session fedcba98 (asker ended)',
+    )
+    expect(routeOf({ answerTo: null })).toEqual({
+      text: 'No session will get the answer',
+      title:
+        'No session will get the answer. The agent reads it when it checks.',
+    })
+    expect(routeOf({})).toBeNull()
+  })
+
+  it('names the launcher when the answer went there', async () => {
+    state.asks = [ask({ launcher: '89abcdef', answerTo: '89abcdef' })]
+    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    const card = screen.getByTestId('ask-card')
+    fireEvent.click(within(card).getAllByRole('radio')[0] as HTMLElement)
+    fireEvent.click(within(card).getByRole('button', { name: 'Send' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Sent to “Disk coordinator”: Finish it now.',
+    )
   })
 
   it('shows what was answered and how it reaches the agent', () => {

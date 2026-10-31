@@ -6,6 +6,7 @@ import { Check, Copy, Inbox, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import {
   type ReactNode,
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -419,17 +420,51 @@ function Note({ children }: { children: ReactNode }) {
   )
 }
 
+/** A session's name from the list the app already has, else null. */
+function useSessionName(): (id: string) => string | null {
+  const { sessions } = useTerminalSessions({ includeDetached: true })
+  return useCallback(
+    (id: string) => sessions?.find((item) => item.id === id)?.name ?? null,
+    [sessions],
+  )
+}
+
 /** Who asked: the session's name, else the requester's label. */
 function useAsker(ask: OwnerAsk): { name: string; sessionId: string | null } {
-  const { sessions } = useTerminalSessions({ includeDetached: true })
+  const nameOf = useSessionName()
   return useMemo(() => {
-    const session = ask.session
-      ? sessions?.find((item) => item.id === ask.session)
-      : undefined
-    if (session) return { name: session.name, sessionId: session.id }
+    const name = ask.session ? nameOf(ask.session) : null
+    if (ask.session && name !== null) return { name, sessionId: ask.session }
     if (ask.session) return { name: 'An ended session', sessionId: null }
     return { name: ask.requester ?? 'An agent', sessionId: null }
-  }, [ask.session, ask.requester, sessions])
+  }, [ask.session, ask.requester, nameOf])
+}
+
+/** Which session gets the owner's answer, in the owner's words (`text` short
+ * for the phone, `detail` for the tooltip); null on an older Tether that does
+ * not say (`answerTo` absent). */
+export function answerRoute(
+  ask: OwnerAsk,
+  nameOf: (id: string) => string | null,
+): { text: string; detail: string } | null {
+  if (ask.answerTo === undefined) return null
+  if (ask.answerTo === null)
+    return {
+      text: 'No session will get the answer',
+      detail: 'The agent reads it when it checks.',
+    }
+  const name = nameOf(ask.answerTo)
+  const label = name ? `“${name}”` : `session ${ask.answerTo}`
+  if (ask.answerTo === ask.session)
+    return {
+      text: `Answer goes to ${label}`,
+      detail: 'The session that asked gets it.',
+    }
+  return {
+    text: `Answer goes to ${label} (asker ended)`,
+    detail:
+      'The session that asked has ended, so the session that launched it gets the answer.',
+  }
 }
 
 function Meta({ children }: { children: ReactNode }) {
@@ -482,6 +517,8 @@ function AskCard({
   onOpenSession?: () => void
 }) {
   const asker = useAsker(ask)
+  const nameOf = useSessionName()
+  const route = answerRoute(ask, nameOf)
   const reply = useAskReply()
   const [choice, setChoice] = useState<number | null>(null)
   const [note, setNote] = useState('')
@@ -492,7 +529,7 @@ function AskCard({
       .mutateAsync({ id: ask.id, reply: answer })
       .then(({ ask: saved }) =>
         onSent?.(
-          `${saved.delivery === 'wake' ? 'Sent to' : 'Saved for'} “${asker.name}”: ${said}.`,
+          `${saved.delivery === 'wake' ? 'Sent to' : 'Saved for'} “${(saved.answerTo && nameOf(saved.answerTo)) || asker.name}”: ${said}.`,
         ),
       )
       .catch(() => {
@@ -566,6 +603,16 @@ function AskCard({
             </button>
           ))}
         </div>
+      )}
+      {route && (
+        <p
+          data-testid="answer-route"
+          className="mb-1.5 truncate text-[12px]"
+          style={{ color: 'var(--mist)' }}
+          title={`${route.text}. ${route.detail}`}
+        >
+          {route.text}
+        </p>
       )}
       <form
         className="flex items-center gap-1.5"
