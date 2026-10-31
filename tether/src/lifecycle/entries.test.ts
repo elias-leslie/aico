@@ -10,6 +10,7 @@ import {
   ENTRY_TOOL_ENV,
   entryClaudeSession,
   entryCodexRollout,
+  entryPiSession,
   findEntryProcess,
   nodeProcFs,
   observeAgent,
@@ -34,8 +35,10 @@ import {
   sessionLaunchLine,
 } from './entries'
 import { createRootHandler, parseRootCreate, rootRequestDigest } from './root-control'
-import { initialLaunchLine } from './root-launch'
+import { initialLaunchLine, rootLaunchEnvironment, withRootPrompt } from './root-launch'
 import { codexTui, initStore, registerBuiltinTuis } from './testing'
+import { getTui } from './tui/registry'
+import type { TuiSpec } from './tui/spec'
 
 const CLAUDE = '5a7741ea-e6b1-4062-853b-0d9d2e03d549'
 const OLD = '6b7741ea-e6b1-4062-853b-0d9d2e03d549'
@@ -301,12 +304,14 @@ describe('root create with entry', () => {
         reason: 'entry.arg must match ^[a-z0-9][a-z0-9-]{0,79}$',
       },
     })
-    expect(await call(body('hunt-pi', { tool: 'pi', model: 'synthetic/model' }))).toEqual({
+    expect(
+      await call(body('hunt-agent-hub', { tool: 'agent-hub', agentSlug: 'synthetic-agent' })),
+    ).toEqual({
       status: 400,
       body: {
         error: 'invalid_body',
         field: 'entry',
-        reason: 'entry runs claude-code and codex sessions only',
+        reason: 'entry runs claude-code, codex and pi sessions only',
       },
     })
     expect(
@@ -319,7 +324,7 @@ describe('root create with entry', () => {
       'hunt-unknown',
       'hunt-config',
       'hunt-bad',
-      'hunt-pi',
+      'hunt-agent-hub',
       'hunt-codex-instr',
       'hunt-codex-unknown',
     ])
@@ -371,6 +376,201 @@ describe('root create with entry', () => {
     const resumed = run({ AICO_ROOT_RESUME_SESSION_ID: THREAD })
     expect(resumed).toEqual(expect.arrayContaining(['--model', 'gpt-6.1-sol', 'resume', THREAD]))
     removeWidget(widgetId)
+  })
+
+  it('runs Pi through the entry under a host-chosen id with either model, kept on every launch', async () => {
+    // A container-like synthetic entry: it records its own environment (what
+    // the host reads at /proc/<pid>/environ), then runs the line with nothing
+    // but the AICO_ROOT_* values a hunt entry forwards and the agent home as
+    // HOME. A pinned synthetic pi (no network, no provider) records its argv
+    // and writes a Pi-shaped session file named after the id it was given.
+    const piEnter = join(fixture, 'pi-enter')
+    const roots = [
+      'INITIAL_LAUNCH',
+      'INITIAL_PROMPT',
+      'RESUME_SESSION_ID',
+      'FRESH_SESSION_ID',
+      'MODEL',
+      'REASONING_EFFORT',
+      'DAYBREAK',
+      'AGENT_HUB_CONTEXT',
+    ].map((name) => `AICO_ROOT_${name}="$AICO_ROOT_${name}"`)
+    writeFileSync(
+      piEnter,
+      `#!/bin/sh\ncat /proc/$$/environ >"${fixture}/pi-enter-$1.environ"\nwhile [ "$1" != -- ]; do shift; done\nshift\nexec /usr/bin/env -i PATH=/usr/bin:/bin HOME="$${ENTRY_HOME_ENV}" ${roots.join(' ')} "$@"\n`,
+    )
+    chmodSync(piEnter, 0o755)
+    const pinned = join(fixture, 'pinned', 'pi-synthetic')
+    execFileSync('/bin/mkdir', ['-p', join(fixture, 'pinned')])
+    writeFileSync(
+      pinned,
+      [
+        '#!/bin/sh',
+        '# synthetic-pi: no network, no provider, no login',
+        'printf \'%s\\n\' "$@" >"$HOME/pi.args"',
+        '/usr/bin/env >"$HOME/pi.env"',
+        'id=; prev=',
+        'for a in "$@"; do case "$prev" in --session-id|--session) id="$a";; esac; prev="$a"; done',
+        'dir="$HOME/.pi/agent/sessions/--work--"',
+        'mkdir -p "$dir"',
+        `printf '%s\\n' '{"type":"message","timestamp":"2026-10-31T09:00:01.000Z","message":{"role":"user","content":"x"}}' '{"type":"message","timestamp":"2026-10-31T09:00:02.000Z","message":{"role":"assistant","stopReason":"stop","content":[]}}' >>"$dir/2026-10-31T09-00-00-000Z_$id.jsonl"`,
+        '',
+      ].join('\n'),
+    )
+    chmodSync(pinned, 0o755)
+    writeEntries({ 'neri-hunt': { argv: [piEnter], home: `${fixture}/pi-hunt/{arg}/home` } })
+    const tool = { ...(getTui('pi') as TuiSpec), command: [pinned, '--approve'] }
+    const models = ['opencode-go/deepseek-v4.1-flash', 'opencode-go/glm-5.3-flash']
+    const hunts = models.map((model, index) => ({ model, arg: `case-pi-${index}`, widgetId: '' }))
+    for (const hunt of hunts) {
+      const created = await call(
+        body(`hunt-${hunt.arg}`, {
+          tool: 'pi',
+          model: hunt.model,
+          reasoningEffort: 'high',
+          agentHubContext: true,
+          entry: { name: 'neri-hunt', arg: hunt.arg },
+        }),
+      )
+      expect(created.status).toBe(200)
+      hunt.widgetId = getRootRequest(`hunt-${hunt.arg}`)?.widgetId as string
+      execFileSync('/bin/mkdir', ['-p', `${fixture}/pi-hunt/${hunt.arg}/home`])
+    }
+    const homeOf = (arg: string) => `${fixture}/pi-hunt/${arg}/home`
+    const launch = (widgetId: string, arg: string, environment: Record<string, string>) => {
+      const line = sessionLaunchLine(widgetId, initialLaunchLine(widgetId, tool)) as string
+      // Preflight: the line runs the pinned synthetic pi through the entry and
+      // names no bare `pi` a host install could answer.
+      expect(
+        line.startsWith(
+          `/usr/bin/env ${ENTRY_HOME_ENV}=${homeOf(arg)} ${ENTRY_TOOL_ENV}=pi ${piEnter} ${arg} -- `,
+        ),
+      ).toBe(true)
+      expect(line).toContain(pinned)
+      expect(line).not.toMatch(/(^|[\s;'"])pi(\s|$)/)
+      expect(readFileSync(pinned, 'utf8')).toContain('# synthetic-pi')
+      rmSync(join(homeOf(arg), 'pi.args'), { force: true })
+      execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', line], {
+        env: { PATH: '/usr/bin:/bin', HOST_ONLY: 'not-for-the-entry', ...environment },
+      })
+      return readFileSync(join(homeOf(arg), 'pi.args'), 'utf8')
+        .split('\n')
+        .filter(Boolean)
+    }
+    // The host's view of a hunt: its entry process (as recorded) in a pane,
+    // its home read through the contained readers.
+    const look = (arg: string) => {
+      const proc = procfs({
+        '/proc/10/task/10/children': '11',
+        '/proc/11/task/11/children': '',
+        '/proc/11/stat': '11 (pi-enter)',
+        '/proc/11/environ': readFileSync(join(fixture, `pi-enter-${arg}.environ`), 'utf8'),
+      })
+      const fs: ProcFs = {
+        ...nodeProcFs,
+        readFile: (path) => (path.startsWith('/proc/') ? proc : nodeProcFs).readFile(path),
+        readdir: (path) => (path.startsWith('/proc/') ? proc : nodeProcFs).readdir(path),
+      }
+      return { entry: findEntryProcess(fs, [10, 11]), seen: observeAgent(fs, '/h', 10) }
+    }
+    const selection = (model: string) => [
+      '--provider',
+      'opencode-go',
+      '--model',
+      model.slice('opencode-go/'.length),
+      '--thinking',
+      'high',
+    ]
+    const chosen = new Map<string, string>()
+    for (const hunt of hunts) {
+      // First launch: the options come from the stored reservation.
+      await withRootPrompt(hunt.widgetId, 'Synthetic brief.', async () => {
+        const environment = rootLaunchEnvironment(hunt.widgetId)
+        const fresh = environment.AICO_ROOT_FRESH_SESSION_ID as string
+        expect(fresh).toMatch(/^[0-9a-f-]{36}$/)
+        expect(environment).toMatchObject({
+          AICO_ROOT_MODEL: hunt.model,
+          AICO_ROOT_REASONING_EFFORT: 'high',
+          AICO_ROOT_AGENT_HUB_CONTEXT: 'true',
+        })
+        const args = launch(hunt.widgetId, hunt.arg, environment)
+        expect(args).toEqual([
+          '--approve',
+          ...selection(hunt.model),
+          '--session-id',
+          fresh,
+          '--',
+          'Synthetic brief.',
+        ])
+        const { entry, seen } = look(hunt.arg)
+        expect(entry).toMatchObject({
+          pid: 11,
+          home: homeOf(hunt.arg),
+          tool: 'pi',
+          chosenId: fresh,
+        })
+        expect(seen).toEqual({ pid: 11, resumeId: fresh, idle: null, blocked: false })
+        chosen.set(hunt.arg, fresh)
+      })
+      // Inside: the agent got its id and selection, never the host's other
+      // variables, the prompt variable or the fresh id variable itself.
+      const inside = readFileSync(join(homeOf(hunt.arg), 'pi.env'), 'utf8')
+      expect(inside).toContain(`TETHER_AGENT_SESSION_ID=${chosen.get(hunt.arg)}`)
+      expect(inside).toContain(`AICO_ROOT_MODEL=${hunt.model}`)
+      expect(inside).not.toMatch(
+        /HOST_ONLY|AICO_ROOT_INITIAL_PROMPT|AICO_ROOT_FRESH_SESSION_ID|TETHER_ENTRY_HOME/,
+      )
+    }
+    // Two hunts: each resolves only its own conversation in its own home.
+    const [a, b] = hunts as [(typeof hunts)[0], (typeof hunts)[0]]
+    const idA = chosen.get(a.arg) as string
+    const idB = chosen.get(b.arg) as string
+    expect(idA).not.toBe(idB)
+    expect(look(a.arg).seen?.resumeId).toBe(idA)
+    expect(look(b.arg).seen?.resumeId).toBe(idB)
+    expect(entryPiSession(nodeProcFs, homeOf(a.arg), idB)?.path).toBeNull()
+    expect(entryPiSession(nodeProcFs, homeOf(b.arg), idA)?.path).toBeNull()
+    // Crash recovery / reboot restore: resumes exactly that id, same selection
+    // (no options passed: they come back from the reservation).
+    await withRootPrompt(
+      a.widgetId,
+      'Resume.',
+      async () => {
+        const args = launch(a.widgetId, a.arg, rootLaunchEnvironment(a.widgetId))
+        expect(args).toEqual([
+          '--approve',
+          ...selection(a.model),
+          '--session',
+          idA,
+          '--',
+          'Resume.',
+        ])
+        expect(look(a.arg).seen?.resumeId).toBe(idA)
+      },
+      idA,
+    )
+    // Restart with nothing to resume: a new conversation under a new
+    // host-chosen id, same selection, and it is the one observed.
+    const later = rootLaunchEnvironment(a.widgetId)
+    expect(later.AICO_ROOT_INITIAL_LAUNCH).toBe('0')
+    const restarted = launch(a.widgetId, a.arg, later)
+    expect(restarted).toEqual([
+      '--approve',
+      ...selection(a.model),
+      '--session-id',
+      later.AICO_ROOT_FRESH_SESSION_ID,
+    ])
+    expect(later.AICO_ROOT_FRESH_SESSION_ID).not.toBe(idA)
+    expect(look(a.arg).seen?.resumeId).toBe(later.AICO_ROOT_FRESH_SESSION_ID)
+    expect(look(b.arg).seen?.resumeId).toBe(idB)
+    // End: the entry and the kept options go with the session.
+    for (const hunt of hunts) {
+      removeWidget(hunt.widgetId)
+      expect(getSessionEntry(hunt.widgetId)).toBeNull()
+      expect(sessionEntryHome(hunt.widgetId)).toBeNull()
+      expect(rootLaunchEnvironment(hunt.widgetId).AICO_ROOT_MODEL).toBe('')
+      rmSync(`${fixture}/pi-hunt/${hunt.arg}`, { recursive: true, force: true })
+    }
   })
 
   it('fails closed when the entry left entries.json after the create', () => {
@@ -428,7 +628,7 @@ describe('root create with entry', () => {
       )
     const marker = join(fixture, 'host-ran-codex')
     reserve('e0e0e0e2', 'codex')
-    reserve('e0e0e0e3', 'pi')
+    reserve('e0e0e0e3', 'agy')
     // Listed, but the session's tool is not one an entry runs: never on the host.
     let run = spawnSync(
       '/bin/sh',
@@ -438,7 +638,7 @@ describe('root create with entry', () => {
       },
     )
     expect(run.status).toBe(ENTRY_MISSING_EXIT)
-    expect(run.stderr).toContain('entry neri-hunt cannot run pi')
+    expect(run.stderr).toContain('entry neri-hunt cannot run agy')
     writeEntries({})
     run = spawnSync('/bin/sh', ['-c', sessionLaunchLine('e0e0e0e2', `touch ${marker}`) as string], {
       encoding: 'utf8',
@@ -482,7 +682,12 @@ describe('entry session state', () => {
         updatedAt: 200,
       }),
     })
-    expect(findEntryProcess(fs, [10, 11, 12])).toEqual({ pid: 11, home: HOME, tool: 'claude-code' })
+    expect(findEntryProcess(fs, [10, 11, 12])).toEqual({
+      pid: 11,
+      home: HOME,
+      tool: 'claude-code',
+      chosenId: null,
+    })
     expect(observeAgent(fs, '/h', 10)).toEqual({
       pid: 11,
       resumeId: CLAUDE,
@@ -579,7 +784,12 @@ describe('entry session state', () => {
         [`${day}/rollout-2026-10-31T09-00-00-b.jsonl`]: 300,
         [`${day}/rollout-2026-10-31T09-30-00-c.jsonl`]: 400,
       })
-      expect(findEntryProcess(fs, [10, 11, 12])).toEqual({ pid: 11, home: HOME, tool: 'codex' })
+      expect(findEntryProcess(fs, [10, 11, 12])).toEqual({
+        pid: 11,
+        home: HOME,
+        tool: 'codex',
+        chosenId: null,
+      })
       expect(entryCodexRollout(fs, HOME)).toEqual({
         path: `${day}/rollout-2026-10-31T09-00-00-b.jsonl`,
         threadId: THREAD,
@@ -605,12 +815,17 @@ describe('entry session state', () => {
       const fs = procfs(
         {
           ...files,
-          '/proc/11/environ': `${ENTRY_HOME_ENV}=${HOME}\0${ENTRY_TOOL_ENV}=pi\0`,
+          '/proc/11/environ': `${ENTRY_HOME_ENV}=${HOME}\0${ENTRY_TOOL_ENV}=agy\0`,
           [`${HOME}/.claude/sessions/9.json`]: containerFile(9, {}),
         },
         links,
       )
-      expect(findEntryProcess(fs, [10, 11, 12])).toEqual({ pid: 11, home: HOME, tool: null })
+      expect(findEntryProcess(fs, [10, 11, 12])).toEqual({
+        pid: 11,
+        home: HOME,
+        tool: null,
+        chosenId: null,
+      })
       expect(observeAgent(fs, '/h', 10)).toBeNull()
     })
 

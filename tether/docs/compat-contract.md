@@ -71,6 +71,7 @@ Set on every pane Tether creates (`src/markers.ts`):
 | `AICO_ROOT_INITIAL_LAUNCH` | `1` or `0` (roots only) | `root-launch.ts` |
 | `AICO_ROOT_INITIAL_PROMPT` | Transient prompt (roots only). It is unset again in the agent's own environment. | `root-launch.ts` |
 | `AICO_ROOT_RESUME_SESSION_ID` | Native resume UUID or empty (roots only) | `root-launch.ts` |
+| `AICO_ROOT_FRESH_SESSION_ID` | A new UUID per launch for a tool that starts under an id Tether picks (Pi), else empty (roots only); unset again in the agent's own environment. Tether reads it back from an entry process (Tether API 20). | `root-launch.ts` |
 | `A_TERM_SESSION_ID` | Web app session UUID, only when the web app created the session | web `agent_service.py`, `root_workloads.py` |
 
 Correction to the migration plan: `AICO_TMUX_SOCKET` is not a pane marker. Aico never sets it in panes; a live Aico pane today carries no such variable. Aico reads it as a process override of its internal socket (`tmux.ts`), so exporting it into panes would redirect any Aico started from a session. Tether does not set it. Panes find their server through tmux's own `TMUX` variable.

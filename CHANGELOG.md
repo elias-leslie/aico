@@ -4,6 +4,23 @@
 
 ### Added
 
+- Pi roots through a per-session entry (Tether API 20): `POST /v1/roots` and
+  `st aico create --tool pi --entry NAME:ARG` run Pi through the host's
+  entries.json program on every launch, with `TETHER_ENTRY_TOOL=pi`. The host
+  picks each launch's conversation id (`AICO_ROOT_FRESH_SESSION_ID`, a new
+  one per launch, unset again in the agent's own environment); the launch
+  line gives Pi `--session-id` with it (`--session <id>` on a resume). Tether
+  reads the id back from the entry process's environment and Pi's state from
+  `<home>/.pi/agent/sessions/*/<time>_<id>.jsonl` by that exact id through the
+  contained entry readers (a link, FIFO or replaced parent reads as nothing),
+  never by scanning and never the host `~/.pi`. Explicit model, effort and
+  Agent Hub context are kept for recovery, restart, wakes and reboot restore.
+  A Pi root's restart with nothing to resume (entry or not) now starts its new
+  conversation under a host-chosen id too, so it stays found and resumable.
+  The hub sends a `pi` root's entry only to a host at API 20 or later (else
+  `400 entry_unsupported`, nothing sent); the CLI checks `/v1/version` (20)
+  and skips this computer's Pi provider check for an entry. No auth,
+  credential or relay change.
 - Entry home containment: Tether's host-side reads of an entry home (Claude
   session files, Codex rollouts and their tail, crash-recovery transcripts)
   open without following a last-component symlink or blocking on a FIFO and

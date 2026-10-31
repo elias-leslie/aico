@@ -21,8 +21,10 @@ import { join } from 'node:path'
  *     (nudge); asks carry `answerTo`.
  * 18: wait kind `cmd` (`argv`, `cwd`); `DELETE /v1/sessions/:id/deliveries?source=`
  *     (withdraw); agy sessions take event lines.
- * 19: `entry` runs `codex` roots too (state from the entry home's rollouts). */
-export const API_VERSION = 19
+ * 19: `entry` runs `codex` roots too (state from the entry home's rollouts).
+ * 20: `entry` runs `pi` roots too (the conversation id Tether chose, read from
+ *     the entry home's Pi session file). */
+export const API_VERSION = 20
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

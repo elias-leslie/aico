@@ -605,6 +605,43 @@ describe('hub', () => {
       },
     })
     expect(peer.requests.filter((r) => r.url === '/v1/roots')).toHaveLength(sent)
+    // A Pi root through an entry needs API 20: refused at 18 and 19, nothing sent.
+    const pi = { host: 'vm', tool: 'pi', model: 'opencode-go/glm-5.3-flash', entry }
+    expect(await call('POST', '/v1/roots', { ...pi, requestId: 'req-e4' })).toEqual({
+      status: 400,
+      body: {
+        error: 'entry_unsupported',
+        host: 'vm',
+        reason: expect.stringContaining('entries run claude-code only (API 18)'),
+      },
+    })
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('offline'))
+    peer.apiVersion = 19
+    await peer.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
+    expect(await call('POST', '/v1/roots', { ...pi, requestId: 'req-e5' })).toEqual({
+      status: 400,
+      body: {
+        error: 'entry_unsupported',
+        host: 'vm',
+        reason: expect.stringContaining('entries run claude-code and codex only (API 19)'),
+      },
+    })
+    expect(peer.requests.filter((r) => r.url === '/v1/roots')).toHaveLength(sent)
+    // At 20 it goes as sent (the host's own entries.json decides the name).
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('offline'))
+    peer.apiVersion = 20
+    await peer.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
+    await call('POST', '/v1/roots', { ...pi, requestId: 'req-e6' })
+    expect(peer.requests.filter((r) => r.url === '/v1/roots').at(-1)?.body).toEqual({
+      requestId: 'req-e6',
+      tool: 'pi',
+      model: 'opencode-go/glm-5.3-flash',
+      entry,
+    })
   })
 
   it('serves the cache while a failing list has its circuit open', async () => {

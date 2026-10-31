@@ -366,10 +366,30 @@ def test_codex_entry_is_sent_and_never_checks_this_computers_codex(monkeypatch):
         assert output[0]["status"] == "running" and output[0]["entry"] == payload["entry"]
 
 
-def test_entry_is_claude_code_or_codex_only_and_its_refusals_carry_the_reason(monkeypatch, capsys):
+def test_pi_entry_is_sent_with_either_model_and_never_checks_this_computers_pi(monkeypatch):
+    # The entry's Pi has its own provider setup: this computer's Pi login is not asked.
+    monkeypatch.setattr(admin, "pi_provider_unavailable", lambda *_: pytest.fail("checked local Pi"))
+    monkeypatch.setattr(admin, "opencode_go_quota_block", lambda *_: None)
+    tools = {"items": [*TOOLS["items"], {"slug": "pi", "enabled": True, "rootCapable": True}]}
+    for model in ("opencode-go/deepseek-v4.1-flash", "opencode-go/glm-5.3-flash"):
+        for argv in (on_host("pi"), on_host("pi")[:-2]):
+            calls, output = [], []
+            monkeypatch.setattr(admin.Collector, "receipt",
+                                owner(calls, tools=(200, tools), version=(200, {"apiVersion": 20})))
+            monkeypatch.setattr(admin, "emit_json", lambda _, record, output=output: output.append(record))
+            assert admin.main([*argv, "--model", model, "--reasoning-effort", "high",
+                               "--entry", "neri-hunt-box:slot-1"]) == 0
+            payload = calls[-1][1]
+            assert payload["tool"] == "pi" and payload["model"] == model
+            assert payload["reasoningEffort"] == "high"
+            assert payload["entry"] == {"name": "neri-hunt-box", "arg": "slot-1"}
+            assert output[0]["status"] == "running" and output[0]["entry"] == payload["entry"]
+
+
+def test_entry_is_claude_code_codex_or_pi_only_and_its_refusals_carry_the_reason(monkeypatch, capsys):
     with pytest.raises(SystemExit):
-        admin.main([*on_host("pi"), "--model", "synthetic/model", "--entry", "neri-hunt-box:slot-1"])
-    assert "--entry runs claude-code and codex sessions only" in capsys.readouterr().err
+        admin.main([*on_host("agy"), "--entry", "neri-hunt-box:slot-1"])
+    assert "--entry runs claude-code, codex and pi sessions only" in capsys.readouterr().err
     output = []
     refusal = (400, {"error": "unknown_entry", "entry": "neri-hunt-box",
                      "reason": "agent-work's entries.json has no neri-hunt-box"})
@@ -390,22 +410,25 @@ def test_entry_is_claude_code_or_codex_only_and_its_refusals_carry_the_reason(mo
 
 
 def test_entry_is_gated_on_this_computers_tether_api(monkeypatch, capsys):
-    # Codex entries need API 19 and Claude entries 15; nothing is created otherwise.
-    tools = {"items": [*TOOLS["items"], {"slug": "codex", "enabled": True, "rootCapable": True}]}
+    # Pi entries need API 20, Codex entries 19 and Claude entries 15; nothing is created otherwise.
+    monkeypatch.setattr(admin, "opencode_go_quota_block", lambda *_: None)
+    tools = {"items": [*TOOLS["items"], {"slug": "codex", "enabled": True, "rootCapable": True},
+                       {"slug": "pi", "enabled": True, "rootCapable": True}]}
     for tool, version, ok in (("codex", 18, False), ("codex", 19, True), ("claude-code", 14, False),
-                              ("claude-code", 15, True)):
+                              ("claude-code", 15, True), ("pi", 19, False), ("pi", 20, True)):
         calls = []
         monkeypatch.setattr(admin.Collector, "receipt",
                             owner(calls, tools=(200, tools), version=(200, {"apiVersion": version})))
         monkeypatch.setattr(admin, "emit_json", lambda *_: None)
-        argv = [*on_host(tool), "--entry", "neri-hunt-box:slot-1"]
+        argv = [*on_host(tool), "--entry", "neri-hunt-box:slot-1",
+                *(["--model", "opencode-go/glm-5.3-flash"] if tool == "pi" else [])]
         if ok:
             assert admin.main(argv) == 0
             assert calls[-1][0] == "/v1/roots"
             continue
         with pytest.raises(SystemExit):
             admin.main(argv)
-        needed = 19 if tool == "codex" else 15
+        needed = admin.ENTRY_API[tool]
         assert (f"--entry for {tool} needs Tether API {needed} or later; "
                 f"this computer's Tether answers API {version}") in capsys.readouterr().err
         assert all(route != "/v1/roots" for route, *_ in calls)

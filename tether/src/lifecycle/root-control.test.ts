@@ -888,6 +888,7 @@ describe('private root workload control', () => {
       AICO_ROOT_REASONING_EFFORT: '',
       AICO_ROOT_DAYBREAK: '',
       AICO_ROOT_AGENT_HUB_CONTEXT: '',
+      AICO_ROOT_FRESH_SESSION_ID: '',
     })
     const replacementResult = execFileSync(
       '/bin/bash',
@@ -1190,24 +1191,38 @@ describe('private root workload control', () => {
           resume,
           { model: input.model, reasoningEffort: 'xhigh', daybreak, agentHubContext: false },
         )
-    // Later launches get the created selection back, never a prompt.
+    // Later launches get the created selection back, never a prompt, and a
+    // new conversation under the id the host picked for that launch.
     const later = rootLaunchEnvironment(root.widgetId)
     expect(later.AICO_ROOT_DAYBREAK).toBe('true')
     expect(later.AICO_ROOT_AGENT_HUB_CONTEXT).toBe('false')
-    expect(
-      JSON.parse(
-        execFileSync(
-          '/bin/bash',
-          ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
-          { env: { PATH: '/usr/bin:/bin', ...later }, encoding: 'utf8' },
+    expect(later.AICO_ROOT_FRESH_SESSION_ID).toMatch(UUID)
+    expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_FRESH_SESSION_ID).not.toBe(
+      later.AICO_ROOT_FRESH_SESSION_ID,
+    )
+    for (const line of [initialLaunchLine(root.widgetId, tool), relaunchLine(root.widgetId, tool)])
+      expect(
+        JSON.parse(
+          execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', present(line)], {
+            env: { PATH: '/usr/bin:/bin', ...later },
+            encoding: 'utf8',
+          }),
         ),
-      ),
-    ).toEqual({
-      args: ['--provider', 'openai', '--model', 'gpt-6-sol', '--thinking', 'xhigh'],
-      model: input.model,
-      daybreak: 'true',
-      context: 'false',
-    })
+      ).toEqual({
+        args: [
+          '--provider',
+          'openai',
+          '--model',
+          'gpt-6-sol',
+          '--thinking',
+          'xhigh',
+          '--session-id',
+          later.AICO_ROOT_FRESH_SESSION_ID,
+        ],
+        model: input.model,
+        daybreak: 'true',
+        context: 'false',
+      })
   })
 
   it('launches Pi with one --approve and carries its chosen session ID to the agent', async () => {
@@ -1232,18 +1247,18 @@ describe('private root workload control', () => {
         root.widgetId,
         'Reply only.',
         async () => {
+          const environment = rootLaunchEnvironment(root.widgetId)
           const result = JSON.parse(
             execFileSync(
               '/bin/bash',
               ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
-              {
-                env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
-                encoding: 'utf8',
-              },
+              { env: { PATH: '/usr/bin:/bin', ...environment }, encoding: 'utf8' },
             ),
           ) as { args: string[]; session: string }
           const session = resume ?? result.session
           expect(session).toMatch(UUID)
+          // A fresh conversation is the id the host picked for this launch.
+          if (!resume) expect(session).toBe(environment.AICO_ROOT_FRESH_SESSION_ID)
           expect(result).toEqual({
             args: [
               '--approve',

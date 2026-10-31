@@ -71,6 +71,8 @@ const PARENT_API_VERSION = 9
 const ENTRY_API_VERSION = 15
 /** The first Tether API that runs a Codex root through an entry. */
 const CODEX_ENTRY_API_VERSION = 19
+/** The first Tether API that runs a Pi root through an entry. */
+const PI_ENTRY_API_VERSION = 20
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -501,6 +503,17 @@ export class Hub {
       throw new HttpError(400, 'entry_unsupported', {
         host: peer.name,
         reason: `${peer.name} runs a Tether whose entries run claude-code only (API ${peer.apiVersion ?? 'unknown'})`,
+      })
+    if (
+      path === '/v1/roots' &&
+      forwarded.entry !== undefined &&
+      forwarded.entry !== null &&
+      forwarded.tool === 'pi' &&
+      (peer.apiVersion ?? 0) < PI_ENTRY_API_VERSION
+    )
+      throw new HttpError(400, 'entry_unsupported', {
+        host: peer.name,
+        reason: `${peer.name} runs a Tether whose entries run ${(peer.apiVersion ?? 0) >= CODEX_ENTRY_API_VERSION ? 'claude-code and codex' : 'claude-code'} only (API ${peer.apiVersion ?? 'unknown'})`,
       })
     if (path === '/v1/roots' && typeof forwarded.launchedBy === 'string') {
       const launcher = forwarded.launchedBy

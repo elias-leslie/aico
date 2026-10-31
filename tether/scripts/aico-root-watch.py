@@ -1501,7 +1501,7 @@ def create_main(argv: list[str]) -> int:
         "default: the default pool"))
     parser.add_argument("--entry", type=entry_spec, metavar="NAME:ARG", help=(
         "run the agent through the program the host's ~/.config/tether/entries.json names NAME, with ARG "
-        "(e.g. a hunt slot), on every launch; claude-code (Tether API 15) or codex (API 19), "
+        "(e.g. a hunt slot), on every launch; claude-code (Tether API 15), codex (API 19) or pi (API 20), "
         "not with --instructions"))
     parser.add_argument("--root-socket", type=socket_path)
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
@@ -1570,8 +1570,8 @@ def create_main(argv: list[str]) -> int:
             refuse(f"--needs: {error}")
     if args.pool is not None and not auto:
         refuse("--pool goes with --host auto")
-    if args.entry is not None and args.tool not in ("claude-code", "codex"):
-        refuse("--entry runs claude-code and codex sessions only")
+    if args.entry is not None and args.tool not in ENTRY_API:
+        refuse("--entry runs claude-code, codex and pi sessions only")
     if args.entry is not None and args.instructions is not None:
         refuse("--entry does not take --instructions")
     if args.host is not None and (here := agent_host()):
@@ -1597,8 +1597,9 @@ def create_main(argv: list[str]) -> int:
             # This computer's Codex and Pi logins say nothing about the host's; ask its Tether.
             if (reason := host_tool_unavailable(collector, endpoint, args.host, args.tool)):
                 refuse(reason)
-        elif args.tool == "pi" and (reason := pi_provider_unavailable(args.model)):
+        elif args.tool == "pi" and args.entry is None and (reason := pi_provider_unavailable(args.model)):
             # Nothing reaches Tether, so the same request id can be retried with the right provider.
+            # An entry's Pi has its own provider setup; this computer's says nothing about it.
             refuse(reason)
         if not args.host and args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
             # Nothing reaches Tether, so the same request id can be retried after the reset.
@@ -2053,8 +2054,8 @@ def root_main(argv: list[str]) -> int:
 
 # Tether API that takes inject `from` (general waits); an older one refuses the field.
 SEND_FROM_API = 13
-# Tether API that runs a root's `entry` for each tool: Claude Code since 15, Codex since 19.
-ENTRY_API = {"claude-code": 15, "codex": 19}
+# Tether API that runs a root's `entry` for each tool: Claude Code since 15, Codex since 19, Pi since 20.
+ENTRY_API = {"claude-code": 15, "codex": 19, "pi": 20}
 
 
 def entry_api_refusal(collector: Collector, endpoint: str, tool: str) -> str | None:

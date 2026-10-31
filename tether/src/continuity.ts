@@ -283,7 +283,7 @@ export const ENTRY_HOME_ENV = 'TETHER_ENTRY_HOME'
  * marker existed has none and is Claude Code (the only entry tool then). */
 export const ENTRY_TOOL_ENV = 'TETHER_ENTRY_TOOL'
 /** The tools an entry can run: Tether reads their state from the entry home. */
-export const ENTRY_TOOLS = ['claude-code', 'codex'] as const
+export const ENTRY_TOOLS = ['claude-code', 'codex', 'pi'] as const
 export type EntryTool = (typeof ENTRY_TOOLS)[number]
 
 export interface EntryProcess {
@@ -293,6 +293,21 @@ export interface EntryProcess {
   home: string
   /** The agent it runs; null for a marker naming no entry tool (read nothing). */
   tool: EntryTool | null
+  /** The conversation id Tether chose for this launch (Pi), from the entry
+   * process's own environment as root-launch.ts set it: the resume id of an
+   * initial launch that resumes, else the fresh id. null when it carries none. */
+  chosenId: string | null
+}
+
+/** The id the launch line hands the agent (root-launch.ts `chooseSession`),
+ * read back from the same variables: a resume only on an initial launch. */
+function chosenSessionId(vars: Map<string, string>): string | null {
+  const resume = vars.get('AICO_ROOT_RESUME_SESSION_ID') ?? ''
+  const id =
+    vars.get('AICO_ROOT_INITIAL_LAUNCH') === '1' && resume
+      ? resume
+      : (vars.get(FRESH_SESSION_ENV) ?? '')
+  return UUID_RE.test(id) ? id : null
 }
 
 /** The pane's entry process, the first in pane order marked with the home. */
@@ -304,15 +319,21 @@ export function findEntryProcess(fs: ProcFs, pids: number[]): EntryProcess | nul
     } catch {
       continue
     }
-    let home: string | null = null
-    let tool: string | null = null
+    const vars = new Map<string, string>()
     for (const entry of environ.split('\0')) {
-      if (entry.startsWith(`${ENTRY_HOME_ENV}=`)) home = entry.slice(ENTRY_HOME_ENV.length + 1)
-      else if (entry.startsWith(`${ENTRY_TOOL_ENV}=`)) tool = entry.slice(ENTRY_TOOL_ENV.length + 1)
+      const eq = entry.indexOf('=')
+      if (eq > 0) vars.set(entry.slice(0, eq), entry.slice(eq + 1))
     }
+    const home = vars.get(ENTRY_HOME_ENV) ?? null
+    const tool = vars.get(ENTRY_TOOL_ENV) ?? null
     if (home === null || !isAbsolute(home)) continue
     const known = (ENTRY_TOOLS as readonly string[]).includes(tool ?? 'claude-code')
-    return { pid, home, tool: known ? ((tool ?? 'claude-code') as EntryTool) : null }
+    return {
+      pid,
+      home,
+      tool: known ? ((tool ?? 'claude-code') as EntryTool) : null,
+      chosenId: chosenSessionId(vars),
+    }
   }
   return null
 }
@@ -412,11 +433,67 @@ export function entryCodexRollout(
   return null
 }
 
+/** Pi's session file for conversation `id` under `home`:
+ * `.pi/agent/sessions/--<cwd>--/<time>_<id>.jsonl`, matched by its exact
+ * suffix (Pi names the file after the id `--session-id` gave it). null until
+ * Pi writes it (after its first prompt). At most `limit` cwd directories are
+ * looked in. */
+export function piSessionFile(
+  fs: ProcFs,
+  home: string,
+  id: string,
+  limit = Number.POSITIVE_INFINITY,
+): string | null {
+  if (!UUID_RE.test(id)) return null
+  const root = `${home}/.pi/agent/sessions`
+  const suffix = `_${id}.jsonl`
+  let dirs: string[]
+  try {
+    dirs = fs.readdir(root)
+  } catch {
+    return null
+  }
+  for (const dir of dirs.slice(0, limit)) {
+    if (dir.startsWith('.') || dir.includes('/')) continue
+    let names: string[]
+    try {
+      names = fs.readdir(`${root}/${dir}`)
+    } catch {
+      continue
+    }
+    const name = names.find((entry) => entry.endsWith(suffix) && !entry.includes('/'))
+    if (!name) continue
+    const path = `${root}/${dir}/${name}`
+    // An entry home's readers open it to time it: a link or anything that is
+    // not a regular file inside the home has no time and is not this session.
+    if (fs.mtimeMs && fs.mtimeMs(path) === null) continue
+    return path
+  }
+  return null
+}
+
+/** An entry session's Pi conversation: the id Tether chose for this launch
+ * (never one found by scanning) and its session file in the entry home. */
+export function entryPiSession(
+  fs: ProcFs,
+  home: string,
+  chosenId: string | null,
+  scan: EntryScanConfig = ENTRY_SCAN_DEFAULTS,
+): { sessionId: string; path: string | null } | null {
+  if (!chosenId) return null
+  return { sessionId: chosenId, path: piSessionFile(fs, home, chosenId, scan.rolloutScan) }
+}
+
 /** An entry session's agent: its state from the entry home, standing on the
  * entry process (the pane's agent exits when it does). Never the host home. */
 export function observeEntryAgent(fs: ProcFs, entry: EntryProcess): AgentObservation | null {
   const readers = entry.tool ? entryReaders(fs, entry.home) : null
   if (!readers) return null
+  if (entry.tool === 'pi') {
+    // Resumable once Pi has written the conversation (as Codex's rollout).
+    const pi = entryPiSession(readers.fs, readers.home, entry.chosenId, readers.scan)
+    return pi?.path ? { pid: entry.pid, resumeId: pi.sessionId, idle: null, blocked: false } : null
+  }
   if (entry.tool === 'codex') {
     const threadId = entryCodexRollout(readers.fs, readers.home, readers.scan)?.threadId
     return threadId ? { pid: entry.pid, resumeId: threadId, idle: null, blocked: false } : null
@@ -457,6 +534,10 @@ export function observeCodex(fs: ProcFs, pids: number[]): AgentObservation | nul
 /** Environment variable carrying the conversation ID Tether chose for an
  * agent that keeps no observable session record (root-launch.ts). */
 export const AGENT_SESSION_ENV = 'TETHER_AGENT_SESSION_ID'
+/** The fresh conversation id Tether picks host-side for such an agent's launch
+ * (root-launch.ts), so a host reader knows it even when the agent runs where
+ * its environment cannot be read (an entry's container). */
+export const FRESH_SESSION_ENV = 'AICO_ROOT_FRESH_SESSION_ID'
 
 /** The first process in `pids` (pane order, so the agent before anything it
  * started) launched under a Tether-chosen conversation ID. */

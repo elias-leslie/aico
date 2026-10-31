@@ -23,10 +23,12 @@ import {
   codexUserRollouts,
   entryClaudeSession,
   entryCodexRollout,
+  entryPiSession,
   entryReaders,
   findEntryProcess,
   observeChosenSession,
   type ProcFs,
+  piSessionFile,
   processTree,
   UUID_RE,
 } from './continuity'
@@ -360,25 +362,11 @@ export function findPiSession(
 ): { pid: number; sessionId: string; path: string | null } | null {
   const chosen = observeChosenSession(fs, pids)
   if (!chosen) return null
-  const root = `${home}/.pi/agent/sessions`
-  const suffix = `_${chosen.resumeId}.jsonl`
-  let dirs: string[]
-  try {
-    dirs = fs.readdir(root)
-  } catch {
-    dirs = []
+  return {
+    pid: chosen.pid,
+    sessionId: chosen.resumeId,
+    path: piSessionFile(fs, home, chosen.resumeId),
   }
-  for (const dir of dirs) {
-    let names: string[]
-    try {
-      names = fs.readdir(`${root}/${dir}`)
-    } catch {
-      continue
-    }
-    const name = names.find((entry) => entry.endsWith(suffix))
-    if (name) return { pid: chosen.pid, sessionId: chosen.resumeId, path: `${root}/${dir}/${name}` }
-  }
-  return { pid: chosen.pid, sessionId: chosen.resumeId, path: null }
 }
 
 /** Incremental reader of one Pi session file. Pi appends each message when it
@@ -1004,6 +992,14 @@ export class AgentStatePoller {
           ? { kind: 'claude', pid: entry.pid, file: session.file, files: readers.fs }
           : { kind: 'none' }
       }
+      if (entry.tool === 'pi') {
+        // Only the conversation this launch was given, read through the
+        // home's contained tail.
+        const pi = entryPiSession(readers.fs, readers.home, entry.chosenId, readers.scan)
+        return pi
+          ? this.piFound(entry.pid, pi, previous, readers.tail ?? this.options.tail)
+          : { kind: 'none' }
+      }
       const rollout = entryCodexRollout(readers.fs, readers.home, readers.scan)
       return rollout
         ? this.codexFound(entry.pid, rollout, previous, readers.tail ?? this.options.tail)
@@ -1014,17 +1010,30 @@ export class AgentStatePoller {
     const codex = findCodexRollout(this.fs, pids)
     if (codex) return this.codexFound(codex.pid, codex, previous, this.options.tail)
     const pi = findPiSession(this.fs, this.home, pids)
-    if (pi) {
-      if (previous.kind === 'pi' && previous.session?.path === pi.path)
-        return { ...previous, pid: pi.pid }
-      return {
-        kind: 'pi',
-        pid: pi.pid,
-        sessionId: pi.sessionId,
-        session: pi.path ? new PiSession(pi.path, pi.sessionId, this.options.tail) : null,
-      }
-    }
+    if (pi) return this.piFound(pi.pid, pi, previous, this.options.tail)
     return this.agyFound(pids, previous) ?? { kind: 'none' }
+  }
+
+  /** A Pi session to read; the reader (and its offset) is kept while the
+   * file is the same. */
+  private piFound(
+    pid: number,
+    pi: { sessionId: string; path: string | null },
+    previous: Found,
+    tail: FileTail | undefined,
+  ): Found {
+    if (
+      previous.kind === 'pi' &&
+      previous.sessionId === pi.sessionId &&
+      (previous.session?.path ?? null) === pi.path
+    )
+      return { ...previous, pid }
+    return {
+      kind: 'pi',
+      pid,
+      sessionId: pi.sessionId,
+      session: pi.path ? new PiSession(pi.path, pi.sessionId, tail) : null,
+    }
   }
 
   /** A Codex rollout to read; the reader (and its offset) is kept while the

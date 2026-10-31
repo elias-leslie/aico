@@ -1,4 +1,5 @@
-import { AGENT_SESSION_ENV } from '../continuity'
+import { randomUUID } from 'node:crypto'
+import { AGENT_SESSION_ENV, FRESH_SESSION_ENV } from '../continuity'
 import { getLaunchOptions, getWidget, rootRequestForWidget } from './catalog'
 import type { RootLaunchOptions } from './root-control'
 import { isResumeSessionId, launchLine, resumeLaunchLine } from './tui/launch'
@@ -70,6 +71,12 @@ export function rootLaunchEnvironment(widgetId: string): Record<string, string> 
     AICO_ROOT_REASONING_EFFORT: options?.reasoningEffort ?? '',
     AICO_ROOT_DAYBREAK: options?.daybreak?.toString() ?? '',
     AICO_ROOT_AGENT_HUB_CONTEXT: options?.agentHubContext?.toString() ?? '',
+    // A tool that starts under an ID Tether picks gets a new one per launch,
+    // picked here so a host reader knows it wherever the agent runs (an
+    // entry's container: continuity.ts findEntryProcess).
+    [FRESH_SESSION_ENV]: getTui(getWidget(widgetId)?.tool ?? '')?.resume?.freshArguments
+      ? randomUUID()
+      : '',
   }
 }
 
@@ -111,21 +118,37 @@ function selectionFlags(tool: TuiSpec): string {
 /** Prompt bytes are always removed; other tools receive no Pi metadata. */
 function cleanEnvironment(tool: TuiSpec): string {
   return (
-    '/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u AICO_ROOT_REASONING_EFFORT' +
+    `/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u ${FRESH_SESSION_ENV} -u AICO_ROOT_REASONING_EFFORT` +
     (tool.slug === 'pi'
       ? ''
       : ' -u AICO_ROOT_MODEL -u AICO_ROOT_DAYBREAK -u AICO_ROOT_AGENT_HUB_CONTEXT')
   )
 }
 
+/** `TETHER_AGENT_SESSION_ID=<id>; ` for a tool that starts under an ID
+ * Tether picks: the resume id when `resume` (an initial launch), else the
+ * host's fresh id, else one picked where the line runs. continuity.ts
+ * `chosenSessionId` reads the same variables back from the entry process. */
+function chooseSession(resume: boolean): string {
+  const fresh = `\${${FRESH_SESSION_ENV}:-$(cat /proc/sys/kernel/random/uuid)}`
+  const value = resume ? `\${AICO_ROOT_RESUME_SESSION_ID:-${fresh}}` : fresh
+  return `${AGENT_SESSION_ENV}="${value}"; `
+}
+
 /** The agent's launch with no launch prompt (restart, a wake or reboot with
  * nothing to resume): plain, unless the root was created with explicit
- * launch options, which it then gets again. */
+ * launch options, which it then gets again. A root whose tool starts under an
+ * ID Tether picks (Pi) starts a new conversation under the launch's fresh ID,
+ * so it stays found (and resumable) after the restart. */
 export function relaunchLine(widgetId: string, tool: TuiSpec): string | null {
   const line = launchLine(tool)
-  if (!line || !tool.modelSelection || !rootRequestForWidget(widgetId)) return line
-  if (!getLaunchOptions(widgetId)) return line
-  return `set --; ${selectionFlags(tool)}${cleanEnvironment(tool)} ${line} "$@"`
+  if (!line || !rootRequestForWidget(widgetId)) return line
+  const fresh = tool.resume?.freshArguments
+  const options = Boolean(tool.modelSelection && getLaunchOptions(widgetId))
+  if (!options && !fresh) return line
+  const selection = options ? selectionFlags(tool) : ''
+  if (!fresh) return `set --; ${selection}${cleanEnvironment(tool)} ${line} "$@"`
+  return `set --; ${selection}${chooseSession(false)}${cleanEnvironment(tool)} ${AGENT_SESSION_ENV}="$${AGENT_SESSION_ENV}" ${line} "$@" ${fresh.join(' ')} "$${AGENT_SESSION_ENV}"`
 }
 
 export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | null {
@@ -141,9 +164,7 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
   // A tool that keeps no observable session record starts under an ID Tether
   // picks; the agent's environment carries it so continuity can read it.
   const fresh = tool.resume?.freshArguments
-  const chosen = fresh
-    ? `${AGENT_SESSION_ENV}="\${AICO_ROOT_RESUME_SESSION_ID:-$(cat /proc/sys/kernel/random/uuid)}"; `
-    : ''
+  const chosen = fresh ? chooseSession(true) : ''
   const agentEnv = fresh ? ` ${AGENT_SESSION_ENV}="$${AGENT_SESSION_ENV}"` : ''
   const selected = `${line} "$@"`
   const initial = `${clean}${agentEnv} ${selected}${fresh ? ` ${fresh.join(' ')} "$${AGENT_SESSION_ENV}"` : ''}`

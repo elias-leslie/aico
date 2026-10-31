@@ -499,10 +499,10 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
 }
 
 /** Why a create with an entry is refused for this tool and these options:
- * Tether reads only Claude Code's and Codex's state from an entry home, and
- * an instructions file on the host is not readable through the entry. */
+ * Tether reads only Claude Code's, Codex's and Pi's state from an entry home,
+ * and an instructions file on the host is not readable through the entry. */
 function entryRefusal(tool: unknown, instructions: unknown): string | null {
-  if (!isEntryTool(tool)) return 'entry runs claude-code and codex sessions only'
+  if (!isEntryTool(tool)) return 'entry runs claude-code, codex and pi sessions only'
   if (instructions !== null && instructions !== undefined) return 'entry does not take instructions'
   return null
 }

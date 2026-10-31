@@ -19,6 +19,7 @@ import {
   ENTRY_TOOL_ENV,
   entryClaudeSession,
   entryCodexRollout,
+  entryPiSession,
   nodeProcFs,
   observeAgent,
   type ProcFs,
@@ -35,6 +36,11 @@ const other = join(fixture, 'other')
 const DAY = join('.codex', 'sessions', '2026', '10', '31')
 const OURS = '1c7741ea-e6b1-4062-853b-0d9d2e03d549'
 const THEIRS = '2d7741ea-e6b1-4062-853b-0d9d2e03d549'
+
+const PI_DIR = join('.pi', 'agent', 'sessions', '--work--')
+const piFile = (id: string) => `2026-10-31T09-00-00-000Z_${id}.jsonl`
+const piLine = (role: string, stopReason?: string) =>
+  `${JSON.stringify({ type: 'message', timestamp: '2026-10-31T09:00:01.000Z', message: { role, ...(stopReason ? { stopReason, content: [] } : { content: 'x' }) } })}\n`
 
 const meta = (id: string) =>
   `${JSON.stringify({ type: 'session_meta', payload: { id, cwd: '/work' } })}\n`
@@ -67,6 +73,9 @@ beforeEach(() => {
     JSON.stringify({ pid: 9, sessionId: THEIRS, status: 'busy', updatedAt: 9 }),
   )
   write(join(other, '.claude', 'projects', 'p', `${THEIRS}.jsonl`), '{"theirs":true}\n')
+  // ... and a busy Pi conversation, under its own id and under ours.
+  write(join(other, PI_DIR, piFile(THEIRS)), piLine('user'))
+  write(join(other, PI_DIR, piFile(OURS)), piLine('user'))
 })
 
 afterAll(() => {
@@ -249,5 +258,113 @@ describe('entry home containment', () => {
     expect(entryCodexRollout(contained().fs, contained().home, contained().scan)?.threadId).toBe(
       OURS,
     )
+  })
+})
+
+describe('Pi entry home containment', () => {
+  const piProc = (id: string): ProcFs => {
+    const proc: Record<string, string> = {
+      '/proc/10/task/10/children': '11',
+      '/proc/11/task/11/children': '',
+      '/proc/11/stat': '11 (enter)',
+      '/proc/11/environ': `${ENTRY_HOME_ENV}=${inside}\0${ENTRY_TOOL_ENV}=pi\0AICO_ROOT_INITIAL_LAUNCH=1\0AICO_ROOT_RESUME_SESSION_ID=\0AICO_ROOT_FRESH_SESSION_ID=${id}\0`,
+    }
+    return {
+      ...nodeProcFs,
+      readFile: (path) => {
+        if (!path.startsWith('/proc/')) return nodeProcFs.readFile(path)
+        if (path in proc) return proc[path] as string
+        throw Object.assign(new Error(path), { code: 'ENOENT' })
+      },
+      readdir: (path) => {
+        if (!path.startsWith('/proc/')) return nodeProcFs.readdir(path)
+        if (path === '/proc/10/task') return ['10']
+        if (path === '/proc/11/task') return ['11']
+        throw Object.assign(new Error(path), { code: 'ENOENT' })
+      },
+    }
+  }
+
+  it('finds only the chosen conversation inside the home, never by scanning elsewhere', () => {
+    const ours = write(
+      join(inside, PI_DIR, piFile(OURS)),
+      piLine('user') + piLine('assistant', 'stop'),
+    )
+    const files = contained()
+    expect(entryPiSession(files.fs, files.home, OURS)).toEqual({ sessionId: OURS, path: ours })
+    // Another id is nothing here, though the other home has it.
+    expect(entryPiSession(files.fs, files.home, THEIRS)).toEqual({ sessionId: THEIRS, path: null })
+    expect(entryPiSession(files.fs, files.home, null)).toBeNull()
+    expect(observeAgent(piProc(OURS), '/h', 10)).toEqual({
+      pid: 11,
+      resumeId: OURS,
+      idle: null,
+      blocked: false,
+    })
+    expect(observeAgent(piProc(THEIRS), '/h', 10)).toBeNull()
+  })
+
+  it('skips a session file that is a link out of the home, or a FIFO', () => {
+    symlinkSync(join(other, PI_DIR), join(inside, '.pi-link'))
+    mkdirSync(join(inside, PI_DIR), { recursive: true })
+    symlinkSync(join(other, PI_DIR, piFile(OURS)), join(inside, PI_DIR, piFile(OURS)))
+    const files = contained()
+    expect(entryPiSession(files.fs, files.home, OURS)?.path).toBeNull()
+    expect(observeAgent(piProc(OURS), '/h', 10)).toBeNull()
+    rmSync(join(inside, PI_DIR, piFile(OURS)))
+    execFileSync('/usr/bin/mkfifo', [join(inside, PI_DIR, piFile(OURS))])
+    expect(entryPiSession(files.fs, files.home, OURS)?.path).toBeNull()
+  })
+
+  it('reads nothing through a replaced ancestor directory', () => {
+    write(join(inside, PI_DIR, piFile(OURS)), piLine('assistant', 'stop'))
+    expect(observeAgent(piProc(OURS), '/h', 10)?.resumeId).toBe(OURS)
+    // .pi swapped for a link to the other home's .pi (which has our id too).
+    renameSync(join(inside, '.pi'), join(inside, '.pi-old'))
+    symlinkSync(join(other, '.pi'), join(inside, '.pi'))
+    expect(observeAgent(piProc(OURS), '/h', 10)).toBeNull()
+    const files = contained()
+    expect(entryPiSession(files.fs, files.home, OURS)?.path).toBeNull()
+    // The sessions/--work-- level swapped the same way.
+    rmSync(join(inside, '.pi'))
+    renameSync(join(inside, '.pi-old'), join(inside, '.pi'))
+    const cwd = join(inside, PI_DIR)
+    rmSync(cwd, { recursive: true })
+    symlinkSync(join(other, PI_DIR), cwd)
+    expect(observeAgent(piProc(OURS), '/h', 10)).toBeNull()
+  })
+
+  it('never reads the other home through the poller, before or after a swap', async () => {
+    const ours = write(
+      join(inside, PI_DIR, piFile(OURS)),
+      piLine('user') + piLine('assistant', 'stop'),
+    )
+    const tracker = new AgentStateTracker(
+      () => {},
+      () => 1000,
+    )
+    const poller = new AgentStatePoller(
+      tracker,
+      { sessions: () => [{ id: 'p', generation: 'g', panePid: async () => 10 }] },
+      piProc(OURS),
+      '/h',
+      { now: () => 0 },
+    )
+    await poller.poll()
+    expect(tracker.get('p')).toMatchObject({ state: 'idle', stateSource: 'pi-session' })
+    // Our file swapped for a link to the other home's busy file with our id.
+    const link = join(inside, PI_DIR, '.swap')
+    symlinkSync(join(other, PI_DIR, piFile(OURS)), link)
+    renameSync(link, ours)
+    await poller.poll()
+    expect(tracker.get('p').state).not.toBe('working')
+    // A parent swapped after selection: the tailed path is refused too.
+    rmSync(ours)
+    write(ours, piLine('assistant', 'stop'))
+    const cwd = join(inside, PI_DIR)
+    renameSync(cwd, `${cwd}-old`)
+    symlinkSync(join(other, PI_DIR), cwd)
+    await poller.poll()
+    expect(tracker.get('p').state).not.toBe('working')
   })
 })

@@ -7,9 +7,10 @@
 //
 // Every launch of the session (first launch, restart, crash recovery, reboot
 // restore) becomes `<argv> <arg> -- /bin/sh -c '<line>'`, so the agent never
-// starts on the host. The agent is Claude Code or Codex (ENTRY_TOOLS). `home`
-// is where the agent's own home is seen from the host: Tether reads Claude's
-// session files and transcripts, or Codex's rollouts, there (continuity.ts
+// starts on the host. The agent is Claude Code, Codex or Pi (ENTRY_TOOLS).
+// `home` is where the agent's own home is seen from the host: Tether reads
+// Claude's session files and transcripts, Codex's rollouts, or the Pi session
+// file of the conversation id it chose for the launch, there (continuity.ts
 // `observeEntryAgent`), because the agent's pid is the container's and hooks
 // cannot reach this Tether from inside.
 //
