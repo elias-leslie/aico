@@ -72,8 +72,6 @@ describe('private root workload control', () => {
     deferrals.delete(widgetId)
     running.add(widgetId)
   })
-  const show = vi.fn(async (_widgetId: string, _generation: string) => true)
-  const position = vi.fn(async (_widgetId: string, _generation: string, _bounds: unknown) => true)
   const title = vi.fn(async (_widgetId: string, _generation: string, _label: string) => true)
   const coordinator = vi.fn(
     async (_widgetId: string, _generation: string, _on: boolean | string) => true,
@@ -93,13 +91,9 @@ describe('private root workload control', () => {
       ensure,
       status,
       mutate: (widgetId, generation, mutation) =>
-        mutation.kind === 'show'
-          ? show(widgetId, generation)
-          : mutation.kind === 'position'
-            ? position(widgetId, generation, mutation.bounds)
-            : mutation.kind === 'coordinator'
-              ? coordinator(widgetId, generation, mutation.coordinator)
-              : title(widgetId, generation, mutation.label),
+        mutation.kind === 'coordinator'
+          ? coordinator(widgetId, generation, mutation.coordinator)
+          : title(widgetId, generation, mutation.label),
       launchDeferral: (widgetId) => deferrals.get(widgetId) ?? null,
     },
     RETRY_MS,
@@ -208,22 +202,21 @@ describe('private root workload control', () => {
     expect((await call('/v1/roots')).body.roots).toHaveLength(3)
   })
 
-  it('guards view mutation with the current generation and validates geometry', async () => {
+  it('answers the retired show and position verbs with 410 windows_retired and applies nothing', async () => {
     const root = present(getRootRequest('target-1'))
     const generation = sessionGeneration(present(getWidget(root.widgetId)))
-    const path = '/v1/roots/target-1'
-    expect((await call(`${path}/show`, 'POST', { generation: '0'.repeat(64) })).status).toBe(409)
-    expect(show).not.toHaveBeenCalled()
-    expect((await call(`${path}/show`, 'POST', { generation })).status).toBe(200)
-    expect(show).toHaveBeenCalledWith(root.widgetId, generation)
     const bounds = { x: -10, y: 20, width: 900, height: 560 }
-    expect((await call(`${path}/position`, 'POST', { generation, bounds })).status).toBe(200)
-    expect(position).toHaveBeenCalledWith(root.widgetId, generation, bounds)
-    expect(
-      (await call(`${path}/position`, 'POST', { generation, bounds: { ...bounds, width: 1 } }))
-        .status,
-    ).toBe(400)
-    expect((await call(`${path}/show`, 'POST', { generation, extra: true })).status).toBe(400)
+    const retired = { status: 410, body: { error: 'windows_retired' } }
+    const before = [title, coordinator].map((mock) => mock.mock.calls.length)
+    for (const path of [
+      '/v1/roots/target-1/show',
+      '/v1/roots/target-1/position',
+      '/v1/roots/missing-root/position',
+      `/v1/widgets/${root.widgetId}/show`,
+      `/v1/widgets/${root.widgetId}/position`,
+    ])
+      expect(await call(path, 'POST', { generation, bounds })).toEqual(retired)
+    expect([title, coordinator].map((mock) => mock.mock.calls.length)).toEqual(before)
   })
 
   it('renames one exact root through a bounded generation-fenced owner mutation', async () => {
@@ -254,26 +247,29 @@ describe('private root workload control', () => {
   it('refuses every view mutation for a non-running or ended workload without applying', async () => {
     const root = present(getRootRequest('target-1'))
     const generation = sessionGeneration(present(getWidget(root.widgetId)))
-    const bounds = { x: 0, y: 0, width: 900, height: 560 }
-    const counts = () => [show, position, title].map((mock) => mock.mock.calls.length)
+    const counts = () => [coordinator, title].map((mock) => mock.mock.calls.length)
     const before = counts()
     const refused = { status: 409, body: { error: 'workload_unavailable' } }
     running.delete(root.widgetId)
     try {
-      expect(await call('/v1/roots/target-1/show', 'POST', { generation })).toEqual(refused)
-      expect(await call('/v1/roots/target-1/position', 'POST', { generation, bounds })).toEqual(
-        refused,
-      )
       expect(
         await call('/v1/roots/target-1/title', 'POST', { generation, label: 'Focus' }),
       ).toEqual(refused)
       expect(
-        await call(`/v1/widgets/${root.widgetId}/position`, 'POST', { generation, bounds }),
+        await call(`/v1/widgets/${root.widgetId}/coordinator`, 'POST', {
+          generation,
+          coordinator: true,
+        }),
       ).toEqual(refused)
     } finally {
       running.add(root.widgetId)
     }
-    expect(await call('/v1/roots/support-1/show', 'POST', { generation: '0'.repeat(64) })).toEqual({
+    expect(
+      await call('/v1/roots/support-1/title', 'POST', {
+        generation: '0'.repeat(64),
+        label: 'Focus',
+      }),
+    ).toEqual({
       status: 410,
       body: { error: 'ended' },
     })
@@ -283,8 +279,7 @@ describe('private root workload control', () => {
   it('serializes root and widget routes for one workload on the widget identity', async () => {
     const root = present(getRootRequest('target-1'))
     const generation = sessionGeneration(present(getWidget(root.widgetId)))
-    const bounds = { x: 0, y: 0, width: 900, height: 560 }
-    const [titles, positions] = [title.mock.calls.length, position.mock.calls.length]
+    const [titles, marks] = [title.mock.calls.length, coordinator.mock.calls.length]
     let release = () => {}
     const gate = new Promise<void>((resolve) => {
       release = resolve
@@ -295,13 +290,16 @@ describe('private root workload control', () => {
     })
     const first = call('/v1/roots/target-1/title', 'POST', { generation, label: 'Focus' })
     await vi.waitFor(() => expect(title).toHaveBeenCalledTimes(titles + 1))
-    const second = call(`/v1/widgets/${root.widgetId}/position`, 'POST', { generation, bounds })
+    const second = call(`/v1/widgets/${root.widgetId}/coordinator`, 'POST', {
+      generation,
+      coordinator: true,
+    })
     await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(position).toHaveBeenCalledTimes(positions)
+    expect(coordinator).toHaveBeenCalledTimes(marks)
     release()
     expect((await first).status).toBe(200)
     expect((await second).status).toBe(200)
-    expect(position).toHaveBeenCalledTimes(positions + 1)
+    expect(coordinator).toHaveBeenCalledTimes(marks + 1)
   })
 
   it('writes root metadata only for an actively dispatched workload under lifecycle ownership', async () => {
@@ -410,17 +408,11 @@ describe('private root workload control', () => {
       available: true,
     }
     expect(await call(path)).toEqual({ status: 200, body: descriptor })
-    const bounds = { x: -10, y: 20, width: 900, height: 560 }
     expect(await call(`${path}/title`, 'POST', { generation, label: '  Exact widget  ' })).toEqual({
       status: 200,
       body: descriptor,
     })
     expect(title).toHaveBeenLastCalledWith(row.id, generation, 'Exact widget')
-    expect(await call(`${path}/position`, 'POST', { generation, bounds })).toEqual({
-      status: 200,
-      body: descriptor,
-    })
-    expect(position).toHaveBeenLastCalledWith(row.id, generation, bounds)
     expect(await call(`${path}/coordinator`, 'POST', { generation, coordinator: true })).toEqual({
       status: 200,
       body: descriptor,
@@ -469,18 +461,14 @@ describe('private root workload control', () => {
     const row = present(getWidget('aabbcc01'))
     const generation = sessionGeneration(row)
     const path = `/v1/widgets/${row.id}`
-    const before = [title.mock.calls.length, position.mock.calls.length]
+    const before = [title.mock.calls.length, coordinator.mock.calls.length]
     for (const wrong of ['0'.repeat(64), sessionGeneration(present(getWidget('aabbcc02')))]) {
       expect(
         (await call(`${path}/title`, 'POST', { generation: wrong, label: 'Rejected' })).status,
       ).toBe(409)
       expect(
-        (
-          await call(`${path}/position`, 'POST', {
-            generation: wrong,
-            bounds: { x: 0, y: 0, width: 900, height: 560 },
-          })
-        ).status,
+        (await call(`${path}/coordinator`, 'POST', { generation: wrong, coordinator: true }))
+          .status,
       ).toBe(409)
     }
     const ended = insertWidget('aabbcc03', 'codex')
@@ -501,15 +489,15 @@ describe('private root workload control', () => {
         })
       ).status,
     ).toBe(409)
-    expect([title.mock.calls.length, position.mock.calls.length]).toEqual(before)
+    expect([title.mock.calls.length, coordinator.mock.calls.length]).toEqual(before)
     expect((await call('/v1/widgets/AABBCC01')).status).toBe(404)
   })
 
-  it('reuses bounded label and integer bounds validation for ordinary widgets', async () => {
+  it('reuses bounded label validation for ordinary widgets', async () => {
     const row = present(getWidget('aabbcc01'))
     const generation = sessionGeneration(row)
     const path = `/v1/widgets/${row.id}`
-    const before = [title.mock.calls.length, position.mock.calls.length]
+    const before = [title.mock.calls.length, coordinator.mock.calls.length]
     for (const label of [
       '',
       '\u001bcontrol',
@@ -526,17 +514,7 @@ describe('private root workload control', () => {
     expect(
       (await call(`${path}/title`, 'POST', { generation, label: 'Valid', extra: true })).status,
     ).toBe(400)
-    for (const bounds of [
-      { x: 0, y: 0, width: 359, height: 240 },
-      { x: 0, y: 0, width: 360, height: 239 },
-      { x: 100001, y: 0, width: 360, height: 240 },
-      { x: 0.5, y: 0, width: 360, height: 240 },
-      { x: '0', y: 0, width: 360, height: 240 },
-      { x: 0, y: 0, width: 360, height: 240, extra: 1 },
-    ]) {
-      expect((await call(`${path}/position`, 'POST', { generation, bounds })).status).toBe(400)
-    }
-    expect([title.mock.calls.length, position.mock.calls.length]).toEqual(before)
+    expect([title.mock.calls.length, coordinator.mock.calls.length]).toEqual(before)
   })
 
   it('reports an applied widget mutation whose identity cannot be requalified as uncertain', async () => {
@@ -626,11 +604,11 @@ describe('private root workload control', () => {
     expect(owners.isHeld(row.id)).toBe(false)
   })
 
-  it('explicitly reports GUI and directed-delivery unavailability without steering', async () => {
+  it('explicitly reports root-control and directed-delivery unavailability without steering', async () => {
     available = false
     expect(await call('/v1/roots', 'POST', create('no-gui'))).toEqual({
       status: 503,
-      body: { error: 'gui_unavailable' },
+      body: { error: 'unavailable' },
     })
     expect(getRootRequest('no-gui')).toBeUndefined()
     available = true

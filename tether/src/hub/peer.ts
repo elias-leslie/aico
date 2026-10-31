@@ -1,12 +1,11 @@
 // One remote Tether ("peer") as the hub sees it through its link's forwarded
 // socket: link health (connected, connecting, offline, identity_changed), the
 // freshness of its last session list, a cache of its descriptors that outlives
-// the link (a down peer's sessions are stale, never gone), its relayed events
-// and its bridged GUI channel.
+// the link (a down peer's sessions are stale, never gone) and its relayed
+// events.
 
 import { statSync } from 'node:fs'
 import type { EventType } from '../events'
-import type { GuiCommand, GuiOutcome } from '../gui-channel'
 import type { HostEntry } from './hosts'
 import { PeerUnavailable, peerRequest, peerStream } from './peer-http'
 import type { WakeProgress } from './wake'
@@ -35,7 +34,6 @@ export interface RunsLike {
 
 export interface PeerDeps {
   publish(type: EventType, data: Record<string, unknown>): void
-  gui: { send(command: GuiCommand): Promise<GuiOutcome> }
   /** A session id this hub runs itself: the local copy wins over a peer's. */
   isLocal(id: string): boolean
   identity: { get(name: string): PeerIdentity | null; set(name: string, id: PeerIdentity): void }
@@ -88,7 +86,6 @@ const RELAYED = new Set<string>([
   'wakes.changed',
   'runs.changed',
 ])
-const GUI_KINDS = new Set(['show', 'position', 'title', 'coordinator', 'layout'])
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -529,7 +526,6 @@ export class Peer {
                 synced = true
                 onUp()
                 for (const queued of early.splice(0)) this.relay(queued)
-                void this.holdGui(connection.signal)
               })
               .catch((error) => {
                 this.deps.log(`${this.name}: sync failed: ${(error as Error).message}`)
@@ -599,65 +595,5 @@ export class Peer {
       return
     }
     this.deps.publish(type, { ...data, host: this.name })
-  }
-
-  /** Hold the peer's GUI channel and apply its commands through ours, so an
-   * agent on the host can show or place its window on this desktop. */
-  private async holdGui(signal: AbortSignal): Promise<void> {
-    let attempt = 0
-    while (!signal.aborted) {
-      let superseded = false
-      try {
-        await peerStream(
-          this.socket,
-          '/v1/gui/channel',
-          (line) => {
-            const message = record(line)
-            if (message?.type === 'hello') attempt = 0
-            else if (message?.type === 'superseded') superseded = true
-            else if (message?.type === 'command') void this.bridge(message)
-          },
-          signal,
-          { 'x-tether-client': 'aico-gui' },
-        )
-      } catch {
-        // Reconnect below while the link is up.
-      }
-      if (signal.aborted || superseded) return
-      await this.waitRetry(retryDelay(attempt++, this.deps.random), signal)
-    }
-  }
-
-  private async bridge(message: Record<string, unknown>): Promise<void> {
-    const { type: _type, commandId, ...command } = message
-    if (typeof commandId !== 'string' || !GUI_KINDS.has(command.kind as string)) return
-    let outcome = await this.deps.gui.send(command as unknown as GuiCommand)
-    // No window on this desktop (the web app only): a title or coordinator mark
-    // is session metadata, which the host records itself on an applied verdict,
-    // as its Tether does when it has no GUI at all.
-    if (
-      outcome.status === 'unavailable' &&
-      (command.kind === 'title' || command.kind === 'coordinator')
-    )
-      outcome = { status: 'applied' }
-    const verdict =
-      outcome.status === 'applied'
-        ? { applied: true, ...(outcome.layout ? { layout: outcome.layout } : {}) }
-        : {
-            applied: false,
-            error:
-              outcome.status === 'rejected'
-                ? outcome.error
-                : outcome.status === 'unavailable'
-                  ? 'gui_unavailable'
-                  : 'gui_timeout',
-          }
-    await peerRequest(
-      this.socket,
-      'POST',
-      `/v1/gui/results/${encodeURIComponent(commandId)}`,
-      verdict,
-      HEALTH_TIMEOUT_MS,
-    ).catch(() => {})
   }
 }

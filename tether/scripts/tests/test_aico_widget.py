@@ -29,8 +29,6 @@ def invoke(monkeypatch, args, responses):
 
 @pytest.mark.parametrize("args,payload", [
     (["title", "  Private new label  "], {"generation": GENERATION, "label": "Private new label"}),
-    (["position", "-10", "20", "900", "560"],
-     {"generation": GENERATION, "bounds": {"x": -10, "y": 20, "width": 900, "height": 560}}),
     (["coordinator", "on"], {"generation": GENERATION, "coordinator": True}),
     (["coordinator", "join", "d2852144"], {"generation": GENERATION, "coordinator": "d2852144"}),
 ])
@@ -70,11 +68,9 @@ def test_missing_or_invalid_widget_id_has_no_active_view_fallback(monkeypatch, t
 @pytest.mark.parametrize("args", [
     ["title", ""], ["title", "control\x1b"], ["title", "line\nbreak"],
     ["title", "\u0085"], ["title", "\u2028"], ["title", "界" * 54],
-    ["position", "0", "0", "359", "240"], ["position", "0", "0", "360", "239"],
-    ["position", "100001", "0", "360", "240"], ["position", "0.5", "0", "360", "240"],
     ["coordinator", "join"], ["coordinator", "join", "D2852144"], ["coordinator", "on", "d2852144"],
 ])
-def test_invalid_label_or_bounds_never_contacts_owner(monkeypatch, args):
+def test_invalid_label_or_coordinator_never_contacts_owner(monkeypatch, args):
     monkeypatch.setenv("AICO_WIDGET_ID", WIDGET)
     monkeypatch.setattr(admin.Collector, "receipt", lambda *_: pytest.fail("owner contacted"))
     with pytest.raises(SystemExit) as error:
@@ -115,7 +111,7 @@ def test_success_requires_same_widget_session_and_generation_without_retry(monke
 
 @pytest.mark.parametrize("status,error", [(404, "not_found"), (410, "ended"), (400, "invalid_body"),
                                         (409, "stale_generation"), (409, "workload_unavailable"),
-                                        (503, "gui_unavailable")])
+                                        (503, "unavailable")])
 def test_qualified_owner_refusals_after_send_report_not_applied(monkeypatch, status, error):
     code, calls, output = invoke(monkeypatch, ["title", "Rejected"],
                                 [(200, DESCRIPTOR), (status, {"error": error, "text": "private"})])
@@ -137,7 +133,7 @@ def test_unqualified_or_post_apply_replies_remain_uncertain_without_retry(monkey
     assert output[0]["applied"] is None
 
 
-def test_actual_private_owner_transport_pins_then_positions(tmp_path, monkeypatch):
+def test_actual_private_owner_transport_pins_then_titles(tmp_path, monkeypatch):
     calls, output = [], []
 
     class Handler(BaseHTTPRequestHandler):
@@ -165,11 +161,18 @@ def test_actual_private_owner_transport_pins_then_positions(tmp_path, monkeypatc
         thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": .01})
         thread.start()
         try:
-            assert admin.main(["widget", "position", "-10", "20", "900", "560", "--root-socket", path]) == 0
+            assert admin.main(["widget", "title", "Fixture", "--root-socket", path]) == 0
         finally:
             server.shutdown()
             thread.join(timeout=1)
     assert calls == [("GET", f"/v1/widgets/{WIDGET}", None),
-                     ("POST", f"/v1/widgets/{WIDGET}/position",
-                      {"generation": GENERATION, "bounds": {"x": -10, "y": 20, "width": 900, "height": 560}})]
-    assert output == [{**DESCRIPTOR, "operation": "position", "applied": True}]
+                     ("POST", f"/v1/widgets/{WIDGET}/title",
+                      {"generation": GENERATION, "label": "Fixture"})]
+    assert output == [{**DESCRIPTOR, "operation": "title", "applied": True}]
+
+
+@pytest.mark.parametrize("args", [["position", "0", "0", "900", "560"], ["position"]])
+def test_widget_position_is_retired_without_contacting_owner(monkeypatch, capsys, args):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_: pytest.fail("owner contacted"))
+    assert admin.main(["widget", *args]) == 2
+    assert capsys.readouterr().err.strip() == admin.WINDOWS_RETIRED

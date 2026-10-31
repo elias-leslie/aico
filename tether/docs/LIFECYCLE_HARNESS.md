@@ -26,7 +26,7 @@ Both default to the `dev` instance and refuse `default`. They are adapted from A
 4. Each pane runs in its own `tmux-spawn-<uuid>.scope`, separate from the server, with `AICO_OWNER=aico`, `AICO_WIDGET_ID`, `AICO_SESSION_ID` and `AICO_AGENT_SLUG`, and without `AICO_TMUX_SOCKET`.
 5. Each pane starts a foreground `sleep` and a `setsid` child; both stay in the pane scope with their markers, and the child is its own session leader.
 6. Capture and scrollback answer, and an End with a wrong generation is refused as `409 stale_generation`.
-7. Without a GUI, `title` renames the session through the generation fence and `position` answers `503 gui_unavailable`.
+7. `title` renames the session through the generation fence and `position` answers `410 windows_retired`.
 8. A real tmux client attaches with the API's exact argv; its resize claim is applied; it is killed by PID and the session survives; a second client reconnects and detaches.
 9. With `TETHER_HARNESS_RESTART=1` (the default) the harness restarts `tether@<instance>` and proves both sessions, scopes, children and generations are unchanged.
 10. Respawn moves the first session to a new scope; the old scope and its detached child are gone; the peer is intact.

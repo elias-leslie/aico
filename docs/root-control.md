@@ -25,15 +25,10 @@ The `st aico` client and its tests live in this repo
 lists with `GET /v1/roots?ended=0`, so retained tombstones never push the list
 past the client's root limit.
 
-Show, position and title reach the Aico window through the GUI channel: Tether
-validates the generation and workload, then sends the command to the connected
-Aico (`GET /v1/gui/channel`), which applies it and posts the result. With no
-Aico connected, those routes return 503 `gui_unavailable`; Tether never starts
-the desktop. Status, create and End work without Aico.
-
-A new root opens an Aico window by itself only when the desktop or `st aico
-create` started it. A root the web app started appears in the desktop's catalog
-and tray without a window (open it from there).
+Title and coordinator apply to the catalog: Tether validates the generation
+and workload, then changes the session. Aico has no desktop windows, so `show`
+and `position` are retired: those routes return 410 `windows_retired` and apply
+nothing. A new root is visible in Aico web as soon as it runs.
 
 ## Routes
 
@@ -42,8 +37,7 @@ and tray without a window (open it from there).
 | `GET /v1/roots` | none | availability, directed-delivery capability, retained roots |
 | `POST /v1/roots` | create body below | existing or reserved root descriptor |
 | `GET /v1/roots/<requestId>` | none | current descriptor, including ended tombstones |
-| `POST /v1/roots/<requestId>/show` | `{generation}` | shows the existing view or reopens it |
-| `POST /v1/roots/<requestId>/position` | `{generation,bounds:{x,y,width,height}}` | positions the view or stores its next placement |
+| `POST /v1/roots/<requestId>/show`, `.../position` | any | retired: 410 `windows_retired` |
 | `POST /v1/roots/<requestId>/title` | `{generation,label}` | renames the exact running root |
 | `POST /v1/roots/<requestId>/end` | `{generation}` | the shared session End; the tombstone is retained |
 | `POST /v1/roots/<requestId>/send` | none supported | 503 `directed_delivery_unavailable` |
@@ -51,7 +45,7 @@ and tray without a window (open it from there).
 | `POST /v1/roots/<requestId>/admin` | strict `kind:clear\|submit`, generation, expected native thread and stable request key | generation-checked, fail-closed 503; no terminal input |
 | `GET /v1/widgets/<widgetId>` | none | compact exact widget descriptor below |
 | `POST /v1/widgets/<widgetId>/title` | `{generation,label}` | renames the exact running widget |
-| `POST /v1/widgets/<widgetId>/position` | `{generation,bounds:{x,y,width,height}}` | positions its view or stores its next placement |
+| `POST /v1/widgets/<widgetId>/show`, `.../position` | any | retired: 410 `windows_retired` |
 | `POST /v1/widgets/<widgetId>/coordinator` | `{generation,coordinator}` | see [Coordinators](../tether/docs/api-v1.md#coordinators) |
 
 Widget routes also address ordinary managed sessions with no root request. The
@@ -59,23 +53,21 @@ widget ID is exactly eight lowercase hexadecimal characters. A successful GET or
 mutation returns exactly `owner: "aico"`, `widgetId`, `sessionId`, the opaque
 64-character lowercase hexadecimal `generation`, `status` (`running`,
 `pending`, or `uncertain`), and `available` (true only for `running`). It
-contains no title, bounds, project details, prompt, transcript, or terminal
+contains no title, project details, prompt, transcript, or terminal
 contents. A missing or retired widget returns 404 `not_found`; retirement while
 waiting to mutate returns 410 `ended`. A stale generation returns 409
 `stale_generation`; unverifiable workload ownership, a changed identity during
-mutation, or an unavailable workload returns 409 `workload_unavailable`. GUI
-unavailability returns 503 `gui_unavailable`. The GET rechecks the same
+mutation, or an unavailable workload returns 409 `workload_unavailable`. The GET rechecks the same
 generation after observing status; identity changes during inspection return
 409 `stale_generation`.
 
 ## View mutations
 
-Show, title and position bodies are strict: exactly `generation` plus the one
+Title and coordinator bodies are strict: exactly `generation` plus the one
 field for that kind. Titles are trimmed with ECMAScript whitespace rules,
 nonempty, at most 160 UTF-8 bytes, and exclude control characters, lone
-surrogates and Unicode line/paragraph separators. Bounds contain exactly integer
-`x`, `y`, `width`, and `height`, each with absolute value at most 100000;
-minimum size is 360 by 240. Invalid bodies return 400 `invalid_body`.
+surrogates and Unicode line/paragraph separators. Invalid bodies return 400
+`invalid_body`.
 [`contracts/view-mutation-vectors.json`](../tether/contracts/view-mutation-vectors.json)
 pins these rules; the TypeScript suite and the Python client's pytest suite both
 run every vector.
@@ -84,12 +76,9 @@ Root and widget routes use one canonical mutation handler, serialized on the
 widget identity, so a root request ID and its widget ID cannot interleave
 writes. Every kind requires the exact current generation and a `running`
 workload. Pending, uncertain or otherwise non-running workloads return 409
-`workload_unavailable`; Aico does not show them, store a future placement for
-them or rename them. Tether verifies a dispatched launch and an active managed
-workload, then rereads the generation before forwarding the command. Aico
-rechecks the generation against its own session mirror; existing views use
-`BrowserWindow.setBounds` and persist the resulting geometry in Aico's `views`
-table, and a running session with no open view saves its next placement there.
+`workload_unavailable`; Tether does not rename or mark them. Tether verifies a
+dispatched launch and an active managed workload, then rereads the generation
+before applying the change.
 
 Every 4xx/503 rejection above is definitive: nothing was applied. A widget
 mutation that applied but whose exact identity cannot be requalified afterwards
@@ -124,18 +113,16 @@ The direct facade uses `AICO_WIDGET_ID` for the current widget, with an explicit
 ```sh
 st aico widget status
 st aico widget title 'Investigation'
-st aico widget position -10 20 900 560
 st aico widget status --widget-id aabbcc01 --root-socket /run/user/1000/tether/default/control.sock
 ```
 
-All three commands accept `--widget-id` and `--root-socket`. Mutations fetch the
+All commands accept `--widget-id` and `--root-socket`. Mutations fetch the
 descriptor once, pin its widget, session and generation, then send one mutation
 and qualify the success receipt against that pin. Their output adds `operation`
-and `applied: true` to the compact descriptor, without echoing title or bounds.
+and `applied: true` to the compact descriptor, without echoing the title.
 `applied: false` means nothing was applied: either no mutation was sent, or the
 owner returned a qualified refusal (`invalid_body`, `not_found`,
-`stale_generation`, `workload_unavailable`, `busy`, `ended`, `gui_unavailable`,
-`position_unavailable`). `applied: null` means the outcome is unknown: transport
+`stale_generation`, `workload_unavailable`, `busy`, `ended`). `applied: null` means the outcome is unknown: transport
 loss or deadline after sending, `outcome_uncertain`, blocked End cleanup,
 `close_uncertain`, or any unqualified reply. A failure receipt reports
 `status: "uncertain"` because it does not vouch for the workload's current state,
@@ -151,9 +138,7 @@ Retained roots have the same owner facade by exact request ID:
 
 ```sh
 st aico root status recovery-root-1
-st aico root show recovery-root-1
 st aico root title recovery-root-1 'Investigation'
-st aico root position recovery-root-1 -10 20 900 560
 st aico root end recovery-root-1
 st aico root send recovery-root-1 'Also run the focused tests.' --generation SHA256
 ```
@@ -163,7 +148,7 @@ so `st aico` only talks to Aico and Tether. A stored root whose owner is `a-term
 (requested through the web app before it dropped the route) is still read: the client
 accepts Tether's 8-hex host identity at `aico://widget/<id>` with `owner: "a-term"`, and
 the older UUID host with an `a-term://pane/<UUID>` locator, but never a mix of the two.
-Show, title and position read `GET /v1/roots/<requestId>`, require a qualified
+Title reads `GET /v1/roots/<requestId>`, require a qualified
 `running` descriptor, pin its generation, then send one request and require the
 same identity, generation and `running` status in the receipt. End reads the exact descriptor and pins its generation, but
 does not require a running workload: it can contain a pending or uncertain root
@@ -199,7 +184,7 @@ idempotency key. The model, reasoning effort and context are unchanged. Paste
 framing does not exclude a human typing in the same pane at that moment.
 
 Roots created by direct `st aico create` are owner roots without SummitFlow
-fleet event streams; title, position and widget controls do not create an event
+fleet event streams; title and widget controls do not create an event
 stream, and operators must not use `sessions emit` or `sessions wait` against
 those roots.
 
@@ -310,9 +295,8 @@ provider access or prove delivery to a live model.
 ### Blank Slate
 
 A Blank Slate session starts with the harness's own prompt and the user's
-words, and nothing first-party. Pick **Blank Slate** at the top of a tool's
-workspace list under New session (control surface or tray), or create a root
-with `--blank-slate` instead of `--project`/`--project-root`:
+words, and nothing first-party. Create a root with `--blank-slate` instead of
+`--project`/`--project-root`:
 
 ```bash
 st aico create review-1 'Read /abs/brief.md and follow it.' --tool claude-code --work-role review --blank-slate
@@ -383,16 +367,11 @@ Codex `-c developer_instructions='''...'''`; the Agent Hub launchers merge it
 with their own context. Antigravity takes none. Content must be 1 byte to
 64 KiB, without control characters other than tab and newline, or `'''`.
 
-On the desktop, a tool that takes instructions shows **Instructions** at the
-top of its New session workspace picker: choose a prompt (type to filter the
-enabled ones), then a revision from its 100 most recent, newest first (the one
-marked current holds the prompt's content now; one Tether can't take shows as
-"can't be used"). The choice applies to the next session started from that
-picker; Aico reads the revision through `st prompt` when the session is
-created, and a failed read starts nothing and says why in the window.
+Only `st aico create --instructions` (or the HTTP form above) picks a revision; Aico web has no
+picker for it.
 
 After launch the revision shows as `· prompt@revision` at the end of the
-session title (desktop, web, `st`), as `instructions` on the session
+session title (web, `st`), as `instructions` on the session
 descriptor, and in the context detail.
 
 Exact UUID resume uses Pi's `--session` in the original working directory, without
@@ -444,12 +423,11 @@ as `external_id`, and posts `initialPrompt` as the first turn; `st aico root sen
 follow-up (queued while a turn runs), `st aico roots` reports `busy` while a turn runs and
 `turn_finished` when idle, and `st aico root end` cancels the turn and closes the Agent Hub
 session. It shows as a child of the coordinator that launched it like any other root.
-Aico opens it as a native chat window (the shared `@agent-hub/chat-ui`: streaming text,
+Aico web shows it as a chat (the shared `@agent-hub/chat-ui`: streaming text,
 thinking and tool blocks, Stop, a follow-up typed during a turn shown as queued) instead of a
-terminal. Tether makes every Agent Hub call; the window's main process asks Tether over its
-private socket for that window's own session, so the owner token and the Agent Hub address
-never reach the page. `show` and `position` reach the desktop for these roots; `title` and
-`coordinator` stay catalog-only. Resume, reasoning effort, Daybreak and Agent Hub context do not apply.
+terminal. Tether makes every Agent Hub call; the web server asks Tether over its
+private socket for that session, so the owner token and the Agent Hub address
+never reach the page. `title` and `coordinator` are catalog-only. Resume, reasoning effort, Daybreak and Agent Hub context do not apply.
 
 When Agent Hub refuses to create the session (for example a work role it does not know), the failure carries its field-level reason from the response's `details` (`work_role.id: Value error, Unknown work role ID`), not just "Request validation failed"; it shows in `agentHub.error`, `st aico create` and `st aico root status`, and in the chat.
 
@@ -522,7 +500,7 @@ exits. Session creation drops the prompt from the tmux session environment in
 the same tmux command, so new windows do not inherit it. The unique logical session identity overrides the center's
 `ST_SESSION_ID`. A descriptor returns `owner`, opaque `hostIdentity`, the
 current exact `generation`, `logicalSessionId`, `surfaceLocator`, metadata,
-bounds, and `status` (`running`, `pending`, `uncertain`, or `ended`). Pending or
+`bounds` (always null), and `status` (`running`, `pending`, `uncertain`, or `ended`). Pending or
 uncertain create results use HTTP 202. A pending root whose launch host
 admission deferred also carries `launch` (the reason, when it was checked, the
 next retry and the attempt count); Tether retries it every 30 s until it starts
@@ -545,7 +523,7 @@ bounded UTF-8 input. The facade caps all prompts at 2000 UTF-8 bytes and
 rejects secrets and framing controls, naming which check failed. Put a longer
 brief in a file and pass a short prompt naming its path; inlining it with
 `"$(cat FILE)"` hits the same cap. `--role`, `--lead-root` and `--facet` carry generic
-metadata. `--root-socket` selects Aico's GUI socket. Tether must already be
+metadata. `--root-socket` selects Tether's socket. Tether must already be
 running; the command does not start it.
 
 Create is explicit recovery. Automatic reboot recovery is a separate path
@@ -622,7 +600,7 @@ is involved.
 The Node web server (`aico-web`, port 3002) serves the browser UI at `/`, the API
 at `/api` and the terminal WebSocket at `/ws`. It deliberately does not forward
 `/v1/roots`; the Python backend that did, on `127.0.0.1:8002`, is gone. Roots go
-through Aico's GUI socket (`st aico create|root`) or Tether's own `/v1/roots`
+through Tether's socket (`st aico create|root`) or its own `/v1/roots`
 (SummitFlow's fleet calls Tether directly). `st aico` can no longer target the
 web app, and SummitFlow refuses to start roots on an `a-term` surface.
 

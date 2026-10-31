@@ -14,7 +14,6 @@ import type { AgentStateTracker, HookReport } from './agent-state'
 import { sessionAsks } from './asks'
 import type { TetherPaths } from './config'
 import type { EventBus } from './events'
-import type { GuiChannel, GuiMutationCommand } from './gui-channel'
 import { HttpError, type Router, readJsonObject, sendError, sendJson } from './http'
 import type { Hub } from './hub/hub'
 import {
@@ -62,7 +61,6 @@ import {
   switchProject,
   tmuxPaneTargetForWidget,
   tmuxTargetForWidget,
-  verifiedCurrentManagedPane,
   verifySessionStatus,
   whenReady,
 } from './lifecycle/engine'
@@ -71,7 +69,6 @@ import { isNeverAllocatedWidget } from './lifecycle/lifecycle-guard'
 import { sessionGeneration } from './lifecycle/owner-retirement'
 import { ForegroundPaneMemory, systemdPaneMemoryHost } from './lifecycle/pane-memory'
 import {
-  type Bounds,
   createRootHandler,
   isProjectRootPath,
   type MutationRejection,
@@ -150,7 +147,6 @@ export interface LifecycleApiContext {
   store: Store
   events: EventBus
   projects: ProjectProvider
-  gui: GuiChannel
   /** Sync project-root cache the engine reads on gate recovery. */
   projectRoots: Map<string, string>
   /** Reboot continuity; absent when reconciliation is off (test instances). */
@@ -359,13 +355,6 @@ async function settleRunning(
   }
 }
 
-/** A new root gets a desktop window only when the desktop or `st aico create`
- * asked for it (session origin `root`). One the web app started (`a-term`)
- * still joins the desktop catalog and tray, without a window. */
-export function opensRootWindow(row: Pick<WidgetRow, 'origin'>): boolean {
-  return row.origin === 'root'
-}
-
 function respawnError(result: RespawnResult): HttpError | null {
   switch (result.status) {
     case 'replaced':
@@ -488,9 +477,9 @@ function applyCoordinator(id: string, coordinator: boolean | string): void {
   for (const changedId of new Set(changed)) notifySessionChanged(changedId, { force: true })
 }
 
-export function forwardViewMutation(
-  gui: GuiChannel,
-): (
+/** Title and coordinator mutations apply to the catalog on the exact running
+ * generation. Aico has no desktop windows, so there is no view to forward to. */
+export function applyViewMutation(): (
   widgetId: string,
   generation: string,
   mutation: WidgetMutation,
@@ -498,71 +487,27 @@ export function forwardViewMutation(
   return async (widgetId, generation, mutation) => {
     const hubRow = getWidget(widgetId)
     if (hubRow?.backend === 'agent-hub') {
-      // The view is a native chat window: the GUI opens and places it. The
-      // catalog's title and coordinator mark apply on the exact running generation.
-      const view = mutation.kind === 'show' || mutation.kind === 'position'
-      if (!view && mutation.kind !== 'title' && mutation.kind !== 'coordinator') return false
       if (generationOf(hubRow) !== generation || (await verifySessionStatus(hubRow)) !== 'running')
         return false
-      if (view) {
-        if (!gui.connected()) return { status: 503, error: 'gui_unavailable' }
-        const command: GuiMutationCommand = {
-          kind: mutation.kind,
-          sessionId: hubRow.id,
-          generation,
-        }
-        if (mutation.kind === 'position') command.bounds = mutation.bounds as Bounds
-        const outcome = await gui.send(command)
-        if (outcome.status === 'unavailable') return { status: 503, error: 'gui_unavailable' }
-        if (outcome.status === 'timeout') return { status: 409, error: 'outcome_uncertain' }
-        if (outcome.status === 'rejected') return { status: 409, error: outcome.error }
-        return true
-      }
       if (mutation.kind === 'title') {
         setWidgetName(hubRow.id, mutation.label)
         notifySessionChanged(hubRow.id, { force: true })
-      } else if (mutation.kind === 'coordinator') applyCoordinator(hubRow.id, mutation.coordinator)
+      } else applyCoordinator(hubRow.id, mutation.coordinator)
       return true
     }
-    if (!gui.connected()) {
-      if (mutation.kind !== 'title' && mutation.kind !== 'coordinator')
-        return { status: 503, error: 'gui_unavailable' }
-      // No GUI to hold a view: the title is the session name and the
-      // coordinator mark is session metadata. Change the exact running
-      // generation under the lifecycle lock.
-      const changed = await withRunningSession(widgetId, generation, async (row) => {
-        if (mutation.kind === 'title') setWidgetName(row.id, mutation.label)
-        if (mutation.kind === 'coordinator') applyCoordinator(row.id, mutation.coordinator)
-        else notifySessionChanged(row.id, { force: true })
-        return true as const
-      })
-      return changed
-    }
-    const result = await withRunningSession(widgetId, generation, async (row) => {
-      const command: GuiMutationCommand = { kind: mutation.kind, sessionId: row.id, generation }
-      if (mutation.kind === 'position') command.bounds = mutation.bounds as Bounds
-      if (mutation.kind === 'title') command.label = mutation.label
-      // The GUI hears only whether the window is a coordinator; lineage
-      // reaches it on the descriptor.
-      if (mutation.kind === 'coordinator') command.coordinator = mutation.coordinator === true
-      const outcome = await gui.send(command)
-      if (outcome.status === 'unavailable') return { status: 503, error: 'gui_unavailable' }
-      if (outcome.status === 'timeout') return { status: 409, error: 'outcome_uncertain' }
-      if (outcome.status === 'rejected') return { status: 409, error: outcome.error }
-      if (mutation.kind === 'title') {
-        // The catalog name changes only when the GUI applied the title.
-        setWidgetName(row.id, mutation.label)
-        notifySessionChanged(row.id, { force: true })
-      }
+    // The title is the session name and the coordinator mark is session
+    // metadata. Change the exact running generation under the lifecycle lock.
+    return withRunningSession(widgetId, generation, async (row) => {
+      if (mutation.kind === 'title') setWidgetName(row.id, mutation.label)
       if (mutation.kind === 'coordinator') applyCoordinator(row.id, mutation.coordinator)
+      else notifySessionChanged(row.id, { force: true })
       return true as const
     })
-    return result === false ? false : result
   }
 }
 
 export function rootOperations(context: LifecycleApiContext): RootControlOperations {
-  const mutate = forwardViewMutation(context.gui)
+  const mutate = applyViewMutation()
   return {
     available: () => true,
     launched: (widgetId, launchedBy) => {
@@ -637,15 +582,7 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
       if (row?.backend === 'agent-hub') {
         await agentHub?.ensure(widgetId, prompt)
         const latest = getWidget(widgetId)
-        const status = latest ? await verifySessionStatus(latest).catch(() => undefined) : undefined
-        if (latest && status === 'running' && opensRootWindow(latest) && context.gui.connected()) {
-          // The new chat gets its window, as a terminal root does. Best effort: the GUI decides.
-          void context.gui.send({
-            kind: 'show',
-            sessionId: latest.id,
-            generation: generationOf(latest),
-          })
-        }
+        if (latest) await verifySessionStatus(latest).catch(() => undefined)
         context.events.publish('root.updated', { id: widgetId })
         return
       }
@@ -664,20 +601,6 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
       const latest = getWidget(widgetId)
       // Verify now so `GET /v1/sessions` agrees with `GET /v1/sessions/:id`.
       if (latest) await verifySessionStatus(latest).catch(() => undefined)
-      if (
-        latest &&
-        opensRootWindow(latest) &&
-        latest.launchState === 'dispatched' &&
-        context.gui.connected() &&
-        (await verifiedCurrentManagedPane(latest))
-      ) {
-        // Aico focused the new root's window. Best effort: the GUI decides.
-        void context.gui.send({
-          kind: 'show',
-          sessionId: latest.id,
-          generation: generationOf(latest),
-        })
-      }
       context.events.publish('root.updated', { id: widgetId })
     },
     status: async (row) => {
@@ -802,7 +725,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     only,
     whenReady,
   })
-  const { store, events, gui } = context
+  const { store, events } = context
   const rootHandler = createRootHandler(rootOperations(context))
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
 
@@ -1244,18 +1167,9 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       if (!delivered) throw new HttpError(409, 'workload_unavailable')
       sendJson(res, 200, { generation, delivered: true })
     })
-    .add('POST', '/v1/sessions/:id/show', async (req, res, params) => {
-      // Ask the GUI to open (or focus) this session's view.
-      const body = await readJsonObject(req)
-      only(body, ['generation'])
-      const generation = requireGeneration(body)
-      const row = requireSession(params.id)
-      fence(row, generation)
-      await whenReady()
-      const result = await forwardViewMutation(context.gui)(row.id, generation, { kind: 'show' })
-      if (result === false) throw new HttpError(409, 'workload_unavailable')
-      if (result !== true) throw new HttpError(result.status, result.error)
-      sendJson(res, 200, { shown: true })
+    // Aico has no desktop windows: a show request gets a plain refusal.
+    .add('POST', '/v1/sessions/:id/show', () => {
+      throw new HttpError(410, 'windows_retired')
     })
     .add('POST', '/v1/sessions/:id/resize-claim', async (req, res, params) => {
       const body = await readJsonObject(req)
@@ -1320,33 +1234,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     .add('GET', '/v1/roots/:requestId/:action', root)
     .add('GET', '/v1/widgets/:id', root)
     .add('POST', '/v1/widgets/:id/:action', root)
-    .add('GET', '/v1/gui/layout', async (_req, res) => {
-      const outcome = await gui.send({ kind: 'layout' })
-      if (outcome.status === 'unavailable') throw new HttpError(503, 'gui_unavailable')
-      if (outcome.status === 'timeout') throw new HttpError(504, 'gui_timeout')
-      if (outcome.status === 'rejected') throw new HttpError(503, outcome.error)
-      sendJson(res, 200, outcome.layout)
-    })
-    .add('GET', '/v1/gui/channel', (req, res) => {
-      if (req.headers['x-tether-client'] !== 'aico-gui') throw new HttpError(400, 'invalid_client')
-      // A GUI that another one superseded asks to take the channel back only
-      // while it is free, so two live apps never take it from each other.
-      if (req.headers['x-tether-gui-if-free'] === '1' && gui.connected())
-        throw new HttpError(409, 'gui_busy')
-      gui.attach(req, res)
-    })
-    .add('POST', '/v1/gui/results/:commandId', async (req, res, params) => {
-      const body = await readJsonObject(req)
-      only(body, ['applied', 'error', 'layout'])
-      let accepted: boolean
-      try {
-        accepted = gui.result(params.commandId ?? '', body)
-      } catch {
-        throw new HttpError(400, 'invalid_body')
-      }
-      if (!accepted) throw new HttpError(404, 'not_found')
-      sendJson(res, 200, { accepted: true })
-    })
 }
 
 async function answerReplacement(

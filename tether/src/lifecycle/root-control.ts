@@ -52,15 +52,6 @@ export function promptOverLimit(value: unknown): number | null {
   return Buffer.byteLength(value.initialPrompt) > limit ? limit : null
 }
 
-/** Window bounds a view mutation carries. Views belong to the GUI client;
- * Tether validates and forwards them, it never stores them. */
-export interface Bounds {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
 export interface RootLaunchOptions {
   model: string | null
   reasoningEffort: string | null
@@ -142,15 +133,11 @@ function parseLineage(value: unknown): RootLineage | null | undefined {
 
 /** One canonical view mutation, shared by retained-root and ordinary-widget routes. */
 export type WidgetMutation =
-  | { kind: 'show' }
-  | { kind: 'position'; bounds: Bounds }
   | { kind: 'title'; label: string }
   /** true/false marks or unmarks; a session id joins that coordinator. */
   | { kind: 'coordinator'; coordinator: boolean | string }
 
-/** Tether: a view mutation is forwarded to the GUI client, which can be absent
- * (`503 gui_unavailable`) or silent (`409 outcome_uncertain`). `false` keeps
- * Aico's meaning: nothing applied because the workload is not running. */
+/** `false` keeps Aico's meaning: nothing applied because the workload is not running. */
 export type MutationRejection = { status: number; error: string; reason?: string }
 
 export interface RootControlOperations {
@@ -208,7 +195,7 @@ interface DeferredLaunch {
  *
  * Every kind requires a dispatched launch and an active managed workload,
  * verified while holding lifecycle ownership, then rereads the catalog before
- * applying. A non-running widget is never shown, positioned or renamed.
+ * applying. A non-running widget is never renamed or marked.
  */
 export async function widgetMutationOperation(
   widgetId: string,
@@ -515,24 +502,6 @@ export function rootRequestDigest(request: RootCreateRequest): string {
     .digest('hex')
 }
 
-/** Owner-side validation; contracts/view-mutation-vectors.json pins every client copy. */
-export function parseBounds(value: unknown): Bounds | null {
-  if (
-    !object(value) ||
-    Object.keys(value).length !== 4 ||
-    ['x', 'y', 'width', 'height'].some(
-      (key) =>
-        typeof value[key] !== 'number' ||
-        !Number.isSafeInteger(value[key]) ||
-        Math.abs(value[key] as number) > 100_000,
-    ) ||
-    (value.width as number) < 360 ||
-    (value.height as number) < 240
-  )
-    return null
-  return { x: value.x, y: value.y, width: value.width, height: value.height } as Bounds
-}
-
 /** Trim (ECMAScript TrimString), then require 1-160 UTF-8 bytes of single-line text. */
 export function parseLabel(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -557,33 +526,21 @@ export function parseWidgetMutation(
   kind: WidgetMutation['kind'],
   value: unknown,
 ): { generation: string; mutation: WidgetMutation } | null {
-  const field =
-    kind === 'position'
-      ? 'bounds'
-      : kind === 'title'
-        ? 'label'
-        : kind === 'coordinator'
-          ? 'coordinator'
-          : null
+  const field = kind === 'title' ? 'label' : 'coordinator'
   if (
     !object(value) ||
     Object.keys(value).some((key) => key !== 'generation' && key !== field) ||
-    (field !== null && !(field in value)) ||
+    !(field in value) ||
     typeof value.generation !== 'string' ||
     !/^[0-9a-f]{64}$/.test(value.generation)
   )
     return null
   const generation = value.generation
-  if (kind === 'show') return { generation, mutation: { kind } }
   if (kind === 'coordinator')
     return typeof value.coordinator === 'boolean' ||
       (typeof value.coordinator === 'string' && /^[0-9a-f]{8}$/.test(value.coordinator))
       ? { generation, mutation: { kind, coordinator: value.coordinator } }
       : null
-  if (kind === 'position') {
-    const bounds = parseBounds(value.bounds)
-    return bounds ? { generation, mutation: { kind, bounds } } : null
-  }
   const label = parseLabel(value.label)
   return label ? { generation, mutation: { kind, label } } : null
 }
@@ -776,13 +733,21 @@ export function createRootHandler(
   return async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     const path = request.url?.split('?')[0] ?? ''
     if (!operations.available()) {
-      json(response, 503, { error: 'gui_unavailable' })
+      json(response, 503, { error: 'unavailable' })
       return
     }
     try {
-      const widgetMatch = /^\/v1\/widgets\/([0-9a-f]{8})(?:\/(title|position|coordinator))?$/.exec(
-        path,
-      )
+      // Aico has no desktop windows any more: showing and placing one is retired.
+      if (
+        request.method === 'POST' &&
+        /^\/v1\/(?:roots\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}|widgets\/[0-9a-f]{8})\/(?:show|position)$/.test(
+          path,
+        )
+      ) {
+        json(response, 410, { error: 'windows_retired' })
+        return
+      }
+      const widgetMatch = /^\/v1\/widgets\/([0-9a-f]{8})(?:\/(title|coordinator))?$/.exec(path)
       if (widgetMatch) {
         const widgetId = widgetMatch[1]
         const row = getWidget(widgetId)
@@ -799,10 +764,7 @@ export function createRootHandler(
           json(response, 405, { error: 'method_not_allowed' })
           return
         }
-        const input = await readMutation(
-          request,
-          widgetMatch[2] as 'title' | 'position' | 'coordinator',
-        )
+        const input = await readMutation(request, widgetMatch[2] as 'title' | 'coordinator')
         if (!input) {
           json(response, 400, { error: 'invalid_body' })
           return
@@ -989,9 +951,7 @@ export function createRootHandler(
         return
       }
       const match =
-        /^\/v1\/roots\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})(?:\/(show|position|title|send|admin|end))?$/.exec(
-          path,
-        )
+        /^\/v1\/roots\/([A-Za-z0-9][A-Za-z0-9._:-]{0,127})(?:\/(title|send|admin|end))?$/.exec(path)
       if (!match) {
         json(response, 404, { error: 'not_found' })
         return
@@ -1099,7 +1059,7 @@ export function createRootHandler(
         })
         return
       }
-      if (match[2] !== 'show' && match[2] !== 'position' && match[2] !== 'title') {
+      if (match[2] !== 'title') {
         json(response, 405, { error: 'method_not_allowed' })
         return
       }

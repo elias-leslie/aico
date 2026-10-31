@@ -12,13 +12,10 @@ import { join } from 'node:path'
 import {
   type AttachAnswer,
   type ContextHook,
-  type GuiCommand,
-  type GuiVerdict,
   HOST_CREATE_TIMEOUT_MS,
   type HostInfo,
   parseAttachAnswer,
   parseContextHook,
-  parseGuiCommand,
   type ResizeClaimAnswer,
   type SessionDescriptor,
   type SizeHolder,
@@ -40,8 +37,6 @@ const DEFAULT_TIMEOUT_MS = 5_000
 export const STREAM_IDLE_MS = 45_000
 const RECONNECT_MIN_MS = 500
 const RECONNECT_MAX_MS = 10_000
-/** How often a GUI that another one superseded checks whether the channel is free again. */
-export const GUI_RECLAIM_POLL_MS = 5_000
 
 /** This user's own `$XDG_RUNTIME_DIR/tether/<TETHER_INSTANCE|default>/control.sock`. */
 export function ownTetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
@@ -391,16 +386,6 @@ export class TetherClient {
     }
   }
 
-  /** Whether a GUI holds this instance's channel (`GET /v1/health`). */
-  async guiConnected(): Promise<boolean> {
-    const health = await this.json<{ gui?: { connected?: unknown } }>('GET', '/v1/health')
-    return health.gui?.connected === true
-  }
-
-  guiResult(commandId: string, result: GuiVerdict): Promise<unknown> {
-    return this.json('POST', `/v1/gui/results/${encodeURIComponent(commandId)}`, result)
-  }
-
   /** Open one long-lived NDJSON stream. Resolves when it ends; rejects with
    * TetherUnavailable or TetherError when it cannot be opened. */
   stream(
@@ -694,86 +679,6 @@ export function followEvents(client: TetherClient, subscriber: EventSubscriber):
         subscriber.onDisconnected?.(error)
       }
       await new Promise((resolve) => setTimeout(resolve, reconnectDelay(attempt++)))
-    }
-  })()
-  return () => controller.abort()
-}
-
-/**
- * Hold `GET /v1/gui/channel` as the one Aico GUI client, apply each
- * view mutation or read-only layout command and post its result. Reconnects with backoff.
- * A `superseded` notice (another GUI took over) leaves the channel to that GUI;
- * this one checks every `reclaimPollMs` and takes it back once it is free, so
- * two live apps never take it from each other.
- */
-export function holdGuiChannel(
-  client: TetherClient,
-  apply: (command: GuiCommand) => Promise<GuiVerdict>,
-  log: (message: string, error?: unknown) => void = () => {},
-  reclaimPollMs = GUI_RECLAIM_POLL_MS,
-): () => void {
-  const controller = new AbortController()
-  void (async () => {
-    let attempt = 0
-    let waiting = false
-    while (!controller.signal.aborted) {
-      let superseded = false
-      try {
-        // The health check keeps an older Tether, which takes no if-free
-        // header, from handing the channel over while a GUI holds it.
-        if (!waiting || !(await client.guiConnected()))
-          await client.stream(
-            '/v1/gui/channel',
-            waiting
-              ? { 'x-tether-client': 'aico-gui', 'x-tether-gui-if-free': '1' }
-              : { 'x-tether-client': 'aico-gui' },
-            (line) => {
-              const type = (line as { type?: unknown } | null)?.type
-              if (type === 'hello') {
-                attempt = 0
-                log(
-                  waiting
-                    ? 'GUI channel taken back: the other GUI client left'
-                    : 'GUI channel connected',
-                )
-                waiting = false
-              } else if (type === 'superseded') {
-                superseded = true
-                log(
-                  'GUI channel superseded by another GUI client; taking it back when that one leaves',
-                )
-              } else if (type === 'command') {
-                const command = parseGuiCommand(line)
-                if (!command) {
-                  // Version skew (an unknown kind or field) should not leave
-                  // Tether waiting out its timeout: answer when there is an id.
-                  const commandId = (line as { commandId?: unknown }).commandId
-                  log('GUI channel: malformed command rejected')
-                  if (typeof commandId === 'string' && commandId)
-                    void client
-                      .guiResult(commandId, { applied: false, error: 'invalid_body' })
-                      .catch((error) => log('GUI result could not be posted', error))
-                  return
-                }
-                void apply(command)
-                  .catch((error): GuiVerdict => {
-                    log(`GUI command ${command.kind} failed`, error)
-                    return { applied: false, error: 'gui_failed' }
-                  })
-                  .then((verdict) => client.guiResult(command.commandId, verdict))
-                  .catch((error) => log('GUI result could not be posted', error))
-              }
-            },
-            controller.signal,
-          )
-      } catch (error) {
-        const stillHeld = waiting && error instanceof TetherError && error.status === 409
-        if (!controller.signal.aborted && !stillHeld) log('GUI channel unavailable', error)
-      }
-      if (controller.signal.aborted) return
-      if (superseded) waiting = true
-      const delay = waiting ? reclaimPollMs : reconnectDelay(attempt++)
-      await new Promise((resolve) => setTimeout(resolve, delay))
     }
   })()
   return () => controller.abort()

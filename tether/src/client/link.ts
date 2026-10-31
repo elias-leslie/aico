@@ -1,15 +1,13 @@
 // The live connection to Tether and Aico's mirror of its sessions and tools.
 // Tether owns every session; this keeps the catalog current from its event
-// stream and complete lists, holds the GUI channel, and tells the rest of Aico
+// stream and complete lists, and tells the rest of Aico
 // what changed through hooks, called in the order the root relies on.
 
 import type { SessionCatalog } from './catalog'
-import { followEvents, holdGuiChannel, type TetherClient } from './client'
+import { followEvents, type TetherClient } from './client'
 import {
   compatibleVersion,
   eventSession,
-  type GuiCommand,
-  type GuiVerdict,
   type SessionDescriptor,
   type TetherEvent,
   type TetherTool,
@@ -91,7 +89,6 @@ export function createTetherLink(deps: TetherLinkDeps) {
   let tools: TetherTool[] = []
   let restored = false
   let stopEvents: (() => void) | null = null
-  let stopGuiChannel: (() => void) | null = null
   /** Other instances (the agent's, or the owner's when that is not active) that answered. */
   const otherConnected = new Set<string>()
 
@@ -223,7 +220,6 @@ export function createTetherLink(deps: TetherLinkDeps) {
     }
     console.error(`[aico:tether] ${tetherIncompatible}; session control is disabled`)
     stopEvents?.()
-    stopGuiChannel?.()
     tetherConnected = false
     hooks.tray()
     dialog.showErrorBox(
@@ -232,13 +228,10 @@ export function createTetherLink(deps: TetherLinkDeps) {
     )
   }
 
-  /** Events and the GUI channel of an instance that is not the active one: its
-   * sessions join the catalog, and its absence is quiet (the agent's instance may not run). */
-  function connectOther(
-    client: TetherClient,
-    applyGuiCommand: (command: GuiCommand) => Promise<GuiVerdict>,
-  ): (() => void)[] {
-    const stopFollow = followEvents(client, {
+  /** Events of an instance that is not the active one: its sessions join the
+   * catalog, and its absence is quiet (the agent's instance may not run). */
+  function connectOther(client: TetherClient): () => void {
+    return followEvents(client, {
       onConnected: () => {
         if (otherConnected.has(client.socketPath)) return
         otherConnected.add(client.socketPath)
@@ -255,15 +248,11 @@ export function createTetherLink(deps: TetherLinkDeps) {
           onTetherEvent(event, client.socketPath)
       },
     })
-    const stopGui = holdGuiChannel(client, applyGuiCommand, (message, error) => {
-      if (error === undefined) console.log(`[aico:gui] ${message} (${client.socketPath})`)
-    })
-    return [stopFollow, stopGui]
   }
 
-  function connectTether(applyGuiCommand: (command: GuiCommand) => Promise<GuiVerdict>): void {
+  function connectTether(): void {
     const [active, ...others] = tether.instances()
-    stopEvents = followEvents(active, {
+    const stopActive = followEvents(active, {
       onConnected: () => {
         const reconnected = !tetherConnected
         tetherConnected = true
@@ -287,14 +276,9 @@ export function createTetherLink(deps: TetherLinkDeps) {
       },
       onEvent: (event) => onTetherEvent(event, active.socketPath),
     })
-    const stopActiveGui = holdGuiChannel(active, applyGuiCommand, (message, error) =>
-      error === undefined
-        ? console.log(`[aico:gui] ${message}`)
-        : console.warn(`[aico:gui] ${message}:`, error instanceof Error ? error.message : error),
-    )
-    const stopOthers = others.flatMap((client) => connectOther(client, applyGuiCommand))
-    stopGuiChannel = () => {
-      stopActiveGui()
+    const stopOthers = others.map(connectOther)
+    stopEvents = () => {
+      stopActive()
       for (const stop of stopOthers) stop()
     }
   }
@@ -319,12 +303,11 @@ export function createTetherLink(deps: TetherLinkDeps) {
     refreshRuns,
     /** Tether ended this session (or it is absent): forget it everywhere. */
     sessionEnded,
-    /** Follow the event stream and hold the GUI channel, applying its commands with `applyGui`. */
+    /** Follow the event stream of every instance. */
     connect: connectTether,
-    /** Stop the event stream and the GUI channel; safe if never connected. */
+    /** Stop the event streams; safe if never connected. */
     stop: (): void => {
       stopEvents?.()
-      stopGuiChannel?.()
     },
   }
 }

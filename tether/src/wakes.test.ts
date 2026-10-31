@@ -258,7 +258,6 @@ describe('wake scheduler', () => {
     const clock = { now: 10_000 }
     const log = {
       delivered: [] as string[],
-      reopened: [] as string[],
       relaunched: [] as string[],
       changed: [] as (string | null)[],
       lines: [] as string[],
@@ -274,7 +273,6 @@ describe('wake scheduler', () => {
         if (state.deliver) log.delivered.push(text)
         return state.deliver
       },
-      reopen: (id) => log.reopened.push(id),
       conversationHolder: async () => null,
       relaunch: async (_ended, message) => {
         log.relaunched.push(message)
@@ -298,7 +296,6 @@ describe('wake scheduler', () => {
     await scheduler.tick()
     expect(log.delivered).toHaveLength(1)
     expect(log.delivered[0]).toMatch(/\] first \/ second$/)
-    expect(log.reopened).toEqual([SESSION])
     expect(wakes.list().map((wake) => wake.id)).toEqual([later.id])
     await scheduler.tick()
     expect(log.delivered).toHaveLength(1)
@@ -317,8 +314,7 @@ describe('wake scheduler', () => {
     await scheduler.tick()
     expect(log.delivered).toEqual([])
     expect(wakes.list()).toHaveLength(1)
-    // Asked to reopen the window, and republished as due, only once while it waits.
-    expect(log.reopened).toEqual([SESSION])
+    // Republished as due only once while it waits.
     expect(log.changed).toEqual([SESSION])
     state.empty = true
     await scheduler.tick()

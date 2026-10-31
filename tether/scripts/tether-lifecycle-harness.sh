@@ -172,19 +172,16 @@ expect_status 409 'stale end'
 [[ $(jq -r .error "$work/body") == stale_generation ]] || die 'stale end not refused as stale_generation'
 pass 'capture, scrollback and the stale-generation fence work'
 
-# --- 5b. view mutations without a GUI: title renames, show/position refuse ----------
+# --- 5b. view mutations: title renames, position answers windows_retired -----------
 gen=$(api GET "/v1/sessions/$a_id" | jq -r .generation)
 api POST "/v1/widgets/$a_id/title" "{\"generation\":\"$gen\",\"label\":\"Harness A\"}" >/dev/null
-expect_status 200 'title without GUI'
+expect_status 200 'title'
 [[ $(api GET "/v1/sessions/$a_id" | jq -r .name) == 'Harness A' ]] || die 'title did not rename the session'
 gen=$(api GET "/v1/sessions/$a_id" | jq -r .generation)
-gui=$(api GET /v1/health | jq -r .gui.connected)
 moved=$(api POST "/v1/widgets/$a_id/position" "{\"generation\":\"$gen\",\"bounds\":{\"x\":0,\"y\":0,\"width\":800,\"height\":600}}")
-if [[ $gui != true ]]; then
-  expect_status 503 'position without GUI'
-  [[ $(jqr .error "$moved") == gui_unavailable ]] || die 'position without GUI not gui_unavailable'
-fi
-pass 'title renames through the generation fence without a GUI; position answers gui_unavailable'
+expect_status 410 'position'
+[[ $(jqr .error "$moved") == windows_retired ]] || die 'position not answered windows_retired'
+pass 'title renames through the generation fence; position answers windows_retired'
 
 # --- 6. real attach client: resize claim, crash, reconnect -------------------------
 attach=$(api GET "/v1/sessions/$a_id/attach"); expect_status 200 attach

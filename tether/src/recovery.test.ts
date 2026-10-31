@@ -115,7 +115,6 @@ function harness(): Harness {
   }
   const context = {
     paths: { stateDir, runtimeDir: join(dir, 'run') },
-    gui: { connected: () => false, send: async () => true },
   } as unknown as LifecycleApiContext
   h.recovery = new Recovery(context, {
     now: () => h.clock.now,

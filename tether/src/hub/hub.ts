@@ -7,7 +7,6 @@
 import { statSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { EventType } from '../events'
-import type { GuiCommand, GuiOutcome } from '../gui-channel'
 import { HttpError, sendJson } from '../http'
 import { type HostEntry, hostsFilePath, loadHosts, peerDir } from './hosts'
 import { linkPaths } from './link'
@@ -40,7 +39,6 @@ export interface HubDeps {
   env: NodeJS.ProcessEnv
   uid?: number
   publish(type: EventType, data: Record<string, unknown>): void
-  gui: { send(command: GuiCommand): Promise<GuiOutcome> }
   settings: { get(key: string): string | null; put(key: string, value: string): void }
   isLocalSession(id: string): boolean
   isLocalRoot(requestId: string): boolean
@@ -177,7 +175,6 @@ export class Hub {
         paths.control,
         {
           publish: this.deps.publish,
-          gui: this.deps.gui,
           isLocal: this.deps.isLocalSession,
           identity: {
             get: (name) => this.identities()[name] ?? null,

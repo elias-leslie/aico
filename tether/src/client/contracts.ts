@@ -2,7 +2,6 @@
 // pure parsers that validate untrusted answers. Daemon types come in by
 // `import type` only, so a client bundle never pulls in daemon code.
 
-import type { GuiMutationCommand as DaemonGuiMutation } from '../gui-channel'
 import type { SessionStatus } from '../lifecycle/engine'
 import type { ResizeRefusal } from '../lifecycle/interactive-tmux'
 import type { SessionOrigin } from '../markers'
@@ -423,56 +422,4 @@ export function parseAttachAnswer(body: unknown): AttachAnswer {
     ...(value.host !== undefined ? { host: value.host } : {}),
     ...(value.ssh !== undefined ? { ssh: value.ssh } : {}),
   }
-}
-
-export type GuiMutationCommand = DaemonGuiMutation & { commandId: string }
-
-export type GuiCommand = GuiMutationCommand | { commandId: string; kind: 'layout' }
-
-/** The GUI's verdict for one command: applied (a layout read carries the
- * GUI's own snapshot), or a stable error code. */
-export type GuiVerdict = { applied: true; layout?: unknown } | { applied: false; error: string }
-
-/** Validate one GUI channel command line. */
-export function parseGuiCommand(value: unknown): GuiCommand | null {
-  const line = value as Record<string, unknown> | null
-  if (line?.type !== 'command' || typeof line.commandId !== 'string') return null
-  if (line.kind === 'layout') return { commandId: line.commandId, kind: 'layout' }
-  if (
-    (line.kind !== 'show' &&
-      line.kind !== 'position' &&
-      line.kind !== 'title' &&
-      line.kind !== 'coordinator') ||
-    typeof line.sessionId !== 'string' ||
-    !/^[0-9a-f]{8}$/.test(line.sessionId) ||
-    typeof line.generation !== 'string'
-  )
-    return null
-  const command: GuiMutationCommand = {
-    commandId: line.commandId,
-    kind: line.kind,
-    sessionId: line.sessionId,
-    generation: line.generation,
-  }
-  if (line.kind === 'position') {
-    const b = line.bounds as Record<string, unknown> | null
-    const int = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n)
-    if (!b || !int(b.x) || !int(b.y) || !int(b.width) || !int(b.height)) return null
-    command.bounds = {
-      x: b.x as number,
-      y: b.y as number,
-      width: b.width as number,
-      height: b.height as number,
-    }
-  }
-  if (line.kind === 'title') {
-    if (typeof line.label !== 'string') return null
-    command.label = line.label
-  }
-  if (line.kind === 'coordinator') {
-    if (typeof line.coordinator !== 'boolean') return null
-    command.coordinator = line.coordinator
-  }
-  if (line.kind === 'show' && line.ifViewed === true) command.ifViewed = true
-  return command
 }

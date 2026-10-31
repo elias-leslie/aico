@@ -112,7 +112,7 @@ What differs from a tmux session:
 
 #### Chat routes *(apiVersion 5)*
 
-A GUI shows a native chat for an Agent Hub session with these routes. All are for `agent-hub` sessions only: any other session, or one whose Agent Hub session is not created yet, answers `409 workload_unavailable`; an unknown session `404 not_found`; Agent Hub unreachable `503 agent_hub_unavailable`; a refusal from Agent Hub `409 workload_unavailable` with `reason`. None of them ever carries the owner token.
+A front end shows a chat for an Agent Hub session with these routes. All are for `agent-hub` sessions only: any other session, or one whose Agent Hub session is not created yet, answers `409 workload_unavailable`; an unknown session `404 not_found`; Agent Hub unreachable `503 agent_hub_unavailable`; a refusal from Agent Hub `409 workload_unavailable` with `reason`. None of them ever carries the owner token.
 
 | Route | Request | Answer |
 |---|---|---|
@@ -177,7 +177,7 @@ kept in the `waiting_notices` setting, so a restart neither repeats nor strands 
 
 ### Session files
 
-A GUI's file browser reads a session's folder (its `projectRoot`) on the machine the session runs on, so the hub forwards these routes to the host of a remote session ([Remote hosts](#remote-hosts): routing) and a host that is not connected answers `409 host_unavailable`. Reads follow the web app's browser rules (`src/files/browser.ts`): one directory level or one file, never outside the folder, never a secret (`.env*`, `.git`, keys, `auth.json`, ...), hidden and build directories left out of listings, text files over 1 MiB truncated.
+A front end's file browser reads a session's folder (its `projectRoot`) on the machine the session runs on, so the hub forwards these routes to the host of a remote session ([Remote hosts](#remote-hosts): routing) and a host that is not connected answers `409 host_unavailable`. Reads follow the web app's browser rules (`src/files/browser.ts`): one directory level or one file, never outside the folder, never a secret (`.env*`, `.git`, keys, `auth.json`, ...), hidden and build directories left out of listings, text files over 1 MiB truncated.
 
 | Route | Answer |
 | --- | --- |
@@ -254,7 +254,7 @@ When a view becomes active, it claims the shared tmux window size:
 
 `POST /v1/sessions/:id/resize-claim` with body `{generation, clientPid, cols, rows, viewer?}` returns `200 {applied: true, changed}` or `{applied: false, reason}`. `changed` is true when the window's size differed before the claim, so a view that took the size back knows to repaint. A successful claim also moves the foreground pane's `MemoryLow=2G` to this session's pane scope, since Aico claims the size when a view gains focus.
 
-`POST /v1/sessions/:id/show` with body `{generation}` asks the connected GUI to open or focus the session's view. It returns `200 {shown: true}`, `503 gui_unavailable` with no GUI connected, or `409` when the session is not running or the GUI rejected the command.
+`POST /v1/sessions/:id/show` is retired: Aico has no desktop windows, so it answers `410 windows_retired` and nothing happens. A session shows in Aico web.
 
 `viewer` *(post-cutover, apiVersion 2)* names the claimer for the other views: `{app, device}`, exactly those two keys, `app` a lowercase slug (`desktop`, `web`; 1–32 of `a-z0-9-`, starting with a letter) and `device` 1–64 characters with no control characters or surrounding spaces (the desktop sends its hostname). It is optional; a malformed one is refused with `400 invalid_viewer` before anything else about the session is checked.
 
@@ -280,22 +280,21 @@ A root is a session created through the root contract with a stable caller `requ
 | `GET /v1/roots` | query `origin=aico\|a-term` *(3a)*, `ended=0\|1` *(post-cutover)* | `{owner, available, directedDelivery, roots: Descriptor[]}`. `owner` is the `origin` filter, else `"aico"`. `ended=0` leaves out ended tombstones (they stay readable at `GET /v1/roots/:requestId`). `400 invalid_query` for another origin or `ended` value. |
 | `POST /v1/roots` | `{requestId, tool, projectId, projectRoot, initialPrompt, role, leadRootReference?, facetCapsuleRef?, resumeSessionId?, model?, agentSlug?, origin?, aTermSessionId?, launchedBy?, lineage?, host?}` | Existing or reserved root descriptor. `host` and `lineage` (8): see [Remote hosts](#remote-hosts). Tool `agent-hub` starts an Agent Hub chat session ([Agent Hub sessions](#agent-hub-sessions)): `agentSlug` is required for it (and refused for any other tool), `model` is optional, `resumeSessionId`, `reasoningEffort` and `daybreak` are refused, and `projectRoot` only has to be an existing directory. `422 unknown_agent` or `unknown_model` when Agent Hub does not know the agent or model, `503 agent_hub_unavailable` when it cannot be reached (nothing is reserved). For a terminal tool that can list its models (Pi), a `model` it does not list is `422 unknown_model` with `reason` naming the host and the listing command, before anything is reserved; a create with `host` gets the same `400` answers as a local one for a malformed option before the hub wakes the host, and the host's Tether judges the model. The descriptor's `agentExit` (`{status}` or `{signal}`, else `null`) says how the root's agent ended while its session stays at the shell. `200` for running or ended, `202` for pending or uncertain. `400 unsupported_tool` with `supported: slug[]` for a tool that can't start a root (`rootCapable: false`). `400 prompt_too_long` with `limit` when `initialPrompt` exceeds 14 KiB fresh or 2000 bytes on resume ([root-control.md](../../docs/root-control.md)). `409 request_conflict` if the same key arrives with a different digest. `409 recovery_pending` with `widgetId` when a new request's `resumeSessionId` is a conversation that [crash recovery](crash-recovery.md) is about to resume, or holds, in that session. |
 | `GET /v1/roots/:requestId` | none | Current descriptor, including ended tombstones (`status: "ended"`, `generation: null`). Every root descriptor carries `launch`: null, or `{state: "deferred", reason, checkedAt, nextRetryAt, attempts}` while host admission holds a pending launch back. Tether tries it again every 30 s, the same way as repeating the create, until it starts or the root ends. The record lives in memory, so a Tether restart drops it; repeat the create then. |
-| `POST /v1/roots/:requestId/show` | `{generation}` | Forwarded to the GUI |
-| `POST /v1/roots/:requestId/position` | `{generation, bounds: {x, y, width, height}}` | Forwarded to the GUI |
-| `POST /v1/roots/:requestId/title` | `{generation, label}` | Renames the session in Tether and forwards to the GUI |
+| `POST /v1/roots/:requestId/show`, `POST /v1/roots/:requestId/position` | any | Retired: `410 windows_retired`, nothing applied |
+| `POST /v1/roots/:requestId/title` | `{generation, label}` | Renames the session in Tether |
 | `POST /v1/roots/:requestId/end` | `{generation}` | Same as session End. The tombstone is retained. |
 | `POST /v1/roots/:requestId/send` | none | `503 directed_delivery_unavailable` |
 | `GET` and `POST /v1/roots/:requestId/admin` | as in Aico | Generation-checked, fail-closed `503`. No terminal input. |
 | `GET /v1/widgets/:id` | none | Compact descriptor `{owner:"aico", widgetId, sessionId, generation, status, available}` |
 | `POST /v1/widgets/:id/title` | `{generation, label}` | As for roots |
-| `POST /v1/widgets/:id/position` | `{generation, bounds}` | As for roots |
-| `POST /v1/widgets/:id/coordinator` | `{generation, coordinator: boolean \| widgetId}` | Marks, unmarks or joins a coordinator in the catalog (see [Coordinators](#coordinators)) and forwards it to the GUI when one is connected |
+| `POST /v1/widgets/:id/show`, `POST /v1/widgets/:id/position` | any | Retired: `410 windows_retired`, as for roots |
+| `POST /v1/widgets/:id/coordinator` | `{generation, coordinator: boolean \| widgetId}` | Marks, unmarks or joins a coordinator in the catalog (see [Coordinators](#coordinators)) |
 
-The root descriptor keeps Aico's fields: `owner`, `hostIdentity`, `generation`, `logicalSessionId`, `surfaceLocator`, metadata, `bounds` and `status`. `bounds` is always `null` from Tether: window geometry belongs to the GUI.
+The root descriptor keeps Aico's fields: `owner`, `hostIdentity`, `generation`, `logicalSessionId`, `surfaceLocator`, metadata, `bounds` and `status`. `bounds` is always `null`: Aico has no desktop windows.
 
 Root origin *(3a)*: `origin` is `"aico"` (default) or `"a-term"`; `aTermSessionId` (a UUID) is accepted only with `"a-term"` and becomes the pane's `A_TERM_SESSION_ID`. Neither is part of the request digest. A root's `owner` is its stored origin and the descriptor also carries `origin`. The pre-Tether sockets `/run/user/<uid>/aico/control.sock` and `gui-control.sock` were removed on 2026-10-24; `st aico` and SummitFlow fleet use this socket.
 
-Root window *(post-cutover)*: once a new root is running, Tether asks the connected GUI to show it only when the desktop or `st aico create` requested it (session origin `root`). A root the web app started (origin `a-term`) joins the desktop catalog and tray without a window, so no window layout is written for it.
+A new root is visible in Aico web as soon as it runs. Tether opens nothing on a desktop.
 
 Root-request tombstones from Aico are imported by `tether import-aico`; there is no separate tombstone import route.
 
@@ -315,8 +314,8 @@ A coordinator is a session that launches and steers other sessions (lanes). The 
 - `coordinator` is true for a coordinator. `coordinatorId` is the root coordinator that launched this session, or null (always null for a coordinator). It stays set after that coordinator ends.
 - `parentId` *(9)* is the session that launched this one: the root coordinator, or a lane of it that started its own helper. It is null on coordinators and on sessions launched before it was recorded, and it may name a session on another host. Colour, tiling, routing and root control follow `coordinatorId`; only the lists nest by `parentId`: a session folds under its parent while that parent is listed, else under its coordinator, as before. A manual `join` makes the named session the parent. A kept wake relaunches under the same parent while that parent is still a lane of the same coordinator.
 - `coordinatorColor` is the coordinator's colour, `#rrggbb` from a fixed palette of eight, on the coordinator and on each of its lanes. A new coordinator takes the first colour no other coordinator holds, so coordinators on screen together differ until there are more than eight. Lanes keep their colour after the coordinator ends.
-- `POST /v1/widgets/:id/coordinator` marks or unmarks one by hand (`st aico widget coordinator on|off`), with or without a GUI connected, and publishes `session.updated`. Unmarking frees the colour; lanes keep theirs.
-- `coordinator: "<widgetId>"` (`st aico widget coordinator join <widgetId>`) makes the session a lane of that session's root coordinator, marking it a coordinator if it is not one or a lane already. The session stops being a coordinator and its own lanes move with it. This repairs sessions that predate `launchedBy` and were promoted when they launched helpers. The GUI hears only `coordinator: false`; lineage reaches it on the descriptor.
+- `POST /v1/widgets/:id/coordinator` marks or unmarks one by hand (`st aico widget coordinator on|off`), and publishes `session.updated`. Unmarking frees the colour; lanes keep theirs.
+- `coordinator: "<widgetId>"` (`st aico widget coordinator join <widgetId>`) makes the session a lane of that session's root coordinator, marking it a coordinator if it is not one or a lane already. The session stops being a coordinator and its own lanes move with it. This repairs sessions that predate `launchedBy` and were promoted when they launched helpers.
 
 ### Display title and badge
 
@@ -326,19 +325,9 @@ Tether names every session once, and the desktop, the web app and `st` show thes
 - `badge` is `{kind, text, color}` or null. A coordinator has `{kind: "coordinator", text: "Coordinator"}`. A session it launched has `{kind: "child", text: "↳ <coordinator>"}`, naming the root coordinator by its task, else its project, else "Coordinator" (ended). `color` is `coordinatorColor`, or `#6fa8ff` for sessions from before colours.
 - A rename, a project switch or a changed project name publishes `session.updated` for the session. A renamed coordinator also publishes its lanes, whose badge text changed. Tether rereads project names every five minutes.
 
-### GUI view-mutation forwarding
+### Retired desktop windows
 
-Show, position, title and coordinator change views, and views belong to the app. Tether forwards them to one connected Aico GUI client:
-
-1. The Aico GUI opens `GET /v1/gui/channel` with header `x-tether-client: aico-gui`. This is a long-lived NDJSON stream of `{commandId, kind, sessionId, generation, bounds?, label?, coordinator?, ifViewed?}`. `ifViewed: true` on `show` (sent for a due wake) reopens the session's window only if the desktop has shown that session before, without taking focus; an open window is left as it is, and a session the desktop never showed answers `no_view`. While the owner is working in the web app (the web app made a size claim and the owner has not typed, clicked or scrolled in a desktop window since; at launch, a web claim Tether remembers from after the owner last used the desktop), the desktop opens, reopens and raises nothing for any `show` and answers `owner_on_web`; the routes that forward it answer `409 owner_on_web`. Only one GUI channel is active per instance. A second one replaces the first, which receives `{type:"superseded"}` and is closed. A superseded GUI waits and takes the channel back once it is free: it checks `GET /v1/health` every 5 s and reopens the channel with header `x-tether-gui-if-free: 1`, which Tether answers `409 gui_busy` while another GUI is connected. Two live apps therefore never take the channel from each other; the newest app keeps it until it leaves.
-2. For each command, the GUI verifies and applies the change (Aico `widgetMutationOperation`). It then posts `POST /v1/gui/results/:commandId` with `{applied: true}` or `{applied: false, error}`.
-3. Tether answers the original caller with the GUI's result. A command that gets no result within 5 s answers `409 outcome_uncertain`.
-
-`GET /v1/gui/layout` reads the connected Aico GUI's current window picture over this same channel. It sends `{type:"command", commandId, kind:"layout"}` without a session or generation; the GUI replies with `{applied:true, layout}` using the existing v1 layout snapshot (`v`, `pid`, `startTime`, `updatedAt`, `displays`, `windows`). This read never opens, focuses, moves, or changes a session. The route returns the snapshot directly, `503 gui_unavailable` when no GUI is connected, or `504 gui_timeout` on timeout/disconnect. The GUI may reject a read while quitting or before it is ready. Mutation commands retain their existing generation checks and result bodies.
-
-`st aico layout` uses this route on the socket selected by `TETHER_SOCKET`, or the current runtime's Tether instance. `AICO_LAYOUT_FILE` explicitly selects a fixture/offline file instead; file reads retain writer PID/start-time freshness checks.
-
-With no GUI connected, `show` and `position` return `503 gui_unavailable` and nothing is applied; Tether never starts the desktop. `coordinator` without a GUI changes only the catalog. `title` without a GUI *(3a)* renames the session in the catalog under the lifecycle lock, fenced on the exact running generation, and publishes `session.updated`. With a GUI connected, `title` renames the catalog entry only when the GUI applies it, so the result stays atomic. `GET /v1/health` reports `gui.connected`, and the events `gui.connected` / `gui.disconnected` announce changes.
+Aico has no desktop windows, so Tether has no GUI channel. `title` and `coordinator` change the catalog directly: `title` renames the session under the lifecycle lock, fenced on the exact running generation, and publishes `session.updated`; `coordinator` changes the catalog mark. `show` and `position` (the session, root and widget routes above) answer `410 windows_retired` and apply nothing, and so does any request to the old desktop client's routes (its channel, results and layout, all under the `gui` path prefix). `st aico layout`, `st aico widget position`, `st aico root position` and `st aico root show` print "Aico has no desktop windows any more; sessions show in Aico web. Nothing to arrange or show." and exit 2. `GET /v1/health` no longer reports `gui`, and the events `gui.connected` and `gui.disconnected` are gone.
 
 ## Agent tools
 
@@ -518,7 +507,6 @@ Event types:
 - `root.updated`
 - `tools.changed` (`{slug|ref, change}`)
 - `projects.changed` (`{id, change: "registered"}`)
-- `gui.connected`, `gui.disconnected`
 - `wakes.changed` (`{sessionId}`; null for a kept wake of an ended session)
 - `runs.changed` (`{}`; the listed workflow runs changed, re-read `GET /v1/runs`)
 - `asks.changed` (`{ask, created}`): see [Asks](#asks-post-cutover)
@@ -566,14 +554,14 @@ kill_enabled, kill_candidate`) tells Nightshift whether a job it may stop exists
 ## Wakes *(post-cutover)*
 
 A wake is a scheduled check-in on a session: a time and a short note. Agents set their own with `st aico wake`; the
-owner sets and cancels them from the desktop tray and the web app. Tether is the only scheduler, and the `wakes` table
+owner sets and cancels them from the web app. Tether is the only scheduler, and the `wakes` table
 survives Tether restarts and reboots. The design is in `docs/plans/session-wakes.md` at the repository root.
 
-When a wake is due, Tether asks the desktop to reopen the session's window (`show` with `ifViewed`) and waits until
+When a wake is due, Tether republishes it as due (`wakes.changed`) and waits until
 the agent is `idle`, no attached client has sent a key for `quietSeconds`, and the agent's input line holds no draft.
 It then pastes one message for all of the session's due wakes, oldest first, and submits it:
 `[Scheduled check-in for 5:30 PM, 12 min late] check the lane reports`. Each wake goes out at most once. A wake that
-was due while Tether or the host was down goes out when the gates next pass. Closing a window does not cancel a wake.
+was due while Tether or the host was down goes out when the gates next pass. Closing a view does not cancel a wake.
 While a due wake waits, its `waitingFor` names the first gate it fails (`the agent is working (claude-status)`,
 `someone typed in the last 15s`, `the input line holds a draft`, `the session is stopped`), and Tether logs each new
 reason once (`[tether:wakes] check-in for session=… waits: …`) and how long it waited when it goes out. A Claude Code
@@ -658,9 +646,7 @@ Tether can be a hub over other machines' Tethers (docs/plans/remote-hosts.md). E
 
 **Lineage.** A root created on a host with `launchedBy` naming a session here: the hub makes that session a coordinator as usual and sends the host `lineage: {coordinatorId, coordinatorColor, parentId}` instead of `launchedBy` (`parentId` only to a host whose health says `apiVersion` 9 or later; an older one refuses keys it does not know). `POST /v1/roots` accepts `lineage` (not with `launchedBy`, not part of the digest) and records it on the new session. A remote lane launched by a coordinator here shows `↳ <coordinator>` in its badge. A root here launched by a remote session takes that session's lineage from the hub, with that session as its `parentId`. `launchedBy` naming a session on the same host is passed through.
 
-**Events.** `peer.state {host, state, since, wake}` on every link change and every step of a create's wake. A connected host whose event stream is silent for 20 s (it sends a heartbeat every 15 s) is asked its health; no answer within 5 s drops it to `offline` (a VM that stopped dead never closes the link). Relayed: `session.*`, `root.updated`, `tools.changed`, `projects.changed`, `wakes.changed` and `runs.changed`, each with `data.host`. Not relayed: a peer's `gui.*`, `show.requested` and `memory-policy.changed`.
-
-**GUI channel.** While a host is connected, the hub holds its `GET /v1/gui/channel` as that host's GUI and applies each command through this Tether's own GUI channel ([GUI view-mutation forwarding](#gui-view-mutation-forwarding)), so an agent on the host can show or place its window here. A command with no GUI here is answered `gui_unavailable`, one the GUI did not answer in time `gui_timeout`.
+**Events.** `peer.state {host, state, since, wake}` on every link change and every step of a create's wake. A connected host whose event stream is silent for 20 s (it sends a heartbeat every 15 s) is asked its health; no answer within 5 s drops it to `offline` (a VM that stopped dead never closes the link). Relayed: `session.*`, `root.updated`, `tools.changed`, `projects.changed`, `wakes.changed` and `runs.changed`, each with `data.host`. Not relayed: a peer's `show.requested` and `memory-policy.changed`.
 
 ## Health and version
 
@@ -669,7 +655,7 @@ Tether can be a hub over other machines' Tethers (docs/plans/remote-hosts.md). E
 ```json
 {"status":"ok","name":"tether","instance":"default","version":"0.1.0","apiVersion":5,"schemaVersion":12,
  "uptimeMs":966,"bootId":"uuid","eventSeq":0,"catalog":{"sessions":0,"tmuxServersActive":0,"rootRequests":0},
- "gui":{"connected":false},"lifecycle":"ready","host":{"name":"davion-sidarli","machineId":"<16 hex>"}}
+ "lifecycle":"ready","host":{"name":"davion-sidarli","machineId":"<16 hex>"}}
 ```
 
 `host` (8) names the machine: its host name and a hash of `/etc/machine-id`. A hub compares it on every link-up ([Remote hosts](#remote-hosts)).

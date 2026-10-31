@@ -18,9 +18,8 @@ ExecStart=%h/.local/lib/tether/bin/tether --instance %i serve
 Restart=on-failure
 RestartSec=2
 UMask=0077
-# Same PATH as aico-shell.service. Panes inherit it (Aico pinned its own PATH
-# onto every pane), so agent CLIs resolve identically from either app. The
-# daemon never sources shell profiles.
+# Panes inherit this PATH, so agent CLIs resolve identically from Aico web and
+# from `st`. The daemon never sources shell profiles.
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 # Sibling checkouts (agent-hub, codex-config) live here, not ~/projects.
 Environment=TETHER_PROJECTS_DIR=/srv/workspaces/projects

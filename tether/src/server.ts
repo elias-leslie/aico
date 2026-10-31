@@ -8,7 +8,6 @@ import { type AskDelivery, type NeedsYouFeed, registerAskRoutes } from './asks'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import type { EventBus, TetherEvent } from './events'
 import { registerFileRoutes } from './files/api'
-import type { GuiChannel } from './gui-channel'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { HostAdmin, registerHostAdminRoutes } from './hub/host-admin'
 import type { Hub } from './hub/hub'
@@ -42,7 +41,6 @@ export interface ServerContext {
   store: Store
   events: EventBus
   projects: ProjectProvider
-  gui: GuiChannel
   /** Project-root cache shared with the lifecycle engine. */
   projectRoots: Map<string, string>
   /** SummitFlow's active-project pointer file, or null to ignore it. */
@@ -255,7 +253,6 @@ export function buildRouter(context: ServerContext): Router {
         bootId: events.bootId,
         eventSeq: events.lastSeq,
         catalog: store.counts(),
-        gui: { connected: context.gui.connected() },
         lifecycle: lifecycleStatus(),
         host: machineIdentity(),
       })
@@ -443,9 +440,17 @@ export function buildRouter(context: ServerContext): Router {
   return router
 }
 
+/** Routes of the retired desktop GUI client. An old client that still calls
+ * them gets one plain answer instead of a 404 it would retry on. */
+const RETIRED_DESKTOP_ROUTES = /^\/v1\/gui(?:\/|$)/
+
 export function createTetherServer(context: ServerContext): Server {
   const router = buildRouter(context)
   return createServer((request, response) => {
+    if (RETIRED_DESKTOP_ROUTES.test(request.url?.split('?')[0] ?? '')) {
+      sendError(response, new HttpError(410, 'windows_retired'))
+      return
+    }
     // A session, root, wake or run a remote host owns goes there verbatim.
     if (context.hub?.forward(request, response)) return
     router.dispatch(request, response).catch((error: unknown) => {

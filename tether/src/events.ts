@@ -17,8 +17,6 @@ export type EventType =
   | 'tools.changed'
   | 'memory-policy.changed'
   | 'projects.changed'
-  | 'gui.connected'
-  | 'gui.disconnected'
   | 'show.requested'
   | 'asks.changed'
   | 'wakes.changed'

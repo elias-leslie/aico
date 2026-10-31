@@ -31,7 +31,7 @@ import {
 import { withRootPrompt } from './lifecycle/root-launch'
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { getTui } from './lifecycle/tui/registry'
-import { generationOf, type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
+import { type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
 import type { Recovery } from './recovery'
 
 const OBSERVE_INTERVAL_MS = 60_000
@@ -122,10 +122,7 @@ export class Continuity {
     this.markFinished = resolve
   })
 
-  constructor(
-    private readonly context: LifecycleApiContext,
-    options: ContinuityOptions = {},
-  ) {
+  constructor(context: LifecycleApiContext, options: ContinuityOptions = {}) {
     this.snapshotPath = join(context.paths.stateDir, 'continuity.json')
     this.reportPath = join(context.paths.stateDir, 'restore.json')
     this.home = process.env.HOME ?? homedir()
@@ -357,13 +354,6 @@ export class Continuity {
         return failure?.code === 'admission_denied'
           ? { status: 'retry', reason }
           : { status: 'failed', reason }
-      }
-      if (latest && this.context.gui.connected()) {
-        void this.context.gui.send({
-          kind: 'show',
-          sessionId: id,
-          generation: generationOf(latest),
-        })
       }
       return { status: 'restored', resumed: Boolean(resume) }
     } catch (error) {

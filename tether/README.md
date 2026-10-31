@@ -1,6 +1,6 @@
 # Tether
 
-Tether is a per-user session daemon for Linux. It is part of [Aico](../README.md) and owns the lifecycle of the durable tmux sessions that Aico's desktop and web front ends show:
+Tether is a per-user session daemon for Linux. It is part of [Aico](../README.md) and owns the lifecycle of the durable tmux sessions that Aico web shows:
 
 - containment
 - the catalog and generation fencing
@@ -8,11 +8,11 @@ Tether is a per-user session daemon for Linux. It is part of [Aico](../README.md
 - the project list
 - events
 
-Either front end works alone against Tether, and both share one instance.
+Aico web and `st` are its clients.
 
-Tether serves a versioned HTTP API on a private Unix socket (`$XDG_RUNTIME_DIR/tether/<instance>/control.sock`, mode 0600). It is never exposed on the network. The front ends keep their own terminal byte path (`tmux attach`) and their own view state.
+Tether serves a versioned HTTP API on a private Unix socket (`$XDG_RUNTIME_DIR/tether/<instance>/control.sock`, mode 0600). It is never exposed on the network. Aico web keeps its own terminal byte path (`tmux attach`) and their own view state.
 
-**Status:** early release (v0.1.0, API v1). In daily use on the author's workstation since October 2026, where `tether@default` owns every Aico session ([cutover retrospective](../docs/history/cutover-log-2026-10-11.md)). Both front ends are clients: they keep only their views (desktop windows; web app panes, layout and project display settings) and require API v1 or later.
+**Status:** early release (v0.1.0, API v1). In daily use on the author's workstation since October 2026, where `tether@default` owns every Aico session ([cutover retrospective](../docs/history/cutover-log-2026-10-11.md)). Aico web is a client: it keeps only its views (panes, layout and project display settings) and requires API v1 or later.
 
 Tether's project list comes from SummitFlow, the author's workspace tool, when it answers on `http://127.0.0.1:8001/api/projects` (override with `TETHER_SUMMITFLOW_URL`, or set it to `off`). Otherwise Tether reads a local list at `~/.config/tether/projects.json`, so it works without SummitFlow. The original migration plan is in [docs/history/migration-plan.md](../docs/history/migration-plan.md).
 

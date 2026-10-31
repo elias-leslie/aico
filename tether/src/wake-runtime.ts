@@ -43,12 +43,7 @@ import { captureVisibleTargetArgs, clientActivityTargetArgs } from './lifecycle/
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './lifecycle/tui/blank-slate'
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { AGENT_HUB_TOOL, getTui } from './lifecycle/tui/registry'
-import {
-  agentStateOf,
-  generationOf,
-  type LifecycleApiContext,
-  pasteIntoRunningSession,
-} from './lifecycle-api'
+import { agentStateOf, type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
 import {
   applyWakePolicyPatch,
   cleanNote,
@@ -130,7 +125,6 @@ export class WakeService {
       inputEmpty: (id) => this.inputEmpty(id),
       lastKeyAt: (id) => this.lastKeyAt(id),
       deliver: (id, text) => pasteIntoRunningSession(id, text),
-      reopen: (id) => this.reopen(id),
       conversationHolder: (resumeId) => this.conversationHolder(resumeId),
       relaunch: (ended, message) => this.relaunch(ended, message),
       changed: (id) => this.changed(id),
@@ -207,16 +201,6 @@ export class WakeService {
       .map((line) => Number(line.trim()))
       .filter((n) => Number.isSafeInteger(n) && n > 0)
     return times.length ? Math.max(...times) * 1000 : null
-  }
-
-  /** Reopen the session's window if the desktop has shown it. Best effort:
-   * the desktop decides, and answers `no_view` for a session it never showed. */
-  private reopen(sessionId: string): void {
-    const row = getWidget(sessionId)
-    if (!row || isHub(row) || !this.context.gui.connected()) return
-    void this.context.gui
-      .send({ kind: 'show', sessionId, generation: generationOf(row), ifViewed: true })
-      .catch(() => {})
   }
 
   private async conversationHolder(resumeId: string): Promise<string | null> {
@@ -298,11 +282,6 @@ export class WakeService {
     const latest = getWidget(id)
     if (latest) await verifySessionStatus(latest).catch(() => undefined)
     notifySessionChanged(id, { force: true })
-    // A desktop-started session comes back in a window; a web-started one does not.
-    if (latest && origin !== 'a-term' && this.context.gui.connected())
-      void this.context.gui
-        .send({ kind: 'show', sessionId: id, generation: generationOf(latest) })
-        .catch(() => {})
     return { status: 'started', id }
   }
 }

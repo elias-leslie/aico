@@ -61,7 +61,6 @@ describe('control socket', () => {
       apiVersion: 9,
       schemaVersion: 17,
       lifecycle: 'disabled',
-      gui: { connected: false },
     })
     const version = await call('GET', '/v1/version')
     expect(version.body).toMatchObject({ name: 'tether', apiVersion: 9, minApiVersion: 1 })
@@ -158,122 +157,31 @@ describe('lifecycle API (no tmux started)', () => {
     ).toEqual({ error: 'invalid_viewer' })
   })
 
-  it('serves roots, widgets and the GUI channel, and no legacy session routes', async () => {
+  it('serves roots and widgets, and no legacy session routes', async () => {
     expect((await call('GET', '/v1/roots')).body).toMatchObject({ owner: 'aico', roots: [] })
     expect((await call('GET', '/v1/roots/r1')).status).toBe(404)
-    expect((await call('POST', '/v1/roots/r1/show', {})).status).toBe(404)
+    expect(await call('POST', '/v1/roots/r1/show', {})).toEqual({
+      status: 410,
+      body: { error: 'windows_retired' },
+    })
     expect((await call('GET', '/v1/widgets/ffffffff')).status).toBe(404)
     expect((await call('POST', '/v1/roots', { requestId: 'r1' })).body).toEqual({
       error: 'invalid_body',
     })
-    expect((await call('GET', '/v1/gui/channel')).body).toEqual({ error: 'invalid_client' })
-    expect((await call('POST', '/v1/gui/results/x', { applied: true })).status).toBe(404)
     // The old web backend's session API is gone.
     expect((await call('GET', '/v1/legacy-sessions')).status).toBe(404)
     expect((await call('POST', '/v1/legacy-sessions/summitflow-x/end', {})).status).toBe(404)
   })
 
-  it('reads a correlated live GUI layout without any session or generation', async () => {
-    expect(await call('GET', '/v1/gui/layout')).toEqual({
-      status: 503,
-      body: { error: 'gui_unavailable' },
-    })
-    let receive: (command: Record<string, string>) => void = () => {}
-    const commands = () =>
-      new Promise<Record<string, string>>((resolve) => {
-        receive = resolve
-      })
-    const channel = request({
-      socketPath: paths.socket,
-      path: '/v1/gui/channel',
-      headers: { 'x-tether-client': 'aico-gui' },
-    })
-    await new Promise<void>((resolve) => {
-      channel.on('response', (res) => {
-        let tail = ''
-        res.on('data', (chunk) => {
-          tail += chunk.toString()
-          const lines = tail.split('\n')
-          tail = lines.pop() ?? ''
-          for (const line of lines) {
-            const value = JSON.parse(line)
-            if (value.type === 'hello') resolve()
-            if (value.type === 'command') receive(value)
-          }
-        })
-      })
-      channel.end()
-    })
-    try {
-      const next = commands()
-      const layoutRequest = call('GET', '/v1/gui/layout')
-      const command = await next
-      expect(command).toEqual({ type: 'command', commandId: expect.any(String), kind: 'layout' })
-      const resultPath = `/v1/gui/results/${command.commandId}`
-      expect((await call('POST', resultPath, { applied: true })).status).toBe(400)
-      const layout = {
-        v: 1,
-        pid: process.pid,
-        startTime: null,
-        updatedAt: new Date().toISOString(),
-        displays: [],
-        windows: [],
-      }
-      expect(await call('POST', resultPath, { applied: true, layout })).toEqual({
-        status: 200,
-        body: { accepted: true },
-      })
-      expect(await layoutRequest).toEqual({ status: 200, body: layout })
-      expect((await call('POST', resultPath, { applied: true, layout })).status).toBe(404)
-      const disconnected = commands()
-      const inFlight = call('GET', '/v1/gui/layout')
-      await disconnected
-      channel.destroy()
-      expect(await inFlight).toEqual({ status: 504, body: { error: 'gui_timeout' } })
-    } finally {
-      channel.destroy()
-    }
-  })
-
-  it('gives a GUI that asks only-if-free the channel only while no GUI holds it', async () => {
-    const open = (headers: Record<string, string>) => {
-      const req = request({
-        socketPath: paths.socket,
-        path: '/v1/gui/channel',
-        headers: { 'x-tether-client': 'aico-gui', ...headers },
-      })
-      const answer = new Promise<{ status: number; first: unknown }>((resolve) => {
-        req.on('response', (res) => {
-          res.once('data', (chunk) =>
-            resolve({
-              status: res.statusCode ?? 0,
-              first: JSON.parse(String(chunk).split('\n')[0] ?? ''),
-            }),
-          )
-        })
-      })
-      req.end()
-      return { req, answer }
-    }
-    const holder = open({})
-    expect(await holder.answer).toEqual({ status: 200, first: { type: 'hello' } })
-    const waiter = open({ 'x-tether-gui-if-free': '1' })
-    try {
-      expect(await waiter.answer).toEqual({ status: 409, first: { error: 'gui_busy' } })
-      holder.req.destroy()
-      await expect
-        .poll(async () => ((await call('GET', '/v1/health')).body as { gui: unknown }).gui)
-        .toEqual({ connected: false })
-      const reclaim = open({ 'x-tether-gui-if-free': '1' })
-      try {
-        expect(await reclaim.answer).toEqual({ status: 200, first: { type: 'hello' } })
-      } finally {
-        reclaim.req.destroy()
-      }
-    } finally {
-      holder.req.destroy()
-      waiter.req.destroy()
-    }
+  it('answers the retired desktop client and its health field plainly', async () => {
+    const retired = { status: 410, body: { error: 'windows_retired' } }
+    expect(await call('GET', '/v1/gui/layout')).toEqual(retired)
+    expect(await call('GET', '/v1/gui/channel')).toEqual(retired)
+    expect(await call('POST', '/v1/gui/results/x', { applied: true })).toEqual(retired)
+    expect(
+      await call('POST', '/v1/sessions/ffffffff/show', { generation: 'a'.repeat(64) }),
+    ).toEqual(retired)
+    expect((await call('GET', '/v1/health')).body).not.toHaveProperty('gui')
   })
 
   it('validates switch-project, pane-mode and context-check', async () => {

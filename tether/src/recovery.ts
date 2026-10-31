@@ -66,7 +66,6 @@ import {
 import { getTui } from './lifecycle/tui/registry'
 import type { TuiSpec } from './lifecycle/tui/spec'
 import type { LifecycleApiContext } from './lifecycle-api'
-import { generationOf } from './lifecycle-api'
 import {
   CRASH_RESULTS,
   type CrashFacts,
@@ -1149,8 +1148,6 @@ export class Recovery {
     this.transcripts.delete(`${record.id}:${record.diedAt}`)
     this.update(record, { state: 'recovered', recoveredAt, reason: null })
     this.log(`${row.id}: resumed in place (attempt ${record.attempt})`)
-    if (this.context.gui.connected())
-      void this.context.gui.send({ kind: 'show', sessionId: row.id, generation: generationOf(row) })
   }
 
   /** Another session that is resuming or running this conversation now. */

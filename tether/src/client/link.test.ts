@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSessionCatalog } from './catalog'
-import { type EventSubscriber, followEvents, holdGuiChannel, type TetherClient } from './client'
+import { type EventSubscriber, followEvents, type TetherClient } from './client'
 import {
-  type GuiCommand,
-  type GuiVerdict,
   type SessionDescriptor,
   type TetherEvent,
   type TetherTool,
@@ -15,11 +13,9 @@ import { coalesceAsync, createTetherLink } from './link'
 vi.mock('./client', async (original) => ({
   ...(await original<typeof import('./client')>()),
   followEvents: vi.fn(),
-  holdGuiChannel: vi.fn(),
 }))
 
 const follow = vi.mocked(followEvents)
-const hold = vi.mocked(holdGuiChannel)
 
 function descriptor(id: string, extra: Partial<SessionDescriptor> = {}): SessionDescriptor {
   return {
@@ -124,12 +120,9 @@ function setup(
     hooks,
   })
   const stopEvents = vi.fn()
-  const stopGui = vi.fn()
   follow.mockReturnValue(stopEvents)
-  hold.mockReturnValue(stopGui)
-  const apply = vi.fn(async (_c: GuiCommand): Promise<GuiVerdict> => ({ applied: true }))
   const connect = (): EventSubscriber => {
-    link.connect(apply)
+    link.connect()
     return follow.mock.calls.at(-1)?.[1] as EventSubscriber
   }
   return {
@@ -142,26 +135,23 @@ function setup(
     calls,
     connect,
     stopEvents,
-    stopGui,
-    apply,
   }
 }
 
 beforeEach(() => {
   follow.mockReset()
-  hold.mockReset()
 })
 
 describe('Tether events', () => {
   it.each([false, true])('accepts handoffs only from tether@default (active=%s)', (active) => {
     const shareSocket = '/run/test/default.sock'
     const agentSocket = '/run/user/1000/tether/dev/control.sock'
-    const { link, apply, hooks } = setup({
+    const { link, hooks } = setup({
       activeSocket: active ? shareSocket : agentSocket,
       other: { socketPath: active ? agentSocket : shareSocket } as TetherClient,
       shareSocket,
     })
-    link.connect(apply)
+    link.connect()
     const data = { id: 'aabbccddeeff', kind: 'url', name: 'https://example.com' }
     for (const [client, subscriber] of follow.mock.calls) {
       subscriber.onEvent(event('show.requested', data))
@@ -339,13 +329,12 @@ describe('workflow runs', () => {
 })
 
 describe('connection', () => {
-  it('connects once per reconnect and holds the GUI channel with the given handler', async () => {
+  it('connects once per reconnect and follows the event stream', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { connect, hooks, apply, tether, projects, link } = setup()
+    const { connect, hooks, tether, projects, link } = setup()
     expect(link.notice()).toBe('Tether is not reachable. Sessions keep running.')
     const subscriber = connect()
-    expect(hold).toHaveBeenCalledWith(tether, apply, expect.any(Function))
     subscriber.onConnected?.()
     subscriber.onConnected?.() // still connected: nothing new
     expect(hooks.connected).toHaveBeenCalledTimes(1)
@@ -362,26 +351,19 @@ describe('connection', () => {
     subscriber.onConnected?.()
     expect(hooks.connected).toHaveBeenCalledTimes(2)
 
-    // The GUI channel's log lines keep their wording.
-    const gui = hold.mock.calls[0]?.[2] as (m: string, e?: unknown) => void
-    gui('connected')
-    gui('channel lost', new Error('reset'))
-    expect(log).toHaveBeenCalledWith('[aico:gui] connected')
-    expect(warn).toHaveBeenCalledWith('[aico:gui] channel lost:', 'reset')
     log.mockRestore()
     warn.mockRestore()
   })
 
-  it('an incompatible Tether stops events and the GUI channel and says so', async () => {
+  it('an incompatible Tether stops events and says so', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { connect, stopEvents, stopGui, dialog, link, hooks } = setup({
+    const { connect, stopEvents, dialog, link, hooks } = setup({
       version: { name: 'tether', version: '9.0.0', apiVersion: 9, minApiVersion: 9 },
     })
     connect().onConnected?.()
     await vi.waitFor(() => expect(dialog.showErrorBox).toHaveBeenCalledTimes(1))
     expect(stopEvents).toHaveBeenCalledTimes(1)
-    expect(stopGui).toHaveBeenCalledTimes(1)
     expect(hooks.tray).toHaveBeenCalled()
     expect(error).toHaveBeenCalledWith(
       '[aico:tether] Tether 9.0.0 (API 9) is not compatible with this Aico; session control is disabled',
@@ -410,12 +392,11 @@ describe('connection', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const other = { socketPath: '/run/test/agent.sock' } as TetherClient
-    const { link, tether, catalog, hooks, apply, stopEvents, stopGui, projects } = setup({ other })
-    link.connect(apply)
+    const { link, tether, catalog, hooks, stopEvents, projects } = setup({ other })
+    link.connect()
     expect(follow).toHaveBeenCalledTimes(2)
     expect(follow.mock.calls[0]?.[0]).toBe(tether)
     expect(follow.mock.calls[1]?.[0]).toBe(other)
-    expect(hold.mock.calls.map((call) => call[0])).toEqual([tether, other])
     const second = follow.mock.calls[1]?.[1] as EventSubscriber
     second.onDisconnected?.(new Error('no agent tether')) // never connected: nothing to say
     expect(warn).not.toHaveBeenCalled()
@@ -434,18 +415,16 @@ describe('connection', () => {
     expect(projects.invalidate).not.toHaveBeenCalled()
     link.stop()
     expect(stopEvents).toHaveBeenCalledTimes(2) // one stop per instance
-    expect(stopGui).toHaveBeenCalledTimes(2)
     log.mockRestore()
     warn.mockRestore()
   })
 
-  it('stop is safe before connect and stops both streams after', () => {
-    const { link, connect, stopEvents, stopGui } = setup()
+  it('stop is safe before connect and stops the stream after', () => {
+    const { link, connect, stopEvents } = setup()
     link.stop()
     connect()
     link.stop()
     expect(stopEvents).toHaveBeenCalledTimes(1)
-    expect(stopGui).toHaveBeenCalledTimes(1)
   })
 })
 

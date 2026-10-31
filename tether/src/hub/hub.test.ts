@@ -9,7 +9,6 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { GuiOutcome } from '../gui-channel'
 import { HttpError, readJsonObject, sendError, sendJson } from '../http'
 import { Hub, type HubDeps } from './hub'
 import { peerRequest } from './peer-http'
@@ -52,9 +51,7 @@ class FakePeer {
    * connection, nothing comes back). */
   hangHealth = false
   readonly streams = new Set<ServerResponse>()
-  gui: ServerResponse | null = null
   roots: Record<string, unknown>[] = []
-  guiResults: { id: string; body: unknown }[] = []
   runs: Record<string, unknown> = {
     status: 'ok',
     error: null,
@@ -107,17 +104,6 @@ class FakePeer {
       res.once('close', () => this.streams.delete(res))
       return
     }
-    if (url === '/v1/gui/channel') {
-      res.writeHead(200, { 'content-type': 'application/x-ndjson' })
-      res.write(`${JSON.stringify({ type: 'hello', header: req.headers['x-tether-client'] })}\n`)
-      this.gui = res
-      return
-    }
-    const result = /^\/v1\/gui\/results\/(.+)$/.exec(url)
-    if (result?.[1]) {
-      this.guiResults.push({ id: result[1], body: payload })
-      return sendJson(res, 200, { accepted: true })
-    }
     if (/^\/v1\/sessions\/[0-9a-f]{8}\/chat\/stream$/.test(url)) {
       res.writeHead(200, { 'content-type': 'application/x-ndjson' })
       res.write(`${JSON.stringify({ type: 'hello' })}\n`)
@@ -158,7 +144,6 @@ describe('hub', () => {
   let frontSocket: string
   let events: { type: string; data: Record<string, unknown> }[]
   let settings: Map<string, string>
-  let guiSend: ReturnType<typeof vi.fn<(command: unknown) => Promise<GuiOutcome>>>
   const local = new Set<string>(['eeee0005'])
 
   function makeHub(overrides: Partial<HubDeps> = {}): Hub {
@@ -166,7 +151,6 @@ describe('hub', () => {
       env: { XDG_RUNTIME_DIR: dir, TETHER_HOSTS_FILE: join(dir, 'hosts.json') },
       uid: 1000,
       publish: (type, data) => events.push({ type, data }),
-      gui: { send: guiSend },
       settings: {
         get: (key) => settings.get(key) ?? null,
         put: (key, value) => settings.set(key, value),
@@ -194,7 +178,6 @@ describe('hub', () => {
     dir = mkdtempSync(join(tmpdir(), 'tether-hub-'))
     events = []
     settings = new Map()
-    guiSend = vi.fn(async (): Promise<GuiOutcome> => ({ status: 'applied' }))
     writeFileSync(
       join(dir, 'hosts.json'),
       JSON.stringify([
@@ -276,7 +259,6 @@ describe('hub', () => {
     events = []
     peer.emit('session.updated', { id: 'aaaa0001', session: session('aaaa0001', { name: 'x' }) })
     peer.emit('session.ended', { id: 'bbbb0002' })
-    peer.emit('gui.connected', {})
     await vi.waitFor(() => expect(events).toHaveLength(2))
     expect(events[0]).toMatchObject({
       type: 'session.updated',
@@ -608,33 +590,6 @@ describe('hub', () => {
     expect(JSON.parse(settings.get('peer_identities') ?? '{}')).toEqual({
       vm: { hostname: 'clone', machineId: 'bbbb' },
     })
-  })
-
-  it('bridges the peer GUI channel into this one', async () => {
-    await vi.waitFor(() => expect(peer.gui).not.toBeNull())
-    peer.gui?.write(
-      `${JSON.stringify({ type: 'command', commandId: 'c1', kind: 'show', sessionId: 'aaaa0001', generation: 'g' })}\n`,
-    )
-    await vi.waitFor(() => expect(peer.guiResults).toHaveLength(1))
-    expect(guiSend).toHaveBeenCalledWith({ kind: 'show', sessionId: 'aaaa0001', generation: 'g' })
-    expect(peer.guiResults[0]).toEqual({ id: 'c1', body: { applied: true } })
-    guiSend.mockResolvedValueOnce({ status: 'unavailable' })
-    peer.gui?.write(`${JSON.stringify({ type: 'command', commandId: 'c2', kind: 'layout' })}\n`)
-    await vi.waitFor(() => expect(peer.guiResults).toHaveLength(2))
-    expect(peer.guiResults[1]?.body).toEqual({ applied: false, error: 'gui_unavailable' })
-    // No window here: the host records a title or coordinator mark itself.
-    guiSend.mockResolvedValueOnce({ status: 'unavailable' })
-    peer.gui?.write(
-      `${JSON.stringify({ type: 'command', commandId: 'c3', kind: 'title', sessionId: 'aaaa0001', generation: 'g', label: 'Lab' })}\n`,
-    )
-    await vi.waitFor(() => expect(peer.guiResults).toHaveLength(3))
-    expect(peer.guiResults[2]?.body).toEqual({ applied: true })
-    guiSend.mockResolvedValueOnce({ status: 'unavailable' })
-    peer.gui?.write(
-      `${JSON.stringify({ type: 'command', commandId: 'c4', kind: 'show', sessionId: 'aaaa0001', generation: 'g' })}\n`,
-    )
-    await vi.waitFor(() => expect(peer.guiResults).toHaveLength(4))
-    expect(peer.guiResults[3]?.body).toEqual({ applied: false, error: 'gui_unavailable' })
   })
 
   it('merges runs and routes a run to its host', async () => {

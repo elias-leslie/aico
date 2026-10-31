@@ -425,8 +425,6 @@ export interface WakeOperations {
   lastKeyAt(sessionId: string): Promise<number | null>
   /** Paste and submit; false when the session is not running. */
   deliver(sessionId: string, text: string): Promise<boolean>
-  /** Ask the desktop to reopen a closed window of a session it has shown. */
-  reopen(sessionId: string): void
   /** The running session that holds this conversation, if any. */
   conversationHolder(resumeId: string): Promise<string | null>
   relaunch(
@@ -451,8 +449,8 @@ export class WakeScheduler {
   private running: Promise<void> | null = null
   private again = false
   private stopped = true
-  /** Wakes whose window reopen was already asked for. */
-  private readonly reopened = new Set<string>()
+  /** Wakes already republished as due. */
+  private readonly announced = new Set<string>()
   /** Kept wakes waiting out a failed relaunch. */
   private readonly retryAt = new Map<string, number>()
   /** Why each session's due wakes are not delivered yet. */
@@ -545,14 +543,13 @@ export class WakeScheduler {
     for (const [sessionId, wakes] of live) await this.deliverLive(sessionId, wakes)
     for (const sessionId of this.held.keys()) if (!live.has(sessionId)) this.held.delete(sessionId)
     for (const wakes of kept.values()) await this.relaunchKept(wakes)
-    for (const id of this.reopened) if (!this.store.get(id)) this.reopened.delete(id)
+    for (const id of this.announced) if (!this.store.get(id)) this.announced.delete(id)
   }
 
   private async deliverLive(sessionId: string, wakes: Wake[]): Promise<void> {
-    const fresh = wakes.filter((wake) => !this.reopened.has(wake.id))
+    const fresh = wakes.filter((wake) => !this.announced.has(wake.id))
     if (fresh.length) {
-      for (const wake of fresh) this.reopened.add(wake.id)
-      this.ops.reopen(sessionId)
+      for (const wake of fresh) this.announced.add(wake.id)
       // Now due: the apps word it as waiting rather than as a time ahead.
       this.ops.changed(sessionId)
     }

@@ -62,15 +62,12 @@ def test_status_drops_an_unqualified_launch(monkeypatch, launch):
 
 
 def test_refusing_a_pending_root_says_why_it_has_not_started(monkeypatch):
-    code, _calls, output = invoke(monkeypatch, ["show", ROOT], [(200, {**PENDING, "launch": LAUNCH})])
+    code, _calls, output = invoke(monkeypatch, ["title", ROOT, "Focus"], [(200, {**PENDING, "launch": LAUNCH})])
     assert code == 1 and output[0]["reason"] == "workload_unavailable" and output[0]["launch"] == LAUNCH
 
 
 @pytest.mark.parametrize("args,payload", [
-    (["show", ROOT], {"generation": GENERATION}),
     (["title", ROOT, "﻿ Private label "], {"generation": GENERATION, "label": "Private label"}),
-    (["position", ROOT, "-10", "20", "900", "560"],
-     {"generation": GENERATION, "bounds": {"x": -10, "y": 20, "width": 900, "height": 560}}),
 ])
 def test_mutation_pins_generation_and_qualifies_one_receipt(monkeypatch, args, payload):
     code, calls, output = invoke(monkeypatch, args, [(200, DESCRIPTOR), (200, {**DESCRIPTOR, "label": "Private label"})])
@@ -81,8 +78,7 @@ def test_mutation_pins_generation_and_qualifies_one_receipt(monkeypatch, args, p
 
 
 @pytest.mark.parametrize("args", [["title", ROOT, "line\nbreak"], ["title", ROOT, "\x85"],
-                                  ["position", ROOT, "0", "0", "359", "240"],
-                                  ["status", "-bad"], ["show", ROOT, "--surface", "a-term"],
+                                  ["status", "-bad"], ["title", ROOT, "Focus", "--surface", "a-term"],
                                   ["status", ROOT, "--root-url", "http://127.0.0.1:8002"]])
 def test_invalid_input_never_contacts_owner(monkeypatch, args, capsys):
     with pytest.raises(SystemExit) as error:
@@ -93,7 +89,7 @@ def test_invalid_input_never_contacts_owner(monkeypatch, args, capsys):
 
 @pytest.mark.parametrize("state", ["pending", "uncertain"])
 def test_non_running_root_is_not_mutated(monkeypatch, state):
-    code, calls, output = invoke(monkeypatch, ["position", ROOT, "0", "0", "900", "560"],
+    code, calls, output = invoke(monkeypatch, ["title", ROOT, "Focus"],
                                 [(200, {**DESCRIPTOR, "status": state})])
     assert code == 1 and len(calls) == 1
     assert output[0]["reason"] == "workload_unavailable" and output[0]["applied"] is False
@@ -101,11 +97,11 @@ def test_non_running_root_is_not_mutated(monkeypatch, state):
 
 @pytest.mark.parametrize("reply,applied", [
     ((409, {"error": "stale_generation"}), False), ((410, {"error": "ended"}), False),
-    ((409, {"error": "owner_on_web"}), False), ((503, {"error": "gui_unavailable"}), False), ((500, {"error": "owner_failure"}), None),
+    ((503, {"error": "unavailable"}), False), ((500, {"error": "owner_failure"}), None),
     ((200, {**DESCRIPTOR, "generation": "b" * 64}), None), ((200, {**DESCRIPTOR, "status": "uncertain"}), None),
 ])
 def test_refusal_is_not_applied_but_unqualified_reply_is_uncertain(monkeypatch, reply, applied):
-    code, calls, output = invoke(monkeypatch, ["show", ROOT], [(200, DESCRIPTOR), reply])
+    code, calls, output = invoke(monkeypatch, ["title", ROOT, "Focus"], [(200, DESCRIPTOR), reply])
     assert code == 1 and len(calls) == 2
     assert output[0]["applied"] is applied
 
@@ -268,3 +264,10 @@ def test_send_invalid_input_never_contacts_owner(monkeypatch, args, capsys):
         invoke(monkeypatch, args, [])
     assert error.value.code == 2
     assert "hunter2" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("args", [["show", ROOT], ["position", ROOT, "0", "0", "900", "560"], ["position"]])
+def test_root_show_and_position_are_retired_without_contacting_owner(monkeypatch, capsys, args):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_: pytest.fail("owner contacted"))
+    assert admin.main(["root", *args, "--root-socket", "/fixture/gui.sock"]) == 2
+    assert capsys.readouterr().err.strip() == admin.WINDOWS_RETIRED

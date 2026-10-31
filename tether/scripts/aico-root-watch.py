@@ -156,7 +156,6 @@ def reason_detail(text: object) -> str | None:
 LABEL_TRIM = ("\t\n\x0b\x0c\r \xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
               "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff")
 LABEL_INVALID = re.compile(r"[\x00-\x1f\x7f-\x9f\ud800-\udfff\u2028\u2029]")
-BOUNDS = ("x", "y", "width", "height")
 KEY = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}"
 # Launch prompts from this facade; the owner allows more for fresh roots.
 PROMPT_BYTES = 2000
@@ -182,9 +181,8 @@ HOST_WAIT_NOTICE_SECONDS = 3
 REFUSED_CREATES = frozenset({"request_conflict", "recovery_pending", "agent_hub_unavailable"})
 # Owner rejections that are definitive before any view or lifecycle effect.
 OWNER_REFUSALS = {400: {"invalid_body", "invalid_generation", "invalid_text"}, 404: {"not_found"},
-                  409: {"stale_generation", "workload_unavailable", "busy", "owner_on_web",
-                        "host_unavailable"}, 410: {"ended"},
-                  503: {"gui_unavailable", "position_unavailable"}}
+                  409: {"stale_generation", "workload_unavailable", "busy", "host_unavailable"},
+                  410: {"ended"}, 503: {"unavailable"}}
 
 
 def view_label(value: object) -> str | None:
@@ -195,19 +193,6 @@ def view_label(value: object) -> str | None:
     if not label or LABEL_INVALID.search(label) or len(label.encode("utf-8")) > 160:
         return None
     return label
-
-
-def view_bounds(value: object) -> dict | None:
-    """Owner integer bounds contract; contracts/view-mutation-vectors.json pins it."""
-    if not isinstance(value, dict) or set(value) != set(BOUNDS):
-        return None
-    bounds: dict[str, int] = {}
-    for key in BOUNDS:
-        item = typing.cast(dict[str, object], value)[key]
-        if isinstance(item, bool) or not isinstance(item, int) or abs(item) > 100_000:
-            return None
-        bounds[key] = item
-    return bounds if bounds["width"] >= 360 and bounds["height"] >= 240 else None
 
 
 def owner_reply(status: int, data: dict, unqualified: str) -> None:
@@ -679,7 +664,7 @@ class Collector:
 
     def receipt(self, path: str, route: str, payload: dict | None = None,
                 *, timeout: float = .25, method: str | None = None) -> tuple[int, dict]:
-        limit = CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/sessions", "/v1/gui/layout") else RECEIPT_LIMIT
+        limit = CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/sessions") else RECEIPT_LIMIT
         connection = http.client.HTTPConnection("localhost", timeout=min(timeout, self.remaining()))
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         connection.sock = client
@@ -1225,7 +1210,7 @@ def admin_main(argv: list[str]) -> int:
             assert payload is not None
             denied = {"native_tui_atomic_admin_unavailable": 503, "invalid_body": 400,
                       "stale_generation": 409, "ended": 410, "not_found": 404,
-                      "gui_unavailable": 503, "unsupported_tool": 422}
+                      "unavailable": 503, "unsupported_tool": 422}
             pins = ("kind", "requestKey", "generation", "expectedThreadId")
             native = data.get("error") == "native_tui_atomic_admin_unavailable"
             if (not isinstance(data.get("error"), str) or denied.get(data["error"]) != status
@@ -1571,7 +1556,7 @@ def create_main(argv: list[str]) -> int:
         errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long", "unknown_host"),
                   409: ("request_conflict", "recovery_pending", "host_unavailable", "outcome_uncertain"),
                   422: ("launch_unavailable", "unknown_agent", "unknown_model"),
-                  503: ("gui_unavailable", "agent_hub_unavailable")}
+                  503: ("unavailable", "agent_hub_unavailable")}
         if status not in (200, 202):
             reason = data.get("error")
             if reason not in errors.get(status, ()):
@@ -1660,17 +1645,14 @@ def widget_descriptor(data: dict, widget_id: str) -> dict:
 def widget_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico widget", description=(
         "Inspect or change one exact Aico widget. Defaults to AICO_WIDGET_ID, else an ancestor process's; "
-        "title, position and coordinator pin its owner generation before one mutation."))
+        "title and coordinator pin its owner generation before one mutation."))
     commands = parser.add_subparsers(dest="operation", required=True)
-    for operation in ("status", "title", "position", "coordinator"):
+    for operation in ("status", "title", "coordinator"):
         command = commands.add_parser(operation)
         command.add_argument("--widget-id", default=caller_widget_id())
         command.add_argument("--root-socket", type=socket_path)
         if operation == "title":
             command.add_argument("label")
-        elif operation == "position":
-            for dimension in ("x", "y", "width", "height"):
-                command.add_argument(dimension, type=int)
         elif operation == "coordinator":
             command.add_argument("state", choices=("on", "off", "join"),
                                  help="on: mark a coordinator; off: an ordinary window; join COORDINATOR_ID: make this "
@@ -1748,17 +1730,12 @@ def applied(sent: bool, error: Exception) -> bool | None:
 
 
 def view_payload(parser: argparse.ArgumentParser, args: argparse.Namespace) -> dict:
-    """Validate title/position input before any owner contact; never echo a label."""
+    """Validate title input before any owner contact; never echo a label."""
     if args.operation == "title":
         label = view_label(args.label)
         if label is None:
             parser.error("expected a nonempty title of at most 160 UTF-8 bytes without controls")
         return {"label": label}
-    if args.operation == "position":
-        bounds = view_bounds({key: getattr(args, key) for key in BOUNDS})
-        if bounds is None:
-            parser.error("expected integer bounds within 100000; minimum size is 360 by 240")
-        return {"bounds": bounds}
     if args.operation == "coordinator":
         if args.state == "join":
             if not isinstance(args.coordinator_id, str) or not re.fullmatch(WIDGET, args.coordinator_id):
@@ -1859,14 +1836,11 @@ def root_main(argv: list[str]) -> int:
         "Inspect or control one exact retained owner root by request ID. Mutations pin its "
         "current generation, send one request and qualify the receipt. No retry or owner startup."))
     commands = parser.add_subparsers(dest="operation", required=True)
-    for operation in ("status", "show", "title", "position", "end", "send"):
+    for operation in ("status", "title", "end", "send"):
         command = commands.add_parser(operation)
         command.add_argument("request_id")
         if operation == "title":
             command.add_argument("label")
-        elif operation == "position":
-            for dimension in BOUNDS:
-                command.add_argument(dimension, type=int)
         elif operation == "send":
             command.add_argument("text", nargs="?", help=f"follow-up, <={PROMPT_BYTES} sanitized UTF-8 bytes")
             command.add_argument("--generation", required=True,
@@ -2064,78 +2038,6 @@ def roots_main(argv: list[str]) -> int:
             signal.signal(s, handler)
 
 
-def layout_writer(data: object) -> tuple[int, str | None] | None:
-    """The Aico process a v1 layout.json names as its writer: its pid and its
-    `/proc/<pid>/stat` start time (null when Aico couldn't read procfs). None
-    when the file doesn't name one, so it can't be told from a crash leftover."""
-    if not isinstance(data, dict):
-        return None
-    layout = typing.cast("dict[str, object]", data)
-    if layout.get("v") != 1:
-        return None
-    pid, start = layout.get("pid"), layout.get("startTime")
-    if type(pid) is not int or pid <= 0:
-        return None
-    if start is not None and not (isinstance(start, str) and start.isdigit()):
-        return None
-    return pid, start
-
-
-def process_running(pid: int, start_time: str | None) -> bool:
-    """True while `pid` is alive and, when a start time is given, is still the
-    same process (a reused pid has another start time). Never an age check:
-    an idle Aico leaves layout.json untouched for hours."""
-    try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-    except OSError:
-        return False
-    fields = stat[stat.rfind(")") + 1:].split()
-    return start_time is None or (len(fields) > 19 and fields[19] == start_time)
-
-
-def layout_main(argv: list[str]) -> int:
-    """Print the running Aico GUI's window layout (displays, every window's
-    bounds) so an agent can plan an arrangement, then move windows with
-    `st aico widget position --widget-id ID X Y WIDTH HEIGHT`. A layout left
-    by an Aico that is no longer running reports layout_stale. Reads the live GUI
-    through Tether; AICO_LAYOUT_FILE selects an explicit offline/fixture file."""
-    parser = argparse.ArgumentParser(prog="st aico layout", description=layout_main.__doc__)
-    parser.parse_args(argv)
-    override = os.environ.get("AICO_LAYOUT_FILE")
-    try:
-        if override is not None:
-            path = Path(override)
-            try:
-                data = json.loads(path.read_text())
-            except (OSError, ValueError):
-                print(json.dumps({"owner": "aico", "observation": "unavailable",
-                                  "reason": "layout_missing", "path": str(path)}))
-                return 1
-        else:
-            collector = Collector("", "", "", time.monotonic() + 7, threading.Event())
-            status, data = collector.receipt(tether_socket(), "/v1/gui/layout", timeout=6)
-            if status != 200:
-                reason = data.get("error")
-                raise Unavailable(reason if reason in (
-                    "gui_unavailable", "gui_timeout", "gui_failed", "invalid_body"
-                ) else "layout_unavailable")
-    except (Unavailable, Stopped) as error:
-        print(json.dumps({"owner": "aico", "observation": "unavailable",
-                          "reason": str(error) if isinstance(error, Unavailable) else "gui_timeout"}))
-        return 1
-    writer = layout_writer(data)
-    if writer is None:
-        print(json.dumps({"owner": "aico", "observation": "unavailable",
-                          "reason": "layout_unqualified"}))
-        return 1
-    if not process_running(*writer):
-        print(json.dumps({"owner": "aico", "observation": "unavailable",
-                          "reason": "layout_stale"}))
-        return 1
-    print(json.dumps({"owner": "aico", **data}, indent=2))
-    return 0
-
-
 def session_inventory_item(item: object) -> dict:
     """Project catalog metadata only; never infer ownership from a root list."""
     if not isinstance(item, dict):
@@ -2287,9 +2189,21 @@ def wake_main(argv: list[str]) -> int:
         return 0
 
 
+WINDOWS_RETIRED = "Aico has no desktop windows any more; sessions show in Aico web. Nothing to arrange or show."
+
+
+def retired_window_verb(argv: list[str]) -> bool:
+    """`layout`, `widget position`, `root position` and `root show` had a desktop window to work on."""
+    return bool(argv) and (argv[0] == "layout" or (argv[0] == "widget" and argv[1:2] == ["position"])
+                           or (argv[0] == "root" and argv[1:2] in (["position"], ["show"])))
+
+
 def main(argv: list[str] | None = None) -> int:
 
     argv = list(sys.argv[1:] if argv is None else argv)
+    if retired_window_verb(argv):
+        print(WINDOWS_RETIRED, file=sys.stderr)
+        return 2
     if argv and argv[0] == "sessions":
         return sessions_main(argv[1:])
     if argv and argv[0] == "roots":
@@ -2302,8 +2216,6 @@ def main(argv: list[str] | None = None) -> int:
         return widget_main(argv[1:])
     if argv and argv[0] == "root":
         return root_main(argv[1:])
-    if argv and argv[0] == "layout":
-        return layout_main(argv[1:])
     if argv and argv[0] == "wake":
         return wake_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)

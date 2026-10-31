@@ -19,7 +19,6 @@ import { nodeProcFs, writeJsonFile } from './continuity'
 import { DeadShells } from './dead-shells'
 import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
-import { GuiChannel } from './gui-channel'
 import { listenPrivateSocket } from './http'
 import { Hub } from './hub/hub'
 import {
@@ -76,7 +75,6 @@ export interface RunningDaemon {
   server: Server
   store: Store
   events: EventBus
-  gui: GuiChannel
   /** The Agent Hub session kind's runtime (polls only where Tether observes sessions). */
   agentHub: AgentHubRuntime
   /** The hub over the remote hosts this instance federates; null when off. */
@@ -206,7 +204,6 @@ export async function startDaemon(
     summitflowUrl: summitflowUrlFromEnv(env),
     localFile: paths.localProjectsFile,
   })
-  const gui = new GuiChannel(events)
   const projectRoots = new Map<string, string>()
 
   // One process serves one instance: bind the extracted lifecycle modules.
@@ -242,7 +239,6 @@ export async function startDaemon(
     store,
     events,
     projects,
-    gui,
     projectRoots,
     activeProjectFile: activeProjectFileFromEnv(env, env.HOME ?? homedir()),
     startedAt: Date.now(),
@@ -394,7 +390,6 @@ export async function startDaemon(
         env,
         uid: process.getuid?.(),
         publish: (type, data) => events.publish(type, data),
-        gui,
         settings: {
           get: (key) => store.getSetting(key),
           put: (key, value) => store.putSetting(key, value, Date.now()),
@@ -532,7 +527,6 @@ export async function startDaemon(
     server,
     store,
     events,
-    gui,
     agentHub: hubRuntime,
     hosts,
     ready,
@@ -553,7 +547,6 @@ export async function startDaemon(
       context.recovery?.stop()
       onAbandonedScope(null)
       setLaunchGuard(null)
-      gui.close()
       await closeServer(server)
       // Let in-flight reconciliation settle before the database closes.
       await ready.catch(() => {})

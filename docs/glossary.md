@@ -1,6 +1,6 @@
 # Aico session context
 
-Aico presents durable terminal sessions in two front ends: desktop windows, and the web app in a browser or on a phone (`aico.summitflow.dev`). Tether, the per-user session daemon, owns every session; both front ends are clients that show views of them. A session can be opened from either without starting another agent process.
+Aico presents durable terminal sessions in the web app, in a browser or on a phone (`aico.summitflow.dev`). Tether, the per-user session daemon, owns every session; the web app is a client that shows views of them. A session can be opened from any browser tab without starting another agent process.
 
 ## Language
 
@@ -9,15 +9,15 @@ The working directory and project identity selected when starting a session. The
 _Avoid_: Workspace, when naming the choice in the user interface
 
 **Session**:
-One running terminal workload and its durable tmux state, owned by Tether and created from the desktop, the web app, the `tether` CLI or a root request. Closing a view does not end it.
+One running terminal workload and its durable tmux state, owned by Tether and created from the web app, the `tether` CLI or a root request. Closing a view does not end it.
 _Avoid_: Widget, attachment, pane, when naming the workload in the user interface
 
 **View**:
-A desktop window or a web app tab that shows an existing session. Several views may show the same session. The desktop stores one view row per session ID (geometry, open state, local name override) in `aico.db`; the web app keeps its tabs in `~/.local/state/aico/web.db`.
+A web app tab that shows an existing session. Several views may show the same session. The web app keeps its tabs in `~/.local/state/aico/web.db`.
 _Avoid_: Session, when only the local display is being closed
 
 **Owner**:
-Tether. It verifies and ends every session's workload; the front ends ask it to. A session's `origin` (`aico` for the desktop, `a-term` for the web app, `cli`, `root`) records which client started it, not who may end it.
+Tether. It verifies and ends every session's workload; the web app asks it to. A session's `origin` (`aico` for the old desktop and for `st aico create`, `a-term` for the web app, `cli`, `root`) records which client started it, not who may end it.
 _Avoid_: Attachment, when describing authority to end a session
 
 **Own tmux session**:
@@ -42,4 +42,4 @@ A root that SummitFlow registered (`root-<32 hex>`) in its event ledger before a
 
 Tether is the authority for workload state; Aico mirrors it from `GET /v1/sessions` and the `/v1/events` stream, and SummitFlow's fleet state records only what it requested and observed. The session, root and fleet status tables live with the root contract in Tether's [`docs/root-control.md`](https://github.com/elias-leslie/tether/blob/main/docs/root-control.md#owner-and-fleet-state).
 
-Show, position and title for roots and widgets go through Tether's socket (`/v1/roots/<requestId>/…` and `/v1/widgets/<widgetId>/…`, one handler for both). Tether checks the generation, then forwards the view part to Aico over its GUI channel (`GET /v1/gui/channel`); Aico applies it to its window and view row and posts the result.
+Title and coordinator marks for roots and widgets go through Tether's socket (`/v1/roots/<requestId>/…` and `/v1/widgets/<widgetId>/…`, one handler for both). Tether checks the generation and applies the change to the catalog. Show and position are retired with the desktop windows: they answer 410 `windows_retired`.

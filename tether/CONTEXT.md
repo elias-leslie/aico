@@ -1,6 +1,6 @@
 # Tether context
 
-Tether is the per-user authority for durable terminal sessions. The Aico desktop and web app are its clients: they show sessions, but they don't own them.
+Tether is the per-user authority for durable terminal sessions. The Aico web app is its client: it shows sessions, but doesn't own them.
 
 ## Language
 
@@ -59,11 +59,8 @@ A root that SummitFlow registered in its own ledger before asking Tether to crea
 ### Clients and views
 
 **View**:
-An app's local display of an existing session: a desktop window or a web app pane or tab. Apps own their views; Tether does not.
+An app's local display of an existing session: a web app pane or tab. Apps own their views; Tether does not.
 _Avoid_: Session, when only the display is meant
-
-**GUI client**:
-The one connected Aico desktop that applies show, position and title to its views on Tether's behalf.
 
 **Active client**:
 The attached terminal client whose grid size the session's window currently follows.
