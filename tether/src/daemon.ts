@@ -260,6 +260,7 @@ export async function startDaemon(
       origin: aicoOrigin(env.TETHER_AICO_URL),
     },
     runs: undefined as RunTracker | undefined,
+    waiting: undefined as WaitingNotices | undefined,
     stepChats: undefined as StepChatSource | undefined,
     hub: undefined as Hub | undefined,
     memoryPolicy: startMemoryGuard(paths, store, env, {
