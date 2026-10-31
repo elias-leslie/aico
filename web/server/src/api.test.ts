@@ -287,6 +287,8 @@ describe('sessions', () => {
     expect((await call('GET', `/api/sessions/${session.id}`)).body.seen_at).toBe(
       marked.body.seen_at,
     )
+    // Tether's waiting notice hears it too.
+    expect(tether.callsOf('markSeen')).toEqual([[[session.id]]])
     expect((await call('POST', '/api/sessions/seen', { ids: ['../x'] })).status).toBe(400)
     expect((await call('POST', '/api/sessions/seen', {})).status).toBe(400)
   })

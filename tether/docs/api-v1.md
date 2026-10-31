@@ -162,6 +162,19 @@ Session errors:
 | 503 | `linger_required` | Linger is off. Durable work is refused. |
 | 500 | `internal_error` | Unexpected failure |
 
+### Seen, and the waiting notice
+
+`POST /v1/sessions/seen` `{ "ids": ["abcd1234", ...] }` (up to 50 session ids) → `{ "seenAt": <ms> }`.
+Aico web sends it when the owner has sessions open and visible (an agent's automated browser never does).
+
+The Tether that knows where Aico is (`TETHER_AICO_URL`) tells the owner when something waits on them: a
+session `blocked` (a permission prompt or a question), local or on a remote host, or a workflow run in
+`needs-you`, not seen for 2 minutes since its wait began, gets one Nightshift notice (contract v1, `kind:
+todo`, `push: tray`, Open as the one action: `<aico>/?session=<id>`, a run's page only on Aico's origin).
+Keys are `aico-waiting:<session id>` and `aico-run:<run member id>`. Tether runs `nightshift resolve <key>`
+once it no longer waits: answered, seen, ended or gone from the run list. Seen marks and open notices are
+kept in the `waiting_notices` setting, so a restart neither repeats nor strands one.
+
 ### Session files
 
 A GUI's file browser reads a session's folder (its `projectRoot`) on the machine the session runs on, so the hub forwards these routes to the host of a remote session ([Remote hosts](#remote-hosts): routing) and a host that is not connected answers `409 host_unavailable`. Reads follow the web app's browser rules (`src/files/browser.ts`): one directory level or one file, never outside the folder, never a secret (`.env*`, `.git`, keys, `auth.json`, ...), hidden and build directories left out of listings, text files over 1 MiB truncated.

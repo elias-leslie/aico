@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { chmodSync, mkdirSync } from 'node:fs'
 import type { Server } from 'node:http'
 import { homedir } from 'node:os'
@@ -68,6 +68,7 @@ import { createTetherServer } from './server'
 import { persistSizeHolders } from './size-holder'
 import { Store } from './store'
 import { VERSION } from './version'
+import { readWaitingState, WAIT_NOTICE_MS, WaitingNotices } from './waiting'
 import { bindWakeStore, WakeService } from './wake-runtime'
 import { cleanNote } from './wakes'
 
@@ -108,6 +109,35 @@ const TOLD_PAUSES_KEY = 'told_run_pauses'
 
 /** Which client holds each session's window size, so a restart keeps it. */
 const SIZE_HOLDERS_KEY = 'size_holders'
+
+/** The waiting notices' seen marks and open notices, so a restart neither repeats nor strands one. */
+const WAITING_KEY = 'waiting_notices'
+
+/** Runs `nightshift` (notice contract v1); logs the outcome, never throws. */
+function nightshift(args: string[], what: string, input?: string): void {
+  try {
+    const child = execFile('nightshift', args, { timeout: 30_000 }, (error, stdout) => {
+      const last =
+        String(stdout ?? '')
+          .trim()
+          .split('\n')
+          .pop()
+          ?.trim() ?? ''
+      const word = /^[a-z][a-z0-9 ,:/-]{0,39}$/.test(last) ? last.replace(/ /g, '_') : ''
+      if (error?.code === 2)
+        console.error(`[tether] Nightshift refused the ${what} (a bug): ${error.message}`)
+      console.log(
+        `[tether:event] ${what} result=${error ? 'failed' : 'ok'}${word ? ` nightshift=${word}` : ''}${error ? ` exit=${String(error.code ?? 'error')}` : ''}`,
+      )
+    })
+    if (input !== undefined) {
+      child.stdin?.on('error', () => {})
+      child.stdin?.end(input)
+    }
+  } catch (error) {
+    console.warn(`[tether] nightshift ${args[0]} failed to start: ${(error as Error).message}`)
+  }
+}
 
 function readTold(raw: string | null): Record<string, ToldPause> {
   try {
@@ -380,6 +410,44 @@ export async function startDaemon(
       })
     : null
   if (hosts) context.hub = hosts
+  // The owner's waiting notice: only the Tether that knows where Aico is.
+  const aicoUrl = aicoOrigin(env.TETHER_AICO_URL)
+  const waiting =
+    aicoUrl && reconcileEnabled(env)
+      ? new WaitingNotices({
+          origin: aicoUrl,
+          tools: () => store.listTools(),
+          send: (notice) =>
+            nightshift(
+              ['push', '--json'],
+              `waiting_notice key=${notice.key}`,
+              JSON.stringify(notice),
+            ),
+          resolve: (key) =>
+            nightshift(
+              ['resolve', key, '--text', 'The session no longer waits on you.'],
+              `waiting_resolve key=${key}`,
+            ),
+          state: {
+            read: () => readWaitingState(store.getSetting(WAITING_KEY)),
+            write: (state) => store.putSetting(WAITING_KEY, JSON.stringify(state), Date.now()),
+          },
+        })
+      : null
+  if (waiting) {
+    context.waiting = waiting
+    events.subscribe((event) => {
+      if (event.type === 'session.created' || event.type === 'session.updated') {
+        const session = event.data.session as { id?: unknown } | undefined
+        if (session && typeof session.id === 'string') waiting.session(session as { id: string })
+      } else if (event.type === 'session.ended' && typeof event.data.id === 'string') {
+        waiting.removed(event.data.id)
+      } else if (event.type === 'runs.changed') {
+        const local = runs.snapshot()
+        waiting.runs(hosts ? hosts.mergeRuns(local) : local)
+      }
+    })
+  }
   const server = createTetherServer(context)
   try {
     await listenPrivateSocket(server, paths.socket)
@@ -449,6 +517,15 @@ export async function startDaemon(
   projectNames.unref()
   void context.continuity?.start()
   void ready.then(() => context.recovery?.start()).catch(() => {})
+  if (waiting)
+    void ready
+      .then(() => {
+        // Sessions already waiting when Tether started; then, once remote hosts
+        // have had time to list theirs, resolve what no longer waits.
+        for (const row of listSessions()) waiting.session(sessionSnapshot(row) as { id: string })
+        setTimeout(() => waiting.sweep(), WAIT_NOTICE_MS).unref()
+      })
+      .catch(() => {})
   console.log(`[tether] ${VERSION} instance=${paths.instance} listening on ${paths.socket}`)
   return {
     server,

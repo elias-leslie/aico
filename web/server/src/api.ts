@@ -219,6 +219,10 @@ export function buildApi(deps: ApiDeps): Router {
       throw new HttpError(400, 'ids must be up to 50 session ids')
     const at = Date.now()
     store.markSeen(ids as string[], at)
+    // Tether's waiting notice: an opened session no longer waits unseen. Best effort.
+    void tether.markSeen(ids as string[]).catch((error) => {
+      console.warn(`[aico-web] seen not passed to Tether: ${(error as Error).message}`)
+    })
     return { seen_at: at }
   })
 

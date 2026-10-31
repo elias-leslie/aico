@@ -137,6 +137,10 @@ export class FakeTether {
     return this.need(id)
   }
 
+  async markSeen(ids: readonly string[]) {
+    this.record('markSeen', [...ids])
+  }
+
   async rename(id: string, generation: string, name: string | null) {
     this.record('rename', id, generation, name)
     const session = this.need(id)

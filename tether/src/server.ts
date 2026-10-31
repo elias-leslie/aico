@@ -35,6 +35,7 @@ import { registerShowRoute } from './show'
 import type { Store, ToolPatch } from './store'
 import { type AgentTool, parseCommand, type ToolSeed, ToolValidationError } from './tools'
 import { VERSION } from './version'
+import { registerSeenRoute, type WaitingNotices } from './waiting'
 
 export interface ServerContext {
   paths: TetherPaths
@@ -54,6 +55,8 @@ export interface ServerContext {
   show?: ShowConfig
   /** How an owner's answer reaches the asking session; absent: asks are pull-only. */
   asks?: AskDelivery
+  /** The owner's waiting notices; Aico web reports what the owner has seen. */
+  waiting?: WaitingNotices
   /** The Nightshift tray's asks file; absent: none is written. */
   asksFeed?: {
     write(feed: NeedsYouFeed): void
@@ -431,6 +434,7 @@ export function buildRouter(context: ServerContext): Router {
     feed: context.asksFeed,
     now: context.now,
   })
+  if (context.waiting) registerSeenRoute(router, context.waiting, context.now)
   registerFileRoutes(router, (id) => {
     const row = getWidget(id)
     return row ? row.projectRoot : undefined

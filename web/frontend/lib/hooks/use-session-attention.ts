@@ -19,6 +19,7 @@ import {
   type TerminalSession,
   useTerminalSessions,
 } from './use-terminal-sessions'
+import { isAutomatedBrowser } from './use-websocket-connection'
 import { useWorkflowRuns, type WorkflowRuns } from './use-workflow-runs'
 
 const EMPTY_SEEN: Record<string, number> = {}
@@ -119,7 +120,9 @@ export function useMarkActiveSeen(activeSessionId: string | null): void {
     const mark = () => {
       if (document.visibilityState !== 'visible') return
       markSeen(ids.split(','))
-      shareSeen(ids.split(','))
+      // An agent's browser looking at a session is not the owner seeing it:
+      // other devices and Tether's waiting notice only hear a real view.
+      if (!isAutomatedBrowser(navigator)) shareSeen(ids.split(','))
     }
     mark()
     document.addEventListener('visibilitychange', mark)

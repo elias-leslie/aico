@@ -293,6 +293,15 @@ export class TetherClient {
     )
   }
 
+  /** The owner has these sessions open now: Tether's waiting notice treats them as seen. */
+  async markSeen(ids: readonly string[]): Promise<void> {
+    try {
+      await this.json('POST', '/v1/sessions/seen', { ids })
+    } catch (error) {
+      if (!isMissing(error)) throw error
+    }
+  }
+
   /** Re-check the session's context hook now (what Aico did on window load). */
   async contextCheck(id: string): Promise<ContextHook | null> {
     const body = await this.json<{ contextHook?: ContextHook }>(
