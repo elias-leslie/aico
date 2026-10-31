@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 20
+export const SCHEMA_VERSION = 21
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -530,4 +530,25 @@ export const SESSION_ENTRIES_SQL = `
   BEGIN
     DELETE FROM session_entries WHERE session_id = old.id;
   END;
+`
+
+/**
+ * v21: deliveries (src/deliveries.ts). A line another owner queued on a
+ * session's delivery queue (`POST /v1/sessions/:id/deliveries`): its id is
+ * the wakes row's, and the row here says when and how it went out (`via`:
+ * the gated paste, an Agent Hub turn or a native puller). Undelivered with no
+ * wakes row left means it was dropped (the session ended). Pruned after 7 days.
+ */
+export const DELIVERIES_SQL = `
+  CREATE TABLE IF NOT EXISTS deliveries (
+    id           TEXT PRIMARY KEY
+                   CHECK(length(id) = 12 AND id NOT GLOB '*[^0-9a-f]*'),
+    session_id   TEXT NOT NULL
+                   CHECK(length(session_id) = 8 AND session_id NOT GLOB '*[^0-9a-f]*'),
+    source       TEXT NOT NULL CHECK(length(source) BETWEEN 1 AND 120),
+    queued_at    INTEGER NOT NULL CHECK(queued_at >= 0),
+    delivered_at INTEGER,
+    via          TEXT CHECK(via IS NULL OR via IN ('paste', 'turn', 'native'))
+  );
+  CREATE INDEX IF NOT EXISTS deliveries_queued_at ON deliveries(queued_at);
 `

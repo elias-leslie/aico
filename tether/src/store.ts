@@ -10,6 +10,7 @@ import {
   AGENT_TOOLS_TABLE_SQL,
   ASKS_SQL,
   COORDINATOR_SQL,
+  DELIVERIES_SQL,
   INDEXES_SQL,
   LANE_REPORTS_COLUMNS,
   LANE_REPORTS_SQL,
@@ -363,6 +364,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(20, now)
+      }
+      if (current < 21) {
+        // v21: deliveries (lines other owners queue on a session).
+        this.db.exec(DELIVERIES_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(21, now)
       }
     })
   }

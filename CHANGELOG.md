@@ -4,6 +4,14 @@
 
 ### Added
 
+- Deliveries (Tether API 16): `POST /v1/sessions/:id/deliveries {source, line}`
+  queues one line on a session's gated delivery queue (the one lane reports and
+  waits ride), coalesced by source while undelivered; `GET /v1/deliveries/:id`
+  says `queued`, `delivered` (via paste, turn or native) or `dropped`.
+  SummitFlow's coordination inbox moves its pane typing onto it. Native
+  pullers: `GET /v1/sessions/:id/due?wait=55` hands a session's due lines to
+  Claude Code's asyncRewake hook or Pi's extension while one is attached,
+  instead of pasting. Schema v21.
 - `st aico create --host auto --needs mem=6G,cpu=2[,cap=live-ready]`: Tether
   picks the first host with room from live readings (Nightshift's admission
   file here; a VM's memory, PSI and CPUs plus its Proxmox node's memory and

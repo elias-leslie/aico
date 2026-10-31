@@ -598,6 +598,9 @@ export interface WakeOperations {
   lastKeyAt(sessionId: string): Promise<number | null>
   /** Paste and submit; false when the session is not running. */
   deliver(sessionId: string, text: string): Promise<boolean>
+  /** The rows went out (`paste`: the gated paste or an Agent Hub turn, which
+   * the runtime tells apart; `native`: a native puller took them). */
+  delivered?(sessionId: string, rows: readonly Wake[], via: 'paste' | 'native'): void
   /** The running session that holds this conversation, if any. */
   conversationHolder(resumeId: string): Promise<string | null>
   relaunch(
@@ -611,6 +614,16 @@ export interface WakeOperations {
 
 /** Re-check due wakes this often while any waits on its gates. */
 export const WAKE_RECHECK_MS = 3_000
+/** A native puller (Claude's asyncRewake hook, Pi's extension) that took a
+ * delivery or whose long poll ended re-attaches within this long: the gated
+ * paste holds for it meanwhile, so a line is never pasted under it. */
+export const PULLER_GRACE_MS = 30_000
+
+/** A native puller waiting on a session's due lines (`GET /v1/sessions/:id/due`). */
+interface Puller {
+  /** Hand the text over; false when the puller is gone (its request closed). */
+  take(text: string): boolean
+}
 /** A kept wake whose relaunch failed tries again after this. */
 export const WAKE_RELAUNCH_RETRY_MS = 60_000
 /** setTimeout's ceiling is 2^31-1 ms; re-arm before it. */
@@ -631,6 +644,10 @@ export class WakeScheduler {
   /** When each session last took a paste: what did not fit waits for the
    * agent to take that one first, never a second paste on a stale idle. */
   private readonly deliveredAt = new Map<string, number>()
+  /** Native pullers attached now, one per session (the newest wins). */
+  private readonly pullers = new Map<string, Puller>()
+  /** When each session's native puller was last attached. */
+  private readonly pulledAt = new Map<string, number>()
 
   constructor(
     private readonly store: WakeStore,
@@ -653,6 +670,53 @@ export class WakeScheduler {
   /** Why the session's due wakes wait, or null when none waits. */
   heldReason(sessionId: string): string | null {
     return this.held.get(sessionId) ?? null
+  }
+
+  /** Whether a native puller is attached to the session, or was within the
+   * grace (between two long polls). */
+  pulling(sessionId: string): boolean {
+    if (this.pullers.has(sessionId)) return true
+    const at = this.pulledAt.get(sessionId)
+    return at !== undefined && this.ops.now() - at < PULLER_GRACE_MS
+  }
+
+  /**
+   * A native puller long-polls the session's due lines: resolves with the text
+   * of one delivery (the same rows and budget as a paste, gated on the agent
+   * being idle but not on typing or the input line: the harness shows it as a
+   * notice, never in the owner's input), or null after `ms` or an abort. While
+   * one is attached, and for PULLER_GRACE_MS after, nothing is pasted to the
+   * session. A newer puller replaces an older one, which gets null.
+   */
+  pull(sessionId: string, ms: number, aborted?: AbortSignal): Promise<string | null> {
+    return new Promise((resolve) => {
+      let done = false
+      const finish = (text: string | null): boolean => {
+        if (done) return false
+        done = true
+        clearTimeout(timer)
+        aborted?.removeEventListener('abort', onAbort)
+        if (this.pullers.get(sessionId) === puller) this.pullers.delete(sessionId)
+        this.pulledAt.set(sessionId, this.ops.now())
+        resolve(text)
+        return true
+      }
+      const puller: Puller = { take: (text) => !aborted?.aborted && finish(text) }
+      const onAbort = () => finish(null)
+      const timer = setTimeout(() => finish(null), Math.max(0, ms))
+      timer.unref?.()
+      if (aborted?.aborted) {
+        finish(null)
+        return
+      }
+      aborted?.addEventListener('abort', onAbort)
+      const previous = this.pullers.get(sessionId)
+      this.pullers.set(sessionId, puller)
+      this.pulledAt.set(sessionId, this.ops.now())
+      // A replaced puller's request ends empty; its client polls again.
+      previous?.take('')
+      this.nudge()
+    })
   }
 
   /** Something changed (a wake, an agent state): look again soon. */
@@ -720,6 +784,9 @@ export class WakeScheduler {
     for (const sessionId of this.held.keys()) if (!live.has(sessionId)) this.held.delete(sessionId)
     for (const [sessionId, at] of this.deliveredAt)
       if (now - at > 3_600_000) this.deliveredAt.delete(sessionId)
+    for (const [sessionId, at] of this.pulledAt)
+      if (!this.pullers.has(sessionId) && now - at > PULLER_GRACE_MS)
+        this.pulledAt.delete(sessionId)
     for (const wakes of kept.values()) await this.relaunchKept(wakes)
     for (const id of this.announced) if (!this.store.get(id)) this.announced.delete(id)
   }
@@ -731,7 +798,8 @@ export class WakeScheduler {
       // Now due: the apps word it as waiting rather than as a time ahead.
       this.ops.changed(sessionId)
     }
-    const reason = await this.gate(sessionId)
+    const native = this.pulling(sessionId)
+    const reason = await this.gate(sessionId, native)
     if (reason) {
       this.hold(sessionId, reason)
       return
@@ -739,6 +807,11 @@ export class WakeScheduler {
     // Re-read: a wake cancelled meanwhile must not go out.
     const due = this.store.forSession(sessionId).filter((wake) => wake.dueAt <= this.ops.now())
     if (!due.length) return
+    const puller = native ? this.pullers.get(sessionId) : undefined
+    if (native && !puller) {
+      this.hold(sessionId, 'its native puller is between polls')
+      return
+    }
     const { text: message, taken: current } = composeDelivery(
       due,
       this.ops.now(),
@@ -749,21 +822,30 @@ export class WakeScheduler {
     for (const wake of current) this.store.remove(wake.id)
     let delivered = false
     try {
-      delivered = await this.ops.deliver(sessionId, message)
+      delivered = puller ? puller.take(message) : await this.ops.deliver(sessionId, message)
     } finally {
       if (!delivered) for (const wake of current) this.store.restore(wake)
       this.ops.changed(sessionId)
     }
     if (!delivered) {
-      this.hold(sessionId, 'the paste did not go through')
+      this.hold(
+        sessionId,
+        puller ? 'its native puller left before taking it' : 'the paste did not go through',
+      )
+      if (puller) this.again = true
       return
+    }
+    try {
+      this.ops.delivered?.(sessionId, current, puller ? 'native' : 'paste')
+    } catch (error) {
+      this.ops.log(`delivery record failed: ${(error as Error).message}`)
     }
     const held = this.held.get(sessionId)
     this.held.delete(sessionId)
     const late = Math.floor((this.ops.now() - (current[0]?.dueAt ?? 0)) / 60_000)
     const events = current.filter((wake) => wake.kind === 'event').length
     this.ops.log(
-      `delivered ${current.length - events} check-in(s)${events ? ` and ${events} event line(s)` : ''} to session=${sessionId}` +
+      `delivered ${current.length - events} check-in(s)${events ? ` and ${events} event line(s)` : ''} to session=${sessionId}${puller ? ' (native)' : ''}` +
         (held ? `, ${late} min after due (held: ${held})` : '') +
         (current.length < due.length
           ? `; ${due.length - current.length} left for the next paste`
@@ -772,14 +854,17 @@ export class WakeScheduler {
     this.deliveredAt.set(sessionId, this.ops.now())
   }
 
-  /** The first gate a due wake fails, or null when it may go out now. */
-  private async gate(sessionId: string): Promise<string | null> {
+  /** The first gate a due wake fails, or null when it may go out now. A
+   * native puller's delivery shows as a notice, not in the input line, so it
+   * waits only for the agent to be idle. */
+  private async gate(sessionId: string, native = false): Promise<string | null> {
     const busy = await this.ops.busy(sessionId)
     if (busy) return busy
     const quietSeconds = this.ops.policy().quietSeconds
     const last = this.deliveredAt.get(sessionId)
     if (last !== undefined && this.ops.now() - last < quietSeconds * 1000)
       return `a delivery went out in the last ${quietSeconds}s`
+    if (native) return null
     const lastKey = await this.ops.lastKeyAt(sessionId)
     if (lastKey !== null && this.ops.now() - lastKey < quietSeconds * 1000)
       return `someone typed in the last ${quietSeconds}s`

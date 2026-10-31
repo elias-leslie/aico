@@ -8,6 +8,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { type ContinuitySnapshot, nodeProcFs, observeAgent, readJsonFile } from './continuity'
+import { DeliveryLog, registerDeliveryRoutes } from './deliveries'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { AgentAdmissionDenied } from './lifecycle/agent-admission'
 import {
@@ -44,7 +45,7 @@ import { terminalClientEnv } from './lifecycle/terminal-env'
 import { captureVisibleTargetArgs, clientActivityTargetArgs } from './lifecycle/tmux'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './lifecycle/tui/blank-slate'
 import { isResumeSessionId } from './lifecycle/tui/launch'
-import { AGENT_HUB_TOOL, getTui } from './lifecycle/tui/registry'
+import { AGENT_HUB_TOOL, getTui, isRootCreateTool } from './lifecycle/tui/registry'
 import { agentStateOf, type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
 import {
   applyWakePolicyPatch,
@@ -130,6 +131,8 @@ export function sessionWaitingOn(sessionId: string, now = Date.now()): string | 
 export class WakeService {
   readonly store: WakeStore
   readonly scheduler: WakeScheduler
+  /** What became of lines other owners queued (src/deliveries.ts). */
+  readonly deliveries: DeliveryLog
   private readonly home: string
   private readonly now: () => number
 
@@ -138,6 +141,7 @@ export class WakeService {
     options: { home?: string; now?: () => number; operations?: Partial<WakeOperations> } = {},
   ) {
     this.store = new WakeStore(context.store.db)
+    this.deliveries = new DeliveryLog(context.store.db)
     this.home = options.home ?? process.env.HOME ?? homedir()
     const now = options.now ?? Date.now
     this.now = now
@@ -148,6 +152,12 @@ export class WakeService {
       inputEmpty: (id) => this.inputEmpty(id),
       lastKeyAt: (id) => this.lastKeyAt(id),
       deliver: (id, text) => pasteIntoRunningSession(id, text),
+      delivered: (id, rows, via) =>
+        this.deliveries.delivered(
+          rows,
+          via === 'native' ? 'native' : isHub(getWidget(id)) ? 'turn' : 'paste',
+          now(),
+        ),
       conversationHolder: (resumeId) => this.conversationHolder(resumeId),
       relaunch: (ended, message) => this.relaunch(ended, message),
       changed: (id) => this.changed(id),
@@ -170,6 +180,22 @@ export class WakeService {
     if (sessionId && getWidget(sessionId)) notifySessionChanged(sessionId, { force: true })
     this.context.events.publish('wakes.changed', { sessionId })
     this.scheduler.nudge()
+  }
+
+  /** Whether event lines (lane reports, waits, deliveries) go to this
+   * session: an agent session Tether delivers to (Claude Code, Codex, Pi,
+   * Agent Hub). */
+  receiver(id: string): boolean {
+    const row = getWidget(id)
+    return Boolean(row && (isHub(row) || isRootCreateTool(row.tool)))
+  }
+
+  /** Queue an event line due now on a session (coalesced by source while
+   * undelivered) and look at the queue. */
+  queueEvent(sessionId: string, source: string, line: string): Wake {
+    const wake = this.store.addEvent({ sessionId, source, note: line, now: this.now() })
+    this.changed(sessionId)
+    return wake
   }
 
   /** Whether wakes can be delivered to this session: an agent whose state
@@ -367,6 +393,16 @@ export function registerWakeRoutes(
   now: () => number = Date.now,
 ): void {
   const policyJson = () => ({ policy: service.policy() })
+  registerDeliveryRoutes(router, {
+    log: () => service.deliveries,
+    exists: (id) => getWidget(id) !== undefined,
+    receiver: (id) => service.receiver(id),
+    maxChars: () => service.policy().noteMaxChars,
+    queue: (id, source, line) => service.queueEvent(id, source, line),
+    pending: (id) => service.store.get(id) !== undefined,
+    pull: (id, ms, aborted) => service.scheduler.pull(id, ms, aborted),
+    now,
+  })
   router
     .add('GET', '/v1/wakes', (_req, res) => {
       sendJson(res, 200, {

@@ -65,6 +65,7 @@ describe('Store schema', () => {
       'agent_hub_sessions',
       'agent_tools',
       'asks',
+      'deliveries',
       'lane_outbox',
       'lane_reports',
       'lane_watches',

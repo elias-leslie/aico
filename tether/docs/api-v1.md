@@ -736,6 +736,40 @@ observed: {state, detail, title}, kept}`; `state` is `armed`, `fired`, `timed_ou
 | `maxWaitsPerSession` | 20 | armed waits one session may hold (1-100) |
 | `waitKeepDays` | 7 | waits that are over stay this long (1-30) |
 
+## Deliveries
+
+Other owners queue a line on a session's delivery queue instead of typing into its pane: SummitFlow's coordination
+inbox sends `[Message] 1 request from cc:1c7a9f` here, and the agent's turn hook shows the content. The line rides the
+same queue as lane reports and waits (wakes, kind `event`): pasted once the agent is idle, nobody has typed for
+`quietSeconds` and the input line is empty; an Agent Hub chat takes it as a turn; a native puller takes it as a notice.
+Each line goes out once, whichever way.
+
+- **The line** is one line of at most `noteMaxChars` characters, with no control, format or separator characters, and
+  it may not start with `/` or `!` (a pasted slash command or shell escape). Tether does not rewrite it.
+- **`source`** is `<owner>:<what>` (`coord:cc:1c7a9f`). A line queued with the source of one still undelivered on the
+  same session replaces it (`coalesced: true`, the same id). Tether's own sources (`lane:`, `wait:`, `run:`, `ask:`) are
+  refused.
+- **Receivers** are agent sessions Tether delivers to: Claude Code, Codex, Pi and Agent Hub chats. A shell or agy is
+  `409 delivery_unsupported`; the producer keeps its own path for those.
+- **State.** `queued` while the row waits, `delivered` with `via` (`paste`, `turn` or `native`) and `deliveredAt`, or
+  `dropped` when the row went without a delivery (the session ended). Records stay 7 days.
+
+**Native pullers.** Claude Code's asyncRewake hook (`hooks/aico-due.sh` in claude-config) and Pi's `aico-due`
+extension long-poll `GET /v1/sessions/:id/due?wait=55` from inside the session (`AICO_WIDGET_ID`). While one is
+attached, and for 30 s after each poll so it can poll again, the session's due lines go to it instead of the pane:
+the same rows, order and 1800-byte budget as a paste, gated only on the agent being idle and the post-delivery
+`quietSeconds` (the harness shows a notice, never text in the owner's input). Claude exits its hook with code 2 and
+the lines (a "Tether" notice that wakes the session); Pi calls `sendUserMessage(lines, {deliverAs: "followUp"})`. A
+newer poll on the same session replaces an older one, which answers `{text: null}`. With no puller attached the gated
+paste delivers as before, so an older hook, a Tether without the route (API < 16, `404`) or a dead puller loses
+nothing.
+
+| Route | Request | Response |
+|---|---|---|
+| `POST /v1/sessions/:id/deliveries` | `{source, line}` | `201` (or `200` when it coalesced) `{id, sessionId, source, state: "queued", queuedAt, deliveredAt: null, via: null, coalesced}`; `400 invalid_body {field, detail}`; `404 not_found`; `409 delivery_unsupported` |
+| `GET /v1/deliveries/:deliveryId` | | `{id, sessionId, source, state, queuedAt, deliveredAt, via}`; `404 not_found` (unknown or older than 7 days) |
+| `GET /v1/sessions/:id/due` | `?wait=0..55` seconds | `{text}`: the next delivery's text once the session's due lines may go to this puller, or `{text: null}` when the seconds are up; `409 delivery_unsupported`, `400 invalid_query` |
+
 ## Crash recovery
 
 | Method and route | Body | Result |
