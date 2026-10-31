@@ -241,6 +241,21 @@ def pool_name(value: str) -> str:
     return value
 
 
+# Tether's entries.json names and the per-launch argument (src/lifecycle/entries.ts).
+ENTRY_NAME = r"[a-z0-9][a-z0-9-]{0,63}"
+ENTRY_ARG = r"[a-z0-9][a-z0-9-]{0,79}"
+
+
+def entry_spec(value: str) -> dict:
+    """`NAME:ARG` as Tether's root `entry` ({name, arg})."""
+    name, sep, arg = value.partition(":")
+    if not sep or not re.fullmatch(ENTRY_NAME, name) or not re.fullmatch(ENTRY_ARG, arg):
+        raise argparse.ArgumentTypeError(
+            "expected NAME:ARG: an entry name from the host's ~/.config/tether/entries.json and its argument "
+            "(lowercase letters, digits and dashes)")
+    return {"name": name, "arg": arg}
+
+
 def pool_names(value: object) -> list[str]:
     """The pools an unknown_pool answer lists, checked and bounded."""
     if not isinstance(value, list):
@@ -1484,6 +1499,9 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--pool", type=pool_name, metavar="NAME", help=(
         "with --host auto: pick only from this placement pool (placement.json pools, e.g. neri-hunt); "
         "default: the default pool"))
+    parser.add_argument("--entry", type=entry_spec, metavar="NAME:ARG", help=(
+        "run the agent through the program the host's ~/.config/tether/entries.json names NAME, with ARG "
+        "(e.g. a hunt slot), on every launch; claude-code only, not with --instructions (Tether API 15)"))
     parser.add_argument("--root-socket", type=socket_path)
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
@@ -1551,6 +1569,10 @@ def create_main(argv: list[str]) -> int:
             refuse(f"--needs: {error}")
     if args.pool is not None and not auto:
         refuse("--pool goes with --host auto")
+    if args.entry is not None and args.tool != "claude-code":
+        refuse("--entry runs claude-code sessions only")
+    if args.entry is not None and args.instructions is not None:
+        refuse("--entry does not take --instructions")
     if args.host is not None and (here := agent_host()):
         # A host's Tether reaches no other host; the workstation's hub does.
         refuse(f"--host works from the workstation only; on agent host {here}, "
@@ -1629,6 +1651,10 @@ def create_main(argv: list[str]) -> int:
         if args.agent:
             payload["agentSlug"] = args.agent
             fields.append({"agentSlug": args.agent})
+        if args.entry is not None:
+            payload["entry"] = args.entry
+            fields.append({"entry": [args.entry["name"], args.entry["arg"]]})
+            output["entry"] = args.entry
         digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
         # Said only once the host is slow to answer (powering on): a refusal comes back at once.
         waiting = threading.Timer(HOST_WAIT_NOTICE_SECONDS, lambda: print(
@@ -1643,10 +1669,10 @@ def create_main(argv: list[str]) -> int:
         finally:
             waiting.cancel()
         errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long", "unknown_host",
-                        "unknown_pool"),
+                        "unknown_pool", "unknown_entry", "entry_unsupported"),
                   409: ("request_conflict", "recovery_pending", "host_unavailable", "outcome_uncertain",
                         "at_capacity"),
-                  422: ("launch_unavailable", "unknown_agent", "unknown_model"),
+                  422: ("launch_unavailable", "unknown_agent", "unknown_model", "entry_unavailable"),
                   503: ("unavailable", "agent_hub_unavailable")}
         if status not in (200, 202):
             reason = data.get("error")

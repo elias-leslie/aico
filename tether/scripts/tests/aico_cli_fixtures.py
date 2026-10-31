@@ -34,6 +34,10 @@ def descriptor(payload, owner="aico"):
         fields.append({"workRole": payload.get("workRole"), "workRoleDisplayName": payload.get("workRoleDisplayName")})
     if payload.get("instructions"):
         fields.append({"instructions": payload["instructions"]["revision"]})
+    if payload.get("agentSlug"):
+        fields.append({"agentSlug": payload["agentSlug"]})
+    if payload.get("entry"):
+        fields.append({"entry": [payload["entry"]["name"], payload["entry"]["arg"]]})
     return {"owner": owner, "requestId": payload["requestId"],
             "digest": hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest(),
             "hostIdentity": "12345678",

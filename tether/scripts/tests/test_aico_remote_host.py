@@ -334,6 +334,32 @@ def test_a_named_host_takes_needs_and_tether_rechecks_it(monkeypatch):
     assert output[-1]["hosts"] == [{"host": "neri-box-1", "reason": "needs 6.0 GiB"}]
 
 
+def test_entry_goes_in_the_payload_and_the_digest(monkeypatch):
+    calls, output = [], []
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    argv = [*on_host(), "--needs", "mem=6G", "--entry", "neri-hunt-box:slot-1"]
+    # The fixture's descriptor computes Tether's digest with the entry: the receipt only matches with it.
+    assert admin.main(argv) == 0
+    payload = calls[-1][1]
+    assert payload["entry"] == {"name": "neri-hunt-box", "arg": "slot-1"}
+    assert output[0]["status"] == "running" and output[0]["entry"] == payload["entry"]
+
+
+def test_entry_is_claude_code_only_and_its_refusals_carry_the_reason(monkeypatch, capsys):
+    with pytest.raises(SystemExit):
+        admin.main([*on_host("codex"), "--entry", "neri-hunt-box:slot-1"])
+    assert "--entry runs claude-code sessions only" in capsys.readouterr().err
+    output = []
+    refusal = (400, {"error": "unknown_entry", "entry": "neri-hunt-box",
+                     "reason": "agent-work's entries.json has no neri-hunt-box"})
+    monkeypatch.setattr(admin.Collector, "receipt", owner([], create=lambda _: refusal))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main([*on_host(), "--entry", "neri-hunt-box:slot-1"]) == 1
+    assert output[0]["reason"] == "unknown_entry"
+    assert output[0]["detail"] == "agent-work's entries.json has no neri-hunt-box"
+
+
 def test_at_capacity_is_a_refusal_with_each_hosts_reason(monkeypatch):
     output = []
     hosts = [{"host": "local", "reason": "Nightshift says amber: builds running"},
@@ -357,6 +383,10 @@ def test_at_capacity_is_a_refusal_with_each_hosts_reason(monkeypatch):
     (["--pool", "neri-hunt"], "--pool goes with --host auto"),
     (["--host", "agent-work", "--pool", "neri-hunt"], "--pool goes with --host auto"),
     (["--host", "auto", "--needs", "mem=6G", "--pool", "Neri Hunt"], "expected a pool name"),
+    (["--entry", "hunt-box"], "expected NAME:ARG"),
+    (["--entry", "Hunt:slot-1"], "expected NAME:ARG"),
+    (["--entry", "hunt-box:Slot 1"], "expected NAME:ARG"),
+    (["--entry", "hunt-box:slot-1", "--instructions", "p"], "--entry does not take --instructions"),
 ])
 def test_bad_needs_never_contact_the_owner(monkeypatch, capsys, argv, message):
     monkeypatch.setattr(admin.Collector, "receipt", lambda *_, **__: pytest.fail("contacted owner"))
