@@ -2,7 +2,7 @@
   "v": 1,
   "state": "red",
   "admit": false,
-  "reason": "Disk is critical: / has 20.0 GiB free (amber below 40, red below 30 GiB; backups stop); defer heavy work",
+  "reason": "Disk is critical: / has 20.0 GiB free, red below 30 (SummitFlow pauses backups there); defer heavy work",
   "updated_at": 1793500000,
   "expires_at": 1793500030,
   "memory_state": "green",
