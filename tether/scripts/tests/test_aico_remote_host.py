@@ -346,10 +346,28 @@ def test_entry_goes_in_the_payload_and_the_digest(monkeypatch):
     assert output[0]["status"] == "running" and output[0]["entry"] == payload["entry"]
 
 
-def test_entry_is_claude_code_only_and_its_refusals_carry_the_reason(monkeypatch, capsys):
+def test_codex_entry_is_sent_and_never_checks_this_computers_codex(monkeypatch):
+    # Locally and on a host: the entry's Codex has its own login and catalog.
+    monkeypatch.setattr(admin, "codex_model_unavailable", lambda *_: pytest.fail("checked local Codex"))
+    monkeypatch.setattr(admin, "codex_daybreak_unavailable", lambda *_: pytest.fail("checked local Codex"))
+    for argv in (on_host("codex"), on_host("codex")[:-2]):
+        calls, output = [], []
+        tools = {"items": [*TOOLS["items"], {"slug": "codex", "enabled": True, "rootCapable": True}]}
+        monkeypatch.setattr(admin.Collector, "receipt", owner(calls, tools=(200, tools)))
+        monkeypatch.setattr(admin, "emit_json", lambda _, record, output=output: output.append(record))
+        assert admin.main([*argv, "--model", "gpt-6.1-sol", "--reasoning-effort", "xhigh",
+                           "--entry", "neri-hunt-box:slot-1"]) == 0
+        payload = calls[-1][1]
+        assert payload["tool"] == "codex" and payload["model"] == "gpt-6.1-sol"
+        assert payload["reasoningEffort"] == "xhigh"
+        assert payload["entry"] == {"name": "neri-hunt-box", "arg": "slot-1"}
+        assert output[0]["status"] == "running" and output[0]["entry"] == payload["entry"]
+
+
+def test_entry_is_claude_code_or_codex_only_and_its_refusals_carry_the_reason(monkeypatch, capsys):
     with pytest.raises(SystemExit):
-        admin.main([*on_host("codex"), "--entry", "neri-hunt-box:slot-1"])
-    assert "--entry runs claude-code sessions only" in capsys.readouterr().err
+        admin.main([*on_host("pi"), "--model", "synthetic/model", "--entry", "neri-hunt-box:slot-1"])
+    assert "--entry runs claude-code and codex sessions only" in capsys.readouterr().err
     output = []
     refusal = (400, {"error": "unknown_entry", "entry": "neri-hunt-box",
                      "reason": "agent-work's entries.json has no neri-hunt-box"})
@@ -358,6 +376,15 @@ def test_entry_is_claude_code_only_and_its_refusals_carry_the_reason(monkeypatch
     assert admin.main([*on_host(), "--entry", "neri-hunt-box:slot-1"]) == 1
     assert output[0]["reason"] == "unknown_entry"
     assert output[0]["detail"] == "agent-work's entries.json has no neri-hunt-box"
+    # A host whose Tether runs Claude entries only (below API 19): refused before any launch.
+    output.clear()
+    refusal = (400, {"error": "entry_unsupported", "host": "agent-work",
+                     "reason": "agent-work runs a Tether whose entries run claude-code only (API 18)"})
+    tools = {"items": [*TOOLS["items"], {"slug": "codex", "enabled": True, "rootCapable": True}]}
+    monkeypatch.setattr(admin.Collector, "receipt", owner([], create=lambda _: refusal, tools=(200, tools)))
+    assert admin.main([*on_host("codex"), "--entry", "neri-hunt-box:slot-1"]) == 1
+    assert output[0]["reason"] == "entry_unsupported"
+    assert "claude-code only (API 18)" in output[0]["detail"]
 
 
 def test_at_capacity_is_a_refusal_with_each_hosts_reason(monkeypatch):

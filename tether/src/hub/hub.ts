@@ -69,6 +69,8 @@ export interface Lineage {
 const PARENT_API_VERSION = 9
 /** The first Tether API that runs a root through its host's entries.json. */
 const ENTRY_API_VERSION = 15
+/** The first Tether API that runs a Codex root through an entry. */
+const CODEX_ENTRY_API_VERSION = 19
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -488,6 +490,17 @@ export class Hub {
       throw new HttpError(400, 'entry_unsupported', {
         host: peer.name,
         reason: `${peer.name} runs a Tether without session entries (API ${peer.apiVersion ?? 'unknown'})`,
+      })
+    if (
+      path === '/v1/roots' &&
+      forwarded.entry !== undefined &&
+      forwarded.entry !== null &&
+      forwarded.tool === 'codex' &&
+      (peer.apiVersion ?? 0) < CODEX_ENTRY_API_VERSION
+    )
+      throw new HttpError(400, 'entry_unsupported', {
+        host: peer.name,
+        reason: `${peer.name} runs a Tether whose entries run claude-code only (API ${peer.apiVersion ?? 'unknown'})`,
       })
     if (path === '/v1/roots' && typeof forwarded.launchedBy === 'string') {
       const launcher = forwarded.launchedBy

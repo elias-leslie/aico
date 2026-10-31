@@ -1501,7 +1501,8 @@ def create_main(argv: list[str]) -> int:
         "default: the default pool"))
     parser.add_argument("--entry", type=entry_spec, metavar="NAME:ARG", help=(
         "run the agent through the program the host's ~/.config/tether/entries.json names NAME, with ARG "
-        "(e.g. a hunt slot), on every launch; claude-code only, not with --instructions (Tether API 15)"))
+        "(e.g. a hunt slot), on every launch; claude-code (Tether API 15) or codex (API 19), "
+        "not with --instructions"))
     parser.add_argument("--root-socket", type=socket_path)
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
@@ -1569,8 +1570,8 @@ def create_main(argv: list[str]) -> int:
             refuse(f"--needs: {error}")
     if args.pool is not None and not auto:
         refuse("--pool goes with --host auto")
-    if args.entry is not None and args.tool != "claude-code":
-        refuse("--entry runs claude-code sessions only")
+    if args.entry is not None and args.tool not in ("claude-code", "codex"):
+        refuse("--entry runs claude-code and codex sessions only")
     if args.entry is not None and args.instructions is not None:
         refuse("--entry does not take --instructions")
     if args.host is not None and (here := agent_host()):
@@ -1602,10 +1603,12 @@ def create_main(argv: list[str]) -> int:
         if not args.host and args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
             # Nothing reaches Tether, so the same request id can be retried after the reset.
             refuse(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
-        if not args.host and args.tool == "codex" and (reason := codex_model_unavailable(args.model)):
+        # This computer's Codex login and catalog say nothing about an entry's Codex.
+        local_codex = not args.host and args.tool == "codex" and args.entry is None
+        if local_codex and (reason := codex_model_unavailable(args.model)):
             # Nothing reaches Tether, so the same request id can be retried with the right model.
             refuse(reason)
-        if (not args.host and args.tool == "codex" and args.daybreak == "on"
+        if (local_codex and args.daybreak == "on"
                 and (reason := codex_daybreak_unavailable(args.model))):
             refuse(reason)
         instructions = None

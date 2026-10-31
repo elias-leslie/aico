@@ -7,8 +7,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { AgentStatePoller, AgentStateTracker } from '../agent-state'
 import {
   ENTRY_HOME_ENV,
+  ENTRY_TOOL_ENV,
   entryClaudeSession,
+  entryCodexRollout,
   findEntryProcess,
+  nodeProcFs,
   observeAgent,
   type ProcFs,
 } from '../continuity'
@@ -31,12 +34,19 @@ import {
   sessionLaunchLine,
 } from './entries'
 import { createRootHandler, parseRootCreate, rootRequestDigest } from './root-control'
-import { initStore, registerBuiltinTuis } from './testing'
+import { initialLaunchLine } from './root-launch'
+import { codexTui, initStore, registerBuiltinTuis } from './testing'
 
 const CLAUDE = '5a7741ea-e6b1-4062-853b-0d9d2e03d549'
 const OLD = '6b7741ea-e6b1-4062-853b-0d9d2e03d549'
+const THREAD = '7c7741ea-e6b1-4062-853b-0d9d2e03d549'
+const SUBAGENT = '8d7741ea-e6b1-4062-853b-0d9d2e03d549'
 
-function procfs(files: Record<string, string>): ProcFs {
+function procfs(
+  files: Record<string, string>,
+  links: Record<string, string> = {},
+  mtimes?: Record<string, number>,
+): ProcFs {
   const missing = (path: string) => Object.assign(new Error(`ENOENT ${path}`), { code: 'ENOENT' })
   return {
     readFile: (path) => {
@@ -56,9 +66,24 @@ function procfs(files: Record<string, string>): ProcFs {
       return [...new Set(names)]
     },
     readlink: (path) => {
+      if (path in links) return links[path] as string
       throw missing(path)
     },
+    ...(mtimes ? { mtimeMs: (path: string) => (path in files ? (mtimes[path] ?? 0) : null) } : {}),
   }
+}
+
+/** A Codex rollout's first line (session_meta), as Codex 0.164 writes it. */
+function rolloutMeta(id: string, extra: Record<string, unknown> = {}): string {
+  return `${JSON.stringify({
+    timestamp: '2026-10-31T09:00:00.000Z',
+    type: 'session_meta',
+    payload: { id, cwd: '/work', originator: 'codex_cli_rs', ...extra },
+  })}\n`
+}
+
+function rolloutEvent(type: string, timestamp: string): string {
+  return `${JSON.stringify({ timestamp, type: 'event_msg', payload: { type } })}\n`
 }
 
 const fixture = mkdtempSync(join(tmpdir(), 'tether-entries-test-'))
@@ -147,6 +172,7 @@ describe('entry launch line', () => {
       { argv: [enterScript], home: '/srv/h/case-1/home' },
       'case-1',
       line,
+      'claude-code',
     )
     execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', wrapped], {
       env: { PATH: '/usr/bin:/bin', AICO_ROOT_INITIAL_PROMPT: 'go; $(id) `x`' },
@@ -229,7 +255,7 @@ describe('root create with entry', () => {
     expect(sessionEntryHome(widgetId)).toBe(`${fixture}/hunt/case-1/home`)
     // Every launch of the session goes through the entry.
     expect(sessionLaunchLine(widgetId, 'claude --x')).toBe(
-      `/usr/bin/env ${ENTRY_HOME_ENV}=${fixture}/hunt/case-1/home ${enterScript} case-1 -- /bin/sh -c 'claude --x'`,
+      `/usr/bin/env ${ENTRY_HOME_ENV}=${fixture}/hunt/case-1/home ${ENTRY_TOOL_ENV}=claude-code ${enterScript} case-1 -- /bin/sh -c 'claude --x'`,
     )
     // A repeat is the same root; the same request without the entry, or with
     // another arg, is a different one.
@@ -275,16 +301,76 @@ describe('root create with entry', () => {
         reason: 'entry.arg must match ^[a-z0-9][a-z0-9-]{0,79}$',
       },
     })
-    expect(await call(body('hunt-codex', { tool: 'codex' }))).toEqual({
+    expect(await call(body('hunt-pi', { tool: 'pi', model: 'synthetic/model' }))).toEqual({
       status: 400,
       body: {
         error: 'invalid_body',
         field: 'entry',
-        reason: 'entry runs claude-code sessions only',
+        reason: 'entry runs claude-code and codex sessions only',
       },
     })
-    for (const id of ['hunt-unknown', 'hunt-config', 'hunt-bad', 'hunt-codex'])
+    expect(
+      await call(body('hunt-codex-instr', { tool: 'codex', instructions: { path: '/x' } })),
+    ).toMatchObject({ status: 400, body: { error: 'invalid_body', field: 'entry' } })
+    expect(
+      await call(body('hunt-codex-unknown', { tool: 'codex', entry: { name: 'nope', arg: 'c' } })),
+    ).toMatchObject({ status: 400, body: { error: 'unknown_entry', entry: 'nope' } })
+    for (const id of [
+      'hunt-unknown',
+      'hunt-config',
+      'hunt-bad',
+      'hunt-pi',
+      'hunt-codex-instr',
+      'hunt-codex-unknown',
+    ])
       expect(getRootRequest(id)).toBeUndefined()
+  })
+
+  it('runs Codex through the entry with the explicit model and effort on every launch', async () => {
+    writeEntries({ 'neri-hunt': { argv: [enterScript], home: `${fixture}/hunt/{arg}/home` } })
+    const created = await call(
+      body('hunt-codex', { tool: 'codex', model: 'gpt-6.1-sol', reasoningEffort: 'xhigh' }),
+    )
+    expect(created.status).toBe(200)
+    expect(created.body).toMatchObject({ entry: { name: 'neri-hunt', arg: 'case-1' } })
+    const widgetId = getRootRequest('hunt-codex')?.widgetId as string
+    const native = initialLaunchLine(widgetId, codexTui) as string
+    const line = sessionLaunchLine(widgetId, native) as string
+    expect(
+      line.startsWith(
+        `/usr/bin/env ${ENTRY_HOME_ENV}=${fixture}/hunt/case-1/home ${ENTRY_TOOL_ENV}=codex ${enterScript} case-1 -- /bin/sh -c `,
+      ),
+    ).toBe(true)
+    // A synthetic codex on the entry's PATH records what it was started with.
+    const bin = join(fixture, 'codex-bin')
+    const argsLog = join(fixture, 'codex.args')
+    execFileSync('/bin/mkdir', ['-p', bin])
+    writeFileSync(join(bin, 'codex'), `#!/bin/sh\nprintf '%s\\n' "$@" >"${argsLog}"\n`)
+    chmodSync(join(bin, 'codex'), 0o755)
+    const run = (extra: Record<string, string>) => {
+      rmSync(argsLog, { force: true })
+      execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', line], {
+        env: {
+          PATH: `${bin}:/usr/bin:/bin`,
+          AICO_ROOT_INITIAL_LAUNCH: '1',
+          AICO_ROOT_INITIAL_PROMPT: 'Synthetic brief.',
+          AICO_ROOT_MODEL: 'gpt-6.1-sol',
+          AICO_ROOT_REASONING_EFFORT: 'xhigh',
+          ...extra,
+        },
+      })
+      return readFileSync(argsLog, 'utf8').split('\n')
+    }
+    const first = run({})
+    expect(first).toEqual(
+      expect.arrayContaining(['--model', 'gpt-6.1-sol', 'model_reasoning_effort="xhigh"']),
+    )
+    expect(first).toContain('Synthetic brief.')
+    expect(readFileSync(enterLog, 'utf8').startsWith('case-1|--|/bin/sh|-c|')).toBe(true)
+    // A resume (restart, recovery, reboot restore) goes the same way, with the thread.
+    const resumed = run({ AICO_ROOT_RESUME_SESSION_ID: THREAD })
+    expect(resumed).toEqual(expect.arrayContaining(['--model', 'gpt-6.1-sol', 'resume', THREAD]))
+    removeWidget(widgetId)
   })
 
   it('fails closed when the entry left entries.json after the create', () => {
@@ -317,6 +403,51 @@ describe('root create with entry', () => {
     expect(run.stderr).toContain('neri-hunt is not in')
     expect(() => readFileSync(marker)).toThrow()
     expect(sessionEntryHome(widgetId)).toBeNull()
+  })
+
+  it('fails closed for a Codex session whose entry is gone, or a tool no entry runs', () => {
+    const reserve = (widgetId: string, tool: string) =>
+      reserveRootRequest(
+        {
+          requestId: `hunt-${widgetId}`,
+          digest: 'd',
+          widgetId,
+          logicalSessionId: `aico-root-${widgetId}`,
+          role: 'r',
+          leadRootReference: null,
+          facetCapsuleRef: null,
+          createdAt: 1,
+          origin: 'aico',
+        },
+        tool,
+        'sample-app',
+        fixture,
+        null,
+        null,
+        { name: 'neri-hunt', arg: 'case-8' },
+      )
+    const marker = join(fixture, 'host-ran-codex')
+    reserve('e0e0e0e2', 'codex')
+    reserve('e0e0e0e3', 'pi')
+    // Listed, but the session's tool is not one an entry runs: never on the host.
+    let run = spawnSync(
+      '/bin/sh',
+      ['-c', sessionLaunchLine('e0e0e0e3', `touch ${marker}`) as string],
+      {
+        encoding: 'utf8',
+      },
+    )
+    expect(run.status).toBe(ENTRY_MISSING_EXIT)
+    expect(run.stderr).toContain('entry neri-hunt cannot run pi')
+    writeEntries({})
+    run = spawnSync('/bin/sh', ['-c', sessionLaunchLine('e0e0e0e2', `touch ${marker}`) as string], {
+      encoding: 'utf8',
+    })
+    expect(run.status).toBe(ENTRY_MISSING_EXIT)
+    expect(run.stderr).toContain('neri-hunt is not in')
+    expect(() => readFileSync(marker)).toThrow()
+    removeWidget('e0e0e0e2')
+    removeWidget('e0e0e0e3')
   })
 })
 
@@ -351,7 +482,7 @@ describe('entry session state', () => {
         updatedAt: 200,
       }),
     })
-    expect(findEntryProcess(fs, [10, 11, 12])).toEqual({ pid: 11, home: HOME })
+    expect(findEntryProcess(fs, [10, 11, 12])).toEqual({ pid: 11, home: HOME, tool: 'claude-code' })
     expect(observeAgent(fs, '/h', 10)).toEqual({
       pid: 11,
       resumeId: CLAUDE,
@@ -414,6 +545,124 @@ describe('entry session state', () => {
     files['/proc/10/task/10/children'] = ''
     await poller.poll()
     expect(tracker.get('a').state).toBe('unknown')
+  })
+
+  describe('Codex', () => {
+    const day = `${HOME}/.codex/sessions/2026/10/31`
+    const codexPane = {
+      ...pane,
+      '/proc/11/environ': `PATH=/bin\0${ENTRY_HOME_ENV}=${HOME}\0${ENTRY_TOOL_ENV}=codex\0`,
+      // A host rollout a pane process holds open is never this session's state.
+      '/proc/12/fd': '',
+      '/h/.codex/sessions/2026/10/31/rollout-2026-10-31T08-00-00-host.jsonl': rolloutMeta(OLD),
+    }
+    const links = {
+      '/proc/12/fd/3': '/h/.codex/sessions/2026/10/31/rollout-2026-10-31T08-00-00-host.jsonl',
+    }
+    const files = {
+      ...codexPane,
+      '/proc/12/fd/3': '',
+      [`${HOME}/.codex/sessions/2026/10/30/rollout-2026-10-30T23-00-00-a.jsonl`]: rolloutMeta(OLD),
+      [`${day}/rollout-2026-10-31T09-00-00-b.jsonl`]: rolloutMeta(THREAD),
+      // A subagent's rollout, written after the user thread's.
+      [`${day}/rollout-2026-10-31T09-30-00-c.jsonl`]: rolloutMeta(SUBAGENT, {
+        parent_thread_id: THREAD,
+      }),
+      [`${day}/notes.txt`]: 'x',
+      [`${HOME}/.codex/auth.json`]: '{}',
+    }
+
+    it('reads the user thread from the entry home rollouts, never the host', () => {
+      // A resumed older thread appends to its own file: write time decides.
+      const fs = procfs(files, links, {
+        [`${HOME}/.codex/sessions/2026/10/30/rollout-2026-10-30T23-00-00-a.jsonl`]: 100,
+        [`${day}/rollout-2026-10-31T09-00-00-b.jsonl`]: 300,
+        [`${day}/rollout-2026-10-31T09-30-00-c.jsonl`]: 400,
+      })
+      expect(findEntryProcess(fs, [10, 11, 12])).toEqual({ pid: 11, home: HOME, tool: 'codex' })
+      expect(entryCodexRollout(fs, HOME)).toEqual({
+        path: `${day}/rollout-2026-10-31T09-00-00-b.jsonl`,
+        threadId: THREAD,
+      })
+      expect(observeAgent(fs, '/h', 10)).toEqual({
+        pid: 11,
+        resumeId: THREAD,
+        idle: null,
+        blocked: false,
+      })
+      const resumedOld = procfs(files, links, {
+        [`${HOME}/.codex/sessions/2026/10/30/rollout-2026-10-30T23-00-00-a.jsonl`]: 500,
+        [`${day}/rollout-2026-10-31T09-00-00-b.jsonl`]: 300,
+      })
+      expect(observeAgent(resumedOld, '/h', 10)?.resumeId).toBe(OLD)
+      // Without write times, the newest by name (creation).
+      expect(observeAgent(procfs(files, links), '/h', 10)?.resumeId).toBe(THREAD)
+      // No rollout in the entry home yet: nothing, even with the host's held open.
+      expect(observeAgent(procfs(codexPane, links), '/h', 10)).toBeNull()
+    })
+
+    it('reads nothing for an entry marker naming a tool no entry runs', () => {
+      const fs = procfs(
+        {
+          ...files,
+          '/proc/11/environ': `${ENTRY_HOME_ENV}=${HOME}\0${ENTRY_TOOL_ENV}=pi\0`,
+          [`${HOME}/.claude/sessions/9.json`]: containerFile(9, {}),
+        },
+        links,
+      )
+      expect(findEntryProcess(fs, [10, 11, 12])).toEqual({ pid: 11, home: HOME, tool: null })
+      expect(observeAgent(fs, '/h', 10)).toBeNull()
+    })
+
+    it('polls the turn from the entry home rollout and loses it with the entry', async () => {
+      const realHome = join(fixture, 'codex-home')
+      const realDay = join(realHome, '.codex', 'sessions', '2026', '10', '31')
+      execFileSync('/bin/mkdir', ['-p', realDay])
+      const rollout = join(realDay, 'rollout-2026-10-31T09-00-00-b.jsonl')
+      writeFileSync(
+        rollout,
+        rolloutMeta(THREAD) + rolloutEvent('task_started', '2026-10-31T09:00:01.000Z'),
+      )
+      const proc: Record<string, string> = {
+        ...pane,
+        '/proc/11/environ': `${ENTRY_HOME_ENV}=${realHome}\0${ENTRY_TOOL_ENV}=codex\0`,
+      }
+      // /proc is synthetic; the entry home is a real synthetic directory.
+      const fake = procfs(proc)
+      const fs: ProcFs = {
+        ...nodeProcFs,
+        readFile: (path) =>
+          path.startsWith('/proc/') ? fake.readFile(path) : nodeProcFs.readFile(path),
+        readdir: (path) =>
+          path.startsWith('/proc/') ? fake.readdir(path) : nodeProcFs.readdir(path),
+      }
+      const tracker = new AgentStateTracker(
+        () => {},
+        () => 1000,
+      )
+      const poller = new AgentStatePoller(
+        tracker,
+        { sessions: () => [{ id: 'c', generation: 'g', panePid: async () => 10 }] },
+        fs,
+        '/h',
+        { now: () => 0 },
+      )
+      await poller.poll()
+      expect(tracker.get('c')).toMatchObject({ state: 'working', stateSource: 'codex-rollout' })
+      writeFileSync(
+        rollout,
+        rolloutMeta(THREAD) +
+          rolloutEvent('task_started', '2026-10-31T09:00:01.000Z') +
+          rolloutEvent('task_complete', '2026-10-31T09:00:09.000Z'),
+      )
+      await poller.poll()
+      expect(tracker.get('c').state).toBe('idle')
+      delete proc['/proc/11/stat']
+      delete proc['/proc/11/environ']
+      proc['/proc/10/task/10/children'] = ''
+      await poller.poll()
+      expect(tracker.get('c').state).toBe('unknown')
+    })
   })
 
   it('leaves a normal pane to the host home', () => {

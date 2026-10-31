@@ -11,7 +11,7 @@ import {
   reserveRootRequest,
   type WidgetRow,
 } from './catalog'
-import { entryProblem, parseEntry, resolveEntry, type SessionEntry } from './entries'
+import { entryProblem, isEntryTool, parseEntry, resolveEntry, type SessionEntry } from './entries'
 import type { LifecycleOwnerToken, ManagedGateState } from './lifecycle-guard'
 import type { RetirementResult } from './owner-retirement'
 import { sessionGeneration } from './owner-retirement'
@@ -482,10 +482,10 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
 }
 
 /** Why a create with an entry is refused for this tool and these options:
- * Tether reads only Claude Code's state from an entry home, and an
- * instructions file on the host is not readable through the entry. */
+ * Tether reads only Claude Code's and Codex's state from an entry home, and
+ * an instructions file on the host is not readable through the entry. */
 function entryRefusal(tool: unknown, instructions: unknown): string | null {
-  if (tool !== 'claude-code') return 'entry runs claude-code sessions only'
+  if (!isEntryTool(tool)) return 'entry runs claude-code and codex sessions only'
   if (instructions !== null && instructions !== undefined) return 'entry does not take instructions'
   return null
 }

@@ -20,6 +20,7 @@ import {
   readlinkSync,
   readSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
@@ -77,6 +78,9 @@ export interface ProcFs {
   readHead(path: string, bytes: number): string
   readdir(path: string): string[]
   readlink(path: string): string
+  /** Last modification time in ms; null when the file is gone. Readers that
+   * pick the newest file (entry homes) use it; without it they go by name. */
+  mtimeMs?(path: string): number | null
 }
 
 export const nodeProcFs: ProcFs = {
@@ -92,6 +96,13 @@ export const nodeProcFs: ProcFs = {
   },
   readdir: (path) => readdirSync(path),
   readlink: (path) => readlinkSync(path),
+  mtimeMs: (path) => {
+    try {
+      return statSync(path).mtimeMs
+    } catch {
+      return null
+    }
+  },
 }
 
 /** The pane process and all its descendants (bounded). */
@@ -232,20 +243,26 @@ export function* codexUserRollouts(fs: ProcFs, pids: number[]): Generator<CodexR
         continue
       }
       if (!ROLLOUT_RE.test(target)) continue
-      let threadId: string | null
-      try {
-        const first = fs.readHead(target, 1024 * 1024).split('\n', 1)[0]
-        const meta = JSON.parse(first) as { type?: string; payload?: Record<string, unknown> }
-        const payload = meta.payload ?? {}
-        if (meta.type !== 'session_meta' || payload.parent_thread_id) continue
-        if (payload.thread_source !== undefined && payload.thread_source !== 'user') continue
-        threadId = typeof payload.id === 'string' && UUID_RE.test(payload.id) ? payload.id : null
-      } catch {
-        // unreadable or partial rollout
-        continue
-      }
-      yield { pid, path: target, threadId }
+      const user = codexUserThread(fs, target)
+      if (user) yield { pid, path: target, threadId: user.threadId }
     }
+  }
+}
+
+/** A rollout's session_meta when it marks the user thread (not a subagent's);
+ * null for a subagent's or an unreadable or partial rollout. */
+function codexUserThread(fs: ProcFs, path: string): { threadId: string | null } | null {
+  try {
+    const first = fs.readHead(path, 1024 * 1024).split('\n', 1)[0] as string
+    const meta = JSON.parse(first) as { type?: string; payload?: Record<string, unknown> }
+    const payload = meta.payload ?? {}
+    if (meta.type !== 'session_meta' || payload.parent_thread_id) return null
+    if (payload.thread_source !== undefined && payload.thread_source !== 'user') return null
+    return {
+      threadId: typeof payload.id === 'string' && UUID_RE.test(payload.id) ? payload.id : null,
+    }
+  } catch {
+    return null
   }
 }
 
@@ -254,12 +271,21 @@ export function* codexUserRollouts(fs: ProcFs, pids: number[]): Generator<CodexR
 /** Set by Tether on a session's entry process only: the host path of the
  * agent's home. Not passed into the entry's container by Tether. */
 export const ENTRY_HOME_ENV = 'TETHER_ENTRY_HOME'
+/** Set next to ENTRY_HOME_ENV: which agent runs through the entry, so its
+ * state is read the way that agent writes it. A session launched before this
+ * marker existed has none and is Claude Code (the only entry tool then). */
+export const ENTRY_TOOL_ENV = 'TETHER_ENTRY_TOOL'
+/** The tools an entry can run: Tether reads their state from the entry home. */
+export const ENTRY_TOOLS = ['claude-code', 'codex'] as const
+export type EntryTool = (typeof ENTRY_TOOLS)[number]
 
 export interface EntryProcess {
   /** The entry process on this host: alive exactly while the agent runs. */
   pid: number
   /** Host path of the agent's home. */
   home: string
+  /** The agent it runs; null for a marker naming no entry tool (read nothing). */
+  tool: EntryTool | null
 }
 
 /** The pane's entry process, the first in pane order marked with the home. */
@@ -271,11 +297,15 @@ export function findEntryProcess(fs: ProcFs, pids: number[]): EntryProcess | nul
     } catch {
       continue
     }
+    let home: string | null = null
+    let tool: string | null = null
     for (const entry of environ.split('\0')) {
-      if (!entry.startsWith(`${ENTRY_HOME_ENV}=`)) continue
-      const home = entry.slice(ENTRY_HOME_ENV.length + 1)
-      if (isAbsolute(home)) return { pid, home }
+      if (entry.startsWith(`${ENTRY_HOME_ENV}=`)) home = entry.slice(ENTRY_HOME_ENV.length + 1)
+      else if (entry.startsWith(`${ENTRY_TOOL_ENV}=`)) tool = entry.slice(ENTRY_TOOL_ENV.length + 1)
     }
+    if (home === null || !isAbsolute(home)) continue
+    const known = (ENTRY_TOOLS as readonly string[]).includes(tool ?? 'claude-code')
+    return { pid, home, tool: known ? ((tool ?? 'claude-code') as EntryTool) : null }
   }
   return null
 }
@@ -318,9 +348,58 @@ export function entryClaudeSession(fs: ProcFs, home: string): ClaudeSession | nu
   return best
 }
 
-/** An entry session's agent: Claude's state from the entry home, standing on
- * the entry process (the pane's agent exits when it does). */
-export function observeEntryClaude(fs: ProcFs, entry: EntryProcess): AgentObservation | null {
+/** At most this many rollouts are looked at per read of an entry home. */
+const ENTRY_ROLLOUT_LIMIT = 2000
+/** At most this many of the newest are opened to find the user thread. */
+const ENTRY_ROLLOUT_OPEN = 32
+
+/** The user thread's rollout in an entry home's `.codex/sessions`
+ * (YYYY/MM/DD/rollout-*.jsonl). Codex in the container holds it open, but
+ * its fds are not this host's to read, and one agent runs per home: so it is
+ * the user thread's rollout written last (a subagent's is skipped; a resumed
+ * thread appends to its own older file, which is then the newest). */
+export function entryCodexRollout(
+  fs: ProcFs,
+  home: string,
+): { path: string; threadId: string | null } | null {
+  const root = join(home, '.codex', 'sessions')
+  const files: string[] = []
+  const walk = (dir: string, depth: number) => {
+    let names: string[]
+    try {
+      names = fs.readdir(dir)
+    } catch {
+      return
+    }
+    for (const name of names) {
+      if (files.length >= ENTRY_ROLLOUT_LIMIT) return
+      if (name.startsWith('.') || name.includes('/')) continue
+      const path = `${dir}/${name}`
+      if (depth === 3) {
+        if (/^rollout-[^/]*\.jsonl$/.test(name)) files.push(path)
+      } else if (/^[0-9]{2,4}$/.test(name)) walk(path, depth + 1)
+    }
+  }
+  walk(root, 0)
+  const when = new Map(files.map((path) => [path, fs.mtimeMs?.(path) ?? null]))
+  // Newest first by write time; by name (creation time) without it.
+  files.sort((a, b) => (when.get(b) ?? 0) - (when.get(a) ?? 0) || (a < b ? 1 : a > b ? -1 : 0))
+  for (const path of files.slice(0, ENTRY_ROLLOUT_OPEN)) {
+    if (fs.mtimeMs && when.get(path) === null) continue
+    const user = codexUserThread(fs, path)
+    if (user) return { path, threadId: user.threadId }
+  }
+  return null
+}
+
+/** An entry session's agent: its state from the entry home, standing on the
+ * entry process (the pane's agent exits when it does). Never the host home. */
+export function observeEntryAgent(fs: ProcFs, entry: EntryProcess): AgentObservation | null {
+  if (entry.tool === 'codex') {
+    const threadId = entryCodexRollout(fs, entry.home)?.threadId
+    return threadId ? { pid: entry.pid, resumeId: threadId, idle: null, blocked: false } : null
+  }
+  if (entry.tool !== 'claude-code') return null
   const session = entryClaudeSession(fs, entry.home)
   const state = session?.state
   if (!state || typeof state.sessionId !== 'string' || !UUID_RE.test(state.sessionId)) return null
@@ -381,7 +460,7 @@ export function observeAgent(fs: ProcFs, home: string, panePid: number): AgentOb
   const pids = processTree(fs, panePid)
   // A session that runs through an entry is read only from the entry's home.
   const entry = findEntryProcess(fs, pids)
-  if (entry) return observeEntryClaude(fs, entry)
+  if (entry) return observeEntryAgent(fs, entry)
   return observeClaude(fs, home, pids) ?? observeCodex(fs, pids) ?? observeChosenSession(fs, pids)
 }
 

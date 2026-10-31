@@ -583,7 +583,8 @@ describe('hub', () => {
     expect(peer.requests.filter((r) => r.url === '/v1/roots')).toHaveLength(before)
     await peer.stop()
     await vi.waitFor(() => expect(state()).toBe('offline'))
-    peer.apiVersion = 15
+    // API 18 (what a VM installs before Codex entries): Claude entries only.
+    peer.apiVersion = 18
     await peer.start()
     await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
     await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-e2', entry })
@@ -591,6 +592,19 @@ describe('hub', () => {
       requestId: 'req-e2',
       entry,
     })
+    // A Codex root through an entry needs API 19: refused here, nothing sent, never run here.
+    const sent = peer.requests.filter((r) => r.url === '/v1/roots').length
+    expect(
+      await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-e3', tool: 'codex', entry }),
+    ).toEqual({
+      status: 400,
+      body: {
+        error: 'entry_unsupported',
+        host: 'vm',
+        reason: expect.stringContaining('entries run claude-code only (API 18)'),
+      },
+    })
+    expect(peer.requests.filter((r) => r.url === '/v1/roots')).toHaveLength(sent)
   })
 
   it('serves the cache while a failing list has its circuit open', async () => {

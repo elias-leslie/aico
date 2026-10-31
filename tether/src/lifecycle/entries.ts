@@ -7,10 +7,11 @@
 //
 // Every launch of the session (first launch, restart, crash recovery, reboot
 // restore) becomes `<argv> <arg> -- /bin/sh -c '<line>'`, so the agent never
-// starts on the host. `home` is where the agent's own home is seen from the
-// host: Tether reads Claude's session files and transcripts there
-// (continuity.ts `observeEntryClaude`), because the agent's pid is the
-// container's and hooks cannot reach this Tether from inside.
+// starts on the host. The agent is Claude Code or Codex (ENTRY_TOOLS). `home`
+// is where the agent's own home is seen from the host: Tether reads Claude's
+// session files and transcripts, or Codex's rollouts, there (continuity.ts
+// `observeEntryAgent`), because the agent's pid is the container's and hooks
+// cannot reach this Tether from inside.
 //
 // Tether passes nothing else to the entry: no socket, no path. What crosses
 // into the container is the entry program's choice.
@@ -18,14 +19,19 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, normalize } from 'node:path'
-import { ENTRY_HOME_ENV } from '../continuity'
-import { getSessionEntry, type SessionEntry } from './catalog'
+import { ENTRY_HOME_ENV, ENTRY_TOOL_ENV, ENTRY_TOOLS, type EntryTool } from '../continuity'
+import { getSessionEntry, getWidget, type SessionEntry } from './catalog'
 import { shellQuote } from './tui/launch'
 
 export type { SessionEntry }
 /** Set on the entry process only: state readers find it in the pane by this
  * marker and read the agent's files under its home (continuity.ts). */
-export { ENTRY_HOME_ENV }
+export { ENTRY_HOME_ENV, ENTRY_TOOL_ENV, ENTRY_TOOLS, type EntryTool }
+
+/** Whether an entry can run this tool. */
+export function isEntryTool(tool: unknown): tool is EntryTool {
+  return (ENTRY_TOOLS as readonly unknown[]).includes(tool)
+}
 
 /** An entry name in entries.json and in `entry.name`. */
 export const ENTRY_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -138,11 +144,17 @@ export function resolveEntry(
   return { kind: 'ok', entry: { argv: argv as string[], home: resolved } }
 }
 
-/** `<argv> <arg> -- /bin/sh -c '<line>'`, marked with the agent's home. */
-export function entryLaunchLine(entry: ResolvedEntry, arg: string, line: string): string {
+/** `<argv> <arg> -- /bin/sh -c '<line>'`, marked with the agent's home and tool. */
+export function entryLaunchLine(
+  entry: ResolvedEntry,
+  arg: string,
+  line: string,
+  tool: EntryTool,
+): string {
   return [
     '/usr/bin/env',
     `${ENTRY_HOME_ENV}=${shellQuote(entry.home)}`,
+    `${ENTRY_TOOL_ENV}=${tool}`,
     ...entry.argv.map(shellQuote),
     shellQuote(arg),
     '--',
@@ -163,10 +175,16 @@ export function sessionLaunchLine(
   if (line === null) return null
   const entry = getSessionEntry(widgetId)
   if (!entry) return line
+  const tool = getWidget(widgetId)?.tool
   const resolved = resolveEntry(entry, env)
-  if (resolved.kind === 'ok') return entryLaunchLine(resolved.entry, entry.arg, line)
-  console.error(`[tether:entries] session ${widgetId}: ${resolved.reason}`)
-  return `printf '%s\\n' ${shellQuote(`Tether: ${resolved.reason}; the agent was not started.`)} >&2; exit ${ENTRY_MISSING_EXIT}`
+  if (resolved.kind === 'ok' && isEntryTool(tool))
+    return entryLaunchLine(resolved.entry, entry.arg, line, tool)
+  const reason =
+    resolved.kind === 'ok'
+      ? `entry ${entry.name} cannot run ${tool ?? 'this tool'}`
+      : resolved.reason
+  console.error(`[tether:entries] session ${widgetId}: ${reason}`)
+  return `printf '%s\\n' ${shellQuote(`Tether: ${reason}; the agent was not started.`)} >&2; exit ${ENTRY_MISSING_EXIT}`
 }
 
 /** The host path of a session's agent home when it runs through an entry. */

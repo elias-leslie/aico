@@ -654,8 +654,9 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
     refuse: async (request) => {
       if (request.tool !== AGENT_HUB_TOOL) {
         const spec = getTui(request.tool)
-        if (!spec || !request.model || (await listsModel(spec, request.model)) !== false)
-          return null
+        // An entry's agent runs elsewhere: this host's model list says nothing about it.
+        if (!spec || !request.model || request.entry) return null
+        if ((await listsModel(spec, request.model)) !== false) return null
         return {
           status: 422,
           error: 'unknown_model',

@@ -4,6 +4,19 @@
 
 ### Added
 
+- Codex roots through a per-session entry (Tether API 19): `POST /v1/roots`
+  and `st aico create --tool codex --entry NAME:ARG` run Codex through the
+  host's entries.json program on every launch (first, restart, crash
+  recovery, reboot restore), as for Claude Code. The entry process carries
+  `TETHER_ENTRY_TOOL`; Tether reads Codex's thread, turn and resume id only
+  from the entry home's `.codex/sessions` rollouts (user thread written last;
+  subagent rollouts skipped), never the host's `~/.codex`. Explicit model,
+  effort and Daybreak ride the launch line's `AICO_ROOT_*` variables; the CLI
+  skips this computer's Codex catalog checks for an entry. A missing or
+  malformed entry, or a stored tool no entry runs, exits 78 without starting
+  the agent; a host below API 19 gets `entry_unsupported` for a Codex entry
+  (Claude entries still go to 15+). No login or credential handling changed.
+
 - `st aico wait cmd [--timeout 6h] [--note T] [--key K] [--block] -- ARGV...`
   (Tether API 18): Tether runs the waiter's watcher command as the transient
   user unit `aico-wait-<ref>` (idle CPU weight, 512M, bounded by the wait's

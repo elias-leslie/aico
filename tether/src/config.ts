@@ -20,8 +20,9 @@ import { join } from 'node:path'
  * 17: wait kinds job, reply, run, ask, host and tap; `POST /v1/waits/check`
  *     (nudge); asks carry `answerTo`.
  * 18: wait kind `cmd` (`argv`, `cwd`); `DELETE /v1/sessions/:id/deliveries?source=`
- *     (withdraw); agy sessions take event lines. */
-export const API_VERSION = 18
+ *     (withdraw); agy sessions take event lines.
+ * 19: `entry` runs `codex` roots too (state from the entry home's rollouts). */
+export const API_VERSION = 19
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

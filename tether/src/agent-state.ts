@@ -22,6 +22,7 @@ import {
   claudeSessions,
   codexUserRollouts,
   entryClaudeSession,
+  entryCodexRollout,
   findEntryProcess,
   observeChosenSession,
   type ProcFs,
@@ -1018,25 +1019,21 @@ export class AgentStatePoller {
 
   private search(panePid: number, previous: Found): Found {
     const pids = processTree(this.fs, panePid)
-    // An entry session: Claude's file in the entry home, alive with the entry.
+    // An entry session: its agent's files in the entry home (never the host
+    // home), alive with the entry process.
     const entry = findEntryProcess(this.fs, pids)
     if (entry) {
-      const session = entryClaudeSession(this.fs, entry.home)
-      return session ? { kind: 'claude', pid: entry.pid, file: session.file } : { kind: 'none' }
+      if (entry.tool === 'claude-code') {
+        const session = entryClaudeSession(this.fs, entry.home)
+        return session ? { kind: 'claude', pid: entry.pid, file: session.file } : { kind: 'none' }
+      }
+      const rollout = entry.tool === 'codex' ? entryCodexRollout(this.fs, entry.home) : null
+      return rollout ? this.codexFound(entry.pid, rollout, previous) : { kind: 'none' }
     }
     const claude = findClaude(this.fs, this.home, pids)
     if (claude) return { kind: 'claude', ...claude }
     const codex = findCodexRollout(this.fs, pids)
-    if (codex) {
-      // Keep the reader (and its offset) while the thread is the same.
-      if (previous.kind === 'codex' && previous.rollout.path === codex.path)
-        return { kind: 'codex', pid: codex.pid, rollout: previous.rollout }
-      return {
-        kind: 'codex',
-        pid: codex.pid,
-        rollout: new CodexRollout(codex.path, codex.threadId, this.options.tail),
-      }
-    }
+    if (codex) return this.codexFound(codex.pid, codex, previous)
     const pi = findPiSession(this.fs, this.home, pids)
     if (pi) {
       if (previous.kind === 'pi' && previous.session?.path === pi.path)
@@ -1049,6 +1046,22 @@ export class AgentStatePoller {
       }
     }
     return this.agyFound(pids, previous) ?? { kind: 'none' }
+  }
+
+  /** A Codex rollout to read; the reader (and its offset) is kept while the
+   * thread is the same. */
+  private codexFound(
+    pid: number,
+    codex: { path: string; threadId: string | null },
+    previous: Found,
+  ): Found {
+    if (previous.kind === 'codex' && previous.rollout.path === codex.path)
+      return { kind: 'codex', pid, rollout: previous.rollout }
+    return {
+      kind: 'codex',
+      pid,
+      rollout: new CodexRollout(codex.path, codex.threadId, this.options.tail),
+    }
   }
 
   private agyFound(pids: number[], previous: Found): Found | null {
