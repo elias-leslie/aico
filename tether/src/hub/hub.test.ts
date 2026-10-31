@@ -618,6 +618,8 @@ describe('hub', () => {
   describe('wake and readiness gate', () => {
     let runs: string[][]
     let health: Record<string, number>
+    /** Runs before a health check answers (the host can go away meanwhile). */
+    let onHealth: (() => Promise<number | null>) | null
     /** Moves the gate's clock past its bounds without waiting them out. */
     let skew = 0
 
@@ -638,7 +640,8 @@ describe('hub', () => {
             }
             if (argv[0] === 'wake-fails') return { code: 1, output: 'ERROR VM 200 is locked' }
             const url = argv[argv.length - 1] ?? ''
-            const code = health[url] ?? 0
+            const hooked = onHealth ? await onHealth() : null
+            const code = hooked ?? health[url] ?? 0
             return { code, output: code ? 'curl: (7) Failed to connect' : '' }
           },
           kick: () => {},
@@ -652,6 +655,7 @@ describe('hub', () => {
     beforeEach(() => {
       runs = []
       health = {}
+      onHealth = null
       skew = 0
     })
 
@@ -697,6 +701,42 @@ describe('hub', () => {
       )
       expect(steps[steps.length - 1]).toBeNull()
       expect(hub.hosts()[0]?.wake).toBeNull()
+    })
+
+    it('wakes a host that went away while its link still looked up, on the first create', async () => {
+      // `st vm rollback` powers the VM off; the create arrives before the link notices.
+      await restart({ wake: ['wake'], health: ['http://127.0.0.1:8003/health'] })
+      let gone = false
+      onHealth = async () => {
+        if (gone) return null
+        gone = true
+        await peer.stop()
+        // While a create waits on it the host shows as connecting.
+        await vi.waitFor(() => expect(state()).not.toBe('connected'))
+        return 255
+      }
+      const answer = await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-7' })
+      expect(answer).toMatchObject({ status: 201, body: { host: 'vm' } })
+      expect(runs.filter((argv) => argv[0] === 'wake')).toHaveLength(1)
+      expect(runs.filter((argv) => argv.includes('curl'))).toHaveLength(2)
+      expect(hub.hosts()[0]?.wake).toBeNull()
+    })
+
+    it('refuses when the host goes away again after it was brought up', async () => {
+      await restart({ wake: ['wake'], health: ['http://127.0.0.1:8003/health'] })
+      onHealth = async () => {
+        await peer.stop()
+        // While a create waits on it the host shows as connecting.
+        await vi.waitFor(() => expect(state()).not.toBe('connected'))
+        return 255
+      }
+      const answer = await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-8' })
+      expect(answer).toMatchObject({
+        status: 409,
+        body: { error: 'host_unavailable', reason: 'vm went away while its services were checked' },
+      })
+      expect(runs.filter((argv) => argv[0] === 'wake')).toHaveLength(1)
+      expect(peer.requests.some((r) => r.method === 'POST')).toBe(false)
     })
 
     it('answers host_unavailable with the real reason when a service does not answer', async () => {

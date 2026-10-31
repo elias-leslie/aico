@@ -168,9 +168,22 @@ export async function readyHost(
   if (changedMachine(peer))
     throw refuse(peer, peer.error ?? `${peer.name} answers as a different machine`)
 
-  const wasLive = peer.live
-  let wakeNote: string | null = null
-  if (!peer.live) {
+  // A host whose link still looked up can be gone already (`st vm rollback`
+  // powered it off before the link noticed). Once it is seen gone, it is
+  // brought up like any down host, once per create.
+  let broughtUp = false
+  for (;;) {
+    const wasLive = peer.live
+    if (!peer.live) {
+      broughtUp = true
+      await bringUp()
+    }
+    if (await servicesAnswer(wasLive)) break
+  }
+  if (current.progress) report(null)
+
+  async function bringUp(): Promise<void> {
+    let wakeNote: string | null = null
     const wake = peer.entry.wake
     if (wake) {
       step('powering_on')
@@ -179,7 +192,8 @@ export async function readyHost(
       if (result.code !== 0) wakeNote = result.output || `exit ${result.code ?? 'error'}`
     }
     step('connecting')
-    const linkDeadline = wake ? deadline : Math.min(deadline, start + runtime.linkGraceMs)
+    const linkStart = runtime.now()
+    const linkDeadline = wake ? deadline : Math.min(deadline, linkStart + runtime.linkGraceMs)
     let kickedAt = 0
     while (!peer.live) {
       if (changedMachine(peer))
@@ -199,8 +213,11 @@ export async function readyHost(
     }
   }
 
-  const urls = peer.entry.health
-  if (urls.length) {
+  /** True once every health URL answers; false when the host went away and
+   * should be brought up first. */
+  async function servicesAnswer(wasLive: boolean): Promise<boolean> {
+    const urls = peer.entry.health
+    if (!urls.length) return true
     step('checking_services')
     const healthDeadline = wasLive ? Math.min(deadline, runtime.now() + HEALTH_GRACE_MS) : deadline
     for (;;) {
@@ -208,8 +225,11 @@ export async function readyHost(
         urls.map((url) => runtime.run(healthArgv(peer, url), HEALTH_RUN_MS)),
       )
       const failing = urls.findIndex((_, index) => results[index]?.code !== 0)
-      if (failing < 0) break
-      if (!peer.live) throw fail(`${peer.name} went away while its services were checked`)
+      if (failing < 0) return true
+      if (!peer.live) {
+        if (!broughtUp) return false
+        throw fail(`${peer.name} went away while its services were checked`)
+      }
       if (runtime.now() + HEALTH_RETRY_MS >= healthDeadline) {
         const detail = results[failing]?.output
         throw fail(
@@ -219,5 +239,4 @@ export async function readyHost(
       await runtime.sleep(HEALTH_RETRY_MS)
     }
   }
-  if (current.progress) report(null)
 }
