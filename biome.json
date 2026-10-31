@@ -9,11 +9,9 @@
   "files": {
     "ignoreUnknown": true,
     "includes": [
-      "electron/**",
       "shared/**",
       "scripts/**/*.{js,mjs}",
       "vitest.config.ts",
-      "electron.vite.config.ts",
       "tether/**",
       "web/server/**",
       "web/frontend/**"
@@ -36,36 +34,5 @@
       "quoteStyle": "single",
       "semicolons": "asNeeded"
     }
-  },
-  "overrides": [
-    {
-      "includes": ["electron/renderer/arcade/concepts/**"],
-      "formatter": {
-        "enabled": false
-      },
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noAssignInExpressions": "off",
-            "noThenProperty": "off",
-            "useIterableCallbackReturn": "off",
-            "noFallthroughSwitchClause": "off"
-          },
-          "correctness": {
-            "noUnusedFunctionParameters": "off"
-          },
-          "complexity": {
-            "useOptionalChain": "off",
-            "noUselessLoneBlockStatements": "off",
-            "noCommaOperator": "off"
-          },
-          "style": {
-            "useConst": "off",
-            "useTemplate": "off",
-            "useExponentiationOperator": "off"
-          }
-        }
-      }
-    }
-  ]
+  }
 }

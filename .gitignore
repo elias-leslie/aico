@@ -9,10 +9,8 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Node / Electron
+# Node
 node_modules/
-electron/node_modules/
-electron/.next/
 *.tsbuildinfo
 out/
 release/
@@ -23,7 +21,7 @@ dist/
 .env.local
 .env*.local
 
-# Electron build artifacts
+# Packaged app artifacts
 *.AppImage
 *.dmg
 *.exe

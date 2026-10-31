@@ -17,10 +17,8 @@
     "types": ["node"]
   },
   "include": [
-    "electron/**/*.ts",
-    "electron/**/*.tsx",
     "shared/**/*.ts",
     "shared/**/*.tsx",
-    "vitest.config.ts", "electron.vite.config.ts"],
+    "vitest.config.ts"],
   "exclude": ["node_modules", "dist", "out"]
 }

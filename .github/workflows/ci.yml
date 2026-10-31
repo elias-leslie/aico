@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  # Desktop, Tether, web/server and web/frontend: one npm workspace, one lockfile.
+  # Tether, web/server and web/frontend: one npm workspace, one lockfile.
   js:
     runs-on: ubuntu-latest
     steps:
