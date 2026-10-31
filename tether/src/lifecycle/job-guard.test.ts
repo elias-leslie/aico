@@ -139,6 +139,18 @@ function guard(
   return { g, killed }
 }
 
+/** Nightshift's admission.json with disk red and memory green, as memctl
+ * writes it (nightshift tests/fixtures/admission-disk-red.json), made fresh. */
+function diskRed(nowMs: number): string {
+  const doc = JSON.parse(
+    readFileSync(
+      new URL('../test-fixtures/nightshift-admission-disk-red.json', import.meta.url),
+      'utf8',
+    ),
+  ) as Record<string, unknown>
+  return JSON.stringify({ ...doc, expires_at: Math.floor(nowMs / 1000) + 30 })
+}
+
 function records(): Record<string, unknown>[] {
   try {
     return readFileSync(events, 'utf8')
@@ -287,6 +299,18 @@ describe('JobGuard', () => {
     g.tick(T0 + 20_000)
     expect(killed).toEqual([])
     expect(parseHostState('nope', T0)).toBeNull()
+  })
+
+  it('reads memory_state: a red disk with green memory warns and kills nothing', () => {
+    twoPanes()
+    const { g, killed } = guard()
+    writeFileSync(admission, diskRed(T0))
+    g.tick(T0)
+    writeFileSync(admission, diskRed(T0 + 20_000))
+    g.tick(T0 + 20_000)
+    expect(killed).toEqual([])
+    expect(records()).toEqual([])
+    expect(parseHostState(diskRed(T0), T0)).toBe('green')
   })
 
   it('records an agent that is the biggest user instead of killing it', () => {

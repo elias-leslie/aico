@@ -162,6 +162,10 @@
 
 ### Changed
 
+- Tether's memory guard reads Nightshift's `memory_state` when admission.json has it: Nightshift's `state`
+  now also goes amber/red on low disk, which must not warn about memory or kill a tool job. Placement on
+  this computer closes on an amber or red disk, agent launches and `wait cmd` starts on red; crash recovery
+  no longer waits on a disk-only amber and says "host admission" in its waiting reason.
 - One wake paste stays under 1800 bytes (the rest waits for the next paste),
   and no second paste goes to a session within `quietSeconds` of the last.
 - `st aico wake` on a Pi session works once Pi's state is known; the docs said

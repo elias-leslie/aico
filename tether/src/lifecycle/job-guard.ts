@@ -265,14 +265,18 @@ export function fastestPane(history: Map<string, number[]>, minGrowth = MIN_GROW
   return best
 }
 
-/** Host state from Nightshift's admission.json (contract v1); null when it
- * is missing, unreadable or past expires_at: no verdict, no kill. */
+/** Host memory state from Nightshift's admission.json (contract v1); null when
+ * it is missing, unreadable or past expires_at: no verdict, no kill. A file
+ * with memory_state (Nightshift since 2026-10-31) is read by it: its state is
+ * the worse of memory and disk, and a full disk is no reason to warn about
+ * memory or kill a tool job. */
 export function parseHostState(text: string, nowMs: number): HostState | null {
   try {
     const doc = JSON.parse(text) as Record<string, unknown>
     if (doc.v !== 1 || typeof doc.expires_at !== 'number' || doc.expires_at * 1000 <= nowMs)
       return null
-    return doc.state === 'green' || doc.state === 'amber' || doc.state === 'red' ? doc.state : null
+    const state = 'memory_state' in doc ? doc.memory_state : doc.state
+    return state === 'green' || state === 'amber' || state === 'red' ? state : null
   } catch {
     return null
   }

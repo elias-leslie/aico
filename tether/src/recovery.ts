@@ -931,7 +931,10 @@ export class Recovery {
       // malformed override: launches use the normal verdict
     }
     const verdict = override ? null : await readNightshiftAdmission(nightshiftAdmissionPath(), now)
-    if (verdict && !verdict.admit) this.admitSince = null
+    // A disk-only amber (memory green) does not hold recovery: agent launches pass on amber, and a low
+    // disk can last for days. Memory amber or anything red still waits.
+    const diskAmber = verdict?.state === 'amber' && verdict.memoryState === 'green'
+    if (verdict && !verdict.admit && !diskAmber) this.admitSince = null
     else if (this.admitSince === null) this.admitSince = now
     return this.admitSince !== null && now - this.admitSince >= ADMIT_SETTLE_MS
   }
@@ -949,7 +952,7 @@ export class Recovery {
         .sort((a, b) => a.notBefore - b.notBefore)[0]
       if (!due) return
       if (!settled && !due.manual) {
-        const reason = 'waiting until host memory has allowed agent launches for a minute'
+        const reason = 'waiting until host admission has allowed agent launches for a minute'
         if (due.reason !== reason) this.update(due, { reason })
         return
       }

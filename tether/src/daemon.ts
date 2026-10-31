@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync, readFileSync } from 'node:fs'
+import { chmodSync, mkdirSync } from 'node:fs'
 import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -29,7 +29,7 @@ import { listenPrivateSocket } from './http'
 import { Hub } from './hub/hub'
 import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
 import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
-import { nightshiftAdmissionPath, parseNightshiftAdmission } from './lifecycle/agent-admission'
+import { nightshiftAdmissionPath, nightshiftAdmissionRed } from './lifecycle/agent-admission'
 import {
   bindCatalog,
   claimLauncher,
@@ -599,16 +599,7 @@ export async function startDaemon(
     run: (runId) => runs.runState(runId),
     ask: (id) => askStore.get(id),
     host: (name) => hosts?.peerView(name)?.state ?? null,
-    admissionRed: () => {
-      if (!admissionPath) return false
-      try {
-        return (
-          parseNightshiftAdmission(readFileSync(admissionPath, 'utf8'), Date.now())?.state === 'red'
-        )
-      } catch {
-        return false
-      }
-    },
+    admissionRed: () => nightshiftAdmissionRed(admissionPath),
     probeJob: systemdProbe(env),
     poke: (kind, ref) => pokeWaits(kind, ref),
     now: Date.now,

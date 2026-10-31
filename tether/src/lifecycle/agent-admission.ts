@@ -14,6 +14,7 @@
  * systemd or /proc.
  */
 
+import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { isNamedProcess } from './procfs'
@@ -217,6 +218,9 @@ export interface NightshiftVerdict {
   admit: boolean
   /** green, amber or red; null when the file names none. */
   state: 'green' | 'amber' | 'red' | null
+  /** Memory alone (memory_state, Nightshift since 2026-10-31: state is the
+   * worse of memory and disk); null when the file has none. */
+  memoryState?: 'green' | 'amber' | 'red' | null
   reason: string
 }
 
@@ -241,14 +245,33 @@ export function parseNightshiftAdmission(text: string, nowMs: number): Nightshif
     return null
   }
   if (!state || typeof state !== 'object') return null
-  const { v, admit, reason, expires_at: expiresAt, state: level } = state as Record<string, unknown>
+  const {
+    v,
+    admit,
+    reason,
+    expires_at: expiresAt,
+    state: level,
+    memory_state: memory,
+  } = state as Record<string, unknown>
   if (v !== 1 || typeof admit !== 'boolean' || typeof expiresAt !== 'number') return null
   if (expiresAt * 1000 <= nowMs) return null
   const clean = typeof reason === 'string' ? reason.replace(/[^\x20-\x7e]/g, '').trim() : ''
   return {
     admit,
     state: level === 'green' || level === 'amber' || level === 'red' ? level : null,
+    memoryState: memory === 'green' || memory === 'amber' || memory === 'red' ? memory : null,
     reason: clean.slice(0, 200) || 'no reason given',
+  }
+}
+
+/** Nightshift admission is red (memory or disk): heavy and probing work such
+ * as `wait cmd` watchers waits. False when the file is missing or stale. */
+export function nightshiftAdmissionRed(path: string | null, nowMs: number = Date.now()): boolean {
+  if (!path) return false
+  try {
+    return parseNightshiftAdmission(readFileSync(path, 'utf8'), nowMs)?.state === 'red'
+  } catch {
+    return false
   }
 }
 

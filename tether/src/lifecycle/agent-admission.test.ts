@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -13,6 +13,7 @@ import {
   LAUNCH_SETTLE_MS,
   type NightshiftVerdict,
   nightshiftAdmissionPath,
+  nightshiftAdmissionRed,
   observeAgentScopes,
   parseMemAvailable,
   parseMemoryPressure,
@@ -20,6 +21,18 @@ import {
   readNightshiftAdmission,
   type ScopeFs,
 } from './agent-admission'
+
+/** Nightshift's admission.json with disk red and memory green, as memctl
+ * writes it (nightshift tests/fixtures/admission-disk-red.json), made fresh. */
+function diskRed(nowMs: number): string {
+  const doc = JSON.parse(
+    readFileSync(
+      new URL('../test-fixtures/nightshift-admission-disk-red.json', import.meta.url),
+      'utf8',
+    ),
+  ) as Record<string, unknown>
+  return JSON.stringify({ ...doc, expires_at: Math.floor(nowMs / 1000) + 30 })
+}
 
 const GiB = 1024 ** 3
 const meminfo = (gib: number) =>
@@ -465,15 +478,32 @@ describe('Nightshift admission state', () => {
     }
   })
 
+  it('a red disk closes agent launches and wait cmd starts', async () => {
+    const verdict = parseNightshiftAdmission(diskRed(now), now)
+    expect(verdict).toMatchObject({ admit: false, state: 'red', memoryState: 'green' })
+    // daemon.ts wires wait cmd's admissionRed() to nightshiftAdmissionRed(admission path)
+    const dir = mkdtempSync(join(tmpdir(), 'tether-admission-'))
+    const file = join(dir, 'admission.json')
+    writeFileSync(file, diskRed(now))
+    expect(nightshiftAdmissionRed(file, now)).toBe(true)
+    expect(nightshiftAdmissionRed(file, now + 3_600_000)).toBe(false) // stale: no verdict
+    expect(nightshiftAdmissionRed(join(dir, 'missing.json'), now)).toBe(false)
+    expect(nightshiftAdmissionRed(null, now)).toBe(false)
+    const { admission } = harness({ verdict })
+    const denied = await denial(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))
+    expect(denied.reason).toContain('Nightshift has closed agent admission (Disk is critical')
+  })
+
   it('parses contract v1 and ignores stale, unknown or malformed state', () => {
     expect(parseNightshiftAdmission(state({}), now)).toEqual({
       admit: false,
       state: 'red',
+      memoryState: null,
       reason: 'swap 80%',
     })
     expect(
       parseNightshiftAdmission(state({ state: 'green', admit: true, reason: '' }), now),
-    ).toEqual({ admit: true, state: 'green', reason: 'no reason given' })
+    ).toEqual({ admit: true, state: 'green', memoryState: null, reason: 'no reason given' })
     expect(parseNightshiftAdmission(state({ state: 'purple' }), now)).toMatchObject({
       state: null,
     })
@@ -508,6 +538,7 @@ describe('Nightshift admission state', () => {
     expect(await readNightshiftAdmission(file, now)).toEqual({
       admit: false,
       state: 'red',
+      memoryState: null,
       reason: 'swap 80%',
     })
   })

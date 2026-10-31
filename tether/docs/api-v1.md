@@ -553,7 +553,11 @@ SSE was rejected. NDJSON is simpler to consume from both Node and Python (`httpx
 
 Tether owns the agent-pane memory policy: the pane cap and the kill policy for runaway agent tool jobs. Host memory
 (the host's pressure state in Nightshift's `admission.json`, swap, systemd-oomd, the app.slice cap) stays with
-Nightshift. The web app's settings panel edits it.
+Nightshift. The web app's settings panel edits it. The guard acts on `memory_state` (memory alone) when the file
+has it, else `state`: since 2026-10-31 Nightshift's `state` is the worse of memory and disk, and a full disk is no
+reason to warn about memory or kill a tool job. The other readers keep `state`/`admit`: placement on this computer
+needs green (an amber or red disk closes it), agent launches and `wait cmd` starts close on red, and automatic crash
+recovery waits on memory amber or anything red but not on a disk-only amber (`memory_state` green).
 
 - `GET /v1/memory-policy` returns `{policy, defaults, bounds, killOrders, guard}`. `guard` is `{running, hostState,
   lastKillAt, paneCapFile}`; only the default instance runs the guard.

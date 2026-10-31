@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "state": "red",
+  "admit": false,
+  "reason": "Disk is critical: / has 20.0 GiB free (amber below 40, red below 30 GiB; backups stop); defer heavy work",
+  "updated_at": 1793500000,
+  "expires_at": 1793500030,
+  "memory_state": "green",
+  "memory_reason": "Enough memory: 16.0 GiB available, swap 0% (parked, no stalls), memory PSI 0.0",
+  "mem_available_gib": 16.0,
+  "swap_used_pct": 0.0,
+  "psi_full_avg10": 0.0,
+  "psi_some_avg60": 0.0,
+  "disk": {
+    "state": "red",
+    "path": "/",
+    "free_bytes": 21474836480,
+    "ballast_bytes": 6442450944,
+    "floor_bytes": 32212254720,
+    "warn_bytes": 42949672960
+  },
+  "offload": null,
+  "throttled": []
+}

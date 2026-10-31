@@ -1,7 +1,7 @@
 // The crash recovery state machine with the engine, clock and commands
 // replaced: no tmux, systemd or agent process is involved.
 
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
@@ -229,6 +229,44 @@ describe('crash recovery', () => {
     await runDue(h)
     expect(h.respawn).toHaveBeenCalledTimes(1)
     expect(sessions(h)).toMatchObject([{ state: 'recovered', attempt: 1 }])
+  })
+
+  it('waits on memory amber but not on a disk-only amber (Nightshift memory_state green)', async () => {
+    const file = join(dir, 'run', 'nightshift', 'admission.json')
+    mkdirSync(join(dir, 'run', 'nightshift'), { recursive: true })
+    const verdict = (memory: string) =>
+      writeFileSync(
+        file,
+        JSON.stringify({
+          v: 1,
+          state: 'amber',
+          admit: false,
+          memory_state: memory,
+          reason: 'tight',
+          expires_at: T0 / 1000 + 86_400,
+        }),
+      )
+    try {
+      await agentKilled(h)
+      h.respawn.mockImplementation(async () => {
+        h.agent = { pid: 7, resumeId: RESUME }
+        return { status: 'replaced' }
+      })
+      verdict('amber')
+      await runDue(h)
+      expect(h.respawn).not.toHaveBeenCalled()
+      expect(sessions(h)).toMatchObject([
+        {
+          state: 'waiting',
+          reason: 'waiting until host admission has allowed agent launches for a minute',
+        },
+      ])
+      verdict('green')
+      await runDue(h)
+      expect(h.respawn).toHaveBeenCalledTimes(1)
+    } finally {
+      rmSync(file, { force: true })
+    }
   })
 
   it('drops the record when the owner restarted the agent by hand, and never kills it', async () => {
