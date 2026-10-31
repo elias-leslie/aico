@@ -35,6 +35,9 @@ export interface HealthFinding {
   checked?: number | null
   /** The owner calls it holds, counted like needs_you. */
   calls?: number
+  /** False when its owner calls are plain alerts (tripwire, sudo, canary):
+   * something to check, nothing to answer. Older Nightshift: absent. */
+  answerable?: boolean
   link: string
 }
 
@@ -206,6 +209,8 @@ export function callsText(view: NightshiftOwnerView): string {
 
 /** Who has a finding, in the owner's words. */
 export function handledBy(finding: HealthFinding): string {
+  if (finding.owner && finding.answerable === false)
+    return 'Needs you to check it. Nothing to answer; the details are in Nightshift.'
   if (finding.owner)
     return (finding.calls ?? 1) > 1
       ? `${finding.calls} calls for you here. You answer them in Nightshift.`
