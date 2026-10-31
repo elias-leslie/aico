@@ -12,6 +12,10 @@
   pullers: `GET /v1/sessions/:id/due?wait=55` hands a session's due lines to
   Claude Code's asyncRewake hook or Pi's extension while one is attached,
   instead of pasting. Schema v21.
+- The native pullers themselves: `tether/scripts/aico-due.py`, run by
+  claude-config's `hooks/aico-due.sh` asyncRewake hook (exit 2 with the lines
+  wakes Claude), and Pi's `tether/integrations/pi/aico-due.ts` extension
+  (`sendUserMessage` follow-up), linked as `~/.pi/agent/extensions/aico-due.ts`.
 - `st aico create --host auto --needs mem=6G,cpu=2[,cap=live-ready]`: Tether
   picks the first host with room from live readings (Nightshift's admission
   file here; a VM's memory, PSI and CPUs plus its Proxmox node's memory and

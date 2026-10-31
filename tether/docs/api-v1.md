@@ -754,8 +754,11 @@ Each line goes out once, whichever way.
 - **State.** `queued` while the row waits, `delivered` with `via` (`paste`, `turn` or `native`) and `deliveredAt`, or
   `dropped` when the row went without a delivery (the session ended). Records stay 7 days.
 
-**Native pullers.** Claude Code's asyncRewake hook (`hooks/aico-due.sh` in claude-config) and Pi's `aico-due`
-extension long-poll `GET /v1/sessions/:id/due?wait=55` from inside the session (`AICO_WIDGET_ID`). While one is
+**Native pullers.** Claude Code's asyncRewake hook (`hooks/aico-due.sh` in claude-config, which runs
+`tether/scripts/aico-due.py`, one poller per session by a lock in `$XDG_RUNTIME_DIR/aico-due/`, ending with the Claude
+process that started it) and Pi's extension `tether/integrations/pi/aico-due.ts` (linked as
+`~/.pi/agent/extensions/aico-due.ts`) long-poll `GET /v1/sessions/:id/due?wait=55` from inside the session
+(`AICO_WIDGET_ID`). Both stop on `404` or `409 delivery_unsupported` and retry other failures after 30 s. While one is
 attached, and for 30 s after each poll so it can poll again, the session's due lines go to it instead of the pane:
 the same rows, order and 1800-byte budget as a paste, gated only on the agent being idle and the post-delivery
 `quietSeconds` (the harness shows a notice, never text in the owner's input). Claude exits its hook with code 2 and
