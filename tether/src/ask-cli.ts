@@ -270,7 +270,7 @@ export async function runAsk(
   if (sub === 'create') {
     if (response.status === 201)
       io.out(
-        `Asked: ${ask.id}. The owner sees it in Aico under Needs you. In your reply, write just the question and "ask ${ask.id}". The answer comes to this session as a message when you are idle; or read it with tether ask get ${ask.id}.`,
+        `Asked: ${ask.id}. The owner sees it in Aico under Needs you. In your reply, restate the one-line question with your recommendation and say it is asked in Aico. The answer comes to this session as a message when you are idle; or read it with tether ask get ${ask.id}.`,
       )
     else if (ask.state === 'answered')
       io.out(`Already answered (ask ${ask.id}):\n${formatAsk(ask)}`)
