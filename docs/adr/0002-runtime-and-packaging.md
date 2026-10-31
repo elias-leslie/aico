@@ -1,6 +1,6 @@
 # ADR 0002: Runtime and packaging
 
-- Status: accepted
+- Status: accepted. The Electron desktop app it mentions was removed on 2026-10-31; its notes on `aico-owner.service` and electron-vite are history.
 - Context: Phase 0 item 1 says Tether ships as a self-contained build or vendored Node, at a start path that stays stable across releases.
 
 ## Decision

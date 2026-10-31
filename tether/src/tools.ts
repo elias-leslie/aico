@@ -1,6 +1,5 @@
-// Merged agent-tool registry: Aico's declarative TUI specs (electron/main/tui/
-// tuis/*) reconciled with the old web backend's agent_tools rows. Editing the registry
-// from either app changes launches in both.
+// Merged agent-tool registry: the declarative TUI specs that came from the retired
+// Aico desktop app, reconciled with the old web backend's agent_tools rows.
 
 import { CONTEXT_HOOKS } from './schema'
 

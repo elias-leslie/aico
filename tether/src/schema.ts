@@ -5,7 +5,7 @@
 
 export const SCHEMA_VERSION = 17
 
-/** Aico's tmux_servers table (electron/main/store.ts TMUX_SERVERS_TABLE_SQL),
+/** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
 export const TMUX_SERVERS_TABLE_SQL = `
   CREATE TABLE tmux_servers (
