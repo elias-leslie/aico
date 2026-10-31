@@ -1,21 +1,17 @@
 // Aico's client for Tether, the per-user session daemon that owns every tmux
-// session, tmux server and agent launch (docs/api-v1.md). The desktop and the
-// web server share it. Everything here speaks HTTP/1.1 over Tether's private
-// 0600 Unix socket; nothing is network-exposed.
+// session, tmux server and agent launch (docs/api-v1.md). The web server uses
+// it. Everything here speaks HTTP/1.1 over Tether's private 0600 Unix socket;
+// nothing is network-exposed.
 //
 // Tether being down is "control unavailable", never "session gone": tmux
 // servers and panes keep running while the daemon restarts.
 
-import { statSync } from 'node:fs'
 import { request } from 'node:http'
 import { join } from 'node:path'
 import {
   type AttachAnswer,
-  type ContextHook,
-  HOST_CREATE_TIMEOUT_MS,
   type HostInfo,
   parseAttachAnswer,
-  parseContextHook,
   type ResizeClaimAnswer,
   type SessionDescriptor,
   type SizeHolder,
@@ -30,16 +26,16 @@ import {
   type Wake,
   type WakeList,
 } from './contracts'
-import type { RunDecision, RunsAnswer } from './run-text'
+import type { RunsAnswer } from './run-text'
 
 const DEFAULT_TIMEOUT_MS = 5_000
 /** Tether sends a heartbeat every 15 s; three missed ones mean a half-open stream. */
-export const STREAM_IDLE_MS = 45_000
+const STREAM_IDLE_MS = 45_000
 const RECONNECT_MIN_MS = 500
 const RECONNECT_MAX_MS = 10_000
 
 /** This user's own `$XDG_RUNTIME_DIR/tether/<TETHER_INSTANCE|default>/control.sock`. */
-export function ownTetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
+function ownTetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
   const runtime = env.XDG_RUNTIME_DIR || (uid === undefined ? '/tmp' : `/run/user/${uid}`)
   const instance = env.TETHER_INSTANCE || 'default'
   return join(runtime, 'tether', instance, 'control.sock')
@@ -53,12 +49,6 @@ export function defaultTetherSocketPath(env: NodeJS.ProcessEnv, uid: number | un
 /** The active instance, the one new sessions go to: `TETHER_SOCKET`, else this user's own. */
 export function tetherSocketPath(env: NodeJS.ProcessEnv, uid: number | undefined): string {
   return env.TETHER_SOCKET || ownTetherSocketPath(env, uid)
-}
-
-/** Instances to consult (a pool's sockets): only the active one, since every
- * session belongs to this user's own Tether. */
-export function knownTetherSockets(env: NodeJS.ProcessEnv, uid: number | undefined): string[] {
-  return [tetherSocketPath(env, uid)]
 }
 
 interface RequestOptions {
@@ -126,11 +116,6 @@ export class TetherClient {
     })
   }
 
-  /** The instances this client covers; a plain client is just itself. */
-  instances(): TetherClient[] {
-    return [this]
-  }
-
   private async json<T>(
     method: string,
     path: string,
@@ -153,42 +138,8 @@ export class TetherClient {
     return this.json('GET', `/v1/sessions/${encodeURIComponent(id)}`)
   }
 
-  /** Creates and launches at the first view's grid size. 201 running, 202
-   * pending/uncertain (with `failure`). Allow a slow agent admission. */
-  createSession(input: {
-    tool: string
-    projectId?: string
-    projectRoot?: string
-    /** Start in a new empty workspace with no first-party context (docs/root-control.md). */
-    blankSlate?: true
-    /** An Agent Hub prompt revision snapshot added to the tool's prompt. */
-    instructions?: {
-      prompt: string
-      name: string
-      revision: string
-      contentHash?: string | null
-      createdAt?: string | null
-      content: string
-    }
-    size: { cols: number; rows: number }
-    /** A remote host from `hosts()`; omitted for this computer. */
-    host?: string
-  }): Promise<SessionDescriptor> {
-    const timeoutMs = input.host ? HOST_CREATE_TIMEOUT_MS : 60_000
-    return this.json('POST', '/v1/sessions', { ...input, origin: 'aico' }, { timeoutMs })
-  }
-
   rename(id: string, generation: string, name: string | null): Promise<SessionDescriptor> {
     return this.json('PATCH', `/v1/sessions/${encodeURIComponent(id)}`, { generation, name })
-  }
-
-  /** Mark or unmark a coordinator in the catalog; Tether forwards it to this
-   * GUI and publishes `session.updated`. */
-  setCoordinator(id: string, generation: string, coordinator: boolean): Promise<unknown> {
-    return this.json('POST', `/v1/widgets/${encodeURIComponent(id)}/coordinator`, {
-      generation,
-      coordinator,
-    })
   }
 
   /** End the session. Its wakes go with it unless `keepWakes`: then they
@@ -217,28 +168,6 @@ export class TetherClient {
     }
   }
 
-  /** Answer a run (or one step) waiting on the owner. */
-  resumeRun(runId: string, action: RunDecision, stepKey?: string | null): Promise<{ ok: true }> {
-    return this.json('POST', `/v1/runs/${encodeURIComponent(runId)}/resume`, {
-      action,
-      ...(stepKey ? { stepKey } : {}),
-    })
-  }
-
-  /** Stop a run, or one of its steps. */
-  cancelRun(runId: string, stepKey?: string | null): Promise<{ ok: true }> {
-    const run = `/v1/runs/${encodeURIComponent(runId)}`
-    return this.json(
-      'POST',
-      stepKey ? `${run}/steps/${encodeURIComponent(stepKey)}/cancel` : `${run}/cancel`,
-    )
-  }
-
-  /** Drop an ended run from the lists. */
-  dismissRun(runId: string): Promise<{ ok: true }> {
-    return this.json('POST', `/v1/runs/${encodeURIComponent(runId)}/dismiss`)
-  }
-
   /** Every wake, kept ones included, with Tether's wake policy. */
   wakes(): Promise<WakeList> {
     return this.json('GET', '/v1/wakes')
@@ -256,10 +185,6 @@ export class TetherClient {
     return this.json('POST', `/v1/sessions/${encodeURIComponent(id)}/wakes`, input)
   }
 
-  moveWake(wakeId: string, dueAt: number): Promise<Wake> {
-    return this.json('PATCH', `/v1/wakes/${encodeURIComponent(wakeId)}`, { dueAt })
-  }
-
   cancelWake(wakeId: string): Promise<{ deleted: true }> {
     return this.json('DELETE', `/v1/wakes/${encodeURIComponent(wakeId)}`)
   }
@@ -273,21 +198,6 @@ export class TetherClient {
     )
   }
 
-  /** Respawn in another project (`projectId`) or a plain directory
-   * (`projectRoot`, as the Personal Workspace). */
-  switchProject(
-    id: string,
-    generation: string,
-    target: { projectId: string } | { projectRoot: string },
-  ): Promise<SessionDescriptor> {
-    return this.json(
-      'POST',
-      `/v1/sessions/${encodeURIComponent(id)}/switch-project`,
-      { generation, ...target },
-      { timeoutMs: 60_000 },
-    )
-  }
-
   /** The owner has these sessions open now: Tether's waiting notice treats them as seen. */
   async markSeen(ids: readonly string[]): Promise<void> {
     try {
@@ -297,40 +207,10 @@ export class TetherClient {
     }
   }
 
-  /** Re-check the session's context hook now (what Aico did on window load). */
-  async contextCheck(id: string): Promise<ContextHook | null> {
-    const body = await this.json<{ contextHook?: ContextHook }>(
-      'POST',
-      `/v1/sessions/${encodeURIComponent(id)}/context-check`,
-      undefined,
-      { timeoutMs: 30_000 },
-    )
-    return parseContextHook(body.contextHook)
-  }
-
-  diagnostics(id: string): Promise<Record<string, unknown>> {
-    return this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/diagnostics`, undefined, {
-      timeoutMs: 15_000,
-    })
-  }
-
   attach(id: string): Promise<AttachAnswer> {
     return this.json('GET', `/v1/sessions/${encodeURIComponent(id)}/attach`, undefined, {
       timeoutMs: 30_000,
     }).then(parseAttachAnswer)
-  }
-
-  inject(
-    id: string,
-    generation: string,
-    text: string,
-    mode: 'type' | 'paste',
-  ): Promise<{ delivered: true }> {
-    return this.json('POST', `/v1/sessions/${encodeURIComponent(id)}/inject`, {
-      generation,
-      text,
-      mode,
-    })
   }
 
   /** Claim the shared window size for this attached tmux client. `viewer`
@@ -440,145 +320,8 @@ export class TetherClient {
   }
 }
 
-function isSocket(path: string): boolean {
-  try {
-    return statSync(path).isSocket()
-  } catch {
-    return false
-  }
-}
-
 const isMissing = (error: unknown): error is TetherError =>
   error instanceof TetherError && error.status === 404
-
-/**
- * The active instance plus the other known one, behind the one-client API.
- * New sessions, tools and projects go to the active instance; the session list
- * merges both; a call about one session asks the active instance first and
- * falls back to the other on 404, so each session is handled by the instance
- * that owns it. The other instance counts only while its socket exists; its
- * outage does not hide the active instance's list. An unreachable candidate
- * fails any lookup that ended in 404: it may still own that session.
- */
-export class TetherPool extends TetherClient {
-  private readonly all: TetherClient[]
-
-  constructor(
-    sockets: string[],
-    defaultTimeoutMs = DEFAULT_TIMEOUT_MS,
-    private readonly socketExists: (path: string) => boolean = isSocket,
-  ) {
-    super(sockets[0], defaultTimeoutMs)
-    this.all = sockets.map((path) => new TetherClient(path, defaultTimeoutMs))
-  }
-
-  override instances(): TetherClient[] {
-    return this.all
-  }
-
-  private candidates(): TetherClient[] {
-    const [active, ...others] = this.all
-    return [active, ...others.filter((client) => this.socketExists(client.socketPath))]
-  }
-
-  override async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-    options: RequestOptions = {},
-  ): Promise<{ status: number; body: T }> {
-    const route = trimTrailingSlashes(path.split('?')[0])
-    if (route === '/v1/sessions' && method === 'GET') return this.mergedSessions(path, options)
-    if (route === '/v1/runs' && method === 'GET') return this.mergedRuns(path, options)
-    if (/^\/v1\/(sessions|widgets|runs)\/[^/]/.test(route))
-      return this.byOwner(method, path, body, options)
-    return this.all[0].request<T>(method, path, body, options)
-  }
-
-  private async mergedSessions<T>(
-    path: string,
-    options: RequestOptions,
-  ): Promise<{ status: number; body: T }> {
-    const merged = new Map<string, unknown>()
-    let first: { status: number; body: T } | null = null
-    for (const client of this.candidates()) {
-      let answer: { status: number; body: T }
-      try {
-        answer = await client.request<T>('GET', path, undefined, options)
-      } catch (error) {
-        if (client !== this.all[0] && error instanceof TetherUnavailable) continue
-        throw error
-      }
-      first ??= answer
-      const items = (answer.body as { items?: { id: string }[] } | null)?.items
-      for (const item of items ?? []) if (!merged.has(item.id)) merged.set(item.id, item)
-    }
-    const head = first as { status: number; body: T }
-    return { status: head.status, body: { ...head.body, items: [...merged.values()] } }
-  }
-
-  /** Each instance follows the runs of its own sessions. An instance that
-   * cannot be asked marks the whole answer stale rather than hide its runs. */
-  private async mergedRuns<T>(
-    path: string,
-    options: RequestOptions,
-  ): Promise<{ status: number; body: T }> {
-    const answers: RunsAnswer[] = []
-    let skipped = false
-    for (const client of this.candidates()) {
-      try {
-        answers.push((await client.request<RunsAnswer>('GET', path, undefined, options)).body)
-      } catch (error) {
-        if (client === this.all[0]) throw error
-        if (error instanceof TetherUnavailable) skipped = true
-        else if (!isMissing(error)) throw error
-      }
-    }
-    const worst = (a: RunsAnswer['status'], b: RunsAnswer['status']): RunsAnswer['status'] =>
-      a === 'unavailable' || b === 'unavailable'
-        ? 'unavailable'
-        : a === 'stale' || b === 'stale'
-          ? 'stale'
-          : 'ok'
-    const times = answers.map((a) => a.updatedAt).filter((t): t is number => typeof t === 'number')
-    const body: RunsAnswer = {
-      status: answers.reduce<RunsAnswer['status']>(
-        (all, a) => worst(all, a.status),
-        skipped ? 'stale' : 'ok',
-      ),
-      error:
-        answers.find((a) => a.error)?.error ??
-        (skipped ? 'The other Tether is not reachable' : null),
-      updatedAt: times.length ? Math.min(...times) : null,
-      items: answers.flatMap((a) => a.items ?? []),
-    }
-    return { status: 200, body: body as T }
-  }
-
-  private async byOwner<T>(
-    method: string,
-    path: string,
-    body: unknown,
-    options: RequestOptions,
-  ): Promise<{ status: number; body: T }> {
-    let missing: { status: number; body: T } | TetherError | null = null
-    let unavailable: TetherUnavailable | null = null
-    for (const client of this.candidates()) {
-      try {
-        const answer = await client.request<T>(method, path, body, options)
-        if (answer.status !== 404) return answer
-        missing ??= answer
-      } catch (error) {
-        if (error instanceof TetherUnavailable) unavailable ??= error
-        else if (isMissing(error)) missing ??= error
-        else throw error
-      }
-    }
-    if (unavailable) throw unavailable // another instance may still own it: not "gone"
-    if (missing instanceof TetherError) throw missing
-    return missing as { status: number; body: T }
-  }
-}
 
 /** Capped exponential reconnect delay. */
 export function reconnectDelay(attempt: number): number {
@@ -682,12 +425,4 @@ export function followEvents(client: TetherClient, subscriber: EventSubscriber):
     }
   })()
   return () => controller.abort()
-}
-
-/** Drops trailing slashes. Not /\/+$/: it backtracks on a long run of '/'
- * (CodeQL js/polynomial-redos). */
-export function trimTrailingSlashes(text: string): string {
-  let end = text.length
-  while (end > 0 && text.charCodeAt(end - 1) === 47) end--
-  return text.slice(0, end)
 }

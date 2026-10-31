@@ -260,31 +260,12 @@ export class FakeTether {
     return list
   }
 
-  /** What `runs()` answers, and the run controls Tether is to refuse. */
+  /** What `runs()` answers. */
   runsAnswer: RunsAnswer = { status: 'ok', error: null, updatedAt: null, items: [] }
-  failRun: TetherError | null = null
 
   async runs() {
     this.record('runs')
     return this.runsAnswer
-  }
-
-  async resumeRun(runId: string, action: string, stepKey?: string | null) {
-    this.record('resumeRun', runId, action, stepKey ?? null)
-    if (this.failRun) throw this.failRun
-    return { ok: true as const }
-  }
-
-  async cancelRun(runId: string, stepKey?: string | null) {
-    this.record('cancelRun', runId, stepKey ?? null)
-    if (this.failRun) throw this.failRun
-    return { ok: true as const }
-  }
-
-  async dismissRun(runId: string) {
-    this.record('dismissRun', runId)
-    if (this.failRun) throw this.failRun
-    return { ok: true as const }
   }
 
   async version() {

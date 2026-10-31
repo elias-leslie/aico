@@ -37,7 +37,7 @@ describe('size claim', () => {
       id: 'aaaaaaaa',
       generation: vi.fn(() => 'g1'),
       link: { pid: 42, cols: 100, rows: 30 },
-      viewer: { app: 'desktop', device: 'host' },
+      viewer: { app: 'web', device: 'host' },
       isCurrent: () => true,
       refresh: vi.fn(async () => {}),
       applied: vi.fn(),
@@ -50,7 +50,7 @@ describe('size claim', () => {
     const { run, deps, resizeClaim } = claim([{ applied: true, changed: true }])
     await run()
     expect(resizeClaim).toHaveBeenCalledWith('aaaaaaaa', 'g1', 42, 100, 30, {
-      app: 'desktop',
+      app: 'web',
       device: 'host',
     })
     expect(deps.applied).toHaveBeenCalledWith(true)
@@ -91,7 +91,7 @@ describe('size at attach', () => {
     rows: 40,
     generation: 'g1',
     claimedAt: '',
-    viewer: { app: 'desktop', device: 'box' },
+    viewer: { app: 'web', device: 'box' },
   })
   function at(
     answer: { generation: string; holder: ReturnType<typeof holder> | null } | Error,

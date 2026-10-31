@@ -117,7 +117,7 @@ export interface ControlTerminalOptions {
   /**
    * Text this viewer may have outstanding (emitted, not yet `delivered`)
    * before the link stops reading from tmux. Omitted: the viewer takes data
-   * as fast as it comes (the desktop's IPC) and never reports delivery.
+   * as fast as it comes and never reports delivery.
    */
   creditBytes?: number
   onReseed?(report: ReseedReport): void

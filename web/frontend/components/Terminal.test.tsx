@@ -245,7 +245,7 @@ describe('TerminalComponent', () => {
     act(() =>
       websocketState.options?.onSizeHolder?.({
         here: false,
-        viewer: { app: 'desktop', device: 'box' },
+        viewer: { app: 'web', device: 'box' },
         size: { cols: 200, rows: 60 },
         sameBrowser: false,
       }),

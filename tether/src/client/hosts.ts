@@ -1,7 +1,6 @@
 // The Hosts panel's calls (tether docs/api-v1.md "Remote hosts"): sign-in state
 // per tool on a host, power on and off, trust after a machine change, and sign
-// in or out. Shared by the desktop and the web server.
-
+// in or out.
 import type { TetherClient } from './client'
 import type { SessionDescriptor } from './contracts'
 

@@ -1,6 +1,6 @@
 // Pane environment markers. These names are a compatibility contract with
-// the Aico desktop and web app, SummitFlow and codex sync (docs/compat-contract.md). Renaming
-// any `AICO_*` marker is out of scope.
+// the Aico web app, SummitFlow and codex sync (docs/compat-contract.md).
+// Renaming any `AICO_*` marker is out of scope.
 
 export const MANAGED_LIFECYCLE_VERSION = 1
 

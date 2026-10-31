@@ -4,7 +4,7 @@
 // Kept in Tether's settings too, so a restart does not forget who holds a
 // window that a claim pinned: the holder's tmux client outlives Tether.
 
-/** Which app on which device made a claim (`{app: 'desktop', device: <hostname>}`),
+/** Which app on which device made a claim (`{app: 'web', device: 'Chrome on Linux'}`),
  * so the other views can say where the session is being viewed. */
 export interface ViewerLabel {
   app: string

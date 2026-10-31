@@ -258,7 +258,7 @@ describe('terminal socket', () => {
         cols: 50,
         rows: 20,
         changed: true,
-        viewer: { app: 'desktop', device: 'davion' },
+        viewer: { app: 'web', device: 'davion' },
       },
     })
     const other = await view.next(
@@ -266,7 +266,7 @@ describe('terminal socket', () => {
     )
     expect(other.size_holder).toEqual({
       here: false,
-      viewer: { app: 'desktop', device: 'davion' },
+      viewer: { app: 'web', device: 'davion' },
       size: { cols: 50, rows: 20 },
     })
 
@@ -289,7 +289,7 @@ describe('terminal socket', () => {
         rows: 30,
         generation: 'g1',
         claimedAt: '',
-        viewer: { app: 'desktop', device: 'box' },
+        viewer: { app: 'web', device: 'box' },
       },
     }
     windowState = { cols: 90, rows: 30, pinned: true, clients: [4242, 7] }
@@ -299,7 +299,7 @@ describe('terminal socket', () => {
     const held = await view.next((f) => 'size_holder' in f)
     expect(held.size_holder).toEqual({
       here: false,
-      viewer: { app: 'desktop', device: 'box' },
+      viewer: { app: 'web', device: 'box' },
       size: { cols: 90, rows: 30 },
     })
     expect(links[0].size).toBeNull()
@@ -317,7 +317,7 @@ describe('terminal socket', () => {
         rows: 40,
         generation: 'g1',
         claimedAt: '',
-        viewer: { app: 'desktop', device: 'box' },
+        viewer: { app: 'web', device: 'box' },
       },
     }
     windowState = { cols: 120, rows: 40, pinned: true, clients: [4242, 7] }
@@ -327,7 +327,7 @@ describe('terminal socket', () => {
     const held = await view.next((f) => 'size_holder' in f)
     expect(held.size_holder).toEqual({
       here: false,
-      viewer: { app: 'desktop', device: 'box' },
+      viewer: { app: 'web', device: 'box' },
       size: { cols: 120, rows: 40 },
     })
     view.ws.send('x')
@@ -357,7 +357,7 @@ describe('terminal socket', () => {
         rows: 40,
         generation: 'g1',
         claimedAt: '',
-        viewer: { app: 'desktop', device: 'box' },
+        viewer: { app: 'web', device: 'box' },
       },
     }
     const second = open(session.id)

@@ -11,9 +11,9 @@ export type { ResizeRefusal, SessionOrigin, SessionStatus, SizeHolder, ViewerLab
 
 /** Lowest Tether API version these clients need (GET /v1/version): 2 accepts
  * the resize claim's viewer label, 3 session wakes and End's `keepWakes`. */
-export const MIN_TETHER_API_VERSION = 3
+const MIN_TETHER_API_VERSION = 3
 /** The API version Aico's clients speak; Tether must still accept it. */
-export const AICO_TETHER_API_VERSION = 1
+const AICO_TETHER_API_VERSION = 1
 
 /** Tether's check of a session's Agent Hub context hook (docs/api-v1.md). */
 export interface ContextHook {
@@ -214,14 +214,6 @@ export function wakeClock(at: number, now: number = Date.now()): string {
   return `${new Date(at).toLocaleDateString('en-US', { weekday: 'short' })} ${time}`
 }
 
-/** A pending check-in's time: `5:30 PM` ahead, `waiting since 2:27 PM` once
- * due, since Tether holds a due one until the session is idle with nothing
- * typed. */
-export function wakePendingTime(at: number, now: number = Date.now()): string {
-  const clock = wakeClock(at, now)
-  return at <= now ? `waiting since ${clock}` : clock
-}
-
 /** The menus' quick choices from the policy: "In 1 hour", "Tonight" (this
  * hour today, tomorrow once it has passed) and "Tomorrow morning". */
 export function wakeChoices(
@@ -307,18 +299,6 @@ export type ResizeClaimAnswer =
   | { applied: true; changed: boolean }
   | { applied: false; reason: ResizeRefusal | 'tmux_unavailable' }
 
-/** The `session.resized` event's data: the new size holder. `viewer` is
- * absent when the claimer sent none (an older client). */
-export interface SessionResized {
-  id: string
-  generation: string
-  clientPid: number
-  cols: number
-  rows: number
-  changed: boolean
-  viewer?: ViewerLabel
-}
-
 /** A Tether answer other than 2xx. `code` is Tether's stable error code. */
 export class TetherError extends Error {
   constructor(
@@ -342,46 +322,6 @@ export class TetherUnavailable extends Error {
     super(message)
     this.name = 'TetherUnavailable'
   }
-}
-
-export function parseContextHook(value: unknown): ContextHook | null {
-  const hook = value as Record<string, unknown> | null
-  if (
-    !hook ||
-    typeof hook !== 'object' ||
-    typeof hook.state !== 'string' ||
-    typeof hook.detail !== 'string' ||
-    typeof hook.tool !== 'string' ||
-    typeof hook.applicable !== 'boolean'
-  )
-    return null
-  return {
-    state: hook.state,
-    detail: hook.detail,
-    tool: hook.tool,
-    applicable: hook.applicable,
-    checkedAt: typeof hook.checkedAt === 'number' ? hook.checkedAt : null,
-  }
-}
-
-/** The descriptor a session event carries (`data.session`), or null when the
- * event has none (an older Tether) or it does not match the event's id. */
-export function eventSession(event: TetherEvent): SessionDescriptor | null {
-  const session = event.data.session as Partial<SessionDescriptor> | undefined
-  if (
-    !session ||
-    typeof session !== 'object' ||
-    typeof session.id !== 'string' ||
-    session.id !== event.data.id ||
-    typeof session.generation !== 'string' ||
-    typeof session.status !== 'string' ||
-    typeof session.tool !== 'string' ||
-    typeof session.createdAt !== 'number' ||
-    !session.tmux ||
-    typeof session.tmux !== 'object'
-  )
-    return null
-  return session as SessionDescriptor
 }
 
 /** True when Tether accepts these clients and offers what they need. */

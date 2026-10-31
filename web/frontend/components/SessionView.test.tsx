@@ -224,7 +224,7 @@ describe('SessionView', () => {
       terminalStatuses: statuses,
       isMobile: true,
     })
-    act(() => sizeHolderHooks.change?.('Aico desktop'))
+    act(() => sizeHolderHooks.change?.('Chrome on Linux'))
     const notice = screen.getByTestId('size-holder-notice')
     const frame = screen.getByTestId('terminal-session-1').parentElement
     expect(frame?.contains(notice)).toBe(false)

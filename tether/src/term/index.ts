@@ -1,4 +1,4 @@
-// Tether's terminal engine, shared by the desktop and the web server
+// Tether's terminal engine, used by the web server
 // (`import … from 'tether/term'`, bundled from this TS source): one tmux
 // control-mode client per viewer, the attach check, the size claim, and the
 // WebSocket viewer frames. The daemon never imports it, and it takes only

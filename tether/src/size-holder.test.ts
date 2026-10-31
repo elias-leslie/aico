@@ -35,7 +35,7 @@ describe('size holder', () => {
   })
 
   it("keeps the claimer's viewer label", () => {
-    const viewer = { app: 'desktop', device: 'davion-sidarli' }
+    const viewer = { app: 'web', device: 'davion-sidarli' }
     recordSizeHolder('aaaaaaaa', { ...claim, viewer })
     expect(sizeHolderOf('aaaaaaaa', 'g1')?.viewer).toEqual(viewer)
   })
@@ -96,8 +96,8 @@ describe('saved size holders', () => {
 describe('viewer label', () => {
   it('accepts an app and a device name, or no label at all', () => {
     expect(parseViewerLabel(undefined)).toBeUndefined()
-    expect(parseViewerLabel({ app: 'desktop', device: 'davion-sidarli' })).toEqual({
-      app: 'desktop',
+    expect(parseViewerLabel({ app: 'web', device: 'davion-sidarli' })).toEqual({
+      app: 'web',
       device: 'davion-sidarli',
     })
     expect(parseViewerLabel({ app: 'web', device: 'Pixel 9 · Chrome' })).toEqual({
@@ -108,16 +108,16 @@ describe('viewer label', () => {
 
   it.each([
     null,
-    'desktop',
+    'web',
     [],
-    { app: 'desktop' },
-    { app: 'desktop', device: 'x', extra: 1 },
+    { app: 'web' },
+    { app: 'web', device: 'x', extra: 1 },
     { app: 'Desktop', device: 'x' },
-    { app: 'desktop', device: '' },
-    { app: 'desktop', device: ' padded ' },
-    { app: 'desktop', device: 'a\nb' },
-    { app: 'desktop', device: 'x'.repeat(65) },
-    { app: 'desktop', device: 7 },
+    { app: 'web', device: '' },
+    { app: 'web', device: ' padded ' },
+    { app: 'web', device: 'a\nb' },
+    { app: 'web', device: 'x'.repeat(65) },
+    { app: 'web', device: 7 },
   ])('refuses %j', (value) => {
     expect(parseViewerLabel(value)).toBeNull()
   })

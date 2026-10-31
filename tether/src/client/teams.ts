@@ -1,4 +1,4 @@
-// Coordinator teams in a session list (the desktop tray and the web list).
+// Coordinator teams in a session list (the web list).
 // Top level holds coordinators and standalone sessions; a coordinator's lanes
 // fold under it. Rows keep the order they arrive in (oldest first); only Needs
 // you moves a row, to the top, so working and idle changes never reshuffle the

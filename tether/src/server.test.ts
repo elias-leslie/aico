@@ -147,7 +147,7 @@ describe('lifecycle API (no tmux started)', () => {
       (await call('POST', '/v1/sessions/ffffffff/end', { generation: 'a'.repeat(64) })).status,
     ).toBe(404)
     const claim = { generation: 'a'.repeat(64), clientPid: 7, cols: 80, rows: 24 }
-    const viewer = { app: 'desktop', device: 'davion-sidarli' }
+    const viewer = { app: 'web', device: 'davion-sidarli' }
     expect(
       (await call('POST', '/v1/sessions/ffffffff/resize-claim', { ...claim, viewer })).status,
     ).toBe(404)

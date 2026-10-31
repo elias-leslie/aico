@@ -1,7 +1,6 @@
 // A workflow run or step as Tether lists it, and which steps the session lists
 // show: only a step that is running or waiting for the owner, as a child agent
-// of the session that launched the run. Shared by the desktop tray and the web
-// list. Pure.
+// of the session that launched the run. Pure.
 
 import type { TeamMember } from './teams'
 

@@ -9,7 +9,6 @@ export interface SizeHolderViewer {
 
 /** The device holding the size, as "Sized for …" names it. */
 export function sizeHolderName(viewer: SizeHolderViewer | null | undefined): string {
-  if (viewer?.app === 'desktop') return 'Aico desktop'
   return viewer?.device || 'another device'
 }
 

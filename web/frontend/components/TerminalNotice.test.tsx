@@ -60,10 +60,14 @@ describe('SizeHolderNotice', () => {
   it('names the holder and takes the size back', () => {
     const onUseHere = vi.fn()
     render(
-      <SizeHolderNotice holder="Aico desktop" onUseHere={onUseHere} isMobile />,
+      <SizeHolderNotice
+        holder="Chrome on Linux"
+        onUseHere={onUseHere}
+        isMobile
+      />,
     )
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Sized for Aico desktop',
+      'Sized for Chrome on Linux',
     )
     fireEvent.click(screen.getByRole('button', { name: 'Use here' }))
     expect(onUseHere).toHaveBeenCalledOnce()
