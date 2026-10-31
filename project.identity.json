@@ -20,7 +20,7 @@
   },
   "branding": {
     "short_name": "Aico",
-    "description": "Floating-widget desktop AI companion with a browser and phone view, all over Tether-owned tmux sessions."
+    "description": "AI companion with a browser and phone view, all over Tether-owned tmux sessions."
   },
   "runtime": {
     "backend_port": 3002,
@@ -32,9 +32,7 @@
   "services": {
     "backend": "aico-web.service",
     "default_workers": [],
-    "optional_workers": [
-      "aico-shell.service"
-    ],
+    "optional_workers": [],
     "manual_workers": [
       "tether@default.service"
     ]
