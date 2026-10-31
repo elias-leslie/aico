@@ -1479,7 +1479,8 @@ def create_main(argv: list[str]) -> int:
         "auto: Tether picks the first host with room for --needs from live readings, or answers "
         "at_capacity with each host's reason (st aico placement shows it without starting anything)"))
     parser.add_argument("--needs", metavar="mem=6G,cpu=2[,cap=live-ready]", help=(
-        "with --host auto: what the session needs; held for it on that host until it ends"))
+        "with --host auto or --host NAME: what the session needs; held for it on that host until it ends. "
+        "With a named host Tether rechecks that host's room first and answers at_capacity if it no longer fits"))
     parser.add_argument("--pool", type=pool_name, metavar="NAME", help=(
         "with --host auto: pick only from this placement pool (placement.json pools, e.g. neri-hunt); "
         "default: the default pool"))
@@ -1542,8 +1543,8 @@ def create_main(argv: list[str]) -> int:
     if auto and args.needs is None:
         refuse("--host auto needs --needs mem=6G,cpu=2[,cap=live-ready]")
     if args.needs is not None:
-        if not auto:
-            refuse("--needs goes with --host auto")
+        if args.host is None:
+            refuse("--needs goes with --host auto or --host NAME")
         try:
             needs = parse_needs(args.needs)
         except ValueError as error:
@@ -2018,6 +2019,23 @@ def root_main(argv: list[str]) -> int:
         return 0
 
 
+# Tether API that takes inject `from` (general waits); an older one refuses the field.
+SEND_FROM_API = 13
+
+
+def send_origin(collector: Collector, control: str, target: str) -> str | None:
+    """The calling session for inject `from`, only when it is another session and Tether takes the field."""
+    sender = caller_widget_id()
+    if not sender or not re.fullmatch(WIDGET, sender) or sender == target:
+        return None
+    try:
+        status, data = collector.receipt(control, "/v1/version", timeout=1)
+    except Unavailable:
+        return None
+    version = data.get("apiVersion")
+    return sender if status == 200 and isinstance(version, int) and version >= SEND_FROM_API else None
+
+
 def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     """Queue one follow-up into the exact running root the caller pinned.
 
@@ -2061,12 +2079,12 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         owner_reply(status, session, "session_receipt_unqualified")
         if session.get("id") != widget or session.get("generation") != args.generation:
             raise Refused("stale_generation")
+        payload = {"generation": args.generation, "text": text, "mode": "paste", "submit": True}
+        # The sender: a wait it sets on this root counts turns from this send.
+        if (sender := send_origin(collector, control, widget)) is not None:
+            payload["from"] = sender
         sent = True
-        status, data = collector.receipt(control, f"/v1/sessions/{widget}/inject", {
-            "generation": args.generation, "text": text, "mode": "paste", "submit": True,
-            # The sender: a wait it sets on this root counts turns from this send.
-            **({"from": sender} if (sender := caller_widget_id()) and re.fullmatch(WIDGET, sender)
-               and sender != widget else {})}, timeout=5)
+        status, data = collector.receipt(control, f"/v1/sessions/{widget}/inject", payload, timeout=5)
         owner_reply(status, data, "send_receipt_unqualified")
         if data.get("generation") != args.generation or data.get("delivered") is not True:
             raise Unavailable("send_receipt_unqualified")
