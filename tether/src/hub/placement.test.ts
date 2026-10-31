@@ -8,6 +8,7 @@ import type { HostEntry } from './hosts'
 import {
   GUEST_LINE,
   judgeCapability,
+  localRootFate,
   type Needs,
   type PeerView,
   Placement,
@@ -392,6 +393,15 @@ describe('placement', () => {
     expect((await some.placement.check(needs(1, 1, ['gpu'])))[0]?.reason).toBe(
       'unknown capability gpu',
     )
+  })
+
+  it('ends a local root only when it is gone or its agent exited, not while it runs', () => {
+    expect(localRootFate(false, false, null)).toBe('missing')
+    expect(localRootFate(true, false, null)).toBe('ended')
+    expect(localRootFate(true, true, 'started')).toBe('live')
+    expect(localRootFate(true, true, null)).toBe('live')
+    expect(localRootFate(true, true, 'exit')).toBe('exited')
+    expect(localRootFate(true, true, 'signal')).toBe('exited')
   })
 
   it('treats a marker it cannot compare as not ready', () => {

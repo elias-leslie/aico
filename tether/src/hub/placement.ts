@@ -417,6 +417,18 @@ export interface Reservation {
 /** What the owning Tether says about a placed root. */
 export type RootFate = 'live' | 'missing' | 'ended' | 'exited' | 'unknown'
 
+/** A root on this computer, from the catalog: no request, no session, or its
+ * agent's exit marker (`started` while it runs; `exit` or `signal` once it ended). */
+export function localRootFate(
+  hasRequest: boolean,
+  hasSession: boolean,
+  exitState: string | null | undefined,
+): RootFate {
+  if (!hasRequest) return 'missing'
+  if (!hasSession) return 'ended'
+  return exitState === 'exit' || exitState === 'signal' ? 'exited' : 'live'
+}
+
 /** A remote host as the hub knows it. */
 export interface PeerView {
   entry: HostEntry

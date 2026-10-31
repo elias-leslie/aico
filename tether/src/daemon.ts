@@ -21,7 +21,7 @@ import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { listenPrivateSocket } from './http'
 import { Hub } from './hub/hub'
-import { LOCAL_HOST, Placement } from './hub/placement'
+import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
 import {
   bindCatalog,
   claimLauncher,
@@ -416,10 +416,8 @@ export async function startDaemon(
     peer: (name) => hosts?.peerView(name) ?? null,
     localRoot: (requestId) => {
       const root = getRootRequest(requestId)
-      if (!root) return 'missing'
-      const row = getWidget(root.widgetId)
-      if (!row) return 'ended'
-      return agentExitOf(row) ? 'exited' : 'live'
+      const row = root ? getWidget(root.widgetId) : undefined
+      return localRootFate(Boolean(root), Boolean(row), row ? agentExitOf(row)?.state : null)
     },
     existingHost: (requestId) => {
       if (getRootRequest(requestId)) return LOCAL_HOST
