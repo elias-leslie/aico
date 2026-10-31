@@ -210,7 +210,7 @@ export function callsText(view: NightshiftOwnerView): string {
 /** Who has a finding, in the owner's words. */
 export function handledBy(finding: HealthFinding): string {
   if (finding.owner && finding.answerable === false)
-    return 'Needs you to check it. Nothing to answer; the details are in Nightshift.'
+    return 'Look at it in Nightshift. There is nothing to answer.'
   if (finding.owner)
     return (finding.calls ?? 1) > 1
       ? `${finding.calls} calls for you here. You answer them in Nightshift.`

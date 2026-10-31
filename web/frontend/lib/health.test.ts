@@ -88,9 +88,7 @@ describe('handledBy', () => {
     // a plain alert (tripwire, sudo, canary) has nothing to answer
     expect(
       handledBy(finding({ owner: true, who: 'You', answerable: false })),
-    ).toBe(
-      'Needs you to check it. Nothing to answer; the details are in Nightshift.',
-    )
+    ).toBe('Look at it in Nightshift. There is nothing to answer.')
   })
 })
 
