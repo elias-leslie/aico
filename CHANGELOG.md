@@ -112,6 +112,20 @@
 
 ### Fixed
 
+- agy state: a step left RUNNING (a background command, an abandoned row) no
+  longer pins an agy session working once the run covering the newest step has
+  ended; an old waiting step a later run passed is not blocked. A conversation
+  with no steps or no database yet reads idle with no time, not unknown. Tether
+  looks at the agy process's own files every poll, so a first prompt or a
+  conversation switch is seen at once; the presence lock wins over another
+  conversation's open database. A draft line that is just `>` is no longer
+  taken for agy's prompt mark (it counts only under the input box's rule).
+- `wait cmd`: a wait that ends while its unit is still starting stops the unit
+  once the start returns; none starts past its deadline; a start that failed
+  or timed out still stops any unit it left; a late result after a slow stop is
+  swept. A watcher systemd stopped at its runtime limit reads as the wait timing
+  out, not failing.
+
 - Agent waits P2 review fixes (Tether API 17, schema v22): an ask's answer goes up the chain (asker while it is there, even with its state unknown; else its launcher; else its coordinator, now recorded); a launcher that ends hands on the asks it holds; an answer queued to a session that ends before it goes out is queued again to the next one up. A run a wait is armed on is read by id after its launcher ended or Tether restarted, and how runs ended is kept across restarts; a `needs-you` run wait goes quiet only once the pause note is queued to the waiter. A delivery being pasted reads `queued`, not `dropped`; a native poll whose client has gone takes no line; `due?wait=0` holds nothing; a source over 120 characters is a 400. The hand-off line fits `noteMaxChars`. `st aico wait`/`nudge` report Tether down as unreachable, not too old. Pi's puller runs only interactive, one per session, waits after an empty answer, and hands Pi a line Tether already gave it even while stopping.
 - The first create on a VM that `st vm rollback` had just powered off no
   longer fails with `host_unavailable` ("went away while its services were

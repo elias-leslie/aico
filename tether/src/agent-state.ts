@@ -483,17 +483,18 @@ export class PiSession {
 
 // --- Antigravity (agy) ----------------------------------------------------------
 
-/** agy's CortexStepStatus values (enum numbers from agy 1.4.9's embedded proto
- * descriptor, checked live): a step still going, and a step waiting on the user
- * (its ask_question tool). DONE 3, CANCELED 6, ERROR 7, INTERRUPTED 12 are over. */
-const AGY_STEP_GOING = new Set([1, 2, 8, 11]) // PENDING, RUNNING, GENERATING, QUEUED
+/** agy's CortexStepStatus for a step waiting on the user (its ask_question
+ * tool); enum numbers from agy 1.4.9's embedded proto descriptor, checked live.
+ * PENDING 1, RUNNING 2, GENERATING 8, QUEUED 11 are going; DONE 3, CANCELED 6,
+ * ERROR 7, INTERRUPTED 12 are over. Whether a turn is going is read from the
+ * executor runs, not these (a step can stay RUNNING after its turn ends). */
 const AGY_STEP_WAITING = 9
 
 /** What one look at an agy conversation database finds. */
 export interface AgySnapshot {
   /** The newest step's index; null before any step. */
   maxIdx: number | null
-  /** Steps not over yet (status in AGY_STEP_GOING or WAITING). */
+  /** Steps waiting on the user (status WAITING). */
   open: { idx: number; status: number; metadata: Uint8Array | null }[]
   /** The newest step's metadata (CortexStepMetadata). */
   lastMetadata: Uint8Array | null
@@ -531,6 +532,10 @@ export function findAgyConversation(
     } catch {
       continue
     }
+    // agy holds presence/<id>.lock for the conversation it is in; the .db only
+    // while it writes. Prefer the lock, the newest-opened (highest fd) one.
+    let lock: { fd: number; id: string } | null = null
+    let db: { fd: number; id: string } | null = null
     for (const fd of fds) {
       let target: string
       try {
@@ -540,13 +545,18 @@ export function findAgyConversation(
       }
       const match = AGY_CONVERSATION_RE.exec(target)
       if (!match?.[1] || !target.startsWith(`${home}/`)) continue
-      const conversationId = match[1]
+      const seen = { fd: Number(fd), id: match[1] }
+      if (target.endsWith('.lock')) {
+        if (!lock || seen.fd > lock.fd) lock = seen
+      } else if (!db || seen.fd > db.fd) db = seen
+    }
+    const conversationId = (lock ?? db)?.id
+    if (conversationId)
       return {
         pid,
         conversationId,
         path: `${home}/.gemini/antigravity-cli/conversations/${conversationId}.db`,
       }
-    }
     fresh ??= { pid, conversationId: null, path: null }
   }
   return fresh
@@ -609,16 +619,23 @@ function agyTime(metadata: Uint8Array | null, field: number): number | null {
 const AGY_CREATED_AT = 1
 const AGY_COMPLETED_AT = 8
 
-/** agy's state from its conversation: a step waiting on the user (its
- * ask_question tool) is blocked; a step still going, or a newest step no
- * finished executor run covers yet (the model is thinking between steps), is
- * working; else the turn is over (finished, cancelled or failed) and agy is
- * idle. Tether runs agy with --dangerously-skip-permissions, so it never waits
- * on a permission prompt. */
-export function agySignal(snapshot: AgySnapshot, conversationId: string): AgentSignal | null {
-  if (snapshot.maxIdx === null) return null
+/** agy's state from its conversation. agy writes an executor run row when a
+ * turn ends; a run covering the newest step means the turn is over and agy is
+ * idle, even with an older step left RUNNING (a background command, or a row
+ * an interrupted turn abandoned). A step waiting on the user (its ask_question
+ * tool) that is the newest or after the last run is blocked; a newest step no
+ * run covers yet is working (a step going, or the model thinking between
+ * steps). A conversation with no steps is agy fresh at its input. Tether runs
+ * agy with --dangerously-skip-permissions, so it never waits on a permission
+ * prompt. */
+export function agySignal(snapshot: AgySnapshot, conversationId: string): AgentSignal {
   const base = { source: 'agy-conversation', agentSessionId: conversationId }
-  const waiting = snapshot.open.find((step) => step.status === AGY_STEP_WAITING)
+  if (snapshot.maxIdx === null) return { ...base, state: 'idle', detail: null, at: null }
+  const covered = snapshot.executorLastStep ?? -1
+  const waiting = snapshot.open.find(
+    (step) =>
+      step.status === AGY_STEP_WAITING && (step.idx > covered || step.idx === snapshot.maxIdx),
+  )
   if (waiting)
     return {
       ...base,
@@ -626,8 +643,7 @@ export function agySignal(snapshot: AgySnapshot, conversationId: string): AgentS
       detail: 'input needed',
       at: agyTime(waiting.metadata, AGY_CREATED_AT),
     }
-  const going = snapshot.open.some((step) => AGY_STEP_GOING.has(step.status))
-  if (going || snapshot.executorLastStep === null || snapshot.executorLastStep < snapshot.maxIdx)
+  if (covered < snapshot.maxIdx)
     return {
       ...base,
       state: 'working',
@@ -647,13 +663,15 @@ export function agySignal(snapshot: AgySnapshot, conversationId: string): AgentS
 /** Reads an agy conversation database, read-only, one short connection per
  * look (agy writes it in WAL mode; nothing is held open between polls). */
 export const nodeAgyRead: AgyRead = (path) => {
-  const db = new DatabaseSync(path, { readOnly: true, timeout: 200 })
+  const db = new DatabaseSync(path, { readOnly: true, timeout: 50 })
   try {
+    // One read transaction: the four looks see the same snapshot.
+    db.exec('BEGIN')
     const top = db.prepare('SELECT max(idx) AS idx FROM steps').get() as { idx: number | null }
     const maxIdx = typeof top?.idx === 'number' ? top.idx : null
     const open = db
       .prepare(
-        `SELECT idx, status, metadata FROM steps WHERE status IN (${[...AGY_STEP_GOING, AGY_STEP_WAITING].join(',')}) ORDER BY idx`,
+        `SELECT idx, status, metadata FROM steps WHERE status = ${AGY_STEP_WAITING} ORDER BY idx`,
       )
       .all() as { idx: number; status: number; metadata: Uint8Array | null }[]
     const last =
@@ -666,6 +684,7 @@ export const nodeAgyRead: AgyRead = (path) => {
       | { data: Uint8Array | null }
       | undefined
     const lastStep = run?.data ? protoFields(run.data).get(3) : undefined
+    db.exec('COMMIT')
     return {
       maxIdx,
       open,
@@ -699,7 +718,12 @@ export class AgyConversation {
   poll(): AgentSignal | null {
     try {
       return agySignal(this.read(this.path), this.conversationId)
-    } catch {
+    } catch (error) {
+      // agy holds the conversation's lock before it writes the database or its
+      // tables: that is agy fresh at its input, not unknown.
+      const message = error instanceof Error ? error.message : ''
+      if (/unable to open database|no such table/i.test(message))
+        return { ...AGY_FRESH, agentSessionId: this.conversationId }
       return null
     }
   }
@@ -976,6 +1000,10 @@ export class AgentStatePoller {
       if (lost || now - watched.searchedAt >= SEARCH_EVERY_MS) {
         watched.found = this.search(watched.panePid, watched.found)
         watched.searchedAt = now
+      } else if (watched.found.kind === 'agy') {
+        // agy opens a conversation on its first prompt and can switch to
+        // another: its own fds are cheap to look at, so look every poll.
+        watched.found = this.agyFound([watched.found.pid], watched.found) ?? watched.found
       }
       this.tracker.observe(session.id, this.read(watched.found))
     }
@@ -1020,20 +1048,22 @@ export class AgentStatePoller {
         session: pi.path ? new PiSession(pi.path, pi.sessionId, this.options.tail) : null,
       }
     }
+    return this.agyFound(pids, previous) ?? { kind: 'none' }
+  }
+
+  private agyFound(pids: number[], previous: Found): Found | null {
     const agy = findAgyConversation(this.fs, this.home, pids)
-    if (agy) {
-      if (previous.kind === 'agy' && (previous.conversation?.path ?? null) === agy.path)
-        return { ...previous, pid: agy.pid }
-      return {
-        kind: 'agy',
-        pid: agy.pid,
-        conversation:
-          agy.path && agy.conversationId
-            ? new AgyConversation(agy.path, agy.conversationId, this.options.agyRead)
-            : null,
-      }
+    if (!agy) return null
+    if (previous.kind === 'agy' && (previous.conversation?.path ?? null) === agy.path)
+      return previous.pid === agy.pid ? previous : { ...previous, pid: agy.pid }
+    return {
+      kind: 'agy',
+      pid: agy.pid,
+      conversation:
+        agy.path && agy.conversationId
+          ? new AgyConversation(agy.path, agy.conversationId, this.options.agyRead)
+          : null,
     }
-    return { kind: 'none' }
   }
 
   private read(found: Found): AgentSignal | null {

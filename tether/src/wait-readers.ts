@@ -215,6 +215,9 @@ export class PullReaders {
   private readonly probedAt = new Map<string, number>()
   private readonly watchers: FSWatcher[] = []
   private readonly starting = new Set<string>()
+  /** Refs whose wait ended while their unit was starting: stopped and dropped
+   * once the start returns. */
+  private readonly ending = new Set<string>()
   private readonly deferredLogged = new Set<string>()
 
   constructor(private readonly deps: PullReaderDeps) {}
@@ -510,6 +513,8 @@ export class PullReaders {
       return
     }
     this.deferredLogged.delete(ref)
+    // Past its deadline the wait times out on this same look: start nothing.
+    if (spec.deadline <= this.deps.now()) return
     const units = this.deps.cmdUnits
     this.starting.add(ref)
     const runtime = Math.max(
@@ -520,7 +525,17 @@ export class PullReaders {
       ? units.start(ref, spec, cmdFile(dir, ref, 'result'), runtime)
       : Promise.resolve('failed' as const)
     started
-      .then((outcome) => {
+      .catch((error) => {
+        this.deps.log(`cmd ${ref}: start failed: ${error}`)
+        return 'failed' as const
+      })
+      .then(async (outcome) => {
+        // A start that failed or timed out may still have left a unit behind.
+        if (outcome === 'failed') await units?.stop(ref).catch(() => {})
+        if (this.ending.has(ref)) {
+          if (outcome !== 'failed') await units?.stop(ref).catch(() => {})
+          return
+        }
         if (outcome === 'failed') {
           writeFileSync(cmdFile(dir, ref, 'result'), 'start-failed\n', { mode: 0o600 })
           this.deps.log(`cmd ${ref}: the unit did not start`)
@@ -529,8 +544,16 @@ export class PullReaders {
       .catch((error) => this.deps.log(`cmd ${ref}: start failed: ${error}`))
       .finally(() => {
         this.starting.delete(ref)
-        this.deps.poke('cmd', ref)
+        if (this.ending.delete(ref)) this.dropCmd(ref)
+        else this.deps.poke('cmd', ref)
       })
+  }
+
+  private dropCmd(ref: string): void {
+    const dir = this.deps.paths.cmdDir
+    for (const ending of ['json', 'started', 'result'] as const)
+      rmSync(cmdFile(dir, ref, ending), { force: true })
+    rmSync(`${cmdFile(dir, ref, 'result')}.tmp`, { force: true })
   }
 
   /** A `cmd` wait is over (fired, timed out, cancelled, its waiter ended):
@@ -538,14 +561,15 @@ export class PullReaders {
   endCmd(ref: string): void {
     if (!CMD_REF.test(ref)) return
     const dir = this.deps.paths.cmdDir
+    this.deferredLogged.delete(ref)
+    // Its unit is starting: the start's end stops and drops it.
+    if (this.starting.has(ref)) {
+      this.ending.add(ref)
+      return
+    }
     const running =
       this.exists(cmdFile(dir, ref, 'started')) && !this.exists(cmdFile(dir, ref, 'result'))
-    const drop = () => {
-      for (const ending of ['json', 'started', 'result'] as const)
-        rmSync(cmdFile(dir, ref, ending), { force: true })
-      rmSync(`${cmdFile(dir, ref, 'result')}.tmp`, { force: true })
-    }
-    this.deferredLogged.delete(ref)
+    const drop = () => this.dropCmd(ref)
     if (running && this.deps.cmdUnits) {
       this.deps.log(`cmd ${ref}: stopping its unit`)
       this.deps.cmdUnits
@@ -564,9 +588,14 @@ export class PullReaders {
     } catch {
       return
     }
+    const records = new Set(names.filter((name) => name.endsWith('.json')))
     for (const name of names) {
-      const ref = name.endsWith('.json') ? name.slice(0, -5) : ''
-      if (CMD_REF.test(ref) && !armed.has(ref) && !this.starting.has(ref)) this.endCmd(ref)
+      const ref = name.split('.')[0] ?? ''
+      if (!CMD_REF.test(ref) || armed.has(ref) || this.starting.has(ref)) continue
+      if (name.endsWith('.json')) this.endCmd(ref)
+      // A result a slow stop wrote after its files were dropped.
+      else if (!records.has(`${ref}.json`))
+        rmSync(join(this.deps.paths.cmdDir, name), { force: true })
     }
   }
 

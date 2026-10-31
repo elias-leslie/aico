@@ -532,8 +532,10 @@ export function cleanNote(value: unknown, max: number): string | null {
 // biome-ignore lint/suspicious/noControlCharactersInRegex: escape sequences are what it parses
 const ESCAPE = /\x1b\[([0-9;:?]*)([A-Za-z])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g
 /** Claude Code draws `❯`, Codex `›`, older Claude Code `│ >`, agy a bare `>`
- * (nothing after it while the input is empty). */
+ * (nothing after it while the input is empty). A `>` mark counts only right
+ * under a rule (the input box's top): a draft line that is just `>` is not one. */
 const PROMPT = /^[\s│]*(?:❯|›|>(?=\s|$))/
+const ARROW_PROMPT = /^[\s│]*(?:❯|›)/
 const RULE = /^[\s│╭╰╮╯]*[─━]{8,}/
 /** A line that is only a rule: Pi's editor borders. A border carrying text
  * (Pi's `── ⠧ Working ──`, `─── ↑ 2 more ───`) is not one. */
@@ -576,7 +578,11 @@ export function inputLineEmpty(screen: string, shape: 'prompt' | 'ruled' = 'prom
   if (shape === 'ruled') return ruledInputEmpty(lines.map(visibleText))
   let start = -1
   for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (PROMPT.test(visibleText(lines[index] ?? ''))) {
+    const text = visibleText(lines[index] ?? '')
+    if (
+      ARROW_PROMPT.test(text) ||
+      (PROMPT.test(text) && index > 0 && RULE.test(visibleText(lines[index - 1] ?? '')))
+    ) {
       start = index
       break
     }

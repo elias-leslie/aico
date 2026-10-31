@@ -780,7 +780,10 @@ started while Nightshift admission is red: the 60 s look (or a nudge) starts it 
 `ExecStopPost` writes systemd's own words for how it ended (`$SERVICE_RESULT $EXIT_CODE $EXIT_STATUS`) to
 `<ref>.result`, which Tether reads on the directory watch and at start, so an end while Tether was down is seen. When
 the wait is over (fired, timed out, cancelled) Tether stops the unit if it still runs and drops its files; at the 60 s
-look it does the same for watchers whose wait is gone (its waiter ended). A `key` returns the armed wait with the same
+look it does the same for watchers whose wait is gone (its waiter ended); a wait over while its unit is still starting
+stops it once the start returns, and none starts past its deadline. A watcher systemd stopped at its runtime limit
+(Tether down past the deadline) reads as the wait timing out. The command runs in the user manager's environment, not
+the waiter's: a missing `cwd` ends it `failed (exit 200)`. A `key` returns the armed wait with the same
 argv. Lines: `[Ready] command "sleep 20" (aico-wait-<ref>) succeeded · journalctl --user -u aico-wait-<ref>`,
 `[Wait over] command "false" (aico-wait-<ref>) failed (exit 1) · …`. `--block` exits 0 on success and 4 on a failure.
 `500 cmd_unavailable` when the record cannot be written.

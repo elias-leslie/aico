@@ -229,6 +229,11 @@ describe('input line', () => {
   it("reads agy's input line", () => {
     expect(inputLineEmpty(agy(''))).toBe(true)
     expect(inputLineEmpty(agy(' half a thought'))).toBe(false)
+    // A draft line that is just `>` (a quote mark) is not agy's prompt mark.
+    expect(inputLineEmpty(['\x1b[1m›\x1b[0m quote this:', '  >', '', '  gpt'].join('\n'))).toBe(
+      false,
+    )
+    expect(inputLineEmpty(['● Done.', '>', ''].join('\n'))).toBe(false)
   })
 
   it('waits when there is no prompt line', () => {

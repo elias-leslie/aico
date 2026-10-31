@@ -944,6 +944,12 @@ export class WaitService {
         wait.cursor = cursor
       }
     }
+    // A watcher systemd stopped at its runtime limit (deadline + grace, while
+    // Tether was down past the deadline) is this wait's timeout, not a failure.
+    if (kind === 'cmd' && reading?.state === 'failed' && reading.detail === 'timeout') {
+      this.fire(wait, 'timeout', now, reading)
+      return
+    }
     const verdict = pullVerdict(kind, wait.until, reading)
     if (verdict) {
       // Told another way already (an ask's answer to the asker, a run's
@@ -1082,7 +1088,9 @@ const ARGV_MAX_ITEM_CHARS = 4096
 const ARGV_MAX_TOTAL_CHARS = 16_384
 
 /** A `cmd` wait's body: `argv` (no ref) and an absolute `cwd`. Whether the
- * directory exists is the unit's to find (it fails to start: `start-failed`). */
+ * directory or program exists is the unit's to find: a missing directory ends
+ * it `failed (exit 200)`, a program not on the user manager's PATH fails to
+ * start (`could not start`). */
 function cmdBody(body: Record<string, unknown>): { argv: string[]; cwd: string } {
   if (body.ref !== undefined && body.ref !== null)
     throw new HttpError(400, 'invalid_body', { field: 'ref' })

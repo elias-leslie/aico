@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -215,6 +215,9 @@ describe('PullReaders', () => {
     r.createCmd('111111111111', { argv: ['x'], cwd: '/', deadline: clock + 60_000 })
     await new Promise((resolve) => setImmediate(resolve))
     expect(r.read('cmd', '111111111111')).toMatchObject({ state: 'failed', detail: 'start-failed' })
+    // A start that failed (or timed out) may have left a unit: stopped anyway.
+    expect(stopped).toEqual(['111111111111'])
+    stopped = []
     startAnswer = 'started'
     r.createCmd('222222222222', { argv: ['y'], cwd: '/', deadline: clock + 60_000 })
     await new Promise((resolve) => setImmediate(resolve))
@@ -223,6 +226,27 @@ describe('PullReaders', () => {
     expect(stopped).toEqual(['222222222222'])
     expect(r.read('cmd', '222222222222')).toBeNull()
     expect(r.read('cmd', '111111111111')?.state).toBe('failed')
+  })
+
+  it('a wait that ends while its unit starts stops it once the start returns; nothing past the deadline starts', async () => {
+    const r = readers()
+    const REF = '333333333333'
+    r.createCmd(REF, { argv: ['sleep', '9'], cwd: '/', deadline: clock + 60_000 })
+    r.endCmd(REF)
+    expect(stopped).toEqual([])
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(stopped).toEqual([REF])
+    expect(r.read('cmd', REF)).toBeNull()
+    expect(readdirSync(join(dir, 'cmd')).filter((name) => name.startsWith(REF))).toEqual([])
+    started = []
+    r.createCmd('444444444444', { argv: ['x'], cwd: '/', deadline: clock - 1 })
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(started).toEqual([])
+    // A late result from a slow stop, its record already gone, is swept.
+    writeFileSync(join(dir, 'cmd', '555555555555.result'), 'success exited 0\n')
+    r.sweepCmd(new Set(['444444444444']))
+    expect(readdirSync(join(dir, 'cmd'))).toEqual(['444444444444.json'])
   })
 
   it('reads systemd result words as typed details', () => {

@@ -7,6 +7,7 @@ import {
   AgentStatePoller,
   type AgentStateRecord,
   AgentStateTracker,
+  AgyConversation,
   type AgySnapshot,
   agySignal,
   CodexRollout,
@@ -662,23 +663,28 @@ describe('agy conversation', () => {
   })
 
   it('reads steps and executor runs as working, blocked and idle', () => {
-    expect(agySignal(snap({ maxIdx: null, executorLastStep: null }), AGY)).toBeNull()
+    // No steps yet: agy fresh at its input, with no time of its own.
+    expect(agySignal(snap({ maxIdx: null, executorLastStep: null }), AGY)).toEqual({
+      state: 'idle',
+      source: 'agy-conversation',
+      detail: null,
+      at: null,
+      agentSessionId: AGY,
+    })
     // The user's prompt is in, no executor run has ended on it: thinking.
     expect(agySignal(snap({ maxIdx: 8, executorLastStep: 7 }), AGY)).toMatchObject({
       state: 'working',
       at: 1_800_000_010_500,
     })
     expect(agySignal(snap({ executorLastStep: null }), AGY)?.state).toBe('working')
-    // A step still going: generating (8), running (2).
-    for (const status of [1, 2, 8, 11])
-      expect(agySignal(snap({ open: [{ idx: 7, status, metadata: null }] }), AGY)?.state).toBe(
-        'working',
-      )
-    // A background command still running after its executor run ended.
+    // A step left RUNNING (a background command, an abandoned row) once the
+    // run covering the newest step ended does not pin working: the turn is over.
+    expect(agySignal(snap({ executorLastStep: 7 }), AGY)?.state).toBe('idle')
+    // An old WAITING row a later run passed is not waiting any more.
     expect(
-      agySignal(snap({ open: [{ idx: 4, status: 2, metadata: null }], executorLastStep: 7 }), AGY)
+      agySignal(snap({ open: [{ idx: 3, status: 9, metadata: null }], executorLastStep: 7 }), AGY)
         ?.state,
-    ).toBe('working')
+    ).toBe('idle')
     // ask_question waits on the user.
     expect(
       agySignal(
@@ -712,7 +718,7 @@ describe('agy conversation', () => {
       )
       const run = db.prepare('INSERT INTO executor_metadata (idx, data) VALUES (?, ?)')
       const read = () => agySignal(nodeAgyRead(path), AGY)
-      expect(read()).toBeNull()
+      expect(read()).toMatchObject({ state: 'idle', at: null })
       step.run(0, 14, 3, stepMeta(1_800_000_000, 1_800_000_001))
       expect(read()?.state).toBe('working')
       step.run(1, 15, 8, stepMeta(1_800_000_002))
@@ -729,7 +735,24 @@ describe('agy conversation', () => {
       expect(read()).toMatchObject({ state: 'idle', at: 1_800_000_009_500 })
       step.run(2, 132, 9, stepMeta(1_800_000_010))
       expect(read()).toMatchObject({ state: 'blocked', detail: 'input needed' })
+      // The ask's run ends at it: still blocked while it is the newest step.
+      run.run(2, executor(2))
+      expect(read()).toMatchObject({ state: 'blocked' })
+      // A background command still RUNNING after a later run ended: idle.
+      db.exec('UPDATE steps SET status = 3 WHERE idx = 2')
+      step.run(3, 21, 2, stepMeta(1_800_000_011))
+      run.run(3, executor(3))
+      expect(read()).toMatchObject({ state: 'idle' })
       db.close()
+      // agy holds the lock before the database (or its tables) exist: fresh, not unknown.
+      expect(new AgyConversation(join(dir, 'none.db'), AGY).poll()).toMatchObject({
+        state: 'idle',
+        at: null,
+        agentSessionId: AGY,
+      })
+      const empty = join(dir, 'empty.db')
+      new DatabaseSync(empty).close()
+      expect(new AgyConversation(empty, AGY).poll()).toMatchObject({ state: 'idle', at: null })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -757,6 +780,20 @@ describe('agy conversation', () => {
       findAgyConversation(procfs(files, { '/proc/40/fd/3': `/x${AGY_DB}` }), '/h', [40])
         ?.conversationId,
     ).toBeNull()
+    // The presence lock wins over another conversation's db, the newest lock over older ones.
+    const OTHER = 'aaaaaaaa-6476-4378-b345-b0b3e6f89938'
+    expect(
+      findAgyConversation(
+        procfs(files, {
+          '/proc/40/fd/3': `/h/.gemini/antigravity-cli/conversations/${OTHER}.db`,
+          '/proc/40/fd/12': `/h/.gemini/antigravity-cli/presence/${OTHER}.lock`,
+          '/proc/40/fd/9': lock['/proc/40/fd/9'],
+          '/proc/40/fd/20': `/h/.gemini/antigravity-cli/presence/${AGY}.lock`,
+        }),
+        '/h',
+        [40],
+      )?.conversationId,
+    ).toBe(AGY)
     // A process not named agy is not agy.
     expect(
       findAgyConversation(
@@ -805,8 +842,9 @@ describe('agy conversation', () => {
       stateSource: 'agy-conversation',
       stateAgentAt: 0,
     })
+    // The first prompt opens a conversation: seen on the next poll, not 15 s later.
     links['/proc/40/fd/9'] = `/h/.gemini/antigravity-cli/presence/${AGY}.lock`
-    now = 20_000
+    now = 1_000
     await poller.poll()
     expect(t.get('g').state).toBe('working')
     expect(reads).toEqual([AGY_DB])

@@ -594,6 +594,13 @@ describe('cmd waits', () => {
     )
     expect(h.settled).toContain(`cmd:${b.wait.ref}`)
     expect(h.swept.at(-1)).toEqual([])
+    // systemd stopped the watcher at its runtime limit (Tether was down past
+    // the deadline): the wait timed out, it did not fail.
+    const c = await cmdArm(h, ['sleep', '99'], { timeoutMinutes: 1 })
+    vi.setSystemTime(T0 + 200_000)
+    h.pull('cmd', c.wait.ref, { state: 'failed', detail: 'timeout', title: 'sleep 99' })
+    expect(h.waits.store.get(c.wait.id)).toMatchObject({ outcome: 'timeout' })
+    expect(h.delivered.at(-1)?.line).toMatch(/^\[Wait timed out\] command "sleep 99"/)
   })
 
   it('a key returns the same command wait; another command conflicts', async () => {
