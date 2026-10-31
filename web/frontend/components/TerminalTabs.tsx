@@ -107,15 +107,31 @@ export function TerminalTabs({
     ? sessionWhoWhere(terminalSlots ?? [], sessionToEnd, agentTools)
     : ''
 
-  // Ending a session cancels its check-ins unless the owner keeps them.
-  const pendingCheckIns = sessionToEnd
-    ? (sessions.find((session) => session.id === pendingSessionId)?.check_ins ??
-      [])
-    : []
+  // Ending a session cancels its check-ins and armed waits unless the owner
+  // keeps them (Tether's End keepWakes keeps both).
+  const pendingSession = sessionToEnd
+    ? sessions.find((session) => session.id === pendingSessionId)
+    : undefined
+  const pendingCheckIns = pendingSession?.check_ins ?? []
+  const pendingWaits = pendingSession?.has_waits === true
   const severalCheckIns = pendingCheckIns.length > 1
-  const checkInNote = pendingCheckIns.length
-    ? ` This also cancels its check-in${severalCheckIns ? 's' : ''} at ${timesLabel(pendingCheckIns.map((checkIn) => checkIn.time))}. Keep ${severalCheckIns ? 'them' : 'it'}, and the conversation comes back in a new session then.`
-    : ''
+  const checkInsWord = `check-in${severalCheckIns ? 's' : ''}`
+  const checkInTimes = timesLabel(
+    pendingCheckIns.map((checkIn) => checkIn.time),
+  )
+  let checkInNote = ''
+  let keepText: string | undefined
+  if (pendingCheckIns.length && pendingWaits) {
+    checkInNote = ` This also cancels its ${checkInsWord} at ${checkInTimes} and its waits. Keep them, and the conversation comes back in a new session when one is due or ready.`
+    keepText = `End, keep ${checkInsWord} and waits`
+  } else if (pendingCheckIns.length) {
+    checkInNote = ` This also cancels its ${checkInsWord} at ${checkInTimes}. Keep ${severalCheckIns ? 'them' : 'it'}, and the conversation comes back in a new session then.`
+    keepText = `End, keep ${checkInsWord}`
+  } else if (pendingWaits) {
+    checkInNote =
+      ' This also cancels its waits. Keep them, and the conversation comes back in a new session when one is ready.'
+    keepText = 'End, keep waits'
+  }
 
   // Loading state - show skeleton
   if (isLoading) {
@@ -169,11 +185,7 @@ export function TerminalTabs({
         title="End session?"
         message={`End ${pendingSessionName}? This stops its process in every view.${checkInNote}`}
         confirmText="End session"
-        secondaryText={
-          pendingCheckIns.length
-            ? `End, keep check-in${severalCheckIns ? 's' : ''}`
-            : undefined
-        }
+        secondaryText={keepText}
         onSecondary={() => {
           void confirmEndSession(true)
         }}

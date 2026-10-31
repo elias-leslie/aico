@@ -51,6 +51,8 @@ export interface TerminalSession extends CoordinatorFields {
   is_root?: boolean
   /** Pending check-ins, oldest first. */
   check_ins?: SessionCheckIn[]
+  /** It has armed waits; End can keep them with its check-ins. */
+  has_waits?: boolean
   /** Open owner asks from this session, oldest first; a blocking one means it needs the owner. */
   asks?: SessionAsk[]
   source?: string | null
@@ -133,7 +135,7 @@ const updateSession = (sessionId: string, req: UpdateSessionRequest) =>
 
 export interface EndSessionRequest {
   sessionId: string
-  /** "End, keep check-in": its check-ins outlive the session. */
+  /** "End, keep check-ins/waits": its check-ins and armed waits outlive the session. */
   keepCheckIns?: boolean
 }
 

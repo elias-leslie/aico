@@ -169,6 +169,42 @@ describe('TerminalTabs session controls', () => {
     expect(endSession).toHaveBeenLastCalledWith(slot, { keepCheckIns: false })
   })
 
+  it('offers to keep armed waits when there are no check-ins', async () => {
+    sessions.list = [{ id: 'session-a', name: 'Work shell', has_waits: true }]
+    endSession.mockResolvedValue(undefined)
+    render(<TerminalTabs />)
+    fireEvent.click(screen.getByRole('button', { name: 'End control' }))
+    expect(
+      screen.getByText(/This also cancels its waits\. Keep them/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/check-in/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'End, keep waits' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+    expect(endSession).toHaveBeenCalledWith(slot, { keepCheckIns: true })
+  })
+
+  it('names check-ins and waits together when it has both', () => {
+    sessions.list = [
+      {
+        id: 'session-a',
+        name: 'Work shell',
+        has_waits: true,
+        check_ins: [{ id: 'aaaaaaaaaaaa', due_at: 1, time: '5:30 PM' }],
+      },
+    ]
+    render(<TerminalTabs />)
+    fireEvent.click(screen.getByRole('button', { name: 'End control' }))
+    expect(
+      screen.getByText(/cancels its check-in at 5:30 PM and its waits\./),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'End, keep check-in and waits' }),
+    ).toBeInTheDocument()
+  })
+
   it('uses plurals for several check-ins', () => {
     sessions.list = [
       {

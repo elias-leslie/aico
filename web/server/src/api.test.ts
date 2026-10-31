@@ -125,6 +125,18 @@ describe('check-ins', () => {
     expect((await call('GET', `/api/sessions/${plain.id}`)).body.check_ins).toEqual([])
   })
 
+  it('says whether a session has armed waits (from waitingOn, not its check-ins)', async () => {
+    const has = async (waitingOn?: string | null) =>
+      (await call('GET', `/api/sessions/${tether.add({ tool: 'claude', waitingOn } as never).id}`))
+        .body.has_waits
+    expect(await has('a wait on session "Store lane" (finished)')).toBe(true)
+    expect(await has('a wait on job 1234abcd (done)')).toBe(true)
+    expect(await has('a check-in at 5:30 PM')).toBe(false)
+    expect(await has('a check-in that is due')).toBe(false)
+    expect(await has(null)).toBe(false)
+    expect(await has()).toBe(false)
+  })
+
   it('offers the quick choices and the pending check-ins', async () => {
     const session = agent()
     const at = Date.now() + 7_200_000

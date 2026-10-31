@@ -44,6 +44,8 @@ export interface WebSession {
   is_root: boolean
   /** Pending check-ins, oldest first; `time` reads `5:30 PM` (weekday when not today). */
   check_ins: { id: string; due_at: number; time: string }[]
+  /** It has armed waits (on another session, a job...): End can keep them with its check-ins. */
+  has_waits: boolean
   /** Open owner asks from this session; a blocking one means it needs the owner. */
   asks: { id: string; question: string; blocking: boolean; created_at: number }[]
   is_legacy: false
@@ -93,6 +95,13 @@ function badgeOf(descriptor: SessionDescriptor): WebSession['badge'] {
   return { kind, text, color }
 }
 
+/** Tether's `waitingOn` (apiVersion 12) names the session's oldest armed wait,
+ * else its own check-in (`a check-in at 5:30 PM`, `a check-in that is due`). */
+function hasArmedWait(descriptor: SessionDescriptor): boolean {
+  const waitingOn = (descriptor as { waitingOn?: unknown }).waitingOn
+  return typeof waitingOn === 'string' && !!waitingOn && !waitingOn.startsWith('a check-in')
+}
+
 export function fromTether(
   descriptor: SessionDescriptor,
   link: Link | null,
@@ -137,6 +146,7 @@ export function fromTether(
       due_at: wake.dueAt,
       time: wakeClock(wake.dueAt),
     })),
+    has_waits: hasArmedWait(descriptor),
     asks: (descriptor.asks ?? []).map((ask) => ({
       id: ask.id,
       question: ask.question,
