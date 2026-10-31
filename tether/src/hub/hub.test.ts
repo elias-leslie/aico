@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import {
   createServer,
   type IncomingMessage,
@@ -201,6 +201,13 @@ describe('hub', () => {
       if (hub.forward(req, res)) return
       void (async () => {
         try {
+          const url = new URL(req.url ?? '/', 'http://local')
+          if (
+            req.method === 'GET' &&
+            (url.pathname === '/v1/tools' || url.pathname === '/v1/projects') &&
+            url.searchParams.has('host')
+          )
+            return await hub.query(res, url.searchParams.get('host') ?? '', url.pathname)
           if (req.url === '/v1/sessions' && req.method === 'POST')
             return await hub.create(res, '/v1/sessions', await readJsonObject(req))
           if (req.url === '/v1/roots' && req.method === 'POST')
@@ -297,6 +304,59 @@ describe('hub', () => {
     expect(hub.hosts()).toEqual([])
     expect(await ids()).toEqual([])
     expect(events).toContainEqual({ type: 'peer.resync', data: { host: 'vm' } })
+  })
+
+  it.each(['/v1/tools', '/v1/projects'])(
+    'recognizes an atomically appended host on the first %s query before periodic reload',
+    async (path) => {
+      hub.close()
+      // Hold periodic reloads still while HTTP and peer connections run normally.
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+      try {
+        hub = makeHub()
+        hub.start()
+        const reload = vi.spyOn(hub, 'reload')
+        const file = join(dir, 'hosts.json')
+        writeFileSync(
+          `${file}.new`,
+          JSON.stringify([
+            { name: 'vm', ssh: 'vm', socket: '/run/user/1000/tether/default/control.sock' },
+            { name: 'fresh', ssh: 'fresh', socket: '/run/user/1000/tether/default/control.sock' },
+          ]),
+        )
+        renameSync(`${file}.new`, file)
+        expect(hub.hostNames()).toEqual(['vm'])
+
+        // The new host has no link yet: it is known but must pass the usual connection check.
+        expect(await call('GET', `${path}?host=fresh`)).toMatchObject({
+          status: 409,
+          body: { error: 'host_unavailable', host: 'fresh' },
+        })
+        expect(reload).toHaveBeenCalledTimes(1)
+        expect(hub.hostNames()).toEqual(['vm', 'fresh'])
+
+        expect(await call('GET', `${path}?host=missing`)).toEqual({
+          status: 400,
+          body: { error: 'unknown_host', host: 'missing' },
+        })
+        // Even a miss-triggered refresh keeps peers when an editor's save is incomplete.
+        writeFileSync(file, '[{"name":')
+        expect((await call('GET', `${path}?host=missing`)).body).toEqual({
+          error: 'unknown_host',
+          host: 'missing',
+        })
+        expect(hub.hostNames()).toEqual(['vm', 'fresh'])
+      } finally {
+        hub.close()
+        vi.useRealTimers()
+      }
+    },
+  )
+
+  it('uses a cached named host without refreshing the catalog', async () => {
+    const reload = vi.spyOn(hub, 'reload')
+    expect((await call('GET', '/v1/tools?host=vm')).body).toMatchObject({ host: 'vm' })
+    expect(reload).not.toHaveBeenCalled()
   })
 
   it('keeps a down peer’s sessions as stale, never gone, and resyncs on return', async () => {

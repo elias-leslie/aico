@@ -319,7 +319,12 @@ export class Hub {
   private knownPeer(name: unknown): Peer {
     if (typeof name !== 'string' || !name)
       throw new HttpError(400, 'invalid_body', { field: 'host' })
-    const peer = this.peers.get(name)
+    let peer = this.peers.get(name)
+    if (!peer) {
+      // A host may have been provisioned since the last periodic catalog reload.
+      this.reload()
+      peer = this.peers.get(name)
+    }
     if (!peer) throw new HttpError(400, 'unknown_host', { host: name })
     return peer
   }
