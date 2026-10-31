@@ -2063,7 +2063,10 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
             raise Refused("stale_generation")
         sent = True
         status, data = collector.receipt(control, f"/v1/sessions/{widget}/inject", {
-            "generation": args.generation, "text": text, "mode": "paste", "submit": True}, timeout=5)
+            "generation": args.generation, "text": text, "mode": "paste", "submit": True,
+            # The sender: a wait it sets on this root counts turns from this send.
+            **({"from": sender} if (sender := caller_widget_id()) and re.fullmatch(WIDGET, sender)
+               and sender != widget else {})}, timeout=5)
         owner_reply(status, data, "send_receipt_unqualified")
         if data.get("generation") != args.generation or data.get("delivered") is not True:
             raise Unavailable("send_receipt_unqualified")
@@ -2386,6 +2389,217 @@ def watch_main(argv: list[str], mode: str) -> int:
         return 0
 
 
+WAIT_ID = r"[0-9a-f]{12}"
+WAIT_REF = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}"
+WAIT_KEY = r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}"
+CODEX_THREAD = r"[0-9A-Za-z-]{8,64}"
+WAIT_UNTILS = ("finished", "idle", "blocked", "ended")
+# GET /v1/waits/:id?wait= holds at most this long (tether/src/waits.ts LONG_POLL_MAX_SECONDS).
+WAIT_POLL_SECONDS = 55
+# A --block client keeps asking through a Tether restart this long before it gives up.
+WAIT_UNREACHABLE_SECONDS = 120
+WAIT_REFUSALS = {
+    "wait_unsupported": ("this session does not take wait lines (waits need a Claude Code, Codex, Pi or Agent "
+                         "Hub session); outside one, use --block"),
+    "not_main_agent": ("you are not this session's main agent, so the line would reach it instead of you; "
+                       "use --block in a background shell"),
+    "self_wait": "a session cannot wait on itself",
+    "too_many_waits": "this session already has its maximum number of armed waits; cancel one first",
+    "not_found": "no such session or wait",
+    "not_armed": "that wait is already over (fired, timed out or cancelled)",
+    "waits_unavailable": "waits are off on this Tether",
+}
+
+
+def wait_minutes(value: str) -> int:
+    """Minutes for 2h, 30m, 1h30m or 3d."""
+    match = re.fullmatch(r"(?:(\d{1,2})d)?(?:(\d{1,4})h)?(?:(\d{1,6})m)?", value)
+    if not match or not any(match.groups()):
+        raise argparse.ArgumentTypeError("expected a span such as 30m, 2h, 1h30m or 3d")
+    days, hours, minutes = (int(part or 0) for part in match.groups())
+    total = days * 1440 + hours * 60 + minutes
+    if total < 1:
+        raise argparse.ArgumentTypeError("expected at least 1m")
+    return total
+
+
+def wait_item(wait: dict) -> dict:
+    def local(value: object) -> str | None:
+        return (datetime.datetime.fromtimestamp(value / 1000).astimezone().isoformat(timespec="minutes")
+                if isinstance(value, int) else None)
+    item = {key: wait.get(key) for key in ("id", "ref", "host", "until", "note", "key", "state", "outcome", "line")}
+    item["deadline"] = local(wait.get("deadline"))
+    if wait.get("firedAt") is not None:
+        item["over"] = local(wait.get("firedAt"))
+    observed = wait.get("observed")
+    if isinstance(observed, dict):
+        item["observed"] = {key: observed.get(key) for key in ("state", "detail", "title")}
+    if wait.get("waiter") is None:
+        item["blocking"] = True
+    return item
+
+
+class WaitInterrupted(Exception):
+    pass
+
+
+def wait_block(collector: Collector, socket_name: str, wait: dict) -> int:
+    """Hold until the wait is over and print its line: 0 ready (or the session is gone), 3 timed out,
+    1 cancelled, 2 Tether unreachable. Ctrl-C or SIGTERM cancels the wait."""
+    wait_id = wait["id"]
+
+    def interrupted(*_: object) -> typing.NoReturn:
+        raise WaitInterrupted()
+
+    handlers = {s: signal.signal(s, interrupted) for s in (signal.SIGINT, signal.SIGTERM)}
+    unreachable_since: float | None = None
+    try:
+        while wait.get("state") == "armed":
+            try:
+                status, data = collector.receipt(socket_name, f"/v1/waits/{wait_id}?wait={WAIT_POLL_SECONDS}",
+                                                 timeout=WAIT_POLL_SECONDS + 10)
+            except Unavailable:
+                now = time.monotonic()
+                unreachable_since = unreachable_since or now
+                if now - unreachable_since > WAIT_UNREACHABLE_SECONDS:
+                    print(f"Tether is unreachable; wait {wait_id} may still be armed. "
+                          f"Ask again: st aico wait get {wait_id} --block", file=sys.stderr)
+                    return 2
+                time.sleep(2)
+                continue
+            unreachable_since = None
+            if status != 200:
+                print(f"wait {wait_id}: {data.get('error', 'unavailable')}", file=sys.stderr)
+                return 1
+            wait = data
+    except WaitInterrupted:
+        try:
+            Collector("", socket_name, "", time.monotonic() + 5, threading.Event()).receipt(
+                socket_name, f"/v1/waits/{wait_id}", timeout=2, method="DELETE")
+        except (Unavailable, Stopped):
+            pass
+        print(f"stopped; wait {wait_id} cancelled", file=sys.stderr)
+        return 130
+    finally:
+        for s, handler in handlers.items():
+            signal.signal(s, handler)
+    if wait.get("state") == "cancelled":
+        print(f"wait {wait_id} was cancelled", file=sys.stderr)
+        return 1
+    print(wait.get("line") or f"wait {wait_id} is {wait.get('state')}", flush=True)
+    return 3 if wait.get("state") == "timed_out" else 0
+
+
+def wait_main(argv: list[str]) -> int:
+    """`st aico wait session|time|get|cancel` and `st aico waits`."""
+    operation = argv[0] if argv else ""
+    if operation == "time":
+        return wake_main(["set", *argv[1:]])
+    if operation not in ("session", "get", "cancel", "list"):
+        print("usage: st aico wait session ID|REQ [--until finished|idle|blocked|ended] [--timeout 2h] "
+              "[--note T] [--key K] [--block] | wait time WHEN NOTE | wait get WAIT [--block] | "
+              "wait cancel WAIT | waits [--recent]", file=sys.stderr)
+        return 2
+    prog = "st aico waits" if operation == "list" else f"st aico wait {operation}"
+    parser = argparse.ArgumentParser(prog=prog, description=(
+        "Wait for a session to finish its turn, go idle, get blocked or end: you get one line when it is "
+        "ready or the wait times out, and nothing after a cancel. Lanes you launch report on their own; "
+        "use this for anything else you wait on. Subagents and agents outside Aico: --block."))
+    parser.add_argument("--widget-id", default=caller_widget_id())
+    parser.add_argument("--owner-socket", type=socket_path, default=tether_socket())
+    if operation == "session":
+        parser.add_argument("ref", help="the session id (eight hex characters) or its root request id")
+        parser.add_argument("--until", choices=WAIT_UNTILS, default="finished")
+        parser.add_argument("--timeout", type=wait_minutes, metavar="SPAN",
+                            help="give up after this long and say so (default 24h, at most 7d)")
+        parser.add_argument("--note", help="your words, shown on the line (at most 200 characters)")
+        parser.add_argument("--key", help="the same key from this session returns the wait already set")
+    if operation in ("session", "get"):
+        parser.add_argument("--block", action="store_true", help=(
+            "hold this command until the wait is over and print the line (exit 0 ready, 3 timed out, "
+            "2 Tether unreachable); for subagents and agents outside Aico, run it in a background shell"))
+    if operation in ("get", "cancel"):
+        parser.add_argument("wait_id")
+    if operation == "list":
+        parser.add_argument("--recent", action="store_true", help="also waits that ended in the last day")
+    args = parser.parse_args(argv[1:])
+    widget = args.widget_id if isinstance(args.widget_id, str) and re.fullmatch(WIDGET, args.widget_id) else None
+    block = getattr(args, "block", False)
+    if operation in ("session", "list") and widget is None and not block:
+        parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters"
+                     + ("; outside an Aico session use --block" if operation == "session" else ""))
+    if operation in ("get", "cancel") and not re.fullmatch(WAIT_ID, args.wait_id):
+        parser.error("expected a wait ID from st aico waits (12 lowercase hex characters)")
+    if operation == "session":
+        if not re.fullmatch(WAIT_REF, args.ref):
+            parser.error("expected a session id or a root request id")
+        if args.key is not None and not re.fullmatch(WAIT_KEY, args.key):
+            parser.error("--key: letters, digits and . _ : - (at most 64)")
+        if args.note is not None and not 0 < len(args.note.strip()) <= 200:
+            parser.error("--note: one line, at most 200 characters")
+    collector = Collector("", args.owner_socket, "", time.monotonic() + 7 * 86400 + 600, threading.Event())
+    output: dict = {"owner": "aico", "operation": "waits" if operation == "list" else f"wait {operation}"}
+    try:
+        if operation == "session":
+            payload: dict = {"kind": "session", "ref": args.ref, "until": args.until}
+            if block:
+                payload.update(waiter=None, by=widget)
+            else:
+                payload["waiter"] = widget
+                thread = os.environ.get("CODEX_THREAD_ID", "")
+                if re.fullmatch(CODEX_THREAD, thread):
+                    payload["thread"] = thread
+            for name, field in (("timeout", "timeoutMinutes"), ("note", "note"), ("key", "key")):
+                if getattr(args, name) is not None:
+                    payload[field] = getattr(args, name)
+            status, data = collector.receipt(args.owner_socket, "/v1/waits", payload, timeout=10)
+            if status not in (200, 201):
+                if isinstance(data.get("field"), str):
+                    output["field"] = data["field"]
+                if isinstance(data.get("max"), int):
+                    output["max"] = data["max"]
+                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
+            if block:
+                return wait_block(collector, args.owner_socket, data)
+            output.update(applied=True, created=data.get("created") is True, wait=wait_item(data))
+            if data.get("state") != "armed":
+                output["note"] = "already over: its line is on the way to this session"
+        elif operation == "get":
+            status, data = collector.receipt(args.owner_socket, f"/v1/waits/{args.wait_id}", timeout=5)
+            if status != 200:
+                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
+            if block:
+                return wait_block(collector, args.owner_socket, data)
+            output["wait"] = wait_item(data)
+        elif operation == "cancel":
+            status, data = collector.receipt(args.owner_socket, f"/v1/waits/{args.wait_id}", timeout=5,
+                                             method="DELETE")
+            if status != 200:
+                if isinstance(data.get("state"), str):
+                    output["state"] = data["state"]
+                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
+            output.update(applied=True, waitId=args.wait_id, detail="cancelled; no line will be sent")
+        else:
+            route = f"/v1/sessions/{widget}/waits" + ("?recent=1" if args.recent else "")
+            status, data = collector.receipt(args.owner_socket, route, timeout=5)
+            if status != 200 or not isinstance(data.get("items"), list):
+                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
+            output.update(widgetId=widget, items=[wait_item(item) for item in data["items"] if isinstance(item, dict)])
+        emit_json(collector, output)
+        return 0
+    except (Unavailable, Stopped) as error:
+        reason = str(error) if isinstance(error, Unavailable) else "deadline"
+        output.update(applied=False if isinstance(error, Refused) else None, reason=reason)
+        if reason in WAIT_REFUSALS:
+            output["detail"] = WAIT_REFUSALS[reason]
+        elif output.get("field") == "timeoutMinutes":
+            output["detail"] = f"--timeout is at most {output.get('max', 10080) // 1440}d"
+        emit_unless_stopped(collector, output)
+        return 2 if block and not isinstance(error, Refused) else 1
+    except BrokenPipeError:
+        return 0
+
+
 WINDOWS_RETIRED = "Aico has no desktop windows any more; sessions show in Aico web. Nothing to arrange or show."
 
 
@@ -2417,6 +2631,10 @@ def main(argv: list[str] | None = None) -> int:
         return wake_main(argv[1:])
     if argv and argv[0] in ("watch", "unwatch"):
         return watch_main(argv[1:], argv[0])
+    if argv and argv[0] == "wait":
+        return wait_main(argv[1:])
+    if argv and argv[0] == "waits":
+        return wait_main(["list", *argv[1:]])
     if argv and argv[0] == "placement":
         return placement_main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)

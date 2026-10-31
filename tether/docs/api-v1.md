@@ -15,7 +15,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 - Bodies are JSON (`content-type: application/json`, at most 128 KiB) and must be objects. Unknown fields are rejected with `400 invalid_body`, never ignored. Field names are camelCase.
 - Errors are `{"error": "<code>", ...}` and the codes are stable API. A 4xx or 503 means nothing was applied. A 2xx or `409 outcome_uncertain` may have applied.
 - No route retries anything on the caller's behalf. Clients must not retry an uncertain mutation with a different identity.
-- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)). 6: `inject` takes `model` for an Agent Hub session. 7: `inject` takes `thinkingLevel` for an Agent Hub session. 8: [remote hosts](#remote-hosts): `host` on descriptors, create, roots, tools and projects; `peer` marks; `GET /v1/hosts`; the `peer.state` and `peer.resync` events; root `lineage`. 9: `parentId` on descriptors and in root `lineage` ([Coordinators](#coordinators)). 10: [placement](#remote-hosts): `host: "auto"` with `needs` on `POST /v1/roots`, `GET /v1/placement`. 11: placement `pool` on both. 12: [lane reports](#lane-reports): `stateAgentAt`, `waitingOn` and `launched` on descriptors, `/v1/sessions/:id/watches`, and wake lists show check-ins only.
+- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)). 6: `inject` takes `model` for an Agent Hub session. 7: `inject` takes `thinkingLevel` for an Agent Hub session. 8: [remote hosts](#remote-hosts): `host` on descriptors, create, roots, tools and projects; `peer` marks; `GET /v1/hosts`; the `peer.state` and `peer.resync` events; root `lineage`. 9: `parentId` on descriptors and in root `lineage` ([Coordinators](#coordinators)). 10: [placement](#remote-hosts): `host: "auto"` with `needs` on `POST /v1/roots`, `GET /v1/placement`. 11: placement `pool` on both. 12: [lane reports](#lane-reports): `stateAgentAt`, `waitingOn` and `launched` on descriptors, `/v1/sessions/:id/watches`, and wake lists show check-ins only. 13: [waits](#waits): `/v1/waits`, `/v1/sessions/:id/waits`, `inject` takes `from`, End answers `keptWaits`.
 - Times are Unix epoch milliseconds.
 
 ## Identity
@@ -94,7 +94,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 
 `state` is the agent's state: `working`, `idle`, `blocked` (waiting on the user: a permission prompt or a question) or `unknown` (no agent found, or the session is not running). `stateSource` names what said so (`claude-status`, `claude-hook`, `codex-rollout`, `codex-hook`, `pi-session`, `none`), `stateAt` is when the state last changed (null while unknown), `stateDetail` says why it is blocked, and `statePrevious` is the state before (so `working` → `idle` is a finished turn, while `unknown` → `idle` is an agent Tether only just found). A change publishes `session.updated`. See [agent-state.md](agent-state.md).
 
-`stateAgentAt` (12) is the agent's own time of its latest state (Claude Code's `statusUpdatedAt`, the Codex turn line, the Pi message; Tether's clock when the agent gives none), null until Tether has seen the agent's state; it keeps its last value after the agent leaves. It only moves forward, and a later one while `idle` publishes `session.updated`: a turn ended, even one shorter than the poll. `waitingOn` (12) is null, or names the session's own pending check-in (`a check-in at 5:30 PM`, `a check-in that is due`), so a lane waiting on its own check-in is not taken for finished. `launched` (12) is true when the session's lineage came from a launch (`launchedBy`, a kept wake's relaunch, the hub's `lineage`), false for an owner's mark or join and for sessions from before v12. See [Lane reports](#lane-reports).
+`stateAgentAt` (12) is the agent's own time of its latest state (Claude Code's `statusUpdatedAt`, the Codex turn line, the Pi message; Tether's clock when the agent gives none), null until Tether has seen the agent's state; it keeps its last value after the agent leaves. It only moves forward, and a later one while `idle` publishes `session.updated`: a turn ended, even one shorter than the poll. `waitingOn` (12) is null, or names what the session itself waits on: an armed [wait](#waits) (`a wait on session "Store lane" (finished)`, 13), else its own pending check-in (`a check-in at 5:30 PM`, `a check-in that is due`), so a lane waiting on something is not taken for finished. `launched` (12) is true when the session's lineage came from a launch (`launchedBy`, a kept wake's relaunch, the hub's `lineage`), false for an owner's mark or join and for sessions from before v12. See [Lane reports](#lane-reports).
 
 `wakes` *(post-cutover)* lists the session's scheduled check-ins, oldest first; see [Wakes](#wakes).
 
@@ -136,7 +136,7 @@ Sending a message uses the existing `inject` route (`mode: "paste"`, `submit: tr
 | `POST /v1/sessions` | `{tool?, projectId?, projectRoot?, blankSlate?, instructions?, name?, origin, aTermSessionId?, size: {cols, rows}, host?}` | `201` running or `202` pending/uncertain descriptor. A `202` also carries `failure: {code, reason} \| null` (`workload_unavailable`, `outcome_uncertain`). `origin` is `aico`, `a-term` or `cli`; `aTermSessionId` (a UUID) is accepted only with `a-term`. `projectRoot` follows the `POST /v1/roots` path rule (absolute, normalized: no `.`/`..` segments or repeated `/`, no NUL; otherwise `400 invalid_body` with `field: projectRoot`) and must be an existing directory (`400 unknown_project`). With both `projectId` and `projectRoot`, the root is used as given and is not compared with the project's registered root. `host` (8) creates on a remote host ([Remote hosts](#remote-hosts)). |
 | `GET /v1/sessions/:id` | none | live-verified descriptor. Rechecks the generation after the async verification and returns `409 identity_changed` if it moved. |
 | `PATCH /v1/sessions/:id` | `{generation, name}` | rename. `name: null` clears to the default label. The label follows the root title rules (trimmed, 1–160 UTF-8 bytes, no control characters). |
-| `POST /v1/sessions/:id/end` | `{generation, keepWakes?}` | `200 {status:"ended", keptWakes}`. Exact containment retirement: stops only the owned pane scope and uses `cgroup.kill` fallback. End cancels the session's wakes; `keepWakes: true` *(apiVersion 3)* keeps them, and they relaunch the conversation when due (see [Wakes](#wakes)). |
+| `POST /v1/sessions/:id/end` | `{generation, keepWakes?}` | `200 {status:"ended", keptWakes, keptWaits}`. Exact containment retirement: stops only the owned pane scope and uses `cgroup.kill` fallback. End cancels the session's wakes; `keepWakes: true` *(apiVersion 3)* keeps them, and they relaunch the conversation when due (see [Wakes](#wakes)); it keeps the session's armed [waits](#waits) too. |
 | `POST /v1/sessions/:id/respawn` | `{generation}` | Replaces the pane workload with the session's stored tool. Returns the new descriptor and generation. A lifecycle-v0 session is refused with `409 workload_unavailable`. |
 | `POST /v1/sessions/:id/load-tui` | `{generation, tool}` | Respawns with another tool and stores it on success |
 | `POST /v1/sessions/:id/switch-project` | `{generation, projectId}` or `{generation, projectRoot}` *(post-cutover)* | With `projectId`: resolves the project root once, respawns there with the same tool, and stores `projectId`/`projectRoot`. With `projectRoot` (an existing directory under the same path rule as on create; Aico's Personal Workspace): respawns there and stores `projectId: null`. Exactly one of the two; a root that is not a directory is `400 unknown_project`. |
@@ -246,7 +246,7 @@ Apps keep their own byte path: a PTY that runs `tmux attach` against the session
 | `GET /v1/sessions/:id/attach` | none | `{generation, argv: ["/usr/bin/tmux","-S","<socket>","attach-session","-t","$3"], env, unset}`. `argv` is the exact client argv. |
 | `GET /v1/sessions/:id/capture` | query `escapes=1` | `{generation, text}`: the visible screen |
 | `GET /v1/sessions/:id/scrollback` | query `fromLine`, `count` (at most 5000, default 5000), `escapes=1` | `{generation, fromLine, totalLines, historySize, text}`. One bounded page of pane history (Aico `scrollback-page.ts`); line `historySize + r` is visible row `r`. Without `fromLine`, the last page. `400 invalid_query` for a non-integer. |
-| `POST /v1/sessions/:id/inject` | `{generation, text, mode: "type" \| "paste", submit?: bool, model?: string \| null, thinkingLevel?: string \| null}` | `{generation, delivered: true}`; an `agent-hub` session adds `queued: bool` ([Agent Hub sessions](#agent-hub-sessions)) |
+| `POST /v1/sessions/:id/inject` | `{generation, text, mode: "type" \| "paste", submit?: bool, model?: string \| null, thinkingLevel?: string \| null}` | `{generation, delivered: true}`; an `agent-hub` session adds `queued: bool` ([Agent Hub sessions](#agent-hub-sessions)). `from` *(13)*, the sending session's id, records the send so a [wait](#waits) that session sets on this one counts turns from it |
 | `GET /v1/sessions/:id/pane-mode` *(post-cutover)* | none | `{generation, alternateScreen, mouseReporting, historySize, inMode, mode}`: whether the pane shows its alternate screen, whether the program asked for mouse reporting, the history line count, and whether tmux shows a mode over the pane (`mode` is its name, such as `copy-mode`, else null). Read-only `display-message`. `409 workload_unavailable` when tmux cannot answer. |
 
 Attach `env` holds **overrides only**, not a full environment: set exactly `TERM=xterm-256color`, `COLORTERM=truecolor` and `CLICOLOR=1` over the client's own environment, then remove every key in `unset` (`TMUX`, `TMUX_PANE`, `TMUX_TMPDIR`, `NO_COLOR`). Both lists may grow additively.
@@ -571,7 +571,7 @@ the session go first, joined with ` / `. One paste stays under 1800 bytes; rows 
 was due while Tether or the host was down goes out when the gates next pass. Closing a view does not cancel a wake.
 While a due wake waits, its `waitingFor` names the first gate it fails (`the agent is working (claude-status)`,
 `someone typed in the last 15s`, `the input line holds a draft`, `the session is stopped`), and Tether logs each new
-reason once (`[tether:wakes] check-in for session=… waits: …`) and how long it waited when it goes out. A Claude Code
+reason once (`[tether:wakes] delivery for session=… waits: …`) and how long it waited when it goes out. A Claude Code
 session parked into a background job is read from the job's status file, not the pane process's frozen one.
 
 End cancels the session's wakes unless the End request says `keepWakes: true`. A kept wake outlives the session: when
@@ -670,6 +670,62 @@ watching a helper adds its `finished`);
 to that lane (a lane watching its own coordinator), which would loop, `409 lane_reports_unavailable` when the daemon runs without lifecycle
 (`TETHER_RECONCILE=off`), `404` for an unknown watcher. A watcher's watches end with it. The CLI is
 `st aico watch LANE`, `st aico unwatch LANE` and `st aico watch list`.
+
+## Waits
+
+A wait tells an agent when something it waits on is ready, instead of a check-in at a guessed time. P1b has one kind,
+`session`: another session finished a turn, is idle, is blocked on the user, or ended. Lanes an agent launched report on
+their own ([Lane reports](#lane-reports)); a wait is for anything else. The CLI is `st aico wait session ID|REQ
+[--until finished|idle|blocked|ended] [--timeout 2h] [--note T] [--key K] [--block]`, `st aico waits [--recent]`,
+`st aico wait cancel WAIT`, `st aico wait get WAIT [--block]`, and `st aico wait time WHEN NOTE` (the same as
+`st aico wake`). Waits live in the `waits` table, apart from wakes, and survive Tether restarts.
+
+- **Level-triggered.** The condition is checked when the wait is armed: a session that already finished after `since`
+  fires at once. `since` defaults to the waiter's last `inject` with `from` to that session, else the launch for the
+  session that launched it, else the time it is armed.
+- **finished** is `idle` with a `stateAgentAt` after `since`, held `laneSettleSeconds`, and `waitingOn` null;
+  **idle** is `idle` held `laneSettleSeconds`; **blocked** is `permission prompt` or `input needed` held
+  `laneBlockedSeconds` (never `dialog open`); **ended** is the session gone, or for a local one its agent left the pane
+  for good. A session that ends before any other condition holds fires `gone`.
+- **Once.** Firing moves the wait out of `armed` with a compare-and-set on `seq` and queues the line in the same
+  transaction, so it fires once across restarts.
+- **Never silent.** A wait past its deadline (default `waitDefaultMinutes`, at most `waitMaxMinutes`) fires `timeout`
+  with the last state Tether saw. Only a cancel is quiet, and the CLI confirms it.
+- **Delivery.** The line goes on the waiter's delivery queue as an event row (source `wait:<id>`), pasted under the
+  [wake](#wakes) gates, events first, under 1800 bytes. It names the session (title cleaned as in lane reports, at most
+  60 characters), the outcome, the waiter's own note and the command that shows it; never the session's reply text:
+  `[Ready] session "Store lane" (req neri-r1) finished · re: "merge after" · st aico root status neri-r1`,
+  `[Wait over] session "Store lane" (req neri-r1) ended before it finished · …`,
+  `[Wait timed out] session "Store lane" (req neri-r1) not finished after 2h: it is working · …`.
+  Check-in lists and `maxPerSession` do not count waits. While a waiter has an armed wait its `waitingOn` names it.
+- **End.** A waiter's waits end with it, unless End says `keepWakes: true`: then its armed waits are kept, and one that
+  becomes ready relaunches the conversation like a kept wake; one that times out or whose session is gone is recorded
+  and relaunches nothing.
+- **Subagents.** A session wait pastes into the waiter's main agent. When the caller provably is not it (a Codex session
+  whose conversation id differs from the caller's `CODEX_THREAD_ID`), the CLI's `thread` makes it `409
+  not_main_agent`. Subagents, Workflow agents and agents outside Aico use `--block`.
+- **`--block`.** The CLI arms a wait with no waiter (`waiter: null`, `by` its session if any) and asks `GET
+  /v1/waits/:id?wait=55` until it is over, printing the line: exit 0 ready (or `gone`), 3 timed out, 1 cancelled, 2
+  Tether unreachable for 2 minutes. The GET is idempotent; Ctrl-C cancels the wait. Nothing is pasted anywhere.
+
+| Route | Request | Response |
+|---|---|---|
+| `POST /v1/waits` | `{waiter, by?, kind: "session", ref, until?, since?, timeoutMinutes?, key?, note?, thread?}` | `201` the wait with `created: true`, or `200` with `created: false` when the same `waiter` already has a wait with that `key` (not cancelled). `ref` is a session id or a root request id, here or on a connected host. `400 invalid_body {field}`; `404 not_found`; `409 wait_unsupported` (the waiter is not an agent session Tether delivers to: agy, a shell), `409 not_main_agent`, `409 self_wait`, `409 too_many_waits {max}` (`maxWaitsPerSession` armed), `409 waits_unavailable` without lifecycle |
+| `GET /v1/waits/:waitId` | `?wait=0..55` seconds | the wait, once it is no longer armed or the seconds are up |
+| `DELETE /v1/waits/:waitId` | | `200 {cancelled: true, ...wait}`; `409 not_armed {state}` |
+| `GET /v1/sessions/:id/waits` | `?recent=1` | `{items}`: armed waits, oldest first; with `recent` also those over in the last day (at most 20) |
+
+A wait is `{id, waiter, kind, ref, host, until, since, deadline, key, note, armedAt, state, outcome, line, firedAt,
+observed: {state, detail, title}, kept}`; `state` is `armed`, `fired`, `timed_out` or `cancelled`, `outcome` is
+`until`, `timeout` or `gone`. Waits that are over are pruned after `waitKeepDays`. Each fire is logged as
+`[tether:waits] wait=… on session=… until -> <waiter>`.
+
+| Policy field | Default | Meaning |
+|---|---|---|
+| `waitDefaultMinutes` | 1440 | a wait's timeout when none is given (1-10080) |
+| `waitMaxMinutes` | 10080 | the longest timeout (1-43200) |
+| `maxWaitsPerSession` | 20 | armed waits one session may hold (1-100) |
+| `waitKeepDays` | 7 | waits that are over stay this long (1-30) |
 
 ## Crash recovery
 

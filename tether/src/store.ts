@@ -23,6 +23,7 @@ import {
   SETTINGS_SQL,
   SHARES_SQL,
   TMUX_SERVERS_TABLE_SQL,
+  WAITS_SQL,
   WAKES_SQL,
 } from './schema'
 import {
@@ -347,6 +348,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(18, now)
+      }
+      if (current < 19) {
+        // v19: general waits and the follow-up sends their default since reads.
+        this.db.exec(WAITS_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(19, now)
       }
     })
   }

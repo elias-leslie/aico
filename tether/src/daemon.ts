@@ -15,7 +15,7 @@ import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { type AskDelivery, aicoOrigin, type NeedsYouFeed } from './asks'
 import { agentExitMarkerDir, resolveShowConfig, type TetherPaths } from './config'
-import { nodeProcFs, writeJsonFile } from './continuity'
+import { nodeProcFs, observeAgent, writeJsonFile } from './continuity'
 import { DeadShells } from './dead-shells'
 import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
@@ -71,7 +71,8 @@ import { persistSizeHolders } from './size-holder'
 import { Store } from './store'
 import { VERSION } from './version'
 import { readWaitingState, WAIT_NOTICE_MS, WaitingNotices } from './waiting'
-import { bindWakeStore, WakeService } from './wake-runtime'
+import { WaitService, WaitStore } from './waits'
+import { bindWaitingOn, bindWakeStore, WakeService } from './wake-runtime'
 import { cleanNote } from './wakes'
 
 export interface RunningDaemon {
@@ -519,6 +520,73 @@ export async function startDaemon(
       }
     })
   }
+  // General waits: an agent's wait on another session fires once, as one line
+  // on its delivery queue (src/waits.ts); pasted, so only where Tether
+  // observes sessions.
+  const waits = reconcileEnabled(env)
+    ? new WaitService(new WaitStore(store.db), {
+        now: Date.now,
+        policy: () => wakes.policy(),
+        resolve: (ref) => {
+          if (/^[0-9a-f]{8}$/.test(ref) && getWidget(ref)) return { id: ref, host: null }
+          const root = getRootRequest(ref)
+          if (root && getWidget(root.widgetId)) return { id: root.widgetId, host: null }
+          const remote = hosts?.remoteSession(ref)
+          return remote && typeof remote.session.id === 'string'
+            ? { id: remote.session.id, host: remote.host }
+            : null
+        },
+        view: (id, host) => {
+          if (host === null) {
+            const row = getWidget(id)
+            return row ? laneView(sessionSnapshot(row), null) : null
+          }
+          const remote = hosts?.remoteSession(id)
+          return remote && remote.host === host && remote.session.id === id
+            ? laneView(remote.session, host)
+            : null
+        },
+        agentGone: (id) => {
+          const row = getWidget(id)
+          if (!row || row.backend === 'agent-hub') return false
+          const exit = agentExitOf(row)
+          return (
+            (exit?.state === 'exit' && exit.status === 0) || Boolean(context.recovery?.isHeld(id))
+          )
+        },
+        receiver: (id) => {
+          const row = getWidget(id)
+          return Boolean(row && (row.backend === 'agent-hub' || isRootCreateTool(row.tool)))
+        },
+        notMainAgent: async (waiter, thread) => {
+          // Codex sets CODEX_THREAD_ID per thread: a subagent's differs from the
+          // session's own conversation. Claude subagents share the parent's ids.
+          const row = getWidget(waiter)
+          if (row?.tool !== 'codex') return null
+          const pane = await verifiedCurrentManagedPane(row).catch(() => null)
+          const agent = pane ? observeAgent(nodeProcFs, env.HOME ?? homedir(), pane.pid) : null
+          return agent?.resumeId && agent.resumeId !== thread
+            ? "the caller's Codex thread is not this session's main agent (a subagent): use --block"
+            : null
+        },
+        deliver: (waiter, source, line) => {
+          wakes.store.addEvent({ sessionId: waiter, source, note: line, now: Date.now() })
+        },
+        relaunch: (ended, line) => {
+          wakes.store.addKept({ ended, note: line, now: Date.now() })
+        },
+        changed: (waiter) => wakes.changed(waiter && getWidget(waiter) ? waiter : null),
+        log: (message) => console.log(`[tether:waits] ${message}`),
+      })
+    : null
+  if (waits) {
+    context.waits = waits
+    bindWaitingOn((id) => waits.waitingOn(id))
+    events.subscribe((event) => {
+      if (event.type.startsWith('session.') && typeof event.data.id === 'string')
+        waits.poke(event.data.id)
+    })
+  }
   const server = createTetherServer(context)
   try {
     await listenPrivateSocket(server, paths.socket)
@@ -573,6 +641,7 @@ export async function startDaemon(
   if (reconcileEnabled(env)) void ready.then(() => runs.start()).catch(() => {})
   // Wakes paste into sessions, so only where Tether observes tmux.
   if (reconcileEnabled(env)) void ready.then(() => wakes.scheduler.start()).catch(() => {})
+  if (waits) void ready.then(() => waits.start()).catch(() => {})
   if (lanes)
     void ready
       .then(() => {
@@ -628,6 +697,8 @@ export async function startDaemon(
       setHubBackend(null)
       wakes.scheduler.stop()
       lanes?.stop()
+      waits?.stop()
+      bindWaitingOn(null)
       bindWakeStore(null)
       bindAgentStates(null)
       context.continuity?.stop()

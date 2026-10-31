@@ -71,10 +71,12 @@ describe('Store schema', () => {
       'retired_session_ids',
       'root_requests',
       'schema_version',
+      'session_sends',
       'sessions',
       'settings',
       'shares',
       'tmux_servers',
+      'waits',
       'wakes',
     ])
   })

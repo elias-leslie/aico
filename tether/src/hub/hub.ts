@@ -356,6 +356,18 @@ export class Hub {
     return null
   }
 
+  /** A relayed session by its id or root request id (waits on a host's
+   * session): the host and its cached descriptor, or null. */
+  remoteSession(ref: string): { host: string; session: Record<string, unknown> } | null {
+    for (const peer of this.peers.values()) {
+      for (const item of peer.descriptors()) {
+        const session = item as unknown as Record<string, unknown>
+        if (session.id === ref || session.rootRequestId === ref) return { host: peer.name, session }
+      }
+    }
+    return null
+  }
+
   /** The registry entry of a host this hub knows, or null. */
   hostEntry(name: string): HostEntry | null {
     return this.peers.get(name)?.entry ?? null

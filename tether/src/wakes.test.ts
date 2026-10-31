@@ -350,14 +350,14 @@ describe('wake scheduler', () => {
     await scheduler.tick()
     await scheduler.tick()
     expect(log.lines).toEqual([
-      `check-in for session=${SESSION} waits: the agent is working (claude-status)`,
+      `delivery for session=${SESSION} waits: the agent is working (claude-status)`,
     ])
     expect(scheduler.heldReason(SESSION)).toBe('the agent is working (claude-status)')
     state.idle = true
     state.empty = false
     await scheduler.tick()
     expect(log.lines.at(-1)).toBe(
-      `check-in for session=${SESSION} waits: the input line holds a draft`,
+      `delivery for session=${SESSION} waits: the input line holds a draft`,
     )
     // An hour overdue, the gates clear and it still goes out.
     clock.now += 3_600_000

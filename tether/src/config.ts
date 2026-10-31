@@ -10,8 +10,10 @@ import { join } from 'node:path'
  * 9: `parentId` on descriptors; root `lineage` takes `parentId`.
  * 10: `host: "auto"` with `needs` on `POST /v1/roots`; `GET /v1/placement`.
  * 12: lane reports: descriptors carry `stateAgentAt`, `waitingOn` and `launched`;
- *     `/v1/sessions/:id/watches`; wake lists show check-ins only. */
-export const API_VERSION = 12
+ *     `/v1/sessions/:id/watches`; wake lists show check-ins only.
+ * 13: general waits (`/v1/waits`, `/v1/sessions/:id/waits`); `inject` takes
+ *     `from`; End answers `keptWaits`. */
+export const API_VERSION = 13
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

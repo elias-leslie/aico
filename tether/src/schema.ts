@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 18
+export const SCHEMA_VERSION = 19
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -448,5 +448,67 @@ export const LANE_REPORTS_SQL = `
   CREATE TRIGGER IF NOT EXISTS sessions_end_lane_watches AFTER DELETE ON sessions
   BEGIN
     DELETE FROM lane_watches WHERE watcher = old.id;
+  END;
+`
+
+/**
+ * v19: general waits (src/waits.ts). An agent's wait on its own session: a
+ * condition (`kind`, `ref`, `until`), a deadline and an optional note. It
+ * fires once (`seq` compare-and-set), when the condition holds or at the
+ * deadline, and queues one event line for the waiter (wakes, kind `event`,
+ * source `wait:<id>`).
+ * - `waiter`: the session that hears it; NULL for a `--block` client, or
+ *   once a kept wait (`kept`, End with keepWakes) outlived its session, with
+ *   the ended session's snapshot in `ended_session`.
+ * - `host`: where `ref` lives ('' is this computer).
+ * - `since`: "finished" counts turns that ended after this.
+ * - `cursor`: the target's last observed state and names (JSON), for the
+ *   timeout line and lines after the target is gone.
+ * - `key`: the same key from the same waiter names the same wait until it is
+ *   cancelled or pruned.
+ * `session_sends`: when a session last sent a follow-up to another
+ * (`st aico root send`), the default `since` of a wait on it.
+ */
+export const WAITS_SQL = `
+  CREATE TABLE IF NOT EXISTS waits (
+    id            TEXT PRIMARY KEY
+                    CHECK(length(id) = 12 AND id NOT GLOB '*[^0-9a-f]*'),
+    waiter        TEXT
+                    CHECK(waiter IS NULL OR (length(waiter) = 8 AND waiter NOT GLOB '*[^0-9a-f]*')),
+    kind          TEXT NOT NULL CHECK(length(kind) BETWEEN 1 AND 20),
+    ref           TEXT NOT NULL CHECK(length(ref) BETWEEN 1 AND 120),
+    host          TEXT NOT NULL DEFAULT '' CHECK(length(host) <= 64),
+    until         TEXT NOT NULL CHECK(length(until) BETWEEN 1 AND 20),
+    since         INTEGER NOT NULL CHECK(since >= 0),
+    deadline      INTEGER NOT NULL CHECK(deadline >= 0),
+    key           TEXT CHECK(key IS NULL OR length(key) BETWEEN 1 AND 64),
+    note          TEXT CHECK(note IS NULL OR length(note) BETWEEN 1 AND 200),
+    armed_at      INTEGER NOT NULL CHECK(armed_at >= 0),
+    seq           INTEGER NOT NULL DEFAULT 0 CHECK(seq >= 0),
+    cursor        TEXT CHECK(cursor IS NULL OR json_valid(cursor)),
+    state         TEXT NOT NULL DEFAULT 'armed'
+                    CHECK(state IN ('armed', 'fired', 'timed_out', 'cancelled')),
+    outcome       TEXT CHECK(outcome IS NULL OR outcome IN ('until', 'timeout', 'gone')),
+    line          TEXT CHECK(line IS NULL OR length(line) BETWEEN 1 AND 2000),
+    fired_at      INTEGER,
+    kept          INTEGER NOT NULL DEFAULT 0 CHECK(kept IN (0, 1)),
+    ended_session TEXT CHECK(ended_session IS NULL OR json_valid(ended_session)),
+    CHECK(kept = 0 OR ended_session IS NOT NULL)
+  );
+  CREATE INDEX IF NOT EXISTS waits_waiter ON waits(waiter, state);
+  CREATE INDEX IF NOT EXISTS waits_ref ON waits(ref, state);
+  CREATE UNIQUE INDEX IF NOT EXISTS waits_key ON waits(coalesce(waiter, ''), key)
+    WHERE key IS NOT NULL AND state <> 'cancelled';
+  CREATE TABLE IF NOT EXISTS session_sends (
+    sender TEXT NOT NULL CHECK(length(sender) = 8 AND sender NOT GLOB '*[^0-9a-f]*'),
+    target TEXT NOT NULL CHECK(length(target) = 8 AND target NOT GLOB '*[^0-9a-f]*'),
+    at     INTEGER NOT NULL CHECK(at >= 0),
+    PRIMARY KEY (sender, target)
+  );
+  CREATE TRIGGER IF NOT EXISTS sessions_end_waits AFTER DELETE ON sessions
+  BEGIN
+    DELETE FROM waits WHERE waiter = old.id AND kept = 0;
+    UPDATE waits SET waiter = NULL WHERE waiter = old.id;
+    DELETE FROM session_sends WHERE sender = old.id OR target = old.id;
   END;
 `

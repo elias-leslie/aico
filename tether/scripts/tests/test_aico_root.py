@@ -23,6 +23,7 @@ def invoke(monkeypatch, args, responses):
 
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    monkeypatch.setattr(admin, "caller_widget_id", lambda: None)
     transport = ["--root-socket", "/fixture/gui.sock"]
     if args[0] in ("end", "send"):
         transport += ["--owner-socket", "/fixture/control.sock"]
@@ -190,6 +191,22 @@ def test_send_queues_one_fenced_followup_into_the_pinned_root(monkeypatch):
     assert output == [{**DESCRIPTOR, "operation": "send", "applied": True, "delivered": True,
                        "bytes": len(FOLLOWUP)}]
     assert "Private" not in json.dumps(output)
+
+
+def test_send_names_the_sending_session_for_its_waits(monkeypatch):
+    replies = [(200, PI_BLANK_SLATE), (200, SESSION), (200, {"generation": GENERATION, "delivered": True})]
+    monkeypatch.setattr(admin, "caller_widget_id", lambda: "0a1b2c3d")
+    calls = []
+
+    def receipt(_, endpoint, route, payload=None, **_options):
+        calls.append(payload)
+        return replies[len(calls) - 1]
+
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    code = admin.main(["root", "send", ROOT, FOLLOWUP, "--generation", GENERATION,
+                       "--root-socket", "/fixture/gui.sock", "--owner-socket", "/fixture/control.sock"])
+    assert code == 0 and calls[2]["from"] == "0a1b2c3d"
 
 
 def test_send_reads_the_followup_from_stdin(monkeypatch):

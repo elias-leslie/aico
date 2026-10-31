@@ -111,7 +111,7 @@ export function laneView(session: unknown, host: string | null): LaneView | null
 /** A title safe inside a pasted line: no control, bidi or zero-width
  * characters, no brackets, quotes or backticks, no leading `/` or `!`, at most
  * 60 characters. */
-export function laneTitle(raw: string): string {
+export function laneTitle(raw: string, max = TITLE_MAX_CHARS): string {
   let title = raw
     .replace(ONE_LINE_BAD, ' ')
     .replace(/[[\]"`]/g, '')
@@ -119,7 +119,7 @@ export function laneTitle(raw: string): string {
     .trim()
   title = title.replace(/^[/!\s]+/, '')
   const chars = Array.from(title)
-  if (chars.length > TITLE_MAX_CHARS) title = `${chars.slice(0, TITLE_MAX_CHARS - 1).join('')}…`
+  if (chars.length > max) title = `${chars.slice(0, max - 1).join('')}…`
   return title || 'untitled'
 }
 
@@ -140,18 +140,32 @@ export function laneLine(
   lane: LaneSnapshot,
   extra: { minutes?: number | null; detail?: string | null; exited?: boolean } = {},
 ): string {
-  const host = lane.host && HOST_NAME.test(lane.host) ? ` on ${lane.host}` : ''
-  const request = lane.requestId && REQUEST_ID.test(lane.requestId) ? lane.requestId : null
   const what =
     outcome === 'finished'
       ? `finished${extra.minutes && extra.minutes >= 1 ? ` after ${extra.minutes}m` : ''}`
       : outcome === 'blocked'
         ? `is blocked: ${extra.detail && BLOCKING_DETAILS.has(extra.detail) ? extra.detail : 'waiting on input'}`
         : `ended${extra.exited ? ' (its agent exited)' : ''}`
-  const look = request
-    ? `st aico root status ${request}`
-    : `st aico widget status --widget-id ${lane.id}`
-  return `[Ready] lane "${laneTitle(lane.title)}"${host}${request ? ` (req ${request})` : ''} ${what} · ${look}`
+  const { name, look } = lineNames(lane)
+  return `[Ready] lane ${name} ${what} · ${look}`
+}
+
+/** A session as a line names it (its quoted title, host and request) and the
+ * command to look at it with. */
+export function lineNames(lane: {
+  id: string
+  host: string | null
+  title: string
+  requestId: string | null
+}): { name: string; look: string } {
+  const host = lane.host && HOST_NAME.test(lane.host) ? ` on ${lane.host}` : ''
+  const request = lane.requestId && REQUEST_ID.test(lane.requestId) ? lane.requestId : null
+  return {
+    name: `"${laneTitle(lane.title)}"${host}${request ? ` (req ${request})` : ''}`,
+    look: request
+      ? `st aico root status ${request}`
+      : `st aico widget status --widget-id ${lane.id}`,
+  }
 }
 
 // --- the store ------------------------------------------------------------------------

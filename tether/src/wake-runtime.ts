@@ -106,9 +106,19 @@ export function sessionWakes(sessionId: string): Record<string, unknown>[] {
   }))
 }
 
+/** The waits' own `waitingOn` (src/waits.ts), bound by the daemon. */
+let boundWaits: ((sessionId: string) => string | null) | null = null
+
+export function bindWaitingOn(waitingOn: ((sessionId: string) => string | null) | null): void {
+  boundWaits = waitingOn
+}
+
 /** What the session's agent waits on, for its descriptor (`waitingOn`): its
- * earliest check-in. A lane that waits is not reported as finished. */
+ * oldest armed wait, else its earliest check-in. A lane that waits is not
+ * reported as finished. */
 export function sessionWaitingOn(sessionId: string, now = Date.now()): string | null {
+  const wait = boundWaits?.(sessionId)
+  if (wait) return wait
   const first = bound?.checkIns(sessionId)[0]
   if (!first) return null
   return first.dueAt <= now

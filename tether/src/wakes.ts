@@ -34,6 +34,14 @@ export interface WakePolicy {
   laneBlockedSeconds: number
   /** Lane reports: at most one `finished` per lane this often; later ones fold into it. */
   laneFinishedFloorSeconds: number
+  /** Waits: the deadline when none is given. */
+  waitDefaultMinutes: number
+  /** Waits: the furthest deadline. */
+  waitMaxMinutes: number
+  /** Waits: armed waits one session may hold. */
+  maxWaitsPerSession: number
+  /** Waits: a wait that is over is kept this long (its line stays readable). */
+  waitKeepDays: number
 }
 
 export const DEFAULT_WAKE_POLICY: Readonly<WakePolicy> = Object.freeze({
@@ -48,6 +56,10 @@ export const DEFAULT_WAKE_POLICY: Readonly<WakePolicy> = Object.freeze({
   laneSettleSeconds: 12,
   laneBlockedSeconds: 3,
   laneFinishedFloorSeconds: 120,
+  waitDefaultMinutes: 1440,
+  waitMaxMinutes: 10080,
+  maxWaitsPerSession: 20,
+  waitKeepDays: 7,
 })
 
 export const WAKE_POLICY_BOUNDS: Readonly<Record<keyof WakePolicy, { min: number; max: number }>> =
@@ -63,6 +75,10 @@ export const WAKE_POLICY_BOUNDS: Readonly<Record<keyof WakePolicy, { min: number
     laneSettleSeconds: { min: 0, max: 300 },
     laneBlockedSeconds: { min: 0, max: 300 },
     laneFinishedFloorSeconds: { min: 0, max: 3600 },
+    waitDefaultMinutes: { min: 1, max: 10080 },
+    waitMaxMinutes: { min: 1, max: 43200 },
+    maxWaitsPerSession: { min: 1, max: 100 },
+    waitKeepDays: { min: 1, max: 30 },
   })
 
 export class WakePolicyError extends Error {
@@ -268,6 +284,19 @@ export class WakeStore {
          VALUES (?, ?, ?, ?, ?, 'agent', 'event', ?)`,
       )
       .run(id, input.sessionId, input.now, input.note, input.now, input.source)
+    return this.get(id) as Wake
+  }
+
+  /** A kept check-in due now for an ended session (a kept wait that became
+   * ready): the scheduler relaunches its conversation with the note. */
+  addKept(input: { ended: EndedSession; note: string; now: number }): Wake {
+    const id = this.random()
+    this.db
+      .prepare(
+        `INSERT INTO wakes (id, session_id, due_at, note, created_at, created_by, kept, ended_session)
+         VALUES (?, NULL, ?, ?, ?, 'agent', 1, ?)`,
+      )
+      .run(id, input.now, input.note, input.now, JSON.stringify(input.ended))
     return this.get(id) as Wake
   }
 
@@ -755,11 +784,11 @@ export class WakeScheduler {
     return null
   }
 
-  /** Log each new reason a session's due wakes wait, once. */
+  /** Log each new reason a session's due rows wait, once. */
   private hold(sessionId: string, reason: string): void {
     if (this.held.get(sessionId) === reason) return
     this.held.set(sessionId, reason)
-    this.ops.log(`check-in for session=${sessionId} waits: ${reason}`)
+    this.ops.log(`delivery for session=${sessionId} waits: ${reason}`)
   }
 
   private async relaunchKept(wakes: Wake[]): Promise<void> {

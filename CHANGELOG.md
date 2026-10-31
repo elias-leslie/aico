@@ -23,6 +23,14 @@
   turns shorter than the poll and turns during a Tether restart count, nothing
   repeats after a restart. `st aico watch LANE` / `st aico unwatch LANE` add
   or drop a receiver. Tether API 12.
+- Waits: `st aico wait session ID|REQ [--until finished|idle|blocked|ended]
+  [--timeout 2h] [--note T] [--key K]` tells an agent with one line when
+  another session is ready, or that the wait timed out, instead of a check-in
+  at a guessed time. A session that is already ready fires at once; each wait
+  fires once, and only a cancel is quiet. `--block` holds the command and
+  prints the line, for subagents and agents outside Aico. `st aico waits`,
+  `st aico wait cancel`, and `st aico wait time` (= `st aico wake`).
+  Tether API 13.
 
 ### Fixed
 

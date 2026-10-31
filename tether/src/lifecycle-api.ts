@@ -122,6 +122,7 @@ import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
 import { parseViewerLabel, recordSizeHolder, sizeHolderOf } from './size-holder'
 import type { Store } from './store'
+import { registerWaitRoutes, type WaitService } from './waits'
 import {
   registerWakeRoutes,
   sessionWaitingOn,
@@ -177,6 +178,8 @@ export interface LifecycleApiContext {
   placement?: Placement
   /** Lane reports; absent where Tether does not observe sessions. */
   lanes?: LaneReporter
+  /** General waits (src/waits.ts); absent where Tether does not observe sessions. */
+  waits?: WaitService
 }
 
 const NEEDS_SHAPE =
@@ -812,6 +815,11 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     () => context.lanes ?? null,
     (id) => getWidget(id) !== undefined,
   )
+  registerWaitRoutes(
+    router,
+    () => context.waits ?? null,
+    (id) => getWidget(id) !== undefined,
+  )
   registerChatRoutes(router, {
     runtime: () => agentHub,
     requireSession,
@@ -1025,17 +1033,25 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       // Kept wakes outlive the row (the End trigger drops every other one);
       // an End that does not happen takes the mark back.
       let kept = 0
+      let keptWaits = 0
       if (body.keepWakes === true && context.wakes && generationOf(row) === generation) {
         const wakes = context.wakes
-        if (wakes.store.checkIns(row.id).length)
-          kept = wakes.store.keep(row.id, await wakes.endedSnapshot(row))
+        const armed = context.waits?.store.countArmed(row.id) ?? 0
+        if (wakes.store.checkIns(row.id).length || armed) {
+          const snapshot = await wakes.endedSnapshot(row)
+          kept = wakes.store.keep(row.id, snapshot)
+          if (armed) keptWaits = context.waits?.keep(row.id, snapshot) ?? 0
+        }
       }
       const result = await endSession(params.id as string, generation)
-      if (kept) {
+      if (kept || keptWaits) {
         if (result.status === 'ended') context.wakes?.changed(null)
-        else if (getWidget(row.id)) context.wakes?.store.unkeep(row.id)
+        else if (getWidget(row.id)) {
+          context.wakes?.store.unkeep(row.id)
+          context.waits?.unkeep(row.id)
+        }
       }
-      if (result.status === 'ended') sendJson(res, 200, { ...result, keptWakes: kept })
+      if (result.status === 'ended') sendJson(res, 200, { ...result, keptWakes: kept, keptWaits })
       else if (result.status === 'absent') throw new HttpError(404, 'not_found')
       else if (result.status === 'stale') throw new HttpError(409, 'stale_generation')
       else if (result.status === 'busy') throw new HttpError(409, 'busy')
@@ -1223,8 +1239,14 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions/:id/inject', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'text', 'mode', 'submit', 'model', 'thinkingLevel'])
+      only(body, ['generation', 'text', 'mode', 'submit', 'model', 'thinkingLevel', 'from'])
       const generation = requireGeneration(body)
+      // The sending session (`st aico root send`): a wait it sets on this one
+      // counts turns from here.
+      const from = body.from
+      if (from !== undefined && (typeof from !== 'string' || !/^[0-9a-f]{8}$/.test(from)))
+        throw new HttpError(400, 'invalid_body', { field: 'from' })
+      const sentAt = Date.now()
       if (!isBoundedTerminalText(body.text)) throw new HttpError(400, 'invalid_text')
       const text = body.text
       if (body.mode !== 'type' && body.mode !== 'paste')
@@ -1268,6 +1290,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           model,
           thinkingLevel ?? null,
         )
+        if (from && from !== row.id) context.waits?.store.recordSend(from, row.id, sentAt)
         sendJson(res, 200, { generation, delivered: true, queued })
         return
       }
@@ -1283,6 +1306,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         return true
       })
       if (!delivered) throw new HttpError(409, 'workload_unavailable')
+      if (from && from !== row.id && submit) context.waits?.store.recordSend(from, row.id, sentAt)
       sendJson(res, 200, { generation, delivered: true })
     })
     // Aico has no desktop windows: a show request gets a plain refusal.
