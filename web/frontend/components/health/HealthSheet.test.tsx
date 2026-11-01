@@ -133,4 +133,22 @@ describe('HealthLauncher', () => {
       screen.getByRole('button', { name: /Nightshift isn’t answering/ }),
     ).toBeInTheDocument()
   })
+
+  it("leads with Nightshift's verdict sentence", () => {
+    health.result = {
+      available: true,
+      view: view({
+        verdict: {
+          state: 'info',
+          label: 'Nightshift is handling 2 things',
+          reason: '',
+          doing: "Nothing needs you; 2 checks queued for tonight's pass.",
+        },
+      }),
+    }
+    render(<HealthSheet open onOpenChange={() => {}} />)
+    expect(screen.getByTestId('health-verdict')).toHaveTextContent(
+      "Nothing needs you; 2 checks queued for tonight's pass.",
+    )
+  })
 })

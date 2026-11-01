@@ -126,6 +126,11 @@ function HealthBody({ view }: { view: NightshiftOwnerView | null }) {
   const findings = view?.findings ?? []
   return (
     <div className="flex flex-col gap-4">
+      {view && (view.verdict?.doing || view.verdict?.label) && (
+        <p className="text-[13px] leading-[1.4]" data-testid="health-verdict">
+          {view.verdict.doing || view.verdict.label}
+        </p>
+      )}
       <ul
         aria-label="Health at a glance"
         className="grid grid-cols-2 gap-2 md:grid-cols-4"
