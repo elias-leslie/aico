@@ -67,6 +67,9 @@ function harness(options: { store?: Store; sessions?: LocalLineage[] } = {}) {
   if (!options.store) stores.push(store)
   bindCatalog(store.db)
   const delivered: { to: string; source: string; line: string }[] = []
+  /** The receivers' delivery queues: `to|source` while undelivered. */
+  const queued = new Set<string>()
+  const withdrawn: string[] = []
   const logs: string[] = []
   const receivers = new Set([ROOT, HELPER_PARENT, LANE, WATCHER])
   const gone = new Set<string>()
@@ -76,13 +79,25 @@ function harness(options: { store?: Store; sessions?: LocalLineage[] } = {}) {
     policy: () => DEFAULT_WAKE_POLICY,
     receiver: (id) => receivers.has(id),
     sessions: () => sessions,
-    deliver: (to, source, line) => delivered.push({ to, source, line }),
+    deliver: (to, source, line) => {
+      delivered.push({ to, source, line })
+      queued.add(`${to}|${source}`)
+    },
+    withdraw: (to, source) => {
+      if (!queued.delete(`${to}|${source}`)) return 0
+      withdrawn.push(`${to}|${source}`)
+      return 1
+    },
     agentGone: (id) => gone.has(id),
     log: (line) => logs.push(line),
   }
   const reporter = new LaneReporter(new LaneReportStore(store.db), ops)
   reporters.push(reporter)
-  return { store, reporter, delivered, logs, receivers, gone, sessions }
+  /** The receiver's agent took its queued lines. */
+  const take = (to: string) => {
+    for (const key of [...queued]) if (key.startsWith(`${to}|`)) queued.delete(key)
+  }
+  return { store, reporter, delivered, queued, withdrawn, take, logs, receivers, gone, sessions }
 }
 
 /** Observe, then let `ms` pass (timers fire). */
@@ -397,6 +412,153 @@ describe('ended', () => {
       `lane=${LANE} ended -> ${WATCHER} (skipped ${ROOT},${HELPER_PARENT}: ended by its launcher ${HELPER_PARENT})`,
     )
     expect(store.db.prepare('SELECT * FROM session_end_requests').all()).toEqual([])
+  })
+
+  it("a coordinator ending its lane loses that lane's went-idle line still queued for it", () => {
+    const { reporter, delivered, queued, withdrawn, logs, store } = harness()
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: ROOT })
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    step(reporter, { state: 'idle', stateAgentAt: 200 }, SETTLE)
+    expect(delivered.map((d) => d.source)).toEqual([`lane:${LANE}:finished`])
+    // The root is mid-turn (the line waits), then ends the lane in that turn.
+    const lanes = new LaneReportStore(store.db)
+    lanes.markEnd(LANE, ROOT, Date.now())
+    removeWidget(LANE)
+    lanes.unmarkEnd(LANE)
+    reporter.drainOutbox()
+    expect(withdrawn).toEqual([`${ROOT}|lane:${LANE}:finished`])
+    expect(queued.size).toBe(0)
+    expect(delivered).toHaveLength(1) // no ended line either
+    expect(logs).toContain(
+      `lane=${LANE} ended: withdrew queued ${ROOT}:finished (ended by ${ROOT})`,
+    )
+  })
+
+  it('a launcher ending its helper takes back the queued lines of both launcher and root', () => {
+    const { reporter, delivered, queued, withdrawn, store } = harness()
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(HELPER_PARENT, 'claude-code', 1_000)
+    insertWidget(WATCHER, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: HELPER_PARENT })
+    reporter.setWatch(WATCHER, LANE, 'watch')
+    const lane = { parentId: HELPER_PARENT }
+    step(reporter, { ...lane, state: 'working', stateAgentAt: 100 })
+    step(reporter, { ...lane, state: 'idle', stateAgentAt: 200 }, SETTLE)
+    step(reporter, { ...lane, state: 'working', stateAgentAt: 300 })
+    step(
+      reporter,
+      { ...lane, state: 'blocked', stateDetail: 'permission prompt', stateAt: Date.now() },
+      DEFAULT_WAKE_POLICY.laneBlockedSeconds * 1000,
+    )
+    expect(delivered.map((d) => `${d.to}|${d.source}`).sort()).toEqual(
+      [
+        `${HELPER_PARENT}|lane:${LANE}:finished`,
+        `${WATCHER}|lane:${LANE}:finished`,
+        `${ROOT}|lane:${LANE}:blocked`,
+        `${HELPER_PARENT}|lane:${LANE}:blocked`,
+        `${WATCHER}|lane:${LANE}:blocked`,
+      ].sort(),
+    )
+    const lanes = new LaneReportStore(store.db)
+    lanes.markEnd(LANE, HELPER_PARENT, Date.now())
+    removeWidget(LANE)
+    lanes.unmarkEnd(LANE)
+    reporter.drainOutbox()
+    expect(withdrawn.sort()).toEqual(
+      [
+        `${HELPER_PARENT}|lane:${LANE}:finished`,
+        `${HELPER_PARENT}|lane:${LANE}:blocked`,
+        `${ROOT}|lane:${LANE}:blocked`,
+      ].sort(),
+    )
+    // The explicit watcher keeps its queue; its ended line follows.
+    expect([...queued].sort()).toEqual(
+      [
+        `${WATCHER}|lane:${LANE}:finished`,
+        `${WATCHER}|lane:${LANE}:blocked`,
+        `${WATCHER}|lane:${LANE}:ended`,
+      ].sort(),
+    )
+  })
+
+  it('a line already delivered stays; only the one still queued goes', () => {
+    const { reporter, queued, withdrawn, take, store } = harness()
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: ROOT })
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    step(reporter, { state: 'idle', stateAgentAt: 200 }, SETTLE)
+    take(ROOT) // the root took the went-idle line
+    step(reporter, { state: 'working', stateAgentAt: 300 })
+    step(
+      reporter,
+      { state: 'blocked', stateDetail: 'input needed', stateAt: Date.now() },
+      DEFAULT_WAKE_POLICY.laneBlockedSeconds * 1000,
+    )
+    const lanes = new LaneReportStore(store.db)
+    lanes.markEnd(LANE, ROOT, Date.now())
+    removeWidget(LANE)
+    lanes.unmarkEnd(LANE)
+    reporter.drainOutbox()
+    expect(withdrawn).toEqual([`${ROOT}|lane:${LANE}:blocked`])
+    expect(queued.size).toBe(0)
+  })
+
+  it("an End without endedBy, or the root ending someone else's helper, keeps the others' queues", () => {
+    const { reporter, queued, withdrawn, store } = harness()
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(HELPER_PARENT, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: HELPER_PARENT })
+    const lane = { parentId: HELPER_PARENT }
+    step(reporter, { ...lane, state: 'working', stateAgentAt: 100 })
+    step(reporter, { ...lane, state: 'idle', stateAgentAt: 200 }, SETTLE)
+    // The owner closes it: no endedBy, nothing withdrawn.
+    removeWidget(LANE)
+    reporter.drainOutbox()
+    expect(withdrawn).toEqual([])
+    expect([...queued].sort()).toEqual(
+      [
+        `${HELPER_PARENT}|lane:${LANE}:finished`,
+        `${HELPER_PARENT}|lane:${LANE}:ended`,
+        `${ROOT}|lane:${LANE}:ended`,
+      ].sort(),
+    )
+    // The root ends a helper HELPER_PARENT launched: the launcher keeps its line.
+    queued.clear()
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: HELPER_PARENT })
+    step(reporter, { ...lane, generation: 'g2', state: 'working', stateAgentAt: 300 })
+    step(reporter, { ...lane, generation: 'g2', state: 'idle', stateAgentAt: 400 }, SETTLE)
+    const lanes = new LaneReportStore(store.db)
+    lanes.markEnd(LANE, ROOT, Date.now())
+    removeWidget(LANE)
+    lanes.unmarkEnd(LANE)
+    reporter.drainOutbox()
+    expect(withdrawn).toEqual([])
+    expect([...queued].sort()).toEqual(
+      [`${HELPER_PARENT}|lane:${LANE}:finished`, `${HELPER_PARENT}|lane:${LANE}:ended`].sort(),
+    )
+  })
+
+  it("an exit's ended line still queued goes when the root then ends the lane", () => {
+    const { reporter, queued, withdrawn, gone, store } = harness()
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: ROOT })
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    gone.add(LANE)
+    step(reporter, { state: 'unknown', stateAgentAt: 100 }, SETTLE)
+    const lanes = new LaneReportStore(store.db)
+    lanes.markEnd(LANE, ROOT, Date.now())
+    removeWidget(LANE)
+    lanes.unmarkEnd(LANE)
+    reporter.drainOutbox()
+    expect(withdrawn).toEqual([`${ROOT}|lane:${LANE}:ended`])
+    expect(queued.size).toBe(0)
   })
 
   it('the root ending a helper someone else launched still tells that launcher', () => {

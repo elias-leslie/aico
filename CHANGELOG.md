@@ -4,6 +4,12 @@
 
 ### Added
 
+- A lane's queued report lines go once the receiver has ended that lane: when
+  an End names `endedBy`, the sessions it spares the `ended` line (the ender,
+  and the root when the ender is the launcher) also lose that lane's
+  still-undelivered went idle, blocked or exit lines through the delivery
+  queue's withdraw. Delivered lines, explicit watchers, other receivers and
+  Ends without `endedBy` are unchanged.
 - No lane `ended` line for the session that ended the lane itself (Tether API
   21, schema 24). `st aico root end` sends End `endedBy` (the caller's own
   session) to a local Tether at 21 or later; Tether records it in the lane's

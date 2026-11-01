@@ -545,6 +545,7 @@ export async function startDaemon(
           wakes.store.addEvent({ sessionId: receiver, source, note: line, now })
           wakes.changed(receiver)
         },
+        withdraw: (receiver, source) => wakes.withdrawEvents(receiver, source).withdrawn,
         agentGone: (id) => {
           const row = getWidget(id)
           if (!row || row.backend === 'agent-hub') return false

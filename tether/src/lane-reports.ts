@@ -28,6 +28,9 @@
 //   session that asked for the End (`endedBy`, recorded in the outbox row)
 //   gets no line for it, nor does the root when that session is the lane's
 //   launcher; an explicit watcher and everyone else do. Without `endedBy` all do.
+//   Those spared sessions also lose the lane's lines still queued for them
+//   (went idle, blocked, an exit's ended): they ended it, so the lines are
+//   stale. A line already delivered (or going out now) stays.
 //
 // Each report is one event line queued on the receiver's delivery queue
 // (wakes, kind `event`): pasted once the agent is idle, nobody is typing and
@@ -37,7 +40,8 @@ import type { DatabaseSync } from 'node:sqlite'
 import { AGENT_STATES, type AgentState } from './agent-state'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 
-export type LaneOutcome = 'finished' | 'blocked' | 'ended'
+export const LANE_OUTCOMES = ['finished', 'blocked', 'ended'] as const
+export type LaneOutcome = (typeof LANE_OUTCOMES)[number]
 
 /** Blocked details that report `blocked`. `dialog open` (the owner opening
  * `/model` in the lane) does not. */
@@ -443,6 +447,9 @@ export interface LaneReportOperations {
   sessions(): LocalLineage[]
   /** Queue one line on the receiver's delivery queue (coalescing by source). */
   deliver(receiver: string, source: string, line: string): void
+  /** Take back the receiver's still-queued line from this source (the queue's
+   * withdraw: a row going out right now is not stopped). Returns rows taken. */
+  withdraw(receiver: string, source: string): number
   /** A local lane's agent has left its pane for good: a clean exit, or crash
    * recovery holds it. */
   agentGone(id: string): boolean
@@ -751,6 +758,30 @@ export class LaneReporter {
     return [...out].filter((id) => id !== lane.id && !unwatched.has(id) && this.ops.receiver(id))
   }
 
+  /** Who gets no `ended` line because `endedBy` ended the lane: the ender,
+   * and the root when the ender is the lane's launcher; never an explicit
+   * watcher other than the ender. */
+  private endSkip(
+    lane: LaneSnapshot,
+    endedBy: string | null,
+  ): { skip: Set<string>; launcher: boolean } {
+    const skip = new Set<string>()
+    if (!endedBy) return { skip, launcher: false }
+    // The session that ended the lane itself already knows. A lane its own
+    // launcher ended is that launcher's business: its root hears nothing
+    // either (an explicit watcher still does).
+    const launcher =
+      lane.launched &&
+      lane.coordinatorId !== null &&
+      endedBy === (lane.parentId ?? lane.coordinatorId)
+    skip.add(endedBy)
+    if (launcher && lane.coordinatorId) skip.add(lane.coordinatorId)
+    for (const watch of this.store.watches())
+      if (watch.lane === lane.id && watch.mode === 'watch' && watch.watcher !== endedBy)
+        skip.delete(watch.watcher)
+    return { skip, launcher }
+  }
+
   private fire(
     outcome: LaneOutcome,
     lane: LaneSnapshot,
@@ -758,22 +789,7 @@ export class LaneReporter {
     endedBy: string | null = null,
   ): void {
     const all = this.receivers(outcome, lane)
-    // The session that ended the lane itself already knows. A lane its own
-    // launcher ended is that launcher's business: its root hears nothing
-    // either (an explicit watcher still does).
-    const launcher =
-      endedBy !== null &&
-      lane.launched &&
-      lane.coordinatorId !== null &&
-      endedBy === (lane.parentId ?? lane.coordinatorId)
-    const skip = new Set<string>()
-    if (endedBy) {
-      skip.add(endedBy)
-      if (launcher && lane.coordinatorId) skip.add(lane.coordinatorId)
-      for (const watch of this.store.watches())
-        if (watch.lane === lane.id && watch.mode === 'watch' && watch.watcher !== endedBy)
-          skip.delete(watch.watcher)
-    }
+    const { skip, launcher } = this.endSkip(lane, endedBy)
     const receivers = all.filter((id) => !skip.has(id))
     const where = lane.host ? `${lane.host}/${lane.id}` : lane.id
     const dropped = all.filter((id) => skip.has(id))
@@ -789,27 +805,38 @@ export class LaneReporter {
     this.ops.log(`lane=${where} ${outcome} -> ${receivers.join(',')}${skipped}`)
   }
 
+  /** The sessions an End spared the `ended` line lose the lane's lines still
+   * queued for them: they ended it themselves (or their lane did). */
+  private withdrawStale(lane: LaneSnapshot, endedBy: string | null): void {
+    const { skip } = this.endSkip(lane, endedBy)
+    const where = lane.host ? `${lane.host}/${lane.id}` : lane.id
+    const taken: string[] = []
+    for (const receiver of skip)
+      for (const outcome of LANE_OUTCOMES) {
+        const n = this.ops.withdraw(receiver, `lane:${where}:${outcome}`)
+        if (n > 0) taken.push(`${receiver}:${outcome}${n > 1 ? `x${n}` : ''}`)
+      }
+    if (taken.length)
+      this.ops.log(`lane=${where} ended: withdrew queued ${taken.join(',')} (ended by ${endedBy})`)
+  }
+
   /** Ended lanes the delete trigger recorded on this computer. */
   drainOutbox(): void {
     if (this.stopped) return
     for (const row of this.store.outbox()) {
       this.store.transaction(() => {
         const cursor = this.store.get('', row.lane)
-        if (!cursor?.ended)
-          this.fire(
-            'ended',
-            {
-              id: row.lane,
-              host: null,
-              title: row.title ?? cursor?.title ?? row.lane,
-              requestId: row.requestId ?? cursor?.requestId ?? null,
-              coordinatorId: row.coordinatorId,
-              parentId: row.parentId,
-              launched: row.launched,
-            },
-            {},
-            row.endedBy,
-          )
+        const lane: LaneSnapshot = {
+          id: row.lane,
+          host: null,
+          title: row.title ?? cursor?.title ?? row.lane,
+          requestId: row.requestId ?? cursor?.requestId ?? null,
+          coordinatorId: row.coordinatorId,
+          parentId: row.parentId,
+          launched: row.launched,
+        }
+        this.withdrawStale(lane, row.endedBy)
+        if (!cursor?.ended) this.fire('ended', lane, {}, row.endedBy)
         this.store.forget('', row.lane)
         this.store.takeOutbox(row.id)
       })
