@@ -20,9 +20,11 @@ TETHER = "/fixture/run/tether/default/control.sock"
 
 @pytest.fixture(autouse=True)
 def bare_environment(monkeypatch):
-    """Start every case with no transport variables set."""
+    """Start every case with no transport variables set, and no calling session (an ancestor's
+    AICO_WIDGET_ID would otherwise reach root end's endedBy probe)."""
     for name in TRANSPORT:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(admin, "caller_widget_id", lambda: None)
 
 
 def record(monkeypatch, responses):
