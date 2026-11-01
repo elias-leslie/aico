@@ -26,13 +26,16 @@ import {
   joinCoordinator,
   listTmuxServers,
   markTmuxServerDead,
+  promoteCoordinatorLanes,
   recordLauncher,
   relaunchLauncher,
   removeWidgetIfOwnership,
   setCoordinator,
   setWidgetOwnership,
   setWidgetPendingScope,
+  type WidgetRow,
 } from './catalog'
+import { badge } from './display'
 
 const store = new Store(':memory:')
 const migratedScopeServer = '00000000000000000000000000000000'
@@ -672,6 +675,49 @@ describe('coordinators', () => {
     expect(getWidget('e0000008')?.parentId).toBe('e0000007')
     expect(getWidget('e0000009')?.parentId).toBe('e0000008')
     expect(getWidget('e000000a')?.parentId).toBe('e0000009')
+  })
+
+  it('promotes coordinator-role lanes when their coordinator ends', () => {
+    const ids = ['f0000001', 'f0000002', 'f0000003', 'f0000004', 'f0000005', 'f0000006']
+    for (const id of ids) insertWidget(id, 'codex')
+    const [old, handoff, helper, plain, nested, other] = ids
+    const role = (id: string, workRole: string) =>
+      store.db
+        .prepare(
+          `INSERT INTO root_requests (request_id, digest, widget_id, logical_session_id, role, created_at, origin, work_role)
+           VALUES (?, ?, ?, ?, 'lead', 0, 'aico', ?)`,
+        )
+        .run(`req-${id}`, 'd', id, `logical-${id}`, workRole)
+    recordLauncher(handoff, old)
+    recordLauncher(plain, old)
+    recordLauncher(helper, handoff)
+    recordLauncher(nested, helper)
+    recordLauncher(other, old)
+    role(handoff, 'coordinator')
+    role(plain, 'builder')
+    role(other, 'coordinator')
+    // While the old coordinator runs, a coordinator-role lane stays a lane.
+    expect(badge(getWidget(handoff) as WidgetRow)?.kind).toBe('child')
+    expect(getWidget(handoff)?.coordinatorId).toBe(old)
+    expect(promoteCoordinatorLanes('f0000099')).toEqual([])
+    store.db.prepare('DELETE FROM sessions WHERE id = ?').run(old)
+    expect(new Set(promoteCoordinatorLanes(old))).toEqual(new Set([handoff, other, helper, nested]))
+    const color = getWidget(handoff)?.coordinatorColor
+    expect(color).toBeTruthy()
+    expect(badge(getWidget(handoff) as WidgetRow)?.kind).toBe('coordinator')
+    expect(lineage(handoff)).toEqual([true, null, color])
+    expect(getWidget(handoff)?.parentId).toBeNull()
+    expect(getWidget(other)?.coordinator).toBe(true)
+    expect(getWidget(other)?.coordinatorColor).not.toBe(color)
+    // Its lanes move under it and keep their own parents.
+    expect(lineage(helper)).toEqual([false, handoff, color])
+    expect(getWidget(helper)?.parentId).toBe(handoff)
+    expect(lineage(nested)).toEqual([false, handoff, color])
+    expect(getWidget(nested)?.parentId).toBe(helper)
+    // A lane without the coordinator work role keeps its ended coordinator.
+    expect(getWidget(plain)?.coordinatorId).toBe(old)
+    expect(getWidget(plain)?.parentId).toBe(old)
+    expect(promoteCoordinatorLanes(old)).toEqual([])
   })
 
   it('records the direct launcher as parent, three deep, beside the root', () => {

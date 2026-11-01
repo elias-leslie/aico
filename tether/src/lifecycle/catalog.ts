@@ -931,6 +931,43 @@ export function listLanes(id: string): string[] {
   ).map((lane) => lane.id)
 }
 
+/** Called once session `endedId` has ended. Each running lane of it whose
+ * root work role is `coordinator` becomes its own coordinator, and the lanes
+ * those launched (by parent, any depth) move under it, keeping their parents.
+ * Other lanes keep the ended coordinator, as a lane always hands it down.
+ * Returns the ids whose descriptors changed. */
+export function promoteCoordinatorLanes(endedId: string): string[] {
+  const lanes = db
+    .prepare('SELECT id, parent_id AS parentId FROM sessions WHERE coordinator_id = ?')
+    .all(endedId) as { id: string; parentId: string | null }[]
+  if (lanes.length === 0) return []
+  const roles = db.prepare('SELECT 1 FROM root_requests WHERE widget_id = ? AND work_role = ?')
+  const promoted = new Set(
+    lanes.filter((lane) => roles.get(lane.id, 'coordinator') !== undefined).map((lane) => lane.id),
+  )
+  if (promoted.size === 0) return []
+  const parents = new Map(lanes.map((lane) => [lane.id, lane.parentId]))
+  const changed = [...promoted]
+  for (const id of promoted) setCoordinator(id, true)
+  for (const lane of lanes) {
+    if (promoted.has(lane.id)) continue
+    const seen = new Set<string>()
+    let up = lane.parentId
+    while (up && !promoted.has(up) && !seen.has(up)) {
+      seen.add(up)
+      up = parents.get(up) ?? null
+    }
+    if (!up || !promoted.has(up)) continue
+    db.prepare('UPDATE sessions SET coordinator_id = ?, coordinator_color = ? WHERE id = ?').run(
+      up,
+      getWidget(up)?.coordinatorColor ?? null,
+      lane.id,
+    )
+    changed.push(lane.id)
+  }
+  return changed
+}
+
 /** Make an existing session a lane of `coordinatorId`'s root coordinator
  * (for sessions launched before lineage was recorded), with `coordinatorId`
  * as its parent. The session stops being a coordinator and its own lanes

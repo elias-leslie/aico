@@ -65,6 +65,7 @@ import {
   listTmuxServers,
   listWidgets,
   markTmuxServerDead,
+  promoteCoordinatorLanes,
   removeWidgetIfOwnership,
   setWidgetPendingScope,
   setWidgetProject,
@@ -2685,8 +2686,14 @@ async function endAgentHubSession(
   if (result.status === 'ended') {
     statusCache.delete(widgetId)
     publishSession(widgetId, { ended: true })
+    publishPromotedLanes(widgetId)
   }
   return result
+}
+
+/** A coordinator's End leaves its coordinator-role lanes as coordinators. */
+function publishPromotedLanes(endedId: string): void {
+  for (const id of promoteCoordinatorLanes(endedId)) publishSession(id, { force: true })
 }
 
 function drainWidgetRetire(id: string): void {
@@ -2753,6 +2760,7 @@ async function discardWidgetOwned(
       contextStatuses.delete(id)
       ensureFailures.delete(id)
       publishSession(id, { ended: true })
+      publishPromotedLanes(id)
       const finalized = await finalizeContext(getTui(row.tool), row.sessionId)
       if (finalized !== null) {
         if (!finalized)
