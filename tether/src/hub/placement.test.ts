@@ -94,7 +94,8 @@ const PVE = { ssh: 'pve', node: 'pve', vmid: 200, storage: 'local-lvm' }
 interface World {
   admission: string | null
   guest: string
-  proxmox: string
+  /** null: the Proxmox host does not answer (ssh fails). */
+  proxmox: string | null
   peerLive: boolean
   peerState: string
   hosts: string[]
@@ -172,7 +173,13 @@ describe('placement', () => {
         world.runs.push(argv)
         const line = argv.at(-1) ?? ''
         if (argv[0] === '/usr/bin/ssh' && argv.includes('pve'))
-          return { code: 0, stdout: world.proxmox, output: '' }
+          return world.proxmox === null
+            ? {
+                code: 255,
+                stdout: '',
+                output: 'ssh: connect to host pve port 22: No route to host',
+              }
+            : { code: 0, stdout: world.proxmox, output: '' }
         if (line.includes(GUEST_LINE)) return { code: 0, stdout: world.guest, output: '' }
         if (line.includes('cat ') && line.includes('live-ready.json')) {
           const marker = world.files[argv.includes('box') ? 'box:live-ready' : 'vm:live-ready']
@@ -444,6 +451,24 @@ describe('placement', () => {
     const full = await tight.placement.place('wake', needs(1))
     expect(full.kind).toBe('at_capacity')
     expect(full.verdicts[0]?.reason).toMatch(/powered off; starting it needs 16.0 GiB/)
+  })
+
+  it('goes to the next pool host when the Proxmox host cannot be read', async () => {
+    const { world, placement } = setup(
+      { ...CONFIG, order: ['local'], pools: { hunt: ['vm', 'local'] } },
+      { proxmox: null, peerLive: false, peerState: 'offline' },
+    )
+    const placed = await placement.place('h1', needs(4), 'hunt')
+    // host null is this computer.
+    expect(placed).toMatchObject({ kind: 'placed', host: null })
+    expect(placed.verdicts.map((v) => v.host)).toEqual(['vm', 'local'])
+    expect(placement.list()).toEqual([expect.objectContaining({ requestId: 'h1', host: 'local' })])
+    expect(placed.verdicts[0]).toMatchObject({ fits: false, room: null })
+    expect(placed.verdicts[0]?.reason).toMatch(
+      /^the Proxmox reading failed \(ssh: connect to host pve/,
+    )
+    // Never woken or read over its link while Proxmox is unreadable.
+    expect(world.runs.some((argv) => (argv.at(-1) ?? '').includes(GUEST_LINE))).toBe(false)
   })
 
   it('takes the smaller of the VM and Proxmox room, and refuses low storage or pressure', async () => {
