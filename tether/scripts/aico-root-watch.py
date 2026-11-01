@@ -1411,6 +1411,8 @@ def launch_row(role: str, tool: str) -> dict | None:
         except (ValueError, IndexError, AttributeError):
             detail = ""
         detail = re.sub(r"[^\x20-\x7e]", "", detail.partition("): ")[2])[:600]
+        if "Unknown work role" not in detail:
+            return None  # e.g. an unknown tool: Tether answers with its supportedTools
         raise ValueError(f"--work-role {role} is not a work role Agent Hub knows. {detail}".strip())
     try:
         data = json.loads(result.stdout)
@@ -1447,6 +1449,17 @@ def apply_launch_defaults(args: argparse.Namespace, row: dict) -> dict:
             args.daybreak = "on" if row["daybreak"] else "off"
             applied["daybreak"] = row["daybreak"]
     return applied
+
+
+def retry_flags(applied: dict) -> list[str]:
+    """The flags that repeat what the launch table filled in."""
+    flags = ["--blank-slate"] * (applied.get("context") == "blank-slate")
+    for key, flag in (("model", "--model"), ("reasoningEffort", "--reasoning-effort")):
+        if key in applied:
+            flags += [flag, str(applied[key])]
+    if "daybreak" in applied:
+        flags += ["--daybreak", "on" if applied["daybreak"] else "off"]
+    return flags
 
 
 def prompt_error(prompt: object) -> str | None:
@@ -1540,7 +1553,8 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--facet")
     parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID; owner adapter validates format/support")
     parser.add_argument("--model", help="per-launch model; Pi requires provider/model, Codex a bare name from its catalog (gpt-6.1-sol), Claude Code an alias or full name (claude-haiku-5-5). "
-                        "Default: Agent Hub's launch table for the work role and tool (st models route --role ROLE --tool TOOL), with its effort and Daybreak")
+                        "Default: Agent Hub's launch table for the work role and tool (st models route --role ROLE --tool TOOL), with its effort and Daybreak. "
+                        "Create prints what it filled in (launchDefault.applied, retryWith): on a retry pass those values explicitly so the request digest stays the same")
     parser.add_argument("--reasoning-effort", choices=EFFORTS)
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; leaves shared defaults alone. Codex: only models its catalog lists with "
                         "Daybreak for this account (on any other, create refuses and names the ones that have it); "
@@ -1597,7 +1611,9 @@ def create_main(argv: list[str]) -> int:
         try:
             launch = launch_row(args.work_role, args.tool)
         except ValueError as error:
-            refuse(str(error))
+            if args.resume_session is None:  # a resumed session keeps the role it was started with
+                refuse(str(error))
+            launch = None
         if launch is not None:
             applied = apply_launch_defaults(args, launch)
     if args.blank_slate:
@@ -1662,6 +1678,9 @@ def create_main(argv: list[str]) -> int:
     if launch is not None:
         output["launchDefault"] = {"job": launch.get("job"), "applied": applied,
                                    "table": f"st models route --role {args.work_role} --tool {args.tool}"}
+        if applied:
+            # The filled values are part of the request digest: a retry passes them as flags so the digest stays the same.
+            output["launchDefault"]["retryWith"] = " ".join(retry_flags(applied))
         if launch.get("use") is not True:
             output["launchDefault"]["note"] = str(launch.get("why") or "")[:300]
     elif args.work_role is not None and args.resume_session is None and args.tool in LAUNCH_TOOLS:

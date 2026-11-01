@@ -707,7 +707,8 @@ def test_table_model_effort_and_blank_slate_apply_when_not_given(monkeypatch):
     assert "daybreak" not in calls[0]
     assert output[0]["launchDefault"] == {
         "job": "testing", "table": "st models route --role verification --tool claude-code",
-        "applied": {"context": "blank-slate", "model": "claude-haiku-5-5", "reasoningEffort": "high"}}
+        "applied": {"context": "blank-slate", "model": "claude-haiku-5-5", "reasoningEffort": "high"},
+        "retryWith": "--blank-slate --model claude-haiku-5-5 --reasoning-effort high"}
 
 
 def test_explicit_flags_win_over_the_table(monkeypatch):
@@ -801,3 +802,49 @@ def test_launch_row_refuses_unknown_roles_and_jobs_that_are_not_work_roles(monke
 def test_launch_row_is_none_when_the_table_cannot_be_read(monkeypatch, returncode, stdout, stderr):
     lookup, _ = _st_route(monkeypatch, returncode, stdout, stderr)
     assert lookup("implementation", "codex") is None
+
+
+@pytest.mark.parametrize("given", [["--project", "sample-app"], ["--project-root", "/fixture/project"]])
+def test_table_blank_slate_does_not_apply_when_only_one_project_flag_is_given(monkeypatch, capsys, given):
+    served(monkeypatch, table_row())
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *a, **k: pytest.fail("contacted owner"))
+    with pytest.raises(SystemExit):
+        admin.main(["create", "half-1", "Try it.", "--tool", "claude-code", "--work-role", "verification", *given])
+    assert "--project and --project-root are required unless --blank-slate" in capsys.readouterr().err
+
+
+def test_table_pi_model_passes_the_pi_model_check(monkeypatch):
+    row = table_row(model="opencode-go/deepseek-v4.1-flash", effort="high")
+    calls, output = served(monkeypatch, row)
+    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)
+    assert admin.main(["create", "pi-table-1", "Try it.", "--tool", "pi", "--work-role", "verification"]) == 0
+    assert (calls[0]["tool"], calls[0]["model"], calls[0]["reasoningEffort"]) == ("pi", "opencode-go/deepseek-v4.1-flash", "high")
+    assert output[0]["launchDefault"]["retryWith"] == "--blank-slate --model opencode-go/deepseek-v4.1-flash --reasoning-effort high"
+
+
+def test_create_prints_the_flags_that_repeat_what_the_table_filled_in(monkeypatch):
+    row = table_row(job="hunting", model="gpt-6-sol", effort="xhigh", daybreak=True, context="full")
+    _, output = served(monkeypatch, row)
+    assert admin.main(["create", "hunt-2", "Hunt.", "--tool", "codex", "--work-role", "hunting",
+                       "--project", "neri-hunters", "--project-root", "/fixture/project"]) == 0
+    assert output[0]["launchDefault"]["retryWith"] == "--model gpt-6-sol --reasoning-effort xhigh --daybreak on"
+
+
+def test_a_422_for_an_unknown_tool_leaves_the_answer_to_tether(monkeypatch):
+    lookup, _ = _st_route(monkeypatch, 1, stderr=json.dumps({"error": "API error (422): Unknown tool 'gemini'."}) + "\n")
+    assert lookup("review", "gemini") is None
+    lookup, _ = _st_route(monkeypatch, 1, stderr=json.dumps({"error": "API error (422): Unknown work role or job 'tester'."}) + "\n")
+    with pytest.raises(ValueError, match="tester is not a work role"):
+        lookup("tester", "claude-code")
+
+
+def test_resume_is_not_refused_over_a_work_role_agent_hub_no_longer_lists(monkeypatch):
+    def lookup(role, tool):
+        raise ValueError(f"--work-role {role} is not a work role Agent Hub knows.")
+
+    calls = []
+    monkeypatch.setattr(admin, "launch_row", lookup)
+    monkeypatch.setattr(admin.Collector, "receipt", lambda _, path, route, payload, **k: (calls.append(payload), (200, descriptor(payload)))[1])
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    argv = [arg if arg != "codex" else "claude-code" for arg in BASE]
+    assert admin.main(argv) == 0 and calls[0]["resumeSessionId"] == THREAD

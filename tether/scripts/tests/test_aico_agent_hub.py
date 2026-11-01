@@ -276,3 +276,14 @@ def test_status_shows_why_a_turn_did_not_start(monkeypatch):
     assert admin.main(["root", "status", "hub-1", "--root-socket", "/fixture/gui.sock"]) == 0
     assert output[0]["error"] == {"code": "agent_hub_refused", "message": "no route"}
     assert output[0]["promptSent"] is False
+
+
+def test_a_blank_slate_work_role_gives_the_chat_the_hub_workspace(monkeypatch):
+    row = {"job": "review", "model": None, "effort": None, "daybreak": None, "context": "blank-slate", "use": None,
+           "work_roles": ["review"], "why": ""}
+    monkeypatch.setattr(admin, "launch_row", lambda role, tool: row)
+    code, calls, output = run_create(monkeypatch, ["create", "hub-3", "Review.", "--tool", "agent-hub", "--agent", "chat",
+                                                   "--work-role", "review", "--root-socket", "/fixture/gui.sock"])
+    assert code == 0
+    assert (calls[0]["projectId"], calls[0]["projectRoot"]) == ("agent-hub", f"{admin.HUB_BLANK_SLATE_BASE}/hub-3")
+    assert "model" not in calls[0] and output[0]["launchDefault"]["applied"] == {"context": "blank-slate"}
