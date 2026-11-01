@@ -181,10 +181,13 @@ HOST_WAIT_NOTICE_SECONDS = 3
 REFUSED_CREATES = frozenset({"request_conflict", "recovery_pending", "agent_hub_unavailable", "at_capacity"})
 # `--host auto`: Tether picks the host from live readings (tether/src/hub/placement.ts).
 AUTO_HOST = "auto"
+# This computer by name: `--host local --needs` books a reservation here like a VM create does.
+LOCAL_HOST = "local"
 CAPABILITY = r"[a-z0-9][a-z0-9-]{0,31}"
 MEMORY_UNITS = {"k": 1024, "m": 1024 ** 2, "g": 1024 ** 3, "t": 1024 ** 4}
 # At most this many hosts' reasons in an at-capacity answer (Tether sends no more).
 MAX_PLACEMENT_HOSTS = 16
+MAX_RESERVATIONS = 500
 # A placement pool from ~/.config/tether/placement.json `pools` (default: `order`).
 POOL = r"[a-z0-9][a-z0-9-]{0,31}"
 MAX_POOLS = 32
@@ -1572,7 +1575,7 @@ def create_main(argv: list[str]) -> int:
         "auto: Tether picks the first host with room for --needs from live readings, or answers "
         "at_capacity with each host's reason (st aico placement shows it without starting anything)"))
     parser.add_argument("--needs", metavar="mem=6G,cpu=2[,cap=live-ready]", help=(
-        "with --host auto or --host NAME: what the session needs; held for it on that host until it ends. "
+        "with --host auto, --host local (this computer) or --host NAME: what the session needs; held for it on that host until it ends. "
         "With a named host Tether rechecks that host's room first and answers at_capacity if it no longer fits"))
     parser.add_argument("--pool", type=pool_name, metavar="NAME", help=(
         "with --host auto: pick only from this placement pool (placement.json pools, e.g. neri-hunt); "
@@ -1691,7 +1694,7 @@ def create_main(argv: list[str]) -> int:
             prompt = "Resume this exact saved session. Reconcile current state after the crash before continuing."
         if (problem := prompt_error(prompt)) is not None:
             refuse(problem)
-        if args.host and not auto:
+        if args.host and not auto and args.host != LOCAL_HOST:
             # This computer's Codex and Pi logins say nothing about the host's; ask its Tether.
             if (reason := host_tool_unavailable(collector, endpoint, args.host, args.tool)):
                 refuse(reason)
@@ -1699,11 +1702,12 @@ def create_main(argv: list[str]) -> int:
             # Nothing reaches Tether, so the same request id can be retried with the right provider.
             # An entry's Pi has its own provider setup; this computer's says nothing about it.
             refuse(reason)
-        if not args.host and args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
+        on_this_computer = args.host in (None, LOCAL_HOST)
+        if on_this_computer and args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
             # Nothing reaches Tether, so the same request id can be retried after the reset.
             refuse(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
         # This computer's Codex login and catalog say nothing about an entry's Codex.
-        local_codex = not args.host and args.tool == "codex" and args.entry is None
+        local_codex = on_this_computer and args.tool == "codex" and args.entry is None
         if local_codex and (reason := codex_model_unavailable(args.model)):
             # Nothing reaches Tether, so the same request id can be retried with the right model.
             refuse(reason)
@@ -1766,7 +1770,7 @@ def create_main(argv: list[str]) -> int:
             f"st aico create: starting on {'the host Tether picks' if auto else args.host}; "
             "if it is off this waits for it to power on "
             f"(up to {HOST_CREATE_SECONDS // 60} min)", file=sys.stderr, flush=True))
-        if args.host:
+        if args.host and args.host != LOCAL_HOST:
             waiting.daemon = True
             waiting.start()
         try:
@@ -2517,13 +2521,19 @@ def placement_main(argv: list[str]) -> int:
         emit_unless_stopped(collector, {"status": "unavailable",
                                         "reason": data.get("error") if isinstance(data.get("error"), str) else "placement_unavailable"})
         return 1
+    reservations = data.get("reservations")
+    # null (an older Tether that does not report them) is "unknown", never "none held".
+    reservations = ([{key: item[key] for key in ("requestId", "host", "memBytes", "cpu", "at", "state") if key in item}
+                     for item in reservations[:MAX_RESERVATIONS] if isinstance(item, dict)]
+                    if isinstance(reservations, list) else None)
     hosts = [{key: item[key] for key in ("host", "fits", "reason", "room", "wake") if key in item}
              for item in data["hosts"][:MAX_PLACEMENT_HOSTS] if isinstance(item, dict)
              and isinstance(item.get("host"), str) and re.fullmatch(HOST_NAME, item["host"])]
     picked = data.get("host")
     pool = data.get("pool") if isinstance(data.get("pool"), str) and re.fullmatch(POOL, data["pool"]) else None
     emit_json(collector, {"needs": needs, "pool": pool or args.pool or "default",
-                          "host": picked if isinstance(picked, str) else None, "hosts": hosts})
+                          "host": picked if isinstance(picked, str) else None, "hosts": hosts,
+                          "reservations": reservations})
     return 0 if isinstance(picked, str) else 1
 
 

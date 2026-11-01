@@ -453,6 +453,26 @@ describe('placement', () => {
     expect(full.verdicts[0]?.reason).toMatch(/powered off; starting it needs 16.0 GiB/)
   })
 
+  it("drops a powered-off VM's held reservations, so it can be picked and woken again", async () => {
+    const { world, placement } = setup({ ...CONFIG, order: ['vm'], skip: ['local'] })
+    // 8 GiB held on vm, which is later powered off with the root already ended.
+    const done = await placement.place('gone', needs(8))
+    if (done.kind !== 'placed') throw new Error('expected placed')
+    done.done()
+    world.remote.gone = 'unknown'
+    const flight = await placement.place('flight', needs(1))
+    expect(flight).toMatchObject({ kind: 'placed', host: 'vm' })
+    world.peerLive = false
+    world.peerState = 'powered_off'
+    world.proxmox = proxmox(19, 'stopped')
+    // Without the drop, 8 + 1 GiB held leaves Proxmox 8 GiB room, under the 16 GiB start.
+    const verdict = (await placement.check(needs(6)))[0]
+    expect(verdict).toMatchObject({ host: 'vm', fits: true, wake: true })
+    // The create still in flight keeps its reservation.
+    expect(placement.list().map((item) => item.requestId)).toEqual(['flight'])
+    expect(JSON.parse(world.settings.get('placement_reservations') ?? '[]')).toHaveLength(1)
+  })
+
   it('goes to the next pool host when the Proxmox host cannot be read', async () => {
     const { world, placement } = setup(
       { ...CONFIG, order: ['local'], pools: { hunt: ['vm', 'local'] } },

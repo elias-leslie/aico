@@ -475,7 +475,8 @@ def test_placement_shows_each_hosts_room_and_starts_nothing(monkeypatch):
     answer = {"host": "agent-work", "hosts": [
         {"host": "local", "fits": False, "reason": "needs 16.0 GiB, has 14.0 GiB room", "room": {"memGiB": 14, "cpu": 12}},
         {"host": "agent-work", "fits": True, "reason": "18.0 GiB room", "room": {"memGiB": 18, "cpu": 7}, "wake": True}],
-        "reservations": [{"requestId": "x"}]}
+        "reservations": [{"requestId": "x", "host": "agent-work", "memBytes": 4, "cpu": 1, "at": 5, "state": "held",
+                          "secret": "dropped"}]}
 
     def receipt(_, path, route, payload=None, **kwargs):
         calls.append((route, payload))
@@ -485,6 +486,8 @@ def test_placement_shows_each_hosts_room_and_starts_nothing(monkeypatch):
     assert admin.main(["placement", "--needs", "mem=16G,cpu=2,cap=live-ready"]) == 0
     assert calls == [(f"/v1/placement?mem={16 * 1024 ** 3}&cpu=2&cap=live-ready", None)]
     assert output[0]["host"] == "agent-work" and output[0]["hosts"] == answer["hosts"]
+    assert output[0]["reservations"] == [{"requestId": "x", "host": "agent-work", "memBytes": 4, "cpu": 1,
+                                          "at": 5, "state": "held"}]
 
 
 def test_host_auto_sends_the_pool_and_reports_an_unknown_one(monkeypatch):
@@ -526,3 +529,37 @@ def test_placement_asks_for_the_pool(monkeypatch):
     assert admin.main(["placement", "--needs", "mem=4G", "--pool", "hunt"]) == 1
     assert output[1] == {"status": "refused", "reason": "unknown_pool", "pool": "hunt",
                          "pools": ["default", "neri-hunt"]}
+
+
+def test_placement_says_reservations_unknown_when_tether_does_not_report_them(monkeypatch):
+    output = []
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_a, **_k: (200, {"host": None, "hosts": []}))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    assert admin.main(["placement", "--needs", "mem=4G"]) == 1
+    assert output[0]["reservations"] is None and output[0]["host"] is None
+
+
+def test_placement_with_no_tether_is_unavailable_and_has_no_reservations(monkeypatch):
+    output = []
+
+    def receipt(*_a, **_k):
+        raise admin.Unavailable("owner_unavailable")
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_unless_stopped", lambda _, record: output.append(record))
+    assert admin.main(["placement", "--needs", "mem=4G"]) == 1
+    assert output == [{"status": "unavailable", "reason": "owner_unavailable"}]
+
+
+def test_host_local_with_needs_books_here_without_asking_a_host_for_its_tools(monkeypatch):
+    calls, output = [], []
+    monkeypatch.setattr(admin.Collector, "receipt", owner(calls))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    monkeypatch.setattr(admin, "codex_model_unavailable", lambda *_: None)
+    argv = [*auto()[:-4], "--host", "local", "--needs", "mem=4G,cpu=1"]
+    assert admin.main(argv) == 0
+    # This computer's own tool checks apply; no hosts.json lookup of a host named local.
+    assert [route for route, *_ in calls] == ["/v1/roots"]
+    payload = calls[0][1]
+    assert payload["host"] == "local" and "pool" not in payload
+    assert payload["needs"] == {"memBytes": 4 * 1024 ** 3, "cpu": 1, "caps": []}
+    assert output[0]["status"] == "running" and output[0]["host"] == "local"

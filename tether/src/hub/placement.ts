@@ -690,6 +690,17 @@ export class Placement {
     if (changed) this.persist()
   }
 
+  /** Drop a stopped host's held reservations; in-flight `placing` ones stay. */
+  private releaseStopped(host: string): void {
+    const gone = this.reservations.filter((item) => item.host === host && item.state === 'held')
+    if (!gone.length) return
+    for (const item of gone) {
+      this.reservations.splice(this.reservations.indexOf(item), 1)
+      this.log(`released ${item.requestId} on ${host} (host powered off)`)
+    }
+    this.persist()
+  }
+
   private held(hosts: (name: string) => boolean): { mem: number; cpu: number } {
     let mem = 0
     let cpu = 0
@@ -864,7 +875,7 @@ export class Placement {
     const peer = this.deps.peer(name)
     if (!peer) return this.unknown(name, 'not in hosts.json')
     const own = config.hosts[name] ?? DEFAULT_REMOTE
-    const held = this.held((host) => host === name)
+    let held = this.held((host) => host === name)
     const ref = own.proxmox
     let pve: ProxmoxReading | null = null
     let pveRoom = Number.POSITIVE_INFINITY
@@ -886,6 +897,13 @@ export class Placement {
           name,
           `Proxmox storage ${ref.storage} has ${g(pve.storageAvailBytes)} GiB free, below ${g(ref.minFreeStorageBytes)} GiB`,
         )
+      // A powered-off VM has no roots: what it still holds is from roots that ended
+      // while it could not answer. Drop those, or they shrink its room until it is
+      // never picked and so never woken. A create in flight (`placing`) stays.
+      if (pve.vmStatus === 'stopped') {
+        this.releaseStopped(name)
+        held = this.held((host) => host === name)
+      }
       const nodeHeld = this.held(this.onNode(config, ref))
       pveRoom = pve.nodeAvailableBytes - ref.reserveBytes - nodeHeld.mem
       pveDetail = `; Proxmox ${g(pve.nodeAvailableBytes)} free - ${g(ref.reserveBytes)} reserve - ${g(nodeHeld.mem)} held`
