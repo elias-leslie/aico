@@ -16,6 +16,8 @@ assert SPEC is not None and SPEC.loader is not None
 admin = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = admin
 SPEC.loader.exec_module(admin)
+# conftest stubs the launch-table lookup for every test; the tests of the lookup itself use this.
+REAL_LAUNCH_ROW = admin.launch_row
 
 THREAD = "00000000-0000-4000-8000-000000000001"
 BASE = ["create", "recovery-1", "Reconcile after crash.", "--tool", "codex", "--project", "sample-app",

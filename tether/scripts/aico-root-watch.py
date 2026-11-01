@@ -1388,6 +1388,67 @@ def resolve_instructions(selection: str) -> dict:
             "content": content}
 
 
+# Tools whose model, effort and Daybreak create fills from Agent Hub's launch table.
+LAUNCH_TOOLS = ("claude-code", "codex", "pi")
+EFFORTS = ("none", "off", "minimal", "low", "medium", "high", "xhigh", "max")
+
+
+def launch_row(role: str, tool: str) -> dict | None:
+    """Agent Hub's launch-table row for this work role and tool (`st models route --role ROLE
+    --tool TOOL`), or None when the table can't be read (the launch then goes ahead on the tool's
+    own settings). Raises ValueError when Agent Hub has no such work role, so a typo such as
+    `tester` fails here instead of launching as an unknown role with the full delivery."""
+    try:
+        result = subprocess.run(["st", "--no-compact", "models", "route", "--role", role, "--tool", tool, "--json"],
+                                capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        if "API error (422)" not in result.stderr:
+            return None
+        try:
+            detail = str(json.loads(result.stderr.strip().splitlines()[-1]).get("error") or "")
+        except (ValueError, IndexError, AttributeError):
+            detail = ""
+        detail = re.sub(r"[^\x20-\x7e]", "", detail.partition("): ")[2])[:600]
+        raise ValueError(f"--work-role {role} is not a work role Agent Hub knows. {detail}".strip())
+    try:
+        data = json.loads(result.stdout)
+        rows, registered = data["rows"], data["work_roles"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or not isinstance(registered, list):
+        return None
+    if role not in registered:
+        roles = [str(r) for r in rows[0].get("work_roles") or []]
+        raise ValueError(f"--work-role {role} is a job, not a work role: "
+                         + (f"use --work-role {' or '.join(roles)}" if roles else
+                            f"use one of {', '.join(str(r) for r in registered)}"))
+    return rows[0]
+
+
+def apply_launch_defaults(args: argparse.Namespace, row: dict) -> dict:
+    """Fill what the caller left out from the table row; explicit flags always win. Effort and
+    Daybreak come with the table's model only. Returns what was filled."""
+    applied: dict = {}
+    if args.resume_session is not None:
+        return applied
+    if (row.get("context") == "blank-slate" and not args.blank_slate
+            and args.project is None and args.project_root is None):
+        args.blank_slate = True
+        applied["context"] = "blank-slate"
+    model = row.get("model")
+    if (args.tool in LAUNCH_TOOLS and args.model is None and row.get("use") is True
+            and isinstance(model, str) and model):
+        args.model = applied["model"] = model
+        if args.reasoning_effort is None and row.get("effort") in EFFORTS:
+            args.reasoning_effort = applied["reasoningEffort"] = row["effort"]
+        if args.tool == "codex" and args.daybreak is None and isinstance(row.get("daybreak"), bool):
+            args.daybreak = "on" if row["daybreak"] else "off"
+            applied["daybreak"] = row["daybreak"]
+    return applied
+
+
 def prompt_error(prompt: object) -> str | None:
     """Why `prompt` cannot be sent to an agent, else None. Never echoes the text."""
     if not isinstance(prompt, str) or not prompt.strip():
@@ -1473,13 +1534,14 @@ def create_main(argv: list[str]) -> int:
         "Agent Hub agent slug; required with --tool agent-hub, refused with any other tool"))
     parser.add_argument("--role", default="portfolio-root", help="opaque orchestration metadata")
     parser.add_argument("--work-role",
-                        help="required for a new root: coordinator, implementation, research, review, recon, hunting, operations, selection, verification, reporting or other; fixed including resume")
+                        help="required for a new root: a work role Agent Hub knows (coordinator, implementation, research, review, recon, hunting, operations, selection, verification, reporting, mapping or other; st models route lists them); fixed including resume. It also picks the launch defaults")
     parser.add_argument("--work-role-name", help="optional display name (1-128 characters)")
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
     parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID; owner adapter validates format/support")
-    parser.add_argument("--model", help="per-launch model; Pi requires provider/model, Codex a bare name from its catalog (gpt-6.1-sol), Claude Code an alias or full name (claude-haiku-5-5)")
-    parser.add_argument("--reasoning-effort", choices=("none", "off", "minimal", "low", "medium", "high", "xhigh", "max"))
+    parser.add_argument("--model", help="per-launch model; Pi requires provider/model, Codex a bare name from its catalog (gpt-6.1-sol), Claude Code an alias or full name (claude-haiku-5-5). "
+                        "Default: Agent Hub's launch table for the work role and tool (st models route --role ROLE --tool TOOL), with its effort and Daybreak")
+    parser.add_argument("--reasoning-effort", choices=EFFORTS)
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; leaves shared defaults alone. Codex: only models its catalog lists with "
                         "Daybreak for this account (on any other, create refuses and names the ones that have it); "
                         "Pi: openai/gpt-6-sol only")
@@ -1530,6 +1592,14 @@ def create_main(argv: list[str]) -> int:
                          "--reasoning-effort, --daybreak and --agent-hub-context")
     elif args.agent is not None:
         refuse("--agent only goes with --tool agent-hub")
+    launch, applied = None, {}
+    if args.work_role is not None:
+        try:
+            launch = launch_row(args.work_role, args.tool)
+        except ValueError as error:
+            refuse(str(error))
+        if launch is not None:
+            applied = apply_launch_defaults(args, launch)
     if args.blank_slate:
         if args.project_root is not None or args.resume_session is not None or args.agent_hub_context is not None:
             refuse("--blank-slate starts fresh in its own empty workspace; drop --project-root, "
@@ -1589,6 +1659,13 @@ def create_main(argv: list[str]) -> int:
     output = {"owner": "aico", "requestId": args.request_id}
     if args.host:
         output["host"] = args.host
+    if launch is not None:
+        output["launchDefault"] = {"job": launch.get("job"), "applied": applied,
+                                   "table": f"st models route --role {args.work_role} --tool {args.tool}"}
+        if launch.get("use") is not True:
+            output["launchDefault"]["note"] = str(launch.get("why") or "")[:300]
+    elif args.work_role is not None and args.resume_session is None and args.tool in LAUNCH_TOOLS:
+        output["launchDefault"] = {"applied": {}, "note": "Agent Hub's launch table could not be read; the tool's own settings apply"}
     try:
         prompt = admin_stdin(collector) if args.stdin else args.prompt
         if prompt is None and args.resume_session:

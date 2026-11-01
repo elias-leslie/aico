@@ -4,6 +4,12 @@
 
 ### Added
 
+- Launch defaults: `st aico create` without `--model` takes the model, effort,
+  Codex Daybreak and (for review, verification and other) Blank Slate from
+  Agent Hub's launch table (`st models route --role ROLE --tool TOOL`), and
+  says what it filled in `launchDefault`. Explicit flags win; resume takes
+  none. `--work-role` is checked against Agent Hub's registry, so a typo fails
+  at launch.
 - Delivery classes (Tether API 24, schema 28). A queued line is a wake or
   ride-along (`ride` on `POST /v1/sessions/:id/deliveries`). Ride-along lines
   never paste or wake a puller alone: they join the next wake, or the

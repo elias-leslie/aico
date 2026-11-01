@@ -255,8 +255,20 @@ Claude Code takes `--model MODEL` (an alias such as `haiku` or a full name such 
 documented `--model` and `--effort` flags ahead of `--resume` and the prompt, so they hold
 for fresh, exact-resume, restart and reboot-restore launches. They override the model and
 effort from the user's settings (a Blank Slate lane keeps those settings, so the override
-still wins); omit them to inherit. Claude Code has no Daybreak switch. Testing lanes run
-on `claude-haiku-5-5`.
+still wins). Claude Code has no Daybreak switch.
+
+Launch defaults. A fresh create (not `--resume-session`) that leaves out `--model`
+takes the model for its work role and tool from Agent Hub's launch table (`st models route
+--role ROLE --tool TOOL`, owner decisions in `model_selection_policy.json` `launch`), with
+the table's effort and, for Codex, its Daybreak setting unless `--reasoning-effort` or
+`--daybreak` is given. A role whose table context is `blank-slate` (review, verification,
+other) starts Blank Slate when neither `--project`/`--project-root` nor `--blank-slate` is
+given. Explicit flags always win. The output's `launchDefault` names the job, what was
+filled (`applied`) and the table command; a row the owner ruled out (Codex reviews) fills
+nothing and says why in `note`. The same lookup validates `--work-role`: a role Agent Hub
+doesn't know (a typo such as `tester`, or the job name `testing` for `verification`) is
+refused before Tether is contacted. When the table can't be read, the launch goes ahead on
+the tool's own settings and `launchDefault.note` says so (Pi then still needs `--model`).
 
 Pi requires an explicit `--model PROVIDER/MODEL`, including on resume. For example,
 `--tool pi --work-role implementation --model openai/gpt-6.1-sol --reasoning-effort high` passes native

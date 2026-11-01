@@ -3,12 +3,13 @@
 import json
 import shutil
 import socketserver
+import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 import pytest
-from aico_cli_fixtures import BASE, THREAD, admin, descriptor
+from aico_cli_fixtures import BASE, REAL_LAUNCH_ROW, THREAD, admin, descriptor
 
 
 @pytest.fixture(autouse=True)
@@ -670,3 +671,133 @@ def test_instructions_refuse_an_unclear_revision_before_contacting_the_owner(mon
     monkeypatch.setattr(admin.Collector, "receipt", lambda *a, **k: pytest.fail("contacted owner"))
     with pytest.raises(SystemExit):
         admin.main(["create", "review-3", "Review.", "--tool", "pi", "--blank-slate", "--instructions", selection])
+
+
+# ---- launch defaults from Agent Hub's table (st models route --role ROLE --tool TOOL) ----------
+
+def table_row(**changes):
+    return {"job": "testing", "model": "claude-haiku-5-5", "effort": "high", "daybreak": None,
+            "context": "blank-slate", "use": True, "work_roles": ["verification"], "why": "Owner rule.", **changes}
+
+
+def served(monkeypatch, row, seen=None):
+    calls, output = [], []
+
+    def receipt(_, path, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+
+    def lookup(role, tool):
+        if seen is not None:
+            seen.append((role, tool))
+        return row
+
+    monkeypatch.setattr(admin, "launch_row", lookup)
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    return calls, output
+
+
+def test_table_model_effort_and_blank_slate_apply_when_not_given(monkeypatch):
+    seen = []
+    calls, output = served(monkeypatch, table_row(), seen)
+    assert admin.main(["create", "test-1", "Try the CLI.", "--tool", "claude-code", "--work-role", "verification"]) == 0
+    assert seen == [("verification", "claude-code")]
+    assert (calls[0]["model"], calls[0]["reasoningEffort"], calls[0]["projectId"]) == ("claude-haiku-5-5", "high", "blank-slate")
+    assert "daybreak" not in calls[0]
+    assert output[0]["launchDefault"] == {
+        "job": "testing", "table": "st models route --role verification --tool claude-code",
+        "applied": {"context": "blank-slate", "model": "claude-haiku-5-5", "reasoningEffort": "high"}}
+
+
+def test_explicit_flags_win_over_the_table(monkeypatch):
+    calls, output = served(monkeypatch, table_row())
+    argv = ["create", "test-2", "Try it.", "--tool", "claude-code", "--work-role", "verification",
+            "--project", "sample-app", "--project-root", "/fixture/project"]
+    assert admin.main([*argv, "--model", "claude-sonnet-5-5"]) == 0
+    # The table's effort belongs to its model: an explicit model keeps the tool's own effort.
+    assert calls[0]["model"] == "claude-sonnet-5-5" and calls[0].get("reasoningEffort") is None
+    assert calls[0]["projectRoot"] == "/fixture/project" and output[0]["launchDefault"]["applied"] == {}
+    assert admin.main([*argv, "--reasoning-effort", "low"]) == 0
+    assert (calls[1]["model"], calls[1]["reasoningEffort"]) == ("claude-haiku-5-5", "low")
+
+
+def test_codex_hunting_default_turns_daybreak_on_unless_told_otherwise(monkeypatch):
+    row = table_row(job="hunting", model="gpt-6-sol", effort="xhigh", daybreak=True, context="full")
+    calls, _ = served(monkeypatch, row)
+    argv = ["create", "hunt-1", "Hunt.", "--tool", "codex", "--work-role", "hunting",
+            "--project", "neri-hunters", "--project-root", "/fixture/project"]
+    assert admin.main(argv) == 0
+    assert (calls[0]["model"], calls[0]["reasoningEffort"], calls[0]["daybreak"]) == ("gpt-6-sol", "xhigh", True)
+    assert admin.main([*argv, "--daybreak", "off"]) == 0
+    assert calls[1]["daybreak"] is False and calls[1]["model"] == "gpt-6-sol"
+
+
+def test_a_row_the_owner_ruled_out_applies_nothing_and_says_why(monkeypatch):
+    row = table_row(job="review", model=None, effort=None, use=False, context="full",
+                    why="Owner 2026-11-01: no Codex reviews.")
+    calls, output = served(monkeypatch, row)
+    assert admin.main(["create", "rev-1", "Review.", "--tool", "codex", "--work-role", "review",
+                       "--project", "sample-app", "--project-root", "/fixture/project"]) == 0
+    assert "model" not in calls[0] and output[0]["launchDefault"]["note"] == "Owner 2026-11-01: no Codex reviews."
+
+
+def test_resume_takes_no_table_model(monkeypatch):
+    calls, output = served(monkeypatch, table_row(job="implementation", model="claude-sonnet-5-5", context="full"))
+    argv = [arg if arg != "codex" else "claude-code" for arg in BASE]
+    assert admin.main(argv) == 0
+    assert "model" not in calls[0] and output[0]["launchDefault"]["applied"] == {}
+
+
+def test_unreadable_table_launches_on_the_tools_own_settings_and_says_so(monkeypatch):
+    calls, output = served(monkeypatch, None)
+    assert admin.main(["create", "impl-1", "Build it.", "--tool", "claude-code", "--work-role", "implementation",
+                       "--project", "sample-app", "--project-root", "/fixture/project"]) == 0
+    assert "model" not in calls[0] and "could not be read" in output[0]["launchDefault"]["note"]
+
+
+def test_a_mistyped_work_role_is_refused_before_tether(monkeypatch, capsys):
+    def lookup(role, tool):
+        raise ValueError(f"--work-role {role} is not a work role Agent Hub knows.")
+
+    monkeypatch.setattr(admin, "launch_row", lookup)
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *a, **k: pytest.fail("contacted owner"))
+    with pytest.raises(SystemExit):
+        admin.main(["create", "t-1", "Test.", "--tool", "claude-code", "--work-role", "tester", "--blank-slate"])
+    assert "--work-role tester is not a work role" in capsys.readouterr().err
+
+
+def _st_route(monkeypatch, returncode, stdout="", stderr=""):
+    argv = []
+
+    def run(cmd, **kwargs):
+        argv.append(cmd)
+        return subprocess.CompletedProcess(cmd, returncode, stdout, stderr)
+
+    monkeypatch.setattr(admin.subprocess, "run", run)
+    return REAL_LAUNCH_ROW, argv
+
+
+def test_launch_row_reads_st_models_route(monkeypatch):
+    payload = {"rows": [table_row()], "work_roles": ["verification", "review"]}
+    lookup, argv = _st_route(monkeypatch, 0, json.dumps(payload))
+    assert lookup("verification", "claude-code") == table_row()
+    assert argv == [["st", "--no-compact", "models", "route", "--role", "verification", "--tool", "claude-code", "--json"]]
+
+
+def test_launch_row_refuses_unknown_roles_and_jobs_that_are_not_work_roles(monkeypatch):
+    error = json.dumps({"error": "API error (422): Unknown work role or job 'tester'. Work roles: review, verification."})
+    lookup, _ = _st_route(monkeypatch, 1, stderr=error + "\n")
+    with pytest.raises(ValueError, match=r"tester is not a work role Agent Hub knows\. Unknown work role or job 'tester'\. Work roles: review"):
+        lookup("tester", "claude-code")
+    payload = {"rows": [table_row()], "work_roles": ["verification", "review"]}
+    lookup, _ = _st_route(monkeypatch, 0, json.dumps(payload))
+    with pytest.raises(ValueError, match="testing is a job, not a work role: use --work-role verification"):
+        lookup("testing", "claude-code")
+
+
+@pytest.mark.parametrize("returncode, stdout, stderr", [
+    (1, "", '{"error": "Cannot connect to Agent Hub"}'), (0, "not json", ""), (0, '{"rows": []}', "")])
+def test_launch_row_is_none_when_the_table_cannot_be_read(monkeypatch, returncode, stdout, stderr):
+    lookup, _ = _st_route(monkeypatch, returncode, stdout, stderr)
+    assert lookup("implementation", "codex") is None
