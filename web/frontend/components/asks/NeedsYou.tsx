@@ -56,12 +56,16 @@ interface DrawerState {
   /** Session lists on screen: while one is, Needs you takes its place
    * instead of opening a drawer over the session. */
   hosts: number
+  /** Opened by a click (focus moves into it), not by a push link or the
+   * window widening while it was open. */
+  byHand: boolean
 }
 let drawerState: DrawerState = {
   open: false,
   focus: null,
   owner: null,
   hosts: 0,
+  byHand: false,
 }
 const drawerListeners = new Set<() => void>()
 function setDrawer(next: Partial<DrawerState>): void {
@@ -77,7 +81,7 @@ const readDrawer = () => drawerState
 /** Open Needs you, with one question first (a push link, the session's own
  * question on the phone). */
 export function openNeedsYou(focus: string | null = null): void {
-  setDrawer({ open: true, focus })
+  setDrawer({ open: true, focus, byHand: true })
 }
 
 export function closeNeedsYou(): void {
@@ -121,7 +125,7 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
   useEffect(() => {
     if (variant === 'row') return
     const id = takeAskFromUrl()
-    if (id) setDrawer({ open: true, focus: id, owner: null })
+    if (id) setDrawer({ open: true, focus: id, owner: null, byHand: false })
   }, [variant])
   useEffect(() => {
     if (variant !== 'row' && drawer.open && drawer.owner === null)
@@ -149,7 +153,7 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
   const show = () =>
     drawer.open && drawer.owner === me && drawer.hosts === 0
       ? closeNeedsYou()
-      : setDrawer({ open: true, focus: null, owner: me })
+      : setDrawer({ open: true, focus: null, owner: me, byHand: true })
 
   let button: ReactNode
   if (variant === 'none') button = null
@@ -303,9 +307,13 @@ export function NeedsYouDrawer({
  * button that opened it, beside the session instead of over it. Back, or Esc
  * from inside it, brings the list back. */
 export function NeedsYouPanel() {
-  const { focus } = useNeedsYouState()
+  const { focus, byHand } = useNeedsYouState()
   const backRef = useRef<HTMLButtonElement>(null)
-  useEffect(() => backRef.current?.focus({ preventScroll: true }), [])
+  // Only when clicked open; else the session keeps the keyboard.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on mount only
+  useEffect(() => {
+    if (byHand) backRef.current?.focus({ preventScroll: true })
+  }, [])
   const back = () => {
     closeNeedsYou()
     // Back on the button that opened it, once the list is back.
@@ -324,6 +332,9 @@ export function NeedsYouPanel() {
       className="flex min-h-0 flex-1 flex-col"
       onKeyDown={(event) => {
         if (event.key !== 'Escape') return
+        // Esc in a half-typed reply keeps the reply.
+        const target = event.target as HTMLInputElement
+        if (target.tagName === 'INPUT' && target.value) return
         event.stopPropagation()
         back()
       }}

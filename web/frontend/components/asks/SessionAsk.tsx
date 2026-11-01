@@ -93,59 +93,66 @@ export function SessionAsk({
     </>
   )
 
+  // `host` keeps the same place as in the branch above, so a question
+  // leaving does not rebuild the sheet it holds.
   return (
-    <section
-      aria-label="This session’s question"
-      data-testid="session-ask"
-      className={`lantern-session-ask ${className ?? ''}`}
-    >
+    <>
       {host}
-      {isPhone ? (
-        <button
-          type="button"
-          className="lantern-session-ask-head"
-          onClick={() => openNeedsYou(ask.id)}
-          aria-label={`${state}: ${ask.question}. Answer`}
-        >
-          {head}
-          <span className="flex-none" style={{ color: 'var(--lantern)' }}>
-            Answer
-          </span>
-        </button>
-      ) : (
-        <>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className="lantern-session-ask-head min-w-0 flex-1"
-              aria-expanded={open}
-              onClick={() => setOpened({ ...opened, [ask.id]: !open })}
-              title={open ? 'Fold the question' : 'Show the question'}
-            >
-              {head}
-              {open ? (
-                <ChevronDown className="h-4 w-4 flex-none" strokeWidth={1.7} />
-              ) : (
-                <ChevronUp className="h-4 w-4 flex-none" strokeWidth={1.7} />
-              )}
-            </button>
-            {others > 0 && (
+      <section
+        aria-label="This session’s question"
+        data-testid="session-ask"
+        className={`lantern-session-ask ${className ?? ''}`}
+      >
+        {isPhone ? (
+          <button
+            type="button"
+            className="lantern-session-ask-head"
+            onClick={() => openNeedsYou(ask.id)}
+            aria-label={`${state}: ${ask.question}. Answer`}
+          >
+            {head}
+            <span className="flex-none" style={{ color: 'var(--lantern)' }}>
+              Answer
+            </span>
+          </button>
+        ) : (
+          <>
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                className="lantern-btn ghost small flex-none"
-                onClick={() => openNeedsYou()}
+                className="lantern-session-ask-head min-w-0 flex-1"
+                aria-expanded={open}
+                onClick={() => setOpened({ ...opened, [ask.id]: !open })}
+                title={open ? 'Fold the question' : 'Show the question'}
               >
-                See all {waiting.length}
+                {head}
+                {open ? (
+                  <ChevronDown
+                    className="h-4 w-4 flex-none"
+                    strokeWidth={1.7}
+                  />
+                ) : (
+                  <ChevronUp className="h-4 w-4 flex-none" strokeWidth={1.7} />
+                )}
               </button>
-            )}
-          </div>
-          {open && (
-            <div className="max-h-[40vh] max-w-[760px] overflow-y-auto overscroll-contain px-3 pt-1 pb-2.5">
-              <AskCard ask={ask} now={now} onSent={setSent} inSession />
+              {others > 0 && (
+                <button
+                  type="button"
+                  className="lantern-btn ghost small flex-none"
+                  onClick={() => openNeedsYou()}
+                >
+                  See all {waiting.length}
+                </button>
+              )}
             </div>
-          )}
-        </>
-      )}
-    </section>
+            {open && (
+              <div className="max-h-[40vh] max-w-[760px] overflow-y-auto overscroll-contain px-3 pt-1 pb-2.5">
+                <AskCard ask={ask} now={now} onSent={setSent} inSession />
+              </div>
+            )}
+          </>
+        )}
+      </section>
+    </>
   )
 }

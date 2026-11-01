@@ -174,6 +174,7 @@ describe('Needs you beside the session list', () => {
 
   it('goes back from its arrow or Esc, and offers the way back once nothing is left', async () => {
     state.asks = [ask()]
+    act(() => openNeedsYou())
     const { rerender } = render(<NeedsYouPanel />)
     const panel = screen.getByTestId('needs-you-panel')
     expect(
@@ -203,6 +204,29 @@ describe('Needs you beside the session list', () => {
     expect(outer).not.toHaveBeenCalled()
     expect(screen.getByTestId('open-probe')).toHaveTextContent('closed')
     document.removeEventListener('keydown', outer)
+  })
+
+  it('leaves the keyboard with the session when a push link opens it, and Esc keeps a half-typed reply', () => {
+    state.asks = [ask()]
+    window.history.replaceState(null, '', '/?ask=abcdefabcdef')
+    render(
+      <ListHost>
+        <NeedsYouLauncher variant="tool" />
+        <OpenProbe />
+      </ListHost>,
+    )
+    render(<NeedsYouPanel />)
+    expect(screen.getByTestId('open-probe')).toHaveTextContent('open')
+    expect(
+      screen.getByRole('button', { name: 'Back to sessions' }),
+    ).not.toHaveFocus()
+    const note = screen.getByLabelText('Note to the agent')
+    fireEvent.change(note, { target: { value: 'after the' } })
+    fireEvent.keyDown(note, { key: 'Escape' })
+    expect(screen.getByTestId('open-probe')).toHaveTextContent('open')
+    fireEvent.change(note, { target: { value: '' } })
+    fireEvent.keyDown(note, { key: 'Escape' })
+    expect(screen.getByTestId('open-probe')).toHaveTextContent('closed')
   })
 
   it('toggles the bar dropdown from its button', () => {

@@ -5,7 +5,12 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OwnerAsk } from '@/lib/hooks/use-asks'
-import { closeNeedsYou, openNeedsYou, useNeedsYouState } from './NeedsYou'
+import {
+  closeNeedsYou,
+  NeedsYouLauncher,
+  openNeedsYou,
+  useNeedsYouState,
+} from './NeedsYou'
 import { SessionAsk } from './SessionAsk'
 
 const state = vi.hoisted(() => ({
@@ -152,4 +157,37 @@ describe('SessionAsk', () => {
     expect(screen.getByTestId('probe')).toHaveTextContent('open abcdefabcdef')
     expect(screen.getByTestId('needs-you-drawer')).toBeInTheDocument()
   })
+
+  it('keeps the same sheet when the session’s question is answered in it', async () => {
+    state.phone = true
+    state.asks = [ask()]
+    const tree = () => (
+      <>
+        <BarLauncher />
+        <SessionAsk sessionId="0123abcd" />
+      </>
+    )
+    const { rerender } = render(tree())
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Waiting on you: Finish the single Linux partition?. Answer',
+      }),
+    )
+    const sheet = screen.getByTestId('needs-you-drawer')
+    const card = within(sheet).getByTestId('ask-card')
+    fireEvent.click(within(card).getAllByRole('radio')[0] as HTMLElement)
+    fireEvent.click(within(card).getByRole('button', { name: 'Send' }))
+    await act(async () => {})
+    state.asks = [{ ...ask(), state: 'answered' }]
+    rerender(tree())
+    expect(screen.getByTestId('needs-you-drawer')).toBe(sheet)
+    expect(within(sheet).getByRole('status')).toHaveTextContent(
+      'Sent to “Disk merge”: Finish it now.',
+    )
+  })
 })
+
+/** The phone session bar's own launcher, mounted before the strip. */
+function BarLauncher() {
+  return <NeedsYouLauncher variant="compact" />
+}
