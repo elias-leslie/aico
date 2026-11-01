@@ -319,6 +319,32 @@ describe('sessionToSlot', () => {
     },
   )
 
+  it('carries the model switch to the session window', () => {
+    const change = {
+      key: 'k1',
+      kind: 'changed',
+      from: 'claude-opus-5-5',
+      to: 'claude-sonnet-5',
+      category: null,
+      at: 1,
+      stopped: false,
+      commit: null,
+      worktree_changed: null,
+      checked: true,
+      rewind_to: null,
+    } as const
+    const session = makeSession('tether', { model_switch: change })
+    expect(
+      sessionToSlot(session, { as: 'adhoc', place: 'unloaded' }).modelSwitch,
+    ).toEqual(change)
+    expect(
+      sessionToSlot(makeSession('tether', { model_switch: null }), {
+        as: 'adhoc',
+        place: 'unloaded',
+      }).modelSwitch,
+    ).toBeUndefined()
+  })
+
   it('shows the session title for a Tether session with a coordinator chip', () => {
     const session = makeSession('tether', {
       badge: { kind: 'coordinator', text: 'Coordinator', color: '#f0a35e' },

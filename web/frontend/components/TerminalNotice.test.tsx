@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { SessionModelSwitch } from '@/lib/hooks/use-terminal-sessions'
 import {
   ConnectionNotice,
   HostNotice,
+  ModelSwitchNotice,
   SizeHolderNotice,
 } from './TerminalNotice'
 
@@ -138,5 +140,77 @@ describe('HostNotice', () => {
     )
     expect(screen.getByText('Connecting to agent-work…')).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Power on' })).toBeNull()
+  })
+})
+
+describe('ModelSwitchNotice', () => {
+  const REFUSAL: SessionModelSwitch = {
+    key: 'k1',
+    kind: 'refusal',
+    from: 'claude-opus-5-5',
+    to: 'claude-opus-4-8',
+    category: 'cyber',
+    at: 1,
+    stopped: true,
+    commit: 'e5a9695',
+    worktree_changed: null,
+    checked: true,
+    rewind_to: null,
+  }
+
+  it('says a refusal switched the model and stopped the turn, with the facts on request', () => {
+    render(<ModelSwitchNotice change={REFUSAL} />)
+    const notice = screen.getByTestId('model-switch-notice')
+    expect(notice).toHaveClass('warn')
+    expect(
+      screen.getByText(
+        'Switched to claude-opus-4-8 after a cyber refusal · stopped',
+      ),
+    ).toBeVisible()
+    expect(
+      screen.getByText(
+        'Was claude-opus-5-5. Last commit e5a9695. Changed since: unknown. Rewind it, or relaunch from a handoff.',
+      ),
+    ).not.toBeVisible()
+    fireEvent.click(screen.getByText('Details'))
+    expect(screen.getByText(/^Was claude-opus-5-5\./)).toBeVisible()
+    expect(notice.textContent).not.toMatch(/terminal|A-Term/i)
+  })
+
+  it.each([
+    [
+      { kind: 'refusal', stopped: false, category: 'abuse', commit: null },
+      'Switched to claude-opus-4-8 after an abuse refusal · not stopped',
+      'warn',
+    ],
+    [
+      { kind: 'substituted', category: null },
+      'Served claude-opus-4-8 instead of claude-opus-5-5 · stopped',
+      'warn',
+    ],
+    [
+      { kind: 'paused', to: 'claude-opus-5-5' },
+      'Stopped on a cyber refusal · waiting on you',
+      'warn',
+    ],
+    [
+      { kind: 'paused', to: 'claude-opus-5-5', category: null },
+      'Stopped on a refusal · waiting on you',
+      'warn',
+    ],
+    [
+      { kind: 'changed', category: null, stopped: false },
+      'Now on claude-opus-4-8 (was claude-opus-5-5)',
+      'quiet',
+    ],
+  ] as const)('words %o as %s', (fields, text, tone) => {
+    render(<ModelSwitchNotice change={{ ...REFUSAL, ...fields }} />)
+    expect(screen.getByRole('status')).toHaveTextContent(text)
+    expect(screen.getByTestId('model-switch-notice')).toHaveClass(tone)
+  })
+
+  it('offers details only for a refusal fallback', () => {
+    render(<ModelSwitchNotice change={{ ...REFUSAL, kind: 'substituted' }} />)
+    expect(screen.queryByText('Details')).toBeNull()
   })
 })

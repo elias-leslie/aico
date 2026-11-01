@@ -69,6 +69,36 @@ export interface WebSession {
   host: string | null
   /** Set while that host cannot be reached: the session is shown as last seen. */
   peer: { state: string; since: number } | null
+  /** Tether's `modelSwitch`: the agent's model changed (a refusal fallback,
+   * a substituted model, a pick in the window) or a refusal paused it; null
+   * when there is nothing to show. */
+  model_switch: ModelSwitch | null
+}
+
+export type ModelSwitchKind = 'refusal' | 'substituted' | 'changed' | 'paused'
+
+export interface ModelSwitch {
+  /** A new key is a new switch. */
+  key: string
+  kind: ModelSwitchKind
+  /** The model before; for `paused`, the model that was refused. */
+  from: string
+  /** The model now (for `paused`, the same as `from`). */
+  to: string
+  /** The refusal's category (`cyber`), else null. */
+  category: string | null
+  /** When it switched (ms). */
+  at: number
+  /** Tether stopped the turn on the fallback model. */
+  stopped: boolean
+  /** The project's HEAD (short) once looked at, else null. */
+  commit: string | null
+  /** A commit or changed file since the switch; null when unknown. */
+  worktree_changed: boolean | null
+  /** The worktree has been looked at. */
+  checked: boolean
+  /** The prompt to rewind to (Claude), else null. */
+  rewind_to: string | null
 }
 
 /** Tether's lifecycle status as the UI's agent badge. */
@@ -93,6 +123,34 @@ function badgeOf(descriptor: SessionDescriptor): WebSession['badge'] {
   if (typeof text !== 'string' || !text.trim()) return null
   if (typeof color !== 'string' || !HEX_COLOR.test(color)) return null
   return { kind, text, color }
+}
+
+const SWITCH_KINDS = new Set<string>(['refusal', 'substituted', 'changed', 'paused'])
+
+const text = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim() ? value : null
+
+/** Tether's `modelSwitch`, checked field by field; null when it is not one. */
+export function modelSwitchOf(value: unknown): ModelSwitch | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  const key = text(v.key)
+  const from = text(v.from)
+  const to = text(v.to)
+  if (!key || !from || !to || typeof v.kind !== 'string' || !SWITCH_KINDS.has(v.kind)) return null
+  return {
+    key,
+    kind: v.kind as ModelSwitchKind,
+    from,
+    to,
+    category: text(v.category),
+    at: typeof v.at === 'number' && Number.isFinite(v.at) ? v.at : 0,
+    stopped: v.stopped === true,
+    commit: text(v.commit),
+    worktree_changed: typeof v.worktreeChanged === 'boolean' ? v.worktreeChanged : null,
+    checked: v.checked === true,
+    rewind_to: text(v.rewindTo),
+  }
 }
 
 /** Tether's `waitingOn` (apiVersion 12) names the session's oldest armed wait,
@@ -173,6 +231,7 @@ export function fromTether(
       descriptor.peer && typeof descriptor.peer.state === 'string'
         ? { state: descriptor.peer.state, since: descriptor.peer.since }
         : null,
+    model_switch: modelSwitchOf((descriptor as { modelSwitch?: unknown }).modelSwitch),
   }
 }
 

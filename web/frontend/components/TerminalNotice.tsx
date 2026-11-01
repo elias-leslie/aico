@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
+import type { SessionModelSwitch } from '@/lib/hooks/use-terminal-sessions'
+import { modelSwitchCopy } from '@/lib/model-switch-copy'
 import { hostNoticeCopy } from '../../../shared/host-notice'
 import { SIZE_HOLDER_HINT } from '../../../shared/size-holder-copy'
 
@@ -195,6 +197,42 @@ export function HostNotice({ away, onReconnect, onPowerOn }: HostNoticeProps) {
         <p className="d" role="alert">
           {failure}
         </p>
+      )}
+    </div>
+  )
+}
+
+/** The agent's model changed under it, or a refusal paused it: one line
+ * docked above the session (never over its output), with the facts behind
+ * a refusal one tap away. It goes when Tether clears the switch. */
+export function ModelSwitchNotice({ change }: { change: SessionModelSwitch }) {
+  const copy = modelSwitchCopy(change)
+  const line = (
+    <>
+      <span aria-hidden="true" className="dot" />
+      <span className="t" title={copy.text}>
+        {copy.text}
+      </span>
+    </>
+  )
+  return (
+    <div
+      className={`lantern-model-bar ${copy.tone}`}
+      role="status"
+      aria-live="polite"
+      data-testid="model-switch-notice"
+      data-kind={change.kind}
+    >
+      {copy.detail ? (
+        <details>
+          <summary className="line">
+            {line}
+            <span className="more">Details</span>
+          </summary>
+          <p className="d">{copy.detail}</p>
+        </details>
+      ) : (
+        <p className="line">{line}</p>
       )}
     </div>
   )

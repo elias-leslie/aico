@@ -14,6 +14,7 @@
 import type { TerminalPane } from '@/lib/hooks/use-terminal-panes'
 import type {
   SessionCheckIn,
+  SessionModelSwitch,
   TerminalSession,
 } from '@/lib/hooks/use-terminal-sessions'
 import { getAgentState } from './agent-state'
@@ -54,6 +55,8 @@ interface SlotSessionFields {
   host?: string
   /** Why that host cannot be reached right now (`offline`, ...); absent when live. */
   hostState?: string
+  /** The agent's model changed or a refusal paused it; absent when not. */
+  modelSwitch?: SessionModelSwitch
   /** The header shows the session title (`Project — Task`) in place of the
    * project switcher. */
   showsSessionTitle: boolean
@@ -256,6 +259,7 @@ function slotFields(
     ...(session.host && session.peer?.state
       ? { hostState: session.peer.state }
       : {}),
+    ...(session.model_switch ? { modelSwitch: session.model_switch } : {}),
     can: {
       rename: session.can_rename,
       // A free-standing View never offers Reset: closing it only detaches.

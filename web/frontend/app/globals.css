@@ -840,6 +840,75 @@ div.xterm .xterm-viewport {
   box-shadow: none;
 }
 
+/* The agent's model changed or a refusal paused it: a slim line docked
+   above the session, never over its output. Stopped or held is beacon;
+   a model picked in the window stays quiet. */
+.lantern-model-bar {
+  flex: none;
+  margin: 0 4px 4px;
+  border: 1px solid var(--frame-edge);
+  border-radius: 8px;
+  background: var(--ink);
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--mist);
+}
+
+.lantern-model-bar.warn {
+  border-color: color-mix(in srgb, var(--beacon) 35%, transparent);
+  background: color-mix(in srgb, var(--beacon) 6%, var(--ink));
+  color: var(--bone);
+}
+
+.lantern-model-bar .line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 5px 10px;
+}
+
+.lantern-model-bar summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.lantern-model-bar summary::-webkit-details-marker {
+  display: none;
+}
+
+.lantern-model-bar .dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mist);
+}
+
+.lantern-model-bar.warn .dot {
+  background: var(--beacon);
+}
+
+.lantern-model-bar .t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lantern-model-bar .more {
+  flex: none;
+  margin-left: auto;
+  color: var(--mist);
+}
+
+.lantern-model-bar .d {
+  margin: 0;
+  padding: 0 10px 7px 24px;
+  color: var(--mist);
+}
+
 /* Connecting for the first time: a word on the empty terminal, no cover. */
 .lantern-term-notice.quiet {
   background: transparent;

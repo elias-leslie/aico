@@ -27,6 +27,28 @@ export interface SessionAsk {
   created_at: number
 }
 
+/** The agent's model changed under it, or a refusal paused it (Tether's
+ * `modelSwitch`). `refusal` and `substituted` stopped the turn when `stopped`;
+ * `changed` was picked in the window; `paused` waits on the owner. */
+export interface SessionModelSwitch {
+  key: string
+  kind: 'refusal' | 'substituted' | 'changed' | 'paused'
+  /** The model before; for `paused`, the model that was refused. */
+  from: string
+  /** The model now (the same as `from` for `paused`). */
+  to: string
+  /** The refusal's category (`cyber`), else null. */
+  category: string | null
+  at: number
+  stopped: boolean
+  /** The project's HEAD (short), else null. */
+  commit: string | null
+  /** A commit or changed file since the switch; null when unknown. */
+  worktree_changed: boolean | null
+  checked: boolean
+  rewind_to: string | null
+}
+
 export interface TerminalSession extends CoordinatorFields {
   id: string
   /** `Project — Task`, the title Aico shows; `task` is Tether's name alone. */
@@ -84,6 +106,8 @@ export interface TerminalSession extends CoordinatorFields {
   host?: string | null
   /** Set while that host cannot be reached (`offline`, `connecting`, ...). */
   peer?: { state: string; since: number } | null
+  /** The latest model switch to show on the session; null when none. */
+  model_switch?: SessionModelSwitch | null
 }
 
 interface SessionListResponse {

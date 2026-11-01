@@ -10,6 +10,7 @@ import { TerminalComponent, type TerminalHandle } from '@/components/Terminal'
 import {
   ConnectionNotice,
   HostNotice,
+  ModelSwitchNotice,
   SizeHolderNotice,
 } from '@/components/TerminalNotice'
 import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
@@ -255,6 +256,13 @@ export function SessionView({
               : undefined
           }
         />
+
+        {slot.modelSwitch && (
+          <ModelSwitchNotice
+            key={slot.modelSwitch.key}
+            change={slot.modelSwitch}
+          />
+        )}
 
         {/* On a phone the bar sits above the session, clear of its prompt. */}
         {isMobile && sizeNotice}
