@@ -3,6 +3,7 @@
 import { Activity } from 'lucide-react'
 import { useState } from 'react'
 import { pillState, TONE_COLOR } from '@/lib/health'
+import { useClock } from '@/lib/hooks/use-clock'
 import { useHealth } from '@/lib/hooks/use-health'
 import { HealthSheet } from './HealthSheet'
 
@@ -19,7 +20,8 @@ export function HealthButton({
   variant?: Variant
 }) {
   const { result, isLoading, isError } = useHealth()
-  const pill = pillState(result, isError, isLoading)
+  const nowMs = useClock()
+  const pill = pillState(result, isError, isLoading, nowMs)
   const color = TONE_COLOR[pill.tone]
   if (variant === 'icon')
     return (

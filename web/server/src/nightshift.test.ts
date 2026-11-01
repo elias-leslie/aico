@@ -84,6 +84,37 @@ const ITEMS = {
       words: { v: 1, tray: { section: 'needs', pos: 0, row: approval('a-need', 600) } },
     },
     { id: 'i8', state: 'over', words: { v: 1, threads: [{ pos: 0 }] } },
+    // an agent's or a project's open alert and to-do: listed beside the host findings, oldest first within a state
+    {
+      id: 'o1',
+      kind: 'alert',
+      state: 'open',
+      source: 'summitflow',
+      title: 'Deploy failed',
+      severity: 'warning',
+      created_at: 999_000,
+      open: 'https://sf.example/d/1',
+    },
+    {
+      id: 'o2',
+      kind: 'todo',
+      state: 'needs_you',
+      source: 'neri',
+      title: 'Pick a plan',
+      created_at: 999_900,
+      open: 'javascript:x',
+    },
+    // not listed: over, a host finding, a question and an info note
+    { id: 'o3', kind: 'alert', state: 'over', title: 'Old', created_at: 1 },
+    {
+      id: 'o4',
+      kind: 'alert',
+      state: 'open',
+      title: 'Disk',
+      words: { v: 1, finding: { pos: 1, row: finding('x', 1) } },
+    },
+    { id: 'o5', kind: 'question', state: 'needs_you', title: 'Which?', created_at: 1 },
+    { id: 'o6', kind: 'info', state: 'open', title: 'FYI', created_at: 1 },
   ],
 }
 
@@ -100,7 +131,8 @@ describe('readNightshiftView', () => {
       available: true,
       view: {
         version: 1,
-        snapshot: BOARD.snapshot,
+        // the snapshot's age moves on with the 10 s since the words, like every other age
+        snapshot: { state: 'fresh', age: 70 },
         generated_at: BOARD.generated_at,
         verdict: BOARD.verdict,
         tiles: BOARD.tiles,
@@ -117,6 +149,26 @@ describe('readNightshiftView', () => {
           { id: 'first', title: 'Approve first', url: 'https://a/e/first', left: 590 },
           { id: 'loose', title: 'Approve loose', url: 'https://a/e/loose', left: 90 },
           { id: 'late', title: 'Approve late', url: 'https://a/e/late', left: 290 },
+        ],
+        others: [
+          {
+            id: 'o2',
+            title: 'Pick a plan',
+            source: 'neri',
+            state: 'needs_you',
+            severity: '',
+            age: 110,
+            link: '',
+          },
+          {
+            id: 'o1',
+            title: 'Deploy failed',
+            source: 'summitflow',
+            state: 'open',
+            severity: 'warning',
+            age: 1010,
+            link: 'https://sf.example/d/1',
+          },
         ],
         links: BOARD.links,
       },

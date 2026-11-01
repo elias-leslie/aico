@@ -7,11 +7,14 @@ import type { ReactNode } from 'react'
 import {
   ageText,
   callsText,
+  currentSnapshot,
   type HealthFinding,
+  type HealthOpenItem,
   type HealthTile,
   handledBy,
   leftText,
   type NightshiftOwnerView,
+  openItemMeta,
   STATE_TONE,
   STATE_WORD,
   TONE_COLOR,
@@ -19,6 +22,7 @@ import {
   unknownReason,
   whenText,
 } from '@/lib/health'
+import { useClock } from '@/lib/hooks/use-clock'
 import { useHealth } from '@/lib/hooks/use-health'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 
@@ -33,7 +37,9 @@ export function HealthSheet({
   const isMobile = useMediaQuery('(max-width: 767px)')
   const { result, isLoading, isError, refetch } = useHealth()
   const view = result?.available ? result.view : null
-  const unknown = unknownReason(result, isError)
+  const nowMs = useClock()
+  const unknown = unknownReason(result, isError, nowMs)
+  const snapshot = view ? currentSnapshot(view, nowMs) : null
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -68,8 +74,8 @@ export function HealthSheet({
               className="min-w-0 flex-1 text-[12px]"
               style={{ color: 'var(--mist)' }}
             >
-              {view?.snapshot.state === 'fresh'
-                ? `From Nightshift · updated ${ageText(view.snapshot.age)} ago`
+              {snapshot?.state === 'fresh'
+                ? `From Nightshift · checked ${ageText(snapshot.age)} ago`
                 : 'From Nightshift'}
             </span>
             {view?.links.status && (
@@ -97,7 +103,7 @@ export function HealthSheet({
                     </button>
                   </Note>
                 )}
-                <HealthBody view={view} />
+                <HealthBody view={view} nowMs={nowMs} />
               </>
             )}
           </div>
@@ -121,18 +127,36 @@ const UNKNOWN_TILES: HealthTile[] = [
   link: '',
 }))
 
-function HealthBody({ view }: { view: NightshiftOwnerView | null }) {
+function HealthBody({
+  view,
+  nowMs,
+}: {
+  view: NightshiftOwnerView | null
+  nowMs: number
+}) {
+  const snapshot = view ? currentSnapshot(view, nowMs) : null
   const tiles = view?.tiles.length ? view.tiles : UNKNOWN_TILES
   const findings = view?.findings ?? []
   return (
     <div className="flex flex-col gap-4">
       {view && (view.verdict?.doing || view.verdict?.label) && (
-        <p className="text-[13px] leading-[1.4]" data-testid="health-verdict">
-          {view.verdict.doing ||
-            [view.verdict.label, view.verdict.reason]
-              .filter(Boolean)
-              .join(': ')}
-        </p>
+        <div>
+          <p className="text-[13px] leading-[1.4]" data-testid="health-verdict">
+            {view.verdict.doing ||
+              [view.verdict.label, view.verdict.reason]
+                .filter(Boolean)
+                .join(': ')}
+          </p>
+          {snapshot?.age != null && (
+            <p
+              className="text-[11px]"
+              style={{ color: 'var(--mist)' }}
+              data-testid="health-verdict-age"
+            >
+              From the checks that ran {ageText(snapshot.age)} ago
+            </p>
+          )}
+        </div>
       )}
       <ul
         aria-label="Health at a glance"
@@ -192,6 +216,22 @@ function HealthBody({ view }: { view: NightshiftOwnerView | null }) {
               ))}
             </ul>
           )}
+        </section>
+      )}
+      {view && (view.others?.length ?? 0) > 0 && (
+        <section aria-labelledby="health-others-h">
+          <h3
+            id="health-others-h"
+            className="mb-1.5 text-[12px] tracking-[0.05em] uppercase"
+            style={{ color: 'var(--mist)' }}
+          >
+            Open from agents and apps
+          </h3>
+          <ul className="flex flex-col" aria-label="Open from agents and apps">
+            {view.others?.map((item) => (
+              <OpenItem key={item.id} item={item} />
+            ))}
+          </ul>
         </section>
       )}
     </div>
@@ -270,6 +310,24 @@ function Finding({ finding }: { finding: HealthFinding }) {
           </OutLink>
         )}
       </div>
+    </li>
+  )
+}
+
+function OpenItem({ item }: { item: HealthOpenItem }) {
+  return (
+    <li
+      data-testid="health-open-item"
+      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
+      style={{ borderTop: '1px solid var(--paper-veil)' }}
+    >
+      <span className="min-w-0 flex-1 text-[13px] break-words">
+        {item.title}
+        <small className="block text-[12px]" style={{ color: 'var(--mist)' }}>
+          {openItemMeta(item)}
+        </small>
+      </span>
+      {item.link && <OutLink href={item.link}>Open</OutLink>}
     </li>
   )
 }

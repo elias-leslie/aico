@@ -101,6 +101,40 @@ function approvals(items: Row[], loose: unknown[], dt: number): Row[] {
     })
 }
 
+const LIVE_STATES = new Set(['needs_you', 'open', 'on_it', 'unknown'])
+const OTHER_KINDS = new Set(['alert', 'todo'])
+
+/** Open items that are not a host check's finding and not an approval: an agent's or a project's alert or to-do.
+ * The board lists host findings only, so these were invisible here. Most urgent first, then oldest. */
+function others(items: Row[], now: number): Row[] {
+  const rank = (state: unknown) => LIVE_STATES.size - [...LIVE_STATES].indexOf(String(state))
+  return items
+    .filter((it) => {
+      const words = isObject(it.words) ? it.words : {}
+      const tray = isObject(words.tray) ? words.tray : {}
+      return (
+        LIVE_STATES.has(String(it.state)) &&
+        OTHER_KINDS.has(String(it.kind)) &&
+        typeof it.title === 'string' &&
+        !words.finding &&
+        !(tray.section === 'approvals')
+      )
+    })
+    .sort(
+      (a, b) =>
+        rank(b.state) - rank(a.state) || Number(a.created_at ?? 0) - Number(b.created_at ?? 0),
+    )
+    .map((it) => ({
+      id: String(it.id),
+      title: it.title,
+      source: typeof it.source === 'string' ? it.source : '',
+      state: it.state,
+      severity: typeof it.severity === 'string' ? it.severity : '',
+      age: isNumber(it.created_at) ? Math.max(0, now - it.created_at) : null,
+      link: typeof it.open === 'string' && it.open.startsWith('https://') ? it.open : '',
+    }))
+}
+
 /** The owner view (version 1, tiles[]) from GET /api/items?list=all, as present.api_view() builds it. */
 export function composeView(body: Row, now: number): Record<string, unknown> {
   const surface = isObject(body.surface) ? body.surface : {}
@@ -112,7 +146,11 @@ export function composeView(body: Row, now: number): Record<string, unknown> {
   const list = (value: unknown) => (Array.isArray(value) ? value : [])
   return {
     version: NIGHTSHIFT_VIEW_VERSION,
-    snapshot: board.snapshot ?? null,
+    // The snapshot's age was true when the words were computed; move it on like every other age here.
+    snapshot:
+      isObject(board.snapshot) && isNumber(board.snapshot.age)
+        ? { ...board.snapshot, age: board.snapshot.age + dt }
+        : (board.snapshot ?? null),
     generated_at: board.generated_at ?? null,
     verdict: board.verdict ?? null,
     tiles: list(board.tiles),
@@ -120,6 +158,7 @@ export function composeView(body: Row, now: number): Record<string, unknown> {
     findings: findings(items, list(unattached.findings), dt),
     needs_you: board.needs_you ?? 0,
     approvals: approvals(items, list(unattached.tray), dt),
+    others: others(items, now),
     links: isObject(board.links) ? board.links : {},
   }
 }

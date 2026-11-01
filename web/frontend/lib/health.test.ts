@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { view } from '../test-stubs/health-view'
 import {
   callsText,
+  currentSnapshot,
   type HealthFinding,
   handledBy,
   type NightshiftOwnerView,
@@ -134,5 +135,42 @@ describe('whenText', () => {
     expect(whenText(240, 1_468_800)).toBe('checked 4 min ago · open 17 days')
     expect(whenText(null, 3600)).toBe('open 1 h')
     expect(whenText(undefined, null)).toBe('')
+  })
+})
+
+describe('currentSnapshot', () => {
+  const ran = Date.parse('2026-11-01T15:00:00Z')
+  const withRan = (over = {}) =>
+    view({
+      generated_at: '2026-11-01T15:00:00Z',
+      snapshot: { state: 'fresh', age: 60, stale_after: 900 },
+      ...over,
+    })
+
+  it('keeps counting the checks age after the view was read', () => {
+    expect(currentSnapshot(withRan(), ran + 600_000)).toMatchObject({
+      state: 'fresh',
+      age: 600,
+    })
+  })
+
+  it('turns a fresh snapshot stale once it outlives Nightshift’s limit', () => {
+    const late = ran + 20 * 60_000
+    expect(currentSnapshot(withRan(), late)).toMatchObject({
+      state: 'stale',
+      age: 1200,
+    })
+    const result: NightshiftViewResult = { available: true, view: withRan() }
+    expect(pillState(result, false, false, late)).toMatchObject({
+      label: 'Health unknown',
+    })
+    expect(unknownReason(result, false, late)).toMatch(/20 min ago/)
+  })
+
+  it('trusts the stored state when it has no time or limit to count from', () => {
+    const plain = view({ snapshot: { state: 'fresh', age: 120 } })
+    expect(currentSnapshot(plain, ran)).toBe(plain.snapshot)
+    const noLimit = withRan({ snapshot: { state: 'fresh', age: 60 } })
+    expect(currentSnapshot(noLimit, ran + 3_600_000).state).toBe('fresh')
   })
 })

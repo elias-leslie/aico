@@ -125,6 +125,55 @@ describe('HealthSheet', () => {
   })
 })
 
+describe('HealthSheet freshness and open items', () => {
+  it('dates the verdict line and lists open items that are not host checks', () => {
+    health.result = {
+      available: true,
+      view: view({
+        generated_at: new Date(Date.now() - 7 * 60_000).toISOString(),
+        snapshot: { state: 'fresh', age: 5, stale_after: 900 },
+        others: [
+          {
+            id: 'o1',
+            title: 'Deploy failed',
+            source: 'summitflow',
+            state: 'open',
+            age: 3 * 3600,
+            link: 'https://sf.example/d/1',
+          },
+        ],
+      }),
+    }
+    render(<HealthSheet open onOpenChange={() => {}} />)
+    // counted from when the checks ran, not from when the view was read
+    expect(screen.getByTestId('health-verdict-age')).toHaveTextContent(
+      'ran 7 min ago',
+    )
+    const item = screen.getByTestId('health-open-item')
+    expect(item).toHaveTextContent('Deploy failed')
+    expect(item).toHaveTextContent('summitflow · open 3 h')
+    expect(within(item).getByRole('link', { name: /Open/ })).toHaveAttribute(
+      'href',
+      'https://sf.example/d/1',
+    )
+  })
+
+  it('says unknown, not fresh, when the checks outlived the limit', () => {
+    health.result = {
+      available: true,
+      view: view({
+        generated_at: new Date(Date.now() - 25 * 60_000).toISOString(),
+        snapshot: { state: 'fresh', age: 5, stale_after: 900 },
+      }),
+    }
+    render(<HealthSheet open onOpenChange={() => {}} />)
+    expect(screen.getByTestId('health-unknown')).toHaveTextContent(
+      'last check was 25 min ago',
+    )
+    expect(screen.queryByText(/checked .* ago$/)).toBeNull()
+  })
+})
+
 describe('HealthLauncher', () => {
   it('names the state for screen readers', () => {
     health.result = { available: false, reason: 'not_answering' }

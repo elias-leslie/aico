@@ -54,12 +54,35 @@ export interface HealthApproval {
   left: number
 }
 
+/** An open alert or to-do from an agent or a project: not a host check, so the
+ * board has no row for it. */
+export interface HealthOpenItem {
+  id: string
+  title: string
+  /** Who sent it ('summitflow', 'neri'); '' when unknown. */
+  source: string
+  state: 'needs_you' | 'open' | 'on_it' | 'unknown'
+  /** Seconds since it was first raised. */
+  age: number | null
+  link: string
+}
+
 export interface NightshiftOwnerView {
   version: 1
-  snapshot: { state: 'fresh' | 'stale' | 'missing'; age: number | null }
+  snapshot: {
+    state: 'fresh' | 'stale' | 'missing'
+    /** Seconds since the checks ran, as of when the view was read. */
+    age: number | null
+    /** Past this many seconds a snapshot is stale (Nightshift's own limit). Older Nightshift: absent. */
+    stale_after?: number
+  }
+  /** When the checks last ran (ISO). Lets the age keep moving after the view was read. */
+  generated_at?: string | null
   verdict: { state: string; label: string; reason: string; doing: string }
   tiles: HealthTile[]
   findings: HealthFinding[]
+  /** Open alerts and to-dos that are not host findings. Older web server: absent. */
+  others?: HealthOpenItem[]
   needs_you: number
   approvals: HealthApproval[]
   links: { status: string; needs_you: string; notices: string }
@@ -127,16 +150,37 @@ const UNAVAILABLE: Record<
     'Nightshift hasn’t updated its item store recently, so health is unknown.',
 }
 
+/** The checks' age and state as of `nowMs`. The view was read some time ago
+ * and the live feed only speaks when something changes, so the age is counted
+ * from when the checks ran, and a snapshot that has outlived Nightshift's own
+ * limit reads stale instead of fresh. */
+export function currentSnapshot(
+  view: NightshiftOwnerView,
+  nowMs: number,
+): NightshiftOwnerView['snapshot'] {
+  const { snapshot } = view
+  const ran = view.generated_at ? Date.parse(view.generated_at) : Number.NaN
+  if (snapshot.state === 'missing' || !Number.isFinite(ran)) return snapshot
+  const age = Math.max(0, (nowMs - ran) / 1000)
+  const outlived = snapshot.stale_after != null && age > snapshot.stale_after
+  return {
+    ...snapshot,
+    age,
+    state: snapshot.state === 'fresh' && outlived ? 'stale' : snapshot.state,
+  }
+}
+
 /** Why health is unknown right now, or null when the view is current. */
 export function unknownReason(
   result: NightshiftViewResult | undefined,
   loadFailed: boolean,
+  nowMs: number = Date.now(),
 ): string | null {
   if (!result) return loadFailed ? 'Couldn’t load health.' : null
   if (loadFailed)
     return 'Couldn’t refresh health, so what’s shown may be out of date.'
   if (!result.available) return UNAVAILABLE[result.reason]
-  const { snapshot } = result.view
+  const snapshot = currentSnapshot(result.view, nowMs)
   if (snapshot.state === 'missing')
     return 'Nightshift hasn’t reported a check yet, so health is unknown.'
   if (snapshot.state === 'stale')
@@ -159,6 +203,7 @@ export function pillState(
   result: NightshiftViewResult | undefined,
   loadFailed: boolean,
   loading: boolean,
+  nowMs: number = Date.now(),
 ): PillState {
   if (!result && loading && !loadFailed)
     return {
@@ -167,7 +212,7 @@ export function pillState(
       count: 0,
       title: 'Health · loading',
     }
-  const unknown = unknownReason(result, loadFailed)
+  const unknown = unknownReason(result, loadFailed, nowMs)
   if (unknown || !result?.available)
     return {
       tone: 'quiet',
@@ -238,4 +283,17 @@ export function handledBy(finding: HealthFinding): string {
 /** `2 min left`, for an approval. */
 export function leftText(seconds: number): string {
   return `${ageText(seconds)} left`
+}
+
+/** Who raised an open item and how long ago, for its second line. */
+export function openItemMeta(item: HealthOpenItem): string {
+  return [
+    item.source,
+    item.state === 'needs_you' ? 'needs you' : null,
+    item.state === 'on_it' ? 'someone is on it' : null,
+    item.state === 'unknown' ? 'state unknown' : null,
+    item.age != null ? `open ${ageText(item.age)}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
