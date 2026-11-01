@@ -49,15 +49,19 @@ def test_claude_keeps_only_pretooluse_guards_model_effort_status_line_and_bypass
     status_line = {"type": "command", "command": "bash statusline.sh", "padding": 1}
     (tmp_path / "claude-home/settings.json").write_text(json.dumps({
         "statusLine": status_line, "outputStyle": "Concise", "model": "opus", "effortLevel": "high",
-        "skipDangerousModePermissionPrompt": True, "hooks": {
+        "skipDangerousModePermissionPrompt": True, "switchModelsOnFlag": False,
+        "env": {"CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "1", "OTHER": "x"}, "hooks": {
         "PreToolUse": guard, "SessionStart": [{"hooks": [{"type": "command", "command": "inject"}]}]}}))
     argv, env = run("claude-code", "--permission-mode", "auto")
     assert argv[1:5] == ["--setting-sources", "project,local", "--settings",
                          json.dumps({"hooks": {"PreToolUse": guard}, "model": "opus", "effortLevel": "high",
-                                     "statusLine": status_line, "skipDangerousModePermissionPrompt": True})]
+                                     "statusLine": status_line, "skipDangerousModePermissionPrompt": True,
+                                     "switchModelsOnFlag": False})]
     assert argv[5:] == ["--strict-mcp-config", "--disable-slash-commands", "--no-chrome", "--permission-mode", "auto"]
     assert env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] == env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
     assert "AGENT_HUB_CONTEXT_PREINJECTED_TEXT" not in env
+    # The flagged-request model switch stays off, as in the user's settings; other env entries are not carried.
+    assert env["CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK"] == "1" and "OTHER" not in env
     trusted = json.loads(state.read_text())
     assert trusted["projects"][str(workspace)] == {"hasTrustDialogAccepted": True}
     assert str(tmp_path / "blank-slate") not in trusted["projects"]

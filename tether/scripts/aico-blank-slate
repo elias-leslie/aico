@@ -35,7 +35,10 @@ CODEX_VALUE_OPTIONS = {"-a", "--ask-for-approval", "-C", "--cd", "-c", "--config
 # mode, so a blank root started with --dangerously-skip-permissions does not stop
 # at that accept screen.
 CLAUDE_KEPT_SETTINGS = ("model", "effortLevel", "modelSettings", "alwaysThinkingEnabled", "statusLine",
-                        "skipDangerousModePermissionPrompt")
+                        "skipDangerousModePermissionPrompt", "switchModelsOnFlag")
+# Entries of the user settings' env kept too: the opt-out of Claude's switch to another model after a flagged
+# request (with switchModelsOnFlag above), so a blank session stops instead of going on with the fallback model.
+CLAUDE_KEPT_ENV = ("CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK",)
 # Environment the normal launchers leave for their hooks; never carried into a blank session.
 DROPPED_ENV = ("AGENT_HUB_CONTEXT_PREINJECTED_HASH", "AGENT_HUB_CONTEXT_PREINJECTED_CONTRACT",
                "AGENT_HUB_CONTEXT_PREINJECTED_TEXT", "AICO_ROOT_AGENT_HUB_CONTEXT")
@@ -108,8 +111,12 @@ def claude(argv: list[str], env: dict[str, str]) -> list[str]:
     # the flag settings put back only the PreToolUse guards and settings that add
     # no text to the model's context: model choice and effort (as Codex keeps
     # config.toml's), the status line, which only the terminal shows, and the
-    # Bypass Permissions acceptance.
+    # Bypass Permissions acceptance, and the model-switch opt-outs.
     settings.update({key: user[key] for key in CLAUDE_KEPT_SETTINGS if key in user})
+    user_env = user.get("env")
+    for key in CLAUDE_KEPT_ENV:
+        if isinstance(user_env, dict) and isinstance(user_env.get(key), str):
+            env[key] = user_env[key]
     env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
     env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] = "1"
     return [native("CLAUDE_REAL", HOME / ".local/bin/claude"),
