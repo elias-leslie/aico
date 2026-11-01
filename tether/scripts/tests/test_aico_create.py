@@ -891,12 +891,11 @@ def test_a_denied_hunting_launch_is_refused_with_agent_hubs_reason(launch_api, m
                           **({"model": model} if model else {})}
 
 
-@pytest.mark.parametrize("model", [[], ["--model", "claude-opus-5-5"]])
-def test_a_denied_agent_hub_chat_is_refused_with_or_without_a_model(monkeypatch, capsys, model):
+def test_a_denied_agent_hub_chat_is_refused(monkeypatch, capsys):
     row = table_row(job="hunting", work_roles=["hunting"], model=None, allowed=False, deny_reason=DENY)
     monkeypatch.setattr(admin, "launch_row", lambda *_args: row)
     error = refused_create(monkeypatch, capsys, ["create", "hub-9", "Hunt.", "--tool", "agent-hub", "--agent", "chat",
-                                                 "--work-role", "hunting", *model, "--blank-slate"])
+                                                 "--work-role", "hunting", "--model", "claude-opus-5-5", "--blank-slate"])
     assert DENY in error
 
 
@@ -919,6 +918,15 @@ def test_without_the_rules_a_claude_launch_for_case_work_is_refused(monkeypatch,
     error = refused_create(monkeypatch, capsys, ["create", "case-1", "Work.", "--tool", "claude-code",
                                                  "--work-role", role, "--blank-slate"])
     assert "launch rules could not be read" in error and f"for {role} work" in error
+
+
+@pytest.mark.parametrize("model", ["anthropic/claude-opus-5-5", "Sonnet-5-5", "haiku-5-5"])
+def test_without_the_rules_a_claude_model_on_another_tool_is_refused_for_case_work(monkeypatch, capsys, model):
+    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)
+    monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
+    error = refused_create(monkeypatch, capsys, ["create", "case-2", "Work.", "--tool", "pi", "--model", model,
+                                                 "--work-role", "hunting", "--blank-slate"])
+    assert "launch rules could not be read" in error
 
 
 def test_a_row_that_does_not_say_allowed_is_the_floor_too(monkeypatch, capsys):

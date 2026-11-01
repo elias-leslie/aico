@@ -55,6 +55,7 @@ import {
   endSession,
   ensureSessionSerialized,
   hasVerifiedStatus,
+  holdPromotion,
   isDir,
   lastEnsureFailure,
   lifecycleOwners,
@@ -66,6 +67,7 @@ import {
   type RespawnResult,
   reconcileWidgetTool,
   releaseLifecycleOwner,
+  releasePromotion,
   respawnAndRelaunch,
   rootManagedGateState,
   type SessionStatus,
@@ -1076,7 +1078,12 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const latest = getWidget(row.id)
       if (!latest) throw new HttpError(404, 'not_found')
       if (generationOf(latest) !== generation) throw new HttpError(409, 'identity_changed')
-      sendJson(res, 200, descriptor(latest, status))
+      // `resumeId`: the native conversation ID of a Claude Code or Codex session, as last
+      // observed (the root's own session in Agent Hub's usage data); null when none is known.
+      sendJson(res, 200, {
+        ...descriptor(latest, status),
+        resumeId: context.continuity?.resumeIdOf(latest.id, latest.tool) ?? null,
+      })
     })
     .add('PATCH', '/v1/sessions/:id', async (req, res, params) => {
       const body = await readJsonObject(req)
@@ -1130,10 +1137,13 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           ? lanes.store.markEnd(row.id, endedBy, Date.now())
           : false
       let result: Awaited<ReturnType<typeof endSession>>
+      // A kept wake relaunches the coordinator and rejoins its lanes, so End does not promote them.
+      if ((kept || keptWaits) && row.coordinator) holdPromotion(row.id)
       try {
         result = await endSession(params.id as string, generation)
       } finally {
         if (marked) lanes?.store.unmarkEnd(row.id)
+        releasePromotion(row.id)
       }
       if (kept || keptWaits) {
         if (result.status === 'ended') context.wakes?.changed(null)

@@ -16,6 +16,7 @@ import {
   type RestoreReport,
   readJsonFile,
   restoreCandidates,
+  snapshotResumeId,
   writeJsonFile,
 } from './continuity'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
@@ -154,6 +155,12 @@ export class Continuity {
 
   setRecovery(recovery: Recovery | null): void {
     this.recovery = recovery
+  }
+
+  /** The native resume ID the observer last saw for a running session (updated every minute). */
+  resumeIdOf(id: string, tool: string): string | null {
+    const seen = snapshotResumeId(readJsonFile<ContinuitySnapshot>(this.snapshotPath), id, tool)
+    return seen && isResumeSessionId(getTui(tool), seen) ? seen : null
   }
 
   isAwaitingRestore(id: string): boolean {

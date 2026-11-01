@@ -1412,7 +1412,8 @@ EFFORTS = ("none", "off", "minimal", "low", "medium", "high", "xhigh", "max")
 # owner 2026-11-01): Claude never does case work, so a Claude launch for these work roles is refused;
 # every other launch goes ahead. With the rules readable, Agent Hub alone answers allowed or denied.
 CLAUDE_FLOOR_ROLES = ("hunting", "recon", "verification")
-CLAUDE_TOOL = "claude-code"  # always Claude; whether another tool's model is Claude is Agent Hub's call
+CLAUDE_TOOL = "claude-code"  # always Claude
+CLAUDE_MODEL_TOKENS = ("claude", "opus", "sonnet", "haiku")  # Agent Hub's launch_policy name tokens for Claude
 
 
 def launch_row(role: str, tool: str, model: str | None = None, project: str | None = None) -> dict | None:
@@ -1456,7 +1457,8 @@ def launch_refusal(role: str, tool: str, model: str | None, row: dict | None) ->
     """Why this launch is refused under Agent Hub's launch rules, else None. Without a readable
     answer (no row, or a row that does not say allowed) only the safety floor applies."""
     if row is None or not isinstance(row.get("allowed"), bool):
-        if tool == CLAUDE_TOOL and role in CLAUDE_FLOOR_ROLES:
+        is_claude = tool == CLAUDE_TOOL or any(token in (model or "").lower() for token in CLAUDE_MODEL_TOKENS)
+        if is_claude and role in CLAUDE_FLOOR_ROLES:
             return (f"Agent Hub's launch rules could not be read, and Claude is never launched for {role} "
                     "work without them; use codex or pi, or retry once Agent Hub answers")
         return None
@@ -2394,20 +2396,46 @@ def context_label(tokens: object) -> str:
     return f"{round(tokens / 1000)}K" if tokens >= 1000 else str(tokens)
 
 
-def root_contexts(records: list[dict]) -> list[str]:
+NATIVE_ID = r"[0-9A-Za-z][0-9A-Za-z-]{7,99}"
+
+
+def root_resume_ids(collector: Collector, owner_socket: str, records: list[dict]) -> list[str | None]:
+    """Each running root's native conversation id (Claude Code session, Codex thread) from Tether's
+    session descriptor, which Agent Hub keys that harness's session by. None for a root Tether has none
+    for, an older Tether, or a read that fails: the context then falls back to the root's links."""
+    found: list[str | None] = []
+    for record in records:
+        widget, resume = record.get("widgetId"), None
+        if isinstance(widget, str) and re.fullmatch(WIDGET, widget):
+            try:
+                status, data = collector.receipt(owner_socket, f"/v1/sessions/{widget}", timeout=1)
+                value = data.get("resumeId") if status == 200 else None
+                resume = value if isinstance(value, str) and re.fullmatch(NATIVE_ID, value) else None
+            except (Unavailable, Stopped):
+                resume = None
+        found.append(resume)
+    return found
+
+
+def root_contexts(records: list[dict], resume_ids: list[str | None] | None = None) -> list[str]:
     """One context label per root, in order: the context the model was sent on its latest response, from
-    Agent Hub's usage data in one batched read. Unmatched roots, roots without usage and an Agent Hub that
-    can't be reached all read unknown; the roots listing never fails on it."""
-    keys = [k for record in records for k in (record.get("logicalSessionId"), record.get("sessionId")) if isinstance(k, str)]
+    Agent Hub's usage data in one batched read. The root's own harness session (its native conversation id)
+    is preferred; its links (work-role source, Aico session id) are the fallback, and those can also match
+    the `claude -p` / `codex exec` processes the root started. Unmatched roots, roots without usage and an
+    Agent Hub that can't be reached all read unknown; the roots listing never fails on it."""
+    natives = list(resume_ids or []) + [None] * (len(records) - len(resume_ids or []))
+    keys = [k for record, native in zip(records, natives)
+            for k in (record.get("logicalSessionId"), record.get("sessionId"), native) if isinstance(k, str)]
     answer = agent_hub_get(CONTEXT_ROOTS_PATH, {"keys": ",".join(dict.fromkeys(keys))}, timeout=2) if keys else None
     found = answer[1].get("roots") if answer is not None and answer[0] == 200 and isinstance(answer[1], dict) else None
     if not isinstance(found, dict):
         found = {}
     labels = []
-    for record in records:
+    for record, native in zip(records, natives):
+        own = found.get(native) if isinstance(native, str) else None
         hits = [found[k] for k in (record.get("logicalSessionId"), record.get("sessionId"))
                 if isinstance(k, str) and isinstance(found.get(k), dict)]
-        newest = max(hits, key=lambda hit: str(hit.get("at")), default={})
+        newest = own if isinstance(own, dict) else max(hits, key=lambda hit: str(hit.get("at")), default={})
         labels.append(context_label(newest.get("context_tokens")))
     return labels
 
@@ -2436,8 +2464,9 @@ def roots_main(argv: list[str]) -> int:
             records = [{**dataclasses.asdict(pin), **({"host": child.remote[0]} if child.remote else {}),
                         **collector.sample(pin)} for pin, child in resolved]
             rows = records + unavailable
+            resumes = root_resume_ids(discovery, args.owner_socket, rows)
             emit_json(collector, {"owner": "aico", "roots": [{**row, "context": label}
-                                                             for row, label in zip(rows, root_contexts(rows))]})
+                                                             for row, label in zip(rows, root_contexts(rows, resumes))]})
             return int(any(failed(row) for row in records + unavailable))
         for record in unavailable:
             emit_json(collector, {"event": "baseline", **record})

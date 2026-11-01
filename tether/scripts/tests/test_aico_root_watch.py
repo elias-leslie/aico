@@ -494,6 +494,51 @@ def test_roots_show_each_roots_measured_context_from_one_batched_read(monkeypatc
                       {"keys": "aico-root-a,aico-widget-aaaaaaaa,aico-root-b,aico-widget-bbbbbbbb"})]
 
 
+NATIVE_A = "f5863e95-a57e-4804-bd32-97b330236c36"
+
+
+def roots_with_native_ids(monkeypatch, answer, resume):
+    """One running root with a widget id; Tether's session descriptor answers `resume` as its native id."""
+    rows = [{"requestId": "a", "widgetId": "aaaaaaaa", "logicalSessionId": "aico-root-a", "sessionId": "aico-widget-aaaaaaaa",
+             "observation": "available", "identity": "pinned", "terminal": "turn_finished"}]
+    asked, output = [], []
+
+    def fake_get(path, params=None, timeout=3):
+        asked.append(params)
+        return 200, {"roots": answer}
+
+    monkeypatch.setattr(watcher.Collector, "discover", lambda self, request_id: ([], rows))
+    monkeypatch.setattr(watcher.Collector, "receipt", lambda self, path, route, **_: (200, {"id": "aaaaaaaa", **resume}))
+    monkeypatch.setattr(watcher, "agent_hub_get", fake_get)
+    monkeypatch.setattr(watcher, "emit_json", lambda _, row: output.append(row))
+    assert watcher.roots_main(["--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"]) == 0
+    return asked, output[0]["roots"][0]
+
+
+def test_roots_prefer_the_roots_own_native_session_over_same_source_children(monkeypatch):
+    # The source key resolves to a `claude -p` child at 29K; the root's own conversation is at 218K.
+    asked, root = roots_with_native_ids(monkeypatch, {
+        "aico-root-a": {"session_id": "child", "context_tokens": 29_000, "at": "2026-11-01T20:05:00Z"},
+        NATIVE_A: {"session_id": NATIVE_A, "context_tokens": 218_000, "at": "2026-11-01T20:00:00Z"}}, {"resumeId": NATIVE_A})
+    assert root["context"] == "218K"
+    assert "resumeId" not in root
+    assert asked == [{"keys": f"aico-root-a,aico-widget-aaaaaaaa,{NATIVE_A}"}]
+
+
+@pytest.mark.parametrize("resume", [{}, {"resumeId": None}, {"resumeId": "not a session id!"}])
+def test_roots_without_a_native_session_id_fall_back_to_their_links(monkeypatch, resume):
+    asked, root = roots_with_native_ids(monkeypatch, {
+        "aico-root-a": {"session_id": "s1", "context_tokens": 211_000, "at": "2026-11-01T20:00:00Z"}}, resume)
+    assert root["context"] == "211K"
+    assert asked == [{"keys": "aico-root-a,aico-widget-aaaaaaaa"}]
+
+
+def test_roots_native_session_with_no_usage_falls_back_to_their_links(monkeypatch):
+    _, root = roots_with_native_ids(monkeypatch, {
+        "aico-root-a": {"session_id": "s1", "context_tokens": 5_000, "at": "2026-11-01T20:00:00Z"}}, {"resumeId": NATIVE_A})
+    assert root["context"] == "5K"
+
+
 @pytest.mark.parametrize("answer", [
     (200, {"roots": {}}), (200, {"roots": {"aico-root-a": {"context_tokens": 0}, "aico-root-b": {}}}),
     (200, {"roots": {"aico-root-a": {"context_tokens": "212K"}}}), (500, {"detail": "boom"}),

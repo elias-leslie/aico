@@ -720,6 +720,41 @@ describe('coordinators', () => {
     expect(promoteCoordinatorLanes(old)).toEqual([])
   })
 
+  it('promotes only running coordinator-role lanes that no running coordinator-role lane launched', () => {
+    const ids = ['f1000001', 'f1000002', 'f1000003', 'f1000004', 'f1000005', 'f1000006', 'f1000007']
+    for (const id of ids) insertWidget(id, 'codex')
+    const [old, top, inner, innerHelper, gone, goneHelper, deadInner] = ids
+    for (const id of [top, inner, gone, deadInner])
+      store.db
+        .prepare(
+          `INSERT INTO root_requests (request_id, digest, widget_id, logical_session_id, role, created_at, origin, work_role)
+           VALUES (?, ?, ?, ?, 'lead', 0, 'aico', 'coordinator')`,
+        )
+        .run(`req-${id}`, 'd', id, `logical-${id}`)
+    recordLauncher(top, old)
+    recordLauncher(inner, top) // a coordinator-role lane launched by another one
+    recordLauncher(innerHelper, inner)
+    recordLauncher(gone, old) // a coordinator-role lane that is no longer running
+    recordLauncher(goneHelper, gone)
+    recordLauncher(deadInner, top)
+    const running = new Set([top, inner, innerHelper, goneHelper])
+    store.db.prepare('DELETE FROM sessions WHERE id = ?').run(old)
+    expect(new Set(promoteCoordinatorLanes(old, (id) => running.has(id)))).toEqual(
+      new Set([top, inner, innerHelper, deadInner]),
+    )
+    // Only the outermost running one is a coordinator; the nested one is a lane of it.
+    expect(getWidget(top)?.coordinator).toBe(true)
+    expect(getWidget(inner)?.coordinator).toBe(false)
+    expect(lineage(inner)).toEqual([false, top, getWidget(top)?.coordinatorColor])
+    expect(getWidget(inner)?.parentId).toBe(top)
+    expect(lineage(innerHelper)).toEqual([false, top, getWidget(top)?.coordinatorColor])
+    expect(getWidget(deadInner)?.coordinatorId).toBe(top)
+    // A lane that is not running is not promoted, and its lanes stay with the ended coordinator.
+    expect(getWidget(gone)?.coordinator).toBe(false)
+    expect(getWidget(gone)?.coordinatorId).toBe(old)
+    expect(getWidget(goneHelper)?.coordinatorId).toBe(old)
+  })
+
   it('records the direct launcher as parent, three deep, beside the root', () => {
     for (const id of ['e0000011', 'e0000012', 'e0000013', 'e0000014']) insertWidget(id, 'codex')
     recordLauncher('e0000012', 'e0000011')

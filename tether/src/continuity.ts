@@ -621,6 +621,18 @@ export function mergeSnapshot(
   return { v: 1, bootId, updatedAt: now, sessions }
 }
 
+/** The native resume ID the snapshot last saw for this session (same tool, so a session
+ * that changed tools reads none), else null. */
+export function snapshotResumeId(
+  snapshot: ContinuitySnapshot | null,
+  id: string,
+  tool: string,
+): string | null {
+  if (snapshot?.v !== 1 || !Array.isArray(snapshot.sessions)) return null
+  const seen = snapshot.sessions.find((session) => session.id === id && session.tool === tool)
+  return seen?.resumeId ?? null
+}
+
 /** Sessions the snapshot saw running whose workload is gone now (status
  * `pending` after startup reconciliation found their tmux server dead). */
 export function restoreCandidates(

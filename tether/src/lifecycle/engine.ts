@@ -55,6 +55,7 @@ import {
   clearWidgetPendingScope,
   compareAndSetWidgetLaunchMetadata,
   compareAndSetWidgetOwnership,
+  coordinatorRoleLanes,
   getCurrentManagedTmuxServer,
   getTmuxServer,
   getWidget,
@@ -2686,14 +2687,40 @@ async function endAgentHubSession(
   if (result.status === 'ended') {
     statusCache.delete(widgetId)
     publishSession(widgetId, { ended: true })
-    publishPromotedLanes(widgetId)
+    await publishPromotedLanes(widgetId)
   }
   return result
 }
 
-/** A coordinator's End leaves its coordinator-role lanes as coordinators. */
-function publishPromotedLanes(endedId: string): void {
-  for (const id of promoteCoordinatorLanes(endedId)) publishSession(id, { force: true })
+/** Coordinators whose End keeps wakes or waits that relaunch it: the relaunch rejoins the
+ * lanes still on it, so they stay put. */
+const promotionHolds = new Set<string>()
+
+export function holdPromotion(id: string): void {
+  promotionHolds.add(id)
+}
+
+export function releasePromotion(id: string): void {
+  promotionHolds.delete(id)
+}
+
+/** A coordinator's End leaves its running coordinator-role lanes as coordinators (not when a
+ * kept wake will relaunch the coordinator itself). */
+export async function publishPromotedLanes(
+  endedId: string,
+  statusOf: (row: WidgetRow) => Promise<SessionStatus> = verifySessionStatus,
+): Promise<string[]> {
+  if (promotionHolds.delete(endedId)) return []
+  const running = new Set<string>()
+  await Promise.all(
+    coordinatorRoleLanes(endedId).map(async (id) => {
+      const row = getWidget(id)
+      if (row && (await statusOf(row).catch(() => null)) === 'running') running.add(id)
+    }),
+  )
+  const changed = promoteCoordinatorLanes(endedId, (lane) => running.has(lane))
+  for (const id of changed) publishSession(id, { force: true })
+  return changed
 }
 
 function drainWidgetRetire(id: string): void {
@@ -2760,7 +2787,7 @@ async function discardWidgetOwned(
       contextStatuses.delete(id)
       ensureFailures.delete(id)
       publishSession(id, { ended: true })
-      publishPromotedLanes(id)
+      await publishPromotedLanes(id)
       const finalized = await finalizeContext(getTui(row.tool), row.sessionId)
       if (finalized !== null) {
         if (!finalized)

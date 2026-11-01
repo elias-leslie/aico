@@ -48,6 +48,9 @@ export interface SessionDescriptor {
     sessionName: string
   }
   createdAt: number
+  /** The native conversation ID last observed for a Claude Code or Codex session; only on
+   * `GET /v1/sessions/:id`, null when none is known, absent from an older Tether. */
+  resumeId?: string | null
   /** Absent from a Tether older than the context-hook field. */
   contextHook?: ContextHook
   /** The Agent Hub prompt revision chosen at creation, or null; absent from

@@ -931,22 +931,41 @@ export function listLanes(id: string): string[] {
   ).map((lane) => lane.id)
 }
 
+/** Ids of the lanes of coordinator `endedId` whose root work role is `coordinator`:
+ * the ones promotion may make coordinators once they are known to be running. */
+export function coordinatorRoleLanes(endedId: string): string[] {
+  const roles = db.prepare('SELECT 1 FROM root_requests WHERE widget_id = ? AND work_role = ?')
+  return listLanes(endedId).filter((id) => roles.get(id, 'coordinator') !== undefined)
+}
+
 /** Called once session `endedId` has ended. Each running lane of it whose
- * root work role is `coordinator` becomes its own coordinator, and the lanes
- * those launched (by parent, any depth) move under it, keeping their parents.
- * Other lanes keep the ended coordinator, as a lane always hands it down.
+ * root work role is `coordinator` and that no running coordinator-role lane
+ * launched (by parent, any depth) becomes its own coordinator, and the lanes
+ * under it move under it, keeping their parents. Other lanes keep the ended
+ * coordinator, as a lane always hands it down, unless they sit under a
+ * promoted one. `isRunning` says which lanes still run (all, by default).
  * Returns the ids whose descriptors changed. */
-export function promoteCoordinatorLanes(endedId: string): string[] {
+export function promoteCoordinatorLanes(
+  endedId: string,
+  isRunning: (id: string) => boolean = () => true,
+): string[] {
   const lanes = db
     .prepare('SELECT id, parent_id AS parentId FROM sessions WHERE coordinator_id = ?')
     .all(endedId) as { id: string; parentId: string | null }[]
   if (lanes.length === 0) return []
-  const roles = db.prepare('SELECT 1 FROM root_requests WHERE widget_id = ? AND work_role = ?')
-  const promoted = new Set(
-    lanes.filter((lane) => roles.get(lane.id, 'coordinator') !== undefined).map((lane) => lane.id),
-  )
-  if (promoted.size === 0) return []
   const parents = new Map(lanes.map((lane) => [lane.id, lane.parentId]))
+  const candidates = new Set(coordinatorRoleLanes(endedId).filter(isRunning))
+  const promoted = new Set<string>()
+  for (const id of candidates) {
+    const seen = new Set<string>([id])
+    let up = parents.get(id) ?? null
+    while (up && !candidates.has(up) && !seen.has(up)) {
+      seen.add(up)
+      up = parents.get(up) ?? null
+    }
+    if (!up || up === id || !candidates.has(up)) promoted.add(id)
+  }
+  if (promoted.size === 0) return []
   const changed = [...promoted]
   for (const id of promoted) setCoordinator(id, true)
   for (const lane of lanes) {

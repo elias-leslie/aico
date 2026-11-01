@@ -9,6 +9,7 @@ import {
   type ProcFs,
   processTree,
   restoreCandidates,
+  snapshotResumeId,
 } from './continuity'
 
 const CLAUDE = '5a7741ea-e6b1-4062-853b-0d9d2e03d549'
@@ -240,6 +241,15 @@ describe('snapshot', () => {
       { id: 'cccccccc', tool: 'shell', resumeId: null, observedAt: 1 },
     ],
   }
+
+  it('reads the resume ID the snapshot last saw for a session of the same tool', () => {
+    expect(snapshotResumeId(previous, 'aaaaaaaa', 'claude-code')).toBe(CLAUDE)
+    expect(snapshotResumeId(previous, 'bbbbbbbb', 'codex')).toBe(CODEX)
+    expect(snapshotResumeId(previous, 'aaaaaaaa', 'codex')).toBeNull()
+    expect(snapshotResumeId(previous, 'cccccccc', 'shell')).toBeNull()
+    expect(snapshotResumeId(previous, 'missing', 'codex')).toBeNull()
+    expect(snapshotResumeId(null, 'aaaaaaaa', 'claude-code')).toBeNull()
+  })
 
   it('keeps a known resume ID while the agent is between conversations', () => {
     const next = mergeSnapshot(
