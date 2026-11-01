@@ -30,7 +30,8 @@ export function forRole<T extends TuiSpec | undefined>(
   const profile = profiles[spec.slug]
   if (!profile || typeof profile === 'string') return spec
   const role = Object.hasOwn(profile.roles, workRole) ? profile.roles[workRole] : profile.roles['*']
-  if (!role) return spec
+  // Only a role object trims; false (or anything else) keeps the full harness.
+  if (typeof role !== 'object' || role === null) return spec
   return {
     ...spec,
     command: [...spec.command, ...(role.args ?? [])],

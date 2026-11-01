@@ -52,6 +52,11 @@ describe('forRole', () => {
     expect(forRole(shell, 'implementation', profiles)).toBe(shell)
   })
 
+  it('trims only for a role object, so a mistyped true keeps the full harness', () => {
+    const typo = { ...profiles, 'claude-code': { env: { LEAN: '1' }, roles: { review: true } } }
+    expect(forRole(claude, 'review', typo as unknown as LaneTools)).toBe(claude)
+  })
+
   it('keeps the tool env it already had, and works on a Blank Slate launch', () => {
     const env = { HOME: '/home/u' }
     const blank = forWorkspace(
