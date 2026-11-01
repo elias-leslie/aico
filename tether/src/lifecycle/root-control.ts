@@ -329,6 +329,20 @@ export function missingProviderModel(value: unknown): string | null {
   return `${value.tool} needs --model provider/model`
 }
 
+function effortLevels(effort: { key?: string; values?: string[] } | undefined): string[] {
+  return (
+    effort?.values ?? [
+      effort?.key ? 'none' : 'off',
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+    ]
+  )
+}
+
 export function parseRootCreate(value: unknown): RootCreateRequest | null {
   if (
     !object(value) ||
@@ -435,11 +449,9 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
       (typeof model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(model))) ||
     (reasoningEffort !== null && !getTui(tool)?.modelSelection?.reasoningEffort) ||
     (reasoningEffort !== null &&
-      !(
-        getTui(tool)?.modelSelection?.reasoningEffort?.key
-          ? ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
-          : ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
-      ).includes(reasoningEffort as string)) ||
+      !effortLevels(getTui(tool)?.modelSelection?.reasoningEffort).includes(
+        reasoningEffort as string,
+      )) ||
     typeof projectId !== 'string' ||
     !KEY.test(projectId) ||
     !isProjectRootPath(projectRoot) ||

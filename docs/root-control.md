@@ -229,7 +229,7 @@ it is not an atomic native submission receipt. If the supported route leaves a
 request queued, observe it and keep the same key rather than pasting a second
 copy into the pane.
 
-`model` and `reasoningEffort` are per-launch create fields for Codex and Pi. Boolean
+`model` and `reasoningEffort` are per-launch create fields for Claude Code, Codex and Pi. Boolean
 `daybreak` supports Codex and Pi's explicit `openai/gpt-6-sol` selection. Model IDs
 are passed literally, without a hardcoded model catalog. Native Codex validates
 availability and whether the selected model supports the effort. The options
@@ -249,6 +249,14 @@ root, naming the bare slug or the listed models. An API key login, a custom
 user's setting. A nonempty selection appends
 `{model: string|null, reasoningEffort: string|null, daybreak?: boolean, agentHubContext?: boolean}` after the existing digest
 fields, preserving digests for callers that omit both fields.
+
+Claude Code takes `--model MODEL` (an alias such as `haiku` or a full name such as
+`claude-haiku-5-5`) and `--reasoning-effort low|medium|high|xhigh|max`, passed as its
+documented `--model` and `--effort` flags ahead of `--resume` and the prompt, so they hold
+for fresh, exact-resume, restart and reboot-restore launches. They override the model and
+effort from the user's settings (a Blank Slate lane keeps those settings, so the override
+still wins); omit them to inherit. Claude Code has no Daybreak switch. Testing lanes run
+on `claude-haiku-5-5`.
 
 Pi requires an explicit `--model PROVIDER/MODEL`, including on resume. For example,
 `--tool pi --work-role implementation --model openai/gpt-6.1-sol --reasoning-effort high` passes native

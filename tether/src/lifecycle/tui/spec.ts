@@ -84,7 +84,9 @@ export interface TuiSpec {
     model: string[]
     /** A provider/model selection is required when this native flag is declared. */
     modelProvider?: string[]
-    reasoningEffort?: { arguments: string[]; key?: string }
+    /** `values`: the levels the tool accepts; without it, the shape of the flag decides
+     * (a `key` config: none..max, a plain flag: off..max). */
+    reasoningEffort?: { arguments: string[]; key?: string; values?: string[] }
     daybreak?: { arguments: string[]; key: string } | { environment: true }
     /** Fixed flags that print the models this host can run as a table whose
      * first two columns are provider and model, under a `provider` header. */

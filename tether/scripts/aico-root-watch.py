@@ -1478,7 +1478,7 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
     parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID; owner adapter validates format/support")
-    parser.add_argument("--model", help="per-launch model; Pi requires provider/model, Codex a bare name from its catalog (gpt-6.1-sol)")
+    parser.add_argument("--model", help="per-launch model; Pi requires provider/model, Codex a bare name from its catalog (gpt-6.1-sol), Claude Code an alias or full name (claude-haiku-5-5)")
     parser.add_argument("--reasoning-effort", choices=("none", "off", "minimal", "low", "medium", "high", "xhigh", "max"))
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; leaves shared defaults alone. Codex: only models its catalog lists with "
                         "Daybreak for this account (on any other, create refuses and names the ones that have it); "

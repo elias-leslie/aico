@@ -969,7 +969,68 @@ describe('private root workload control', () => {
     expect(parseRootCreate({ ...input, daybreak: 'off' })).toBeNull()
     const selected = present(parseRootCreate({ ...input, daybreak: false }))
     expect(rootRequestDigest(selected)).not.toBe(rootRequestDigest(parsed))
-    expect(parseRootCreate({ ...input, tool: 'claude-code' })).toBeNull()
+    // Claude Code takes a model and effort but has no Daybreak switch.
+    expect(parseRootCreate({ ...input, tool: 'claude-code', daybreak: false })).toBeNull()
+  })
+
+  it('launches and resumes Claude Code on the chosen model and effort', async () => {
+    const input = {
+      ...create('claude-selection'),
+      tool: 'claude-code',
+      model: 'claude-haiku-5-5',
+      reasoningEffort: 'low',
+    }
+    expect(parseRootCreate(input)).not.toBeNull()
+    expect(parseRootCreate({ ...input, reasoningEffort: 'max' })).not.toBeNull()
+    expect(parseRootCreate({ ...input, model: null, reasoningEffort: null })).not.toBeNull()
+    // Its own levels: Codex's none and Pi's off/minimal are not Claude Code's.
+    for (const bad of ['none', 'off', 'minimal', 'turbo'])
+      expect(parseRootCreate({ ...input, reasoningEffort: bad })).toBeNull()
+    for (const model of ['--flag', 'x\nunsafe', 'x'.repeat(129)])
+      expect(parseRootCreate({ ...input, model })).toBeNull()
+    expect(parseRootCreate({ ...input, daybreak: false })).toBeNull()
+    const first = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(await call('/v1/roots', 'POST', input)).toEqual(first)
+    expect((await call('/v1/roots', 'POST', { ...input, model: 'claude-opus-5-5' })).status).toBe(
+      409,
+    )
+    const root = present(getRootRequest('claude-selection'))
+    const tool = {
+      ...present(getTui('claude-code')),
+      command: [process.execPath, '-e', 'console.log(JSON.stringify(process.argv.slice(1)))', '--'],
+    }
+    const run = (line: string | null, env: Record<string, string>) =>
+      JSON.parse(
+        execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', present(line)], {
+          env: { PATH: '/usr/bin:/bin', ...env },
+          encoding: 'utf8',
+        }),
+      )
+    for (const resume of [null, '00000000-0000-4000-8000-000000000001'])
+      await withRootPrompt(
+        root.widgetId,
+        'Reply only.',
+        async () => {
+          expect(
+            run(initialLaunchLine(root.widgetId, tool), rootLaunchEnvironment(root.widgetId)),
+          ).toEqual([
+            '--model',
+            'claude-haiku-5-5',
+            '--effort',
+            'low',
+            ...(resume ? ['--resume', resume] : []),
+            '--',
+            'Reply only.',
+          ])
+        },
+        resume,
+        { model: 'claude-haiku-5-5', reasoningEffort: 'low' },
+      )
+    // Every later launch (recovery, restart, reboot restore) keeps them.
+    const later = rootLaunchEnvironment(root.widgetId)
+    for (const line of [initialLaunchLine(root.widgetId, tool), relaunchLine(root.widgetId, tool)])
+      expect(run(line, later)).toEqual(['--model', 'claude-haiku-5-5', '--effort', 'low'])
   })
 
   it('passes model and effort as literal argv for fresh and resumed launches', async () => {

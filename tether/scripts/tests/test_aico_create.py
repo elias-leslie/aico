@@ -220,6 +220,22 @@ def test_requested_model_and_effort_are_digest_bound(monkeypatch):
     assert calls[0]["daybreak"] is False
 
 
+def test_claude_code_model_and_effort_are_sent_for_this_launch(monkeypatch):
+    calls = []
+
+    def receipt(_, endpoint, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    argv = [arg if arg != "codex" else "claude-code" for arg in BASE]
+    assert admin.main([*argv, "--model", "claude-haiku-5-5", "--reasoning-effort", "low"]) == 0
+    assert calls[0]["tool"] == "claude-code"
+    assert calls[0]["model"] == "claude-haiku-5-5"
+    assert calls[0]["reasoningEffort"] == "low"
+    assert "daybreak" not in calls[0]
+
+
 @pytest.mark.parametrize("args, refused", [
     (["--daybreak", "on"], True),  # configured default lacks Daybreak
     (["--model", "gpt-6.1-sol", "--daybreak", "on"], True),

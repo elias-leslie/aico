@@ -102,6 +102,16 @@ export function toolSpec(tool: AgentTool): TuiSpec {
       reasoningEffort: { arguments: ['-c'], key: 'model_reasoning_effort' },
       daybreak: { arguments: ['-c'], key: 'daybreak' },
     }
+  if (tool.slug === 'claude-code')
+    // Claude Code's documented --model and --effort (claude --help); an override
+    // wins over the user's settings, which a Blank Slate session keeps.
+    spec.modelSelection = {
+      model: ['--model'],
+      reasoningEffort: {
+        arguments: ['--effort'],
+        values: ['low', 'medium', 'high', 'xhigh', 'max'],
+      },
+    }
   if (tool.slug === 'pi') {
     spec.inputLine = 'ruled'
     spec.modelSelection = {
