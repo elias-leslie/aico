@@ -113,8 +113,9 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
   there; its database is copied first, and the old release and database are
   put back if it does not answer). A create waits for it within the host's
   `wakeTimeoutSec`; until it succeeds, a refused request names the host's API
-  and the update's state. A failed update is tried again only by another hub
-  release. A host that is off is updated on its next link-up and is never
+  and the update's state. One that failed after the host began installing is
+  tried again only by another hub release; one that installed nothing (no ssh,
+  a dropped link, a held lock) on the next link-up. A host that is off is updated on its next link-up and is never
   started for it (`tether/src/hub/update.ts`, tether/docs/api-v1.md "Updates").
 - Snapshots are taken only when the Tether catalog is empty. Rollback and
   poweroff end sessions first. Clones are made from a clean snapshot.

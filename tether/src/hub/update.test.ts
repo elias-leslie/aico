@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { remoteArgv } from './host-admin'
 import type { HostEntry } from './hosts'
 import {
+  installStarted,
   pushRelease,
   RELEASE_FILES,
   releaseId,
@@ -134,6 +135,7 @@ describe('remote Tether update', () => {
   it("installs the hub's release on the host and restarts its Tether there", async () => {
     const result = await pushRelease(release, target, { argv: hostArgv() })
     expect(result.code).toBe(0)
+    expect(installStarted(result)).toBe(true)
     expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('new bundle\n')
     // The host can pass the release on in turn: the installer came with it.
     expect(existsSync(join(lib, 'scripts', 'install-release.sh'))).toBe(true)
@@ -149,6 +151,8 @@ describe('remote Tether update', () => {
     expect(result.output).toBe(
       'the new release did not answer within 1 s; the previous release is back',
     )
+    // It failed after the host began installing: the same release would again.
+    expect(installStarted(result)).toBe(true)
     expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
     expect(readFileSync(join(lib, 'bin', 'tether'), 'utf8')).toBe('#!/bin/sh\nexit 0\n')
     expect(restarts()).toEqual([stop, start, stop, start])
@@ -208,6 +212,7 @@ describe('remote Tether update', () => {
       code: UPDATE_BUSY_EXIT,
       output: "another update of this host's Tether is still running",
     })
+    expect(installStarted(result)).toBe(false)
     expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
     expect(restarts()).toEqual([])
   })
@@ -228,6 +233,22 @@ describe('remote Tether update', () => {
       (await pushRelease(release, { ...target, instance: "x'; rm -rf ~" }, { argv: ['false'] }))
         .output,
     ).toContain('named no usable instance')
+    expect(restarts()).toEqual([])
+  })
+
+  it('installs nothing when the release does not arrive whole', async () => {
+    // A link that drops mid-copy: the host gets a cut-off tar stream.
+    const cut = [
+      'sh',
+      '-c',
+      `head -c 100 | ${hostArgv()
+        .map((word) => `'${word.replace(/'/g, `'\\''`)}'`)
+        .join(' ')}`,
+    ]
+    const result = await pushRelease(release, target, { argv: cut })
+    expect(result.code).not.toBe(0)
+    expect(installStarted(result)).toBe(false)
+    expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
     expect(restarts()).toEqual([])
   })
 

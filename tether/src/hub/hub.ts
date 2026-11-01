@@ -24,7 +24,7 @@ import {
 } from './peer'
 import { forwardRequest, PeerUnavailable, peerRequest } from './peer-http'
 import type { PeerView } from './placement'
-import { pushRelease, releaseId, runningRelease, UPDATE_BUSY_EXIT, type Updater } from './update'
+import { installStarted, pushRelease, releaseId, runningRelease, type Updater } from './update'
 import { defaultGateRuntime, type GateRuntime, readyHost } from './wake'
 
 export const LIST_TIMEOUT_MS = 1_500
@@ -319,11 +319,13 @@ export class Hub {
   }
 
   /** On each link-up: a peer whose Tether is on an older API than this one
-   * gets this release (src/hub/update.ts). One update per host at a time. A
-   * failed one is remembered in settings and the same from/to is tried again
-   * only by another hub release, so a host that cannot take it is not
-   * restarted on every link-up or hub restart. A peer that names no API, or a
-   * newer one, is left alone. */
+   * gets this release (src/hub/update.ts): one attempt per link-up, one
+   * update per host at a time. One that failed after the host began installing
+   * is remembered in settings and the same from/to is tried again only by
+   * another hub release, so a host that cannot take it is not restarted on
+   * every link-up or hub restart. One that failed before (no ssh, a dropped
+   * link, a held lock) installed nothing and is tried on the next link-up. A
+   * peer that names no API, or a newer one, is left alone. */
   private checkRelease(peer: Peer): void {
     const from = peer.apiVersion
     if (from !== null && from >= API_VERSION && peer.update?.state === 'failed') {
@@ -358,19 +360,23 @@ export class Hub {
     const to = API_VERSION
     peer.setUpdate({ state: 'updating', from, to, since: this.now(), error: null })
     this.log(`${peer.name}: its Tether is API ${from}, this one is ${to}; updating it`)
-    /** `remember` false: the host was busy with another update, not this one failing. */
-    const fail = (error: string, remember = true) => {
+    /** `remember` false: nothing was installed (no ssh, a dropped link, a
+     * held lock), so the next link-up tries again. */
+    const fail = (why: string, remember = true) => {
+      const error = remember
+        ? why
+        : `${why}; nothing was installed, tried again on the next link-up`
       this.log(`${peer.name}: Tether update failed: ${error}`)
       const update: PeerUpdate = { state: 'failed', from, to, since: this.now(), error }
       peer.setUpdate(update)
-      if (remember)
-        this.deps.settings.put(
-          UPDATE_FAILURES_KEY,
-          JSON.stringify({
-            ...this.updateFailures(),
-            [peer.name]: { ...update, release: this.release },
-          }),
-        )
+      if (!remember) return this.forgetUpdateFailure(peer.name)
+      this.deps.settings.put(
+        UPDATE_FAILURES_KEY,
+        JSON.stringify({
+          ...this.updateFailures(),
+          [peer.name]: { ...update, release: this.release },
+        }),
+      )
     }
     let result: Awaited<ReturnType<Updater>>
     try {
@@ -380,13 +386,10 @@ export class Hub {
         instance: peer.instance,
       })
     } catch (error) {
-      return fail((error as Error).message)
+      return fail((error as Error).message, false)
     }
     if (result.code !== 0)
-      return fail(
-        result.output || `exit ${result.code ?? 'error'}`,
-        result.code !== UPDATE_BUSY_EXIT,
-      )
+      return fail(result.output || `exit ${result.code ?? 'error'}`, installStarted(result))
     // The restart dropped the peer's stream; wait for the link-up on the new release.
     const waitMs = this.deps.updateReconnectMs ?? UPDATE_RECONNECT_MS
     const deadline = this.now() + waitMs

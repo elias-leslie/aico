@@ -38,9 +38,17 @@ export const UPDATE_RUN_MS = 300_000
 /** How long the host's restarted Tether has to answer before rollback, and
  * the rolled-back one after it. */
 export const UPDATE_ANSWER_SEC = 90
-/** The host script's exit when another update holds the host's lock: not a
- * failed update of this release, so it is not remembered as one. */
+/** The host script's exit when another update holds the host's lock. */
 export const UPDATE_BUSY_EXIT = 75
+/** The line the host script prints just before it installs anything. */
+export const UPDATE_INSTALLING = 'tether-update: installing'
+
+/** Whether the host began installing: a failure after that (the install, the
+ * restart or the rollback) would happen again on this release, while one
+ * before it (no ssh, a dropped link, a held lock) is worth another try. */
+export function installStarted(result: RunResult): boolean {
+  return result.stdout.split('\n').includes(UPDATE_INSTALLING)
+}
 
 export interface UpdateTarget {
   entry: HostEntry
@@ -131,6 +139,7 @@ export function updateLine(
     'stopped=0',
     'saved=0',
     'why="its install failed"',
+    `echo ${shellQuote(UPDATE_INSTALLING)}`,
     'if TETHER_LIB_DIR="$lib" bash "$stage/new/scripts/install-release.sh" >/dev/null; then',
     '  why="$unit did not stop"',
     '  if systemctl --user --no-ask-password stop "$unit"; then',
@@ -192,13 +201,14 @@ export function pushRelease(
     remoteArgv(target.entry, target.control, updateLine(instance, target.entry.socket))
   return new Promise((resolve) => {
     let stderr = ''
+    let stdout = ''
     let settled = false
     const tar = spawn('tar', ['-cf', '-', ...RELEASE_FILES], {
       cwd: release,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     const [command, ...args] = argv as [string, ...string[]]
-    const ssh = spawn(command, args, { stdio: ['pipe', 'ignore', 'pipe'] })
+    const ssh = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] })
     const done = (result: RunResult) => {
       if (settled) return
       settled = true
@@ -208,11 +218,14 @@ export function pushRelease(
     }
     const timer = setTimeout(() => {
       ssh.kill('SIGKILL')
-      done({ code: null, stdout: '', output: `timed out after ${Math.round(timeoutMs / 1000)} s` })
+      done({ code: null, stdout, output: `timed out after ${Math.round(timeoutMs / 1000)} s` })
     }, timeoutMs)
     const keep = (chunk: Buffer) => {
       stderr = (stderr + chunk.toString('utf8')).slice(-4_096)
     }
+    ssh.stdout.on('data', (chunk: Buffer) => {
+      stdout = (stdout + chunk.toString('utf8')).slice(-4_096)
+    })
     tar.stderr.on('data', keep)
     ssh.stderr.on('data', keep)
     tar.stdout.pipe(ssh.stdin)
@@ -226,7 +239,7 @@ export function pushRelease(
     ssh.once('close', (code) => {
       const lines = stderr.trim().split('\n')
       const last = (lines[lines.length - 1] ?? '').trim().slice(0, 300)
-      done({ code, stdout: '', output: last || `exit ${code ?? 'error'}` })
+      done({ code, stdout, output: last || `exit ${code ?? 'error'}` })
     })
   })
 }

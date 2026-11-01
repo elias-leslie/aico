@@ -19,7 +19,7 @@ import { ProjectProvider } from '../projects'
 import { Hub, type HubDeps } from './hub'
 import { peerRequest } from './peer-http'
 import { Placement } from './placement'
-import type { UpdateTarget } from './update'
+import { UPDATE_INSTALLING, type UpdateTarget } from './update'
 
 type Item = Record<string, unknown> & { id: string }
 
@@ -939,14 +939,19 @@ describe('hub', () => {
       await startHub({
         update: async () => {
           calls += 1
-          return { code: 1, stdout: '', output: 'tar: No space left on device' }
+          // The host began installing, then rolled back: this release fails again there.
+          return {
+            code: 1,
+            stdout: `${UPDATE_INSTALLING}\n`,
+            output: 'its install failed; the previous release is back',
+          }
         },
       })
       await vi.waitFor(() => expect(update()?.state).toBe('failed'))
       expect(update()).toMatchObject({
         from: 20,
         to: API_VERSION,
-        error: 'tar: No space left on device',
+        error: 'its install failed; the previous release is back',
       })
       // A create it takes still goes there.
       expect((await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-u2' })).status).toBe(
@@ -959,7 +964,7 @@ describe('hub', () => {
           error: 'invalid_body',
           field: 'reply',
           host: 'vm',
-          reason: `remote Tether on vm is API 20, needs ${API_VERSION}; update failed: tar: No space left on device`,
+          reason: `remote Tether on vm is API 20, needs ${API_VERSION}; update failed: its install failed; the previous release is back`,
         },
       })
       // A link-up soon after does not restart the host's Tether again.
@@ -976,7 +981,11 @@ describe('hub', () => {
         release: 'release-a',
         update: async () => {
           calls += 1
-          return { code: 1, stdout: '', output: 'node: v20 is older than 22.13' }
+          return {
+            code: 1,
+            stdout: `${UPDATE_INSTALLING}\n`,
+            output: 'node: v20 is older than 22.13',
+          }
         },
       }
       await startHub(failing)
@@ -1010,7 +1019,11 @@ describe('hub', () => {
     it('drops a remembered failure once the host is on this API some other way', async () => {
       const failing: Partial<HubDeps> = {
         release: 'release-a',
-        update: async () => ({ code: 1, stdout: '', output: 'install failed' }),
+        update: async () => ({
+          code: 1,
+          stdout: `${UPDATE_INSTALLING}\n`,
+          output: 'install failed',
+        }),
       }
       await startHub(failing)
       await vi.waitFor(() => expect(update()?.state).toBe('failed'))
@@ -1024,23 +1037,40 @@ describe('hub', () => {
       expect(JSON.parse(settings.get('peer_update_failures') ?? '{}')).toEqual({})
     })
 
-    it('does not remember a host that was busy with another update', async () => {
+    it('tries a failure that installed nothing again on the next link-up, once per link-up', async () => {
+      const failures = [
+        // The ssh session dropped before the host began installing.
+        { code: 255, stdout: '', output: 'Connection to vm closed by remote host.' },
+        // Another update held the host's lock.
+        { code: 75, stdout: '', output: "another update of this host's Tether is still running" },
+      ]
       let calls = 0
-      const busy: Partial<HubDeps> = {
+      await startHub({
         release: 'release-a',
         update: async () => {
+          const failure = failures[calls]
           calls += 1
-          return {
-            code: 75,
-            stdout: '',
-            output: "another update of this host's Tether is still running",
-          }
+          if (failure) return failure
+          await restartUpdated()
+          return { code: 0, stdout: `${UPDATE_INSTALLING}\n`, output: '' }
         },
-      }
-      await startHub(busy)
+      })
       await vi.waitFor(() => expect(update()?.state).toBe('failed'))
-      await startHub(busy)
-      await vi.waitFor(() => expect(calls).toBe(2))
+      expect(update()?.error).toBe(
+        'Connection to vm closed by remote host.; nothing was installed, tried again on the next link-up',
+      )
+      expect(JSON.parse(settings.get('peer_update_failures') ?? '{}')).toEqual({})
+      // No tight loop: nothing more until the link comes up again.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect(calls).toBe(1)
+      for (const expected of [2, 3]) {
+        await peer.stop()
+        await vi.waitFor(() => expect(state()).toBe('offline'))
+        await peer.start()
+        await vi.waitFor(() => expect(calls).toBe(expected), { timeout: 8_000 })
+      }
+      await vi.waitFor(() => expect(update()?.state).toBe('updated'), { timeout: 8_000 })
+      expect(calls).toBe(3)
     })
 
     it('says when the update did not bring the host to this API', async () => {
