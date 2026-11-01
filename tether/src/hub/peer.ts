@@ -20,6 +20,16 @@ export interface PeerIdentity {
   machineId: string | null
 }
 
+/** Where bringing the host's Tether up to this hub's API stands (src/hub/update.ts). */
+export interface PeerUpdate {
+  state: 'updating' | 'updated' | 'failed'
+  /** The host's API version before, and this hub's. */
+  from: number
+  to: number
+  since: number
+  error: string | null
+}
+
 export interface PeerSnapshot {
   listedAt: number | null
   items: Descriptor[]
@@ -48,6 +58,9 @@ export interface PeerDeps {
   poweredOff?(entry: HostEntry): Promise<boolean | null>
   /** Ask the host's link to retry now instead of waiting out its backoff. */
   kick?(host: string): void
+  /** The peer answered its health on a link-up as the trusted machine
+   * (`apiVersion` and `instance` are fresh). */
+  checked?(peer: Peer): void
   /** How long a silent event stream waits before asking the peer's health,
    * and how long that ask may take (tests shorten them). */
   stall?: { afterMs: number; probeMs: number }
@@ -124,6 +137,10 @@ export class Peer {
   wake: WakeProgress | null = null
   /** The peer Tether's `apiVersion` from its last health answer. */
   apiVersion: number | null = null
+  /** The peer Tether's instance from its last health answer. */
+  instance: string | null = null
+  /** The last update of its Tether to this hub's API, if one was needed. */
+  update: PeerUpdate | null = null
   private readonly sessions = new Map<string, Descriptor>()
   private readonly roots = new Set<string>()
   /** The last root list per query, kept for while the link is down. */
@@ -250,6 +267,12 @@ export class Peer {
       since: this.since,
       wake: progress,
     })
+  }
+
+  /** Not published: a `peer.state` event while the link is not up would
+   * make every open remote terminal let go of its host. `GET /v1/hosts` shows it. */
+  setUpdate(update: PeerUpdate): void {
+    this.update = update
   }
 
   /** The host was just powered off on purpose (the Hosts panel). */
@@ -448,6 +471,8 @@ export class Peer {
     if (health.status !== 200) throw new PeerUnavailable(`health answered ${health.status}`)
     const api = record(health.body)?.apiVersion
     this.apiVersion = typeof api === 'number' ? api : null
+    const instance = record(health.body)?.instance
+    this.instance = typeof instance === 'string' ? instance : null
     const host = record(record(health.body)?.host)
     // An older Tether names no host: nothing to compare.
     if (typeof host?.name !== 'string') return
@@ -485,6 +510,7 @@ export class Peer {
   /** One link-up: identity, then the event stream; resolves when it drops. */
   private async connect(signal: AbortSignal, onUp: () => void): Promise<void> {
     await this.checkIdentity()
+    this.deps.checked?.(this)
     const connection = new AbortController()
     const stop = () => connection.abort()
     signal.addEventListener('abort', stop, { once: true })

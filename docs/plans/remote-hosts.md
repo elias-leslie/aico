@@ -107,6 +107,13 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
 - Retained work comes back to the workstation by fetching branches, or
   through Neri and Agent Hub records. Nothing on the host is durable.
 - The remote Tether runs with `TETHER_HEADLESS=1`.
+- Updates: on each link-up the hub compares the host Tether's `apiVersion`
+  with its own. An older host gets the hub's installed release over the link
+  (installed with `install-release.sh`, then `tether@<instance>` restarts
+  there, rolled back if it does not answer). A create waits for it; until it
+  succeeds, a refused request names the host's API and the update's state.
+  A host that is off is updated on its next link-up and is never started for
+  it (`tether/src/hub/update.ts`, tether/docs/api-v1.md "Updates").
 - Snapshots are taken only when the Tether catalog is empty. Rollback and
   poweroff end sessions first. Clones are made from a clean snapshot.
 

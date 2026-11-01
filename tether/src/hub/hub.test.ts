@@ -9,7 +9,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolvePaths } from '../config'
+import { API_VERSION, resolvePaths } from '../config'
 import { EventBus } from '../events'
 import { HttpError, readJsonObject, sendError, sendJson } from '../http'
 import { createRootHandler } from '../lifecycle/root-control'
@@ -19,6 +19,7 @@ import { ProjectProvider } from '../projects'
 import { Hub, type HubDeps } from './hub'
 import { peerRequest } from './peer-http'
 import { Placement } from './placement'
+import type { UpdateTarget } from './update'
 
 type Item = Record<string, unknown> & { id: string }
 
@@ -54,6 +55,9 @@ class FakePeer {
   apiVersion: number | undefined = undefined
   requests: { method: string; url: string; body: unknown }[] = []
   refuseEnd = false
+  /** Refuse creates and deliveries as an older Tether refuses a field it
+   * does not know. */
+  refuseBody = false
   failSessions = false
   /** Health never answers (a VM that stopped dead: the socket takes the
    * connection, nothing comes back). */
@@ -101,8 +105,19 @@ class FakePeer {
     if (url === '/v1/health') {
       if (this.hangHealth) return
       await this.healthReady
-      return sendJson(res, 200, { status: 'ok', apiVersion: this.apiVersion, host: this.identity })
+      return sendJson(res, 200, {
+        status: 'ok',
+        instance: 'default',
+        apiVersion: this.apiVersion,
+        host: this.identity,
+      })
     }
+    if (
+      this.refuseBody &&
+      req.method === 'POST' &&
+      (url === '/v1/roots' || /\/deliveries$/.test(url))
+    )
+      return sendJson(res, 400, { error: 'invalid_body', field: 'reply' })
     if (url === '/v1/sessions' && req.method === 'GET') {
       if (this.failSessions) return sendJson(res, 500, { error: 'internal_error' })
       return sendJson(res, 200, { items: this.sessions })
@@ -181,6 +196,8 @@ describe('hub', () => {
       log: () => {},
       random: () => 0,
       gate: { kick: () => {}, linkGraceMs: 200 },
+      // Never an ssh from a test: a host on an older API fails its update.
+      update: async () => ({ code: 1, stdout: '', output: 'no release in tests' }),
       ...overrides,
     })
   }
@@ -805,6 +822,164 @@ describe('hub', () => {
     expect(hub.mergeRuns({ status: 'ok', error: null, updatedAt: 2, items: [] })).toMatchObject({
       status: 'ok',
       error: null,
+    })
+  })
+
+  describe('a host whose Tether is on an older API', () => {
+    const roots = () => peer.requests.filter((r) => r.url === '/v1/roots' && r.method === 'POST')
+    const update = () => hub.hosts()[0]?.update as Record<string, unknown> | null | undefined
+
+    /** Restart the fake host on this hub's API, as the update's restart does. */
+    async function restartUpdated(): Promise<void> {
+      peer.apiVersion = API_VERSION
+      peer.refuseBody = false
+      await peer.stop()
+      await peer.start()
+    }
+
+    async function startHub(overrides: Partial<HubDeps>): Promise<void> {
+      hub.close()
+      peer.apiVersion = 20
+      hub = makeHub(overrides)
+      hub.start()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
+    }
+
+    it('gets this release over its link and is updated once it is back on it', async () => {
+      const targets: UpdateTarget[] = []
+      await startHub({
+        update: async (target) => {
+          targets.push(target)
+          await restartUpdated()
+          return { code: 0, stdout: '', output: '' }
+        },
+      })
+      await vi.waitFor(() => expect(update()?.state).toBe('updated'), { timeout: 8_000 })
+      expect(targets).toEqual([
+        {
+          entry: expect.objectContaining({ name: 'vm', ssh: 'vm' }),
+          control: join(dir, 'tether', 'peers', 'vm', 'ssh.ctl'),
+          instance: 'default',
+        },
+      ])
+      expect(hub.hosts()[0]).toMatchObject({
+        state: 'connected',
+        apiVersion: API_VERSION,
+        update: { state: 'updated', from: 20, to: API_VERSION, error: null },
+      })
+      // Never a peer.state of its own: open remote terminals let go of a host on one.
+      expect(events.filter((e) => e.type === 'peer.state' && 'update' in e.data)).toEqual([])
+    })
+
+    it('holds a create until the update is done, and says why an older host refuses meanwhile', async () => {
+      let finish = () => {}
+      const finished = new Promise<void>((resolve) => {
+        finish = resolve
+      })
+      const targets: UpdateTarget[] = []
+      await startHub({
+        update: async (target) => {
+          targets.push(target)
+          await finished
+          await restartUpdated()
+          return { code: 0, stdout: '', output: '' }
+        },
+      })
+      await vi.waitFor(() => expect(targets).toHaveLength(1))
+      peer.refuseBody = true
+      // A forwarded request the old Tether does not know: a reason, never a bare invalid_body.
+      expect(
+        await call('POST', '/v1/sessions/aaaa0001/deliveries', { text: 'hi', reply: true }),
+      ).toEqual({
+        status: 400,
+        body: {
+          error: 'invalid_body',
+          field: 'reply',
+          host: 'vm',
+          reason: `remote Tether on vm is API 20, needs ${API_VERSION}; updating`,
+        },
+      })
+      const before = roots().length
+      const created = call('POST', '/v1/roots', { host: 'vm', requestId: 'req-u1' })
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect(roots()).toHaveLength(before)
+      finish()
+      expect(await created).toMatchObject({ status: 201, body: { requestId: 'req-1', host: 'vm' } })
+      expect(roots().at(-1)?.body).toEqual({ requestId: 'req-u1' })
+      expect(update()?.state).toBe('updated')
+    })
+
+    it('stays usable after a failed update, says why it refuses, and is not retried at once', async () => {
+      let calls = 0
+      await startHub({
+        update: async () => {
+          calls += 1
+          return { code: 1, stdout: '', output: 'tar: No space left on device' }
+        },
+      })
+      await vi.waitFor(() => expect(update()?.state).toBe('failed'))
+      expect(update()).toMatchObject({
+        from: 20,
+        to: API_VERSION,
+        error: 'tar: No space left on device',
+      })
+      // A create it takes still goes there.
+      expect((await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-u2' })).status).toBe(
+        201,
+      )
+      peer.refuseBody = true
+      expect(await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-u3' })).toEqual({
+        status: 400,
+        body: {
+          error: 'invalid_body',
+          field: 'reply',
+          host: 'vm',
+          reason: `remote Tether on vm is API 20, needs ${API_VERSION}; update failed: tar: No space left on device`,
+        },
+      })
+      // A link-up soon after does not restart the host's Tether again.
+      await peer.stop()
+      await vi.waitFor(() => expect(state()).toBe('offline'))
+      await peer.start()
+      await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
+      expect(calls).toBe(1)
+    })
+
+    it('says when the update did not bring the host to this API', async () => {
+      await startHub({
+        update: async () => ({ code: 0, stdout: '', output: '' }),
+        updateReconnectMs: 300,
+      })
+      await vi.waitFor(() => expect(update()?.state).toBe('failed'))
+      expect(update()?.error).toBe('its Tether still answers API 20 after the update')
+    })
+
+    it('leaves a host on this API, or one that names none, alone', async () => {
+      let calls = 0
+      const counting: Partial<HubDeps> = {
+        update: async () => {
+          calls += 1
+          return { code: 0, stdout: '', output: '' }
+        },
+      }
+      hub.close()
+      peer.apiVersion = undefined
+      hub = makeHub(counting)
+      hub.start()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
+      hub.close()
+      peer.apiVersion = API_VERSION
+      hub = makeHub(counting)
+      hub.start()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
+      expect(calls).toBe(0)
+      expect(hub.hosts()[0]).toMatchObject({ apiVersion: API_VERSION, update: null })
+      peer.refuseBody = true
+      // Not behind: the host's own answer, as before.
+      expect(await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-u4' })).toEqual({
+        status: 400,
+        body: { error: 'invalid_body', field: 'reply', host: 'vm' },
+      })
     })
   })
 

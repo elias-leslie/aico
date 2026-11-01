@@ -75,6 +75,10 @@ On a host with SummitFlow, `st service rebuild aico` deploys instead. It also
 restarts `tether@default` on the new release when Tether's source (`tether/`
 or its unit) changed since the release Tether runs from;
 `st service rebuild aico --worker tether@default` deploys Tether alone.
+Remote hosts need no copy of their own: when the hub's link to a host comes
+up and the host's Tether is on an older API, the hub installs its own release
+there and restarts that Tether (a host that is off is updated when it next
+comes up). `tether hosts` shows each host's `apiVersion` and last `update`.
 
 Aico connects to `$TETHER_SOCKET`, else
 `$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`. If Tether is
