@@ -471,7 +471,10 @@ describe('Claude Code', () => {
       ...fs,
       mtimeMs: (path: string) => (made && path.endsWith(`/x/${id}.jsonl`) ? 1 : null),
     }
-    const next = (): ModelSource => ({ ...source(id), fs: renamed as unknown as ProcFs })
+    const next = (): ModelSource => ({
+      ...(source(id) as Extract<ModelSource, { tool: 'claude' }>),
+      fs: renamed as unknown as ProcFs,
+    })
     h.watch.see(SESSION, next(), h.tail)
     made = true
     vi.advanceTimersByTime(2_000)

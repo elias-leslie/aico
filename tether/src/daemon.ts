@@ -911,7 +911,8 @@ export async function startDaemon(
       .then(() => {
         // Switches standing when Tether started; then, once remote hosts have
         // listed theirs, resolve the notices of sessions that are gone.
-        for (const row of listSessions()) modelNotices.session(sessionSnapshot(row), null)
+        for (const row of listSessions())
+          modelNotices.session(sessionSnapshot(row) as { id: string }, null)
         setTimeout(() => modelNotices.sweep(), WAIT_NOTICE_MS).unref()
       })
       .catch(() => {})
