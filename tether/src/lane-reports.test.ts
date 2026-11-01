@@ -1092,6 +1092,34 @@ describe('delivery classes of went-idle lines', () => {
     expect(delivered).toEqual([])
   })
 
+  it('a turn too short to see, after a told-dropped one, still sends its line (review P2-2)', () => {
+    const { reporter, delivered, toldAt } = harness()
+    step(reporter, { state: 'working', stateAgentAt: Date.now() })
+    toldAt.set(`${LANE}>${ROOT}`, Date.now())
+    step(reporter, { stateAgentAt: Date.now() + 1 }, SETTLE)
+    expect(delivered).toEqual([])
+    // The next turn ends before Tether sees it working, with no message of its own.
+    vi.advanceTimersByTime(60_000)
+    step(reporter, { stateAgentAt: Date.now() }, SETTLE)
+    expect(delivered.map((d) => [d.to, d.ride])).toEqual([[ROOT, false]])
+  })
+
+  it('a message just before the previous idle does not hide a quick next turn', () => {
+    const { reporter, delivered, toldAt } = harness({
+      policy: { ...DEFAULT_WAKE_POLICY, laneSettleSeconds: 1 },
+    })
+    step(reporter, { state: 'working', stateAgentAt: Date.now() })
+    vi.advanceTimersByTime(30_000)
+    toldAt.set(`${LANE}>${ROOT}`, Date.now())
+    step(reporter, { stateAgentAt: Date.now() + 500 }, 1_000)
+    expect(delivered).toEqual([])
+    // The launcher answers at once: a new turn, seen working within the
+    // slack of that message, ends with no message of its own.
+    step(reporter, { state: 'working', stateAgentAt: Date.now() })
+    step(reporter, { stateAgentAt: Date.now() + 1 }, 1_000)
+    expect(delivered.map((d) => d.to)).toEqual([ROOT])
+  })
+
   it('a message from an earlier turn does not hide this turn’s idle', () => {
     const { reporter, delivered, toldAt } = harness()
     toldAt.set(`${LANE}>${ROOT}`, Date.now())

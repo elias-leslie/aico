@@ -18,6 +18,14 @@
   during the turn that ended sends no went-idle line (`from` on a delivery).
   SummitFlow sends bare acknowledgements and `st sessions send --fyi` notes as
   ride-along.
+- Delivery class fixes (Tether API 25, review of the above). A ride-along line
+  never turns a queued wake ride-along, and a failed paste puts a wake back as
+  a wake. A coordination request or ack to a lane counts as its launcher acting
+  on it, so the lane's next went-idle line wakes again. Only a request (not an
+  ack, `reply` on a delivery) hides a lane's went-idle line, and only one sent
+  since the lane's previous idle. Ride-along lines are peeked and confirmed
+  (`GET …/due?ride=peek`, `DELETE …/due?token=`), so a hook that times out
+  loses none.
 - Tether stops and reports a model switch (Tether API 22, schema 26). It
   follows each session's own record (Claude Code transcript, Codex rollout, Pi
   session) and treats a served model other than the launch model as a switch;

@@ -30,8 +30,10 @@ import { join } from 'node:path'
  * 23: the hub takes a forwarded End's asker in the `Tether-Ended-By` header
  *     (a session on another host: no lane `ended` line for it).
  * 24: delivery classes: `ride` and `from` on `POST /v1/sessions/:id/deliveries`,
- *     `GET /v1/sessions/:id/due?ride=1`. */
-export const API_VERSION = 24
+ *     `GET /v1/sessions/:id/due?ride=1`.
+ * 25: `reply` on `POST /v1/sessions/:id/deliveries`; `GET /v1/sessions/:id/due?ride=peek`
+ *     and `DELETE /v1/sessions/:id/due?token=` (take ride-along lines once shown). */
+export const API_VERSION = 25
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

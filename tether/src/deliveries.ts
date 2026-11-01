@@ -12,7 +12,17 @@
 // Two classes (API 24). A wake line pastes or wakes the session when it is due;
 // a ride-along line (`ride: true`) never does on its own: it joins the next
 // wake paste, or the agent's next natural turn takes it with
-// `GET /v1/sessions/:id/due?ride=1` (a prompt hook, a tool result).
+// `GET /v1/sessions/:id/due?ride=1` (a prompt hook, a tool result). Since API
+// 25 a client peeks instead (`?ride=peek`: the text and a token, nothing
+// taken) and confirms once it has shown the text
+// (`DELETE /v1/sessions/:id/due?token=`), so a client that dies or times out in
+// between loses no line.
+//
+// `from` names the sessions whose message a line carries: each counts as
+// having acted on this session (a lane's repeat went-idle backoff starts over),
+// and, for a wake line that is not a `reply` (an ack of this session's
+// request), as having told it (a lane that told its launcher during a turn
+// sends no went-idle line for it).
 //
 // `DELETE /v1/sessions/:id/deliveries?source=` takes back a producer's line
 // that has not gone out (it went stale: the inbox has nothing waiting any
@@ -20,7 +30,7 @@
 
 import type { DatabaseSync } from 'node:sqlite'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
-import type { Wake } from './wakes'
+import { RIDE_TOKEN, type Wake } from './wakes'
 
 const SESSION_ID = /^[0-9a-f]{8}$/
 const DELIVERY_ID = /^[0-9a-f]{12}$/
@@ -120,10 +130,15 @@ export interface DeliveryRouteDeps {
   maxChars(): number
   /** Queue the line due now (coalesced by source while undelivered). */
   queue(sessionId: string, source: string, line: string, ride: boolean): Wake
-  /** Sessions whose wake line this was (`from`): each has just told this one. */
-  sent(from: readonly string[], to: string): void
+  /** Sessions whose message this line carries (`from`): each acted on this
+   * one, and `told` it something (a wake line that is not a reply). */
+  sent(from: readonly string[], to: string, told: boolean): void
   /** Take the session's due ride-along lines now (WakeScheduler.takeRide). */
   takeRide(sessionId: string): string | null
+  /** Its due ride-along lines and a token, left queued (WakeScheduler.peekRide). */
+  peekRide(sessionId: string): { text: string; token: string } | null
+  /** The client showed them: the token's rows go (WakeScheduler.confirmRide). */
+  confirmRide(sessionId: string, token: string): number
   /** Take back the source's undelivered line(s) on the session. */
   withdraw(sessionId: string, source: string): { withdrawn: number; sending: boolean }
   /** Whether the queue still holds this row. */
@@ -171,7 +186,7 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
       const id = session(params.id)
       const body = await readJsonObject(req)
       const unknown = Object.keys(body).filter(
-        (key) => !['source', 'line', 'ride', 'from'].includes(key),
+        (key) => !['source', 'line', 'ride', 'from', 'reply'].includes(key),
       )
       if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
       const source = deliverySource(body.source)
@@ -189,6 +204,8 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
         })
       if (body.ride !== undefined && typeof body.ride !== 'boolean')
         throw new HttpError(400, 'invalid_body', { field: 'ride', detail: 'true or false' })
+      if (body.reply !== undefined && typeof body.reply !== 'boolean')
+        throw new HttpError(400, 'invalid_body', { field: 'reply', detail: 'true or false' })
       const from = body.from
       if (
         from !== undefined &&
@@ -206,9 +223,12 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
       if (!deps.receiver(id)) throw new HttpError(409, 'delivery_unsupported')
       const ride = body.ride === true
       const wake = deps.queue(id, source, line, ride)
-      // A wake line from a session is that session telling this one (a lane
-      // that messaged its launcher needs no went-idle line for the same turn).
-      if (!ride && Array.isArray(from)) deps.sent(from as string[], id)
+      // Each sender acted on this session; a wake line that is not a reply
+      // also told it (a lane that messaged its launcher needs no went-idle
+      // line for the same turn). An ack never counts as telling: it may come
+      // first in a turn of work whose end the receiver still needs to hear.
+      if (Array.isArray(from) && from.length)
+        deps.sent(from as string[], id, !ride && body.reply !== true)
       const fresh = log.get(wake.id) === undefined
       log.record({ id: wake.id, sessionId: id, source, now: deps.now() })
       sendJson(res, fresh ? 201 : 200, {
@@ -228,6 +248,17 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
       const { withdrawn, sending } = deps.withdraw(id, source)
       sendJson(res, 200, { sessionId: id, source, withdrawn, sending })
     })
+    .add('DELETE', '/v1/sessions/:id/due', (_req, res, params, query) => {
+      const id = session(params.id)
+      const token = query.get('token')
+      if (token === null || !RIDE_TOKEN.test(token))
+        throw new HttpError(400, 'invalid_query', {
+          field: 'token',
+          detail: 'the token GET …/due?ride=peek answered',
+        })
+      if (!deps.receiver(id)) throw new HttpError(409, 'delivery_unsupported')
+      sendJson(res, 200, { taken: deps.confirmRide(id, token) })
+    })
     .add('GET', '/v1/deliveries/:deliveryId', (_req, res, params) => {
       const id = params.deliveryId
       const delivery = id && DELIVERY_ID.test(id) ? current().get(id) : undefined
@@ -236,11 +267,18 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
     })
     .add('GET', '/v1/sessions/:id/due', async (_req, res, params, query) => {
       const id = session(params.id)
-      if (query.get('ride') !== null) {
-        if (query.get('ride') !== '1' || query.get('wait') !== null)
-          throw new HttpError(400, 'invalid_query', { field: 'ride', detail: '1, without wait' })
+      const ride = query.get('ride')
+      if (ride !== null) {
+        if ((ride !== '1' && ride !== 'peek') || query.get('wait') !== null)
+          throw new HttpError(400, 'invalid_query', {
+            field: 'ride',
+            detail: '1 or peek, without wait',
+          })
         if (!deps.receiver(id)) throw new HttpError(409, 'delivery_unsupported')
-        sendJson(res, 200, { text: deps.takeRide(id) })
+        if (ride === 'peek') {
+          const peeked = deps.peekRide(id)
+          sendJson(res, 200, { text: peeked?.text ?? null, token: peeked?.token ?? null })
+        } else sendJson(res, 200, { text: deps.takeRide(id) })
         return
       }
       const raw = query.get('wait')

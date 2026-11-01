@@ -48,10 +48,11 @@
 //   stale. A line already delivered (or going out now) stays.
 //
 // - A went-idle line the receiver does not need is dropped: the lane told
-//   that receiver with a wake-class message (`st sessions send` or an ack with a
-//   note) during the turn that just ended, so it heard from the lane already
-//   (the explicit message carries the report path). A repeat went-idle line
-//   (the receiver neither sent to the lane nor armed a wait since the last one)
+//   that receiver with a request (`st sessions send`; never an ack, which may
+//   open a turn of work) during the turn that just ended, so it heard from the
+//   lane already (the explicit message carries the report path). A repeat went-idle line
+//   (the receiver neither sent to the lane, by a root send or a coordination
+//   message or ack, nor armed a wait since the last one)
 //   is ride-along: it never wakes the receiver on its own, and joins its next
 //   wake or natural turn. Finished, blocked, ended and model lines are wake
 //   class otherwise.
@@ -871,9 +872,15 @@ export class LaneReporter {
           memory.workingSeenAt !== null
             ? Math.floor((memory.seenAt - memory.workingSeenAt) / 60_000)
             : null
-        // The turn that just ended began when it was first seen working; a
-        // turn too short to see began after the last line.
-        const turnStart = memory.workingSeenAt ?? Math.max(cursor.finishedSentAt, view.createdAt)
+        // The turn that just ended began when it was first seen working (a
+        // message sent as it began may reach Tether a moment before that),
+        // never before the previous idle: a turn too short to see began after
+        // it. A message from an earlier turn never hides this one's idle.
+        const afterLastIdle = cursor.finishedAt + 1
+        const toldSince =
+          memory.workingSeenAt !== null
+            ? Math.max(memory.workingSeenAt - TURN_SLACK_MS, afterLastIdle)
+            : afterLastIdle
         this.store.transaction(() => {
           const told = this.fire(
             {
@@ -884,7 +891,7 @@ export class LaneReporter {
             snapshotOf(view),
             { minutes },
             null,
-            { toldSince: turnStart - TURN_SLACK_MS, ride: cursor.finishedStreak > 0 },
+            { toldSince, ride: cursor.finishedStreak > 0 },
           )
           cursor.finishedAt = view.stateAgentAt
           // A turn the lane reported itself is no went-idle line sent: it

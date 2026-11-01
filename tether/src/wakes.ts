@@ -5,7 +5,7 @@
 // the owner kept past End relaunches the conversation in a new session.
 // Tether is the only scheduler; the wakes table survives restarts and reboots.
 
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 
 // --- policy ----------------------------------------------------------------------
@@ -292,13 +292,16 @@ export class WakeStore {
   }
 
   /** Queue an event line for a session, due now. An undelivered row with the
-   * same source takes the newer line instead (coalescing). */
+   * same source takes the newer line instead (coalescing). A merge never makes
+   * a queued wake ride-along: the row stays a wake until it goes out or its
+   * source withdraws it. */
   addEvent(input: {
     sessionId: string
     source: string
     note: string
     now: number
-    /** Ride-along class (default: wake class). The newer line's class wins. */
+    /** Ride-along class (default: wake class). Merged into a queued wake, it
+     * stays a wake. */
     ride?: boolean
   }): Wake {
     const ride = input.ride ? 1 : 0
@@ -307,7 +310,7 @@ export class WakeStore {
       .get(input.sessionId, input.source) as { id: string } | undefined
     if (pending) {
       this.db
-        .prepare('UPDATE wakes SET note = ?, ride = ? WHERE id = ?')
+        .prepare('UPDATE wakes SET note = ?, ride = min(ride, ?) WHERE id = ?')
         .run(input.note, ride, pending.id)
       return this.get(pending.id) as Wake
     }
@@ -371,14 +374,18 @@ export class WakeStore {
 
   /** Put back a wake taken for a delivery that did not happen. */
   restore(wake: Wake): void {
-    // A newer line for the same report arrived while the paste was out.
-    if (
-      wake.kind === 'event' &&
-      this.db
-        .prepare("SELECT 1 FROM wakes WHERE kind = 'event' AND session_id = ? AND source = ?")
-        .get(wake.sessionId, wake.source)
-    )
+    // A newer line for the same report arrived while the paste was out: it
+    // stands, and stays a wake when the line it replaces was one.
+    const newer =
+      wake.kind === 'event'
+        ? (this.db
+            .prepare("SELECT id FROM wakes WHERE kind = 'event' AND session_id = ? AND source = ?")
+            .get(wake.sessionId, wake.source) as { id: string } | undefined)
+        : undefined
+    if (newer) {
+      if (!wake.ride) this.db.prepare('UPDATE wakes SET ride = 0 WHERE id = ?').run(newer.id)
       return
+    }
     this.db
       .prepare(
         `INSERT OR IGNORE INTO wakes (id, session_id, due_at, note, created_at, created_by, kept,
@@ -681,6 +688,14 @@ interface Puller {
   /** Hand the text over; false when the puller is gone (its request closed). */
   take(text: string): boolean
 }
+/** One ride-along row as a client saw it: its id and its line's hash. */
+function rideMark(wake: Wake): string {
+  return `${wake.id}.${createHash('sha256').update(wake.note).digest('hex').slice(0, 8)}`
+}
+
+/** A `peekRide` token: up to 64 row marks. */
+export const RIDE_TOKEN = /^[\w-]{1,64}\.[0-9a-f]{8}(,[\w-]{1,64}\.[0-9a-f]{8}){0,63}$/
+
 /** Why a session's due rows wait when all of them are ride-along. */
 const RIDE_ONLY = 'only ride-along lines are queued: they join the next wake or turn'
 /** A kept wake whose relaunch failed tries again after this. */
@@ -845,6 +860,43 @@ export class WakeScheduler {
       `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn)`,
     )
     return text
+  }
+
+  /** The session's due ride-along lines for its next natural turn, left
+   * queued: the text and a token that names exactly these rows as they are
+   * now. The client shows the text, then hands the token to `confirmRide`, so
+   * a client that times out or dies before showing them loses nothing (the
+   * lines stay for the next turn or wake). Null with none. */
+  peekRide(sessionId: string): { text: string; token: string } | null {
+    const now = this.ops.now()
+    const rows = this.store
+      .forSession(sessionId)
+      .filter((wake) => wake.kind === 'event' && wake.ride && wake.dueAt <= now)
+    if (!rows.length) return null
+    const { text, taken } = composeDelivery(rows, now, this.ops.policy())
+    return { text, token: taken.map(rideMark).join(',') }
+  }
+
+  /** The client showed what `peekRide` gave it: those rows go, as a native
+   * delivery. A row replaced (a newer line of its source) or made a wake
+   * since stays queued. Returns how many went. */
+  confirmRide(sessionId: string, token: string): number {
+    const marks = new Set(token.split(','))
+    const taken = this.store
+      .forSession(sessionId)
+      .filter((wake) => wake.kind === 'event' && wake.ride && marks.has(rideMark(wake)))
+    if (!taken.length) return 0
+    for (const wake of taken) this.store.remove(wake.id)
+    try {
+      this.ops.delivered?.(sessionId, taken, 'native')
+    } catch (error) {
+      this.ops.log(`delivery record failed: ${(error as Error).message}`)
+    }
+    this.ops.changed(sessionId)
+    this.ops.log(
+      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn, confirmed)`,
+    )
+    return taken.length
   }
 
   /** Something changed (a wake, an agent state): look again soon. */

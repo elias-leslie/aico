@@ -205,9 +205,17 @@ export class WakeService {
    * Memory only: after a restart the lane gets its line, as before. */
   private readonly told = new Map<string, number>()
 
-  noteSent(from: readonly string[], to: string): void {
+  /** A delivery carried a message from each of `from` to `to`. Each sent to
+   * `to` (session_sends, as a root send does: a lane's repeat went-idle line
+   * is a first line again once its receiver sent it work); with `told`, each
+   * also told `to` something (a request, not an ack). */
+  noteSent(from: readonly string[], to: string, told = true): void {
     const now = this.now()
-    for (const id of from) if (id !== to) this.told.set(`${id}>${to}`, now)
+    for (const id of from) {
+      if (id === to) continue
+      this.context.waits?.store.recordSend(id, to, now)
+      if (told) this.told.set(`${id}>${to}`, now)
+    }
     for (const [key, at] of this.told) if (now - at > TOLD_KEEP_MS) this.told.delete(key)
   }
 
@@ -431,8 +439,10 @@ export function registerWakeRoutes(
     receiver: (id) => service.receiver(id),
     maxChars: () => service.policy().noteMaxChars,
     queue: (id, source, line, ride) => service.queueEvent(id, source, line, ride),
-    sent: (from, to) => service.noteSent(from, to),
+    sent: (from, to, told) => service.noteSent(from, to, told),
     takeRide: (id) => service.scheduler.takeRide(id),
+    peekRide: (id) => service.scheduler.peekRide(id),
+    confirmRide: (id, token) => service.scheduler.confirmRide(id, token),
     withdraw: (id, source) => service.withdrawEvents(id, source),
     pending: (id) => service.store.get(id) !== undefined || service.scheduler.inFlight(id),
     pull: (id, ms, aborted, alive) => service.scheduler.pull(id, ms, aborted, alive),

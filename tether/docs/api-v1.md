@@ -15,7 +15,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 - Bodies are JSON (`content-type: application/json`, at most 128 KiB) and must be objects. Unknown fields are rejected with `400 invalid_body`, never ignored. Field names are camelCase.
 - Errors are `{"error": "<code>", ...}` and the codes are stable API. A 4xx or 503 means nothing was applied. A 2xx or `409 outcome_uncertain` may have applied.
 - No route retries anything on the caller's behalf. Clients must not retry an uncertain mutation with a different identity.
-- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)). 6: `inject` takes `model` for an Agent Hub session. 7: `inject` takes `thinkingLevel` for an Agent Hub session. 8: [remote hosts](#remote-hosts): `host` on descriptors, create, roots, tools and projects; `peer` marks; `GET /v1/hosts`; the `peer.state` and `peer.resync` events; root `lineage`. 9: `parentId` on descriptors and in root `lineage` ([Coordinators](#coordinators)). 10: [placement](#remote-hosts): `host: "auto"` with `needs` on `POST /v1/roots`, `GET /v1/placement`. 11: placement `pool` on both. 12: [lane reports](#lane-reports): `stateAgentAt`, `waitingOn` and `launched` on descriptors, `/v1/sessions/:id/watches`, and wake lists show check-ins only. 13: [waits](#waits): `/v1/waits`, `/v1/sessions/:id/waits`, `inject` takes `from`, End answers `keptWaits`. 14: placement `needs` with a named `host`, and placement.json `hosts.<name>.room: "local"`. 15: root `entry` ([Roots](#roots)). 19: root `entry` on `codex` roots. 20: root `entry` on `pi` roots. 21: End's `endedBy` ([Lane reports](#lane-reports)). 23: the hub takes a forwarded End's asker in the `Tether-Ended-By` header ([Lane reports](#lane-reports)). 24: delivery classes: `ride` and `from` on `POST /v1/sessions/:id/deliveries`, `GET /v1/sessions/:id/due?ride=1` ([Deliveries](#deliveries)).
+- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)). 6: `inject` takes `model` for an Agent Hub session. 7: `inject` takes `thinkingLevel` for an Agent Hub session. 8: [remote hosts](#remote-hosts): `host` on descriptors, create, roots, tools and projects; `peer` marks; `GET /v1/hosts`; the `peer.state` and `peer.resync` events; root `lineage`. 9: `parentId` on descriptors and in root `lineage` ([Coordinators](#coordinators)). 10: [placement](#remote-hosts): `host: "auto"` with `needs` on `POST /v1/roots`, `GET /v1/placement`. 11: placement `pool` on both. 12: [lane reports](#lane-reports): `stateAgentAt`, `waitingOn` and `launched` on descriptors, `/v1/sessions/:id/watches`, and wake lists show check-ins only. 13: [waits](#waits): `/v1/waits`, `/v1/sessions/:id/waits`, `inject` takes `from`, End answers `keptWaits`. 14: placement `needs` with a named `host`, and placement.json `hosts.<name>.room: "local"`. 15: root `entry` ([Roots](#roots)). 19: root `entry` on `codex` roots. 20: root `entry` on `pi` roots. 21: End's `endedBy` ([Lane reports](#lane-reports)). 23: the hub takes a forwarded End's asker in the `Tether-Ended-By` header ([Lane reports](#lane-reports)). 24: delivery classes: `ride` and `from` on `POST /v1/sessions/:id/deliveries`, `GET /v1/sessions/:id/due?ride=1` ([Deliveries](#deliveries)). 25: `reply` on a delivery, `GET /v1/sessions/:id/due?ride=peek` and `DELETE /v1/sessions/:id/due?token=` ([Deliveries](#deliveries)).
 - Times are Unix epoch milliseconds.
 
 ## Identity
@@ -694,14 +694,17 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
   `laneRepeatQuietMaxSeconds` (defaults 10, 20, then 30 minutes): a lane waiting on its own work with short turns in
   between stays quiet, and one that stalls is heard within the cap. It starts over at the normal settle and floor
   when a receiver sends to the lane (`inject` with `from`, as `st aico root send` does) or arms a session wait on it,
-  on a new generation, and after a `blocked` or `ended`. The streak is kept in the cursor, so a restart keeps it
+  on a new generation, and after a `blocked` or `ended`. *(25)* A delivery to the lane with the receiver in `from` (a
+  coordination request or ack, [Deliveries](#deliveries)) counts as a send. The streak is kept in the cursor, so a restart keeps it
   (the quiet counts from the restart). Log: `lane=<id> idle again: repeat N goes out after Ns quiet`, once per idle.
   *(24, schema 28)* Two classes ([Deliveries](#deliveries)): the first `finished` line is a wake; a repeat is
   ride-along, so it never wakes the receiver alone and joins its next wake or turn. And when the lane already told
-  the receiver (a request, ack with a note or answer posted with `from`) during the turn that just ended, the
-  `finished` line is dropped: the receiver heard it, and the explicit message carries the report. Nothing is
-  counted as a report for the drop, so the next idle is a first line again. The check uses what this Tether saw in
-  the last 6 hours; a remote lane's launcher is not checked and still gets the line. Log: `(told in that turn: <ids>)`.
+  the receiver (a wake line posted with `from` naming the lane, not a `reply`: SummitFlow's request, never an ack)
+  during the turn that just ended, the `finished` line is dropped: the receiver heard it, and the explicit message
+  carries the report. The turn is from when Tether first saw the lane working (less 3 s), never before the lane's
+  previous idle. Nothing is counted as a report for the drop, so the next idle is a first line again. The check uses
+  what this Tether saw in the last 6 hours; a remote lane's launcher is not checked and still gets the line. Log:
+  `(told in that turn: <ids>)`.
 - **model** *(22, schema 26)*: the lane's model switched, or a refusal paused it ([Model switches](#model-switches)),
   once per switch when its facts are in (`lane_reports.model_key`, so a restart never repeats one). Same receivers as
   `blocked`: `[Model changed] lane "Store lane" (req neri-r1) now on claude-opus-4-8 after a cyber refusal · turn
@@ -927,11 +930,20 @@ Each line goes out once, whichever way.
   next wake's paste or puller text (after the wake lines), or is taken at the session's next natural turn with
   `GET /v1/sessions/:id/due?ride=1`. SummitFlow uses it for a bare acknowledgement that needs nothing, and for
   `st sessions send --fyi` notes. Tether's own went-idle line is a wake the first time and ride-along when it repeats
-  (the repeat backoff). A source's newer line decides the class. A ride-along line that never joins anything stays
-  queued until it is taken, withdrawn or the session ends.
-- **`from`** *(24)* is optional: up to 8 session ids (8 hex) that sent what the line carries. Tether keeps, in memory
-  for 6 hours, that each of them told this session, and a lane that told its launcher during the turn that just
-  ended gets no went-idle line for it ([Lane reports](#lane-reports)). It is recorded only for wake lines.
+  (the repeat backoff). A source's newer line replaces the text of one still queued; a wake line makes it a wake,
+  and a ride-along line never turns a queued wake ride-along (only a withdraw takes a wake back). A ride-along line
+  that never joins anything stays queued until it is taken, withdrawn or the session ends.
+- **Taking ride-along lines** *(25)*. A client that shows them at a natural turn peeks first:
+  `GET /v1/sessions/:id/due?ride=peek` answers the text and a `token` naming those rows as they are, and takes
+  nothing. Once the text is shown, `DELETE /v1/sessions/:id/due?token=` takes exactly those rows (a row replaced by
+  a newer line, or made a wake, since stays). A client that times out or dies between the two loses no line; at
+  worst it is shown again. `?ride=1` (API 24) still takes them in one step.
+- **`from`** *(24)* is optional: up to 8 session ids (8 hex) that sent what the line carries. *(25)* Each counts as
+  a send to this session (as `inject` with `from` does), so a lane's went-idle repeat backoff starts over. For a
+  wake line that is not a `reply`, Tether also keeps, in memory for 6 hours, that each of them told this session,
+  and a lane that told its launcher during the turn that just ended gets no went-idle line for it
+  ([Lane reports](#lane-reports)). **`reply`** *(25)*, optional: the line carries `from`'s answer to this session's
+  own request (an ack). An ack may open a turn of work, so it never counts as telling.
 - **Receivers** are agent sessions Tether delivers to: Claude Code, Codex, Pi, Antigravity (agy) and Agent Hub chats. A
   shell is `409 delivery_unsupported`; the producer keeps its own path for those.
 - **State.** `queued` while the row waits or is being pasted, `delivered` with `via` (`paste`, `turn` or `native`) and `deliveredAt`, or
@@ -954,10 +966,12 @@ nothing.
 
 | Route | Request | Response |
 |---|---|---|
-| `POST /v1/sessions/:id/deliveries` | `{source, line, ride?, from?}` | `201` (or `200` when it coalesced) `{id, sessionId, source, state: "queued", queuedAt, deliveredAt: null, via: null, coalesced}`; `400 invalid_body {field, detail}`; `404 not_found`; `409 delivery_unsupported` |
+| `POST /v1/sessions/:id/deliveries` | `{source, line, ride?, from?, reply?}` | `201` (or `200` when it coalesced) `{id, sessionId, source, state: "queued", queuedAt, deliveredAt: null, via: null, coalesced}`; `400 invalid_body {field, detail}`; `404 not_found`; `409 delivery_unsupported` |
 | `DELETE /v1/sessions/:id/deliveries` | `?source=<owner>:<what>` | `200 {sessionId, source, withdrawn, sending}`: how many undelivered lines went, and whether one is being pasted now; `400 invalid_query {field: "source"}` (missing, or one of Tether's own); `404 not_found` |
 | `GET /v1/deliveries/:deliveryId` | | `{id, sessionId, source, state, queuedAt, deliveredAt, via}`; `404 not_found` (unknown or older than 7 days) |
-| `GET /v1/sessions/:id/due` | `?ride=1` *(24)* | `{text}`: the session's queued ride-along lines (composed like a paste, within the budget), taken once as `native`, or `{text: null}`; `400 invalid_query` (anything but `1`, or with `wait`); `409 delivery_unsupported` |
+| `GET /v1/sessions/:id/due` | `?ride=1` *(24)* | `{text}`: the session's queued ride-along lines (composed like a paste, within the budget), taken once as `native`, or `{text: null}`; `400 invalid_query` (anything but `1` or `peek`, or with `wait`); `409 delivery_unsupported` |
+| `GET /v1/sessions/:id/due` | `?ride=peek` *(25)* | `{text, token}`: the same text, nothing taken, or `{text: null, token: null}`; errors as `?ride=1` |
+| `DELETE /v1/sessions/:id/due` | `?token=` *(25)* | `{taken}`: the peeked rows still unchanged go, as `native`; `400 invalid_query {field: "token"}`; `409 delivery_unsupported` |
 | `GET /v1/sessions/:id/due` | `?wait=0..55` seconds | `{text}`: the next delivery's text once the session's due lines may go to this puller, or `{text: null}` when the seconds are up; `409 delivery_unsupported`, `400 invalid_query` |
 
 ## Crash recovery

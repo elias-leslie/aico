@@ -24,7 +24,7 @@ let state: { idle: boolean; empty: boolean; lastKey: number | null }
 let pasted: string[]
 let lines: string[]
 let scheduler: WakeScheduler
-let told: [string, string][]
+let told: [string, string, boolean][]
 
 function ops(overrides: Partial<WakeOperations> = {}): WakeOperations {
   return {
@@ -249,19 +249,53 @@ describe('delivery classes', () => {
     expect(pasted).toEqual(['ready / ride'])
   })
 
-  it('the newer line of a source decides its class', () => {
+  it('a wake line merged into a queued ride-along line makes it a wake', () => {
     const first = ride('coord:x', 'old')
     const wake = wakes.addEvent({ sessionId: SESSION, source: 'coord:x', note: 'new', now: 2 })
     expect(wake.id).toBe(first.id)
     expect(wake.ride).toBe(false)
-    const back = wakes.addEvent({
+  })
+
+  it('a ride-along line merged into a queued wake keeps it a wake (review P1-1)', async () => {
+    // The launcher is busy, so a lane's first went-idle line (a wake) waits;
+    // the lane's repeat line for the same source must not turn it ride-along.
+    state.idle = false
+    scheduler.start()
+    const first = wakes.addEvent({
       sessionId: SESSION,
-      source: 'coord:x',
-      note: 'newer',
-      now: 3,
-      ride: true,
+      source: 'lane:a:finished',
+      note: 'one',
+      now: 1,
     })
-    expect(back).toMatchObject({ id: first.id, ride: true, note: 'newer' })
+    await scheduler.tick()
+    const repeat = ride('lane:a:finished', 'two')
+    expect(repeat).toMatchObject({ id: first.id, ride: false, note: 'two' })
+    state.idle = true
+    await scheduler.tick()
+    expect(pasted).toEqual(['two'])
+  })
+
+  it('a paste that fails puts a wake back as a wake over a newer ride-along line', async () => {
+    let n = 0
+    const failing = new WakeScheduler(
+      wakes,
+      ops({
+        deliver: async () => {
+          n += 1
+          // A ride-along line of the same source comes in while the paste is out.
+          if (n === 1) ride('coord:x', 'newer')
+          return n > 1
+        },
+      }),
+    )
+    failing.start()
+    wakes.addEvent({ sessionId: SESSION, source: 'coord:x', note: 'wake', now: 1 })
+    await failing.tick()
+    expect(wakes.forSession(SESSION)).toMatchObject([{ note: 'newer', ride: false }])
+    clock.now += 60_000
+    await failing.tick()
+    expect(n).toBe(2)
+    failing.stop()
   })
 
   it('takeRide hands over only the ride-along lines, once, as a native delivery', () => {
@@ -272,6 +306,23 @@ describe('delivery classes', () => {
     expect(log.get(one.id)).toMatchObject({ via: 'native', deliveredAt: 100_000 })
     expect(wakes.forSession(SESSION).map((row) => row.note)).toEqual(['blocked'])
     expect(scheduler.takeRide(SESSION)).toBeNull()
+  })
+
+  it('peekRide leaves the lines queued; confirmRide takes exactly the rows peeked', () => {
+    const one = ride('coord:x', 'one')
+    log.record({ id: one.id, sessionId: SESSION, source: 'coord:x', now: 1 })
+    ride('coord:y', 'two')
+    const peeked = scheduler.peekRide(SESSION)
+    expect(peeked?.text).toBe('one / two')
+    // The client never confirmed (it timed out, or its hook was killed): nothing is lost.
+    expect(wakes.forSession(SESSION)).toHaveLength(2)
+    expect(scheduler.peekRide(SESSION)?.token).toBe(peeked?.token)
+    // A newer line replaces one before the confirm: that row stays for the next turn.
+    ride('coord:y', 'two, newer')
+    expect(scheduler.confirmRide(SESSION, peeked?.token ?? '')).toBe(1)
+    expect(log.get(one.id)).toMatchObject({ via: 'native', deliveredAt: 100_000 })
+    expect(wakes.forSession(SESSION).map((row) => row.note)).toEqual(['two, newer'])
+    expect(scheduler.confirmRide(SESSION, peeked?.token ?? '')).toBe(0)
   })
 
   it('a puller attached for wakes is not woken by ride-along lines', async () => {
@@ -297,8 +348,10 @@ describe('delivery routes', () => {
       maxChars: () => 500,
       queue: (id, source, line, ride) =>
         wakes.addEvent({ sessionId: id, source, note: line, now: clock.now, ride }),
-      sent: (from, to) => told.push([from.join(','), to]),
+      sent: (from, to, isTold) => told.push([from.join(','), to, isTold]),
       takeRide: (id) => scheduler.takeRide(id),
+      peekRide: (id) => scheduler.peekRide(id),
+      confirmRide: (id, token) => scheduler.confirmRide(id, token),
       withdraw: (id, source) => {
         const { withdrawn, sending } = scheduler.withdraw(id, source)
         return { withdrawn: withdrawn.length, sending }
@@ -440,7 +493,8 @@ describe('delivery routes', () => {
       state: 'delivered',
       via: 'native',
     })
-    // A wake line names who told this session; a ride-along line names no one.
+    // A wake line names who told this session; a ride-along line or a reply
+    // (an ack) only that its sender acted on it.
     await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
       source: 'coord:b',
       line: 'Request',
@@ -452,7 +506,43 @@ describe('delivery routes', () => {
       from: ['0a1b2c3f'],
       ride: true,
     })
-    expect(told).toEqual([['0a1b2c3e', SESSION]])
+    await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
+      source: 'coord:d',
+      line: 'Ack',
+      from: ['0a1b2c40'],
+      reply: true,
+    })
+    expect(told).toEqual([
+      ['0a1b2c3e', SESSION, true],
+      ['0a1b2c3f', SESSION, false],
+      ['0a1b2c40', SESSION, false],
+    ])
+  })
+
+  it('peeks ride-along lines with a token and takes them only on the confirm', async () => {
+    const queued = await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
+      source: 'coord:a',
+      line: '[Message] FYI from cc:1',
+      ride: true,
+    })
+    const peeked = await call('GET', `/v1/sessions/${SESSION}/due?ride=peek`)
+    expect(peeked.body).toMatchObject({ text: '[Message] FYI from cc:1' })
+    const token = peeked.body.token as string
+    expect((await call('GET', `/v1/sessions/${SESSION}/due?ride=peek`)).body.token).toBe(token)
+    expect((await call('GET', `/v1/deliveries/${queued.body.id}`)).body.state).toBe('queued')
+    const confirm = `/v1/sessions/${SESSION}/due?token=${encodeURIComponent(token)}`
+    expect((await call('DELETE', confirm)).body).toEqual({ taken: 1 })
+    expect((await call('DELETE', confirm)).body).toEqual({ taken: 0 })
+    expect((await call('GET', `/v1/deliveries/${queued.body.id}`)).body).toMatchObject({
+      state: 'delivered',
+      via: 'native',
+    })
+    expect((await call('GET', `/v1/sessions/${SESSION}/due?ride=peek`)).body).toEqual({
+      text: null,
+      token: null,
+    })
+    expect((await call('DELETE', `/v1/sessions/${SESSION}/due?token=nope`)).status).toBe(400)
+    expect((await call('DELETE', `/v1/sessions/${SESSION}/due`)).status).toBe(400)
   })
 
   it('refuses a bad ride or from, and ride=1 with a wait', async () => {
@@ -462,6 +552,9 @@ describe('delivery routes', () => {
     })
     expect((await post({ source: 'coord:x', line: 'x', from: ['nope'] })).body).toMatchObject({
       field: 'from',
+    })
+    expect((await post({ source: 'coord:x', line: 'x', reply: 1 })).body).toMatchObject({
+      field: 'reply',
     })
     expect((await call('GET', `/v1/sessions/${SESSION}/due?ride=1&wait=5`)).status).toBe(400)
     expect((await call('GET', `/v1/sessions/${SESSION}/due?ride=2`)).status).toBe(400)
