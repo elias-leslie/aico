@@ -460,7 +460,53 @@ def test_roots_fail_only_for_failed_observation(monkeypatch, reason, code):
     monkeypatch.setattr(watcher, "emit_json", lambda _, row: output.append(row))
     assert watcher.roots_main(["--root-socket", "/fixture/root",
                                "--owner-socket", "/fixture/owner"]) == code
-    assert output == [{"owner": "aico", "roots": [record]}]
+    assert output == [{"owner": "aico", "roots": [{**record, "context": "unknown"}]}]
+
+
+def roots_with_ids(monkeypatch, answer):
+    """`st aico roots` over two ids-bearing rows with Agent Hub's batched read stubbed to `answer`."""
+    rows = [{"requestId": "a", "logicalSessionId": "aico-root-a", "sessionId": "aico-widget-aaaaaaaa",
+             "observation": "available", "identity": "pinned", "terminal": "turn_finished"},
+            {"requestId": "b", "logicalSessionId": "aico-root-b", "sessionId": "aico-widget-bbbbbbbb",
+             "observation": "available", "identity": "pinned", "terminal": "turn_finished"}]
+    asked, output = [], []
+
+    def fake_get(path, params=None, timeout=3):
+        asked.append((path, params))
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(watcher.Collector, "discover", lambda self, request_id: ([], rows))
+    monkeypatch.setattr(watcher, "agent_hub_get", fake_get)
+    monkeypatch.setattr(watcher, "emit_json", lambda _, row: output.append(row))
+    code = watcher.roots_main(["--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"])
+    return code, asked, output[0]["roots"]
+
+
+def test_roots_show_each_roots_measured_context_from_one_batched_read(monkeypatch):
+    code, asked, roots = roots_with_ids(monkeypatch, (200, {"roots": {
+        "aico-root-a": {"session_id": "s1", "context_tokens": 211_961, "at": "2026-11-01T20:00:00Z"},
+        "aico-widget-bbbbbbbb": {"session_id": "s2", "context_tokens": 850, "at": "2026-11-01T20:00:00Z"}}}))
+    assert code == 0
+    assert [row["context"] for row in roots] == ["212K", "850"]
+    assert asked == [("/api/context-observability/aico-roots",
+                      {"keys": "aico-root-a,aico-widget-aaaaaaaa,aico-root-b,aico-widget-bbbbbbbb"})]
+
+
+@pytest.mark.parametrize("answer", [
+    (200, {"roots": {}}), (200, {"roots": {"aico-root-a": {"context_tokens": 0}, "aico-root-b": {}}}),
+    (200, {"roots": {"aico-root-a": {"context_tokens": "212K"}}}), (500, {"detail": "boom"}),
+    (200, ["not", "an", "object"]), None])
+def test_roots_context_is_unknown_never_zero_when_unmatched_unmeasured_or_agent_hub_is_down(monkeypatch, answer):
+    code, _, roots = roots_with_ids(monkeypatch, answer)
+    assert code == 0
+    assert [row["context"] for row in roots] == ["unknown", "unknown"]
+
+
+def test_context_label_rounds_to_thousands_and_keeps_small_counts_exact():
+    assert [watcher.context_label(n) for n in (1, 999, 1000, 1499, 1500, 211_961)] == ["1", "999", "1K", "1K", "2K", "212K"]
+    assert [watcher.context_label(v) for v in (0, -5, None, True, 12.5, "9")] == ["unknown"] * 6
 
 
 def test_discovery_claude_owner_tool_mismatch_fails_closed(monkeypatch):

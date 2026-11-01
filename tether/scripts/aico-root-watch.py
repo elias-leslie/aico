@@ -2384,6 +2384,34 @@ def failed(row: dict) -> bool:
     return row["observation"] == "unavailable" and row.get("reason") != "unsupported_profile"
 
 
+CONTEXT_ROOTS_PATH = "/api/context-observability/aico-roots"
+
+
+def context_label(tokens: object) -> str:
+    """The measured context size as text (212K); anything that is not a positive count is unknown, never 0."""
+    if isinstance(tokens, bool) or not isinstance(tokens, int) or tokens <= 0:
+        return "unknown"
+    return f"{round(tokens / 1000)}K" if tokens >= 1000 else str(tokens)
+
+
+def root_contexts(records: list[dict]) -> list[str]:
+    """One context label per root, in order: the context the model was sent on its latest response, from
+    Agent Hub's usage data in one batched read. Unmatched roots, roots without usage and an Agent Hub that
+    can't be reached all read unknown; the roots listing never fails on it."""
+    keys = [k for record in records for k in (record.get("logicalSessionId"), record.get("sessionId")) if isinstance(k, str)]
+    answer = agent_hub_get(CONTEXT_ROOTS_PATH, {"keys": ",".join(dict.fromkeys(keys))}, timeout=2) if keys else None
+    found = answer[1].get("roots") if answer is not None and answer[0] == 200 and isinstance(answer[1], dict) else None
+    if not isinstance(found, dict):
+        found = {}
+    labels = []
+    for record in records:
+        hits = [found[k] for k in (record.get("logicalSessionId"), record.get("sessionId"))
+                if isinstance(k, str) and isinstance(found.get(k), dict)]
+        newest = max(hits, key=lambda hit: str(hit.get("at")), default={})
+        labels.append(context_label(newest.get("context_tokens")))
+    return labels
+
+
 def roots_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico roots", description=__doc__)
     parser.add_argument("request_id", nargs="?", help="exact retained Aico catalog request ID")
@@ -2407,7 +2435,9 @@ def roots_main(argv: list[str]) -> int:
         if args.watch is None:
             records = [{**dataclasses.asdict(pin), **({"host": child.remote[0]} if child.remote else {}),
                         **collector.sample(pin)} for pin, child in resolved]
-            emit_json(collector, {"owner": "aico", "roots": records + unavailable})
+            rows = records + unavailable
+            emit_json(collector, {"owner": "aico", "roots": [{**row, "context": label}
+                                                             for row, label in zip(rows, root_contexts(rows))]})
             return int(any(failed(row) for row in records + unavailable))
         for record in unavailable:
             emit_json(collector, {"event": "baseline", **record})
