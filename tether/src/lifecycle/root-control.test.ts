@@ -884,6 +884,52 @@ describe('private root workload control', () => {
     expect(sessionSpec(tool, fixture, 'ffffffff')).toEqual(tool)
   })
 
+  it('resumes and relaunches a lane trimmed to its work role too', async () => {
+    const root = present(getRootRequest('target-1'))
+    const tool = {
+      slug: 'claude-code',
+      displayName: 'fixture',
+      icon: '',
+      accent: '',
+      enabled: true,
+      order: 0,
+      command: [
+        process.execPath,
+        '-e',
+        'process.stdout.write(JSON.stringify({args:process.argv.slice(1),artifact:process.env.CLAUDE_CODE_DISABLE_ARTIFACT}))',
+        '--',
+      ],
+      processName: 'node',
+      resume: { sessionIdPattern: UUID, arguments: ['--resume'] },
+    }
+    const lane = sessionSpec(tool, fixture, root.widgetId)
+    const run = (line: string | null) =>
+      JSON.parse(
+        execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', present(line)], {
+          env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+          encoding: 'utf8',
+        }),
+      )
+    const trim = '--disallowedTools=AskUserQuestion,ReportFindings'
+    const resumed = '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d'
+    await withRootPrompt(
+      root.widgetId,
+      'Go on.',
+      async () => {
+        expect(run(initialLaunchLine(root.widgetId, lane)).args).toEqual([
+          trim,
+          '--resume',
+          resumed,
+          '--',
+          'Go on.',
+        ])
+      },
+      resumed,
+    )
+    // A restart with nothing to resume relaunches trimmed too.
+    expect(run(relaunchLine(root.widgetId, lane))).toEqual({ args: [trim], artifact: '1' })
+  })
+
   it('keeps prompt bytes out of durable storage and safely passes exact launch argv', async () => {
     const root = present(getRootRequest('target-1'))
     const prompt = "-flag\n$(printf compromised)\u001b\t'quoted'\n"
