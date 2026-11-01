@@ -9,9 +9,16 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resolvePaths } from '../config'
+import { EventBus } from '../events'
 import { HttpError, readJsonObject, sendError, sendJson } from '../http'
+import { createRootHandler } from '../lifecycle/root-control'
+import { initStore } from '../lifecycle/testing'
+import { rootOperations } from '../lifecycle-api'
+import { ProjectProvider } from '../projects'
 import { Hub, type HubDeps } from './hub'
 import { peerRequest } from './peer-http'
+import { Placement } from './placement'
 
 type Item = Record<string, unknown> & { id: string }
 
@@ -50,6 +57,8 @@ class FakePeer {
   /** Health never answers (a VM that stopped dead: the socket takes the
    * connection, nothing comes back). */
   hangHealth = false
+  /** Hold the initial transport handshake until a synthetic host is ready. */
+  healthReady: Promise<void> | null = null
   readonly streams = new Set<ServerResponse>()
   roots: Record<string, unknown>[] = []
   runs: Record<string, unknown> = {
@@ -90,6 +99,7 @@ class FakePeer {
     this.requests.push({ method: req.method ?? '', url, body: payload })
     if (url === '/v1/health') {
       if (this.hangHealth) return
+      await this.healthReady
       return sendJson(res, 200, { status: 'ok', apiVersion: this.apiVersion, host: this.identity })
     }
     if (url === '/v1/sessions' && req.method === 'GET') {
@@ -144,6 +154,7 @@ describe('hub', () => {
   let frontSocket: string
   let events: { type: string; data: Record<string, unknown> }[]
   let settings: Map<string, string>
+  let rootHandler: ReturnType<typeof createRootHandler> | null
   const local = new Set<string>(['eeee0005'])
 
   function makeHub(overrides: Partial<HubDeps> = {}): Hub {
@@ -178,6 +189,7 @@ describe('hub', () => {
     dir = mkdtempSync(join(tmpdir(), 'tether-hub-'))
     events = []
     settings = new Map()
+    rootHandler = null
     writeFileSync(
       join(dir, 'hosts.json'),
       JSON.stringify([
@@ -211,7 +223,9 @@ describe('hub', () => {
           if (req.url === '/v1/sessions' && req.method === 'POST')
             return await hub.create(res, '/v1/sessions', await readJsonObject(req))
           if (req.url === '/v1/roots' && req.method === 'POST')
-            return await hub.create(res, '/v1/roots', await readJsonObject(req))
+            return rootHandler
+              ? await rootHandler(req, res)
+              : await hub.create(res, '/v1/roots', await readJsonObject(req))
           sendJson(res, 404, { error: 'not_found', local: true })
         } catch (error) {
           if (error instanceof HttpError) sendError(res, error)
@@ -748,6 +762,212 @@ describe('hub', () => {
     expect(hub.mergeRuns({ status: 'ok', error: null, updatedAt: 2, items: [] })).toMatchObject({
       status: 'ok',
       error: null,
+    })
+  })
+
+  describe('named create with room admission', () => {
+    const gib = 1024 ** 3
+    let waiting: Promise<void>
+    let resume: () => void
+    let connect: () => void
+    let memGiB: number
+    let cpus: number
+    let placement: Placement
+    let gateRuns: string[][]
+
+    beforeEach(async () => {
+      hub.close()
+      let entered = () => {}
+      waiting = new Promise<void>((resolve) => {
+        entered = resolve
+      })
+      const released = new Promise<void>((resolve) => {
+        resume = resolve
+      })
+      peer.healthReady = new Promise<void>((resolve) => {
+        connect = resolve
+      })
+      let now = Date.now()
+      gateRuns = []
+      writeFileSync(join(dir, 'hosts.json'), '[]')
+      hub = makeHub({
+        gate: {
+          run: async (argv) => {
+            gateRuns.push(argv)
+            return { code: 0, output: '' }
+          },
+          kick: () => {},
+          now: () => now,
+          sleep: async (ms) => {
+            entered()
+            await released
+            now += ms
+          },
+          linkGraceMs: 1_000,
+        },
+      })
+      hub.start()
+      // Provisioning added a running host after the hub's catalog read. Its
+      // transport handshake is not complete; create must refresh and wait.
+      writeFileSync(
+        join(dir, 'hosts.json'),
+        JSON.stringify([{ name: 'vm', ssh: 'vm', socket: '/synthetic/control.sock' }]),
+      )
+      const file = join(dir, 'placement.json')
+      writeFileSync(file, JSON.stringify({ hosts: { vm: { room: 'local' } } }))
+      memGiB = 20
+      cpus = 16
+      placement = new Placement({
+        env: { TETHER_PLACEMENT_FILE: file, HOME: dir, XDG_RUNTIME_DIR: dir },
+        hostNames: () => hub.hostNames(),
+        peer: (name) => hub.peerView(name),
+        localRoot: () => 'missing',
+        existingHost: () => undefined,
+        settings: {
+          get: (key) => settings.get(key) ?? null,
+          put: (key, value) => settings.set(key, value),
+        },
+        readText: async () =>
+          JSON.stringify({
+            v: 1,
+            state: 'green',
+            admit: true,
+            updated_at: now / 1_000,
+            expires_at: now / 1_000 + 30,
+            mem_available_gib: memGiB,
+          }),
+        cpu: () => ({ cpus, load5: 2 }),
+        remoteRoot: async () => 'live',
+        now: () => now,
+        run: async () => {
+          throw new Error('synthetic shared room needs no external command')
+        },
+        log: () => {},
+      })
+      const operations = rootOperations({
+        paths: resolvePaths({ home: dir, env: { XDG_RUNTIME_DIR: dir }, uid: 1000 }),
+        store: initStore(join(dir, 'catalog.db')),
+        events: new EventBus(),
+        projects: new ProjectProvider({
+          summitflowUrl: null,
+          localFile: join(dir, 'projects.json'),
+        }),
+        projectRoots: new Map(),
+        hub,
+        placement,
+      })
+      operations.ensure = async () => {
+        throw new Error('synthetic remote create must never launch locally')
+      }
+      rootHandler = createRootHandler(operations)
+    })
+
+    afterEach(() => {
+      resume()
+      connect()
+    })
+
+    const create = (requestId = 'named-ready') =>
+      call('POST', '/v1/roots', {
+        requestId,
+        tool: 'codex',
+        projectId: 'synthetic',
+        projectRoot: dir,
+        initialPrompt: 'Synthetic peer only.',
+        role: 'lead',
+        host: 'vm',
+        needs: { memBytes: 4 * gib, cpu: 1 },
+      })
+
+    it.each(['fits', 'memory full', 'CPU full'])(
+      'waits for the new named transport before judging room: %s',
+      async (room) => {
+        if (room === 'memory full') memGiB = 7
+        if (room === 'CPU full') cpus = 4
+        hub.reload()
+        expect(state()).toBe('connecting')
+        const pending = create()
+        expect(await Promise.race([waiting.then(() => 'waiting'), pending])).toBe('waiting')
+        expect(peer.requests.some((r) => r.method === 'POST')).toBe(false)
+        expect(placement.list()).toEqual([])
+        connect()
+        await vi.waitFor(() => expect(state()).toBe('connected'))
+        resume()
+        const answer = await pending
+        if (room === 'fits') {
+          expect(answer).toMatchObject({ status: 201, body: { host: 'vm' } })
+          expect(placement.list()).toMatchObject([{ requestId: 'named-ready', host: 'vm' }])
+          expect(peer.requests.filter((r) => r.method === 'POST')).toHaveLength(1)
+        } else {
+          expect(answer).toMatchObject({
+            status: 409,
+            body: {
+              error: 'at_capacity',
+              hosts: [{ host: 'vm', reason: expect.stringContaining('needs') }],
+            },
+          })
+          expect(peer.requests.some((r) => r.method === 'POST')).toBe(false)
+          expect(placement.list()).toEqual([])
+        }
+      },
+    )
+
+    it('refreshes the named catalog miss before waiting and placing', async () => {
+      expect(hub.hostNames()).toEqual([])
+      const pending = create()
+      expect(await Promise.race([waiting.then(() => 'waiting'), pending])).toBe('waiting')
+      connect()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
+      resume()
+      expect(await pending).toMatchObject({ status: 201, body: { host: 'vm' } })
+    })
+
+    it('serializes room reservations after concurrent creates share readiness', async () => {
+      memGiB = 11 // 5 GiB after the owner reserve: only one 4 GiB root fits.
+      hub.reload()
+      const pending = Promise.all([create('first'), create('second')])
+      expect(await Promise.race([waiting.then(() => 'waiting'), pending])).toBe('waiting')
+      connect()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
+      resume()
+      const answers = await pending
+      expect(answers.map((answer) => answer.status).sort()).toEqual([201, 409])
+      expect(answers.find((answer) => answer.status === 409)?.body).toMatchObject({
+        error: 'at_capacity',
+      })
+      expect(placement.list()).toHaveLength(1)
+      expect(peer.requests.filter((r) => r.method === 'POST')).toHaveLength(1)
+    })
+
+    it('refuses a full powered-off host before waking or reserving it', async () => {
+      writeFileSync(
+        join(dir, 'hosts.json'),
+        JSON.stringify([
+          { name: 'vm', ssh: 'vm', socket: '/synthetic/control.sock', wake: ['synthetic-wake'] },
+        ]),
+      )
+      hub.reload()
+      hub.markPoweredOff('vm')
+      memGiB = 7
+      expect(await create()).toMatchObject({ status: 409, body: { error: 'at_capacity' } })
+      expect(gateRuns).toEqual([])
+      expect(placement.list()).toEqual([])
+      expect(peer.requests.some((r) => r.method === 'POST')).toBe(false)
+    })
+
+    it('keeps the readiness failure reason and reserves or forwards nothing', async () => {
+      hub.reload()
+      resume()
+      expect(await create()).toMatchObject({
+        status: 409,
+        body: {
+          error: 'host_unavailable',
+          host: 'vm',
+          reason: 'vm is not reachable and has no wake command',
+        },
+      })
+      expect(placement.list()).toEqual([])
+      expect(peer.requests.some((r) => r.method === 'POST')).toBe(false)
     })
   })
 

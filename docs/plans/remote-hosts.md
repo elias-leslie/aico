@@ -190,9 +190,12 @@ host in `~/.config/tether/placement.json` order whose live room fits, or answers
   "local"` probes its capabilities (live-ready) on this computer, which owns
   the slot's C2 sandbox and proxy, so a sleeping slot can take a live hunt.
 - **Named host with needs** (2026-10-31): `st aico create --host NAME --needs ...`
-  rechecks that host and holds its reservation before the create is sent, or
+  waits for a running host's link using the existing create readiness wait,
+  then rechecks that host and holds its reservation before the create is sent.
+  A readiness failure keeps its `host_unavailable` reason; actual room refusal
   answers `at_capacity` with its reason (Neri: dry run, set up the host, then
-  create there). Tether API 14.
+  create there). A powered-off host is still judged and reserved before it is
+  woken. Tether API 14.
 - `st aico placement --needs ... [--pool NAME]` shows the decision without starting anything.
 - Details and the config fields: tether/docs/api-v1.md "Placement".
 

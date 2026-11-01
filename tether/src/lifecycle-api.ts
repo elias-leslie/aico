@@ -19,6 +19,7 @@ import type { Hub } from './hub/hub'
 import {
   AUTO_HOST,
   type HostVerdict,
+  LOCAL_HOST,
   type Needs,
   type Placement,
   parseNeeds,
@@ -612,6 +613,23 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
           status: 400,
           body: { error: 'unknown_host', host: host ?? AUTO_HOST },
         }
+      if (host !== undefined && host !== LOCAL_HOST && context.hub) {
+        const peer = context.hub.peerView(host)
+        // A newly running host can still be connecting. Use create's existing
+        // readiness wait before judging its room; a powered-off host still
+        // reserves room before create wakes it.
+        if (!peer || (!peer.live && peer.state !== 'powered_off'))
+          try {
+            await context.hub.wakeHost(host)
+          } catch (error) {
+            if (!(error instanceof HttpError)) throw error
+            return {
+              kind: 'refused',
+              status: error.status,
+              body: { error: error.code, ...error.extra },
+            }
+          }
+      }
       const placed = await context.placement.place(requestId, needs, pool, host)
       if (placed.kind === 'placed') return placed
       if (placed.kind === 'unknown_host')
