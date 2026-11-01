@@ -4,6 +4,15 @@
 
 ### Added
 
+- The Health panel follows Nightshift's item stream instead of polling every
+  minute. `aico-web` keeps one connection to Nightshift's `GET /api/stream`
+  while at least one page listens (closed when none does, reconnected with
+  backoff, a fresh one after five minutes with no bytes) and relays it at
+  `GET /api/nightshift/stream`: `live` (whether that connection is up) and
+  `changed` (Nightshift's items or top line moved; a batch becomes one). The
+  page reads `/api/nightshift/view` again on `changed` and polls it every
+  minute only while the feed is down, so a Nightshift that isn't answering
+  still shows Health unknown, never OK.
 - Repeat went-idle lines from a lane back off (Tether schema 25). After a
   lane's first went-idle line, the next one needs the lane idle with no turn
   for `laneRepeatQuietSeconds` (600), doubling per repeat up to

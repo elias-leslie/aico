@@ -10,6 +10,7 @@ import { CLI_COMMANDS, runCli } from './cli'
 import { HISTORY_LINES, loadConfig } from './config'
 import { WebStore } from './db'
 import { registerNightshiftRoutes } from './nightshift'
+import { NightshiftRelay, registerNightshiftStream } from './nightshift-stream'
 import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
@@ -39,6 +40,8 @@ function serve(): void {
   })
   const api = buildApi({ tether, store, config, uploads: config.uploads, shows, asks })
   registerNightshiftRoutes(api, config)
+  const nightshift = new NightshiftRelay(config)
+  registerNightshiftStream(api, nightshift)
   const server = createWebServer(
     config,
     api,
@@ -61,6 +64,7 @@ function serve(): void {
     console.log(`[aico-web] ${signal}: stopping`)
     background.stop()
     terminals.stop()
+    nightshift.stop()
     server.close(() => {
       store.close()
       process.exit(0)
