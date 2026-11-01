@@ -24,7 +24,9 @@
 // - Ended comes from the sessions delete trigger (lane_outbox, written in the
 //   delete's own transaction), or from an agent that left its pane for good
 //   (a clean exit, or crash recovery holds). It is terminal. A remote lane's
-//   ended comes from the hub's relay, which drops ids it never had.
+//   ended comes from the hub's relay, which drops ids it never had. The
+//   session that asked for the End (`endedBy`, recorded in the outbox row)
+//   gets no line for it; everyone else does. Without `endedBy` all do.
 //
 // Each report is one event line queued on the receiver's delivery queue
 // (wakes, kind `event`): pasted once the agent is idle, nobody is typing and
@@ -244,9 +246,12 @@ export interface OutboxRow {
   launched: boolean
   title: string | null
   requestId: string | null
+  /** The session whose End deleted the lane (schema v24); null when unknown. */
+  endedBy: string | null
 }
 
-/** lane_reports, lane_watches and lane_outbox (schema v18). One daemon writes them. */
+/** lane_reports, lane_watches and lane_outbox (schema v18), and
+ * session_end_requests (v24). One daemon writes them. */
 export class LaneReportStore {
   private depth = 0
 
@@ -357,6 +362,7 @@ export class LaneReportStore {
         launched: number
         title: string | null
         request_id: string | null
+        ended_by?: string | null
       }[]
     ).map((row) => ({
       id: row.id,
@@ -367,7 +373,31 @@ export class LaneReportStore {
       launched: row.launched === 1,
       title: row.title,
       requestId: row.request_id,
+      endedBy: row.ended_by && SESSION_ID.test(row.ended_by) ? row.ended_by : null,
     }))
+  }
+
+  /** An End that `endedBy` asked for is about to run on `session`. Returns
+   * false (nothing written) when another End's mark is already there. */
+  markEnd(session: string, endedBy: string, now: number): boolean {
+    return (
+      this.db
+        .prepare(
+          `INSERT INTO session_end_requests (session_id, ended_by, at) VALUES (?, ?, ?)
+           ON CONFLICT (session_id) DO NOTHING`,
+        )
+        .run(session, endedBy, now).changes === 1
+    )
+  }
+
+  /** The End answered (the delete trigger already copied the mark if it ran). */
+  unmarkEnd(session: string): void {
+    this.db.prepare('DELETE FROM session_end_requests WHERE session_id = ?').run(session)
+  }
+
+  /** Marks from Ends a crash interrupted. */
+  clearEndMarks(): void {
+    this.db.prepare('DELETE FROM session_end_requests').run()
   }
 
   takeOutbox(id: number): void {
@@ -477,6 +507,8 @@ export class LaneReporter {
     private readonly ops: LaneReportOperations,
   ) {
     this.startedAt = ops.now()
+    // No End is running yet: a mark left here was a crash's.
+    store.clearEndMarks()
     this.refreshWatched()
   }
 
@@ -722,16 +754,20 @@ export class LaneReporter {
     outcome: LaneOutcome,
     lane: LaneSnapshot,
     extra: Parameters<typeof laneLine>[2] = {},
+    endedBy: string | null = null,
   ): void {
-    const receivers = this.receivers(outcome, lane)
+    const all = this.receivers(outcome, lane)
+    // The session that ended the lane itself already knows.
+    const receivers = endedBy ? all.filter((id) => id !== endedBy) : all
     const where = lane.host ? `${lane.host}/${lane.id}` : lane.id
+    const skipped = receivers.length < all.length ? ` (skipped ${endedBy}: ended it)` : ''
     if (!receivers.length) {
-      this.ops.log(`lane=${where} ${outcome}: no receiver`)
+      this.ops.log(`lane=${where} ${outcome}: no receiver${skipped}`)
       return
     }
     const line = laneLine(outcome, lane, extra)
     for (const receiver of receivers) this.ops.deliver(receiver, `lane:${where}:${outcome}`, line)
-    this.ops.log(`lane=${where} ${outcome} -> ${receivers.join(',')}`)
+    this.ops.log(`lane=${where} ${outcome} -> ${receivers.join(',')}${skipped}`)
   }
 
   /** Ended lanes the delete trigger recorded on this computer. */
@@ -741,15 +777,20 @@ export class LaneReporter {
       this.store.transaction(() => {
         const cursor = this.store.get('', row.lane)
         if (!cursor?.ended)
-          this.fire('ended', {
-            id: row.lane,
-            host: null,
-            title: row.title ?? cursor?.title ?? row.lane,
-            requestId: row.requestId ?? cursor?.requestId ?? null,
-            coordinatorId: row.coordinatorId,
-            parentId: row.parentId,
-            launched: row.launched,
-          })
+          this.fire(
+            'ended',
+            {
+              id: row.lane,
+              host: null,
+              title: row.title ?? cursor?.title ?? row.lane,
+              requestId: row.requestId ?? cursor?.requestId ?? null,
+              coordinatorId: row.coordinatorId,
+              parentId: row.parentId,
+              launched: row.launched,
+            },
+            {},
+            row.endedBy,
+          )
         this.store.forget('', row.lane)
         this.store.takeOutbox(row.id)
       })

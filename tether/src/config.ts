@@ -23,8 +23,10 @@ import { join } from 'node:path'
  *     (withdraw); agy sessions take event lines.
  * 19: `entry` runs `codex` roots too (state from the entry home's rollouts).
  * 20: `entry` runs `pi` roots too (the conversation id Tether chose, read from
- *     the entry home's Pi session file). */
-export const API_VERSION = 20
+ *     the entry home's Pi session file).
+ * 21: `endedBy` on `POST /v1/sessions/:id/end` (that session gets no lane
+ *     `ended` line for it). */
+export const API_VERSION = 21
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

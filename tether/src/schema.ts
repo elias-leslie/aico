@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 23
+export const SCHEMA_VERSION = 24
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -550,6 +550,52 @@ export const SESSION_LAUNCH_OPTIONS_SQL = `
   CREATE TRIGGER IF NOT EXISTS sessions_end_launch_options AFTER DELETE ON sessions
   BEGIN
     DELETE FROM session_launch_options WHERE session_id = old.id;
+  END;
+`
+
+/**
+ * v24: who ended a lane (src/lane-reports.ts). `session_end_requests` holds
+ * the `endedBy` an End names (the session that asked for it) while that End
+ * runs; the delete trigger copies it into `lane_outbox.ended_by`, and the
+ * reporter sends that session no `ended` line. The handler removes the mark
+ * once End answers, and startup clears any left by a crash. Rows written
+ * before v24 have no `ended_by` and report as before.
+ */
+export const LANE_ENDED_BY_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
+  {
+    table: 'lane_outbox',
+    column: 'ended_by',
+    sql: "ALTER TABLE lane_outbox ADD COLUMN ended_by TEXT CHECK(ended_by IS NULL OR (length(ended_by) = 8 AND ended_by NOT GLOB '*[^0-9a-f]*'))",
+  },
+]
+
+export const LANE_ENDED_BY_SQL = `
+  CREATE TABLE IF NOT EXISTS session_end_requests (
+    session_id TEXT PRIMARY KEY
+                 CHECK(length(session_id) = 8 AND session_id NOT GLOB '*[^0-9a-f]*'),
+    ended_by   TEXT NOT NULL
+                 CHECK(length(ended_by) = 8 AND ended_by NOT GLOB '*[^0-9a-f]*'),
+    at         INTEGER NOT NULL CHECK(at >= 0)
+  );
+  DROP TRIGGER IF EXISTS sessions_end_lane;
+  CREATE TRIGGER sessions_end_lane AFTER DELETE ON sessions
+  WHEN (old.launched = 1 AND old.coordinator_id IS NOT NULL)
+    OR EXISTS (SELECT 1 FROM lane_watches WHERE lane = old.id AND mode = 'watch')
+  BEGIN
+    INSERT INTO lane_outbox (lane, at, coordinator_id, parent_id, launched, title, request_id, ended_by)
+      VALUES (
+        old.id,
+        CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+        old.coordinator_id,
+        old.parent_id,
+        old.launched,
+        COALESCE((SELECT title FROM lane_reports WHERE host = '' AND lane = old.id), old.name),
+        COALESCE(
+          (SELECT request_id FROM lane_reports WHERE host = '' AND lane = old.id),
+          (SELECT request_id FROM root_requests WHERE widget_id = old.id)
+        ),
+        (SELECT ended_by FROM session_end_requests WHERE session_id = old.id)
+      );
   END;
 `
 

@@ -2022,6 +2022,9 @@ def root_main(argv: list[str]) -> int:
         sent = True
         if args.operation == "end":
             # Exact containment retirement: Tether's session End (it may add accounting fields).
+            # endedBy: the calling session, so Tether sends it no lane "ended" line for its own End.
+            if (ender := send_origin(collector, control, pinned["hostIdentity"], pinned, END_BY_API)) is not None:
+                payload["endedBy"] = ender
             status, data = collector.receipt(control, f"/v1/sessions/{pinned['hostIdentity']}/end", payload,
                                              timeout=10)
             owner_reply(status, data, "end_receipt_unqualified")
@@ -2054,6 +2057,8 @@ def root_main(argv: list[str]) -> int:
 
 # Tether API that takes inject `from` (general waits); an older one refuses the field.
 SEND_FROM_API = 13
+# Tether API that takes End `endedBy` (no lane "ended" line for the session that ended it).
+END_BY_API = 21
 # Tether API that runs a root's `entry` for each tool: Claude Code since 15, Codex since 19, Pi since 20.
 ENTRY_API = {"claude-code": 15, "codex": 19, "pi": 20}
 
@@ -2070,8 +2075,10 @@ def entry_api_refusal(collector: Collector, endpoint: str, tool: str) -> str | N
     return f"--entry for {tool} needs Tether API {needed} or later; this computer's Tether answers {shown}"
 
 
-def send_origin(collector: Collector, control: str, target: str, session: dict) -> str | None:
-    """The calling session for inject `from`, only when it is another session and Tether takes the field.
+def send_origin(collector: Collector, control: str, target: str, session: dict,
+                min_api: int = SEND_FROM_API) -> str | None:
+    """The calling session for inject `from` (or End `endedBy`), only when it is another session and Tether
+    (at `min_api` or later) takes the field.
     Never to a session on another host: the hub forwards the body to that host's Tether, which may be older."""
     sender = caller_widget_id()
     if not sender or not re.fullmatch(WIDGET, sender) or sender == target or session.get("host"):
@@ -2081,7 +2088,7 @@ def send_origin(collector: Collector, control: str, target: str, session: dict) 
     except Unavailable:
         return None
     version = data.get("apiVersion")
-    return sender if status == 200 and isinstance(version, int) and version >= SEND_FROM_API else None
+    return sender if status == 200 and isinstance(version, int) and version >= min_api else None
 
 
 def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:

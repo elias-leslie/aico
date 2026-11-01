@@ -374,6 +374,95 @@ describe('ended', () => {
     expect(delivered.map((d) => d.source)).toEqual([`lane:${LANE}:ended`, `lane:${LANE}:finished`])
   })
 
+  it('the session that ended the lane gets no ended line; everyone else still does', () => {
+    const { reporter, delivered, logs, store } = harness()
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(HELPER_PARENT, 'claude-code', 1_000)
+    insertWidget(WATCHER, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: HELPER_PARENT })
+    step(reporter, { parentId: HELPER_PARENT, title: 'Lane title' })
+    reporter.setWatch(WATCHER, LANE, 'watch')
+    const lanes = new LaneReportStore(store.db)
+    // The launcher ends it (`st aico root end` from HELPER_PARENT).
+    expect(lanes.markEnd(LANE, HELPER_PARENT, Date.now())).toBe(true)
+    expect(lanes.markEnd(LANE, ROOT, Date.now())).toBe(false) // another End's mark stays
+    removeWidget(LANE)
+    lanes.unmarkEnd(LANE)
+    expect(lanes.outbox()).toMatchObject([{ lane: LANE, endedBy: HELPER_PARENT }])
+    reporter.drainOutbox()
+    expect(delivered.map((d) => d.to).sort()).toEqual([ROOT, WATCHER])
+    expect(logs).toContain(
+      `lane=${LANE} ended -> ${ROOT},${WATCHER} (skipped ${HELPER_PARENT}: ended it)`,
+    )
+    expect(store.db.prepare('SELECT * FROM session_end_requests').all()).toEqual([])
+  })
+
+  it('a coordinator ending its only lane hears nothing, and the log names the skip', () => {
+    const { reporter, delivered, logs, store } = harness()
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: ROOT })
+    step(reporter, { title: 'Lane title' })
+    const lanes = new LaneReportStore(store.db)
+    lanes.markEnd(LANE, ROOT, Date.now())
+    removeWidget(LANE)
+    lanes.unmarkEnd(LANE)
+    reporter.drainOutbox()
+    expect(delivered).toEqual([])
+    expect(logs).toContain(`lane=${LANE} ended: no receiver (skipped ${ROOT}: ended it)`)
+    expect(lanes.get('', LANE)).toBeUndefined()
+    expect(lanes.outbox()).toEqual([])
+  })
+
+  it('an End that did not happen, an unknown ender, or a crash leaves today’s ended', () => {
+    const { reporter, delivered, store } = harness()
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: ROOT })
+    step(reporter, {})
+    const lanes = new LaneReportStore(store.db)
+    // A refused End took its mark back; the owner then closes the lane.
+    lanes.markEnd(LANE, ROOT, Date.now())
+    lanes.unmarkEnd(LANE)
+    removeWidget(LANE)
+    reporter.drainOutbox()
+    expect(delivered.map((d) => d.to)).toEqual([ROOT])
+
+    // An ender that is no receiver changes nothing.
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: ROOT })
+    lanes.markEnd(LANE, 'eeee0001', Date.now())
+    removeWidget(LANE)
+    lanes.unmarkEnd(LANE)
+    reporter.drainOutbox()
+    expect(delivered.map((d) => d.to)).toEqual([ROOT, ROOT])
+
+    // A mark a crash left behind is gone once Tether starts again.
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: ROOT })
+    lanes.markEnd(LANE, ROOT, Date.now())
+    reporter.stop()
+    const restarted = harness({ store }).reporter
+    removeWidget(LANE)
+    restarted.drainOutbox()
+    expect(lanes.outbox()).toEqual([])
+    expect(store.db.prepare('SELECT * FROM session_end_requests').all()).toEqual([])
+  })
+
+  it('an outbox row from before v24 (no ended_by) reports as before', () => {
+    const { reporter, delivered, store } = harness()
+    store.db
+      .prepare(
+        `INSERT INTO lane_outbox (lane, at, coordinator_id, parent_id, launched, title, request_id)
+         VALUES (?, 1, ?, ?, 1, 'Old row', NULL)`,
+      )
+      .run(LANE, ROOT, HELPER_PARENT)
+    expect(new LaneReportStore(store.db).outbox()).toMatchObject([{ endedBy: null }])
+    reporter.drainOutbox()
+    expect(delivered.map((d) => d.to).sort()).toEqual([ROOT, HELPER_PARENT])
+  })
+
   it('a relayed lane ends once on the hub', () => {
     const { reporter, delivered } = harness()
     step(reporter, { host: 'neri-vm', title: 'Remote' })

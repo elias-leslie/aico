@@ -58,12 +58,12 @@ describe('control socket', () => {
     expect(health.body).toMatchObject({
       status: 'ok',
       instance: 'test',
-      apiVersion: 20,
-      schemaVersion: 23,
+      apiVersion: 21,
+      schemaVersion: 24,
       lifecycle: 'disabled',
     })
     const version = await call('GET', '/v1/version')
-    expect(version.body).toMatchObject({ name: 'tether', apiVersion: 20, minApiVersion: 1 })
+    expect(version.body).toMatchObject({ name: 'tether', apiVersion: 21, minApiVersion: 1 })
   })
 
   it('returns 404 and 405 with stable error codes', async () => {
@@ -356,7 +356,7 @@ describe('event stream', () => {
     await call('PATCH', '/v1/tools/pi', { enabled: false })
     await new Promise((resolve) => setTimeout(resolve, 50))
     req.destroy()
-    expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 20, instance: 'test' } })
+    expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 21, instance: 'test' } })
     expect(lines[1]).toMatchObject({ type: 'tools.changed', seq: 1, data: { slug: 'pi' } })
 
     const gap = await new Promise<string>((resolve) => {
@@ -476,7 +476,15 @@ describe('session wakes API', () => {
     expect(
       (await call('POST', '/v1/sessions/0a1b2c3d/end', { generation, keepWakes: 1 })).status,
     ).toBe(400)
-    const ended = await call('POST', '/v1/sessions/0a1b2c3d/end', { generation, keepWakes: true })
+    for (const endedBy of ['nope', 12, 'AAAA0001'])
+      expect(
+        (await call('POST', '/v1/sessions/0a1b2c3d/end', { generation, endedBy })).body,
+      ).toMatchObject({ error: 'invalid_body', field: 'endedBy' })
+    const ended = await call('POST', '/v1/sessions/0a1b2c3d/end', {
+      generation,
+      keepWakes: true,
+      endedBy: 'aaaa0001',
+    })
     expect(ended.body).toMatchObject({ status: 'ended', keptWakes: 1 })
     const [kept] = ((await call('GET', '/v1/wakes')).body as { items: Record<string, unknown>[] })
       .items

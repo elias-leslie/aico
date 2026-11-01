@@ -72,6 +72,7 @@ describe('Store schema', () => {
       'retired_session_ids',
       'root_requests',
       'schema_version',
+      'session_end_requests',
       'session_entries',
       'session_launch_options',
       'session_sends',

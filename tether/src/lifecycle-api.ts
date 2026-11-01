@@ -1059,10 +1059,18 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions/:id/end', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'keepWakes'])
+      only(body, ['generation', 'keepWakes', 'endedBy'])
       const generation = requireGeneration(body)
       if (body.keepWakes !== undefined && typeof body.keepWakes !== 'boolean')
         throw new HttpError(400, 'invalid_body', { field: 'keepWakes' })
+      // The session asking for this End (`st aico root end` from a lane's
+      // coordinator): it gets no lane `ended` line for it (API 21).
+      if (
+        body.endedBy !== undefined &&
+        (typeof body.endedBy !== 'string' || !/^[0-9a-f]{8}$/.test(body.endedBy))
+      )
+        throw new HttpError(400, 'invalid_body', { field: 'endedBy' })
+      const endedBy = body.endedBy as string | undefined
       const row = requireSession(params.id)
       await whenReady()
       // Kept wakes outlive the row (the End trigger drops every other one);
@@ -1078,7 +1086,17 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           if (armed) keptWaits = context.waits?.keep(row.id, snapshot) ?? 0
         }
       }
-      const result = await endSession(params.id as string, generation)
+      const lanes = context.lanes
+      const marked =
+        endedBy !== undefined && endedBy !== row.id && lanes
+          ? lanes.store.markEnd(row.id, endedBy, Date.now())
+          : false
+      let result: Awaited<ReturnType<typeof endSession>>
+      try {
+        result = await endSession(params.id as string, generation)
+      } finally {
+        if (marked) lanes?.store.unmarkEnd(row.id)
+      }
       if (kept || keptWaits) {
         if (result.status === 'ended') context.wakes?.changed(null)
         else if (getWidget(row.id)) {
