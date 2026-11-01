@@ -330,7 +330,7 @@ CLAUDE_SESSION = {**SESSION, "tool": "claude-code"}
 
 def test_rewind_pins_the_current_generation_and_asks_tether_once(monkeypatch):
     code, calls, output = invoke(monkeypatch, ["rewind", ROOT], [
-        (200, DESCRIPTOR), (200, CLAUDE_SESSION), (200, {"generation": GENERATION, "rewound": True, "up": 2})])
+        (200, DESCRIPTOR), (200, CLAUDE_SESSION), (200, {"generation": GENERATION, "rewound": True, "up": 2, "cleared": True})])
     assert code == 0
     assert calls == [
         ("/fixture/gui.sock", f"/v1/roots/{ROOT}", None),

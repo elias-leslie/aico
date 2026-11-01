@@ -175,7 +175,8 @@ export function laneLine(
 /** The one line a model switch gets (src/model-switch.ts). */
 export function modelLine(lane: LaneSnapshot, change: ModelSwitch, tool: string | null): string {
   const { name } = lineNames(lane)
-  const { tag, what, tail } = modelSwitchText(change, tool, lane.requestId)
+  const request = lane.requestId && REQUEST_ID.test(lane.requestId) ? lane.requestId : null
+  const { tag, what, tail } = modelSwitchText(change, tool, request)
   return `${tag} lane ${name} ${what} · ${tail}`
 }
 
@@ -493,6 +494,8 @@ export interface LaneReportOperations {
   /** A local lane's agent has left its pane for good: a clean exit, or crash
    * recovery holds it. */
   agentGone(id: string): boolean
+  /** A lane's model switch had no receiver (the owner's notice takes it). */
+  unheard?(lane: string): void
   log(message: string): void
 }
 
@@ -740,7 +743,8 @@ export class LaneReporter {
     const where = laneWhere(lane)
     const receivers = this.receivers('blocked', lane)
     if (!receivers.length) {
-      this.ops.log(`lane=${where} model ${change.kind}: no receiver`)
+      this.ops.log(`lane=${where} model ${change.kind}: no receiver, the owner is told`)
+      this.ops.unheard?.(lane.id)
       return
     }
     const line = modelLine(lane, change, tool)

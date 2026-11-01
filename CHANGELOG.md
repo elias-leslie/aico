@@ -4,6 +4,22 @@
 
 ### Added
 
+- Tether stops and reports a model switch (Tether API 22, schema 26). It
+  follows each session's own record (Claude Code transcript, Codex rollout, Pi
+  session) and treats a served model other than the launch model as a switch;
+  spelling differences of the same model are not, and allowed alternates per
+  tool live in `~/.config/tether/model-alternates.json` (none by default). A
+  refusal fallback or a substituted model gets Escape at once (never into an
+  open dialog, again if the other model keeps answering); a `/model` change is
+  only reported; Claude Code pausing on a flagged request is reported as
+  paused. The launcher of a lane gets one line per switch with the new model,
+  the refusal category, the last commit, whether the worktree changed since,
+  and how to recover (`st aico root rewind REQ`, or relaunch from a handoff;
+  Codex and Pi have no rewind). A session nobody launched gets the owner a
+  Nightshift notice, and Aico shows the switch above the session. New
+  `POST /v1/sessions/:id/rewind` and `st aico root rewind` drive Claude Code's
+  rewind list (conversation only), reading every screen back and refusing on
+  any mismatch.
 - The Health panel follows Nightshift's item stream instead of polling every
   minute. `aico-web` keeps one connection to Nightshift's `GET /api/stream`
   while at least one page listens (closed when none does, reconnected with

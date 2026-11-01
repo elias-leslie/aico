@@ -1089,6 +1089,7 @@ export class AgentStatePoller {
       return signal?.agentSessionId
         ? {
             tool: 'claude',
+            agent: found.pid,
             sessionId: signal.agentSessionId,
             home: found.home ?? this.home,
             fs: found.files ?? this.fs,
@@ -1096,9 +1097,9 @@ export class AgentStatePoller {
           }
         : null
     if (found.kind === 'codex')
-      return { tool: 'codex', path: found.rollout.path, tail: found.rollout.tail }
+      return { tool: 'codex', agent: found.pid, path: found.rollout.path, tail: found.rollout.tail }
     if (found.kind === 'pi' && found.session)
-      return { tool: 'pi', path: found.session.path, tail: found.session.tail }
+      return { tool: 'pi', agent: found.pid, path: found.session.path, tail: found.session.tail }
     return null
   }
 

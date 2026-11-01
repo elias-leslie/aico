@@ -79,8 +79,10 @@ function harness(initial: string, options: { alternates?: string[] } = {}) {
   return { file, tail, saved, agent, interrupts, changes, logs, ops, watch }
 }
 
-const claude = (tail: FileTail): ModelSource => ({
+const PID = 4242
+const claude = (tail: FileTail, agent = PID): ModelSource => ({
   tool: 'claude',
+  agent,
   sessionId: CONVERSATION,
   home: '/home/test',
   // The transcript is found in its projects dir.
@@ -294,16 +296,189 @@ describe('Claude Code', () => {
     ).toMatchObject({ kind: 'refusal' })
   })
 
-  it('finds the first model at the start of a record read late', () => {
+  it('reads a long record forward, showing and stopping only once caught up', async () => {
     const row = (model: string) =>
       `${JSON.stringify({ type: 'assistant', message: { model, role: 'assistant' }, pad: 'x'.repeat(4_000) })}\n`
-    const h = harness(row('claude-opus-5-5') + row('claude-opus-4-8').repeat(1_200))
+    const picked = `${JSON.stringify({ type: 'system', subtype: 'local_command', content: '<command-name>/model</command-name>' })}\n`
+    // Moved to Sonnet early, then a substitution near the end.
+    const h = harness(
+      row('claude-opus-5-5') +
+        picked +
+        row('claude-sonnet-5-5').repeat(1_200) +
+        row('claude-haiku-5-5'),
+    )
     h.watch.see(SESSION, claude(h.tail), h.tail)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.watch.switchOf(SESSION)).toBeNull()
+    expect(h.interrupts).toEqual([])
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    await vi.advanceTimersByTimeAsync(0)
     expect(h.watch.switchOf(SESSION)).toMatchObject({
       kind: 'substituted',
+      from: 'claude-sonnet-5-5',
+      to: 'claude-haiku-5-5',
+    })
+    expect(h.interrupts).toEqual([SESSION])
+  })
+
+  it('a new agent in the session is followed afresh; a resumed record goes on from its end', async () => {
+    const row = (model: string) =>
+      `${JSON.stringify({ type: 'assistant', message: { model, role: 'assistant' } })}\n`
+    const h = harness(fixture('claude-incident-2026-11-01.jsonl'))
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    expect(h.watch.switchOf(SESSION)?.kind).toBe('refusal')
+    // Claude Code restarted on its own model, resuming the same transcript.
+    h.file.content += row('claude-opus-5-5')
+    h.watch.see(SESSION, claude(h.tail, PID + 1), h.tail)
+    expect(h.watch.switchOf(SESSION)).toBeNull()
+    h.file.content += row('claude-opus-5-5')
+    h.watch.see(SESSION, claude(h.tail, PID + 1), h.tail)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.watch.switchOf(SESSION)).toBeNull()
+    expect(h.interrupts).toEqual([SESSION])
+    // `claude --model sonnet` in the same session: its own launch model.
+    const s = harness(row('claude-opus-5-5'))
+    s.watch.see(SESSION, claude(s.tail), s.tail)
+    s.file.content = row('claude-sonnet-5-5')
+    s.watch.see(SESSION, claude(s.tail, PID + 1), s.tail)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.watch.switchOf(SESSION)).toBeNull()
+    expect(s.interrupts).toEqual([])
+  })
+
+  it('the owner keeping the fallback in /model turns it into a pick: no more stops', async () => {
+    const row = (model: string) =>
+      `${JSON.stringify({ type: 'assistant', message: { model, role: 'assistant' } })}\n`
+    const command = (content: string) =>
+      `${JSON.stringify({ type: 'system', subtype: 'local_command', content })}\n`
+    const h = harness(fixture('claude-incident-2026-11-01.jsonl'))
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.interrupts).toHaveLength(1)
+    // Opened and closed without a change: still the fallback, still stopped.
+    await vi.advanceTimersByTimeAsync(5_000)
+    h.file.content += `${command('<command-name>/model</command-name>')}${command('<local-command-stdout>Kept model as `Opus 4.8`</local-command-stdout>')}${row('claude-opus-4-8')}`
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.interrupts).toHaveLength(2)
+    expect(h.watch.switchOf(SESSION)?.kind).toBe('refusal')
+    // Picked on purpose: told as a change, never stopped again.
+    await vi.advanceTimersByTimeAsync(5_000)
+    h.file.content += `${command('<command-name>/model</command-name>')}${row('claude-opus-4-8')}`
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(h.watch.switchOf(SESSION)).toMatchObject({
+      kind: 'changed',
       from: 'claude-opus-5-5',
       to: 'claude-opus-4-8',
     })
+    h.file.content += row('claude-opus-4-8')
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.interrupts).toHaveLength(2)
+  })
+
+  it('a refusal onto an allowed alternate is still shown and stopped', async () => {
+    const row = (model: string) =>
+      `${JSON.stringify({ type: 'assistant', message: { model, role: 'assistant' } })}\n`
+    const fallback = `${JSON.stringify({ type: 'system', subtype: 'model_refusal_fallback', originalModel: 'claude-opus-5-5', fallbackModel: 'claude-sonnet-5-5', requestId: 'req_A', apiRefusalCategory: 'cyber' })}\n`
+    const h = harness(row('claude-opus-5-5') + fallback + row('claude-sonnet-5-5'), {
+      alternates: ['claude-sonnet-5-5'],
+    })
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.watch.switchOf(SESSION)).toMatchObject({ kind: 'refusal', to: 'claude-sonnet-5-5' })
+    expect(h.interrupts).toEqual([SESSION])
+  })
+
+  it('a stop the poll could not send yet is sent on a later poll; idle drops it', async () => {
+    const h = harness(fixture('claude-incident-2026-11-01.jsonl'))
+    h.agent.state = 'blocked'
+    h.agent.detail = 'dialog open'
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.interrupts).toEqual([])
+    // The dialog closed with the turn still going: stopped now, no new row needed.
+    h.agent.state = 'working'
+    h.agent.detail = null
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.interrupts).toEqual([SESSION])
+    const idle = harness(fixture('claude-incident-2026-11-01.jsonl'))
+    idle.agent.state = 'idle'
+    idle.watch.see(SESSION, claude(idle.tail), idle.tail)
+    idle.agent.state = 'working'
+    vi.advanceTimersByTime(10_000)
+    idle.watch.see(SESSION, claude(idle.tail), idle.tail)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(idle.interrupts).toEqual([])
+  })
+
+  it('a restart before the facts were in looks at the worktree again', async () => {
+    const h = harness(fixture('claude-incident-2026-11-01.jsonl'))
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    expect(h.saved.entries[SESSION]?.current?.checked).toBe(false)
+    // Tether restarts within the 3 s.
+    const again = new ModelWatch(h.ops)
+    again.see(SESSION, claude(h.tail), h.tail)
+    await vi.advanceTimersByTimeAsync(3_000)
+    expect(again.switchOf(SESSION)).toMatchObject({ checked: true, commit: 'e5a9695' })
+  })
+
+  it('the rewind target is read from its own row on, and a rewind is not repeated', () => {
+    const h = harness(fixture('claude-incident-2026-11-01.jsonl'))
+    h.watch.see(SESSION, claude(h.tail), h.tail)
+    const target = h.watch.promptOf(SESSION)
+    expect(target).toMatchObject({ key: h.watch.switchOf(SESSION)?.key, after: [] })
+    expect(target?.text.length).toBeGreaterThan(0)
+    expect(h.watch.rewoundOf(SESSION)).toBeNull()
+    h.watch.markRewound(SESSION, target?.key ?? '')
+    expect(new ModelWatch(h.ops).rewoundOf(SESSION)).toBe(target?.key)
+  })
+
+  it('a pause with no model named still reaches the descriptor', () => {
+    const follower = new ModelFollower()
+    const raw = follower.apply(
+      { type: 'noFallback', model: null, category: 'cyber', key: 'k', at: 1 },
+      1,
+    )
+    expect(raw).toMatchObject({ kind: 'paused', from: 'unknown', to: 'unknown' })
+  })
+
+  it('a new conversation is found beside the last one on the next poll', () => {
+    let made = false
+    const fs = {
+      readdir: () => ['x'],
+      mtimeMs: (path: string) =>
+        path.endsWith(`${CONVERSATION}.jsonl`) || (made && path.endsWith('/x/new.jsonl'))
+          ? 1
+          : null,
+    } as unknown as ProcFs
+    const h = harness(
+      `${JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-5-5', role: 'assistant' } })}\n`,
+    )
+    const source = (sessionId: string): ModelSource => ({
+      tool: 'claude',
+      agent: PID,
+      sessionId,
+      home: '/home/test',
+      fs,
+      tail: h.tail,
+    })
+    h.watch.see(SESSION, source(CONVERSATION), h.tail)
+    const id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+    const renamed = {
+      ...fs,
+      mtimeMs: (path: string) => (made && path.endsWith(`/x/${id}.jsonl`) ? 1 : null),
+    }
+    const next = (): ModelSource => ({ ...source(id), fs: renamed as unknown as ProcFs })
+    h.watch.see(SESSION, next(), h.tail)
+    made = true
+    vi.advanceTimersByTime(2_000)
+    h.watch.see(SESSION, next(), h.tail)
+    expect(
+      (h.watch as unknown as { entries: Record<string, WatchEntry> }).entries[SESSION]?.path,
+    ).toBe(`/home/test/.claude/projects/x/${id}.jsonl`)
   })
 
   it('finds the transcript by conversation id', () => {
@@ -326,7 +501,7 @@ describe('Codex', () => {
     const h = harness(
       `${line('session_meta', { id: 't' })}\n${line('turn_context', { model: 'gpt-5.5' })}\n${line('turn_context', { model: 'gpt-5.5' })}\n`,
     )
-    const source: ModelSource = { tool: 'codex', path: '/r.jsonl', tail: h.tail }
+    const source: ModelSource = { tool: 'codex', agent: PID, path: '/r.jsonl', tail: h.tail }
     h.watch.see(SESSION, source, h.tail)
     expect(h.watch.switchOf(SESSION)).toBeNull()
     h.file.content += `${line('turn_context', { model: 'gpt-5.4' })}\n`
@@ -361,7 +536,7 @@ describe('Pi', () => {
       { type: 'served', model: 'openai-codex/gpt-5.4', at: Date.parse('2026-10-22T12:00:02Z') },
     ])
     const h = harness(fixture('pi-response-model.jsonl'))
-    h.watch.see(SESSION, { tool: 'pi', path: '/p.jsonl', tail: h.tail }, h.tail)
+    h.watch.see(SESSION, { tool: 'pi', agent: PID, path: '/p.jsonl', tail: h.tail }, h.tail)
     await vi.advanceTimersByTimeAsync(0)
     expect(h.watch.switchOf(SESSION)).toMatchObject({
       kind: 'substituted',
@@ -471,12 +646,41 @@ describe('owner notice', () => {
     expect(resolved).toEqual([`aico-model:${SESSION}:1@5`])
   })
 
-  it('a launched lane tells its launcher instead', () => {
+  it('a launched lane tells its launcher instead, unless nobody could take the line', () => {
     const { n, sent } = notices()
-    n.session(
-      { id: SESSION, launched: true, coordinatorId: 'bbbb0001', modelSwitch: change },
-      'davion-gem',
-    )
+    const lane = { id: SESSION, launched: true, coordinatorId: 'bbbb0001', modelSwitch: change }
+    n.session(lane, 'davion-gem')
     expect(sent).toHaveLength(0)
+    n.unheard(SESSION)
+    n.session(lane, 'davion-gem')
+    expect(sent).toHaveLength(1)
+  })
+
+  it('a notice for a session gone while Tether was down is resolved by the sweep', () => {
+    const { n, sent, resolved } = notices()
+    n.session({ id: SESSION, launched: false, modelSwitch: change }, null)
+    n.session({ id: 'cccc0001', launched: false, modelSwitch: change }, null)
+    expect(sent).toHaveLength(2)
+    // A restart: only one of them is listed again.
+    const state = readModelNoticeState(
+      JSON.stringify({
+        sent: Object.fromEntries(
+          sent.map((s) => [
+            s.key.includes(SESSION) ? `|${SESSION}` : '|cccc0001',
+            { key: s.key, switchKey: '1@5' },
+          ]),
+        ),
+      }),
+    )
+    const after = new ModelNotices({
+      origin: 'https://aico.test',
+      send: (notice) => sent.push(notice),
+      resolve: (key) => resolved.push(key),
+      state: { read: () => state, write: () => {} },
+    })
+    after.session({ id: SESSION, launched: false, modelSwitch: change }, null)
+    after.sweep()
+    expect(resolved).toEqual([`aico-model:cccc0001:1@5`])
+    expect(sent).toHaveLength(2)
   })
 })

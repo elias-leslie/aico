@@ -94,7 +94,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 
 `state` is the agent's state: `working`, `idle`, `blocked` (waiting on the user: a permission prompt or a question) or `unknown` (no agent found, or the session is not running). `stateSource` names what said so (`claude-status`, `claude-hook`, `codex-rollout`, `codex-hook`, `pi-session`, `none`), `stateAt` is when the state last changed (null while unknown), `stateDetail` says why it is blocked, and `statePrevious` is the state before (so `working` → `idle` is a finished turn, while `unknown` → `idle` is an agent Tether only just found). A change publishes `session.updated`. See [agent-state.md](agent-state.md).
 
-`stateAgentAt` (12) is the agent's own time of its latest state (Claude Code's `statusUpdatedAt`, the Codex turn line, the Pi message; Tether's clock when the agent gives none), null until Tether has seen the agent's state; it keeps its last value after the agent leaves. It only moves forward, and a later one while `idle` publishes `session.updated`: a turn ended, even one shorter than the poll. `waitingOn` (12) is null, or names what the session itself waits on: an armed [wait](#waits) (`a wait on session "Store lane" (finished)`, 13), else its own pending check-in (`a check-in at 5:30 PM`, `a check-in that is due`), so a lane waiting on something is not taken for finished. `launched` (12) is true when the session's lineage came from a launch (`launchedBy`, a kept wake's relaunch, the hub's `lineage`), false for an owner's mark or join and for sessions from before v12. See [Lane reports](#lane-reports).
+`stateAgentAt` (12) is the agent's own time of its latest state (Claude Code's `statusUpdatedAt`, the Codex turn line, the Pi message; Tether's clock when the agent gives none), null until Tether has seen the agent's state; it keeps its last value after the agent leaves. It only moves forward, and a later one while `idle` publishes `session.updated`: a turn ended, even one shorter than the poll. `waitingOn` (12) is null, or names what the session itself waits on: an armed [wait](#waits) (`a wait on session "Store lane" (finished)`, 13), else its own pending check-in (`a check-in at 5:30 PM`, `a check-in that is due`), so a lane waiting on something is not taken for finished. `launched` (12) is true when the session's lineage came from a launch (`launchedBy`, a kept wake's relaunch, the hub's `lineage`), false for an owner's mark or join and for sessions from before v12. See [Lane reports](#lane-reports). `modelSwitch` *(22)* is null, or the session's current model switch: `{key, kind, from, to, category, at, stopped, commit, worktreeChanged, checked, rewindTo}` ([Model switches](#model-switches)).
 
 `wakes` *(post-cutover)* lists the session's scheduled check-ins, oldest first; see [Wakes](#wakes).
 
@@ -685,6 +685,11 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
   when a receiver sends to the lane (`inject` with `from`, as `st aico root send` does) or arms a session wait on it,
   on a new generation, and after a `blocked` or `ended`. The streak is kept in the cursor, so a restart keeps it
   (the quiet counts from the restart). Log: `lane=<id> idle again: repeat N goes out after Ns quiet`, once per idle.
+- **model** *(22, schema 26)*: the lane's model switched, or a refusal paused it ([Model switches](#model-switches)),
+  once per switch when its facts are in (`lane_reports.model_key`, so a restart never repeats one). Same receivers as
+  `blocked`: `[Model changed] lane "Store lane" (req neri-r1) now on claude-opus-4-8 after a cyber refusal · turn
+  stopped · last commit e5a9695 · worktree changed since: no · rewind it (st aico root rewind neri-r1), or relaunch
+  from a handoff`. A Codex or Pi lane says `Codex has no supported rewind: relaunch from a handoff`.
 - **blocked**: `permission prompt` or `input needed` held `laneBlockedSeconds`, once per episode (a Tether restart
   during the episode does not repeat it). `dialog open` (the
   owner opening a menu in the lane) is not reported.
@@ -718,6 +723,53 @@ watching a helper adds its `finished`);
 to that lane (a lane watching its own coordinator), which would loop, `409 lane_reports_unavailable` when the daemon runs without lifecycle
 (`TETHER_RECONCILE=off`), `404` for an unknown watcher. A watcher's watches end with it. The CLI is
 `st aico watch LANE`, `st aico unwatch LANE` and `st aico watch list`.
+
+## Model switches
+
+*(22, schema 26)* Tether follows each session's own record (the Claude Code transcript, the Codex rollout, the Pi
+session file; an entry session's through its contained home) and compares the model that answers with the one the
+session started on, read from the start of the record. A different model is a switch (Agent Hub's `is_model_switch`):
+case, a `provider/` prefix, a `[1m]` tag and a date snapshot suffix are the same model. Models a tool may serve
+instead of its launch model are data: `~/.config/tether/model-alternates.json`, `{"claude-code": [...], "codex":
+[...], "pi": [...]}`, none by default. A `/model` pick of the model a stopped switch moved to makes it the session's
+own choice (`changed`, no more Escape). The record is read forward in steps, never skipped, and a switch found while
+catching up (after a restart, or a lane already on a fallback when Tether starts) is stopped and told once caught
+up. A new agent in the session (another pid or tool) starts the watch again from what it serves; a resumed
+conversation is read from its end, and a new conversation is found beside the last one.
+
+| `kind` | When | Interrupt |
+|---|---|---|
+| `refusal` | Claude Code's `model_refusal_fallback`, Codex's `model_reroute` | Escape |
+| `substituted` | an answer from another model with no refusal (Pi's `responseModel`) | Escape |
+| `changed` | the owner's `/model` | none |
+| `paused` | a refusal with no switch (Claude Code with its fallback off) that left the agent out of its turn for 5 s | none |
+
+The Escape goes at once while the agent works or waits on a permission prompt or input, never into an open dialog,
+at most every 5 s (a second Escape opens Claude Code's rewind list), and again each time the other model answers
+while the switch stands. Nothing is ended or relaunched. Three seconds later Tether adds the facts: `commit` (the
+worktree's last commit), `worktreeChanged` (a commit after the switch, or a changed file written after it) and
+`checked: true`. `category` is the refusal's category (`cyber`, …); `rewindTo` is the uuid of the owner's prompt
+before the switch (Claude Code only). Only typed values are kept, never the refusal or the request. An answer from
+the launch model again clears it. The watch is kept in the `model_watch` setting, so a restart neither repeats nor
+loses a switch.
+
+Who is told: a launched lane's launcher gets the `model` line ([Lane reports](#lane-reports)); any other session gets
+the owner one Nightshift notice (`aico-model:<id>:<key>`, "Model changed in …" or "Model refused in …"), from the
+Tether that knows Aico's address, resolved when the switch clears or the session ends (or, after a restart, is gone).
+A lane whose line has no receiver gets the owner's notice too. Aico shows the switch above
+the session.
+
+`POST /v1/sessions/:id/rewind {generation?}` rewinds a Claude Code session to before `rewindTo`, conversation only
+(the files stay as they are; a coordinator decides about them): Escape, Escape, Up to that prompt, Enter, "Restore
+conversation", Enter, then the prompt's text is cleared from the input. Each screen is read back before the next key
+and a mismatch stops it (the list is closed again): every Up must land on the next prompt the transcript has after
+the target, newest first. `200 {generation, rewound: true, up, cleared}`, `cleared: false` when the restored prompt's
+text is still in the input (clear it before sending); `409 rewind_unsupported` (not Claude Code), `409
+no_rewind_target`, `409 already_rewound` (this switch was rewound already), `409 agent_busy` (working), `409
+rewind_target_unreadable`, `409 rewind_refused {step, reason}` (a screen did not match: a dialog open, a draft in the
+input, a prompt not listed, a list that does not match the transcript), `409 stale_generation`. The model after a rewind is the session's setting, which may still be the fallback; the watch
+stops it again if it answers. CLI: `st aico root rewind REQ [--generation G]`, then `st aico root send REQ TEXT
+--generation G`.
 
 ## Waits
 

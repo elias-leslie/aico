@@ -40,6 +40,8 @@ const POLLS = 15
 const POLL_MS = 200
 /** The most prompts a rewind walks up. */
 const MAX_UP = 200
+/** C-u presses tried to clear a restored prompt (one per line it fills). */
+const CLEAR_MAX = 40
 
 /** Text as compared: whitespace collapsed, a trailing ellipsis dropped. */
 export function screenText(text: string): string {
@@ -51,12 +53,18 @@ export function promptLine(prompt: string): string {
   return screenText(prompt.split('\n').find((line) => line.trim()) ?? '')
 }
 
-/** A menu entry shows the prompt (cut to the window's width). */
+/** A menu entry shows the prompt's first line: whole, or cut to the
+ * window's width with an ellipsis. */
 export function sameEntry(shown: string, prompt: string): boolean {
+  const cut = shown.trim().endsWith('…')
   const a = screenText(shown)
   const b = promptLine(prompt)
   if (!a || !b) return false
-  return a === b || (a.length >= 16 && b.startsWith(a)) || (b.length >= 16 && a.startsWith(b))
+  return a === b || (cut && b.startsWith(a))
+}
+
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((entry, i) => entry === b[i])
 }
 
 function lines(screen: string): string[] {
@@ -134,21 +142,31 @@ export function readInput(screen: string): string | null {
   return [first.replace(/^❯ ?/, ''), ...box.slice(1).map((line) => line.trim())].join(' ').trim()
 }
 
-/** Rewind to before `prompt`, the `skip`-th newest entry showing its text
- * (0: the newest). Resolves when the input is empty again. */
+/** Rewind to before `prompt`, with `after` the first lines of the prompts
+ * sent after it, oldest first: the list must show exactly those, newest
+ * first, then the prompt. Resolves once the conversation is restored, with
+ * `cleared` false when its text could not be cleared from the input. */
 export async function rewindClaude(
   ops: RewindOperations,
   prompt: string,
-  skip = 0,
-): Promise<{ up: number }> {
+  after: readonly string[],
+): Promise<{ up: number; cleared: boolean }> {
   if (!promptLine(prompt)) throw new RewindRefused('prompt', 'no prompt text to find')
-  const read = async <T>(step: RewindStep, parse: (screen: string) => T | null): Promise<T> => {
+  const walk = [...after].reverse().concat(prompt)
+  if (walk.length > MAX_UP) throw new RewindRefused('pick', 'too many prompts after it')
+  const poll = async <T>(parse: (screen: string) => T | null): Promise<T | null> => {
     for (let i = 0; i < POLLS; i++) {
       const found = parse(await ops.capture())
       if (found !== null) return found
       await ops.sleep(POLL_MS)
     }
-    throw new RewindRefused(step, 'the screen did not show what this step needs')
+    return null
+  }
+  const read = async <T>(step: RewindStep, parse: (screen: string) => T | null): Promise<T> => {
+    const found = await poll(parse)
+    if (found === null)
+      throw new RewindRefused(step, 'the screen did not show what this step needs')
+    return found
   }
   const input = readInput(await ops.capture())
   if (input === null) throw new RewindRefused('prompt', 'no empty input box on screen')
@@ -162,22 +180,23 @@ export async function rewindClaude(
     let menu = await read('menu', readMenu)
     if (menu.entries[menu.picked] !== '(current)')
       throw new RewindRefused('menu', 'the list did not open on (current)')
-    let up = 0
-    let seen = 0
-    for (;;) {
-      if (up >= MAX_UP || menu.picked === 0)
-        throw new RewindRefused('pick', 'prompt not in the list')
+    for (const [i, want] of walk.entries()) {
+      const before = menu
       await ops.press('Up')
-      up++
-      const want = menu.picked - 1
+      // The pick moved, or the list scrolled under it.
       menu = await read('pick', (screen) => {
         const next = readMenu(screen)
-        return next && next.picked === want ? next : null
+        return next && (next.picked !== before.picked || !sameList(next.entries, before.entries))
+          ? next
+          : null
       })
-      if (sameEntry(menu.entries[menu.picked] ?? '', prompt)) {
-        if (seen === skip) break
-        seen++
-      }
+      if (!sameEntry(menu.entries[menu.picked] ?? '', want))
+        throw new RewindRefused(
+          'pick',
+          i === walk.length - 1
+            ? 'the list shows another prompt there'
+            : 'the list does not match the transcript',
+        )
     }
     await ops.press('Enter')
     let confirm = await read('confirm', readConfirm)
@@ -197,14 +216,23 @@ export async function rewindClaude(
     if (confirm.options[confirm.picked] !== RESTORE_CONVERSATION)
       throw new RewindRefused('option', 'another option is picked')
     await ops.press('Enter')
+    // Restored once the input is back; until then the menu may still be up.
+    let text = await poll(readInput)
+    if (text === null)
+      throw new RewindRefused('restored', 'the input did not come back after the restore')
     open = false
-    await read('restored', (screen) => {
-      const text = readInput(screen)
-      return text !== null && sameEntry(text, prompt) ? text : null
-    })
-    await ops.press('C-u')
-    await read('cleared', (screen) => (readInput(screen) === '' ? true : null))
-    return { up }
+    // The prompt's text comes back in the input: C-u clears a line at a time.
+    for (let i = 0; text !== '' && i < CLEAR_MAX; i++) {
+      const was: string = text
+      await ops.press('C-u')
+      const next = await poll((screen) => {
+        const now = readInput(screen)
+        return now !== null && now !== was ? now : null
+      })
+      if (next === null) break
+      text = next
+    }
+    return { up: walk.length, cleared: text === '' }
   } catch (error) {
     // Close the menu (the confirm screen goes back to the list, then out).
     if (open)

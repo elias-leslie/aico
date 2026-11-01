@@ -1416,9 +1416,9 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const change = sessionModelSwitch(row.id)
       if (!change?.rewindTo) throw new HttpError(409, 'no_rewind_target')
       if (agentStateOf(row.id).state === 'working') throw new HttpError(409, 'agent_busy')
-      const prompt = modelWatch?.promptOf(row.id, change.rewindTo) ?? null
-      if (!prompt) throw new HttpError(409, 'rewind_target_unreadable')
-      const target = prompt
+      if (modelWatch?.rewoundOf(row.id) === change.key) throw new HttpError(409, 'already_rewound')
+      const target = modelWatch?.promptOf(row.id) ?? null
+      if (target?.key !== change.key) throw new HttpError(409, 'rewind_target_unreadable')
       let refused: RewindRefused | null = null
       const done = await withRunningSession(row.id, generation, async (current) => {
         const pane = tmuxPaneTargetForWidget(current.id)
@@ -1432,7 +1432,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
               sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
             },
             target.text,
-            target.later,
+            target.after,
           )
         } catch (error) {
           if (error instanceof RewindRefused) {
@@ -1447,8 +1447,11 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         throw new HttpError(409, 'rewind_refused', { step, reason })
       }
       if (!done) throw new HttpError(409, 'workload_unavailable')
-      console.log(`[tether:models] session=${row.id} rewound ${done.up} prompt(s) back`)
-      sendJson(res, 200, { generation, rewound: true, up: done.up })
+      modelWatch?.markRewound(row.id, change.key)
+      console.log(
+        `[tether:models] session=${row.id} rewound ${done.up} prompt(s) back${done.cleared ? '' : ', its text left in the input'}`,
+      )
+      sendJson(res, 200, { generation, rewound: true, up: done.up, cleared: done.cleared })
     })
     // Aico has no desktop windows: a show request gets a plain refusal.
     .add('POST', '/v1/sessions/:id/show', () => {

@@ -599,6 +599,10 @@ export async function startDaemon(
             (exit?.state === 'exit' && exit.status === 0) || Boolean(context.recovery?.isHeld(id))
           )
         },
+        unheard: (id) => {
+          modelNotices?.unheard(id)
+          if (getWidget(id)) notifySessionChanged(id, { force: true })
+        },
         log: (message) => console.log(`[tether:lanes] ${message}`),
       })
     : null
@@ -888,6 +892,15 @@ export async function startDaemon(
         // have had time to list theirs, resolve what no longer waits.
         for (const row of listSessions()) waiting.session(sessionSnapshot(row) as { id: string })
         setTimeout(() => waiting.sweep(), WAIT_NOTICE_MS).unref()
+      })
+      .catch(() => {})
+  if (modelNotices)
+    void ready
+      .then(() => {
+        // Switches standing when Tether started; then, once remote hosts have
+        // listed theirs, resolve the notices of sessions that are gone.
+        for (const row of listSessions()) modelNotices.session(sessionSnapshot(row), null)
+        setTimeout(() => modelNotices.sweep(), WAIT_NOTICE_MS).unref()
       })
       .catch(() => {})
   console.log(`[tether] ${VERSION} instance=${paths.instance} listening on ${paths.socket}`)

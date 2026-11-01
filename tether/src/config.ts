@@ -25,8 +25,9 @@ import { join } from 'node:path'
  * 20: `entry` runs `pi` roots too (the conversation id Tether chose, read from
  *     the entry home's Pi session file).
  * 21: `endedBy` on `POST /v1/sessions/:id/end` (that session gets no lane
- *     `ended` line for it). */
-export const API_VERSION = 21
+ *     `ended` line for it).
+ * 22: `modelSwitch` on the session descriptor; `POST /v1/sessions/:id/rewind`. */
+export const API_VERSION = 22
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

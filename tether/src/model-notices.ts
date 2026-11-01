@@ -2,7 +2,8 @@
 // opened) has no launcher to tell when its model switches or a refusal stops
 // it: the owner gets one Nightshift notice per switch (contract v1, the same
 // path as the waiting notice), resolved when the session is back on its model
-// or gone. Launched lanes tell their launcher instead (src/lane-reports.ts).
+// or gone. Launched lanes tell their launcher instead (src/lane-reports.ts),
+// unless nobody could take the line (`unheard`).
 //
 // Only the Tether that knows where Aico is (TETHER_AICO_URL) sends these: it
 // sees its own sessions and every remote host's.
@@ -73,6 +74,10 @@ export function modelNotice(
 
 export class ModelNotices {
   private readonly state: ModelNoticeState
+  /** Sessions seen since Tether started (`<host>|<id>`). */
+  private readonly seen = new Set<string>()
+  /** Launched lanes whose switch line had no receiver: the owner hears it. */
+  private readonly unheardLanes = new Set<string>()
 
   constructor(private readonly deps: ModelNoticeDeps) {
     this.state = deps.state.read()
@@ -89,7 +94,11 @@ export class ModelNotices {
   /** A session's latest descriptor (local, or relayed with its host). */
   session(session: ModelNoticeSession, host: string | null): void {
     const id = `${host ?? ''}|${session.id}`
-    const launchedLane = session.launched === true && typeof session.coordinatorId === 'string'
+    this.seen.add(id)
+    const launchedLane =
+      session.launched === true &&
+      typeof session.coordinatorId === 'string' &&
+      !this.unheardLanes.has(session.id)
     const change = launchedLane ? null : modelSwitchOf(session.modelSwitch)
     const sent = this.state.sent[id]
     if (!change) {
@@ -107,7 +116,21 @@ export class ModelNotices {
   /** The session ended. */
   removed(sessionId: string, host: string | null): void {
     const id = `${host ?? ''}|${sessionId}`
+    this.seen.delete(id)
+    this.unheardLanes.delete(sessionId)
     if (this.state.sent[id]) this.over(id)
+  }
+
+  /** A launched lane's switch line found no receiver: its next descriptor
+   * gets the owner's notice instead. */
+  unheard(sessionId: string): void {
+    this.unheardLanes.add(sessionId)
+  }
+
+  /** Once every host has listed its sessions: resolve the notices of
+   * sessions that ended while Tether was down or their host went away. */
+  sweep(): void {
+    for (const id of Object.keys(this.state.sent)) if (!this.seen.has(id)) this.over(id)
   }
 
   private over(id: string): void {

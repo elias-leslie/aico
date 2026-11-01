@@ -29,7 +29,7 @@
 // ~/.config/tether/model-alternates.json are no switch unless a refusal put
 // them there.
 
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { FileTail } from './agent-state'
 import type { ProcFs } from './continuity'
 
@@ -93,6 +93,8 @@ export type ModelEvent =
   | { type: 'requested'; model: string; at: number | null }
   /** Someone ran the tool's model picker (Claude `/model`). */
   | { type: 'chosen'; at: number | null }
+  /** The picker closed without a change (Claude "Kept model as …"). */
+  | { type: 'kept'; at: number | null }
   /** An owner's prompt (Claude), the start of a turn a rewind can go back to. */
   | { type: 'prompt'; uuid: string; at: number | null }
   /** A reply was refused (Claude `stop_reason: refusal`); the turn may still
@@ -123,6 +125,8 @@ export type ModelEvent =
     }
 
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@[\]-]{0,127}$/
+/** A refused model the record does not name. */
+const UNKNOWN_MODEL = 'unknown'
 const CATEGORY = /^[a-z][a-z0-9_]{0,31}$/
 const KEY = /^[A-Za-z0-9_.:@-]{1,128}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -166,7 +170,8 @@ function parse(line: string): Record<string, unknown> | null {
   }
 }
 
-const CLAUDE_HINT = /"type":\s*"(?:assistant|user)"|model_refusal|command-name>\/model</
+const CLAUDE_HINT =
+  /"type":\s*"(?:assistant|user)"|model_refusal|command-name>\/model<|stdout>Kept model as/
 
 /** An owner's prompt: a user row with text, not a tool result, meta row or
  * compact summary. */
@@ -229,6 +234,13 @@ export function claudeModelEvents(line: string): ModelEvent[] {
     row.content.includes('<command-name>/model</command-name>')
   )
     return [{ type: 'chosen', at }]
+  if (
+    row.type === 'system' &&
+    row.subtype === 'local_command' &&
+    typeof row.content === 'string' &&
+    row.content.startsWith('<local-command-stdout>Kept model as ')
+  )
+    return [{ type: 'kept', at }]
   if (row.type === 'user') {
     return typeof row.uuid === 'string' && UUID.test(row.uuid) && isPrompt(row)
       ? [{ type: 'prompt', uuid: row.uuid, at }]
@@ -319,6 +331,8 @@ export interface PendingRefusal {
   at: number
   /** The prompt of the refused turn. */
   prompt: string | null
+  /** Where that prompt's row starts in the record. */
+  promptAt: number | null
 }
 
 /** What a follower keeps across a Tether restart. */
@@ -328,8 +342,12 @@ export interface FollowerState {
   requested: string | null
   /** A model picker ran and no answer has come since. */
   chosen: boolean
-  /** The latest owner's prompt (Claude). */
+  /** The latest owner's prompt (Claude), and where its row starts. */
   prompt: string | null
+  promptAt: number | null
+  /** The model now came from a refusal or a substitution, not a pick: an
+   * allowed alternate is still a switch until someone picks it. */
+  unasked: boolean
   /** A refused reply not yet answered by a retry or a switch. */
   pending: PendingRefusal | null
   /** The turn stopped on a refusal and nothing has answered since. */
@@ -346,6 +364,8 @@ export const EMPTY_FOLLOWER: Readonly<FollowerState> = Object.freeze({
   requested: null,
   chosen: false,
   prompt: null,
+  promptAt: null,
+  unasked: false,
   pending: null,
   paused: false,
   refusals: [],
@@ -360,6 +380,8 @@ export interface RawSwitch {
   category: string | null
   at: number
   rewindTo: string | null
+  /** Where the rewind target's row starts in the record. */
+  rewindAt: number | null
 }
 
 /** Folds one session's model events into its switches. */
@@ -374,10 +396,11 @@ export class ModelFollower {
     this.state = { ...EMPTY_FOLLOWER, ...state, refusals: [...(state.refusals ?? [])] }
   }
 
-  /** On the baseline model (or an allowed alternate) and not paused. */
+  /** On the baseline model (or an allowed alternate nobody was put on) and
+   * not paused. */
   settled(): boolean {
-    const { baseline, current, paused } = this.state
-    return !paused && (!isModelSwitch(baseline, current) || this.allowed(current))
+    const { baseline, current, paused, unasked } = this.state
+    return !paused && (!isModelSwitch(baseline, current) || (!unasked && this.allowed(current)))
   }
 
   private allowed(model: string | null): boolean {
@@ -396,16 +419,28 @@ export class ModelFollower {
     to: string,
     category: string | null,
     at: number,
-    rewindTo: string | null = null,
+    rewind: { uuid: string | null; at: number | null } = { uuid: null, at: null },
   ): RawSwitch {
     this.state.seq += 1
-    return { key: `${this.state.seq}@${at}`, kind, from, to, category, at, rewindTo }
+    this.state.unasked = kind === 'refusal' || kind === 'substituted'
+    return {
+      key: `${this.state.seq}@${at}`,
+      kind,
+      from,
+      to,
+      category,
+      at,
+      rewindTo: rewind.uuid,
+      rewindAt: rewind.uuid ? rewind.at : null,
+    }
   }
 
-  /** The session's first model, from the start of a record read late. */
-  seed(model: string): void {
-    this.state.baseline ??= model
-    this.state.current ??= model
+  /** Someone picked the model the session was put on: no longer unasked. */
+  private picked(model: string, at: number): RawSwitch | null {
+    const s = this.state
+    if (!s.unasked || isModelSwitch(s.current, model) || !isModelSwitch(s.baseline, model))
+      return null
+    return this.next('changed', s.baseline ?? model, model, null, at)
   }
 
   /** The pending refusal ended its turn with no switch. */
@@ -415,19 +450,30 @@ export class ModelFollower {
     if (!pending) return null
     s.pending = null
     s.paused = true
-    const on = pending.model ?? s.current ?? s.baseline ?? 'its model'
-    return this.next('paused', on, on, pending.category, pending.at ?? now, pending.prompt)
+    const on = pending.model ?? s.current ?? s.baseline ?? UNKNOWN_MODEL
+    const unasked = s.unasked
+    const raw = this.next('paused', on, on, pending.category, pending.at ?? now, {
+      uuid: pending.prompt,
+      at: pending.promptAt,
+    })
+    s.unasked = unasked
+    return raw
   }
 
-  apply(event: ModelEvent, now: number): RawSwitch | null {
+  /** `offset`: where the event's row starts in the record. */
+  apply(event: ModelEvent, now: number, offset: number | null = null): RawSwitch | null {
     const s = this.state
     const at = event.at ?? now
     switch (event.type) {
       case 'chosen':
         s.chosen = true
         return null
+      case 'kept':
+        s.chosen = false
+        return null
       case 'prompt':
         s.prompt = event.uuid
+        s.promptAt = offset
         return null
       case 'refused':
         s.baseline ??= event.model
@@ -439,6 +485,7 @@ export class ModelFollower {
             key: event.key,
             at,
             prompt: s.prompt,
+            promptAt: s.promptAt,
           }
         return null
       case 'noFallback': {
@@ -448,18 +495,19 @@ export class ModelFollower {
           return null
         if (pending) this.seen(pending.key)
         s.paused = true
-        const on = event.model ?? pending?.model ?? s.current ?? s.baseline ?? 'its model'
-        return this.next(
-          'paused',
-          on,
-          on,
-          event.category ?? pending?.category ?? null,
-          at,
-          pending?.prompt ?? s.prompt,
-        )
+        const on = event.model ?? pending?.model ?? s.current ?? s.baseline ?? UNKNOWN_MODEL
+        const unasked = s.unasked
+        const raw = this.next('paused', on, on, event.category ?? pending?.category ?? null, at, {
+          uuid: pending?.prompt ?? s.prompt,
+          at: pending ? pending.promptAt : s.promptAt,
+        })
+        s.unasked = unasked
+        return raw
       }
       case 'refusal': {
-        const prompt = s.pending?.prompt ?? s.prompt
+        const prompt = s.pending
+          ? { uuid: s.pending.prompt, at: s.pending.promptAt }
+          : { uuid: s.prompt, at: s.promptAt }
         if (s.pending) this.seen(s.pending.key)
         s.pending = null
         s.paused = false
@@ -479,7 +527,10 @@ export class ModelFollower {
         const before = s.requested
         s.requested = event.model
         if (!isModelSwitch(before, event.model)) return null
-        // The tool's own pick changed (its model picker).
+        // The tool's own pick changed (its model picker), perhaps to the model
+        // the session was put on.
+        const picked = this.picked(event.model, at)
+        if (picked) return picked
         const from = s.current ?? s.baseline
         s.current = event.model
         if (!isModelSwitch(s.baseline, event.model) || !isModelSwitch(from, event.model))
@@ -499,14 +550,19 @@ export class ModelFollower {
         }
         const from = s.current ?? s.baseline
         if (!isModelSwitch(from, event.model)) {
+          // `/model` kept on the model the session was put on: picked now.
+          const picked = s.chosen ? this.picked(event.model, at) : null
           s.chosen = false
-          return null
+          return picked
         }
         s.current = event.model
         const chosen =
           s.chosen || (s.requested !== null && !isModelSwitch(s.requested, event.model))
         s.chosen = false
-        if (!isModelSwitch(s.baseline, event.model) || this.allowed(event.model)) return null
+        if (!isModelSwitch(s.baseline, event.model) || this.allowed(event.model)) {
+          s.unasked = false
+          return null
+        }
         return this.next(chosen ? 'changed' : 'substituted', from, event.model, null, at)
       }
     }
@@ -515,11 +571,12 @@ export class ModelFollower {
 
 // --- the watch -------------------------------------------------------------------------
 
-/** Where one session's agent keeps its record. */
+/** Where one session's agent keeps its record. `agent` is the agent's pid:
+ * another process in the session starts a new follow (its own launch model). */
 export type ModelSource =
-  | { tool: 'claude'; sessionId: string; home: string; fs: ProcFs; tail?: FileTail }
-  | { tool: 'codex'; path: string; tail?: FileTail }
-  | { tool: 'pi'; path: string; tail?: FileTail }
+  | { tool: 'claude'; agent: number; sessionId: string; home: string; fs: ProcFs; tail?: FileTail }
+  | { tool: 'codex'; agent: number; path: string; tail?: FileTail }
+  | { tool: 'pi'; agent: number; path: string; tail?: FileTail }
 
 /** One session's persisted follow (settings `model-watch`). */
 export interface WatchEntry {
@@ -528,6 +585,13 @@ export interface WatchEntry {
   follower: FollowerState
   /** The switch the descriptor shows; null while settled. */
   current: ModelSwitch | null
+  /** The tool and agent process followed. */
+  tool: ModelTool | null
+  agent: number | null
+  /** Where the shown switch's rewind target row starts. */
+  rewindAt: number | null
+  /** The switch key a rewind already undid. */
+  rewound: string | null
 }
 
 export interface ModelWatchOperations {
@@ -547,13 +611,12 @@ export interface ModelWatchOperations {
   log(message: string): void
 }
 
-/** Bytes read per poll: a record further behind is read from its last step
- * (the reader skips ahead). */
+/** Bytes read per poll, forward from where the last read stopped: a record
+ * further behind is caught up over several polls, and only once caught up is
+ * a switch shown or a turn stopped. */
 const STEP_BYTES = 4 * 1024 * 1024
-/** The longest transcript a rewind reads for its prompt. */
-const TRANSCRIPT_MAX_BYTES = 256 * 1024 * 1024
-/** The start of a record read for its first model. */
-const HEAD_BYTES = 2 * 1024 * 1024
+/** The most a rewind reads from its target prompt on. */
+const PROMPT_READ_BYTES = 32 * 1024 * 1024
 /** Persist an advancing offset at most this often when nothing else changed. */
 const SAVE_EVERY_MS = 60_000
 const TRANSCRIPT_SEARCH_MS = 15_000
@@ -575,15 +638,38 @@ interface Live {
   /** Claude: the conversation whose transcript is followed. */
   conversation: string | null
   searchedAt: number
+  /** Claude: the folder of the transcript followed before a `/clear`. */
+  near: string | null
+  /** A new agent process resumed this record: read it from its end. */
+  resumes: string | null
+  /** The next read starts inside a line longer than a step. */
+  midLine: boolean
+  /** The latest switch found while catching up, shown once caught up. */
+  held: RawSwitch | null
   dirty: boolean
   savedAt: number
   /** An Escape is being sent. */
   busy: boolean
   stoppedAt: number
+  /** The shown switch's turn still needs its Escape. */
+  stopDue: boolean
   /** When the pending refusal was first seen with the agent out of its turn. */
   quietSince: number | null
   /** The reader the record was last read with (contained for an entry home). */
   reader: FileTail | null
+}
+
+function emptyEntry(tool: ModelTool, agent: number): WatchEntry {
+  return {
+    path: null,
+    offset: 0,
+    follower: { ...EMPTY_FOLLOWER },
+    current: null,
+    tool,
+    agent,
+    rewindAt: null,
+    rewound: null,
+  }
 }
 
 /** Follows each running session's model and reports its switches. */
@@ -608,71 +694,108 @@ export class ModelWatch {
     return this.entries[id]?.current ?? null
   }
 
-  private liveOf(id: string, tool: ModelTool, now: number): Live {
-    let live = this.live.get(id)
-    if (live && live.tool === tool) return live
-    const entry = this.entries[id] ?? {
-      path: null,
-      offset: 0,
-      follower: { ...EMPTY_FOLLOWER },
-      current: null,
+  private liveOf(id: string, source: ModelSource, now: number): Live {
+    const live = this.live.get(id)
+    if (live && live.tool === source.tool && live.entry.agent === source.agent) return live
+    let entry = this.entries[id]
+    let resumes: string | null = null
+    if (entry && (entry.tool !== source.tool || entry.agent !== source.agent)) {
+      // Another agent in the session: its own launch model. The same record
+      // resumed is read on from its end; what was shown belonged to the last.
+      this.ops.log(
+        `session=${id} new agent ${source.tool} pid ${source.agent}: following it afresh`,
+      )
+      resumes = entry.tool === source.tool ? entry.path : null
+      const shown = entry.current !== null
+      entry = emptyEntry(source.tool, source.agent)
+      if (shown) this.ops.changed(id)
     }
-    const follower = new ModelFollower(entry.follower, this.ops.alternates(tool))
+    entry ??= emptyEntry(source.tool, source.agent)
+    const follower = new ModelFollower(entry.follower, this.ops.alternates(source.tool))
     entry.follower = follower.state
-    live = {
+    const current = entry.current
+    const next: Live = {
       entry,
       follower,
-      tool,
+      tool: source.tool,
       conversation: null,
       searchedAt: Number.NEGATIVE_INFINITY,
-      dirty: false,
+      near: null,
+      resumes,
+      midLine: false,
+      held: null,
+      dirty: resumes !== null,
       savedAt: now,
       busy: false,
       stoppedAt: Number.NEGATIVE_INFINITY,
+      stopDue: current !== null && STOPPING.has(current.kind) && !current.stopped,
       quietSince: null,
       reader: null,
     }
-    this.live.set(id, live)
+    this.live.set(id, next)
     this.entries[id] = entry
-    return live
+    // A switch whose facts a restart cut off gets them now.
+    if (current && !current.checked) void this.facts(id, next, current.key, current.at)
+    return next
   }
 
   /** A poll found the session's agent record (the agent-state poller). */
   see(id: string, source: ModelSource, tail: FileTail): void {
     const now = this.ops.now()
-    const live = this.liveOf(id, source.tool, now)
+    const live = this.liveOf(id, source, now)
     const path = this.pathOf(live, source, now)
     if (!path) return
-    if (live.entry.path !== path) {
-      // Another conversation (Claude `/clear`, a resumed thread): read it from
-      // its start; the baseline stays the session's.
-      live.entry.path = path
-      live.entry.offset = 0
-      live.dirty = true
-    }
     const reader = source.tail ?? tail
     live.reader = reader
-    if (live.entry.offset === 0 && live.follower.state.baseline === null)
-      this.seed(live, source.tool, path, reader)
-    let chunk: { text: string; offset: number; size: number }
+    let size: number
     try {
-      chunk = reader.read(path, live.entry.offset, STEP_BYTES)
+      size = reader.read(path, 0, 0).size
     } catch {
       return
     }
-    const lines = chunk.text.split('\n')
-    // A read that skipped ahead (more than a step behind) starts mid-line.
-    if (chunk.offset - Buffer.byteLength(chunk.text) > live.entry.offset) lines.shift()
-    if (chunk.offset !== live.entry.offset) {
-      live.entry.offset = chunk.offset
+    if (live.entry.path !== path) {
+      // Another conversation (Claude `/clear`, a resumed thread): read it from
+      // its start; the baseline stays the session's. A record a new agent
+      // process resumed goes on from its end.
+      live.entry.path = path
+      live.entry.offset = path === live.resumes ? size : 0
+      live.resumes = null
+      live.midLine = false
       live.dirty = true
+    }
+    // A shrunk record starts over.
+    if (live.entry.offset > size) live.entry.offset = 0
+    const start = live.entry.offset
+    const end = Math.min(size, start + STEP_BYTES)
+    let buffer: Buffer
+    try {
+      buffer = end > start ? reader.range(path, start, end) : Buffer.alloc(0)
+    } catch {
+      return
+    }
+    let at = 0
+    if (live.midLine) {
+      const newline = buffer.indexOf(0x0a)
+      at = newline < 0 ? buffer.length : newline + 1
+      live.midLine = newline < 0
+    }
+    let cut = buffer.lastIndexOf(0x0a) + 1
+    if (cut <= at && buffer.length >= STEP_BYTES) {
+      // One line longer than a step: skip it.
+      cut = buffer.length
+      live.midLine = true
     }
     const found: RawSwitch[] = []
     let spoke = false
-    for (const line of lines) {
+    while (at < cut) {
+      const newline = buffer.indexOf(0x0a, at)
+      const stop = newline < 0 || newline >= cut ? cut : newline
+      const line = buffer.subarray(at, stop).toString('utf8')
+      const lineAt = start + at
+      at = stop + 1
       if (!line) continue
       for (const event of EVENTS[source.tool](line)) {
-        const raw = live.follower.apply(event, now)
+        const raw = live.follower.apply(event, now, lineAt)
         if (raw) found.push(raw)
         else if (
           event.type === 'served' &&
@@ -681,7 +804,11 @@ export class ModelWatch {
           spoke = true
       }
     }
-    const caughtUp = chunk.offset >= chunk.size
+    if (start + cut !== live.entry.offset) {
+      live.entry.offset = start + cut
+      live.dirty = true
+    }
+    const caughtUp = end >= size
     const agent = this.ops.agent(id)
     if (
       live.follower.state.pending &&
@@ -697,11 +824,17 @@ export class ModelWatch {
       }
     } else live.quietSince = null
     if (found.length) live.dirty = true
-    const latest = found.at(-1) ?? null
+    // While catching up, only the latest switch counts, once caught up.
+    let latest = found.at(-1) ?? live.held
+    live.held = caughtUp ? null : latest
+    if (!caughtUp) latest = null
     if (live.follower.settled()) {
+      live.held = null
       if (live.entry.current) {
         this.ops.log(`session=${id} settled on ${live.follower.state.current ?? 'its model'}`)
         live.entry.current = null
+        live.entry.rewindAt = null
+        live.stopDue = false
         live.dirty = true
         this.ops.changed(id)
       }
@@ -713,40 +846,11 @@ export class ModelWatch {
       shown &&
       STOPPING.has(shown.kind) &&
       caughtUp &&
-      (latest?.key === shown.key ||
-        (spoke && !isModelSwitch(shown.to, live.follower.state.current)))
+      (live.stopDue || (spoke && !isModelSwitch(shown.to, live.follower.state.current)))
     )
       void this.stop(id, live, shown, agent)
     if (live.dirty && (found.length || spoke || now - live.savedAt >= SAVE_EVERY_MS))
       this.save(live, now)
-  }
-
-  /** A record longer than a step is read from its last step: its first
-   * model, the baseline, is read from its start. */
-  private seed(live: Live, tool: ModelTool, path: string, reader: FileTail): void {
-    let head: string
-    try {
-      head = reader.range(path, 0, HEAD_BYTES).toString('utf8')
-    } catch {
-      return
-    }
-    const lines = head.split('\n')
-    lines.pop()
-    for (const line of lines)
-      for (const event of EVENTS[tool](line)) {
-        const first =
-          event.type === 'served' || event.type === 'requested'
-            ? event.model
-            : event.type === 'refused' || event.type === 'noFallback'
-              ? event.model
-              : event.type === 'refusal'
-                ? event.from
-                : null
-        if (first) {
-          live.follower.seed(first)
-          return
-        }
-      }
   }
 
   private pathOf(live: Live, source: ModelSource, now: number): string | null {
@@ -754,10 +858,15 @@ export class ModelWatch {
     const name = `${source.sessionId}.jsonl`
     if (live.conversation === source.sessionId) {
       if (live.entry.path?.endsWith(`/${name}`)) return live.entry.path
+      // A new conversation's file appears with its first prompt, most likely
+      // beside the last one: looked for there on every poll.
+      const near = live.near ? join(live.near, name) : null
+      if (near && exists(source.fs, near)) return near
       if (now - live.searchedAt < TRANSCRIPT_SEARCH_MS) return null
     }
     live.searchedAt = now
     live.conversation = source.sessionId
+    if (live.entry.path) live.near = dirname(live.entry.path)
     // A transcript followed before a restart is still the one.
     if (live.entry.path?.endsWith(`/${name}`)) return live.entry.path
     return claudeTranscriptPath(source.fs, source.home, source.sessionId)
@@ -765,13 +874,16 @@ export class ModelWatch {
 
   /** The switch goes on the descriptor; the worktree facts follow. */
   private show(id: string, live: Live, raw: RawSwitch): void {
+    const { rewindAt, ...shown } = raw
     live.entry.current = {
-      ...raw,
+      ...shown,
       stopped: false,
       commit: null,
       worktreeChanged: null,
       checked: false,
     }
+    live.entry.rewindAt = rewindAt
+    live.stopDue = STOPPING.has(raw.kind)
     this.ops.changed(id)
     this.ops.log(
       `session=${id} model ${raw.kind}: ${raw.from}${raw.kind === 'paused' ? '' : ` -> ${raw.to}`}${raw.category ? ` (${raw.category})` : ''}`,
@@ -784,7 +896,7 @@ export class ModelWatch {
     await new Promise((resolve) => setTimeout(resolve, FACTS_DELAY_MS).unref?.())
     const facts = await this.ops.worktree(id, since).catch(() => ({ commit: null, changed: null }))
     const current = live.entry.current
-    if (current?.key !== key) return
+    if (current?.key !== key || this.live.get(id) !== live) return
     live.entry.current = {
       ...current,
       commit: facts.commit,
@@ -796,7 +908,8 @@ export class ModelWatch {
   }
 
   /** Escape into the pane while the agent is in a turn, at most once per
-   * `STOP_EVERY_MS`. Never into a dialog the owner opened. */
+   * `STOP_EVERY_MS`. Never into a dialog the owner opened. A due stop waits
+   * for a turn, and is dropped once the agent is idle (no turn to stop). */
   private async stop(
     id: string,
     live: Live,
@@ -809,7 +922,10 @@ export class ModelWatch {
       agent.state === 'working' ||
       (agent.state === 'blocked' && agent.detail !== null && TURN_BLOCKS.has(agent.detail))
     if (!inTurn) {
-      this.ops.log(`session=${id} on ${shown.to} while ${agent.state}: no turn to stop`)
+      if (agent.state === 'idle' && live.stopDue) {
+        live.stopDue = false
+        this.ops.log(`session=${id} on ${shown.to} while idle: no turn to stop`)
+      }
       return
     }
     live.busy = true
@@ -819,6 +935,7 @@ export class ModelWatch {
       this.ops.log(
         `session=${id} stopping its turn on ${shown.to}: ${sent ? 'sent Escape' : 'Escape failed'}`,
       )
+      if (sent) live.stopDue = false
       const current = live.entry.current
       if (sent && current?.key === shown.key && !current.stopped) {
         live.entry.current = { ...current, stopped: true }
@@ -840,19 +957,38 @@ export class ModelWatch {
     }
   }
 
-  /** The owner's prompt `uuid` in the Claude transcript followed for a
-   * session (the rewind target), read with the same reader. */
-  promptOf(id: string, uuid: string): { text: string; later: number } | null {
+  /** The rewind target of the shown switch in the Claude transcript followed
+   * for a session: the prompt's text and the first lines of the prompts after
+   * it, read with the same reader from that prompt's row on. */
+  promptOf(id: string): { key: string; text: string; after: string[] } | null {
     const live = this.live.get(id)
-    const path = this.entries[id]?.path
-    if (live?.tool !== 'claude' || !live.reader || !path) return null
+    const entry = this.entries[id]
+    const change = entry?.current
+    if (live?.tool !== 'claude' || !live.reader || !entry?.path || !change?.rewindTo) return null
+    if (entry.rewindAt === null) return null
     try {
-      const { size } = live.reader.read(path, 0, 0)
-      if (size > TRANSCRIPT_MAX_BYTES) return null
-      return claudePromptAt(live.reader.range(path, 0, size).toString('utf8'), uuid)
+      const { size } = live.reader.read(entry.path, 0, 0)
+      if (size - entry.rewindAt > PROMPT_READ_BYTES) return null
+      const text = live.reader.range(entry.path, entry.rewindAt, size).toString('utf8')
+      const found = claudePromptAt(text, change.rewindTo)
+      return found ? { key: change.key, ...found } : null
     } catch {
       return null
     }
+  }
+
+  /** The switch a rewind undid, so it is not undone twice. */
+  rewoundOf(id: string): string | null {
+    return this.entries[id]?.rewound ?? null
+  }
+
+  markRewound(id: string, key: string): void {
+    const entry = this.entries[id]
+    if (!entry) return
+    entry.rewound = key
+    try {
+      this.ops.write(this.entries)
+    } catch {}
   }
 
   /** Sessions that are gone lose their follow. */
@@ -872,6 +1008,10 @@ export class ModelWatch {
   }
 }
 
+function exists(fs: ProcFs, path: string): boolean {
+  return fs.mtimeMs ? fs.mtimeMs(path) !== null : readable(fs, path)
+}
+
 /** `<home>/.claude/projects/<dir>/<sessionId>.jsonl`, the first that exists. */
 export function claudeTranscriptPath(fs: ProcFs, home: string, sessionId: string): string | null {
   if (!UUID.test(sessionId)) return null
@@ -884,7 +1024,7 @@ export function claudeTranscriptPath(fs: ProcFs, home: string, sessionId: string
   }
   for (const dir of dirs) {
     const path = join(root, dir, `${sessionId}.jsonl`)
-    if (fs.mtimeMs ? fs.mtimeMs(path) !== null : readable(fs, path)) return path
+    if (exists(fs, path)) return path
   }
   return null
 }
@@ -919,6 +1059,12 @@ export function readWatchEntries(text: string | null): Record<string, WatchEntry
           follower: { ...EMPTY_FOLLOWER, ...entry.follower },
           current:
             entry.current && SWITCH_KINDS.includes(entry.current.kind) ? entry.current : null,
+          tool: (['claude', 'codex', 'pi'] as unknown[]).includes(entry.tool)
+            ? (entry.tool as ModelTool)
+            : null,
+          agent: typeof entry.agent === 'number' ? entry.agent : null,
+          rewindAt: typeof entry.rewindAt === 'number' ? entry.rewindAt : null,
+          rewound: typeof entry.rewound === 'string' ? entry.rewound : null,
         }
     return out
   } catch {
@@ -1031,10 +1177,13 @@ const TOOL_NAMES: Record<string, string> = {
   pi: 'Pi',
 }
 
+const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/
+
 /** What the lane should do next, per tool. */
 function advice(tool: string | null, requestId: string | null): string {
+  const request = requestId && REQUEST_ID.test(requestId) ? requestId : null
   if (tool && REWIND_TOOLS.has(tool))
-    return `rewind it${requestId ? ` (st aico root rewind ${requestId})` : ''}, or relaunch from a handoff`
+    return `rewind it${request ? ` (st aico root rewind ${request})` : ''}, or relaunch from a handoff`
   const name = (tool && TOOL_NAMES[tool]) || 'this agent'
   return `${name} has no supported rewind: relaunch from a handoff`
 }
@@ -1076,19 +1225,20 @@ export function modelSwitchText(
   }
 }
 
-/** The text of the owner's prompt `uuid` in a Claude transcript, and how many
- * later prompts start with the same line (a rewind skips that many). */
+/** The text of the owner's prompt `uuid` in a Claude transcript, and the
+ * first line of each owner's prompt after it, oldest first (what a rewind
+ * walks past in the window's list). */
 export function claudePromptAt(
   transcript: string,
   uuid: string,
-): { text: string; later: number } | null {
+): { text: string; after: string[] } | null {
   if (!UUID.test(uuid)) return null
   let text: string | null = null
-  let later = 0
+  const after: string[] = []
   for (const line of transcript.split('\n')) {
     if (!line.includes('"user"')) continue
     const row = parse(line)
-    if (!row || row.type !== 'user' || row.isSidechain === true || !isPrompt(row)) continue
+    if (row?.type !== 'user' || row.isSidechain === true || !isPrompt(row)) continue
     const content = (row.message as { content?: unknown }).content
     const body =
       typeof content === 'string'
@@ -1096,22 +1246,9 @@ export function claudePromptAt(
         : (content as { type?: string; text?: unknown }[])
             .map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text : ''))
             .join('\n')
-    const first =
-      body
-        .split('\n')
-        .find((l) => l.trim())
-        ?.trim() ?? ''
     if (text === null) {
       if (row.uuid === uuid) text = body
-    } else if (
-      first &&
-      first ===
-        (text
-          .split('\n')
-          .find((l) => l.trim())
-          ?.trim() ?? '')
-    )
-      later++
+    } else after.push(body.split('\n').find((l) => l.trim()) ?? '')
   }
-  return text === null ? null : { text, later }
+  return text === null ? null : { text, after }
 }

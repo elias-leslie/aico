@@ -2167,7 +2167,7 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
 
 # Tether's rewind refusals (POST /v1/sessions/:id/rewind).
 REWIND_REFUSALS = {"rewind_refused", "rewind_unsupported", "no_rewind_target", "agent_busy",
-                   "rewind_target_unreadable"}
+                   "rewind_target_unreadable", "already_rewound"}
 
 
 def root_rewind(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
@@ -2214,6 +2214,9 @@ def root_rewind(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
         output.update(applied=True, rewound=True, generation=generation)
         if isinstance(data.get("up"), int):
             output["up"] = data["up"]
+        if data.get("cleared") is False:
+            # Restored, but its prompt's text is still in the input: clear it before root send.
+            output["cleared"] = False
         emit_json(collector, output)
         return 0
     except (Unavailable, Stopped) as error:
