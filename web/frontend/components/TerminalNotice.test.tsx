@@ -155,7 +155,7 @@ describe('ModelSwitchNotice', () => {
     commit: 'e5a9695',
     worktree_changed: null,
     checked: true,
-    rewind_to: null,
+    rewind_to: '11111111-1111-4111-8111-111111111111',
   }
 
   it('says a refusal switched the model and stopped the turn, with the facts on request', () => {
@@ -207,6 +207,20 @@ describe('ModelSwitchNotice', () => {
     render(<ModelSwitchNotice change={{ ...REFUSAL, ...fields }} />)
     expect(screen.getByRole('status')).toHaveTextContent(text)
     expect(screen.getByTestId('model-switch-notice')).toHaveClass(tone)
+  })
+
+  it.each([
+    [
+      { checked: false, commit: null },
+      'Was claude-opus-5-5. Last commit and changes not checked yet. Rewind it, or relaunch from a handoff.',
+    ],
+    [
+      { rewind_to: null, worktree_changed: true },
+      'Was claude-opus-5-5. Last commit e5a9695. Changed since: yes. No rewind for this session: relaunch from a handoff.',
+    ],
+  ] as const)('gives the facts and the way back for %o', (fields, detail) => {
+    render(<ModelSwitchNotice change={{ ...REFUSAL, ...fields }} />)
+    expect(screen.getByText(detail)).toBeInTheDocument()
   })
 
   it('offers details only for a refusal fallback', () => {

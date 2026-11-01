@@ -21,13 +21,25 @@ function refusal(category: string | null): string {
 const yesNo = (value: boolean | null): string =>
   value === null ? 'unknown' : value ? 'yes' : 'no'
 
+/** The facts Tether adds a few seconds after the switch, and the way back:
+ * a rewind only where Tether has a prompt to rewind to (Claude Code). */
+function facts(change: SessionModelSwitch): string {
+  const known = change.checked
+    ? `Last commit ${change.commit ?? 'none'}. Changed since: ${yesNo(change.worktree_changed)}.`
+    : 'Last commit and changes not checked yet.'
+  const back = change.rewind_to
+    ? 'Rewind it, or relaunch from a handoff.'
+    : 'No rewind for this session: relaunch from a handoff.'
+  return `Was ${change.from}. ${known} ${back}`
+}
+
 export function modelSwitchCopy(change: SessionModelSwitch): ModelSwitchCopy {
   const stopped = change.stopped ? 'stopped' : 'not stopped'
   switch (change.kind) {
     case 'refusal':
       return {
         text: `Switched to ${change.to} after ${refusal(change.category)} · ${stopped}`,
-        detail: `Was ${change.from}. Last commit ${change.commit ?? 'none'}. Changed since: ${yesNo(change.worktree_changed)}. Rewind it, or relaunch from a handoff.`,
+        detail: facts(change),
         tone: 'warn',
       }
     case 'substituted':
