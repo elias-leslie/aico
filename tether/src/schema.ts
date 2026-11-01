@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 25
+export const SCHEMA_VERSION = 26
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -610,6 +610,19 @@ export const LANE_STREAK_COLUMNS: readonly { table: string; column: string; sql:
     table: 'lane_reports',
     column: 'finished_streak',
     sql: 'ALTER TABLE lane_reports ADD COLUMN finished_streak INTEGER NOT NULL DEFAULT 0 CHECK(finished_streak >= 0)',
+  },
+]
+
+/**
+ * v26: model switches (src/model-switch.ts). `lane_reports.model_key` is the
+ * last model switch a lane's line went out for (its `modelSwitch.key`), so
+ * each switch is told once.
+ */
+export const LANE_MODEL_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
+  {
+    table: 'lane_reports',
+    column: 'model_key',
+    sql: 'ALTER TABLE lane_reports ADD COLUMN model_key TEXT',
   },
 ]
 

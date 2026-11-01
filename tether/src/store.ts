@@ -15,6 +15,7 @@ import {
   INDEXES_SQL,
   LANE_ENDED_BY_COLUMNS,
   LANE_ENDED_BY_SQL,
+  LANE_MODEL_COLUMNS,
   LANE_REPORTS_COLUMNS,
   LANE_REPORTS_SQL,
   LANE_STREAK_COLUMNS,
@@ -420,6 +421,18 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(25, now)
+      }
+      if (current < 26) {
+        // v26: the last model switch told per lane.
+        for (const { table, column, sql } of LANE_MODEL_COLUMNS) {
+          const has = this.db
+            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
+            .get(table, column)
+          if (!has) this.db.exec(sql)
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(26, now)
       }
     })
   }

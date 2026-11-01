@@ -45,6 +45,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { AGENT_STATES, type AgentState } from './agent-state'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import { type ModelSwitch, modelSwitchOf, modelSwitchText } from './model-switch'
 
 export const LANE_OUTCOMES = ['finished', 'blocked', 'ended'] as const
 export type LaneOutcome = (typeof LANE_OUTCOMES)[number]
@@ -78,6 +79,10 @@ export interface LaneView {
   title: string
   requestId: string | null
   waitingOn: string | null
+  /** The agent tool (`claude-code`, `codex`, `pi`). */
+  tool: string | null
+  /** The standing model switch (src/model-switch.ts). */
+  modelSwitch: ModelSwitch | null
 }
 
 function str(value: unknown): string | null {
@@ -116,6 +121,8 @@ export function laneView(session: unknown, host: string | null): LaneView | null
     title: str(s.displayTitle) ?? str(s.label) ?? id,
     requestId: str(s.rootRequestId),
     waitingOn: str(s.waitingOn),
+    tool: str(s.tool),
+    modelSwitch: modelSwitchOf(s.modelSwitch),
   }
 }
 
@@ -165,6 +172,13 @@ export function laneLine(
   return `[Ready] lane ${name} ${what} · ${look}`
 }
 
+/** The one line a model switch gets (src/model-switch.ts). */
+export function modelLine(lane: LaneSnapshot, change: ModelSwitch, tool: string | null): string {
+  const { name } = lineNames(lane)
+  const { tag, what, tail } = modelSwitchText(change, tool, lane.requestId)
+  return `${tag} lane ${name} ${what} · ${tail}`
+}
+
 /** A session as a line names it (its quoted title, host and request) and the
  * command to look at it with. */
 export function lineNames(lane: {
@@ -206,6 +220,8 @@ export interface LaneCursor {
   coordinatorId: string | null
   parentId: string | null
   launched: boolean
+  /** The last model switch told (schema v26). */
+  modelKey: string | null
 }
 
 interface RawCursor {
@@ -223,6 +239,7 @@ interface RawCursor {
   coordinator_id: string | null
   parent_id: string | null
   launched: number
+  model_key: string | null
 }
 
 function toCursor(raw: RawCursor): LaneCursor {
@@ -241,6 +258,7 @@ function toCursor(raw: RawCursor): LaneCursor {
     coordinatorId: raw.coordinator_id,
     parentId: raw.parent_id,
     launched: raw.launched === 1,
+    modelKey: raw.model_key ?? null,
   }
 }
 
@@ -307,15 +325,16 @@ export class LaneReportStore {
       .prepare(
         `INSERT INTO lane_reports (host, lane, generation, finished_at, finished_sent_at,
            finished_streak, blocked_at, reset, ended, title, request_id, coordinator_id, parent_id,
-           launched, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           launched, model_key, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (host, lane) DO UPDATE SET generation = excluded.generation,
            finished_at = excluded.finished_at, finished_sent_at = excluded.finished_sent_at,
            finished_streak = excluded.finished_streak,
            blocked_at = excluded.blocked_at, reset = excluded.reset, ended = excluded.ended,
            title = excluded.title, request_id = excluded.request_id,
            coordinator_id = excluded.coordinator_id, parent_id = excluded.parent_id,
-           launched = excluded.launched, updated_at = excluded.updated_at`,
+           launched = excluded.launched, model_key = excluded.model_key,
+           updated_at = excluded.updated_at`,
       )
       .run(
         cursor.host,
@@ -332,6 +351,7 @@ export class LaneReportStore {
         cursor.coordinatorId,
         cursor.parentId,
         cursor.launched ? 1 : 0,
+        cursor.modelKey,
         now,
       )
   }
@@ -615,6 +635,7 @@ export class LaneReporter {
         coordinatorId: null,
         parentId: null,
         launched: false,
+        modelKey: null,
       }
       dirty = true
     }
@@ -699,8 +720,32 @@ export class LaneReporter {
       cursor.finishedAt = view.stateAgentAt
       dirty = true
     }
+    const change = view.modelSwitch
+    if (change?.checked && change.key !== cursor.modelKey) {
+      // Each switch once, when its worktree has been looked at.
+      const told = cursor
+      this.store.transaction(() => {
+        this.fireModel(snapshot, change, view.tool)
+        told.modelKey = change.key
+        this.store.save(told, now)
+      })
+      dirty = false
+    }
     if (dirty) this.store.save(cursor, now)
     this.evaluate(key)
+  }
+
+  /** A model switch goes to the lane's root and launcher (and its watchers). */
+  private fireModel(lane: LaneSnapshot, change: ModelSwitch, tool: string | null): void {
+    const where = laneWhere(lane)
+    const receivers = this.receivers('blocked', lane)
+    if (!receivers.length) {
+      this.ops.log(`lane=${where} model ${change.kind}: no receiver`)
+      return
+    }
+    const line = modelLine(lane, change, tool)
+    for (const receiver of receivers) this.ops.deliver(receiver, `lane:${where}:model`, line)
+    this.ops.log(`lane=${where} model ${change.kind} -> ${receivers.join(',')}`)
   }
 
   private drop(key: string): void {
@@ -885,7 +930,7 @@ export class LaneReporter {
     const where = laneWhere(lane)
     const taken: string[] = []
     for (const receiver of skip)
-      for (const outcome of LANE_OUTCOMES) {
+      for (const outcome of [...LANE_OUTCOMES, 'model']) {
         const n = this.ops.withdraw(receiver, `lane:${where}:${outcome}`)
         if (n > 0) taken.push(`${receiver}:${outcome}${n > 1 ? `x${n}` : ''}`)
       }

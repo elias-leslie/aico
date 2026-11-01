@@ -50,6 +50,8 @@ function view(overrides: Partial<LaneView> = {}): LaneView {
     title: 'TEST lane',
     requestId: 'test-lane',
     waitingOn: null,
+    tool: 'claude-code',
+    modelSwitch: null,
     ...overrides,
   }
 }

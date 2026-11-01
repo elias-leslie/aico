@@ -1969,7 +1969,7 @@ def root_main(argv: list[str]) -> int:
         "Inspect or control one exact retained owner root by request ID. Mutations pin its "
         "current generation, send one request and qualify the receipt. No retry or owner startup."))
     commands = parser.add_subparsers(dest="operation", required=True)
-    for operation in ("status", "title", "end", "send"):
+    for operation in ("status", "title", "end", "send", "rewind"):
         command = commands.add_parser(operation)
         command.add_argument("request_id")
         if operation == "title":
@@ -1979,15 +1979,20 @@ def root_main(argv: list[str]) -> int:
             command.add_argument("--generation", required=True,
                                  help="exact generation from root status; a restarted or changed root refuses")
             command.add_argument("--stdin", action="store_true", help="read the follow-up from stdin instead")
+        elif operation == "rewind":
+            command.add_argument("--generation",
+                                 help="exact generation from root status (default: the root's current one)")
         command.add_argument("--root-socket", type=socket_path)
         command.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
-        if operation in ("end", "send"):
+        if operation in ("end", "send", "rewind"):
             command.add_argument("--owner-socket", type=socket_path)
     args = parser.parse_args(argv)
     if not re.fullmatch(KEY, args.request_id):
         parser.error("invalid root request ID")
     if args.operation == "send":
         return root_send(parser, args)
+    if args.operation == "rewind":
+        return root_rewind(parser, args)
     payload = view_payload(parser, args)
     try:
         endpoint = owner_endpoint(args.root_socket)
@@ -2147,6 +2152,68 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         if data.get("queued") is True:
             # Agent Hub chat root with a turn running: held until it is idle.
             output["queued"] = True
+        emit_json(collector, output)
+        return 0
+    except (Unavailable, Stopped) as error:
+        output.update(reason=str(error) if isinstance(error, Unavailable) else "deadline",
+                      applied=applied(sent, error))
+        if isinstance(error, Unavailable) and error.detail:
+            output["detail"] = error.detail
+        emit_unless_stopped(collector, output)
+        return 1
+    except BrokenPipeError:
+        return 0
+
+
+# Tether's rewind refusals (POST /v1/sessions/:id/rewind).
+REWIND_REFUSALS = {"rewind_refused", "rewind_unsupported", "no_rewind_target", "agent_busy",
+                   "rewind_target_unreadable"}
+
+
+def root_rewind(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    """Rewind the exact running Claude Code root to before the prompt its standing model switch
+    names (the lane line's "rewind it"), conversation only: Tether drives the root's own rewind
+    menu, reading each screen back before the next key, and refuses when one does not match.
+    The prompt's text is not put back: send the reworded turn with root send. Never retried."""
+    if args.generation is not None and not re.fullmatch(GENERATION, args.generation):
+        parser.error("--generation expects the root's exact SHA-256 generation")
+    try:
+        endpoint = owner_endpoint(args.root_socket)
+        control = args.owner_socket or socket_path(tether_socket())
+    except argparse.ArgumentTypeError as error:
+        parser.error(f"invalid owner transport configuration: {error}")
+    collector = Collector(endpoint, control, "", time.monotonic() + 70, threading.Event())
+    output: dict = {"owner": "aico", "requestId": args.request_id, "operation": "rewind"}
+    sent = False
+    try:
+        status, data = collector.receipt(endpoint, f"/v1/roots/{args.request_id}")
+        owner_reply(status, data, "root_receipt_unqualified")
+        pinned = root_descriptor(data, args.request_id)
+        output.update(pinned)
+        widget = pinned["hostIdentity"]
+        if pinned["status"] != "running" or not re.fullmatch(WIDGET, widget) or pinned["generation"] is None:
+            raise Refused("workload_unavailable")
+        generation = args.generation or pinned["generation"]
+        if pinned["generation"] != generation:
+            raise Refused("stale_generation")
+        status, session = collector.receipt(control, f"/v1/sessions/{widget}", timeout=1)
+        owner_reply(status, session, "session_receipt_unqualified")
+        if session.get("id") != widget or session.get("generation") != generation:
+            raise Refused("stale_generation")
+        sent = True
+        status, data = collector.receipt(control, f"/v1/sessions/{widget}/rewind", {"generation": generation},
+                                         timeout=60)
+        if status == 409 and data.get("error") in REWIND_REFUSALS:
+            # Nothing applied, or the menu was closed again: which step and why.
+            step = data.get("step") if isinstance(data.get("step"), str) else None
+            words = reason_detail(data.get("reason"))
+            raise Refused(data["error"], reason_detail(f"{step}: {words}") if step and words else words)
+        owner_reply(status, data, "rewind_receipt_unqualified")
+        if data.get("generation") != generation or data.get("rewound") is not True:
+            raise Unavailable("rewind_receipt_unqualified")
+        output.update(applied=True, rewound=True, generation=generation)
+        if isinstance(data.get("up"), int):
+            output["up"] = data["up"]
         emit_json(collector, output)
         return 0
     except (Unavailable, Stopped) as error:

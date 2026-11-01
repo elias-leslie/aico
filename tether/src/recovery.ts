@@ -344,7 +344,7 @@ function defaultEngine(home: string, stateDir: string, markerDir: string): Recov
   }
 }
 
-async function runCommand(
+export async function runCommand(
   command: string,
   args: string[],
   timeoutMs: number,

@@ -33,6 +33,7 @@ import {
   UUID_RE,
 } from './continuity'
 import { fileTail } from './entry-files'
+import type { ModelSource } from './model-switch'
 
 export const AGENT_STATES = ['working', 'idle', 'blocked', 'unknown'] as const
 export type AgentState = (typeof AGENT_STATES)[number]
@@ -273,7 +274,7 @@ export class CodexRollout {
   constructor(
     readonly path: string,
     threadId: string | null,
-    private readonly tail: FileTail = nodeFileTail,
+    readonly tail: FileTail = nodeFileTail,
   ) {
     this.turn = new CodexTurn(threadId)
   }
@@ -383,7 +384,7 @@ export class PiSession {
   constructor(
     readonly path: string,
     readonly sessionId: string,
-    private readonly tail: FileTail = nodeFileTail,
+    readonly tail: FileTail = nodeFileTail,
   ) {}
 
   apply(line: string): void {
@@ -867,7 +868,7 @@ export class AgentStateTracker {
 
 /** What the poller found in one session's pane. */
 type Found =
-  | { kind: 'claude'; pid: number; file: string; files?: ProcFs }
+  | { kind: 'claude'; pid: number; file: string; files?: ProcFs; home?: string; tail?: FileTail }
   | { kind: 'codex'; pid: number; rollout: CodexRollout }
   | { kind: 'pi'; pid: number; sessionId: string; session: PiSession | null }
   | { kind: 'agy'; pid: number; conversation: AgyConversation | null }
@@ -904,6 +905,8 @@ export class AgentStatePoller {
       tail?: FileTail
       alive?: (pid: number) => boolean
       agyRead?: AgyRead
+      /** Each poll's agent record, for the model watch (model-switch.ts). */
+      models?: (id: string, source: ModelSource) => void
     } = {},
   ) {}
 
@@ -966,7 +969,12 @@ export class AgentStatePoller {
         // another: its own fds are cheap to look at, so look every poll.
         watched.found = this.agyFound([watched.found.pid], watched.found) ?? watched.found
       }
-      this.tracker.observe(session.id, this.read(watched.found))
+      const signal = this.read(watched.found)
+      this.tracker.observe(session.id, signal)
+      if (this.options.models) {
+        const source = this.modelSource(watched.found, signal)
+        if (source) this.options.models(session.id, source)
+      }
     }
     for (const id of [...this.watched.keys()]) {
       if (!live.has(id)) {
@@ -989,7 +997,14 @@ export class AgentStatePoller {
       if (entry.tool === 'claude-code') {
         const session = entryClaudeSession(readers.fs, readers.home)
         return session
-          ? { kind: 'claude', pid: entry.pid, file: session.file, files: readers.fs }
+          ? {
+              kind: 'claude',
+              pid: entry.pid,
+              file: session.file,
+              files: readers.fs,
+              home: readers.home,
+              ...(readers.tail ? { tail: readers.tail } : {}),
+            }
           : { kind: 'none' }
       }
       if (entry.tool === 'pi') {
@@ -1066,6 +1081,25 @@ export class AgentStatePoller {
           ? new AgyConversation(agy.path, agy.conversationId, this.options.agyRead)
           : null,
     }
+  }
+
+  /** Where the found agent keeps the record of its models. */
+  private modelSource(found: Found, signal: AgentSignal | null): ModelSource | null {
+    if (found.kind === 'claude')
+      return signal?.agentSessionId
+        ? {
+            tool: 'claude',
+            sessionId: signal.agentSessionId,
+            home: found.home ?? this.home,
+            fs: found.files ?? this.fs,
+            ...(found.tail ? { tail: found.tail } : {}),
+          }
+        : null
+    if (found.kind === 'codex')
+      return { tool: 'codex', path: found.rollout.path, tail: found.rollout.tail }
+    if (found.kind === 'pi' && found.session)
+      return { tool: 'pi', path: found.session.path, tail: found.session.tail }
+    return null
   }
 
   private read(found: Found): AgentSignal | null {

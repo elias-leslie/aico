@@ -604,6 +604,22 @@ export function sendTextTargetArgs(target: TmuxTarget, text: string): string[] {
   return targetArgs(target, ['send-keys', '-t', target.session, '-l', text])
 }
 
+/** Keys Tether itself presses in a pane: stopping a turn (Escape) and the
+ * rewind menu's steps (docs/api-v1.md "Model switches"). */
+export const PANE_KEYS = ['Escape', 'Up', 'Down', 'Enter', 'C-u'] as const
+export type PaneKey = (typeof PANE_KEYS)[number]
+
+/** One named key into the exact pane (never text). */
+export function sendKeyTargetArgs(target: TmuxTarget, key: PaneKey): string[] {
+  if (
+    !target.socket?.startsWith('/') ||
+    !/^%\d+$/.test(target.session) ||
+    !(PANE_KEYS as readonly string[]).includes(key)
+  )
+    throw new Error('invalid pane key')
+  return targetArgs(target, ['send-keys', '-t', target.session, key])
+}
+
 /** One bracketed-paste event followed by one Enter, qualified against Codex
  * 0.160.1. This is framing only: tmux success is not native acceptance and does
  * not exclude an existing or concurrent human draft. Callers need a native

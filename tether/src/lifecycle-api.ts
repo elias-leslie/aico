@@ -96,6 +96,8 @@ import {
   bracketedPasteTargetArgs,
   captureVisibleTargetArgs,
   isBoundedTerminalText,
+  type PaneKey,
+  sendKeyTargetArgs,
   sendTextTargetArgs,
   sessionName,
   type TmuxTarget,
@@ -117,10 +119,12 @@ import {
 } from './lifecycle/tui/instructions'
 import { listsModel } from './lifecycle/tui/models'
 import { AGENT_HUB_TOOL, getTui, supportsInstructions } from './lifecycle/tui/registry'
+import type { ModelSwitch, ModelWatch } from './model-switch'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { Project, ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
+import { RewindRefused, rewindClaude } from './rewind'
 import { parseViewerLabel, recordSizeHolder, sizeHolderOf } from './size-holder'
 import type { Store } from './store'
 import { registerWaitRoutes, type WaitService } from './waits'
@@ -216,6 +220,19 @@ let agentStates: AgentStateTracker | null = null
 
 export function bindAgentStates(tracker: AgentStateTracker | null): void {
   agentStates = tracker
+}
+
+/** The daemon's model watch (src/model-switch.ts); unbound in tests and
+ * scratch instances. */
+let modelWatch: ModelWatch | null = null
+
+export function bindModelWatch(watch: ModelWatch | null): void {
+  modelWatch = watch
+}
+
+/** The session's standing model switch (docs/api-v1.md "Model switches"). */
+export function sessionModelSwitch(id: string): ModelSwitch | null {
+  return modelWatch?.switchOf(id) ?? null
 }
 
 /** The Agent Hub session kind's runtime (src/agent-hub/); unbound in route-only tests. */
@@ -317,6 +334,7 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
     ...agentStateOf(row.id),
     wakes: sessionWakes(row.id),
     waitingOn: sessionWaitingOn(row.id),
+    modelSwitch: sessionModelSwitch(row.id),
     launched: row.launched,
     asks: sessionAsks(row.id),
     createdAt: row.createdAt,
@@ -482,6 +500,28 @@ export async function pasteIntoRunningSession(widgetId: string, text: string): P
     return true
   })
   return delivered === true
+}
+
+/** Press named keys in a running session's pane, in order, only while it is
+ * the exact `generation` (or its current one when omitted). False when it is
+ * not running, busy, or has no pane. */
+export async function pressKeysInRunningSession(
+  widgetId: string,
+  keys: readonly PaneKey[],
+  generation?: string,
+): Promise<boolean> {
+  const row = getWidget(widgetId)
+  if (!row || row.backend === 'agent-hub' || keys.length === 0) return false
+  const pressed = await withRunningSession(
+    row.id,
+    generation ?? generationOf(row),
+    async (current) => {
+      const target = tmuxPaneTargetForWidget(current.id)
+      for (const key of keys) await runTmux(sendKeyTargetArgs(target, key))
+      return true
+    },
+  )
+  return pressed === true
 }
 
 /** Post `text` to an Agent Hub session as a turn (queued while one runs),
@@ -1361,6 +1401,54 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       if (!delivered) throw new HttpError(409, 'workload_unavailable')
       if (from && from !== row.id && submit) context.waits?.store.recordSend(from, row.id, sentAt)
       sendJson(res, 200, { generation, delivered: true })
+    })
+    // Rewind a Claude Code session to before the prompt its standing model
+    // switch names (docs/api-v1.md "Model switches"), through its rewind menu.
+    .add('POST', '/v1/sessions/:id/rewind', async (req, res, params) => {
+      const body = await readJsonObject(req)
+      only(body, ['generation'])
+      const generation = requireGeneration(body)
+      const row = requireSession(params.id)
+      requireTerminal(row)
+      fence(row, generation)
+      if (row.tool !== 'claude-code')
+        throw new HttpError(409, 'rewind_unsupported', { tool: row.tool })
+      const change = sessionModelSwitch(row.id)
+      if (!change?.rewindTo) throw new HttpError(409, 'no_rewind_target')
+      if (agentStateOf(row.id).state === 'working') throw new HttpError(409, 'agent_busy')
+      const prompt = modelWatch?.promptOf(row.id, change.rewindTo) ?? null
+      if (!prompt) throw new HttpError(409, 'rewind_target_unreadable')
+      const target = prompt
+      let refused: RewindRefused | null = null
+      const done = await withRunningSession(row.id, generation, async (current) => {
+        const pane = tmuxPaneTargetForWidget(current.id)
+        try {
+          return await rewindClaude(
+            {
+              capture: () => runTmux(captureVisibleTargetArgs(pane, false)),
+              press: async (key) => {
+                await runTmux(sendKeyTargetArgs(pane, key))
+              },
+              sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            },
+            target.text,
+            target.later,
+          )
+        } catch (error) {
+          if (error instanceof RewindRefused) {
+            refused = error
+            return null
+          }
+          throw error
+        }
+      })
+      if (refused) {
+        const { step, reason } = refused as RewindRefused
+        throw new HttpError(409, 'rewind_refused', { step, reason })
+      }
+      if (!done) throw new HttpError(409, 'workload_unavailable')
+      console.log(`[tether:models] session=${row.id} rewound ${done.up} prompt(s) back`)
+      sendJson(res, 200, { generation, rewound: true, up: done.up })
     })
     // Aico has no desktop windows: a show request gets a plain refusal.
     .add('POST', '/v1/sessions/:id/show', () => {

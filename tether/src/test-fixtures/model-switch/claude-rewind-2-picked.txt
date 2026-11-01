@@ -1,0 +1,68 @@
+ ▐▛███▛█   Claude Code v2.1.316
+▝▜██████▀  Opus 5.5 with high effort · Claude Ultra
+ ▝▝   ▝▝   ~/.local/share/aico/blank-slate/ms-rewind-probe-1
+
+
+❯ Reply with only the word ONE. Do not use any tools.
+
+● ONE
+
+✻ Crunched for 1s · done 8:56 AM
+
+❯ Reply with only the word TWO. Do not use any tools.
+
+● TWO
+
+✻ Sautéed for 0s · done 8:58 AM
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Rewind
+
+  Restore the code and/or conversation to the point before…
+
+    Reply with only the word ONE. Do not use any tools.
+    No code changes
+
+  ❯ Reply with only the word TWO. Do not use any tools.
+    No code changes
+
+    (current)
+
+
+
+  Enter to continue · Esc to cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

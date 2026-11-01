@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync } from 'node:fs'
+import { chmodSync, mkdirSync, readFileSync } from 'node:fs'
 import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -12,7 +12,7 @@ import {
 } from './agent-hub/config'
 import { RunTracker, readOverRuns, sessionLaunchers, type ToldPause } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
-import { AgentStatePoller, AgentStateTracker } from './agent-state'
+import { AgentStatePoller, AgentStateTracker, nodeFileTail } from './agent-state'
 import { type AskDelivery, AskStore, aicoOrigin, handOffAsks, type NeedsYouFeed } from './asks'
 import {
   agentExitMarkerDir,
@@ -64,15 +64,19 @@ import { bindToolSource } from './lifecycle/tui/registry'
 import {
   bindAgentHub,
   bindAgentStates,
+  bindModelWatch,
   foregroundPaneScope,
   generationOf,
   learnProjects,
+  pressKeysInRunningSession,
   sessionSnapshot,
 } from './lifecycle-api'
 import { startMemoryGuard } from './memory-guard'
+import { ModelNotices, readModelNoticeState } from './model-notices'
+import { ModelWatch, readAlternates, readWatchEntries, worktreeFacts } from './model-switch'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
 import { Continuity } from './reboot'
-import { Recovery } from './recovery'
+import { Recovery, runCommand } from './recovery'
 import type { StepChatSource } from './runs-api'
 import { createTetherServer } from './server'
 import { persistSizeHolders } from './size-holder'
@@ -126,6 +130,8 @@ const SIZE_HOLDERS_KEY = 'size_holders'
 
 /** The waiting notices' seen marks and open notices, so a restart neither repeats nor strands one. */
 const WAITING_KEY = 'waiting_notices'
+const MODEL_WATCH_KEY = 'model_watch'
+const MODEL_NOTICE_KEY = 'model_notices'
 
 /** Runs `nightshift` (notice contract v1); logs the outcome, never throws. */
 function nightshift(args: string[], what: string, input?: string): void {
@@ -525,6 +531,43 @@ export async function startDaemon(
       }
     })
   }
+  // A model switch in a window nobody launched: the owner's notice (src/model-notices.ts).
+  const modelNotices =
+    aicoUrl && reconcileEnabled(env)
+      ? new ModelNotices({
+          origin: aicoUrl,
+          send: (notice) =>
+            nightshift(
+              ['push', '--json'],
+              `model_notice key=${notice.key}`,
+              JSON.stringify(notice),
+            ),
+          resolve: (key) =>
+            nightshift(
+              ['resolve', key, '--text', 'The session is back on its model or gone.'],
+              `model_resolve key=${key}`,
+            ),
+          state: {
+            read: () => readModelNoticeState(store.getSetting(MODEL_NOTICE_KEY)),
+            write: (state) => store.putSetting(MODEL_NOTICE_KEY, JSON.stringify(state), Date.now()),
+          },
+        })
+      : null
+  if (modelNotices)
+    events.subscribe((event) => {
+      try {
+        const host = typeof event.data.host === 'string' ? event.data.host : null
+        if (event.type === 'session.created' || event.type === 'session.updated') {
+          const session = event.data.session as { id?: unknown } | undefined
+          if (session && typeof session.id === 'string')
+            modelNotices.session(session as { id: string }, host)
+        } else if (event.type === 'session.ended' && typeof event.data.id === 'string') {
+          modelNotices.removed(event.data.id, host)
+        }
+      } catch (error) {
+        console.error('[tether:models] notice failed:', error)
+      }
+    })
   // Lane reports: a launched lane tells its launcher it finished, is blocked
   // or ended (src/lane-reports.ts); only where Tether observes sessions, since
   // the lines are pasted.
@@ -739,6 +782,39 @@ export async function startDaemon(
     runs.poke()
   })
   bindAgentStates(agentStates)
+  // Model switches: each agent's own record, read on the agent poll; a switch
+  // nobody asked for stops the turn (src/model-switch.ts).
+  const models = reconcileEnabled(env)
+    ? new ModelWatch({
+        now: Date.now,
+        read: () => readWatchEntries(store.getSetting(MODEL_WATCH_KEY)),
+        write: (entries) => store.putSetting(MODEL_WATCH_KEY, JSON.stringify(entries), Date.now()),
+        alternates: (tool) => {
+          let text: string | null = null
+          try {
+            text = readFileSync(join(paths.configDir, 'model-alternates.json'), 'utf8')
+          } catch {}
+          return readAlternates(text)[tool]
+        },
+        agent: (id) => {
+          const record = agentStates.get(id)
+          return { state: record.state, detail: record.stateDetail }
+        },
+        interrupt: (id) => pressKeysInRunningSession(id, ['Escape']),
+        worktree: (id, since) =>
+          worktreeFacts(getWidget(id)?.projectRoot ?? null, since, runCommand, (path) =>
+            nodeProcFs.mtimeMs ? nodeProcFs.mtimeMs(path) : null,
+          ),
+        changed: (id) => notifySessionChanged(id, { force: true }),
+        log: (message) => console.log(`[tether:models] ${message}`),
+      })
+    : null
+  bindModelWatch(models)
+  if (models)
+    events.subscribe((event) => {
+      if (event.type === 'session.ended' && typeof event.data.host !== 'string')
+        models.retain(listWidgets().map((row) => row.id))
+    })
   // Agent Hub sessions have no pane: their own state tracker, runtime and
   // poll, none of which the tmux machinery above ever sees.
   const hubRuntime = new AgentHubRuntime({
@@ -771,6 +847,7 @@ export async function startDaemon(
     },
     nodeProcFs,
     env.HOME ?? homedir(),
+    models ? { models: (id, source) => models.see(id, source, nodeFileTail) } : {},
   )
   if (reconcileEnabled(env)) void ready.then(() => agentPoller.start()).catch(() => {})
   if (reconcileEnabled(env)) void ready.then(() => hubRuntime.start()).catch(() => {})
@@ -837,6 +914,7 @@ export async function startDaemon(
       bindWaitingOn(null)
       bindWakeStore(null)
       bindAgentStates(null)
+      bindModelWatch(null)
       context.continuity?.stop()
       context.recovery?.stop()
       onAbandonedScope(null)

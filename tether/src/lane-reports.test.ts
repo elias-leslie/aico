@@ -70,6 +70,8 @@ function view(overrides: Partial<LaneView> = {}): LaneView {
     title: 'TEST',
     requestId: null,
     waitingOn: null,
+    tool: 'claude-code',
+    modelSwitch: null,
     ...overrides,
   }
 }
@@ -979,5 +981,98 @@ describe('delivery rows', () => {
     const out = composeDelivery([row('é'.repeat(3000), 'event')], 0, DEFAULT_WAKE_POLICY)
     expect(out.taken).toHaveLength(1)
     expect(Buffer.byteLength(out.text)).toBeLessThanOrEqual(1800)
+  })
+})
+
+describe('model switch lines', () => {
+  const change = {
+    key: '1@1793452778260',
+    kind: 'refusal' as const,
+    from: 'claude-opus-5-5',
+    to: 'claude-opus-4-8',
+    category: 'cyber',
+    at: 1793452778260,
+    stopped: true,
+    commit: 'e5a9695',
+    worktreeChanged: false,
+    checked: true,
+    rewindTo: null,
+  }
+
+  it('tells the root and launcher once per switch, after the worktree was looked at', () => {
+    const { reporter, delivered } = harness()
+    step(reporter, { state: 'working', requestId: 'neri-p2a', title: 'Neri shape' })
+    step(reporter, {
+      state: 'working',
+      requestId: 'neri-p2a',
+      title: 'Neri shape',
+      modelSwitch: { ...change, checked: false },
+    })
+    expect(delivered).toHaveLength(0)
+    for (let i = 0; i < 3; i++)
+      step(reporter, {
+        state: i ? 'idle' : 'working',
+        requestId: 'neri-p2a',
+        title: 'Neri shape',
+        modelSwitch: change,
+      })
+    const model = delivered.filter((d) => d.source.endsWith(':model'))
+    expect(model).toEqual([
+      {
+        to: ROOT,
+        source: `lane:${LANE}:model`,
+        line: '[Model changed] lane "Neri shape" (req neri-p2a) now on claude-opus-4-8 after a cyber refusal · turn stopped · last commit e5a9695 · worktree changed since: no · rewind it (st aico root rewind neri-p2a), or relaunch from a handoff',
+      },
+    ])
+    step(reporter, {
+      requestId: 'neri-p2a',
+      title: 'Neri shape',
+      modelSwitch: { ...change, key: '2@1793452800000' },
+    })
+    expect(delivered.filter((d) => d.source.endsWith(':model'))).toHaveLength(2)
+  })
+
+  it('remembers the switch told across a restart', () => {
+    const store = new Store(':memory:', () => 1_000)
+    stores.push(store)
+    const first = harness({ store })
+    step(first.reporter, { state: 'working', modelSwitch: change })
+    expect(first.delivered).toHaveLength(1)
+    first.reporter.stop()
+    const second = harness({ store })
+    step(second.reporter, { state: 'working', modelSwitch: change })
+    expect(second.delivered).toHaveLength(0)
+  })
+
+  it('says a Codex lane has no supported rewind', () => {
+    const { reporter, delivered } = harness()
+    step(reporter, {
+      tool: 'codex',
+      modelSwitch: {
+        ...change,
+        from: 'gpt-5.5',
+        to: 'gpt-5.4',
+        commit: null,
+        worktreeChanged: null,
+      },
+    })
+    expect(delivered[0]?.line).toContain(
+      'last commit none · worktree changed since: unknown · Codex has no supported rewind: relaunch from a handoff',
+    )
+  })
+
+  it('reads a relayed descriptor field by field', () => {
+    const relayed = laneView(
+      {
+        id: LANE,
+        generation: 'g1',
+        tool: 'claude-code',
+        modelSwitch: { ...change, from: 'x"; rm -rf /', category: 'Cyber Stuff!' },
+      },
+      'davion-gem',
+    )
+    expect(relayed?.modelSwitch).toBeNull()
+    const good = laneView({ id: LANE, generation: 'g1', modelSwitch: change }, 'davion-gem')
+    expect(good?.modelSwitch).toEqual(change)
   })
 })

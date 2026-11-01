@@ -25,7 +25,7 @@ def invoke(monkeypatch, args, responses):
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
     monkeypatch.setattr(admin, "caller_widget_id", lambda: None)
     transport = ["--root-socket", "/fixture/gui.sock"]
-    if args[0] in ("end", "send"):
+    if args[0] in ("end", "send", "rewind"):
         transport += ["--owner-socket", "/fixture/control.sock"]
     return admin.main(["root", *args, *transport]), calls, output
 
@@ -322,3 +322,37 @@ def test_root_show_and_position_are_retired_without_contacting_owner(monkeypatch
     monkeypatch.setattr(admin.Collector, "receipt", lambda *_: pytest.fail("owner contacted"))
     assert admin.main(["root", *args, "--root-socket", "/fixture/gui.sock"]) == 2
     assert capsys.readouterr().err.strip() == admin.WINDOWS_RETIRED
+
+
+# root rewind: back to before the prompt a model switch names, through Tether's rewind route.
+CLAUDE_SESSION = {**SESSION, "tool": "claude-code"}
+
+
+def test_rewind_pins_the_current_generation_and_asks_tether_once(monkeypatch):
+    code, calls, output = invoke(monkeypatch, ["rewind", ROOT], [
+        (200, DESCRIPTOR), (200, CLAUDE_SESSION), (200, {"generation": GENERATION, "rewound": True, "up": 2})])
+    assert code == 0
+    assert calls == [
+        ("/fixture/gui.sock", f"/v1/roots/{ROOT}", None),
+        ("/fixture/control.sock", "/v1/sessions/aabbcc01", None),
+        ("/fixture/control.sock", "/v1/sessions/aabbcc01/rewind", {"generation": GENERATION}),
+    ]
+    assert output == [{**DESCRIPTOR, "operation": "rewind", "applied": True, "rewound": True, "up": 2}]
+
+
+@pytest.mark.parametrize("reply,reason,detail", [
+    ((409, {"error": "rewind_refused", "step": "pick", "reason": "prompt not in the list"}), "rewind_refused",
+     "pick: prompt not in the list"),
+    ((409, {"error": "rewind_unsupported", "tool": "codex"}), "rewind_unsupported", None),
+    ((409, {"error": "no_rewind_target"}), "no_rewind_target", None),
+])
+def test_rewind_refusals_say_why_and_applied_nothing(monkeypatch, reply, reason, detail):
+    code, _calls, output = invoke(monkeypatch, ["rewind", ROOT], [(200, DESCRIPTOR), (200, CLAUDE_SESSION), reply])
+    assert code == 1
+    assert output[0]["reason"] == reason and output[0]["applied"] is False
+    assert output[0].get("detail") == detail
+
+
+def test_rewind_with_a_stale_generation_sends_nothing(monkeypatch):
+    code, calls, output = invoke(monkeypatch, ["rewind", ROOT, "--generation", "b" * 64], [(200, DESCRIPTOR)])
+    assert code == 1 and len(calls) == 1 and output[0]["reason"] == "stale_generation"
