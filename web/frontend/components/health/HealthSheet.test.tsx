@@ -151,4 +151,23 @@ describe('HealthLauncher', () => {
       "Nothing needs you; 2 checks queued for tonight's pass.",
     )
   })
+
+  it('shows the stale label, not an all-clear, when Nightshift sends no sentence', () => {
+    health.result = {
+      available: true,
+      view: view({
+        snapshot: { state: 'stale', age: 10_800 },
+        verdict: {
+          state: 'unknown',
+          label: 'Status unknown',
+          reason: 'Last check 3 h ago',
+          doing: '',
+        },
+      }),
+    }
+    render(<HealthSheet open onOpenChange={() => {}} />)
+    expect(screen.getByTestId('health-verdict')).toHaveTextContent(
+      'Status unknown: Last check 3 h ago',
+    )
+  })
 })

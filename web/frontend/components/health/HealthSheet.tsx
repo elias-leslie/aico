@@ -128,7 +128,10 @@ function HealthBody({ view }: { view: NightshiftOwnerView | null }) {
     <div className="flex flex-col gap-4">
       {view && (view.verdict?.doing || view.verdict?.label) && (
         <p className="text-[13px] leading-[1.4]" data-testid="health-verdict">
-          {view.verdict.doing || view.verdict.label}
+          {view.verdict.doing ||
+            [view.verdict.label, view.verdict.reason]
+              .filter(Boolean)
+              .join(': ')}
         </p>
       )}
       <ul
