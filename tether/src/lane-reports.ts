@@ -227,8 +227,9 @@ export interface LaneCursor {
   finishedAt: number
   /** When the last finished line was queued (the rate floor). */
   finishedSentAt: number
-  /** Went-idle lines sent since the receiver last acted on the lane, the
-   * generation changed, or it was blocked or ended (schema v25). */
+  /** Went-idle lines sent since the receiver last acted on the lane,
+   * something reached the lane (`LaneReporter.reached`), the generation
+   * changed, or it was blocked or ended (schema v25). */
   finishedStreak: number
   /** The `stateAt` of the last blocked episode reported. */
   blockedAt: number
@@ -558,6 +559,12 @@ interface Memory {
   timer: NodeJS.Timeout | null
   /** The idle (`stateAgentAt`) whose backoff hold was logged. */
   holdLogged: number
+  /** Something reached the lane while this idle (`stateAgentAt`) was still
+   * unreported: that idle keeps `streakBeforeReach` (its line goes as it
+   * would have), and the next idle is a first line (the cursor's streak was
+   * reset, so a restart keeps that). */
+  reachedAfter: number | null
+  streakBeforeReach: number
 }
 
 export class WatchRefused extends Error {
@@ -664,6 +671,36 @@ export class LaneReporter {
     )
   }
 
+  /**
+   * Something reached this local lane: a line pasted into it or taken by it
+   * (not a check-in or wait line it set itself), a send typed into it, or its
+   * own reply to a message. Its next went-idle line is a first line (a wake),
+   * never a ride-along repeat: what reached it may be work whose end its
+   * receivers still need to hear. Counted when the lane got it, not when it
+   * was sent: a request sent before the lane's last went-idle line but pasted
+   * after it must still wake.
+   */
+  reached(lane: string, why: string): void {
+    if (this.stopped) return
+    const cursor = this.store.get('', lane)
+    if (!cursor || cursor.ended) return
+    const memory = this.memory.get(memoryKey(null, lane))
+    const held = memory?.view.state === 'idle' && memory.view.stateAgentAt > cursor.finishedAt
+    if (memory && held) {
+      // An idle not reported yet (its line held) came before this. Should its
+      // line still go before the new turn is seen, it goes as it would have
+      // and must not use up the reset: the end of the work this starts would
+      // then be the repeat.
+      if (memory.reachedAfter !== memory.view.stateAgentAt)
+        memory.streakBeforeReach = cursor.finishedStreak
+      memory.reachedAfter = memory.view.stateAgentAt
+    }
+    if (cursor.finishedStreak === 0 && !held) return
+    cursor.finishedStreak = 0
+    this.store.save(cursor, this.ops.now())
+    this.ops.log(`lane=${lane} ${why}: its next went-idle line is a first line`)
+  }
+
   /** A session descriptor arrived (created or updated, local or relayed). */
   observe(view: LaneView): void {
     if (this.stopped) return
@@ -746,6 +783,8 @@ export class LaneReporter {
         known: false,
         timer: null,
         holdLogged: 0,
+        reachedAfter: null,
+        streakBeforeReach: 0,
       }
       this.memory.set(key, memory)
     }
@@ -865,15 +904,23 @@ export class LaneReporter {
         memory.heldIdleAt = 0
         return
       }
+      // An idle from before something reached the lane (its line still held)
+      // keeps the streak it had then; the next idle is the first line.
+      const beforeReach = memory.reachedAfter !== null && view.stateAgentAt <= memory.reachedAfter
+      if (!beforeReach) memory.reachedAfter = null
+      let streak = beforeReach ? memory.streakBeforeReach : cursor.finishedStreak
       if (
-        cursor.finishedStreak > 0 &&
+        streak > 0 &&
         this.ops.acted(view.id, view.host, this.receivers(snapshotOf(view)), cursor.finishedSentAt)
       ) {
         // Its receiver sent to the lane or armed a wait on it: no repeat.
-        cursor.finishedStreak = 0
-        this.store.save(cursor, now)
+        streak = 0
+        if (cursor.finishedStreak > 0) {
+          cursor.finishedStreak = 0
+          this.store.save(cursor, now)
+        }
       }
-      const quiet = repeatQuietMs(policy, cursor.finishedStreak)
+      const quiet = repeatQuietMs(policy, streak)
       const settle = Math.max(policy.laneSettleSeconds * 1000, quiet) - held
       const floor = cursor.finishedSentAt
         ? policy.laneFinishedFloorSeconds * 1000 - (now - cursor.finishedSentAt)
@@ -884,7 +931,7 @@ export class LaneReporter {
         if (quiet > 0 && memory.holdLogged !== view.stateAgentAt) {
           memory.holdLogged = view.stateAgentAt
           this.ops.log(
-            `lane=${laneWhere(view)} idle again: repeat ${cursor.finishedStreak} goes out after ${Math.round(quiet / 1000)}s quiet`,
+            `lane=${laneWhere(view)} idle again: repeat ${streak} goes out after ${Math.round(quiet / 1000)}s quiet`,
           )
         }
       } else {
@@ -912,14 +959,16 @@ export class LaneReporter {
             snapshotOf(view),
             { minutes },
             null,
-            { toldSince, ride: cursor.finishedStreak > 0 },
+            { toldSince, ride: streak > 0 },
           )
           cursor.finishedAt = view.stateAgentAt
           // A turn the lane reported itself is no went-idle line sent: it
           // neither starts the floor nor counts toward the repeat backoff.
+          // A line for an idle from before something reached the lane leaves
+          // the streak at 0: the idle after it is still a first line.
           if (!told) {
             cursor.finishedSentAt = now
-            cursor.finishedStreak += 1
+            if (!beforeReach) cursor.finishedStreak += 1
           }
           this.store.save(cursor, now)
         })

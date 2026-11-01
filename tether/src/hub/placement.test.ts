@@ -473,6 +473,36 @@ describe('placement', () => {
     expect(JSON.parse(world.settings.get('placement_reservations') ?? '[]')).toHaveLength(1)
   })
 
+  it('releases the held reservations of a host taken out of hosts.json, and logs it', async () => {
+    const retired = (requestId: string) => ({
+      requestId,
+      host: 'neri-box-1',
+      memBytes: 4 * GIB,
+      cpu: 2,
+      at: NOW - 1,
+      state: 'held',
+    })
+    const held = [retired('hunt-nh-a'), retired('hunt-nh-b'), { ...retired('vm-1'), host: 'vm' }]
+    const { world, deps } = setup(
+      { ...CONFIG, order: ['vm'], skip: ['local'] },
+      {
+        // vm is configured but offline: its reservation stays.
+        peerLive: false,
+        peerState: 'offline',
+        settings: new Map([['placement_reservations', JSON.stringify(held)]]),
+      },
+    )
+    const logs: string[] = []
+    const placement = new Placement({ ...deps(), log: (line) => logs.push(line) })
+    await placement.check(needs(1))
+    expect(placement.list().map((item) => item.requestId)).toEqual(['vm-1'])
+    expect(JSON.parse(world.settings.get('placement_reservations') ?? '[]')).toHaveLength(1)
+    expect(logs).toEqual([
+      'released hunt-nh-a on neri-box-1 (host no longer in hosts.json)',
+      'released hunt-nh-b on neri-box-1 (host no longer in hosts.json)',
+    ])
+  })
+
   it('goes to the next pool host when the Proxmox host cannot be read', async () => {
     const { world, placement } = setup(
       { ...CONFIG, order: ['local'], pools: { hunt: ['vm', 'local'] } },

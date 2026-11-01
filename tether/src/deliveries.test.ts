@@ -25,6 +25,7 @@ let pasted: string[]
 let lines: string[]
 let scheduler: WakeScheduler
 let told: [string, string, boolean][]
+let replied: [string, string, boolean][]
 
 function ops(overrides: Partial<WakeOperations> = {}): WakeOperations {
   return {
@@ -62,6 +63,7 @@ beforeEach(() => {
   pasted = []
   lines = []
   told = []
+  replied = []
   scheduler = new WakeScheduler(wakes, ops())
 })
 
@@ -349,6 +351,7 @@ describe('delivery routes', () => {
       queue: (id, source, line, ride) =>
         wakes.addEvent({ sessionId: id, source, note: line, now: clock.now, ride }),
       sent: (from, to, isTold) => told.push([from.join(','), to, isTold]),
+      replied: (from, to, ride) => replied.push([from.join(','), to, ride]),
       takeRide: (id) => scheduler.takeRide(id),
       peekRide: (id) => scheduler.peekRide(id),
       confirmRide: (id, token) => scheduler.confirmRide(id, token),
@@ -516,6 +519,19 @@ describe('delivery routes', () => {
     expect(told).toEqual([
       ['0a1b2c3e', SESSION, true],
       ['0a1b2c40', SESSION, false],
+    ])
+    // A reply, ride-along too (a lane's yes to its launcher), shows what it
+    // answers reached its sender.
+    await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
+      source: 'coord:e',
+      line: 'Ack yes',
+      from: ['0a1b2c41'],
+      reply: true,
+      ride: true,
+    })
+    expect(replied).toEqual([
+      ['0a1b2c40', SESSION, false],
+      ['0a1b2c41', SESSION, true],
     ])
   })
 

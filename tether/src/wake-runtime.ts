@@ -54,6 +54,7 @@ import {
   type EndedSession,
   inputLineEmpty,
   parseStoredWakePolicy,
+  reachesSession,
   type Wake,
   type WakeOperations,
   type WakePolicy,
@@ -154,12 +155,14 @@ export class WakeService {
       inputEmpty: (id) => this.inputEmpty(id),
       lastKeyAt: (id) => this.lastKeyAt(id),
       deliver: (id, text) => pasteIntoRunningSession(id, text),
-      delivered: (id, rows, via) =>
+      delivered: (id, rows, via) => {
         this.deliveries.delivered(
           rows,
           via === 'native' ? 'native' : isHub(getWidget(id)) ? 'turn' : 'paste',
           now(),
-        ),
+        )
+        this.noteReached(id, rows)
+      },
       conversationHolder: (resumeId) => this.conversationHolder(resumeId),
       relaunch: (ended, message) => this.relaunch(ended, message),
       changed: (id) => this.changed(id),
@@ -217,6 +220,27 @@ export class WakeService {
       if (told) this.told.set(`${id}>${to}`, now)
     }
     for (const [key, at] of this.told) if (now - at > TOLD_KEEP_MS) this.told.delete(key)
+  }
+
+  /** Rows that went out to a session (pasted, an Agent Hub turn, or taken
+   * by its puller or hook): if one came from outside, a lane's next went-idle
+   * line is a first line (LaneReporter.reached). */
+  noteReached(sessionId: string, rows: readonly Wake[]): void {
+    const from = rows.find(reachesSession)
+    if (from) this.context.lanes?.reached(sessionId, `got ${from.source ?? 'a check-in'}`)
+  }
+
+  /** A reply (an ack) from each of `from` to `to`: whatever it answers
+   * reached the replier, though maybe not through a line Tether delivered
+   * (an inbox it read itself). A ride-along reply wakes nobody, so it also
+   * takes back the replier's "told" to `to`: its went-idle line for the turn
+   * must still go out and carry the reply (review of SummitFlow ebd6ea870 P1). */
+  noteReplied(from: readonly string[], to: string, ride = false): void {
+    for (const id of from) {
+      if (id === to) continue
+      if (ride) this.told.delete(`${id}>${to}`)
+      this.context.lanes?.reached(id, `replied to ${to}`)
+    }
   }
 
   /** Whether `from` told `to` at or after `since`. */
@@ -440,6 +464,7 @@ export function registerWakeRoutes(
     maxChars: () => service.policy().noteMaxChars,
     queue: (id, source, line, ride) => service.queueEvent(id, source, line, ride),
     sent: (from, to, told) => service.noteSent(from, to, told),
+    replied: (from, to, ride) => service.noteReplied(from, to, ride),
     takeRide: (id) => service.scheduler.takeRide(id),
     peekRide: (id) => service.scheduler.peekRide(id),
     confirmRide: (id, token) => service.scheduler.confirmRide(id, token),

@@ -234,6 +234,19 @@
 
 ### Fixed
 
+- A lane's went-idle line wakes its launcher again after a message reached
+  the lane. A request sent while the lane was finishing a turn, then pasted
+  after the lane's went-idle line, used to leave the end of that work as a
+  ride-along repeat, so the launcher was never woken. Tether now counts what
+  reaches a lane when the lane gets it: a pasted or taken line (not its own
+  wait lines or an agent's check-in), a send typed into it, or its own reply.
+  Repeats with nothing in between still ride along.
+- A lane that asked its launcher something earlier in a turn, then answered
+  the launcher with a ride-along yes, still sends that turn's went-idle line,
+  so the launcher wakes to the answer. The ride-along reply clears the lane's
+  "told" mark.
+- Placement releases the reservations held on a host taken out of
+  hosts.json, so they no longer show as open forever (it logs each one).
 - Lane lines go to the session that launched the lane, not the root
   coordinator. A lane's went idle, blocked and ended lines (and model-switch
   lines) go to its launcher only; the root gets them when it launched the

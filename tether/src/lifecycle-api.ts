@@ -1382,6 +1382,8 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           thinkingLevel ?? null,
         )
         if (from && from !== row.id) context.waits?.store.recordSend(from, row.id, sentAt)
+        // A follow-up reached the lane: its next went-idle line wakes.
+        if (from !== row.id) context.lanes?.reached(row.id, 'a send reached it')
         sendJson(res, 200, { generation, delivered: true, queued })
         return
       }
@@ -1398,6 +1400,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       })
       if (!delivered) throw new HttpError(409, 'workload_unavailable')
       if (from && from !== row.id && submit) context.waits?.store.recordSend(from, row.id, sentAt)
+      if (submit && from !== row.id) context.lanes?.reached(row.id, 'a send reached it')
       sendJson(res, 200, { generation, delivered: true })
     })
     // Rewind a Claude Code session to before the prompt its standing model

@@ -204,6 +204,15 @@ export function isWakeClass(wake: Pick<Wake, 'kind' | 'ride'>): boolean {
   return wake.kind !== 'event' || !wake.ride
 }
 
+/** Whether this row reached the session from outside: any event line but a
+ * wait of its own (`wait:<id>` goes to the waiter), or a check-in the owner
+ * set; never an agent's check-in (a self-wake). A lane's next went-idle line
+ * after such a row is a first line (LaneReporter.reached). */
+export function reachesSession(wake: Pick<Wake, 'kind' | 'source' | 'createdBy'>): boolean {
+  if (wake.kind !== 'event') return wake.createdBy === 'owner'
+  return !wake.source?.startsWith('wait:')
+}
+
 function toWake(raw: RawWake): Wake {
   let ended: EndedSession | null = null
   try {

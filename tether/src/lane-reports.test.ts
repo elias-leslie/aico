@@ -1186,6 +1186,75 @@ describe('delivery classes of went-idle lines', () => {
     )
     expect(delivered.map((d) => [d.source.split(':').pop(), d.ride])).toEqual([['blocked', false]])
   })
+
+  it('a request sent before the last idle line but pasted after it wakes at the end of its work', () => {
+    const { reporter, delivered, waits, logs } = harness()
+    // The launcher sends while the lane is still finishing a turn.
+    step(reporter, { state: 'working', stateAgentAt: 99 })
+    waits.recordSend(ROOT, LANE, Date.now())
+    // The lane goes idle: its first went-idle line wakes (streak 1).
+    step(reporter, { stateAgentAt: 100 }, SETTLE)
+    expect(delivered.map((d) => d.ride)).toEqual([false])
+    // The request is pasted only now; the lane acks it, works and stops
+    // without a done report. That idle wakes the launcher, not rides along.
+    vi.advanceTimersByTime(FLOOR)
+    reporter.reached(LANE, 'got coord:cc:1c7a9f')
+    expect(logs).toContain(
+      `lane=${LANE} got coord:cc:1c7a9f: its next went-idle line is a first line`,
+    )
+    turn(reporter, 300, SETTLE)
+    expect(delivered.map((d) => d.ride)).toEqual([false, false])
+    // A turn nothing reached (a self-wake) is a repeat again: it rides along.
+    turn(reporter, 400, QUIET)
+    expect(delivered.map((d) => d.ride)).toEqual([false, false, true])
+  })
+
+  it('what reached the lane before its last idle line was sent leaves the next idle a repeat', () => {
+    const { reporter, delivered } = harness()
+    turn(reporter, 100, SETTLE)
+    // A line reaches it mid-turn (a hook took it); that turn's idle wakes.
+    step(reporter, { state: 'working', stateAgentAt: 199 }, 60_000)
+    reporter.reached(LANE, 'got coord:x')
+    step(reporter, { stateAgentAt: 200 }, SETTLE + FLOOR)
+    // Then a self-wake turn: nothing reached it since that line.
+    turn(reporter, 300, QUIET)
+    expect(delivered.map((d) => d.ride)).toEqual([false, false, true])
+  })
+
+  it('a paste into a lane whose repeat is held: that held line rides, the end of the new work wakes', () => {
+    const { reporter, delivered } = harness()
+    turn(reporter, 100, SETTLE)
+    // A self-wake turn: its idle is a repeat, held for the quiet.
+    turn(reporter, 200, QUIET - 5_000)
+    expect(delivered).toHaveLength(1)
+    // A request is pasted into the idle lane; the hold runs out before
+    // Tether sees the new turn begin.
+    reporter.reached(LANE, 'got coord:x')
+    vi.advanceTimersByTime(5_000)
+    expect(delivered.map((d) => d.ride)).toEqual([false, true])
+    // The work the request started ends: a wake.
+    turn(reporter, 300, SETTLE + FLOOR)
+    expect(delivered.map((d) => d.ride)).toEqual([false, true, false])
+  })
+
+  it('a paste while a first line is held: that line wakes, and so does the end of the new work', () => {
+    const { reporter, delivered } = harness()
+    step(reporter, { state: 'working', stateAgentAt: 99 })
+    step(reporter, { stateAgentAt: 100 }, 5_000)
+    // Pasted within the settle; the held line goes before the turn is seen.
+    reporter.reached(LANE, 'got coord:x')
+    reporter.reached(LANE, 'got coord:y')
+    vi.advanceTimersByTime(SETTLE)
+    expect(delivered.map((d) => d.ride)).toEqual([false])
+    turn(reporter, 300, SETTLE + FLOOR)
+    expect(delivered.map((d) => d.ride)).toEqual([false, false])
+  })
+
+  it('a lane with no cursor (nobody reports it) ignores what reached it', () => {
+    const { reporter, logs } = harness()
+    reporter.reached(LANE, 'got coord:x')
+    expect(logs).toEqual([])
+  })
 })
 
 describe('watch and unwatch', () => {

@@ -667,23 +667,28 @@ export class Placement {
     return config
   }
 
-  /** Release the reservations whose root has definitely ended. */
+  /** Release the reservations whose root has definitely ended, and those on
+   * a host no longer configured (it can take no launch, so its room counts
+   * for nothing). */
   private async reconcile(): Promise<void> {
     const held = this.reservations.filter((item) => item.state === 'held')
     const fates = await Promise.all(
-      held.map(async (item): Promise<RootFate> => {
+      held.map(async (item): Promise<RootFate | 'retired'> => {
         if (item.host === LOCAL_HOST) return this.deps.localRoot(item.requestId)
+        // The hub keeps a host whose hosts.json entry is half-written or
+        // briefly invalid, so no peer means the host was taken out.
         const peer = this.deps.peer(item.host)
-        // A host that left hosts.json keeps its reservations until it answers again.
-        return peer ? this.remoteRoot(peer, item.requestId) : 'unknown'
+        return peer ? this.remoteRoot(peer, item.requestId) : 'retired'
       }),
     )
     let changed = false
     held.forEach((item, index) => {
       const fate = fates[index]
-      if (fate === 'missing' || fate === 'ended' || fate === 'exited') {
+      if (fate === 'missing' || fate === 'ended' || fate === 'exited' || fate === 'retired') {
         this.reservations.splice(this.reservations.indexOf(item), 1)
-        this.log(`released ${item.requestId} on ${item.host} (${fate})`)
+        this.log(
+          `released ${item.requestId} on ${item.host} (${fate === 'retired' ? 'host no longer in hosts.json' : fate})`,
+        )
         changed = true
       }
     })

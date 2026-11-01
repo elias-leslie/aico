@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { bindCatalog } from './lifecycle/catalog'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { Store } from './store'
 import { WaitStore } from './waits'
@@ -42,5 +43,61 @@ describe('WakeService.noteSent', () => {
     wakes.noteSent([LANE], LANE, true)
     expect(waits.actedOn(LANE, '', [LANE], 0)).toBe(false)
     expect(wakes.toldSince(LANE, LANE, 0)).toBe(false)
+  })
+})
+
+describe('what reached a lane (its next went-idle line wakes)', () => {
+  function reachedService() {
+    const store = new Store(':memory:', () => 1_000)
+    stores.push(store)
+    bindCatalog(store.db)
+    const reached: string[] = []
+    const context = {
+      store,
+      events: { publish: () => {} },
+      lanes: { reached: (lane: string, why: string) => reached.push(`${lane} ${why}`) },
+    } as unknown as LifecycleApiContext
+    return { wakes: new WakeService(context, { now: () => 5_000 }), reached }
+  }
+
+  it('a line the lane takes counts when it takes it, not when it was queued', () => {
+    const { wakes, reached } = reachedService()
+    wakes.queueEvent(LANE, 'coord:cc:1c7a9f', '[Message] 1 request', true)
+    expect(reached).toEqual([])
+    expect(wakes.scheduler.takeRide(LANE)).toContain('1 request')
+    expect(reached).toEqual([`${LANE} got coord:cc:1c7a9f`])
+  })
+
+  it('its own wait line, or a check-in an agent set, is no message from outside', () => {
+    const { wakes, reached } = reachedService()
+    wakes.noteReached(LANE, [
+      { kind: 'event', source: 'wait:0123456789ab', createdBy: 'agent' },
+      { kind: 'time', source: null, createdBy: 'agent' },
+    ] as never)
+    expect(reached).toEqual([])
+    wakes.noteReached(LANE, [{ kind: 'time', source: null, createdBy: 'owner' }] as never)
+    expect(reached).toEqual([`${LANE} got a check-in`])
+  })
+
+  it("a lane's ride-along yes takes back its told mark, so that turn's went-idle line still goes", () => {
+    // Review of SummitFlow ebd6ea870 P1: the lane asked its launcher
+    // something mid-turn (told), then answered the launcher with a noted
+    // yes, which rides along. The turn's went-idle line must not be dropped.
+    const { wakes } = reachedService()
+    wakes.noteSent([LANE], LAUNCHER, true)
+    expect(wakes.toldSince(LANE, LAUNCHER, 4_999)).toBe(true)
+    wakes.noteReplied([LANE], LAUNCHER, true)
+    expect(wakes.toldSince(LANE, LAUNCHER, 0)).toBe(false)
+    // A wake-class reply wakes the launcher itself: the told mark stays.
+    wakes.noteSent([LANE], LAUNCHER, true)
+    wakes.noteReplied([LANE], LAUNCHER, false)
+    expect(wakes.toldSince(LANE, LAUNCHER, 4_999)).toBe(true)
+  })
+
+  it("a lane's reply counts for the lane, never for itself as receiver", () => {
+    const { wakes, reached } = reachedService()
+    wakes.noteReplied([LANE], LAUNCHER)
+    wakes.noteReplied([LAUNCHER], LAUNCHER)
+    expect(reached).toEqual([`${LANE} replied to ${LAUNCHER}`])
   })
 })

@@ -22,7 +22,8 @@
 // having acted on this session (a lane's repeat went-idle backoff starts over),
 // and, for a wake line that is not a `reply` (an ack of this session's
 // request), as having told it (a lane that told its launcher during a turn
-// sends no went-idle line for it).
+// sends no went-idle line for it). A `reply` also shows that what it answers
+// reached its sender: that lane's next went-idle line is a first line (a wake).
 //
 // `DELETE /v1/sessions/:id/deliveries?source=` takes back a producer's line
 // that has not gone out (it went stale: the inbox has nothing waiting any
@@ -133,6 +134,10 @@ export interface DeliveryRouteDeps {
   /** Sessions whose message this line carries (`from`): each acted on this
    * one, and `told` it something (a wake line that is not a reply). */
   sent(from: readonly string[], to: string, told: boolean): void
+  /** A reply (`reply: true`, wake or ride-along) from each of `from`: what it
+   * answers reached the replier (a lane's next went-idle line wakes). A
+   * ride-along one also takes back the replier's "told" to this session. */
+  replied?(from: readonly string[], to: string, ride: boolean): void
   /** Take the session's due ride-along lines now (WakeScheduler.takeRide). */
   takeRide(sessionId: string): string | null
   /** Its due ride-along lines and a token, left queued (WakeScheduler.peekRide). */
@@ -232,6 +237,12 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
       // `since` past a turn that wait still has to see end.
       if (Array.isArray(from) && from.length && !ride)
         deps.sent(from as string[], id, body.reply !== true)
+      // A reply, a lane's ride-along yes included, shows that what it answers
+      // reached the replier, maybe through an inbox it read itself. A
+      // ride-along reply wakes no one, so the replier's went-idle line must
+      // still go out (never dropped for a request it sent earlier that turn).
+      if (Array.isArray(from) && from.length && body.reply === true)
+        deps.replied?.(from as string[], id, ride)
       const fresh = log.get(wake.id) === undefined
       log.record({ id: wake.id, sessionId: id, source, now: deps.now() })
       sendJson(res, fresh ? 201 : 200, {
