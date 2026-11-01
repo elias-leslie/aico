@@ -549,6 +549,32 @@ def test_roots_context_is_unknown_never_zero_when_unmatched_unmeasured_or_agent_
     assert [row["context"] for row in roots] == ["unknown", "unknown"]
 
 
+def test_a_slow_tether_costs_the_resume_ids_but_never_the_roots_output(monkeypatch, capfd):
+    # Every session read takes the full second Tether is given and fails; twelve roots would run past the 10 s deadline.
+    rows = [{"requestId": f"r{i}", "widgetId": f"{i:08x}", "logicalSessionId": f"aico-root-{i}", "sessionId": f"aico-widget-{i:08x}",
+             "observation": "available", "identity": "pinned", "terminal": "turn_finished"} for i in range(12)]
+    clock = [0.0]
+    start = time.monotonic()
+    reads = []
+
+    def slow_receipt(self, path, route, *args, **kwargs):
+        left = self.remaining()
+        reads.append(route)
+        clock[0] += min(1.0, left)  # like the real read: a second at most, and never past the collector's deadline
+        raise watcher.Unavailable("owner_unavailable")
+
+    monkeypatch.setattr(watcher.time, "monotonic", lambda: start + clock[0])
+    monkeypatch.setattr(watcher.Collector, "discover", lambda self, request_id: ([], rows))
+    monkeypatch.setattr(watcher.Collector, "receipt", slow_receipt)
+    monkeypatch.setattr(watcher, "agent_hub_get", lambda *args, **kwargs: None)
+
+    assert watcher.roots_main(["--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"]) == 0
+
+    printed = json.loads(capfd.readouterr().out)
+    assert [row["context"] for row in printed["roots"]] == ["unknown"] * 12
+    assert 0 < len(reads) < 12
+
+
 def test_context_label_rounds_to_thousands_and_keeps_small_counts_exact():
     assert [watcher.context_label(n) for n in (1, 999, 1000, 1499, 1500, 211_961)] == ["1", "999", "1K", "1K", "2K", "212K"]
     assert [watcher.context_label(v) for v in (0, -5, None, True, 12.5, "9")] == ["unknown"] * 6

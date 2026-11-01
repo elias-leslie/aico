@@ -911,13 +911,27 @@ def test_an_allowed_launch_goes_ahead(launch_api, monkeypatch):
     assert (calls[0]["tool"], calls[0]["model"], calls[0]["daybreak"]) == ("codex", "gpt-6-sol", True)
 
 
-@pytest.mark.parametrize("role", ["hunting", "recon", "verification"])
-def test_without_the_rules_a_claude_launch_for_case_work_is_refused(monkeypatch, capsys, role):
+@pytest.mark.parametrize(("role", "project"), [("hunting", None), ("recon", "sample-app"), ("verification", "neri-hunters")])
+def test_without_the_rules_a_claude_launch_for_case_work_is_refused(monkeypatch, capsys, role, project):
     monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)  # Agent Hub can't be asked
     monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
     error = refused_create(monkeypatch, capsys, ["create", "case-1", "Work.", "--tool", "claude-code",
-                                                 "--work-role", role, "--blank-slate"])
+                                                 "--work-role", role, "--blank-slate",
+                                                 *(["--project", project] if project else [])])
     assert "launch rules could not be read" in error and f"for {role} work" in error
+
+
+@pytest.mark.parametrize("project", [None, "neri", "sample-app"])
+def test_without_the_rules_verification_outside_neri_hunters_keeps_claude(monkeypatch, project):
+    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)
+    monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
+    calls = []
+    monkeypatch.setattr(admin.Collector, "receipt", lambda _, path, route, payload, **k: (calls.append(payload), (200, descriptor(payload)))[1])
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    assert admin.main(["create", "ver-1", "Verify.", "--tool", "claude-code", "--work-role", "verification",
+                       *(["--project", project] if project else ["--blank-slate"]),
+                       *(["--project-root", "/fixture/project"] if project else [])]) == 0
+    assert calls[0]["tool"] == "claude-code"
 
 
 @pytest.mark.parametrize("model", ["anthropic/claude-opus-5-5", "Sonnet-5-5", "haiku-5-5"])

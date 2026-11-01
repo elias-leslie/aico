@@ -1409,9 +1409,11 @@ EFFORTS = ("none", "off", "minimal", "low", "medium", "high", "xhigh", "max")
 
 
 # The safety floor that holds when Agent Hub's launch rules can't be read (model-choice build plan,
-# owner 2026-11-01): Claude never does case work, so a Claude launch for these work roles is refused;
-# every other launch goes ahead. With the rules readable, Agent Hub alone answers allowed or denied.
-CLAUDE_FLOOR_ROLES = ("hunting", "recon", "verification")
+# owner 2026-11-01): a Claude launch is refused for hunting and recon work in any project and for
+# verification work in project neri-hunters, no wider than Agent Hub's deny rows; every other launch
+# goes ahead. With the rules readable, Agent Hub alone answers allowed or denied.
+CLAUDE_FLOOR_ROLES = ("hunting", "recon")
+CLAUDE_FLOOR_PROJECT_ROLES = {"verification": "neri-hunters"}
 CLAUDE_TOOL = "claude-code"  # always Claude
 CLAUDE_MODEL_TOKENS = ("claude", "opus", "sonnet", "haiku")  # Agent Hub's launch_policy name tokens for Claude
 
@@ -1453,12 +1455,14 @@ def launch_row(role: str, tool: str, model: str | None = None, project: str | No
     return row
 
 
-def launch_refusal(role: str, tool: str, model: str | None, row: dict | None) -> str | None:
+def launch_refusal(role: str, tool: str, model: str | None, row: dict | None,
+                   project: str | None = None) -> str | None:
     """Why this launch is refused under Agent Hub's launch rules, else None. Without a readable
     answer (no row, or a row that does not say allowed) only the safety floor applies."""
     if row is None or not isinstance(row.get("allowed"), bool):
         is_claude = tool == CLAUDE_TOOL or any(token in (model or "").lower() for token in CLAUDE_MODEL_TOKENS)
-        if is_claude and role in CLAUDE_FLOOR_ROLES:
+        if is_claude and (role in CLAUDE_FLOOR_ROLES or (
+                role in CLAUDE_FLOOR_PROJECT_ROLES and project == CLAUDE_FLOOR_PROJECT_ROLES[role])):
             return (f"Agent Hub's launch rules could not be read, and Claude is never launched for {role} "
                     "work without them; use codex or pi, or retry once Agent Hub answers")
         return None
@@ -1655,7 +1659,7 @@ def create_main(argv: list[str]) -> int:
                 refuse(str(error))
             launch = None
         # A hard rule: nothing reaches Tether, on this computer or a host, with an entry or without.
-        if (reason := launch_refusal(args.work_role, args.tool, args.model, launch)) is not None:
+        if (reason := launch_refusal(args.work_role, args.tool, args.model, launch, args.project)) is not None:
             refuse(reason)
         if launch is not None:
             applied = apply_launch_defaults(args, launch)
@@ -2399,16 +2403,25 @@ def context_label(tokens: object) -> str:
 NATIVE_ID = r"[0-9A-Za-z][0-9A-Za-z-]{7,99}"
 
 
-def root_resume_ids(collector: Collector, owner_socket: str, records: list[dict]) -> list[str | None]:
+RESUME_BUDGET = 2.0  # seconds for all the resume-id reads together
+OUTPUT_RESERVE = 3.0  # seconds the collector keeps for the Agent Hub context read (2 s) and printing
+
+
+def root_resume_ids(collector: Collector, owner_socket: str, records: list[dict],
+                    budget: float = RESUME_BUDGET) -> list[str | None]:
     """Each running root's native conversation id (Claude Code session, Codex thread) from Tether's
     session descriptor, which Agent Hub keys that harness's session by. None for a root Tether has none
-    for, an older Tether, or a read that fails: the context then falls back to the root's links."""
+    for, an older Tether, or a read that fails: the context then falls back to the root's links.
+    The reads share their own budget and never run into the time the collector keeps for printing, so a slow
+    Tether leaves the later roots without an id instead of costing the whole roots output."""
+    lookups = Collector(collector.root_socket, owner_socket, "",
+                        min(time.monotonic() + budget, collector.deadline - OUTPUT_RESERVE), collector.cancel)
     found: list[str | None] = []
     for record in records:
         widget, resume = record.get("widgetId"), None
         if isinstance(widget, str) and re.fullmatch(WIDGET, widget):
             try:
-                status, data = collector.receipt(owner_socket, f"/v1/sessions/{widget}", timeout=1)
+                status, data = lookups.receipt(owner_socket, f"/v1/sessions/{widget}", timeout=1)
                 value = data.get("resumeId") if status == 200 else None
                 resume = value if isinstance(value, str) and re.fullmatch(NATIVE_ID, value) else None
             except (Unavailable, Stopped):
