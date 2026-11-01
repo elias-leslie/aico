@@ -4,6 +4,16 @@
 
 ### Added
 
+- Repeat went-idle lines from a lane back off (Tether schema 25). After a
+  lane's first went-idle line, the next one needs the lane idle with no turn
+  for `laneRepeatQuietSeconds` (600), doubling per repeat up to
+  `laneRepeatQuietMaxSeconds` (1800), so a lane waiting on its own work with
+  short turns in between no longer wakes its launcher every few minutes, and
+  one that stalls is still heard within 30 minutes. The receiver sending to
+  the lane or arming a wait on it, a new generation, a blocked line or an
+  `ended` starts over at the normal floor; the streak is kept across Tether
+  restarts. Blocked and ended lines are unchanged. Log: `lane=<id> idle again:
+  repeat N goes out after Ns quiet`.
 - A lane's queued report lines go once the receiver has ended that lane: when
   an End names `endedBy`, the sessions it spares the `ended` line (the ender,
   and the root when the ender is the launcher) also lose that lane's

@@ -17,6 +17,7 @@ import {
   LANE_ENDED_BY_SQL,
   LANE_REPORTS_COLUMNS,
   LANE_REPORTS_SQL,
+  LANE_STREAK_COLUMNS,
   PARENT_SQL,
   RETIRED_SESSION_IDS_SQL,
   ROOT_ORIGIN_SQL,
@@ -407,6 +408,18 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(24, now)
+      }
+      if (current < 25) {
+        // v25: repeat went-idle lines back off (the per-lane streak).
+        for (const { table, column, sql } of LANE_STREAK_COLUMNS) {
+          const has = this.db
+            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
+            .get(table, column)
+          if (!has) this.db.exec(sql)
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(25, now)
       }
     })
   }

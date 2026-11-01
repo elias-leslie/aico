@@ -34,6 +34,12 @@ export interface WakePolicy {
   laneBlockedSeconds: number
   /** Lane reports: at most one `finished` per lane this often; later ones fold into it. */
   laneFinishedFloorSeconds: number
+  /** Lane reports: a repeat went-idle line (its receiver neither sent to the
+   * lane nor armed a wait on it since the last one) needs the lane idle this
+   * long, doubling per repeat; 0 turns the backoff off. */
+  laneRepeatQuietSeconds: number
+  /** Lane reports: the most quiet a repeat needs (the doubling's cap). */
+  laneRepeatQuietMaxSeconds: number
   /** Waits: the deadline when none is given. */
   waitDefaultMinutes: number
   /** Waits: the furthest deadline. */
@@ -56,6 +62,8 @@ export const DEFAULT_WAKE_POLICY: Readonly<WakePolicy> = Object.freeze({
   laneSettleSeconds: 12,
   laneBlockedSeconds: 3,
   laneFinishedFloorSeconds: 120,
+  laneRepeatQuietSeconds: 600,
+  laneRepeatQuietMaxSeconds: 1800,
   waitDefaultMinutes: 1440,
   waitMaxMinutes: 10080,
   maxWaitsPerSession: 20,
@@ -75,6 +83,8 @@ export const WAKE_POLICY_BOUNDS: Readonly<Record<keyof WakePolicy, { min: number
     laneSettleSeconds: { min: 0, max: 300 },
     laneBlockedSeconds: { min: 0, max: 300 },
     laneFinishedFloorSeconds: { min: 0, max: 3600 },
+    laneRepeatQuietSeconds: { min: 0, max: 3600 },
+    laneRepeatQuietMaxSeconds: { min: 0, max: 14400 },
     waitDefaultMinutes: { min: 1, max: 10080 },
     waitMaxMinutes: { min: 1, max: 43200 },
     maxWaitsPerSession: { min: 1, max: 100 },

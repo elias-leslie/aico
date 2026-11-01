@@ -20,7 +20,14 @@ import {
   setCoordinator,
 } from './lifecycle/catalog'
 import { Store } from './store'
-import { composeDelivery, DEFAULT_WAKE_POLICY, type Wake, WakeStore } from './wakes'
+import { WaitStore } from './waits'
+import {
+  composeDelivery,
+  DEFAULT_WAKE_POLICY,
+  type Wake,
+  type WakePolicy,
+  WakeStore,
+} from './wakes'
 
 const ROOT = 'aaaa0001'
 const HELPER_PARENT = 'aaaa0002'
@@ -28,6 +35,11 @@ const LANE = 'bbbb0001'
 const WATCHER = 'cccc0001'
 const SHELL = 'dddd0001'
 const SETTLE = DEFAULT_WAKE_POLICY.laneSettleSeconds * 1000
+const FLOOR = DEFAULT_WAKE_POLICY.laneFinishedFloorSeconds * 1000
+const QUIET = DEFAULT_WAKE_POLICY.laneRepeatQuietSeconds * 1000
+const QUIET_MAX = DEFAULT_WAKE_POLICY.laneRepeatQuietMaxSeconds * 1000
+/** The repeat backoff off, for tests about the floor and receivers. */
+const NO_BACKOFF: WakePolicy = { ...DEFAULT_WAKE_POLICY, laneRepeatQuietSeconds: 0 }
 
 const stores: Store[] = []
 const reporters: LaneReporter[] = []
@@ -62,7 +74,7 @@ function view(overrides: Partial<LaneView> = {}): LaneView {
   }
 }
 
-function harness(options: { store?: Store; sessions?: LocalLineage[] } = {}) {
+function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: WakePolicy } = {}) {
   const store = options.store ?? new Store(':memory:', () => 1_000)
   if (!options.store) stores.push(store)
   bindCatalog(store.db)
@@ -74,9 +86,10 @@ function harness(options: { store?: Store; sessions?: LocalLineage[] } = {}) {
   const receivers = new Set([ROOT, HELPER_PARENT, LANE, WATCHER])
   const gone = new Set<string>()
   const sessions = options.sessions ?? []
+  const waits = new WaitStore(store.db)
   const ops: LaneReportOperations = {
     now: () => Date.now(),
-    policy: () => DEFAULT_WAKE_POLICY,
+    policy: () => options.policy ?? DEFAULT_WAKE_POLICY,
     receiver: (id) => receivers.has(id),
     sessions: () => sessions,
     deliver: (to, source, line) => {
@@ -88,6 +101,7 @@ function harness(options: { store?: Store; sessions?: LocalLineage[] } = {}) {
       withdrawn.push(`${to}|${source}`)
       return 1
     },
+    acted: (lane, host, by, since) => waits.actedOn(lane, host ?? '', by, since),
     agentGone: (id) => gone.has(id),
     log: (line) => logs.push(line),
   }
@@ -97,7 +111,19 @@ function harness(options: { store?: Store; sessions?: LocalLineage[] } = {}) {
   const take = (to: string) => {
     for (const key of [...queued]) if (key.startsWith(`${to}|`)) queued.delete(key)
   }
-  return { store, reporter, delivered, queued, withdrawn, take, logs, receivers, gone, sessions }
+  return {
+    store,
+    reporter,
+    delivered,
+    queued,
+    withdrawn,
+    take,
+    logs,
+    receivers,
+    gone,
+    sessions,
+    waits,
+  }
 }
 
 /** Observe, then let `ms` pass (timers fire). */
@@ -194,8 +220,8 @@ describe('finished', () => {
     const again = harness({ store: first.store })
     step(again.reporter, { stateAgentAt: 200 }, SETTLE * 2)
     expect(again.delivered).toHaveLength(0)
-    vi.advanceTimersByTime(DEFAULT_WAKE_POLICY.laneFinishedFloorSeconds * 1000)
-    step(again.reporter, { stateAgentAt: 300 }, SETTLE)
+    vi.advanceTimersByTime(FLOOR)
+    step(again.reporter, { stateAgentAt: 300 }, QUIET) // a repeat: it needs the quiet
     expect(again.delivered).toHaveLength(1)
   })
 
@@ -217,7 +243,7 @@ describe('finished', () => {
   })
 
   it('holds a second finish to the floor and folds later ones into it', () => {
-    const { reporter, delivered } = harness()
+    const { reporter, delivered } = harness({ policy: NO_BACKOFF })
     const floor = DEFAULT_WAKE_POLICY.laneFinishedFloorSeconds * 1000
     step(reporter, { state: 'working', stateAgentAt: 100 })
     step(reporter, { stateAgentAt: 200 }, SETTLE)
@@ -234,7 +260,7 @@ describe('finished', () => {
   })
 
   it('goes to the launcher, or the root when the launcher cannot take it', () => {
-    const { reporter, delivered, receivers } = harness()
+    const { reporter, delivered, receivers } = harness({ policy: NO_BACKOFF })
     step(reporter, { parentId: HELPER_PARENT, state: 'working', stateAgentAt: 100 })
     step(reporter, { parentId: HELPER_PARENT, stateAgentAt: 200 }, SETTLE)
     expect(delivered.map((d) => d.to)).toEqual([HELPER_PARENT])
@@ -275,6 +301,148 @@ describe('finished', () => {
     step(reporter, { launched: false, state: 'working', stateAgentAt: 100 })
     step(reporter, { launched: false, stateAgentAt: 200 }, SETTLE * 2)
     expect(delivered).toHaveLength(0)
+  })
+})
+
+describe('repeat went-idle backoff', () => {
+  /** One short turn: working, then idle at `at`, then `ms` pass. */
+  function turn(reporter: LaneReporter, at: number, ms: number, extra: Partial<LaneView> = {}) {
+    step(reporter, { ...extra, state: 'working', stateAgentAt: at - 1 })
+    step(reporter, { ...extra, stateAgentAt: at }, ms)
+  }
+
+  it('the first went-idle line is unchanged; repeats need a growing quiet', () => {
+    const { reporter, delivered, logs } = harness()
+    turn(reporter, 100, SETTLE)
+    expect(delivered).toHaveLength(1) // first: the normal settle
+    // The drill case: a short turn every 3 minutes while the lane waits on its
+    // own background work. None of them is a line.
+    for (let i = 1; i <= 10; i += 1) turn(reporter, 100 + i * 10, 3 * 60_000)
+    expect(delivered).toHaveLength(1)
+    expect(logs).toContain(
+      `lane=${LANE} idle again: repeat 1 goes out after ${QUIET / 1000}s quiet`,
+    )
+    // It goes quiet for real: the repeat goes out once the quiet has held.
+    turn(reporter, 300, QUIET - 1)
+    expect(delivered).toHaveLength(1)
+    vi.advanceTimersByTime(1)
+    expect(delivered).toHaveLength(2)
+    expect(delivered[1]?.line).toContain('went idle')
+    // The next repeat needs twice the quiet, then the cap.
+    turn(reporter, 400, QUIET * 2 - 1)
+    expect(delivered).toHaveLength(2)
+    vi.advanceTimersByTime(1)
+    expect(delivered).toHaveLength(3)
+    turn(reporter, 500, QUIET_MAX - 1)
+    vi.advanceTimersByTime(1)
+    expect(delivered).toHaveLength(4)
+    turn(reporter, 600, QUIET_MAX) // capped, not 4x
+    expect(delivered).toHaveLength(5)
+  })
+
+  it('a send from the receiver, or a wait it arms on the lane, starts over', () => {
+    const { reporter, delivered, waits } = harness()
+    turn(reporter, 100, SETTLE)
+    turn(reporter, 200, QUIET)
+    expect(delivered).toHaveLength(2)
+    // The root sends the lane a follow-up: its next idle is a normal line.
+    vi.advanceTimersByTime(FLOOR)
+    waits.recordSend(ROOT, LANE, Date.now())
+    turn(reporter, 300, SETTLE)
+    expect(delivered).toHaveLength(3)
+    // Repeats back off again from there.
+    turn(reporter, 400, SETTLE + FLOOR)
+    expect(delivered).toHaveLength(3)
+    // A wait the root arms on the lane counts too.
+    waits.insert({
+      waiter: ROOT,
+      kind: 'session',
+      ref: LANE,
+      host: null,
+      until: 'finished',
+      since: Date.now(),
+      deadline: Date.now() + 3_600_000,
+      key: null,
+      note: null,
+      armedAt: Date.now(),
+      cursor: null,
+      kept: false,
+      endedSession: null,
+    })
+    turn(reporter, 500, SETTLE)
+    expect(delivered).toHaveLength(4)
+  })
+
+  it('a send from someone who does not hear the lane is no act', () => {
+    const { reporter, delivered, waits } = harness()
+    turn(reporter, 100, SETTLE)
+    vi.advanceTimersByTime(FLOOR)
+    waits.recordSend(WATCHER, LANE, Date.now())
+    turn(reporter, 200, SETTLE)
+    expect(delivered).toHaveLength(1)
+  })
+
+  it('a new generation, or a blocked line, starts over at the normal floor', () => {
+    const { reporter, delivered } = harness()
+    turn(reporter, 100, SETTLE)
+    turn(reporter, 200, QUIET)
+    expect(delivered).toHaveLength(2)
+    // Recovery: the first idle is absorbed, the next turn reports normally.
+    step(reporter, { generation: 'g2', stateAgentAt: 300 }, SETTLE * 2)
+    vi.advanceTimersByTime(FLOOR)
+    turn(reporter, 400, SETTLE, { generation: 'g2' })
+    expect(delivered).toHaveLength(3)
+    turn(reporter, 500, SETTLE + FLOOR, { generation: 'g2' })
+    expect(delivered).toHaveLength(3)
+    // Blocked on a prompt: that line goes as before, and then idle is normal.
+    step(reporter, {
+      generation: 'g2',
+      state: 'blocked',
+      stateDetail: 'permission prompt',
+      stateAt: Date.now(),
+      stateAgentAt: 600,
+    })
+    vi.advanceTimersByTime(DEFAULT_WAKE_POLICY.laneBlockedSeconds * 1000)
+    expect(delivered.map((d) => d.source).at(-1)).toBe(`lane:${LANE}:blocked`)
+    const lines = delivered.length
+    turn(reporter, 700, SETTLE, { generation: 'g2' })
+    expect(delivered).toHaveLength(lines + 1)
+    expect(delivered.at(-1)?.source).toBe(`lane:${LANE}:finished`)
+  })
+
+  it('blocked and ended lines never wait on the backoff', () => {
+    const { reporter, delivered, gone } = harness()
+    turn(reporter, 100, SETTLE)
+    turn(reporter, 200, QUIET)
+    turn(reporter, 300, SETTLE)
+    expect(delivered).toHaveLength(2) // repeat 2 held
+    step(reporter, { state: 'blocked', stateDetail: 'input needed', stateAt: Date.now() })
+    vi.advanceTimersByTime(DEFAULT_WAKE_POLICY.laneBlockedSeconds * 1000)
+    expect(delivered.at(-1)?.source).toBe(`lane:${LANE}:blocked`)
+    gone.add(LANE)
+    step(reporter, { state: 'unknown', stateAt: Date.now(), stateAgentAt: 400 }, SETTLE)
+    expect(delivered.at(-1)?.source).toBe(`lane:${LANE}:ended`)
+  })
+
+  it('the streak survives a Tether restart', () => {
+    const first = harness()
+    turn(first.reporter, 100, SETTLE)
+    turn(first.reporter, 200, QUIET)
+    expect(first.delivered).toHaveLength(2)
+    first.reporter.stop()
+    const again = harness({ store: first.store })
+    step(again.reporter, { stateAgentAt: 200 }, SETTLE) // already reported
+    turn(again.reporter, 300, QUIET * 2 - 1)
+    expect(again.delivered).toHaveLength(0)
+    vi.advanceTimersByTime(1)
+    expect(again.delivered).toHaveLength(1)
+  })
+
+  it('a quiet of 0 turns the backoff off', () => {
+    const { reporter, delivered } = harness({ policy: NO_BACKOFF })
+    turn(reporter, 100, SETTLE)
+    turn(reporter, 200, SETTLE + FLOOR)
+    expect(delivered).toHaveLength(2)
   })
 })
 

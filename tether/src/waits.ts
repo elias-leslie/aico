@@ -331,6 +331,29 @@ export class WaitStore {
       .run(sender, target, at)
   }
 
+  /** Whether one of `by` sent to `target` (a local session) or armed a wait
+   * on it (`host`: '' for this computer) after `since`. */
+  actedOn(target: string, host: string, by: readonly string[], since: number): boolean {
+    if (!by.length) return false
+    const marks = by.map(() => '?').join(', ')
+    const sent =
+      host === '' &&
+      this.db
+        .prepare(
+          `SELECT 1 FROM session_sends WHERE target = ? AND at > ? AND sender IN (${marks}) LIMIT 1`,
+        )
+        .get(target, since, ...by) !== undefined
+    if (sent) return true
+    return (
+      this.db
+        .prepare(
+          `SELECT 1 FROM waits WHERE kind = 'session' AND ref = ? AND host = ? AND armed_at > ?
+             AND waiter IN (${marks}) LIMIT 1`,
+        )
+        .get(target, host, since, ...by) !== undefined
+    )
+  }
+
   lastSend(sender: string, target: string): number | null {
     const row = this.db
       .prepare('SELECT at FROM session_sends WHERE sender = ? AND target = ?')

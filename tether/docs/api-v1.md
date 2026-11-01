@@ -649,6 +649,8 @@ and `session.updated` for the session it belongs to.
 | `laneSettleSeconds` | 12 | a lane must stay idle this long before `finished` goes out (0-300) |
 | `laneBlockedSeconds` | 3 | a lane must stay blocked this long before `blocked` goes out (0-300) |
 | `laneFinishedFloorSeconds` | 120 | at most one `finished` per lane in this long; later ones fold into the next (0-3600) |
+| `laneRepeatQuietSeconds` | 600 | a repeat `finished` (no send or wait from its receiver since the last) needs the lane idle this long, doubling per repeat; 0 is off (0-3600) |
+| `laneRepeatQuietMaxSeconds` | 1800 | the most quiet a repeat needs (0-14400) |
 
 ## Lane reports
 
@@ -676,7 +678,13 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
   while Tether runs counts every turn, its first included, even one that ended before the poll found the agent. A new
   generation (crash recovery, respawn, reboot restore), or a lane Tether first sees idle at its own start, resets the
   cursor without a report, and so does closing a dialog the owner opened (`/model`). At most one per
-  `laneFinishedFloorSeconds`.
+  `laneFinishedFloorSeconds`. *(schema 25)* A repeat, the next `finished` with no act from its receiver since the
+  last, needs the lane to hold idle with no new turn `laneRepeatQuietSeconds`, doubling per repeat up to
+  `laneRepeatQuietMaxSeconds` (defaults 10, 20, then 30 minutes): a lane waiting on its own work with short turns in
+  between stays quiet, and one that stalls is heard within the cap. It starts over at the normal settle and floor
+  when a receiver sends to the lane (`inject` with `from`, as `st aico root send` does) or arms a session wait on it,
+  on a new generation, and after a `blocked` or `ended`. The streak is kept in the cursor, so a restart keeps it
+  (the quiet counts from the restart). Log: `lane=<id> idle again: repeat N goes out after Ns quiet`, once per idle.
 - **blocked**: `permission prompt` or `input needed` held `laneBlockedSeconds`, once per episode (a Tether restart
   during the episode does not repeat it). `dialog open` (the
   owner opening a menu in the lane) is not reported.

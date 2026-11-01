@@ -18,7 +18,13 @@
 //   and the persisted cursor never repeats one. A lane that waits on a
 //   check-in of its own is not finished; a new generation (recovery, respawn,
 //   reboot restore) resets the cursor quietly; at most one finished per lane
-//   per `laneFinishedFloorSeconds`, later ones folding into it.
+//   per `laneFinishedFloorSeconds`, later ones folding into it. A repeat
+//   (no send or wait from its receiver on the lane since the last line) needs
+//   the lane quiet, idle with no turn, `laneRepeatQuietSeconds`, doubling per
+//   repeat up to `laneRepeatQuietMaxSeconds`: a lane waiting on its own work
+//   with short turns in between stays quiet, one that stalls is heard within
+//   the cap. A send or wait from the receiver, a new generation, blocked or
+//   ended starts over at the normal floor.
 // - Blocked fires for a permission prompt or a question held
 //   `laneBlockedSeconds`, never for `dialog open`.
 // - Ended comes from the sessions delete trigger (lane_outbox, written in the
@@ -187,6 +193,9 @@ export interface LaneCursor {
   finishedAt: number
   /** When the last finished line was queued (the rate floor). */
   finishedSentAt: number
+  /** Went-idle lines sent since the receiver last acted on the lane, the
+   * generation changed, or it was blocked or ended (schema v25). */
+  finishedStreak: number
   /** The `stateAt` of the last blocked episode reported. */
   blockedAt: number
   /** The first idle after a new generation is absorbed, not reported. */
@@ -205,6 +214,7 @@ interface RawCursor {
   generation: string | null
   finished_at: number
   finished_sent_at: number
+  finished_streak: number
   blocked_at: number
   reset: number
   ended: number
@@ -222,6 +232,7 @@ function toCursor(raw: RawCursor): LaneCursor {
     generation: raw.generation,
     finishedAt: raw.finished_at,
     finishedSentAt: raw.finished_sent_at,
+    finishedStreak: raw.finished_streak,
     blockedAt: raw.blocked_at,
     reset: raw.reset === 1,
     ended: raw.ended === 1,
@@ -294,11 +305,13 @@ export class LaneReportStore {
   save(cursor: LaneCursor, now: number): void {
     this.db
       .prepare(
-        `INSERT INTO lane_reports (host, lane, generation, finished_at, finished_sent_at, blocked_at,
-           reset, ended, title, request_id, coordinator_id, parent_id, launched, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO lane_reports (host, lane, generation, finished_at, finished_sent_at,
+           finished_streak, blocked_at, reset, ended, title, request_id, coordinator_id, parent_id,
+           launched, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (host, lane) DO UPDATE SET generation = excluded.generation,
            finished_at = excluded.finished_at, finished_sent_at = excluded.finished_sent_at,
+           finished_streak = excluded.finished_streak,
            blocked_at = excluded.blocked_at, reset = excluded.reset, ended = excluded.ended,
            title = excluded.title, request_id = excluded.request_id,
            coordinator_id = excluded.coordinator_id, parent_id = excluded.parent_id,
@@ -310,6 +323,7 @@ export class LaneReportStore {
         cursor.generation,
         cursor.finishedAt,
         cursor.finishedSentAt,
+        cursor.finishedStreak,
         cursor.blockedAt,
         cursor.reset ? 1 : 0,
         cursor.ended ? 1 : 0,
@@ -427,6 +441,8 @@ export interface LaneReportPolicy {
   laneSettleSeconds: number
   laneBlockedSeconds: number
   laneFinishedFloorSeconds: number
+  laneRepeatQuietSeconds: number
+  laneRepeatQuietMaxSeconds: number
 }
 
 /** A local session's lineage, for receivers and watch cycles. */
@@ -450,6 +466,10 @@ export interface LaneReportOperations {
   /** Take back the receiver's still-queued line from this source (the queue's
    * withdraw: a row going out right now is not stopped). Returns rows taken. */
   withdraw(receiver: string, source: string): number
+  /** Whether one of `by` sent to this lane (`inject` with `from`) or armed a
+   * wait on it after `since`: it acted on the lane, so its next went-idle line
+   * is no repeat. */
+  acted(lane: string, host: string | null, by: readonly string[], since: number): boolean
   /** A local lane's agent has left its pane for good: a clean exit, or crash
    * recovery holds it. */
   agentGone(id: string): boolean
@@ -466,6 +486,8 @@ interface Memory {
   /** A state other than unknown was seen (in this generation or before). */
   known: boolean
   timer: NodeJS.Timeout | null
+  /** The idle (`stateAgentAt`) whose backoff hold was logged. */
+  holdLogged: number
 }
 
 export class WatchRefused extends Error {
@@ -476,6 +498,22 @@ export class WatchRefused extends Error {
 
 function memoryKey(host: string | null, id: string): string {
   return `${host ?? ''}/${id}`
+}
+
+function laneWhere(lane: { id: string; host: string | null }): string {
+  return lane.host ? `${lane.host}/${lane.id}` : lane.id
+}
+
+/** How long a went-idle line must hold idle after `streak` lines with no
+ * act from the receiver: none extra for the first, then the quiet doubling
+ * per repeat up to its cap. */
+export function repeatQuietMs(
+  policy: Pick<LaneReportPolicy, 'laneRepeatQuietSeconds' | 'laneRepeatQuietMaxSeconds'>,
+  streak: number,
+): number {
+  if (streak < 1 || policy.laneRepeatQuietSeconds <= 0) return 0
+  const cap = Math.max(policy.laneRepeatQuietSeconds, policy.laneRepeatQuietMaxSeconds)
+  return Math.min(policy.laneRepeatQuietSeconds * 2 ** Math.min(streak - 1, 20), cap) * 1000
 }
 
 function snapshotOf(view: LaneView): LaneSnapshot {
@@ -554,6 +592,7 @@ export class LaneReporter {
       if (view.state === 'unknown' || (view.host === null && this.ops.agentGone(view.id))) return
       cursor.ended = false
       cursor.reset = true
+      cursor.finishedStreak = 0
       dirty = true
     }
     if (!cursor) {
@@ -567,6 +606,7 @@ export class LaneReporter {
         generation: view.generation,
         finishedAt: fresh ? view.createdAt : 0,
         finishedSentAt: 0,
+        finishedStreak: 0,
         blockedAt: 0,
         reset: !fresh,
         ended: false,
@@ -586,6 +626,7 @@ export class LaneReporter {
       // launch's own generation changes (before any agent state) are not one.
       cursor.generation = view.generation
       if (!memory || memory.known) cursor.reset = true
+      cursor.finishedStreak = 0
       dirty = true
     }
     const snapshot = snapshotOf(view)
@@ -604,7 +645,15 @@ export class LaneReporter {
       dirty = true
     }
     if (!memory) {
-      memory = { view, key: stateKey, seenAt: now, workingSeenAt: null, known: false, timer: null }
+      memory = {
+        view,
+        key: stateKey,
+        seenAt: now,
+        workingSeenAt: null,
+        known: false,
+        timer: null,
+        holdLogged: 0,
+      }
       this.memory.set(key, memory)
     } else if (memory.key !== stateKey) {
       memory.key = stateKey
@@ -682,13 +731,34 @@ export class LaneReporter {
         memory.workingSeenAt = null
         return
       }
-      const settle = policy.laneSettleSeconds * 1000 - held
+      if (
+        cursor.finishedStreak > 0 &&
+        this.ops.acted(
+          view.id,
+          view.host,
+          this.receivers('finished', snapshotOf(view)),
+          cursor.finishedSentAt,
+        )
+      ) {
+        // Its receiver sent to the lane or armed a wait on it: no repeat.
+        cursor.finishedStreak = 0
+        this.store.save(cursor, now)
+      }
+      const quiet = repeatQuietMs(policy, cursor.finishedStreak)
+      const settle = Math.max(policy.laneSettleSeconds * 1000, quiet) - held
       const floor = cursor.finishedSentAt
         ? policy.laneFinishedFloorSeconds * 1000 - (now - cursor.finishedSentAt)
         : 0
       const remaining = Math.max(settle, floor)
-      if (remaining > 0) wait = remaining
-      else {
+      if (remaining > 0) {
+        wait = remaining
+        if (quiet > 0 && memory.holdLogged !== view.stateAgentAt) {
+          memory.holdLogged = view.stateAgentAt
+          this.ops.log(
+            `lane=${laneWhere(view)} idle again: repeat ${cursor.finishedStreak} goes out after ${Math.round(quiet / 1000)}s quiet`,
+          )
+        }
+      } else {
         const minutes =
           memory.workingSeenAt !== null
             ? Math.floor((memory.seenAt - memory.workingSeenAt) / 60_000)
@@ -697,6 +767,7 @@ export class LaneReporter {
           this.fire('finished', snapshotOf(view), { minutes })
           cursor.finishedAt = view.stateAgentAt
           cursor.finishedSentAt = now
+          cursor.finishedStreak += 1
           this.store.save(cursor, now)
         })
         memory.workingSeenAt = null
@@ -713,6 +784,7 @@ export class LaneReporter {
         this.store.transaction(() => {
           this.fire('blocked', snapshotOf(view), { detail: view.stateDetail })
           cursor.blockedAt = view.stateAt
+          cursor.finishedStreak = 0
           this.store.save(cursor, now)
         })
     } else if (view.state === 'unknown' && view.host === null && this.ops.agentGone(view.id)) {
@@ -723,6 +795,7 @@ export class LaneReporter {
         this.store.transaction(() => {
           this.fire('ended', snapshotOf(view), { exited: true })
           cursor.ended = true
+          cursor.finishedStreak = 0
           this.store.save(cursor, now)
         })
     }
@@ -791,7 +864,7 @@ export class LaneReporter {
     const all = this.receivers(outcome, lane)
     const { skip, launcher } = this.endSkip(lane, endedBy)
     const receivers = all.filter((id) => !skip.has(id))
-    const where = lane.host ? `${lane.host}/${lane.id}` : lane.id
+    const where = laneWhere(lane)
     const dropped = all.filter((id) => skip.has(id))
     const skipped = dropped.length
       ? ` (skipped ${dropped.join(',')}: ended by ${launcher ? 'its launcher ' : ''}${endedBy})`
@@ -809,7 +882,7 @@ export class LaneReporter {
    * queued for them: they ended it themselves (or their lane did). */
   private withdrawStale(lane: LaneSnapshot, endedBy: string | null): void {
     const { skip } = this.endSkip(lane, endedBy)
-    const where = lane.host ? `${lane.host}/${lane.id}` : lane.id
+    const where = laneWhere(lane)
     const taken: string[] = []
     for (const receiver of skip)
       for (const outcome of LANE_OUTCOMES) {

@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 24
+export const SCHEMA_VERSION = 25
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -598,6 +598,20 @@ export const LANE_ENDED_BY_SQL = `
       );
   END;
 `
+
+/**
+ * v25: repeat went-idle lines back off (src/lane-reports.ts).
+ * `lane_reports.finished_streak` counts the went-idle lines sent since the
+ * lane's receiver last acted on it (a send, a wait on it), its generation
+ * changed, or it was blocked or ended; a repeat needs a longer quiet idle.
+ */
+export const LANE_STREAK_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
+  {
+    table: 'lane_reports',
+    column: 'finished_streak',
+    sql: 'ALTER TABLE lane_reports ADD COLUMN finished_streak INTEGER NOT NULL DEFAULT 0 CHECK(finished_streak >= 0)',
+  },
+]
 
 /**
  * v21: deliveries (src/deliveries.ts). A line another owner queued on a
