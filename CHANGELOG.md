@@ -20,6 +20,13 @@
   `POST /v1/sessions/:id/rewind` and `st aico root rewind` drive Claude Code's
   rewind list (conversation only), reading every screen back and refusing on
   any mismatch.
+- Launched lanes start lean. Tether trims a session by its work role at every
+  launch, from data in `tether/src/lifecycle/tui/lane-tools.json`: Claude Code
+  lanes other than coordinators start without Artifact, Workflow,
+  Claude-drafted feedback, Chrome and claude.ai connectors, plus
+  `--disallowedTools` for tools the role didn't use in a week. A fresh lane
+  drops from about 45K to 23K tokens. Coordinators and sessions nobody
+  launched keep everything.
 - The Health panel follows Nightshift's item stream instead of polling every
   minute. `aico-web` keeps one connection to Nightshift's `GET /api/stream`
   while at least one page listens (closed when none does, reconnected with

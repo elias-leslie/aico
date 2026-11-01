@@ -89,7 +89,7 @@ import {
   type WidgetMutation,
   widgetMutationOperation,
 } from './lifecycle/root-control'
-import { withRootPrompt } from './lifecycle/root-launch'
+import { sessionSpec, withRootPrompt } from './lifecycle/root-launch'
 import { readScrollbackPage } from './lifecycle/scrollback-page'
 import { terminalClientEnv } from './lifecycle/terminal-env'
 import {
@@ -105,7 +105,6 @@ import {
 import {
   createBlankSlateWorkspace,
   ensureBlankSlateWorkspace,
-  forWorkspace,
   isBlankSlateRoot,
   isHubBlankSlateRoot,
   supportsBlankSlate,
@@ -115,7 +114,6 @@ import {
   parseInstructions,
   saveInstructions,
   sessionInstructions,
-  withInstructions,
 } from './lifecycle/tui/instructions'
 import { listsModel } from './lifecycle/tui/models'
 import { AGENT_HUB_TOOL, getTui, supportsInstructions } from './lifecycle/tui/registry'
@@ -285,7 +283,7 @@ export function contextHookOf(row: WidgetRow): Record<string, unknown> {
       checkedAt: status.checkedAt,
     }
   }
-  const spec = withInstructions(forWorkspace(getTui(row.tool), row.projectRoot), row.id)
+  const spec = sessionSpec(getTui(row.tool), row.projectRoot, row.id)
   const fixed = spec ? staticContextStatus(spec) : null
   return {
     state: fixed?.state ?? 'unknown',
@@ -1250,7 +1248,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     .add('POST', '/v1/sessions/:id/context-check', async (_req, res, params) => {
       const row = requireSession(params.id)
       requireTmuxBackend(row)
-      const spec = withInstructions(forWorkspace(getTui(row.tool), row.projectRoot), row.id)
+      const spec = sessionSpec(getTui(row.tool), row.projectRoot, row.id)
       if (spec) await probeContext(row.id, spec)
       const latest = requireSession(row.id)
       sendJson(res, 200, { generation: generationOf(latest), contextHook: contextHookOf(latest) })

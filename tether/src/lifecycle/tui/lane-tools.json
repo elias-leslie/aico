@@ -1,0 +1,18 @@
+{
+  "about": "Tools and listings a launched session starts without, by tool and work role (lane-tools.ts). A role set to false starts with the full harness. A role object starts with the tool's env plus that role's args; '*' is any other work role. Sessions nobody launched (no work role) and tools not listed here are untouched. Measured 2026-11-01: handoffs/followups-2026-10-31/token-audit/REPORT-lean-startup.md.",
+  "claude-code": {
+    "env": {
+      "CLAUDE_CODE_DISABLE_ARTIFACT": "1",
+      "CLAUDE_CODE_DISABLE_WORKFLOWS": "1",
+      "DISABLE_FEEDBACK_COMMAND": "1",
+      "CLAUDE_CODE_ENABLE_CFC": "0",
+      "ENABLE_CLAUDEAI_MCP_SERVERS": "false"
+    },
+    "roles": {
+      "coordinator": false,
+      "implementation": { "args": ["--disallowedTools=AskUserQuestion,ReportFindings"] },
+      "other": { "args": ["--disallowedTools=ReportFindings,ScheduleWakeup"] },
+      "*": { "args": ["--disallowedTools=AskUserQuestion,ReportFindings,ScheduleWakeup"] }
+    }
+  }
+}

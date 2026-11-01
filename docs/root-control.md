@@ -401,6 +401,18 @@ original declaration; changing either declaration field conflicts. Legacy
 requests can still retry with their original body/digest and remain Unknown;
 a new request without a work role returns `400 work_role_required`.
 
+The work role also trims what the session starts with (Blank Slate or not, every
+launch: create, restart, recovery, replacement). `tether/src/lifecycle/tui/lane-tools.json`
+holds, per tool, the environment every trimmed role gets and each role's extra
+arguments, all documented harness switches. Claude Code roles other than
+`coordinator` start without the Artifact and Workflow tools, Claude-drafted
+feedback, Chrome and claude.ai connectors, and with `--disallowedTools` for tools
+the role did not use in a week (AskUserQuestion, ReportFindings, ScheduleWakeup;
+`implementation` keeps ScheduleWakeup, `other` keeps AskUserQuestion). That takes
+a fresh lane from about 45K to 23K tokens. Coordinators and sessions nobody
+launched keep the full harness. Codex and Pi are not listed: Neri's Codex lanes
+use computer use, and Blank Slate Codex and Pi already start bare.
+
 Native producers register the declaration against the actual native UUID.
 Resuming a UUID retains its first native-session declaration in Agent Hub;
 choose that same role on resume. A different role requires a new native session

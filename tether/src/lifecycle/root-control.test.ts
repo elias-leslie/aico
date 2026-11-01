@@ -37,6 +37,7 @@ import {
   relaunchLine,
   rootLaunchEnvironment,
   rootPromptReady,
+  sessionSpec,
   withRootPrompt,
 } from './root-launch'
 import { codexTui, initStore, registerBuiltinTuis } from './testing'
@@ -844,6 +845,43 @@ describe('private root workload control', () => {
     expect(rootRequestDigest(parsed)).not.toBe(
       rootRequestDigest({ ...parsed, facetCapsuleRef: 'capsule-2' }),
     )
+  })
+
+  it('starts a launched lane trimmed to its work role, before the prompt', async () => {
+    const root = present(getRootRequest('target-1'))
+    expect(root.workRole).toBe('implementation')
+    const tool = {
+      slug: 'claude-code',
+      displayName: 'fixture',
+      icon: '',
+      accent: '',
+      enabled: true,
+      order: 0,
+      command: [
+        process.execPath,
+        '-e',
+        'process.stdout.write(JSON.stringify({args:process.argv.slice(1),artifact:process.env.CLAUDE_CODE_DISABLE_ARTIFACT}))',
+        '--',
+      ],
+      processName: 'node',
+    }
+    const lane = sessionSpec(tool, fixture, root.widgetId)
+    await withRootPrompt(root.widgetId, 'Go.', async () => {
+      const result = execFileSync(
+        '/bin/bash',
+        ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, lane))],
+        {
+          env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+          encoding: 'utf8',
+        },
+      )
+      expect(JSON.parse(result)).toEqual({
+        args: ['--disallowedTools=AskUserQuestion,ReportFindings', '--', 'Go.'],
+        artifact: '1',
+      })
+    })
+    // A session nobody launched keeps the whole harness.
+    expect(sessionSpec(tool, fixture, 'ffffffff')).toEqual(tool)
   })
 
   it('keeps prompt bytes out of durable storage and safely passes exact launch argv', async () => {

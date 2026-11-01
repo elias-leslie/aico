@@ -68,6 +68,15 @@ def test_claude_keeps_only_pretooluse_guards_model_effort_status_line_and_bypass
     assert trusted["keep"] == 1 and trusted["projects"]["/other"]["hasTrustDialogAccepted"] is True
 
 
+def test_claude_passes_on_the_lean_lane_env_and_args_tether_adds(run, monkeypatch):
+    # Tether trims a launched lane by work role (src/lifecycle/tui/lane-tools.json) with env and args
+    # on the launcher's command line; the launcher hands both to Claude unchanged.
+    monkeypatch.setenv("CLAUDE_CODE_DISABLE_ARTIFACT", "1")
+    argv, env = run("claude-code", "--dangerously-skip-permissions", "--disallowedTools=AskUserQuestion")
+    assert argv[-2:] == ["--dangerously-skip-permissions", "--disallowedTools=AskUserQuestion"]
+    assert env["CLAUDE_CODE_DISABLE_ARTIFACT"] == "1"
+
+
 def test_codex_turns_off_every_hook_but_pretooluse_and_keeps_trust(run, tmp_path):
     home = tmp_path / "codex-home"
     home.mkdir()

@@ -129,6 +129,7 @@ import {
   relaunchLine,
   rootLaunchEnvironment,
   rootPromptReady,
+  sessionSpec,
 } from './root-launch'
 import { terminalClientEnv } from './terminal-env'
 import {
@@ -164,10 +165,9 @@ import {
   type TmuxServerRuntimeState,
   type TmuxServerUnitEvidence,
 } from './tmux-server-state'
-import { ensureBlankSlateWorkspace, forWorkspace, isBlankSlateRoot } from './tui/blank-slate'
+import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './tui/blank-slate'
 import { ensureContext, finalizeContext } from './tui/context'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
-import { withInstructions } from './tui/instructions'
 import { type AgentExitMarker, paneCommand, paneGatePath, parseAgentExitMarker } from './tui/launch'
 import { agentProcessNames, getTui, listTuis } from './tui/registry'
 import type { ContextStatus, TuiSpec } from './tui/spec'
@@ -1732,10 +1732,7 @@ async function recoverInterruptedManagedPane(
       const dispatchedRow = markManagedGateDispatched(intentRow)
       if (!dispatchedRow) return 'blocked'
       current = dispatchedRow
-      const tool = withInstructions(
-        forWorkspace(getTui(current.tool ?? 'shell'), current.projectRoot),
-        current.id,
-      )
+      const tool = sessionSpec(getTui(current.tool ?? 'shell'), current.projectRoot, current.id)
       const line = sessionLaunchLine(current.id, tool ? initialLaunchLine(current.id, tool) : null)
       // Re-observe immediately before the one-time transition out of the gate.
       const immediatelyCurrent = await verifiedCurrentManagedPane(current)
@@ -2129,8 +2126,9 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
   // into its dedicated cgroup, then launch the TUI through that contained shell.
   // Embedding the TUI in new-session lets it fork before tmux's asynchronous
   // cgroup move and was the path that put every tool in app-aico-9189.scope.
-  const tool = withInstructions(
-    forWorkspace(getTui(rowBeforeCreate.tool ?? 'shell'), rowBeforeCreate.projectRoot),
+  const tool = sessionSpec(
+    getTui(rowBeforeCreate.tool ?? 'shell'),
+    rowBeforeCreate.projectRoot,
     widgetId,
   )
   const line = sessionLaunchLine(widgetId, tool ? initialLaunchLine(widgetId, tool) : null)
@@ -2312,7 +2310,7 @@ async function probeRunningContexts(): Promise<void> {
   for (const row of listWidgets()) {
     if (quitting) return
     if (cachedSessionStatus(row) !== 'running') continue
-    const tool = withInstructions(forWorkspace(getTui(row.tool), row.projectRoot), row.id)
+    const tool = sessionSpec(getTui(row.tool), row.projectRoot, row.id)
     if (tool) await probeContext(row.id, tool)
   }
 }
@@ -2483,10 +2481,7 @@ export async function respawnAndRelaunch(
       const expected = getWidget(widgetId)
       if (!expected?.pendingScopeUnit) return { status: 'stale' }
 
-      const launched = withInstructions(
-        forWorkspace(tool, options.cwd ?? previous.projectRoot),
-        widgetId,
-      )
+      const launched = sessionSpec(tool, options.cwd ?? previous.projectRoot, widgetId)
       const line = sessionLaunchLine(
         widgetId,
         launched

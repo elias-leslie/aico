@@ -2,9 +2,26 @@ import { randomUUID } from 'node:crypto'
 import { AGENT_SESSION_ENV, FRESH_SESSION_ENV } from '../continuity'
 import { getLaunchOptions, getWidget, rootRequestForWidget } from './catalog'
 import type { RootLaunchOptions } from './root-control'
+import { forWorkspace } from './tui/blank-slate'
+import { withInstructions } from './tui/instructions'
+import { forRole } from './tui/lane-tools'
 import { isResumeSessionId, launchLine, resumeLaunchLine } from './tui/launch'
 import { getTui } from './tui/registry'
 import type { TuiSpec } from './tui/spec'
+
+/** What a session launches: its tool in its workspace (Blank Slate or not),
+ * trimmed to its work role, with its chosen instructions. Every launch path
+ * (create, recovery, restart, replacement) and the context check build it here. */
+export function sessionSpec<T extends TuiSpec | undefined>(
+  spec: T,
+  root: string | null | undefined,
+  widgetId: string,
+): T {
+  return withInstructions(
+    forRole(forWorkspace(spec, root), rootRequestForWidget(widgetId)?.workRole),
+    widgetId,
+  )
+}
 
 // Prompt bytes exist here only during an exact create/reconcile request (a
 // root, or any session Tether restores after a reboot). Once a pane exists its
