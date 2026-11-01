@@ -685,7 +685,9 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
   An agent that comes back in the same session (`tether recovery resume`) reports again. Tether writes the intent in the same
   transaction as the session's delete, so a crash cannot lose it. A remote lane's `ended` comes from the hub, which
   relays each ended id it knew once. The session an End names in `endedBy` *(21, schema 24)* asked for it and gets no
-  `ended` line (the daemon log says `skipped <id>: ended it`); every other receiver still gets one. Tether keeps the
+  `ended` line; when it is the lane's launcher (`parentId`, else the root), the root gets none either, since a lane
+  its launcher ended is the launcher's business. An explicit watcher and every other receiver still get one; the
+  daemon log names each skip (`skipped <ids>: ended by [its launcher] <id>`). Tether keeps the
   name while that End runs (`session_end_requests`) and the delete trigger copies it into the outbox row
   (`lane_outbox.ended_by`); an End that does not happen drops it, and so does a restart. An End without `endedBy`, an
   owner's close, a failed launch, an agent that left and a remote lane's relay report as before. `st aico root end`

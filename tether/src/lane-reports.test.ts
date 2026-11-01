@@ -391,11 +391,38 @@ describe('ended', () => {
     lanes.unmarkEnd(LANE)
     expect(lanes.outbox()).toMatchObject([{ lane: LANE, endedBy: HELPER_PARENT }])
     reporter.drainOutbox()
-    expect(delivered.map((d) => d.to).sort()).toEqual([ROOT, WATCHER])
+    // Its launcher ended it: the root hears nothing either; the explicit watcher does.
+    expect(delivered.map((d) => d.to)).toEqual([WATCHER])
     expect(logs).toContain(
-      `lane=${LANE} ended -> ${ROOT},${WATCHER} (skipped ${HELPER_PARENT}: ended it)`,
+      `lane=${LANE} ended -> ${WATCHER} (skipped ${ROOT},${HELPER_PARENT}: ended by its launcher ${HELPER_PARENT})`,
     )
     expect(store.db.prepare('SELECT * FROM session_end_requests').all()).toEqual([])
+  })
+
+  it('the root ending a helper someone else launched still tells that launcher', () => {
+    const { reporter, delivered, logs, store } = harness()
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(HELPER_PARENT, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: HELPER_PARENT })
+    step(reporter, { parentId: HELPER_PARENT })
+    const lanes = new LaneReportStore(store.db)
+    lanes.markEnd(LANE, ROOT, Date.now())
+    removeWidget(LANE)
+    lanes.unmarkEnd(LANE)
+    reporter.drainOutbox()
+    expect(delivered.map((d) => d.to)).toEqual([HELPER_PARENT])
+    expect(logs).toContain(
+      `lane=${LANE} ended -> ${HELPER_PARENT} (skipped ${ROOT}: ended by ${ROOT})`,
+    )
+  })
+
+  it('a launcher ending its helper spares the root; its exit still reaches both', () => {
+    const { reporter, delivered, gone } = harness()
+    step(reporter, { parentId: HELPER_PARENT, state: 'working', stateAgentAt: 100 })
+    gone.add(LANE)
+    step(reporter, { parentId: HELPER_PARENT, state: 'unknown', stateAgentAt: 100 }, SETTLE)
+    expect(delivered.map((d) => d.to).sort()).toEqual([ROOT, HELPER_PARENT])
   })
 
   it('a coordinator ending its only lane hears nothing, and the log names the skip', () => {
@@ -410,7 +437,9 @@ describe('ended', () => {
     lanes.unmarkEnd(LANE)
     reporter.drainOutbox()
     expect(delivered).toEqual([])
-    expect(logs).toContain(`lane=${LANE} ended: no receiver (skipped ${ROOT}: ended it)`)
+    expect(logs).toContain(
+      `lane=${LANE} ended: no receiver (skipped ${ROOT}: ended by its launcher ${ROOT})`,
+    )
     expect(lanes.get('', LANE)).toBeUndefined()
     expect(lanes.outbox()).toEqual([])
   })

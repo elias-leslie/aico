@@ -26,7 +26,8 @@
 //   (a clean exit, or crash recovery holds). It is terminal. A remote lane's
 //   ended comes from the hub's relay, which drops ids it never had. The
 //   session that asked for the End (`endedBy`, recorded in the outbox row)
-//   gets no line for it; everyone else does. Without `endedBy` all do.
+//   gets no line for it, nor does the root when that session is the lane's
+//   launcher; an explicit watcher and everyone else do. Without `endedBy` all do.
 //
 // Each report is one event line queued on the receiver's delivery queue
 // (wakes, kind `event`): pasted once the agent is idle, nobody is typing and
@@ -757,10 +758,28 @@ export class LaneReporter {
     endedBy: string | null = null,
   ): void {
     const all = this.receivers(outcome, lane)
-    // The session that ended the lane itself already knows.
-    const receivers = endedBy ? all.filter((id) => id !== endedBy) : all
+    // The session that ended the lane itself already knows. A lane its own
+    // launcher ended is that launcher's business: its root hears nothing
+    // either (an explicit watcher still does).
+    const launcher =
+      endedBy !== null &&
+      lane.launched &&
+      lane.coordinatorId !== null &&
+      endedBy === (lane.parentId ?? lane.coordinatorId)
+    const skip = new Set<string>()
+    if (endedBy) {
+      skip.add(endedBy)
+      if (launcher && lane.coordinatorId) skip.add(lane.coordinatorId)
+      for (const watch of this.store.watches())
+        if (watch.lane === lane.id && watch.mode === 'watch' && watch.watcher !== endedBy)
+          skip.delete(watch.watcher)
+    }
+    const receivers = all.filter((id) => !skip.has(id))
     const where = lane.host ? `${lane.host}/${lane.id}` : lane.id
-    const skipped = receivers.length < all.length ? ` (skipped ${endedBy}: ended it)` : ''
+    const dropped = all.filter((id) => skip.has(id))
+    const skipped = dropped.length
+      ? ` (skipped ${dropped.join(',')}: ended by ${launcher ? 'its launcher ' : ''}${endedBy})`
+      : ''
     if (!receivers.length) {
       this.ops.log(`lane=${where} ${outcome}: no receiver${skipped}`)
       return

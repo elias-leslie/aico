@@ -7,7 +7,8 @@
 - No lane `ended` line for the session that ended the lane itself (Tether API
   21, schema 24). `st aico root end` sends End `endedBy` (the caller's own
   session) to a local Tether at 21 or later; Tether records it in the lane's
-  outbox row and the reporter skips that receiver, logging the skip. Other
+  outbox row and the reporter skips that receiver, and the root too when the
+  ender is the lane's launcher, logging each skip. Explicit watchers, other
   receivers, an owner's close, an agent that exited and a remote relay report
   as before; so do outbox rows from before schema 24.
 - Pi roots through a per-session entry (Tether API 20): `POST /v1/roots` and
