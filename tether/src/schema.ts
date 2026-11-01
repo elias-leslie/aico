@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 26
+export const SCHEMA_VERSION = 27
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -623,6 +623,21 @@ export const LANE_MODEL_COLUMNS: readonly { table: string; column: string; sql: 
     table: 'lane_reports',
     column: 'model_key',
     sql: 'ALTER TABLE lane_reports ADD COLUMN model_key TEXT',
+  },
+]
+
+/**
+ * v27: a `--block` client's session (src/waits.ts). `waits.armed_by` is the
+ * session a blocking wait was armed from (the request's `by`; a wait with a
+ * waiter hears through that waiter): the session that hears the line, so a
+ * lane line it already gets from the wait isn't sent again
+ * (src/lane-reports.ts), and its wait counts as acting on the lane.
+ */
+export const WAITS_ARMED_BY_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
+  {
+    table: 'waits',
+    column: 'armed_by',
+    sql: "ALTER TABLE waits ADD COLUMN armed_by TEXT CHECK(armed_by IS NULL OR (length(armed_by) = 8 AND armed_by NOT GLOB '*[^0-9a-f]*'))",
   },
 ]
 

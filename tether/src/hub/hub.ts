@@ -35,6 +35,8 @@ const SNAPSHOTS_KEY = 'peer_sessions'
 
 const SESSION_ID = /^[0-9a-f]{8}$/
 const ROUTE = /^\/v1\/(sessions|widgets|roots|wakes|runs)\/([^/?]+)(\/[^?]*)?$/
+/** The session asking for a forwarded End (API 23; lowercase, as Node keeps it). */
+export const ENDED_BY_HEADER = 'tether-ended-by'
 
 export interface HubDeps {
   env: NodeJS.ProcessEnv
@@ -49,6 +51,10 @@ export interface HubDeps {
   /** Make a local session a coordinator and return the lineage its lanes on
    * other machines carry; null when it is unknown. */
   claimLocal(launcherId: string): Lineage | null
+  /** An End forwarded to a peer named the session asking for it (the
+   * `Tether-Ended-By` header, API 23): `by`, or null once that End did not
+   * end it. Lane reports spare that session the relayed `ended` line. */
+  endedBy?(host: string, id: string, by: string | null): void
   log?(message: string): void
   now?(): number
   random?(): number
@@ -465,9 +471,24 @@ export class Hub {
       return true
     }
     const attach = kind === 'sessions' && rest === '/attach'
-    void forwardRequest(peer.socket, req, res, (status, body) =>
-      this.rewrite(peer, status, body, attach),
-    ).then((reached) => {
+    // The header stays out of the forwarded body, so an older peer is fine.
+    const header = req.headers[ENDED_BY_HEADER]
+    const endedBy =
+      kind === 'sessions' &&
+      rest === '/end' &&
+      req.method === 'POST' &&
+      typeof header === 'string' &&
+      SESSION_ID.test(header) &&
+      header !== id
+        ? header
+        : null
+    if (endedBy) this.deps.endedBy?.(peer.name, id, endedBy)
+    void forwardRequest(peer.socket, req, res, (status, body) => {
+      if (endedBy && (status !== 200 || record(body)?.status !== 'ended'))
+        this.deps.endedBy?.(peer.name, id, null)
+      return this.rewrite(peer, status, body, attach)
+    }).then((reached) => {
+      if (!reached && endedBy) this.deps.endedBy?.(peer.name, id, null)
       if (reached || res.headersSent) return
       const error = unavailable(peer)
       sendJson(res, error.status, { error: error.code, ...error.extra })

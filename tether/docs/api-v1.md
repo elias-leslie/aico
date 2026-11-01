@@ -15,7 +15,7 @@ Status: every route below is implemented (Phase 3a). Additions made for the web 
 - Bodies are JSON (`content-type: application/json`, at most 128 KiB) and must be objects. Unknown fields are rejected with `400 invalid_body`, never ignored. Field names are camelCase.
 - Errors are `{"error": "<code>", ...}` and the codes are stable API. A 4xx or 503 means nothing was applied. A 2xx or `409 outcome_uncertain` may have applied.
 - No route retries anything on the caller's behalf. Clients must not retry an uncertain mutation with a different identity.
-- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)). 6: `inject` takes `model` for an Agent Hub session. 7: `inject` takes `thinkingLevel` for an Agent Hub session. 8: [remote hosts](#remote-hosts): `host` on descriptors, create, roots, tools and projects; `peer` marks; `GET /v1/hosts`; the `peer.state` and `peer.resync` events; root `lineage`. 9: `parentId` on descriptors and in root `lineage` ([Coordinators](#coordinators)). 10: [placement](#remote-hosts): `host: "auto"` with `needs` on `POST /v1/roots`, `GET /v1/placement`. 11: placement `pool` on both. 12: [lane reports](#lane-reports): `stateAgentAt`, `waitingOn` and `launched` on descriptors, `/v1/sessions/:id/watches`, and wake lists show check-ins only. 13: [waits](#waits): `/v1/waits`, `/v1/sessions/:id/waits`, `inject` takes `from`, End answers `keptWaits`. 14: placement `needs` with a named `host`, and placement.json `hosts.<name>.room: "local"`. 15: root `entry` ([Roots](#roots)). 19: root `entry` on `codex` roots. 20: root `entry` on `pi` roots. 21: End's `endedBy` ([Lane reports](#lane-reports)).
+- Versioning: `apiVersion` is an integer. v1 only grows additively: new routes, new optional request fields, new response fields, new event types. Clients ignore unknown response fields and event types. A breaking change ships as `/v2` next to `/v1`. Apps declare the minimum `apiVersion` they need and compare it with `GET /v1/version`; an addition an app depends on (a request field an older Tether would refuse) raises `apiVersion`. 2 *(post-cutover)*: the resize claim's `viewer`. 3 *(post-cutover)*: session wakes and End's `keepWakes`. 4: shares link files where they are. 5: the Agent Hub chat routes ([Agent Hub sessions](#agent-hub-sessions)). 6: `inject` takes `model` for an Agent Hub session. 7: `inject` takes `thinkingLevel` for an Agent Hub session. 8: [remote hosts](#remote-hosts): `host` on descriptors, create, roots, tools and projects; `peer` marks; `GET /v1/hosts`; the `peer.state` and `peer.resync` events; root `lineage`. 9: `parentId` on descriptors and in root `lineage` ([Coordinators](#coordinators)). 10: [placement](#remote-hosts): `host: "auto"` with `needs` on `POST /v1/roots`, `GET /v1/placement`. 11: placement `pool` on both. 12: [lane reports](#lane-reports): `stateAgentAt`, `waitingOn` and `launched` on descriptors, `/v1/sessions/:id/watches`, and wake lists show check-ins only. 13: [waits](#waits): `/v1/waits`, `/v1/sessions/:id/waits`, `inject` takes `from`, End answers `keptWaits`. 14: placement `needs` with a named `host`, and placement.json `hosts.<name>.room: "local"`. 15: root `entry` ([Roots](#roots)). 19: root `entry` on `codex` roots. 20: root `entry` on `pi` roots. 21: End's `endedBy` ([Lane reports](#lane-reports)). 23: the hub takes a forwarded End's asker in the `Tether-Ended-By` header ([Lane reports](#lane-reports)).
 - Times are Unix epoch milliseconds.
 
 ## Identity
@@ -136,7 +136,7 @@ Sending a message uses the existing `inject` route (`mode: "paste"`, `submit: tr
 | `POST /v1/sessions` | `{tool?, projectId?, projectRoot?, blankSlate?, instructions?, name?, origin, aTermSessionId?, size: {cols, rows}, host?}` | `201` running or `202` pending/uncertain descriptor. A `202` also carries `failure: {code, reason} \| null` (`workload_unavailable`, `outcome_uncertain`). `origin` is `aico`, `a-term` or `cli`; `aTermSessionId` (a UUID) is accepted only with `a-term`. `projectRoot` follows the `POST /v1/roots` path rule (absolute, normalized: no `.`/`..` segments or repeated `/`, no NUL; otherwise `400 invalid_body` with `field: projectRoot`) and must be an existing directory (`400 unknown_project`). With both `projectId` and `projectRoot`, the root is used as given and is not compared with the project's registered root. `host` (8) creates on a remote host ([Remote hosts](#remote-hosts)). |
 | `GET /v1/sessions/:id` | none | live-verified descriptor. Rechecks the generation after the async verification and returns `409 identity_changed` if it moved. |
 | `PATCH /v1/sessions/:id` | `{generation, name}` | rename. `name: null` clears to the default label. The label follows the root title rules (trimmed, 1–160 UTF-8 bytes, no control characters). |
-| `POST /v1/sessions/:id/end` | `{generation, keepWakes?, endedBy?}` | `200 {status:"ended", keptWakes, keptWaits}`. Exact containment retirement: stops only the owned pane scope and uses `cgroup.kill` fallback. End cancels the session's wakes; `keepWakes: true` *(apiVersion 3)* keeps them, and they relaunch the conversation when due (see [Wakes](#wakes)); it keeps the session's armed [waits](#waits) too. `endedBy` *(apiVersion 21)* (8 hex) names the session asking for the End; it gets no lane `ended` line for it ([Lane reports](#lane-reports)). |
+| `POST /v1/sessions/:id/end` | `{generation, keepWakes?, endedBy?}` | `200 {status:"ended", keptWakes, keptWaits}`. Exact containment retirement: stops only the owned pane scope and uses `cgroup.kill` fallback. End cancels the session's wakes; `keepWakes: true` *(apiVersion 3)* keeps them, and they relaunch the conversation when due (see [Wakes](#wakes)); it keeps the session's armed [waits](#waits) too. `endedBy` *(apiVersion 21)* (8 hex) names the session asking for the End; it gets no lane `ended` line for it ([Lane reports](#lane-reports)). For a session on another host the asker goes in the `Tether-Ended-By` header *(apiVersion 23)* instead: the hub keeps it for that lane's relayed `ended` and forwards the body as is. |
 | `POST /v1/sessions/:id/respawn` | `{generation}` | Replaces the pane workload with the session's stored tool. Returns the new descriptor and generation. A lifecycle-v0 session is refused with `409 workload_unavailable`. |
 | `POST /v1/sessions/:id/load-tui` | `{generation, tool}` | Respawns with another tool and stores it on success |
 | `POST /v1/sessions/:id/switch-project` | `{generation, projectId}` or `{generation, projectRoot}` *(post-cutover)* | With `projectId`: resolves the project root once, respawns there with the same tool, and stores `projectId`/`projectRoot`. With `projectRoot` (an existing directory under the same path rule as on create; Aico's Personal Workspace): respawns there and stores `projectId: null`. Exactly one of the two; a root that is not a directory is `400 unknown_project`. |
@@ -667,11 +667,20 @@ The line carries the lane's title (control, bidi and zero-width characters, brac
 `/` or `!` removed, at most 60 characters), its host, its request id and the command that shows it; never the agent's
 reply text. An undelivered line for the same lane and outcome is replaced by the newer one.
 
-- **Who hears it**, worked out when the report fires from the lane's current lineage: `finished` goes to the lane's
-  `parentId` (the coordinator, or the lane that started this helper), or to `coordinatorId` when the parent can't take
-  it; `blocked` and `ended` go to both. A receiver must be a session on this computer that Tether can deliver to
-  (Claude Code, Codex, Pi, Agent Hub), never a shell. Only `launched` lineage counts: a lane an owner marked or joined
-  reports nothing, and nothing is backfilled for sessions from before v12.
+- **Who hears it**, worked out when the report fires from the lane's current lineage: every line goes to the lane's
+  launcher, its `parentId` (the coordinator for an ordinary lane, the lane that started this helper). The root
+  (`coordinatorId`) gets it only when it is the launcher, or in place of a launcher that is gone: ended, its agent
+  exited (exit 0, or crash recovery holds it), or a session that can't take lines. A remote lane's launcher on that
+  lane's own host (an agent session there) hears it from that host's Tether, so the root here gets nothing for it. A receiver that waits on
+  the lane itself hears the event from its [wait](#waits) and gets no line, and nobody stands in for it: a session
+  wait it armed as waiter, or from a `--block` client (*schema 27*, the request's `by`), that is still armed and
+  fires on this event, or fired on it (at or after Tether here first saw the lane in that state, its own clock). A
+  `--block` client counts while it is attached or asked within two long polls, and once fired only if it was given
+  the line, so a client that died swallows nothing. `finished` is covered by a wait until `finished` (a turn after its `since`)
+  or `idle`, `blocked` by one until `blocked`, `ended` by any (it fires `ended` or `gone`). The daemon log names
+  each (`heard from its wait: <ids>`). A receiver must be a session on this computer that Tether can deliver to
+  (Claude Code, Codex, Pi, Agent Hub), never a shell. Only `launched` lineage counts: a lane an owner marked or
+  joined reports nothing, and nothing is backfilled for sessions from before v12.
 - **finished**: the lane is `idle` with a `stateAgentAt` later than the last one reported, held `laneSettleSeconds`.
   It catches turns too short for the poll and turns during a Tether restart; the per-lane cursor is kept in the
   database, so a restart never repeats one. A lane whose `waitingOn` is set is not finished. A lane launched
@@ -705,9 +714,11 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
   already delivered, or in a paste going out, stays (log: `withdrew queued <id>:<outcome>,…`). Tether keeps the
   name while that End runs (`session_end_requests`) and the delete trigger copies it into the outbox row
   (`lane_outbox.ended_by`); an End that does not happen drops it, and so does a restart. An End without `endedBy`, an
-  owner's close, a failed launch, an agent that left and a remote lane's relay report as before. `st aico root end`
-  sends the caller's own session (`AICO_WIDGET_ID`) to a Tether at 21 or later, never for a session on another host
-  (the hub forwards the body to that host's Tether as is).
+  owner's close, a failed launch and an agent that left report as before. A remote lane's relayed `ended` uses the
+  asker the hub took from the `Tether-Ended-By` header *(23)* of an End it forwarded there within 10 minutes; an End
+  that did not end it (not `200 {status:"ended"}`, or the host not reached) takes it back. `st aico root end` sends
+  the caller's own session (`AICO_WIDGET_ID`) as `endedBy` to a Tether at 21 or later, and for a session on another
+  host as that header to a hub at 23 or later (the host's Tether gets the body as is).
 
 Explicit watches, from the watching session (`:id` is the watcher, normally the caller's own session):
 
@@ -717,7 +728,7 @@ Explicit watches, from the watching session (`:id` is the watcher, normally the 
 | `POST /v1/sessions/:id/watches` | `{lane, mode}` | `200 {watcher, lane, mode, hears}` |
 
 `mode: "watch"` adds the watcher as a receiver of all that lane's reports (a lane nobody launched included; a root
-watching a helper adds its `finished`);
+watching a helper hears all its lines, not only in its launcher's place);
 `mode: "unwatch"` drops it, also when lineage would make it one. `hears` says how the watcher hears the lane now:
 `lineage`, `watch` or `none`. `409 self_watch` for the watcher itself, `409 watch_cycle` when the watcher already reports
 to that lane (a lane watching its own coordinator), which would loop, `409 lane_reports_unavailable` when the daemon runs without lifecycle
@@ -816,7 +827,8 @@ the `waits` table, apart from wakes, and survive Tether restarts.
 - **Subagents.** A session wait pastes into the waiter's main agent. When the caller provably is not it (a Codex session
   whose conversation id differs from the caller's `CODEX_THREAD_ID`), the CLI's `thread` makes it `409
   not_main_agent`. Subagents, Workflow agents and agents outside Aico use `--block`.
-- **`--block`.** The CLI arms a wait with no waiter (`waiter: null`, `by` its session if any) and asks `GET
+- **`--block`.** The CLI arms a wait with no waiter (`waiter: null`, `by` its session if any; kept as `armed_by`,
+  *schema 27*, so that session's [lane lines](#lane-reports) the wait covers are skipped) and asks `GET
   /v1/waits/:id?wait=55` until it is over, printing the line: exit 0 ready, 4 the session ended first (`gone`), 3
   timed out, 1 cancelled, 2 Tether unreachable for 2 minutes, 130 interrupted. Ctrl-C, SIGTERM or SIGHUP cancels a
   wait the command armed (never a session's own wait, as `st aico wait get ID --block` can hold). The GET is

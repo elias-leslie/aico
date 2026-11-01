@@ -74,6 +74,9 @@ export interface WaitCursor {
 export interface Wait {
   id: string
   waiter: string | null
+  /** A `--block` client's session (the request's `by`, schema v27): it hears
+   * the line through its client, not its queue. */
+  armedBy: string | null
   kind: WaitKind
   ref: string
   /** null on this computer; the peer's name for a relayed session. */
@@ -98,6 +101,7 @@ export interface Wait {
 interface RawWait {
   id: string
   waiter: string | null
+  armed_by?: string | null
   kind: string
   ref: string
   host: string
@@ -129,6 +133,7 @@ function toWait(raw: RawWait): Wait {
   return {
     id: raw.id,
     waiter: raw.waiter,
+    armedBy: raw.armed_by ?? null,
     kind: raw.kind as WaitKind,
     ref: raw.ref,
     host: raw.host || null,
@@ -239,17 +244,22 @@ export class WaitStore {
     return [...armed, ...over]
   }
 
-  insert(wait: Omit<Wait, 'id' | 'seq' | 'state' | 'outcome' | 'line' | 'firedAt'>): Wait {
+  insert(
+    wait: Omit<Wait, 'id' | 'seq' | 'state' | 'outcome' | 'line' | 'firedAt' | 'armedBy'> & {
+      armedBy?: string | null
+    },
+  ): Wait {
     const id = this.random()
     this.db
       .prepare(
-        `INSERT INTO waits (id, waiter, kind, ref, host, until, since, deadline, key, note, armed_at,
-           cursor, kept, ended_session)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO waits (id, waiter, armed_by, kind, ref, host, until, since, deadline, key, note,
+           armed_at, cursor, kept, ended_session)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
         wait.waiter,
+        wait.armedBy ?? null,
         wait.kind,
         wait.ref,
         wait.host ?? '',
@@ -332,7 +342,8 @@ export class WaitStore {
   }
 
   /** Whether one of `by` sent to `target` (a local session) or armed a wait
-   * on it (`host`: '' for this computer) after `since`. */
+   * on it (`host`: '' for this computer) after `since`, as its waiter or from
+   * a `--block` client. */
   actedOn(target: string, host: string, by: readonly string[], since: number): boolean {
     if (!by.length) return false
     const marks = by.map(() => '?').join(', ')
@@ -348,10 +359,69 @@ export class WaitStore {
       this.db
         .prepare(
           `SELECT 1 FROM waits WHERE kind = 'session' AND ref = ? AND host = ? AND armed_at > ?
-             AND waiter IN (${marks}) LIMIT 1`,
+             AND (waiter IN (${marks}) OR armed_by IN (${marks})) LIMIT 1`,
         )
-        .get(target, host, since, ...by) !== undefined
+        .get(target, host, since, ...by, ...by) !== undefined
     )
+  }
+
+  /**
+   * Which of `sessions` hear a lane line about `target` (`host`: '' for this
+   * computer) from a session wait of their own, as its waiter or the session a
+   * `--block` client armed it from. A wait still armed that fires on this
+   * event, or one that fired on it (at or after `at`), covers it: `finished`
+   * by a wait until finished (a turn after its `since`, by `agentAt`) or idle,
+   * `blocked` by one until blocked, `ended` by any (it fires ended or gone).
+   * `counts` drops a wait nobody hears (a `--block` client that is gone).
+   */
+  heardFrom(
+    target: string,
+    host: string,
+    sessions: readonly string[],
+    event: { outcome: 'finished' | 'blocked' | 'ended'; at: number; agentAt: number },
+    counts: (wait: {
+      id: string
+      waiter: string | null
+      state: 'armed' | 'fired'
+    }) => boolean = () => true,
+  ): Set<string> {
+    const heard = new Set<string>()
+    if (!sessions.length) return heard
+    const marks = sessions.map(() => '?').join(', ')
+    const rows = this.db
+      .prepare(
+        `SELECT id, waiter, armed_by, until, since, state, outcome, fired_at FROM waits
+           WHERE kind = 'session' AND ref = ? AND host = ? AND state IN ('armed', 'fired')
+             AND (waiter IN (${marks}) OR armed_by IN (${marks}))`,
+      )
+      .all(target, host, ...sessions, ...sessions) as unknown as {
+      id: string
+      waiter: string | null
+      armed_by: string | null
+      until: string
+      since: number
+      state: 'armed' | 'fired'
+      outcome: WaitOutcome | null
+      fired_at: number | null
+    }[]
+    const wanted = new Set(sessions)
+    for (const row of rows) {
+      const armed = row.state === 'armed'
+      const firedOnIt = !armed && (row.fired_at ?? 0) >= event.at
+      let covers = false
+      if (event.outcome === 'ended')
+        covers =
+          armed ||
+          (firedOnIt &&
+            (row.outcome === 'gone' || (row.until === 'ended' && row.outcome === 'until')))
+      else if (event.outcome === 'blocked')
+        covers = row.until === 'blocked' && (armed || (firedOnIt && row.outcome === 'until'))
+      else if (row.until === 'idle' || (row.until === 'finished' && event.agentAt > row.since))
+        covers = armed || (firedOnIt && row.outcome === 'until')
+      if (!covers || !counts(row)) continue
+      for (const id of [row.waiter, row.armed_by]) if (id && wanted.has(id)) heard.add(id)
+    }
+    return heard
   }
 
   lastSend(sender: string, target: string): number | null {
@@ -607,6 +677,11 @@ export class WaitService {
   private scheduled = false
   private stopped = true
   private readonly listeners = new Map<string, Set<() => void>>()
+  /** `--block` clients (no waiter), in memory: when one last asked about a
+   * wait, and when one was given its line. After a restart a client counts
+   * again once it asks. */
+  private readonly polled = new Map<string, number>()
+  private readonly answered = new Map<string, number>()
 
   constructor(
     readonly store: WaitStore,
@@ -801,6 +876,7 @@ export class WaitService {
   ): { wait: Wait; created: boolean } {
     const wait = this.store.insert({
       waiter: input.waiter,
+      armedBy: input.waiter === null ? input.by : null,
       kind: input.kind,
       ref: target.ref,
       host: target.host ?? null,
@@ -847,6 +923,7 @@ export class WaitService {
   /** The wait once it is no longer armed, or as it is after `ms`. */
   async waitFor(id: string, ms: number, aborted?: AbortSignal): Promise<Wait | undefined> {
     const now = this.store.get(id)
+    this.asked(id, now)
     // Held also before start (Tether is still starting): an answer at once
     // would set a blocking client polling in a tight loop.
     if (now?.state !== 'armed' || ms <= 0) return now
@@ -869,12 +946,55 @@ export class WaitService {
       aborted?.addEventListener('abort', done)
       set.add(done)
     })
-    return this.store.get(id)
+    const after = this.store.get(id)
+    if (!aborted?.aborted) this.asked(id, after)
+    return after
+  }
+
+  /** A `--block` client asked about `id` and is given `wait`. */
+  private asked(id: string, wait: Wait | undefined): void {
+    const now = this.ops.now()
+    for (const seen of [this.answered, this.polled])
+      for (const [key, at] of seen) if (now - at > PRUNE_MS) seen.delete(key)
+    if (!wait) return
+    if (wait.state === 'armed') this.polled.set(id, now)
+    else {
+      this.polled.delete(id)
+      if (wait.state === 'fired') this.answered.set(id, now)
+    }
+  }
+
+  /** Whether the session a wait is for hears it: a waiter always (its queue);
+   * a `--block` client while one is asking (attached, or asked within two
+   * long polls), and once fired only if one was given the line. */
+  private clientHears(wait: {
+    id: string
+    waiter: string | null
+    state: 'armed' | 'fired'
+  }): boolean {
+    if (wait.waiter !== null) return true
+    if (wait.state === 'fired') return this.answered.has(wait.id)
+    if (this.listeners.has(wait.id)) return true
+    const at = this.polled.get(wait.id)
+    return at !== undefined && this.ops.now() - at <= 2 * LONG_POLL_MAX_SECONDS * 1000
+  }
+
+  /** Which of `sessions` hear a lane line's event from a wait of their own
+   * (WaitStore.heardFrom), counting a `--block` client only while it is there. */
+  heardFrom(
+    target: string,
+    host: string,
+    sessions: readonly string[],
+    event: { outcome: 'finished' | 'blocked' | 'ended'; at: number; agentAt: number },
+  ): Set<string> {
+    return this.store.heardFrom(target, host, sessions, event, (wait) => this.clientHears(wait))
   }
 
   private notify(id: string): void {
     const set = this.listeners.get(id)
     if (!set) return
+    // A client attached now is handed this wait as it is (fired: its line).
+    if (this.store.get(id)?.state === 'fired') this.answered.set(id, this.ops.now())
     for (const listener of [...set]) listener()
   }
 

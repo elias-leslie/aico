@@ -741,7 +741,8 @@ class Collector:
         return remaining
 
     def receipt(self, path: str, route: str, payload: dict | None = None,
-                *, timeout: float = .25, method: str | None = None) -> tuple[int, dict]:
+                *, timeout: float = .25, method: str | None = None,
+                headers: dict[str, str] | None = None) -> tuple[int, dict]:
         limit = CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/sessions") else RECEIPT_LIMIT
         connection = http.client.HTTPConnection("localhost", timeout=min(timeout, self.remaining()))
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -752,7 +753,8 @@ class Collector:
             connection.request(method or ("GET" if payload is None else "POST"), route,
                                body=None if payload is None else json.dumps(
                                    payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
-                               headers={"Connection": "close", "Content-Type": "application/json"})
+                               headers={"Connection": "close", "Content-Type": "application/json",
+                                        **(headers or {})})
             response = connection.getresponse()
             parts = bytearray()
             while True:
@@ -2028,10 +2030,16 @@ def root_main(argv: list[str]) -> int:
         if args.operation == "end":
             # Exact containment retirement: Tether's session End (it may add accounting fields).
             # endedBy: the calling session, so Tether sends it no lane "ended" line for its own End.
+            # A session on another host: this computer's hub takes it in a header instead (the body goes to that
+            # host's Tether as is, and it may be older).
+            headers = None
             if (ender := send_origin(collector, control, pinned["hostIdentity"], pinned, END_BY_API)) is not None:
                 payload["endedBy"] = ender
+            elif pinned.get("host") and (ender := send_origin(
+                    collector, control, pinned["hostIdentity"], {}, END_BY_HEADER_API)) is not None:
+                headers = {"Tether-Ended-By": ender}
             status, data = collector.receipt(control, f"/v1/sessions/{pinned['hostIdentity']}/end", payload,
-                                             timeout=10)
+                                             timeout=10, headers=headers)
             owner_reply(status, data, "end_receipt_unqualified")
             if data.get("status") != "ended":
                 raise Unavailable("end_receipt_unqualified")
@@ -2064,6 +2072,8 @@ def root_main(argv: list[str]) -> int:
 SEND_FROM_API = 13
 # Tether API that takes End `endedBy` (no lane "ended" line for the session that ended it).
 END_BY_API = 21
+# Tether API whose hub takes a forwarded End's asker in the Tether-Ended-By header (a session on another host).
+END_BY_HEADER_API = 23
 # Tether API that runs a root's `entry` for each tool: Claude Code since 15, Codex since 19, Pi since 20.
 ENTRY_API = {"claude-code": 15, "codex": 19, "pi": 20}
 

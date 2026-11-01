@@ -53,6 +53,7 @@ class FakePeer {
   /** Absent: an older Tether that names no API version in its health. */
   apiVersion: number | undefined = undefined
   requests: { method: string; url: string; body: unknown }[] = []
+  refuseEnd = false
   failSessions = false
   /** Health never answers (a VM that stopped dead: the socket takes the
    * connection, nothing comes back). */
@@ -137,6 +138,11 @@ class FakePeer {
       return sendJson(res, 200, { owner: 'aico', roots: this.roots })
     if (url === '/v1/roots' && req.method === 'POST')
       return sendJson(res, 201, { requestId: 'req-1', widgetId: 'dddd0004' })
+    const end = /^\/v1\/sessions\/([0-9a-f]{8})\/end$/.exec(url)
+    if (end && req.method === 'POST')
+      return this.refuseEnd
+        ? sendJson(res, 409, { error: 'not_ended' })
+        : sendJson(res, 200, { id: end[1], status: 'ended' })
     const one = /^\/v1\/sessions\/([0-9a-f]{8})$/.exec(url)
     if (one) {
       const found = this.sessions.find((item) => item.id === one[1])
@@ -583,6 +589,43 @@ describe('hub', () => {
     })
     expect((await call('GET', '/v1/sessions/ffff0006')).body).toMatchObject({ local: true })
     expect(peer.requests.filter((r) => r.url === '/v1/sessions/ffff0006')).toEqual([])
+  })
+
+  it('tells lane reports who asked for a forwarded End, and takes it back when nothing ended', async () => {
+    const marks: [string, string, string | null][] = []
+    hub.close()
+    hub = makeHub({ endedBy: (host, id, by) => marks.push([host, id, by]) })
+    hub.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'))
+    const end = (id: string, by?: string) =>
+      new Promise<number>((resolve, reject) => {
+        const headers: Record<string, string> = { 'content-type': 'application/json' }
+        if (by) headers['Tether-Ended-By'] = by
+        const req = request(
+          { socketPath: frontSocket, method: 'POST', path: `/v1/sessions/${id}/end`, headers },
+          (res) => {
+            res.resume()
+            res.once('end', () => resolve(res.statusCode ?? 0))
+          },
+        )
+        req.on('error', reject)
+        req.end('{}')
+      })
+    expect(await end('aaaa0001', 'cccc0003')).toBe(200)
+    expect(marks).toEqual([['vm', 'aaaa0001', 'cccc0003']])
+    // The asker stays out of the forwarded body.
+    expect(peer.requests.at(-1)).toMatchObject({ url: '/v1/sessions/aaaa0001/end', body: {} })
+    // No header, a malformed one, or the session itself: no mark.
+    await end('aaaa0001')
+    await end('aaaa0001', 'nope')
+    await end('aaaa0001', 'aaaa0001')
+    expect(marks).toHaveLength(1)
+    peer.refuseEnd = true
+    expect(await end('bbbb0002', 'cccc0003')).toBe(409)
+    expect(marks.slice(1)).toEqual([
+      ['vm', 'bbbb0002', 'cccc0003'],
+      ['vm', 'bbbb0002', null],
+    ])
   })
 
   it('creates on a host without the host field, and refuses unknown hosts', async () => {

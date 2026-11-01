@@ -120,22 +120,24 @@ def test_aico_end_accepts_tether_accounting_fields(monkeypatch):
     assert code == 0 and output[0]["status"] == "ended" and output[0]["applied"] is True
 
 
-@pytest.mark.parametrize("caller, version, host, ended_by", [
-    ("0a1b2c3d", 21, None, "0a1b2c3d"),  # a coordinator ending its lane: no "ended" line back to it
-    ("0a1b2c3d", 20, None, None),        # an older Tether refuses the field
-    ("0a1b2c3d", 21, "neri-vm", None),   # the hub forwards the body to that host's Tether verbatim
-    ("aabbcc01", 21, None, None),        # the lane ending itself
-    (None, 21, None, None),              # not run from a session (the owner's shell)
+@pytest.mark.parametrize("caller, version, host, ended_by, header", [
+    ("0a1b2c3d", 21, None, "0a1b2c3d", None),  # a coordinator ending its lane: no "ended" line back to it
+    ("0a1b2c3d", 20, None, None, None),        # an older Tether refuses the field
+    ("0a1b2c3d", 21, "neri-vm", None, None),   # the hub forwards the body to that host's Tether verbatim
+    ("0a1b2c3d", 23, "neri-vm", None, "0a1b2c3d"),  # this hub takes it in a header, never in that body
+    ("aabbcc01", 21, None, None, None),        # the lane ending itself
+    (None, 23, "neri-vm", None, None),         # not run from a session (the owner's shell)
 ])
-def test_end_names_the_ending_session_only_to_a_tether_that_takes_it(monkeypatch, caller, version, host, ended_by):
+def test_end_names_the_ending_session_only_to_a_tether_that_takes_it(monkeypatch, caller, version, host, ended_by,
+                                                                     header):
     named = {"host": host} if host else {}
     replies = {f"/v1/roots/{ROOT}": (200, {**DESCRIPTOR, **named}), "/v1/version": (200, {"apiVersion": version}),
                "/v1/sessions/aabbcc01/end": (200, {"status": "ended"})}
     monkeypatch.setattr(admin, "caller_widget_id", lambda: caller)
     calls = []
 
-    def receipt(_, endpoint, route, payload=None, **_options):
-        calls.append((route, payload))
+    def receipt(_, endpoint, route, payload=None, **options):
+        calls.append((route, payload, options.get("headers")))
         return replies[route]
 
     monkeypatch.setattr(admin.Collector, "receipt", receipt)
@@ -143,8 +145,9 @@ def test_end_names_the_ending_session_only_to_a_tether_that_takes_it(monkeypatch
     code = admin.main(["root", "end", ROOT, "--root-socket", "/fixture/gui.sock",
                        "--owner-socket", "/fixture/control.sock"])
     assert code == 0
-    sent = next(payload for route, payload in calls if route.endswith("/end"))
+    sent, headers = next((payload, headers) for route, payload, headers in calls if route.endswith("/end"))
     assert sent == {"generation": GENERATION, **({"endedBy": ended_by} if ended_by else {})}
+    assert headers == ({"Tether-Ended-By": header} if header else None)
 
 
 @pytest.mark.parametrize("reply,applied", [

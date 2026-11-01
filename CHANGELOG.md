@@ -203,6 +203,20 @@
 
 ### Fixed
 
+- Lane lines go to the session that launched the lane, not the root
+  coordinator. A lane's went idle, blocked and ended lines (and model-switch
+  lines) go to its launcher only; the root gets them when it launched the
+  lane, or in place of a launcher that has ended or whose agent exited. A
+  session on another host launched by a lane here tells that lane. A
+  receiver with its own session wait on the lane that fires on the event,
+  including a `--block` client's (Tether schema 27 keeps its session as
+  `waits.armed_by`), hears it from the wait and gets no line, and nobody
+  stands in (a `--block` client only while it is still asking). A launcher
+  here that ends its session on another host no longer gets that session's
+  ended line: `st aico root end` names it in the `Tether-Ended-By` header
+  (Tether API 23) and the hub keeps it for the relayed end. Before, every
+  ended and blocked line from a lane's helper also woke the root, and a lane
+  waiting on its hunters heard each one twice (Neri coordinator, 2026-11-01).
 - agy state: a step left RUNNING (a background command, an abandoned row) no
   longer pins an agy session working once the run covering the newest step has
   ended; an old waiting step a later run passed is not blocked. A conversation

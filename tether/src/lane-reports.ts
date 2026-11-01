@@ -2,10 +2,17 @@
 // `st aico create` tells whoever launched it, with no subscription and no
 // scheduled check-in, when it finishes a turn, is blocked on the user, or ends:
 //
-// - `finished` goes to the lane's launcher (`parentId`: the root coordinator
-//   for an ordinary lane, the lane for a helper it started; the root when the
-//   launcher can't take it); `blocked` and `ended` go to the root coordinator
-//   (`coordinatorId`) and to the launcher when that is another session.
+// - Every line (`finished`, `blocked`, `ended`) goes to the lane's launcher
+//   (`parentId`: the root coordinator for an ordinary lane, the lane for a
+//   helper it started). The root (`coordinatorId`) gets it only when it is
+//   the launcher, or stands in when the launcher is gone: ended, its agent
+//   exited, or a session that can't take lines. A launcher on a remote lane's
+//   own host hears it from that host's Tether. A receiver with a session wait
+//   of its own on the lane that fires on this event (as its waiter, or the
+//   session a `--block` client armed it from) hears it from the wait: no line
+//   for it, and nobody stands in. Only a wait that fired on this event counts
+//   (at or after this Tether first saw the state), and a `--block` client
+//   only while it is there.
 // - Receivers are worked out when the report fires, from the lane's current
 //   lineage, and must be agent sessions on this computer that Tether can
 //   deliver to (Claude Code, Codex, Pi, Agent Hub). Only lineage from a launch
@@ -34,6 +41,8 @@
 //   session that asked for the End (`endedBy`, recorded in the outbox row)
 //   gets no line for it, nor does the root when that session is the lane's
 //   launcher; an explicit watcher and everyone else do. Without `endedBy` all do.
+//   A remote lane's asker comes from the End the hub forwarded there (the
+//   `Tether-Ended-By` header, `remoteEnd`).
 //   Those spared sessions also lose the lane's lines still queued for them
 //   (went idle, blocked, an exit's ended): they ended it, so the lines are
 //   stale. A line already delivered (or going out now) stays.
@@ -494,9 +503,30 @@ export interface LaneReportOperations {
   /** A local lane's agent has left its pane for good: a clean exit, or crash
    * recovery holds it. */
   agentGone(id: string): boolean
+  /** The host a session lives on when it is a live session there (relayed
+   * by the hub), else null. */
+  elsewhere(id: string): string | null
+  /** Which of `receivers` hear this event from a session wait of their own on
+   * the lane (src/waits.ts `heardFrom`). */
+  heardFrom(
+    lane: string,
+    host: string | null,
+    receivers: readonly string[],
+    event: LaneEvent,
+  ): Set<string>
   /** A lane's model switch had no receiver (the owner's notice takes it). */
   unheard?(lane: string): void
   log(message: string): void
+}
+
+/** The event a line reports, for the waits that may already cover it: when
+ * this Tether first saw the lane's current state (`at`, its own clock, less
+ * SAME_EVENT_SLACK_MS) and the agent's own time of it (`agentAt`). A wait
+ * that fired before `at` fired on something earlier. */
+export interface LaneEvent {
+  outcome: LaneOutcome
+  at: number
+  agentAt: number
 }
 
 interface Memory {
@@ -563,10 +593,28 @@ function cursorSnapshot(cursor: LaneCursor): LaneSnapshot {
   }
 }
 
+/** How long a forwarded End's asker is kept for the relayed `ended`. */
+const REMOTE_END_MS = 10 * 60_000
+
+/** A wait may fire on the same observation a moment before the reporter
+ * sees it (another subscriber of the same event). */
+const SAME_EVENT_SLACK_MS = 1000
+
+/** An end, after the lane's last state seen here (0: none seen since start). */
+function endedEvent(memory: Memory | undefined): LaneEvent {
+  return {
+    outcome: 'ended',
+    at: memory ? memory.seenAt - SAME_EVENT_SLACK_MS : 0,
+    agentAt: memory?.view.stateAgentAt ?? 0,
+  }
+}
+
 export class LaneReporter {
   private readonly memory = new Map<string, Memory>()
   /** Lanes with an explicit watch (any host). */
   private watched = new Set<string>()
+  /** Ends this hub forwarded to another host, by `host/id`: who asked, when. */
+  private readonly remoteEnds = new Map<string, { by: string; at: number }>()
   private stopped = false
   /** Lanes created after this saw their whole life here. */
   private readonly startedAt: number
@@ -738,10 +786,10 @@ export class LaneReporter {
     this.evaluate(key)
   }
 
-  /** A model switch goes to the lane's root and launcher (and its watchers). */
+  /** A model switch goes to the lane's launcher, the root in its place, and its watchers. */
   private fireModel(lane: LaneSnapshot, change: ModelSwitch, tool: string | null): void {
     const where = laneWhere(lane)
-    const receivers = this.receivers('blocked', lane)
+    const receivers = this.receivers(lane)
     if (!receivers.length) {
       this.ops.log(`lane=${where} model ${change.kind}: no receiver, the owner is told`)
       this.ops.unheard?.(lane.id)
@@ -782,12 +830,7 @@ export class LaneReporter {
       }
       if (
         cursor.finishedStreak > 0 &&
-        this.ops.acted(
-          view.id,
-          view.host,
-          this.receivers('finished', snapshotOf(view)),
-          cursor.finishedSentAt,
-        )
+        this.ops.acted(view.id, view.host, this.receivers(snapshotOf(view)), cursor.finishedSentAt)
       ) {
         // Its receiver sent to the lane or armed a wait on it: no repeat.
         cursor.finishedStreak = 0
@@ -813,7 +856,15 @@ export class LaneReporter {
             ? Math.floor((memory.seenAt - memory.workingSeenAt) / 60_000)
             : null
         this.store.transaction(() => {
-          this.fire('finished', snapshotOf(view), { minutes })
+          this.fire(
+            {
+              outcome: 'finished',
+              at: memory.seenAt - SAME_EVENT_SLACK_MS,
+              agentAt: view.stateAgentAt,
+            },
+            snapshotOf(view),
+            { minutes },
+          )
           cursor.finishedAt = view.stateAgentAt
           cursor.finishedSentAt = now
           cursor.finishedStreak += 1
@@ -831,7 +882,15 @@ export class LaneReporter {
       if (remaining > 0) wait = remaining
       else
         this.store.transaction(() => {
-          this.fire('blocked', snapshotOf(view), { detail: view.stateDetail })
+          this.fire(
+            {
+              outcome: 'blocked',
+              at: memory.seenAt - SAME_EVENT_SLACK_MS,
+              agentAt: view.stateAgentAt,
+            },
+            snapshotOf(view),
+            { detail: view.stateDetail },
+          )
           cursor.blockedAt = view.stateAt
           cursor.finishedStreak = 0
           this.store.save(cursor, now)
@@ -842,7 +901,7 @@ export class LaneReporter {
       if (remaining > 0) wait = remaining
       else
         this.store.transaction(() => {
-          this.fire('ended', snapshotOf(view), { exited: true })
+          this.fire(endedEvent(memory), snapshotOf(view), { exited: true })
           cursor.ended = true
           cursor.finishedStreak = 0
           this.store.save(cursor, now)
@@ -854,22 +913,15 @@ export class LaneReporter {
     }
   }
 
-  /** The sessions that get this report now, from the lane's current lineage. */
-  receivers(outcome: LaneOutcome, lane: LaneSnapshot): string[] {
+  /** The sessions that get a report now, from the lane's current lineage:
+   * its launcher, or the root standing in for a launcher that is gone. */
+  receivers(lane: LaneSnapshot): string[] {
     const out = new Set<string>()
     if (lane.launched && lane.coordinatorId) {
       const root = lane.coordinatorId
-      const parent = lane.parentId ?? root
-      if (outcome === 'finished') {
-        // The root stands in for a launcher here that can't take it; a
-        // launcher on the lane's own host hears it from that host's Tether.
-        if (this.ops.receiver(parent)) out.add(parent)
-        else if (lane.host === null || this.ops.sessions().some((s) => s.id === parent))
-          out.add(root)
-      } else {
-        out.add(root)
-        out.add(parent)
-      }
+      const launcher = lane.parentId ?? root
+      if (this.ops.receiver(launcher) && !this.ops.agentGone(launcher)) out.add(launcher)
+      else if (this.launcherGone(launcher, lane)) out.add(root)
     }
     const unwatched = new Set<string>()
     for (const watch of this.store.watches()) {
@@ -878,6 +930,14 @@ export class LaneReporter {
       else unwatched.add(watch.watcher)
     }
     return [...out].filter((id) => id !== lane.id && !unwatched.has(id) && this.ops.receiver(id))
+  }
+
+  /** Nobody else would hear the lane in its launcher's place: the launcher
+   * is here and can't take it (a shell, an agent that exited) or has ended.
+   * A launcher that lives on a remote lane's own host is that host's to tell. */
+  private launcherGone(launcher: string, lane: LaneSnapshot): boolean {
+    if (lane.host === null || this.ops.sessions().some((s) => s.id === launcher)) return true
+    return this.ops.elsewhere(launcher) !== lane.host
   }
 
   /** Who gets no `ended` line because `endedBy` ended the lane: the ender,
@@ -905,19 +965,24 @@ export class LaneReporter {
   }
 
   private fire(
-    outcome: LaneOutcome,
+    event: LaneEvent,
     lane: LaneSnapshot,
     extra: Parameters<typeof laneLine>[2] = {},
     endedBy: string | null = null,
   ): void {
-    const all = this.receivers(outcome, lane)
+    const { outcome } = event
+    const all = this.receivers(lane)
     const { skip, launcher } = this.endSkip(lane, endedBy)
-    const receivers = all.filter((id) => !skip.has(id))
     const where = laneWhere(lane)
     const dropped = all.filter((id) => skip.has(id))
-    const skipped = dropped.length
+    let skipped = dropped.length
       ? ` (skipped ${dropped.join(',')}: ended by ${launcher ? 'its launcher ' : ''}${endedBy})`
       : ''
+    const left = all.filter((id) => !skip.has(id))
+    // A receiver waiting on the lane hears this from its wait.
+    const heard = left.length ? this.ops.heardFrom(lane.id, lane.host, left, event) : new Set()
+    const receivers = left.filter((id) => !heard.has(id))
+    if (heard.size) skipped += ` (heard from its wait: ${[...heard].join(',')})`
     if (!receivers.length) {
       this.ops.log(`lane=${where} ${outcome}: no receiver${skipped}`)
       return
@@ -958,7 +1023,8 @@ export class LaneReporter {
           launched: row.launched,
         }
         this.withdrawStale(lane, row.endedBy)
-        if (!cursor?.ended) this.fire('ended', lane, {}, row.endedBy)
+        if (!cursor?.ended)
+          this.fire(endedEvent(this.memory.get(memoryKey(null, row.lane))), lane, {}, row.endedBy)
         this.store.forget('', row.lane)
         this.store.takeOutbox(row.id)
       })
@@ -968,13 +1034,30 @@ export class LaneReporter {
     this.refreshWatched()
   }
 
+  /** An End this hub forwarded to `host` named the session asking for it
+   * (`by`), or null: that End did not end it. Kept in memory a short while. */
+  remoteEnd(host: string, id: string, by: string | null): void {
+    const key = memoryKey(host, id)
+    if (by) this.remoteEnds.set(key, { by, at: this.ops.now() })
+    else this.remoteEnds.delete(key)
+  }
+
   /** A relayed lane ended on its host (the hub relays each id once). */
   ended(id: string, host: string): void {
     if (this.stopped) return
+    const key = memoryKey(host, id)
+    const mark = this.remoteEnds.get(key)
+    this.remoteEnds.delete(key)
+    const now = this.ops.now()
+    for (const [other, { at }] of this.remoteEnds)
+      if (now - at > REMOTE_END_MS) this.remoteEnds.delete(other)
     const cursor = this.store.get(host, id)
     if (!cursor) return
+    const endedBy = mark && now - mark.at <= REMOTE_END_MS ? mark.by : null
     this.store.transaction(() => {
-      if (!cursor.ended) this.fire('ended', cursorSnapshot(cursor))
+      const lane = cursorSnapshot(cursor)
+      this.withdrawStale(lane, endedBy)
+      if (!cursor.ended) this.fire(endedEvent(this.memory.get(key)), lane, {}, endedBy)
       this.store.forget(host, id)
     })
     this.drop(memoryKey(host, id))
@@ -983,8 +1066,8 @@ export class LaneReporter {
 
   // --- watch / unwatch ---------------------------------------------------------
 
-  /** Whether `watcher` gets this lane's reports through lineage: all of them
-   * (it is the launcher), or `some` (blocked and ended, as its root). */
+  /** Whether `watcher` gets this lane's reports through lineage: as its
+   * launcher, or (`some`, for an unwatch) as the root that stands in for it. */
   private lineageReceiver(watcher: string, lane: string, some: boolean): boolean {
     const local = this.ops.sessions().find((session) => session.id === lane)
     const lineages: { coordinatorId: string | null; parentId: string | null; launched: boolean }[] =

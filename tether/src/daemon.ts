@@ -60,7 +60,7 @@ import {
 } from './lifecycle/engine'
 import { setLifecycleInstance } from './lifecycle/ownership'
 import { configureTmuxPaths } from './lifecycle/tmux'
-import { bindToolSource } from './lifecycle/tui/registry'
+import { AGENT_HUB_TOOL, bindToolSource, isDeliveryTool } from './lifecycle/tui/registry'
 import {
   bindAgentHub,
   bindAgentStates,
@@ -465,6 +465,7 @@ export async function startDaemon(
         isLocalSession: (id) => getWidget(id) !== undefined,
         isLocalRoot: (requestId) => getRootRequest(requestId) !== undefined,
         isLocalRun: (runId) => runs.snapshot().items.some((item) => item.runId === runId),
+        endedBy: (host, id, by) => context.lanes?.remoteEnd(host, id, by),
         leadName,
         claimLocal: (launcherId) => {
           const claimed = claimLauncher(launcherId)
@@ -591,6 +592,17 @@ export async function startDaemon(
         withdraw: (receiver, source) => wakes.withdrawEvents(receiver, source).withdrawn,
         acted: (lane, host, by, since) =>
           context.waits?.store.actedOn(lane, host ?? '', by, since) ?? false,
+        elsewhere: (id) => {
+          // Only an agent there that can take lines: else the root stands in.
+          const remote = hosts?.remoteSession(id)
+          if (!remote || remote.session.id !== id) return null
+          const { tool, state } = remote.session
+          const agent =
+            typeof tool === 'string' && (tool === AGENT_HUB_TOOL || isDeliveryTool(tool))
+          return agent && state !== 'unknown' ? remote.host : null
+        },
+        heardFrom: (lane, host, receivers, event) =>
+          context.waits?.heardFrom(lane, host ?? '', receivers, event) ?? new Set(),
         agentGone: (id) => {
           const row = getWidget(id)
           if (!row || row.backend === 'agent-hub') return false

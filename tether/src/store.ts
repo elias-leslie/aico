@@ -31,6 +31,7 @@ import {
   SETTINGS_SQL,
   SHARES_SQL,
   TMUX_SERVERS_TABLE_SQL,
+  WAITS_ARMED_BY_COLUMNS,
   WAITS_SQL,
   WAKES_SQL,
 } from './schema'
@@ -433,6 +434,18 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(26, now)
+      }
+      if (current < 27) {
+        // v27: the session a `--block` client's wait was armed from.
+        for (const { table, column, sql } of WAITS_ARMED_BY_COLUMNS) {
+          const has = this.db
+            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
+            .get(table, column)
+          if (!has) this.db.exec(sql)
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(27, now)
       }
     })
   }

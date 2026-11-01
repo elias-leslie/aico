@@ -87,6 +87,8 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
   const logs: string[] = []
   const receivers = new Set([ROOT, HELPER_PARENT, LANE, WATCHER])
   const gone = new Set<string>()
+  /** Live sessions on other hosts (the hub's relay): id -> host. */
+  const remote = new Map<string, string>()
   const sessions = options.sessions ?? []
   const waits = new WaitStore(store.db)
   const ops: LaneReportOperations = {
@@ -105,6 +107,8 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
     },
     acted: (lane, host, by, since) => waits.actedOn(lane, host ?? '', by, since),
     agentGone: (id) => gone.has(id),
+    elsewhere: (id) => remote.get(id) ?? null,
+    heardFrom: (lane, host, to, event) => waits.heardFrom(lane, host ?? '', to, event),
     log: (line) => logs.push(line),
   }
   const reporter = new LaneReporter(new LaneReportStore(store.db), ops)
@@ -123,6 +127,7 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
     logs,
     receivers,
     gone,
+    remote,
     sessions,
     waits,
   }
@@ -274,7 +279,8 @@ describe('finished', () => {
   })
 
   it('a remote helper whose launcher is on its own host is not the root’s to hear', () => {
-    const { reporter, delivered } = harness()
+    const { reporter, delivered, remote: hub } = harness()
+    hub.set('eeee0001', 'neri-vm')
     const remote = { host: 'neri-vm', parentId: 'eeee0001' }
     step(reporter, { ...remote, state: 'working', stateAgentAt: 100 })
     step(reporter, { ...remote, stateAgentAt: 200 }, SETTLE)
@@ -449,7 +455,7 @@ describe('repeat went-idle backoff', () => {
 })
 
 describe('blocked', () => {
-  it('reports a held permission prompt to the root and the launcher, once', () => {
+  it('reports a held permission prompt to the launcher only, once', () => {
     const { reporter, delivered } = harness()
     const at = Date.now()
     step(reporter, {
@@ -459,14 +465,14 @@ describe('blocked', () => {
       stateAt: at,
     })
     vi.advanceTimersByTime(DEFAULT_WAKE_POLICY.laneBlockedSeconds * 1000)
-    expect(delivered.map((d) => d.to).sort()).toEqual([ROOT, HELPER_PARENT].sort())
+    expect(delivered.map((d) => d.to)).toEqual([HELPER_PARENT])
     expect(delivered[0]?.line).toContain('is blocked: permission prompt')
     step(
       reporter,
       { parentId: HELPER_PARENT, state: 'blocked', stateDetail: 'permission prompt', stateAt: at },
       60_000,
     )
-    expect(delivered).toHaveLength(2)
+    expect(delivered).toHaveLength(1)
   })
 
   it('the same prompt seen again after a Tether restart is not reported twice', () => {
@@ -579,7 +585,7 @@ describe('ended', () => {
     // Its launcher ended it: the root hears nothing either; the explicit watcher does.
     expect(delivered.map((d) => d.to)).toEqual([WATCHER])
     expect(logs).toContain(
-      `lane=${LANE} ended -> ${WATCHER} (skipped ${ROOT},${HELPER_PARENT}: ended by its launcher ${HELPER_PARENT})`,
+      `lane=${LANE} ended -> ${WATCHER} (skipped ${HELPER_PARENT}: ended by its launcher ${HELPER_PARENT})`,
     )
     expect(store.db.prepare('SELECT * FROM session_end_requests').all()).toEqual([])
   })
@@ -606,7 +612,7 @@ describe('ended', () => {
     )
   })
 
-  it('a launcher ending its helper takes back the queued lines of both launcher and root', () => {
+  it('a launcher ending its helper takes back its own queued lines', () => {
     const { reporter, delivered, queued, withdrawn, store } = harness()
     insertWidget(ROOT, 'claude-code', 1_000)
     insertWidget(HELPER_PARENT, 'claude-code', 1_000)
@@ -627,7 +633,6 @@ describe('ended', () => {
       [
         `${HELPER_PARENT}|lane:${LANE}:finished`,
         `${WATCHER}|lane:${LANE}:finished`,
-        `${ROOT}|lane:${LANE}:blocked`,
         `${HELPER_PARENT}|lane:${LANE}:blocked`,
         `${WATCHER}|lane:${LANE}:blocked`,
       ].sort(),
@@ -638,11 +643,7 @@ describe('ended', () => {
     lanes.unmarkEnd(LANE)
     reporter.drainOutbox()
     expect(withdrawn.sort()).toEqual(
-      [
-        `${HELPER_PARENT}|lane:${LANE}:finished`,
-        `${HELPER_PARENT}|lane:${LANE}:blocked`,
-        `${ROOT}|lane:${LANE}:blocked`,
-      ].sort(),
+      [`${HELPER_PARENT}|lane:${LANE}:finished`, `${HELPER_PARENT}|lane:${LANE}:blocked`].sort(),
     )
     // The explicit watcher keeps its queue; its ended line follows.
     expect([...queued].sort()).toEqual(
@@ -691,11 +692,7 @@ describe('ended', () => {
     reporter.drainOutbox()
     expect(withdrawn).toEqual([])
     expect([...queued].sort()).toEqual(
-      [
-        `${HELPER_PARENT}|lane:${LANE}:finished`,
-        `${HELPER_PARENT}|lane:${LANE}:ended`,
-        `${ROOT}|lane:${LANE}:ended`,
-      ].sort(),
+      [`${HELPER_PARENT}|lane:${LANE}:finished`, `${HELPER_PARENT}|lane:${LANE}:ended`].sort(),
     )
     // The root ends a helper HELPER_PARENT launched: the launcher keeps its line.
     queued.clear()
@@ -744,17 +741,15 @@ describe('ended', () => {
     lanes.unmarkEnd(LANE)
     reporter.drainOutbox()
     expect(delivered.map((d) => d.to)).toEqual([HELPER_PARENT])
-    expect(logs).toContain(
-      `lane=${LANE} ended -> ${HELPER_PARENT} (skipped ${ROOT}: ended by ${ROOT})`,
-    )
+    expect(logs).toContain(`lane=${LANE} ended -> ${HELPER_PARENT}`)
   })
 
-  it('a launcher ending its helper spares the root; its exit still reaches both', () => {
+  it("a helper's exit reaches its launcher only", () => {
     const { reporter, delivered, gone } = harness()
     step(reporter, { parentId: HELPER_PARENT, state: 'working', stateAgentAt: 100 })
     gone.add(LANE)
     step(reporter, { parentId: HELPER_PARENT, state: 'unknown', stateAgentAt: 100 }, SETTLE)
-    expect(delivered.map((d) => d.to).sort()).toEqual([ROOT, HELPER_PARENT])
+    expect(delivered.map((d) => d.to)).toEqual([HELPER_PARENT])
   })
 
   it('a coordinator ending its only lane hears nothing, and the log names the skip', () => {
@@ -821,7 +816,7 @@ describe('ended', () => {
       .run(LANE, ROOT, HELPER_PARENT)
     expect(new LaneReportStore(store.db).outbox()).toMatchObject([{ endedBy: null }])
     reporter.drainOutbox()
-    expect(delivered.map((d) => d.to).sort()).toEqual([ROOT, HELPER_PARENT])
+    expect(delivered.map((d) => d.to)).toEqual([HELPER_PARENT])
   })
 
   it('a relayed lane ends once on the hub', () => {
@@ -835,6 +830,222 @@ describe('ended', () => {
         source: `lane:neri-vm/${LANE}:ended`,
         line: expect.stringContaining('lane "Remote" on neri-vm ended'),
       },
+    ])
+  })
+})
+
+describe('who hears a lane line (root -> lane -> session)', () => {
+  /** HELPER_PARENT is the root's lane; LANE is a session it launched. */
+  const grandchild = { parentId: HELPER_PARENT }
+  const blockedFor = { state: 'blocked' as const, stateDetail: 'permission prompt' }
+  const BLOCKED = DEFAULT_WAKE_POLICY.laneBlockedSeconds * 1000
+
+  function sessionWait(
+    waits: WaitStore,
+    by: { waiter?: string | null; armedBy?: string | null },
+    until: string,
+    host: string | null = null,
+  ) {
+    return waits.insert({
+      waiter: by.waiter ?? null,
+      armedBy: by.armedBy ?? null,
+      kind: 'session',
+      ref: LANE,
+      host,
+      until,
+      since: 0,
+      deadline: Date.now() + 3_600_000,
+      key: null,
+      note: null,
+      armedAt: Date.now(),
+      cursor: null,
+      kept: false,
+      endedSession: null,
+    })
+  }
+
+  function localGrandchild() {
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(HELPER_PARENT, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: HELPER_PARENT })
+  }
+
+  it('went idle, blocked and ended go to the lane that launched it, never the root', () => {
+    const { reporter, delivered } = harness()
+    localGrandchild()
+    step(reporter, { ...grandchild, state: 'working', stateAgentAt: 100 })
+    step(reporter, { ...grandchild, stateAgentAt: 200 }, SETTLE)
+    step(reporter, { ...grandchild, state: 'working', stateAgentAt: 300 })
+    step(reporter, { ...grandchild, ...blockedFor, stateAt: Date.now() }, BLOCKED)
+    removeWidget(LANE)
+    reporter.drainOutbox()
+    expect(delivered.map((d) => `${d.to}|${d.source}`)).toEqual([
+      `${HELPER_PARENT}|lane:${LANE}:finished`,
+      `${HELPER_PARENT}|lane:${LANE}:blocked`,
+      `${HELPER_PARENT}|lane:${LANE}:ended`,
+    ])
+  })
+
+  it('a session on another host launched by a lane here tells that lane only', () => {
+    const { reporter, delivered } = harness()
+    const remote = { ...grandchild, host: 'neri-hunters' }
+    step(reporter, { ...remote, state: 'working', stateAgentAt: 100 })
+    step(reporter, { ...remote, stateAgentAt: 200 }, SETTLE)
+    reporter.ended(LANE, 'neri-hunters')
+    expect(delivered.map((d) => `${d.to}|${d.source}`)).toEqual([
+      `${HELPER_PARENT}|lane:neri-hunters/${LANE}:finished`,
+      `${HELPER_PARENT}|lane:neri-hunters/${LANE}:ended`,
+    ])
+  })
+
+  it('the root stands in when the launcher has ended or its agent exited', () => {
+    const { reporter, delivered, receivers, gone } = harness()
+    localGrandchild()
+    // The launcher's agent exited: a blocked line goes to the root.
+    gone.add(HELPER_PARENT)
+    step(reporter, { ...grandchild, ...blockedFor, stateAt: Date.now() }, BLOCKED)
+    // The launcher ended: so does the ended line.
+    removeWidget(HELPER_PARENT)
+    receivers.delete(HELPER_PARENT)
+    removeWidget(LANE)
+    reporter.drainOutbox()
+    expect(delivered.map((d) => `${d.to}|${d.source}`)).toEqual([
+      `${ROOT}|lane:${LANE}:blocked`,
+      `${ROOT}|lane:${LANE}:ended`,
+    ])
+  })
+
+  it('a remote session whose launcher here has ended goes to the root', () => {
+    const { reporter, delivered, receivers } = harness()
+    receivers.delete(HELPER_PARENT)
+    step(reporter, { ...grandchild, host: 'neri-hunters', title: 'Remote' })
+    reporter.ended(LANE, 'neri-hunters')
+    expect(delivered.map((d) => d.to)).toEqual([ROOT])
+  })
+
+  it('a launcher here ending its remote session hears no ended line, and its queued lines go', () => {
+    const remote = { ...grandchild, host: 'neri-hunters' }
+    const finishedThen = (reporter: LaneReporter) => {
+      step(reporter, { ...remote, state: 'working', stateAgentAt: 100 })
+      step(reporter, { ...remote, stateAgentAt: 200 }, SETTLE)
+    }
+    const ended = harness()
+    finishedThen(ended.reporter)
+    // The hub forwarded that End with the Tether-Ended-By header.
+    ended.reporter.remoteEnd('neri-hunters', LANE, HELPER_PARENT)
+    ended.reporter.ended(LANE, 'neri-hunters')
+    expect(ended.delivered.map((d) => d.source)).toEqual([`lane:neri-hunters/${LANE}:finished`])
+    expect(ended.withdrawn).toEqual([`${HELPER_PARENT}|lane:neri-hunters/${LANE}:finished`])
+    expect(ended.logs).toContainEqual(
+      expect.stringMatching(/ended: no receiver \(skipped .*ended by its launcher/),
+    )
+    // An End that did not end it took its mark back: the ended line goes as before.
+    const refused = harness()
+    finishedThen(refused.reporter)
+    refused.reporter.remoteEnd('neri-hunters', LANE, HELPER_PARENT)
+    refused.reporter.remoteEnd('neri-hunters', LANE, null)
+    refused.reporter.ended(LANE, 'neri-hunters')
+    expect(refused.delivered.map((d) => d.source)).toEqual([
+      `lane:neri-hunters/${LANE}:finished`,
+      `lane:neri-hunters/${LANE}:ended`,
+    ])
+    // So does a mark too old to be this end.
+    const stale = harness()
+    finishedThen(stale.reporter)
+    stale.reporter.remoteEnd('neri-hunters', LANE, HELPER_PARENT)
+    vi.advanceTimersByTime(10 * 60_000 + 1)
+    stale.reporter.ended(LANE, 'neri-hunters')
+    expect(stale.delivered.map((d) => d.to)).toEqual([HELPER_PARENT, HELPER_PARENT])
+  })
+
+  it('a wait that fired before the lane got here does not cover its end', () => {
+    const remote = { ...grandchild, host: 'neri-hunters' }
+    // It fired (the host went away) before this state was seen: news.
+    const before = harness()
+    const old = sessionWait(before.waits, { waiter: HELPER_PARENT }, 'ended', 'neri-hunters')
+    before.waits.settle(old, 'fired', 'gone', '[Gone] session', Date.now())
+    vi.advanceTimersByTime(5_000)
+    step(before.reporter, { ...remote, title: 'Remote' })
+    before.reporter.ended(LANE, 'neri-hunters')
+    expect(before.delivered.map((d) => d.to)).toEqual([HELPER_PARENT])
+    // Fired on this end: the launcher heard it from the wait.
+    const now = harness()
+    const wait = sessionWait(now.waits, { waiter: HELPER_PARENT }, 'ended', 'neri-hunters')
+    step(now.reporter, { ...remote, title: 'Remote' })
+    now.waits.settle(wait, 'fired', 'until', '[Ready] session ended', Date.now())
+    now.reporter.ended(LANE, 'neri-hunters')
+    expect(now.delivered).toEqual([])
+  })
+
+  it('a launcher waiting on it hears it from its wait: no line for anyone', () => {
+    const { reporter, delivered, logs, waits } = harness()
+    localGrandchild()
+    sessionWait(waits, { waiter: HELPER_PARENT }, 'idle')
+    step(reporter, { ...grandchild, state: 'working', stateAgentAt: 100 })
+    step(reporter, { ...grandchild, stateAgentAt: 200 }, SETTLE)
+    expect(delivered).toEqual([])
+    expect(logs).toContain(
+      `lane=${LANE} finished: no receiver (heard from its wait: ${HELPER_PARENT})`,
+    )
+    // Any wait still armed fires when the session ends: no ended line, and the
+    // root does not stand in.
+    removeWidget(LANE)
+    reporter.drainOutbox()
+    expect(delivered).toEqual([])
+  })
+
+  it('a --block client (no waiter) counts for the session it was armed from, remote too', () => {
+    const { reporter, delivered, waits } = harness({ policy: NO_BACKOFF })
+    const remote = { ...grandchild, host: 'neri-hunters' }
+    const wait = sessionWait(waits, { armedBy: HELPER_PARENT }, 'idle', 'neri-hunters')
+    expect(waits.actedOn(LANE, 'neri-hunters', [HELPER_PARENT], 0)).toBe(true)
+    step(reporter, { ...remote, state: 'working', stateAgentAt: 100 })
+    // The wait fires first (same settle), then the lane line is due: covered.
+    waits.settle(wait, 'fired', 'until', '[Ready] session is idle', Date.now() + SETTLE)
+    step(reporter, { ...remote, stateAgentAt: 200 }, SETTLE)
+    expect(delivered).toEqual([])
+    // The next turn is news: that wait fired before it.
+    vi.advanceTimersByTime(FLOOR)
+    step(reporter, { ...remote, state: 'working', stateAgentAt: Date.now() })
+    step(reporter, { ...remote, stateAgentAt: Date.now() + 1 }, SETTLE)
+    expect(delivered.map((d) => d.to)).toEqual([HELPER_PARENT])
+  })
+
+  it('a wait covers only the event it fires on', () => {
+    const { reporter, delivered, waits } = harness()
+    localGrandchild()
+    // Waiting for idle does not hear a permission prompt.
+    const idle = sessionWait(waits, { waiter: HELPER_PARENT }, 'idle')
+    step(reporter, { ...grandchild, ...blockedFor, stateAt: Date.now() }, BLOCKED)
+    expect(delivered.map((d) => d.source)).toEqual([`lane:${LANE}:blocked`])
+    // Waiting for blocked does.
+    sessionWait(waits, { waiter: HELPER_PARENT }, 'blocked')
+    step(reporter, { ...grandchild, state: 'working', stateAgentAt: 300 })
+    step(reporter, { ...grandchild, ...blockedFor, stateAt: Date.now() }, BLOCKED)
+    expect(delivered).toHaveLength(1)
+    // Waiting for a turn after a later send does not hear this one.
+    waits.settle(idle, 'cancelled', null, null, Date.now())
+    const late = { ...grandchild, state: 'idle' as const }
+    waits.insert({
+      waiter: HELPER_PARENT,
+      kind: 'session',
+      ref: LANE,
+      host: null,
+      until: 'finished',
+      since: 10_000_000,
+      deadline: Date.now() + 3_600_000,
+      key: null,
+      note: null,
+      armedAt: Date.now(),
+      cursor: null,
+      kept: false,
+      endedSession: null,
+    })
+    step(reporter, { ...late, stateAgentAt: 400 }, SETTLE)
+    expect(delivered.map((d) => d.source)).toEqual([
+      `lane:${LANE}:blocked`,
+      `lane:${LANE}:finished`,
     ])
   })
 })
@@ -856,7 +1067,7 @@ describe('watch and unwatch', () => {
     expect(reporter.watchesOf(ROOT)).toEqual([])
   })
 
-  it('a root watching a helper adds its finished; unwatching it drops blocked and ended', () => {
+  it('a root watching a helper hears all its lines; unwatching it drops the stand-in ones', () => {
     const sessions: LocalLineage[] = [
       { id: LANE, coordinatorId: ROOT, parentId: HELPER_PARENT, launched: true },
     ]
@@ -999,7 +1210,7 @@ describe('model switch lines', () => {
     rewindTo: null,
   }
 
-  it('tells the root and launcher once per switch, after the worktree was looked at', () => {
+  it('tells the launcher once per switch, after the worktree was looked at', () => {
     const { reporter, delivered } = harness()
     step(reporter, { state: 'working', requestId: 'neri-p2a', title: 'Neri shape' })
     step(reporter, {

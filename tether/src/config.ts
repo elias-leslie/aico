@@ -26,8 +26,10 @@ import { join } from 'node:path'
  *     the entry home's Pi session file).
  * 21: `endedBy` on `POST /v1/sessions/:id/end` (that session gets no lane
  *     `ended` line for it).
- * 22: `modelSwitch` on the session descriptor; `POST /v1/sessions/:id/rewind`. */
-export const API_VERSION = 22
+ * 22: `modelSwitch` on the session descriptor; `POST /v1/sessions/:id/rewind`.
+ * 23: the hub takes a forwarded End's asker in the `Tether-Ended-By` header
+ *     (a session on another host: no lane `ended` line for it). */
+export const API_VERSION = 23
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

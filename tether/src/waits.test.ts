@@ -4,6 +4,7 @@ import { bindCatalog, insertWidget, removeWidget } from './lifecycle/catalog'
 import { Store } from './store'
 import type { PullRead } from './wait-kinds'
 import {
+  LONG_POLL_MAX_SECONDS,
   sessionVerdict,
   spanLabel,
   type Wait,
@@ -433,6 +434,8 @@ describe('WaitService', () => {
   it('a blocking client (no waiter) is answered by waitFor and gets no paste', async () => {
     const h = harness()
     const { wait } = await h.arm({ waiter: null, by: WAITER })
+    // The session it was armed from hears it (lane lines it covers skip it).
+    expect(wait.armedBy).toBe(WAITER)
     const answer = h.waits.waitFor(wait.id, 55_000)
     h.set({ state: 'idle', stateAt: T0, stateAgentAt: T0 + 1 })
     await vi.advanceTimersByTimeAsync(SETTLE + 100)
@@ -440,6 +443,31 @@ describe('WaitService', () => {
     expect(h.delivered).toHaveLength(0)
     // Idempotent: asking again returns the same line.
     expect((await h.waits.waitFor(wait.id, 55_000))?.line).toContain('[Ready]')
+  })
+
+  it('a --block client counts for the lane lines it covers only while it is there', async () => {
+    const h = harness()
+    const event = { outcome: 'finished' as const, at: 0, agentAt: T0 + 1 }
+    const heard = () => [...h.waits.heardFrom(LANE, '', [WAITER], event)]
+    const { wait } = await h.arm({ waiter: null, by: WAITER })
+    // Armed, but no client has asked yet: a dead client would swallow the line.
+    expect(heard()).toEqual([])
+    const attached = h.waits.waitFor(wait.id, 1_000)
+    expect(heard()).toEqual([WAITER])
+    await vi.advanceTimersByTimeAsync(1_100)
+    await attached
+    // Between long polls it still counts; two missed polls later it does not.
+    expect(heard()).toEqual([WAITER])
+    await vi.advanceTimersByTimeAsync(2 * LONG_POLL_MAX_SECONDS * 1000 + 1)
+    expect(heard()).toEqual([])
+    // Fired with no client there: nobody was told.
+    h.set({ state: 'idle', stateAt: T0, stateAgentAt: T0 + 1 })
+    await vi.advanceTimersByTimeAsync(SETTLE + 100)
+    expect(new WaitStore(h.store.db).get(wait.id)?.state).toBe('fired')
+    expect(heard()).toEqual([])
+    // A client that comes back and is given the line heard it.
+    expect((await h.waits.waitFor(wait.id, 55_000))?.state).toBe('fired')
+    expect(heard()).toEqual([WAITER])
   })
 
   it('waitFor returns the armed wait when its time is up', async () => {
