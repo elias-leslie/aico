@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { attachPlan, main, parseArgs, shareBody } from './cli'
+import { attachPlan, main, parseArgs, render, shareBody } from './cli'
 import { resolvePaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
 import { VERSION } from './version'
@@ -212,5 +212,36 @@ describe('main', () => {
     expect(await main(['-i', 'nobody', 'tools'], io)).toBe(2)
     process.env.TETHER_RUNTIME_DIR = runtime
     expect(err.join('\n')).toContain('not reachable')
+  })
+})
+
+describe('tether hosts', () => {
+  it('prints each host with its link state, Tether API and last update', () => {
+    const out: string[] = []
+    const io = { out: (line: string) => out.push(line), err: () => {} }
+    render(io as never, false, 200, {
+      items: [
+        {
+          name: 'neri-hunters',
+          ssh: 'neri-hunters',
+          state: 'live',
+          sessions: 2,
+          apiVersion: 25,
+          update: null,
+        },
+        {
+          name: 'laptop',
+          ssh: 'laptop',
+          state: 'powered_off',
+          sessions: 0,
+          apiVersion: null,
+          update: { state: 'failed', error: 'the host has no flock' },
+        },
+      ],
+    })
+    expect(out[0]).toMatch(/^ {2}neri-hunters +live +api 25 {2}sessions 2$/)
+    expect(out[1]).toContain('api ?')
+    expect(out[1]).toContain('update failed: the host has no flock')
+    expect(out.join('\n')).not.toContain('undefined')
   })
 })

@@ -93,7 +93,7 @@ export function parseArgs(argv: string[]): Parsed {
   return parsed
 }
 
-function render(io: Io, json: boolean, status: number, body: unknown): number {
+export function render(io: Io, json: boolean, status: number, body: unknown): number {
   if (json || typeof body !== 'object' || body === null) {
     io.out(typeof body === 'string' ? body : JSON.stringify(body, null, 2))
   } else {
@@ -108,6 +108,21 @@ function render(io: Io, json: boolean, status: number, body: unknown): number {
         io.out(
           `  ${item.id}  ${String(item.status).padEnd(9)} ${String(item.tool).padEnd(12)} ${item.projectId ?? '-'}  ${item.label}`,
         )
+    } else if (
+      Array.isArray(record.items) &&
+      (record.items as Record<string, unknown>[]).some((item) => 'ssh' in item)
+    ) {
+      // GET /v1/hosts: name, link state, the host's Tether API and its last update.
+      for (const item of record.items as Record<string, unknown>[]) {
+        const api = item.apiVersion == null ? 'api ?' : `api ${item.apiVersion}`
+        const update = item.update as Record<string, unknown> | null
+        const updated = update
+          ? `  update ${update.state ?? ''}${update.error ? `: ${update.error}` : ''}`
+          : ''
+        io.out(
+          `  ${String(item.name).padEnd(16)} ${String(item.state).padEnd(12)} ${api}  sessions ${item.sessions}${updated}`,
+        )
+      }
     } else if (Array.isArray(record.items)) {
       for (const item of record.items as Record<string, unknown>[]) {
         const marker = item.isDefault ? '*' : ' '
