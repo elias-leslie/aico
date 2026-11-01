@@ -47,7 +47,9 @@ export const UPDATE_INSTALLING = 'tether-update: installing'
  * restart or the rollback) would happen again on this release, while one
  * before it (no ssh, a dropped link, a held lock) is worth another try. */
 export function installStarted(result: RunResult): boolean {
-  return result.stdout.split('\n').includes(UPDATE_INSTALLING)
+  // Anywhere in stdout: a login profile that prints without a newline would
+  // otherwise share the marker's line and hide it.
+  return result.stdout.includes(UPDATE_INSTALLING)
 }
 
 export interface UpdateTarget {
@@ -86,6 +88,7 @@ export function updateLine(
   instance: string,
   socket: string,
   answerSec: number = UPDATE_ANSWER_SEC,
+  stateDir: string | null = null,
 ): string {
   const keep = 'dist/tether.mjs bin/tether'
   return [
@@ -96,7 +99,10 @@ export function updateLine(
     // The stable path tether@.service runs from, and the instance's database
     // where src/config.ts resolvePaths puts it (production units override neither).
     'lib="$HOME/.local/lib/tether"',
-    `state="\${XDG_STATE_HOME:-$HOME/.local/state}/tether/$instance"`,
+    // hosts.json `stateDir` replaces ~/.local/state/tether when the host sets it.
+    stateDir
+      ? `state=${shellQuote(stateDir)}/"$instance"`
+      : `state="\${XDG_STATE_HOME:-$HOME/.local/state}/tether/$instance"`,
     'mkdir -p "$lib"',
     'command -v flock >/dev/null || { echo "the host has no flock" >&2; exit 1; }',
     'exec 9>"$lib/.update.lock"',
@@ -132,13 +138,16 @@ export function updateLine(
     '    if [ -f "$stage/db/$name" ]; then cp -p "$stage/db/$name" "$state/$name.rollback" || return 1; fi',
     '  done',
     '  for name in tether.db tether.db-wal; do',
-    '    if [ -f "$stage/db/$name" ]; then mv -f "$state/$name.rollback" "$state/$name"; else rm -f "$state/$name"; fi',
+    '    if [ -f "$stage/db/$name" ]; then mv -f "$state/$name.rollback" "$state/$name" || return 1; else rm -f "$state/$name"; fi',
     '  done',
     '  rm -f "$state/tether.db-shm"',
     '}',
     'stopped=0',
     'saved=0',
     'why="its install failed"',
+    // No database where this script looks means a rollback could not put it
+    // back: stop before anything is installed.
+    '[ -f "$state/tether.db" ] || { echo "no Tether database at $state; nothing installed" >&2; exit 1; }',
     `echo ${shellQuote(UPDATE_INSTALLING)}`,
     'if TETHER_LIB_DIR="$lib" bash "$stage/new/scripts/install-release.sh" >/dev/null; then',
     '  why="$unit did not stop"',
@@ -198,7 +207,11 @@ export function pushRelease(
     return fail(`the host's Tether named no usable instance (${JSON.stringify(instance)})`)
   const argv =
     options.argv ??
-    remoteArgv(target.entry, target.control, updateLine(instance, target.entry.socket))
+    remoteArgv(
+      target.entry,
+      target.control,
+      updateLine(instance, target.entry.socket, UPDATE_ANSWER_SEC, target.entry.stateDir),
+    )
   return new Promise((resolve) => {
     let stderr = ''
     let stdout = ''

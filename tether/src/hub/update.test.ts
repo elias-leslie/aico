@@ -22,6 +22,7 @@ import {
   releaseId,
   runningRelease,
   UPDATE_BUSY_EXIT,
+  UPDATE_INSTALLING,
   updateLine,
 } from './update'
 
@@ -67,6 +68,8 @@ describe('remote Tether update', () => {
     state = join(home, '.local', 'state', 'tether', 'default')
     db = join(state, 'tether.db')
     holder = null
+    // A Tether that answered its link has opened its database.
+    put(db, 'schema 25\n', 0o600)
     // This hub's installed release, as install-release.sh lays it out.
     put(join(release, 'dist', 'tether.mjs'), 'new bundle\n')
     put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 0\n', 0o755)
@@ -149,7 +152,7 @@ describe('remote Tether update', () => {
     const result = await pushRelease(release, target, { argv: hostArgv() })
     expect(result.code).toBe(1)
     expect(result.output).toBe(
-      'the new release did not answer within 1 s; the previous release is back',
+      'the new release did not answer within 1 s; the previous release and its database are back',
     )
     // It failed after the host began installing: the same release would again.
     expect(installStarted(result)).toBe(true)
@@ -180,7 +183,7 @@ describe('remote Tether update', () => {
     put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
     const result = await pushRelease(release, target, { argv: hostArgv() })
     expect(result.output).toBe(
-      'the new release did not answer within 1 s; the previous release is back but did not answer within 1 s either',
+      'the new release did not answer within 1 s; the previous release and its database are back but did not answer within 1 s either',
     )
   })
 
@@ -250,6 +253,28 @@ describe('remote Tether update', () => {
     expect(installStarted(result)).toBe(false)
     expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
     expect(restarts()).toEqual([])
+  })
+
+  it('installs nothing when its database is not where the script looks', async () => {
+    // A rollback could not put it back, so an old release would meet a newer schema.
+    rmSync(db)
+    const result = await pushRelease(release, target, { argv: hostArgv() })
+    expect(result.code).toBe(1)
+    expect(result.output).toBe(`no Tether database at ${state}; nothing installed`)
+    expect(installStarted(result)).toBe(false)
+    expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
+    expect(restarts()).toEqual([])
+  })
+
+  it("looks for the database under the host's stateDir when hosts.json sets one", () => {
+    expect(updateLine('default', entry.socket, 1, '/srv/tether-state')).toContain(
+      'state=\'/srv/tether-state\'/"$instance"',
+    )
+    expect(updateLine('default', entry.socket, 1)).toContain('XDG_STATE_HOME')
+  })
+
+  it('sees the install marker when a login profile printed before it on the same line', () => {
+    expect(installStarted({ code: 1, stdout: `motd${UPDATE_INSTALLING}\n`, output: '' })).toBe(true)
   })
 
   it('lists every file install-release.sh installs', () => {
