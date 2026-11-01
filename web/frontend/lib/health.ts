@@ -1,5 +1,5 @@
 // The Health panel's words and tones, from Nightshift's owner view
-// (web/server src/nightshift.ts passes Nightshift's GET /api/view through).
+// (web/server src/nightshift.ts composes it from Nightshift's GET /api/items).
 // Nightshift decides every state; this only says it. Unknown is never OK.
 
 /** A board state, as Nightshift names it. */
@@ -69,7 +69,12 @@ export type NightshiftViewResult =
   | { available: true; view: NightshiftOwnerView }
   | {
       available: false
-      reason: 'not_configured' | 'not_answering' | 'unexpected'
+      reason:
+        | 'not_configured'
+        | 'not_answering'
+        | 'unexpected'
+        | 'store_refused'
+        | 'store_stale'
     }
 
 export type Tone = 'good' | 'warn' | 'danger' | 'quiet'
@@ -117,6 +122,9 @@ const UNAVAILABLE: Record<
   not_configured: 'Health isn’t set up for this app, so it’s unknown.',
   unexpected:
     'Nightshift answered in a form this app can’t read, so health is unknown.',
+  store_refused: 'Nightshift can’t read its item store, so health is unknown.',
+  store_stale:
+    'Nightshift hasn’t updated its item store recently, so health is unknown.',
 }
 
 /** Why health is unknown right now, or null when the view is current. */

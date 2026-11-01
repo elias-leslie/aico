@@ -61,6 +61,14 @@ describe('pillState', () => {
     expect(
       pillState({ available: false, reason: 'not_answering' }, false, false),
     ).toMatchObject(unknown)
+    for (const reason of ['store_refused', 'store_stale'] as const) {
+      expect(
+        pillState({ available: false, reason }, false, false),
+      ).toMatchObject(unknown)
+      expect(unknownReason({ available: false, reason }, false)).toMatch(
+        /item store.*unknown/,
+      )
+    }
     expect(pillState(undefined, true, false)).toMatchObject(unknown)
     expect(pillState(ok(view()), true, false)).toMatchObject(unknown) // a failed refresh
     const stale = view({ snapshot: { state: 'stale', age: 2400 } })
