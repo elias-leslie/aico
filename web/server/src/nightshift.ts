@@ -104,7 +104,8 @@ function approvals(items: Row[], loose: unknown[], dt: number): Row[] {
 const LIVE_STATES = new Set(['needs_you', 'open', 'on_it', 'unknown'])
 const OTHER_KINDS = new Set(['alert', 'todo'])
 
-/** Open items that are not a host check's finding and not an approval: an agent's or a project's alert or to-do.
+/** Open items that are not a host check's finding and not an approval: an agent's or a project's alert or to-do, and
+ * Nightshift's own floor and delivery alarms (the sheet's heading says "not from host checks", not who sent them).
  * The board lists host findings only, so these were invisible here. Most urgent first, then oldest. */
 function others(items: Row[], now: number): Row[] {
   const rank = (state: unknown) => LIVE_STATES.size - [...LIVE_STATES].indexOf(String(state))

@@ -141,6 +141,14 @@ describe('HealthSheet freshness and open items', () => {
             age: 3 * 3600,
             link: 'https://sf.example/d/1',
           },
+          {
+            id: 'o2',
+            title: "Can't send alerts on ws",
+            source: 'nightshift',
+            state: 'open',
+            age: 600,
+            link: '',
+          },
         ],
       }),
     }
@@ -149,7 +157,13 @@ describe('HealthSheet freshness and open items', () => {
     expect(screen.getByTestId('health-verdict-age')).toHaveTextContent(
       'ran 7 min ago',
     )
-    const item = screen.getByTestId('health-open-item')
+    // Nightshift's own floor and delivery alarms are listed here too: the heading says what the list is, not who
+    // sent it (pass F review)
+    expect(
+      screen.getByRole('heading', { name: 'Open, not from host checks' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/from agents and apps/i)).toBeNull()
+    const item = screen.getAllByTestId('health-open-item')[0]
     expect(item).toHaveTextContent('Deploy failed')
     expect(item).toHaveTextContent('summitflow · open 3 h')
     expect(within(item).getByRole('link', { name: /Open/ })).toHaveAttribute(

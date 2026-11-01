@@ -225,9 +225,9 @@ function HealthBody({
             className="mb-1.5 text-[12px] tracking-[0.05em] uppercase"
             style={{ color: 'var(--mist)' }}
           >
-            Open from agents and apps
+            Open, not from host checks
           </h3>
-          <ul className="flex flex-col" aria-label="Open from agents and apps">
+          <ul className="flex flex-col" aria-label="Open, not from host checks">
             {view.others?.map((item) => (
               <OpenItem key={item.id} item={item} />
             ))}
