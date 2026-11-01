@@ -24,6 +24,7 @@ let state: { idle: boolean; empty: boolean; lastKey: number | null }
 let pasted: string[]
 let lines: string[]
 let scheduler: WakeScheduler
+let told: [string, string][]
 
 function ops(overrides: Partial<WakeOperations> = {}): WakeOperations {
   return {
@@ -60,6 +61,7 @@ beforeEach(() => {
   state = { idle: true, empty: true, lastKey: null }
   pasted = []
   lines = []
+  told = []
   scheduler = new WakeScheduler(wakes, ops())
 })
 
@@ -211,6 +213,77 @@ describe('native pullers', () => {
   })
 })
 
+describe('delivery classes', () => {
+  const ride = (source: string, note: string) =>
+    wakes.addEvent({ sessionId: SESSION, source, note, now: 1, ride: true })
+
+  it('never pastes a ride-along line on its own, and does not poll for it', async () => {
+    scheduler.start()
+    ride('coord:x', '[Message] Ack from cc:1')
+    await scheduler.tick()
+    expect(pasted).toEqual([])
+    expect(wakes.forSession(SESSION)).toHaveLength(1)
+    expect(scheduler.heldReason(SESSION)).toMatch(/ride-along/)
+    clock.now += 600_000
+    await scheduler.tick()
+    expect(pasted).toEqual([])
+  })
+
+  it('a ride-along line joins the next wake paste, after the wake line', async () => {
+    scheduler.start()
+    ride('coord:x', 'ride')
+    wakes.addEvent({ sessionId: SESSION, source: 'lane:a:blocked', note: 'blocked', now: 2 })
+    await scheduler.tick()
+    expect(pasted).toEqual(['blocked / ride'])
+    expect(wakes.forSession(SESSION)).toEqual([])
+  })
+
+  it('a wake line is never delayed by queued ride-along lines', async () => {
+    scheduler.start()
+    ride('coord:x', 'ride')
+    await scheduler.tick()
+    expect(pasted).toEqual([])
+    const wake = wakes.addEvent({ sessionId: SESSION, source: 'wait:y', note: 'ready', now: 3 })
+    expect(wake.ride).toBe(false)
+    await scheduler.tick()
+    expect(pasted).toEqual(['ready / ride'])
+  })
+
+  it('the newer line of a source decides its class', () => {
+    const first = ride('coord:x', 'old')
+    const wake = wakes.addEvent({ sessionId: SESSION, source: 'coord:x', note: 'new', now: 2 })
+    expect(wake.id).toBe(first.id)
+    expect(wake.ride).toBe(false)
+    const back = wakes.addEvent({
+      sessionId: SESSION,
+      source: 'coord:x',
+      note: 'newer',
+      now: 3,
+      ride: true,
+    })
+    expect(back).toMatchObject({ id: first.id, ride: true, note: 'newer' })
+  })
+
+  it('takeRide hands over only the ride-along lines, once, as a native delivery', () => {
+    const one = ride('coord:x', 'one')
+    log.record({ id: one.id, sessionId: SESSION, source: 'coord:x', now: 1 })
+    wakes.addEvent({ sessionId: SESSION, source: 'lane:a:blocked', note: 'blocked', now: 2 })
+    expect(scheduler.takeRide(SESSION)).toBe('one')
+    expect(log.get(one.id)).toMatchObject({ via: 'native', deliveredAt: 100_000 })
+    expect(wakes.forSession(SESSION).map((row) => row.note)).toEqual(['blocked'])
+    expect(scheduler.takeRide(SESSION)).toBeNull()
+  })
+
+  it('a puller attached for wakes is not woken by ride-along lines', async () => {
+    scheduler.start()
+    const pulled = scheduler.pull(SESSION, 200)
+    ride('coord:x', 'ride')
+    await scheduler.tick()
+    expect(await pulled).toBeNull()
+    expect(wakes.forSession(SESSION)).toHaveLength(1)
+  })
+})
+
 describe('delivery routes', () => {
   let server: Server
   let base: string
@@ -222,8 +295,10 @@ describe('delivery routes', () => {
       exists: (id) => id === SESSION || id === SHELL,
       receiver: (id) => id === SESSION,
       maxChars: () => 500,
-      queue: (id, source, line) =>
-        wakes.addEvent({ sessionId: id, source, note: line, now: clock.now }),
+      queue: (id, source, line, ride) =>
+        wakes.addEvent({ sessionId: id, source, note: line, now: clock.now, ride }),
+      sent: (from, to) => told.push([from.join(','), to]),
+      takeRide: (id) => scheduler.takeRide(id),
       withdraw: (id, source) => {
         const { withdrawn, sending } = scheduler.withdraw(id, source)
         return { withdrawn: withdrawn.length, sending }
@@ -344,5 +419,54 @@ describe('delivery routes', () => {
     expect((await call('GET', `/v1/sessions/${SESSION}/due`)).body).toEqual({ text: null })
     expect((await call('GET', `/v1/sessions/${SESSION}/due?wait=56`)).status).toBe(400)
     expect((await call('GET', `/v1/sessions/${SHELL}/due`)).body.error).toBe('delivery_unsupported')
+  })
+
+  it('queues a ride-along line, takes it with ?ride=1 and records who told whom', async () => {
+    const queued = await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
+      source: 'coord:a',
+      line: '[Message] Ack from cc:1',
+      ride: true,
+    })
+    expect(queued.status).toBe(201)
+    expect(wakes.forSession(SESSION).map((row) => row.ride)).toEqual([true])
+    scheduler.start()
+    await scheduler.tick()
+    expect(pasted).toEqual([])
+    expect((await call('GET', `/v1/sessions/${SESSION}/due?ride=1`)).body).toEqual({
+      text: '[Message] Ack from cc:1',
+    })
+    expect((await call('GET', `/v1/sessions/${SESSION}/due?ride=1`)).body).toEqual({ text: null })
+    expect((await call('GET', `/v1/deliveries/${queued.body.id}`)).body).toMatchObject({
+      state: 'delivered',
+      via: 'native',
+    })
+    // A wake line names who told this session; a ride-along line names no one.
+    await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
+      source: 'coord:b',
+      line: 'Request',
+      from: ['0a1b2c3e'],
+    })
+    await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
+      source: 'coord:c',
+      line: 'FYI',
+      from: ['0a1b2c3f'],
+      ride: true,
+    })
+    expect(told).toEqual([['0a1b2c3e', SESSION]])
+  })
+
+  it('refuses a bad ride or from, and ride=1 with a wait', async () => {
+    const post = (body: unknown) => call('POST', `/v1/sessions/${SESSION}/deliveries`, body)
+    expect((await post({ source: 'coord:x', line: 'x', ride: 'yes' })).body).toMatchObject({
+      field: 'ride',
+    })
+    expect((await post({ source: 'coord:x', line: 'x', from: ['nope'] })).body).toMatchObject({
+      field: 'from',
+    })
+    expect((await call('GET', `/v1/sessions/${SESSION}/due?ride=1&wait=5`)).status).toBe(400)
+    expect((await call('GET', `/v1/sessions/${SESSION}/due?ride=2`)).status).toBe(400)
+    expect((await call('GET', `/v1/sessions/${SHELL}/due?ride=1`)).body.error).toBe(
+      'delivery_unsupported',
+    )
   })
 })

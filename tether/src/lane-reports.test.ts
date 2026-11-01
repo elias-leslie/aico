@@ -80,7 +80,9 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
   const store = options.store ?? new Store(':memory:', () => 1_000)
   if (!options.store) stores.push(store)
   bindCatalog(store.db)
-  const delivered: { to: string; source: string; line: string }[] = []
+  const delivered: { to: string; source: string; line: string; ride: boolean }[] = []
+  /** `lane>receiver` -> when the lane told it with a wake-class message. */
+  const toldAt = new Map<string, number>()
   /** The receivers' delivery queues: `to|source` while undelivered. */
   const queued = new Set<string>()
   const withdrawn: string[] = []
@@ -96,10 +98,11 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
     policy: () => options.policy ?? DEFAULT_WAKE_POLICY,
     receiver: (id) => receivers.has(id),
     sessions: () => sessions,
-    deliver: (to, source, line) => {
-      delivered.push({ to, source, line })
+    deliver: (to, source, line, ride) => {
+      delivered.push({ to, source, line, ride: ride === true })
       queued.add(`${to}|${source}`)
     },
+    told: (lane, to, since) => (toldAt.get(`${lane}>${to}`) ?? -Infinity) >= since,
     withdraw: (to, source) => {
       if (!queued.delete(`${to}|${source}`)) return 0
       withdrawn.push(`${to}|${source}`)
@@ -130,6 +133,7 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
     remote,
     sessions,
     waits,
+    toldAt,
   }
 }
 
@@ -201,6 +205,7 @@ describe('finished', () => {
         to: ROOT,
         source: `lane:${LANE}:finished`,
         line: expect.stringContaining('lane "TEST" went idle'),
+        ride: false,
       },
     ])
     step(reporter, { stateAgentAt: 200 }, SETTLE * 2)
@@ -514,6 +519,7 @@ describe('ended', () => {
         to: ROOT,
         source: `lane:${LANE}:ended`,
         line: expect.stringContaining('lane "Lane title" ended'),
+        ride: false,
       },
     ])
     expect(new LaneReportStore(store.db).get('', LANE)).toBeUndefined()
@@ -829,6 +835,7 @@ describe('ended', () => {
         to: ROOT,
         source: `lane:neri-vm/${LANE}:ended`,
         line: expect.stringContaining('lane "Remote" on neri-vm ended'),
+        ride: false,
       },
     ])
   })
@@ -1050,6 +1057,81 @@ describe('who hears a lane line (root -> lane -> session)', () => {
   })
 })
 
+describe('delivery classes of went-idle lines', () => {
+  /** One short turn: working, then idle at `at`, then `ms` pass. */
+  function turn(reporter: LaneReporter, at: number, ms: number, extra: Partial<LaneView> = {}) {
+    step(reporter, { ...extra, state: 'working', stateAgentAt: at - 1 })
+    step(reporter, { ...extra, stateAgentAt: at }, ms)
+  }
+
+  it('the first went-idle line wakes; a repeat the receiver ignored rides along', () => {
+    const { reporter, delivered } = harness()
+    turn(reporter, 100, SETTLE)
+    turn(reporter, 200, QUIET)
+    expect(delivered.map((d) => d.ride)).toEqual([false, true])
+  })
+
+  it('a lane that told its launcher in the turn that just ended sends no went-idle line', () => {
+    const { reporter, delivered, toldAt, logs } = harness()
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    // Its done message reaches the launcher mid-turn.
+    vi.advanceTimersByTime(5_000)
+    toldAt.set(`${LANE}>${ROOT}`, Date.now())
+    vi.advanceTimersByTime(5_000)
+    step(reporter, { stateAgentAt: 200 }, SETTLE)
+    expect(delivered).toEqual([])
+    expect(logs.some((l) => l.includes(`told in that turn: ${ROOT}`))).toBe(true)
+  })
+
+  it('owner example: told to pause, the lane answers "paused" and goes idle: one wake, not two', () => {
+    const { reporter, delivered, toldAt } = harness()
+    // The coordinator's pause request starts the lane's turn; its reply is the wake.
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    toldAt.set(`${LANE}>${ROOT}`, Date.now())
+    step(reporter, { stateAgentAt: 200 }, SETTLE + FLOOR)
+    expect(delivered).toEqual([])
+  })
+
+  it('a message from an earlier turn does not hide this turn’s idle', () => {
+    const { reporter, delivered, toldAt } = harness()
+    toldAt.set(`${LANE}>${ROOT}`, Date.now())
+    vi.advanceTimersByTime(60_000)
+    turn(reporter, 100, SETTLE)
+    expect(delivered.map((d) => d.to)).toEqual([ROOT])
+  })
+
+  it('a message to someone else does not hide the idle line from the launcher', () => {
+    const { reporter, delivered, toldAt } = harness()
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    toldAt.set(`${LANE}>${WATCHER}`, Date.now())
+    step(reporter, { stateAgentAt: 200 }, SETTLE)
+    expect(delivered.map((d) => d.to)).toEqual([ROOT])
+  })
+
+  it('a turn the lane reported itself leaves the next idle a normal first line', () => {
+    const { reporter, delivered, toldAt } = harness()
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    toldAt.set(`${LANE}>${ROOT}`, Date.now())
+    step(reporter, { stateAgentAt: 200 }, SETTLE)
+    expect(delivered).toEqual([])
+    // The next turn ends without a message: a first line, on time, wake class.
+    turn(reporter, 300, SETTLE)
+    expect(delivered.map((d) => [d.to, d.ride])).toEqual([[ROOT, false]])
+  })
+
+  it('blocked and ended lines are never dropped for a message', () => {
+    const { reporter, delivered, toldAt } = harness()
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    toldAt.set(`${LANE}>${ROOT}`, Date.now())
+    step(
+      reporter,
+      { state: 'blocked', stateDetail: 'permission prompt', stateAt: Date.now() },
+      DEFAULT_WAKE_POLICY.laneBlockedSeconds * 1000,
+    )
+    expect(delivered.map((d) => [d.source.split(':').pop(), d.ride])).toEqual([['blocked', false]])
+  })
+})
+
 describe('watch and unwatch', () => {
   it('a watch adds a receiver, an unwatch removes a lineage one', () => {
     const sessions: LocalLineage[] = [
@@ -1233,6 +1315,7 @@ describe('model switch lines', () => {
         to: ROOT,
         source: `lane:${LANE}:model`,
         line: '[Model changed] lane "Neri shape" (req neri-p2a) now on claude-opus-4-8 after a cyber refusal · turn stopped · last commit e5a9695 · worktree changed since: no · rewind it (st aico root rewind neri-p2a), or relaunch from a handoff',
+        ride: false,
       },
     ])
     step(reporter, {

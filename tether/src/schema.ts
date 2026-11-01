@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 27
+export const SCHEMA_VERSION = 28
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -638,6 +638,20 @@ export const WAITS_ARMED_BY_COLUMNS: readonly { table: string; column: string; s
     table: 'waits',
     column: 'armed_by',
     sql: "ALTER TABLE waits ADD COLUMN armed_by TEXT CHECK(armed_by IS NULL OR (length(armed_by) = 8 AND armed_by NOT GLOB '*[^0-9a-f]*'))",
+  },
+]
+
+/**
+ * v28: delivery classes (src/wakes.ts). `wakes.ride` marks an event line as
+ * ride-along (1): it never pastes or wakes a session on its own, and joins the
+ * session's next wake paste or its next natural turn (`GET /v1/sessions/:id/due?ride=1`).
+ * Rows from before v28 are 0: wake class, as before.
+ */
+export const WAKES_RIDE_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
+  {
+    table: 'wakes',
+    column: 'ride',
+    sql: 'ALTER TABLE wakes ADD COLUMN ride INTEGER NOT NULL DEFAULT 0 CHECK(ride IN (0, 1))',
   },
 ]
 

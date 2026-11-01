@@ -121,6 +121,19 @@ describe('Store schema', () => {
     expect(migrated.defaultTool()?.slug).toBe('codex')
   })
 
+  it('v28 adds the wakes ride column, keeping queued rows as wake class', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-ride-migration-'))
+    const path = join(dir, 'tether.db')
+    const old = open(path)
+    old.db.exec('ALTER TABLE wakes DROP COLUMN ride')
+    old.db.exec('DELETE FROM schema_version WHERE version >= 28')
+    old.close()
+    const migrated = open(path)
+    expect(migrated.schemaVersion()).toBe(SCHEMA_VERSION)
+    const columns = migrated.db.prepare('PRAGMA table_info(wakes)').all() as { name: string }[]
+    expect(columns.map((c) => c.name)).toContain('ride')
+  })
+
   it('v9 retires the OpenCode rows, moves their default and names Pi `pi`', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-opencode-retire-'))
     const path = join(dir, 'tether.db')

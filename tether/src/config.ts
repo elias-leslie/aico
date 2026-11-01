@@ -28,8 +28,10 @@ import { join } from 'node:path'
  *     `ended` line for it).
  * 22: `modelSwitch` on the session descriptor; `POST /v1/sessions/:id/rewind`.
  * 23: the hub takes a forwarded End's asker in the `Tether-Ended-By` header
- *     (a session on another host: no lane `ended` line for it). */
-export const API_VERSION = 23
+ *     (a session on another host: no lane `ended` line for it).
+ * 24: delivery classes: `ride` and `from` on `POST /v1/sessions/:id/deliveries`,
+ *     `GET /v1/sessions/:id/due?ride=1`. */
+export const API_VERSION = 24
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

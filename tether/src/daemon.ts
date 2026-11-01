@@ -584,11 +584,12 @@ export async function startDaemon(
             parentId: row.parentId,
             launched: row.launched,
           })),
-        deliver: (receiver, source, line) => {
+        deliver: (receiver, source, line, ride) => {
           const now = Date.now()
-          wakes.store.addEvent({ sessionId: receiver, source, note: line, now })
+          wakes.store.addEvent({ sessionId: receiver, source, note: line, now, ride })
           wakes.changed(receiver)
         },
+        told: (lane, receiver, since) => wakes.toldSince(lane, receiver, since),
         withdraw: (receiver, source) => wakes.withdrawEvents(receiver, source).withdrawn,
         acted: (lane, host, by, since) =>
           context.waits?.store.actedOn(lane, host ?? '', by, since) ?? false,

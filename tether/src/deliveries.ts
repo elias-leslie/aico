@@ -9,6 +9,11 @@
 // `GET /v1/sessions/:id/due?wait=N` is the native puller's long poll: it
 // answers with the session's next delivery as text, at most once.
 //
+// Two classes (API 24). A wake line pastes or wakes the session when it is due;
+// a ride-along line (`ride: true`) never does on its own: it joins the next
+// wake paste, or the agent's next natural turn takes it with
+// `GET /v1/sessions/:id/due?ride=1` (a prompt hook, a tool result).
+//
 // `DELETE /v1/sessions/:id/deliveries?source=` takes back a producer's line
 // that has not gone out (it went stale: the inbox has nothing waiting any
 // more); a paste already going out cannot be stopped and says so.
@@ -24,6 +29,8 @@ const SOURCE = /^[a-z][a-z0-9-]{0,18}:[A-Za-z0-9._:@-]{1,100}$/
 /** Sources Tether writes itself: a producer may not replace those lines. */
 const RESERVED_SOURCES = ['lane:', 'wait:', 'run:', 'ask:', 'kind:', 'time:']
 const ONE_LINE_BAD = /[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/u
+/** Most sessions one wake line may name as its senders. */
+const MAX_FROM = 8
 /** The longest a native puller's `GET …/due?wait=` holds. */
 export const DUE_POLL_MAX_SECONDS = 55
 /** Delivery records older than this go. */
@@ -112,7 +119,11 @@ export interface DeliveryRouteDeps {
   /** The longest line, in characters (the wake policy's note limit). */
   maxChars(): number
   /** Queue the line due now (coalesced by source while undelivered). */
-  queue(sessionId: string, source: string, line: string): Wake
+  queue(sessionId: string, source: string, line: string, ride: boolean): Wake
+  /** Sessions whose wake line this was (`from`): each has just told this one. */
+  sent(from: readonly string[], to: string): void
+  /** Take the session's due ride-along lines now (WakeScheduler.takeRide). */
+  takeRide(sessionId: string): string | null
   /** Take back the source's undelivered line(s) on the session. */
   withdraw(sessionId: string, source: string): { withdrawn: number; sending: boolean }
   /** Whether the queue still holds this row. */
@@ -159,7 +170,9 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
     .add('POST', '/v1/sessions/:id/deliveries', async (req, res, params) => {
       const id = session(params.id)
       const body = await readJsonObject(req)
-      const unknown = Object.keys(body).filter((key) => key !== 'source' && key !== 'line')
+      const unknown = Object.keys(body).filter(
+        (key) => !['source', 'line', 'ride', 'from'].includes(key),
+      )
       if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
       const source = deliverySource(body.source)
       if (source === null)
@@ -174,9 +187,28 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
           field: 'line',
           detail: `one line, 1 to ${max} characters, not starting with / or !`,
         })
+      if (body.ride !== undefined && typeof body.ride !== 'boolean')
+        throw new HttpError(400, 'invalid_body', { field: 'ride', detail: 'true or false' })
+      const from = body.from
+      if (
+        from !== undefined &&
+        !(
+          Array.isArray(from) &&
+          from.length <= MAX_FROM &&
+          from.every((item) => typeof item === 'string' && SESSION_ID.test(item))
+        )
+      )
+        throw new HttpError(400, 'invalid_body', {
+          field: 'from',
+          detail: `up to ${MAX_FROM} session ids`,
+        })
       const log = current()
       if (!deps.receiver(id)) throw new HttpError(409, 'delivery_unsupported')
-      const wake = deps.queue(id, source, line)
+      const ride = body.ride === true
+      const wake = deps.queue(id, source, line, ride)
+      // A wake line from a session is that session telling this one (a lane
+      // that messaged its launcher needs no went-idle line for the same turn).
+      if (!ride && Array.isArray(from)) deps.sent(from as string[], id)
       const fresh = log.get(wake.id) === undefined
       log.record({ id: wake.id, sessionId: id, source, now: deps.now() })
       sendJson(res, fresh ? 201 : 200, {
@@ -204,6 +236,13 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
     })
     .add('GET', '/v1/sessions/:id/due', async (_req, res, params, query) => {
       const id = session(params.id)
+      if (query.get('ride') !== null) {
+        if (query.get('ride') !== '1' || query.get('wait') !== null)
+          throw new HttpError(400, 'invalid_query', { field: 'ride', detail: '1, without wait' })
+        if (!deps.receiver(id)) throw new HttpError(409, 'delivery_unsupported')
+        sendJson(res, 200, { text: deps.takeRide(id) })
+        return
+      }
       const raw = query.get('wait')
       let seconds = 0
       if (raw !== null) {

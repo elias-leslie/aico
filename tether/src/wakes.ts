@@ -177,6 +177,10 @@ export interface Wake {
   endedSession: EndedSession | null
   attempts: number
   lastError: string | null
+  /** Delivery class of an event line: ride-along (never pastes or wakes a
+   * session on its own; it joins the next wake paste or the session's next
+   * natural turn). A check-in and every other line is wake class. */
+  ride: boolean
 }
 
 interface RawWake {
@@ -192,6 +196,12 @@ interface RawWake {
   ended_session: string | null
   attempts: number
   last_error: string | null
+  ride?: number | null
+}
+
+/** Whether this row alone justifies waking the session (anything but a ride-along line). */
+export function isWakeClass(wake: Pick<Wake, 'kind' | 'ride'>): boolean {
+  return wake.kind !== 'event' || !wake.ride
 }
 
 function toWake(raw: RawWake): Wake {
@@ -214,6 +224,7 @@ function toWake(raw: RawWake): Wake {
     endedSession: ended,
     attempts: raw.attempts,
     lastError: raw.last_error,
+    ride: raw.ride === 1,
   }
 }
 
@@ -282,21 +293,31 @@ export class WakeStore {
 
   /** Queue an event line for a session, due now. An undelivered row with the
    * same source takes the newer line instead (coalescing). */
-  addEvent(input: { sessionId: string; source: string; note: string; now: number }): Wake {
+  addEvent(input: {
+    sessionId: string
+    source: string
+    note: string
+    now: number
+    /** Ride-along class (default: wake class). The newer line's class wins. */
+    ride?: boolean
+  }): Wake {
+    const ride = input.ride ? 1 : 0
     const pending = this.db
       .prepare("SELECT id FROM wakes WHERE kind = 'event' AND session_id = ? AND source = ?")
       .get(input.sessionId, input.source) as { id: string } | undefined
     if (pending) {
-      this.db.prepare('UPDATE wakes SET note = ? WHERE id = ?').run(input.note, pending.id)
+      this.db
+        .prepare('UPDATE wakes SET note = ?, ride = ? WHERE id = ?')
+        .run(input.note, ride, pending.id)
       return this.get(pending.id) as Wake
     }
     const id = this.random()
     this.db
       .prepare(
-        `INSERT INTO wakes (id, session_id, due_at, note, created_at, created_by, kind, source)
-         VALUES (?, ?, ?, ?, ?, 'agent', 'event', ?)`,
+        `INSERT INTO wakes (id, session_id, due_at, note, created_at, created_by, kind, source, ride)
+         VALUES (?, ?, ?, ?, ?, 'agent', 'event', ?, ?)`,
       )
-      .run(id, input.sessionId, input.now, input.note, input.now, input.source)
+      .run(id, input.sessionId, input.now, input.note, input.now, input.source, ride)
     return this.get(id) as Wake
   }
 
@@ -361,8 +382,8 @@ export class WakeStore {
     this.db
       .prepare(
         `INSERT OR IGNORE INTO wakes (id, session_id, due_at, note, created_at, created_by, kept,
-           ended_session, attempts, last_error, kind, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ended_session, attempts, last_error, kind, source, ride)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         wake.id,
@@ -377,6 +398,7 @@ export class WakeStore {
         wake.lastError,
         wake.kind,
         wake.source,
+        wake.ride ? 1 : 0,
       )
   }
 
@@ -462,9 +484,9 @@ export function cutToBytes(text: string, max: number): string {
   return out + ELLIPSIS
 }
 
-/** One paste for a session's due rows: event lines first (oldest first),
- * then the check-ins under their `[Scheduled check-in …]` header, all on one
- * line joined with ` / `, under `budget` bytes. `taken` are the rows it
+/** One paste for a session's due rows: wake-class event lines first (oldest
+ * first), then the check-ins under their `[Scheduled check-in …]` header, then
+ * ride-along lines, all on one line joined with ` / `, under `budget` bytes. `taken` are the rows it
  * carries; the rest stay queued. The first row always goes, cut to fit, so an
  * oversized row can never wedge the session's deliveries. */
 export function composeDelivery(
@@ -473,7 +495,10 @@ export function composeDelivery(
   policy: WakePolicy,
   budget = DELIVERY_BUDGET_BYTES,
 ): { text: string; taken: Wake[] } {
-  const events = rows.filter((row) => row.kind === 'event')
+  // Wake-class lines first, the check-ins, then the ride-along lines that
+  // came with them (they never crowd out what woke the session).
+  const events = rows.filter((row) => row.kind === 'event' && !row.ride)
+  const ride = rows.filter((row) => row.kind === 'event' && row.ride)
   const checkIns = rows.filter((row) => row.kind !== 'event')
   const header = checkIns[0] ? checkInHeader(checkIns[0].dueAt, now, policy) : ''
   const pieces = [
@@ -482,6 +507,7 @@ export function composeDelivery(
       row,
       text: index === 0 ? `${header} ${row.note}` : row.note,
     })),
+    ...ride.map((row) => ({ row, text: row.note })),
   ]
   let text = ''
   const taken: Wake[] = []
@@ -655,6 +681,8 @@ interface Puller {
   /** Hand the text over; false when the puller is gone (its request closed). */
   take(text: string): boolean
 }
+/** Why a session's due rows wait when all of them are ride-along. */
+const RIDE_ONLY = 'only ride-along lines are queued: they join the next wake or turn'
 /** A kept wake whose relaunch failed tries again after this. */
 export const WAKE_RELAUNCH_RETRY_MS = 60_000
 /** setTimeout's ceiling is 2^31-1 ms; re-arm before it. */
@@ -795,6 +823,30 @@ export class WakeScheduler {
     })
   }
 
+  /** The session's due ride-along lines, taken now for its next natural turn
+   * (a prompt hook, a tool result): one text under the paste budget, or null
+   * with none. The wake-class rows are not touched: they go by the gated
+   * paste or the puller. */
+  takeRide(sessionId: string): string | null {
+    const now = this.ops.now()
+    const rows = this.store
+      .forSession(sessionId)
+      .filter((wake) => wake.kind === 'event' && wake.ride && wake.dueAt <= now)
+    if (!rows.length) return null
+    const { text, taken } = composeDelivery(rows, now, this.ops.policy())
+    for (const wake of taken) this.store.remove(wake.id)
+    try {
+      this.ops.delivered?.(sessionId, taken, 'native')
+    } catch (error) {
+      this.ops.log(`delivery record failed: ${(error as Error).message}`)
+    }
+    this.ops.changed(sessionId)
+    this.ops.log(
+      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn)`,
+    )
+    return text
+  }
+
   /** Something changed (a wake, an agent state): look again soon. */
   nudge(): void {
     if (this.stopped) return
@@ -827,7 +879,17 @@ export class WakeScheduler {
     this.timer = null
     const now = this.ops.now()
     const wakes = this.store.list()
-    const waiting = wakes.filter((wake) => wake.dueAt <= now && !this.stalled(wake))
+    // Ride-along lines wait for a wake or a natural turn: they are no reason
+    // to look again every few seconds.
+    const wakeSessions = new Set(
+      wakes.filter((wake) => wake.dueAt <= now && isWakeClass(wake)).map((wake) => wake.sessionId),
+    )
+    const waiting = wakes.filter(
+      (wake) =>
+        wake.dueAt <= now &&
+        !this.stalled(wake) &&
+        (isWakeClass(wake) || wake.sessionId === null || wakeSessions.has(wake.sessionId)),
+    )
     if (waiting.length && !this.recheck) {
       this.recheck = setInterval(() => void this.tick(), WAKE_RECHECK_MS)
       this.recheck.unref()
@@ -874,6 +936,12 @@ export class WakeScheduler {
       // Now due: the apps word it as waiting rather than as a time ahead.
       this.ops.changed(sessionId)
     }
+    // Ride-along lines never wake a session on their own: they stay queued for
+    // the next wake paste or the session's next natural turn (`takeRide`).
+    if (!wakes.some(isWakeClass)) {
+      this.held.set(sessionId, RIDE_ONLY)
+      return
+    }
     const native = this.pulling(sessionId)
     const reason = await this.gate(sessionId, native)
     if (reason) {
@@ -882,7 +950,7 @@ export class WakeScheduler {
     }
     // Re-read: a wake cancelled meanwhile must not go out.
     const due = this.store.forSession(sessionId).filter((wake) => wake.dueAt <= this.ops.now())
-    if (!due.length) return
+    if (!due.some(isWakeClass)) return
     const puller = native ? this.pullers.get(sessionId) : undefined
     if (native && !puller) {
       this.hold(sessionId, 'its native puller is between polls')
@@ -924,7 +992,8 @@ export class WakeScheduler {
     } catch (error) {
       this.ops.log(`delivery record failed: ${(error as Error).message}`)
     }
-    const held = this.held.get(sessionId)
+    const heldNow = this.held.get(sessionId)
+    const held = heldNow === RIDE_ONLY ? undefined : heldNow
     this.held.delete(sessionId)
     const late = Math.floor((this.ops.now() - (current[0]?.dueAt ?? 0)) / 60_000)
     const events = current.filter((wake) => wake.kind === 'event').length

@@ -72,6 +72,8 @@ const MAX_AHEAD_MS = 366 * 24 * 3600_000
 /** A time this far in the past is a mistake, not "now". */
 const MAX_BEHIND_MS = 5 * 60_000
 const WAKE_ID = /^[0-9a-f]{12}$/
+/** How long a "session told session" mark is kept. */
+const TOLD_KEEP_MS = 6 * 3600_000
 
 async function runTmux(args: string[]): Promise<string> {
   const { stdout } = await execFileAsync(TMUX_BIN, args, {
@@ -192,10 +194,26 @@ export class WakeService {
 
   /** Queue an event line due now on a session (coalesced by source while
    * undelivered) and look at the queue. */
-  queueEvent(sessionId: string, source: string, line: string): Wake {
-    const wake = this.store.addEvent({ sessionId, source, note: line, now: this.now() })
+  queueEvent(sessionId: string, source: string, line: string, ride = false): Wake {
+    const wake = this.store.addEvent({ sessionId, source, note: line, now: this.now(), ride })
     this.changed(sessionId)
     return wake
+  }
+
+  /** Sessions that told another, `from>to` -> when: a lane that messaged its
+   * launcher during a turn needs no went-idle line for it (lane-reports.ts).
+   * Memory only: after a restart the lane gets its line, as before. */
+  private readonly told = new Map<string, number>()
+
+  noteSent(from: readonly string[], to: string): void {
+    const now = this.now()
+    for (const id of from) if (id !== to) this.told.set(`${id}>${to}`, now)
+    for (const [key, at] of this.told) if (now - at > TOLD_KEEP_MS) this.told.delete(key)
+  }
+
+  /** Whether `from` told `to` at or after `since`. */
+  toldSince(from: string, to: string, since: number): boolean {
+    return (this.told.get(`${from}>${to}`) ?? -1) >= since
   }
 
   /** Take back a source's undelivered line(s) (docs/api-v1.md "Deliveries"). */
@@ -412,7 +430,9 @@ export function registerWakeRoutes(
     exists: (id) => getWidget(id) !== undefined,
     receiver: (id) => service.receiver(id),
     maxChars: () => service.policy().noteMaxChars,
-    queue: (id, source, line) => service.queueEvent(id, source, line),
+    queue: (id, source, line, ride) => service.queueEvent(id, source, line, ride),
+    sent: (from, to) => service.noteSent(from, to),
+    takeRide: (id) => service.scheduler.takeRide(id),
     withdraw: (id, source) => service.withdrawEvents(id, source),
     pending: (id) => service.store.get(id) !== undefined || service.scheduler.inFlight(id),
     pull: (id, ms, aborted, alive) => service.scheduler.pull(id, ms, aborted, alive),

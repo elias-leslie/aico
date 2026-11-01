@@ -33,6 +33,7 @@ import {
   TMUX_SERVERS_TABLE_SQL,
   WAITS_ARMED_BY_COLUMNS,
   WAITS_SQL,
+  WAKES_RIDE_COLUMNS,
   WAKES_SQL,
 } from './schema'
 import {
@@ -446,6 +447,18 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(27, now)
+      }
+      if (current < 28) {
+        // v28: delivery classes (wake or ride-along) on event lines.
+        for (const { table, column, sql } of WAKES_RIDE_COLUMNS) {
+          const has = this.db
+            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
+            .get(table, column)
+          if (!has) this.db.exec(sql)
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(28, now)
       }
     })
   }

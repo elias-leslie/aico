@@ -47,6 +47,15 @@
 //   (went idle, blocked, an exit's ended): they ended it, so the lines are
 //   stale. A line already delivered (or going out now) stays.
 //
+// - A went-idle line the receiver does not need is dropped: the lane told
+//   that receiver with a wake-class message (`st sessions send` or an ack with a
+//   note) during the turn that just ended, so it heard from the lane already
+//   (the explicit message carries the report path). A repeat went-idle line
+//   (the receiver neither sent to the lane nor armed a wait since the last one)
+//   is ride-along: it never wakes the receiver on its own, and joins its next
+//   wake or natural turn. Finished, blocked, ended and model lines are wake
+//   class otherwise.
+//
 // Each report is one event line queued on the receiver's delivery queue
 // (wakes, kind `event`): pasted once the agent is idle, nobody is typing and
 // the input line is empty, or sent as an Agent Hub follow-up turn.
@@ -491,8 +500,12 @@ export interface LaneReportOperations {
   receiver(id: string): boolean
   /** Local sessions' lineage (watch cycles, lineage receivers). */
   sessions(): LocalLineage[]
-  /** Queue one line on the receiver's delivery queue (coalescing by source). */
-  deliver(receiver: string, source: string, line: string): void
+  /** Queue one line on the receiver's delivery queue (coalescing by source).
+   * `ride`: ride-along class, which never wakes the receiver on its own. */
+  deliver(receiver: string, source: string, line: string, ride?: boolean): void
+  /** Whether the lane (a session here) told `receiver` with a wake-class
+   * message at or after `since` (src/wake-runtime.ts `toldSince`). */
+  told?(lane: string, receiver: string, since: number): boolean
   /** Take back the receiver's still-queued line from this source (the queue's
    * withdraw: a row going out right now is not stopped). Returns rows taken. */
   withdraw(receiver: string, source: string): number
@@ -595,6 +608,9 @@ function cursorSnapshot(cursor: LaneCursor): LaneSnapshot {
 
 /** How long a forwarded End's asker is kept for the relayed `ended`. */
 const REMOTE_END_MS = 10 * 60_000
+
+/** A message sent as the turn began may reach Tether before it saw the lane work. */
+const TURN_SLACK_MS = 3000
 
 /** A wait may fire on the same observation a moment before the reporter
  * sees it (another subscriber of the same event). */
@@ -855,8 +871,11 @@ export class LaneReporter {
           memory.workingSeenAt !== null
             ? Math.floor((memory.seenAt - memory.workingSeenAt) / 60_000)
             : null
+        // The turn that just ended began when it was first seen working; a
+        // turn too short to see began after the last line.
+        const turnStart = memory.workingSeenAt ?? Math.max(cursor.finishedSentAt, view.createdAt)
         this.store.transaction(() => {
-          this.fire(
+          const told = this.fire(
             {
               outcome: 'finished',
               at: memory.seenAt - SAME_EVENT_SLACK_MS,
@@ -864,10 +883,16 @@ export class LaneReporter {
             },
             snapshotOf(view),
             { minutes },
+            null,
+            { toldSince: turnStart - TURN_SLACK_MS, ride: cursor.finishedStreak > 0 },
           )
           cursor.finishedAt = view.stateAgentAt
-          cursor.finishedSentAt = now
-          cursor.finishedStreak += 1
+          // A turn the lane reported itself is no went-idle line sent: it
+          // neither starts the floor nor counts toward the repeat backoff.
+          if (!told) {
+            cursor.finishedSentAt = now
+            cursor.finishedStreak += 1
+          }
           this.store.save(cursor, now)
         })
         memory.workingSeenAt = null
@@ -969,7 +994,8 @@ export class LaneReporter {
     lane: LaneSnapshot,
     extra: Parameters<typeof laneLine>[2] = {},
     endedBy: string | null = null,
-  ): void {
+    delivery: { toldSince?: number; ride?: boolean } = {},
+  ): boolean {
     const { outcome } = event
     const all = this.receivers(lane)
     const { skip, launcher } = this.endSkip(lane, endedBy)
@@ -981,15 +1007,36 @@ export class LaneReporter {
     const left = all.filter((id) => !skip.has(id))
     // A receiver waiting on the lane hears this from its wait.
     const heard = left.length ? this.ops.heardFrom(lane.id, lane.host, left, event) : new Set()
-    const receivers = left.filter((id) => !heard.has(id))
+    let receivers = left.filter((id) => !heard.has(id))
+    let toldAll = false
     if (heard.size) skipped += ` (heard from its wait: ${[...heard].join(',')})`
+    // A went-idle line after the lane told the receiver in that turn adds nothing.
+    if (
+      outcome === 'finished' &&
+      lane.host === null &&
+      delivery.toldSince !== undefined &&
+      this.ops.told
+    ) {
+      const since = delivery.toldSince
+      const told = receivers.filter((id) => this.ops.told?.(lane.id, id, since))
+      if (told.length) {
+        skipped += ` (told in that turn: ${told.join(',')})`
+        receivers = receivers.filter((id) => !told.includes(id))
+        toldAll = receivers.length === 0
+      }
+    }
     if (!receivers.length) {
       this.ops.log(`lane=${where} ${outcome}: no receiver${skipped}`)
-      return
+      return toldAll
     }
     const line = laneLine(outcome, lane, extra)
-    for (const receiver of receivers) this.ops.deliver(receiver, `lane:${where}:${outcome}`, line)
-    this.ops.log(`lane=${where} ${outcome} -> ${receivers.join(',')}${skipped}`)
+    const ride = delivery.ride === true
+    for (const receiver of receivers)
+      this.ops.deliver(receiver, `lane:${where}:${outcome}`, line, ride)
+    this.ops.log(
+      `lane=${where} ${outcome} -> ${receivers.join(',')}${ride ? ' (ride-along: repeat)' : ''}${skipped}`,
+    )
+    return false
   }
 
   /** The sessions an End spared the `ended` line lose the lane's lines still

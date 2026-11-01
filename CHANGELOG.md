@@ -4,6 +4,14 @@
 
 ### Added
 
+- Delivery classes (Tether API 24, schema 28). A queued line is a wake or
+  ride-along (`ride` on `POST /v1/sessions/:id/deliveries`). Ride-along lines
+  never paste or wake a puller alone: they join the next wake, or the
+  session's next turn (`GET /v1/sessions/:id/due?ride=1`). A lane's repeated
+  went-idle line is ride-along, and a lane that already told its launcher
+  during the turn that ended sends no went-idle line (`from` on a delivery).
+  SummitFlow sends bare acknowledgements and `st sessions send --fyi` notes as
+  ride-along.
 - Tether stops and reports a model switch (Tether API 22, schema 26). It
   follows each session's own record (Claude Code transcript, Codex rollout, Pi
   session) and treats a served model other than the launch model as a switch;
