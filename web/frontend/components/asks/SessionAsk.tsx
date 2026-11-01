@@ -5,7 +5,12 @@ import { useEffect, useState } from 'react'
 import { formatAge } from '@/lib/attention'
 import { openAsks, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
-import { AskCard, NeedsYouLauncher, openNeedsYou } from './NeedsYou'
+import {
+  AskCard,
+  NeedsYouLauncher,
+  openNeedsYou,
+  useNeedsYouState,
+} from './NeedsYou'
 
 /** Ask ids are a session's short id; slots carry the full one. */
 const sameSession = (a: string, b: string) => a.startsWith(b) || b.startsWith(a)
@@ -47,6 +52,9 @@ export function SessionAsk({
   // The phone's drawer, when no bar button is on screen to hold it; mounted
   // whether or not a question shows, so answering one keeps the sheet open.
   const host = isPhone && <NeedsYouLauncher variant="none" />
+  // A desktop with Needs you open already shows this question there.
+  const needsYouOpen = useNeedsYouState().open
+  if (!isPhone && needsYouOpen) return null
   if (!ask)
     return (
       <>
@@ -132,7 +140,7 @@ export function SessionAsk({
             )}
           </div>
           {open && (
-            <div className="max-h-[40vh] overflow-y-auto overscroll-contain px-3 pt-1 pb-2.5">
+            <div className="max-h-[40vh] max-w-[760px] overflow-y-auto overscroll-contain px-3 pt-1 pb-2.5">
               <AskCard ask={ask} now={now} onSent={setSent} inSession />
             </div>
           )}

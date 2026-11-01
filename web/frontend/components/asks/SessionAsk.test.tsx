@@ -5,7 +5,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OwnerAsk } from '@/lib/hooks/use-asks'
-import { closeNeedsYou, useNeedsYouState } from './NeedsYou'
+import { closeNeedsYou, openNeedsYou, useNeedsYouState } from './NeedsYou'
 import { SessionAsk } from './SessionAsk'
 
 const state = vi.hoisted(() => ({
@@ -120,6 +120,14 @@ describe('SessionAsk', () => {
     expect(screen.queryByTestId('ask-card')).toBeNull()
     fireEvent.click(head)
     expect(screen.getByTestId('ask-card')).toBeVisible()
+  })
+
+  it('steps aside on a desktop while Needs you is open beside it', () => {
+    state.asks = [ask()]
+    render(<SessionAsk sessionId="0123abcd" />)
+    expect(screen.getByTestId('session-ask')).toBeVisible()
+    act(() => openNeedsYou())
+    expect(screen.queryByTestId('session-ask')).toBeNull()
   })
 
   it('hands the phone to the Needs you sheet on that question', () => {

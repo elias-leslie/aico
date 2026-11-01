@@ -1290,6 +1290,10 @@ div.xterm .xterm-viewport {
     min-height: 44px;
   }
 
+  [data-testid="needs-you-drawer"] .lantern-ask-option {
+    align-items: center;
+  }
+
   /* 16px or the phone zooms the page when the note field takes focus. */
   [data-testid="needs-you-drawer"] .lantern-ask-note input {
     font-size: 16px;
