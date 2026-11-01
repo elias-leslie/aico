@@ -35,6 +35,7 @@ vi.mock('./SessionSidebar', () => ({
   ),
 }))
 vi.mock('./AgentShowToast', () => ({ AgentShows: () => null }))
+vi.mock('./asks/SessionAsk', () => ({ SessionAsk: () => null }))
 vi.mock('./terminal-content/TerminalMobileSection', () => ({
   TerminalMobileSection: () => <div data-testid="phone-key-row" />,
 }))

@@ -1241,6 +1241,40 @@ div.xterm .xterm-viewport {
   height: 32px;
 }
 
+/* The open session's own question, between the session and where you type. */
+.lantern-session-ask {
+  margin: 0 8px 6px;
+  border: 1px solid rgb(var(--lantern-rgb) / 0.35);
+  border-radius: 8px;
+  background: rgb(var(--lantern-rgb) / 0.06);
+  font-size: 13px;
+}
+
+.lantern-session-ask-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--bone);
+  text-align: left;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-session-ask-head:hover {
+  background: rgb(var(--lantern-rgb) / 0.08);
+}
+
+.lantern-session-ask-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lantern);
+}
+
 /* On the phone every control in the drawer and the session sheet's tool row is
    a full 44px touch target. */
 @media (max-width: 767px) {
@@ -1251,7 +1285,13 @@ div.xterm .xterm-viewport {
   }
 
   [data-testid="needs-you-drawer"] .lantern-ask-option,
-  [data-testid="needs-you-drawer"] .lantern-ask-note {
+  [data-testid="needs-you-drawer"] .lantern-ask-note,
+  .lantern-session-ask-head {
     min-height: 44px;
+  }
+
+  /* 16px or the phone zooms the page when the note field takes focus. */
+  [data-testid="needs-you-drawer"] .lantern-ask-note input {
+    font-size: 16px;
   }
 }

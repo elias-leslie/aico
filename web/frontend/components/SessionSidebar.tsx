@@ -4,7 +4,12 @@ import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
-import { NeedsYouLauncher } from './asks/NeedsYou'
+import {
+  NeedsYouLauncher,
+  NeedsYouPanel,
+  useHostNeedsYou,
+  useNeedsYouState,
+} from './asks/NeedsYou'
 import { HostsLauncher } from './HostsButton'
 import { HealthLauncher } from './health/HealthButton'
 import { SessionList, SessionRail, sessionsHeading } from './SessionList'
@@ -48,6 +53,8 @@ export function SessionSidebar({
 }: SessionSidebarProps) {
   const attention = useSessionAttention()
   const [dragWidth, setDragWidth] = useState<number | null>(null)
+  useHostNeedsYou()
+  const needsYouOpen = useNeedsYouState().open
   const heading = sessionsHeading(slots.length, attention.needsYouCount)
   const newButton = onNewSession && (
     <button
@@ -62,6 +69,32 @@ export function SessionSidebar({
       <Plus className="h-4 w-4" strokeWidth={1.7} />
     </button>
   )
+
+  // Needs you opens in the list's place, at the list's width (the rail opens
+  // out to it), and Back brings the list or the rail back.
+  if (needsYouOpen)
+    return (
+      <aside
+        data-testid="session-sidebar"
+        data-mode="needs-you"
+        data-resizing={dragWidth !== null ? 'true' : undefined}
+        className="relative flex max-w-[50vw] flex-none flex-col"
+        style={{
+          width: dragWidth ?? width,
+          borderRight: '1px solid rgb(var(--glass-rgb) / 0.05)',
+        }}
+      >
+        <NeedsYouPanel />
+        {!collapsed && onWidthChange && (
+          <ResizeHandle
+            width={dragWidth ?? width}
+            onDrag={setDragWidth}
+            onWidthChange={onWidthChange}
+            onFold={() => onCollapsedChange?.(true)}
+          />
+        )}
+      </aside>
+    )
 
   if (collapsed) {
     const needs = attention.needsYouCount

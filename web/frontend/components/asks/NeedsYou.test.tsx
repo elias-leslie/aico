@@ -2,10 +2,19 @@
 // answer sent as picked, approvals as links only, and an honest state for
 // each of loading, empty and failed.
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Approvals, OwnerAsk } from '@/lib/hooks/use-asks'
-import { NeedsYouDrawer, NeedsYouLauncher } from './NeedsYou'
+import {
+  closeNeedsYou,
+  NeedsYouDrawer,
+  NeedsYouLauncher,
+  NeedsYouPanel,
+  openNeedsYou,
+  useHostNeedsYou,
+  useNeedsYouState,
+} from './NeedsYou'
 
 const state = vi.hoisted(() => ({
   asks: [] as OwnerAsk[],
@@ -83,6 +92,7 @@ beforeEach(() => {
   state.approvalsLoading = false
   state.sent = []
   push.mockReset()
+  act(() => closeNeedsYou())
 })
 
 describe('NeedsYouLauncher', () => {
@@ -137,6 +147,71 @@ describe('NeedsYouLauncher', () => {
     rerender(<NeedsYouLauncher key="list" />)
     expect(screen.getAllByTestId('needs-you-drawer')).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByTestId('needs-you-drawer')).toBeNull()
+  })
+})
+
+describe('Needs you beside the session list', () => {
+  function ListHost({ children }: { children: ReactNode }) {
+    useHostNeedsYou()
+    return <>{children}</>
+  }
+  function OpenProbe() {
+    const { open } = useNeedsYouState()
+    return <p data-testid="open-probe">{open ? 'open' : 'closed'}</p>
+  }
+
+  it('opens no drawer while a session list is on screen to hold it', () => {
+    state.asks = [ask()]
+    render(
+      <ListHost>
+        <NeedsYouLauncher variant="tool" />
+      </ListHost>,
+    )
+    fireEvent.click(screen.getByTestId('needs-you-pill'))
+    expect(screen.queryByTestId('needs-you-drawer')).toBeNull()
+  })
+
+  it('goes back from its arrow or Esc, and offers the way back once nothing is left', async () => {
+    state.asks = [ask()]
+    const { rerender } = render(<NeedsYouPanel />)
+    const panel = screen.getByTestId('needs-you-panel')
+    expect(
+      within(panel).getByRole('heading', { name: 'Needs you' }),
+    ).toBeVisible()
+    const backButton = screen.getByRole('button', { name: 'Back to sessions' })
+    expect(backButton).toHaveFocus()
+
+    const card = screen.getByTestId('ask-card')
+    fireEvent.click(within(card).getAllByRole('radio')[0] as HTMLElement)
+    fireEvent.click(within(card).getByRole('button', { name: 'Send' }))
+    await screen.findByRole('status')
+    state.asks = [{ ...ask(), state: 'answered' }]
+    rerender(<NeedsYouPanel />)
+    expect(panel).toHaveTextContent('Nothing else waiting.')
+    expect(
+      screen.getAllByRole('button', { name: 'Back to sessions' }),
+    ).toHaveLength(2)
+
+    // Esc from inside it goes back; the session never sees the key.
+    const outer = vi.fn()
+    document.addEventListener('keydown', outer)
+    render(<OpenProbe />)
+    act(() => openNeedsYou())
+    expect(screen.getByTestId('open-probe')).toHaveTextContent('open')
+    fireEvent.keyDown(backButton, { key: 'Escape' })
+    expect(outer).not.toHaveBeenCalled()
+    expect(screen.getByTestId('open-probe')).toHaveTextContent('closed')
+    document.removeEventListener('keydown', outer)
+  })
+
+  it('toggles the bar dropdown from its button', () => {
+    state.asks = [ask()]
+    render(<NeedsYouLauncher />)
+    const pill = screen.getByTestId('needs-you-pill')
+    fireEvent.click(pill)
+    expect(screen.getByTestId('needs-you-drawer')).toBeInTheDocument()
+    fireEvent.click(pill)
     expect(screen.queryByTestId('needs-you-drawer')).toBeNull()
   })
 })

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionSidebar } from './SessionSidebar'
 
 vi.mock('@/lib/hooks/use-session-attention', () => ({
@@ -7,7 +7,13 @@ vi.mock('@/lib/hooks/use-session-attention', () => ({
 }))
 vi.mock('./HostsButton', () => ({ HostsLauncher: () => null }))
 vi.mock('./health/HealthButton', () => ({ HealthLauncher: () => null }))
-vi.mock('./asks/NeedsYou', () => ({ NeedsYouLauncher: () => null }))
+const needsYou = vi.hoisted(() => ({ open: false }))
+vi.mock('./asks/NeedsYou', () => ({
+  NeedsYouLauncher: () => null,
+  NeedsYouPanel: () => <p>Needs you panel</p>,
+  useHostNeedsYou: () => {},
+  useNeedsYouState: () => ({ open: needsYou.open }),
+}))
 vi.mock('./SessionList', () => ({
   SessionList: () => <p>Full list</p>,
   SessionRail: () => <p>Rail marks</p>,
@@ -38,7 +44,28 @@ function open(width = 320) {
   }
 }
 
+beforeEach(() => {
+  needsYou.open = false
+})
+
 describe('SessionSidebar', () => {
+  it('shows Needs you in the list’s place at the list’s width, the rail opening out to it', () => {
+    needsYou.open = true
+    const { unmount } = render(
+      <SessionSidebar slots={[]} onSelect={vi.fn()} width={360} />,
+    )
+    expect(screen.getByText('Needs you panel')).toBeVisible()
+    expect(screen.queryByText('Full list')).toBeNull()
+    expect(screen.getByTestId('session-sidebar').style.width).toBe('360px')
+    unmount()
+    render(
+      <SessionSidebar slots={[]} onSelect={vi.fn()} width={360} collapsed />,
+    )
+    expect(screen.getByText('Needs you panel')).toBeVisible()
+    expect(screen.queryByText('Rail marks')).toBeNull()
+    expect(screen.getByTestId('session-sidebar').style.width).toBe('360px')
+  })
+
   it('folds to a rail that counts who needs you and opens the list again', () => {
     const onCollapsedChange = vi.fn()
     render(

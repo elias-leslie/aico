@@ -4,6 +4,7 @@ import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { getSlotName, getSlotPanelId, getSlotSessionId } from '@/lib/utils/slot'
 import { AgentShows } from './AgentShowToast'
+import { SessionAsk } from './asks/SessionAsk'
 import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
 import { SessionSidebar, SIDE_LIST_WIDTH } from './SessionSidebar'
 import { getShownSlot } from './SessionView'
@@ -154,6 +155,12 @@ function TerminalContentBody({
           sideList={wide}
           composeOpen={composeOpen}
           onToggleCompose={isMobile ? undefined : toggleCompose}
+        />
+
+        {/* The open session's question for the owner, above where you type */}
+        <SessionAsk
+          sessionId={shownSlot ? getSlotSessionId(shownSlot) : null}
+          className="order-3 flex-none"
         />
 
         {/* Phone typing and key row, while a session is open */}

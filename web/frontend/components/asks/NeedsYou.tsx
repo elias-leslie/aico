@@ -2,7 +2,7 @@
 
 import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
-import { Check, Copy, Inbox, X } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Inbox, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import {
   type ReactNode,
@@ -10,6 +10,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
@@ -52,8 +53,16 @@ interface DrawerState {
   open: boolean
   focus: string | null
   owner: string | null
+  /** Session lists on screen: while one is, Needs you takes its place
+   * instead of opening a drawer over the session. */
+  hosts: number
 }
-let drawerState: DrawerState = { open: false, focus: null, owner: null }
+let drawerState: DrawerState = {
+  open: false,
+  focus: null,
+  owner: null,
+  hosts: 0,
+}
 const drawerListeners = new Set<() => void>()
 function setDrawer(next: Partial<DrawerState>): void {
   drawerState = { ...drawerState, ...next }
@@ -65,12 +74,36 @@ function subscribeDrawer(listener: () => void): () => void {
 }
 const readDrawer = () => drawerState
 
+/** Open Needs you, with one question first (a push link, the session's own
+ * question on the phone). */
+export function openNeedsYou(focus: string | null = null): void {
+  setDrawer({ open: true, focus })
+}
+
+export function closeNeedsYou(): void {
+  setDrawer({ open: false, focus: null, owner: null })
+}
+
+export function useNeedsYouState(): DrawerState {
+  return useSyncExternalStore(subscribeDrawer, readDrawer, readDrawer)
+}
+
+/** The session list calls this while it is on screen, so Needs you opens in
+ * its place. */
+export function useHostNeedsYou(): void {
+  useEffect(() => {
+    setDrawer({ hosts: drawerState.hosts + 1 })
+    return () => setDrawer({ hosts: drawerState.hosts - 1 })
+  }, [])
+}
+
 /** Where the launcher sits: the session bar on a desktop (`pill`), the
  * session list's tool row beside Health and Hosts (`tool`: labelled), its
  * folded rail (`icon`), the phone's session bar (`compact`: the count alone,
- * nothing when nothing waits) or the session sheet (`row`: labelled, mounted
- * only while the sheet is open). */
-type Variant = 'pill' | 'tool' | 'icon' | 'compact' | 'row'
+ * nothing when nothing waits), the session sheet (`row`: labelled, mounted
+ * only while the sheet is open) or no button at all (`none`: a session's own
+ * question opening the drawer). */
+type Variant = 'pill' | 'tool' | 'icon' | 'compact' | 'row' | 'none'
 
 /** The "N need you" pill and its drawer: questions agents asked, Nightshift
  * approvals (links only) and what was answered. */
@@ -78,7 +111,7 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
   const { asks } = useOwnerAsks()
   const { approvals } = useApprovals()
   const me = useId()
-  const drawer = useSyncExternalStore(subscribeDrawer, readDrawer, readDrawer)
+  const drawer = useNeedsYouState()
   const waiting = openAsks(asks).length
   const taps = approvals?.taps.length ?? 0
   const count = waiting + taps
@@ -112,10 +145,15 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
         ]
           .filter(Boolean)
           .join(' and ')} waiting`
-  const show = () => setDrawer({ open: true, focus: null, owner: me })
+  // The bar's button toggles its dropdown.
+  const show = () =>
+    drawer.open && drawer.owner === me && drawer.hosts === 0
+      ? closeNeedsYou()
+      : setDrawer({ open: true, focus: null, owner: me })
 
   let button: ReactNode
-  if (variant === 'row' || variant === 'tool')
+  if (variant === 'none') button = null
+  else if (variant === 'row' || variant === 'tool')
     button = (
       <button
         type="button"
@@ -173,11 +211,11 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
   return (
     <>
       {button}
-      {drawer.open && drawer.owner === me && (
+      {drawer.open && drawer.owner === me && drawer.hosts === 0 && (
         <NeedsYouDrawer
           open
           onOpenChange={(next) => {
-            if (!next) setDrawer({ open: false, focus: null, owner: null })
+            if (!next) closeNeedsYou()
           }}
           focus={drawer.focus}
         />
@@ -186,6 +224,8 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
   )
 }
 
+/** Phones: a sheet over most of the screen. A desktop without the session
+ * list beside the session: a dropdown under the bar's button. */
 export function NeedsYouDrawer({
   open,
   onOpenChange,
@@ -197,6 +237,147 @@ export function NeedsYouDrawer({
   focus?: string | null
 }) {
   const isMobile = useMediaQuery('(max-width: 767px)')
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={isMobile}>
+      <Dialog.Portal>
+        {isMobile && (
+          <Dialog.Overlay
+            className="fixed inset-0 z-[10000]"
+            style={{ backgroundColor: 'var(--scrim)' }}
+          />
+        )}
+        <Dialog.Content
+          data-testid="needs-you-drawer"
+          aria-describedby={undefined}
+          // The bar's button toggles it; a click there is not a dismissal.
+          onInteractOutside={(event) => {
+            const target = event.target as Element | null
+            if (target?.closest?.('[data-testid="needs-you-pill"]'))
+              event.preventDefault()
+          }}
+          className={clsx(
+            'lantern-sheet fixed z-[10001] flex flex-col overflow-hidden outline-none',
+            isMobile
+              ? 'lantern-rise inset-x-0 bottom-0 h-[84dvh] rounded-t-[14px]'
+              : 'lantern-enter top-12 right-2 max-h-[min(680px,calc(100dvh-64px))] w-[380px] max-w-[calc(100vw-16px)] rounded-[10px]',
+          )}
+          style={{
+            color: 'var(--bone)',
+            border: isMobile ? undefined : '1px solid var(--paper-veil)',
+          }}
+        >
+          {isMobile && (
+            <div
+              aria-hidden="true"
+              className="mx-auto mt-2 h-1 w-9 rounded-full"
+              style={{ backgroundColor: 'var(--paper-veil)' }}
+            />
+          )}
+          <NeedsYouBody
+            focus={focus}
+            onOpenSession={isMobile ? () => onOpenChange(false) : undefined}
+            header={(summary) => (
+              <>
+                <Dialog.Title
+                  className="min-w-0 flex-1"
+                  style={{ font: '500 18px/1.2 var(--font-display)' }}
+                >
+                  Needs you
+                </Dialog.Title>
+                <span className="text-[12px]" style={{ color: 'var(--mist)' }}>
+                  {summary}
+                </span>
+                <Dialog.Close aria-label="Close" className="lantern-icon-btn">
+                  <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
+                </Dialog.Close>
+              </>
+            )}
+          />
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
+/** A desktop with the session list: Needs you in the list's place, under the
+ * button that opened it, beside the session instead of over it. Back, or Esc
+ * from inside it, brings the list back. */
+export function NeedsYouPanel() {
+  const { focus } = useNeedsYouState()
+  const backRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => backRef.current?.focus({ preventScroll: true }), [])
+  const back = () => {
+    closeNeedsYou()
+    // Back on the button that opened it, once the list is back.
+    window.requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>(
+          '[data-testid="session-sidebar"] [data-testid="needs-you-pill"]',
+        )
+        ?.focus(),
+    )
+  }
+  return (
+    <section
+      aria-labelledby="needs-you-panel-title"
+      data-testid="needs-you-panel"
+      className="flex min-h-0 flex-1 flex-col"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return
+        event.stopPropagation()
+        back()
+      }}
+    >
+      <NeedsYouBody
+        focus={focus}
+        onBack={back}
+        header={(summary) => (
+          <>
+            <button
+              ref={backRef}
+              type="button"
+              className="lantern-icon-btn compact -ml-1.5"
+              onClick={back}
+              aria-label="Back to sessions"
+              title="Back to sessions"
+            >
+              <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
+            </button>
+            <h2
+              id="needs-you-panel-title"
+              className="min-w-0 flex-1 truncate"
+              style={{ font: '500 17px/1.2 var(--font-display)' }}
+            >
+              Needs you
+            </h2>
+            <span
+              className="truncate text-[12px]"
+              style={{ color: 'var(--mist)' }}
+            >
+              {summary}
+            </span>
+          </>
+        )}
+      />
+    </section>
+  )
+}
+
+/** The header row, tabs and cards every Needs you shares. */
+function NeedsYouBody({
+  focus,
+  header,
+  onOpenSession,
+  onBack,
+}: {
+  focus: string | null
+  /** The title row, given the "N agent questions" line. */
+  header: (summary: string) => ReactNode
+  /** Called after a card opens its session (the phone closes the sheet). */
+  onOpenSession?: () => void
+  /** In the session list's place: a way back once nothing is left. */
+  onBack?: () => void
+}) {
   const { asks, isLoading, isError, refetch } = useOwnerAsks()
   const { approvals, isLoading: approvalsLoading } = useApprovals()
   const now = Date.now()
@@ -217,168 +398,132 @@ export function NeedsYouDrawer({
   const blockedSessions = new Set(
     waiting.filter((ask) => ask.blocking && ask.session).map((a) => a.session),
   ).size
+  const summary = [
+    plural(waiting.length, 'agent question'),
+    blockedSessions ? plural(blockedSessions, 'waiting session') : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={isMobile}>
-      <Dialog.Portal>
-        {isMobile && (
-          <Dialog.Overlay
-            className="fixed inset-0 z-[10000]"
-            style={{ backgroundColor: 'var(--scrim)' }}
-          />
-        )}
-        <Dialog.Content
-          data-testid="needs-you-drawer"
-          aria-describedby={undefined}
-          // Beside the session on a desktop: clicking the session keeps it open.
-          onInteractOutside={(event) => {
-            if (!isMobile) event.preventDefault()
-          }}
-          className={clsx(
-            'lantern-sheet fixed z-[10001] flex flex-col overflow-hidden outline-none',
-            isMobile
-              ? 'lantern-rise inset-x-0 bottom-0 h-[84dvh] rounded-t-[14px]'
-              : 'lantern-enter top-0 right-0 bottom-0 w-[380px] max-w-[92vw]',
-          )}
-          style={{
-            color: 'var(--bone)',
-            borderLeft: isMobile ? undefined : '1px solid var(--paper-veil)',
-          }}
-        >
-          {isMobile && (
-            <div
-              aria-hidden="true"
-              className="mx-auto mt-2 h-1 w-9 rounded-full"
-              style={{ backgroundColor: 'var(--paper-veil)' }}
-            />
-          )}
-          <div className="flex items-center gap-2 pt-3 pr-2 pb-1 pl-4">
-            <Dialog.Title
-              className="min-w-0 flex-1"
-              style={{ font: '500 18px/1.2 var(--font-display)' }}
+    <>
+      <div className="flex items-center gap-2 pt-3 pr-2 pb-1 pl-4">
+        {header(summary)}
+      </div>
+      <div
+        role="tablist"
+        aria-label="Needs you"
+        className="flex flex-none gap-1 px-3 pb-2"
+        style={{ borderBottom: '1px solid var(--paper-veil)' }}
+      >
+        <TabButton id="asks" tab={tab} onSelect={setTab}>
+          Asks{waiting.length ? ` ${waiting.length}` : ''}
+        </TabButton>
+        <TabButton id="approvals" tab={tab} onSelect={setTab}>
+          Approvals{taps.length ? ` ${taps.length}` : ''}
+        </TabButton>
+        <TabButton id="answered" tab={tab} onSelect={setTab}>
+          Answered
+        </TabButton>
+      </div>
+      <div
+        role="tabpanel"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-4"
+      >
+        {tab === 'approvals' ? (
+          approvalsLoading ? (
+            <Note>Checking Nightshift…</Note>
+          ) : approvals?.state !== 'ok' ? (
+            <Note>
+              Can’t read Nightshift’s approvals right now. Open Nightshift to
+              see them.
+            </Note>
+          ) : taps.length === 0 ? (
+            <Note>Nothing waiting for your security key.</Note>
+          ) : (
+            <ul className="flex flex-col gap-2.5" aria-label="Approvals">
+              {taps.map((tap) => (
+                <ApprovalCard key={tap.id} tap={tap} />
+              ))}
+            </ul>
+          )
+        ) : isLoading ? (
+          <Note>Loading questions…</Note>
+        ) : isError ? (
+          <Note>
+            Couldn’t load questions.{' '}
+            <button
+              type="button"
+              className="underline"
+              style={{ color: 'var(--lantern)' }}
+              onClick={() => void refetch()}
             >
-              Needs you
-            </Dialog.Title>
-            <span className="text-[12px]" style={{ color: 'var(--mist)' }}>
-              {[
-                plural(waiting.length, 'agent question'),
-                blockedSessions
-                  ? plural(blockedSessions, 'waiting session')
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-            <Dialog.Close aria-label="Close" className="lantern-icon-btn">
-              <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
-            </Dialog.Close>
-          </div>
-          <div
-            role="tablist"
-            aria-label="Needs you"
-            className="flex flex-none gap-1 px-3 pb-2"
-            style={{ borderBottom: '1px solid var(--paper-veil)' }}
-          >
-            <TabButton id="asks" tab={tab} onSelect={setTab}>
-              Asks{waiting.length ? ` ${waiting.length}` : ''}
-            </TabButton>
-            <TabButton id="approvals" tab={tab} onSelect={setTab}>
-              Approvals{taps.length ? ` ${taps.length}` : ''}
-            </TabButton>
-            <TabButton id="answered" tab={tab} onSelect={setTab}>
-              Answered
-            </TabButton>
-          </div>
-          <div
-            role="tabpanel"
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-4"
-          >
-            {tab === 'approvals' ? (
-              approvalsLoading ? (
-                <Note>Checking Nightshift…</Note>
-              ) : approvals?.state !== 'ok' ? (
-                <Note>
-                  Can’t read Nightshift’s approvals right now. Open Nightshift
-                  to see them.
-                </Note>
-              ) : taps.length === 0 ? (
-                <Note>Nothing waiting for your security key.</Note>
-              ) : (
-                <ul className="flex flex-col gap-2.5" aria-label="Approvals">
-                  {taps.map((tap) => (
-                    <ApprovalCard key={tap.id} tap={tap} />
-                  ))}
-                </ul>
-              )
-            ) : isLoading ? (
-              <Note>Loading questions…</Note>
-            ) : isError ? (
-              <Note>
-                Couldn’t load questions.{' '}
+              Try again
+            </button>
+          </Note>
+        ) : tab === 'asks' ? (
+          <>
+            {sent && (
+              <p
+                role="status"
+                className="mb-2.5 rounded-md px-2.5 py-2 text-[13px]"
+                style={{
+                  backgroundColor: 'rgb(var(--lantern-rgb) / 0.12)',
+                }}
+              >
+                {sent}{' '}
                 <button
                   type="button"
                   className="underline"
                   style={{ color: 'var(--lantern)' }}
-                  onClick={() => void refetch()}
+                  onClick={() => setTab('answered')}
                 >
-                  Try again
+                  See Answered
                 </button>
-              </Note>
-            ) : tab === 'asks' ? (
+              </p>
+            )}
+            {waiting.length === 0 ? (
               <>
-                {sent && (
-                  <p
-                    role="status"
-                    className="mb-2.5 rounded-md px-2.5 py-2 text-[13px]"
-                    style={{
-                      backgroundColor: 'rgb(var(--lantern-rgb) / 0.12)',
-                    }}
+                <Note>
+                  {sent
+                    ? 'Nothing else waiting.'
+                    : 'No agent questions waiting. Nightshift’s own checks are under Health.'}
+                </Note>
+                {onBack && (
+                  <button
+                    type="button"
+                    className="lantern-btn small mt-1"
+                    onClick={onBack}
                   >
-                    {sent}{' '}
-                    <button
-                      type="button"
-                      className="underline"
-                      style={{ color: 'var(--lantern)' }}
-                      onClick={() => setTab('answered')}
-                    >
-                      See Answered
-                    </button>
-                  </p>
-                )}
-                {waiting.length === 0 ? (
-                  <Note>
-                    No agent questions waiting. Nightshift’s own checks are
-                    under Health.
-                  </Note>
-                ) : (
-                  <ul className="flex flex-col gap-2.5" aria-label="Questions">
-                    {orderFocused(waiting, focus).map((ask) => (
-                      <AskCard
-                        key={ask.id}
-                        ask={ask}
-                        now={now}
-                        onSent={setSent}
-                        onOpenSession={
-                          isMobile ? () => onOpenChange(false) : undefined
-                        }
-                      />
-                    ))}
-                  </ul>
+                    Back to sessions
+                  </button>
                 )}
               </>
-            ) : answered.length === 0 ? (
-              <Note>Nothing answered in the last day.</Note>
             ) : (
-              <ul className="flex flex-col gap-2.5" aria-label="Answered">
-                {orderFocused(answered, focus).map((ask) => (
-                  <AnsweredCard key={ask.id} ask={ask} now={now} />
+              <ul className="flex flex-col gap-2.5" aria-label="Questions">
+                {orderFocused(waiting, focus).map((ask) => (
+                  <AskCard
+                    key={ask.id}
+                    ask={ask}
+                    now={now}
+                    onSent={setSent}
+                    onOpenSession={onOpenSession}
+                  />
                 ))}
               </ul>
             )}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </>
+        ) : answered.length === 0 ? (
+          <Note>Nothing answered in the last day.</Note>
+        ) : (
+          <ul className="flex flex-col gap-2.5" aria-label="Answered">
+            {orderFocused(answered, focus).map((ask) => (
+              <AnsweredCard key={ask.id} ask={ask} now={now} />
+            ))}
+          </ul>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -504,17 +649,20 @@ function OpenSession({
   )
 }
 
-function AskCard({
+export function AskCard({
   ask,
   now,
   onSent,
   onOpenSession,
+  inSession = false,
 }: {
   ask: OwnerAsk
   now: number
   /** Called with what was said once the answer is saved. */
   onSent?: (text: string) => void
   onOpenSession?: () => void
+  /** Shown in the session that asked: no asker line, no Open session. */
+  inSession?: boolean
 }) {
   const asker = useAsker(ask)
   const nameOf = useSessionName()
@@ -538,22 +686,25 @@ function AskCard({
   const noteText = note.trim()
   const canSend = !reply.isPending && (choice !== null || noteText.length > 0)
 
+  const Item = inSession ? 'div' : 'li'
   return (
-    <li
+    <Item
       data-testid="ask-card"
-      className="lantern-ask"
+      className={inSession ? undefined : 'lantern-ask'}
       data-blocking={ask.blocking ? 'true' : undefined}
     >
-      <Meta>
-        <span className="min-w-0 truncate" style={{ color: 'var(--bone)' }}>
-          {asker.name}
-        </span>
-        <span aria-hidden="true">·</span>
-        <span className="whitespace-nowrap">
-          {ask.blocking ? 'agent is waiting' : 'whenever'} ·{' '}
-          {formatAge(now - ask.createdAt)}
-        </span>
-      </Meta>
+      {!inSession && (
+        <Meta>
+          <span className="min-w-0 truncate" style={{ color: 'var(--bone)' }}>
+            {asker.name}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="whitespace-nowrap">
+            {ask.blocking ? 'agent is waiting' : 'whenever'} ·{' '}
+            {formatAge(now - ask.createdAt)}
+          </span>
+        </Meta>
+      )}
       <p className="mb-1.5 font-semibold" style={{ overflowWrap: 'anywhere' }}>
         {ask.question}
       </p>
@@ -673,7 +824,9 @@ function AskCard({
         >
           Reply “Not now”
         </button>
-        <OpenSession sessionId={asker.sessionId} onOpen={onOpenSession} />
+        {!inSession && (
+          <OpenSession sessionId={asker.sessionId} onOpen={onOpenSession} />
+        )}
       </div>
       {reply.isError && (
         <p
@@ -684,7 +837,7 @@ function AskCard({
           {reply.error.message}
         </p>
       )}
-    </li>
+    </Item>
   )
 }
 
