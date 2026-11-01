@@ -131,14 +131,16 @@ function refuse(peer: Peer, reason: string): HttpError {
 
 /**
  * Bring `peer` to where a create can be sent: powered on, linked, the same
- * machine as before, and its health URLs answering. Resolves when it is;
- * rejects with `409 host_unavailable` and the real reason when it is not
- * within the host's `wakeTimeoutSec`.
+ * machine as before, its health URLs answering, and no update of its Tether
+ * running (`updating`, src/hub/update.ts: the update restarts it). Resolves
+ * when it is; rejects with `409 host_unavailable` and the real reason when it
+ * is not within the host's `wakeTimeoutSec`, which bounds the update wait too.
  */
 export async function readyHost(
   peer: Peer,
   runtime: GateRuntime,
   report: (progress: WakeProgress | null) => void,
+  updating: () => Promise<void> | null = () => null,
 ): Promise<void> {
   const start = runtime.now()
   const deadline = start + peer.entry.wakeTimeoutSec * 1_000
@@ -173,14 +175,39 @@ export async function readyHost(
   // brought up like any down host, once per create.
   let broughtUp = false
   for (;;) {
+    await updated()
     const wasLive = peer.live
     if (!peer.live) {
       broughtUp = true
       await bringUp()
+      // Its link-up can start an update of its Tether: that goes first.
+      if (updating()) continue
     }
-    if (await servicesAnswer(wasLive)) break
+    if (await servicesAnswer(wasLive)) {
+      if (updating()) continue
+      break
+    }
   }
   if (current.progress) report(null)
+
+  /** Wait out an update of the host's Tether, within the deadline. */
+  async function updated(): Promise<void> {
+    const running = updating()
+    if (!running) return
+    let done = false
+    const settle = () => {
+      done = true
+    }
+    running.then(settle, settle)
+    while (!done) {
+      if (runtime.now() >= deadline) {
+        const update = peer.update
+        const detail = update ? ` from API ${update.from} to ${update.to}` : ''
+        throw fail(`${peer.name}'s Tether is still being updated${detail}`)
+      }
+      await runtime.sleep(POLL_MS)
+    }
+  }
 
   async function bringUp(): Promise<void> {
     let wakeNote: string | null = null
@@ -227,7 +254,8 @@ export async function readyHost(
       const failing = urls.findIndex((_, index) => results[index]?.code !== 0)
       if (failing < 0) return true
       if (!peer.live) {
-        if (!broughtUp) return false
+        // An update's restart, not the host going away: wait for it, then look again.
+        if (!broughtUp || updating()) return false
         throw fail(`${peer.name} went away while its services were checked`)
       }
       if (runtime.now() + HEALTH_RETRY_MS >= healthDeadline) {

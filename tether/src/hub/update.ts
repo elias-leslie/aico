@@ -2,13 +2,18 @@
 // health names an older `apiVersion` than this hub gets this hub's installed
 // release over the link's ssh ControlMaster: the release files go as one tar
 // stream, the host installs them with the release's own install-release.sh
-// into its ~/.local/lib/tether, and tether@<instance> restarts there. When the
-// restarted Tether does not answer within the bound, the host puts its
-// previous bundle and launcher back and restarts on them. Nothing here powers
-// a host on: a host that is off is updated when its link next comes up.
+// into its ~/.local/lib/tether, and tether@<instance> restarts there. The
+// restart is a stop, a copy of the instance's database (with its WAL), then a
+// start: a new release migrates the database as it starts, and an older one
+// refuses a newer schema. When the restarted Tether does not answer within the
+// bound, the host stops it, puts its previous bundle, launcher and database
+// back and starts on them. One update runs on a host at a time (a flock).
+// Nothing here powers a host on: a host that is off is updated when its link
+// next comes up.
 
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { isInstanceName } from '../config'
 import { type RunResult, remoteArgv, shellQuote } from './host-admin'
@@ -27,10 +32,15 @@ export const RELEASE_FILES = [
   'shims/shims.list',
 ]
 
-/** How long the copy, install, restart and rollback may take in all. */
-export const UPDATE_RUN_MS = 240_000
-/** How long the host's restarted Tether has to answer before rollback. */
+/** How long the copy, install, restart and rollback may take in all: two
+ * answer waits, two stops and the copies. */
+export const UPDATE_RUN_MS = 300_000
+/** How long the host's restarted Tether has to answer before rollback, and
+ * the rolled-back one after it. */
 export const UPDATE_ANSWER_SEC = 90
+/** The host script's exit when another update holds the host's lock: not a
+ * failed update of this release, so it is not remembered as one. */
+export const UPDATE_BUSY_EXIT = 75
 
 export interface UpdateTarget {
   entry: HostEntry
@@ -50,6 +60,19 @@ export function runningRelease(bundle: string | undefined = process.argv[1]): st
   return dirname(dirname(bundle))
 }
 
+/** Which release this hub runs, as a short hash of its bundle: a failed
+ * update is tried again only once it changes. `none` when there is no
+ * installed release (nothing can be sent then anyway). */
+export function releaseId(release: string | null): string {
+  if (!release) return 'none'
+  try {
+    const bundle = readFileSync(join(release, 'dist', 'tether.mjs'))
+    return createHash('sha256').update(bundle).digest('hex').slice(0, 16)
+  } catch {
+    return 'none'
+  }
+}
+
 /** The shell line the host runs with the release's tar on stdin. */
 export function updateLine(
   instance: string,
@@ -61,11 +84,18 @@ export function updateLine(
     'set -eu',
     `instance=${shellQuote(instance)}`,
     `socket=${shellQuote(socket)}`,
-    // The stable path tether@.service runs from.
+    'unit="tether@$instance"',
+    // The stable path tether@.service runs from, and the instance's database
+    // where src/config.ts resolvePaths puts it (production units override neither).
     'lib="$HOME/.local/lib/tether"',
+    `state="\${XDG_STATE_HOME:-$HOME/.local/state}/tether/$instance"`,
+    'mkdir -p "$lib"',
+    'command -v flock >/dev/null || { echo "the host has no flock" >&2; exit 1; }',
+    'exec 9>"$lib/.update.lock"',
+    `flock -n 9 || { echo "another update of this host's Tether is still running" >&2; exit ${UPDATE_BUSY_EXIT}; }`,
     'stage=$(mktemp -d -t tether-update.XXXXXX)',
     `trap 'rm -rf "$stage"' EXIT`,
-    'mkdir "$stage/new" "$stage/old"',
+    'mkdir "$stage/new" "$stage/old" "$stage/db"',
     'tar -xf - -C "$stage/new"',
     // install-release.sh reads the shims where a checkout keeps them.
     'mkdir -p "$stage/new/scripts/shims"',
@@ -82,21 +112,61 @@ export function updateLine(
     '  done',
     '  return 1',
     '}',
-    'restarted=0',
+    // Taken while Tether is stopped, so the copy is whole. The -shm index is
+    // rebuilt from the WAL when the database next opens.
+    'save_db() {',
+    '  for name in tether.db tether.db-wal; do',
+    '    if [ -f "$state/$name" ]; then cp -p "$state/$name" "$stage/db/$name" || return 1; fi',
+    '  done',
+    '}',
+    'restore_db() {',
+    '  for name in tether.db tether.db-wal; do',
+    '    if [ -f "$stage/db/$name" ]; then cp -p "$stage/db/$name" "$state/$name.rollback" || return 1; fi',
+    '  done',
+    '  for name in tether.db tether.db-wal; do',
+    '    if [ -f "$stage/db/$name" ]; then mv -f "$state/$name.rollback" "$state/$name"; else rm -f "$state/$name"; fi',
+    '  done',
+    '  rm -f "$state/tether.db-shm"',
+    '}',
+    'stopped=0',
+    'saved=0',
     'why="its install failed"',
     'if TETHER_LIB_DIR="$lib" bash "$stage/new/scripts/install-release.sh" >/dev/null; then',
-    '  why="tether@$instance did not restart"',
-    '  if systemctl --user --no-ask-password restart "tether@$instance"; then',
-    '    restarted=1',
-    `    why="the new release did not answer within ${answerSec} s"`,
-    '    if answers; then exit 0; fi',
+    '  why="$unit did not stop"',
+    '  if systemctl --user --no-ask-password stop "$unit"; then',
+    '    stopped=1',
+    '    why="its database could not be copied"',
+    '    if save_db; then',
+    '      saved=1',
+    '      why="$unit did not start"',
+    '      if systemctl --user --no-ask-password start "$unit"; then',
+    `        why="the new release did not answer within ${answerSec} s"`,
+    '        if answers; then exit 0; fi',
+    '      fi',
+    '    fi',
     '  fi',
     'fi',
+    'if [ "$stopped" = 1 ]; then systemctl --user --no-ask-password stop "$unit" || true; fi',
     `for file in ${keep}; do`,
     '  if [ -f "$stage/old/$file" ]; then cp -p "$stage/old/$file" "$lib/$file.rollback" && mv -f "$lib/$file.rollback" "$lib/$file"; fi',
     'done',
-    'if [ "$restarted" = 1 ]; then systemctl --user --no-ask-password restart "tether@$instance" || true; fi',
-    'echo "$why; the previous release is back" >&2',
+    'back="the previous release is back"',
+    'if [ "$saved" = 1 ]; then',
+    '  if restore_db; then',
+    '    if [ -f "$stage/db/tether.db" ]; then back="the previous release and its database are back"; fi',
+    '  else',
+    // The new release may have moved the schema past what the old one reads:
+    // never start it on that. The copy stays for whoever repairs the host.
+    `    trap - EXIT`,
+    '    echo "$why; its database could not be put back (a copy is in $stage/db), so $unit stays stopped" >&2',
+    '    exit 1',
+    '  fi',
+    'fi',
+    'if [ "$stopped" = 1 ]; then',
+    '  systemctl --user --no-ask-password start "$unit" || true',
+    `  answers || back="$back but did not answer within ${answerSec} s either"`,
+    'fi',
+    'echo "$why; $back" >&2',
     'exit 1',
   ].join('\n')
 }

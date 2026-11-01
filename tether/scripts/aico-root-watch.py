@@ -172,8 +172,9 @@ SSH_ALIAS = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
 SSH = "/usr/bin/ssh"
 REMOTE_TMUX = "/usr/bin/tmux"
 PGREP = "/usr/bin/pgrep"
-# A create on a host may first power it on and wait for it (hosts.json wakeTimeoutSec,
-# 240 s by default), then waits for the host's own create (tether/src/hub/hub.ts).
+# A create on a host may first power it on and wait for it, and for an update of its
+# Tether, within hosts.json wakeTimeoutSec (240 s by default), then waits for the host's
+# own create (tether/src/hub/hub.ts).
 HOST_CREATE_SECONDS = 420
 # How long a --host create waits for an answer before saying the host may be powering on.
 HOST_WAIT_NOTICE_SECONDS = 3

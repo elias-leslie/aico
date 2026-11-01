@@ -945,6 +945,79 @@ describe('hub', () => {
       expect(calls).toBe(1)
     })
 
+    it('remembers a failed update across hub restarts and tries it again only on another release', async () => {
+      let calls = 0
+      const failing: Partial<HubDeps> = {
+        release: 'release-a',
+        update: async () => {
+          calls += 1
+          return { code: 1, stdout: '', output: 'node: v20 is older than 22.13' }
+        },
+      }
+      await startHub(failing)
+      await vi.waitFor(() => expect(update()?.state).toBe('failed'))
+      // A hub restart (every deploy) on the same release, long after: no new
+      // attempt, and the failure still shows.
+      await startHub({ ...failing, now: () => Date.now() + 24 * 3_600_000 })
+      expect(update()).toMatchObject({ state: 'failed', error: 'node: v20 is older than 22.13' })
+      peer.refuseBody = true
+      expect(
+        (await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-u5' })).body,
+      ).toMatchObject({
+        reason: `remote Tether on vm is API 20, needs ${API_VERSION}; update failed: node: v20 is older than 22.13`,
+      })
+      peer.refuseBody = false
+      expect(calls).toBe(1)
+      // Another hub release tries again, and success clears the record.
+      await startHub({
+        release: 'release-b',
+        update: async () => {
+          calls += 1
+          await restartUpdated()
+          return { code: 0, stdout: '', output: '' }
+        },
+      })
+      await vi.waitFor(() => expect(update()?.state).toBe('updated'), { timeout: 8_000 })
+      expect(calls).toBe(2)
+      expect(JSON.parse(settings.get('peer_update_failures') ?? '{}')).toEqual({})
+    })
+
+    it('drops a remembered failure once the host is on this API some other way', async () => {
+      const failing: Partial<HubDeps> = {
+        release: 'release-a',
+        update: async () => ({ code: 1, stdout: '', output: 'install failed' }),
+      }
+      await startHub(failing)
+      await vi.waitFor(() => expect(update()?.state).toBe('failed'))
+      // Updated by hand (the VM201 fix): the next hub start shows it as fine.
+      hub.close()
+      peer.apiVersion = API_VERSION
+      hub = makeHub(failing)
+      hub.start()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
+      await vi.waitFor(() => expect(update()).toBeNull())
+      expect(JSON.parse(settings.get('peer_update_failures') ?? '{}')).toEqual({})
+    })
+
+    it('does not remember a host that was busy with another update', async () => {
+      let calls = 0
+      const busy: Partial<HubDeps> = {
+        release: 'release-a',
+        update: async () => {
+          calls += 1
+          return {
+            code: 75,
+            stdout: '',
+            output: "another update of this host's Tether is still running",
+          }
+        },
+      }
+      await startHub(busy)
+      await vi.waitFor(() => expect(update()?.state).toBe('failed'))
+      await startHub(busy)
+      await vi.waitFor(() => expect(calls).toBe(2))
+    })
+
     it('says when the update did not bring the host to this API', async () => {
       await startHub({
         update: async () => ({ code: 0, stdout: '', output: '' }),
@@ -974,6 +1047,25 @@ describe('hub', () => {
       await vi.waitFor(() => expect(state()).toBe('connected'))
       expect(calls).toBe(0)
       expect(hub.hosts()[0]).toMatchObject({ apiVersion: API_VERSION, update: null })
+      // A host above this hub is never taken down to it.
+      hub.close()
+      peer.apiVersion = API_VERSION + 1
+      hub = makeHub(counting)
+      hub.start()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
+      expect(calls).toBe(0)
+      expect(hub.hosts()[0]).toMatchObject({ apiVersion: API_VERSION + 1, update: null })
+      peer.refuseBody = true
+      expect(await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-u6' })).toEqual({
+        status: 400,
+        body: { error: 'invalid_body', field: 'reply', host: 'vm' },
+      })
+      hub.close()
+      peer.apiVersion = API_VERSION
+      peer.refuseBody = false
+      hub = makeHub(counting)
+      hub.start()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
       peer.refuseBody = true
       // Not behind: the host's own answer, as before.
       expect(await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-u4' })).toEqual({
@@ -1197,7 +1289,7 @@ describe('hub', () => {
     /** Moves the gate's clock past its bounds without waiting them out. */
     let skew = 0
 
-    function gatedHub(entry: Record<string, unknown>): Hub {
+    function gatedHub(entry: Record<string, unknown>, overrides: Partial<HubDeps> = {}): Hub {
       writeFileSync(
         join(dir, 'hosts.json'),
         JSON.stringify([
@@ -1223,6 +1315,7 @@ describe('hub', () => {
           sleep: (ms) => new Promise((resolve) => setTimeout(resolve, Math.min(ms, 50))),
           linkGraceMs: 300,
         },
+        ...overrides,
       })
     }
 
@@ -1233,9 +1326,12 @@ describe('hub', () => {
       skew = 0
     })
 
-    async function restart(entry: Record<string, unknown>): Promise<void> {
+    async function restart(
+      entry: Record<string, unknown>,
+      overrides: Partial<HubDeps> = {},
+    ): Promise<void> {
       hub.close()
-      hub = gatedHub(entry)
+      hub = gatedHub(entry, overrides)
       hub.start()
       await vi.waitFor(() => expect(state()).toBe('connected'))
     }
@@ -1331,6 +1427,84 @@ describe('hub', () => {
         },
       })
       expect(hub.hosts()[0]?.wake).toMatchObject({ state: 'failed', step: 'checking_services' })
+      expect(peer.requests.some((r) => r.method === 'POST')).toBe(false)
+    })
+
+    it('waits out the update a woken host starts before it checks its services', async () => {
+      // Powered off on an older API: the create wakes it, its link-up starts the
+      // update, and the update's restart takes the host off the link meanwhile.
+      let updating = false
+      let checking = () => {}
+      // The restart comes once a service check is under way (or soon anyway).
+      const checked = new Promise<void>((resolve) => {
+        checking = resolve
+        setTimeout(resolve, 500)
+      })
+      await restart(
+        { wake: ['wake'], health: ['http://127.0.0.1:8003/health'] },
+        {
+          update: async () => {
+            updating = true
+            await checked
+            await peer.stop()
+            peer.apiVersion = API_VERSION
+            await new Promise((resolve) => setTimeout(resolve, 300))
+            await peer.start()
+            updating = false
+            return { code: 0, stdout: '', output: '' }
+          },
+        },
+      )
+      await peer.stop()
+      await vi.waitFor(() => expect(state()).toBe('offline'))
+      peer.apiVersion = 20
+      // A service check made while the update restarts the host sees it gone.
+      onHealth = async () => {
+        if (!updating) return null
+        checking()
+        await vi.waitFor(() => expect(state()).not.toBe('connected'))
+        return 7
+      }
+      const answer = await call('POST', '/v1/roots', { host: 'vm', requestId: 'req-w1' })
+      expect(answer).toMatchObject({ status: 201, body: { host: 'vm' } })
+      expect(runs.filter((argv) => argv[0] === 'wake')).toHaveLength(1)
+      expect(hub.hosts()[0]).toMatchObject({
+        apiVersion: API_VERSION,
+        update: { state: 'updated' },
+        wake: null,
+      })
+    })
+
+    it("bounds a create's wait on an update by the host's wake time", async () => {
+      let finish = () => {}
+      const finished = new Promise<void>((resolve) => {
+        finish = resolve
+      })
+      peer.apiVersion = 20
+      await restart(
+        { wakeTimeoutSec: 10 },
+        {
+          update: async () => {
+            await finished
+            return { code: 1, stdout: '', output: 'cancelled' }
+          },
+        },
+      )
+      await vi.waitFor(() =>
+        expect((hub.hosts()[0]?.update as { state?: string } | null)?.state).toBe('updating'),
+      )
+      const pending = call('POST', '/v1/roots', { host: 'vm', requestId: 'req-w2' })
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      skew = 11_000
+      const answer = await pending
+      finish()
+      expect(answer).toMatchObject({
+        status: 409,
+        body: {
+          error: 'host_unavailable',
+          reason: `vm's Tether is still being updated from API 20 to ${API_VERSION}`,
+        },
+      })
       expect(peer.requests.some((r) => r.method === 'POST')).toBe(false)
     })
 

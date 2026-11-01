@@ -271,7 +271,7 @@ export class Peer {
 
   /** Not published: a `peer.state` event while the link is not up would
    * make every open remote terminal let go of its host. `GET /v1/hosts` shows it. */
-  setUpdate(update: PeerUpdate): void {
+  setUpdate(update: PeerUpdate | null): void {
     this.update = update
   }
 

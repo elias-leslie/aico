@@ -19,11 +19,12 @@ import {
   type PeerDeps,
   type PeerIdentity,
   type PeerSnapshot,
+  type PeerUpdate,
   type RunsLike,
 } from './peer'
 import { forwardRequest, PeerUnavailable, peerRequest } from './peer-http'
 import type { PeerView } from './placement'
-import { pushRelease, runningRelease, type Updater } from './update'
+import { pushRelease, releaseId, runningRelease, UPDATE_BUSY_EXIT, type Updater } from './update'
 import { defaultGateRuntime, type GateRuntime, readyHost } from './wake'
 
 export const LIST_TIMEOUT_MS = 1_500
@@ -36,8 +37,8 @@ const IDENTITIES_KEY = 'peer_identities'
 /** How long an updated host's Tether has to come back on the link. */
 export const UPDATE_RECONNECT_MS = 60_000
 const UPDATE_POLL_MS = 500
-/** A failed update is tried again on a link-up this long after it failed. */
-export const UPDATE_RETRY_MS = 30 * 60_000
+/** Failed updates by host, with the hub release that tried them. */
+const UPDATE_FAILURES_KEY = 'peer_update_failures'
 const SNAPSHOTS_KEY = 'peer_sessions'
 
 const SESSION_ID = /^[0-9a-f]{8}$/
@@ -74,7 +75,13 @@ export interface HubDeps {
    * back on the link. */
   update?: Updater
   updateReconnectMs?: number
+  /** This hub's release (src/hub/update.ts releaseId; tests set it). */
+  release?: string
 }
+
+/** A failed update as settings keep it: the same from/to is tried again only
+ * by another hub release. */
+type UpdateFailure = PeerUpdate & { release: string }
 
 export interface Lineage {
   coordinatorId: string
@@ -136,6 +143,7 @@ export class Hub {
   /** The update running per host; a create there waits for it. */
   private readonly updates = new Map<string, Promise<void>>()
   private readonly updater: Updater
+  private readonly release: string
 
   constructor(private readonly deps: HubDeps) {
     this.file = hostsFilePath(deps.env)
@@ -145,6 +153,7 @@ export class Hub {
     this.gate = { ...defaultGateRuntime, ...deps.gate }
     const release = runningRelease()
     this.updater = deps.update ?? ((target) => pushRelease(release, target))
+    this.release = deps.release ?? releaseId(release)
   }
 
   start(): void {
@@ -193,6 +202,7 @@ export class Hub {
       if (!entry) {
         delete this.snapshots[name]
         this.schedulePersist()
+        this.forgetUpdateFailure(name)
         this.deps.publish('peer.resync', { host: name })
       }
     }
@@ -229,6 +239,12 @@ export class Hub {
         },
         this.snapshots[entry.name] ?? null,
       )
+      // A failed update stays visible across hub restarts.
+      const failed = this.updateFailures()[entry.name]
+      if (failed) {
+        const { release: _release, ...update } = failed
+        peer.setUpdate(update)
+      }
       this.peers.set(entry.name, peer)
       peer.start()
     }
@@ -298,34 +314,58 @@ export class Hub {
   }
 
   /** On each link-up: a peer whose Tether is on an older API than this one
-   * gets this release (src/hub/update.ts). One update per host at a time; a
-   * failed one is tried again only on a link-up after UPDATE_RETRY_MS, so a
-   * host that cannot take it is not restarted over and over. A peer that names
-   * no API is left alone. */
+   * gets this release (src/hub/update.ts). One update per host at a time. A
+   * failed one is remembered in settings and the same from/to is tried again
+   * only by another hub release, so a host that cannot take it is not
+   * restarted on every link-up or hub restart. A peer that names no API, or a
+   * newer one, is left alone. */
   private checkRelease(peer: Peer): void {
     const from = peer.apiVersion
+    if (from !== null && from >= API_VERSION && peer.update?.state === 'failed') {
+      // Brought up to this API some other way: the failure no longer holds.
+      peer.setUpdate(null)
+      this.forgetUpdateFailure(peer.name)
+    }
     if (from === null || from >= API_VERSION || this.updates.has(peer.name)) return
-    const last = peer.update
-    if (
-      last?.state === 'failed' &&
-      last.from === from &&
-      last.to === API_VERSION &&
-      this.now() - last.since < UPDATE_RETRY_MS
-    )
-      return
+    const failed = this.updateFailures()[peer.name]
+    if (failed && failed.from === from && failed.to === API_VERSION) {
+      if (failed.release === this.release) return
+      this.log(`${peer.name}: the last Tether update failed on another hub release; trying again`)
+    }
     const run = this.updatePeer(peer, from)
       .catch((error: Error) => this.log(`${peer.name}: Tether update failed: ${error.message}`))
       .finally(() => this.updates.delete(peer.name))
     this.updates.set(peer.name, run)
   }
 
+  private updateFailures(): Record<string, UpdateFailure> {
+    return readJson(this.deps.settings.get(UPDATE_FAILURES_KEY), {})
+  }
+
+  private forgetUpdateFailure(name: string): void {
+    const failures = this.updateFailures()
+    if (!(name in failures)) return
+    delete failures[name]
+    this.deps.settings.put(UPDATE_FAILURES_KEY, JSON.stringify(failures))
+  }
+
   private async updatePeer(peer: Peer, from: number): Promise<void> {
     const to = API_VERSION
     peer.setUpdate({ state: 'updating', from, to, since: this.now(), error: null })
     this.log(`${peer.name}: its Tether is API ${from}, this one is ${to}; updating it`)
-    const fail = (error: string) => {
+    /** `remember` false: the host was busy with another update, not this one failing. */
+    const fail = (error: string, remember = true) => {
       this.log(`${peer.name}: Tether update failed: ${error}`)
-      peer.setUpdate({ state: 'failed', from, to, since: this.now(), error })
+      const update: PeerUpdate = { state: 'failed', from, to, since: this.now(), error }
+      peer.setUpdate(update)
+      if (remember)
+        this.deps.settings.put(
+          UPDATE_FAILURES_KEY,
+          JSON.stringify({
+            ...this.updateFailures(),
+            [peer.name]: { ...update, release: this.release },
+          }),
+        )
     }
     let result: Awaited<ReturnType<Updater>>
     try {
@@ -337,7 +377,11 @@ export class Hub {
     } catch (error) {
       return fail((error as Error).message)
     }
-    if (result.code !== 0) return fail(result.output || `exit ${result.code ?? 'error'}`)
+    if (result.code !== 0)
+      return fail(
+        result.output || `exit ${result.code ?? 'error'}`,
+        result.code !== UPDATE_BUSY_EXIT,
+      )
     // The restart dropped the peer's stream; wait for the link-up on the new release.
     const waitMs = this.deps.updateReconnectMs ?? UPDATE_RECONNECT_MS
     const deadline = this.now() + waitMs
@@ -353,6 +397,7 @@ export class Hub {
     }
     this.log(`${peer.name}: Tether updated from API ${from} to ${peer.apiVersion}`)
     peer.setUpdate({ state: 'updated', from, to, since: this.now(), error: null })
+    this.forgetUpdateFailure(peer.name)
   }
 
   /** Why a host refused a request it may not know yet: its Tether is on an
@@ -484,12 +529,18 @@ export class Hub {
   private ready(peer: Peer): Promise<void> {
     const running = this.gates.get(peer.name)
     if (running) return running
-    if (peer.live && peer.entry.health.length === 0) return Promise.resolve()
-    const gate = readyHost(peer, this.gate, (progress) => {
-      if (progress?.state === 'failed') this.log(`${peer.name}: start failed: ${progress.error}`)
-      else if (progress) this.log(`${peer.name}: starting (${progress.step})`)
-      peer.setWake(progress)
-    }).finally(() => this.gates.delete(peer.name))
+    if (peer.live && peer.entry.health.length === 0 && !this.updates.has(peer.name))
+      return Promise.resolve()
+    const gate = readyHost(
+      peer,
+      this.gate,
+      (progress) => {
+        if (progress?.state === 'failed') this.log(`${peer.name}: start failed: ${progress.error}`)
+        else if (progress) this.log(`${peer.name}: starting (${progress.step})`)
+        peer.setWake(progress)
+      },
+      () => this.updates.get(peer.name) ?? null,
+    ).finally(() => this.gates.delete(peer.name))
     this.gates.set(peer.name, gate)
     return gate
   }
@@ -598,14 +649,8 @@ export class Hub {
     body: Record<string, unknown>,
   ): Promise<void> {
     const peer = this.knownPeer(body.host)
+    // Also waits out an update of the host's Tether, within the host's bound.
     await this.ready(peer)
-    // A host whose Tether is being brought up to this API takes the create
-    // once it is back on the new release (or the update failed).
-    const update = this.updates.get(peer.name)
-    if (update) {
-      await update
-      await this.ready(peer)
-    }
     if (!peer.live) throw unavailable(peer)
     const { host: _host, ...forwarded } = body
     // An older Tether would refuse the key as a bare invalid_body.
