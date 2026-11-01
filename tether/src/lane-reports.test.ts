@@ -87,6 +87,8 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
   const queued = new Set<string>()
   const withdrawn: string[] = []
   const logs: string[] = []
+  /** promoteReplies calls: [lane, receivers]. */
+  const promoted: [string, string[]][] = []
   const receivers = new Set([ROOT, HELPER_PARENT, LANE, WATCHER])
   const gone = new Set<string>()
   /** Live sessions on other hosts (the hub's relay): id -> host. */
@@ -112,6 +114,10 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
     agentGone: (id) => gone.has(id),
     elsewhere: (id) => remote.get(id) ?? null,
     heardFrom: (lane, host, to, event) => waits.heardFrom(lane, host ?? '', to, event),
+    promoteReplies: (lane, to) => {
+      promoted.push([lane, [...to]])
+      return [...to]
+    },
     log: (line) => logs.push(line),
   }
   const reporter = new LaneReporter(new LaneReportStore(store.db), ops)
@@ -134,6 +140,7 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
     sessions,
     waits,
     toldAt,
+    promoted,
   }
 }
 
@@ -252,6 +259,22 @@ describe('finished', () => {
     step(reporter, { state: 'working', stateAgentAt: 100 })
     step(reporter, { stateAgentAt: 200, waitingOn: 'a check-in at 14:00' }, SETTLE * 2)
     expect(delivered).toHaveLength(0)
+  })
+
+  it('a lane idle on its own wait has its ride-along replies to its receivers wake them now', () => {
+    // SummitFlow dcd7053e2 gap: the lane acked its launcher with a noted yes
+    // (ride-along: its went-idle line would carry it), then armed its own
+    // wait. No went-idle line goes, so the yes must not sit until the wait fires.
+    const { reporter, delivered, promoted, logs } = harness()
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    step(reporter, { stateAgentAt: 200, waitingOn: 'a check-in at 14:00' }, SETTLE * 2)
+    expect(delivered).toHaveLength(0)
+    expect(promoted).toEqual([[LANE, [ROOT]]])
+    expect(logs).toContain(`lane=${LANE} idle on its own wait: its ride-along reply wakes ${ROOT}`)
+    // A restart's absorbed idle is no such case.
+    step(reporter, { generation: 'g2', state: 'working', stateAgentAt: 300 })
+    step(reporter, { generation: 'g2', stateAgentAt: 400 }, SETTLE)
+    expect(promoted).toHaveLength(1)
   })
 
   it('holds a second finish to the floor and folds later ones into it', () => {
@@ -1248,6 +1271,25 @@ describe('delivery classes of went-idle lines', () => {
     expect(delivered.map((d) => d.ride)).toEqual([false])
     turn(reporter, 300, SETTLE + FLOOR)
     expect(delivered.map((d) => d.ride)).toEqual([false, false])
+  })
+
+  it('a paste into a lane whose repeat is held, then a Tether restart: the end of the new work still wakes (review P3-3)', () => {
+    const first = harness()
+    turn(first.reporter, 100, SETTLE)
+    turn(first.reporter, 200, QUIET - 5_000)
+    expect(first.delivered).toHaveLength(1)
+    first.reporter.reached(LANE, 'got coord:x')
+    first.reporter.stop()
+    // Tether restarts before it sees the new turn: the held idle goes out as
+    // the repeat it was, and does not use up the reset.
+    const again = harness({ store: first.store })
+    step(again.reporter, { stateAgentAt: 200 }, QUIET)
+    expect(again.delivered.map((d) => d.ride)).toEqual([true])
+    turn(again.reporter, 300, SETTLE + FLOOR)
+    expect(again.delivered.map((d) => d.ride)).toEqual([true, false])
+    // Nothing reached it since: the next idle is a repeat again.
+    turn(again.reporter, 400, QUIET)
+    expect(again.delivered.map((d) => d.ride)).toEqual([true, false, true])
   })
 
   it('a lane with no cursor (nobody reports it) ignores what reached it', () => {

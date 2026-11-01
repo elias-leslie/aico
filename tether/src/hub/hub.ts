@@ -132,6 +132,9 @@ export class Hub {
   private readonly peers = new Map<string, Peer>()
   private readonly file: string
   private fileStamp: string | null = null
+  /** Host names (valid or held) in the last hosts.json that was there and
+   * parsed; null until one was. */
+  private listed: Set<string> | null = null
   private reloadTimer: NodeJS.Timeout | null = null
   private persistTimer: NodeJS.Timeout | null = null
   private readonly snapshots: Record<string, PeerSnapshot>
@@ -181,7 +184,7 @@ export class Hub {
     }
     if (stamp === this.fileStamp && this.reloadTimer) return
     this.fileStamp = stamp
-    const { hosts, errors, readable, held } = loadHosts(this.file)
+    const { hosts, errors, readable, held, missing } = loadHosts(this.file)
     for (const error of errors) this.log(`hosts.json: ${error}`)
     // A file that does not parse (often an editor's half-written save) changes
     // nothing: dropping its hosts would close every window on them.
@@ -189,6 +192,8 @@ export class Hub {
       if (this.peers.size) this.log('hosts.json: keeping the hosts already loaded')
       return
     }
+    // A file briefly gone retires nothing (placement keeps its reservations).
+    if (!missing) this.listed = new Set([...hosts.map((host) => host.name), ...held])
     const wanted = new Map(hosts.map((host) => [host.name, host]))
     for (const [name, peer] of this.peers) {
       const entry = wanted.get(name)
@@ -486,6 +491,12 @@ export class Hub {
   /** The hosts this hub knows, in hosts.json order. */
   hostNames(): string[] {
     return [...this.peers.keys()]
+  }
+
+  /** A host taken out of hosts.json: the last file that was there and parsed
+   * does not name it. Never one only briefly missing, invalid or unread. */
+  retired(name: string): boolean {
+    return this.listed !== null && !this.listed.has(name)
   }
 
   /** What placement reads about a host (src/hub/placement.ts), or null. */

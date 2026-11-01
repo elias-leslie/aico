@@ -348,8 +348,8 @@ describe('delivery routes', () => {
       exists: (id) => id === SESSION || id === SHELL,
       receiver: (id) => id === SESSION,
       maxChars: () => 500,
-      queue: (id, source, line, ride) =>
-        wakes.addEvent({ sessionId: id, source, note: line, now: clock.now, ride }),
+      queue: (id, source, line, ride, reach) =>
+        wakes.addEvent({ sessionId: id, source, note: line, now: clock.now, ride, ...reach }),
       sent: (from, to, isTold) => told.push([from.join(','), to, isTold]),
       replied: (from, to, ride) => replied.push([from.join(','), to, ride]),
       takeRide: (id) => scheduler.takeRide(id),
@@ -533,6 +533,29 @@ describe('delivery routes', () => {
       ['0a1b2c40', SESSION, false],
       ['0a1b2c41', SESSION, true],
     ])
+    // A wake line from another session reached this one from outside; a
+    // ride-along line never does, nor a line with no other sender (the
+    // session's own watcher: an eta reminder, a memory notice). A ride-along
+    // reply keeps its sender, for a sender that goes idle on its own wait.
+    await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
+      source: 'coord:f',
+      line: 'Your eta ran out',
+    })
+    await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
+      source: 'coord:g',
+      line: 'Self',
+      from: [SESSION],
+    })
+    const row = (source: string) => {
+      const wake = wakes.forSession(SESSION).find((item) => item.source === source)
+      return wake && { reached: wake.reached, replyFrom: wake.replyFrom }
+    }
+    expect(row('coord:b')).toEqual({ reached: true, replyFrom: [] })
+    expect(row('coord:c')).toEqual({ reached: false, replyFrom: [] })
+    expect(row('coord:d')).toEqual({ reached: true, replyFrom: [] })
+    expect(row('coord:e')).toEqual({ reached: false, replyFrom: ['0a1b2c41'] })
+    expect(row('coord:f')).toEqual({ reached: false, replyFrom: [] })
+    expect(row('coord:g')).toEqual({ reached: false, replyFrom: [] })
   })
 
   it('peeks ride-along lines with a token and takes them only on the confirm', async () => {

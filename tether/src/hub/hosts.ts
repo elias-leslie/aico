@@ -44,6 +44,8 @@ export interface HostsLoad {
   /** Names of entries that are listed but not usable right now: the hub keeps
    * a running peer of that name instead of dropping it. */
   held: string[]
+  /** There was no file (no hosts, though maybe only for a moment). */
+  missing?: boolean
 }
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,31}$/
@@ -241,7 +243,7 @@ export function loadHosts(path: string): HostsLoad {
     text = readFileSync(path, 'utf8')
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-      return { hosts: [], errors: [], readable: true, held: [] }
+      return { hosts: [], errors: [], readable: true, held: [], missing: true }
     return {
       hosts: [],
       errors: [`hosts.json could not be read: ${(error as Error).message}`],

@@ -24,6 +24,12 @@
 // request), as having told it (a lane that told its launcher during a turn
 // sends no went-idle line for it). A `reply` also shows that what it answers
 // reached its sender: that lane's next went-idle line is a first line (a wake).
+// A wake line whose `from` names another session reaches this one from
+// outside: once it goes out, this lane's next went-idle line is a first line
+// too. A line with no `from` (the session's own watcher: an eta reminder, a
+// memory notice) and a ride-along line do not. A ride-along `reply` is kept
+// with its senders: a sender lane that goes idle waiting on something of its
+// own (no went-idle line to carry the reply) makes it a wake.
 //
 // `DELETE /v1/sessions/:id/deliveries?source=` takes back a producer's line
 // that has not gone out (it went stale: the inbox has nothing waiting any
@@ -129,8 +135,16 @@ export interface DeliveryRouteDeps {
   receiver(id: string): boolean
   /** The longest line, in characters (the wake policy's note limit). */
   maxChars(): number
-  /** Queue the line due now (coalesced by source while undelivered). */
-  queue(sessionId: string, source: string, line: string, ride: boolean): Wake
+  /** Queue the line due now (coalesced by source while undelivered).
+   * `reached`: it came from another session; `replyFrom`: the sessions whose
+   * ride-along reply it carries. */
+  queue(
+    sessionId: string,
+    source: string,
+    line: string,
+    ride: boolean,
+    reach?: { reached: boolean; replyFrom: readonly string[] },
+  ): Wake
   /** Sessions whose message this line carries (`from`): each acted on this
    * one, and `told` it something (a wake line that is not a reply). */
   sent(from: readonly string[], to: string, told: boolean): void
@@ -227,7 +241,11 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
       const log = current()
       if (!deps.receiver(id)) throw new HttpError(409, 'delivery_unsupported')
       const ride = body.ride === true
-      const wake = deps.queue(id, source, line, ride)
+      const senders = Array.isArray(from) ? (from as string[]).filter((item) => item !== id) : []
+      const wake = deps.queue(id, source, line, ride, {
+        reached: senders.length > 0,
+        replyFrom: ride && body.reply === true ? senders : [],
+      })
       // Each sender of a wake line acted on this session (a session send, as
       // a root send records); one that is not a reply also told it (a lane
       // that messaged its launcher needs no went-idle line for the same

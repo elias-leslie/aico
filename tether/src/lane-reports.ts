@@ -243,6 +243,12 @@ export interface LaneCursor {
   launched: boolean
   /** The last model switch told (schema v26). */
   modelKey: string | null
+  /** Something reached the lane while this idle (`stateAgentAt`) was still
+   * unreported (its line held): that idle's line goes with
+   * `streakBeforeReach`, and the idle after it is a first line. Kept across a
+   * restart (schema v29). */
+  reachedAfter: number | null
+  streakBeforeReach: number
 }
 
 interface RawCursor {
@@ -261,6 +267,8 @@ interface RawCursor {
   parent_id: string | null
   launched: number
   model_key: string | null
+  reached_after?: number | null
+  streak_before_reach?: number | null
 }
 
 function toCursor(raw: RawCursor): LaneCursor {
@@ -280,6 +288,8 @@ function toCursor(raw: RawCursor): LaneCursor {
     parentId: raw.parent_id,
     launched: raw.launched === 1,
     modelKey: raw.model_key ?? null,
+    reachedAfter: raw.reached_after ?? null,
+    streakBeforeReach: raw.streak_before_reach ?? 0,
   }
 }
 
@@ -346,8 +356,8 @@ export class LaneReportStore {
       .prepare(
         `INSERT INTO lane_reports (host, lane, generation, finished_at, finished_sent_at,
            finished_streak, blocked_at, reset, ended, title, request_id, coordinator_id, parent_id,
-           launched, model_key, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           launched, model_key, reached_after, streak_before_reach, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (host, lane) DO UPDATE SET generation = excluded.generation,
            finished_at = excluded.finished_at, finished_sent_at = excluded.finished_sent_at,
            finished_streak = excluded.finished_streak,
@@ -355,6 +365,8 @@ export class LaneReportStore {
            title = excluded.title, request_id = excluded.request_id,
            coordinator_id = excluded.coordinator_id, parent_id = excluded.parent_id,
            launched = excluded.launched, model_key = excluded.model_key,
+           reached_after = excluded.reached_after,
+           streak_before_reach = excluded.streak_before_reach,
            updated_at = excluded.updated_at`,
       )
       .run(
@@ -373,6 +385,8 @@ export class LaneReportStore {
         cursor.parentId,
         cursor.launched ? 1 : 0,
         cursor.modelKey,
+        cursor.reachedAfter,
+        cursor.streakBeforeReach,
         now,
       )
   }
@@ -531,6 +545,10 @@ export interface LaneReportOperations {
   ): Set<string>
   /** A lane's model switch had no receiver (the owner's notice takes it). */
   unheard?(lane: string): void
+  /** The lane went idle waiting on something of its own (no went-idle line):
+   * its still-queued ride-along replies to `receivers` become wakes. Returns
+   * the receivers whose line did. */
+  promoteReplies?(lane: string, receivers: readonly string[]): string[]
   log(message: string): void
 }
 
@@ -559,12 +577,6 @@ interface Memory {
   timer: NodeJS.Timeout | null
   /** The idle (`stateAgentAt`) whose backoff hold was logged. */
   holdLogged: number
-  /** Something reached the lane while this idle (`stateAgentAt`) was still
-   * unreported: that idle keeps `streakBeforeReach` (its line goes as it
-   * would have), and the next idle is a first line (the cursor's streak was
-   * reset, so a restart keeps that). */
-  reachedAfter: number | null
-  streakBeforeReach: number
 }
 
 export class WatchRefused extends Error {
@@ -685,17 +697,19 @@ export class LaneReporter {
     const cursor = this.store.get('', lane)
     if (!cursor || cursor.ended) return
     const memory = this.memory.get(memoryKey(null, lane))
-    const held = memory?.view.state === 'idle' && memory.view.stateAgentAt > cursor.finishedAt
-    if (memory && held) {
+    let marked = false
+    if (memory?.view.state === 'idle' && memory.view.stateAgentAt > cursor.finishedAt) {
       // An idle not reported yet (its line held) came before this. Should its
-      // line still go before the new turn is seen, it goes as it would have
-      // and must not use up the reset: the end of the work this starts would
-      // then be the repeat.
-      if (memory.reachedAfter !== memory.view.stateAgentAt)
-        memory.streakBeforeReach = cursor.finishedStreak
-      memory.reachedAfter = memory.view.stateAgentAt
+      // line still go before the new turn is seen (a restart in between
+      // included), it goes as it would have and must not use up the reset:
+      // the end of the work this starts would then be the repeat.
+      if (cursor.reachedAfter !== memory.view.stateAgentAt) {
+        cursor.streakBeforeReach = cursor.finishedStreak
+        cursor.reachedAfter = memory.view.stateAgentAt
+        marked = true
+      }
     }
-    if (cursor.finishedStreak === 0 && !held) return
+    if (cursor.finishedStreak === 0 && !marked) return
     cursor.finishedStreak = 0
     this.store.save(cursor, this.ops.now())
     this.ops.log(`lane=${lane} ${why}: its next went-idle line is a first line`)
@@ -744,6 +758,8 @@ export class LaneReporter {
         parentId: null,
         launched: false,
         modelKey: null,
+        reachedAfter: null,
+        streakBeforeReach: 0,
       }
       dirty = true
     }
@@ -783,8 +799,6 @@ export class LaneReporter {
         known: false,
         timer: null,
         holdLogged: 0,
-        reachedAfter: null,
-        streakBeforeReach: 0,
       }
       this.memory.set(key, memory)
     }
@@ -902,13 +916,28 @@ export class LaneReporter {
         this.store.save(cursor, now)
         memory.workingSeenAt = null
         memory.heldIdleAt = 0
+        if (view.waitingOn) {
+          // No went-idle line carries a ride-along reply it sent this turn (a
+          // noted yes to its launcher): that reply wakes its receiver now,
+          // not when the lane's own wait fires.
+          const promoted =
+            this.ops.promoteReplies?.(view.id, this.receivers(snapshotOf(view))) ?? []
+          if (promoted.length)
+            this.ops.log(
+              `lane=${laneWhere(view)} idle on its own wait: its ride-along reply wakes ${promoted.join(',')}`,
+            )
+        }
         return
       }
       // An idle from before something reached the lane (its line still held)
       // keeps the streak it had then; the next idle is the first line.
-      const beforeReach = memory.reachedAfter !== null && view.stateAgentAt <= memory.reachedAfter
-      if (!beforeReach) memory.reachedAfter = null
-      let streak = beforeReach ? memory.streakBeforeReach : cursor.finishedStreak
+      const beforeReach = cursor.reachedAfter !== null && view.stateAgentAt <= cursor.reachedAfter
+      if (!beforeReach && cursor.reachedAfter !== null) {
+        cursor.reachedAfter = null
+        cursor.streakBeforeReach = 0
+        this.store.save(cursor, now)
+      }
+      let streak = beforeReach ? cursor.streakBeforeReach : cursor.finishedStreak
       if (
         streak > 0 &&
         this.ops.acted(view.id, view.host, this.receivers(snapshotOf(view)), cursor.finishedSentAt)

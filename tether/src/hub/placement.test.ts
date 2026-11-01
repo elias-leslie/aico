@@ -493,7 +493,11 @@ describe('placement', () => {
       },
     )
     const logs: string[] = []
-    const placement = new Placement({ ...deps(), log: (line) => logs.push(line) })
+    const placement = new Placement({
+      ...deps(),
+      retired: (name) => name === 'neri-box-1',
+      log: (line) => logs.push(line),
+    })
     await placement.check(needs(1))
     expect(placement.list().map((item) => item.requestId)).toEqual(['vm-1'])
     expect(JSON.parse(world.settings.get('placement_reservations') ?? '[]')).toHaveLength(1)
@@ -501,6 +505,35 @@ describe('placement', () => {
       'released hunt-nh-a on neri-box-1 (host no longer in hosts.json)',
       'released hunt-nh-b on neri-box-1 (host no longer in hosts.json)',
     ])
+  })
+
+  it('keeps the reservations of a host the hub has no link for but did not retire', async () => {
+    // A restart with a hosts.json it cannot parse, the file briefly gone, or
+    // the hub turned off: no peer, yet the host's roots may still run.
+    const held = ['hunt-nh-a', 'hunt-nh-b'].map((requestId) => ({
+      requestId,
+      host: 'neri-box-1',
+      memBytes: 4 * GIB,
+      cpu: 2,
+      at: NOW - 1,
+      state: 'held',
+    }))
+    const { world, deps } = setup(
+      { ...CONFIG, order: ['vm'], skip: ['local'] },
+      { settings: new Map([['placement_reservations', JSON.stringify(held)]]) },
+    )
+    for (const retired of [undefined, () => false]) {
+      const logs: string[] = []
+      const placement = new Placement({
+        ...deps(),
+        ...(retired ? { retired } : {}),
+        log: (line) => logs.push(line),
+      })
+      await placement.check(needs(1))
+      expect(placement.list().map((item) => item.requestId)).toEqual(['hunt-nh-a', 'hunt-nh-b'])
+      expect(JSON.parse(world.settings.get('placement_reservations') ?? '[]')).toHaveLength(2)
+      expect(logs.filter((line) => line.startsWith('released'))).toEqual([])
+    }
   })
 
   it('goes to the next pool host when the Proxmox host cannot be read', async () => {

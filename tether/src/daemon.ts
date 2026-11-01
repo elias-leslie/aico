@@ -480,6 +480,7 @@ export async function startDaemon(
     env,
     hostNames: () => hosts?.hostNames() ?? [],
     peer: (name) => hosts?.peerView(name) ?? null,
+    retired: (name) => hosts?.retired(name) ?? false,
     localRoot: (requestId) => {
       const root = getRootRequest(requestId)
       const row = root ? getWidget(root.widgetId) : undefined
@@ -590,6 +591,7 @@ export async function startDaemon(
           wakes.changed(receiver)
         },
         told: (lane, receiver, since) => wakes.toldSince(lane, receiver, since),
+        promoteReplies: (lane, receivers) => wakes.promoteReplies(lane, receivers),
         withdraw: (receiver, source) => wakes.withdrawEvents(receiver, source).withdrawn,
         acted: (lane, host, by, since) =>
           context.waits?.store.actedOn(lane, host ?? '', by, since) ?? false,

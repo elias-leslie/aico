@@ -197,8 +197,22 @@ export class WakeService {
 
   /** Queue an event line due now on a session (coalesced by source while
    * undelivered) and look at the queue. */
-  queueEvent(sessionId: string, source: string, line: string, ride = false): Wake {
-    const wake = this.store.addEvent({ sessionId, source, note: line, now: this.now(), ride })
+  queueEvent(
+    sessionId: string,
+    source: string,
+    line: string,
+    ride = false,
+    reach?: { reached: boolean; replyFrom?: readonly string[] },
+  ): Wake {
+    const wake = this.store.addEvent({
+      sessionId,
+      source,
+      note: line,
+      now: this.now(),
+      ride,
+      ...(reach ? { reached: reach.reached } : {}),
+      ...(reach?.replyFrom?.length ? { replyFrom: reach.replyFrom } : {}),
+    })
     this.changed(sessionId)
     return wake
   }
@@ -241,6 +255,15 @@ export class WakeService {
       if (ride) this.told.delete(`${id}>${to}`)
       this.context.lanes?.reached(id, `replied to ${to}`)
     }
+  }
+
+  /** A lane went idle waiting on something of its own, so no went-idle line
+   * carries its ride-along replies: those still queued for its receivers
+   * become wakes (WakeStore.promoteReplies). Returns the receivers woken. */
+  promoteReplies(lane: string, receivers: readonly string[]): string[] {
+    const promoted = this.store.promoteReplies(lane, receivers)
+    for (const receiver of promoted) this.changed(receiver)
+    return promoted
   }
 
   /** Whether `from` told `to` at or after `since`. */
@@ -462,7 +485,7 @@ export function registerWakeRoutes(
     exists: (id) => getWidget(id) !== undefined,
     receiver: (id) => service.receiver(id),
     maxChars: () => service.policy().noteMaxChars,
-    queue: (id, source, line, ride) => service.queueEvent(id, source, line, ride),
+    queue: (id, source, line, ride, reach) => service.queueEvent(id, source, line, ride, reach),
     sent: (from, to, told) => service.noteSent(from, to, told),
     replied: (from, to, ride) => service.noteReplied(from, to, ride),
     takeRide: (id) => service.scheduler.takeRide(id),

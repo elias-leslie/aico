@@ -20,6 +20,8 @@ import {
   LANE_REPORTS_SQL,
   LANE_STREAK_COLUMNS,
   PARENT_SQL,
+  REACH_BACKFILL_SQL,
+  REACH_COLUMNS,
   RETIRED_SESSION_IDS_SQL,
   ROOT_ORIGIN_SQL,
   ROOT_REQUESTS_TABLE_SQL,
@@ -459,6 +461,19 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(28, now)
+      }
+      if (current < 29) {
+        // v29: what reaches a lane (a line from outside, a lane's ride-along reply).
+        for (const { table, column, sql } of REACH_COLUMNS) {
+          const has = this.db
+            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
+            .get(table, column)
+          if (!has) this.db.exec(sql)
+        }
+        this.db.exec(REACH_BACKFILL_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(29, now)
       }
     })
   }

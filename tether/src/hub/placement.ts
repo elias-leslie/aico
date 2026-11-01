@@ -529,6 +529,9 @@ export interface PlacementDeps {
   env: NodeJS.ProcessEnv
   hostNames(): string[]
   peer(name: string): PeerView | null
+  /** A host taken out of hosts.json (src/hub/hub.ts `retired`): not one
+   * only briefly missing, invalid or unread, nor any while the hub is off. */
+  retired?(name: string): boolean
   /** Fate of a root this computer owns. */
   localRoot(requestId: string): RootFate
   /** The host already holding this root (null = this computer), else undefined. */
@@ -668,17 +671,16 @@ export class Placement {
   }
 
   /** Release the reservations whose root has definitely ended, and those on
-   * a host no longer configured (it can take no launch, so its room counts
-   * for nothing). */
+   * a host taken out of hosts.json (it can take no launch, so its room counts
+   * for nothing). A host only briefly missing keeps them. */
   private async reconcile(): Promise<void> {
     const held = this.reservations.filter((item) => item.state === 'held')
     const fates = await Promise.all(
       held.map(async (item): Promise<RootFate | 'retired'> => {
         if (item.host === LOCAL_HOST) return this.deps.localRoot(item.requestId)
-        // The hub keeps a host whose hosts.json entry is half-written or
-        // briefly invalid, so no peer means the host was taken out.
         const peer = this.deps.peer(item.host)
-        return peer ? this.remoteRoot(peer, item.requestId) : 'retired'
+        if (peer) return this.remoteRoot(peer, item.requestId)
+        return this.deps.retired?.(item.host) ? 'retired' : 'unknown'
       }),
     )
     let changed = false

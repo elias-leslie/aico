@@ -181,6 +181,12 @@ export interface Wake {
    * session on its own; it joins the next wake paste or the session's next
    * natural turn). A check-in and every other line is wake class. */
   ride: boolean
+  /** A wake-class event line that came from outside the session (schema v29):
+   * a delivery from another session, or Tether's own `lane:`, `run:` or
+   * `ask:` line. Not one the session's own watcher queued for itself. */
+  reached: boolean
+  /** Sessions whose ride-along reply this row carries (schema v29). */
+  replyFrom: string[]
 }
 
 interface RawWake {
@@ -197,6 +203,21 @@ interface RawWake {
   attempts: number
   last_error: string | null
   ride?: number | null
+  reached?: number | null
+  reply_from?: string | null
+}
+
+/** Tether's own event sources that reach a session from outside it (a `wait:`
+ * line goes to the session that armed the wait). */
+const REACHING_SOURCES = ['lane:', 'run:', 'ask:']
+
+function replyFromOf(raw: string | null | undefined): string[] {
+  try {
+    const value: unknown = raw ? JSON.parse(raw) : []
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
 }
 
 /** Whether this row alone justifies waking the session (anything but a ride-along line). */
@@ -204,13 +225,18 @@ export function isWakeClass(wake: Pick<Wake, 'kind' | 'ride'>): boolean {
   return wake.kind !== 'event' || !wake.ride
 }
 
-/** Whether this row reached the session from outside: any event line but a
- * wait of its own (`wait:<id>` goes to the waiter), or a check-in the owner
- * set; never an agent's check-in (a self-wake). A lane's next went-idle line
- * after such a row is a first line (LaneReporter.reached). */
-export function reachesSession(wake: Pick<Wake, 'kind' | 'source' | 'createdBy'>): boolean {
+/** Whether this row reached the session from outside: a wake-class event
+ * line marked `reached` (from another session, or Tether's own lane, run or
+ * ask line), or a check-in the owner set. Never a ride-along line (another
+ * lane's repeat, an FYI, a bare yes: nothing to act on), a line the session's
+ * own watcher queued (an eta reminder, a memory notice), a wait of its own or
+ * an agent's check-in (a self-wake). A lane's next went-idle line after such
+ * a row is a first line (LaneReporter.reached). */
+export function reachesSession(
+  wake: Pick<Wake, 'kind' | 'createdBy' | 'ride' | 'reached'>,
+): boolean {
   if (wake.kind !== 'event') return wake.createdBy === 'owner'
-  return !wake.source?.startsWith('wait:')
+  return !wake.ride && wake.reached
 }
 
 function toWake(raw: RawWake): Wake {
@@ -234,6 +260,8 @@ function toWake(raw: RawWake): Wake {
     attempts: raw.attempts,
     lastError: raw.last_error,
     ride: raw.ride === 1,
+    reached: raw.reached === 1,
+    replyFrom: replyFromOf(raw.reply_from),
   }
 }
 
@@ -303,7 +331,7 @@ export class WakeStore {
   /** Queue an event line for a session, due now. An undelivered row with the
    * same source takes the newer line instead (coalescing). A merge never makes
    * a queued wake ride-along: the row stays a wake until it goes out or its
-   * source withdraws it. */
+   * source withdraws it. Nor does it take back `reached` or `replyFrom`. */
   addEvent(input: {
     sessionId: string
     source: string
@@ -312,25 +340,61 @@ export class WakeStore {
     /** Ride-along class (default: wake class). Merged into a queued wake, it
      * stays a wake. */
     ride?: boolean
+    /** It came from outside the session (default: Tether's own lane, run
+     * and ask lines). Counts only on a wake-class line. */
+    reached?: boolean
+    /** Sessions whose ride-along reply it carries. */
+    replyFrom?: readonly string[]
   }): Wake {
     const ride = input.ride ? 1 : 0
+    const outside =
+      input.reached ?? REACHING_SOURCES.some((prefix) => input.source.startsWith(prefix))
+    const reached = outside && !input.ride ? 1 : 0
+    const replyFrom = input.replyFrom ?? []
     const pending = this.db
       .prepare("SELECT id FROM wakes WHERE kind = 'event' AND session_id = ? AND source = ?")
       .get(input.sessionId, input.source) as { id: string } | undefined
     if (pending) {
+      const ids = [...new Set([...(this.get(pending.id)?.replyFrom ?? []), ...replyFrom])]
       this.db
-        .prepare('UPDATE wakes SET note = ?, ride = min(ride, ?) WHERE id = ?')
-        .run(input.note, ride, pending.id)
+        .prepare(
+          'UPDATE wakes SET note = ?, ride = min(ride, ?), reached = max(reached, ?), reply_from = ? WHERE id = ?',
+        )
+        .run(input.note, ride, reached, ids.length ? JSON.stringify(ids) : null, pending.id)
       return this.get(pending.id) as Wake
     }
     const id = this.random()
     this.db
       .prepare(
-        `INSERT INTO wakes (id, session_id, due_at, note, created_at, created_by, kind, source, ride)
-         VALUES (?, ?, ?, ?, ?, 'agent', 'event', ?, ?)`,
+        `INSERT INTO wakes (id, session_id, due_at, note, created_at, created_by, kind, source, ride,
+           reached, reply_from)
+         VALUES (?, ?, ?, ?, ?, 'agent', 'event', ?, ?, ?, ?)`,
       )
-      .run(id, input.sessionId, input.now, input.note, input.now, input.source, ride)
+      .run(
+        id,
+        input.sessionId,
+        input.now,
+        input.note,
+        input.now,
+        input.source,
+        ride,
+        reached,
+        replyFrom.length ? JSON.stringify([...new Set(replyFrom)]) : null,
+      )
     return this.get(id) as Wake
+  }
+
+  /** A lane went idle without a went-idle line to carry its ride-along
+   * replies (it waits on something of its own): the still-queued ride-along
+   * rows carrying one to these receivers become wakes, from outside as a
+   * reply posted as a wake is. Returns the sessions whose row changed. */
+  promoteReplies(lane: string, receivers: readonly string[]): string[] {
+    const promote = this.db.prepare(
+      `UPDATE wakes SET ride = 0, reached = 1
+        WHERE kind = 'event' AND ride = 1 AND session_id = ? AND reply_from IS NOT NULL
+          AND EXISTS (SELECT 1 FROM json_each(wakes.reply_from) WHERE value = ?)`,
+    )
+    return receivers.filter((receiver) => Number(promote.run(receiver, lane).changes) > 0)
   }
 
   /** Take back the undelivered event line(s) a source queued (on one session,
@@ -393,13 +457,17 @@ export class WakeStore {
         : undefined
     if (newer) {
       if (!wake.ride) this.db.prepare('UPDATE wakes SET ride = 0 WHERE id = ?').run(newer.id)
+      const ids = [...new Set([...(this.get(newer.id)?.replyFrom ?? []), ...wake.replyFrom])]
+      this.db
+        .prepare('UPDATE wakes SET reached = max(reached, ?), reply_from = ? WHERE id = ?')
+        .run(wake.reached ? 1 : 0, ids.length ? JSON.stringify(ids) : null, newer.id)
       return
     }
     this.db
       .prepare(
         `INSERT OR IGNORE INTO wakes (id, session_id, due_at, note, created_at, created_by, kept,
-           ended_session, attempts, last_error, kind, source, ride)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ended_session, attempts, last_error, kind, source, ride, reached, reply_from)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         wake.id,
@@ -415,6 +483,8 @@ export class WakeStore {
         wake.kind,
         wake.source,
         wake.ride ? 1 : 0,
+        wake.reached ? 1 : 0,
+        wake.replyFrom.length ? JSON.stringify(wake.replyFrom) : null,
       )
   }
 

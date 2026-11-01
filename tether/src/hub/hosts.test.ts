@@ -52,6 +52,7 @@ describe('hosts registry', () => {
       errors: [],
       readable: true,
       held: [],
+      missing: true,
     })
     writeFileSync(join(dir, 'hosts.json'), '{nope')
     expect(loadHosts(join(dir, 'hosts.json'))).toMatchObject({

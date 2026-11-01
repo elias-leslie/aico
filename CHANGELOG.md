@@ -247,6 +247,18 @@
   "told" mark.
 - Placement releases the reservations held on a host taken out of
   hosts.json, so they no longer show as open forever (it logs each one).
+- Review fixes for the above (Tether schema 29). A ride-along line, such as a
+  helper's repeat went-idle line pasted with a lane's own check-in, no longer
+  counts as reaching the lane, nor does a line the lane's own watcher queued
+  (an eta reminder, a memory notice): the launcher no-op wakes stay gone. A
+  restart while a lane's idle line is held keeps that line's class, so the end
+  of the new work still wakes. Placement releases a host's reservations only
+  when a hosts.json that is there and parses leaves the host out, never for a
+  file that is briefly gone, unreadable at a restart, or a hub turned off.
+- A lane that acks its launcher with a noted yes (ride-along), then arms its
+  own wait and goes idle, sends no went-idle line to carry the yes. That
+  queued yes now wakes the launcher at once instead of waiting for the lane's
+  wait to fire.
 - Lane lines go to the session that launched the lane, not the root
   coordinator. A lane's went idle, blocked and ended lines (and model-switch
   lines) go to its launcher only; the root gets them when it launched the

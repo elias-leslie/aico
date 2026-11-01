@@ -343,6 +343,31 @@ describe('hub', () => {
     expect(events).toContainEqual({ type: 'peer.resync', data: { host: 'vm' } })
   })
 
+  it('retires only a host that a hosts.json there and parsed leaves out (placement releases its reservations)', () => {
+    const file = join(dir, 'hosts.json')
+    hub.close()
+    // A restart with a file it cannot parse: nothing is retired.
+    writeFileSync(file, '[{"name": "vm", "ssh": ')
+    hub = makeHub()
+    hub.reload()
+    expect(hub.retired('vm')).toBe(false)
+    expect(hub.retired('neri-box-1')).toBe(false)
+    // No file at all (briefly gone, or the hub's first look): nothing either.
+    rmSync(file)
+    hub.reload()
+    expect(hub.retired('neri-box-1')).toBe(false)
+    // An entry it cannot use yet is held, not retired; a name not listed is.
+    writeFileSync(file, JSON.stringify([{ name: 'vm', ssh: 'vm', socket: 'relative.sock' }]))
+    hub.reload()
+    expect(hub.retired('vm')).toBe(false)
+    expect(hub.retired('neri-box-1')).toBe(true)
+    // The file then goes for a moment: what it last said stands.
+    rmSync(file)
+    hub.reload()
+    expect(hub.retired('vm')).toBe(false)
+    expect(hub.retired('neri-box-1')).toBe(true)
+  })
+
   it.each(['/v1/tools', '/v1/projects'])(
     'recognizes an atomically appended host on the first %s query before periodic reload',
     async (path) => {

@@ -134,6 +134,37 @@ describe('Store schema', () => {
     expect(columns.map((c) => c.name)).toContain('ride')
   })
 
+  it('v29 adds the reach columns, marking queued wake-class lines as from outside', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-reach-migration-'))
+    const path = join(dir, 'tether.db')
+    const old = open(path)
+    for (const [table, column] of [
+      ['wakes', 'reached'],
+      ['wakes', 'reply_from'],
+      ['lane_reports', 'reached_after'],
+      ['lane_reports', 'streak_before_reach'],
+    ])
+      old.db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`)
+    const insert = old.db.prepare(
+      `INSERT INTO wakes (id, session_id, due_at, note, created_at, created_by, kind, source, ride)
+       VALUES (?, 'aaaa0001', 1, 'line', 1, 'agent', 'event', ?, ?)`,
+    )
+    insert.run('000000000001', 'coord:a', 0)
+    insert.run('000000000002', 'coord:b', 1)
+    insert.run('000000000003', 'wait:0123456789ab', 0)
+    old.db.exec('DELETE FROM schema_version WHERE version >= 29')
+    old.close()
+    const migrated = open(path)
+    expect(migrated.schemaVersion()).toBe(SCHEMA_VERSION)
+    expect(migrated.db.prepare('SELECT id, reached FROM wakes ORDER BY id').all()).toEqual([
+      { id: '000000000001', reached: 1 },
+      { id: '000000000002', reached: 0 },
+      { id: '000000000003', reached: 0 },
+    ])
+    const lanes = migrated.db.prepare('PRAGMA table_info(lane_reports)').all() as { name: string }[]
+    expect(lanes.map((c) => c.name)).toContain('reached_after')
+  })
+
   it('v9 retires the OpenCode rows, moves their default and names Pi `pi`', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-opencode-retire-'))
     const path = join(dir, 'tether.db')

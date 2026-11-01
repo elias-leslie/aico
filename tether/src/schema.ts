@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 28
+export const SCHEMA_VERSION = 29
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -654,6 +654,49 @@ export const WAKES_RIDE_COLUMNS: readonly { table: string; column: string; sql: 
     sql: 'ALTER TABLE wakes ADD COLUMN ride INTEGER NOT NULL DEFAULT 0 CHECK(ride IN (0, 1))',
   },
 ]
+
+/**
+ * v29: what reaches a lane (src/wakes.ts, src/lane-reports.ts).
+ * `wakes.reached` (1) marks a wake-class event line that came from outside
+ * the session: a delivery whose `from` names another session, or Tether's own
+ * `lane:`, `run:` or `ask:` line. Only such a line, when it goes out, makes a
+ * lane's next went-idle line a first line; one the lane's own watcher queued
+ * (no `from`) does not. Queued wake-class rows from before v29 are marked, as
+ * they counted then. `wakes.reply_from` (a JSON list of session ids) names the
+ * lanes whose ride-along reply a row carries: a lane that goes idle waiting on
+ * something of its own makes those rows to its receivers wakes.
+ * `lane_reports.reached_after` and `streak_before_reach` keep, across a
+ * restart, the idle whose line was still held when something reached the
+ * lane, and the streak it goes out with.
+ */
+export const REACH_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
+  {
+    table: 'wakes',
+    column: 'reached',
+    sql: 'ALTER TABLE wakes ADD COLUMN reached INTEGER NOT NULL DEFAULT 0 CHECK(reached IN (0, 1))',
+  },
+  {
+    table: 'wakes',
+    column: 'reply_from',
+    sql: 'ALTER TABLE wakes ADD COLUMN reply_from TEXT CHECK(reply_from IS NULL OR json_valid(reply_from))',
+  },
+  {
+    table: 'lane_reports',
+    column: 'reached_after',
+    sql: 'ALTER TABLE lane_reports ADD COLUMN reached_after INTEGER',
+  },
+  {
+    table: 'lane_reports',
+    column: 'streak_before_reach',
+    sql: 'ALTER TABLE lane_reports ADD COLUMN streak_before_reach INTEGER NOT NULL DEFAULT 0 CHECK(streak_before_reach >= 0)',
+  },
+]
+
+/** v29: queued wake-class event lines from before v29 counted as reaching their session. */
+export const REACH_BACKFILL_SQL = `
+  UPDATE wakes SET reached = 1
+   WHERE kind = 'event' AND ride = 0 AND (source IS NULL OR source NOT LIKE 'wait:%')
+`
 
 /**
  * v21: deliveries (src/deliveries.ts). A line another owner queued on a
