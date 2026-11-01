@@ -71,12 +71,43 @@ export interface CmdUnits {
   stop(ref: string): Promise<void>
 }
 
+/** The Aico session a live harness process runs in, from a SummitFlow
+ * coordination anchor (`pid:start`, /proc stat start time): its
+ * `AICO_WIDGET_ID`, or null when the process is gone, reused or outside Aico. */
+export function anchorWidget(
+  fs: { readFile(path: string): string },
+  anchor: string,
+): string | null {
+  const m = /^(\d{1,9}):(\d{1,20})$/.exec(anchor)
+  if (!m) return null
+  try {
+    const stat = fs.readFile(`/proc/${m[1]}/stat`)
+    if (
+      stat
+        .slice(stat.lastIndexOf(')') + 1)
+        .trim()
+        .split(/\s+/)[19] !== m[2]
+    )
+      return null
+    const env = fs.readFile(`/proc/${m[1]}/environ`).split('\0')
+    const widget = env
+      .find((pair) => pair.startsWith('AICO_WIDGET_ID='))
+      ?.slice('AICO_WIDGET_ID='.length)
+    return widget && /^[0-9a-f]{8}$/.test(widget) ? widget : null
+  } catch {
+    return null
+  }
+}
+
 export interface PullReaderDeps {
   paths: PullReaderPaths
   /** A run Tether follows (RunTracker.runState). */
   run(runId: string): { state: string | null; launcherId: string | null } | undefined
   /** An ask (AskStore.get). */
-  ask(id: string): { state: string } | undefined
+  ask(id: string): { state: string; question?: string } | undefined
+  /** The window title of the agent a coordination identity's anchor (`pid:start`)
+   * names, or null (not a live harness in an Aico window). */
+  agentTitle?(anchor: string): string | null
   /** A hub peer's state; null when this hub has no such host. */
   host(name: string): string | null
   /** Nightshift admission is red: heavy and probing work waits. */
@@ -210,6 +241,8 @@ export function cmdResult(text: string): { state: 'succeeded' | 'failed'; detail
 
 export class PullReaders {
   private ledgerCache: Cached<Map<string, Record<string, unknown>> | null> | null = null
+  /** Agent id -> identity anchor, from the same ledger read. */
+  private anchorsCache: Map<string, string> | null = null
   private readonly probed = new Map<string, { state: string; exit: string | null }>()
   private readonly probing = new Set<string>()
   private readonly probedAt = new Map<string, number>()
@@ -298,7 +331,7 @@ export class PullReaders {
       }
       case 'ask': {
         const ask = this.deps.ask(ref)
-        return ask ? { state: ask.state, detail: null, title: null } : null
+        return ask ? { state: ask.state, detail: null, title: ask.question ?? null } : null
       }
       case 'host': {
         const state = this.deps.host(ref)
@@ -399,6 +432,7 @@ export class PullReaders {
     }
     if (this.ledgerCache?.key === key) return this.ledgerCache.value
     let value: Map<string, Record<string, unknown>> | null = null
+    const anchors = new Map<string, string>()
     try {
       const raw = readJson(path) as { messages?: unknown }
       const messages = Array.isArray(raw.messages) ? raw.messages : []
@@ -417,10 +451,20 @@ export class PullReaders {
           })
         }
       }
+      // Identities: only each agent's anchor, to name a request's recipient by its window.
+      const identities = (raw as { identities?: unknown }).identities
+      if (identities && typeof identities === 'object') {
+        for (const [agent, row] of Object.entries(identities as Record<string, unknown>)) {
+          const anchor =
+            row && typeof row === 'object' ? str((row as Record<string, unknown>).anchor) : null
+          if (anchor) anchors.set(agent, anchor)
+        }
+      }
     } catch {
       value = null
     }
     this.ledgerCache = { key, value }
+    this.anchorsCache = value ? anchors : null
     return value
   }
 
@@ -430,12 +474,15 @@ export class PullReaders {
     const message = ledger.get(id)
     if (!message) return null
     const to = str(message.to)
+    const anchor = to ? this.anchorsCache?.get(to) : undefined
+    const window = anchor ? (this.deps.agentTitle?.(anchor) ?? null) : null
+    const title = to && window ? `${window} (${to})` : to
     // A withdrawn request is closed without an answer.
-    if (message.withdrawn) return { state: 'closed', detail: null, title: to }
+    if (message.withdrawn) return { state: 'closed', detail: null, title }
     return {
       state: str(message.state) ?? 'open',
       detail: str(message.intent),
-      title: to,
+      title,
     }
   }
 

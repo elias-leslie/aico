@@ -404,7 +404,8 @@ export function spanLabel(ms: number): string {
 }
 
 const UNTIL_WORDS: Record<SessionUntil, { ready: string; not: string; gone: string }> = {
-  finished: { ready: 'finished', not: 'not finished', gone: 'ended before it finished' },
+  // Idle after the send is all Tether knows: never "finished" (it may be waiting on its own check).
+  finished: { ready: 'went idle', not: 'not idle yet', gone: 'ended before it went idle' },
   idle: { ready: 'is idle', not: 'not idle', gone: 'ended before it was idle' },
   blocked: { ready: 'is blocked', not: 'not blocked', gone: 'ended without being blocked' },
   ended: { ready: 'ended', not: 'not ended', gone: 'ended' },

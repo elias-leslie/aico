@@ -212,13 +212,13 @@ describe('waitLine', () => {
 
   it('names the session, the outcome and the command to look with', () => {
     expect(waitLine(base, 'until', T0)).toBe(
-      '[Ready] session "TEST lane" (req test-lane) finished · st aico root status test-lane',
+      '[Ready] session "TEST lane" (req test-lane) went idle · st aico root status test-lane',
     )
     expect(waitLine(base, 'gone', T0)).toBe(
-      '[Wait over] session "TEST lane" (req test-lane) ended before it finished · st aico root status test-lane',
+      '[Wait over] session "TEST lane" (req test-lane) ended before it went idle · st aico root status test-lane',
     )
     expect(waitLine(base, 'timeout', T0 + 2 * 3600_000)).toBe(
-      '[Wait timed out] session "TEST lane" (req test-lane) not finished after 2h: it is working · st aico root status test-lane',
+      '[Wait timed out] session "TEST lane" (req test-lane) not idle yet after 2h: it is working · st aico root status test-lane',
     )
   })
 
@@ -261,7 +261,7 @@ describe('WaitService', () => {
       {
         to: WAITER,
         source: `wait:${wait.id}`,
-        line: '[Ready] session "TEST lane" (req test-lane) finished · st aico root status test-lane',
+        line: '[Ready] session "TEST lane" (req test-lane) went idle · st aico root status test-lane',
       },
     ])
     h.waits.check()
@@ -301,7 +301,7 @@ describe('WaitService', () => {
     expect(over.state).toBe('timed_out')
     expect(over.outcome).toBe('timeout')
     expect(h.delivered.map((item) => item.line)).toEqual([
-      '[Wait timed out] session "TEST lane" (req test-lane) not finished after 2m: it is working · re: "store lane" · st aico root status test-lane',
+      '[Wait timed out] session "TEST lane" (req test-lane) not idle yet after 2m: it is working · re: "store lane" · st aico root status test-lane',
     ])
   })
 
@@ -416,7 +416,7 @@ describe('WaitService', () => {
     expect(h.waits.store.get(finished.wait.id)?.outcome).toBe('gone')
     expect(h.delivered.map((item) => item.line).sort()).toEqual([
       '[Ready] session "TEST lane" (req test-lane) ended · st aico root status test-lane',
-      '[Wait over] session "TEST lane" (req test-lane) ended before it finished · st aico root status test-lane',
+      '[Wait over] session "TEST lane" (req test-lane) ended before it went idle · st aico root status test-lane',
     ])
   })
 
@@ -659,6 +659,22 @@ describe('pull kinds', () => {
     h.pull('reply', 'def456', { state: 'closed', detail: null, title: 'cc:1' })
     expect(h.waits.store.get(b.wait.id)?.outcome).toBe('gone')
     expect(h.waits.store.get(a.wait.id)?.outcome).toBe('until')
+  })
+
+  it("a reply line names the recipient's window, an ask line its question", async () => {
+    const h = harness()
+    const title = 'SummitFlow — One wake per message (cc:94bdf3)'
+    h.pulls.set('reply:abc123', { state: 'open', detail: null, title })
+    await pullArm(h, 'reply', 'abc123', 'acked')
+    h.pull('reply', 'abc123', { state: 'acked', detail: 'yes', title })
+    const ask = 'c'.repeat(12)
+    h.pulls.set(`ask:${ask}`, { state: 'open', detail: null, title: 'Rebuild aico now?' })
+    await pullArm(h, 'ask', ask, 'answered')
+    h.pull('ask', ask, { state: 'answered', detail: null, title: 'Rebuild aico now?' })
+    expect(h.delivered.map((d) => d.line)).toEqual([
+      `[Ready] request abc123 to ${title} answered: yes · st sessions inbox`,
+      `[Ready] ask "Rebuild aico now?" (${ask}) answered · tether ask get ${ask}`,
+    ])
   })
 
   it('a tap not taken in yet arms and waits; a timeout says so', async () => {

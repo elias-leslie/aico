@@ -657,7 +657,7 @@ finishes a turn, is blocked on the user, or ends. Nobody subscribes and no check
 line on the receiver's delivery queue ([Wakes](#wakes)), pasted under the same gates (or sent as an Agent Hub
 follow-up turn):
 
-`[Ready] lane "Store lane" (req neri-r1) finished after 6m · st aico root status neri-r1`
+`[Ready] lane "Store lane" (req neri-r1) went idle after 6m · st aico root status neri-r1`
 `[Ready] lane "Store lane" on neri-vm is blocked: permission prompt · st aico widget status --widget-id 1a2b3c4d`
 `[Ready] lane "Store lane" ended (its agent exited) · st aico root status neri-r1`
 
@@ -735,9 +735,9 @@ the `waits` table, apart from wakes, and survive Tether restarts.
 - **Delivery.** The line goes on the waiter's delivery queue as an event row (source `wait:<id>`), pasted under the
   [wake](#wakes) gates, events first, under 1800 bytes. It names the session (title cleaned as in lane reports, at most
   60 characters), the outcome, the waiter's own note and the command that shows it; never the session's reply text:
-  `[Ready] session "Store lane" (req neri-r1) finished · re: "merge after" · st aico root status neri-r1`,
-  `[Wait over] session "Store lane" (req neri-r1) ended before it finished · …`,
-  `[Wait timed out] session "Store lane" (req neri-r1) not finished after 2h: it is working · …`.
+  `[Ready] session "Store lane" (req neri-r1) went idle · re: "merge after" · st aico root status neri-r1`,
+  `[Wait over] session "Store lane" (req neri-r1) ended before it went idle · …`,
+  `[Wait timed out] session "Store lane" (req neri-r1) not idle yet after 2h: it is working · …`.
   Check-in lists and `maxPerSession` do not count waits. While a waiter has an armed wait its `waitingOn` names it.
 - **End.** A waiter's waits end with it, unless End says `keepWakes: true`: then its armed waits are kept, and one that
   becomes ready relaunches the conversation like a kept wake (also when it fires while the End is still running); one

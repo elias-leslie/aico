@@ -124,15 +124,18 @@ function names(kind: PullKind, ref: string, title: string | null): { name: strin
         name: `service job ${ref.slice(0, 8)}${label ? ` (${label})` : ''}`,
         look: `st service result ${ref}`,
       }
-    case 'reply':
+    case 'reply': {
+      // The recipient's window title with its id ("Title (cc:x)") fits in 60.
+      const to = title ? laneTitle(title, 60) : null
       return {
-        name: `request ${ref}${label ? ` to ${label}` : ''}`,
+        name: `request ${ref}${to ? ` to ${to}` : ''}`,
         look: 'st sessions inbox',
       }
+    }
     case 'run':
       return { name: `workflow run ${ref}`, look: `st workflow get ${ref}` }
     case 'ask':
-      return { name: `ask ${ref}`, look: `tether ask get ${ref}` }
+      return { name: `ask${label ? ` "${label}"` : ''} (${ref})`, look: `tether ask get ${ref}` }
     case 'host':
       return { name: `host ${ref}`, look: 'st aico placement' }
     case 'tap':

@@ -79,7 +79,7 @@ import { persistSizeHolders } from './size-holder'
 import { Store } from './store'
 import { VERSION } from './version'
 import type { PullKind } from './wait-kinds'
-import { PullReaders, systemdCmdUnits, systemdProbe } from './wait-readers'
+import { anchorWidget, PullReaders, systemdCmdUnits, systemdProbe } from './wait-readers'
 import { readWaitingState, WAIT_NOTICE_MS, WaitingNotices } from './waiting'
 import { WaitService, WaitStore } from './waits'
 import { bindWaitingOn, bindWakeStore, WakeService } from './wake-runtime'
@@ -598,6 +598,11 @@ export async function startDaemon(
     cmdUnits: systemdCmdUnits(env),
     run: (runId) => runs.runState(runId),
     ask: (id) => askStore.get(id),
+    agentTitle: (anchor) => {
+      const widget = anchorWidget(nodeProcFs, anchor)
+      const row = widget ? getWidget(widget) : null
+      return row ? displayTitle(row) : null
+    },
     host: (name) => hosts?.peerView(name)?.state ?? null,
     admissionRed: () => nightshiftAdmissionRed(admissionPath),
     probeJob: systemdProbe(env),

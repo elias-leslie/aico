@@ -141,8 +141,10 @@ export function laneLine(
   extra: { minutes?: number | null; detail?: string | null; exited?: boolean } = {},
 ): string {
   const what =
+    // "went idle", not "finished": an idle lane may only be waiting on its own
+    // check; Tether can't tell done from paused until the lane ends.
     outcome === 'finished'
-      ? `finished${extra.minutes && extra.minutes >= 1 ? ` after ${extra.minutes}m` : ''}`
+      ? `went idle${extra.minutes && extra.minutes >= 1 ? ` after ${extra.minutes}m` : ''}`
       : outcome === 'blocked'
         ? `is blocked: ${extra.detail && BLOCKING_DETAILS.has(extra.detail) ? extra.detail : 'waiting on input'}`
         : `ended${extra.exited ? ' (its agent exited)' : ''}`

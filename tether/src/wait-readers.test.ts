@@ -3,7 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { PullKind } from './wait-kinds'
-import { type CmdSpec, type CmdUnits, cmdResult, PullReaders, parseJobResult } from './wait-readers'
+import {
+  anchorWidget,
+  type CmdSpec,
+  type CmdUnits,
+  cmdResult,
+  PullReaders,
+  parseJobResult,
+} from './wait-readers'
 
 const JOB = '0123456789abcdef0123456789abcdef'
 const TAP = 'fedcba9876543210fedcba9876543210'
@@ -41,7 +48,9 @@ function readers(): PullReaders {
         : id === 'run-2'
           ? { state: null, launcherId: null }
           : undefined,
-    ask: (id) => (id === 'c'.repeat(12) ? { state: 'answered' } : undefined),
+    ask: (id) =>
+      id === 'c'.repeat(12) ? { state: 'answered', question: 'Rebuild aico now?' } : undefined,
+    agentTitle: (anchor) => (anchor === '4242:99' ? 'SummitFlow — One wake per message' : null),
     host: (name) => (name === 'gem' ? 'connected' : null),
     admissionRed: () => red,
     cmdUnits: units,
@@ -141,6 +150,50 @@ describe('PullReaders', () => {
     })
     expect(r.read('reply', 'def456')).toEqual({ state: 'closed', detail: null, title: 'cc:1' })
     expect(r.read('reply', '999999')).toBeNull()
+  })
+
+  it("names a reply's recipient by its window title when its anchor is in Aico", () => {
+    const r = readers()
+    writeFileSync(
+      join(dir, 'leases', '_coord.json'),
+      JSON.stringify({
+        messages: [
+          { id: 'abc123', to: 'cc:94bdf3', state: 'acked', intent: 'yes' },
+          { id: 'def456', to: 'cc:gone01', state: 'open' },
+        ],
+        identities: { 'cc:94bdf3': { anchor: '4242:99' }, 'cc:gone01': { anchor: '1:1' } },
+      }),
+    )
+    expect(r.read('reply', 'abc123')).toMatchObject({
+      title: 'SummitFlow — One wake per message (cc:94bdf3)',
+    })
+    expect(r.read('reply', 'def456')).toMatchObject({ title: 'cc:gone01' })
+  })
+
+  it('an ask reads its question as its title', () => {
+    expect(readers().read('ask', 'c'.repeat(12))).toEqual({
+      state: 'answered',
+      detail: null,
+      title: 'Rebuild aico now?',
+    })
+  })
+
+  it("an anchor names the Aico session of the live process it started, never a reused pid's", () => {
+    const stat = `4242 (claude) S ${'1 '.repeat(18)}99 0 0`
+    const files: Record<string, string> = {
+      '/proc/4242/stat': stat,
+      '/proc/4242/environ': 'HOME=/h\0AICO_WIDGET_ID=644e1b6c\0',
+    }
+    const fs = {
+      readFile: (path: string) => {
+        if (!(path in files)) throw new Error('ENOENT')
+        return files[path] as string
+      },
+    }
+    expect(anchorWidget(fs, '4242:99')).toBe('644e1b6c')
+    expect(anchorWidget(fs, '4242:98')).toBeNull()
+    expect(anchorWidget(fs, '5151:1')).toBeNull()
+    expect(anchorWidget(fs, 'bad')).toBeNull()
   })
 
   it('reads a tap from either answer dir; unanswered is unknown, never gone', () => {

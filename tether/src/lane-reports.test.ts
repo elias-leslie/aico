@@ -103,7 +103,7 @@ describe('lane lines', () => {
       launched: true,
     }
     expect(laneLine('finished', lane, { minutes: 4 })).toBe(
-      '[Ready] lane "Store lane" (req neri-r1) finished after 4m · st aico root status neri-r1',
+      '[Ready] lane "Store lane" (req neri-r1) went idle after 4m · st aico root status neri-r1',
     )
     expect(laneLine('blocked', { ...lane, requestId: null }, { detail: 'permission prompt' })).toBe(
       `[Ready] lane "Store lane" is blocked: permission prompt · st aico widget status --widget-id ${LANE}`,
@@ -152,7 +152,7 @@ describe('finished', () => {
       {
         to: ROOT,
         source: `lane:${LANE}:finished`,
-        line: expect.stringContaining('lane "TEST" finished'),
+        line: expect.stringContaining('lane "TEST" went idle'),
       },
     ])
     step(reporter, { stateAgentAt: 200 }, SETTLE * 2)
@@ -167,7 +167,7 @@ describe('finished', () => {
     expect(delivered).toHaveLength(0)
     step(reporter, { stateAgentAt: 400 }, SETTLE)
     expect(delivered).toHaveLength(1)
-    expect(delivered[0]?.line).toContain('finished after 6m')
+    expect(delivered[0]?.line).toContain('went idle after 6m')
   })
 
   it('a restart neither repeats a finish nor loses one that happened while down', () => {
