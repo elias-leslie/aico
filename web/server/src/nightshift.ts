@@ -50,13 +50,15 @@ function ageText(seconds: number): string {
 /** present._aged: a row's age and time left, moved on from when its words were computed. */
 function aged(row: Row, dt: number): Row {
   const out = { ...row }
-  if (isNumber(out.age)) {
-    out.age = out.age + dt
-    if ('age_text' in out) out.age_text = ageText(out.age)
+  if (isNumber(row.age)) {
+    const age = row.age + dt
+    out.age = age
+    if ('age_text' in out) out.age_text = ageText(age)
   }
-  if (isNumber(out.left)) {
-    out.left = out.left - dt
-    if ('left_text' in out) out.left_text = `${Math.max(1, Math.round(out.left / 60))} min left`
+  if (isNumber(row.left)) {
+    const left = row.left - dt
+    out.left = left
+    if ('left_text' in out) out.left_text = `${Math.max(1, Math.round(left / 60))} min left`
   }
   return out
 }
