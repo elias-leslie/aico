@@ -281,7 +281,7 @@ def test_status_shows_why_a_turn_did_not_start(monkeypatch):
 def test_a_blank_slate_work_role_gives_the_chat_the_hub_workspace(monkeypatch):
     row = {"job": "review", "model": None, "effort": None, "daybreak": None, "context": "blank-slate", "use": None,
            "work_roles": ["review"], "why": ""}
-    monkeypatch.setattr(admin, "launch_row", lambda role, tool: row)
+    monkeypatch.setattr(admin, "launch_row", lambda *_args: row)
     code, calls, output = run_create(monkeypatch, ["create", "hub-3", "Review.", "--tool", "agent-hub", "--agent", "chat",
                                                    "--work-role", "review", "--root-socket", "/fixture/gui.sock"])
     assert code == 0

@@ -344,31 +344,42 @@ def socket_path(value: str) -> str:
 PROC = Path("/proc")
 
 
-def opencode_go_quota_block(model: str | None) -> str | None:
-    """`<window> resets <time>` while Agent Hub reports an opencode-go window rate-limited, else None.
-
-    Best effort: without the ST context's Agent Hub URL, the approved client id
-    (~/.env.local SUMMITFLOW_CLIENT_ID) or a known reply, the launch goes ahead.
-    """
-    if not model or not model.startswith("opencode-go/"):
-        return None
+def agent_hub_get(path: str, params: dict | None = None, timeout: float = 3) -> tuple[int, typing.Any] | None:
+    """(status, JSON body) of a GET to the Agent Hub the ST context names, or None when it can't be
+    asked or answers something unreadable. Sends the approved client id (~/.env.local
+    SUMMITFLOW_CLIENT_ID) when there is one; Agent Hub's model reads need none."""
     try:
         base = urlsplit(json.loads(os.environ.get("ST_EXTENSION_CONTEXT") or "{}").get("agent_hub_url") or "")
-        client = next((line.partition("=")[2].strip().strip("\"'")
-                       for line in (Path.home() / ".env.local").read_text().splitlines()
-                       if line.startswith("SUMMITFLOW_CLIENT_ID=")), "")
-        if base.scheme != "http" or not base.hostname or not client:
+        if base.scheme != "http" or not base.hostname:
             return None
-        connection = http.client.HTTPConnection(base.hostname, base.port or 80, timeout=3)
         try:
-            connection.request("GET", "/api/analytics/subscriptions/opencode-go/usage",
-                               headers={"X-Client-Id": client, "X-Request-Source": "cli"})
+            client = next((line.partition("=")[2].strip().strip("\"'")
+                           for line in (Path.home() / ".env.local").read_text().splitlines()
+                           if line.startswith("SUMMITFLOW_CLIENT_ID=")), "")
+        except OSError:
+            client = ""
+        query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
+        connection = http.client.HTTPConnection(base.hostname, base.port or 80, timeout=timeout)
+        try:
+            connection.request("GET", path + (f"?{query}" if query else ""),
+                               headers={"X-Request-Source": "cli", **({"X-Client-Id": client} if client else {})})
             response = connection.getresponse()
-            data = json.loads(response.read(65536)) if response.status == 200 else {}
+            return response.status, json.loads(response.read(CATALOG_LIMIT))
         finally:
             connection.close()
     except (OSError, ValueError, AttributeError, http.client.HTTPException):
         return None
+
+
+def opencode_go_quota_block(model: str | None) -> str | None:
+    """`<window> resets <time>` while Agent Hub reports an opencode-go window rate-limited, else None.
+
+    Best effort: without the ST context's Agent Hub URL or a known reply, the launch goes ahead.
+    """
+    if not model or not model.startswith("opencode-go/"):
+        return None
+    answer = agent_hub_get("/api/analytics/subscriptions/opencode-go/usage")
+    data = answer[1] if answer is not None and answer[0] == 200 else {}
     for window in (data.get("windows") if isinstance(data, dict) else None) or []:
         if isinstance(window, dict) and window.get("status") == "rate-limited":
             return f"{window.get('label') or window.get('key')} window resets {window.get('resets_at') or 'later'}"
@@ -1397,40 +1408,63 @@ LAUNCH_TOOLS = ("claude-code", "codex", "pi")
 EFFORTS = ("none", "off", "minimal", "low", "medium", "high", "xhigh", "max")
 
 
-def launch_row(role: str, tool: str) -> dict | None:
-    """Agent Hub's launch-table row for this work role and tool (`st models route --role ROLE
-    --tool TOOL`), or None when the table can't be read (the launch then goes ahead on the tool's
-    own settings). Raises ValueError when Agent Hub has no such work role, so a typo such as
-    `tester` fails here instead of launching as an unknown role with the full delivery."""
-    try:
-        result = subprocess.run(["st", "--no-compact", "models", "route", "--role", role, "--tool", tool, "--json"],
-                                capture_output=True, text=True, timeout=30, check=False)
-    except (OSError, subprocess.TimeoutExpired):
+# The safety floor that holds when Agent Hub's launch rules can't be read (model-choice build plan,
+# owner 2026-11-01): Claude never does case work, so a Claude launch for these work roles is refused;
+# every other launch goes ahead. With the rules readable, Agent Hub alone answers allowed or denied.
+CLAUDE_FLOOR_ROLES = ("hunting", "recon", "verification")
+CLAUDE_TOOL = "claude-code"  # always Claude; whether another tool's model is Claude is Agent Hub's call
+
+
+def launch_row(role: str, tool: str, model: str | None = None, project: str | None = None) -> dict | None:
+    """Agent Hub's launch-table row for this work role and tool (GET /api/models/launch-defaults,
+    what `st models route --role ROLE --tool TOOL` shows), judged for the explicit model and the
+    project: the row carries Agent Hub's `allowed` and `deny_reason`. None when the table can't be
+    read. Raises ValueError when Agent Hub has no such work role, so a typo such as `tester` fails
+    here instead of launching as an unknown role with the full delivery."""
+    answer = agent_hub_get("/api/models/launch-defaults",
+                           {"role": role, "tool": tool, "model": model, "project": project}, timeout=10)
+    if answer is None:
         return None
-    if result.returncode != 0:
-        if "API error (422)" not in result.stderr:
-            return None
-        try:
-            detail = str(json.loads(result.stderr.strip().splitlines()[-1]).get("error") or "")
-        except (ValueError, IndexError, AttributeError):
-            detail = ""
-        detail = re.sub(r"[^\x20-\x7e]", "", detail.partition("): ")[2])[:600]
-        if "Unknown work role" not in detail:
+    status, data = answer
+    if status == 422:
+        # Agent Hub's error envelope ({"error", "message"}), or FastAPI's own ({"detail"}).
+        detail = (data.get("message") or data.get("detail")) if isinstance(data, dict) else None
+        if not isinstance(detail, str) or "Unknown work role" not in detail:
             return None  # e.g. an unknown tool: Tether answers with its supportedTools
+        detail = re.sub(r"[^\x20-\x7e]", "", detail)[:600]
         raise ValueError(f"--work-role {role} is not a work role Agent Hub knows. {detail}".strip())
     try:
-        data = json.loads(result.stdout)
         rows, registered = data["rows"], data["work_roles"]
-    except (ValueError, KeyError, TypeError):
+    except (KeyError, TypeError):
         return None
-    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict) or not isinstance(registered, list):
+    if (status != 200 or not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict)
+            or not isinstance(registered, list)):
         return None
     if role not in registered:
         roles = [str(r) for r in rows[0].get("work_roles") or []]
         raise ValueError(f"--work-role {role} is a job, not a work role: "
                          + (f"use --work-role {' or '.join(roles)}" if roles else
                             f"use one of {', '.join(str(r) for r in registered)}"))
-    return rows[0]
+    row = dict(rows[0])
+    for key in ("allowed", "deny_reason"):  # on the row or beside it: either way it judges this one row
+        if key not in row and key in data:
+            row[key] = data[key]
+    return row
+
+
+def launch_refusal(role: str, tool: str, model: str | None, row: dict | None) -> str | None:
+    """Why this launch is refused under Agent Hub's launch rules, else None. Without a readable
+    answer (no row, or a row that does not say allowed) only the safety floor applies."""
+    if row is None or not isinstance(row.get("allowed"), bool):
+        if tool == CLAUDE_TOOL and role in CLAUDE_FLOOR_ROLES:
+            return (f"Agent Hub's launch rules could not be read, and Claude is never launched for {role} "
+                    "work without them; use codex or pi, or retry once Agent Hub answers")
+        return None
+    if row["allowed"]:
+        return None
+    reason = re.sub(r"[\x00-\x1f\x7f]", " ", str(row.get("deny_reason") or "Agent Hub's launch rules deny it"))[:300]
+    return (f"{tool}{f' --model {model}' if model else ''} is not allowed for {role} work: {reason}. "
+            f"See the options: st models route --role {role}")
 
 
 def apply_launch_defaults(args: argparse.Namespace, row: dict) -> dict:
@@ -1444,7 +1478,7 @@ def apply_launch_defaults(args: argparse.Namespace, row: dict) -> dict:
         args.blank_slate = True
         applied["context"] = "blank-slate"
     model = row.get("model")
-    if (args.tool in LAUNCH_TOOLS and args.model is None and row.get("use") is True
+    if (args.tool in LAUNCH_TOOLS and args.model is None and row.get("use", True) is True
             and isinstance(model, str) and model):
         args.model = applied["model"] = model
         if args.reasoning_effort is None and row.get("effort") in EFFORTS:
@@ -1613,11 +1647,14 @@ def create_main(argv: list[str]) -> int:
     launch, applied = None, {}
     if args.work_role is not None:
         try:
-            launch = launch_row(args.work_role, args.tool)
+            launch = launch_row(args.work_role, args.tool, args.model, args.project)
         except ValueError as error:
             if args.resume_session is None:  # a resumed session keeps the role it was started with
                 refuse(str(error))
             launch = None
+        # A hard rule: nothing reaches Tether, on this computer or a host, with an entry or without.
+        if (reason := launch_refusal(args.work_role, args.tool, args.model, launch)) is not None:
+            refuse(reason)
         if launch is not None:
             applied = apply_launch_defaults(args, launch)
     if args.blank_slate:
@@ -1685,7 +1722,7 @@ def create_main(argv: list[str]) -> int:
         if applied:
             # The filled values are part of the request digest: a retry passes them as flags so the digest stays the same.
             output["launchDefault"]["retryWith"] = " ".join(retry_flags(applied))
-        if launch.get("use") is not True:
+        if launch.get("use", True) is not True:
             output["launchDefault"]["note"] = str(launch.get("why") or "")[:300]
     elif args.work_role is not None and args.resume_session is None and args.tool in LAUNCH_TOOLS:
         output["launchDefault"] = {"applied": {}, "note": "Agent Hub's launch table could not be read; the tool's own settings apply"}

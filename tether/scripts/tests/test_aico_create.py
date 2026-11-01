@@ -3,7 +3,6 @@
 import json
 import shutil
 import socketserver
-import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
@@ -673,11 +672,12 @@ def test_instructions_refuse_an_unclear_revision_before_contacting_the_owner(mon
         admin.main(["create", "review-3", "Review.", "--tool", "pi", "--blank-slate", "--instructions", selection])
 
 
-# ---- launch defaults from Agent Hub's table (st models route --role ROLE --tool TOOL) ----------
+# ---- launch defaults from Agent Hub's table (GET /api/models/launch-defaults) --------------------
 
 def table_row(**changes):
     return {"job": "testing", "model": "claude-haiku-5-5", "effort": "high", "daybreak": None,
-            "context": "blank-slate", "use": True, "work_roles": ["verification"], "why": "Owner rule.", **changes}
+            "context": "blank-slate", "use": True, "work_roles": ["verification"], "why": "Owner rule.",
+            "allowed": True, "deny_reason": None, **changes}
 
 
 def served(monkeypatch, row, seen=None):
@@ -687,9 +687,9 @@ def served(monkeypatch, row, seen=None):
         calls.append(payload)
         return 200, descriptor(payload)
 
-    def lookup(role, tool):
+    def lookup(role, tool, model=None, project=None):
         if seen is not None:
-            seen.append((role, tool))
+            seen.append((role, tool, model, project))
         return row
 
     monkeypatch.setattr(admin, "launch_row", lookup)
@@ -702,7 +702,7 @@ def test_table_model_effort_and_blank_slate_apply_when_not_given(monkeypatch):
     seen = []
     calls, output = served(monkeypatch, table_row(), seen)
     assert admin.main(["create", "test-1", "Try the CLI.", "--tool", "claude-code", "--work-role", "verification"]) == 0
-    assert seen == [("verification", "claude-code")]
+    assert seen == [("verification", "claude-code", None, None)]
     assert (calls[0]["model"], calls[0]["reasoningEffort"], calls[0]["projectId"]) == ("claude-haiku-5-5", "high", "blank-slate")
     assert "daybreak" not in calls[0]
     assert output[0]["launchDefault"] == {
@@ -758,7 +758,7 @@ def test_unreadable_table_launches_on_the_tools_own_settings_and_says_so(monkeyp
 
 
 def test_a_mistyped_work_role_is_refused_before_tether(monkeypatch, capsys):
-    def lookup(role, tool):
+    def lookup(role, tool, *_args):
         raise ValueError(f"--work-role {role} is not a work role Agent Hub knows.")
 
     monkeypatch.setattr(admin, "launch_row", lookup)
@@ -768,40 +768,184 @@ def test_a_mistyped_work_role_is_refused_before_tether(monkeypatch, capsys):
     assert "--work-role tester is not a work role" in capsys.readouterr().err
 
 
-def _st_route(monkeypatch, returncode, stdout="", stderr=""):
-    argv = []
+def launch_server(answers, seen):
+    """A fake Agent Hub: answers[path] is (status, body); seen gets each request's path and query."""
+    from urllib.parse import parse_qs, urlsplit
 
-    def run(cmd, **kwargs):
-        argv.append(cmd)
-        return subprocess.CompletedProcess(cmd, returncode, stdout, stderr)
+    class Hub(BaseHTTPRequestHandler):
+        def do_GET(self):
+            url = urlsplit(self.path)
+            seen.append((url.path, {key: values[0] for key, values in parse_qs(url.query).items()}))
+            status, body = answers.get(url.path, (404, {"error": "http_error", "message": "Not Found"}))
+            data = json.dumps(body).encode() if not isinstance(body, bytes) else body
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
 
-    monkeypatch.setattr(admin.subprocess, "run", run)
-    return REAL_LAUNCH_ROW, argv
+        def log_message(self, format, *args):
+            pass
+
+    server = socketserver.TCPServer(("127.0.0.1", 0), Hub)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
-def test_launch_row_reads_st_models_route(monkeypatch):
-    payload = {"rows": [table_row()], "work_roles": ["verification", "review"]}
-    lookup, argv = _st_route(monkeypatch, 0, json.dumps(payload))
-    assert lookup("verification", "claude-code") == table_row()
-    assert argv == [["st", "--no-compact", "models", "route", "--role", "verification", "--tool", "claude-code", "--json"]]
+@pytest.fixture
+def launch_api(monkeypatch):
+    """The real launch_row against a fake Agent Hub serving one launch-defaults answer."""
+    servers = []
+
+    def start(status, body):
+        seen: list = []
+        server = launch_server({"/api/models/launch-defaults": (status, body)}, seen)
+        servers.append(server)
+        monkeypatch.setenv("ST_EXTENSION_CONTEXT", json.dumps({"agent_hub_url": f"http://127.0.0.1:{server.server_address[1]}"}))
+        monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
+        return seen
+    yield start
+    for server in servers:
+        server.shutdown()
+        server.server_close()
 
 
-def test_launch_row_refuses_unknown_roles_and_jobs_that_are_not_work_roles(monkeypatch):
-    error = json.dumps({"error": "API error (422): Unknown work role or job 'tester'. Work roles: review, verification."})
-    lookup, _ = _st_route(monkeypatch, 1, stderr=error + "\n")
+def launch_answer(row, **top):
+    return {"version": 3, "role": "verification", "work_roles": ["verification", "review", "hunting", "coordinator"],
+            "rows": [row], **top}
+
+
+def test_launch_row_reads_agent_hubs_launch_defaults_for_the_model_and_project(launch_api):
+    seen = launch_api(200, launch_answer(table_row()))
+    assert REAL_LAUNCH_ROW("verification", "pi", "anthropic/claude-opus-5-5", "neri-hunters") == table_row()
+    assert seen == [("/api/models/launch-defaults", {"role": "verification", "tool": "pi",
+                                                     "model": "anthropic/claude-opus-5-5", "project": "neri-hunters"})]
+    seen.clear()
+    REAL_LAUNCH_ROW("verification", "claude-code")
+    assert seen == [("/api/models/launch-defaults", {"role": "verification", "tool": "claude-code"})]
+
+
+def test_launch_row_takes_allowed_and_deny_reason_beside_the_row(launch_api):
+    row = {key: value for key, value in table_row().items() if key not in ("allowed", "deny_reason")}
+    launch_api(200, launch_answer(row, allowed=False, deny_reason="Owner: no."))
+    assert REAL_LAUNCH_ROW("verification", "claude-code") == {**row, "allowed": False, "deny_reason": "Owner: no."}
+
+
+def test_launch_row_refuses_unknown_roles_and_jobs_that_are_not_work_roles(launch_api):
+    message = "Unknown work role or job 'tester'. Work roles: review, verification."
+    launch_api(422, {"error": "http_error", "message": message, "details": []})
     with pytest.raises(ValueError, match=r"tester is not a work role Agent Hub knows\. Unknown work role or job 'tester'\. Work roles: review"):
-        lookup("tester", "claude-code")
-    payload = {"rows": [table_row()], "work_roles": ["verification", "review"]}
-    lookup, _ = _st_route(monkeypatch, 0, json.dumps(payload))
+        REAL_LAUNCH_ROW("tester", "claude-code")
+    launch_api(200, launch_answer(table_row()))
     with pytest.raises(ValueError, match="testing is a job, not a work role: use --work-role verification"):
-        lookup("testing", "claude-code")
+        REAL_LAUNCH_ROW("testing", "claude-code")
 
 
-@pytest.mark.parametrize("returncode, stdout, stderr", [
-    (1, "", '{"error": "Cannot connect to Agent Hub"}'), (0, "not json", ""), (0, '{"rows": []}', "")])
-def test_launch_row_is_none_when_the_table_cannot_be_read(monkeypatch, returncode, stdout, stderr):
-    lookup, _ = _st_route(monkeypatch, returncode, stdout, stderr)
-    assert lookup("implementation", "codex") is None
+@pytest.mark.parametrize("status, body", [
+    (500, {"error": "internal"}), (200, b"not json"), (200, {"rows": []}),
+    (422, {"error": "http_error", "message": "Unknown tool 'gemini'; use one of: claude-code"})])
+def test_launch_row_is_none_when_the_table_cannot_be_read(launch_api, status, body):
+    launch_api(status, body)
+    assert REAL_LAUNCH_ROW("implementation", "codex") is None
+
+
+def test_launch_row_is_none_without_agent_hub(monkeypatch):
+    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)
+    assert REAL_LAUNCH_ROW("implementation", "codex") is None
+    monkeypatch.setenv("ST_EXTENSION_CONTEXT", json.dumps({"agent_hub_url": "http://127.0.0.1:9"}))
+    assert REAL_LAUNCH_ROW("implementation", "codex") is None
+
+
+# ---- hard rules: a launch Agent Hub denies never reaches Tether ---------------------------------
+
+DENY = "Owner 2026-11-01: Claude never for active hunting or recon"
+
+
+def refused_create(monkeypatch, capsys, argv):
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *a, **k: pytest.fail("contacted owner"))
+    with pytest.raises(SystemExit) as exit_info:
+        admin.main(argv)
+    assert exit_info.value.code == 2
+    return capsys.readouterr().err
+
+
+HUNT = ["create", "hunt-9", "Hunt.", "--work-role", "hunting", "--project", "neri-hunters",
+        "--project-root", "/fixture/project"]
+
+
+@pytest.mark.parametrize("launch", [
+    ["--tool", "claude-code"],
+    ["--tool", "pi", "--model", "anthropic/claude-opus-5-5"],
+    ["--tool", "claude-code", "--host", "agent-work", "--needs", "mem=6G,cpu=2", "--entry", "neri-hunt:h-1"],
+    ["--tool", "pi", "--model", "anthropic/claude-opus-5-5", "--host", "auto", "--needs", "mem=6G,cpu=2",
+     "--pool", "neri-hunt", "--entry", "neri-hunt:h-1"],
+])
+def test_a_denied_hunting_launch_is_refused_with_agent_hubs_reason(launch_api, monkeypatch, capsys, launch):
+    seen = launch_api(200, launch_answer(table_row(job="hunting", work_roles=["hunting"], model=None, context="full",
+                                                   allowed=False, deny_reason=DENY)))
+    error = refused_create(monkeypatch, capsys, [*HUNT, *launch])
+    assert DENY in error and "is not allowed for hunting work" in error
+    assert "st models route --role hunting" in error
+    model = launch[launch.index("--model") + 1] if "--model" in launch else None
+    assert seen[0][1] == {"role": "hunting", "tool": launch[1], "project": "neri-hunters",
+                          **({"model": model} if model else {})}
+
+
+@pytest.mark.parametrize("model", [[], ["--model", "claude-opus-5-5"]])
+def test_a_denied_agent_hub_chat_is_refused_with_or_without_a_model(monkeypatch, capsys, model):
+    row = table_row(job="hunting", work_roles=["hunting"], model=None, allowed=False, deny_reason=DENY)
+    monkeypatch.setattr(admin, "launch_row", lambda *_args: row)
+    error = refused_create(monkeypatch, capsys, ["create", "hub-9", "Hunt.", "--tool", "agent-hub", "--agent", "chat",
+                                                 "--work-role", "hunting", *model, "--blank-slate"])
+    assert DENY in error
+
+
+def test_an_allowed_launch_goes_ahead(launch_api, monkeypatch):
+    launch_api(200, launch_answer(table_row(job="hunting", work_roles=["hunting"], model="gpt-6-sol", effort="xhigh",
+                                            daybreak=True, context="full")))
+    calls = []
+    monkeypatch.setattr(admin.Collector, "receipt", lambda _, path, route, payload, **k: (calls.append(payload), (200, descriptor(payload)))[1])
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    monkeypatch.setattr(admin, "codex_model_unavailable", lambda *_: None)
+    monkeypatch.setattr(admin, "codex_daybreak_unavailable", lambda *_: None)
+    assert admin.main([*HUNT, "--tool", "codex"]) == 0
+    assert (calls[0]["tool"], calls[0]["model"], calls[0]["daybreak"]) == ("codex", "gpt-6-sol", True)
+
+
+@pytest.mark.parametrize("role", ["hunting", "recon", "verification"])
+def test_without_the_rules_a_claude_launch_for_case_work_is_refused(monkeypatch, capsys, role):
+    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)  # Agent Hub can't be asked
+    monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
+    error = refused_create(monkeypatch, capsys, ["create", "case-1", "Work.", "--tool", "claude-code",
+                                                 "--work-role", role, "--blank-slate"])
+    assert "launch rules could not be read" in error and f"for {role} work" in error
+
+
+def test_a_row_that_does_not_say_allowed_is_the_floor_too(monkeypatch, capsys):
+    row = {key: value for key, value in table_row(job="hunting").items() if key not in ("allowed", "deny_reason")}
+    monkeypatch.setattr(admin, "launch_row", lambda *_args: row)
+    assert "could not be read" in refused_create(monkeypatch, capsys, [*HUNT, "--tool", "claude-code"])
+
+
+@pytest.mark.parametrize("launch", [["--tool", "claude-code", "--work-role", "coordinator"],
+                                    ["--tool", "codex", "--work-role", "hunting"]])
+def test_without_the_rules_other_launches_go_ahead(monkeypatch, launch):
+    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)
+    monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
+    monkeypatch.setattr(admin, "codex_model_unavailable", lambda *_: None)
+    calls = []
+    monkeypatch.setattr(admin.Collector, "receipt", lambda _, path, route, payload, **k: (calls.append(payload), (200, descriptor(payload)))[1])
+    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
+    assert admin.main(["create", "coord-1", "Coordinate.", *launch, "--blank-slate"]) == 0
+    assert calls[0]["tool"] == launch[1]
+
+
+def test_a_denied_resume_is_refused_too(monkeypatch, capsys):
+    row = table_row(job="hunting", work_roles=["hunting"], allowed=False, deny_reason=DENY)
+    monkeypatch.setattr(admin, "launch_row", lambda *_args: row)
+    argv = [arg if arg != "codex" else "claude-code" for arg in BASE]
+    argv[argv.index("implementation")] = "hunting"
+    assert DENY in refused_create(monkeypatch, capsys, argv)
 
 
 @pytest.mark.parametrize("given", [["--project", "sample-app"], ["--project-root", "/fixture/project"]])
@@ -830,16 +974,8 @@ def test_create_prints_the_flags_that_repeat_what_the_table_filled_in(monkeypatc
     assert output[0]["launchDefault"]["retryWith"] == "--model gpt-6-sol --reasoning-effort xhigh --daybreak on"
 
 
-def test_a_422_for_an_unknown_tool_leaves_the_answer_to_tether(monkeypatch):
-    lookup, _ = _st_route(monkeypatch, 1, stderr=json.dumps({"error": "API error (422): Unknown tool 'gemini'."}) + "\n")
-    assert lookup("review", "gemini") is None
-    lookup, _ = _st_route(monkeypatch, 1, stderr=json.dumps({"error": "API error (422): Unknown work role or job 'tester'."}) + "\n")
-    with pytest.raises(ValueError, match="tester is not a work role"):
-        lookup("tester", "claude-code")
-
-
 def test_resume_is_not_refused_over_a_work_role_agent_hub_no_longer_lists(monkeypatch):
-    def lookup(role, tool):
+    def lookup(role, tool, *_args):
         raise ValueError(f"--work-role {role} is not a work role Agent Hub knows.")
 
     calls = []
