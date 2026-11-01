@@ -173,8 +173,14 @@ function parse(line: string): Record<string, unknown> | null {
 const CLAUDE_HINT =
   /"type":\s*"(?:assistant|user)"|model_refusal|command-name>\/model<|stdout>Kept model as/
 
-/** An owner's prompt: a user row with text, not a tool result, meta row or
- * compact summary. */
+/** The marker Claude Code writes as a user row when a turn is interrupted
+ * (`[Request interrupted by user]`, `… for tool use]`): not a prompt, and
+ * not in the rewind list. */
+const INTERRUPTED = /^\[Request interrupted by user\b/
+
+/** An owner's prompt: a user row with text, not a tool result, meta row,
+ * compact summary, interrupt marker or a row Claude Code itself made (an
+ * `origin` other than `human`, such as a background task's notice). */
 function isPrompt(row: Record<string, unknown>): boolean {
   if (
     row.isMeta === true ||
@@ -182,8 +188,11 @@ function isPrompt(row: Record<string, unknown>): boolean {
     row.isVisibleInTranscriptOnly === true
   )
     return false
+  const origin = (row.origin as { kind?: unknown } | undefined)?.kind
+  if (origin !== undefined && origin !== 'human') return false
   const content = (row.message as { content?: unknown } | undefined)?.content
-  if (typeof content === 'string') return !content.startsWith('<') && content.trim() !== ''
+  if (typeof content === 'string')
+    return !content.startsWith('<') && content.trim() !== '' && !INTERRUPTED.test(content)
   return (
     Array.isArray(content) &&
     content.length > 0 &&
@@ -191,6 +200,11 @@ function isPrompt(row: Record<string, unknown>): boolean {
       (part) =>
         (part as { type?: unknown })?.type === 'text' ||
         (part as { type?: unknown })?.type === 'image',
+    ) &&
+    !content.every(
+      (part) =>
+        (part as { type?: unknown })?.type === 'text' &&
+        INTERRUPTED.test(String((part as { text?: unknown }).text ?? '')),
     )
   )
 }
