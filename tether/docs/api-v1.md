@@ -694,15 +694,15 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
   `laneRepeatQuietMaxSeconds` (defaults 10, 20, then 30 minutes): a lane waiting on its own work with short turns in
   between stays quiet, and one that stalls is heard within the cap. It starts over at the normal settle and floor
   when a receiver sends to the lane (`inject` with `from`, as `st aico root send` does) or arms a session wait on it,
-  on a new generation, and after a `blocked` or `ended`. *(25)* A delivery to the lane with the receiver in `from` (a
-  coordination request or ack, [Deliveries](#deliveries)) counts as a send. The streak is kept in the cursor, so a restart keeps it
+  on a new generation, and after a `blocked` or `ended`. *(25)* A wake-class delivery to the lane with the receiver in `from`
+  (a coordination request or ack, [Deliveries](#deliveries)) counts as a send; a ride-along one does not. The streak is kept in the cursor, so a restart keeps it
   (the quiet counts from the restart). Log: `lane=<id> idle again: repeat N goes out after Ns quiet`, once per idle.
   *(24, schema 28)* Two classes ([Deliveries](#deliveries)): the first `finished` line is a wake; a repeat is
   ride-along, so it never wakes the receiver alone and joins its next wake or turn. And when the lane already told
   the receiver (a wake line posted with `from` naming the lane, not a `reply`: SummitFlow's request, never an ack)
   during the turn that just ended, the `finished` line is dropped: the receiver heard it, and the explicit message
   carries the report. The turn is from when Tether first saw the lane working (less 3 s), never before the lane's
-  previous idle. Nothing is counted as a report for the drop, so the next idle is a first line again. The check uses
+  previous idle, including one whose line was still held when the next turn began. Nothing is counted as a report for the drop, so the next idle is a first line again. The check uses
   what this Tether saw in the last 6 hours; a remote lane's launcher is not checked and still gets the line. Log:
   `(told in that turn: <ids>)`.
 - **model** *(22, schema 26)*: the lane's model switched, or a refusal paused it ([Model switches](#model-switches)),
@@ -809,7 +809,8 @@ Tether is older. Waits live in
 the `waits` table, apart from wakes, and survive Tether restarts.
 
 - **Level-triggered.** The condition is checked when the wait is armed: a session that already finished after `since`
-  fires at once. `since` defaults to the waiter's last `inject` with `from` to that session, else the launch for the
+  fires at once. `since` defaults to the waiter's last `inject` with `from` to that session (or, *(25)*, wake-class delivery
+  naming the waiter in `from`: a coordination request or ack, never a ride-along FYI or bare yes), else the launch for the
   session that launched it (on this computer only: follow-ups to another host's session go through the hub
   unrecorded), else the time it is armed. `st aico root send` passes `from` only to a session on this computer whose
   Tether takes it (API 13).
@@ -938,8 +939,9 @@ Each line goes out once, whichever way.
   nothing. Once the text is shown, `DELETE /v1/sessions/:id/due?token=` takes exactly those rows (a row replaced by
   a newer line, or made a wake, since stays). A client that times out or dies between the two loses no line; at
   worst it is shown again. `?ride=1` (API 24) still takes them in one step.
-- **`from`** *(24)* is optional: up to 8 session ids (8 hex) that sent what the line carries. *(25)* Each counts as
-  a send to this session (as `inject` with `from` does), so a lane's went-idle repeat backoff starts over. For a
+- **`from`** *(24)* is optional: up to 8 session ids (8 hex) that sent what the line carries. *(25)* On a wake
+  line each counts as a send to this session (as `inject` with `from` does), so a lane's went-idle repeat backoff
+  starts over and a wait's default `since` moves to it; on a ride-along line `from` records nothing. For a
   wake line that is not a `reply`, Tether also keeps, in memory for 6 hours, that each of them told this session,
   and a lane that told its launcher during the turn that just ended gets no went-idle line for it
   ([Lane reports](#lane-reports)). **`reply`** *(25)*, optional: the line carries `from`'s answer to this session's

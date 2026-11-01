@@ -550,6 +550,9 @@ interface Memory {
   seenAt: number
   /** When this turn was first seen working (for "finished after Nm"). */
   workingSeenAt: number | null
+  /** The idle (`stateAgentAt`) that ended the previous turn while its line
+   * was still held: this turn began after it, whatever was said before. */
+  heldIdleAt: number
   /** A state other than unknown was seen (in this generation or before). */
   known: boolean
   timer: NodeJS.Timeout | null
@@ -739,12 +742,16 @@ export class LaneReporter {
         key: stateKey,
         seenAt: now,
         workingSeenAt: null,
+        heldIdleAt: 0,
         known: false,
         timer: null,
         holdLogged: 0,
       }
       this.memory.set(key, memory)
-    } else if (memory.key !== stateKey) {
+    }
+    // How long the previous observation (an idle, say) held.
+    const lastHeld = now - memory.seenAt
+    if (memory.key !== stateKey) {
       memory.key = stateKey
       memory.seenAt = now
     }
@@ -759,6 +766,18 @@ export class LaneReporter {
       if (cursor.reset) {
         cursor.reset = false
         dirty = true
+      }
+      if (
+        before?.state === 'idle' &&
+        before.stateAgentAt > cursor.finishedAt &&
+        before.stateAgentAt > memory.heldIdleAt
+      ) {
+        // A new turn began while the last idle's line was held (settle, floor
+        // or quiet): a message sent before that idle never hides this turn's
+        // idle (when in doubt, wake). The turn's length starts over only when
+        // that idle had settled: a shorter one is not a finish.
+        memory.heldIdleAt = before.stateAgentAt
+        if (lastHeld >= this.ops.policy().laneSettleSeconds * 1000) memory.workingSeenAt = now
       }
       memory.workingSeenAt ??= now
     }
@@ -843,6 +862,7 @@ export class LaneReporter {
         cursor.reset = false
         this.store.save(cursor, now)
         memory.workingSeenAt = null
+        memory.heldIdleAt = 0
         return
       }
       if (
@@ -874,9 +894,10 @@ export class LaneReporter {
             : null
         // The turn that just ended began when it was first seen working (a
         // message sent as it began may reach Tether a moment before that),
-        // never before the previous idle: a turn too short to see began after
-        // it. A message from an earlier turn never hides this one's idle.
-        const afterLastIdle = cursor.finishedAt + 1
+        // never before the previous idle (reported, or held when this turn
+        // began): a turn too short to see began after it. A message from an
+        // earlier turn never hides this one's idle.
+        const afterLastIdle = Math.max(cursor.finishedAt, memory.heldIdleAt) + 1
         const toldSince =
           memory.workingSeenAt !== null
             ? Math.max(memory.workingSeenAt - TURN_SLACK_MS, afterLastIdle)
@@ -903,6 +924,7 @@ export class LaneReporter {
           this.store.save(cursor, now)
         })
         memory.workingSeenAt = null
+        memory.heldIdleAt = 0
       }
     } else if (
       view.state === 'blocked' &&

@@ -1120,6 +1120,34 @@ describe('delivery classes of went-idle lines', () => {
     expect(delivered.map((d) => d.to)).toEqual([ROOT])
   })
 
+  it('a request from a turn whose idle line was still held does not hide the next turn (review follow-up)', () => {
+    const { reporter, delivered, toldAt } = harness()
+    step(reporter, { state: 'working', stateAgentAt: Date.now() })
+    vi.advanceTimersByTime(30_000)
+    // Turn N: the lane asks its launcher something, then goes idle.
+    toldAt.set(`${LANE}>${ROOT}`, Date.now())
+    step(reporter, { stateAgentAt: Date.now() + 1 }, 5_000)
+    // The launcher's noted ack starts turn N+1 while that idle line is still
+    // held (settle); turn N+1 ends with no message of its own.
+    step(reporter, { state: 'working', stateAgentAt: Date.now() }, 60_000)
+    step(reporter, { stateAgentAt: Date.now() }, SETTLE)
+    expect(delivered.map((d) => [d.to, d.ride])).toEqual([[ROOT, false]])
+  })
+
+  it('a turn that began while a settled idle line was held reports only its own length', () => {
+    const { reporter, delivered } = harness()
+    turn(reporter, 100, SETTLE)
+    // A repeat idle is held for the quiet; the next turn starts after it settled.
+    step(reporter, { state: 'working', stateAgentAt: 150 }, 60_000)
+    step(reporter, { stateAgentAt: 200 }, 60_000)
+    step(reporter, { state: 'working', stateAgentAt: 250 }, 2 * 60_000)
+    step(reporter, { stateAgentAt: 300 }, QUIET)
+    expect(delivered.map((d) => d.line.match(/went idle after \d+m/)?.[0])).toEqual([
+      undefined,
+      'went idle after 2m',
+    ])
+  })
+
   it('a message from an earlier turn does not hide this turn’s idle', () => {
     const { reporter, delivered, toldAt } = harness()
     toldAt.set(`${LANE}>${ROOT}`, Date.now())

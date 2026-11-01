@@ -205,10 +205,10 @@ export class WakeService {
    * Memory only: after a restart the lane gets its line, as before. */
   private readonly told = new Map<string, number>()
 
-  /** A delivery carried a message from each of `from` to `to`. Each sent to
-   * `to` (session_sends, as a root send does: a lane's repeat went-idle line
-   * is a first line again once its receiver sent it work); with `told`, each
-   * also told `to` something (a request, not an ack). */
+  /** A wake-class delivery carried a message from each of `from` to `to`.
+   * Each sent to `to` (session_sends, as a root send does: a lane's repeat
+   * went-idle line is a first line again once its receiver sent it work);
+   * with `told`, each also told `to` something (a request, not an ack). */
   noteSent(from: readonly string[], to: string, told = true): void {
     const now = this.now()
     for (const id of from) {

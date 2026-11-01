@@ -493,8 +493,9 @@ describe('delivery routes', () => {
       state: 'delivered',
       via: 'native',
     })
-    // A wake line names who told this session; a ride-along line or a reply
-    // (an ack) only that its sender acted on it.
+    // A wake line names who told this session, a reply (an ack) only that its
+    // sender acted on it; a ride-along line records nothing (review follow-up:
+    // it moved `st aico wait`'s default since).
     await call('POST', `/v1/sessions/${SESSION}/deliveries`, {
       source: 'coord:b',
       line: 'Request',
@@ -514,7 +515,6 @@ describe('delivery routes', () => {
     })
     expect(told).toEqual([
       ['0a1b2c3e', SESSION, true],
-      ['0a1b2c3f', SESSION, false],
       ['0a1b2c40', SESSION, false],
     ])
   })

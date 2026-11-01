@@ -223,12 +223,15 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
       if (!deps.receiver(id)) throw new HttpError(409, 'delivery_unsupported')
       const ride = body.ride === true
       const wake = deps.queue(id, source, line, ride)
-      // Each sender acted on this session; a wake line that is not a reply
-      // also told it (a lane that messaged its launcher needs no went-idle
-      // line for the same turn). An ack never counts as telling: it may come
-      // first in a turn of work whose end the receiver still needs to hear.
-      if (Array.isArray(from) && from.length)
-        deps.sent(from as string[], id, !ride && body.reply !== true)
+      // Each sender of a wake line acted on this session (a session send, as
+      // a root send records); one that is not a reply also told it (a lane
+      // that messaged its launcher needs no went-idle line for the same
+      // turn). An ack never counts as telling: it may come first in a turn of
+      // work whose end the receiver still needs to hear. A ride-along line (an
+      // FYI, a bare yes) records nothing: it would move a wait's default
+      // `since` past a turn that wait still has to see end.
+      if (Array.isArray(from) && from.length && !ride)
+        deps.sent(from as string[], id, body.reply !== true)
       const fresh = log.get(wake.id) === undefined
       log.record({ id: wake.id, sessionId: id, source, now: deps.now() })
       sendJson(res, fresh ? 201 : 200, {

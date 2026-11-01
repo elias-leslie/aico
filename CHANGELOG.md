@@ -25,7 +25,9 @@
   ack, `reply` on a delivery) hides a lane's went-idle line, and only one sent
   since the lane's previous idle. Ride-along lines are peeked and confirmed
   (`GET …/due?ride=peek`, `DELETE …/due?token=`), so a hook that times out
-  loses none.
+  loses none. A request sent in a turn whose went-idle line was still held
+  never hides the next turn's line, and a ride-along line's `from` records no
+  send (it moved `st aico wait`'s default since).
 - Tether stops and reports a model switch (Tether API 22, schema 26). It
   follows each session's own record (Claude Code transcript, Codex rollout, Pi
   session) and treats a served model other than the launch model as a switch;
