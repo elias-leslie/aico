@@ -190,6 +190,11 @@ export class NoteStore {
     })
   }
 
+  /** Refreshes the search entries of notes whose rows sync just changed. */
+  reindexNotes(noteIds: Iterable<string>): void {
+    for (const id of new Set(noteIds)) this.reindex(id)
+  }
+
   private reindex(noteId: string): void {
     if (!this.fts) return
     this.db.prepare('DELETE FROM notes_fts WHERE note_id = ?').run(noteId)
@@ -361,6 +366,31 @@ export class NoteStore {
       text: oldText,
       saved_at: now,
       reason: 'edit',
+    })
+  }
+
+  /**
+   * Sync lost an edit to a newer one: keep its text. The id is derived from
+   * the losing version, so both hosts make the same row and a replay adds none.
+   */
+  addConflictRevision(revision: {
+    id: string
+    table: string
+    rowId: string
+    field: string
+    text: string
+  }): void {
+    this.core.transaction(() => {
+      if (this.db.prepare('SELECT 1 FROM note_revisions WHERE id = ?').get(revision.id)) return
+      this.insert('note_revisions', {
+        id: revision.id,
+        table_name: revision.table,
+        row_id: revision.rowId,
+        field: revision.field,
+        text: revision.text,
+        saved_at: this.core.now(),
+        reason: 'conflict',
+      })
     })
   }
 

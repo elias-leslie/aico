@@ -11,8 +11,18 @@ import { DatabaseSync } from 'node:sqlite'
 import type { CaptureKind } from './capture-files'
 import { HybridClock } from './hlc'
 import { NoteStore } from './notes-data'
+import type { SyncHandle } from './sync/engine'
+import { NOTES_SYNC_TABLES } from './sync/registry'
 
 export const SCHEMA_VERSION = 4
+
+/** Which column names the note a synced row belongs to (to refresh its search entry). */
+const NOTE_ID_COLUMN: Record<string, string> = {
+  notes: 'id',
+  note_items: 'note_id',
+  note_labels: 'note_id',
+  attachments: 'note_id',
+}
 
 /** Changes after version 1, in order; `MIGRATIONS[n]` takes the file to version n + 1. */
 const MIGRATIONS: Record<number, string> = {
@@ -342,6 +352,34 @@ export class NotesStore {
   observe(remote: number): void {
     this.clock.observe(remote)
     this.setMeta('hlc_last', String(this.clock.last))
+  }
+
+  /** What the sync engine needs to read and write this file. */
+  syncHandle(): SyncHandle {
+    return {
+      set: 'notes',
+      tables: NOTES_SYNC_TABLES,
+      hostName: this.hostName,
+      db: this.db,
+      now: () => this.now(),
+      schemaVersion: () => SCHEMA_VERSION,
+      meta: (key) => this.meta(key),
+      setMeta: (key, value) => this.setMeta(key, value),
+      transaction: (work) => this.transaction(work),
+      stamp: () => {
+        const stamp = this.stamp()
+        return { at: stamp.updated_at, origin: stamp.origin, seq: stamp.seq }
+      },
+      observe: (at) => this.observe(at),
+      saveRevision: (revision) => this.notes.addConflictRevision(revision),
+      afterApply: (touched) =>
+        this.notes.reindexNotes(
+          touched.flatMap(({ table, row }) => {
+            const id = row[NOTE_ID_COLUMN[table] ?? '']
+            return typeof id === 'string' ? [id] : []
+          }),
+        ),
+    }
   }
 
   // -- Captures -----------------------------------------------------------------

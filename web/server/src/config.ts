@@ -29,6 +29,7 @@ export interface WebConfig {
   hostName: string
   captures: CaptureConfig
   notes: NotesConfig
+  sync: SyncConfig
   vision: VisionSettings
   /** The capture type table's override file (the default table ships with Aico). */
   captureTypesFile: string
@@ -63,9 +64,21 @@ export interface CaptureConfig {
   maxFiles: number
 }
 
+/** This host's name on rows it writes: AICO_HOST_NAME, else the machine's. */
+export function hostNameFrom(env: NodeJS.ProcessEnv): string {
+  return env.AICO_HOST_NAME?.trim().toLowerCase() || hostname().toLowerCase()
+}
+
 export interface NotesConfig {
   /** Least time between two kept revisions of one title or body (`AICO_NOTE_REVISION_MINUTES`). */
   revisionWindowMs: number
+}
+
+export interface SyncConfig {
+  /** How long a delete is remembered for peers (`AICO_SYNC_TOMBSTONE_DAYS`). */
+  tombstoneMs: number
+  /** A batch with a stamp further ahead than this is refused (`AICO_SYNC_MAX_AHEAD_HOURS`). */
+  maxAheadMs: number
 }
 
 /** Where receipts go: portfolio-ai's API, reached on loopback (the workstation's forwarder). */
@@ -108,6 +121,8 @@ const DEFAULT_CAPTURE_MAX_MB = 25
 const DEFAULT_CAPTURE_MAX_FILES = 20
 /** Least time between two kept revisions of one note field while it is being edited. */
 export const DEFAULT_NOTE_REVISION_MINUTES = 5
+export const DEFAULT_TOMBSTONE_DAYS = 180
+export const DEFAULT_MAX_AHEAD_HOURS = 24
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
 const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
@@ -263,7 +278,7 @@ export function loadConfig(
     staticDir: resolve(env.AICO_WEB_STATIC_DIR || join(HERE, '..', '..', 'frontend', 'out')),
     dbPath: webDbPath(env),
     dataDir: dataDirPath(env),
-    hostName: env.AICO_HOST_NAME?.trim().toLowerCase() || hostname().toLowerCase(),
+    hostName: hostNameFrom(env),
     captures: {
       maxBytes: positiveInt(env.AICO_CAPTURE_MAX_MB, DEFAULT_CAPTURE_MAX_MB) * 1024 * 1024,
       maxFiles: positiveInt(env.AICO_CAPTURE_MAX_FILES, DEFAULT_CAPTURE_MAX_FILES),
@@ -271,6 +286,10 @@ export function loadConfig(
     notes: {
       revisionWindowMs:
         positiveInt(env.AICO_NOTE_REVISION_MINUTES, DEFAULT_NOTE_REVISION_MINUTES) * 60_000,
+    },
+    sync: {
+      tombstoneMs: positiveInt(env.AICO_SYNC_TOMBSTONE_DAYS, DEFAULT_TOMBSTONE_DAYS) * 86_400_000,
+      maxAheadMs: positiveInt(env.AICO_SYNC_MAX_AHEAD_HOURS, DEFAULT_MAX_AHEAD_HOURS) * 3_600_000,
     },
     vision: {
       routes: visionRoutes(env.AICO_VISION_ROUTES),
