@@ -144,6 +144,9 @@ vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
 }))
 
+vi.mock('./capture/CaptureLauncher', () => ({
+  CaptureLauncher: () => <button type="button">Capture</button>,
+}))
 vi.mock('./asks/NeedsYou', () => ({
   NeedsYouLauncher: () => <button type="button">Needs you</button>,
 }))
@@ -238,10 +241,12 @@ describe('SessionView', () => {
     expect(screen.getByText('No session open.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Needs you' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Health' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Capture' })).toBeVisible()
     rerender(
       <SessionView fontSize={14} slots={[]} activeSessionId={null} sideList />,
     )
     expect(screen.queryByRole('button', { name: 'Needs you' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Capture' })).toBeNull()
   })
 
   it("while the session's host is away, the bar says so instead of Live", () => {

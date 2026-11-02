@@ -15,6 +15,7 @@ import {
 import { NeedsYouCount } from './AttentionBadge'
 import { NeedsYouLauncher } from './asks/NeedsYou'
 import { CoordinatorBadge } from './CoordinatorBadge'
+import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostBadge } from './HostBadge'
 import { HostsButton } from './HostsButton'
 import { HostsSheet } from './HostsSheet'
@@ -161,6 +162,7 @@ export function SessionSwitcher({
           {list}
           <div className="flex justify-end gap-2 px-2 pb-2">
             <NeedsYouLauncher variant="row" />
+            <CaptureLauncher variant="row" />
             <HealthLauncher variant="row" />
             <HostsButton onClick={openHosts} />
           </div>
@@ -203,6 +205,7 @@ export function SessionSwitcher({
                   {sessionsHeading(allSlots.length, needsYouCount)}
                 </h2>
                 <NeedsYouLauncher variant="row" />
+                <CaptureLauncher variant="row" />
                 <HealthLauncher variant="row" />
                 <HostsButton onClick={openHosts} />
               </div>

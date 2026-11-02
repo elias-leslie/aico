@@ -5,11 +5,14 @@ import { SessionSidebar } from './SessionSidebar'
 vi.mock('@/lib/hooks/use-session-attention', () => ({
   useSessionAttention: () => ({ forSlot: () => null, needsYouCount: 2 }),
 }))
+vi.mock('./capture/CaptureLauncher', () => ({
+  CaptureLauncher: () => <i data-testid="capture-mock" />,
+}))
 vi.mock('./HostsButton', () => ({ HostsLauncher: () => null }))
 vi.mock('./health/HealthButton', () => ({ HealthLauncher: () => null }))
 const needsYou = vi.hoisted(() => ({ open: false }))
 vi.mock('./asks/NeedsYou', () => ({
-  NeedsYouLauncher: () => null,
+  NeedsYouLauncher: () => <i data-testid="needs-you-mock" />,
   NeedsYouPanel: () => <p>Needs you panel</p>,
   useHostNeedsYou: () => {},
   useNeedsYouState: () => ({ open: needsYou.open }),
@@ -49,6 +52,20 @@ beforeEach(() => {
 })
 
 describe('SessionSidebar', () => {
+  it('puts Capture beside Needs you on the rail and in the full list', () => {
+    const { unmount } = render(
+      <SessionSidebar slots={[]} onSelect={vi.fn()} width={360} collapsed />,
+    )
+    expect(screen.getByTestId('needs-you-mock').nextElementSibling).toBe(
+      screen.getByTestId('capture-mock'),
+    )
+    unmount()
+    render(<SessionSidebar slots={[]} onSelect={vi.fn()} width={360} />)
+    expect(screen.getByTestId('needs-you-mock').nextElementSibling).toBe(
+      screen.getByTestId('capture-mock'),
+    )
+  })
+
   it('shows Needs you in the list’s place at the list’s width, the rail opening out to it', () => {
     needsYou.open = true
     const { unmount } = render(

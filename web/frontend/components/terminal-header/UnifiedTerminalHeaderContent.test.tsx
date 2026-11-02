@@ -11,7 +11,12 @@ const { renamePane, updateSession } = vi.hoisted(() => ({
 
 vi.mock('../HostsButton', () => ({ HostsButton: () => null }))
 vi.mock('../health/HealthButton', () => ({ HealthLauncher: () => null }))
-vi.mock('../asks/NeedsYou', () => ({ NeedsYouLauncher: () => null }))
+vi.mock('../asks/NeedsYou', () => ({
+  NeedsYouLauncher: () => <i data-testid="needs-you-mock" />,
+}))
+vi.mock('../capture/CaptureLauncher', () => ({
+  CaptureLauncher: () => <i data-testid="capture-mock" />,
+}))
 vi.mock('../KeptCheckIns', () => ({ KeptCheckIns: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ enabledTools: [], agentTools: [] }),
@@ -114,6 +119,20 @@ describe('UnifiedTerminalHeaderContent', () => {
       }
     },
   )
+
+  it('carries Capture beside Needs you when the list is not beside it', () => {
+    const slot = makeProjectSlot('a', 'Alpha')
+    render(
+      <UnifiedTerminalHeaderContent
+        slot={slot}
+        allSlots={[slot]}
+        onSwitchTo={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('needs-you-mock').nextElementSibling).toBe(
+      screen.getByTestId('capture-mock'),
+    )
+  })
 
   it('shows a lane title and chip', () => {
     render(

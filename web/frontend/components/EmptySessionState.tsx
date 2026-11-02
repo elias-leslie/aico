@@ -6,6 +6,7 @@ import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouLauncher } from './asks/NeedsYou'
+import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostsLauncher } from './HostsButton'
 import { HealthLauncher } from './health/HealthButton'
 import { SessionList } from './SessionList'
@@ -42,6 +43,7 @@ export function EmptySessionState({
       {showLaunchers && (
         <header className="lantern-sheet-tools mx-auto flex max-w-md flex-wrap items-center justify-end gap-2">
           <NeedsYouLauncher variant="row" />
+          <CaptureLauncher variant="row" />
           <HealthLauncher variant="row" />
           <HostsLauncher />
         </header>

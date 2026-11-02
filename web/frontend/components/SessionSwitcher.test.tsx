@@ -13,7 +13,12 @@ vi.mock('./HostsButton', () => ({
   ),
 }))
 vi.mock('./health/HealthButton', () => ({ HealthLauncher: () => null }))
-vi.mock('./asks/NeedsYou', () => ({ NeedsYouLauncher: () => null }))
+vi.mock('./asks/NeedsYou', () => ({
+  NeedsYouLauncher: () => <i data-testid="needs-you-mock" />,
+}))
+vi.mock('./capture/CaptureLauncher', () => ({
+  CaptureLauncher: () => <i data-testid="capture-mock" />,
+}))
 vi.mock('./HostsSheet', () => ({
   HostsSheet: () => <div data-testid="hosts-sheet-stub" />,
 }))
@@ -37,6 +42,22 @@ function makeProjectSlot(id: string, name: string): PaneSlot {
 }
 
 describe('SessionSwitcher', () => {
+  it('puts Capture beside Needs you in the phone sheet', () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    render(
+      <SessionSwitcher
+        currentSlot={slotA}
+        allSlots={[slotA]}
+        onSwitchTo={vi.fn()}
+        isMobile
+      />,
+    )
+    fireEvent.click(screen.getByTestId('session-switcher'))
+    expect(screen.getByTestId('needs-you-mock').nextElementSibling).toBe(
+      screen.getByTestId('capture-mock'),
+    )
+  })
+
   it('switches sessions from the phone sheet', () => {
     const slotA = makeProjectSlot('a', 'Alpha')
     const slotB = makeProjectSlot('b', 'Beta')

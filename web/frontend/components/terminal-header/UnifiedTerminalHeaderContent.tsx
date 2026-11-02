@@ -8,6 +8,7 @@ import { useTerminalPanes } from '@/lib/hooks/use-terminal-panes'
 import { useTerminalSessions } from '@/lib/hooks/use-terminal-sessions'
 import { getSlotPanelId, getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
 import { NeedsYouLauncher } from '../asks/NeedsYou'
+import { CaptureLauncher } from '../capture/CaptureLauncher'
 import { ModeToggle } from '../ModeToggle'
 import { PaneOverflowMenu } from '../PaneOverflowMenu'
 import { HeaderIconButton } from './HeaderIconButton'
@@ -106,7 +107,10 @@ export const UnifiedTerminalHeaderContent = memo(
         <div className="flex flex-none items-center gap-0.5">
           {/* Without the session list beside it, the bar carries Needs you. */}
           {allSlots && onSwitchTo && (
-            <NeedsYouLauncher variant={isMobile ? 'compact' : 'pill'} />
+            <>
+              <NeedsYouLauncher variant={isMobile ? 'compact' : 'pill'} />
+              <CaptureLauncher variant="icon" />
+            </>
           )}
 
           {onOpenModal && (

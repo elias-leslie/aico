@@ -10,6 +10,7 @@ import {
   useHostNeedsYou,
   useNeedsYouState,
 } from './asks/NeedsYou'
+import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostsLauncher } from './HostsButton'
 import { HealthLauncher } from './health/HealthButton'
 import { SessionList, SessionRail, sessionsHeading } from './SessionList'
@@ -123,6 +124,7 @@ export function SessionSidebar({
         </header>
         {newButton}
         <NeedsYouLauncher variant="icon" />
+        <CaptureLauncher variant="icon" />
         <HostsLauncher icon />
         <HealthLauncher variant="icon" />
         <nav
@@ -175,6 +177,7 @@ export function SessionSidebar({
       {/* Labelled, under the heading, so the heading keeps its width. */}
       <div className="flex flex-none flex-wrap items-center gap-1 px-1.5 pb-1.5">
         <NeedsYouLauncher variant="tool" />
+        <CaptureLauncher variant="row" />
         <HealthLauncher variant="row" />
         <HostsLauncher />
       </div>
