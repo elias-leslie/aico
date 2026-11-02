@@ -506,3 +506,321 @@ describe('photos', () => {
     expect(missingBlobs(a.handles.notes, () => true)).toEqual([])
   })
 })
+
+// -- Fixes from the fresh-context review of Milestone 5a ------------------------------
+
+const live = (h: Host, title: string) => h.notes.notes.list().notes.filter((n) => n.title === title)
+
+describe('restore, however far the restored host got', () => {
+  // The peer's cursor on the restored host can end up below, at or above its new `seq`
+  // (its own edits and what it pulls from the peer both raise it): all must be noticed.
+  it.each([1, 5, 9])(
+    'a host restored and then changed %i times is noticed; the peer starts over and gets its edits',
+    async (edits) => {
+      const a = host('workstation', { notesPath: join(dir, 'a-notes.db') })
+      const b = host('gem')
+      const link = new Link()
+      const note = a.notes.notes.create({ title: 'N', body: 'v1' })
+      await settle(a, b, link)
+      backup(a.handles.notes, join(dir, 'backup.db'))
+      const oldId = a.notes.meta('db_id')
+      for (let i = 0; i < 5; i += 1) {
+        a.clock.advance(1000)
+        a.notes.notes.create({ title: `a${i}` })
+        b.clock.advance(1000)
+        b.notes.notes.create({ title: `b${i}` })
+      }
+      await settle(a, b, link)
+
+      a.notes.close()
+      a.web.close()
+      hosts = hosts.filter((h) => h !== a)
+      copyFileSync(join(dir, 'backup.db'), join(dir, 'a-notes.db'))
+      const restored = host('workstation', { clock: a.clock, notesPath: join(dir, 'a-notes.db') })
+      restored.clock.advance(MINUTE)
+      restored.notes.notes.update(note.id, { body: 'edited after restore' })
+      for (let i = 1; i < edits; i += 1) restored.notes.notes.create({ title: `r${i}` })
+      await pull(restored, b, link) // the restored host's own loop ticks first
+      await settle(restored, b, link)
+
+      expect(restored.notes.meta('db_id')).not.toBe(oldId)
+      for (const h of [restored, b]) {
+        expect(h.notes.notes.getNote(note.id)?.body).toBe('edited after restore')
+        expect(h.notes.notes.list().total).toBe(1 + 10 + (edits - 1))
+      }
+      expect(dump(restored.handles.notes)).toEqual(dump(b.handles.notes))
+    },
+  )
+})
+
+describe('a loser renamed for a unique value is a stamped edit', () => {
+  /** Hosts each make a Groceries list; tried again until host A's id is the lower (A holds the keeper). */
+  const groceriesWhereAHoldsKeeper = () => {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const a = host('workstation')
+      const b = host('gem')
+      const first = a.notes.notes.groceries()
+      const second = b.notes.notes.groceries()
+      if (first.id < second.id) return { a, b, first, second }
+    }
+    throw new Error('ids never sorted')
+  }
+
+  it('hosts settle the same after the keeper is deleted on the host that received the loser', async () => {
+    const { a, b, first, second } = groceriesWhereAHoldsKeeper()
+    const link = new Link()
+    await pull(a, b, link) // A renames gem's list (the loser) without anything having been sent
+    a.clock.advance(MINUTE)
+    a.notes.notes.remove(first.id)
+    await settle(a, b, link)
+    expect(dump(a.handles.notes)).toEqual(dump(b.handles.notes))
+    expect(a.notes.notes.getNote(second.id)?.source).toBe(b.notes.notes.getNote(second.id)?.source)
+
+    // The next grocery list is the surviving one on both hosts, not a third list.
+    const file = {
+      captureId: 'cap1',
+      hash: 'f'.repeat(64),
+      name: 'l.jpg',
+      mime: 'image/jpeg',
+      size: 1,
+    }
+    a.notes.notes.fileGroceries(file, [{ text: 'milk' }])
+    b.clock.advance(MINUTE)
+    b.notes.notes.fileGroceries({ ...file, captureId: 'cap2' }, [{ text: 'eggs' }])
+    await settle(a, b, link)
+    expect(dump(a.handles.notes)).toEqual(dump(b.handles.notes))
+    for (const h of [a, b]) {
+      expect(live(h, 'Groceries').map((n) => n.id)).toEqual([second.id])
+      expect(h.notes.notes.groceries().id).toBe(second.id)
+      expect(itemTexts(h, second.id)).toEqual(['eggs', 'milk'])
+    }
+  })
+
+  it('a capture renamed on the receiving host is the same row on both', async () => {
+    let a: Host
+    let b: Host
+    let x: { id: string }
+    let y: { id: string }
+    const upload = {
+      clientId: 'c1c1c1c1',
+      kind: 'image',
+      name: 'p.jpg',
+      mime: 'image/jpeg',
+      size: 1,
+      hash: 'a'.repeat(64),
+    } as const
+    for (let attempt = 0; ; attempt += 1) {
+      a = host('workstation')
+      b = host('gem')
+      x = a.notes.insertCapture(upload).capture
+      y = b.notes.insertCapture(upload).capture
+      if (x.id < y.id) break
+      if (attempt > 60) throw new Error('ids never sorted')
+    }
+    const link = new Link()
+    await pull(a, b, link)
+    a.clock.advance(MINUTE)
+    a.notes.tombstoneCapture(x.id)
+    await settle(a, b, link)
+    expect(dump(a.handles.notes)).toEqual(dump(b.handles.notes))
+    expect(a.notes.findByClientId('c1c1c1c1')?.id).toBe(b.notes.findByClientId('c1c1c1c1')?.id)
+  })
+})
+
+describe('an upload retried against both doors is read once', () => {
+  it('the duplicate is a tombstone: one live capture, and only its door claims it', async () => {
+    const a = host('workstation')
+    const b = host('gem')
+    const upload = {
+      clientId: 'c2c2c2c2',
+      kind: 'image',
+      name: 'p.jpg',
+      mime: 'image/jpeg',
+      size: 1,
+      hash: 'b'.repeat(64),
+    } as const
+    const x = a.notes.insertCapture(upload).capture
+    const y = b.notes.insertCapture(upload).capture
+    await settle(a, b, new Link())
+    const keeper = x.id < y.id ? x : y
+    for (const h of [a, b]) {
+      expect(h.notes.listCaptures().captures.map((c) => c.id)).toEqual([keeper.id])
+      expect(h.notes.findByClientId('c2c2c2c2')?.id).toBe(keeper.id)
+    }
+    const claimed = [a, b].map((h) => h.notes.claimForExtraction()?.id ?? null)
+    expect(claimed.filter((id) => id !== null)).toEqual([keeper.id])
+    await settle(a, b, new Link())
+    expect(dump(a.handles.notes)).toEqual(dump(b.handles.notes))
+  })
+})
+
+describe('a run of edits made apart is not a conflict', () => {
+  it('the host that created the row pulls two edits of the other and keeps no revision', async () => {
+    const a = host('workstation')
+    const b = host('gem')
+    const link = new Link()
+    const note = b.notes.notes.create({ title: 'Plan', body: 'from gem' })
+    await settle(a, b, link)
+    for (const body of ['ws edit 1', 'ws edit 2', 'ws edit 3']) {
+      a.clock.advance(MINUTE)
+      a.notes.notes.update(note.id, { body })
+    }
+    await settle(a, b, link)
+    expect(b.notes.notes.getNote(note.id)?.body).toBe('ws edit 3')
+    expect(conflicts(b)).toEqual([])
+    expect(conflicts(a)).toEqual([])
+    expect(dump(a.handles.notes)).toEqual(dump(b.handles.notes))
+    // Going back the other way, from the middle of a chain, is the same.
+    b.clock.advance(MINUTE)
+    b.notes.notes.update(note.id, { body: 'gem again' })
+    a.clock.advance(MINUTE)
+    a.notes.notes.update(note.id, { title: 'Plan B' })
+    await settle(a, b, link)
+    expect(dump(a.handles.notes)).toEqual(dump(b.handles.notes))
+  })
+})
+
+describe('equal stamps on two hosts', () => {
+  it('an edit whose base shares a millisecond with the other host is still a conflict, and is kept', async () => {
+    const a = host('workstation')
+    const b = host('gem')
+    const link = new Link()
+    const note = a.notes.notes.create({ title: 'T', body: 'start' })
+    await settle(a, b, link)
+    a.clock.advance(DAY)
+    b.clock.advance(DAY)
+    a.notes.notes.update(note.id, { body: 'A text' })
+    b.notes.notes.update(note.id, { body: 'B text' })
+    expect(a.notes.notes.getNote(note.id)?.updated_at).toBe(
+      b.notes.notes.getNote(note.id)?.updated_at,
+    )
+    b.notes.notes.update(note.id, { body: 'B text 2' }) // built on the version that shares A's stamp
+    await settle(a, b, link)
+    for (const h of [a, b]) {
+      expect(h.notes.notes.getNote(note.id)?.body).toBe('B text 2')
+      expect(conflicts(h)).toContainEqual({ table_name: 'notes', field: 'body', text: 'A text' })
+    }
+    expect(dump(a.handles.notes)).toEqual(dump(b.handles.notes))
+  })
+})
+
+describe('a link to a deleted tab', () => {
+  it('is no link on either host, though its row is kept', async () => {
+    const a = host('workstation')
+    const b = host('gem')
+    const link = new Link()
+    const pane = a.web.createPane({ projectId: 'aico', name: 'Aico', activeMode: 'claude' })
+    a.web.link('s0000001', pane.id, 'claude')
+    await settle(a, b, link)
+    link.down()
+    a.clock.advance(MINUTE)
+    a.web.deletePane(pane.id)
+    b.clock.advance(2 * MINUTE)
+    b.web.link('s0000002', pane.id, 'shell')
+    link.up()
+    await settle(a, b, link)
+    for (const h of [a, b]) {
+      expect(h.web.getPane(pane.id)).toBeNull()
+      expect(h.web.listLinks()).toEqual([])
+      expect(h.web.getLink('s0000002')).toBeNull()
+      expect(h.web.linksForPane(pane.id)).toEqual([])
+    }
+    expect(dump(a.handles.web)).toEqual(dump(b.handles.web))
+    // The session can be linked to a live tab again.
+    const other = b.web.createPane({ projectId: 'aico', name: 'Again', activeMode: 'shell' })
+    b.web.link('s0000002', other.id, 'shell')
+    await settle(a, b, link)
+    expect(a.web.getLink('s0000002')?.pane_id).toBe(other.id)
+  })
+})
+
+describe('search after an item moves between notes', () => {
+  it('finds the item only in the note that now holds it', async () => {
+    const a = host('workstation')
+    const b = host('gem')
+    const link = new Link()
+    const first = a.notes.notes.create({
+      kind: 'list',
+      title: 'First',
+      items: [{ text: 'zucchini' }],
+    })
+    const second = a.notes.notes.create({ kind: 'list', title: 'Second' })
+    await settle(a, b, link)
+    expect(b.notes.notes.list({ q: 'zucchini' }).notes.map((n) => n.id)).toEqual([first.id])
+    // The same item id arrives from the peer filed in the other note (as two doors
+    // filing one capture into their own Groceries lists do).
+    const item = changesSince(a.handles.notes, 0, 100).rows.find((r) => r.table === 'note_items')
+    applyPage(b.handles.notes, [
+      {
+        table: 'note_items',
+        row: { ...item?.row, note_id: second.id, updated_at: START + DAY, origin: 'workstation' },
+      },
+    ])
+    expect(b.notes.notes.items(second.id).map((i) => i.text)).toEqual(['zucchini'])
+    expect(b.notes.notes.list({ q: 'zucchini' }).notes.map((n) => n.id)).toEqual([second.id])
+  })
+})
+
+describe('tombstone purge', () => {
+  it('with no named peers purges nothing', async () => {
+    const a = host('workstation')
+    const note = a.notes.notes.create({ title: 'gone' })
+    a.notes.notes.remove(note.id)
+    a.clock.advance(400 * DAY)
+    expect(purgeTombstones(a.handles.notes, { retentionMs: 180 * DAY, peers: [] })).toBe(0)
+    expect(a.notes.notes.getNote(note.id, true)?.deleted).toBe(1)
+  })
+})
+
+describe('random split brain', () => {
+  // A small seeded storm: two hosts with skewed clocks edit the same notes, items and
+  // labels while apart, pull each other at random, and must end with identical files.
+  it.each(Array.from({ length: 12 }, (_, i) => i + 1))(
+    'seed %i ends with identical dumps on both hosts',
+    async (seed) => {
+      let state = seed * 7919
+      const random = (n: number) => {
+        state = (state * 1_103_515_245 + 12_345) % 2_147_483_648
+        return Math.floor((state / 2_147_483_648) * n)
+      }
+      const a = host('workstation')
+      const b = host('gem')
+      b.clock.advance(random(5) * MINUTE - 2 * MINUTE)
+      const link = new Link()
+      const groceries = [a, b].map((h) => h.notes.notes.groceries()) // two lists, one name
+      const ids = [a.notes.notes.create({ kind: 'list', title: 'Shared' }).id]
+      await settle(a, b, link)
+      for (let step = 0; step < 60; step += 1) {
+        const h = random(2) === 0 ? a : b
+        h.clock.advance(random(3) * 1000)
+        const id = ids[random(ids.length)] as string
+        const items = h.notes.notes.items(id)
+        const item = items[random(items.length)]
+        const action = random(9)
+        if (action === 0) ids.push(h.notes.notes.create({ kind: 'list', title: `n${step}` }).id)
+        else if (action === 1) h.notes.notes.update(id, { title: `t${step}${h.name}` })
+        else if (action === 2) h.notes.notes.update(id, { body: `b${step}${h.name}` })
+        else if (action === 3) h.notes.notes.addItem(id, { text: `i${step}${h.name}` })
+        else if (action === 4 && item) h.notes.notes.updateItem(id, item.id, { text: `u${step}` })
+        else if (action === 5 && item) h.notes.notes.removeItem(id, item.id)
+        else if (action === 6) h.notes.notes.setLabels(id, [`l${random(3)}`])
+        else if (action === 7 && random(4) === 0) h.notes.notes.remove(id)
+        else if (action === 8)
+          h.notes.notes.fileGroceries(
+            {
+              captureId: `cap${step}`,
+              hash: 'e'.repeat(64),
+              name: 'g.jpg',
+              mime: 'image/jpeg',
+              size: 1,
+            },
+            [{ text: `g${step}` }],
+          )
+        if (random(5) === 0) await (random(2) === 0 ? pull(a, b, link) : pull(b, a, link))
+      }
+      expect(groceries).toHaveLength(2)
+      await settle(a, b, link)
+      expect(dump(a.handles.notes)).toEqual(dump(b.handles.notes))
+    },
+  )
+})
