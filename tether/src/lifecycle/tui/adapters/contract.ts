@@ -21,6 +21,13 @@ import type {
 import type { ToolSeed } from '../../../tools'
 import type { ContextHook, ContextStatus, TuiSpec } from '../spec'
 
+/** The `detail` of a `working` signal whose agent finished its own turn while
+ * background work (subagents, tasks) still runs: its prompt takes input, but
+ * the tool still counts it busy. It stays `working` for everything that waits
+ * on busy work (reboot, lane reports); only the gated wake paste treats it
+ * as able to take a line (wake-runtime.ts). */
+export const MAIN_TURN_OVER = 'main turn over, background work running'
+
 /** What a state search has to look with. `seams` holds per-adapter test
  * seams, keyed by adapter id. */
 export interface StateContext {

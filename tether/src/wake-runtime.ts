@@ -43,6 +43,7 @@ import {
 import { withRootPrompt } from './lifecycle/root-launch'
 import { terminalClientEnv } from './lifecycle/terminal-env'
 import { captureVisibleTargetArgs, clientActivityTargetArgs } from './lifecycle/tmux'
+import { MAIN_TURN_OVER } from './lifecycle/tui/adapters/contract'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './lifecycle/tui/blank-slate'
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { AGENT_HUB_TOOL, getTui, isDeliveryTool } from './lifecycle/tui/registry'
@@ -131,6 +132,15 @@ export function sessionWaitingOn(sessionId: string, now = Date.now()): string | 
   return first.dueAt <= now
     ? 'a check-in that is due'
     : `a check-in at ${clockLabel(first.dueAt, now)}`
+}
+
+/** Why an agent's state keeps a wake from being pasted, or null when its
+ * prompt takes a line: idle, or working only on background work after its own
+ * turn ended (Claude Code reports that as busy; MAIN_TURN_OVER). */
+export function agentBusyReason(agent: Record<string, unknown>): string | null {
+  if (agent.state === 'idle') return null
+  if (agent.state === 'working' && agent.stateDetail === MAIN_TURN_OVER) return null
+  return `the agent is ${agent.state} (${agent.stateSource})`
 }
 
 export class WakeService {
@@ -335,8 +345,8 @@ export class WakeService {
     const row = getWidget(sessionId)
     if (!row) return 'the session is gone'
     if (!(isHub(row) || isAgent(row.tool))) return `${row.tool} is not an agent`
-    const agent = agentStateOf(sessionId)
-    if (agent.state !== 'idle') return `the agent is ${agent.state} (${agent.stateSource})`
+    const held = agentBusyReason(agentStateOf(sessionId))
+    if (held) return held
     const status = await verifySessionStatus(row).catch(() => 'uncertain')
     return status === 'running' ? null : `the session is ${status}`
   }

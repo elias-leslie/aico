@@ -231,9 +231,10 @@ const ANSWER_SOURCE = /^ask:[0-9a-f]{12}$/
 
 /** Whether the session's next natural turn (a prompt, a tool result) may take
  * this row: every ride-along line, and an owner's answer to an ask. An answer
- * is also a wake (it pastes once the agent is idle), but a session whose agent
- * never shows idle (Claude Code counts its background agents as busy) must
- * still get it with its next turn, never wait for an idle that may not come. */
+ * is also a wake (it pastes once the agent can take a line: idle, or Claude
+ * Code with its own turn over and only background agents running), but a
+ * session whose agent stays busy must still get it with its next turn, never
+ * wait for an idle that may not come. */
 export function ridesAlong(wake: Pick<Wake, 'kind' | 'ride' | 'source'>): boolean {
   return wake.kind === 'event' && (wake.ride || ANSWER_SOURCE.test(wake.source ?? ''))
 }

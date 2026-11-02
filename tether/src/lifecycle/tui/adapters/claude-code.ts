@@ -18,10 +18,10 @@ import {
   UUID,
 } from '../../../model-record'
 import type { AgentObservation, FileTail, ProcFs } from '../../../proc-fs'
-import { UUID_RE } from '../../../proc-fs'
+import { nodeFileTail, UUID_RE } from '../../../proc-fs'
 import { agentHubRepo, resolveLauncher, unknownCheckout, viaShim } from '../context-support'
 import type { ContextStatus, TuiSpec } from '../spec'
-import type { AgentProbe, TuiAdapter } from './contract'
+import { type AgentProbe, MAIN_TURN_OVER, type TuiAdapter } from './contract'
 
 // --- state ------------------------------------------------------------------
 
@@ -447,28 +447,110 @@ export function claudeModelSource(
   }
 }
 
+// --- the main thread's turn ---------------------------------------------------
+
+/** First read of a transcript: enough tail to hold the end of the last turn. */
+const TURN_TAIL_BYTES = 1024 * 1024
+const TURN_MAX_STEP_BYTES = 4 * 1024 * 1024
+const TURN_ROW = /"type":"(?:user|assistant)"|"subtype":"turn_duration"/
+
+/** What one transcript line says about the main thread's turn: `over` for the
+ * `turn_duration` row Claude Code writes when the main turn ends (it also
+ * counts the background agents still running), `active` for a prompt, a tool
+ * result, a background task's notice or an assistant reply, null for anything
+ * else (bookkeeping rows, hook summaries, a subagent's own rows). */
+export function mainTurnRow(line: string): 'over' | 'active' | null {
+  if (!TURN_ROW.test(line)) return null
+  const row = parse(line)
+  if (!row || row.isSidechain === true) return null
+  if (row.type === 'system') return row.subtype === 'turn_duration' ? 'over' : null
+  return row.type === 'user' || row.type === 'assistant' ? 'active' : null
+}
+
+/** Incremental reader of a conversation's transcript: whether the latest
+ * thing on the main thread is the end of its turn. Claude Code keeps its
+ * status `busy` while background agents run after that, though its prompt
+ * takes input again; the status file cannot tell that from a turn at work. */
+export class ClaudeMainTurn {
+  private offset = 0
+  private started = false
+  private over = false
+
+  constructor(
+    readonly path: string,
+    private readonly tail: FileTail = nodeFileTail,
+  ) {}
+
+  /** True when the main turn has ended; false while it runs or when the
+   * transcript cannot say (unreadable, or no turn row in its tail yet). */
+  isOver(): boolean {
+    try {
+      const chunk = this.tail.read(
+        this.path,
+        this.offset,
+        this.started ? TURN_MAX_STEP_BYTES : TURN_TAIL_BYTES,
+      )
+      this.offset = chunk.offset
+      this.started = true
+      for (const line of chunk.text.split('\n')) {
+        const row = line ? mainTurnRow(line) : null
+        if (row) this.over = row === 'over'
+      }
+    } catch {
+      return false
+    }
+    return this.over
+  }
+}
+
 /** One Claude Code process, read through the files of the home it runs in. */
 class ClaudeProbe implements AgentProbe {
+  /** The transcript reader for the conversation the status file names. */
+  private turn: { sessionId: string; reader: ClaudeMainTurn | null } | null = null
+
   constructor(
     readonly pid: number,
-    private readonly file: string,
+    readonly file: string,
     private readonly fs: ProcFs,
     private readonly home: string,
     private readonly tail?: FileTail,
   ) {}
 
   poll(): AgentSignal | null {
+    let signal: AgentSignal | null
     try {
-      return claudeSignal(this.fs.readFile(this.file))
+      signal = claudeSignal(this.fs.readFile(this.file))
     } catch {
       return null
     }
+    // busy while the main turn is over: background agents still run.
+    if (signal?.state === 'working' && signal.agentSessionId && this.mainTurnOver(signal))
+      return { ...signal, detail: MAIN_TURN_OVER }
+    return signal
+  }
+
+  private mainTurnOver(signal: AgentSignal): boolean {
+    const sessionId = signal.agentSessionId as string
+    if (this.turn?.sessionId !== sessionId) this.turn = { sessionId, reader: null }
+    if (!this.turn.reader) {
+      const path = claudeTranscriptPath(this.fs, this.home, sessionId)
+      if (!path) return false
+      this.turn.reader = new ClaudeMainTurn(path, this.tail)
+    }
+    return this.turn.reader.isOver()
   }
 
   models(signal: AgentSignal | null) {
     const sessionId = signal?.agentSessionId
     return sessionId ? claudeModelSource(this.pid, sessionId, this.fs, this.home, this.tail) : null
   }
+}
+
+/** The probe already reading this status file keeps its place in the transcript. */
+function keptProbe(previous: AgentProbe | null, pid: number, file: string): ClaudeProbe | null {
+  return previous instanceof ClaudeProbe && previous.pid === pid && previous.file === file
+    ? previous
+    : null
 }
 
 export const claudeCode: TuiAdapter = {
@@ -520,21 +602,24 @@ export const claudeCode: TuiAdapter = {
   },
   entryApiVersion: 15,
   state: {
-    find: (ctx) => {
+    find: (ctx, previous) => {
       for (const { pid, file } of claudeSessions(ctx.fs, ctx.home, ctx.pids))
-        return new ClaudeProbe(pid, file, ctx.fs, ctx.home)
+        return (
+          keptProbe(previous, pid, file) ?? new ClaudeProbe(pid, file, ctx.fs, ctx.home, ctx.tail)
+        )
       return null
     },
-    findInEntry: ({ entry, readers }) => {
+    findInEntry: ({ entry, readers }, previous) => {
       const session = entryClaudeSession(readers.fs, readers.home)
       return session
-        ? new ClaudeProbe(
-            entry.pid,
-            session.file,
-            readers.fs,
-            readers.home,
-            readers.tail ?? undefined,
-          )
+        ? (keptProbe(previous, entry.pid, session.file) ??
+            new ClaudeProbe(
+              entry.pid,
+              session.file,
+              readers.fs,
+              readers.home,
+              readers.tail ?? undefined,
+            ))
         : null
     },
     observe: observeClaude,

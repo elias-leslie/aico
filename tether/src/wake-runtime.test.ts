@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindCatalog, insertWidget } from './lifecycle/catalog'
+import { MAIN_TURN_OVER } from './lifecycle/tui/adapters/contract'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { Store } from './store'
 import { WaitStore } from './waits'
-import { WakeService } from './wake-runtime'
+import { agentBusyReason, WakeService } from './wake-runtime'
 
 const LAUNCHER = 'aaaa0001'
 const LANE = 'bbbb0001'
@@ -217,5 +218,34 @@ describe('answers to asks', () => {
       `[tether:wakes] dropped undelivered line ask:991a6593792d on session=${LANE} (ask 991a6593792d closed as done), queued 2 min earlier`,
     )
     log.mockRestore()
+  })
+})
+
+describe('agentBusyReason', () => {
+  it('lets a line go to an idle agent, and to one working only on background work', () => {
+    expect(agentBusyReason({ state: 'idle', stateSource: 'claude-status' })).toBeNull()
+    expect(
+      agentBusyReason({
+        state: 'working',
+        stateSource: 'claude-status',
+        stateDetail: MAIN_TURN_OVER,
+      }),
+    ).toBeNull()
+  })
+
+  it('holds a line for an agent at work or at a prompt', () => {
+    expect(
+      agentBusyReason({ state: 'working', stateSource: 'claude-status', stateDetail: null }),
+    ).toBe('the agent is working (claude-status)')
+    expect(
+      agentBusyReason({
+        state: 'blocked',
+        stateSource: 'claude-status',
+        stateDetail: MAIN_TURN_OVER,
+      }),
+    ).toBe('the agent is blocked (claude-status)')
+    expect(agentBusyReason({ state: 'unknown', stateSource: 'none' })).toBe(
+      'the agent is unknown (none)',
+    )
   })
 })
