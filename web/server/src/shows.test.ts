@@ -40,6 +40,13 @@ describe('validateShare', () => {
     expect(validateShare(payload({ title }))).toEqual(payload({ title }))
   })
 
+  it('keeps a linked host and its not-live mark, and refuses a bad one', () => {
+    const away = { host: 'gem', peer: { state: 'offline', since: 1, listedAt: null } }
+    expect(validateShare(payload(away))).toEqual(payload(away))
+    expect(validateShare(payload({ host: '' }))).toBeNull()
+    expect(validateShare(payload({ peer: { state: 'offline' } }))).toBeNull()
+  })
+
   it('accepts several paths without a session, and a URL', () => {
     expect(validateShare(payload({ session: null, paths: ['/a/b.png', '/a/c'] }))).not.toBeNull()
     const url = 'https://example.com/report?a=1&b=2'

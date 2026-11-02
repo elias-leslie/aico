@@ -230,6 +230,76 @@ describe('events', () => {
   })
 })
 
+describe('one push per ask across two doors', () => {
+  const ask = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    session: null,
+    requester: 'nightly',
+    question: 'Run the cleanup?',
+    options: [],
+    recommended: null,
+    body: null,
+    command: null,
+    share: null,
+    blocking: true,
+    state: 'open',
+    answer: null,
+    note: null,
+    delivery: null,
+    createdAt: 1,
+    updatedAt: 1,
+    answeredAt: null,
+    ...extra,
+  })
+
+  it('pushes the workstation ask from the workstation and the gem ask from gem, once each', async () => {
+    const workstation: string[][] = []
+    const gem: string[][] = []
+    const door = (into: string[][]) =>
+      new Background({
+        tether: tether.client,
+        store,
+        shows,
+        asks: new Asks({
+          tether: tether.client,
+          publicHost: null,
+          run: async (argv, _t, input) => {
+            into.push(input === undefined ? argv : [...argv, input])
+            return ''
+          },
+        }),
+        trustShows: true,
+        uploads: { dir: '/nonexistent/uploads', remoteDir: '~/uploads', maxBytes: 1, maxAgeMs: 1 },
+        maintenance: { enabled: false, intervalMs: 1000, emptyPaneDays: 7 },
+      })
+    const w = door(workstation)
+    const g = door(gem)
+    const mine = ask('111111111111')
+    const theirs = ask('222222222222')
+    // The workstation's Tether: its own ask as is, gem's relayed with `host`.
+    // Gem's Tether: its own ask as is, the workstation's relayed.
+    await w.event(event('asks.changed', { ask: mine, created: true }))
+    await w.event(
+      event('asks.changed', { ask: { ...theirs, host: 'gem' }, created: true, host: 'gem' }),
+    )
+    await g.event(event('asks.changed', { ask: theirs, created: true }))
+    await g.event(
+      event('asks.changed', {
+        ask: { ...mine, host: 'workstation' },
+        created: true,
+        host: 'workstation',
+      }),
+    )
+    // A replayed event never pushes twice.
+    await w.event(event('asks.changed', { ask: mine, created: true }))
+    await g.event(event('asks.changed', { ask: theirs, created: true }))
+    expect(workstation).toHaveLength(1)
+    expect(gem).toHaveLength(1)
+    expect(workstation[0]?.at(-1)).toContain('ask:111111111111')
+    expect(gem[0]?.at(-1)).toContain('ask:222222222222')
+  })
+})
+
 describe('reconcileLinks', () => {
   it('drops dead links, keeps live ones, prunes tabs empty past the cutoff', async () => {
     const alive = linked()

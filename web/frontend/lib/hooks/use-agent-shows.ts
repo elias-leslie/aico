@@ -9,6 +9,8 @@ type ShowMetadata = {
   session: string | null
   title: string | null
   createdAt: string
+  /** The linked host that shared it; absent: this computer. Its files are on that host. */
+  host?: string
 }
 
 /** An agent's share: links to files or folders where they are, or a web link. */

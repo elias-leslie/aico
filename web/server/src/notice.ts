@@ -43,10 +43,26 @@ export const runCommand: RunCommand = (argv, timeoutMs, input) =>
 
 export const PUSH_ARGV = ['nightshift', 'push', '--json']
 
+/** Where this host's pushes go. A host with Nightshift runs `nightshift push --json`.
+ * A host without it (the gem container) sets `AICO_PUSH_SSH` to an ssh alias whose key
+ * on the Proxmox host is forced to a push-only command that reads the same notice on
+ * stdin (scripts/pve-push/); it cannot resolve a push afterwards. */
+export function pushRoute(env: NodeJS.ProcessEnv = process.env): {
+  argv: string[]
+  canResolve: boolean
+} {
+  const alias = env.AICO_PUSH_SSH?.trim()
+  if (!alias) return { argv: PUSH_ARGV, canResolve: true }
+  return {
+    argv: ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', alias],
+    canResolve: false,
+  }
+}
+
 /** Sends the notice; logs a failure, loudly for a contract refusal, and never throws. */
 export async function sendNotice(run: RunNotice, notice: Notice): Promise<void> {
   try {
-    await run(PUSH_ARGV, PUSH_TIMEOUT_MS, JSON.stringify(notice))
+    await run(pushRoute().argv, PUSH_TIMEOUT_MS, JSON.stringify(notice))
   } catch (error) {
     const err = error as Error & { code?: unknown }
     const refused = err.code === 2 ? ' (contract refusal, a bug)' : ''
@@ -56,6 +72,7 @@ export async function sendNotice(run: RunNotice, notice: Notice): Promise<void> 
 
 /** Tells Nightshift the condition behind `key` is over. */
 export async function resolveNotice(run: RunNotice, key: string, text: string): Promise<void> {
+  if (!pushRoute().canResolve) return
   try {
     await run(['nightshift', 'resolve', key, '--text', text], PUSH_TIMEOUT_MS)
   } catch (error) {

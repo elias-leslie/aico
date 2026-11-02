@@ -22,6 +22,10 @@ export type Share = {
   session: string | null
   title: string | null
   createdAt: string
+  /** The linked host that shared it; absent: this door's own. Its file paths are on that host. */
+  host?: string
+  /** Why a linked host's share is not live (its link is down). */
+  peer?: { state: string; since: number; listedAt: number | null }
 } & ({ kind: 'files'; paths: string[] } | { kind: 'url'; url: string })
 
 const length = (text: string) => Array.from(text).length
@@ -29,13 +33,40 @@ const length = (text: string) => Array.from(text).length
 /** A share as Tether sends it, or null when any field is not what Tether sends. */
 export function validateShare(data: unknown): Share | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
-  const { id, session, title, createdAt, kind, paths, url } = data as Record<string, unknown>
+  const { id, session, title, createdAt, kind, paths, url, host, peer } = data as Record<
+    string,
+    unknown
+  >
   if (typeof id !== 'string' || !ID.test(id)) return null
   if (session !== null && (typeof session !== 'string' || !SESSION.test(session))) return null
   if (title !== null && (typeof title !== 'string' || length(title) > 120 || NOT_PLAIN.test(title)))
     return null
   if (typeof createdAt !== 'string' || Number.isNaN(Date.parse(createdAt))) return null
-  const base = { id, session, title, createdAt }
+  if (
+    host !== undefined &&
+    (typeof host !== 'string' || !host || length(host) > 120 || NOT_PLAIN.test(host))
+  )
+    return null
+  const mark = peer as Record<string, unknown> | undefined
+  if (
+    mark !== undefined &&
+    !(
+      mark &&
+      typeof mark === 'object' &&
+      typeof mark.state === 'string' &&
+      Number.isSafeInteger(mark.since) &&
+      (mark.listedAt === null || Number.isSafeInteger(mark.listedAt))
+    )
+  )
+    return null
+  const base = {
+    id,
+    session,
+    title,
+    createdAt,
+    ...(host !== undefined ? { host } : {}),
+    ...(mark !== undefined ? { peer: mark as unknown as NonNullable<Share['peer']> } : {}),
+  }
   if (kind === 'files') {
     if (
       !Array.isArray(paths) ||
@@ -136,7 +167,10 @@ export class Shows {
 
   /** Tether's shares, oldest first; any that fail the checks are left out. */
   async list(): Promise<Share[]> {
-    const { body } = await this.options.tether.request<{ items?: unknown }>('GET', '/v1/shares')
+    const { body } = await this.options.tether.request<{ items?: unknown }>(
+      'GET',
+      '/v1/shares?hosts=all',
+    )
     if (!Array.isArray(body?.items)) return []
     return body.items.map(validateShare).filter((share): share is Share => share !== null)
   }

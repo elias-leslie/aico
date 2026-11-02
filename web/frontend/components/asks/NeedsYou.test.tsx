@@ -330,6 +330,32 @@ describe('NeedsYouDrawer', () => {
     )
   })
 
+  it('names the linked host an ask is on, and holds the answer while that host is away', () => {
+    state.asks = [
+      ask({ host: 'gem' }),
+      ask({
+        id: 'ffeeddccbbaa',
+        host: 'gem',
+        peer: { state: 'offline', since: 1, listedAt: 1 },
+      }),
+    ]
+    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    const [live, away] = screen.getAllByTestId('ask-card')
+    expect(live).toHaveTextContent('on gem')
+    expect(within(live as HTMLElement).queryByTestId('ask-away')).toBeNull()
+    expect(away).toHaveTextContent(
+      'gem is not reachable. This is the last copy seen; you can answer when it is back.',
+    )
+    expect(
+      within(away as HTMLElement).getByRole('button', { name: 'Send' }),
+    ).toBeDisabled()
+    expect(
+      within(away as HTMLElement).getByRole('button', {
+        name: 'Reply “Not now”',
+      }),
+    ).toBeDisabled()
+  })
+
   it('replies Done for a question without choices, and opens the session', () => {
     state.asks = [ask({ options: [], recommended: null, command: null })]
     render(<NeedsYouDrawer open onOpenChange={() => {}} />)

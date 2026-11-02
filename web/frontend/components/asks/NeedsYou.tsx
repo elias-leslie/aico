@@ -630,6 +630,15 @@ export function answerRoute(
   }
 }
 
+/** What a down host is, in the owner's words. */
+function awayText(state: string | undefined): string {
+  return state === 'powered_off'
+    ? 'powered off'
+    : state === 'connecting'
+      ? 'still connecting'
+      : 'not reachable'
+}
+
 function Meta({ children }: { children: ReactNode }) {
   return (
     <div
@@ -707,7 +716,10 @@ export function AskCard({
       })
   const noteText = note.trim()
   const said = choice !== null || noteText.length > 0
+  // A linked host that is down cannot take the answer; this is its last copy.
+  const away = ask.peer !== undefined
   const canSend =
+    !away &&
     !reply.isPending &&
     files.waiting === 0 &&
     (wantsFiles ? files.enough && (said || files.saved.length > 0) : said)
@@ -734,8 +746,19 @@ export function AskCard({
           <span className="whitespace-nowrap">
             {ask.blocking ? 'agent is waiting' : 'whenever'} ·{' '}
             {formatAge(now - ask.createdAt)}
+            {ask.host ? ` · on ${ask.host}` : ''}
           </span>
         </Meta>
+      )}
+      {away && (
+        <p
+          data-testid="ask-away"
+          className="mb-1.5 text-[12px]"
+          style={{ color: 'var(--ember)' }}
+        >
+          {ask.host ?? 'That computer'} is {awayText(ask.peer?.state)}. This is
+          the last copy seen; you can answer when it is back.
+        </p>
       )}
       <p className="mb-1.5 font-semibold" style={{ overflowWrap: 'anywhere' }}>
         {ask.question}
@@ -849,7 +872,7 @@ export function AskCard({
           <button
             type="button"
             className="lantern-btn small"
-            disabled={reply.isPending}
+            disabled={reply.isPending || away}
             onClick={() => send({ kind: 'answer', text: 'Done' }, 'Done')}
             title="Tells the agent: Done"
           >
@@ -859,7 +882,7 @@ export function AskCard({
         <button
           type="button"
           className="lantern-btn ghost small"
-          disabled={reply.isPending}
+          disabled={reply.isPending || away}
           onClick={() =>
             send(
               {

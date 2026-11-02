@@ -87,6 +87,7 @@ export function SharedFiles({
               </span>
               {' · '}
               {from ?? 'an agent'} · {sharedWhen(share.createdAt)}
+              {share.host ? ` · on ${share.host}` : ''}
             </p>
             {share.kind === 'url' ? (
               <a
@@ -108,7 +109,10 @@ export function SharedFiles({
                     type="button"
                     className="lantern-file-row"
                     onClick={() => onOpenPath(path)}
-                    title={path}
+                    disabled={share.host !== undefined}
+                    title={
+                      share.host ? `${path} (on ${share.host}, not here)` : path
+                    }
                   >
                     <Icon
                       className={isFolder ? 'dir' : undefined}

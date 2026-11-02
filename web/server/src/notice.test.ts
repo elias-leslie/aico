@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { type Ask, askNotice } from './asks'
-import { type Notice, PUSH_ARGV, resolveNotice, sendNotice } from './notice'
+import { type Notice, PUSH_ARGV, pushRoute, resolveNotice, sendNotice } from './notice'
 import { type Share, showNotice } from './shows'
 
 const hasNightshift = (() => {
@@ -42,6 +42,32 @@ describe('notice contract v1', () => {
       input: JSON.stringify(notice),
     })
     expect(String(out).length).toBeGreaterThan(0)
+  })
+
+  it('sends through the ssh alias when AICO_PUSH_SSH is set, and cannot resolve there', async () => {
+    expect(pushRoute({})).toEqual({ argv: PUSH_ARGV, canResolve: true })
+    vi.stubEnv('AICO_PUSH_SSH', 'pve-alerts')
+    try {
+      const runs: { argv: string[]; input?: string }[] = []
+      const run = async (argv: string[], _t: number, input?: string) => {
+        runs.push({ argv, input })
+        return ''
+      }
+      await sendNotice(run, notices[1][1])
+      await resolveNotice(run, 'ask:x', 'done')
+      expect(runs).toHaveLength(1)
+      expect(runs[0]?.argv).toEqual([
+        'ssh',
+        '-o',
+        'BatchMode=yes',
+        '-o',
+        'ConnectTimeout=5',
+        'pve-alerts',
+      ])
+      expect(JSON.parse(runs[0]?.input ?? '{}')).toMatchObject({ v: 1, key: 'ask:abcdefabcdef' })
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('logs a refusal loudly and does not throw', async () => {

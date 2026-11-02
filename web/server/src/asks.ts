@@ -73,6 +73,17 @@ export interface Ask {
   createdAt: number
   updatedAt: number
   answeredAt: number | null
+  /** The linked host whose Tether holds this ask; absent: this door's own. */
+  host?: string
+  /** Why a linked host's ask is not live (its link is down): this is the last copy seen. */
+  peer?: PeerMark
+}
+
+/** The hub's mark on what a down host last told us (`state`: offline, powered_off, ...). */
+export interface PeerMark {
+  state: string
+  since: number
+  listedAt: number | null
 }
 
 const NOT_ONE_LINE_ALL = new RegExp(NOT_ONE_LINE.source, 'gu')
@@ -130,6 +141,12 @@ function validFile(value: unknown): value is AnswerFile {
   )
 }
 
+function validPeer(value: unknown): value is PeerMark {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const p = value as Record<string, unknown>
+  return line(p.state, 40) && time(p.since) && (p.listedAt === null || time(p.listedAt))
+}
+
 /** An ask as Tether sends it, or null when any field is not what Tether sends. */
 export function validateAsk(data: unknown): Ask | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
@@ -170,6 +187,8 @@ export function validateAsk(data: unknown): Ask | null {
   }
   if (!time(a.createdAt) || !time(a.updatedAt) || (a.answeredAt !== null && !time(a.answeredAt)))
     return null
+  if (a.host !== undefined && !line(a.host, 120)) return null
+  if (a.peer !== undefined && !validPeer(a.peer)) return null
   return {
     id: a.id,
     session: a.session as string | null,
@@ -192,6 +211,8 @@ export function validateAsk(data: unknown): Ask | null {
     createdAt: a.createdAt as number,
     updatedAt: a.updatedAt as number,
     answeredAt: a.answeredAt as number | null,
+    ...(a.host !== undefined ? { host: a.host as string } : {}),
+    ...(a.peer !== undefined ? { peer: a.peer as PeerMark } : {}),
   }
 }
 
@@ -331,7 +352,7 @@ export class Asks {
   /** Open and answered asks plus recently closed ones; any failing the checks are left out. */
   async list(): Promise<Ask[]> {
     const { body } = await tetherCall(() =>
-      this.options.tether.request<{ items?: unknown }>('GET', '/v1/asks'),
+      this.options.tether.request<{ items?: unknown }>('GET', '/v1/asks?hosts=all'),
     )
     if (!Array.isArray(body?.items)) return []
     return body.items.map(validateAsk).filter((ask): ask is Ask => ask !== null)
@@ -377,7 +398,8 @@ export class Asks {
         name: capture.name.replace(NOT_ONE_LINE_ALL, '').trim().slice(0, 255) || 'file',
         mime: capture.mime,
         size: capture.size,
-        path: capture.hash ? resolve(blobPath(source.blobsDir, capture.hash)) : null,
+        // On a linked host's ask this folder is not the asker's: it reads the file by id.
+        path: capture.hash && !ask.host ? resolve(blobPath(source.blobsDir, capture.hash)) : null,
         host: source.hostName,
       }
     })

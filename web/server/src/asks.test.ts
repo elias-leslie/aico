@@ -138,10 +138,46 @@ describe('the push', () => {
   })
 })
 
+describe('asks from a linked host', () => {
+  const REMOTE: Ask = { ...ASK, id: 'aabbccddeeff', host: 'gem' }
+  const AWAY: Ask = {
+    ...REMOTE,
+    id: 'ffeeddccbbaa',
+    peer: { state: 'offline', since: 5_000, listedAt: 4_000 },
+  }
+
+  it('keeps the host and the not-live mark, and refuses a bad one', () => {
+    expect(validateAsk(AWAY)).toEqual(AWAY)
+    expect(validateAsk({ ...REMOTE, host: 'two\nlines' })).toBeNull()
+    expect(validateAsk({ ...AWAY, peer: { state: 'offline' } })).toBeNull()
+    const own = validateAsk(ASK)
+    expect(own && 'host' in own).toBe(false)
+  })
+
+  it("lists every host's asks in one call and answers a remote one by its id", async () => {
+    const tether = fakeTether({
+      'GET /v1/asks?hosts=all': { items: [ASK, REMOTE, AWAY] },
+      [`POST /v1/asks/${REMOTE.id}/done`]: { ...REMOTE, state: 'done' },
+    })
+    const asks = new Asks({ tether: tether.client as never, publicHost: null, run: async () => '' })
+    expect((await asks.list()).map((ask) => [ask.id, ask.host, ask.peer?.state])).toEqual([
+      [ASK.id, undefined, undefined],
+      [REMOTE.id, 'gem', undefined],
+      [AWAY.id, 'gem', 'offline'],
+    ])
+    // The hub routes /v1/asks/:id to the owning host; this door sends it as for its own.
+    await asks.act(REMOTE.id, 'done')
+    expect(tether.calls.at(-1)).toMatchObject({
+      method: 'POST',
+      path: `/v1/asks/${REMOTE.id}/done`,
+    })
+  })
+})
+
 describe('list and answer', () => {
   it('lists only asks that check out and passes the answer through', async () => {
     const tether = fakeTether({
-      'GET /v1/asks': { items: [ASK, { ...ASK, id: 'bad' }] },
+      'GET /v1/asks?hosts=all': { items: [ASK, { ...ASK, id: 'bad' }] },
       'POST /v1/asks/abcdefabcdef/answer': { ...ASK, state: 'answered', answer: 'Finish it now' },
     })
     const asks = new Asks({ tether: tether.client as never, publicHost: null, run: async () => '' })

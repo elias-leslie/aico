@@ -51,6 +51,10 @@ export interface OwnerAsk {
   createdAt: number
   updatedAt: number
   answeredAt: number | null
+  /** The linked host whose Tether holds the ask; absent: this computer's. */
+  host?: string
+  /** Set while that host's link is down: this is the last copy seen, not live. */
+  peer?: { state: string; since: number; listedAt: number | null }
 }
 
 /** A Nightshift tap waiting for the owner; approved there, never here. */
