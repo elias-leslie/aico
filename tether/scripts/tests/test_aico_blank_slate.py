@@ -106,10 +106,27 @@ def test_codex_without_a_subcommand_puts_flags_first(run):
     assert argv[-1] == "--yolo"
 
 
-def test_pi_skips_extensions_skills_and_context_files(run):
+def test_pi_skips_extensions_skills_and_context_files(run, monkeypatch):
+    monkeypatch.delenv("ST_WORK_ROLE", raising=False)
     argv, _ = run("pi", "--approve")
     assert argv == ["pi", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates",
                     "--no-mcp", "--approve"]
+
+
+def test_pi_with_a_work_role_loads_only_the_model_guard(run, monkeypatch, tmp_path, capsys):
+    agent_dir = tmp_path / "pi-agent"
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(agent_dir))
+    monkeypatch.setenv("ST_WORK_ROLE", "recon")
+    blank_flags = ["pi", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-mcp"]
+    # Without the guard installed the session still starts, and says it is unchecked.
+    argv, _ = run("pi", "--approve")
+    assert argv == [*blank_flags, "--approve"]
+    assert "Pi model guard not found" in capsys.readouterr().err
+    guard = agent_dir / "extensions/model-guard.ts"
+    guard.parent.mkdir(parents=True)
+    guard.write_text("export default () => {};\n")
+    argv, _ = run("pi", "--approve")
+    assert argv == [*blank_flags, "-e", str(guard), "--approve"]
 
 
 def test_unsupported_tool_is_refused(capsys):
