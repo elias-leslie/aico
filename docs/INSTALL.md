@@ -59,7 +59,10 @@ without that file Tether works exactly as before.
 
 `ssh` is a Host alias from `~/.ssh/config` that logs in without a prompt.
 `forwards` (optional) lists workstation ports the host may reach on its own
-loopback. Then turn on the link for each host:
+loopback. `sync` (optional) is the path of the other host's notes-sync socket,
+`/run/user/<uid>/aico/sync.sock` (the same path on every host); with it, the
+same link carries notes sync (`-L <peerDir>/sync.sock:<sync>`), and both
+hosts must list each other. Then turn on the link for each host:
 
 ```bash
 systemctl --user enable --now tether-link@agent-work
@@ -79,6 +82,42 @@ Remote hosts need no copy of their own: when the hub's link to a host comes
 up and the host's Tether is on an older API, the hub installs its own release
 there and restarts that Tether (a host that is off is updated when it next
 comes up). `tether hosts` shows each host's `apiVersion` and last `update`.
+
+### A second machine running Aico (notes on both)
+
+A host without SummitFlow (such as the gem container) gets the same build from
+the workstation's checkout:
+
+```bash
+scripts/deploy-remote.sh <ssh-alias>            # copy the git-tracked tree, then scripts/install.sh --start there
+scripts/deploy-remote.sh <ssh-alias> --dry-run  # show the copy; change nothing
+```
+
+It rsyncs the tracked files to `$AICO_REMOTE_DIR` (default
+`/srv/workspaces/projects/aico`, where the shipped units expect the checkout;
+`node_modules` and builds stay between runs) and runs `scripts/install.sh --start`
+there, so there is one installer. The machine needs Node 22+ (the same major as
+the workstation), npm, git, Python 3, tmux, rsync, a systemd user manager with
+linger, and for notes `libheif-examples` and `rclone`. Deploy the machine
+with the older database first, so a newer schema never reaches a host that
+cannot read it; a different schema pauses sync and the Hosts card says so.
+
+Once per machine, as drop-ins (they survive redeploys):
+
+```ini
+# ~/.config/systemd/user/aico-web.service.d/host.conf
+[Service]
+Environment=AICO_HOST_NAME=gem          # the name this host writes on its rows; workstation on the other side
+# ~/.config/systemd/user/tether@default.service.d/headless.conf   (a machine with no desktop)
+[Service]
+Environment=TETHER_HEADLESS=1
+```
+
+Then list each machine in the other's `hosts.json` with `ssh`, `socket` and
+`sync`, and enable `tether-link@<name>` on both sides. A machine without Nightshift
+(the gem container) cannot send push notices until it has its own route to one.
+The Hosts card shows "different Aico version" when the two bundles differ
+(`hello.build_id` is a fingerprint of the server bundle, `AICO_BUILD_ID` overrides it).
 
 Aico connects to `$TETHER_SOCKET`, else
 `$XDG_RUNTIME_DIR/tether/${TETHER_INSTANCE:-default}/control.sock`. If Tether is
