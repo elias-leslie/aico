@@ -29,7 +29,7 @@ import { realRunners } from './vision-extract/runners'
 
 function serve(): void {
   const config = loadConfig()
-  const store = new WebStore(config.dbPath)
+  const store = new WebStore(config.dbPath, { hostName: config.hostName })
   const notes = new NotesStore(join(config.dataDir, 'notes.db'), {
     hostName: config.hostName,
     revisionWindowMs: config.notes.revisionWindowMs,
