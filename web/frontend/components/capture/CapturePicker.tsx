@@ -1,7 +1,7 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { Camera, FilePlus2 } from 'lucide-react'
+import { Camera, FilePlus2, Images } from 'lucide-react'
 import { type DragEvent, useEffect, useRef, useState } from 'react'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 
@@ -52,15 +52,27 @@ function PickerControl({
   )
 }
 
+/** The image half of the server's accept string. Android opens its own photo
+ * picker, which multi-selects with plain taps, only when every accepted type
+ * is an image or video; a mixed list gets the document chooser, where a tap
+ * picks one file and closes. */
+export function photoAccept(accept?: string): string {
+  const images = (accept ?? '')
+    .split(',')
+    .map((token) => token.trim())
+    .filter((token) => token.startsWith('image/'))
+  return images.length > 0 ? images.join(',') : 'image/*'
+}
+
 /** Files pasted from the clipboard (a screenshot, a copied file). */
 function pastedFiles(event: ClipboardEvent): File[] {
   return Array.from(event.clipboardData?.files ?? [])
 }
 
 /**
- * The two ways in, equal: Take photo (on a touch screen) and Choose files
- * (a multi-select of library photos, PDFs and documents). A computer also
- * takes dropped and pasted files. Shared by the Capture sheet and the ask
+ * The ways in, equal. A touch screen gets Camera, Photos (a multi-select from
+ * the photo library) and Files (PDFs and documents too). A computer gets
+ * Choose files, plus dropped and pasted files. Shared by the Capture sheet and the ask
  * cards that want files.
  */
 export function CapturePicker({
@@ -119,23 +131,39 @@ export function CapturePicker({
     >
       <div className="flex gap-2">
         {touch && (
-          <PickerControl
-            label="Take photo"
-            icon={
-              <Camera
-                className="h-4 w-4"
-                strokeWidth={1.7}
-                aria-hidden="true"
-              />
-            }
-            disabled={disabled}
-            accept="image/*"
-            capture="environment"
-            onFiles={onFiles}
-          />
+          <>
+            <PickerControl
+              label="Camera"
+              icon={
+                <Camera
+                  className="h-4 w-4"
+                  strokeWidth={1.7}
+                  aria-hidden="true"
+                />
+              }
+              disabled={disabled}
+              accept="image/*"
+              capture="environment"
+              onFiles={onFiles}
+            />
+            <PickerControl
+              label="Photos"
+              icon={
+                <Images
+                  className="h-4 w-4"
+                  strokeWidth={1.7}
+                  aria-hidden="true"
+                />
+              }
+              disabled={disabled}
+              multiple
+              accept={photoAccept(accept)}
+              onFiles={onFiles}
+            />
+          </>
         )}
         <PickerControl
-          label="Choose files"
+          label={touch ? 'Files' : 'Choose files'}
           icon={
             <FilePlus2
               className="h-4 w-4"

@@ -61,7 +61,7 @@ const saved = (name: string): Capture => ({
 })
 
 function choose(...files: File[]) {
-  fireEvent.change(screen.getByLabelText('Choose files'), {
+  fireEvent.change(screen.getByLabelText('Files'), {
     target: { files },
   })
 }

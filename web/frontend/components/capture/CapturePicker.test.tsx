@@ -1,9 +1,9 @@
-// The two equal ways in: Take photo (touch screens) and Choose files (a
-// multi-select with the server's accept string); drop and paste on a computer.
+// The equal ways in: Camera, Photos and Files on a touch screen; Choose files
+// plus drop and paste on a computer.
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { CapturePicker } from './CapturePicker'
+import { CapturePicker, photoAccept } from './CapturePicker'
 
 const media = vi.hoisted(() => ({ touch: true }))
 vi.mock('@/lib/hooks/use-media-query', () => ({
@@ -17,24 +17,40 @@ describe('CapturePicker', () => {
     media.touch = true
   })
 
-  it('offers Take photo and Choose files on a touch screen', () => {
-    render(<CapturePicker accept=".jpg,.pdf" onFiles={vi.fn()} />)
-    const photo = screen.getByLabelText('Take photo') as HTMLInputElement
-    const files = screen.getByLabelText('Choose files') as HTMLInputElement
-    expect(photo.type).toBe('file')
-    expect(photo.getAttribute('capture')).toBe('environment')
-    expect(photo.accept).toBe('image/*')
-    expect(photo.multiple).toBe(false)
+  it('offers Camera, Photos and Files on a touch screen', () => {
+    render(
+      <CapturePicker
+        accept="image/jpeg,image/heic,application/pdf,.jpg,.pdf"
+        onFiles={vi.fn()}
+      />,
+    )
+    const camera = screen.getByLabelText('Camera') as HTMLInputElement
+    const photos = screen.getByLabelText('Photos') as HTMLInputElement
+    const files = screen.getByLabelText('Files') as HTMLInputElement
+    expect(camera.type).toBe('file')
+    expect(camera.getAttribute('capture')).toBe('environment')
+    expect(camera.accept).toBe('image/*')
+    expect(camera.multiple).toBe(false)
+    // Images only, so Android opens its multi-select photo picker.
+    expect(photos.multiple).toBe(true)
+    expect(photos.accept).toBe('image/jpeg,image/heic')
+    expect(photos.hasAttribute('capture')).toBe(false)
     expect(files.multiple).toBe(true)
-    expect(files.accept).toBe('.jpg,.pdf')
-    // The camera hint belongs to Take photo alone.
+    expect(files.accept).toBe('image/jpeg,image/heic,application/pdf,.jpg,.pdf')
+    // The camera hint belongs to Camera alone.
     expect(files.hasAttribute('capture')).toBe(false)
+  })
+
+  it('falls back to any image before the limits load', () => {
+    expect(photoAccept(undefined)).toBe('image/*')
+    expect(photoAccept('.pdf,application/pdf')).toBe('image/*')
   })
 
   it('shows only Choose files, with a drop hint, on a computer', () => {
     media.touch = false
     render(<CapturePicker onFiles={vi.fn()} />)
-    expect(screen.queryByLabelText('Take photo')).toBeNull()
+    expect(screen.queryByLabelText('Camera')).toBeNull()
+    expect(screen.queryByLabelText('Photos')).toBeNull()
     expect(screen.getByLabelText('Choose files')).toBeInTheDocument()
     expect(screen.getByText(/drop files here/i)).toBeInTheDocument()
   })
@@ -46,7 +62,7 @@ describe('CapturePicker', () => {
       jpeg(),
       new File(['p'], 'b.pdf', { type: 'application/pdf' }),
     ]
-    fireEvent.change(screen.getByLabelText('Choose files'), {
+    fireEvent.change(screen.getByLabelText('Files'), {
       target: { files },
     })
     expect(onFiles).toHaveBeenCalledWith(files)
@@ -74,6 +90,6 @@ describe('CapturePicker', () => {
     })
     window.dispatchEvent(paste)
     expect(onFiles).toHaveBeenCalledTimes(2)
-    expect(screen.getByLabelText('Choose files')).toBeDisabled()
+    expect(screen.getByLabelText('Files')).toBeDisabled()
   })
 })
