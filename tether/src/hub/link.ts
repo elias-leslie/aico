@@ -1,7 +1,7 @@
 // `tether link <host>`: the process behind `tether-link@<host>.service`. It
 // holds one ssh ControlMaster to the host that forwards the remote Tether's
 // control socket to `$XDG_RUNTIME_DIR/tether/peers/<host>/control.sock` and,
-// optionally, workstation ports back to the host. It never powers a host on:
+// optionally the host's Aico sync socket to `.../sync.sock` and workstation ports back to the host. It never powers a host on:
 // while the host is down it retries quietly with jittered, capped backoff,
 // which resets only after a link stayed up. SIGUSR1 retries at once (a wake).
 
@@ -36,10 +36,17 @@ export interface LinkPaths {
   dir: string
   control: string
   forwarded: string
+  /** Where the remote Aico's sync socket appears here (when the host has `sync`). */
+  sync: string
 }
 
 export function linkPaths(dir: string): LinkPaths {
-  return { dir, control: join(dir, 'ssh.ctl'), forwarded: join(dir, 'control.sock') }
+  return {
+    dir,
+    control: join(dir, 'ssh.ctl'),
+    forwarded: join(dir, 'control.sock'),
+    sync: join(dir, 'sync.sock'),
+  }
 }
 
 /** The ssh argv of one link (without the binary). */
@@ -64,6 +71,7 @@ export function linkArgv(host: HostEntry, paths: LinkPaths): string[] {
     ...options.flatMap((option) => ['-o', option]),
     '-L',
     `${paths.forwarded}:${host.socket}`,
+    ...(host.sync ? ['-L', `${paths.sync}:${host.sync}`] : []),
     ...host.forwards.flatMap((p) => ['-R', `127.0.0.1:${p}:127.0.0.1:${p}`]),
     '--',
     host.ssh,

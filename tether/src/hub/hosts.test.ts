@@ -28,6 +28,7 @@ describe('hosts registry', () => {
           name: 'agent-work',
           ssh: 'agent-work',
           socket: '/run/user/1000/tether/default/control.sock',
+          sync: null,
           forwards: [8001, 8003],
           wake: ['st', 'vm', 'start', '200'],
           sleep: null,
@@ -70,6 +71,9 @@ describe('hosts registry', () => {
     [{ ...VALID, name: 'local' }, 'name must be'],
     [{ ...VALID, socket: 'run/control.sock' }, 'socket must be an absolute path'],
     [{ ...VALID, socket: '/run/../etc/x.sock' }, 'socket must be an absolute path'],
+    [{ ...VALID, sync: 'run/aico/sync.sock' }, 'sync must be an absolute path'],
+    [{ ...VALID, sync: '/run/../etc/x.sock' }, 'sync must be an absolute path'],
+    [{ ...VALID, sync: `/${'a'.repeat(120)}` }, 'sync must be an absolute path'],
     [{ ...VALID, forwards: ['80a'] }, 'forwards must be ports'],
     [{ ...VALID, forwards: [70_000] }, 'forwards must be ports'],
     [{ ...VALID, wake: [] }, 'wake must be a non-empty argv list'],
@@ -178,6 +182,21 @@ describe('link', () => {
       '--',
       'agent-work',
     ])
+  })
+
+  it('forwards the remote Aico sync socket on the same master when the host has one', () => {
+    const host = parseHosts(
+      JSON.stringify([{ ...VALID, forwards: [], sync: '/run/user/1000/aico/sync.sock' }]),
+    ).hosts[0]
+    if (!host) throw new Error('no host')
+    expect(host.sync).toBe('/run/user/1000/aico/sync.sock')
+    const argv = linkArgv(host, linkPaths('/run/user/1000/tether/peers/agent-work'))
+    const forwards = argv.flatMap((arg, i) => (arg === '-L' ? [argv[i + 1]] : []))
+    expect(forwards).toEqual([
+      '/run/user/1000/tether/peers/agent-work/control.sock:/run/user/1000/tether/default/control.sock',
+      '/run/user/1000/tether/peers/agent-work/sync.sock:/run/user/1000/aico/sync.sock',
+    ])
+    expect(parseHosts(JSON.stringify([VALID])).hosts[0]?.sync).toBeNull()
   })
 
   it('backs off with jitter up to a cap', () => {

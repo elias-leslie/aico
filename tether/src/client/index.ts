@@ -5,4 +5,5 @@
 export * from './client'
 export * from './contracts'
 export * from './hosts'
+export * from './sync-peers'
 export * from './teams'

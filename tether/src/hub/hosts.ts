@@ -14,6 +14,9 @@ export interface HostEntry {
   ssh: string
   /** The remote Tether's control socket. */
   socket: string
+  /** The remote Aico's sync socket (`$XDG_RUNTIME_DIR/aico/sync.sock` there), forwarded to
+   * `<peerDir>/sync.sock` by the same ssh master; null: this host does not sync. */
+  sync: string | null
   /** Workstation ports exposed to the host through `-R` (loopback both ends). */
   forwards: number[]
   /** The command that powers the host on: run by a create, never by the link. */
@@ -57,6 +60,7 @@ const FIELDS = new Set([
   'name',
   'ssh',
   'socket',
+  'sync',
   'forwards',
   'wake',
   'sleep',
@@ -139,6 +143,12 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
   const socket = absolutePath(raw.socket)
   if (!socket || Buffer.byteLength(socket) > MAX_SOCKET_BYTES)
     return `${name}: socket must be an absolute path`
+  let sync: string | null = null
+  if (raw.sync !== undefined && raw.sync !== null) {
+    sync = absolutePath(raw.sync)
+    if (!sync || Buffer.byteLength(sync) > MAX_SOCKET_BYTES)
+      return `${name}: sync must be an absolute path`
+  }
   let forwards: number[] = []
   if (raw.forwards !== undefined) {
     if (!Array.isArray(raw.forwards)) return `${name}: forwards must be a list of ports`
@@ -183,6 +193,7 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
     name,
     ssh,
     socket,
+    sync,
     forwards,
     wake,
     sleep,

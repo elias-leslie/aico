@@ -71,6 +71,7 @@ const ENTRY: HostEntry = {
   name: 'vm',
   ssh: 'vm',
   socket: '/run/user/1000/tether/default/control.sock',
+  sync: null,
   forwards: [],
   wake: ['st', 'vm', 'start', '200'],
   sleep: null,
