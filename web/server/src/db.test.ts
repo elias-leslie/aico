@@ -208,6 +208,30 @@ describe('WebStore', () => {
       rmSync(dir, { recursive: true, force: true })
     })
 
+    it('migrates a schema 2 file by adding prev_origin, keeping every row', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'aico-web-v2-'))
+      const path = join(dir, 'web.db')
+      const first = new WebStore(path, { hostName: 'workstation' })
+      const pane = first.createPane({ projectId: 'aico', name: 'Aico', activeMode: 'claude' })
+      first.link('s1', pane.id, 'shell')
+      first.upsertProjectSettings('aico', { enabled: true })
+      first.close()
+      const raw = new DatabaseSync(path)
+      raw.exec(
+        `ALTER TABLE panes DROP COLUMN prev_origin; ALTER TABLE session_links DROP COLUMN prev_origin;
+         ALTER TABLE project_settings DROP COLUMN prev_origin;
+         UPDATE meta SET value = '2' WHERE key = 'schema_version'`,
+      )
+      raw.close()
+      const store = new WebStore(path, { hostName: 'workstation' })
+      expect(store.meta('schema_version')).toBe(String(SCHEMA_VERSION))
+      expect(store.getPane(pane.id)?.name).toBe('Aico')
+      expect(store.getLink('s1')?.pane_id).toBe(pane.id)
+      expect(store.allProjectSettings().get('aico')?.enabled).toBe(true)
+      store.close()
+      rmSync(dir, { recursive: true, force: true })
+    })
+
     it('refuses a file from a newer Aico', () => {
       const dir = mkdtempSync(join(tmpdir(), 'aico-web-v9-'))
       const path = join(dir, 'web.db')

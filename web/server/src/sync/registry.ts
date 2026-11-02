@@ -5,7 +5,7 @@
 import type { SyncTable } from './engine'
 
 export const NOTES_SYNC_TABLES: readonly SyncTable[] = [
-  { name: 'captures', keys: ['id'], unique: ['client_id'], blob: 'hash' },
+  { name: 'captures', keys: ['id'], unique: ['client_id'], blob: 'hash', dropDuplicate: true },
   { name: 'notes', keys: ['id'], text: ['title', 'body'], unique: ['source'] },
   { name: 'note_items', keys: ['id'], text: ['text'] },
   { name: 'note_labels', keys: ['id'] },

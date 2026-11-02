@@ -79,7 +79,7 @@ describe('notes', () => {
     const raw = new DatabaseSync(path)
     raw.exec(
       `DROP TABLE notes_fts; DROP TABLE notes; DROP TABLE note_items; DROP TABLE note_labels;
-       DROP TABLE attachments; DROP TABLE note_revisions;
+       DROP TABLE attachments; DROP TABLE note_revisions; ALTER TABLE captures DROP COLUMN prev_origin;
        UPDATE meta SET value = '3' WHERE key = 'schema_version'`,
     )
     raw.close()

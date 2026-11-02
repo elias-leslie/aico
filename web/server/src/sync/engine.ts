@@ -6,11 +6,15 @@
 //
 // Rules, in short (docs/plans/notes-and-capture.md "Sync"):
 // - Every synced row carries `<clock>` (a hybrid logical clock), `origin`,
-//   `prev` (the clock of the version the edit was based on), `deleted` and
-//   `seq` (a per-file change counter). A peer asks for "rows after my cursor".
-// - A remote row R meets the local row L: identical stamp -> skip; R built on L
-//   -> take R; L built on R -> skip; otherwise the newer (clock, then origin)
-//   wins the whole row, and a losing local edit is kept as a conflict revision.
+//   `prev` + `prev_origin` (the newest version by another host that the edit
+//   is built on, carried across a host's own edits), `deleted` and `seq` (a
+//   per-file change counter). A peer asks for "rows after my cursor".
+// - A remote row R meets the local row L: identical stamp -> skip; R descends
+//   from L -> take R; L descends from R -> skip; otherwise the newer (clock,
+//   then origin) wins the whole row, and a losing local edit is kept as a
+//   conflict revision. One host's versions of a row are one history (the
+//   later descends from the earlier); across hosts, R descends from L when
+//   R's base is a version of L's host at or after L.
 // - Applying a page is one transaction that also moves the cursor, so half a
 //   page changes nothing and a page applied twice changes nothing.
 
@@ -38,6 +42,8 @@ export interface SyncTable {
   unique?: string[]
   /** A column holding a blob hash (original file) the row needs. */
   blob?: string
+  /** Two live rows with the same unique value are one thing made twice: the loser is also tombstoned. */
+  dropDuplicate?: boolean
 }
 
 export interface ConflictRevision {
@@ -164,9 +170,9 @@ export function serveHello(handles: readonly SyncHandle[], host: string, now: nu
 
 /**
  * Answers `GET /sync/changes`. Notes which cursor the peer holds (what it
- * has applied from us), for tombstone cleanup. A cursor beyond our `seq` means
- * this file was replaced by an older copy: it takes a new `db_id`, and the
- * peer, seeing the new id, starts over from 0.
+ * has applied from us), for tombstone cleanup, and the furthest page handed to
+ * it. A cursor beyond either means this file was replaced by an older copy: it
+ * takes a new `db_id`, and the peer, seeing the new id, starts over from 0.
  */
 export function serveChanges(
   handle: SyncHandle,
@@ -175,20 +181,28 @@ export function serveChanges(
   const since = Math.max(0, Math.trunc(request.since) || 0)
   const limit = Math.min(Math.max(Math.trunc(request.limit) || DEFAULT_PAGE_LIMIT, 1), 2000)
   const seq = Number(handle.meta('seq') ?? 0)
-  if (since > seq) {
+  // A restored file has forgotten what it handed out: the peer's cursor is past
+  // our `seq`, or past the last page we recorded giving this peer (our own
+  // edits and pulls since the restore may have carried `seq` beyond it).
+  const handed = Number(handle.meta(`handed:${request.peer}`) ?? 0)
+  if (since > seq || (request.peer && since > handed)) {
     resetDbId(handle)
     return { db_id: handle.meta('db_id') ?? '', rows: [], next: 0, more: false }
   }
-  const key = `served:${request.peer}`
-  if (request.peer && handle.meta(key) !== String(since)) handle.setMeta(key, String(since))
-  return changesSince(handle, since, limit)
+  const page = changesSince(handle, since, limit)
+  if (request.peer) {
+    const key = `served:${request.peer}`
+    if (handle.meta(key) !== String(since)) handle.setMeta(key, String(since))
+    if (page.next > handed) handle.setMeta(`handed:${request.peer}`, String(page.next))
+  }
+  return page
 }
 
 /** A restored file must not look like the one peers already pulled from. */
 export function resetDbId(handle: SyncHandle): void {
   handle.transaction(() => {
     handle.setMeta('db_id', randomUUID())
-    handle.db.prepare("DELETE FROM meta WHERE key LIKE 'served:%'").run()
+    handle.db.prepare("DELETE FROM meta WHERE key LIKE 'served:%' OR key LIKE 'handed:%'").run()
   })
 }
 
@@ -223,6 +237,34 @@ export function readPeer(handle: SyncHandle, host: string): PeerState | null {
 
 function writePeer(handle: SyncHandle, host: string, state: PeerState): void {
   handle.setMeta(`peer:${host}`, JSON.stringify(state))
+}
+
+/**
+ * The base a new edit of `current` is built on: the newest version by another
+ * host in its history. An edit of another host's version builds on that
+ * version; an edit of our own carries the base forward, so a peer that has
+ * only seen the first of several edits still sees them as built on its copy.
+ * Call with the table's stamp (`{ at, origin }` from `handle.stamp()`).
+ */
+export function baseOf(
+  host: string,
+  current: { origin?: unknown; prev?: unknown; prev_origin?: unknown },
+  clock: unknown,
+): { prev: number | null; prev_origin: string | null } {
+  if (current.origin !== host) return { prev: Number(clock), prev_origin: String(current.origin) }
+  return current.prev_origin != null && current.prev != null
+    ? { prev: Number(current.prev), prev_origin: String(current.prev_origin) }
+    : { prev: null, prev_origin: null }
+}
+
+/** True when `later` is `earlier` or was built on it. */
+function descends(later: SyncRow, earlier: SyncRow, clock: string): boolean {
+  if (later.origin === earlier.origin) return Number(later[clock]) >= Number(earlier[clock])
+  return (
+    later.prev != null &&
+    later.prev_origin === earlier.origin &&
+    Number(later.prev) >= Number(earlier[clock])
+  )
 }
 
 const newer = (a: SyncRow, b: SyncRow, clock: string): boolean =>
@@ -300,11 +342,11 @@ function applyRow(
   const clock = clockOf(table)
   if (Number(remote[clock]) === Number(local[clock]) && remote.origin === local.origin)
     return 'skipped' // identical
-  if (remote.prev != null && Number(remote.prev) === Number(local[clock])) {
-    write(handle, table, remote, touched) // built on what we have
+  if (descends(remote, local, clock)) {
+    write(handle, table, remote, touched, local) // built on what we have
     return 'applied'
   }
-  if (local.prev != null && Number(local.prev) === Number(remote[clock])) return 'skipped' // we are past it
+  if (descends(local, remote, clock)) return 'skipped' // we are past it
   // Edited apart. The newer wins the whole row.
   if (!newer(remote, local, clock)) return 'skipped'
   let conflict = false
@@ -312,7 +354,7 @@ function applyRow(
   // also wrote (same origin both sides) is just a newer version of one history.
   if (local.origin === handle.hostName && remote.origin !== handle.hostName)
     conflict = keepLoser(handle, table, local, remote)
-  write(handle, table, remote, touched)
+  write(handle, table, remote, touched, local)
   return conflict ? 'conflict' : 'applied'
 }
 
@@ -341,6 +383,7 @@ function write(
   table: SyncTable,
   remote: SyncRow,
   touched: { table: string; row: SyncRow }[],
+  replaced?: SyncRow,
 ): void {
   const row = { ...remote }
   for (const column of table.unique ?? []) claimUnique(handle, table, row, column, touched)
@@ -355,6 +398,8 @@ function write(
        ON CONFLICT (${table.keys.join(', ')}) DO UPDATE SET ${updates.map((name) => `${name} = excluded.${name}`).join(', ')}`,
     )
     .run(...values)
+  // The row it replaced is touched too: an item that moved notes leaves the old one's search entry stale.
+  if (replaced) touched.push({ table: table.name, row: replaced })
   touched.push({ table: table.name, row })
 }
 
@@ -362,7 +407,10 @@ function write(
  * Two hosts can make different rows with the same unique value (the Groceries
  * list on both doors, the same upload retried against each). The row with the
  * lower key keeps the value (a live row beats a tombstone); the other gets
- * `value~key`, on whichever side holds it, so both hosts settle the same way.
+ * `value~key`. Whichever side holds the loser, the rename is a local edit with
+ * its own stamp, built on the version it changed, so it syncs back and both
+ * hosts end with the same row. A table with `dropDuplicate` also tombstones a
+ * live loser (a retried upload is one capture, read once).
  */
 function claimUnique(
   handle: SyncHandle,
@@ -379,31 +427,40 @@ function claimUnique(
     .map((found) => ({ ...(found as SyncRow) }))
     .find((found) => keyText(table, found) !== keyText(table, row))
   if (!other) return
+  const clock = clockOf(table)
   const incomingLoses =
     Number(row.deleted) !== Number(other.deleted)
       ? Number(row.deleted) === 1
       : keyText(table, row) > keyText(table, other)
+  const loser = incomingLoses ? row : other
+  const drop = table.dropDuplicate && Number(row.deleted) === 0 && Number(other.deleted) === 0
+  // The stamp must sort after the version it changes, which may be a peer's.
+  handle.observe(Number(loser[clock]))
+  const stamp = handle.stamp()
+  const renamed: Record<string, SyncValue> = {
+    [column]: `${value}~${keyText(table, loser)}`,
+    [clock]: stamp.at,
+    origin: stamp.origin,
+    ...baseOf(handle.hostName, loser, loser[clock]),
+    ...(drop ? { deleted: 1 } : {}),
+  }
   if (incomingLoses) {
-    row[column] = `${value}~${keyText(table, row)}`
+    Object.assign(row, renamed) // written by the caller
     return
   }
-  const stamp = handle.stamp()
-  const clock = clockOf(table)
+  const names = Object.keys(renamed)
   const where = table.keys.map((key) => `${key} = ?`).join(' AND ')
   handle.db
     .prepare(
-      `UPDATE ${table.name} SET ${column} = ?, ${clock} = ?, origin = ?, prev = ?, seq = ? WHERE ${where}`,
+      `UPDATE ${table.name} SET ${names.map((name) => `${name} = ?`).join(', ')}, seq = ? WHERE ${where}`,
     )
     .run(
-      `${value}~${keyText(table, other)}`,
-      stamp.at,
-      stamp.origin,
-      other[clock] as number,
+      ...names.map((name) => renamed[name] as SyncValue),
       stamp.seq,
       ...table.keys.map((key) => other[key] as SyncValue),
     )
-  const renamed = readRow(handle, table, other)
-  if (renamed) touched.push({ table: table.name, row: renamed })
+  const updated = readRow(handle, table, other)
+  if (updated) touched.push({ table: table.name, row: updated })
 }
 
 // -- Pulling from a peer ------------------------------------------------------
@@ -525,10 +582,8 @@ export function purgeTombstones(
   handle: SyncHandle,
   options: { retentionMs: number; peers: readonly string[] },
 ): number {
-  const floor = Math.min(
-    Number.POSITIVE_INFINITY,
-    ...options.peers.map((peer) => Number(handle.meta(`served:${peer}`) ?? 0)),
-  )
+  if (options.peers.length === 0) return 0 // no named peers: nobody to wait for is not "everyone has pulled"
+  const floor = Math.min(...options.peers.map((peer) => Number(handle.meta(`served:${peer}`) ?? 0)))
   const before = handle.now() - options.retentionMs
   let removed = 0
   handle.transaction(() => {
@@ -538,7 +593,7 @@ export function purgeTombstones(
         .prepare(
           `DELETE FROM ${table.name} WHERE deleted = 1 AND ${clockOf(table)} < ? AND seq <= ?`,
         )
-        .run(before, floor === Number.POSITIVE_INFINITY ? Number.MAX_SAFE_INTEGER : floor)
+        .run(before, floor)
       removed += Number(result.changes)
     }
   })

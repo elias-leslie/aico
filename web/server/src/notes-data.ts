@@ -9,6 +9,7 @@
 import { randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { DEFAULT_NOTE_REVISION_MINUTES } from './config'
+import { baseOf } from './sync/engine'
 
 export const NOTE_KINDS = ['note', 'list', 'prompt'] as const
 export type NoteKind = (typeof NOTE_KINDS)[number]
@@ -23,6 +24,7 @@ interface Sync {
   updated_at: number
   origin: string
   prev: number | null
+  prev_origin: string | null
   deleted: number
   seq: number
 }
@@ -214,7 +216,7 @@ export class NoteStore {
 
   // -- Row helpers --------------------------------------------------------------
 
-  /** Re-stamps one row with new field values; `prev` is the version it was based on. */
+  /** Re-stamps one row with new field values; `prev` is the base it is built on (`baseOf`). */
   private edit(
     table: 'notes' | 'note_items' | 'note_labels' | 'attachments',
     id: string,
@@ -222,17 +224,19 @@ export class NoteStore {
     fields: Record<string, Value>,
   ): void {
     const stamp = this.core.stamp()
+    const base = baseOf(stamp.origin, current, current.updated_at)
     const names = Object.keys(fields)
     this.db
       .prepare(
         `UPDATE ${table} SET ${names.map((name) => `${name} = ?`).join(', ')},
-           updated_at = ?, origin = ?, prev = ?, seq = ? WHERE id = ?`,
+           updated_at = ?, origin = ?, prev = ?, prev_origin = ?, seq = ? WHERE id = ?`,
       )
       .run(
         ...names.map((name) => fields[name] as Value),
         stamp.updated_at,
         stamp.origin,
-        current.updated_at,
+        base.prev,
+        base.prev_origin,
         stamp.seq,
         id,
       )
@@ -705,6 +709,16 @@ export class NoteStore {
       if (found && !found.deleted) return found
       if (found)
         this.edit('notes', found.id, found, { source: `${GROCERIES_SOURCE}:removed:${found.id}` })
+      // Sync can leave a live list under `aico:groceries~<id>` (the other door made
+      // one too and the owner deleted the winner): that list is the Groceries list.
+      const duplicate = this.db
+        .prepare('SELECT id FROM notes WHERE deleted = 0 AND source LIKE ? ORDER BY id LIMIT 1')
+        .get(`${GROCERIES_SOURCE}~%`) as Row | undefined
+      const adopted = duplicate ? this.getNote(String(duplicate.id)) : null
+      if (adopted) {
+        this.edit('notes', adopted.id, adopted, { source: GROCERIES_SOURCE })
+        return this.getNote(adopted.id) as NoteRow
+      }
       return this.createNow({ kind: 'list', title: 'Groceries', source: GROCERIES_SOURCE })
     })
   }

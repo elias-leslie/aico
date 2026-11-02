@@ -75,7 +75,10 @@ describe('NotesStore', () => {
     first.close()
     const raw = new DatabaseSync(path)
     raw.exec(
-      `DROP INDEX captures_route; ALTER TABLE captures DROP COLUMN owner;
+      `DROP TABLE notes_fts; DROP TABLE notes; DROP TABLE note_items; DROP TABLE note_labels;
+       DROP TABLE attachments; DROP TABLE note_revisions;
+       DROP INDEX captures_route; ALTER TABLE captures DROP COLUMN prev_origin;
+       ALTER TABLE captures DROP COLUMN owner;
        ALTER TABLE captures DROP COLUMN owner_ref; ALTER TABLE captures DROP COLUMN route_state;
        ALTER TABLE captures DROP COLUMN route_note;
        ALTER TABLE captures DROP COLUMN extract_json; ALTER TABLE captures DROP COLUMN extract_route;
@@ -92,6 +95,27 @@ describe('NotesStore', () => {
     store.close()
   })
 
+  it('migrates a schema 4 file by adding prev_origin, keeping every row', () => {
+    const path = join(dir, 'notes.db')
+    const first = open(path)
+    const { capture: kept } = first.insertCapture(capture('dddddddd'))
+    const note = first.notes.create({ title: 'Kept', items: [{ text: 'milk' }] })
+    first.close()
+    const raw = new DatabaseSync(path)
+    raw.exec(
+      `${['captures', 'notes', 'note_items', 'note_labels', 'attachments', 'note_revisions']
+        .map((table) => `ALTER TABLE ${table} DROP COLUMN prev_origin;`)
+        .join(' ')} UPDATE meta SET value = '4' WHERE key = 'schema_version'`,
+    )
+    raw.close()
+    const store = open(path)
+    expect(store.meta('schema_version')).toBe(String(SCHEMA_VERSION))
+    expect(store.getCapture(kept.id)).toMatchObject({ client_id: 'dddddddd', prev_origin: null })
+    expect(store.notes.getNote(note.id)?.title).toBe('Kept')
+    expect(store.notes.items(note.id).map((i) => i.text)).toEqual(['milk'])
+    store.close()
+  })
+
   it('returns the same row for a repeated client_id', () => {
     const store = open()
     const first = store.insertCapture(capture('aaaaaaaa'))
@@ -104,7 +128,7 @@ describe('NotesStore', () => {
     expect(store.meta('seq')).toBe('1')
   })
 
-  it('stamps every write with a new seq, clock value, origin and prev', () => {
+  it('stamps every write with a new seq, clock value and origin', () => {
     const store = open()
     const { capture: added } = store.insertCapture(capture('bbbbbbbb'))
     expect(added).toMatchObject({
@@ -118,12 +142,13 @@ describe('NotesStore', () => {
       created_at: wall,
     })
     const edited = store.updateCaption(added.id, 'hello')
-    expect(edited).toMatchObject({ caption: 'hello', seq: 2, prev: added.updated_at })
+    // An edit of its own host's version has no other host to build on.
+    expect(edited).toMatchObject({ caption: 'hello', seq: 2, prev: null, prev_origin: null })
     expect(edited?.updated_at).toBeGreaterThan(added.updated_at)
     const gone = store.tombstoneCapture(added.id)
     expect(gone).toBe(true)
     const row = store.getCapture(added.id, true)
-    expect(row).toMatchObject({ deleted: 1, seq: 3, prev: edited?.updated_at })
+    expect(row).toMatchObject({ deleted: 1, seq: 3, prev: null })
     expect(store.meta('seq')).toBe('3')
     expect(store.meta('hlc_last')).toBe(String(row?.updated_at))
   })

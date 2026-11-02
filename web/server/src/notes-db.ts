@@ -1,8 +1,8 @@
 // The durable notes and captures store (node:sqlite), beside web.db. Rows are
 // sync-shaped from the start: every write stamps `updated_at` (a hybrid
-// logical clock), `origin` (this host), `prev` (the `updated_at` of the version
-// the edit was based on), `seq` (a per-database change counter), and a delete
-// is a tombstone. Sync ships later; nothing here has to be migrated for it.
+// logical clock), `origin` (this host), `prev` and `prev_origin` (the newest
+// version by another host the edit is built on, see `baseOf`), `seq` (a
+// per-database change counter), and a delete is a tombstone.
 
 import { randomBytes, randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync } from 'node:fs'
@@ -11,10 +11,10 @@ import { DatabaseSync } from 'node:sqlite'
 import type { CaptureKind } from './capture-files'
 import { HybridClock } from './hlc'
 import { NoteStore } from './notes-data'
-import type { SyncHandle } from './sync/engine'
+import { baseOf, type SyncHandle } from './sync/engine'
 import { NOTES_SYNC_TABLES } from './sync/registry'
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 /** Which column names the note a synced row belongs to (to refresh its search entry). */
 const NOTE_ID_COLUMN: Record<string, string> = {
@@ -118,6 +118,15 @@ const MIGRATIONS: Record<number, string> = {
       );
       CREATE INDEX IF NOT EXISTS note_revisions_row ON note_revisions (table_name, row_id, field, saved_at);
       CREATE INDEX IF NOT EXISTS note_revisions_seq ON note_revisions (seq);`,
+  // `prev` now means the newest version by another host an edit is built on,
+  // so it needs that host's name. Rows made before it have none and read as
+  // "no known base" (nothing synced before this).
+  4: `ALTER TABLE captures ADD COLUMN prev_origin TEXT;
+      ALTER TABLE notes ADD COLUMN prev_origin TEXT;
+      ALTER TABLE note_items ADD COLUMN prev_origin TEXT;
+      ALTER TABLE note_labels ADD COLUMN prev_origin TEXT;
+      ALTER TABLE attachments ADD COLUMN prev_origin TEXT;
+      ALTER TABLE note_revisions ADD COLUMN prev_origin TEXT;`,
 }
 
 const SCHEMA = `
@@ -194,6 +203,7 @@ export interface CaptureRow {
   updated_at: number
   origin: string
   prev: number | null
+  prev_origin: string | null
   deleted: number
   seq: number
   /** The validated JSON the reader returned (a string), or null. */
@@ -510,17 +520,19 @@ export class NotesStore {
     const current = this.getCapture(id)
     if (!current) return null
     const stamp = this.stamp()
+    const base = baseOf(stamp.origin, current, current.updated_at)
     const names = Object.keys(fields)
     this.db
       .prepare(
         `UPDATE captures SET ${names.map((name) => `${name} = ?`).join(', ')},
-           updated_at = ?, origin = ?, prev = ?, seq = ? WHERE id = ?`,
+           updated_at = ?, origin = ?, prev = ?, prev_origin = ?, seq = ? WHERE id = ?`,
       )
       .run(
         ...names.map((name) => fields[name] as string | number | null),
         stamp.updated_at,
         stamp.origin,
-        current.updated_at,
+        base.prev,
+        base.prev_origin,
         stamp.seq,
         id,
       )

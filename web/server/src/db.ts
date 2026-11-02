@@ -5,7 +5,7 @@
 //
 // Schema 2 makes this state syncable between doors: tabs, links and project
 // settings carry the sync columns (`sync_at` is the hybrid-clock stamp, with
-// `origin`, `prev`, `deleted`, `seq`), a delete is a tombstone that reads
+// `origin`, `prev`, `prev_origin`, `deleted`, `seq`), a delete is a tombstone that reads
 // filter out, and `session_seen` carries `seq` (it merges by max). Nothing is
 // deleted physically except by tombstone cleanup (sync/engine.ts).
 
@@ -15,10 +15,10 @@ import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { hostNameFrom } from './config'
 import { HybridClock } from './hlc'
-import type { SyncHandle } from './sync/engine'
+import { baseOf, type SyncHandle } from './sync/engine'
 import { WEB_SYNC_TABLES } from './sync/registry'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 const SYNC_COLUMNS = (table: string) => `
   ALTER TABLE ${table} ADD COLUMN sync_at INTEGER NOT NULL DEFAULT 0;
@@ -35,7 +35,19 @@ const MIGRATIONS: Record<number, string> = {
       ${SYNC_COLUMNS('project_settings')}
       ALTER TABLE session_seen ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
       CREATE INDEX IF NOT EXISTS session_seen_seq ON session_seen (seq);`,
+  // `prev` now means the newest version by another host an edit is built on
+  // (`baseOf`), so it needs that host's name. Older rows have none: no known base.
+  2: `ALTER TABLE panes ADD COLUMN prev_origin TEXT;
+      ALTER TABLE session_links ADD COLUMN prev_origin TEXT;
+      ALTER TABLE project_settings ADD COLUMN prev_origin TEXT;`,
 }
+
+/**
+ * A link to a tab that is deleted (or never arrived) is no link: another door
+ * can link a session to a tab this one just deleted, and the rows meet in sync.
+ * Reads skip it; the row stays, and shows again if the tab comes back.
+ */
+const LIVE_PANE = 'pane_id IN (SELECT id FROM panes WHERE deleted = 0)'
 
 /** The columns the app has always read; the sync columns stay inside. */
 const PANE_COLUMNS = 'id, project_id, name, active_mode, created_at'
@@ -296,7 +308,7 @@ export class WebStore {
   }
 
   /**
-   * Re-stamps one row with new values; `prev` is the version it was based on.
+   * Re-stamps one row with new values; `prev` is the base it is built on (`baseOf`).
    * Fields equal to what is stored change nothing (no new stamp). True when
    * the row changed. Call inside `transaction`.
    */
@@ -313,16 +325,18 @@ export class WebStore {
     const names = Object.keys(fields).filter((name) => current[name] !== fields[name])
     if (names.length === 0) return false
     const stamp = this.stamp()
+    const base = baseOf(stamp.origin, current, current.sync_at)
     this.db
       .prepare(
         `UPDATE ${table} SET ${names.map((name) => `${name} = ?`).join(', ')},
-           sync_at = ?, origin = ?, prev = ?, seq = ? WHERE ${keyColumn} = ?`,
+           sync_at = ?, origin = ?, prev = ?, prev_origin = ?, seq = ? WHERE ${keyColumn} = ?`,
       )
       .run(
         ...names.map((name) => fields[name] as Value),
         stamp.sync_at,
         stamp.origin,
-        current.sync_at as number,
+        base.prev,
+        base.prev_origin,
         stamp.seq,
         key,
       )
@@ -436,21 +450,25 @@ export class WebStore {
 
   getLink(sessionId: string): Link | null {
     const row = this.db
-      .prepare(`SELECT ${LINK_COLUMNS} FROM session_links WHERE session_id = ? AND deleted = 0`)
+      .prepare(
+        `SELECT ${LINK_COLUMNS} FROM session_links WHERE session_id = ? AND deleted = 0 AND ${LIVE_PANE}`,
+      )
       .get(sessionId)
     return (row as unknown as Link | undefined) ?? null
   }
 
   listLinks(): Link[] {
     return this.db
-      .prepare(`SELECT ${LINK_COLUMNS} FROM session_links WHERE deleted = 0 ORDER BY pane_id, mode`)
+      .prepare(
+        `SELECT ${LINK_COLUMNS} FROM session_links WHERE deleted = 0 AND ${LIVE_PANE} ORDER BY pane_id, mode`,
+      )
       .all() as unknown as Link[]
   }
 
   linksForPane(paneId: string): Link[] {
     return this.db
       .prepare(
-        `SELECT ${LINK_COLUMNS} FROM session_links WHERE pane_id = ? AND deleted = 0 ORDER BY mode`,
+        `SELECT ${LINK_COLUMNS} FROM session_links WHERE pane_id = ? AND deleted = 0 AND ${LIVE_PANE} ORDER BY mode`,
       )
       .all(paneId) as unknown as Link[]
   }
