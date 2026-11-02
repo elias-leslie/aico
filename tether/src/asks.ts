@@ -14,6 +14,10 @@ import type { EventBus } from './events'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 
 export const MAX_ASK_OPTIONS = 5
+/** The most files one ask can want or be answered with. */
+export const MAX_ASK_FILES = 20
+/** Ids named in the wake line; the rest are in `tether ask get`. */
+const FILES_IN_NOTE = 5
 /** The most asks listed at once (newest kept). */
 export const MAX_LISTED_ASKS = 200
 
@@ -27,6 +31,24 @@ const MULTI_LINE_BAD = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\p{Cf}\p{Cs}\u20
 
 export type AskState = 'open' | 'answered' | 'done' | 'withdrawn'
 
+/** What an ask wants back: `min` to `max` files, `hint` saying what. */
+export interface WantsFiles {
+  min: number
+  max: number
+  hint: string | null
+}
+
+/** A file the owner answered with: a capture in Aico (`tether capture get ID`).
+ * `path` and `host`: where its bytes are, null when not known. */
+export interface AnswerFile {
+  id: string
+  name: string
+  mime: string
+  size: number
+  path: string | null
+  host: string | null
+}
+
 export interface Ask {
   id: string
   session: string | null
@@ -39,6 +61,10 @@ export interface Ask {
   command: string | null
   /** A `tether share` id to look at. */
   share: string | null
+  /** The files the ask wants, or null. */
+  wantsFiles: WantsFiles | null
+  /** The files the owner answered with (empty until a files answer). */
+  files: AnswerFile[]
   blocking: boolean
   state: AskState
   answer: string | null
@@ -68,6 +94,7 @@ export interface AskRequest {
   body: string | null
   command: string | null
   share: string | null
+  wantsFiles: WantsFiles | null
   blocking: boolean
 }
 
@@ -82,6 +109,10 @@ interface AskRow {
   body: string | null
   command: string | null
   share_id: string | null
+  files_min?: number | null
+  files_max?: number | null
+  files_hint?: string | null
+  files?: string | null
   blocking: number
   state: AskState
   answer: string | null
@@ -104,6 +135,17 @@ function fromRow(row: AskRow): Ask {
   } catch {
     options = []
   }
+  let files: AnswerFile[] = []
+  try {
+    const parsed = JSON.parse(row.files ?? '[]') as unknown
+    if (Array.isArray(parsed)) files = parsed.filter(isAnswerFile)
+  } catch {
+    files = []
+  }
+  const wantsFiles =
+    row.files_min != null && row.files_max != null
+      ? { min: row.files_min, max: row.files_max, hint: row.files_hint ?? null }
+      : null
   return {
     id: row.id,
     session: row.session_id,
@@ -114,6 +156,8 @@ function fromRow(row: AskRow): Ask {
     body: row.body,
     command: row.command,
     share: row.share_id,
+    wantsFiles,
+    files,
     blocking: row.blocking === 1,
     state: row.state,
     answer: row.answer,
@@ -129,6 +173,20 @@ function fromRow(row: AskRow): Ask {
 }
 
 const chars = (text: string) => Array.from(text).length
+
+function isAnswerFile(value: unknown): value is AnswerFile {
+  if (!value || typeof value !== 'object') return false
+  const file = value as Record<string, unknown>
+  return (
+    typeof file.id === 'string' &&
+    ID.test(file.id) &&
+    typeof file.name === 'string' &&
+    typeof file.mime === 'string' &&
+    typeof file.size === 'number' &&
+    (file.path === null || typeof file.path === 'string') &&
+    (file.host === null || typeof file.host === 'string')
+  )
+}
 
 /** Same question, whatever its spacing or case. */
 export function questionHash(question: string): string {
@@ -175,6 +233,7 @@ export function parseAsk(body: Record<string, unknown>): AskRequest {
     'body',
     'command',
     'share',
+    'files',
     'blocking',
   ])
   const session = body.session ?? null
@@ -221,8 +280,60 @@ export function parseAsk(body: Record<string, unknown>): AskRequest {
     body: multiLine(body.body, 'body', 4000),
     command: multiLine(body.command, 'command', 2000),
     share: share as string | null,
+    wantsFiles: parseWantsFiles(body.files),
     blocking: body.blocking === true,
   }
+}
+
+/** `files: {min, max, hint}`: 0 to 20 files, at least one wanted at most. */
+function parseWantsFiles(value: unknown): WantsFiles | null {
+  if (value === undefined || value === null) return null
+  const bad = (detail: string) => new HttpError(400, 'invalid_body', { field: 'files', detail })
+  if (typeof value !== 'object' || Array.isArray(value)) throw bad('{min, max, hint}')
+  const wanted = value as Record<string, unknown>
+  const unknown = Object.keys(wanted).filter((key) => !['min', 'max', 'hint'].includes(key))
+  if (unknown.length) throw bad(`unknown: ${unknown.join(', ')}`)
+  const { min, max } = wanted
+  if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max))
+    throw bad('min and max are whole numbers')
+  if ((min as number) < 0 || (max as number) < 1 || (max as number) > MAX_ASK_FILES)
+    throw bad(`min from 0, max from 1 to ${MAX_ASK_FILES}`)
+  if ((min as number) > (max as number)) throw bad('min is over max')
+  return {
+    min: min as number,
+    max: max as number,
+    hint: oneLine(wanted.hint, 'files.hint', 100, false),
+  }
+}
+
+/** The files the owner answered with: at most `max`, each a well-formed
+ * `AnswerFile`. Shapes only; the content is aico-web's business. */
+function parseAnswerFiles(value: unknown, max: number): AnswerFile[] {
+  const bad = (detail: string) => new HttpError(400, 'invalid_body', { field: 'files', detail })
+  if (!Array.isArray(value)) throw bad('a list of files')
+  if (value.length > max) throw bad(`at most ${max}`)
+  const seen = new Set<string>()
+  return value.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item))
+      throw bad('{id, name, mime, size, path, host}')
+    const file = item as Record<string, unknown>
+    const unknown = Object.keys(file).filter(
+      (key) => !['id', 'name', 'mime', 'size', 'path', 'host'].includes(key),
+    )
+    if (unknown.length) throw bad(`unknown: ${unknown.join(', ')}`)
+    if (typeof file.id !== 'string' || !ID.test(file.id)) throw bad('id is 12 hex characters')
+    if (seen.has(file.id)) throw bad('a file repeats')
+    seen.add(file.id)
+    if (!Number.isSafeInteger(file.size) || (file.size as number) < 0) throw bad('size')
+    return {
+      id: file.id,
+      name: oneLine(file.name, 'files.name', 255, true) as string,
+      mime: oneLine(file.mime, 'files.mime', 127, true) as string,
+      size: file.size as number,
+      path: oneLine(file.path, 'files.path', 4096, false),
+      host: oneLine(file.host, 'files.host', 120, false),
+    }
+  })
 }
 
 /** The line that carries an answer: the question and the answer in one
@@ -238,12 +349,29 @@ export function answerNote(ask: Ask, max: number, handedFrom: string | null = nu
     .filter(Boolean)
     .join(', ')
   const from = handedFrom ? ` (asked by ended session ${handedFrom})` : ''
-  const head = `Owner answered ask ${ask.id}${from} "${ask.question}": ${reply}`
+  const head = `Owner answered ask ${ask.id}${from} "${ask.question}":${reply ? ` ${reply}` : ''}`
   const room = max - chars(tail)
-  if (chars(head) <= room) return `${head}${tail}`
-  return `${Array.from(head)
+  // The ids are what the agent needs, so a long answer is clipped before them.
+  const files = filesPart(ask.files)
+  const join = reply ? ', ' : ' '
+  const lead = files ? room - chars(files) - join.length : room
+  if (files && lead >= 20) return `${clipText(head, lead)}${join}${files}${tail}`
+  return `${clipText(files ? `${head}${join}${files}` : head, room)}${tail}`
+}
+
+function clipText(text: string, room: number): string {
+  if (chars(text) <= room) return text
+  return `${Array.from(text)
     .slice(0, Math.max(0, room - 1))
-    .join('')}…${tail}`
+    .join('')}…`
+}
+
+/** `files: 2 (ids a, b; read: tether capture get ID)`, or null without files. */
+function filesPart(files: readonly AnswerFile[]): string | null {
+  if (!files.length) return null
+  const ids = files.slice(0, FILES_IN_NOTE).map((file) => file.id)
+  const more = files.length > ids.length ? ` and ${files.length - ids.length} more` : ''
+  return `files: ${files.length} (ids ${ids.join(', ')}${more}; read: tether capture get ID)`
 }
 
 /** The asks table (schema v17). One daemon writes it. */
@@ -294,37 +422,51 @@ export class AskStore {
       request.share,
       request.blocking ? 1 : 0,
     ]
+    const wants = [
+      request.wantsFiles?.min ?? null,
+      request.wantsFiles?.max ?? null,
+      request.wantsFiles?.hint ?? null,
+    ]
     if (existing) {
       this.db
         .prepare(
           `UPDATE asks SET requester = ?, question = ?, options = ?, recommended = ?, body = ?,
-             command = ?, share_id = ?, blocking = ?, updated_at = ? WHERE id = ?`,
+             command = ?, share_id = ?, blocking = ?, files_min = ?, files_max = ?, files_hint = ?,
+             updated_at = ? WHERE id = ?`,
         )
-        .run(...values, now, existing.id)
+        .run(...values, ...wants, now, existing.id)
       return { ask: this.get(existing.id) as Ask, created: false }
     }
     const id = this.random()
     this.db
       .prepare(
         `INSERT INTO asks (id, session_id, requester, question, options, recommended, body,
-           command, share_id, blocking, question_hash, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           command, share_id, blocking, files_min, files_max, files_hint, question_hash,
+           created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, request.session, ...values, hash, now, now)
+      .run(id, request.session, ...values, ...wants, hash, now, now)
     return { ask: this.get(id) as Ask, created: true }
   }
 
   answer(
     id: string,
-    answer: { answer: string | null; note: string | null },
+    answer: { answer: string | null; note: string | null; files?: AnswerFile[] },
     now: number,
   ): Ask | undefined {
     this.db
       .prepare(
-        `UPDATE asks SET state = 'answered', answer = ?, note = ?, answered_at = ?, updated_at = ?,
-           wake_id = NULL, delivery = NULL WHERE id = ?`,
+        `UPDATE asks SET state = 'answered', answer = ?, note = ?, files = ?, answered_at = ?,
+           updated_at = ?, wake_id = NULL, delivery = NULL WHERE id = ?`,
       )
-      .run(answer.answer, answer.note, now, now, id)
+      .run(
+        answer.answer,
+        answer.note,
+        answer.files?.length ? JSON.stringify(answer.files) : null,
+        now,
+        now,
+        id,
+      )
     return this.get(id)
   }
 
@@ -752,7 +894,7 @@ export function registerAskRoutes(
     })
     .add('POST', '/v1/asks/:id/answer', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['option', 'text', 'note'])
+      only(body, ['option', 'text', 'note', 'files'])
       const ask = requireAsk(params.id)
       if (ask.state !== 'open' && ask.state !== 'answered')
         throw new HttpError(409, 'ask_closed', { state: ask.state })
@@ -774,10 +916,16 @@ export function registerAskRoutes(
         answer = text
       }
       const note = multiLine(body.note, 'note', 1000)
-      if (answer === null && note === null)
-        throw new HttpError(400, 'invalid_body', { detail: 'give an answer or a note' })
+      let files: AnswerFile[] = []
+      if (body.files !== undefined) {
+        if (!ask.wantsFiles && !(Array.isArray(body.files) && body.files.length === 0))
+          throw new HttpError(400, 'files_not_requested')
+        files = parseAnswerFiles(body.files, ask.wantsFiles?.max ?? 0)
+      }
+      if (answer === null && note === null && files.length === 0)
+        throw new HttpError(400, 'invalid_body', { detail: 'give an answer, a note or files' })
       cancelWake(ask.id)
-      let answered = asks.answer(ask.id, { answer, note }, now()) as Ask
+      let answered = asks.answer(ask.id, { answer, note, files }, now()) as Ask
       // The asker, or its launcher once the asker has ended (worked out now).
       const to = answerTarget(answered, delivery)
       const handedFrom =

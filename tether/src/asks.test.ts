@@ -322,6 +322,148 @@ describe('aicoOrigin', () => {
   })
 })
 
+const FILE_A = {
+  id: 'aaaaaaaaaaaa',
+  name: 'odometer.jpg',
+  mime: 'image/jpeg',
+  size: 2048,
+  path: '/data/blobs/aa/hash-a',
+  host: 'davion-sidarli',
+}
+const FILE_B = { ...FILE_A, id: 'bbbbbbbbbbbb', name: 'invoice.pdf', mime: 'application/pdf' }
+
+describe('asks that want files', () => {
+  const wants = (files: unknown, extra: Record<string, unknown> = {}) =>
+    ask({ session: '0123abcd', question: 'Photos?', files, ...extra })
+
+  it('records the range and hint, and shows them on the ask', async () => {
+    const created = await wants({ min: 1, max: 3, hint: 'odometer, engine off' })
+    expect(created.status).toBe(201)
+    expect(created.body).toMatchObject({
+      wantsFiles: { min: 1, max: 3, hint: 'odometer, engine off' },
+      files: [],
+    })
+    const plain = await ask({ session: '0123abcd', question: 'Plain?' })
+    expect(plain.body).toMatchObject({ wantsFiles: null, files: [] })
+    expect((await call('GET', `/v1/asks/${created.body.id}`)).body.wantsFiles).toEqual({
+      min: 1,
+      max: 3,
+      hint: 'odometer, engine off',
+    })
+  })
+
+  it('refuses bad ranges, hints and unknown keys', async () => {
+    for (const files of [
+      { min: 0, max: 0, hint: null },
+      { min: 3, max: 2, hint: null },
+      { min: -1, max: 2, hint: null },
+      { min: 0, max: 21, hint: null },
+      { min: 1.5, max: 2, hint: null },
+      { min: 1, max: 'x', hint: null },
+      { min: 1, max: 2, hint: 'two\nlines' },
+      { min: 1, max: 2, hint: 'x'.repeat(101) },
+      { min: 1, max: 2, extra: true },
+      [1, 2],
+      3,
+    ])
+      expect((await wants(files)).status, JSON.stringify(files)).toBe(400)
+    expect((await wants({ min: 0, max: 20 })).body).toMatchObject({
+      wantsFiles: { min: 0, max: 20, hint: null },
+    })
+  })
+
+  it('updates the wanted files when the same open question is asked again', async () => {
+    const first = await wants({ min: 1, max: 1, hint: 'front' })
+    clock += 1_000
+    const again = await wants({ min: 1, max: 4, hint: 'front and back' })
+    expect(again.status).toBe(200)
+    expect(again.body).toMatchObject({
+      id: first.body.id,
+      wantsFiles: { min: 1, max: 4, hint: 'front and back' },
+    })
+    const dropped = await ask({ session: '0123abcd', question: 'photos?' })
+    expect(dropped.body).toMatchObject({ id: first.body.id, wantsFiles: null })
+  })
+
+  it('takes a files-only answer, keeps the files and puts the ids in the wake line', async () => {
+    const created = await wants({ min: 1, max: 3, hint: null })
+    const id = created.body.id as string
+    const answered = await call('POST', `/v1/asks/${id}/answer`, { files: [FILE_A, FILE_B] })
+    expect(answered.status).toBe(200)
+    expect(answered.body).toMatchObject({
+      state: 'answered',
+      answer: null,
+      note: null,
+      delivery: 'wake',
+      files: [FILE_A, FILE_B],
+    })
+    expect(woken[0]?.note).toBe(
+      `Owner answered ask ${id} "Photos?": files: 2 (ids aaaaaaaaaaaa, bbbbbbbbbbbb; read: tether capture get ID) (full: tether ask get ${id}; when handled: tether ask done ${id})`,
+    )
+    expect((await call('GET', `/v1/asks/${id}`)).body.files).toEqual([FILE_A, FILE_B])
+    // Answering again replaces the files.
+    const second = await call('POST', `/v1/asks/${id}/answer`, { text: 'No files' })
+    expect(second.body).toMatchObject({ answer: 'No files', files: [] })
+  })
+
+  it('takes files with a choice and a note, and a null path or host', async () => {
+    const created = await wants({ min: 0, max: 2 }, { options: ['Here', 'Skip'] })
+    const answered = await call('POST', `/v1/asks/${created.body.id}/answer`, {
+      option: 0,
+      note: 'see the second',
+      files: [{ ...FILE_A, path: null, host: null }],
+    })
+    expect(answered.body).toMatchObject({
+      answer: 'Here',
+      note: 'see the second',
+      files: [{ id: 'aaaaaaaaaaaa', path: null, host: null }],
+    })
+    expect(woken[0]?.note).toContain('"Here", note: "see the second", files: 1 (ids aaaaaaaaaaaa;')
+  })
+
+  it('refuses files on an ask that wanted none', async () => {
+    const created = await ask({ session: '0123abcd', question: 'Plain?' })
+    const refused = await call('POST', `/v1/asks/${created.body.id}/answer`, {
+      files: [FILE_A],
+    })
+    expect(refused.status).toBe(400)
+    expect(refused.body.error).toBe('files_not_requested')
+    // An empty list is nothing to refuse, but it is not an answer either.
+    const empty = await call('POST', `/v1/asks/${created.body.id}/answer`, { files: [] })
+    expect(empty.status).toBe(400)
+    expect(empty.body.error).not.toBe('files_not_requested')
+  })
+
+  it('refuses more than max, repeats, odd shapes and unknown keys', async () => {
+    const created = await wants({ min: 1, max: 1 })
+    const id = created.body.id
+    for (const files of [
+      [FILE_A, FILE_B],
+      [{ ...FILE_A, id: 'nope' }],
+      [{ ...FILE_A, size: -1 }],
+      [{ ...FILE_A, name: 'a\nb' }],
+      [{ ...FILE_A, extra: 1 }],
+      'file',
+    ])
+      expect(
+        (await call('POST', `/v1/asks/${id}/answer`, { files })).status,
+        JSON.stringify(files),
+      ).toBe(400)
+    const wide = await wants({ min: 0, max: 2 }, { question: 'Two?' })
+    expect(
+      (await call('POST', `/v1/asks/${wide.body.id}/answer`, { files: [FILE_A, FILE_A] })).status,
+    ).toBe(400)
+  })
+
+  it('does not enforce the minimum: the owner can answer without files', async () => {
+    const created = await wants({ min: 2, max: 3 })
+    const answered = await call('POST', `/v1/asks/${created.body.id}/answer`, {
+      files: [FILE_A],
+    })
+    expect(answered.status).toBe(200)
+  })
+})
+
 describe('answerNote', () => {
   const base: Ask = {
     id: 'abcdefabcdef',
@@ -333,6 +475,8 @@ describe('answerNote', () => {
     body: null,
     command: null,
     share: null,
+    wantsFiles: null,
+    files: [],
     blocking: false,
     state: 'answered',
     answer: 'Yes',
@@ -358,6 +502,24 @@ describe('answerNote', () => {
     expect(answerNote(base, 500)).toBe(
       'Owner answered ask abcdefabcdef "Q?": "Yes" (full: tether ask get abcdefabcdef; when handled: tether ask done abcdefabcdef)',
     )
+  })
+
+  it('names the files, clips a long answer before them and keeps the ids', () => {
+    const files = [FILE_A, FILE_B]
+    const note = answerNote({ ...base, answer: null, note: 'n'.repeat(1000), files }, 300)
+    expect(Array.from(note).length).toBeLessThanOrEqual(300)
+    expect(note).toContain(
+      '…, files: 2 (ids aaaaaaaaaaaa, bbbbbbbbbbbb; read: tether capture get ID)',
+    )
+    expect(note.endsWith('when handled: tether ask done abcdefabcdef)')).toBe(true)
+    const many = Array.from({ length: 8 }, (_, i) => ({ ...FILE_A, id: `${i}`.repeat(12) }))
+    expect(answerNote({ ...base, files: many }, 500)).toContain(
+      'files: 8 (ids 000000000000, 111111111111, 222222222222, 333333333333, 444444444444 and 3 more;',
+    )
+    // Too little room for the ids and a lead: the whole line is clipped.
+    const tight = answerNote({ ...base, files }, 190)
+    expect(Array.from(tight).length).toBeLessThanOrEqual(190)
+    expect(tight.endsWith('when handled: tether ask done abcdefabcdef)')).toBe(true)
   })
 
   it('hashes the same question the same', () => {

@@ -9,10 +9,14 @@ import type { TetherPaths } from './config'
 export const ASK_USAGE = `Usage:
   tether ask create "<question>" [--option TEXT]... [--recommend N] [--blocking]
                     [--body TEXT | --body-file PATH] [--command CMD] [--share ID]
-                    [--session ID | --from LABEL]
+                    [--files N|MIN-MAX [--files-hint TEXT]] [--session ID | --from LABEL]
       One line that stands alone. --option up to 5 choices, --recommend N marks
       choice N (from 1). --blocking: you stopped and wait on the answer (the
       owner gets a phone push). Asking the same open question again updates it.
+      --files N (exactly N) or MIN-MAX (0 to 20): the owner takes or chooses
+      photos and files in the card. --files-hint: one line, up to 100
+      characters, on what to send. The answer lists each file (id, path);
+      read one with tether capture get ID. Aliases: --photos, --photo-hint.
   tether ask get <id>          the ask with the owner's answer
   tether ask list [--mine] [--all]
                                open and answered asks (--all: closed ones too);
@@ -49,6 +53,10 @@ const VALUE_FLAGS = [
   'body-file',
   'command',
   'share',
+  'files',
+  'photos',
+  'files-hint',
+  'photo-hint',
   'session',
   'from',
 ] as const
@@ -90,6 +98,27 @@ function parseFlags(args: string[], switches: readonly string[]): ParsedFlags | 
 
 const last = (flags: ParsedFlags, name: ValueFlag) => flags.values[name]?.at(-1)
 
+const MAX_FILES = 20
+const MAX_HINT = 100
+
+/** `--files N` or `--files MIN-MAX` (and the `--photos` alias), as the API's
+ * `files` object, or what is wrong. */
+function filesWanted(
+  flags: ParsedFlags,
+): { min: number; max: number; hint?: string } | string | null {
+  const range = last(flags, 'files') ?? last(flags, 'photos')
+  const hint = last(flags, 'files-hint') ?? last(flags, 'photo-hint')
+  if (range === undefined) return hint === undefined ? null : '--files-hint needs --files'
+  const match = /^(\d{1,3})(?:-(\d{1,3}))?$/.exec(range.trim())
+  const lo = match ? Number(match[1]) : Number.NaN
+  const hi = match ? Number(match[2] ?? match[1]) : Number.NaN
+  if (!match || hi < 1 || hi > MAX_FILES || lo > hi)
+    return `--files takes N or MIN-MAX, up to ${MAX_FILES} (for example 1, 1-3, 0-5)`
+  if (hint !== undefined && (hint.trim() === '' || Array.from(hint.trim()).length > MAX_HINT))
+    return `--files-hint is one line of at most ${MAX_HINT} characters`
+  return { min: lo, max: hi, ...(hint === undefined ? {} : { hint: hint.trim() }) }
+}
+
 /** The `POST /v1/asks` body for `tether ask create`, or what is wrong. */
 export function askCreateBody(
   args: string[],
@@ -121,6 +150,8 @@ export function askCreateBody(
   }
   const command = last(flags, 'command')
   const share = last(flags, 'share')
+  const files = filesWanted(flags)
+  if (typeof files === 'string') return files
   return {
     ...askerOf({ session: last(flags, 'session'), from: last(flags, 'from') }, env, cwd),
     question: flags.positional[0],
@@ -129,6 +160,7 @@ export function askCreateBody(
     ...(body === undefined ? {} : { body }),
     ...(command === undefined ? {} : { command }),
     ...(share === undefined ? {} : { share }),
+    ...(files === null ? {} : { files }),
     ...(flags.switches.has('blocking') ? { blocking: true } : {}),
   }
 }
@@ -163,11 +195,44 @@ interface AskJson {
   body: string | null
   command: string | null
   share: string | null
+  /** Absent from a Tether older than schema 30. */
+  wantsFiles?: { min: number; max: number; hint: string | null } | null
+  files?: AnswerFileJson[]
   blocking: boolean
   state: string
   answer: string | null
   note: string | null
   delivery: string | null
+}
+
+interface AnswerFileJson {
+  id: string
+  name: string
+  mime: string
+  size: number
+  path: string | null
+  host: string | null
+}
+
+const kb = (bytes: number) =>
+  bytes < 1024
+    ? `${bytes} B`
+    : bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(1)} KB`
+      : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+
+/** `wants files: 1-5 (hint)`. */
+function wantsLine(wants: NonNullable<AskJson['wantsFiles']>): string {
+  const range = wants.min === wants.max ? `${wants.max}` : `${wants.min}-${wants.max}`
+  return `wants files: ${range}${wants.hint ? ` (${wants.hint})` : ''}`
+}
+
+/** One line per file the owner answered with. */
+function fileLines(files: readonly AnswerFileJson[]): string[] {
+  return files.map(
+    (file) =>
+      `  file ${file.id}  ${file.name}  ${file.mime}  ${kb(file.size)}  ${file.path ?? '(no path)'}${file.host ? `  host ${file.host}` : ''}`,
+  )
 }
 
 const STATE_WORDS: Record<string, string> = {
@@ -188,16 +253,28 @@ export function formatAsk(ask: AskJson): string {
   if (ask.body) for (const line of ask.body.split('\n')) lines.push(`  | ${line}`)
   if (ask.command) lines.push(`  command: ${ask.command}`)
   if (ask.share) lines.push(`  share: ${ask.share}`)
+  if (ask.wantsFiles) lines.push(`  ${wantsLine(ask.wantsFiles)}`)
   if (ask.answer !== null) lines.push(`  answer: ${ask.answer}`)
   if (ask.note !== null) lines.push(`  note: ${ask.note}`)
+  if (ask.files?.length) lines.push(...fileLines(ask.files))
   if (ask.state === 'answered') lines.push(`  when handled: tether ask done ${ask.id}`)
   return lines.join('\n')
 }
 
 function listLine(ask: AskJson): string {
-  const reply = ask.state === 'answered' ? `  → ${ask.answer ?? `note: ${ask.note}`}` : ''
+  const count = ask.files?.length ?? 0
+  const said = [
+    ask.answer ?? (ask.note !== null ? `note: ${ask.note}` : null),
+    count ? `${count} ${count === 1 ? 'file' : 'files'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const reply = ask.state === 'answered' && said ? `  → ${said}` : ''
   const mark = ask.blocking && ask.state === 'open' ? '!' : ' '
-  return `${mark} ${ask.id}  ${ask.state.padEnd(9)} ${ask.question}${reply}`
+  const lines = [`${mark} ${ask.id}  ${ask.state.padEnd(9)} ${ask.question}${reply}`]
+  if (ask.wantsFiles) lines.push(`    ${wantsLine(ask.wantsFiles)}`)
+  if (ask.files?.length) lines.push(...fileLines(ask.files).map((line) => `  ${line}`))
+  return lines.join('\n')
 }
 
 export async function runAsk(
@@ -270,7 +347,7 @@ export async function runAsk(
   if (sub === 'create') {
     if (response.status === 201)
       io.out(
-        `Asked: ${ask.id}. The owner sees it in Aico under Needs you. In your reply, restate the one-line question with your recommendation and say it is asked in Aico. The answer comes to this session as a message when you are idle; or read it with tether ask get ${ask.id}.`,
+        `Asked: ${ask.id}. The owner sees it in Aico under Needs you. In your reply, restate the one-line question with your recommendation and say it is asked in Aico. The answer comes to this session as a message when you are idle; or read it with tether ask get ${ask.id}.${ask.wantsFiles ? ' The files come in the answer (ids and paths; tether capture get ID).' : ''}`,
       )
     else if (ask.state === 'answered')
       io.out(`Already answered (ask ${ask.id}):\n${formatAsk(ask)}`)

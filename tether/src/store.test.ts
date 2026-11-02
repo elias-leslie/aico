@@ -165,6 +165,34 @@ describe('Store schema', () => {
     expect(lanes.map((c) => c.name)).toContain('reached_after')
   })
 
+  it('v30 adds the ask files columns, keeping open asks', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-ask-files-migration-'))
+    const path = join(dir, 'tether.db')
+    const old = open(path)
+    for (const column of ['files_min', 'files_max', 'files_hint', 'files'])
+      old.db.exec(`ALTER TABLE asks DROP COLUMN ${column}`)
+    old.db
+      .prepare(
+        `INSERT INTO asks (id, requester, question_hash, question, options, blocking, state,
+           created_at, updated_at)
+         VALUES ('abcdefabcdef', 'cron', 'h', 'Still here?', '["Yes"]', 1, 'open', 1, 1)`,
+      )
+      .run()
+    old.db.exec('DELETE FROM schema_version WHERE version >= 30')
+    old.close()
+    const migrated = open(path)
+    expect(migrated.schemaVersion()).toBe(SCHEMA_VERSION)
+    const columns = migrated.db.prepare('PRAGMA table_info(asks)').all() as { name: string }[]
+    expect(columns.map((c) => c.name)).toEqual(
+      expect.arrayContaining(['files_min', 'files_max', 'files_hint', 'files']),
+    )
+    expect(
+      migrated.db
+        .prepare('SELECT question, state, files_min, files FROM asks WHERE id = ?')
+        .get('abcdefabcdef'),
+    ).toEqual({ question: 'Still here?', state: 'open', files_min: null, files: null })
+  })
+
   it('v9 retires the OpenCode rows, moves their default and names Pi `pi`', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-opencode-retire-'))
     const path = join(dir, 'tether.db')

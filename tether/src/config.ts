@@ -32,8 +32,10 @@ import { join } from 'node:path'
  * 24: delivery classes: `ride` and `from` on `POST /v1/sessions/:id/deliveries`,
  *     `GET /v1/sessions/:id/due?ride=1`.
  * 25: `reply` on `POST /v1/sessions/:id/deliveries`; `GET /v1/sessions/:id/due?ride=peek`
- *     and `DELETE /v1/sessions/:id/due?token=` (take ride-along lines once shown). */
-export const API_VERSION = 25
+ *     and `DELETE /v1/sessions/:id/due?token=` (take ride-along lines once shown).
+ * 26: asks that want files: `files` on `POST /v1/asks`, `files` on an answer,
+ *     `wantsFiles` and `files` on the ask (schema 30). */
+export const API_VERSION = 26
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

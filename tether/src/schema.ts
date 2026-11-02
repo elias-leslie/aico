@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 29
+export const SCHEMA_VERSION = 30
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -741,5 +741,34 @@ export const ASK_HANDOFF_COLUMNS: readonly { table: string; column: string; sql:
     table: 'asks',
     column: 'coordinator_id',
     sql: "ALTER TABLE asks ADD COLUMN coordinator_id TEXT CHECK(coordinator_id IS NULL OR (length(coordinator_id) = 8 AND coordinator_id NOT GLOB '*[^0-9a-f]*'))",
+  },
+]
+
+/**
+ * v30: asks that want files (src/asks.ts). `files_min` and `files_max` are the
+ * count the asker wants (null: no files asked for), `files_hint` one line on
+ * what to send; `files` is the owner's answer, a JSON list of
+ * `{id, name, mime, size, path, host}` (null until a files answer).
+ */
+export const ASK_FILES_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
+  {
+    table: 'asks',
+    column: 'files_min',
+    sql: 'ALTER TABLE asks ADD COLUMN files_min INTEGER CHECK(files_min IS NULL OR files_min BETWEEN 0 AND 20)',
+  },
+  {
+    table: 'asks',
+    column: 'files_max',
+    sql: 'ALTER TABLE asks ADD COLUMN files_max INTEGER CHECK(files_max IS NULL OR files_max BETWEEN 1 AND 20)',
+  },
+  {
+    table: 'asks',
+    column: 'files_hint',
+    sql: 'ALTER TABLE asks ADD COLUMN files_hint TEXT',
+  },
+  {
+    table: 'asks',
+    column: 'files',
+    sql: 'ALTER TABLE asks ADD COLUMN files TEXT CHECK(files IS NULL OR json_valid(files))',
   },
 ]
