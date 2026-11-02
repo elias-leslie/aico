@@ -89,6 +89,8 @@ export interface Hello {
   /** The peer's wall clock, for the skew estimate. */
   now: number
   sets: Record<string, { db_id: string; schema_version: number; seq: number }>
+  /** Which build the peer runs (a fingerprint of its server bundle); older peers omit it. */
+  build_id?: string
 }
 
 export interface PeerTransport {
@@ -157,7 +159,12 @@ export function changesSince(handle: SyncHandle, since: number, limit: number): 
 }
 
 /** A peer is told apart from a stranger only by the name it gives; the link is the authentication. */
-export function serveHello(handles: readonly SyncHandle[], host: string, now: number): Hello {
+export function serveHello(
+  handles: readonly SyncHandle[],
+  host: string,
+  now: number,
+  buildId?: string,
+): Hello {
   const sets: Hello['sets'] = {}
   for (const handle of handles)
     sets[handle.set] = {
@@ -165,7 +172,7 @@ export function serveHello(handles: readonly SyncHandle[], host: string, now: nu
       schema_version: handle.schemaVersion(),
       seq: Number(handle.meta('seq') ?? 0),
     }
-  return { host, now, sets }
+  return buildId ? { host, now, sets, build_id: buildId } : { host, now, sets }
 }
 
 /**
@@ -478,6 +485,8 @@ export type PullStatus =
 export interface PullResult {
   status: PullStatus
   host?: string
+  /** The peer's build, when it said. */
+  buildId?: string
   applied: number
   pages: number
   /** Peer clock minus ours, estimated; null when the peer was not reached. */
@@ -510,6 +519,7 @@ export async function pullSet(
   }
   const finished = handle.now()
   result.host = hello.host
+  if (hello.build_id) result.buildId = hello.build_id
   result.skewMs = Math.round(hello.now - (started + finished) / 2)
   const theirs = hello.sets[handle.set]
   const remember = (state: Partial<PeerState>) =>

@@ -43,6 +43,7 @@ export function startSync(options: {
     },
     connect: (peer) => unixPeer(peer.socket, { idleMs: config.sync.idleMs }),
     now: Date.now,
+    buildId: config.buildId,
     tombstoneMs: config.sync.tombstoneMs,
     maxAheadMs: config.sync.maxAheadMs,
     blobGraceMs: config.sync.blobGraceMs,
@@ -52,6 +53,7 @@ export function startSync(options: {
   })
   const server: Server = createSyncServer({
     hostName: config.hostName,
+    buildId: config.buildId,
     handles: [notes.syncHandle(), store.syncHandle()],
     blobsDir,
     now: Date.now,

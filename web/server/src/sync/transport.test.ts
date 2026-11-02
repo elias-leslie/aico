@@ -34,7 +34,7 @@ interface Door {
 async function door(
   name: string,
   peerSocket: () => string | null,
-  options: { schema?: number } = {},
+  options: { schema?: number; build?: string } = {},
 ): Promise<Door> {
   const host = openHost(name)
   const blobs = join(root, `${name}-blobs`)
@@ -45,6 +45,7 @@ async function door(
     for (const handle of handles) handle.schemaVersion = () => options.schema as number
   self.server = createSyncServer({
     hostName: name,
+    buildId: options.build,
     handles,
     blobsDir: blobs,
     now: host.clock.now,
@@ -68,6 +69,7 @@ async function door(
     now: host.clock.now,
     tombstoneMs: 180 * DAY,
     maxAheadMs: DAY,
+    buildId: options.build,
     blobGraceMs: 7 * DAY,
     intervalMs: 60_000,
     watchMs: 1_000,
@@ -111,6 +113,7 @@ describe('the sync listener', () => {
     const path = join(dir, 'sync.sock')
     const server = createSyncServer({
       hostName: 'alpha',
+      buildId: 'b1',
       handles: [a.host.handles.notes],
       blobsDir: a.blobs,
       now: () => 5,
@@ -123,6 +126,7 @@ describe('the sync listener', () => {
       expect(JSON.parse((await get(path, '/sync/hello')).body)).toMatchObject({
         host: 'alpha',
         now: 5,
+        build_id: 'b1',
       })
       expect((await get(path, '/api/captures')).status).toBe(404)
       expect((await get(path, '/sync/changes?set=nope&since=0&limit=5')).status).toBe(400)
@@ -243,6 +247,19 @@ describe('two hosts over sockets', () => {
     a.loop.watch()
     await a.loop.run()
     expect(b.nudges).toBe(1)
+  })
+
+  it('flags a peer on a different build, and not one on the same build', async () => {
+    let peerSocket: string | null = null
+    const a = await door('alpha', () => peerSocket, { build: 'b1' })
+    const b = await door('beta', () => null, { build: 'b2' })
+    peerSocket = b.socket
+    await a.loop.run()
+    expect(a.loop.status()[0]).toMatchObject({ state: 'ok', buildMismatch: true })
+    const c = await door('gamma', () => null, { build: 'b1' })
+    peerSocket = c.socket
+    await a.loop.run()
+    expect(a.loop.status()[0]).toMatchObject({ state: 'ok', buildMismatch: false })
   })
 
   it('skips a peer that is down without a word, and a schema mismatch pauses only sync', async () => {

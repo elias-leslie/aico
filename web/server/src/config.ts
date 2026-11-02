@@ -2,6 +2,7 @@
 // project.identity.json (port, public host), then defaults that hold by
 // definition. Nothing here names a machine.
 
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -27,6 +28,8 @@ export interface WebConfig {
   dataDir: string
   /** This host's name on rows it writes (`origin`): AICO_HOST_NAME, else the machine's. */
   hostName: string
+  /** A fingerprint of this server bundle (`AICO_BUILD_ID` overrides); two hosts on the same build share it. */
+  buildId: string
   captures: CaptureConfig
   notes: NotesConfig
   sync: SyncConfig
@@ -67,6 +70,20 @@ export interface CaptureConfig {
 /** This host's name on rows it writes: AICO_HOST_NAME, else the machine's. */
 export function hostNameFrom(env: NodeJS.ProcessEnv): string {
   return env.AICO_HOST_NAME?.trim().toLowerCase() || hostname().toLowerCase()
+}
+
+/** Names the running build: AICO_BUILD_ID, else the first 12 hex of the SHA-256 of this server bundle. */
+export function buildIdFrom(env: NodeJS.ProcessEnv): string {
+  const set = env.AICO_BUILD_ID?.trim()
+  if (set) return set
+  try {
+    return createHash('sha256')
+      .update(readFileSync(fileURLToPath(import.meta.url)))
+      .digest('hex')
+      .slice(0, 12)
+  } catch {
+    return 'unknown'
+  }
 }
 
 export interface NotesConfig {
@@ -295,6 +312,7 @@ export function loadConfig(
     dbPath: webDbPath(env),
     dataDir: dataDirPath(env),
     hostName: hostNameFrom(env),
+    buildId: buildIdFrom(env),
     captures: {
       maxBytes: positiveInt(env.AICO_CAPTURE_MAX_MB, DEFAULT_CAPTURE_MAX_MB) * 1024 * 1024,
       maxFiles: positiveInt(env.AICO_CAPTURE_MAX_FILES, DEFAULT_CAPTURE_MAX_FILES),

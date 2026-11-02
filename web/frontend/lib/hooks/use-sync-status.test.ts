@@ -26,6 +26,13 @@ describe('syncLine', () => {
     })
   })
 
+  it('warns when the other Aico is a different build', () => {
+    expect(syncLine(peer({ buildMismatch: true }), 1_000, age)).toEqual({
+      text: 'Notes synced 0s ago · different Aico version',
+      warn: true,
+    })
+  })
+
   it('names why sync is paused, and says a down link is only waiting', () => {
     expect(
       syncLine(

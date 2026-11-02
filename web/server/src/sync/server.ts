@@ -14,6 +14,8 @@ import { type SyncHandle, serveChanges, serveHello } from './engine'
 
 export interface SyncServerDeps {
   hostName: string
+  /** This build's fingerprint, told to peers in `hello`. */
+  buildId?: string
   handles: readonly SyncHandle[]
   blobsDir: string
   now(): number
@@ -30,7 +32,9 @@ export function createSyncServer(deps: SyncServerDeps): Server {
     if (!handle) throw new HttpError(400, 'Unknown set')
     return handle
   }
-  router.on('GET', '/sync/hello', () => serveHello(deps.handles, deps.hostName, deps.now()))
+  router.on('GET', '/sync/hello', () =>
+    serveHello(deps.handles, deps.hostName, deps.now(), deps.buildId),
+  )
   router.on('GET', '/sync/changes', (ctx) =>
     serveChanges(handleOf(ctx.query.get('set')), {
       since: Number(ctx.query.get('since')),

@@ -14,6 +14,8 @@ export interface PeerSync {
   skewMs: number | null
   /** Why sync is paused or failing. */
   reason: string | null
+  /** The other Aico runs a different build. Sync still works. */
+  buildMismatch?: boolean
 }
 
 /** A clock gap past this is worth a warning. */
@@ -47,17 +49,18 @@ export function syncLine(
     peer.skewMs !== null && Math.abs(peer.skewMs) > SKEW_WARN_MS
       ? ` · clock ${Math.round(Math.abs(peer.skewMs) / 1000)} s ${peer.skewMs > 0 ? 'ahead' : 'behind'}`
       : ''
-  const warn = skew !== ''
+  const build = peer.buildMismatch ? ' · different Aico version' : ''
+  const warn = skew !== '' || build !== ''
   const last =
     peer.lastSyncAt === null
       ? 'not synced yet'
       : `synced ${age(now - peer.lastSyncAt)} ago`
   switch (peer.state) {
     case 'ok':
-      return { text: `Notes ${last}${skew}`, warn }
+      return { text: `Notes ${last}${skew}${build}`, warn }
     case 'paused':
       return {
-        text: `Notes sync paused${peer.reason ? `: ${peer.reason}` : ''}${skew}`,
+        text: `Notes sync paused${peer.reason ? `: ${peer.reason}` : ''}${skew}${build}`,
         warn: true,
       }
     case 'error':

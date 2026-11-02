@@ -135,6 +135,8 @@ describe('loadConfig: uploads, shares and maintenance', () => {
     expect(config.dataDir).toBe('/srv/aico-data')
     expect(config.captures).toEqual({ maxBytes: 5 * 1024 * 1024, maxFiles: 4 })
     expect(config.hostName).toBe('gem')
+    expect(loadConfig({ AICO_BUILD_ID: ' abc123 ' }, ID).buildId).toBe('abc123')
+    expect(loadConfig({}, ID).buildId).toMatch(/^[0-9a-f]{12}$|^unknown$/)
     // Without AICO_DATA_DIR it follows web.db.
     expect(loadConfig({ AICO_WEB_DB: '/tmp/x/web.db' }, ID).dataDir).toBe('/tmp/x')
   })

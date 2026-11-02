@@ -23,6 +23,8 @@ export interface LoopDeps {
   now(): number
   tombstoneMs: number
   maxAheadMs: number
+  /** This build's fingerprint, compared with each peer's. */
+  buildId?: string
   blobGraceMs: number
   intervalMs: number
   /** How often to look for a local write (a change of the files' `seq`). */
@@ -42,6 +44,8 @@ export interface PeerStatus {
   skewMs: number | null
   /** Why sync is paused or failing, in words. */
   reason: string | null
+  /** The peer runs a different build than this host (both said). Sync works; update the older one. */
+  buildMismatch: boolean
 }
 
 const PAUSED: Partial<Record<PullStatus, string>> = {
@@ -115,6 +119,7 @@ export class SyncLoop {
           lastSyncAt: null,
           skewMs: null,
           reason: null,
+          buildMismatch: false,
         },
     )
   }
@@ -181,8 +186,12 @@ export class SyncLoop {
       reason = failed.error ?? 'Sync failed'
     } else if (down) state = 'down'
     else if (results.some((result) => result.status === 'unreachable')) state = 'error'
-    const skew = results.find((result) => result.skewMs !== null)?.skewMs ?? null
     const before = this.statuses.get(peer.name)
+    const peerBuild = results.find((result) => result.buildId)?.buildId
+    const buildMismatch = peerBuild
+      ? !!this.deps.buildId && peerBuild !== this.deps.buildId
+      : (before?.buildMismatch ?? false)
+    const skew = results.find((result) => result.skewMs !== null)?.skewMs ?? null
     this.statuses.set(peer.name, {
       name: peer.name,
       host: host ?? before?.host ?? null,
@@ -190,6 +199,7 @@ export class SyncLoop {
       lastSyncAt: state === 'ok' ? this.deps.now() : (before?.lastSyncAt ?? null),
       skewMs: skew ?? before?.skewMs ?? null,
       reason,
+      buildMismatch,
     })
     // A peer that is down is skipped quietly; say only when something changes.
     if (state !== 'down' && state !== before?.state)
