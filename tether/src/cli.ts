@@ -531,7 +531,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           io.out(NOTE_USAGE)
           return sub === undefined ? 2 : 0
         }
-        return runNote(io, json, parsed.args.slice(1))
+        return runNote(io, json, parsed.args.slice(1), withOwnWidget(process.env))
       case 'share': {
         const body = shareBody(parsed.args.slice(1), withOwnWidget(process.env), process.cwd())
         if (typeof body === 'string') {

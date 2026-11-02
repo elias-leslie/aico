@@ -352,7 +352,7 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
   }
 }
 
-const HOOK_EVENTS = new Set(['Notification', 'PermissionRequest', 'UserPromptSubmit', 'Stop'])
+const HOOK_EVENTS = new Set(ADAPTERS.flatMap((adapter) => adapter.hooks.stateReports))
 
 /** Validate an agent hook report (`POST /v1/sessions/:id/agent-event`). */
 export function parseHookReport(body: Record<string, unknown>): HookReport {
