@@ -506,31 +506,51 @@ describe('a card that asks for files', () => {
     return render(<NeedsYouDrawer open onOpenChange={() => {}} />)
   }
   const send = () =>
-    within(card()).getByRole('button', { name: /^(Send|Waiting)/ })
+    within(card()).getByRole('button', { name: /^(Send|Waiting|Add \d+ more)/ })
   const land = async (index: number, name: string, id: string) =>
     act(async () => state.uploads[index]?.resolve(saved(name, id)))
 
-  it('idle: the count and hint, Send off, and Answer without files always works', () => {
-    open()
+  it('idle: the count and hint, and Send says what is missing; there is no way to answer a minimum away', () => {
+    open(wants(2, 5, 'any 2-3 photos'))
     expect(screen.getByTestId('ask-files-count')).toHaveTextContent(
-      '0 of 1-3 files · any photo or PDF',
+      '0 of 2-5 files · any 2-3 photos',
     )
     expect(send()).toBeDisabled()
+    expect(send()).toHaveTextContent('Add 2 more photos')
     expect(
-      within(card()).getByRole('button', { name: 'Answer without files' }),
-    ).toBeEnabled()
+      within(card()).queryByRole('button', { name: 'Answer without files' }),
+    ).toBeNull()
     // Done is not an answer to a question that asked for files.
     expect(within(card()).queryByRole('button', { name: /Done/ })).toBeNull()
+    // Typing a note does not open it.
     fireEvent.change(within(card()).getByLabelText('Reply to the agent'), {
       target: { value: 'no camera here' },
     })
+    expect(send()).toBeDisabled()
+  })
+
+  it('Send counts down as files are saved, and names files when the ask gave no hint', async () => {
+    open(wants(2, 3))
+    expect(send()).toHaveTextContent('Add 2 more files')
+    choose(file('a.jpg'))
+    await land(0, 'a.jpg', '111111111111')
+    expect(send()).toHaveTextContent('Add 1 more file')
+    expect(send()).toBeDisabled()
+    choose(file('b.jpg'))
+    await land(1, 'b.jpg', '222222222222')
+    expect(send()).toHaveTextContent('Send')
+    expect(send()).toBeEnabled()
+  })
+
+  it('Reply "Not now" is the one answer a files ask takes without its files', () => {
+    open(wants(2, 3))
     fireEvent.click(
-      within(card()).getByRole('button', { name: 'Answer without files' }),
+      within(card()).getByRole('button', { name: 'Reply “Not now”' }),
     )
     expect(state.sent).toEqual([
       {
         id: 'abcdefabcdef',
-        reply: { kind: 'answer', note: 'no camera here', skippedFiles: true },
+        reply: { kind: 'answer', text: 'Not now', skippedFiles: true },
       },
     ])
   })
@@ -637,7 +657,7 @@ describe('a card that asks for files', () => {
     expect(row).toHaveTextContent("Aico can't store this kind of file yet")
     expect(send()).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent(
-      '1 file failed and won’t be sent',
+      '1 file didn’t upload. Retry it or remove it.',
     )
 
     const clientId = state.uploads[0]?.upload.clientId
@@ -672,7 +692,7 @@ describe('a card that asks for files', () => {
       state.uploads[1]?.reject(new ApiError('That file is over 25 MB', 413)),
     )
     expect(screen.getByRole('alert')).toHaveTextContent(
-      '1 file failed and won’t be sent',
+      '1 file didn’t upload. Retry it or remove it.',
     )
     expect(send()).toBeEnabled()
     fireEvent.click(send())

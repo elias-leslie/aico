@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Ask } from './asks'
 import { blobPath, sha256 } from './blobs'
 import { CaptureRouter } from './capture-router'
@@ -221,6 +221,37 @@ describe('capture routes', () => {
       // Removing one makes room.
       store.tombstoneCapture(store.capturesForAsk(ASK_ID)[0]?.id as string)
       expect((await upload(JPEG, 'c.jpg', 'image/jpeg', { ask_id: ASK_ID })).status).toBe(201)
+    })
+
+    it('logs one line for a refused upload: ids, size and type, never the name or the bytes', async () => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+      ask = { id: ASK_ID, state: 'done', wantsFiles: { min: 1, max: 2, hint: null } }
+      const refused = await upload(PNG, 'private-name.png', 'image/png', {
+        ask_id: ASK_ID,
+        client_id: 'client-logged-1',
+      })
+      expect(refused.status).toBe(409)
+      const lines = log.mock.calls.map((call) => String(call[0]))
+      log.mockRestore()
+      expect(lines).toEqual([
+        `[aico-web] capture upload refused: 409 This question was closed (ask=${ASK_ID} client=client-logged-1 size=${PNG.length} type=image/png)`,
+      ])
+    })
+
+    it('logs an upload that is not a form at all', async () => {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+      const response = await fetch(`${server.base}/api/captures`, {
+        method: 'POST',
+        headers: { 'content-type': 'multipart/form-data; boundary=x' },
+        body: 'not a form',
+      })
+      expect(response.status).toBe(422)
+      const lines = log.mock.calls.map((call) => String(call[0]))
+      log.mockRestore()
+      expect(lines).toHaveLength(1)
+      expect(lines[0]).toMatch(
+        /^\[aico-web\] capture upload refused: 422 Expected a multipart form/,
+      )
     })
   })
 

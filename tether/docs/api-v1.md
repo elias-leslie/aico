@@ -487,6 +487,12 @@ Asking the same open question again updates `wantsFiles` with the rest.
 delivered when the agent is idle, its input line empty and the owner quiet),
 which carries the question and the answer within `noteMaxChars` and ends with
 `tether ask get <id>` and `tether ask done <id>`. `delivery` is then `wake`.
+The line is queued even while Tether has not read the agent's state yet (just
+restarted). It is also taken by the session's next natural turn (a prompt, a
+tool result: the ride-along path, `GET …/due?ride=`) while the agent stays busy,
+so an agent that never shows idle (Claude Code counts its background agents as
+busy) still gets it. It is dropped undelivered only when its ask is answered
+again, done or withdrawn, and Tether logs that with the line's age.
 
 **Asks from ended lanes** (API 17). `launcher` is the session that launched
 the asker and `coordinator` its coordinator (lineage from a launch, recorded

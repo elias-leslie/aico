@@ -383,12 +383,31 @@ export class Asks {
     })
   }
 
+  /** The ask wants at least `min` files and this answer carries `count`: the
+   * plain reason it is refused, or null. Only a decline (no choice, files
+   * skipped: "Not now") may go below the minimum. */
+  private tooFewFiles(ask: Ask, count: number, reply: AnswerReply): string | null {
+    const min = ask.wantsFiles?.min ?? 0
+    if (count >= min) return null
+    if (reply.skippedFiles === true && reply.option === undefined && count === 0) return null
+    const files = (n: number) => `${n} ${n === 1 ? 'file' : 'files'}`
+    return count === 0
+      ? `This question needs at least ${files(min)}. None are saved yet.`
+      : `This question needs at least ${files(min)}. Only ${count} saved so far; add ${min - count} more.`
+  }
+
   /** The owner's answer to an ask that may want files. Files are checked here,
-   * then Tether gets the answer with their paths. */
+   * then Tether gets the answer with their paths. An ask with a minimum is not
+   * answered until that many files are saved. */
   async answer(id: string, reply: AnswerReply): Promise<Ask> {
     const { files, skippedFiles, ...rest } = reply
     const body: Record<string, unknown> = { ...rest }
     if (!files?.length) {
+      const ask = await this.get(id)
+      if (ask.state === 'open' || ask.state === 'answered') {
+        const refused = this.tooFewFiles(ask, 0, reply)
+        if (refused) throw new HttpError(409, refused)
+      }
       if (skippedFiles && !Object.keys(body).length) body.text = NO_FILES_TEXT
       return this.act(id, 'answer', body)
     }
@@ -399,6 +418,8 @@ export class Asks {
       if (ask.state !== 'open' && ask.state !== 'answered')
         throw new HttpError(409, 'This question was closed. Your files are kept in Captures.')
       body.files = this.answerFiles(ask, files)
+      const refused = this.tooFewFiles(ask, (body.files as AnswerFile[]).length, reply)
+      if (refused) throw new HttpError(409, refused)
       // The same answer again (a second tap after the first landed) changes nothing.
       if (ask.state === 'answered' && sameAnswer(ask, body)) return ask
       return await this.act(id, 'answer', body)

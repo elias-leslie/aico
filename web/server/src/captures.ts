@@ -23,7 +23,7 @@ import {
 } from './capture-router'
 import type { CaptureConfig } from './config'
 import { execRunner, PreviewJobs, type PreviewState, type Runner } from './heic'
-import { objectBody, RAW, type Router, sendJson } from './http'
+import { objectBody, RAW, type RequestContext, type Router, sendJson } from './http'
 import { CAPTURE_STATUSES, type CaptureRow, type CaptureStatus, type NotesStore } from './notes-db'
 import { HttpError } from './tether'
 import { RateLimiter, readUploadForm } from './uploads'
@@ -56,6 +56,14 @@ const CAPTURE_ID = /^[0-9a-f]{12}$/
 const CLIENT_ID = /^[A-Za-z0-9_-]{8,64}$/
 const CACHE_FOREVER = 'private, max-age=31536000, immutable'
 const JPEG_MAGIC = Buffer.from([0xff, 0xd8, 0xff])
+
+/** What an upload showed before it failed, for its log line. */
+interface UploadSeen {
+  askId?: string
+  clientId?: string
+  size?: number
+  type?: string
+}
 
 const megabytes = (bytes: number) => Math.round((bytes / (1024 * 1024)) * 10) / 10
 
@@ -281,19 +289,55 @@ export function registerCaptureRoutes(
     accept,
   }))
 
+  /** One line for an upload that did not land, so a phone's "it didn't
+   * attach" can be traced. Ids, size and the type the client claimed; never
+   * the file's name or bytes. */
+  function logUploadFailure(error: unknown, seen: UploadSeen, length: string | undefined): void {
+    const status = error instanceof HttpError ? error.status : 500
+    const reason = error instanceof HttpError ? error.detail : (error as Error).message
+    const parts = [
+      seen.askId && `ask=${seen.askId}`,
+      seen.clientId && `client=${seen.clientId}`,
+      seen.size !== undefined
+        ? `size=${seen.size}`
+        : length !== undefined
+          ? `length=${length}`
+          : null,
+      seen.type && `type=${seen.type}`,
+    ].filter(Boolean)
+    console.log(
+      `[aico-web] capture upload refused: ${status} ${String(reason).replace(/\s+/g, ' ').slice(0, 160)}${parts.length ? ` (${parts.join(' ')})` : ''}`,
+    )
+  }
+
   router.on('POST', '/api/captures', async (ctx) => {
+    const seen: UploadSeen = {}
+    try {
+      return await upload(ctx, seen)
+    } catch (error) {
+      logUploadFailure(error, seen, ctx.req.headers['content-length'])
+      throw error
+    }
+  })
+
+  async function upload(ctx: RequestContext, seen: UploadSeen): Promise<unknown> {
     if (!limiter.allow(ctx.req.socket.remoteAddress ?? '')) {
       sendJson(ctx.res, 429, {
         detail: `Too many files at once (${RATE_LIMIT} a minute). Wait a minute and try again`,
       })
       ctx.req.resume()
+      console.log('[aico-web] capture upload refused: 429 rate limit')
       return RAW
     }
     const { form, file } = await readUploadForm(ctx.req, limits.maxBytes, tooBig)
+    seen.size = file.size
+    seen.type = file.type.slice(0, 60) || undefined
     const clientId = formText(form, 'client_id', 64, CLIENT_ID)
     if (!clientId) throw new HttpError(422, 'client_id is required')
+    seen.clientId = clientId
     const groupId = formText(form, 'group_id', 64, CLIENT_ID)
     const askId = formText(form, 'ask_id', 12, /^[0-9a-f]{12}$/)
+    seen.askId = askId ?? undefined
     const caption = formText(form, 'caption', CAPTION_MAX) ?? ''
 
     const earlier = store.findByClientId(clientId)
@@ -324,7 +368,7 @@ export function registerCaptureRoutes(
     if (created) deps.reader?.kick()
     sendJson(ctx.res, created ? 201 : 200, json(capture))
     return RAW
-  })
+  }
 
   router.on('PUT', '/api/captures/:id/thumb', async (ctx) => {
     const row = need(ctx.params.id)

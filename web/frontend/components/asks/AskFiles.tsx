@@ -20,9 +20,6 @@ import { useCaptureLimits } from '@/lib/hooks/use-captures'
 import { CapturePicker } from '../capture/CapturePicker'
 import { FileThumb } from '../capture/CaptureThumb'
 
-const plural = (count: number, one: string) =>
-  `${count} ${one}${count === 1 ? '' : 's'}`
-
 /** Where the card stands on the files it asked for. */
 export interface AskFilesState {
   wants: WantsFiles | null
@@ -75,6 +72,15 @@ export function countText(held: number, wants: WantsFiles): string {
       ? `${wants.max}`
       : `${wants.min}-${wants.max}`
   return `${held} of ${range} ${wants.max === 1 ? 'file' : 'files'}`
+}
+
+/** What Send says while the ask's minimum is not met: "Add 2 more photos". */
+export function addMoreText(wants: WantsFiles, saved: number): string {
+  const noun = /photo|picture|image|screenshot/i.test(wants.hint ?? '')
+    ? 'photo'
+    : 'file'
+  const missing = Math.max(1, wants.min - saved)
+  return `Add ${missing} more ${noun}${missing === 1 ? '' : 's'}`
 }
 
 function Row({
@@ -249,7 +255,9 @@ export function AskFilesBlock({
           className="text-[12px]"
           style={{ color: 'var(--term-error-text)' }}
         >
-          {plural(failed, 'file')} failed and won’t be sent.
+          {failed === 1
+            ? '1 file didn’t upload. Retry it or remove it.'
+            : `${failed} files didn’t upload. Retry them or remove them.`}
         </p>
       )}
     </section>

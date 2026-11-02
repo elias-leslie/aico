@@ -29,7 +29,12 @@ import {
 } from '@/lib/hooks/use-asks'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useTerminalSessions } from '@/lib/hooks/use-terminal-sessions'
-import { AnsweredFiles, AskFilesBlock, useAskFiles } from './AskFiles'
+import {
+  AnsweredFiles,
+  AskFilesBlock,
+  addMoreText,
+  useAskFiles,
+} from './AskFiles'
 
 type Tab = 'asks' | 'approvals' | 'answered'
 
@@ -709,7 +714,9 @@ export function AskCard({
   const sendLabel =
     files.waiting > 0
       ? `Waiting for ${files.waiting} upload${files.waiting === 1 ? '' : 's'}`
-      : 'Send'
+      : files.wants && !files.enough
+        ? addMoreText(files.wants, files.saved.length)
+        : 'Send'
 
   const Item = inSession ? 'div' : 'li'
   return (
@@ -838,33 +845,6 @@ export function AskCard({
         </button>
       </form>
       <div className="mt-2 flex flex-wrap items-center gap-1">
-        {wantsFiles && (
-          <button
-            type="button"
-            className="lantern-btn small"
-            disabled={reply.isPending}
-            onClick={() =>
-              send(
-                {
-                  kind: 'answer',
-                  ...(choice !== null ? { option: choice } : {}),
-                  ...(noteText ? { note: noteText } : {}),
-                  skippedFiles: true,
-                },
-                [
-                  choice !== null ? ask.options[choice] : null,
-                  noteText && `“${noteText}”`,
-                  'no files',
-                ]
-                  .filter(Boolean)
-                  .join(', '),
-              )
-            }
-            title="Answers without sending any files"
-          >
-            Answer without files
-          </button>
-        )}
         {!hasOptions && !wantsFiles && (
           <button
             type="button"
@@ -880,7 +860,17 @@ export function AskCard({
           type="button"
           className="lantern-btn ghost small"
           disabled={reply.isPending}
-          onClick={() => send({ kind: 'answer', text: 'Not now' }, 'Not now')}
+          onClick={() =>
+            send(
+              {
+                kind: 'answer',
+                text: 'Not now',
+                // A decline is the one answer a files ask takes without its files.
+                ...(wantsFiles ? { skippedFiles: true } : {}),
+              },
+              'Not now',
+            )
+          }
           title="Tells the agent: Not now"
         >
           Reply “Not now”

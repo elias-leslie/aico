@@ -319,6 +319,74 @@ describe('asks that want files', () => {
   })
 })
 
+describe('an ask with a minimum is not answered below it', () => {
+  const ask = {
+    ...ASK,
+    options: ['Yes, works', 'No, problem'],
+    wantsFiles: { min: 2, max: 5, hint: null },
+  }
+  function setup() {
+    const notes = new NotesStore(':memory:', { hostName: 'door' })
+    const tether = fakeTether({
+      [`GET /v1/asks/${ask.id}`]: ask,
+      [`POST /v1/asks/${ask.id}/answer`]: { ...ask, state: 'answered' },
+    })
+    const asks = new Asks({
+      tether: tether.client as never,
+      publicHost: null,
+      run: async () => '',
+      files: { store: notes, blobsDir: '/data/blobs', hostName: 'door' },
+    })
+    const add = (name: string) =>
+      notes.insertCapture({
+        clientId: `client-${name}`,
+        askId: ask.id,
+        kind: 'image',
+        name,
+        mime: 'image/jpeg',
+        size: 10,
+        hash: 'a'.repeat(64),
+      }).capture.id
+    const posts = () => tether.calls.filter((call) => call.method === 'POST')
+    return { asks, add, posts }
+  }
+
+  it('refuses a choice with no files, however it is sent, and says what is missing', async () => {
+    const { asks, posts } = setup()
+    for (const reply of [
+      { option: 0 },
+      { option: 0, skippedFiles: true },
+      { option: 0, files: [] },
+    ])
+      await expect(asks.answer(ask.id, reply), JSON.stringify(reply)).rejects.toMatchObject({
+        status: 409,
+        detail: 'This question needs at least 2 files. None are saved yet.',
+      })
+    expect(posts()).toEqual([])
+  })
+
+  it('refuses one file of two, then answers once there are two, carrying both', async () => {
+    const { asks, add, posts } = setup()
+    const one = add('a.jpg')
+    await expect(asks.answer(ask.id, { option: 0, files: [one] })).rejects.toMatchObject({
+      status: 409,
+      detail: 'This question needs at least 2 files. Only 1 saved so far; add 1 more.',
+    })
+    expect(posts()).toEqual([])
+    const two = add('b.jpg')
+    await asks.answer(ask.id, { option: 0, files: [one, two] })
+    expect(posts()).toHaveLength(1)
+    const sent = posts()[0]?.body as { files: { id: string }[] }
+    expect(sent.files.map((f) => f.id)).toEqual([one, two])
+  })
+
+  it('lets a plain decline through: Not now is not an answer with files missing', async () => {
+    const { asks, posts } = setup()
+    await asks.answer(ask.id, { text: 'Not now', skippedFiles: true })
+    expect(posts().map((call) => call.body)).toEqual([{ text: 'Not now' }])
+  })
+})
+
 describe('Nightshift approvals', () => {
   it('keeps https taps as links', () => {
     expect(
