@@ -1,5 +1,6 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import {
   Archive,
@@ -13,11 +14,21 @@ import {
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import type { NoteDetail, NoteKind, NotePatch } from '@/lib/api/notes'
+import {
+  deleteNote,
+  type NoteDetail,
+  type NoteKind,
+  type NotePatch,
+} from '@/lib/api/notes'
 import { formatAge } from '@/lib/attention'
 import { formatWhen } from '@/lib/capture-format'
 import { type SaveState, useAutosave } from '@/lib/hooks/use-autosave'
-import { useDeleteNote, useNote, useNoteActions } from '@/lib/hooks/use-notes'
+import {
+  NOTES_KEY,
+  useDeleteNote,
+  useNote,
+  useNoteActions,
+} from '@/lib/hooks/use-notes'
 import { ConfirmationDialog } from '../ConfirmationDialog'
 import { NoteAttachments } from './NoteAttachments'
 import { NoteHistory } from './NoteHistory'
@@ -134,6 +145,27 @@ function Labels({
   )
 }
 
+/** Nothing in it at all: a New note opened and left. Lists you keep (Groceries)
+ * have a source and are never left out this way. */
+export function isBlankNote(
+  note: NoteDetail,
+  draft: { title: string; body: string },
+): boolean {
+  return (
+    note.source === null &&
+    !note.pinned &&
+    draft.title.trim() === '' &&
+    draft.body.trim() === '' &&
+    note.items.length === 0 &&
+    note.attachments.length === 0 &&
+    note.labels.length === 0
+  )
+}
+
+/** Deletes waiting one tick, so a remount of the same note (React's dev
+ * double mount) cancels them. */
+const blankDeletes = new Map<string, ReturnType<typeof setTimeout>>()
+
 function Editor({
   id,
   note,
@@ -156,6 +188,34 @@ function Editor({
     save: (patch) => actions.save(patch),
   })
   const { draft } = auto
+  const client = useQueryClient()
+
+  // A note left with nothing in it is deleted, so New note then Back leaves
+  // no untitled card behind.
+  const latest = useRef({ note, draft })
+  latest.current = { note, draft }
+  useEffect(() => {
+    clearTimeout(blankDeletes.get(id))
+    blankDeletes.delete(id)
+    return () => {
+      const { note: last, draft: lastDraft } = latest.current
+      if (!isBlankNote(last, lastDraft)) return
+      blankDeletes.set(
+        id,
+        setTimeout(() => {
+          blankDeletes.delete(id)
+          void deleteNote(id)
+            .then(() => {
+              client.removeQueries({ queryKey: [...NOTES_KEY, 'one', id] })
+              return client.invalidateQueries({
+                queryKey: [...NOTES_KEY, 'list'],
+              })
+            })
+            .catch((failure) => console.warn('blank note not removed', failure))
+        }, 0),
+      )
+    }
+  }, [id, client])
 
   // The text box grows with its text.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the text changes
