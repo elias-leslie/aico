@@ -2,6 +2,7 @@
 // environment and project.identity.json (config.ts). With a command
 // (`tsession`, `tclaude`, `tcodex`) the same bundle is the terminal CLI.
 
+import { join } from 'node:path'
 import { TetherClient } from 'tether/client'
 import { buildApi } from './api'
 import { Asks } from './asks'
@@ -11,6 +12,7 @@ import { HISTORY_LINES, loadConfig } from './config'
 import { WebStore } from './db'
 import { registerNightshiftRoutes } from './nightshift'
 import { NightshiftRelay, registerNightshiftStream } from './nightshift-stream'
+import { NotesStore } from './notes-db'
 import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
@@ -19,6 +21,7 @@ import { TerminalHub } from './terminal'
 function serve(): void {
   const config = loadConfig()
   const store = new WebStore(config.dbPath)
+  const notes = new NotesStore(join(config.dataDir, 'notes.db'), { hostName: config.hostName })
 
   const tether = new TetherClient(config.tetherSocket)
   const terminals = new TerminalHub({
@@ -38,7 +41,19 @@ function serve(): void {
     maintenance: config.maintenance,
     forward: (event) => terminals.event(event),
   })
-  const api = buildApi({ tether, store, config, uploads: config.uploads, shows, asks })
+  const api = buildApi({
+    tether,
+    store,
+    config,
+    uploads: config.uploads,
+    shows,
+    asks,
+    captures: {
+      store: notes,
+      blobsDir: join(config.dataDir, 'blobs'),
+      limits: config.captures,
+    },
+  })
   registerNightshiftRoutes(api, config)
   const nightshift = new NightshiftRelay(config)
   registerNightshiftStream(api, nightshift)
@@ -67,6 +82,7 @@ function serve(): void {
     nightshift.stop()
     server.close(() => {
       store.close()
+      notes.close()
       process.exit(0)
     })
     server.closeAllConnections()

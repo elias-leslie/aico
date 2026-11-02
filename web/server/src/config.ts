@@ -3,7 +3,7 @@
 // definition. Nothing here names a machine.
 
 import { existsSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, hostname } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultTetherSocketPath, tetherSocketPath } from 'tether/client'
@@ -22,6 +22,11 @@ export interface WebConfig {
   /** web/frontend's static export, served at `/`. */
   staticDir: string
   dbPath: string
+  /** Durable data (`notes.db`, `blobs/`): the folder `web.db` lives in unless AICO_DATA_DIR says otherwise. */
+  dataDir: string
+  /** This host's name on rows it writes (`origin`): AICO_HOST_NAME, else the machine's. */
+  hostName: string
+  captures: CaptureConfig
   /** The Python backend's database, read once into `dbPath` and never written. */
   tetherSocket: string
   /** Agent shares are taken only from this user's tether@default (the owner's own socket). */
@@ -45,6 +50,13 @@ export interface UploadConfig {
   maxAgeMs: number
 }
 
+export interface CaptureConfig {
+  /** Largest single capture file. */
+  maxBytes: number
+  /** Most files in one batch or ask. */
+  maxFiles: number
+}
+
 export interface MaintenanceConfig {
   /** Off: maintenance runs once at startup only. */
   enabled: boolean
@@ -66,6 +78,8 @@ interface Identity {
 
 // The Python backend's settings names and defaults, so its EnvironmentFile keeps
 // working; only the upload dir name is Aico's own.
+const DEFAULT_CAPTURE_MAX_MB = 25
+const DEFAULT_CAPTURE_MAX_FILES = 20
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
 const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
@@ -142,6 +156,11 @@ export function webDbPath(env: NodeJS.ProcessEnv = process.env): string {
   return env.AICO_WEB_DB || join(stateDir(env), 'aico', 'web.db')
 }
 
+/** `AICO_DATA_DIR`, else the folder `web.db` is in. */
+export function dataDirPath(env: NodeJS.ProcessEnv = process.env): string {
+  return resolve(env.AICO_DATA_DIR?.trim() || dirname(webDbPath(env)))
+}
+
 function stateDir(env: NodeJS.ProcessEnv): string {
   return env.XDG_STATE_HOME || join(env.HOME || homedir(), '.local', 'state')
 }
@@ -183,6 +202,12 @@ export function loadConfig(
     ],
     staticDir: resolve(env.AICO_WEB_STATIC_DIR || join(HERE, '..', '..', 'frontend', 'out')),
     dbPath: webDbPath(env),
+    dataDir: dataDirPath(env),
+    hostName: env.AICO_HOST_NAME?.trim().toLowerCase() || hostname().toLowerCase(),
+    captures: {
+      maxBytes: positiveInt(env.AICO_CAPTURE_MAX_MB, DEFAULT_CAPTURE_MAX_MB) * 1024 * 1024,
+      maxFiles: positiveInt(env.AICO_CAPTURE_MAX_FILES, DEFAULT_CAPTURE_MAX_FILES),
+    },
     tetherSocket,
     trustShows: tetherSocket === defaultTetherSocketPath(env, uid),
     agentHubUrl: env.AGENT_HUB_URL?.trim() || env.NEXT_PUBLIC_AGENT_HUB_URL?.trim() || null,

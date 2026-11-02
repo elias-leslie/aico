@@ -5,6 +5,7 @@
 import { compatibleVersion, type TetherClient } from 'tether/client'
 import { AGENT_HUB_PATHS, type AgentHubConfig, proxyAgentHub } from './agent-hub'
 import { type Asks, registerAskRoutes } from './asks'
+import { type CaptureDeps, registerCaptureRoutes } from './captures'
 import { registerChatRoutes } from './chat'
 import { registerCheckInRoutes } from './check-ins'
 import type { UploadConfig } from './config'
@@ -35,6 +36,8 @@ export interface ApiDeps {
   uploads: UploadConfig
   shows: Shows
   asks: Asks
+  /** The notes store and blob folder behind `/api/captures`; the routes are off without it. */
+  captures?: CaptureDeps
   /** The size a new session starts at, before any viewer claims one. */
   defaultSize?: { cols: number; rows: number }
 }
@@ -390,6 +393,7 @@ export function buildApi(deps: ApiDeps): Router {
   // -- Files and agent shares -------------------------------------------------------
 
   registerUploadRoutes(router, deps.uploads, uploadTargets(life, tether))
+  if (deps.captures) registerCaptureRoutes(router, deps.captures)
   registerPaneFileRoutes(router, life, tether)
   registerFileLocationRoutes(router)
   registerShowRoutes(router, deps.shows)

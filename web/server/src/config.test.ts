@@ -1,5 +1,5 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadConfig } from './config'
@@ -88,6 +88,31 @@ describe('loadConfig: uploads, shares and maintenance', () => {
       maxAgeMs: 60_000,
     })
     expect(config.maintenance).toEqual({ enabled: false, intervalMs: 30_000, emptyPaneDays: 3 })
+  })
+
+  it('keeps captures beside web.db, 25 MB and 20 files by default', () => {
+    const config = loadConfig({ HOME: '/home/u' }, ID)
+    expect(config.dataDir).toBe('/home/u/.local/state/aico')
+    expect(config.captures).toEqual({ maxBytes: 25 * 1024 * 1024, maxFiles: 20 })
+    expect(config.hostName).toBe(hostname().toLowerCase())
+  })
+
+  it('reads the capture folder, limits and host name from the environment', () => {
+    const config = loadConfig(
+      {
+        HOME: '/home/u',
+        AICO_DATA_DIR: '/srv/aico-data',
+        AICO_CAPTURE_MAX_MB: '5',
+        AICO_CAPTURE_MAX_FILES: '4',
+        AICO_HOST_NAME: ' Gem ',
+      },
+      ID,
+    )
+    expect(config.dataDir).toBe('/srv/aico-data')
+    expect(config.captures).toEqual({ maxBytes: 5 * 1024 * 1024, maxFiles: 4 })
+    expect(config.hostName).toBe('gem')
+    // Without AICO_DATA_DIR it follows web.db.
+    expect(loadConfig({ AICO_WEB_DB: '/tmp/x/web.db' }, ID).dataDir).toBe('/tmp/x')
   })
 
   it('reads Nightshift on its own loopback address unless told otherwise', () => {

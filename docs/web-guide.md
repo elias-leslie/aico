@@ -90,6 +90,13 @@ AICO_REMOTE_UPLOAD_DIR=~/.cache/aico/uploads
 MAINTENANCE_INTERVAL_SECONDS=900
 MAINTENANCE_SESSION_PURGE_DAYS=7
 
+# Captures (photos and files saved in Aico): notes.db and blobs/ live in the folder web.db is in
+AICO_DATA_DIR=/home/you/.local/state/aico
+AICO_CAPTURE_MAX_MB=25
+AICO_CAPTURE_MAX_FILES=20
+# Name stamped on rows this host writes (default: the machine's host name)
+AICO_HOST_NAME=sidarli
+
 # Optional Agent Hub (the web app works without it)
 AGENT_HUB_URL=http://localhost:8003
 ```

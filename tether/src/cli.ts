@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { isAbsolute, resolve } from 'node:path'
 import { ASK_USAGE, runAsk } from './ask-cli'
+import { CAPTURE_USAGE, runCapture } from './capture-cli'
 import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { startDaemon } from './daemon'
@@ -41,6 +42,8 @@ Commands:
   ask create|get|list|done|withdraw
                                 put a question to the owner in Aico and read
                                 the answer (tether ask --help)
+  capture list|get|file         read the owner's photos and files saved in Aico
+                                (tether capture --help)
   import-aico --from PATH [--apply]
                                 copy a pre-Tether Aico catalog (an archived
                                 aico.db; dry-run unless --apply; opened
@@ -505,6 +508,12 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           return sub === undefined ? 2 : 0
         }
         return runAsk(io, paths, json, parsed.args.slice(1), process.env, process.cwd())
+      case 'capture':
+        if (sub === undefined || sub === '--help' || sub === 'help') {
+          io.out(CAPTURE_USAGE)
+          return sub === undefined ? 2 : 0
+        }
+        return runCapture(io, json, parsed.args.slice(1))
       case 'share': {
         const body = shareBody(parsed.args.slice(1), process.env, process.cwd())
         if (typeof body === 'string') {

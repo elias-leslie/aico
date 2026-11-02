@@ -1,0 +1,105 @@
+{
+  "textKinds": ["text"],
+  "ftypBrands": {
+    "heic": ["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1"],
+    "m4a": ["M4A ", "M4B ", "mp42", "isom"]
+  },
+  "types": [
+    {
+      "ext": "jpg",
+      "mime": "image/jpeg",
+      "kind": "image",
+      "magic": [[{ "at": 0, "hex": "ffd8ff" }]]
+    },
+    {
+      "ext": "jpeg",
+      "mime": "image/jpeg",
+      "kind": "image",
+      "magic": [[{ "at": 0, "hex": "ffd8ff" }]]
+    },
+    {
+      "ext": "png",
+      "mime": "image/png",
+      "kind": "image",
+      "magic": [[{ "at": 0, "hex": "89504e470d0a1a0a" }]]
+    },
+    {
+      "ext": "gif",
+      "mime": "image/gif",
+      "kind": "image",
+      "magic": [[{ "at": 0, "ascii": "GIF87a" }], [{ "at": 0, "ascii": "GIF89a" }]]
+    },
+    {
+      "ext": "webp",
+      "mime": "image/webp",
+      "kind": "image",
+      "magic": [[{ "at": 0, "ascii": "RIFF" }, { "at": 8, "ascii": "WEBP" }]]
+    },
+    { "ext": "heic", "mime": "image/heic", "kind": "image", "ftyp": "heic" },
+    { "ext": "heif", "mime": "image/heif", "kind": "image", "ftyp": "heic" },
+    {
+      "ext": "pdf",
+      "mime": "application/pdf",
+      "kind": "pdf",
+      "magic": [[{ "at": 0, "ascii": "%PDF" }]]
+    },
+    { "ext": "txt", "mime": "text/plain", "kind": "text", "text": true },
+    { "ext": "md", "mime": "text/markdown", "kind": "text", "text": true },
+    { "ext": "csv", "mime": "text/csv", "kind": "text", "text": true },
+    { "ext": "json", "mime": "application/json", "kind": "text", "text": true },
+    {
+      "ext": "docx",
+      "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "kind": "doc",
+      "magic": [[{ "at": 0, "hex": "504b0304" }]]
+    },
+    {
+      "ext": "xlsx",
+      "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "kind": "doc",
+      "magic": [[{ "at": 0, "hex": "504b0304" }]]
+    },
+    {
+      "ext": "odt",
+      "mime": "application/vnd.oasis.opendocument.text",
+      "kind": "doc",
+      "magic": [[{ "at": 0, "hex": "504b0304" }]]
+    },
+    {
+      "ext": "ods",
+      "mime": "application/vnd.oasis.opendocument.spreadsheet",
+      "kind": "doc",
+      "magic": [[{ "at": 0, "hex": "504b0304" }]]
+    },
+    { "ext": "m4a", "mime": "audio/mp4", "kind": "audio", "ftyp": "m4a" },
+    {
+      "ext": "mp3",
+      "mime": "audio/mpeg",
+      "kind": "audio",
+      "magic": [
+        [{ "at": 0, "ascii": "ID3" }],
+        [{ "at": 0, "hex": "fffb" }],
+        [{ "at": 0, "hex": "fff3" }],
+        [{ "at": 0, "hex": "fff2" }]
+      ]
+    },
+    {
+      "ext": "ogg",
+      "mime": "audio/ogg",
+      "kind": "audio",
+      "magic": [[{ "at": 0, "ascii": "OggS" }]]
+    },
+    {
+      "ext": "webm",
+      "mime": "audio/webm",
+      "kind": "audio",
+      "magic": [[{ "at": 0, "hex": "1a45dfa3" }]]
+    },
+    {
+      "ext": "wav",
+      "mime": "audio/wav",
+      "kind": "audio",
+      "magic": [[{ "at": 0, "ascii": "RIFF" }, { "at": 8, "ascii": "WAVE" }]]
+    }
+  ]
+}

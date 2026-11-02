@@ -1,0 +1,335 @@
+// The durable notes and captures store (node:sqlite), beside web.db. Rows are
+// sync-shaped from the start: every write stamps `updated_at` (a hybrid
+// logical clock), `origin` (this host), `prev` (the `updated_at` of the version
+// the edit was based on), `seq` (a per-database change counter), and a delete
+// is a tombstone. Sync ships later; nothing here has to be migrated for it.
+
+import { randomBytes, randomUUID } from 'node:crypto'
+import { chmodSync, existsSync, mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+import type { CaptureKind } from './capture-files'
+import { HybridClock } from './hlc'
+
+export const SCHEMA_VERSION = 1
+
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+CREATE TABLE IF NOT EXISTS captures (
+  id          TEXT PRIMARY KEY,
+  client_id   TEXT NOT NULL UNIQUE,
+  group_id    TEXT,
+  ask_id      TEXT,
+  kind        TEXT NOT NULL CHECK (kind IN ('image','pdf','doc','text','audio')),
+  name        TEXT NOT NULL,
+  mime        TEXT NOT NULL,
+  size        INTEGER NOT NULL,
+  hash        TEXT,
+  caption     TEXT NOT NULL DEFAULT '',
+  status      TEXT NOT NULL DEFAULT 'new'
+                CHECK (status IN ('new','extracting','ready','failed','filed')),
+  type        TEXT,
+  text        TEXT,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL,
+  origin      TEXT NOT NULL,
+  prev        INTEGER,
+  deleted     INTEGER NOT NULL DEFAULT 0,
+  seq         INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS captures_created ON captures (deleted, created_at DESC);
+CREATE INDEX IF NOT EXISTS captures_ask ON captures (ask_id);
+CREATE INDEX IF NOT EXISTS captures_seq ON captures (seq);
+`
+
+export const CAPTURE_STATUSES = ['new', 'extracting', 'ready', 'failed', 'filed'] as const
+export type CaptureStatus = (typeof CAPTURE_STATUSES)[number]
+
+export interface CaptureRow {
+  id: string
+  client_id: string
+  group_id: string | null
+  ask_id: string | null
+  kind: CaptureKind
+  name: string
+  mime: string
+  size: number
+  hash: string | null
+  caption: string
+  status: CaptureStatus
+  type: string | null
+  text: string | null
+  created_at: number
+  updated_at: number
+  origin: string
+  prev: number | null
+  deleted: number
+  seq: number
+}
+
+export interface NewCapture {
+  clientId: string
+  groupId?: string | null
+  askId?: string | null
+  kind: CaptureKind
+  name: string
+  mime: string
+  size: number
+  hash: string
+  caption?: string
+}
+
+export interface CaptureQuery {
+  status?: CaptureStatus
+  ask?: string
+  limit?: number
+  /** Older than this: a capture id, or a created-at in ms. */
+  before?: string
+}
+
+interface Stamp {
+  updated_at: number
+  origin: string
+  seq: number
+}
+
+type Row = Record<string, unknown>
+
+export interface NotesStoreOptions {
+  /** The host that writes these rows (`origin`). */
+  hostName: string
+  /** The wall clock in ms; tests pass a fake. */
+  now?: () => number
+}
+
+export class NotesStore {
+  private readonly db: DatabaseSync
+  private readonly clock: HybridClock
+  private readonly now: () => number
+  readonly hostName: string
+
+  /** Opens (creating 0600 in a 0700 directory) and migrates; `':memory:'` for tests. */
+  constructor(path: string, options: NotesStoreOptions) {
+    this.hostName = options.hostName
+    this.now = options.now ?? Date.now
+    const fresh = path !== ':memory:' && !existsSync(path)
+    if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+    this.db = new DatabaseSync(path)
+    try {
+      if (fresh) chmodSync(path, 0o600)
+      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 10000;')
+      this.db.exec(SCHEMA)
+      const version = this.meta('schema_version')
+      if (version !== null && Number(version) > SCHEMA_VERSION)
+        throw new Error(`${path} has schema ${version}, newer than this Aico (${SCHEMA_VERSION})`)
+      this.transaction(() => {
+        if (version === null) this.setMeta('schema_version', String(SCHEMA_VERSION))
+        if (this.meta('db_id') === null) this.setMeta('db_id', randomUUID())
+        if (this.meta('seq') === null) this.setMeta('seq', '0')
+        this.setMeta('host_name', this.hostName)
+      })
+    } catch (error) {
+      this.db.close()
+      throw error
+    }
+    this.clock = new HybridClock(Number(this.meta('hlc_last') ?? 0), this.now)
+  }
+
+  close(): void {
+    this.db.close()
+  }
+
+  meta(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as Row | undefined
+    return row ? String(row.value) : null
+  }
+
+  private setMeta(key: string, value: string): void {
+    this.db
+      .prepare(
+        'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
+      )
+      .run(key, value)
+  }
+
+  private transaction<T>(work: () => T): T {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const result = work()
+      this.db.exec('COMMIT')
+      return result
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  /**
+   * The sync columns for one write: the next change number and clock value,
+   * saved in `meta` in the same transaction as the row. Call inside `transaction`.
+   */
+  private stamp(): Stamp {
+    const seq = Number(this.meta('seq') ?? 0) + 1
+    const updatedAt = this.clock.next()
+    this.setMeta('seq', String(seq))
+    this.setMeta('hlc_last', String(updatedAt))
+    return { updated_at: updatedAt, origin: this.hostName, seq }
+  }
+
+  /** Moves the clock past a stamp seen from a peer (sync), and remembers it. */
+  observe(remote: number): void {
+    this.clock.observe(remote)
+    this.setMeta('hlc_last', String(this.clock.last))
+  }
+
+  // -- Captures -----------------------------------------------------------------
+
+  /**
+   * Adds a capture. The same `clientId` again returns the row already stored
+   * (`created: false`), so a retried upload never duplicates.
+   */
+  insertCapture(input: NewCapture): { capture: CaptureRow; created: boolean } {
+    return this.transaction(() => {
+      const existing = this.db
+        .prepare('SELECT * FROM captures WHERE client_id = ?')
+        .get(input.clientId) as Row | undefined
+      if (existing) return { capture: existing as unknown as CaptureRow, created: false }
+      const stamp = this.stamp()
+      const id = randomBytes(6).toString('hex')
+      this.db
+        .prepare(
+          `INSERT INTO captures
+             (id, client_id, group_id, ask_id, kind, name, mime, size, hash, caption,
+              created_at, updated_at, origin, prev, deleted, seq)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?)`,
+        )
+        .run(
+          id,
+          input.clientId,
+          input.groupId ?? null,
+          input.askId ?? null,
+          input.kind,
+          input.name,
+          input.mime,
+          input.size,
+          input.hash,
+          input.caption ?? '',
+          this.now(),
+          stamp.updated_at,
+          stamp.origin,
+          stamp.seq,
+        )
+      return { capture: this.requireCapture(id), created: true }
+    })
+  }
+
+  private requireCapture(id: string): CaptureRow {
+    return this.db.prepare('SELECT * FROM captures WHERE id = ?').get(id) as unknown as CaptureRow
+  }
+
+  /** The capture a browser's `client_id` already made, tombstone or not. */
+  findByClientId(clientId: string): CaptureRow | null {
+    const row = this.db.prepare('SELECT * FROM captures WHERE client_id = ?').get(clientId)
+    return (row as unknown as CaptureRow | undefined) ?? null
+  }
+
+  /** One capture; a tombstone reads as missing unless `includeDeleted`. */
+  getCapture(id: string, includeDeleted = false): CaptureRow | null {
+    const row = this.db.prepare('SELECT * FROM captures WHERE id = ?').get(id) as unknown as
+      | CaptureRow
+      | undefined
+    return row && (includeDeleted || !row.deleted) ? row : null
+  }
+
+  /** Newest first, tombstones hidden. `total` counts every match, not just this page. */
+  listCaptures(query: CaptureQuery = {}): { captures: CaptureRow[]; total: number } {
+    const where = ['deleted = 0']
+    const args: (string | number)[] = []
+    if (query.status) {
+      where.push('status = ?')
+      args.push(query.status)
+    }
+    if (query.ask) {
+      where.push('ask_id = ?')
+      args.push(query.ask)
+    }
+    const total = Number(
+      (
+        this.db
+          .prepare(`SELECT count(*) AS n FROM captures WHERE ${where.join(' AND ')}`)
+          .get(...args) as Row
+      ).n,
+    )
+    if (query.before !== undefined) {
+      if (/^[0-9]+$/.test(query.before)) {
+        where.push('created_at < ?')
+        args.push(Number(query.before))
+      } else {
+        const anchor = this.getCapture(query.before, true)
+        if (anchor) {
+          where.push('(created_at, id) < (?, ?)')
+          args.push(anchor.created_at, anchor.id)
+        } else where.push('0') // an unknown anchor ends the paging
+      }
+    }
+    const limit = Math.min(Math.max(Math.trunc(query.limit ?? 50), 1), 200)
+    const captures = this.db
+      .prepare(
+        `SELECT * FROM captures WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ?`,
+      )
+      .all(...args, limit) as unknown as CaptureRow[]
+    return { captures, total }
+  }
+
+  /** Live captures that share a `group_id`. */
+  countInGroup(groupId: string): number {
+    return Number(
+      (
+        this.db
+          .prepare('SELECT count(*) AS n FROM captures WHERE group_id = ? AND deleted = 0')
+          .get(groupId) as Row
+      ).n,
+    )
+  }
+
+  /** The captures that answer an ask, oldest first (tombstones left out). */
+  capturesForAsk(askId: string): CaptureRow[] {
+    return this.db
+      .prepare('SELECT * FROM captures WHERE ask_id = ? AND deleted = 0 ORDER BY created_at, id')
+      .all(askId) as unknown as CaptureRow[]
+  }
+
+  /** Re-stamps a live capture with new field values; `prev` is the version it was based on. */
+  private edit(id: string, fields: Record<string, string | number | null>): CaptureRow | null {
+    return this.transaction(() => {
+      const current = this.getCapture(id)
+      if (!current) return null
+      const stamp = this.stamp()
+      const names = Object.keys(fields)
+      this.db
+        .prepare(
+          `UPDATE captures SET ${names.map((name) => `${name} = ?`).join(', ')},
+             updated_at = ?, origin = ?, prev = ?, seq = ? WHERE id = ?`,
+        )
+        .run(
+          ...names.map((name) => fields[name] as string | number | null),
+          stamp.updated_at,
+          stamp.origin,
+          current.updated_at,
+          stamp.seq,
+          id,
+        )
+      return this.requireCapture(id)
+    })
+  }
+
+  updateCaption(id: string, caption: string): CaptureRow | null {
+    return this.edit(id, { caption })
+  }
+
+  /** Marks the capture deleted. The blob stays until the sync-aware cleanup. */
+  tombstoneCapture(id: string): boolean {
+    return this.edit(id, { deleted: 1 }) !== null
+  }
+}

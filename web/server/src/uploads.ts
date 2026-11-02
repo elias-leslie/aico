@@ -88,16 +88,23 @@ function tooLarge(config: UploadConfig): HttpError {
   return new HttpError(413, `File too large. Maximum size: ${config.maxBytes / (1024 * 1024)}MB`)
 }
 
-/** The request's `file` part, read with the body capped near the limit. */
-async function readUpload(req: IncomingMessage, config: UploadConfig): Promise<File> {
-  const cap = config.maxBytes + MULTIPART_OVERHEAD_BYTES
-  if (Number(req.headers['content-length'] ?? 0) > cap) throw tooLarge(config)
+/**
+ * The request's multipart form, read with the body capped near `maxBytes` for
+ * the file part; `tooLarge` supplies the 413 so each caller words it its own way.
+ */
+export async function readUploadForm(
+  req: IncomingMessage,
+  maxBytes: number,
+  tooLarge: () => HttpError,
+): Promise<{ form: FormData; file: File }> {
+  const cap = maxBytes + MULTIPART_OVERHEAD_BYTES
+  if (Number(req.headers['content-length'] ?? 0) > cap) throw tooLarge()
   let seen = 0
   const counted = req.pipe(
     new Transform({
       transform(chunk: Buffer, _encoding, done) {
         seen += chunk.length
-        done(seen > cap ? tooLarge(config) : null, chunk)
+        done(seen > cap ? tooLarge() : null, chunk)
       },
     }),
   )
@@ -110,13 +117,18 @@ async function readUpload(req: IncomingMessage, config: UploadConfig): Promise<F
       duplex: 'half',
     } as RequestInit).formData()
   } catch (error) {
-    if (seen > cap) throw tooLarge(config)
+    if (seen > cap) throw tooLarge()
     throw new HttpError(422, `Expected a multipart form with a file: ${(error as Error).message}`)
   }
   const file = form.get('file')
   if (!(file instanceof File)) throw new HttpError(422, 'file is required')
-  if (file.size > config.maxBytes) throw tooLarge(config)
-  return file
+  if (file.size > maxBytes) throw tooLarge()
+  return { form, file }
+}
+
+/** The request's `file` part, read with the body capped near the limit. */
+export async function readUpload(req: IncomingMessage, config: UploadConfig): Promise<File> {
+  return (await readUploadForm(req, config.maxBytes, () => tooLarge(config))).file
 }
 
 /** At most `limit` calls per window per key (the Python backend's 10/minute). */
