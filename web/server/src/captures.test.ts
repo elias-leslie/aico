@@ -441,10 +441,12 @@ describe('capture routes', () => {
       extractRoute: 'ollama',
       extract: { title: 'T' },
     })
+    await upload(PNG, 'b.png', 'image/png')
     const list = (await (await fetch(`${server.base}/api/captures`)).json()) as {
       captures: CaptureJson[]
     }
-    expect(list.captures[0]).not.toHaveProperty('extract')
+    expect(list.captures).toHaveLength(2)
+    for (const entry of list.captures) expect(entry).not.toHaveProperty('extract')
   })
 
   it('serves an image inline with the immutable cache and sandbox headers', async () => {

@@ -315,7 +315,7 @@ export function registerCaptureRoutes(
       before: ctx.query.get('before') || undefined,
       limit,
     })
-    return { captures: captures.map(json), total }
+    return { captures: captures.map((row) => json(row)), total }
   })
 
   router.on('GET', '/api/captures/:id', (ctx) => json(need(ctx.params.id), true))
