@@ -946,6 +946,8 @@ export class WakeScheduler {
       .filter((wake) => ridesAlong(wake) && wake.dueAt <= now)
     if (!rows.length) return null
     const { text, taken } = composeDelivery(rows, now, this.ops.policy())
+    // Before the rows go: a pass that sees none clears why the session was held.
+    const held = this.heldNote(sessionId, taken)
     for (const wake of taken) this.store.remove(wake.id)
     try {
       this.ops.delivered?.(sessionId, taken, 'native')
@@ -954,7 +956,7 @@ export class WakeScheduler {
     }
     this.ops.changed(sessionId)
     this.ops.log(
-      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn)${this.heldNote(sessionId, taken)}`,
+      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn)${held}`,
     )
     return text
   }
@@ -983,6 +985,7 @@ export class WakeScheduler {
       .forSession(sessionId)
       .filter((wake) => ridesAlong(wake) && marks.has(rideMark(wake)))
     if (!taken.length) return 0
+    const held = this.heldNote(sessionId, taken)
     for (const wake of taken) this.store.remove(wake.id)
     try {
       this.ops.delivered?.(sessionId, taken, 'native')
@@ -991,7 +994,7 @@ export class WakeScheduler {
     }
     this.ops.changed(sessionId)
     this.ops.log(
-      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn, confirmed)${this.heldNote(sessionId, taken)}`,
+      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn, confirmed)${held}`,
     )
     return taken.length
   }

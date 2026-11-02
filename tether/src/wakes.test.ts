@@ -393,7 +393,10 @@ describe('wake scheduler', () => {
   })
 
   it('an answer to an ask rides along with the next natural turn while the agent stays busy', async () => {
-    const { wakes, clock, log, state, scheduler } = harness()
+    // A change looks at the queue again at once, as the daemon does.
+    const again: { run: () => void } = { run: () => {} }
+    const { wakes, clock, log, state, scheduler } = harness({ changed: () => again.run() })
+    again.run = () => void scheduler.tick()
     const answer = wakes.addEvent({
       sessionId: SESSION,
       source: 'ask:991a6593792d',
