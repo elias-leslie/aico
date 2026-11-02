@@ -1591,7 +1591,7 @@ def create_main(argv: list[str]) -> int:
         "Agent Hub agent slug; required with --tool agent-hub, refused with any other tool"))
     parser.add_argument("--role", default="portfolio-root", help="opaque orchestration metadata")
     parser.add_argument("--work-role",
-                        help="required for a new root: a work role Agent Hub knows (coordinator, implementation, research, review, recon, hunting, operations, selection, verification, reporting, mapping or other; st models route lists them); fixed including resume. It also picks the launch defaults")
+                        help="required for a new root: a work role Agent Hub knows (coordinator, implementation, design, research, review, recon, hunting, operations, selection, verification, reporting, mapping or other; st models route lists them); fixed including resume. It also picks the launch defaults")
     parser.add_argument("--work-role-name", help="optional display name (1-128 characters)")
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
