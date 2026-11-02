@@ -4,6 +4,7 @@ import { Asks } from './asks'
 import { Background, reconcileLinks } from './background'
 import { WebStore } from './db'
 import { Shows } from './shows'
+import { applyPage, changesSince } from './sync/engine'
 import { FakeTether } from './testing'
 
 vi.mock('tether/client', async (original) => ({
@@ -186,6 +187,47 @@ describe('events', () => {
       '“nightly” has a question for you. Open Aico to answer it.',
     )
   })
+
+  it('pushes once with two doors: only the door whose Tether owns the session pushes', async () => {
+    const share = {
+      id: 'ab12cd34ef56',
+      session: 'ab12cd34',
+      kind: 'files',
+      title: null,
+      createdAt: '2026-10-27T10:00:00.000Z',
+      paths: ['/srv/a.txt'],
+    }
+    const ask = {
+      id: 'ff12cd34ef56',
+      session: null,
+      requester: 'nightly',
+      question: 'Run the cleanup?',
+      options: [],
+      recommended: null,
+      body: null,
+      command: null,
+      share: null,
+      blocking: true,
+      state: 'open',
+      answer: null,
+      note: null,
+      delivery: null,
+      createdAt: 1,
+      updatedAt: 1,
+      answeredAt: null,
+    }
+    // The same two events on both doors: the owner's own Tether (no host) and
+    // the other door, whose hub relays them from the peer with `host` set.
+    const owner = [event('show.requested', share), event('asks.changed', { ask, created: true })]
+    const relayed = owner.map((item) => event(item.type, { ...item.data, host: 'gem' }))
+    const door = background(true)
+    const other = background(true)
+    for (const item of owner) await door.event(item)
+    for (const item of relayed) await other.event(item)
+    expect(pushes).toHaveLength(2) // one share and one ask, each once
+    await other.event(relayed[0] as (typeof relayed)[0])
+    expect(pushes).toHaveLength(2)
+  })
 })
 
 describe('reconcileLinks', () => {
@@ -208,6 +250,26 @@ describe('reconcileLinks', () => {
     expect(store.getPane(emptyTab)).toBeNull()
     expect(store.getPane(paneId)).not.toBeNull()
     expect(store.getLink(alive.id)).not.toBeNull()
+  })
+
+  it("leaves the other door's links alone, and everything while a peer is in doubt", async () => {
+    const own = linked('shell')
+    tether.sessions.delete(own.id)
+    // A tab link made on another door for a session this Tether does not list.
+    const other = new WebStore(':memory:', { hostName: 'gem' })
+    other.link('feedface', paneId, 'codex')
+    applyPage(store.syncHandle(), changesSince(other.syncHandle(), 0, 100).rows)
+    expect(store.getLink('feedface')).not.toBeNull()
+    other.close()
+
+    tether.hostRows = [{ name: 'gem', state: 'offline', ssh: 'gem', sessions: 0 }]
+    expect((await reconcileLinks(tether.client, store, 7)).links_dropped).toBe(0)
+    expect(store.getLink(own.id)).not.toBeNull()
+
+    tether.hostRows = [{ name: 'gem', state: 'connected', ssh: 'gem', sessions: 0 }]
+    expect((await reconcileLinks(tether.client, store, 7)).links_dropped).toBe(1)
+    expect(store.getLink(own.id)).toBeNull()
+    expect(store.getLink('feedface')).not.toBeNull()
   })
 
   it('never treats an outage as every session ended', async () => {

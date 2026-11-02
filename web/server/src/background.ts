@@ -29,6 +29,15 @@ export interface ReconcileStats {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+/** Session ids of the live links this host wrote last (`origin`). */
+function ownLinks(store: WebStore): Set<string> {
+  const rows = store
+    .syncHandle()
+    .db.prepare('SELECT session_id FROM session_links WHERE deleted = 0 AND origin = ?')
+    .all(store.hostName) as { session_id: string }[]
+  return new Set(rows.map((row) => row.session_id))
+}
+
 /**
  * Drop links to sessions Tether no longer has, then tabs left empty for
  * `emptyPaneDays`. Throws when Tether is unreachable: an outage never counts
@@ -43,10 +52,19 @@ export async function reconcileLinks(
   // Links from before the list read: one made meanwhile may be for a session it missed.
   const links = store.listLinks()
   const alive = new Set((await tether.listSessions()).map((session) => session.id))
+  // With two doors a drop is a tombstone that deletes the other door's tab link, so
+  // a link is dropped here only when this door made it (its Tether owns the session)
+  // and no peer is in doubt: a peer that is down or reconnecting may simply be
+  // missing from the list. The ended-session event covers the rest.
+  const mine = ownLinks(store)
+  const settled = (await tether.hosts()).every(
+    (host) => host.state === 'connected' || host.state === 'powered_off',
+  )
   const stats: ReconcileStats = { links: 0, links_dropped: 0, panes_pruned: 0 }
   for (const link of links) {
     stats.links += 1
     if (alive.has(link.session_id)) continue
+    if (!settled || !mine.has(link.session_id)) continue
     if (store.unlink(link.session_id)) {
       stats.links_dropped += 1
       console.log(`[aico-web] view link dropped session=${link.session_id}`)
@@ -80,6 +98,11 @@ export interface MaintenanceResult {
   project_count?: number
   orphaned_project_settings_deleted?: number
   project_settings_cleanup_skipped?: boolean
+}
+
+/** True when the hub relayed this event from another host's Tether. */
+function fromPeer(data: Record<string, unknown>): boolean {
+  return typeof data.host === 'string' && data.host !== ''
 }
 
 function tetherDown(error: unknown): boolean {
@@ -125,10 +148,13 @@ export class Background {
     const { store } = this.deps
     const data = event.data && typeof event.data === 'object' ? event.data : {}
     const id = typeof data.id === 'string' ? data.id : null
+    // Push door: with two Aico doors, only the one whose Tether owns the
+    // session pushes. The hub relays a peer's events with `host` set in the data.
+    const pushDoor = this.deps.trustShows && !fromPeer(data)
     if (event.type === 'show.requested') {
-      if (this.deps.trustShows) await this.deps.shows.receive(data)
+      if (pushDoor) await this.deps.shows.receive(data)
     } else if (event.type === 'asks.changed') {
-      if (this.deps.trustShows) await this.deps.asks?.receive(data)
+      if (pushDoor) await this.deps.asks?.receive(data)
     } else if (event.type === 'session.ended') {
       if (id && store.unlink(id))
         console.log(`[aico-web] view link dropped session=${id} reason=session.ended`)

@@ -23,6 +23,7 @@ import type { OwnerAdapter } from './owners/types'
 import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
+import { registerSyncRoutes, startSync } from './sync/start'
 import { TerminalHub } from './terminal'
 import { extract } from './vision-extract'
 import { realRunners } from './vision-extract/runners'
@@ -103,6 +104,8 @@ function serve(): void {
     },
   })
   registerNightshiftRoutes(api, config)
+  const sync = startSync({ config, store, notes, blobsDir })
+  registerSyncRoutes(api, sync.loop)
   const nightshift = new NightshiftRelay(config)
   registerNightshiftStream(api, nightshift)
   const server = createWebServer(
@@ -130,6 +133,7 @@ function serve(): void {
     reader.stop()
     terminals.stop()
     nightshift.stop()
+    sync.stop()
     server.close(() => {
       store.close()
       notes.close()

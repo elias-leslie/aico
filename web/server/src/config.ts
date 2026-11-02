@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defaultTetherSocketPath, tetherSocketPath } from 'tether/client'
+import { defaultTetherSocketPath, hostsFile, tetherSocketPath } from 'tether/client'
 import { DEFAULT_REMOTE_UPLOAD_DIR } from 'tether/term'
 import type { RouteName, VisionConfig } from './vision-extract'
 
@@ -79,6 +79,18 @@ export interface SyncConfig {
   tombstoneMs: number
   /** A batch with a stamp further ahead than this is refused (`AICO_SYNC_MAX_AHEAD_HOURS`). */
   maxAheadMs: number
+  /** The sync listener's unix socket (`AICO_SYNC_SOCKET`), else `$XDG_RUNTIME_DIR/aico/sync.sock`. */
+  socket: string
+  /** Pull each peer this often, and on a nudge (`AICO_SYNC_INTERVAL_SECONDS`). */
+  intervalMs: number
+  /** How often a local write is looked for, to nudge the peers (`AICO_SYNC_WATCH_MS`). */
+  watchMs: number
+  /** A peer that says nothing for this long on an open request is dropped (`AICO_SYNC_IDLE_SECONDS`). */
+  idleMs: number
+  /** A blob nothing references is removed once its file is this old (`AICO_SYNC_BLOB_GRACE_DAYS`). */
+  blobGraceMs: number
+  /** hosts.json, read for the peers that have a `sync` socket. */
+  hostsFile: string
 }
 
 /** Where receipts go: portfolio-ai's API, reached on loopback (the workstation's forwarder). */
@@ -123,6 +135,10 @@ const DEFAULT_CAPTURE_MAX_FILES = 20
 export const DEFAULT_NOTE_REVISION_MINUTES = 5
 export const DEFAULT_TOMBSTONE_DAYS = 180
 export const DEFAULT_MAX_AHEAD_HOURS = 24
+export const DEFAULT_SYNC_INTERVAL_SECONDS = 60
+const DEFAULT_SYNC_IDLE_SECONDS = 30
+const DEFAULT_SYNC_WATCH_MS = 1000
+const DEFAULT_BLOB_GRACE_DAYS = 7
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
 const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
@@ -290,6 +306,15 @@ export function loadConfig(
     sync: {
       tombstoneMs: positiveInt(env.AICO_SYNC_TOMBSTONE_DAYS, DEFAULT_TOMBSTONE_DAYS) * 86_400_000,
       maxAheadMs: positiveInt(env.AICO_SYNC_MAX_AHEAD_HOURS, DEFAULT_MAX_AHEAD_HOURS) * 3_600_000,
+      socket: resolve(
+        env.AICO_SYNC_SOCKET?.trim() ||
+          join(env.XDG_RUNTIME_DIR || `/run/user/${uid ?? 0}`, 'aico', 'sync.sock'),
+      ),
+      intervalMs: positiveInt(env.AICO_SYNC_INTERVAL_SECONDS, DEFAULT_SYNC_INTERVAL_SECONDS) * 1000,
+      watchMs: positiveInt(env.AICO_SYNC_WATCH_MS, DEFAULT_SYNC_WATCH_MS),
+      idleMs: positiveInt(env.AICO_SYNC_IDLE_SECONDS, DEFAULT_SYNC_IDLE_SECONDS) * 1000,
+      blobGraceMs: positiveInt(env.AICO_SYNC_BLOB_GRACE_DAYS, DEFAULT_BLOB_GRACE_DAYS) * 86_400_000,
+      hostsFile: hostsFile(env, home),
     },
     vision: {
       routes: visionRoutes(env.AICO_VISION_ROUTES),
