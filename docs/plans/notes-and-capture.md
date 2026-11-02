@@ -305,6 +305,8 @@ For a remote row R and the local row L with the same key:
 - A differing `schema_version` pauses sync ("update gem") but never blocks local use. Migrations are additive.
 - Failures: peer or link down -> skip quietly, retry on the next tick; half a page -> nothing applied; duplicate delivery -> idempotent.
 
+**Fleet link (2026-11-02):** the agreed fleet direction gives Aico its own Ominull-style link: connect out, a certificate per machine, approve to join. It's in the summitflow cleanup plan, "Aico fleet". Until that exists, sync uses the SSH forward above. Later the fleet link carries the same `/sync/*` socket API, so only the `-L` forward changes; the engine, endpoints and tests stay.
+
 ### View state in `web.db` (the per-server state fix)
 
 - `panes`, `session_links` and `project_settings` get the sync columns in `web.db` schema version 2. The deletes in `db.ts` (`deletePane`, `unlink`, `pruneProjectSettings`, `deleteEmptyPanes`) become tombstones and reads filter them. So a tab made on one door appears on the other. Sessions stay in Tether; their ids are global (8 hex).
