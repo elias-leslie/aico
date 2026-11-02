@@ -360,7 +360,7 @@ CT 190 `aico`: Debian 13, unprivileged, `nesting=1`, `onboot=1`, 2 cores, 2 GB R
 | workstation | notes, capture, gem sessions | the workstation's terminals (shown offline), `st` |
 | both | the installed PWA opens last-synced notes read-only | everything else |
 
-### Wake button (needs the owner's go-ahead before it is built)
+### Wake button (on hold: owner said no for now, 2026-11-02; revisit only if they ask)
 
 Not part of any milestone above. You said to run it by you first. Testing the wake itself is fine without asking.
 - What it would be: the `workstation` entry in the LXC's `hosts.json` gets `wake: ["wake-ws"]`, so phone Aico shows a Wake button on the offline workstation. Tether runs `wake` only on an explicit create or button press and the link never powers anything on, so nothing wakes by itself. `wake-ws` would be a copy of the script in the LXC (it broadcasts a magic packet on the same LAN bridge; no `qm` and no host access).
