@@ -305,7 +305,7 @@ Debian 13 PVE host, 30 GB RAM (about 24 GB free), 54 GB free on root, 310 GB fre
 ### Why an LXC, not the PVE host
 
 - Untrusted files and a web app with a shell behind Access belong in a guest, like every other always-on service there. Node 22 (for `node:sqlite`, [ADR 0002](../adr/0002-runtime-and-packaging.md)), tmux and `libheif-examples` stay off the host.
-- Cost: the guest needs its own ssh key to the workstation and to VM 180, a backup row, and its own `agy` login. Reaching the PVE host from it is blocked on purpose; that is Open question 1.
+- Cost: the guest needs its own ssh key to the workstation and to VM 180, a backup row, and its own `agy` login. Reaching the PVE host from it was blocked on purpose; you approved it on 2026-11-02 for the rescue shell and alerts only (Open question 1).
 
 ### The LXC
 
@@ -408,5 +408,5 @@ Rules: tests never cross the network (loopback ephemeral ports and temp unix soc
 
 ## Open questions (only the owner can answer)
 
-1. **Let the aico LXC ssh into the Proxmox host?** The firewall allows only the workstation today. Without it the phone still gets notes, capture and sessions in the LXC. With it (add the LXC's address to the `management` ipset, one restricted key) you also get a root rescue session on gem from the phone, and the gem door can send your phone a Nightshift push when the workstation is off (the push key lives on the PVE host). Recommendation: yes, for those two uses only. It is a security boundary, so it is yours to open. Milestones 1 to 5 do not depend on it.
-2. **Drive token for the nightly export on gem.** The export needs a Drive login on both hosts. Recommendation: a separate Google consent limited to files Aico creates (the `drive.file` scope) in its own `SummitFlow-Notes` folder, authorised privately like `scripts/authorize-backup-drive.sh`, so the backup's token is never copied to gem. The alternative is copying the backup's rclone config, which can read your whole backup. It is a credential, so yours to approve.
+1. **Decided 2026-11-02: yes, for those two uses only.** Let the aico LXC ssh into the Proxmox host? The firewall allows only the workstation today. Without it the phone still gets notes, capture and sessions in the LXC. With it (add the LXC's address to the `management` ipset, one restricted key) you also get a root rescue session on gem from the phone, and the gem door can send your phone a Nightshift push when the workstation is off (the push key lives on the PVE host). Recommendation: yes, for those two uses only. It is a security boundary, so it is yours to open. Milestones 1 to 5 do not depend on it.
+2. **Decided 2026-11-02: its own limited token.** Drive token for the nightly export on gem. The export needs a Drive login on both hosts. Recommendation: a separate Google consent limited to files Aico creates (the `drive.file` scope) in its own `SummitFlow-Notes` folder, authorised privately like `scripts/authorize-backup-drive.sh`, so the backup's token is never copied to gem. The alternative is copying the backup's rclone config, which can read your whole backup. It is a credential, so yours to approve.
