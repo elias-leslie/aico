@@ -65,6 +65,12 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
   - A duplicate id at merge is logged, and the local copy wins.
 - **Events:** the hub follows each peer's event stream and re-emits the
   events with `host`. When a peer reconnects, it emits a resync event.
+  - `asks.changed` and `show.requested` are relayed too (2026-11-02): the hub keeps each
+    peer's asks and shares (read on link-up, then from its events, persisted with the
+    session snapshot) so `GET /v1/asks?hosts=all` and `/v1/shares?hosts=all` list every
+    host's, marked `peer` while a host is away. Per-ask routes go to the owning host.
+    Only the door whose Tether owns an item pushes it (events with `host` set are not
+    pushed).
 - **GUI channel:** the hub holds each peer's `/v1/gui/channel` and bridges it
   into its own channel.
 - **Create:** `POST /v1/sessions` and `POST /v1/roots` accept `host`.

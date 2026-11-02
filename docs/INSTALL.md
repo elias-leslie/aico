@@ -114,8 +114,24 @@ Environment=TETHER_HEADLESS=1
 ```
 
 Then list each machine in the other's `hosts.json` with `ssh`, `socket` and
-`sync`, and enable `tether-link@<name>` on both sides. A machine without Nightshift
-(the gem container) cannot send push notices until it has its own route to one.
+`sync`, and enable `tether-link@<name>` on both sides. Both doors then
+list every host's asks and shares (Tether's hub relays them; an answer goes to the host that owns the ask), and
+only the owning host pushes.
+
+A machine without Nightshift (the gem container) sends its pushes through the Proxmox host: set
+`AICO_PUSH_SSH=pve-alerts` in an `aico-web.service.d` drop-in and give the container an ssh alias `pve-alerts` for
+`root@<pve>` with its own key. On the Proxmox host that key is forced to
+[`scripts/pve-push/aico-push`](../scripts/pve-push/aico-push) (copy it to `/usr/local/sbin/aico-push`, mode 0755):
+
+```
+restrict,from="<container ip>",command="/usr/local/sbin/aico-push" ssh-ed25519 AAAA... aico-gem-push
+```
+
+The script reads one Aico notice on stdin, checks every field, and sends it with the dead-man alarm's own sender
+(`nightshift.deadman.send`, so the app route and Web Push, with credentials only root holds there), once per key.
+The key opens no shell and takes no arguments. The host firewall must let the container reach port 22 (one rule in
+the node's `host.fw`). Such a push has no Nightshift item (it shows in the Proxmox push log) and cannot be resolved
+afterwards.
 The Hosts card shows "different Aico version" when the two bundles differ
 (`hello.build_id` is a fingerprint of the server bundle, `AICO_BUILD_ID` overrides it).
 
