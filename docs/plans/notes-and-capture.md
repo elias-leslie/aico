@@ -108,10 +108,11 @@ Tether CLI (`tether/src/`): `capture-cli.ts` new, wired in `cli.ts` beside `case
 | `GET /api/captures?status=&ask=&limit=&before=` | `{ captures, total }`, newest first, tombstones hidden |
 | `GET /api/captures/:id` | one capture |
 | `GET /api/captures/:id/file`, `/thumb`, `/preview` | bytes. `Cache-Control: private, max-age=31536000, immutable` (hash-named), `nosniff`, `Content-Security-Policy: sandbox; default-src 'none'`. Only jpeg, png, webp and gif render inline; everything else is `Content-Disposition: attachment`. |
+| `POST /api/captures/:id/retry` | A `failed` capture goes back to `new` and is read again (409 for any other status). Milestone 2. |
 | `PATCH /api/captures/:id` | `{ caption }` only |
 | `DELETE /api/captures/:id` | tombstone. The blob stays until the sync-aware cleanup (Milestone 5). |
 
-Errors in plain words: 413 "That file is over 25 MB", 415 "Aico can't store this kind of file yet", 429 (60 per minute, the `RateLimiter`), 409 for a closed or full ask (Milestone 1b). The capture JSON: `{ id, clientId, groupId, askId, kind, name, mime, size, hash, caption, status, type, text, createdAt, updatedAt, origin, hasThumb, previewState }`, with `previewState` of `ready`, `pending` or `unavailable`.
+Errors in plain words: 413 "That file is over 25 MB", 415 "Aico can't store this kind of file yet", 429 (60 per minute, the `RateLimiter`), 409 for a closed or full ask (Milestone 1b). The capture JSON: `{ id, clientId, groupId, askId, kind, name, mime, size, hash, caption, status, type, text, createdAt, updatedAt, origin, hasThumb, previewState, extractError, extractRoute, needsCheck }`, plus `extract` (the parsed reading) on a single `GET /api/captures/:id` and on retry, never in lists, with `previewState` of `ready`, `pending` or `unavailable`.
 
 ### Accepted types and HEIC
 
@@ -125,7 +126,7 @@ A thin client over `http://127.0.0.1:3002` (`AICO_WEB_URL` overrides). It sends 
 - `tether capture list [--status S] [--ask ID] [--json]`
 - `tether capture get ID [--json]`: fields, caption, text.
 - `tether capture file ID [--out DIR]`: prints the blob path on this host; with `--out` it downloads. A session on another host needs port 3002 in that host's `forwards` in hosts.json.
-- `tether capture result ID --type T [--text-file F]` comes in Milestone 2.
+- `tether capture result ID [--json]`: what was read (Milestone 2, shipped). Exit 3 while it is still being read, 1 when it could not be read.
 
 ### Tests for Milestone 1
 
@@ -137,6 +138,19 @@ No network, no real `heif-convert`, no real timers.
 - Frontend: `CapturePicker.test.tsx` (two inputs, `accept` from the table, `capture` attribute, `multiple`), `CaptureSheet.test.tsx` (queue states, retry, caption sent), `CaptureLauncher.test.tsx` (beside each `NeedsYouLauncher`, absent in a terminal view), `CaptureList`/`CaptureDetail` tests for loading, empty, failed and stale states.
 - `tether/src/capture-cli.test.ts` against a stub HTTP server on an ephemeral loopback port.
 - Live check (a lane, not `st check`): phone PWA on the workstation door; take a photo; choose three files including a HEIC and a PDF; see them in Captures; `tether capture get`.
+
+### Milestone 2 as shipped (2026-11-02)
+
+- **Module:** `web/server/src/vision-extract/` (`index.ts` routes, `validate.ts` a small schema checker, `capture-schema.ts` the schema and prompt, `runners.ts` the real agy and HTTP calls). `extract(request, config, runners)` returns `{ json, raw, route, ms }`; output that fails the schema fails that route and the next route is tried. Tests inject the runners and pin the agy argv and the ollama request.
+- **Routes and config** (`config.ts`, all env): `AICO_VISION_ROUTES` (default `agy,ollama`), `AICO_AGY_PATH` (else `~/.local/bin/agy` when present, else `agy`), `AICO_AGY_MODEL` (`gemini-3.8-flash-low`), `AICO_OLLAMA_URL` (`http://localhost:11434`), `AICO_OLLAMA_MODEL` (`qwen3-vl:8b-instruct`), `AICO_VISION_CONCURRENCY` (2). The ollama route reads pictures only and its results are `needsCheck`. No time limit on either route (owner rule); a read ends when the process exits or the connection errors.
+- **Schema (one call):** `type` (grocery_list, receipt, odometer, service_invoice, recipe, note, document, other), `title`, `text`, `summary`, `lines[{text, struck}]`, `items[{as_written, item, quantity, struck}]`, `receipt|null`, `odometer|null`. All fields are required; the unused ones come back empty or null.
+- **Store:** `notes.db` schema 2 adds `extract_json`, `extract_route`, `extract_error`. Claim, finish, fail, requeue and retry are `NotesStore` methods that go through the same stamp path as every edit (new `updated_at`, `seq`, `prev`), so sync later sees them. A capture in `extracting` has the time reading began as its `updated_at`.
+- **Worker** (`extract-worker.ts`, started in `main.ts`): takes `status=new` rows whose `origin` is this host, oldest first, up to the concurrency; sets `extracting`; writes `ready` or `failed` with a short plain reason; requeues `extracting` rows at startup. Upload and Retry only call `kick()`. A HEIC is read through its preview (fails plainly if there is none). The reader gets a temp folder holding one symlink with a real extension, so blobs named by hash still read as `.jpg`, `.pdf`, `.m4a`. Text captures are copied in as `type=note` with no call; Word, Excel and OpenDocument files are marked `ready` with no text.
+- **UI:** the list shows Reading… / Read / Couldn't read it and the first line of the text when there is no caption. The detail view, under the picture, shows "Waiting to be read", "Reading since 1:42 PM", or "Couldn't read it: reason" with Retry; then a "check this" note when the fallback route read it, the list items (cleaned item, quantity, struck items crossed out, "written: ..." when it differs), and the text.
+- **Live check (workstation, 2026-11-02):** receipt 40.6 s, type receipt, total 172.89, subtotal 171.31, tax 1.58, 24 items, date 2026-08-17. Odometer 14.5 s, 33396 with trip 44.6. Grocery list 16.9 s, 21 items with cleaned names ("see weeds" to seaweed, "pamagrants" to pomegranates, "potateous" to potatoes). Concurrency 2 held: the third waited as `new` until a slot freed. The model marked "sea salt" and "bread crumbs" as struck; on the photo those lines are underlined, so it may be confusing underlines with strike-throughs (worth a look at the prompt).
+- **Spikes:** `agy` reads a PDF directly, text or scanned (a text PDF made with LibreOffice: exact; an image-only PDF made from a rendered picture: exact, 21 s). No `pdftoppm` step is needed. `agy` takes audio directly: a synthetic spoken sentence in m4a, wav, mp3, ogg and webm/opus transcribed word for word (11 to 13 s each). So speech-to-text through Agent Hub's faster-whisper is not needed for now. Both also worked through the real worker (a PDF and an m4a uploaded to the running server reached `ready` with correct text). Gem still needs `agy` installed and signed in. The ollama fallback cannot read PDFs or audio, so those fail plainly when agy is unavailable.
+- **Not exercised live:** the ollama fallback (unit-tested with a canned reply only; it was bake-off tested earlier) and the failed-read path with a real agy outage.
+- **Left for Milestone 3:** the router and type table, suggestions, owners and hand-off (nothing routes yet); a sync-aware rule for which host reads a row (today `origin` equals this host, which also changes when another host edits the row).
 
 ---
 
