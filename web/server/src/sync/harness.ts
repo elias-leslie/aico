@@ -3,7 +3,6 @@
 // page mid-way. No sockets, no timers: a "request" is a function call on the
 // server host's handle, with the answer passed through JSON as a wire would.
 
-import { DatabaseSync } from 'node:sqlite'
 import { WebStore } from '../db'
 import { NotesStore } from '../notes-db'
 import {
@@ -164,13 +163,4 @@ export function dump(handle: SyncHandle): Snapshot {
 /** A copy of a store's file as a backup would hold it (a consistent snapshot). */
 export function backup(handle: SyncHandle, to: string): void {
   handle.db.exec(`VACUUM INTO '${to.replace(/'/g, "''")}'`)
-}
-
-export function peek(path: string, sql: string): Record<string, unknown>[] {
-  const db = new DatabaseSync(path)
-  try {
-    return db.prepare(sql).all() as Record<string, unknown>[]
-  } finally {
-    db.close()
-  }
 }
