@@ -17,6 +17,7 @@ import { execRunner, PreviewJobs } from './heic'
 import { registerNightshiftRoutes } from './nightshift'
 import { NightshiftRelay, registerNightshiftStream } from './nightshift-stream'
 import { NotesStore } from './notes-db'
+import { NotesOwner } from './owners/notes'
 import { PortfolioAiOwner } from './owners/portfolio-ai'
 import type { OwnerAdapter } from './owners/types'
 import { createWebServer } from './server'
@@ -29,7 +30,10 @@ import { realRunners } from './vision-extract/runners'
 function serve(): void {
   const config = loadConfig()
   const store = new WebStore(config.dbPath)
-  const notes = new NotesStore(join(config.dataDir, 'notes.db'), { hostName: config.hostName })
+  const notes = new NotesStore(join(config.dataDir, 'notes.db'), {
+    hostName: config.hostName,
+    revisionWindowMs: config.notes.revisionWindowMs,
+  })
 
   const tether = new TetherClient(config.tetherSocket)
   const terminals = new TerminalHub({
@@ -45,7 +49,7 @@ function serve(): void {
     files: { store: notes, blobsDir, hostName: config.hostName },
   })
   const previews = new PreviewJobs(blobsDir, execRunner)
-  const adapters = new Map<string, OwnerAdapter>()
+  const adapters = new Map<string, OwnerAdapter>([['notes', new NotesOwner(notes)]])
   if (config.portfolio.url)
     adapters.set(
       'portfolio-ai',

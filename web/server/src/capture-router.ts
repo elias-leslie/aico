@@ -188,7 +188,7 @@ export class CaptureRouter {
       const entry = this.deps.table.type(row.type)
       let result: Awaited<ReturnType<OwnerAdapter['send']>>
       try {
-        const job = await this.job(row, entry)
+        const job = await this.job(row, entry, adapter.local === true)
         result = 'failed' in job ? { state: 'failed', reason: job.failed } : await adapter.send(job)
       } catch (error) {
         this.log(`capture ${id}: hand-off crashed: ${(error as Error).stack ?? error}`)
@@ -218,12 +218,16 @@ export class CaptureRouter {
   private async job(
     row: CaptureRow,
     entry: CaptureTypeRow | null,
+    local: boolean,
   ): Promise<HandOff | { failed: string }> {
     if (!row.hash) return { failed: 'The file is no longer on this computer' }
     const preview = needsPreview(row.mime)
-    const bytes = await readBlob(this.deps.blobsDir, row.hash, preview ? 'preview' : 'original')
+    const bytes = local
+      ? new Uint8Array(0)
+      : await readBlob(this.deps.blobsDir, row.hash, preview ? 'preview' : 'original')
     if (!bytes) return { failed: 'The picture is not ready to send yet. Try again in a moment' }
     return {
+      capture: row,
       captureId: row.id,
       bytes,
       mime: preview ? 'image/jpeg' : row.mime,

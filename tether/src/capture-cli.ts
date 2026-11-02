@@ -26,7 +26,7 @@ export const CAPTURE_USAGE = `Usage:
 
 Talks to http://127.0.0.1:3002 (AICO_WEB_URL overrides).`
 
-const DEFAULT_URL = 'http://127.0.0.1:3002'
+export const DEFAULT_URL = 'http://127.0.0.1:3002'
 const STATUSES = ['new', 'extracting', 'ready', 'failed', 'filed']
 
 export interface CaptureIo {
@@ -80,13 +80,13 @@ interface Extract {
   odometer?: { odometer: number | null; trip: number | null } | null
 }
 
-interface Flags {
+export interface Flags {
   positional: string[]
   values: Record<string, string>
   json: boolean
 }
 
-function parseFlags(args: string[], names: readonly string[]): Flags | string {
+export function parseFlags(args: string[], names: readonly string[]): Flags | string {
   const flags: Flags = { positional: [], values: {}, json: false }
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index] as string
@@ -182,7 +182,7 @@ export function formatResult(item: CaptureJson): string {
   return lines.join('\n')
 }
 
-interface Answer {
+export interface Answer {
   status: number
   body: unknown
 }
@@ -197,7 +197,7 @@ async function call(base: string, path: string): Promise<Answer> {
   }
 }
 
-function problem(answer: Answer): string {
+export function problem(answer: Answer): string {
   const body = answer.body as { detail?: unknown } | string | null
   const detail = typeof body === 'object' && body !== null ? body.detail : body
   return typeof detail === 'string' && detail ? detail : `HTTP ${answer.status}`

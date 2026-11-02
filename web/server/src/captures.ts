@@ -177,6 +177,31 @@ async function sendFile(
   }
 }
 
+/** Streams one variant of a stored file; the preview of a HEIC is its JPEG, other kinds that show inline are shown as they are. */
+export async function sendBlobVariant(
+  res: ServerResponse,
+  blobsDir: string,
+  file: { hash: string; mime: string; name: string },
+  variant: BlobVariant,
+): Promise<void> {
+  let path = blobPath(blobsDir, file.hash, variant)
+  let mime = file.mime
+  let inline = false
+  if (variant === 'thumb') {
+    mime = 'image/jpeg'
+    inline = true
+  } else if (variant === 'preview') {
+    if (needsPreview(file.mime)) {
+      mime = 'image/jpeg'
+      inline = true
+    } else if (isInlineMime(file.mime)) {
+      path = blobPath(blobsDir, file.hash)
+      inline = true
+    } else throw new HttpError(404, 'This kind of file has no preview')
+  } else inline = isInlineMime(file.mime)
+  await sendFile(res, path, { mime, inline, name: file.name })
+}
+
 export function registerCaptureRoutes(
   router: Router,
   deps: CaptureDeps,
@@ -342,28 +367,13 @@ export function registerCaptureRoutes(
     return json(queued, true)
   })
 
-  /** Streams one variant of a capture's bytes; `pick` says which file and how it is shown. */
+  /** Streams one variant of a capture's bytes. */
   const serve =
     (variant: BlobVariant) =>
     async (ctx: { params: Record<string, string>; res: ServerResponse }) => {
       const row = need(ctx.params.id)
       if (!row.hash) throw new HttpError(404, 'The file for this capture was handed off')
-      let path = blobPath(blobsDir, row.hash, variant)
-      let mime = row.mime
-      let inline = false
-      if (variant === 'thumb') {
-        mime = 'image/jpeg'
-        inline = true
-      } else if (variant === 'preview') {
-        if (needsPreview(row.mime)) {
-          mime = 'image/jpeg'
-          inline = true
-        } else if (isInlineMime(row.mime)) {
-          path = blobPath(blobsDir, row.hash)
-          inline = true
-        } else throw new HttpError(404, 'This kind of file has no preview')
-      } else inline = isInlineMime(row.mime)
-      await sendFile(ctx.res, path, { mime, inline, name: row.name })
+      await sendBlobVariant(ctx.res, blobsDir, { ...row, hash: row.hash }, variant)
       return RAW
     }
   router.on('GET', '/api/captures/:id/file', serve('original'))

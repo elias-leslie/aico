@@ -83,7 +83,7 @@ describe('NotesStore', () => {
     )
     raw.close()
     const store = open(path)
-    expect(store.meta('schema_version')).toBe('3')
+    expect(store.meta('schema_version')).toBe(String(SCHEMA_VERSION))
     expect(store.claimForExtraction()).toMatchObject({
       status: 'extracting',
       extract_json: null,

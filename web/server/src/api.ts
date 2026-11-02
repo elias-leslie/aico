@@ -22,6 +22,7 @@ import {
   sendJson,
 } from './http'
 import { createLifecycle, type PaneView, tetherCall } from './lifecycle'
+import { registerNoteRoutes } from './notes'
 import { registerPaneFileRoutes } from './pane-files'
 import { registerRunRoutes } from './runs'
 import { byText, SHELL_MODE } from './sessions'
@@ -393,7 +394,10 @@ export function buildApi(deps: ApiDeps): Router {
   // -- Files and agent shares -------------------------------------------------------
 
   registerUploadRoutes(router, deps.uploads, uploadTargets(life, tether))
-  if (deps.captures) registerCaptureRoutes(router, deps.captures)
+  if (deps.captures) {
+    registerCaptureRoutes(router, deps.captures)
+    registerNoteRoutes(router, deps.captures)
+  }
   registerPaneFileRoutes(router, life, tether)
   registerFileLocationRoutes(router)
   registerShowRoutes(router, deps.shows)

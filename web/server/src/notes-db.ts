@@ -10,8 +10,9 @@ import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { CaptureKind } from './capture-files'
 import { HybridClock } from './hlc'
+import { NoteStore } from './notes-data'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 /** Changes after version 1, in order; `MIGRATIONS[n]` takes the file to version n + 1. */
 const MIGRATIONS: Record<number, string> = {
@@ -25,6 +26,88 @@ const MIGRATIONS: Record<number, string> = {
           ('suggested','confirmed','filed','waiting','failed','kept'));
       ALTER TABLE captures ADD COLUMN route_note  TEXT;
       CREATE INDEX IF NOT EXISTS captures_route ON captures (route_state);`,
+  3: `CREATE TABLE IF NOT EXISTS notes (
+        id          TEXT PRIMARY KEY,
+        kind        TEXT NOT NULL DEFAULT 'note' CHECK (kind IN ('note','list','prompt')),
+        title       TEXT NOT NULL DEFAULT '',
+        body        TEXT NOT NULL DEFAULT '',
+        pinned      INTEGER NOT NULL DEFAULT 0,
+        archived    INTEGER NOT NULL DEFAULT 0,
+        scope       TEXT,
+        source      TEXT,
+        created_at  INTEGER NOT NULL,
+        edited_at   INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL,
+        origin      TEXT NOT NULL,
+        prev        INTEGER,
+        deleted     INTEGER NOT NULL DEFAULT 0,
+        seq         INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS notes_source ON notes (source) WHERE source IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS notes_list ON notes (deleted, archived, pinned, edited_at DESC);
+      CREATE INDEX IF NOT EXISTS notes_seq ON notes (seq);
+      CREATE TABLE IF NOT EXISTS note_items (
+        id          TEXT PRIMARY KEY,
+        note_id     TEXT NOT NULL,
+        text        TEXT NOT NULL,
+        checked     INTEGER NOT NULL DEFAULT 0,
+        position    REAL NOT NULL,
+        hint        TEXT,
+        updated_at  INTEGER NOT NULL,
+        origin      TEXT NOT NULL,
+        prev        INTEGER,
+        deleted     INTEGER NOT NULL DEFAULT 0,
+        seq         INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS note_items_note ON note_items (note_id, deleted, position);
+      CREATE INDEX IF NOT EXISTS note_items_seq ON note_items (seq);
+      CREATE TABLE IF NOT EXISTS note_labels (
+        id          TEXT PRIMARY KEY,
+        note_id     TEXT NOT NULL,
+        label       TEXT NOT NULL,
+        updated_at  INTEGER NOT NULL,
+        origin      TEXT NOT NULL,
+        prev        INTEGER,
+        deleted     INTEGER NOT NULL DEFAULT 0,
+        seq         INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS note_labels_note ON note_labels (note_id, deleted);
+      CREATE INDEX IF NOT EXISTS note_labels_label ON note_labels (label COLLATE NOCASE);
+      CREATE INDEX IF NOT EXISTS note_labels_seq ON note_labels (seq);
+      CREATE TABLE IF NOT EXISTS attachments (
+        id          TEXT PRIMARY KEY,
+        note_id     TEXT NOT NULL,
+        capture_id  TEXT,
+        hash        TEXT NOT NULL,
+        name        TEXT NOT NULL,
+        mime        TEXT NOT NULL,
+        size        INTEGER NOT NULL,
+        position    REAL NOT NULL,
+        updated_at  INTEGER NOT NULL,
+        origin      TEXT NOT NULL,
+        prev        INTEGER,
+        deleted     INTEGER NOT NULL DEFAULT 0,
+        seq         INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS attachments_note ON attachments (note_id, deleted, position);
+      CREATE INDEX IF NOT EXISTS attachments_hash ON attachments (hash);
+      CREATE INDEX IF NOT EXISTS attachments_seq ON attachments (seq);
+      CREATE TABLE IF NOT EXISTS note_revisions (
+        id          TEXT PRIMARY KEY,
+        table_name  TEXT NOT NULL,
+        row_id      TEXT NOT NULL,
+        field       TEXT NOT NULL,
+        text        TEXT NOT NULL,
+        saved_at    INTEGER NOT NULL,
+        reason      TEXT NOT NULL CHECK (reason IN ('conflict','edit')),
+        updated_at  INTEGER NOT NULL,
+        origin      TEXT NOT NULL,
+        prev        INTEGER,
+        deleted     INTEGER NOT NULL DEFAULT 0,
+        seq         INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS note_revisions_row ON note_revisions (table_name, row_id, field, saved_at);
+      CREATE INDEX IF NOT EXISTS note_revisions_seq ON note_revisions (seq);`,
 }
 
 const SCHEMA = `
@@ -151,13 +234,20 @@ export interface NotesStoreOptions {
   hostName: string
   /** The wall clock in ms; tests pass a fake. */
   now?: () => number
+  /** Least time between two kept revisions of one note field (default: config). */
+  revisionWindowMs?: number
+  /** false: search notes with LIKE even where SQLite has FTS5 (tests). */
+  fts?: boolean
 }
 
 export class NotesStore {
   private readonly db: DatabaseSync
   private readonly clock: HybridClock
   private readonly now: () => number
+  private depth = 0
   readonly hostName: string
+  /** Notes, items, labels, attachments and revisions. */
+  readonly notes: NoteStore
 
   /** Opens (creating 0600 in a 0700 directory) and migrates; `':memory:'` for tests. */
   constructor(path: string, options: NotesStoreOptions) {
@@ -187,6 +277,19 @@ export class NotesStore {
       throw error
     }
     this.clock = new HybridClock(Number(this.meta('hlc_last') ?? 0), this.now)
+    try {
+      this.notes = new NoteStore({
+        db: this.db,
+        transaction: (work) => this.transaction(work),
+        stamp: () => this.stamp(),
+        now: () => this.now(),
+        revisionWindowMs: options.revisionWindowMs,
+        fts: options.fts,
+      })
+    } catch (error) {
+      this.db.close()
+      throw error
+    }
   }
 
   close(): void {
@@ -206,7 +309,10 @@ export class NotesStore {
       .run(key, value)
   }
 
+  /** One transaction; a call made inside another joins it (and rolls back with it). */
   private transaction<T>(work: () => T): T {
+    if (this.depth > 0) return work()
+    this.depth += 1
     this.db.exec('BEGIN IMMEDIATE')
     try {
       const result = work()
@@ -215,6 +321,8 @@ export class NotesStore {
     } catch (error) {
       this.db.exec('ROLLBACK')
       throw error
+    } finally {
+      this.depth -= 1
     }
   }
 
@@ -505,10 +613,12 @@ export class NotesStore {
       .all(this.hostName) as unknown as CaptureRow[]
   }
 
-  /** How many captures (tombstones too) still point at this blob. */
+  /** How many captures and note attachments (tombstones too) still point at this blob. */
   countHashRefs(hash: string): number {
-    return Number(
-      (this.db.prepare('SELECT count(*) AS n FROM captures WHERE hash = ?').get(hash) as Row).n,
+    return (
+      Number(
+        (this.db.prepare('SELECT count(*) AS n FROM captures WHERE hash = ?').get(hash) as Row).n,
+      ) + this.notes.countHashRefs(hash)
     )
   }
 }

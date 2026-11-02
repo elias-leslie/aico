@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { blobPath, putOriginal, putVariant } from './blobs'
 import { CaptureRouter, routeKey } from './capture-router'
 import { buildTable, loadCaptureTypes } from './capture-types'
-import { NotesStore } from './notes-db'
+import { type CaptureRow, NotesStore } from './notes-db'
 import type { Notice } from './notice'
 import { PortfolioAiOwner, uuidV5 } from './owners/portfolio-ai'
 import type { OwnerAdapter } from './owners/types'
@@ -186,6 +186,7 @@ describe('capture router and the portfolio-ai owner', () => {
 
     // The same capture sent again (a retry) answers with the same Portfolio AI row.
     const again = await owner().send({
+      capture: row as CaptureRow,
       captureId: row?.id as string,
       bytes: JPEG,
       mime: 'image/jpeg',

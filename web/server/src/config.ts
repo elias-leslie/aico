@@ -28,6 +28,7 @@ export interface WebConfig {
   /** This host's name on rows it writes (`origin`): AICO_HOST_NAME, else the machine's. */
   hostName: string
   captures: CaptureConfig
+  notes: NotesConfig
   vision: VisionSettings
   /** The capture type table's override file (the default table ships with Aico). */
   captureTypesFile: string
@@ -60,6 +61,11 @@ export interface CaptureConfig {
   maxBytes: number
   /** Most files in one batch or ask. */
   maxFiles: number
+}
+
+export interface NotesConfig {
+  /** Least time between two kept revisions of one title or body (`AICO_NOTE_REVISION_MINUTES`). */
+  revisionWindowMs: number
 }
 
 /** Where receipts go: portfolio-ai's API, reached on loopback (the workstation's forwarder). */
@@ -100,6 +106,8 @@ interface Identity {
 // working; only the upload dir name is Aico's own.
 const DEFAULT_CAPTURE_MAX_MB = 25
 const DEFAULT_CAPTURE_MAX_FILES = 20
+/** Least time between two kept revisions of one note field while it is being edited. */
+export const DEFAULT_NOTE_REVISION_MINUTES = 5
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
 const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
@@ -259,6 +267,10 @@ export function loadConfig(
     captures: {
       maxBytes: positiveInt(env.AICO_CAPTURE_MAX_MB, DEFAULT_CAPTURE_MAX_MB) * 1024 * 1024,
       maxFiles: positiveInt(env.AICO_CAPTURE_MAX_FILES, DEFAULT_CAPTURE_MAX_FILES),
+    },
+    notes: {
+      revisionWindowMs:
+        positiveInt(env.AICO_NOTE_REVISION_MINUTES, DEFAULT_NOTE_REVISION_MINUTES) * 60_000,
     },
     vision: {
       routes: visionRoutes(env.AICO_VISION_ROUTES),

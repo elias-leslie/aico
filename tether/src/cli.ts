@@ -9,6 +9,7 @@ import { runDoctor } from './doctor'
 import { hostsFilePath, loadHosts, peerDir } from './hub/hosts'
 import { linkPaths, runLink } from './hub/link'
 import { applyImport, formatPlan, planImportForPath, summarize } from './importer'
+import { NOTE_USAGE, runNote } from './note-cli'
 import { Store } from './store'
 import { VERSION } from './version'
 
@@ -44,6 +45,9 @@ Commands:
                                 the answer (tether ask --help)
   capture list|get|file         read the owner's photos and files saved in Aico
                                 (tether capture --help)
+  note list|get|add|item|groceries
+                                read and add to the owner's notes and Groceries
+                                list in Aico (tether note --help)
   import-aico --from PATH [--apply]
                                 copy a pre-Tether Aico catalog (an archived
                                 aico.db; dry-run unless --apply; opened
@@ -514,6 +518,12 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           return sub === undefined ? 2 : 0
         }
         return runCapture(io, json, parsed.args.slice(1))
+      case 'note':
+        if (sub === undefined || sub === '--help' || sub === 'help') {
+          io.out(NOTE_USAGE)
+          return sub === undefined ? 2 : 0
+        }
+        return runNote(io, json, parsed.args.slice(1))
       case 'share': {
         const body = shareBody(parsed.args.slice(1), process.env, process.cwd())
         if (typeof body === 'string') {
