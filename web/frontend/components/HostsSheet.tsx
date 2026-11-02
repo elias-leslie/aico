@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import { X } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
+import { formatAge } from '@/lib/attention'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HostCallError,
@@ -25,6 +26,11 @@ import {
   WAKE_STEP_LABELS,
 } from '@/lib/hooks/use-hosts'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
+import {
+  type PeerSync,
+  syncLine,
+  useSyncStatus,
+} from '@/lib/hooks/use-sync-status'
 import { ConfirmationDialog } from './ConfirmationDialog'
 
 const LOGIN_LABELS: Record<LoginState, string> = {
@@ -180,6 +186,7 @@ export function HostsSheet({
 }) {
   const isMobile = useMediaQuery('(max-width: 767px)')
   const { hosts, isLoading, isError, refetch } = useHosts(open)
+  const syncing = useSyncStatus(open)
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -235,6 +242,7 @@ export function HostsSheet({
                   <HostCard
                     key={host.name}
                     host={host}
+                    sync={syncing.find((peer) => peer.name === host.name)}
                     onOpened={() => onOpenChange(false)}
                   />
                 ))}
@@ -249,9 +257,11 @@ export function HostsSheet({
 
 function HostCard({
   host,
+  sync,
   onOpened,
 }: {
   host: HostChoice
+  sync?: PeerSync
   onOpened: () => void
 }) {
   const queryClient = useQueryClient()
@@ -406,6 +416,7 @@ function HostCard({
           {error}
         </p>
       )}
+      {sync && <SyncState peer={sync} />}
 
       <HostSignIn host={host.name} connected={connected} onOpened={onOpened} />
 
@@ -440,6 +451,20 @@ function HostCard({
         }}
       />
     </li>
+  )
+}
+
+function SyncState({ peer }: { peer: PeerSync }) {
+  const line = syncLine(peer, Date.now(), formatAge)
+  return (
+    <p
+      data-testid="host-sync"
+      data-warn={line.warn}
+      className="mt-1.5 text-[12px] break-words"
+      style={{ color: line.warn ? 'var(--beacon)' : 'var(--mist)' }}
+    >
+      {line.text}
+    </p>
   )
 }
 

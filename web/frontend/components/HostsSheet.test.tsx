@@ -26,6 +26,7 @@ vi.mock('@/lib/hooks/use-agent-tools', () => ({
 type Json = Record<string, unknown>
 const state = vi.hoisted(() => ({
   hosts: [] as Json[],
+  sync: [] as Json[],
   logins: {} as Record<string, { status: number; body: Json }>,
   posts: [] as Array<{ url: string; body: Json }>,
   answers: [] as Array<{ status: number; body: Json }>,
@@ -44,6 +45,7 @@ function stubFetch() {
         return reply(next.status, next.body)
       }
       if (url === '/api/hosts') return reply(200, { items: state.hosts })
+      if (url === '/api/sync/status') return reply(200, { items: state.sync })
       const match = url.match(/^\/api\/hosts\/([^/]+)\/logins$/)
       if (match) {
         const answer = state.logins[match[1]]
@@ -110,6 +112,7 @@ function renderSheet() {
 describe('HostsSheet', () => {
   beforeEach(() => {
     state.hosts = []
+    state.sync = []
     state.logins = {}
     state.posts = []
     state.answers = []
@@ -153,6 +156,24 @@ describe('HostsSheet', () => {
         { url: '/api/hosts/agent-work/power', body: { action: 'on' } },
       ]),
     )
+  })
+
+  it('shows how notes sync is doing with a host, warning on a paused sync or a clock gap', async () => {
+    state.hosts = [host({ state: 'offline' })]
+    state.sync = [
+      {
+        name: 'agent-work',
+        state: 'paused',
+        lastSyncAt: 1,
+        skewMs: 12_000,
+        reason: 'The two Aico versions have different databases.',
+      },
+    ]
+    renderSheet()
+    const line = await screen.findByTestId('host-sync')
+    expect(line).toHaveTextContent('Notes sync paused: The two Aico versions')
+    expect(line).toHaveTextContent('clock 12 s ahead')
+    expect(line).toHaveAttribute('data-warn', 'true')
   })
 
   it('says a powered-off host is off without the link error', async () => {
