@@ -1,0 +1,11 @@
+# TEMPLATE — `__PROJECT_ROOT__` is a placeholder; scripts/install.sh renders it (see aico-web.service).
+# Writes consistent copies of the SQLite stores to ~/.local/state/aico-snapshot for the host's backup.
+[Unit]
+Description=Aico state snapshot (consistent SQLite copies for backup)
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node --disable-warning=ExperimentalWarning __PROJECT_ROOT__/scripts/snapshot-state.mjs
+Nice=10
+SyslogIdentifier=aico-state-snapshot

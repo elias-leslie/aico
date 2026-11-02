@@ -52,7 +52,7 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 PI_COORD_SOURCE="${ST_PI_COORD_EXTENSION:-$HOME/.summitflow/services/projects/summitflow/current/source/scripts/lib/pi-coord-extension.ts}"
 PI_COORD_LINK="$HOME/.pi/agent/extensions/st-coord.ts"
 # Started by --start.
-START_UNITS=(tether@default.service aico-web.service)
+START_UNITS=(tether@default.service aico-web.service aico-state-snapshot.timer)
 
 fail() {
   echo "install: $*" >&2
@@ -154,7 +154,7 @@ check_prerequisites() {
 
 install_units() {
   local unit changed=0
-  for unit in scripts/systemd/*.service; do
+  for unit in scripts/systemd/*.service scripts/systemd/*.timer; do
     install_content "$(render "$unit")" "$UNIT_DIR/$(basename "$unit")" 0644 && changed=1
   done
   # The generic template, for test instances such as tether@dev.
