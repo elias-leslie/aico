@@ -3,7 +3,12 @@
 import Link from 'next/link'
 import type { Capture } from '@/lib/api/captures'
 import { formatAge } from '@/lib/attention'
-import { formatBytes, formatWhen, statusWord } from '@/lib/capture-format'
+import {
+  firstLine,
+  formatBytes,
+  formatWhen,
+  statusWord,
+} from '@/lib/capture-format'
 import { useCaptures } from '@/lib/hooks/use-captures'
 import { CaptureThumb } from './CaptureThumb'
 
@@ -40,6 +45,7 @@ const RetryButton = ({ onClick }: { onClick: () => void }) => (
 )
 
 function Row({ capture }: { capture: Capture }) {
+  const heading = capture.caption || firstLine(capture.text)
   return (
     <li>
       <Link
@@ -53,13 +59,13 @@ function Row({ capture }: { capture: Capture }) {
             className="block truncate text-[14px]"
             style={{ color: 'var(--bone)' }}
           >
-            {capture.caption || capture.name}
+            {heading || capture.name}
           </span>
           <span
             className="block truncate text-[12px]"
             style={{ color: 'var(--mist)' }}
           >
-            {capture.caption ? `${capture.name} · ` : ''}
+            {heading ? `${capture.name} · ` : ''}
             {formatBytes(capture.size)} · {formatWhen(capture.createdAt)}
           </span>
         </span>

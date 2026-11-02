@@ -14,6 +14,10 @@ export const CAPTURE_USAGE = `Usage:
       failed or filed.
   tether capture get <id> [--json]
       One capture: its fields, caption, and the text read from it once present.
+  tether capture result <id> [--json]
+      What was read from the file: type, title, summary, the text, list items,
+      receipt and odometer fields. Fails while the capture is still being read
+      or when it could not be read. --json prints the full result.
   tether capture file <id> [--out DIR]
       Print the file's path on this host. With --out, download it into DIR
       and print that path (use this when aico-web runs on another host; that
@@ -45,6 +49,26 @@ interface CaptureJson {
   createdAt: number
   origin: string
   previewState: string
+  extractError?: string | null
+  extractRoute?: string | null
+  needsCheck?: boolean
+  extract?: Extract | null
+}
+
+interface Extract {
+  type?: string
+  title?: string
+  summary?: string
+  text?: string
+  items?: { as_written: string; item: string; quantity: string | null; struck: boolean }[]
+  receipt?: {
+    store: string | null
+    date: string | null
+    subtotal: number | null
+    tax: number | null
+    total: number | null
+  } | null
+  odometer?: { odometer: number | null; trip: number | null } | null
 }
 
 interface Flags {
@@ -104,12 +128,41 @@ export function formatCapture(item: CaptureJson): string {
   lines.push(
     `  ${item.status} · ${item.kind} (${item.mime}) · ${kb(item.size)} · ${when(item.createdAt)} · from ${item.origin}`,
   )
-  if (item.type) lines.push(`  type: ${item.type}`)
+  if (item.type)
+    lines.push(
+      `  type: ${item.type}${item.needsCheck ? ' (read by the fallback reader: check it)' : ''}`,
+    )
+  if (item.status === 'failed' && item.extractError)
+    lines.push(`  could not read: ${item.extractError}`)
+  if (item.extract?.title) lines.push(`  title: ${item.extract.title}`)
+  if (item.extract?.summary) lines.push(`  summary: ${item.extract.summary}`)
   if (item.askId) lines.push(`  answers ask: ${item.askId}`)
   if (item.groupId) lines.push(`  group: ${item.groupId}`)
   if (item.caption) for (const line of item.caption.split('\n')) lines.push(`  caption | ${line}`)
   if (item.text) for (const line of item.text.split('\n')) lines.push(`  text | ${line}`)
   if (item.hash) lines.push(`  get the file: tether capture file ${item.id} [--out DIR]`)
+  return lines.join('\n')
+}
+
+/** The reading of one capture as plain text, for an agent in a terminal. */
+export function formatResult(item: CaptureJson): string {
+  const read = item.extract ?? {}
+  const lines = [`${item.id}  ${item.type ?? 'unknown type'}${read.title ? `  ${read.title}` : ''}`]
+  if (item.needsCheck) lines.push('  note: read by the fallback reader, so check it')
+  if (read.summary) lines.push(`  summary: ${read.summary}`)
+  if (item.text) for (const line of item.text.split('\n')) lines.push(`  text | ${line}`)
+  for (const entry of read.items ?? [])
+    lines.push(
+      `  item | ${entry.struck ? '[struck] ' : ''}${entry.item}${entry.quantity ? ` x ${entry.quantity}` : ''}${entry.as_written !== entry.item ? ` (written: ${entry.as_written})` : ''}`,
+    )
+  if (read.receipt) {
+    const r = read.receipt
+    lines.push(
+      `  receipt | ${[r.store, r.date].filter(Boolean).join(' ')} subtotal ${r.subtotal ?? '?'} tax ${r.tax ?? '?'} total ${r.total ?? '?'}`,
+    )
+  }
+  if (read.odometer)
+    lines.push(`  odometer | ${read.odometer.odometer ?? '?'} (trip ${read.odometer.trip ?? '?'})`)
   return lines.join('\n')
 }
 
@@ -142,7 +195,7 @@ export async function runCapture(
 ): Promise<number> {
   const [sub, ...rest] = args
   const base = (env.AICO_WEB_URL?.trim() || DEFAULT_URL).replace(/\/+$/, '')
-  if (sub !== 'list' && sub !== 'get' && sub !== 'file') {
+  if (sub !== 'list' && sub !== 'get' && sub !== 'result' && sub !== 'file') {
     io.err(CAPTURE_USAGE)
     return 2
   }
@@ -208,6 +261,39 @@ export async function runCapture(
   const item = answer.body as CaptureJson
   if (sub === 'get') {
     io.out(asJson ? JSON.stringify(item, null, 2) : formatCapture(item))
+    return 0
+  }
+
+  if (sub === 'result') {
+    if (item.status === 'new' || item.status === 'extracting') {
+      io.err(
+        `tether capture: ${item.id} is still ${item.status === 'new' ? 'waiting to be read' : 'being read'}; try again shortly`,
+      )
+      return 3
+    }
+    if (item.status === 'failed') {
+      io.err(
+        `tether capture: ${item.id} could not be read${item.extractError ? `: ${item.extractError}` : ''}`,
+      )
+      return 1
+    }
+    if (asJson)
+      io.out(
+        JSON.stringify(
+          {
+            id: item.id,
+            status: item.status,
+            type: item.type,
+            text: item.text,
+            needsCheck: item.needsCheck ?? false,
+            route: item.extractRoute ?? null,
+            extract: item.extract ?? null,
+          },
+          null,
+          2,
+        ),
+      )
+    else io.out(formatResult(item))
     return 0
   }
 

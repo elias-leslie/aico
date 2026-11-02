@@ -62,6 +62,23 @@ describe('tether capture', () => {
           total: 3,
         })
       if (path === '/api/captures/0123456789ab') return reply(200, item())
+      if (path === '/api/captures/cccccccccccc')
+        return reply(
+          200,
+          item({
+            id: 'cccccccccccc',
+            type: 'grocery_list',
+            needsCheck: true,
+            extractRoute: 'ollama',
+            extract: {
+              title: 'Shopping',
+              summary: 'A list.',
+              items: [{ as_written: 'see weeds', item: 'seaweed', quantity: '2', struck: false }],
+            },
+          }),
+        )
+      if (path === '/api/captures/dddddddddddd')
+        return reply(200, item({ id: 'dddddddddddd', status: 'failed', extractError: 'no reader' }))
       if (path === '/api/captures/0123456789ab/file') return reply(200, download, 'application/pdf')
       if (path === '/api/captures/aaaaaaaaaaaa')
         return reply(200, item({ id: 'aaaaaaaaaaaa', hash: null, status: 'filed' }))
@@ -122,6 +139,25 @@ describe('tether capture', () => {
     expect(text).toContain('caption | oil change')
     expect(text).toContain('text | Total 42.00')
     expect(text).toContain('tether capture file 0123456789ab')
+  })
+
+  it('shows what was read with result, and says plainly when there is none yet', async () => {
+    const run = capture()
+    expect(await runCapture(run.io, false, ['result', 'cccccccccccc'], env())).toBe(0)
+    const text = run.out.join('\n')
+    expect(text).toContain('grocery_list  Shopping')
+    expect(text).toContain('check it')
+    expect(text).toContain('item | seaweed x 2 (written: see weeds)')
+    const json = capture()
+    expect(await runCapture(json.io, false, ['result', 'cccccccccccc', '--json'], env())).toBe(0)
+    expect(JSON.parse(json.out.join('\n'))).toMatchObject({
+      type: 'grocery_list',
+      route: 'ollama',
+      needsCheck: true,
+    })
+    const failed = capture()
+    expect(await runCapture(failed.io, false, ['result', 'dddddddddddd'], env())).toBe(1)
+    expect(failed.err[0]).toContain('could not be read: no reader')
   })
 
   it('sends no Origin, so the guard lets it through', async () => {

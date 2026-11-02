@@ -24,6 +24,38 @@ export interface Capture {
   updatedAt: number
   hasThumb: boolean
   previewState: PreviewState
+  /** Why the last read failed, in plain words. */
+  extractError?: string | null
+  /** The fallback reader read it, so it should be checked against the picture. */
+  needsCheck?: boolean
+  /** What was read; only on a single capture, not in lists. */
+  extract?: CaptureExtract | null
+}
+
+export interface ExtractedItem {
+  as_written: string
+  item: string
+  quantity: string | null
+  struck: boolean
+}
+
+export interface CaptureExtract {
+  title?: string
+  summary?: string
+  items?: ExtractedItem[]
+}
+
+/** The list items out of a reading, ignoring anything shaped wrong. */
+export function extractedItems(capture: Capture): ExtractedItem[] {
+  const items = capture.extract?.items
+  if (!Array.isArray(items)) return []
+  return items.filter(
+    (entry): entry is ExtractedItem =>
+      !!entry &&
+      typeof entry.item === 'string' &&
+      typeof entry.as_written === 'string' &&
+      (entry.item !== '' || entry.as_written !== ''),
+  )
 }
 
 export interface CaptureLimits {
@@ -135,6 +167,15 @@ export function saveCaption(id: string, caption: string): Promise<Capture> {
       body: JSON.stringify({ caption }),
     },
     "Couldn't save the caption. Try again.",
+  ).then(parseCapture)
+}
+
+/** Reads a capture again after it couldn't be read. */
+export function retryCapture(id: string): Promise<Capture> {
+  return apiFetch<unknown>(
+    `/api/captures/${id}/retry`,
+    { method: 'POST' },
+    "Couldn't start reading it again. Try again.",
   ).then(parseCapture)
 }
 

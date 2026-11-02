@@ -21,6 +21,7 @@ import { objectBody, RAW, type Router, sendJson } from './http'
 import { CAPTURE_STATUSES, type CaptureRow, type CaptureStatus, type NotesStore } from './notes-db'
 import { HttpError } from './tether'
 import { RateLimiter, readUploadForm } from './uploads'
+import { ROUTE_NEEDS_CHECK, type RouteName } from './vision-extract'
 
 export interface CaptureDeps {
   store: NotesStore
@@ -34,6 +35,8 @@ export interface CaptureDeps {
   /** Reads an ask from Tether, to check an upload tagged with `ask_id`. Without
    * it the tag is stored as given. */
   asks?: { get(id: string): Promise<Ask> }
+  /** Wakes the background reader after a new or retried capture. */
+  reader?: { kick(): void }
 }
 
 const RATE_LIMIT = 60
@@ -68,6 +71,23 @@ export interface CaptureJson {
   origin: string
   hasThumb: boolean
   previewState: PreviewState
+  /** Where the last read failed, in plain words; null otherwise. */
+  extractError: string | null
+  /** Which route read it (`agy`, `ollama`); null if nothing was read. */
+  extractRoute: string | null
+  /** The fallback route read it, so the owner should look it over. */
+  needsCheck: boolean
+  /** What was read (title, summary, lines, items, receipt, odometer); only on one capture, not in lists. */
+  extract?: unknown
+}
+
+function parseExtract(text: string | null): unknown {
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
 }
 
 /** A display name: no path, no control characters, bounded. */
@@ -181,7 +201,7 @@ export function registerCaptureRoutes(
     return isInlineMime(row.mime) ? 'ready' : 'unavailable'
   }
 
-  function json(row: CaptureRow): CaptureJson {
+  function json(row: CaptureRow, detail = false): CaptureJson {
     return {
       id: row.id,
       clientId: row.client_id,
@@ -201,6 +221,11 @@ export function registerCaptureRoutes(
       origin: row.origin,
       hasThumb: row.hash !== null && hasBlob(blobsDir, row.hash, 'thumb'),
       previewState: previewState(row),
+      extractError: row.extract_error,
+      extractRoute: row.extract_route,
+      needsCheck:
+        row.extract_route !== null && ROUTE_NEEDS_CHECK[row.extract_route as RouteName] === true,
+      ...(detail ? { extract: parseExtract(row.extract_json) } : {}),
     }
   }
 
@@ -257,6 +282,7 @@ export function registerCaptureRoutes(
       caption,
     })
     if (created && needsPreview(type.mime)) previews.schedule(hash)
+    if (created) deps.reader?.kick()
     sendJson(ctx.res, created ? 201 : 200, json(capture))
     return RAW
   })
@@ -292,7 +318,15 @@ export function registerCaptureRoutes(
     return { captures: captures.map(json), total }
   })
 
-  router.on('GET', '/api/captures/:id', (ctx) => json(need(ctx.params.id)))
+  router.on('GET', '/api/captures/:id', (ctx) => json(need(ctx.params.id), true))
+
+  router.on('POST', '/api/captures/:id/retry', (ctx) => {
+    const row = need(ctx.params.id)
+    const queued = store.retryExtraction(row.id)
+    if (!queued) throw new HttpError(409, "Only a capture that couldn't be read can be tried again")
+    deps.reader?.kick()
+    return json(queued, true)
+  })
 
   /** Streams one variant of a capture's bytes; `pick` says which file and how it is shown. */
   const serve =

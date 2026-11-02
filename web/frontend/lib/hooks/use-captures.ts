@@ -14,6 +14,7 @@ import {
   fetchCapture,
   fetchCaptureLimits,
   fetchCaptures,
+  retryCapture,
   saveCaption,
 } from '../api/captures'
 import { ApiError, isPermanentRefusal } from '../api-fetch'
@@ -100,6 +101,17 @@ export function useSaveCaption() {
   return useMutation({
     mutationFn: ({ id, caption }: { id: string; caption: string }) =>
       saveCaption(id, caption),
+    onSuccess: (capture: Capture) => {
+      client.setQueryData([...CAPTURES_KEY, 'one', capture.id], capture)
+      void client.invalidateQueries({ queryKey: [...CAPTURES_KEY, 'list'] })
+    },
+  })
+}
+
+export function useRetryCapture() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => retryCapture(id),
     onSuccess: (capture: Capture) => {
       client.setQueryData([...CAPTURES_KEY, 'one', capture.id], capture)
       void client.invalidateQueries({ queryKey: [...CAPTURES_KEY, 'list'] })

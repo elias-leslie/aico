@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultTetherSocketPath, tetherSocketPath } from 'tether/client'
 import { DEFAULT_REMOTE_UPLOAD_DIR } from 'tether/term'
+import type { RouteName, VisionConfig } from './vision-extract'
 
 export interface WebConfig {
   /** Loopback only: the app has no login of its own (Access gates the edge). */
@@ -27,6 +28,7 @@ export interface WebConfig {
   /** This host's name on rows it writes (`origin`): AICO_HOST_NAME, else the machine's. */
   hostName: string
   captures: CaptureConfig
+  vision: VisionSettings
   /** The Python backend's database, read once into `dbPath` and never written. */
   tetherSocket: string
   /** Agent shares are taken only from this user's tether@default (the owner's own socket). */
@@ -55,6 +57,11 @@ export interface CaptureConfig {
   maxBytes: number
   /** Most files in one batch or ask. */
   maxFiles: number
+}
+
+/** How captures are read (vision-extract) and how many are read at once. */
+export interface VisionSettings extends VisionConfig {
+  concurrency: number
 }
 
 export interface MaintenanceConfig {
@@ -87,6 +94,13 @@ const DEFAULT_MAINTENANCE_INTERVAL_SECONDS = 15 * 60
 const DEFAULT_EMPTY_PANE_DAYS = 7
 // The browser's own fallback (web/frontend lib/api-config.ts PORTS.agentHub).
 const DEFAULT_AGENT_HUB_PORT = 8003
+// vision-extract (bake-off 2026-11-02): agy with a Gemini Flash model first, a
+// local ollama vision model as the fallback.
+const DEFAULT_VISION_ROUTES: RouteName[] = ['agy', 'ollama']
+const DEFAULT_AGY_MODEL = 'gemini-3.8-flash-low'
+const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
+const DEFAULT_OLLAMA_MODEL = 'qwen3-vl:8b-instruct'
+const DEFAULT_VISION_CONCURRENCY = 2
 // Nightshift's own loopback address (its project.identity.json hosts.local_frontend).
 const DEFAULT_NIGHTSHIFT_URL = 'http://127.0.0.1:3020'
 
@@ -142,6 +156,21 @@ function list(value: string | undefined): string[] | null {
     .map((item) => item.trim())
     .filter(Boolean)
   return items.length ? items : null
+}
+
+/** AICO_VISION_ROUTES (comma list of agy, ollama), else both in that order. */
+function visionRoutes(value: string | undefined): RouteName[] {
+  const names = (list(value) ?? []).map((name) => name.toLowerCase())
+  const known = names.filter((name): name is RouteName => name === 'agy' || name === 'ollama')
+  return known.length ? known : DEFAULT_VISION_ROUTES
+}
+
+/** AICO_AGY_PATH, else ~/.local/bin/agy when it exists (the service's PATH may not have it), else `agy`. */
+function agyPath(env: NodeJS.ProcessEnv, home: string): string {
+  const set = env.AICO_AGY_PATH?.trim()
+  if (set) return expandHome(set, home)
+  const installed = join(home, '.local', 'bin', 'agy')
+  return existsSync(installed) ? installed : 'agy'
 }
 
 /** AICO_NIGHTSHIFT_URL, `off` for none; Nightshift's own address otherwise. */
@@ -207,6 +236,14 @@ export function loadConfig(
     captures: {
       maxBytes: positiveInt(env.AICO_CAPTURE_MAX_MB, DEFAULT_CAPTURE_MAX_MB) * 1024 * 1024,
       maxFiles: positiveInt(env.AICO_CAPTURE_MAX_FILES, DEFAULT_CAPTURE_MAX_FILES),
+    },
+    vision: {
+      routes: visionRoutes(env.AICO_VISION_ROUTES),
+      agyPath: agyPath(env, home),
+      agyModel: env.AICO_AGY_MODEL?.trim() || DEFAULT_AGY_MODEL,
+      ollamaUrl: env.AICO_OLLAMA_URL?.trim() || DEFAULT_OLLAMA_URL,
+      ollamaModel: env.AICO_OLLAMA_MODEL?.trim() || DEFAULT_OLLAMA_MODEL,
+      concurrency: positiveInt(env.AICO_VISION_CONCURRENCY, DEFAULT_VISION_CONCURRENCY),
     },
     tetherSocket,
     trustShows: tetherSocket === defaultTetherSocketPath(env, uid),

@@ -30,6 +30,7 @@ describe('capture routes', () => {
   let runnerCalls: string[][]
   let converterWorks: boolean
   let counter: number
+  let kicks: number
 
   const runner: Runner = async (argv) => {
     runnerCalls.push(argv)
@@ -62,6 +63,7 @@ describe('capture routes', () => {
     runnerCalls = []
     converterWorks = true
     counter = 0
+    kicks = 0
     previews = new PreviewJobs(blobs, runner)
     server = await serveRoutes((router) =>
       registerCaptureRoutes(router, {
@@ -69,6 +71,7 @@ describe('capture routes', () => {
         blobsDir: blobs,
         limits: { maxBytes: MAX_BYTES, maxFiles: 3 },
         previews,
+        reader: { kick: () => (kicks += 1) },
       }),
     )
   })
@@ -218,6 +221,9 @@ describe('capture routes', () => {
         'origin',
         'hasThumb',
         'previewState',
+        'extractError',
+        'extractRoute',
+        'needsCheck',
       ].sort(),
     )
     const hash = body.hash as string
@@ -362,7 +368,7 @@ describe('capture routes', () => {
     const row = await created(await upload(PNG, 'a.png', 'image/png'))
     const got = await fetch(`${server.base}/api/captures/${row.id}`)
     expect(got.status).toBe(200)
-    expect(await got.json()).toEqual(row)
+    expect(await got.json()).toEqual({ ...row, extract: null })
     for (const id of ['0123456789ab', 'not-an-id'])
       expect(await (await fetch(`${server.base}/api/captures/${id}`)).json()).toEqual({
         detail: 'That capture is gone',
@@ -393,6 +399,52 @@ describe('capture routes', () => {
     // The row and the blob stay (tombstone), for the sync-aware cleanup.
     expect(store.getCapture(row.id, true)?.deleted).toBe(1)
     expect(readFileSync(blobPath(blobs, row.hash as string)).equals(PNG)).toBe(true)
+  })
+
+  it('wakes the reader for a new capture; shows what was read on one capture; retries only a failed one', async () => {
+    const row = await created(await upload(PNG, 'a.png', 'image/png'))
+    expect(kicks).toBe(1)
+    await upload(PNG, 'a.png', 'image/png', { client_id: 'client-0001' })
+    expect(kicks).toBe(1) // a repeated upload is not new work
+    expect(row).toMatchObject({ status: 'new', extractError: null, needsCheck: false })
+
+    expect(
+      (await fetch(`${server.base}/api/captures/${row.id}/retry`, { method: 'POST' })).status,
+    ).toBe(409)
+
+    store.claimForExtraction()
+    store.failExtraction(row.id, "the main reader isn't available")
+    const failed = await created(await fetch(`${server.base}/api/captures/${row.id}`))
+    expect(failed).toMatchObject({
+      status: 'failed',
+      extractError: "the main reader isn't available",
+      extract: null,
+    })
+
+    const retried = await fetch(`${server.base}/api/captures/${row.id}/retry`, { method: 'POST' })
+    expect(retried.status).toBe(200)
+    expect((await created(retried)).status).toBe('new')
+    expect(kicks).toBe(2)
+
+    store.claimForExtraction()
+    store.finishExtraction(row.id, {
+      type: 'note',
+      text: 'hi',
+      json: '{"title":"T"}',
+      route: 'ollama',
+    })
+    const detail = await created(await fetch(`${server.base}/api/captures/${row.id}`))
+    expect(detail).toMatchObject({
+      status: 'ready',
+      text: 'hi',
+      needsCheck: true,
+      extractRoute: 'ollama',
+      extract: { title: 'T' },
+    })
+    const list = (await (await fetch(`${server.base}/api/captures`)).json()) as {
+      captures: CaptureJson[]
+    }
+    expect(list.captures[0]).not.toHaveProperty('extract')
   })
 
   it('serves an image inline with the immutable cache and sandbox headers', async () => {

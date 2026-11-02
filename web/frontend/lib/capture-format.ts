@@ -21,10 +21,25 @@ export function formatWhen(ms: number, now = Date.now()): string {
 
 const STATUS_WORD: Record<string, string> = {
   new: 'Saved',
-  extracting: 'Reading',
+  extracting: 'Reading…',
   ready: 'Read',
-  failed: "Couldn't read",
+  failed: "Couldn't read it",
   filed: 'Filed',
+}
+
+/** `1:42 PM`. */
+export function formatClock(ms: number): string {
+  return new Date(ms).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/** The first line of some text, cut to fit a list row. */
+export function firstLine(text: string | null, max = 80): string {
+  const line = (text ?? '').split('\n').find((part) => part.trim()) ?? ''
+  const trimmed = line.trim()
+  return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed
 }
 
 /** The capture's state in words. `new` is just saved: nothing has read it yet. */

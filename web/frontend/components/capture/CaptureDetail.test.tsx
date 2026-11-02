@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   view: {} as Record<string, unknown>,
   saved: [] as unknown[],
   deleted: [] as string[],
+  retried: [] as string[],
 }))
 vi.mock('@/lib/hooks/use-captures', () => ({
   useCapture: () => state.view,
@@ -18,6 +19,12 @@ vi.mock('@/lib/hooks/use-captures', () => ({
     isPending: false,
     isError: false,
     isSuccess: false,
+    error: null,
+  }),
+  useRetryCapture: () => ({
+    mutate: (id: string) => state.retried.push(id),
+    isPending: false,
+    isError: false,
     error: null,
   }),
   useDeleteCapture: () => ({
@@ -64,6 +71,7 @@ beforeEach(() => {
   state.view = { ...base, capture: capture() }
   state.saved.length = 0
   state.deleted.length = 0
+  state.retried.length = 0
 })
 
 describe('CaptureDetail', () => {
@@ -98,7 +106,7 @@ describe('CaptureDetail', () => {
       '/api/captures/abcdef012345/preview',
     )
     expect(screen.getByText('IMG_1.jpg')).toBeInTheDocument()
-    expect(screen.getByText(/not read yet/)).toBeInTheDocument()
+    expect(screen.getByText(/Waiting to be read/)).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /Download/ }).getAttribute('href'),
     ).toBe('/api/captures/abcdef012345/file')
@@ -130,6 +138,61 @@ describe('CaptureDetail', () => {
     }
     render(<CaptureDetail id="abcdef012345" />)
     expect(screen.getByText('Total 12.00')).toBeInTheDocument()
+  })
+
+  it('shows reading since when, and a failure with Retry', () => {
+    state.view = {
+      ...base,
+      capture: capture({ status: 'extracting', updatedAt: 1_700_000_000_000 }),
+    }
+    const { unmount } = render(<CaptureDetail id="abcdef012345" />)
+    expect(screen.getByTestId('capture-reading')).toHaveTextContent(
+      /Reading since \d/,
+    )
+    unmount()
+    state.view = {
+      ...base,
+      capture: capture({
+        status: 'failed',
+        extractError: "the main reader isn't available",
+      }),
+    }
+    render(<CaptureDetail id="abcdef012345" />)
+    expect(screen.getByTestId('capture-unread')).toHaveTextContent(
+      "Couldn't read it: the main reader isn't available",
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(state.retried).toEqual(['abcdef012345'])
+  })
+
+  it('shows list items with what was written, and a check note for the fallback reader', () => {
+    state.view = {
+      ...base,
+      capture: capture({
+        status: 'ready',
+        text: 'see weeds',
+        needsCheck: true,
+        extract: {
+          items: [
+            {
+              as_written: 'see weeds',
+              item: 'seaweed',
+              quantity: '2',
+              struck: false,
+            },
+            { as_written: 'milk', item: 'milk', quantity: null, struck: true },
+          ],
+        },
+      }),
+    }
+    render(<CaptureDetail id="abcdef012345" />)
+    const items = screen.getByTestId('capture-items')
+    expect(items).toHaveTextContent('seaweed')
+    expect(items).toHaveTextContent('written: see weeds')
+    expect(screen.getByText('milk').parentElement).toHaveStyle(
+      'text-decoration: line-through',
+    )
+    expect(screen.getByTestId('capture-check')).toBeInTheDocument()
   })
 
   it('saves an edited caption only', () => {

@@ -11,7 +11,14 @@ import { DatabaseSync } from 'node:sqlite'
 import type { CaptureKind } from './capture-files'
 import { HybridClock } from './hlc'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
+
+/** Changes after version 1, in order; `MIGRATIONS[n]` takes the file to version n + 1. */
+const MIGRATIONS: Record<number, string> = {
+  1: `ALTER TABLE captures ADD COLUMN extract_json  TEXT;
+      ALTER TABLE captures ADD COLUMN extract_route TEXT;
+      ALTER TABLE captures ADD COLUMN extract_error TEXT;`,
+}
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -66,6 +73,12 @@ export interface CaptureRow {
   prev: number | null
   deleted: number
   seq: number
+  /** The validated JSON the reader returned (a string), or null. */
+  extract_json: string | null
+  /** Which route read it (`agy`, `ollama`), or null. */
+  extract_route: string | null
+  /** Why the last read failed, in plain words; null once it works. */
+  extract_error: string | null
 }
 
 export interface NewCapture {
@@ -124,7 +137,10 @@ export class NotesStore {
       if (version !== null && Number(version) > SCHEMA_VERSION)
         throw new Error(`${path} has schema ${version}, newer than this Aico (${SCHEMA_VERSION})`)
       this.transaction(() => {
-        if (version === null) this.setMeta('schema_version', String(SCHEMA_VERSION))
+        // A new file starts at version 1 (SCHEMA above) and climbs like an old one.
+        for (let from = Number(version ?? 1); from < SCHEMA_VERSION; from += 1)
+          this.db.exec(MIGRATIONS[from] as string)
+        this.setMeta('schema_version', String(SCHEMA_VERSION))
         if (this.meta('db_id') === null) this.setMeta('db_id', randomUUID())
         if (this.meta('seq') === null) this.setMeta('seq', '0')
         this.setMeta('host_name', this.hostName)
@@ -302,26 +318,29 @@ export class NotesStore {
 
   /** Re-stamps a live capture with new field values; `prev` is the version it was based on. */
   private edit(id: string, fields: Record<string, string | number | null>): CaptureRow | null {
-    return this.transaction(() => {
-      const current = this.getCapture(id)
-      if (!current) return null
-      const stamp = this.stamp()
-      const names = Object.keys(fields)
-      this.db
-        .prepare(
-          `UPDATE captures SET ${names.map((name) => `${name} = ?`).join(', ')},
-             updated_at = ?, origin = ?, prev = ?, seq = ? WHERE id = ?`,
-        )
-        .run(
-          ...names.map((name) => fields[name] as string | number | null),
-          stamp.updated_at,
-          stamp.origin,
-          current.updated_at,
-          stamp.seq,
-          id,
-        )
-      return this.requireCapture(id)
-    })
+    return this.transaction(() => this.editNow(id, fields))
+  }
+
+  /** `edit` without its own transaction, for callers that hold one. */
+  private editNow(id: string, fields: Record<string, string | number | null>): CaptureRow | null {
+    const current = this.getCapture(id)
+    if (!current) return null
+    const stamp = this.stamp()
+    const names = Object.keys(fields)
+    this.db
+      .prepare(
+        `UPDATE captures SET ${names.map((name) => `${name} = ?`).join(', ')},
+           updated_at = ?, origin = ?, prev = ?, seq = ? WHERE id = ?`,
+      )
+      .run(
+        ...names.map((name) => fields[name] as string | number | null),
+        stamp.updated_at,
+        stamp.origin,
+        current.updated_at,
+        stamp.seq,
+        id,
+      )
+    return this.requireCapture(id)
   }
 
   updateCaption(id: string, caption: string): CaptureRow | null {
@@ -331,5 +350,74 @@ export class NotesStore {
   /** Marks the capture deleted. The blob stays until the sync-aware cleanup. */
   tombstoneCapture(id: string): boolean {
     return this.edit(id, { deleted: 1 }) !== null
+  }
+
+  // -- Reading text out of captures (vision-extract) ------------------------------
+
+  /**
+   * Takes the oldest `new` capture made on this host and marks it `extracting`
+   * (its `updated_at` is then when reading started). Null when there is none.
+   */
+  claimForExtraction(): CaptureRow | null {
+    return this.transaction(() => {
+      const next = this.db
+        .prepare(
+          `SELECT id FROM captures WHERE status = 'new' AND deleted = 0 AND origin = ?
+           ORDER BY created_at, id LIMIT 1`,
+        )
+        .get(this.hostName) as Row | undefined
+      if (!next) return null
+      return this.editNow(String(next.id), { status: 'extracting', extract_error: null })
+    })
+  }
+
+  /** Puts `extracting` captures of this host back to `new` (a restart cut them short). */
+  requeueExtracting(): number {
+    return this.transaction(() => {
+      const rows = this.db
+        .prepare(
+          `SELECT id FROM captures WHERE status = 'extracting' AND deleted = 0 AND origin = ?`,
+        )
+        .all(this.hostName) as Row[]
+      for (const row of rows) this.editNow(String(row.id), { status: 'new' })
+      return rows.length
+    })
+  }
+
+  /** Saves what was read and marks the capture `ready`. Only an `extracting` capture takes it. */
+  finishExtraction(
+    id: string,
+    result: { type: string | null; text: string | null; json: string | null; route: string | null },
+  ): CaptureRow | null {
+    return this.transaction(() =>
+      this.getCapture(id)?.status === 'extracting'
+        ? this.editNow(id, {
+            status: 'ready',
+            type: result.type,
+            text: result.text,
+            extract_json: result.json,
+            extract_route: result.route,
+            extract_error: null,
+          })
+        : null,
+    )
+  }
+
+  /** Marks an `extracting` capture `failed` with a short plain reason. */
+  failExtraction(id: string, reason: string): CaptureRow | null {
+    return this.transaction(() =>
+      this.getCapture(id)?.status === 'extracting'
+        ? this.editNow(id, { status: 'failed', extract_error: reason })
+        : null,
+    )
+  }
+
+  /** Puts a `failed` capture back to `new` so it is read again. Null for any other status. */
+  retryExtraction(id: string): CaptureRow | null {
+    return this.transaction(() =>
+      this.getCapture(id)?.status === 'failed'
+        ? this.editNow(id, { status: 'new', extract_error: null })
+        : null,
+    )
   }
 }

@@ -118,3 +118,11 @@ export const isInlineMime = (mime: string): boolean => INLINE_MIMES.has(mime)
 /** ISO files whose preview the server makes (HEIC and HEIF). */
 export const needsPreview = (mime: string): boolean =>
   mime === 'image/heic' || mime === 'image/heif'
+
+/** The usual extension for a mime type (`image/jpeg` is `jpg`), or null. */
+export function extensionForMime(
+  mime: string,
+  files: CaptureFileTable = DEFAULT_TABLE,
+): string | null {
+  return files.types.find((type) => type.mime === mime)?.ext ?? null
+}

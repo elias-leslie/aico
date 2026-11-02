@@ -7,12 +7,19 @@ import {
   type Capture,
   captureFileUrl,
   capturePreviewUrl,
+  extractedItems,
 } from '@/lib/api/captures'
 import { formatAge } from '@/lib/attention'
-import { formatBytes, formatWhen, statusWord } from '@/lib/capture-format'
+import {
+  formatBytes,
+  formatClock,
+  formatWhen,
+  statusWord,
+} from '@/lib/capture-format'
 import {
   useCapture,
   useDeleteCapture,
+  useRetryCapture,
   useSaveCaption,
 } from '@/lib/hooks/use-captures'
 import { ConfirmationDialog } from '../ConfirmationDialog'
@@ -66,6 +73,107 @@ function Fact({
       <dt style={{ color: 'var(--mist)' }}>{label}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
     </>
+  )
+}
+
+/** Where the reading stands: waiting, in progress (since when), couldn't read
+ * (with Retry), or read with nothing to show. */
+function ReadingState({ capture }: { capture: Capture }) {
+  const retry = useRetryCapture()
+  if (capture.status === 'new')
+    return (
+      <p
+        role="status"
+        data-testid="capture-reading"
+        className="text-[13px]"
+        style={{ color: 'var(--mist)' }}
+      >
+        Waiting to be read…
+      </p>
+    )
+  if (capture.status === 'extracting')
+    return (
+      <p
+        role="status"
+        data-testid="capture-reading"
+        className="text-[13px]"
+        style={{ color: 'var(--mist)' }}
+      >
+        Reading since {formatClock(capture.updatedAt)}…
+      </p>
+    )
+  if (capture.status === 'failed')
+    return (
+      <div
+        role="status"
+        data-testid="capture-unread"
+        className="flex flex-col gap-1 text-[13px]"
+      >
+        <p style={{ color: 'var(--term-error-text)' }}>
+          Couldn&apos;t read it
+          {capture.extractError ? `: ${capture.extractError}` : ''}.
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="lantern-btn min-h-11"
+            disabled={retry.isPending}
+            onClick={() => retry.mutate(capture.id)}
+          >
+            {retry.isPending ? 'Starting…' : 'Retry'}
+          </button>
+          {retry.isError && (
+            <span style={{ color: 'var(--term-error-text)' }}>
+              {retry.error.message}
+            </span>
+          )}
+        </div>
+      </div>
+    )
+  if (capture.status === 'ready' && !capture.text)
+    return (
+      <p
+        role="status"
+        data-testid="capture-nothing"
+        className="text-[13px]"
+        style={{ color: 'var(--mist)' }}
+      >
+        Nothing was read from this file.
+      </p>
+    )
+  return null
+}
+
+function ListItems({ capture }: { capture: Capture }) {
+  const items = extractedItems(capture)
+  if (!items.length) return null
+  return (
+    <section aria-label="List items" className="flex flex-col gap-1">
+      <h2 className="lantern-sec">List items</h2>
+      <ul
+        className="flex flex-col gap-1 text-[14px]"
+        data-testid="capture-items"
+      >
+        {items.map((entry, index) => (
+          <li
+            // biome-ignore lint/suspicious/noArrayIndexKey: a read-only list in reading order
+            key={index}
+            className="flex flex-wrap items-baseline gap-x-2"
+            style={{ textDecoration: entry.struck ? 'line-through' : 'none' }}
+          >
+            <span>{entry.item || entry.as_written}</span>
+            {entry.quantity ? (
+              <span style={{ color: 'var(--mist)' }}>× {entry.quantity}</span>
+            ) : null}
+            {entry.as_written && entry.as_written !== entry.item ? (
+              <span className="text-[12px]" style={{ color: 'var(--mist)' }}>
+                written: {entry.as_written}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -140,13 +248,25 @@ function Detail({ capture }: { capture: Capture }) {
         <Fact label="Size">{formatBytes(capture.size)}</Fact>
         <Fact label="Type">{capture.mime}</Fact>
         <Fact label="Sent">{formatWhen(capture.createdAt)}</Fact>
-        <Fact label="Status">
-          {statusWord(capture.status)}
-          {capture.status === 'new' && (
-            <span style={{ color: 'var(--mist)' }}> · not read yet</span>
-          )}
-        </Fact>
+        <Fact label="Status">{statusWord(capture.status)}</Fact>
       </dl>
+
+      <ReadingState capture={capture} />
+
+      {capture.needsCheck &&
+      (capture.text || extractedItems(capture).length) ? (
+        <p
+          role="note"
+          data-testid="capture-check"
+          className="text-[13px]"
+          style={{ color: 'var(--beacon)' }}
+        >
+          Check this: the backup reader (a small model on this computer) read
+          it, so compare it with the picture.
+        </p>
+      ) : null}
+
+      <ListItems capture={capture} />
 
       {capture.text ? (
         <section

@@ -10,6 +10,8 @@ import { Background } from './background'
 import { CLI_COMMANDS, runCli } from './cli'
 import { HISTORY_LINES, loadConfig } from './config'
 import { WebStore } from './db'
+import { ExtractWorker } from './extract-worker'
+import { execRunner, PreviewJobs } from './heic'
 import { registerNightshiftRoutes } from './nightshift'
 import { NightshiftRelay, registerNightshiftStream } from './nightshift-stream'
 import { NotesStore } from './notes-db'
@@ -17,6 +19,8 @@ import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
 import { TerminalHub } from './terminal'
+import { extract } from './vision-extract'
+import { realRunners } from './vision-extract/runners'
 
 function serve(): void {
   const config = loadConfig()
@@ -35,6 +39,14 @@ function serve(): void {
     tether,
     publicHost: config.publicHost,
     files: { store: notes, blobsDir, hostName: config.hostName },
+  })
+  const previews = new PreviewJobs(blobsDir, execRunner)
+  const reader = new ExtractWorker({
+    store: notes,
+    blobsDir,
+    previews,
+    concurrency: config.vision.concurrency,
+    extract: (request) => extract(request, config.vision, realRunners),
   })
   const background = new Background({
     tether,
@@ -58,6 +70,8 @@ function serve(): void {
       blobsDir,
       limits: config.captures,
       asks,
+      previews,
+      reader,
     },
   })
   registerNightshiftRoutes(api, config)
@@ -74,6 +88,7 @@ function serve(): void {
   )
 
   background.start()
+  reader.start()
   server.listen(config.port, config.host, () => {
     console.log(`[aico-web] listening on http://${config.host}:${config.port}`)
   })
@@ -84,6 +99,7 @@ function serve(): void {
     stopping = true
     console.log(`[aico-web] ${signal}: stopping`)
     background.stop()
+    reader.stop()
     terminals.stop()
     nightshift.stop()
     server.close(() => {
