@@ -20,6 +20,7 @@ import { HostBadge } from './HostBadge'
 import { HostsButton } from './HostsButton'
 import { HostsSheet } from './HostsSheet'
 import { HealthLauncher } from './health/HealthButton'
+import { NotesLauncher } from './notes/NotesLauncher'
 import { SessionList, sessionsHeading } from './SessionList'
 import { SessionTitle } from './SessionTitle'
 
@@ -163,6 +164,7 @@ export function SessionSwitcher({
           <div className="flex justify-end gap-2 px-2 pb-2">
             <NeedsYouLauncher variant="row" />
             <CaptureLauncher variant="row" />
+            <NotesLauncher variant="row" />
             <HealthLauncher variant="row" />
             <HostsButton onClick={openHosts} />
           </div>
@@ -206,6 +208,7 @@ export function SessionSwitcher({
                 </h2>
                 <NeedsYouLauncher variant="row" />
                 <CaptureLauncher variant="row" />
+                <NotesLauncher variant="row" />
                 <HealthLauncher variant="row" />
                 <HostsButton onClick={openHosts} />
               </div>

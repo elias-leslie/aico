@@ -10,6 +10,7 @@ import { getSlotPanelId, getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
 import { NeedsYouLauncher } from '../asks/NeedsYou'
 import { CaptureLauncher } from '../capture/CaptureLauncher'
 import { ModeToggle } from '../ModeToggle'
+import { NotesLauncher } from '../notes/NotesLauncher'
 import { PaneOverflowMenu } from '../PaneOverflowMenu'
 import { HeaderIconButton } from './HeaderIconButton'
 import { HeaderNameDisplay } from './HeaderNameDisplay'
@@ -110,6 +111,7 @@ export const UnifiedTerminalHeaderContent = memo(
             <>
               <NeedsYouLauncher variant={isMobile ? 'compact' : 'pill'} />
               <CaptureLauncher variant="icon" />
+              <NotesLauncher variant="icon" />
             </>
           )}
 

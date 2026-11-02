@@ -726,6 +726,15 @@ export class NoteStore {
     })
   }
 
+  /** True when a note holds this capture's file (the owner added it from a note). */
+  hasCaptureAttachment(captureId: string): boolean {
+    return (
+      this.db
+        .prepare('SELECT 1 FROM attachments WHERE capture_id = ? AND deleted = 0 LIMIT 1')
+        .get(captureId) !== undefined
+    )
+  }
+
   /** How many attachments (tombstones too) still point at this blob. */
   countHashRefs(hash: string): number {
     return Number(

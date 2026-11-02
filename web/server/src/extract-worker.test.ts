@@ -134,6 +134,42 @@ describe('extract worker', () => {
     expect(told).toEqual([`${row.id}:suggested`])
   })
 
+  it('plans no route for a capture the owner already attached to a note', async () => {
+    const row = await add('image', 'image/jpeg', 'note-photo')
+    const note = store.notes.create({ kind: 'note', title: 'Odometer' })
+    store.notes.attach(note.id, {
+      captureId: row.id,
+      hash: row.hash as string,
+      name: row.name,
+      mime: row.mime,
+      size: row.size,
+    })
+    const told: string[] = []
+    const w = new ExtractWorker({
+      store,
+      blobsDir: join(dir, 'blobs'),
+      previews,
+      extract: extractor,
+      concurrency: 1,
+      workDir: dir,
+      log: () => {},
+      router: {
+        plan: () => ({ owner: 'notes', state: 'suggested', note: null }),
+        afterReady: async (ready) => {
+          told.push(ready.id)
+        },
+      },
+    })
+    w.kick()
+    await w.idle()
+    expect(store.getCapture(row.id)).toMatchObject({
+      status: 'ready',
+      owner: null,
+      route_state: null,
+    })
+    expect(told).toEqual([row.id])
+  })
+
   it('fails with a plain reason, and Retry reads it again', async () => {
     const row = await add('image', 'image/png', 'png-bytes')
     failWith = new ExtractError("the main reader isn't available", ['agy failed to run'])

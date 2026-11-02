@@ -21,6 +21,10 @@ export const MANIFEST: MetadataRoute.Manifest = {
   display: 'standalone',
   background_color: LANTERN_RIM,
   theme_color: LANTERN_RIM,
+  shortcuts: [
+    { name: 'Groceries', url: '/notes?id=groceries' },
+    { name: 'Notes', url: '/notes' },
+  ],
   icons: [
     {
       src: '/icons/icon-192.png',

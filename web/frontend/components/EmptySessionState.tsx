@@ -9,6 +9,7 @@ import { NeedsYouLauncher } from './asks/NeedsYou'
 import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostsLauncher } from './HostsButton'
 import { HealthLauncher } from './health/HealthButton'
+import { NotesLauncher } from './notes/NotesLauncher'
 import { SessionList } from './SessionList'
 
 interface EmptySessionStateProps {
@@ -44,6 +45,7 @@ export function EmptySessionState({
         <header className="lantern-sheet-tools mx-auto flex max-w-md flex-wrap items-center justify-end gap-2">
           <NeedsYouLauncher variant="row" />
           <CaptureLauncher variant="row" />
+          <NotesLauncher variant="row" />
           <HealthLauncher variant="row" />
           <HostsLauncher />
         </header>

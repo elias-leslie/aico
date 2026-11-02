@@ -13,6 +13,7 @@ import {
 import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostsLauncher } from './HostsButton'
 import { HealthLauncher } from './health/HealthButton'
+import { NotesLauncher } from './notes/NotesLauncher'
 import { SessionList, SessionRail, sessionsHeading } from './SessionList'
 
 /** The list's width: the default, its limits, and the keyboard step. */
@@ -125,6 +126,7 @@ export function SessionSidebar({
         {newButton}
         <NeedsYouLauncher variant="icon" />
         <CaptureLauncher variant="icon" />
+        <NotesLauncher variant="icon" />
         <HostsLauncher icon />
         <HealthLauncher variant="icon" />
         <nav
@@ -178,6 +180,7 @@ export function SessionSidebar({
       <div className="flex flex-none flex-wrap items-center gap-1 px-1.5 pb-1.5">
         <NeedsYouLauncher variant="tool" />
         <CaptureLauncher variant="row" />
+        <NotesLauncher variant="row" />
         <HealthLauncher variant="row" />
         <HostsLauncher />
       </div>

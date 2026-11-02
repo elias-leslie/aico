@@ -41,6 +41,9 @@ vi.mock('@/lib/hooks/use-captures', () => ({
     error: null,
   }),
 }))
+vi.mock('@/lib/hooks/use-notes', () => ({
+  useNote: () => ({ note: { title: 'Groceries' } }),
+}))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn() }) }))
 
 const capture = (over: Partial<Capture> = {}): Capture => ({
@@ -126,17 +129,17 @@ describe('CaptureDetail route', () => {
 
   it('offers no button for an owner that is not built yet, only the reason', () => {
     show({
-      type: 'grocery_list',
+      type: 'receipt',
       route: route({
-        owner: 'notes',
-        ownerLabel: 'Notes',
+        owner: 'portfolio-ai',
+        ownerLabel: 'Portfolio AI',
         canSend: false,
-        question: 'File this as a grocery list?',
-        note: 'Notes are coming soon, so this stays here for now.',
+        question: 'File this as a receipt?',
+        note: 'Receipts are coming soon, so this stays here for now.',
       }),
     })
     expect(screen.getByTestId('capture-route')).toHaveTextContent(
-      'Notes are coming soon',
+      'Receipts are coming soon',
     )
     expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
   })
@@ -186,6 +189,25 @@ describe('CaptureDetail route', () => {
     ).toHaveAttribute('href', 'https://portfolio.example/capture')
     expect(screen.queryByRole('link', { name: /Download/ })).toBeNull()
     expect(screen.queryByText(/couldn't make a preview/)).toBeNull()
+  })
+
+  it('links a capture filed in Notes to its note', () => {
+    show({
+      status: 'filed',
+      route: route({
+        state: 'filed',
+        owner: 'notes',
+        ownerLabel: 'Notes',
+        ownerRef: '0123456789ab',
+      }),
+    })
+    expect(screen.getByTestId('capture-route')).toHaveTextContent(
+      'Filed in Notes: Groceries',
+    )
+    expect(screen.getByTestId('filed-note-link')).toHaveAttribute(
+      'href',
+      '/notes?id=0123456789ab',
+    )
   })
 })
 

@@ -120,4 +120,10 @@ describe('tether note', () => {
       }),
     ).toContain('(untitled)')
   })
+
+  it('prints the edit time in local time', () => {
+    const ms = new Date(2026, 10, 2, 14, 44).getTime()
+    const base = { id: 'x', kind: 'note', title: 't', pinned: false, archived: false, labels: [] }
+    expect(formatNote({ ...base, editedAt: ms } as never)).toContain('edited 2026-11-02 14:44')
+  })
 })

@@ -3,6 +3,7 @@
 // logic lives in Tether. It sends no Origin, so aico-web's guard lets it through.
 
 import { type Answer, type CaptureIo, DEFAULT_URL, parseFlags, problem } from './capture-cli'
+import { stamp } from './recovery-facts'
 
 export const NOTE_USAGE = `Usage:
   tether note list [--kind note|list|prompt] [--label L] [--q TEXT] [--limit N] [--json]
@@ -47,7 +48,8 @@ interface NoteJson {
   attachments?: { name: string; mime: string }[]
 }
 
-const when = (ms: number) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16)
+/** Local time, as the other tether commands print it. */
+const when = (ms: number) => stamp(ms).slice(0, 16)
 
 function listLine(note: NoteJson): string {
   const counts =

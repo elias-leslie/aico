@@ -98,7 +98,12 @@ export class ExtractWorker {
     const { store } = this.options
     try {
       const outcome = await this.read(row)
-      const ready = store.finishExtraction(row.id, outcome, this.options.router?.plan(outcome.type))
+      // A photo the owner added from a note is already filed there: no suggestion,
+      // so the router never moves it into Groceries or a new note.
+      const plan = store.notes.hasCaptureAttachment(row.id)
+        ? null
+        : this.options.router?.plan(outcome.type)
+      const ready = store.finishExtraction(row.id, outcome, plan)
       if (ready) await this.route(ready)
     } catch (error) {
       const reason =

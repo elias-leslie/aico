@@ -1,6 +1,7 @@
 'use client'
 
 import { Download, ExternalLink, Trash2 } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
@@ -10,6 +11,7 @@ import {
   extractedItems,
   type RouteAction,
 } from '@/lib/api/captures'
+import { noteHref } from '@/lib/api/notes'
 import { formatAge } from '@/lib/attention'
 import {
   formatBytes,
@@ -24,6 +26,7 @@ import {
   useRouteCapture,
   useSaveCaption,
 } from '@/lib/hooks/use-captures'
+import { useNote } from '@/lib/hooks/use-notes'
 import { ConfirmationDialog } from '../ConfirmationDialog'
 import { CaptureThumb } from './CaptureThumb'
 
@@ -261,10 +264,14 @@ function RouteBlock({ capture }: { capture: Capture }) {
   return box(
     'var(--paper-veil)',
     <>
-      <p style={{ color: 'var(--bone)' }}>
-        Sent to {owner}.
-        {capture.hasFile === false ? ' Aico no longer keeps the file.' : ''}
-      </p>
+      {route.owner === 'notes' && route.ownerRef ? (
+        <FiledInNotes noteId={route.ownerRef} />
+      ) : (
+        <p style={{ color: 'var(--bone)' }}>
+          Sent to {owner}.
+          {capture.hasFile === false ? ' Aico no longer keeps the file.' : ''}
+        </p>
+      )}
       {route.url && (
         <a
           className="lantern-btn min-h-11 self-start"
@@ -281,6 +288,24 @@ function RouteBlock({ capture }: { capture: Capture }) {
         </a>
       )}
     </>,
+  )
+}
+
+/** A capture the router filed into Notes: the note it went to, as a link. */
+function FiledInNotes({ noteId }: { noteId: string }) {
+  const { note } = useNote(noteId)
+  return (
+    <p style={{ color: 'var(--bone)' }}>
+      Filed in Notes:{' '}
+      <Link
+        href={noteHref(noteId)}
+        data-testid="filed-note-link"
+        className="inline-flex min-h-11 items-center underline underline-offset-2"
+        style={{ color: 'var(--lantern)' }}
+      >
+        {note ? note.title || 'Untitled' : 'Open the note'}
+      </Link>
+    </p>
   )
 }
 
