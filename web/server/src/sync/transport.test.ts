@@ -294,14 +294,14 @@ describe('daily cleanup', () => {
     expect(hasBlob(a.blobs, keep)).toBe(true)
     expect(hasBlob(a.blobs, orphan)).toBe(false)
     expect(hasBlob(a.blobs, fresh)).toBe(true) // inside the grace period
-    expect(a.logs.at(-1)).toMatch(/sync cleanup/)
+    expect(a.logs.at(-1)).toMatch(/cleanup:/)
 
     const before = a.logs.length
     await a.loop.run() // not again the same day
     expect(a.logs).toHaveLength(before)
     a.host.clock.advance(DAY + 1)
     await a.loop.run()
-    expect(a.logs.at(-1)).toMatch(/sync cleanup/)
+    expect(a.logs.at(-1)).toMatch(/cleanup:/)
   })
 
   it('keeps a blob a deleted row still names, and drops stale temp files', async () => {

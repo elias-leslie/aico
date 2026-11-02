@@ -225,6 +225,6 @@ export class SyncLoop {
       return 0
     })
     notes.setMeta(LAST_MAINTENANCE, String(now()))
-    this.deps.log(`sync cleanup: ${removed[0]} + ${removed[1]} tombstone(s), ${blobs} blob file(s)`)
+    this.deps.log(`cleanup: ${removed[0]} + ${removed[1]} tombstone(s), ${blobs} blob file(s)`)
   }
 }
