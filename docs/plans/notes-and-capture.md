@@ -453,6 +453,9 @@ CT 190 `aico`: Debian 13, unprivileged, `nesting=1`, `onboot=1`, 2 cores, 2 GB R
 - **Tether links:** the workstation's `hosts.json` gets `gem` (ssh alias to the LXC, `socket`, `sync`). The LXC's gets `workstation` with `sync` and no wake command (see "Wake button" below). Sessions on one door show on the other, offline ones marked.
 - Docs to update: `docs/remote-access.md` (one tunnel, two connectors, why a replica of the big tunnel is wrong), `docs/INSTALL.md` (the `sync` field, `deploy-remote.sh`), `docs/web-guide.md`.
 
+### Backups for CT 190 (decided 2026-11-02)
+No container backup. The container is 2.4 GB of OS, Node and build, all rebuildable with `pct create` plus `scripts/deploy-remote.sh` (see "Milestone 6a as shipped"). Its data, `~/.local/state/aico`, was 1 MB at setup and syncs to the workstation within seconds, where btrbk (every 4 hours, to the T7) and the daily Drive job already cover it. The only uncovered case: gem's disk fails while the workstation is off, and the edits made on gem in that window are lost. Revisit if gem ever holds data the workstation doesn't.
+
 ### What each outage looks like
 
 | Down | Works | Missing |
