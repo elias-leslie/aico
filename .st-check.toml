@@ -7,7 +7,8 @@
 # ty reads ty.toml, pytest reads pytest.ini (tether/scripts/tests),
 # Vitest's root config runs the shared, Tether, web/server and web/frontend
 # projects, and tsc checks shared/. Tether, web/server and web/frontend each
-# have their own tsconfig, so they type-check in the native stages below.
+# have their own tsconfig, so they type-check in the native stages below; those
+# run in the quick lane too (`quick = true`) when a TypeScript or JSON file changed.
 [paths]
 pytest = "tether/scripts/.venv/bin"
 types = "tether/scripts/.venv/bin"
@@ -32,18 +33,24 @@ python3 = "/usr/bin/python3"
 id = "tether-tsc"
 kind = "check"
 coverage = "full"
+quick = true
+quick_paths = ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.json"]
 argv = ["node_modules/.bin/tsc", "--noEmit", "-p", "tether"]
 
 [[native.stages]]
 id = "web-tsc"
 kind = "check"
 coverage = "full"
+quick = true
+quick_paths = ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.json"]
 argv = ["node_modules/.bin/tsc", "--noEmit", "-p", "web/frontend"]
 
 [[native.stages]]
 id = "web-server-tsc"
 kind = "check"
 coverage = "full"
+quick = true
+quick_paths = ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.json"]
 argv = ["node_modules/.bin/tsc", "--noEmit", "-p", "web/server"]
 
 # Mechanical UI copy rules from ui-spec.json (uilint). A pass is not a copy review.
