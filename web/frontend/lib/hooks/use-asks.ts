@@ -4,6 +4,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api-fetch'
 import { SESSION_REFRESH_MS } from './use-terminal-sessions'
 
+/** What an ask wants back: `min` to `max` files, `hint` saying what. */
+export interface WantsFiles {
+  min: number
+  max: number
+  hint: string | null
+}
+
+/** A file the owner answered with; read it with `tether capture get ID`. */
+export interface AnswerFile {
+  id: string
+  name: string
+  mime: string
+  size: number
+  path: string | null
+  host: string | null
+}
+
 /** A question an agent put to the owner (tether docs/api-v1.md "Asks"). */
 export interface OwnerAsk {
   id: string
@@ -15,6 +32,10 @@ export interface OwnerAsk {
   body: string | null
   command: string | null
   share: string | null
+  /** The files it wants; null or absent (an older Tether): none. */
+  wantsFiles?: WantsFiles | null
+  /** The files the owner answered with. */
+  files?: AnswerFile[]
   blocking: boolean
   state: 'open' | 'answered' | 'done' | 'withdrawn'
   answer: string | null
@@ -127,7 +148,16 @@ export function useApprovals() {
 }
 
 export type AskReply =
-  | { kind: 'answer'; option?: number; text?: string; note?: string }
+  | {
+      kind: 'answer'
+      option?: number
+      text?: string
+      note?: string
+      /** Capture ids, in the order shown. */
+      files?: string[]
+      /** The owner chose to answer without the files the ask wanted. */
+      skippedFiles?: boolean
+    }
   | { kind: 'done' }
 
 /** Answer or close an ask; the lists and the sessions (their needs-you mark) refresh. */

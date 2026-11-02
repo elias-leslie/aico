@@ -15,6 +15,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { formatAge } from '@/lib/attention'
+import { dropAskCaptureQueue } from '@/lib/capture-queue'
 import { openFiles } from '@/lib/files-opener'
 import {
   type Approval,
@@ -28,6 +29,7 @@ import {
 } from '@/lib/hooks/use-asks'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useTerminalSessions } from '@/lib/hooks/use-terminal-sessions'
+import { AnsweredFiles, AskFilesBlock, useAskFiles } from './AskFiles'
 
 type Tab = 'asks' | 'approvals' | 'answered'
 
@@ -682,20 +684,32 @@ export function AskCard({
   const [choice, setChoice] = useState<number | null>(null)
   const [note, setNote] = useState('')
   const hasOptions = ask.options.length > 0
+  const files = useAskFiles(ask)
+  const wantsFiles = files.wants !== null
   // The card leaves the list once the answer is saved, so the drawer says it.
   const send = (answer: AskReply, said: string) =>
     reply
       .mutateAsync({ id: ask.id, reply: answer })
-      .then(({ ask: saved }) =>
+      .then(({ ask: saved }) => {
+        // Sent: the files are the agent's now, not a draft.
+        dropAskCaptureQueue(ask.id)
         onSent?.(
           `${saved.delivery === 'wake' ? 'Sent to' : 'Saved for'} “${(saved.answerTo && nameOf(saved.answerTo)) || asker.name}”: ${said}.`,
-        ),
-      )
+        )
+      })
       .catch(() => {
-        // reply.error shows under the card.
+        // reply.error shows under the card; saved files stay saved.
       })
   const noteText = note.trim()
-  const canSend = !reply.isPending && (choice !== null || noteText.length > 0)
+  const said = choice !== null || noteText.length > 0
+  const canSend =
+    !reply.isPending &&
+    files.waiting === 0 &&
+    (wantsFiles ? files.enough && (said || files.saved.length > 0) : said)
+  const sendLabel =
+    files.waiting > 0
+      ? `Waiting for ${files.waiting} upload${files.waiting === 1 ? '' : 's'}`
+      : 'Send'
 
   const Item = inSession ? 'div' : 'li'
   return (
@@ -766,6 +780,7 @@ export function AskCard({
           ))}
         </div>
       )}
+      {wantsFiles && <AskFilesBlock files={files} disabled={reply.isPending} />}
       {route && (
         <p
           data-testid="answer-route"
@@ -782,13 +797,21 @@ export function AskCard({
           event.preventDefault()
           if (!canSend) return
           const picked = choice !== null ? ask.options[choice] : undefined
+          const ids = files.saved.map((item) => item.capture?.id as string)
           send(
             {
               kind: 'answer',
               ...(choice !== null ? { option: choice } : {}),
               ...(noteText ? { note: noteText } : {}),
+              ...(ids.length ? { files: ids } : {}),
             },
-            [picked, noteText && `“${noteText}”`].filter(Boolean).join(', '),
+            [
+              picked,
+              noteText && `“${noteText}”`,
+              ids.length && plural(ids.length, 'file'),
+            ]
+              .filter(Boolean)
+              .join(', '),
           )
         }}
       >
@@ -811,11 +834,38 @@ export function AskCard({
           className="lantern-btn primary small"
           disabled={!canSend}
         >
-          Send
+          {sendLabel}
         </button>
       </form>
       <div className="mt-2 flex flex-wrap items-center gap-1">
-        {!hasOptions && (
+        {wantsFiles && (
+          <button
+            type="button"
+            className="lantern-btn small"
+            disabled={reply.isPending}
+            onClick={() =>
+              send(
+                {
+                  kind: 'answer',
+                  ...(choice !== null ? { option: choice } : {}),
+                  ...(noteText ? { note: noteText } : {}),
+                  skippedFiles: true,
+                },
+                [
+                  choice !== null ? ask.options[choice] : null,
+                  noteText && `“${noteText}”`,
+                  'no files',
+                ]
+                  .filter(Boolean)
+                  .join(', '),
+              )
+            }
+            title="Answers without sending any files"
+          >
+            Answer without files
+          </button>
+        )}
+        {!hasOptions && !wantsFiles && (
           <button
             type="button"
             className="lantern-btn small"
@@ -912,11 +962,17 @@ function AnsweredCard({ ask, now }: { ask: OwnerAsk; now: number }) {
           <>
             You answered <b>{ask.answer}</b>
           </>
+        ) : ask.files?.length ? (
+          `You sent ${plural(ask.files.length, 'file')}`
         ) : (
           'You replied'
         )}
         {ask.note ? `: “${ask.note}”` : ''}
+        {ask.answer && ask.files?.length
+          ? ` (${plural(ask.files.length, 'file')})`
+          : ''}
       </p>
+      <AnsweredFiles files={ask.files ?? []} />
       <p className="mt-1 text-[12.5px]" style={{ color: 'var(--mist)' }}>
         {deliveryText(ask)}
       </p>

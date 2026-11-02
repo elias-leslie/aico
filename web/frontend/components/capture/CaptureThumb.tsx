@@ -1,7 +1,7 @@
 'use client'
 
 import { FileAudio, FileText, Image as ImageIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { type Capture, captureThumbSource } from '@/lib/api/captures'
 
 function KindIcon({ kind }: { kind: string }) {
@@ -44,6 +44,45 @@ export function CaptureThumb({
         />
       ) : (
         <KindIcon kind={capture.kind} />
+      )}
+    </span>
+  )
+}
+
+/** The small picture for a file the browser still holds (before or just after
+ * it is sent): its own image, else an icon. */
+export function FileThumb({ file, size = 44 }: { file: File; size?: number }) {
+  const [failed, setFailed] = useState(false)
+  const url = useMemo(
+    () => (file.type.startsWith('image/') ? URL.createObjectURL(file) : null),
+    [file],
+  )
+  useEffect(
+    () => () => {
+      if (url) URL.revokeObjectURL(url)
+    },
+    [url],
+  )
+  return (
+    <span
+      className="grid flex-none place-items-center overflow-hidden rounded-md"
+      style={{
+        width: size,
+        height: size,
+        background: 'var(--paper)',
+        color: 'var(--mist)',
+      }}
+    >
+      {url && !failed ? (
+        // biome-ignore lint/performance/noImgElement: a local preview of the chosen file
+        <img
+          src={url}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <FileText className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />
       )}
     </span>
   )

@@ -66,12 +66,16 @@ function pastedFiles(event: ClipboardEvent): File[] {
 export function CapturePicker({
   accept,
   disabled = false,
+  paste = true,
   onFiles,
   className,
 }: {
   /** From the server's table (`GET /api/captures/limits`); unset until it loads. */
   accept?: string
   disabled?: boolean
+  /** Take files pasted anywhere on the page. A card among several turns it
+   * on only while it is the one being used. */
+  paste?: boolean
   onFiles: (files: File[]) => void
   className?: string
 }) {
@@ -81,16 +85,16 @@ export function CapturePicker({
   onFilesRef.current = onFiles
 
   useEffect(() => {
-    if (disabled) return
-    const paste = (event: ClipboardEvent) => {
+    if (disabled || !paste) return
+    const onPaste = (event: ClipboardEvent) => {
       const files = pastedFiles(event)
       if (files.length === 0) return
       event.preventDefault()
       onFilesRef.current(files)
     }
-    window.addEventListener('paste', paste)
-    return () => window.removeEventListener('paste', paste)
-  }, [disabled])
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [disabled, paste])
 
   const drop = (event: DragEvent) => {
     event.preventDefault()

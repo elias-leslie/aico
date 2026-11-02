@@ -4,6 +4,8 @@
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Capture, CaptureUpload } from '@/lib/api/captures'
+import { dropAskCaptureQueue, setCaptureLimits } from '@/lib/capture-queue'
 import type { OwnerAsk } from '@/lib/hooks/use-asks'
 import {
   closeNeedsYou,
@@ -17,6 +19,26 @@ const state = vi.hoisted(() => ({
   asks: [] as OwnerAsk[],
   phone: false,
   sent: [] as unknown[],
+  uploads: [] as {
+    upload: CaptureUpload
+    resolve: (capture: Capture) => void
+  }[],
+}))
+vi.mock('@/lib/api/captures', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/captures')>()),
+  uploadCapture: (upload: CaptureUpload) =>
+    new Promise<Capture>((resolve) => {
+      state.uploads.push({ upload, resolve })
+    }),
+  uploadThumb: async () => {},
+  deleteCapture: async () => {},
+}))
+vi.mock('@/lib/capture-thumb', () => ({ makeThumbnail: async () => null }))
+vi.mock('@/lib/hooks/use-captures', () => ({
+  useCaptureLimits: () => ({
+    limits: { max_bytes: 1000, max_files: 3, types: [], accept: '.jpg,.pdf' },
+    isError: false,
+  }),
 }))
 vi.mock('@/lib/hooks/use-asks', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/hooks/use-asks')>()),
@@ -77,6 +99,11 @@ beforeEach(() => {
   state.asks = []
   state.phone = false
   state.sent = []
+  state.uploads = []
+  dropAskCaptureQueue('abcdefabcdef')
+  setCaptureLimits({ max_bytes: 1000, max_files: 3 })
+  URL.createObjectURL = vi.fn(() => 'blob:x')
+  URL.revokeObjectURL = vi.fn()
   act(() => closeNeedsYou())
 })
 
@@ -113,6 +140,56 @@ describe('SessionAsk', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Sent to “Disk merge”: Finish it now.',
     )
+  })
+
+  it('takes the files a question asks for, in place', async () => {
+    state.asks = [
+      ask({
+        options: [],
+        recommended: null,
+        wantsFiles: { min: 1, max: 2, hint: 'the dashboard' },
+      }),
+    ]
+    render(<SessionAsk sessionId="0123abcd" />)
+    const card = screen.getByTestId('ask-card')
+    expect(within(card).getByTestId('ask-files-count')).toHaveTextContent(
+      '0 of 1-2 files · the dashboard',
+    )
+    fireEvent.change(within(card).getByLabelText('Choose files'), {
+      target: {
+        files: [
+          new File([new Uint8Array(10)], 'dash.jpg', { type: 'image/jpeg' }),
+        ],
+      },
+    })
+    expect(state.uploads[0]?.upload.askId).toBe('abcdefabcdef')
+    await act(async () =>
+      state.uploads[0]?.resolve({
+        id: '111111111111',
+        clientId: 'c',
+        groupId: null,
+        askId: 'abcdefabcdef',
+        kind: 'image',
+        name: 'dash.jpg',
+        mime: 'image/jpeg',
+        size: 10,
+        caption: '',
+        status: 'new',
+        type: null,
+        text: null,
+        createdAt: 1,
+        updatedAt: 1,
+        hasThumb: false,
+        previewState: 'ready',
+      }),
+    )
+    fireEvent.click(within(card).getByRole('button', { name: 'Send' }))
+    expect(state.sent).toEqual([
+      {
+        id: 'abcdefabcdef',
+        reply: { kind: 'answer', files: ['111111111111'] },
+      },
+    ])
   })
 
   it('stays one folded line for a whenever question until opened', () => {

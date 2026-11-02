@@ -2,9 +2,9 @@
 
 import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
-import { Check, FileText, Mic, RotateCw, X } from 'lucide-react'
+import { Check, Mic, RotateCw, X } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { formatBytes } from '@/lib/capture-format'
 import {
   addCaptureFiles,
@@ -19,6 +19,7 @@ import {
 import { useCaptureLimits, useRefreshCaptures } from '@/lib/hooks/use-captures'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { CapturePicker } from './CapturePicker'
+import { FileThumb } from './CaptureThumb'
 
 const CAPTION_MAX = 4000
 
@@ -102,38 +103,6 @@ function DictationButton({ onText }: { onText: (text: string) => void }) {
   )
 }
 
-function Thumb({ file }: { file: File }) {
-  const [failed, setFailed] = useState(false)
-  const url = useMemo(
-    () => (file.type.startsWith('image/') ? URL.createObjectURL(file) : null),
-    [file],
-  )
-  useEffect(
-    () => () => {
-      if (url) URL.revokeObjectURL(url)
-    },
-    [url],
-  )
-  return (
-    <span
-      className="grid h-11 w-11 flex-none place-items-center overflow-hidden rounded-md"
-      style={{ background: 'var(--paper)', color: 'var(--mist)' }}
-    >
-      {url && !failed ? (
-        // biome-ignore lint/performance/noImgElement: a local preview of the chosen file
-        <img
-          src={url}
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        <FileText className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />
-      )}
-    </span>
-  )
-}
-
 function Row({ item, locked }: { item: QueueItem; locked: boolean }) {
   const status =
     item.state === 'queued'
@@ -151,7 +120,7 @@ function Row({ item, locked }: { item: QueueItem; locked: boolean }) {
       data-testid="capture-row"
       data-state={item.state}
     >
-      <Thumb file={item.file} />
+      <FileThumb file={item.file} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px]" style={{ color: 'var(--bone)' }}>
           {item.file.name}

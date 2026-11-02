@@ -2,9 +2,19 @@
 // answer sent as picked, approvals as links only, and an honest state for
 // each of loading, empty and failed.
 
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Capture, CaptureUpload } from '@/lib/api/captures'
+import { ApiError } from '@/lib/api-fetch'
+import { dropAskCaptureQueue, setCaptureLimits } from '@/lib/capture-queue'
 import type { Approvals, OwnerAsk } from '@/lib/hooks/use-asks'
 import {
   closeNeedsYou,
@@ -23,31 +33,71 @@ const state = vi.hoisted(() => ({
   approvals: null as Approvals | null,
   approvalsLoading: false,
   sent: [] as unknown[],
+  /** The next answer is refused with this. */
+  sendError: null as Error | null,
+  uploads: [] as {
+    upload: CaptureUpload
+    resolve: (capture: Capture) => void
+    reject: (error: Error) => void
+  }[],
+  deleted: [] as string[],
 }))
-vi.mock('@/lib/hooks/use-asks', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/hooks/use-asks')>()),
-  useOwnerAsks: () => ({
-    asks: state.asks,
-    isLoading: state.isLoading,
-    isError: state.isError,
-    refetch: () => {},
-  }),
-  useApprovals: () => ({
-    approvals: state.approvals,
-    isLoading: state.approvalsLoading,
-  }),
-  useAskReply: () => ({
-    mutate: (value: unknown) => state.sent.push(value),
-    mutateAsync: async (value: { id: string }) => {
-      state.sent.push(value)
-      const saved = state.asks.find((item) => item.id === value.id)
-      return { ask: { ...saved, state: 'answered', delivery: 'wake' } }
-    },
-    isPending: false,
+vi.mock('@/lib/api/captures', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/captures')>()),
+  uploadCapture: (upload: CaptureUpload) =>
+    new Promise<Capture>((resolve, reject) => {
+      state.uploads.push({ upload, resolve, reject })
+      upload.signal?.addEventListener('abort', () =>
+        reject(new ApiError('Cancelled', 0)),
+      )
+    }),
+  uploadThumb: async () => {},
+  deleteCapture: async (id: string) => {
+    state.deleted.push(id)
+  },
+}))
+vi.mock('@/lib/capture-thumb', () => ({ makeThumbnail: async () => null }))
+vi.mock('@/lib/hooks/use-captures', () => ({
+  useCaptureLimits: () => ({
+    limits: { max_bytes: 1000, max_files: 3, types: [], accept: '.jpg,.pdf' },
     isError: false,
-    error: null,
   }),
 }))
+vi.mock('@/lib/hooks/use-asks', async (importOriginal) => {
+  const { useState } = await import('react')
+  return {
+    ...(await importOriginal<typeof import('@/lib/hooks/use-asks')>()),
+    useOwnerAsks: () => ({
+      asks: state.asks,
+      isLoading: state.isLoading,
+      isError: state.isError,
+      refetch: () => {},
+    }),
+    useApprovals: () => ({
+      approvals: state.approvals,
+      isLoading: state.approvalsLoading,
+    }),
+    useAskReply: () => {
+      const [error, setError] = useState<Error | null>(null)
+      return {
+        mutate: (value: unknown) => state.sent.push(value),
+        mutateAsync: async (value: { id: string }) => {
+          state.sent.push(value)
+          if (state.sendError) {
+            setError(state.sendError)
+            throw state.sendError
+          }
+          setError(null)
+          const saved = state.asks.find((item) => item.id === value.id)
+          return { ask: { ...saved, state: 'answered', delivery: 'wake' } }
+        },
+        isPending: false,
+        isError: error !== null,
+        error,
+      }
+    },
+  }
+})
 vi.mock('@/lib/hooks/use-terminal-sessions', () => ({
   SESSION_REFRESH_MS: 5_000,
   useTerminalSessions: () => ({
@@ -91,6 +141,13 @@ beforeEach(() => {
   state.approvals = { state: 'ok', taps: [] }
   state.approvalsLoading = false
   state.sent = []
+  state.sendError = null
+  state.uploads = []
+  state.deleted = []
+  dropAskCaptureQueue('abcdefabcdef')
+  setCaptureLimits({ max_bytes: 1000, max_files: 3 })
+  URL.createObjectURL = vi.fn(() => 'blob:x')
+  URL.revokeObjectURL = vi.fn()
   push.mockReset()
   act(() => closeNeedsYou())
 })
@@ -408,5 +465,357 @@ describe('NeedsYouDrawer', () => {
     expect(state.sent).toEqual([
       { id: 'abcdefabcdef', reply: { kind: 'done' } },
     ])
+  })
+})
+
+describe('a card that asks for files', () => {
+  const wants = (min: number, max: number, hint: string | null = null) =>
+    ask({
+      options: [],
+      recommended: null,
+      command: null,
+      wantsFiles: { min, max, hint },
+    })
+  const file = (name: string, type = 'image/jpeg', size = 10) =>
+    new File([new Uint8Array(size)], name, { type })
+  const saved = (name: string, id: string): Capture => ({
+    id,
+    clientId: 'c',
+    groupId: null,
+    askId: 'abcdefabcdef',
+    kind: 'image',
+    name,
+    mime: 'image/jpeg',
+    size: 10,
+    caption: '',
+    status: 'new',
+    type: null,
+    text: null,
+    createdAt: 1,
+    updatedAt: 1,
+    hasThumb: false,
+    previewState: 'ready',
+  })
+  const choose = (...files: File[]) =>
+    fireEvent.change(screen.getByLabelText('Choose files'), {
+      target: { files },
+    })
+  const card = () => screen.getByTestId('ask-card')
+  const open = (patch = wants(1, 3, 'any photo or PDF')) => {
+    state.asks = [patch]
+    return render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+  }
+  const send = () =>
+    within(card()).getByRole('button', { name: /^(Send|Waiting)/ })
+  const land = async (index: number, name: string, id: string) =>
+    act(async () => state.uploads[index]?.resolve(saved(name, id)))
+
+  it('idle: the count and hint, Send off, and Answer without files always works', () => {
+    open()
+    expect(screen.getByTestId('ask-files-count')).toHaveTextContent(
+      '0 of 1-3 files · any photo or PDF',
+    )
+    expect(send()).toBeDisabled()
+    expect(
+      within(card()).getByRole('button', { name: 'Answer without files' }),
+    ).toBeEnabled()
+    // Done is not an answer to a question that asked for files.
+    expect(within(card()).queryByRole('button', { name: /Done/ })).toBeNull()
+    fireEvent.change(within(card()).getByLabelText('Reply to the agent'), {
+      target: { value: 'no camera here' },
+    })
+    fireEvent.click(
+      within(card()).getByRole('button', { name: 'Answer without files' }),
+    )
+    expect(state.sent).toEqual([
+      {
+        id: 'abcdefabcdef',
+        reply: { kind: 'answer', note: 'no camera here', skippedFiles: true },
+      },
+    ])
+  })
+
+  it('a card that asks for no files has no files block', () => {
+    open(ask())
+    expect(screen.queryByTestId('ask-files')).toBeNull()
+  })
+
+  it('uploading: a row with progress and Cancel, and Send waits', async () => {
+    open()
+    choose(file('odometer.jpg'))
+    expect(state.uploads).toHaveLength(1)
+    const upload = state.uploads[0]?.upload as CaptureUpload
+    expect(upload.askId).toBe('abcdefabcdef')
+    expect(upload.groupId).toBeUndefined()
+    await act(async () => upload.onProgress?.(40))
+    const row = screen.getByTestId('ask-file-row')
+    expect(row).toHaveAttribute('data-state', 'sending')
+    expect(row).toHaveTextContent('odometer.jpg')
+    expect(row).toHaveTextContent('Sending 40%')
+    expect(
+      within(row).getByRole('progressbar', { name: 'Sending odometer.jpg' }),
+    ).toHaveValue(40)
+    expect(send()).toHaveTextContent('Waiting for 1 upload')
+    expect(send()).toBeDisabled()
+    expect(screen.getByTestId('ask-files-count')).toHaveTextContent('1 of 1-3')
+
+    await act(async () =>
+      fireEvent.click(
+        within(row).getByRole('button', { name: 'Cancel odometer.jpg' }),
+      ),
+    )
+    expect(screen.queryByTestId('ask-file-row')).toBeNull()
+    expect(screen.getByTestId('ask-files-count')).toHaveTextContent('0 of 1-3')
+  })
+
+  it('saved: thumbnail, name, size and Remove (which deletes the capture); Send then answers with the ids', async () => {
+    open()
+    choose(file('odometer.jpg'), file('dash.jpg'))
+    await land(0, 'odometer.jpg', '111111111111')
+    expect(send()).toHaveTextContent('Waiting for 1 upload')
+    await land(1, 'dash.jpg', '222222222222')
+    const rows = screen.getAllByTestId('ask-file-row')
+    expect(rows[0]).toHaveAttribute('data-state', 'sent')
+    expect(rows[0]).toHaveTextContent('10 B · Saved')
+    expect(send()).toBeEnabled()
+    expect(send()).toHaveTextContent('Send')
+
+    await act(async () =>
+      fireEvent.click(
+        within(rows[1] as HTMLElement).getByRole('button', {
+          name: 'Remove dash.jpg',
+        }),
+      ),
+    )
+    expect(state.deleted).toEqual(['222222222222'])
+    expect(screen.getAllByTestId('ask-file-row')).toHaveLength(1)
+
+    fireEvent.click(send())
+    expect(state.sent).toEqual([
+      {
+        id: 'abcdefabcdef',
+        reply: { kind: 'answer', files: ['111111111111'] },
+      },
+    ])
+    // Sent: the card leaves like any answered ask, saying what went.
+    expect(
+      await screen.findByText(/Sent to “Disk merge”: 1 file\./),
+    ).toBeInTheDocument()
+  })
+
+  it('sends files with a note, in the order shown', async () => {
+    open(wants(0, 3))
+    choose(file('a.jpg'), file('b.jpg'))
+    await land(0, 'a.jpg', '111111111111')
+    await land(1, 'b.jpg', '222222222222')
+    fireEvent.change(within(card()).getByLabelText('Reply to the agent'), {
+      target: { value: 'both sides' },
+    })
+    fireEvent.click(send())
+    expect(state.sent).toEqual([
+      {
+        id: 'abcdefabcdef',
+        reply: {
+          kind: 'answer',
+          note: 'both sides',
+          files: ['111111111111', '222222222222'],
+        },
+      },
+    ])
+  })
+
+  it('failed: the reason in words with Retry (same id) or Remove, and never sent', async () => {
+    open()
+    choose(file('a.pdf', 'application/pdf'))
+    await act(async () =>
+      state.uploads[0]?.reject(
+        new ApiError("Aico can't store this kind of file yet", 415),
+      ),
+    )
+    const row = screen.getByTestId('ask-file-row')
+    expect(row).toHaveAttribute('data-state', 'failed')
+    expect(row).toHaveTextContent("Aico can't store this kind of file yet")
+    expect(send()).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '1 file failed and won’t be sent',
+    )
+
+    const clientId = state.uploads[0]?.upload.clientId
+    fireEvent.click(within(row).getByRole('button', { name: 'Retry a.pdf' }))
+    expect(state.uploads).toHaveLength(2)
+    expect(state.uploads[1]?.upload.clientId).toBe(clientId)
+    await act(async () =>
+      state.uploads[1]?.reject(
+        new ApiError('Aico is unreachable, try again', 0),
+      ),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Remove a.pdf' }))
+    expect(screen.queryByTestId('ask-file-row')).toBeNull()
+    expect(state.deleted).toEqual([])
+  })
+
+  it('a file over the limit fails before it is sent', () => {
+    setCaptureLimits({ max_bytes: 2 * 1024 * 1024, max_files: 3 })
+    open()
+    choose(file('big.jpg', 'image/jpeg', 3 * 1024 * 1024))
+    expect(state.uploads).toHaveLength(0)
+    expect(screen.getByTestId('ask-file-row')).toHaveTextContent(
+      'That file is over 2 MB',
+    )
+  })
+
+  it('partial: Send is on once the saved files meet the minimum, off below it', async () => {
+    open(wants(1, 3))
+    choose(file('a.jpg'), file('b.pdf', 'application/pdf'))
+    await land(0, 'a.jpg', '111111111111')
+    await act(async () =>
+      state.uploads[1]?.reject(new ApiError('That file is over 25 MB', 413)),
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '1 file failed and won’t be sent',
+    )
+    expect(send()).toBeEnabled()
+    fireEvent.click(send())
+    expect((state.sent[0] as { reply: unknown }).reply).toEqual({
+      kind: 'answer',
+      files: ['111111111111'],
+    })
+  })
+
+  it('partial below the minimum keeps Send off', async () => {
+    open(wants(2, 3))
+    choose(file('a.jpg'), file('b.jpg'))
+    await land(0, 'a.jpg', '111111111111')
+    await act(async () =>
+      state.uploads[1]?.reject(
+        new ApiError('Aico is unreachable, try again', 0),
+      ),
+    )
+    expect(send()).toBeDisabled()
+    // Retrying brings it back.
+    fireEvent.click(screen.getByRole('button', { name: 'Retry b.jpg' }))
+    await land(2, 'b.jpg', '222222222222')
+    expect(send()).toBeEnabled()
+  })
+
+  it('at the maximum: both controls off and the count says so', async () => {
+    open(wants(1, 2))
+    choose(file('a.jpg'), file('b.jpg'), file('c.jpg'))
+    expect(state.uploads).toHaveLength(1)
+    expect(screen.getAllByTestId('ask-file-row')).toHaveLength(2)
+    expect(
+      screen.getByText(/That is all this question takes. 1 not added/),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('ask-files-count')).toHaveTextContent(
+      '2 of 2 files',
+    )
+    expect(screen.getByLabelText('Choose files')).toBeDisabled()
+    // A failed file frees its place.
+    await act(async () =>
+      state.uploads[0]?.reject(
+        new ApiError('Aico is unreachable, try again', 0),
+      ),
+    )
+    expect(screen.getByLabelText('Choose files')).toBeEnabled()
+  })
+
+  it('answer failed: the files stay saved, the error shows, and Send tries again without uploading', async () => {
+    open(wants(1, 3))
+    choose(file('a.jpg'))
+    await land(0, 'a.jpg', '111111111111')
+    state.sendError = new Error('Could not send it. Try again.')
+    await act(async () => fireEvent.click(send()))
+    expect(state.sent).toHaveLength(1)
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not send it. Try again.',
+    )
+    expect(screen.getByTestId('ask-file-row')).toHaveAttribute(
+      'data-state',
+      'sent',
+    )
+    expect(send()).toBeEnabled()
+    state.sendError = null
+    await act(async () => fireEvent.click(send()))
+    expect(state.sent).toHaveLength(2)
+    expect(state.sent[1]).toEqual(state.sent[0])
+    expect(state.uploads).toHaveLength(1)
+  })
+
+  it('closed meanwhile: says so and that the files are kept', async () => {
+    open(wants(1, 3))
+    choose(file('a.jpg'))
+    await land(0, 'a.jpg', '111111111111')
+    state.sendError = new Error(
+      'This question was closed. Your files are kept in Captures.',
+    )
+    await act(async () => fireEvent.click(send()))
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'This question was closed. Your files are kept in Captures.',
+    )
+    expect(state.deleted).toEqual([])
+  })
+
+  it('keeps its files when the drawer closes and opens again, and starts clean after a send', async () => {
+    const { unmount } = open(wants(1, 3))
+    choose(file('a.jpg'))
+    await land(0, 'a.jpg', '111111111111')
+    unmount()
+    open(wants(1, 3))
+    expect(screen.getByTestId('ask-file-row')).toHaveTextContent('a.jpg')
+    await act(async () => fireEvent.click(send()))
+    cleanup()
+    open(wants(1, 3))
+    expect(screen.queryByTestId('ask-file-row')).toBeNull()
+  })
+
+  it('shows the files on the Answered tab', () => {
+    state.asks = [
+      ask({
+        state: 'answered',
+        options: [],
+        answer: null,
+        wantsFiles: { min: 1, max: 3, hint: null },
+        delivery: 'wake',
+        files: [
+          {
+            id: '111111111111',
+            name: 'odometer.jpg',
+            mime: 'image/jpeg',
+            size: 10,
+            path: '/x',
+            host: 'door',
+          },
+          {
+            id: '222222222222',
+            name: 'invoice.pdf',
+            mime: 'application/pdf',
+            size: 10,
+            path: '/y',
+            host: 'door',
+          },
+        ],
+      }),
+    ]
+    render(<NeedsYouDrawer open onOpenChange={() => {}} focus="abcdefabcdef" />)
+    const answered = screen.getByTestId('answered-card')
+    expect(answered).toHaveTextContent('You sent 2 files')
+    const files = within(answered).getAllByTestId('answered-file')
+    expect(files).toHaveLength(2)
+    expect(
+      within(files[0] as HTMLElement).getByRole('link', {
+        name: 'Open odometer.jpg',
+      }),
+    ).toHaveAttribute('href', '/api/captures/111111111111/file')
+    expect(
+      within(files[0] as HTMLElement).getByRole('presentation', {
+        hidden: true,
+      }),
+    ).toHaveAttribute('src', '/api/captures/111111111111/thumb')
+    // A PDF has no picture: an icon, not a broken image.
+    expect(
+      within(files[1] as HTMLElement).queryByRole('presentation', {
+        hidden: true,
+      }),
+    ).toBeNull()
   })
 })
