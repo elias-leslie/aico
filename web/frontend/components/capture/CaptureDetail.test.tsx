@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   saved: [] as unknown[],
   deleted: [] as string[],
   retried: [] as string[],
+  routed: [] as unknown[],
 }))
 vi.mock('@/lib/hooks/use-captures', () => ({
   useCapture: () => state.view,
@@ -23,6 +24,12 @@ vi.mock('@/lib/hooks/use-captures', () => ({
   }),
   useRetryCapture: () => ({
     mutate: (id: string) => state.retried.push(id),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+  useRouteCapture: () => ({
+    mutate: (value: unknown) => state.routed.push(value),
     isPending: false,
     isError: false,
     error: null,
@@ -72,6 +79,114 @@ beforeEach(() => {
   state.saved.length = 0
   state.deleted.length = 0
   state.retried.length = 0
+  state.routed.length = 0
+})
+
+const route = (over: Partial<NonNullable<Capture['route']>> = {}) => ({
+  state: 'suggested' as const,
+  owner: 'portfolio-ai',
+  ownerLabel: 'Portfolio AI',
+  ownerRef: null,
+  note: null,
+  question: 'Send to Portfolio AI as a receipt?',
+  notLabel: 'Not a receipt',
+  canSend: true,
+  url: null,
+  ...over,
+})
+
+describe('CaptureDetail route', () => {
+  const show = (over: Partial<Capture>) => {
+    state.view = {
+      ...base,
+      capture: capture({
+        status: 'ready',
+        type: 'receipt',
+        text: 'x',
+        ...over,
+      }),
+    }
+    render(<CaptureDetail id="abcdef012345" />)
+  }
+
+  it('asks the suggestion with Send, Not a receipt and Keep here', () => {
+    show({ route: route() })
+    expect(screen.getByTestId('capture-route')).toHaveTextContent(
+      'Send to Portfolio AI as a receipt?',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Not a receipt' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Keep here' }))
+    expect(state.routed).toEqual([
+      { id: 'abcdef012345', action: 'send' },
+      { id: 'abcdef012345', action: 'not_this' },
+      { id: 'abcdef012345', action: 'keep' },
+    ])
+  })
+
+  it('offers no button for an owner that is not built yet, only the reason', () => {
+    show({
+      type: 'grocery_list',
+      route: route({
+        owner: 'notes',
+        ownerLabel: 'Notes',
+        canSend: false,
+        question: 'File this as a grocery list?',
+        note: 'Notes are coming soon, so this stays here for now.',
+      }),
+    })
+    expect(screen.getByTestId('capture-route')).toHaveTextContent(
+      'Notes are coming soon',
+    )
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
+  })
+
+  it('says it is waiting and offers Send now; says why it failed and offers Try again', () => {
+    show({
+      route: route({
+        state: 'waiting',
+        note: "Portfolio AI isn't answering right now",
+      }),
+    })
+    expect(screen.getByTestId('capture-route')).toHaveTextContent(
+      'Waiting for Portfolio AI',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Send now' }))
+    expect(state.routed).toEqual([{ id: 'abcdef012345', action: 'send' }])
+  })
+
+  it('shows the failure reason', () => {
+    show({
+      route: route({ state: 'failed', note: 'Portfolio AI said no (415)' }),
+    })
+    expect(screen.getByTestId('capture-route')).toHaveTextContent(
+      "Couldn't send it to Portfolio AI: Portfolio AI said no (415)",
+    )
+    expect(
+      screen.getByRole('button', { name: 'Try again' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a filed capture with the link and no download', () => {
+    show({
+      status: 'filed',
+      hasFile: false,
+      previewState: 'unavailable',
+      hasThumb: false,
+      route: route({
+        state: 'filed',
+        url: 'https://portfolio.example/capture',
+      }),
+    })
+    expect(screen.getByTestId('capture-route')).toHaveTextContent(
+      'Sent to Portfolio AI.',
+    )
+    expect(
+      screen.getByRole('link', { name: /Open in Portfolio AI/ }),
+    ).toHaveAttribute('href', 'https://portfolio.example/capture')
+    expect(screen.queryByRole('link', { name: /Download/ })).toBeNull()
+    expect(screen.queryByText(/couldn't make a preview/)).toBeNull()
+  })
 })
 
 describe('CaptureDetail', () => {

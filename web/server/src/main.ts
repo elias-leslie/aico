@@ -7,6 +7,8 @@ import { TetherClient } from 'tether/client'
 import { buildApi } from './api'
 import { Asks } from './asks'
 import { Background } from './background'
+import { CaptureRouter } from './capture-router'
+import { loadCaptureTypes } from './capture-types'
 import { CLI_COMMANDS, runCli } from './cli'
 import { HISTORY_LINES, loadConfig } from './config'
 import { WebStore } from './db'
@@ -15,6 +17,8 @@ import { execRunner, PreviewJobs } from './heic'
 import { registerNightshiftRoutes } from './nightshift'
 import { NightshiftRelay, registerNightshiftStream } from './nightshift-stream'
 import { NotesStore } from './notes-db'
+import { PortfolioAiOwner } from './owners/portfolio-ai'
+import type { OwnerAdapter } from './owners/types'
 import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
@@ -41,7 +45,25 @@ function serve(): void {
     files: { store: notes, blobsDir, hostName: config.hostName },
   })
   const previews = new PreviewJobs(blobsDir, execRunner)
+  const adapters = new Map<string, OwnerAdapter>()
+  if (config.portfolio.url)
+    adapters.set(
+      'portfolio-ai',
+      new PortfolioAiOwner({ url: config.portfolio.url, tokenFile: config.portfolio.tokenFile }),
+    )
+  const router = new CaptureRouter({
+    store: notes,
+    blobsDir,
+    table: loadCaptureTypes(config.captureTypesFile),
+    adapters,
+    ownerUrls: {
+      'portfolio-ai':
+        config.portfolio.appUrl && `${config.portfolio.appUrl.replace(/\/+$/, '')}/capture`,
+    },
+    publicHost: config.publicHost,
+  })
   const reader = new ExtractWorker({
+    router,
     store: notes,
     blobsDir,
     previews,
@@ -57,6 +79,7 @@ function serve(): void {
     uploads: config.uploads,
     maintenance: config.maintenance,
     forward: (event) => terminals.event(event),
+    tick: () => router.tick(),
   })
   const api = buildApi({
     tether,
@@ -72,6 +95,7 @@ function serve(): void {
       asks,
       previews,
       reader,
+      router,
     },
   })
   registerNightshiftRoutes(api, config)

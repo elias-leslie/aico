@@ -11,13 +11,20 @@ import { DatabaseSync } from 'node:sqlite'
 import type { CaptureKind } from './capture-files'
 import { HybridClock } from './hlc'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 /** Changes after version 1, in order; `MIGRATIONS[n]` takes the file to version n + 1. */
 const MIGRATIONS: Record<number, string> = {
   1: `ALTER TABLE captures ADD COLUMN extract_json  TEXT;
       ALTER TABLE captures ADD COLUMN extract_route TEXT;
       ALTER TABLE captures ADD COLUMN extract_error TEXT;`,
+  2: `ALTER TABLE captures ADD COLUMN owner       TEXT;
+      ALTER TABLE captures ADD COLUMN owner_ref   TEXT;
+      ALTER TABLE captures ADD COLUMN route_state TEXT
+        CHECK (route_state IS NULL OR route_state IN
+          ('suggested','confirmed','filed','waiting','failed','kept'));
+      ALTER TABLE captures ADD COLUMN route_note  TEXT;
+      CREATE INDEX IF NOT EXISTS captures_route ON captures (route_state);`,
 }
 
 const SCHEMA = `
@@ -53,6 +60,29 @@ CREATE INDEX IF NOT EXISTS captures_seq ON captures (seq);
 export const CAPTURE_STATUSES = ['new', 'extracting', 'ready', 'failed', 'filed'] as const
 export type CaptureStatus = (typeof CAPTURE_STATUSES)[number]
 
+/**
+ * Where a capture is on its way to an owner: `suggested` (waiting for a tap, or
+ * for the owner to exist), `confirmed` (being sent), `waiting` (the owner is
+ * unreachable), `failed` (the owner refused it), `filed` (handed off) or `kept`
+ * (the owner chose to keep it here). Null: nothing was suggested.
+ */
+export const ROUTE_STATES = [
+  'suggested',
+  'confirmed',
+  'filed',
+  'waiting',
+  'failed',
+  'kept',
+] as const
+export type RouteState = (typeof ROUTE_STATES)[number]
+
+/** What the router decided for a capture that was just read. */
+export interface RoutePlan {
+  owner: string
+  state: RouteState
+  note: string | null
+}
+
 export interface CaptureRow {
   id: string
   client_id: string
@@ -79,6 +109,13 @@ export interface CaptureRow {
   extract_route: string | null
   /** Why the last read failed, in plain words; null once it works. */
   extract_error: string | null
+  /** Who takes this kind of capture (`portfolio-ai`, `notes`), or null. */
+  owner: string | null
+  /** The owner's id for it once handed off (portfolio-ai's capture id). */
+  owner_ref: string | null
+  route_state: RouteState | null
+  /** A plain sentence about the route: why it waits or failed, or what is not built yet. */
+  route_note: string | null
 }
 
 export interface NewCapture {
@@ -388,6 +425,7 @@ export class NotesStore {
   finishExtraction(
     id: string,
     result: { type: string | null; text: string | null; json: string | null; route: string | null },
+    plan: RoutePlan | null = null,
   ): CaptureRow | null {
     return this.transaction(() =>
       this.getCapture(id)?.status === 'extracting'
@@ -398,6 +436,9 @@ export class NotesStore {
             extract_json: result.json,
             extract_route: result.route,
             extract_error: null,
+            owner: plan?.owner ?? null,
+            route_state: plan?.state ?? null,
+            route_note: plan?.note ?? null,
           })
         : null,
     )
@@ -418,6 +459,56 @@ export class NotesStore {
       this.getCapture(id)?.status === 'failed'
         ? this.editNow(id, { status: 'new', extract_error: null })
         : null,
+    )
+  }
+
+  // -- Routing to owners (the capture router) -------------------------------------
+
+  /**
+   * Moves a live capture's route from one of the `from` states to `fields`
+   * (`route_state` is required). Null when it is gone or in another state, so a
+   * double tap or a late retry changes nothing.
+   */
+  transitionRoute(
+    id: string,
+    from: readonly (RouteState | null)[],
+    fields: { route_state: RouteState } & Record<string, string | number | null>,
+  ): CaptureRow | null {
+    return this.transaction(() => {
+      const current = this.getCapture(id)
+      return current && from.includes(current.route_state) ? this.editNow(id, fields) : null
+    })
+  }
+
+  /**
+   * Records the hand-off: `filed`, the owner's id for it, and, unless the type
+   * keeps a copy, the file, text and reading are dropped (`hash` becomes NULL;
+   * the caller removes the blob files).
+   */
+  fileCapture(id: string, ownerRef: string, purge: boolean): CaptureRow | null {
+    return this.transitionRoute(id, ['confirmed', 'waiting', 'failed'], {
+      status: 'filed',
+      route_state: 'filed',
+      owner_ref: ownerRef,
+      route_note: null,
+      ...(purge ? { hash: null, text: null, extract_json: null } : {}),
+    })
+  }
+
+  /** Captures of this host in the middle of a hand-off (`waiting`, or `confirmed` and cut short), oldest first. */
+  pendingRoutes(): CaptureRow[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM captures WHERE route_state IN ('waiting','confirmed') AND deleted = 0
+           AND origin = ? ORDER BY created_at, id`,
+      )
+      .all(this.hostName) as unknown as CaptureRow[]
+  }
+
+  /** How many captures (tombstones too) still point at this blob. */
+  countHashRefs(hash: string): number {
+    return Number(
+      (this.db.prepare('SELECT count(*) AS n FROM captures WHERE hash = ?').get(hash) as Row).n,
     )
   }
 }

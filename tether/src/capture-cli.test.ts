@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { blobPathHere, runCapture } from './capture-cli'
+import { blobPathHere, formatCapture, runCapture } from './capture-cli'
 
 const BYTES = Buffer.from('%PDF-1.7\nhello capture\n')
 const HASH = createHash('sha256').update(BYTES).digest('hex')
@@ -139,6 +139,32 @@ describe('tether capture', () => {
     expect(text).toContain('caption | oil change')
     expect(text).toContain('text | Total 42.00')
     expect(text).toContain('tether capture file 0123456789ab')
+  })
+
+  it('shows the route and owner of a capture that was suggested, waiting or filed', () => {
+    const route = (fields: Record<string, unknown>) => ({
+      state: 'suggested',
+      owner: 'portfolio-ai',
+      ownerLabel: 'Portfolio AI',
+      ownerRef: null,
+      note: null,
+      url: null,
+      ...fields,
+    })
+    expect(formatCapture(item({ route: route({}) }) as never)).toContain(
+      'route: suggested -> portfolio-ai',
+    )
+    expect(
+      formatCapture(
+        item({
+          route: route({ state: 'waiting', note: 'Portfolio AI had an error (503)' }),
+        }) as never,
+      ),
+    ).toContain('route: waiting -> portfolio-ai: Portfolio AI had an error (503)')
+    expect(
+      formatCapture(item({ route: route({ state: 'filed', ownerRef: 'pf-9' }) }) as never),
+    ).toContain('route: filed -> portfolio-ai (their id pf-9)')
+    expect(formatCapture(item() as never)).not.toContain('route:')
   })
 
   it('shows what was read with result, and says plainly when there is none yet', async () => {

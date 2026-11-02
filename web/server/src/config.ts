@@ -29,6 +29,9 @@ export interface WebConfig {
   hostName: string
   captures: CaptureConfig
   vision: VisionSettings
+  /** The capture type table's override file (the default table ships with Aico). */
+  captureTypesFile: string
+  portfolio: PortfolioSettings
   /** The Python backend's database, read once into `dbPath` and never written. */
   tetherSocket: string
   /** Agent shares are taken only from this user's tether@default (the owner's own socket). */
@@ -57,6 +60,16 @@ export interface CaptureConfig {
   maxBytes: number
   /** Most files in one batch or ask. */
   maxFiles: number
+}
+
+/** Where receipts go: portfolio-ai's API, reached on loopback (the workstation's forwarder). */
+export interface PortfolioSettings {
+  /** Empty: receipts are not handed off. */
+  url: string | null
+  /** A file holding portfolio-ai's agent token; never read into config or logs. */
+  tokenFile: string | null
+  /** portfolio-ai's web address, to link a filed capture to its capture page. */
+  appUrl: string | null
 }
 
 /** How captures are read (vision-extract) and how many are read at once. */
@@ -101,6 +114,9 @@ const DEFAULT_AGY_MODEL = 'gemini-3.8-flash-low'
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 const DEFAULT_OLLAMA_MODEL = 'qwen3-vl:8b-instruct'
 const DEFAULT_VISION_CONCURRENCY = 2
+// The workstation's socket-activated forwarder to portfolio-ai on VM 180
+// (portfolio-prod-api.socket); AICO_PORTFOLIO_URL=off turns hand-off off.
+const DEFAULT_PORTFOLIO_URL = 'http://127.0.0.1:18000'
 // Nightshift's own loopback address (its project.identity.json hosts.local_frontend).
 const DEFAULT_NIGHTSHIFT_URL = 'http://127.0.0.1:3020'
 
@@ -180,6 +196,13 @@ function nightshiftUrl(value: string | undefined): string | null {
   return text.toLowerCase() === 'off' ? null : text
 }
 
+/** A setting that is a URL or `off`. */
+function urlOrOff(value: string | undefined, fallback: string | null): string | null {
+  const text = value?.trim()
+  if (!text) return fallback
+  return text.toLowerCase() === 'off' ? null : text
+}
+
 /** `~/.local/state/aico/web.db` unless `AICO_WEB_DB` says otherwise. */
 export function webDbPath(env: NodeJS.ProcessEnv = process.env): string {
   return env.AICO_WEB_DB || join(stateDir(env), 'aico', 'web.db')
@@ -244,6 +267,15 @@ export function loadConfig(
       ollamaUrl: env.AICO_OLLAMA_URL?.trim() || DEFAULT_OLLAMA_URL,
       ollamaModel: env.AICO_OLLAMA_MODEL?.trim() || DEFAULT_OLLAMA_MODEL,
       concurrency: positiveInt(env.AICO_VISION_CONCURRENCY, DEFAULT_VISION_CONCURRENCY),
+    },
+    captureTypesFile: resolve(
+      expandHome(env.AICO_CAPTURE_TYPES_FILE?.trim() || '~/.config/aico/capture-types.json', home),
+    ),
+    portfolio: {
+      url: urlOrOff(env.AICO_PORTFOLIO_URL, DEFAULT_PORTFOLIO_URL),
+      tokenFile:
+        env.AICO_PORTFOLIO_TOKEN_FILE?.trim() || env.HOUSEHOLD_AGENT_TOKEN_FILE?.trim() || null,
+      appUrl: urlOrOff(env.AICO_PORTFOLIO_APP_URL, null),
     },
     tetherSocket,
     trustShows: tetherSocket === defaultTetherSocketPath(env, uid),

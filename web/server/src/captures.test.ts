@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Ask } from './asks'
 import { blobPath, sha256 } from './blobs'
+import { CaptureRouter } from './capture-router'
+import { buildTable } from './capture-types'
 import { type CaptureJson, registerCaptureRoutes } from './captures'
 import { PreviewJobs, type Runner } from './heic'
 import { NotesStore } from './notes-db'
@@ -80,6 +82,66 @@ describe('capture routes', () => {
     await server.close()
     store.close()
     rmSync(dir, { recursive: true, force: true })
+  })
+
+  describe('sending a capture on to its owner', () => {
+    const adapter = {
+      reachable: async () => true,
+      send: async () => ({ state: 'filed' as const, ref: 'pf-9' }),
+    }
+
+    beforeEach(async () => {
+      await server.close()
+      const routing = new CaptureRouter({
+        store,
+        blobsDir: blobs,
+        table: buildTable(null),
+        adapters: new Map([['portfolio-ai', adapter]]),
+        run: async () => {},
+        log: () => {},
+      })
+      server = await serveRoutes((router) =>
+        registerCaptureRoutes(router, {
+          store,
+          blobsDir: blobs,
+          limits: { maxBytes: MAX_BYTES, maxFiles: 3 },
+          previews,
+          router: routing,
+        }),
+      )
+    })
+
+    it('shows the route, sends on a tap, refuses an unknown action, and purges the file', async () => {
+      const made = await created(await upload(PNG, 'r.png', 'image/png'))
+      expect(made.route).toBeNull()
+      store.claimForExtraction()
+      store.finishExtraction(
+        made.id,
+        { type: 'receipt', text: 't', json: null, route: 'agy' },
+        { owner: 'portfolio-ai', state: 'suggested', note: null },
+      )
+      const one = (await (
+        await fetch(`${server.base}/api/captures/${made.id}`)
+      ).json()) as CaptureJson
+      expect(one.route).toMatchObject({
+        state: 'suggested',
+        canSend: true,
+        notLabel: 'Not a receipt',
+      })
+
+      const post = (action: string) =>
+        fetch(`${server.base}/api/captures/${made.id}/route`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action }),
+        })
+      expect((await post('explode')).status).toBe(422)
+      const sent = (await (await post('send')).json()) as CaptureJson
+      expect(sent).toMatchObject({ status: 'filed', hasFile: false, hash: null, text: null })
+      expect(sent.route).toMatchObject({ state: 'filed', ownerRef: 'pf-9' })
+      expect((await fetch(`${server.base}/api/captures/${made.id}/file`)).status).toBe(404)
+      expect((await post('send')).status).toBe(409)
+    })
   })
 
   describe('uploads for an ask', () => {
@@ -224,6 +286,8 @@ describe('capture routes', () => {
         'extractError',
         'extractRoute',
         'needsCheck',
+        'hasFile',
+        'route',
       ].sort(),
     )
     const hash = body.hash as string

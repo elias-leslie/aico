@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { blobPath, hasBlob } from './blobs'
 import { extensionForMime, needsPreview } from './capture-files'
 import type { PreviewJobs } from './heic'
-import type { CaptureRow, NotesStore } from './notes-db'
+import type { CaptureRow, NotesStore, RoutePlan } from './notes-db'
 import { ExtractError, type ExtractRequest, type ExtractResult } from './vision-extract'
 import { CAPTURE_INSTRUCTIONS, CAPTURE_SCHEMA } from './vision-extract/capture-schema'
 
@@ -23,6 +23,11 @@ export interface ExtractWorkerOptions {
   blobsDir: string
   previews: PreviewJobs
   extract: Extractor
+  /** The capture router: plans where a read capture goes, then acts on it. */
+  router?: {
+    plan(type: string | null): RoutePlan | null
+    afterReady(row: CaptureRow): Promise<void>
+  }
   /** Reads at once. */
   concurrency: number
   /** Where the per-read folders go; tests pass a temp dir. */
@@ -93,7 +98,8 @@ export class ExtractWorker {
     const { store } = this.options
     try {
       const outcome = await this.read(row)
-      store.finishExtraction(row.id, outcome)
+      const ready = store.finishExtraction(row.id, outcome, this.options.router?.plan(outcome.type))
+      if (ready) await this.route(ready)
     } catch (error) {
       const reason =
         error instanceof ReadFailure || error instanceof ExtractError
@@ -111,6 +117,15 @@ export class ExtractWorker {
           `capture ${row.id}: could not record the failure: ${(writeError as Error).message}`,
         )
       }
+    }
+  }
+
+  /** Hands a read capture to the router; a failure there never undoes the reading. */
+  private async route(row: CaptureRow): Promise<void> {
+    try {
+      await this.options.router?.afterReady(row)
+    } catch (error) {
+      this.log(`capture ${row.id}: routing failed: ${(error as Error).message}`)
     }
   }
 

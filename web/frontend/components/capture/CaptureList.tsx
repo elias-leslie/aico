@@ -7,6 +7,7 @@ import {
   firstLine,
   formatBytes,
   formatWhen,
+  routeWord,
   statusWord,
 } from '@/lib/capture-format'
 import { useCaptures } from '@/lib/hooks/use-captures'
@@ -44,8 +45,16 @@ const RetryButton = ({ onClick }: { onClick: () => void }) => (
   </button>
 )
 
+const TONE = {
+  mist: 'var(--mist)',
+  lantern: 'var(--lantern)',
+  beacon: 'var(--beacon)',
+  error: 'var(--term-error-text)',
+} as const
+
 function Row({ capture }: { capture: Capture }) {
   const heading = capture.caption || firstLine(capture.text)
+  const route = routeWord(capture.route)
   return (
     <li>
       <Link
@@ -70,15 +79,17 @@ function Row({ capture }: { capture: Capture }) {
           </span>
         </span>
         <span
-          className="flex-none text-[11px]"
+          className="flex-none text-right text-[11px]"
+          data-testid={route ? 'capture-route-word' : undefined}
           style={{
-            color:
-              capture.status === 'failed'
+            color: route
+              ? TONE[route.tone]
+              : capture.status === 'failed'
                 ? 'var(--term-error-text)'
                 : 'var(--mist)',
           }}
         >
-          {statusWord(capture.status)}
+          {route ? route.text : statusWord(capture.status)}
         </span>
       </Link>
     </li>

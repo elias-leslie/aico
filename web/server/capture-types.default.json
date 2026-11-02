@@ -1,0 +1,88 @@
+{
+  "owners": {
+    "portfolio-ai": { "label": "Portfolio AI" },
+    "notes": { "label": "Notes", "later": "Notes are coming soon, so this stays here for now." },
+    "vehicles": { "label": "Vehicles", "later": "Vehicles come later, so this stays here for now." }
+  },
+  "types": [
+    {
+      "id": "receipt",
+      "label": "Receipt",
+      "owner": "portfolio-ai",
+      "owner_kind": "receipt",
+      "auto": false,
+      "confirm": true,
+      "keep_copy": false,
+      "question": "Send to Portfolio AI as a receipt?",
+      "not_label": "Not a receipt"
+    },
+    {
+      "id": "grocery_list",
+      "label": "Grocery list",
+      "owner": "notes",
+      "auto": true,
+      "confirm": false,
+      "keep_copy": true,
+      "question": "File this as a grocery list?",
+      "not_label": "Not a grocery list"
+    },
+    {
+      "id": "note",
+      "label": "Note",
+      "owner": "notes",
+      "auto": true,
+      "confirm": false,
+      "keep_copy": true,
+      "question": "File this as a note?",
+      "not_label": "Not a note"
+    },
+    {
+      "id": "recipe",
+      "label": "Recipe",
+      "owner": "notes",
+      "auto": true,
+      "confirm": false,
+      "keep_copy": true,
+      "question": "File this as a recipe?",
+      "not_label": "Not a recipe"
+    },
+    {
+      "id": "document",
+      "label": "Document",
+      "owner": "notes",
+      "auto": true,
+      "confirm": false,
+      "keep_copy": true,
+      "question": "File this as a document?",
+      "not_label": "Not a document"
+    },
+    {
+      "id": "odometer",
+      "label": "Odometer",
+      "owner": "vehicles",
+      "auto": false,
+      "confirm": true,
+      "keep_copy": false,
+      "question": "Send to Vehicles as an odometer reading?",
+      "not_label": "Not an odometer"
+    },
+    {
+      "id": "service_invoice",
+      "label": "Service invoice",
+      "owner": "vehicles",
+      "auto": false,
+      "confirm": true,
+      "keep_copy": false,
+      "question": "Send to Vehicles as a service invoice?",
+      "not_label": "Not a service invoice"
+    },
+    {
+      "id": "other",
+      "label": "Other",
+      "owner": null,
+      "auto": false,
+      "confirm": false,
+      "keep_copy": true
+    }
+  ]
+}

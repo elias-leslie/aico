@@ -68,20 +68,27 @@ describe('NotesStore', () => {
     expect(() => open(path)).toThrow(/newer than this Aico/)
   })
 
-  it('migrates a version 1 file by adding the extract columns', () => {
+  it('migrates a version 1 file by adding the extract and route columns', () => {
     const path = join(dir, 'notes.db')
     const first = open(path)
     first.insertCapture(capture('aaaaaaaa'))
     first.close()
     const raw = new DatabaseSync(path)
     raw.exec(
-      `ALTER TABLE captures DROP COLUMN extract_json; ALTER TABLE captures DROP COLUMN extract_route;
+      `DROP INDEX captures_route; ALTER TABLE captures DROP COLUMN owner;
+       ALTER TABLE captures DROP COLUMN owner_ref; ALTER TABLE captures DROP COLUMN route_state;
+       ALTER TABLE captures DROP COLUMN route_note;
+       ALTER TABLE captures DROP COLUMN extract_json; ALTER TABLE captures DROP COLUMN extract_route;
        ALTER TABLE captures DROP COLUMN extract_error; UPDATE meta SET value = '1' WHERE key = 'schema_version'`,
     )
     raw.close()
     const store = open(path)
-    expect(store.meta('schema_version')).toBe('2')
-    expect(store.claimForExtraction()).toMatchObject({ status: 'extracting', extract_json: null })
+    expect(store.meta('schema_version')).toBe('3')
+    expect(store.claimForExtraction()).toMatchObject({
+      status: 'extracting',
+      extract_json: null,
+      route_state: null,
+    })
     store.close()
   })
 

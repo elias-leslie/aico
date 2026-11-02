@@ -1,6 +1,6 @@
 'use client'
 
-import { Download, Trash2 } from 'lucide-react'
+import { Download, ExternalLink, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
@@ -8,6 +8,7 @@ import {
   captureFileUrl,
   capturePreviewUrl,
   extractedItems,
+  type RouteAction,
 } from '@/lib/api/captures'
 import { formatAge } from '@/lib/attention'
 import {
@@ -20,6 +21,7 @@ import {
   useCapture,
   useDeleteCapture,
   useRetryCapture,
+  useRouteCapture,
   useSaveCaption,
 } from '@/lib/hooks/use-captures'
 import { ConfirmationDialog } from '../ConfirmationDialog'
@@ -40,7 +42,8 @@ function Preview({ capture }: { capture: Capture }) {
       />
     )
   let note: string | null = null
-  if (capture.kind === 'image') {
+  if (capture.hasFile === false) note = null
+  else if (capture.kind === 'image') {
     if (failed) note = "Your browser couldn't show this picture."
     else if (capture.previewState === 'pending') note = 'Making a preview…'
     else note = "Aico couldn't make a preview of this picture."
@@ -144,6 +147,143 @@ function ReadingState({ capture }: { capture: Capture }) {
   return null
 }
 
+/** Where the capture is on its way to an owner: the suggestion with its
+ * three choices, or waiting, failed or filed. Nothing for an owner Aico has no
+ * adapter for beyond the plain reason it stays here. */
+function RouteBlock({ capture }: { capture: Capture }) {
+  const route = capture.route
+  const act = useRouteCapture()
+  if (!route || route.state === 'kept') return null
+  if (route.state === 'confirmed')
+    return (
+      <p
+        role="status"
+        data-testid="capture-route"
+        className="text-[13px]"
+        style={{ color: 'var(--mist)' }}
+      >
+        Sending to {route.ownerLabel ?? 'the owner'}…
+      </p>
+    )
+  const owner = route.ownerLabel ?? 'the owner'
+  const choose = (action: RouteAction) => act.mutate({ id: capture.id, action })
+  const buttons = (send: string | null) => (
+    <div className="flex flex-wrap items-center gap-2">
+      {send && route.canSend && (
+        <button
+          type="button"
+          className="lantern-btn primary min-h-11"
+          disabled={act.isPending}
+          onClick={() => choose('send')}
+        >
+          {act.isPending ? 'Sending…' : send}
+        </button>
+      )}
+      {route.state === 'suggested' && route.canSend && (
+        <button
+          type="button"
+          className="lantern-btn min-h-11"
+          disabled={act.isPending}
+          onClick={() => choose('not_this')}
+        >
+          {route.notLabel ?? 'Not this'}
+        </button>
+      )}
+      {route.state !== 'filed' && route.canSend && (
+        <button
+          type="button"
+          className="lantern-btn min-h-11"
+          disabled={act.isPending}
+          onClick={() => choose('keep')}
+        >
+          Keep here
+        </button>
+      )}
+    </div>
+  )
+  const error = act.isError ? (
+    <p className="text-[12px]" style={{ color: 'var(--term-error-text)' }}>
+      {act.error.message}
+    </p>
+  ) : null
+  const box = (tone: string, children: React.ReactNode) => (
+    <section
+      aria-label="Where this goes"
+      data-testid="capture-route"
+      className="flex flex-col gap-2 rounded-lg p-3 text-[13px]"
+      style={{ background: 'var(--paper)', border: `1px solid ${tone}` }}
+    >
+      {children}
+    </section>
+  )
+
+  if (route.state === 'suggested')
+    return box(
+      'var(--paper-veil)',
+      <>
+        <p style={{ color: 'var(--bone)' }}>
+          {route.canSend
+            ? (route.question ?? `Send to ${owner}?`)
+            : `Looks like ${(capture.type ?? 'this').replace(/_/g, ' ')}.`}
+        </p>
+        {route.note && <p style={{ color: 'var(--mist)' }}>{route.note}</p>}
+        {route.canSend && buttons('Send')}
+        {error}
+      </>,
+    )
+  if (route.state === 'waiting')
+    return box(
+      'var(--beacon)',
+      <>
+        <p role="status" style={{ color: 'var(--beacon)' }}>
+          Waiting for {owner}
+          {route.note ? `. ${route.note}` : ''}.
+        </p>
+        <p style={{ color: 'var(--mist)' }}>
+          Aico sends it when {owner} answers. Aico keeps the photo until then.
+        </p>
+        {buttons('Send now')}
+        {error}
+      </>,
+    )
+  if (route.state === 'failed')
+    return box(
+      'var(--term-error-text)',
+      <>
+        <p role="status" style={{ color: 'var(--term-error-text)' }}>
+          Couldn&apos;t send it to {owner}
+          {route.note ? `: ${route.note}` : ''}.
+        </p>
+        {buttons('Try again')}
+        {error}
+      </>,
+    )
+  return box(
+    'var(--paper-veil)',
+    <>
+      <p style={{ color: 'var(--bone)' }}>
+        Sent to {owner}.
+        {capture.hasFile === false ? ' Aico no longer keeps the file.' : ''}
+      </p>
+      {route.url && (
+        <a
+          className="lantern-btn min-h-11 self-start"
+          href={route.url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ExternalLink
+            className="h-4 w-4"
+            strokeWidth={1.7}
+            aria-hidden="true"
+          />
+          Open in {owner}
+        </a>
+      )}
+    </>,
+  )
+}
+
 function ListItems({ capture }: { capture: Capture }) {
   const items = extractedItems(capture)
   if (!items.length) return null
@@ -198,6 +338,8 @@ function Detail({ capture }: { capture: Capture }) {
       <Preview capture={capture} />
 
       <ReadingState capture={capture} />
+
+      <RouteBlock capture={capture} />
 
       {capture.needsCheck &&
       (capture.text || extractedItems(capture).length) ? (
@@ -287,14 +429,20 @@ function Detail({ capture }: { capture: Capture }) {
       </dl>
 
       <div className="flex flex-wrap gap-2">
-        <a
-          className="lantern-btn min-h-11"
-          href={captureFileUrl(capture.id)}
-          download={capture.name}
-        >
-          <Download className="h-4 w-4" strokeWidth={1.7} aria-hidden="true" />
-          Download
-        </a>
+        {capture.hasFile !== false && (
+          <a
+            className="lantern-btn min-h-11"
+            href={captureFileUrl(capture.id)}
+            download={capture.name}
+          >
+            <Download
+              className="h-4 w-4"
+              strokeWidth={1.7}
+              aria-hidden="true"
+            />
+            Download
+          </a>
+        )}
         <button
           type="button"
           className="lantern-btn min-h-11"

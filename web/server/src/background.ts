@@ -68,6 +68,8 @@ export interface BackgroundDeps {
   maintenance: MaintenanceConfig
   /** The open terminals, which follow the same stream. */
   forward?(event: TetherEvent): void
+  /** Runs on each maintenance pass (startup and interval): retries hand-offs that are waiting. */
+  tick?(): Promise<void>
 }
 
 export interface MaintenanceResult {
@@ -214,6 +216,11 @@ export class Background {
     } catch (error) {
       if (!tetherDown(error)) console.warn('[aico-web] project settings pruning failed:', error)
       result.project_settings_cleanup_skipped = true
+    }
+    try {
+      await this.deps.tick?.()
+    } catch (error) {
+      console.warn('[aico-web] maintenance tick failed:', error)
     }
     const cleanup = result.upload_cleanup
     console.log(

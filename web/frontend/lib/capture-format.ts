@@ -46,3 +46,34 @@ export function firstLine(text: string | null, max = 80): string {
 export function statusWord(status: string): string {
   return STATUS_WORD[status] ?? status
 }
+
+/** What the route says about a capture in a few words (for a list row), or null. */
+export function routeWord(
+  route:
+    | {
+        state: string
+        ownerLabel: string | null
+        canSend: boolean
+      }
+    | null
+    | undefined,
+): { text: string; tone: 'mist' | 'lantern' | 'beacon' | 'error' } | null {
+  if (!route) return null
+  const owner = route.ownerLabel ?? 'the owner'
+  switch (route.state) {
+    case 'suggested':
+      return route.canSend
+        ? { text: `Send to ${owner}?`, tone: 'lantern' }
+        : null
+    case 'confirmed':
+      return { text: `Sending to ${owner}…`, tone: 'mist' }
+    case 'waiting':
+      return { text: `Waiting for ${owner}`, tone: 'beacon' }
+    case 'failed':
+      return { text: `Couldn't send to ${owner}`, tone: 'error' }
+    case 'filed':
+      return { text: `Sent to ${owner}`, tone: 'mist' }
+    default:
+      return null
+  }
+}

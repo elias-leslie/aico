@@ -131,4 +131,42 @@ describe('CaptureList', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show older' }))
     expect(base.loadMore).toHaveBeenCalled()
   })
+
+  it('puts the route in the row: the question, waiting, failed and sent', () => {
+    const r = (state: string, canSend = true) => ({
+      state: state as 'suggested',
+      owner: 'portfolio-ai',
+      ownerLabel: 'Portfolio AI',
+      ownerRef: null,
+      note: null,
+      question: null,
+      notLabel: null,
+      canSend,
+      url: null,
+    })
+    state.list = {
+      ...base,
+      total: 5,
+      captures: [
+        capture({ id: 'aaaaaaaaaaa1', route: r('suggested') }),
+        capture({ id: 'aaaaaaaaaaa2', route: r('waiting') }),
+        capture({ id: 'aaaaaaaaaaa3', route: r('failed') }),
+        capture({ id: 'aaaaaaaaaaa4', route: r('filed'), status: 'filed' }),
+        capture({
+          id: 'aaaaaaaaaaa5',
+          route: r('suggested', false),
+          status: 'ready',
+        }),
+      ],
+    }
+    render(<CaptureList />)
+    expect(
+      screen.getAllByTestId('capture-route-word').map((n) => n.textContent),
+    ).toEqual([
+      'Send to Portfolio AI?',
+      'Waiting for Portfolio AI',
+      "Couldn't send to Portfolio AI",
+      'Sent to Portfolio AI',
+    ])
+  })
 })

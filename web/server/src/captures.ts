@@ -15,6 +15,12 @@ import {
   needsPreview,
   sniffCapture,
 } from './capture-files'
+import {
+  type CaptureRouter,
+  ROUTE_ACTIONS,
+  type RouteAction,
+  type RouteJson,
+} from './capture-router'
 import type { CaptureConfig } from './config'
 import { execRunner, PreviewJobs, type PreviewState, type Runner } from './heic'
 import { objectBody, RAW, type Router, sendJson } from './http'
@@ -37,6 +43,8 @@ export interface CaptureDeps {
   asks?: { get(id: string): Promise<Ask> }
   /** Wakes the background reader after a new or retried capture. */
   reader?: { kick(): void }
+  /** Hands read captures to their owners; without it captures carry no route. */
+  router?: CaptureRouter
 }
 
 const RATE_LIMIT = 60
@@ -77,6 +85,10 @@ export interface CaptureJson {
   extractRoute: string | null
   /** The fallback route read it, so the owner should look it over. */
   needsCheck: boolean
+  /** The stored file is still here (a handed-off capture no longer has one). */
+  hasFile: boolean
+  /** Where it is on its way to an owner (suggestion, waiting, filed, failed); null if nothing was suggested. */
+  route: RouteJson | null
   /** What was read (title, summary, lines, items, receipt, odometer); only on one capture, not in lists. */
   extract?: unknown
 }
@@ -219,6 +231,8 @@ export function registerCaptureRoutes(
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       origin: row.origin,
+      hasFile: row.hash !== null,
+      route: deps.router?.describe(row) ?? null,
       hasThumb: row.hash !== null && hasBlob(blobsDir, row.hash, 'thumb'),
       previewState: previewState(row),
       extractError: row.extract_error,
@@ -365,9 +379,19 @@ export function registerCaptureRoutes(
     return json(store.updateCaption(row.id, body.caption) ?? row)
   })
 
-  router.on('DELETE', '/api/captures/:id', (ctx) => {
+  router.on('POST', '/api/captures/:id/route', async (ctx) => {
+    const row = need(ctx.params.id)
+    if (!deps.router) throw new HttpError(409, 'Sending captures on is not set up')
+    const body = objectBody(await ctx.body())
+    if (typeof body.action !== 'string' || !ROUTE_ACTIONS.includes(body.action))
+      throw new HttpError(422, `action must be one of: ${ROUTE_ACTIONS.join(', ')}`)
+    return json(await deps.router.act(row.id, body.action as RouteAction), true)
+  })
+
+  router.on('DELETE', '/api/captures/:id', async (ctx) => {
     const row = need(ctx.params.id)
     store.tombstoneCapture(row.id)
+    await deps.router?.clearNotice(row, 'The capture was deleted.')
     return { deleted: true, id: row.id }
   })
 

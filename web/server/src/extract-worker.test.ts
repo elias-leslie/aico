@@ -104,6 +104,36 @@ describe('extract worker', () => {
     ])
   })
 
+  it('plans the route in the same write that makes it ready, then tells the router', async () => {
+    const row = await add('image', 'image/jpeg', 'receipt-bytes')
+    const told: string[] = []
+    const w = new ExtractWorker({
+      store,
+      blobsDir: join(dir, 'blobs'),
+      previews,
+      extract: extractor,
+      concurrency: 1,
+      workDir: dir,
+      log: () => {},
+      router: {
+        plan: (type) =>
+          type === 'grocery_list' ? { owner: 'notes', state: 'suggested', note: 'soon' } : null,
+        afterReady: async (ready) => {
+          told.push(`${ready.id}:${ready.route_state}`)
+        },
+      },
+    })
+    w.kick()
+    await w.idle()
+    expect(store.getCapture(row.id)).toMatchObject({
+      status: 'ready',
+      owner: 'notes',
+      route_state: 'suggested',
+      route_note: 'soon',
+    })
+    expect(told).toEqual([`${row.id}:suggested`])
+  })
+
   it('fails with a plain reason, and Retry reads it again', async () => {
     const row = await add('image', 'image/png', 'png-bytes')
     failWith = new ExtractError("the main reader isn't available", ['agy failed to run'])

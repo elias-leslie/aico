@@ -28,8 +28,38 @@ export interface Capture {
   extractError?: string | null
   /** The fallback reader read it, so it should be checked against the picture. */
   needsCheck?: boolean
+  /** False once the file was handed to its owner and Aico's copy removed. */
+  hasFile?: boolean
+  route?: CaptureRoute | null
   /** What was read; only on a single capture, not in lists. */
   extract?: CaptureExtract | null
+}
+
+export type RouteState =
+  | 'suggested'
+  | 'confirmed'
+  | 'filed'
+  | 'waiting'
+  | 'failed'
+  | 'kept'
+export type RouteAction = 'send' | 'keep' | 'not_this'
+
+/** Where a capture is on its way to an owner (Portfolio AI, Notes...). */
+export interface CaptureRoute {
+  state: RouteState
+  owner: string | null
+  ownerLabel: string | null
+  ownerRef: string | null
+  /** Why it waits or failed, or what is not built yet. */
+  note: string | null
+  /** The suggestion, as a question, while it waits for a tap. */
+  question: string | null
+  /** The button for "this is not that". */
+  notLabel: string | null
+  /** The owner is set up, so Send works. */
+  canSend: boolean
+  /** The owner's page, once filed. */
+  url: string | null
 }
 
 export interface ExtractedItem {
@@ -176,6 +206,22 @@ export function retryCapture(id: string): Promise<Capture> {
     `/api/captures/${id}/retry`,
     { method: 'POST' },
     "Couldn't start reading it again. Try again.",
+  ).then(parseCapture)
+}
+
+/** The owner's tap on a suggestion: send it on, keep it here, or say it is not that kind. */
+export function routeCapture(
+  id: string,
+  action: RouteAction,
+): Promise<Capture> {
+  return apiFetch<unknown>(
+    `/api/captures/${id}/route`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    },
+    "Couldn't do that. Try again.",
   ).then(parseCapture)
 }
 

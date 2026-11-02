@@ -13,7 +13,8 @@ export const CAPTURE_USAGE = `Usage:
       The owner's captures, newest first. Status: new, extracting, ready,
       failed or filed.
   tether capture get <id> [--json]
-      One capture: its fields, caption, and the text read from it once present.
+      One capture: its fields, route (suggested, waiting, failed or filed, and
+      which owner), caption, and the text read from it once present.
   tether capture result <id> [--json]
       What was read from the file: type, title, summary, the text, list items,
       receipt and odometer fields. Fails while the capture is still being read
@@ -52,6 +53,14 @@ interface CaptureJson {
   extractError?: string | null
   extractRoute?: string | null
   needsCheck?: boolean
+  route?: {
+    state: string
+    owner: string | null
+    ownerLabel: string | null
+    ownerRef: string | null
+    note: string | null
+    url: string | null
+  } | null
   extract?: Extract | null
 }
 
@@ -132,6 +141,13 @@ export function formatCapture(item: CaptureJson): string {
     lines.push(
       `  type: ${item.type}${item.needsCheck ? ' (read by the fallback reader: check it)' : ''}`,
     )
+  if (item.route) {
+    const owner = item.route.owner ? ` -> ${item.route.owner}` : ''
+    const ref = item.route.ownerRef ? ` (their id ${item.route.ownerRef})` : ''
+    lines.push(
+      `  route: ${item.route.state}${owner}${ref}${item.route.note ? `: ${item.route.note}` : ''}`,
+    )
+  }
   if (item.status === 'failed' && item.extractError)
     lines.push(`  could not read: ${item.extractError}`)
   if (item.extract?.title) lines.push(`  title: ${item.extract.title}`)

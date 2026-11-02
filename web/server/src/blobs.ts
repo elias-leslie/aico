@@ -94,3 +94,11 @@ export async function verifyBlob(dir: string, hash: string): Promise<boolean> {
   const bytes = await readBlob(dir, hash)
   return bytes !== null && sha256(bytes) === hash
 }
+
+/** Deletes the original and its thumb and preview. Missing files are fine. */
+export async function removeBlobs(dir: string, hash: string): Promise<void> {
+  for (const variant of Object.keys(SUFFIX) as BlobVariant[])
+    await unlink(blobPath(dir, hash, variant)).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    })
+}
