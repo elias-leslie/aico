@@ -17,6 +17,30 @@ const ID = identity({
 })
 
 describe('loadConfig', () => {
+  it('puts the sync socket in the runtime directory and reads the sync settings', () => {
+    const config = loadConfig({ HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/7' }, ID)
+    expect(config.sync).toMatchObject({
+      socket: '/run/user/7/aico/sync.sock',
+      intervalMs: 60_000,
+      blobGraceMs: 7 * 86_400_000,
+      hostsFile: '/home/u/.config/tether/hosts.json',
+    })
+    const set = loadConfig(
+      {
+        HOME: '/home/u',
+        AICO_SYNC_SOCKET: '/tmp/s.sock',
+        AICO_SYNC_INTERVAL_SECONDS: '5',
+        TETHER_HOSTS_FILE: '/tmp/h.json',
+      },
+      ID,
+    )
+    expect(set.sync).toMatchObject({
+      socket: '/tmp/s.sock',
+      intervalMs: 5_000,
+      hostsFile: '/tmp/h.json',
+    })
+  })
+
   it('takes the port and public host from the identity file', () => {
     const config = loadConfig({ HOME: '/home/u' }, ID)
     expect(config.port).toBe(4321)
