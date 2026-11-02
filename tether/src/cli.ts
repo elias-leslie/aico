@@ -10,6 +10,7 @@ import { hostsFilePath, loadHosts, peerDir } from './hub/hosts'
 import { linkPaths, runLink } from './hub/link'
 import { applyImport, formatPlan, planImportForPath, summarize } from './importer'
 import { NOTE_USAGE, runNote } from './note-cli'
+import { withOwnWidget } from './own-session'
 import { Store } from './store'
 import { VERSION } from './version'
 
@@ -511,7 +512,14 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           io.out(ASK_USAGE)
           return sub === undefined ? 2 : 0
         }
-        return runAsk(io, paths, json, parsed.args.slice(1), process.env, process.cwd())
+        return runAsk(
+          io,
+          paths,
+          json,
+          parsed.args.slice(1),
+          withOwnWidget(process.env),
+          process.cwd(),
+        )
       case 'capture':
         if (sub === undefined || sub === '--help' || sub === 'help') {
           io.out(CAPTURE_USAGE)
@@ -525,7 +533,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         }
         return runNote(io, json, parsed.args.slice(1))
       case 'share': {
-        const body = shareBody(parsed.args.slice(1), process.env, process.cwd())
+        const body = shareBody(parsed.args.slice(1), withOwnWidget(process.env), process.cwd())
         if (typeof body === 'string') {
           io.err(`tether share: ${body}`)
           return 2

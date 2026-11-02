@@ -971,6 +971,9 @@ Each line goes out once, whichever way.
   nothing. Once the text is shown, `DELETE /v1/sessions/:id/due?token=` takes exactly those rows (a row replaced by
   a newer line, or made a wake, since stays). A client that times out or dies between the two loses no line; at
   worst it is shown again. `?ride=1` (API 24) still takes them in one step.
+  The clients: SummitFlow's `coord-inbox` hook takes them at a Claude Code or Codex prompt (a background task or agent
+  reporting back counts as one) and at the main agent's next tool result, never a subagent's (its hook payload carries an
+  `agent_id`); Pi's extension takes them at its next tool result. Antigravity has no such hook: its lines paste when it is idle.
 - **`from`** *(24)* is optional: up to 8 session ids (8 hex) that sent what the line carries. *(25)* On a wake
   line each counts as a send to this session (as `inject` with `from` does), so a lane's went-idle repeat backoff
   starts over and a wait's default `since` moves to it; on a ride-along line `from` records nothing. For a
