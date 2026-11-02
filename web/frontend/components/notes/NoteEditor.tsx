@@ -1,5 +1,6 @@
 'use client'
 
+import { clsx } from 'clsx'
 import {
   Archive,
   ArchiveRestore,
@@ -276,7 +277,10 @@ function Editor({
           <button
             key={kind}
             type="button"
-            className="lantern-btn small min-h-9"
+            className={clsx(
+              'lantern-btn small min-h-9',
+              note.kind === kind && 'primary',
+            )}
             aria-pressed={note.kind === kind}
             onClick={() => note.kind !== kind && change({ kind })}
           >

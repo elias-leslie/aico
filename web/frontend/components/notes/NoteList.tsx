@@ -296,7 +296,7 @@ export function NoteList() {
         </label>
         <button
           type="button"
-          className="lantern-btn min-h-11"
+          className={clsx('lantern-btn min-h-11', archived && 'primary')}
           aria-pressed={archived}
           onClick={() => setArchived((now) => !now)}
         >
@@ -316,15 +316,20 @@ export function NoteList() {
               key={name}
               type="button"
               aria-pressed={label === name}
-              className={clsx(
-                'min-h-9 flex-none rounded-full px-3 text-[13px]',
-                label === name && 'font-medium',
-              )}
-              style={{
-                background:
-                  label === name ? 'var(--lantern)' : 'var(--paper-veil)',
-                color: label === name ? 'var(--ink)' : 'var(--bone)',
-              }}
+              className="min-h-9 flex-none rounded-full px-3 text-[13px]"
+              style={
+                label === name
+                  ? {
+                      background: 'rgb(var(--lantern-rgb) / 0.14)',
+                      border: '1px solid var(--lantern)',
+                      color: 'var(--lantern)',
+                    }
+                  : {
+                      background: 'var(--paper-veil)',
+                      border: '1px solid transparent',
+                      color: 'var(--bone)',
+                    }
+              }
               onClick={() => setLabel((now) => (now === name ? null : name))}
             >
               {name}
