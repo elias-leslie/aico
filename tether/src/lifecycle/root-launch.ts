@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { AGENT_SESSION_ENV, FRESH_SESSION_ENV } from '../continuity'
+import { AGENT_SESSION_ENV, FRESH_SESSION_ENV } from '../proc-fs'
 import { getLaunchOptions, getWidget, rootRequestForWidget } from './catalog'
 import type { RootLaunchOptions } from './root-control'
 import { forWorkspace } from './tui/blank-slate'
@@ -136,7 +136,7 @@ function selectionFlags(tool: TuiSpec): string {
 function cleanEnvironment(tool: TuiSpec): string {
   return (
     `/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u ${FRESH_SESSION_ENV} -u AICO_ROOT_REASONING_EFFORT` +
-    (tool.slug === 'pi'
+    (tool.environmentSelection
       ? ''
       : ' -u AICO_ROOT_MODEL -u AICO_ROOT_DAYBREAK -u AICO_ROOT_AGENT_HUB_CONTEXT')
   )
@@ -176,8 +176,8 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
   // Pi's native extension consumes only the explicit per-session selection.
   const clean = cleanEnvironment(tool)
   const selection = selectionFlags(tool)
-  const projectTrust =
-    tool.slug === 'pi' && !tool.command.includes('--approve') ? 'set -- "$@" --approve; ' : ''
+  const missing = (tool.ensureArgs ?? []).filter((arg) => !tool.command.includes(arg))
+  const projectTrust = missing.length ? `set -- "$@" ${missing.join(' ')}; ` : ''
   // A tool that keeps no observable session record starts under an ID Tether
   // picks; the agent's environment carries it so continuity can read it.
   const fresh = tool.resume?.freshArguments

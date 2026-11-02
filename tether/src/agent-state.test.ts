@@ -7,23 +7,25 @@ import {
   AgentStatePoller,
   type AgentStateRecord,
   AgentStateTracker,
+  hookState,
+} from './agent-state'
+import {
   AgyConversation,
   type AgySnapshot,
   agySignal,
+  findAgyConversation,
+  nodeAgyRead,
+} from './lifecycle/tui/adapters/agy'
+import { claudeSignal, findClaude } from './lifecycle/tui/adapters/claude-code'
+import {
   CodexRollout,
   CodexTurn,
-  claudeSignal,
-  type FileTail,
-  findAgyConversation,
-  findClaude,
   findCodexRollout,
-  findPiSession,
-  hookState,
-  nodeAgyRead,
-  PiSession,
-} from './agent-state'
-import { observeCodex, type ProcFs } from './continuity'
+  observeCodex,
+} from './lifecycle/tui/adapters/codex'
+import { findPiSession, PiSession } from './lifecycle/tui/adapters/pi'
 import { parseHookReport } from './lifecycle-api'
+import type { FileTail, ProcFs } from './proc-fs'
 
 const CLAUDE = '5a7741ea-e6b1-4062-853b-0d9d2e03d549'
 const OTHER = '6b7741ea-e6b1-4062-853b-0d9d2e03d549'
@@ -830,9 +832,11 @@ describe('agy conversation', () => {
       '/h',
       {
         now: () => now,
-        agyRead: (path) => {
-          reads.push(path)
-          return snapshot
+        seams: {
+          agy: (path: string) => {
+            reads.push(path)
+            return snapshot
+          },
         },
       },
     )

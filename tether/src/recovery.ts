@@ -30,11 +30,8 @@ import {
   type ContinuitySnapshot,
   currentBootId,
   findEntryProcess,
-  nodeProcFs,
   observeAgent,
-  processTree,
   readJsonFile,
-  UUID_RE,
   writeJsonFile,
 } from './continuity'
 import { entryHomeFiles } from './entry-files'
@@ -72,9 +69,10 @@ import {
   isResumeSessionId,
   parseAgentExitMarker,
 } from './lifecycle/tui/launch'
-import { getTui } from './lifecycle/tui/registry'
+import { adapterOf, getTui } from './lifecycle/tui/registry'
 import type { TuiSpec } from './lifecycle/tui/spec'
 import type { LifecycleApiContext } from './lifecycle-api'
+import { nodeProcFs, processTree, UUID_RE } from './proc-fs'
 import {
   CRASH_RESULTS,
   type CrashFacts,
@@ -1029,7 +1027,7 @@ export class Recovery {
     const key = `${record.id}:${record.diedAt}`
     if (!this.transcripts.has(key)) {
       let facts: TranscriptFacts | null = null
-      if (record.resumeId && getTui(row.tool)?.slug === 'claude-code') {
+      if (record.resumeId && adapterOf(getTui(row.tool)?.slug)?.capabilities.transcriptFacts) {
         // An entry session's transcript is read only inside its home (none
         // when the entry no longer resolves), never the host's.
         const entryHome = getSessionEntry(row.id) ? sessionEntryHome(row.id) : undefined

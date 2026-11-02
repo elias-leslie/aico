@@ -1,27 +1,29 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FileTail } from './agent-state'
-import type { ProcFs } from './continuity'
+import {
+  claudeModelEvents,
+  claudeModelSource,
+  claudeTranscriptPath,
+} from './lifecycle/tui/adapters/claude-code'
+import { codexModelEvents } from './lifecycle/tui/adapters/codex'
+import { piModelEvents } from './lifecycle/tui/adapters/pi'
 import { ModelNotices, readModelNoticeState } from './model-notices'
+import type { ModelSource } from './model-record'
 import {
   bareModel,
-  claudeModelEvents,
-  claudeTranscriptPath,
-  codexModelEvents,
   isModelSwitch,
   ModelFollower,
-  type ModelSource,
   type ModelSwitch,
   ModelWatch,
   type ModelWatchOperations,
   modelSwitchText,
-  piModelEvents,
   readAlternates,
   readWatchEntries,
   type WatchEntry,
   worktreeFacts,
 } from './model-switch'
+import type { FileTail, ProcFs } from './proc-fs'
 
 const FIXTURES = join(__dirname, 'test-fixtures', 'model-switch')
 const fixture = (name: string) => readFileSync(join(FIXTURES, name), 'utf8')
@@ -80,15 +82,15 @@ function harness(initial: string, options: { alternates?: string[] } = {}) {
 }
 
 const PID = 4242
-const claude = (tail: FileTail, agent = PID): ModelSource => ({
-  tool: 'claude',
-  agent,
-  sessionId: CONVERSATION,
-  home: '/home/test',
-  // The transcript is found in its projects dir.
-  fs: { readdir: () => ['x'], mtimeMs: () => 1 } as unknown as ProcFs,
-  tail,
-})
+const claude = (tail: FileTail, agent = PID): ModelSource =>
+  claudeModelSource(
+    agent,
+    CONVERSATION,
+    // The transcript is found in its projects dir.
+    { readdir: () => ['x'], mtimeMs: () => 1 } as unknown as ProcFs,
+    '/home/test',
+    tail,
+  )
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(Date.parse('2026-11-01T13:19:50Z'))
@@ -457,24 +459,15 @@ describe('Claude Code', () => {
     const h = harness(
       `${JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-5-5', role: 'assistant' } })}\n`,
     )
-    const source = (sessionId: string): ModelSource => ({
-      tool: 'claude',
-      agent: PID,
-      sessionId,
-      home: '/home/test',
-      fs,
-      tail: h.tail,
-    })
+    const source = (sessionId: string, files: ProcFs = fs): ModelSource =>
+      claudeModelSource(PID, sessionId, files, '/home/test', h.tail)
     h.watch.see(SESSION, source(CONVERSATION), h.tail)
     const id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
     const renamed = {
       ...fs,
       mtimeMs: (path: string) => (made && path.endsWith(`/x/${id}.jsonl`) ? 1 : null),
     }
-    const next = (): ModelSource => ({
-      ...(source(id) as Extract<ModelSource, { tool: 'claude' }>),
-      fs: renamed as unknown as ProcFs,
-    })
+    const next = (): ModelSource => source(id, renamed as unknown as ProcFs)
     h.watch.see(SESSION, next(), h.tail)
     made = true
     vi.advanceTimersByTime(2_000)

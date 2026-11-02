@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { PaneKey } from './lifecycle/tmux'
-import { claudePromptAt } from './model-switch'
+import { claudePromptAt } from './lifecycle/tui/adapters/claude-code'
 import { RewindRefused, readConfirm, readInput, readMenu, rewindClaude, sameEntry } from './rewind'
 
 // Screens recorded from Claude Code 2.1.316 (a Blank Slate session, 2026-11-01).

@@ -118,7 +118,13 @@ import {
   sessionInstructions,
 } from './lifecycle/tui/instructions'
 import { listsModel } from './lifecycle/tui/models'
-import { AGENT_HUB_TOOL, getTui, supportsInstructions } from './lifecycle/tui/registry'
+import {
+  ADAPTERS,
+  AGENT_HUB_TOOL,
+  adapterOf,
+  getTui,
+  supportsInstructions,
+} from './lifecycle/tui/registry'
 import type { ModelSwitch, ModelWatch } from './model-switch'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { Project, ProjectProvider } from './projects'
@@ -354,7 +360,10 @@ export function parseHookReport(body: Record<string, unknown>): HookReport {
   const { event, notificationType, agent, agentSessionId } = body
   if (typeof event !== 'string' || !HOOK_EVENTS.has(event))
     throw new HttpError(400, 'invalid_body', { field: 'event' })
-  if (agent !== 'claude' && agent !== 'codex')
+  if (
+    typeof agent !== 'string' ||
+    !ADAPTERS.some((a) => a.capabilities.stateHooks && a.harness === agent)
+  )
     throw new HttpError(400, 'invalid_body', { field: 'agent' })
   const optional = (value: unknown, field: string): string | null => {
     if (value === undefined || value === null || value === '') return null
@@ -1422,7 +1431,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const row = requireSession(params.id)
       requireTerminal(row)
       fence(row, generation)
-      if (row.tool !== 'claude-code')
+      if (!adapterOf(row.tool)?.capabilities.rewind)
         throw new HttpError(409, 'rewind_unsupported', { tool: row.tool })
       const change = sessionModelSwitch(row.id)
       if (!change?.rewindTo) throw new HttpError(409, 'no_rewind_target')

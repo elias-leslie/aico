@@ -75,6 +75,10 @@ export interface TuiSpec {
   instructions?: { arguments: string[]; key?: string }
   /** Set per session by `withInstructions`: the snapshot file each launch reads. */
   chosenInstructions?: { file: string; label: string }
+  /** Arguments the launch line adds when `command` lacks them (Pi's `--approve`). */
+  ensureArgs?: string[]
+  /** Launch settings travel in AICO_ROOT_* variables the tool's extension reads (Pi). */
+  environmentSelection?: boolean
   /** How the agent draws its input line, for reading whether it holds a draft
    * (wakes.ts `inputLineEmpty`): a prompt mark (`❯`, `›`, `>`) by default, or
    * `ruled` for an editor drawn between two full-width rules with no mark (Pi). */
@@ -87,7 +91,8 @@ export interface TuiSpec {
     /** `values`: the levels the tool accepts; without it, the shape of the flag decides
      * (a `key` config: none..max, a plain flag: off..max). */
     reasoningEffort?: { arguments: string[]; key?: string; values?: string[] }
-    daybreak?: { arguments: string[]; key: string } | { environment: true }
+    /** `environment`: the tool's extension reads it from AICO_ROOT_DAYBREAK; `model`: the only model it is valid with. */
+    daybreak?: { arguments: string[]; key: string } | { environment: true; model?: string }
     /** Fixed flags that print the models this host can run as a table whose
      * first two columns are provider and model, under a `provider` header. */
     listModels?: string[]

@@ -7,8 +7,8 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { UUID_RE as UUID } from '../continuity'
 import { listenPrivateSocket } from '../http'
+import { UUID_RE as UUID } from '../proc-fs'
 import {
   allocateWidgetId,
   getRootRequest,

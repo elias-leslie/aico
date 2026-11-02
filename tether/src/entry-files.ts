@@ -22,9 +22,8 @@ import {
   realpathSync,
 } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
-import type { FileTail } from './agent-state'
 import { ENTRY_SCAN_DEFAULTS, type EntryScanConfig } from './config'
-import type { ProcFs } from './continuity'
+import type { FileTail, ProcFs } from './proc-fs'
 import type { FileReader } from './recovery-facts'
 
 /** Readers bound to one entry home: none of them reads outside it. */

@@ -15,25 +15,11 @@
 // A hook's `blocked` holds until the user answers: a UserPromptSubmit report,
 // or a poll whose status changed after the hook fired and is no longer waiting.
 
-import { openSync } from 'node:fs'
-import { DatabaseSync } from 'node:sqlite'
-import {
-  type CodexRolloutFile,
-  claudeSessions,
-  codexUserRollouts,
-  entryClaudeSession,
-  entryCodexRollout,
-  entryPiSession,
-  entryReaders,
-  findEntryProcess,
-  observeChosenSession,
-  type ProcFs,
-  piSessionFile,
-  processTree,
-  UUID_RE,
-} from './continuity'
-import { fileTail } from './entry-files'
-import type { ModelSource } from './model-switch'
+import { findEntryProcess } from './continuity'
+import type { AgentProbe, StateContext, TuiAdapter } from './lifecycle/tui/adapters/contract'
+import { ADAPTERS, adapterOf } from './lifecycle/tui/registry'
+import type { ModelSource } from './model-record'
+import { entryReaders, type FileTail, type ProcFs, processTree } from './proc-fs'
 
 export const AGENT_STATES = ['working', 'idle', 'blocked', 'unknown'] as const
 export type AgentState = (typeof AGENT_STATES)[number]
@@ -68,629 +54,6 @@ export interface AgentSignal {
   agentSessionId: string | null
 }
 
-// --- Claude Code ------------------------------------------------------------
-
-export interface ClaudeProcess {
-  pid: number
-  file: string
-}
-
-/** The Claude Code process in a pane's process tree, by its session file. */
-export function findClaude(fs: ProcFs, home: string, pids: number[]): ClaudeProcess | null {
-  for (const { pid, file } of claudeSessions(fs, home, pids)) return { pid, file }
-  return null
-}
-
-/** Claude's status: busy → working, waiting → blocked, idle or shell → idle. */
-export function claudeSignal(text: string): AgentSignal | null {
-  let state: Record<string, unknown>
-  try {
-    state = JSON.parse(text)
-  } catch {
-    return null
-  }
-  if (typeof state !== 'object' || state === null) return null
-  const at = typeof state.statusUpdatedAt === 'number' ? state.statusUpdatedAt : null
-  const agentSessionId =
-    typeof state.sessionId === 'string' && UUID_RE.test(state.sessionId) ? state.sessionId : null
-  const base = { source: 'claude-status', at, agentSessionId }
-  switch (state.status) {
-    case 'busy':
-      return { ...base, state: 'working', detail: null }
-    case 'waiting':
-      return {
-        ...base,
-        state: 'blocked',
-        detail: typeof state.waitingFor === 'string' ? state.waitingFor : 'waiting',
-      }
-    case 'idle':
-    case 'shell':
-      return { ...base, state: 'idle', detail: null }
-    default:
-      return null
-  }
-}
-
-// --- Codex ------------------------------------------------------------------
-
-/** Tools whose call waits for the user's answer. */
-const CODEX_QUESTION_TOOLS = new Set(['request_user_input'])
-/** Approval prompts, if a Codex build ever records them in the rollout. */
-const CODEX_APPROVAL_EVENTS = new Set([
-  'exec_approval_request',
-  'apply_patch_approval_request',
-  'request_permissions',
-])
-/** Approval policies under which an escalated sandbox request waits for the
- * user (Codex records no event while its approval prompt is open). */
-const CODEX_ASKING_POLICIES = new Set(['on-request', 'untrusted', 'on-failure'])
-const ESCALATED = /sandbox_permissions\W+require_escalated/
-/** First read of an existing rollout: enough tail for the current turn. */
-const ROLLOUT_TAIL_BYTES = 512 * 1024
-const ROLLOUT_MAX_STEP_BYTES = 4 * 1024 * 1024
-/** A long turn's start can sit far before the tail: the first read walks back
- * this far at most, step by step, to find the latest turn boundary. */
-const ROLLOUT_SCAN_STEP_BYTES = 1024 * 1024
-const ROLLOUT_SCAN_MAX_BYTES = 256 * 1024 * 1024
-const TURN_BOUNDARIES = new Set(['task_started', 'task_complete', 'turn_aborted'])
-const MAYBE_BOUNDARY = /"(task_started|task_complete|turn_aborted)"/
-
-/** The line is a turn start or end (not a tool output quoting one). */
-function isTurnBoundary(line: string): boolean {
-  if (!MAYBE_BOUNDARY.test(line)) return false
-  try {
-    const item = JSON.parse(line)
-    return item?.type === 'event_msg' && TURN_BOUNDARIES.has(item.payload?.type)
-  } catch {
-    return false
-  }
-}
-
-/** The user thread's rollout (not a subagent's) a Codex process holds open:
- * the first with a UUID thread ID, the thread reboot continuity resumes
- * (observeCodex), else the first user rollout so its state still shows. */
-export function findCodexRollout(fs: ProcFs, pids: number[]): CodexRolloutFile | null {
-  let fallback: CodexRolloutFile | null = null
-  for (const rollout of codexUserRollouts(fs, pids)) {
-    if (rollout.threadId) return rollout
-    fallback ??= rollout
-  }
-  return fallback
-}
-
-/** Folds rollout lines into the thread's turn state. */
-export class CodexTurn {
-  private active = false
-  private approval = false
-  private readonly questions = new Set<string>()
-  /** Escalated tool calls the user must approve, until their output. */
-  private readonly escalations = new Set<string>()
-  /** The turn's policy routes escalation requests to the user. */
-  private asksUser = false
-  /** Timestamp of the last line that changed the state. */
-  at: number | null = null
-  /** Turn starts and ends seen. */
-  boundaries = 0
-
-  constructor(readonly threadId: string | null = null) {}
-
-  apply(line: string): void {
-    let item: { timestamp?: string; type?: string; payload?: Record<string, unknown> }
-    try {
-      item = JSON.parse(line)
-    } catch {
-      return
-    }
-    const payload = item.payload ?? {}
-    const kind = payload.type
-    const at = item.timestamp ? Date.parse(item.timestamp) : Number.NaN
-    const stamp = () => {
-      if (Number.isFinite(at)) this.at = at
-    }
-    if (item.type === 'turn_context') {
-      this.asksUser =
-        typeof payload.approval_policy === 'string' &&
-        CODEX_ASKING_POLICIES.has(payload.approval_policy) &&
-        (payload.approvals_reviewer === undefined || payload.approvals_reviewer === 'user')
-      return
-    }
-    if (item.type === 'event_msg') {
-      if (typeof kind === 'string' && TURN_BOUNDARIES.has(kind)) {
-        this.boundaries += 1
-        this.active = kind === 'task_started'
-        this.approval = false
-        this.questions.clear()
-        this.escalations.clear()
-        stamp()
-      } else if (typeof kind === 'string' && CODEX_APPROVAL_EVENTS.has(kind)) {
-        this.approval = true
-        stamp()
-      } else if (this.approval && kind !== 'token_count') {
-        // Anything the turn does next means the approval was answered.
-        this.approval = false
-        stamp()
-      }
-      return
-    }
-    if (item.type !== 'response_item') return
-    const callId = typeof payload.call_id === 'string' ? payload.call_id : null
-    if (
-      (kind === 'function_call' || kind === 'custom_tool_call') &&
-      callId &&
-      typeof payload.name === 'string' &&
-      CODEX_QUESTION_TOOLS.has(payload.name)
-    ) {
-      this.questions.add(callId)
-      stamp()
-    } else if (
-      (kind === 'function_call' || kind === 'custom_tool_call') &&
-      callId &&
-      this.asksUser &&
-      ESCALATED.test(String(payload.arguments ?? payload.input ?? ''))
-    ) {
-      this.escalations.add(callId)
-      stamp()
-    } else if (
-      (kind === 'function_call_output' || kind === 'custom_tool_call_output') &&
-      callId &&
-      (this.questions.delete(callId) || this.escalations.delete(callId))
-    ) {
-      stamp()
-    } else if (this.approval) {
-      this.approval = false
-      stamp()
-    }
-  }
-
-  signal(): AgentSignal {
-    const base = { source: 'codex-rollout', at: this.at, agentSessionId: this.threadId }
-    if (this.active && this.questions.size > 0)
-      return { ...base, state: 'blocked', detail: 'input needed' }
-    if (this.active && (this.approval || this.escalations.size > 0))
-      return { ...base, state: 'blocked', detail: 'permission prompt' }
-    return { ...base, state: this.active ? 'working' : 'idle', detail: null }
-  }
-}
-
-export interface FileTail {
-  /** Bytes appended since `offset` (at most `max`, ending at a newline), and
-   * the new offset. A shrunk file restarts from 0. */
-  read(path: string, offset: number, max: number): { text: string; offset: number; size: number }
-  /** Bytes `[start, end)` of the file. */
-  range(path: string, start: number, end: number): Buffer
-}
-
-export const nodeFileTail: FileTail = fileTail((path) => openSync(path, 'r'))
-
-/** Incremental reader of one rollout file. */
-export class CodexRollout {
-  private offset = 0
-  private readonly turn: CodexTurn
-  private started = false
-  /** Set when the first read found no turn boundary it could trust: the state
-   * stays unknown until the next one is appended. */
-  private blindUntil: number | null = null
-
-  constructor(
-    readonly path: string,
-    threadId: string | null,
-    readonly tail: FileTail = nodeFileTail,
-  ) {
-    this.turn = new CodexTurn(threadId)
-  }
-
-  poll(): AgentSignal | null {
-    let chunk: { text: string; offset: number }
-    try {
-      if (!this.started) {
-        const probe = this.tail.read(this.path, 0, ROLLOUT_TAIL_BYTES)
-        let lines = probe.text.split('\n')
-        let start = probe.offset - Buffer.byteLength(probe.text)
-        // A tail that starts mid-file begins with a partial line.
-        if (start > 0) start += Buffer.byteLength(lines.shift() ?? '') + 1
-        if (start > 0 && !lines.some(isTurnBoundary)) {
-          // The turn began before the tail: without its start it reads as idle.
-          const earlier = this.fromLastBoundary(start)
-          if (earlier) lines = [...earlier, ...lines]
-          else this.blindUntil = this.turn.boundaries
-        }
-        for (const line of lines) if (line) this.turn.apply(line)
-        this.offset = probe.offset
-        this.started = true
-        return this.signal()
-      }
-      chunk = this.tail.read(this.path, this.offset, ROLLOUT_MAX_STEP_BYTES)
-    } catch {
-      return null
-    }
-    this.offset = chunk.offset
-    for (const line of chunk.text.split('\n')) if (line) this.turn.apply(line)
-    return this.signal()
-  }
-
-  private signal(): AgentSignal | null {
-    if (this.blindUntil !== null && this.turn.boundaries === this.blindUntil) return null
-    this.blindUntil = null
-    return this.turn.signal()
-  }
-
-  /** Complete lines from the latest turn boundary before `end` (a line start)
-   * to the end of the step that holds it; [] when the file has none, null when
-   * the scan gave up (the state is then unknown, never a guessed idle). */
-  private fromLastBoundary(end: number): string[] | null {
-    let carry = Buffer.alloc(0)
-    for (let at = end; at > 0; ) {
-      if (end - at >= ROLLOUT_SCAN_MAX_BYTES) return null
-      const start = Math.max(0, at - ROLLOUT_SCAN_STEP_BYTES)
-      let chunk = Buffer.concat([this.tail.range(this.path, start, at), carry])
-      at = start
-      if (start > 0) {
-        // Up to the first newline is the end of a line that starts earlier.
-        const newline = chunk.indexOf(10)
-        if (newline < 0) {
-          carry = chunk
-          continue
-        }
-        carry = chunk.subarray(0, newline + 1)
-        chunk = chunk.subarray(newline + 1)
-      }
-      const lines = chunk.toString('utf8').split('\n')
-      for (let i = lines.length - 1; i >= 0; i--)
-        if (isTurnBoundary(lines[i] as string)) return lines.slice(i)
-    }
-    return []
-  }
-}
-
-// --- Pi ---------------------------------------------------------------------
-
-/** Assistant stop reasons that end Pi's turn (pi-ai StopReason; pi-agent-core's
- * loop ends on these unless the reply holds tool calls). `toolUse`, and the
- * `pending` / `deferred` of a reply still being fetched, run on. */
-const PI_TURN_ENDS = new Set(['stop', 'length', 'error', 'aborted'])
-/** First read of an existing session file: the state is its last message. */
-const PI_TAIL_BYTES = 512 * 1024
-
-/** Pi's session file for the conversation Tether chose at launch
- * (TETHER_AGENT_SESSION_ID, `pi --session-id`): <home>/.pi/agent/sessions/
- * --<cwd>--/<time>_<id>.jsonl. `path` is null until Pi writes it, after the
- * first prompt. A `/new` inside Pi starts a file under another ID, which is
- * not followed. */
-export function findPiSession(
-  fs: ProcFs,
-  home: string,
-  pids: number[],
-): { pid: number; sessionId: string; path: string | null } | null {
-  const chosen = observeChosenSession(fs, pids)
-  if (!chosen) return null
-  return {
-    pid: chosen.pid,
-    sessionId: chosen.resumeId,
-    path: piSessionFile(fs, home, chosen.resumeId),
-  }
-}
-
-/** Incremental reader of one Pi session file. Pi appends each message when it
- * completes: a user prompt or tool result means the turn goes on (a long model
- * call writes nothing until it ends), an assistant reply that ends the turn
- * means idle. Pi asks the user nothing structured (Tether runs it with
- * --approve), so it is never blocked. */
-export class PiSession {
-  private offset = 0
-  private started = false
-  private working: boolean | null = null
-  private at: number | null = null
-
-  constructor(
-    readonly path: string,
-    readonly sessionId: string,
-    readonly tail: FileTail = nodeFileTail,
-  ) {}
-
-  apply(line: string): void {
-    let item: {
-      type?: string
-      timestamp?: string
-      message?: { role?: string; stopReason?: string; content?: unknown }
-    }
-    try {
-      item = JSON.parse(line)
-    } catch {
-      return
-    }
-    if (item?.type !== 'message' || !item.message) return
-    const { role, stopReason, content } = item.message
-    let working: boolean
-    if (role === 'user' || role === 'toolResult') working = true
-    else if (role === 'assistant' && typeof stopReason === 'string') {
-      // A reply cut off by the token limit still fails its tool calls and runs on.
-      const calls =
-        Array.isArray(content) &&
-        content.some((part) => (part as { type?: unknown })?.type === 'toolCall')
-      working = !PI_TURN_ENDS.has(stopReason) || (stopReason === 'length' && calls)
-    } else return
-    this.working = working
-    const at = item.timestamp ? Date.parse(item.timestamp) : Number.NaN
-    if (Number.isFinite(at)) this.at = at
-  }
-
-  poll(): AgentSignal | null {
-    try {
-      if (!this.started) {
-        const probe = this.tail.read(this.path, 0, PI_TAIL_BYTES)
-        const lines = probe.text.split('\n')
-        // A tail that starts mid-file begins with a partial line.
-        if (probe.offset - Buffer.byteLength(probe.text) > 0) lines.shift()
-        for (const line of lines) if (line) this.apply(line)
-        this.offset = probe.offset
-        this.started = true
-      } else {
-        const chunk = this.tail.read(this.path, this.offset, ROLLOUT_MAX_STEP_BYTES)
-        this.offset = chunk.offset
-        for (const line of chunk.text.split('\n')) if (line) this.apply(line)
-      }
-    } catch {
-      return null
-    }
-    if (this.working === null) return null
-    return {
-      state: this.working ? 'working' : 'idle',
-      source: 'pi-session',
-      detail: null,
-      at: this.at,
-      agentSessionId: this.sessionId,
-    }
-  }
-}
-
-// --- Antigravity (agy) ----------------------------------------------------------
-
-/** agy's CortexStepStatus for a step waiting on the user (its ask_question
- * tool); enum numbers from agy 1.4.9's embedded proto descriptor, checked live.
- * PENDING 1, RUNNING 2, GENERATING 8, QUEUED 11 are going; DONE 3, CANCELED 6,
- * ERROR 7, INTERRUPTED 12 are over. Whether a turn is going is read from the
- * executor runs, not these (a step can stay RUNNING after its turn ends). */
-const AGY_STEP_WAITING = 9
-
-/** What one look at an agy conversation database finds. */
-export interface AgySnapshot {
-  /** The newest step's index; null before any step. */
-  maxIdx: number | null
-  /** Steps waiting on the user (status WAITING). */
-  open: { idx: number; status: number; metadata: Uint8Array | null }[]
-  /** The newest step's metadata (CortexStepMetadata). */
-  lastMetadata: Uint8Array | null
-  /** The newest executor run's `last_step_idx` (ExecutorMetadata field 3):
-   * agy writes the row when the run ends, so it covering the newest step means
-   * the turn is over. Null with no run yet. */
-  executorLastStep: number | null
-}
-
-export type AgyRead = (path: string) => AgySnapshot
-
-const AGY_CONVERSATION_RE =
-  /\/\.gemini\/antigravity-cli\/(?:presence|conversations)\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\.(?:lock|db)$/
-
-/** The agy process in the pane and the conversation it holds: agy keeps
- * `presence/<id>.lock` (and, while it writes, `conversations/<id>.db`) open.
- * `conversationId` is null before the first prompt, when agy has none yet. */
-export function findAgyConversation(
-  fs: ProcFs,
-  home: string,
-  pids: number[],
-): { pid: number; conversationId: string | null; path: string | null } | null {
-  let fresh: { pid: number; conversationId: null; path: null } | null = null
-  for (const pid of pids) {
-    let comm: string
-    try {
-      comm = fs.readFile(`/proc/${pid}/comm`).trim()
-    } catch {
-      continue
-    }
-    if (comm !== 'agy') continue
-    let fds: string[]
-    try {
-      fds = fs.readdir(`/proc/${pid}/fd`)
-    } catch {
-      continue
-    }
-    // agy holds presence/<id>.lock for the conversation it is in; the .db only
-    // while it writes. Prefer the lock, the newest-opened (highest fd) one.
-    let lock: { fd: number; id: string } | null = null
-    let db: { fd: number; id: string } | null = null
-    for (const fd of fds) {
-      let target: string
-      try {
-        target = fs.readlink(`/proc/${pid}/fd/${fd}`)
-      } catch {
-        continue
-      }
-      const match = AGY_CONVERSATION_RE.exec(target)
-      if (!match?.[1] || !target.startsWith(`${home}/`)) continue
-      const seen = { fd: Number(fd), id: match[1] }
-      if (target.endsWith('.lock')) {
-        if (!lock || seen.fd > lock.fd) lock = seen
-      } else if (!db || seen.fd > db.fd) db = seen
-    }
-    const conversationId = (lock ?? db)?.id
-    if (conversationId)
-      return {
-        pid,
-        conversationId,
-        path: `${home}/.gemini/antigravity-cli/conversations/${conversationId}.db`,
-      }
-    fresh ??= { pid, conversationId: null, path: null }
-  }
-  return fresh
-}
-
-function varint(bytes: Uint8Array, start: number): [number, number] | null {
-  let value = 0
-  let scale = 1
-  for (let index = start; index < bytes.length && index < start + 10; index += 1) {
-    const byte = bytes[index] as number
-    value += (byte & 0x7f) * scale
-    if (byte < 0x80) return [value, index + 1]
-    scale *= 128
-  }
-  return null
-}
-
-/** The top-level fields of a protobuf message: varints as numbers,
- * length-delimited fields as bytes. Fixed-width fields are skipped. */
-export function protoFields(bytes: Uint8Array): Map<number, number | Uint8Array> {
-  const out = new Map<number, number | Uint8Array>()
-  let index = 0
-  while (index < bytes.length) {
-    const key = varint(bytes, index)
-    if (!key) break
-    const [tag, next] = key
-    const field = Math.floor(tag / 8)
-    const wire = tag % 8
-    index = next
-    if (wire === 0) {
-      const value = varint(bytes, index)
-      if (!value) break
-      out.set(field, value[0])
-      index = value[1]
-    } else if (wire === 2) {
-      const length = varint(bytes, index)
-      if (!length || length[1] + length[0] > bytes.length) break
-      out.set(field, bytes.subarray(length[1], length[1] + length[0]))
-      index = length[1] + length[0]
-    } else if (wire === 1) index += 8
-    else if (wire === 5) index += 4
-    else break
-  }
-  return out
-}
-
-/** A google.protobuf.Timestamp field of a step's metadata, in ms. */
-function agyTime(metadata: Uint8Array | null, field: number): number | null {
-  if (!metadata) return null
-  const stamp = protoFields(metadata).get(field)
-  if (!(stamp instanceof Uint8Array)) return null
-  const parts = protoFields(stamp)
-  const seconds = parts.get(1)
-  if (typeof seconds !== 'number' || seconds <= 0) return null
-  const nanos = parts.get(2)
-  return seconds * 1000 + Math.floor((typeof nanos === 'number' ? nanos : 0) / 1e6)
-}
-
-/** CortexStepMetadata: created_at 1, completed_at 8. */
-const AGY_CREATED_AT = 1
-const AGY_COMPLETED_AT = 8
-
-/** agy's state from its conversation. agy writes an executor run row when a
- * turn ends; a run covering the newest step means the turn is over and agy is
- * idle, even with an older step left RUNNING (a background command, or a row
- * an interrupted turn abandoned). A step waiting on the user (its ask_question
- * tool) that is the newest or after the last run is blocked; a newest step no
- * run covers yet is working (a step going, or the model thinking between
- * steps). A conversation with no steps is agy fresh at its input. Tether runs
- * agy with --dangerously-skip-permissions, so it never waits on a permission
- * prompt. */
-export function agySignal(snapshot: AgySnapshot, conversationId: string): AgentSignal {
-  const base = { source: 'agy-conversation', agentSessionId: conversationId }
-  if (snapshot.maxIdx === null) return { ...base, state: 'idle', detail: null, at: null }
-  const covered = snapshot.executorLastStep ?? -1
-  const waiting = snapshot.open.find(
-    (step) =>
-      step.status === AGY_STEP_WAITING && (step.idx > covered || step.idx === snapshot.maxIdx),
-  )
-  if (waiting)
-    return {
-      ...base,
-      state: 'blocked',
-      detail: 'input needed',
-      at: agyTime(waiting.metadata, AGY_CREATED_AT),
-    }
-  if (covered < snapshot.maxIdx)
-    return {
-      ...base,
-      state: 'working',
-      detail: null,
-      at: agyTime(snapshot.lastMetadata, AGY_CREATED_AT),
-    }
-  return {
-    ...base,
-    state: 'idle',
-    detail: null,
-    at:
-      agyTime(snapshot.lastMetadata, AGY_COMPLETED_AT) ??
-      agyTime(snapshot.lastMetadata, AGY_CREATED_AT),
-  }
-}
-
-/** Reads an agy conversation database, read-only, one short connection per
- * look (agy writes it in WAL mode; nothing is held open between polls). */
-export const nodeAgyRead: AgyRead = (path) => {
-  const db = new DatabaseSync(path, { readOnly: true, timeout: 50 })
-  try {
-    // One read transaction: the four looks see the same snapshot.
-    db.exec('BEGIN')
-    const top = db.prepare('SELECT max(idx) AS idx FROM steps').get() as { idx: number | null }
-    const maxIdx = typeof top?.idx === 'number' ? top.idx : null
-    const open = db
-      .prepare(
-        `SELECT idx, status, metadata FROM steps WHERE status = ${AGY_STEP_WAITING} ORDER BY idx`,
-      )
-      .all() as { idx: number; status: number; metadata: Uint8Array | null }[]
-    const last =
-      maxIdx === null
-        ? null
-        : (db.prepare('SELECT metadata FROM steps WHERE idx = ?').get(maxIdx) as
-            | { metadata: Uint8Array | null }
-            | undefined)
-    const run = db.prepare('SELECT data FROM executor_metadata ORDER BY idx DESC LIMIT 1').get() as
-      | { data: Uint8Array | null }
-      | undefined
-    const lastStep = run?.data ? protoFields(run.data).get(3) : undefined
-    db.exec('COMMIT')
-    return {
-      maxIdx,
-      open,
-      lastMetadata: last?.metadata ?? null,
-      // An executor that ended at step 0 encodes no field 3 (proto3 default).
-      executorLastStep: run?.data ? (typeof lastStep === 'number' ? lastStep : 0) : null,
-    }
-  } finally {
-    db.close()
-  }
-}
-
-/** agy before its first prompt: at its input, with no conversation yet. No
- * time of its own, so it never reads as a finished turn. */
-const AGY_FRESH: AgentSignal = {
-  state: 'idle',
-  source: 'agy-conversation',
-  detail: null,
-  at: null,
-  agentSessionId: null,
-}
-
-/** Reader of one agy conversation. */
-export class AgyConversation {
-  constructor(
-    readonly path: string,
-    readonly conversationId: string,
-    private readonly read: AgyRead = nodeAgyRead,
-  ) {}
-
-  poll(): AgentSignal | null {
-    try {
-      return agySignal(this.read(this.path), this.conversationId)
-    } catch (error) {
-      // agy holds the conversation's lock before it writes the database or its
-      // tables: that is agy fresh at its input, not unknown.
-      const message = error instanceof Error ? error.message : ''
-      if (/unable to open database|no such table/i.test(message))
-        return { ...AGY_FRESH, agentSessionId: this.conversationId }
-      return null
-    }
-  }
-}
-
 // --- hook reports -------------------------------------------------------------
 
 export interface HookReport {
@@ -698,7 +61,8 @@ export interface HookReport {
   event: string
   /** Claude's `notification_type` for a Notification. */
   notificationType?: string | null
-  agent: 'claude' | 'codex'
+  /** The tool's `harness` name (`claude`, `codex`). */
+  agent: string
   agentSessionId?: string | null
 }
 
@@ -866,18 +230,16 @@ export class AgentStateTracker {
 
 // --- the poller ------------------------------------------------------------------
 
-/** What the poller found in one session's pane. */
-type Found =
-  | { kind: 'claude'; pid: number; file: string; files?: ProcFs; home?: string; tail?: FileTail }
-  | { kind: 'codex'; pid: number; rollout: CodexRollout }
-  | { kind: 'pi'; pid: number; sessionId: string; session: PiSession | null }
-  | { kind: 'agy'; pid: number; conversation: AgyConversation | null }
-  | { kind: 'none' }
+/** What the poller found in one session's pane: the adapter that read it and its probe. */
+interface Found {
+  adapter: TuiAdapter
+  probe: AgentProbe
+}
 
 interface Watched {
   generation: string
   panePid: number | null
-  found: Found
+  found: Found | null
   /** When the process tree was last searched. */
   searchedAt: number
 }
@@ -904,7 +266,8 @@ export class AgentStatePoller {
       now?: () => number
       tail?: FileTail
       alive?: (pid: number) => boolean
-      agyRead?: AgyRead
+      /** Test seams for an adapter's readers, keyed by adapter id. */
+      seams?: Record<string, unknown>
       /** Each poll's agent record, for the model watch (model-switch.ts). */
       models?: (id: string, source: ModelSource) => void
     } = {},
@@ -941,6 +304,16 @@ export class AgentStatePoller {
     }
   }
 
+  private context(pids: number[]): StateContext {
+    return {
+      fs: this.fs,
+      home: this.home,
+      pids,
+      ...(this.options.tail ? { tail: this.options.tail } : {}),
+      ...(this.options.seams ? { seams: this.options.seams } : {}),
+    }
+  }
+
   private async pollOnce(): Promise<void> {
     const now = (this.options.now ?? Date.now)()
     const live = new Set<string>()
@@ -951,7 +324,7 @@ export class AgentStatePoller {
         watched = {
           generation: session.generation,
           panePid: await session.panePid().catch(() => null),
-          found: { kind: 'none' },
+          found: null,
           searchedAt: Number.NEGATIVE_INFINITY,
         }
         this.watched.set(session.id, watched)
@@ -960,19 +333,17 @@ export class AgentStatePoller {
         this.tracker.observe(session.id, null)
         continue
       }
-      const lost = watched.found.kind !== 'none' && !this.alive(watched.found.pid)
+      const lost = watched.found !== null && !this.alive(watched.found.probe.pid)
       if (lost || now - watched.searchedAt >= SEARCH_EVERY_MS) {
         watched.found = this.search(watched.panePid, watched.found)
         watched.searchedAt = now
-      } else if (watched.found.kind === 'agy') {
-        // agy opens a conversation on its first prompt and can switch to
-        // another: its own fds are cheap to look at, so look every poll.
-        watched.found = this.agyFound([watched.found.pid], watched.found) ?? watched.found
+      } else if (watched.found?.probe.follow) {
+        watched.found.probe = watched.found.probe.follow(this.context([watched.found.probe.pid]))
       }
-      const signal = this.read(watched.found)
+      const signal = watched.found?.probe.poll() ?? null
       this.tracker.observe(session.id, signal)
       if (this.options.models) {
-        const source = this.modelSource(watched.found, signal)
+        const source = watched.found?.probe.models?.(signal)
         if (source) this.options.models(session.id, source)
       }
     }
@@ -985,135 +356,26 @@ export class AgentStatePoller {
     for (const id of this.tracker.ids()) if (!live.has(id)) this.tracker.forget(id)
   }
 
-  private search(panePid: number, previous: Found): Found {
+  private search(panePid: number, previous: Found | null): Found | null {
     const pids = processTree(this.fs, panePid)
+    const ctx = this.context(pids)
+    const kept = (adapter: TuiAdapter): AgentProbe | null =>
+      previous?.adapter === adapter ? previous.probe : null
     // An entry session: its agent's files in the entry home (never the host
-    // home), alive with the entry process.
-    // Every read there stays inside the home (entryReaders).
+    // home), alive with the entry process. Every read there stays inside the
+    // home (entryReaders).
     const entry = findEntryProcess(this.fs, pids)
     if (entry) {
+      const adapter = adapterOf(entry.tool)
       const readers = entry.tool ? entryReaders(this.fs, entry.home) : null
-      if (!readers) return { kind: 'none' }
-      if (entry.tool === 'claude-code') {
-        const session = entryClaudeSession(readers.fs, readers.home)
-        return session
-          ? {
-              kind: 'claude',
-              pid: entry.pid,
-              file: session.file,
-              files: readers.fs,
-              home: readers.home,
-              ...(readers.tail ? { tail: readers.tail } : {}),
-            }
-          : { kind: 'none' }
-      }
-      if (entry.tool === 'pi') {
-        // Only the conversation this launch was given, read through the
-        // home's contained tail.
-        const pi = entryPiSession(readers.fs, readers.home, entry.chosenId, readers.scan)
-        return pi
-          ? this.piFound(entry.pid, pi, previous, readers.tail ?? this.options.tail)
-          : { kind: 'none' }
-      }
-      const rollout = entryCodexRollout(readers.fs, readers.home, readers.scan)
-      return rollout
-        ? this.codexFound(entry.pid, rollout, previous, readers.tail ?? this.options.tail)
-        : { kind: 'none' }
+      if (!adapter || !readers) return null
+      const probe = adapter.state.findInEntry?.({ ...ctx, readers, entry }, kept(adapter)) ?? null
+      return probe ? { adapter, probe } : null
     }
-    const claude = findClaude(this.fs, this.home, pids)
-    if (claude) return { kind: 'claude', ...claude }
-    const codex = findCodexRollout(this.fs, pids)
-    if (codex) return this.codexFound(codex.pid, codex, previous, this.options.tail)
-    const pi = findPiSession(this.fs, this.home, pids)
-    if (pi) return this.piFound(pi.pid, pi, previous, this.options.tail)
-    return this.agyFound(pids, previous) ?? { kind: 'none' }
-  }
-
-  /** A Pi session to read; the reader (and its offset) is kept while the
-   * file is the same. */
-  private piFound(
-    pid: number,
-    pi: { sessionId: string; path: string | null },
-    previous: Found,
-    tail: FileTail | undefined,
-  ): Found {
-    if (
-      previous.kind === 'pi' &&
-      previous.sessionId === pi.sessionId &&
-      (previous.session?.path ?? null) === pi.path
-    )
-      return { ...previous, pid }
-    return {
-      kind: 'pi',
-      pid,
-      sessionId: pi.sessionId,
-      session: pi.path ? new PiSession(pi.path, pi.sessionId, tail) : null,
+    for (const adapter of ADAPTERS) {
+      const probe = adapter.state.find(ctx, kept(adapter))
+      if (probe) return { adapter, probe }
     }
-  }
-
-  /** A Codex rollout to read; the reader (and its offset) is kept while the
-   * thread is the same. */
-  private codexFound(
-    pid: number,
-    codex: { path: string; threadId: string | null },
-    previous: Found,
-    tail: FileTail | undefined,
-  ): Found {
-    if (previous.kind === 'codex' && previous.rollout.path === codex.path)
-      return { kind: 'codex', pid, rollout: previous.rollout }
-    return {
-      kind: 'codex',
-      pid,
-      rollout: new CodexRollout(codex.path, codex.threadId, tail),
-    }
-  }
-
-  private agyFound(pids: number[], previous: Found): Found | null {
-    const agy = findAgyConversation(this.fs, this.home, pids)
-    if (!agy) return null
-    if (previous.kind === 'agy' && (previous.conversation?.path ?? null) === agy.path)
-      return previous.pid === agy.pid ? previous : { ...previous, pid: agy.pid }
-    return {
-      kind: 'agy',
-      pid: agy.pid,
-      conversation:
-        agy.path && agy.conversationId
-          ? new AgyConversation(agy.path, agy.conversationId, this.options.agyRead)
-          : null,
-    }
-  }
-
-  /** Where the found agent keeps the record of its models. */
-  private modelSource(found: Found, signal: AgentSignal | null): ModelSource | null {
-    if (found.kind === 'claude')
-      return signal?.agentSessionId
-        ? {
-            tool: 'claude',
-            agent: found.pid,
-            sessionId: signal.agentSessionId,
-            home: found.home ?? this.home,
-            fs: found.files ?? this.fs,
-            ...(found.tail ? { tail: found.tail } : {}),
-          }
-        : null
-    if (found.kind === 'codex')
-      return { tool: 'codex', agent: found.pid, path: found.rollout.path, tail: found.rollout.tail }
-    if (found.kind === 'pi' && found.session)
-      return { tool: 'pi', agent: found.pid, path: found.session.path, tail: found.session.tail }
-    return null
-  }
-
-  private read(found: Found): AgentSignal | null {
-    if (found.kind === 'claude') {
-      try {
-        return claudeSignal((found.files ?? this.fs).readFile(found.file))
-      } catch {
-        return null
-      }
-    }
-    if (found.kind === 'codex') return found.rollout.poll()
-    if (found.kind === 'pi') return found.session?.poll() ?? null
-    if (found.kind === 'agy') return found.conversation ? found.conversation.poll() : AGY_FRESH
     return null
   }
 }

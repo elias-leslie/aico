@@ -13,7 +13,7 @@ import {
   withInstructions,
 } from './instructions'
 import { launchLine, resumeLaunchLine } from './launch'
-import { INSTRUCTION_ADAPTERS, RESUME_ADAPTERS } from './registry'
+import { adapterOf } from './registry'
 import type { TuiSpec } from './spec'
 
 const snapshot = {
@@ -39,8 +39,8 @@ const tool = (slug: string, command: string[]): TuiSpec =>
   ({
     slug,
     command,
-    instructions: INSTRUCTION_ADAPTERS[slug],
-    resume: RESUME_ADAPTERS[slug],
+    instructions: adapterOf(slug)?.spec.instructions,
+    resume: adapterOf(slug)?.spec.resume,
   }) as unknown as TuiSpec
 
 /** The argv a launch line hands its command, with the command swapped for printf. */

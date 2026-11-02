@@ -30,8 +30,17 @@
 // them there.
 
 import { dirname, join } from 'node:path'
-import type { FileTail } from './agent-state'
-import type { ProcFs } from './continuity'
+import { ADAPTERS, adapterByHarness, adapterOf } from './lifecycle/tui/registry'
+import {
+  KEY,
+  type ModelEvent,
+  type ModelSource,
+  model,
+  refusalCategory,
+  UNKNOWN_MODEL,
+  UUID,
+} from './model-record'
+import type { FileTail } from './proc-fs'
 
 export const SWITCH_KINDS = ['refusal', 'substituted', 'changed', 'paused'] as const
 export type SwitchKind = (typeof SWITCH_KINDS)[number]
@@ -86,254 +95,8 @@ export function isModelSwitch(
 
 // --- the agents' records -------------------------------------------------------------
 
-export type ModelEvent =
-  /** The model that answered. */
-  | { type: 'served'; model: string; at: number | null }
-  /** The model the tool itself asks for (Codex turn context, Pi message). */
-  | { type: 'requested'; model: string; at: number | null }
-  /** Someone ran the tool's model picker (Claude `/model`). */
-  | { type: 'chosen'; at: number | null }
-  /** The picker closed without a change (Claude "Kept model as …"). */
-  | { type: 'kept'; at: number | null }
-  /** An owner's prompt (Claude), the start of a turn a rewind can go back to. */
-  | { type: 'prompt'; uuid: string; at: number | null }
-  /** A reply was refused (Claude `stop_reason: refusal`); the turn may still
-   * go on (a same-model retry, a fallback). */
-  | {
-      type: 'refused'
-      model: string | null
-      category: string | null
-      key: string
-      at: number | null
-    }
-  /** The tool switched models because a request was refused. */
-  | {
-      type: 'refusal'
-      from: string | null
-      to: string
-      category: string | null
-      key: string
-      at: number | null
-    }
-  /** A refusal ended the turn without a switch. */
-  | {
-      type: 'noFallback'
-      model: string | null
-      category: string | null
-      key: string
-      at: number | null
-    }
-
-const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@[\]-]{0,127}$/
-/** A refused model the record does not name. */
-const UNKNOWN_MODEL = 'unknown'
-const CATEGORY = /^[a-z][a-z0-9_]{0,31}$/
-const KEY = /^[A-Za-z0-9_.:@-]{1,128}$/
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-
-function model(value: unknown): string | null {
-  return typeof value === 'string' && MODEL_ID.test(value.trim()) ? value.trim() : null
-}
-
-function time(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value !== 'string') return null
-  const ms = Date.parse(value)
-  return Number.isFinite(ms) ? ms : null
-}
-
-function keyOf(...values: unknown[]): string | null {
-  const found = values.find(
-    (value): value is string => typeof value === 'string' && KEY.test(value),
-  )
-  return found ?? null
-}
-
-/** A refusal category as a short lowercase word (`cyber`), else null. */
-export function refusalCategory(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const word = value
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, '_')
-  // Codex reroute reasons (Agent Hub refusal_codes.py).
-  if (word.replace(/_/g, '') === 'highriskcyberactivity') return 'cyber'
-  return CATEGORY.test(word) ? word : null
-}
-
-function parse(line: string): Record<string, unknown> | null {
-  try {
-    const value = JSON.parse(line)
-    return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
-  } catch {
-    return null
-  }
-}
-
-const CLAUDE_HINT =
-  /"type":\s*"(?:assistant|user)"|model_refusal|command-name>\/model<|stdout>Kept model as/
-
-/** The marker Claude Code writes as a user row when a turn is interrupted
- * (`[Request interrupted by user]`, `… for tool use]`): not a prompt, and
- * not in the rewind list. */
-const INTERRUPTED = /^\[Request interrupted by user\b/
-
-/** An owner's prompt: a user row with text, not a tool result, meta row,
- * compact summary, interrupt marker or a row Claude Code itself made (an
- * `origin` other than `human`, such as a background task's notice). */
-function isPrompt(row: Record<string, unknown>): boolean {
-  if (
-    row.isMeta === true ||
-    row.isCompactSummary === true ||
-    row.isVisibleInTranscriptOnly === true
-  )
-    return false
-  const origin = (row.origin as { kind?: unknown } | undefined)?.kind
-  if (origin !== undefined && origin !== 'human') return false
-  const content = (row.message as { content?: unknown } | undefined)?.content
-  if (typeof content === 'string')
-    return !content.startsWith('<') && content.trim() !== '' && !INTERRUPTED.test(content)
-  return (
-    Array.isArray(content) &&
-    content.length > 0 &&
-    content.every(
-      (part) =>
-        (part as { type?: unknown })?.type === 'text' ||
-        (part as { type?: unknown })?.type === 'image',
-    ) &&
-    !content.every(
-      (part) =>
-        (part as { type?: unknown })?.type === 'text' &&
-        INTERRUPTED.test(String((part as { text?: unknown }).text ?? '')),
-    )
-  )
-}
-
-/** One Claude Code transcript row. Sidechain rows (subagents run their own
- * models) say nothing about the session; a `<synthetic>` row (an error Claude
- * Code wrote itself) names no model. */
-export function claudeModelEvents(line: string): ModelEvent[] {
-  if (!CLAUDE_HINT.test(line)) return []
-  const row = parse(line)
-  if (!row || row.isSidechain === true) return []
-  const at = time(row.timestamp)
-  if (row.type === 'system' && row.subtype === 'model_refusal_fallback') {
-    const to = model(row.fallbackModel)
-    if (!to) return []
-    return [
-      {
-        type: 'refusal',
-        from: model(row.originalModel),
-        to,
-        category: refusalCategory(row.apiRefusalCategory),
-        key: keyOf(row.requestId, row.uuid, row.timestamp) ?? `at-${at ?? 0}`,
-        at,
-      },
-    ]
-  }
-  if (row.type === 'system' && row.subtype === 'model_refusal_no_fallback')
-    return [
-      {
-        type: 'noFallback',
-        model: model(row.originalModel),
-        category: refusalCategory(row.apiRefusalCategory),
-        key: keyOf(row.requestId, row.uuid, row.timestamp) ?? `at-${at ?? 0}`,
-        at,
-      },
-    ]
-  if (
-    row.type === 'system' &&
-    row.subtype === 'local_command' &&
-    typeof row.content === 'string' &&
-    row.content.includes('<command-name>/model</command-name>')
-  )
-    return [{ type: 'chosen', at }]
-  if (
-    row.type === 'system' &&
-    row.subtype === 'local_command' &&
-    typeof row.content === 'string' &&
-    row.content.startsWith('<local-command-stdout>Kept model as ')
-  )
-    return [{ type: 'kept', at }]
-  if (row.type === 'user') {
-    return typeof row.uuid === 'string' && UUID.test(row.uuid) && isPrompt(row)
-      ? [{ type: 'prompt', uuid: row.uuid, at }]
-      : []
-  }
-  if (row.type === 'assistant') {
-    const message = row.message as Record<string, unknown> | undefined
-    const served = model(message?.model)
-    if (message?.stop_reason === 'refusal') {
-      const details = message.stop_details as { category?: unknown } | undefined
-      return [
-        {
-          type: 'refused',
-          model: served,
-          category: refusalCategory(details?.category),
-          key: keyOf(row.requestId, row.uuid, message.id, row.timestamp) ?? `at-${at ?? 0}`,
-          at,
-        },
-      ]
-    }
-    return served ? [{ type: 'served', model: served, at }] : []
-  }
-  return []
-}
-
-/** One Codex rollout line. */
-export function codexModelEvents(line: string): ModelEvent[] {
-  if (!line.includes('"turn_context"') && !line.includes('model_reroute')) return []
-  const row = parse(line)
-  const payload = row?.payload as Record<string, unknown> | undefined
-  if (!row || !payload) return []
-  const at = time(row.timestamp)
-  if (row.type === 'turn_context') {
-    const asked = model(payload.model)
-    return asked ? [{ type: 'requested', model: asked, at }] : []
-  }
-  if (row.type === 'event_msg' && payload.type === 'model_reroute') {
-    const to = model(payload.to_model ?? payload.toModel)
-    if (!to) return []
-    return [
-      {
-        type: 'refusal',
-        from: model(payload.from_model ?? payload.fromModel),
-        to,
-        category: refusalCategory(payload.reason),
-        key: `reroute-${keyOf(payload.turn_id, payload.turnId) ?? at ?? 0}`,
-        at,
-      },
-    ]
-  }
-  return []
-}
-
-/** One Pi session line: an assistant message names the model asked for
- * (`provider/model`) and, when the provider says, the one that answered. */
-export function piModelEvents(line: string): ModelEvent[] {
-  if (!line.includes('"assistant"')) return []
-  const row = parse(line)
-  const message = row?.message as Record<string, unknown> | undefined
-  if (row?.type !== 'message' || message?.role !== 'assistant') return []
-  const at = time(row.timestamp)
-  const asked = model(message.model)
-  if (!asked) return []
-  const provider = typeof message.provider === 'string' ? message.provider : null
-  const full = (id: string) => (provider && !id.includes('/') ? `${provider}/${id}` : id)
-  const served = model(message.responseModel) ?? asked
-  return [
-    { type: 'requested', model: full(asked), at },
-    { type: 'served', model: full(served), at },
-  ]
-}
-
-export type ModelTool = 'claude' | 'codex' | 'pi'
-
-const EVENTS: Record<ModelTool, (line: string) => ModelEvent[]> = {
-  claude: claudeModelEvents,
-  codex: codexModelEvents,
-  pi: piModelEvents,
-}
+/** An adapter's `harness`: `claude`, `codex`, `pi`. */
+export type ModelTool = string
 
 // --- the follower ------------------------------------------------------------------------
 
@@ -585,13 +348,6 @@ export class ModelFollower {
 
 // --- the watch -------------------------------------------------------------------------
 
-/** Where one session's agent keeps its record. `agent` is the agent's pid:
- * another process in the session starts a new follow (its own launch model). */
-export type ModelSource =
-  | { tool: 'claude'; agent: number; sessionId: string; home: string; fs: ProcFs; tail?: FileTail }
-  | { tool: 'codex'; agent: number; path: string; tail?: FileTail }
-  | { tool: 'pi'; agent: number; path: string; tail?: FileTail }
-
 /** One session's persisted follow (settings `model-watch`). */
 export interface WatchEntry {
   path: string | null
@@ -808,7 +564,7 @@ export class ModelWatch {
       const lineAt = start + at
       at = stop + 1
       if (!line) continue
-      for (const event of EVENTS[source.tool](line)) {
+      for (const event of adapterByHarness(source.tool)?.models?.events(line) ?? []) {
         const raw = live.follower.apply(event, now, lineAt)
         if (raw) found.push(raw)
         else if (
@@ -868,22 +624,23 @@ export class ModelWatch {
   }
 
   private pathOf(live: Live, source: ModelSource, now: number): string | null {
-    if (source.tool !== 'claude') return source.path
-    const name = `${source.sessionId}.jsonl`
-    if (live.conversation === source.sessionId) {
+    const where = source.locate
+    if (!where) return source.path ?? null
+    const name = where.fileName
+    if (live.conversation === where.sessionId) {
       if (live.entry.path?.endsWith(`/${name}`)) return live.entry.path
       // A new conversation's file appears with its first prompt, most likely
       // beside the last one: looked for there on every poll.
       const near = live.near ? join(live.near, name) : null
-      if (near && exists(source.fs, near)) return near
+      if (near && where.exists(near)) return near
       if (now - live.searchedAt < TRANSCRIPT_SEARCH_MS) return null
     }
     live.searchedAt = now
-    live.conversation = source.sessionId
+    live.conversation = where.sessionId
     if (live.entry.path) live.near = dirname(live.entry.path)
     // A transcript followed before a restart is still the one.
     if (live.entry.path?.endsWith(`/${name}`)) return live.entry.path
-    return claudeTranscriptPath(source.fs, source.home, source.sessionId)
+    return where.find()
   }
 
   /** The switch goes on the descriptor; the worktree facts follow. */
@@ -978,13 +735,14 @@ export class ModelWatch {
     const live = this.live.get(id)
     const entry = this.entries[id]
     const change = entry?.current
-    if (live?.tool !== 'claude' || !live.reader || !entry?.path || !change?.rewindTo) return null
+    const promptAt = adapterByHarness(live?.tool)?.models?.promptAt
+    if (!promptAt || !live?.reader || !entry?.path || !change?.rewindTo) return null
     if (entry.rewindAt === null) return null
     try {
       const { size } = live.reader.read(entry.path, 0, 0)
       if (size - entry.rewindAt > PROMPT_READ_BYTES) return null
       const text = live.reader.range(entry.path, entry.rewindAt, size).toString('utf8')
-      const found = claudePromptAt(text, change.rewindTo)
+      const found = promptAt(text, change.rewindTo)
       return found ? { key: change.key, ...found } : null
     } catch {
       return null
@@ -1022,36 +780,6 @@ export class ModelWatch {
   }
 }
 
-function exists(fs: ProcFs, path: string): boolean {
-  return fs.mtimeMs ? fs.mtimeMs(path) !== null : readable(fs, path)
-}
-
-/** `<home>/.claude/projects/<dir>/<sessionId>.jsonl`, the first that exists. */
-export function claudeTranscriptPath(fs: ProcFs, home: string, sessionId: string): string | null {
-  if (!UUID.test(sessionId)) return null
-  const root = join(home, '.claude', 'projects')
-  let dirs: string[]
-  try {
-    dirs = fs.readdir(root)
-  } catch {
-    return null
-  }
-  for (const dir of dirs) {
-    const path = join(root, dir, `${sessionId}.jsonl`)
-    if (exists(fs, path)) return path
-  }
-  return null
-}
-
-function readable(fs: ProcFs, path: string): boolean {
-  try {
-    fs.readHead(path, 1)
-    return true
-  } catch {
-    return false
-  }
-}
-
 /** Saved follows, as written by `ModelWatch` (unknown shapes dropped). */
 export function readWatchEntries(text: string | null): Record<string, WatchEntry> {
   if (!text) return {}
@@ -1073,9 +801,7 @@ export function readWatchEntries(text: string | null): Record<string, WatchEntry
           follower: { ...EMPTY_FOLLOWER, ...entry.follower },
           current:
             entry.current && SWITCH_KINDS.includes(entry.current.kind) ? entry.current : null,
-          tool: (['claude', 'codex', 'pi'] as unknown[]).includes(entry.tool)
-            ? (entry.tool as ModelTool)
-            : null,
+          tool: adapterByHarness(entry.tool)?.models ? (entry.tool as ModelTool) : null,
           agent: typeof entry.agent === 'number' ? entry.agent : null,
           rewindAt: typeof entry.rewindAt === 'number' ? entry.rewindAt : null,
           rewound: typeof entry.rewound === 'string' ? entry.rewound : null,
@@ -1132,15 +858,17 @@ export async function worktreeFacts(
  * no switch for that tool (refusals always are). Tools are Tether's
  * (`claude-code`, `codex`, `pi`); a missing or broken file allows none. */
 export function readAlternates(text: string | null): Record<ModelTool, string[]> {
-  const none: Record<ModelTool, string[]> = { claude: [], codex: [], pi: [] }
+  const watched = ADAPTERS.filter((adapter) => adapter.models)
+  const none: Record<ModelTool, string[]> = Object.fromEntries(
+    watched.map((adapter) => [adapter.harness, []]),
+  )
   if (!text) return none
   try {
     const value = JSON.parse(text) as Record<string, unknown>
-    const names: Record<string, ModelTool> = { 'claude-code': 'claude', codex: 'codex', pi: 'pi' }
-    for (const [name, tool] of Object.entries(names)) {
-      const list = value?.[name]
+    for (const adapter of watched) {
+      const list = value?.[adapter.id]
       if (Array.isArray(list))
-        none[tool] = list.filter(
+        none[adapter.harness] = list.filter(
           (item): item is string => typeof item === 'string' && model(item) !== null,
         )
     }
@@ -1182,23 +910,15 @@ export function modelSwitchOf(value: unknown): ModelSwitch | null {
   }
 }
 
-/** Tools `st aico root rewind` can rewind (Claude Code's rewind menu). */
-export const REWIND_TOOLS: ReadonlySet<string> = new Set(['claude-code'])
-
-const TOOL_NAMES: Record<string, string> = {
-  'claude-code': 'Claude Code',
-  codex: 'Codex',
-  pi: 'Pi',
-}
-
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/
 
 /** What the lane should do next, per tool. */
 function advice(tool: string | null, requestId: string | null): string {
   const request = requestId && REQUEST_ID.test(requestId) ? requestId : null
-  if (tool && REWIND_TOOLS.has(tool))
+  const adapter = adapterOf(tool)
+  if (adapter?.capabilities.rewind)
     return `rewind it${request ? ` (st aico root rewind ${request})` : ''}, or relaunch from a handoff`
-  const name = (tool && TOOL_NAMES[tool]) || 'this agent'
+  const name = adapter?.displayName ?? 'this agent'
   return `${name} has no supported rewind: relaunch from a handoff`
 }
 
@@ -1237,32 +957,4 @@ export function modelSwitchText(
       advice(tool, requestId),
     ].join(' · '),
   }
-}
-
-/** The text of the owner's prompt `uuid` in a Claude transcript, and the
- * first line of each owner's prompt after it, oldest first (what a rewind
- * walks past in the window's list). */
-export function claudePromptAt(
-  transcript: string,
-  uuid: string,
-): { text: string; after: string[] } | null {
-  if (!UUID.test(uuid)) return null
-  let text: string | null = null
-  const after: string[] = []
-  for (const line of transcript.split('\n')) {
-    if (!line.includes('"user"')) continue
-    const row = parse(line)
-    if (row?.type !== 'user' || row.isSidechain === true || !isPrompt(row)) continue
-    const content = (row.message as { content?: unknown }).content
-    const body =
-      typeof content === 'string'
-        ? content
-        : (content as { type?: string; text?: unknown }[])
-            .map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text : ''))
-            .join('\n')
-    if (text === null) {
-      if (row.uuid === uuid) text = body
-    } else after.push(body.split('\n').find((l) => l.trim()) ?? '')
-  }
-  return text === null ? null : { text, after }
 }

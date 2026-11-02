@@ -3,14 +3,12 @@ import {
   type ContinuitySnapshot,
   mergeSnapshot,
   observeAgent,
-  observeChosenSession,
-  observeClaude,
-  observeCodex,
-  type ProcFs,
-  processTree,
   restoreCandidates,
   snapshotResumeId,
 } from './continuity'
+import { observeClaude } from './lifecycle/tui/adapters/claude-code'
+import { observeCodex } from './lifecycle/tui/adapters/codex'
+import { observeChosenSession, type ProcFs, processTree } from './proc-fs'
 
 const CLAUDE = '5a7741ea-e6b1-4062-853b-0d9d2e03d549'
 const CODEX = '01a130a3-ac80-74c1-8728-7cc6a6085327'

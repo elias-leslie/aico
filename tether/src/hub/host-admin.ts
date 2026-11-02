@@ -11,6 +11,8 @@ import { dirname, join } from 'node:path'
 import { CLIENT_ID_HEADER, OWNER_TOKEN_HEADER, REQUEST_SOURCE_HEADER } from '@agent-hub/sdk'
 import type { AgentHubConfig } from '../agent-hub/config'
 import { HttpError, type Router, readJsonObject, sendJson } from '../http'
+import type { ToolLogin } from '../lifecycle/tui/adapters/contract'
+import { ADAPTERS } from '../lifecycle/tui/registry'
 import { type HostEntry, hostsFilePath } from './hosts'
 import { linkPaths, SSH_BIN, SSH_MUX_ONLY } from './link'
 import { downReason } from './peer'
@@ -66,41 +68,15 @@ export const runCommand: Runner = (argv, timeoutMs) =>
     })
   })
 
-/** How one tool signs in and out on a host. `signIn` and a `session` sign-out
- * are shell lines typed into a new session there; `command` runs over ssh. */
-export interface ToolLogin {
-  signIn: string | null
-  signOut:
-    | { kind: 'revoke' }
-    | { kind: 'command'; line: string }
-    | { kind: 'session'; line: string }
-    | null
-  /** A served tool: sign-in grants it to the host first (push needs the grant). */
-  grant?: boolean
-}
+/** How one tool signs in and out on a host (adapters/contract.ts). `signIn` and a
+ * `session` sign-out are shell lines typed into a new session there; `command` runs over ssh. */
+export type { ToolLogin }
 
-/** The tools' own logins (agent-hub docs/remote-host-credentials.md). A
- * `host-logins.json` next to hosts.json overrides them per tool. */
-export const DEFAULT_LOGINS: Record<string, ToolLogin> = {
-  'claude-code': {
-    signIn:
-      'agent-hub native claude setup-token && agent-hub credential push claude-code && agent-hub install',
-    signOut: { kind: 'revoke' },
-    grant: true,
-  },
-  codex: {
-    signIn: 'codex login --device-auth',
-    signOut: { kind: 'command', line: 'codex logout' },
-  },
-  pi: {
-    signIn: "echo 'In pi, type /login and pick a provider.'; pi",
-    signOut: { kind: 'session', line: "echo 'In pi, type /logout.'; pi" },
-  },
-  agy: {
-    signIn: "echo 'agy asks you to sign in when it starts.'; agy",
-    signOut: { kind: 'session', line: "echo 'In agy, type /logout.'; agy" },
-  },
-}
+/** The tools' own logins (agent-hub docs/remote-host-credentials.md), from
+ * their adapters. A `host-logins.json` next to hosts.json overrides them per tool. */
+export const DEFAULT_LOGINS: Record<string, ToolLogin> = Object.fromEntries(
+  ADAPTERS.map((adapter) => [adapter.id, adapter.login]),
+)
 
 export const STATUS_LINE = 'agent-hub login status --json'
 /** The host's own refresh of its shims after a grant changed. */

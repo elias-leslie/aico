@@ -1,6 +1,7 @@
 // Merged agent-tool registry: the declarative TUI specs that came from the retired
 // Aico desktop app, reconciled with the old web backend's agent_tools rows.
 
+import { ADAPTERS } from './lifecycle/tui/registry'
 import { CONTEXT_HOOKS } from './schema'
 
 export type ContextHook = (typeof CONTEXT_HOOKS)[number]
@@ -28,66 +29,14 @@ export interface AgentTool {
 export type ToolSeed = Omit<AgentTool, 'id' | 'command' | 'createdAt' | 'updatedAt'>
 
 /**
- * Seeded once when the database is created. Canonical slugs follow Aico
- * (widget rows and the root contract use `claude-code`); the web app's `claude`
- * slug is an alias. Codex is the default (owner decision 2026-10-10).
- * Colours are Aico's titlebar accents; descriptions come from the old web backend's rows.
- * Pi keeps Aico's `--approve`, which removes Pi's project-trust prompt in this
- * operator-owned workspace; the web app's bare `pi` predates it.
+ * Seeded once when the database is created. Each agent tool's row comes from
+ * its adapter (lifecycle/tui/adapters): canonical slugs follow Aico (widget
+ * rows and the root contract use `claude-code`), the web app's `claude` slug
+ * is an alias, and Codex is the default (owner decision 2026-10-10). Colours
+ * are Aico's titlebar accents.
  */
 export const DEFAULT_TOOLS: readonly ToolSeed[] = [
-  {
-    slug: 'claude-code',
-    name: 'Claude Code',
-    argv: ['claude', '--dangerously-skip-permissions'],
-    processName: 'claude',
-    description: 'Anthropic Claude Code coding agent',
-    color: '#D97757',
-    displayOrder: 0,
-    isDefault: false,
-    enabled: true,
-    aliases: ['claude'],
-    contextHook: 'claude-session-start',
-  },
-  {
-    slug: 'codex',
-    name: 'Codex',
-    argv: ['codex', '--yolo'],
-    processName: 'codex',
-    description: 'OpenAI Codex coding agent',
-    color: '#9B8CFF',
-    displayOrder: 1,
-    isDefault: true,
-    enabled: true,
-    aliases: [],
-    contextHook: 'codex-hooks',
-  },
-  {
-    slug: 'agy',
-    name: 'Antigravity',
-    argv: ['agy', '--dangerously-skip-permissions'],
-    processName: 'agy',
-    description: 'Google Antigravity terminal coding agent',
-    color: '#3186FF',
-    displayOrder: 2,
-    isDefault: false,
-    enabled: true,
-    aliases: [],
-    contextHook: 'canonical-retrieval:antigravity',
-  },
-  {
-    slug: 'pi',
-    name: 'Pi',
-    argv: ['pi', '--approve'],
-    processName: 'pi',
-    description: 'Pi coding agent',
-    color: '#C16A8A',
-    displayOrder: 3,
-    isDefault: false,
-    enabled: true,
-    aliases: [],
-    contextHook: 'pi-extension',
-  },
+  ...ADAPTERS.map((adapter) => adapter.seed),
   {
     // The Agent Hub chat: no command and no terminal (see AGENT_HUB_TOOL). The
     // name here is the one label every Aico screen shows for it.
@@ -116,7 +65,7 @@ export const DEFAULT_TOOLS: readonly ToolSeed[] = [
     aliases: [],
     contextHook: null,
   },
-]
+].sort((a, b) => a.displayOrder - b.displayOrder)
 
 export const SLUG_RE = /^[a-z0-9_-]{1,50}$/
 const SAFE_WORD_RE = /^[A-Za-z0-9_@%+=:,./-]+$/

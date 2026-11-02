@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { type ContinuitySnapshot, nodeProcFs, observeAgent, readJsonFile } from './continuity'
+import { type ContinuitySnapshot, observeAgent, readJsonFile } from './continuity'
 import { DeliveryLog, registerDeliveryRoutes } from './deliveries'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { AgentAdmissionDenied } from './lifecycle/agent-admission'
@@ -47,6 +47,7 @@ import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './lifecycle/tui/bla
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { AGENT_HUB_TOOL, getTui, isDeliveryTool } from './lifecycle/tui/registry'
 import { agentStateOf, type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
+import { nodeProcFs } from './proc-fs'
 import {
   applyWakePolicyPatch,
   cleanNote,

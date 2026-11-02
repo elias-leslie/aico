@@ -1,48 +1,51 @@
-// Aico enumerated TUIs in code (electron/main/tui/registry.ts + tuis/*). In
-// Tether the merged `agent_tools` table is the registry; this module adapts a
-// tool row to the engine's pure-data TuiSpec. Resume adapters stay code, keyed
-// by canonical slug, and can never be edited through the API.
+// The registry of agent TUIs. Each tool is one adapter (adapters/, contract in
+// adapters/contract.ts); this module lists them, answers every question that
+// used to branch on a tool's name, and adapts an `agent_tools` row to the
+// engine's pure-data TuiSpec. The adapters are code and can never be edited
+// through the API; the table holds the operator's command, colour and order.
 
 import type { AgentTool, ContextHook as ToolContextHook } from '../../tools'
+import { agy } from './adapters/agy'
+import { claudeCode } from './adapters/claude-code'
+import { codex } from './adapters/codex'
+import type { TuiAdapter } from './adapters/contract'
+import { pi } from './adapters/pi'
 import type { ContextHook, TuiSpec } from './spec'
 
-/** Native resume adapters (Aico tuis/codex.ts). Code, not data. */
-export const RESUME_ADAPTERS: Readonly<Record<string, NonNullable<TuiSpec['resume']>>> = {
-  codex: {
-    sessionIdPattern: /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/,
-    arguments: ['resume', '--no-daemon'],
-  },
-  'claude-code': {
-    sessionIdPattern: /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/,
-    arguments: ['--resume'],
-  },
-  pi: {
-    sessionIdPattern: /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/,
-    arguments: ['--session'],
-    freshArguments: ['--session-id'],
-  },
+/** Every agent TUI Tether knows, one adapter each (adapters/contract.ts), in the
+ * order an agent is looked for in a pane's processes. */
+export const ADAPTERS: readonly TuiAdapter[] = [claudeCode, codex, pi, agy]
+
+/** The adapter of a canonical tool slug. */
+export function adapterOf(slug: unknown): TuiAdapter | undefined {
+  return ADAPTERS.find((adapter) => adapter.id === slug)
+}
+
+/** The adapter a harness name (`claude`, as its hooks and the model watch say it) belongs to. */
+export function adapterByHarness(harness: unknown): TuiAdapter | undefined {
+  return ADAPTERS.find((adapter) => adapter.harness === harness)
+}
+
+/** The adapter that checks a context hook kind. */
+export function adapterForContext(kind: ContextHook['kind']): TuiAdapter | undefined {
+  return ADAPTERS.find((adapter) => adapter.context.kind.kind === kind)
 }
 
 /** How each tool takes a session's chosen instructions on top of its own
  * prompt. The Agent Hub launchers merge these with the context they deliver. */
-export const INSTRUCTION_ADAPTERS: Readonly<Record<string, NonNullable<TuiSpec['instructions']>>> =
-  {
-    'claude-code': { arguments: ['--append-system-prompt'] },
-    codex: { arguments: ['-c'], key: 'developer_instructions' },
-    pi: { arguments: ['--append-system-prompt'] },
-  }
-
 export function supportsInstructions(slug: string): boolean {
-  return Object.hasOwn(INSTRUCTION_ADAPTERS, slug)
+  return adapterOf(slug)?.capabilities.instructions ?? false
 }
 
 /** Tools Tether can start as a root: exactly the slugs with a resume adapter,
  * since a root must be resumable after a crash. Canonical slugs only, as the
  * root digest covers the tool string as sent. */
-export const ROOT_TOOLS: readonly string[] = Object.keys(RESUME_ADAPTERS).sort()
+export const ROOT_TOOLS: readonly string[] = ADAPTERS.filter((adapter) => adapter.capabilities.root)
+  .map((adapter) => adapter.id)
+  .sort()
 
 export function isRootTool(slug: unknown): slug is string {
-  return typeof slug === 'string' && Object.hasOwn(RESUME_ADAPTERS, slug)
+  return adapterOf(slug)?.capabilities.root ?? false
 }
 
 /** The Agent Hub session kind: a root with no pane, held in Agent Hub (src/agent-hub/).
@@ -58,25 +61,13 @@ export function isRootCreateTool(slug: unknown): slug is string {
 }
 
 /** Pane tools Tether delivers event lines to (lane reports, waits, deliveries)
- * by its gated paste: the root tools, and agy, whose state Tether reads
- * (agent-state.ts) but which has no resume adapter, so it is no root tool. */
+ * by its gated paste. */
 export function isDeliveryTool(slug: unknown): slug is string {
-  return isRootTool(slug) || slug === 'agy'
+  return adapterOf(slug)?.capabilities.delivery.idlePaste ?? false
 }
 
 function contextHook(hook: ToolContextHook | null): ContextHook | undefined {
-  switch (hook) {
-    case 'claude-session-start':
-      return { kind: 'claude-session-start' }
-    case 'codex-hooks':
-      return { kind: 'codex-hooks' }
-    case 'pi-extension':
-      return { kind: 'pi-extension' }
-    case 'canonical-retrieval:antigravity':
-      return { kind: 'canonical-retrieval', surface: 'antigravity' }
-    default:
-      return undefined
-  }
+  return ADAPTERS.find((adapter) => adapter.seed.contextHook === hook)?.context.kind
 }
 
 export function toolSpec(tool: AgentTool): TuiSpec {
@@ -92,35 +83,11 @@ export function toolSpec(tool: AgentTool): TuiSpec {
   }
   const context = contextHook(tool.contextHook)
   if (context) spec.context = context
-  const resume = RESUME_ADAPTERS[tool.slug]
-  if (resume) spec.resume = resume
-  const instructions = INSTRUCTION_ADAPTERS[tool.slug]
-  if (instructions) spec.instructions = instructions
-  if (tool.slug === 'codex')
-    spec.modelSelection = {
-      model: ['--model'],
-      reasoningEffort: { arguments: ['-c'], key: 'model_reasoning_effort' },
-      daybreak: { arguments: ['-c'], key: 'daybreak' },
-    }
-  if (tool.slug === 'claude-code')
-    // Claude Code's documented --model and --effort (claude --help); an override
-    // wins over the user's settings, which a Blank Slate session keeps.
-    spec.modelSelection = {
-      model: ['--model'],
-      reasoningEffort: {
-        arguments: ['--effort'],
-        values: ['low', 'medium', 'high', 'xhigh', 'max'],
-      },
-    }
-  if (tool.slug === 'pi') {
-    spec.inputLine = 'ruled'
-    spec.modelSelection = {
-      model: ['--model'],
-      modelProvider: ['--provider'],
-      reasoningEffort: { arguments: ['--thinking'] },
-      listModels: ['--list-models'],
-      daybreak: { environment: true },
-    }
+  const adapter = adapterOf(tool.slug)
+  if (adapter) {
+    Object.assign(spec, adapter.spec)
+    if (adapter.launch.ensureArgs.length) spec.ensureArgs = adapter.launch.ensureArgs
+    if (adapter.capabilities.environmentSelection) spec.environmentSelection = true
   }
   return spec
 }

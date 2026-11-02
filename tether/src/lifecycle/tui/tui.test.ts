@@ -16,17 +16,20 @@ import {
   resumeLaunchLine,
 } from './launch'
 import {
+  ADAPTERS,
   bindToolSource,
   defaultTui,
   getTui,
   isRootTool,
   listTuis,
-  RESUME_ADAPTERS,
   ROOT_TOOLS,
 } from './registry'
 import type { TuiSpec } from './spec'
 
-vi.mock('node:fs', () => ({
+// The registry loads every adapter, whose readers use more of node:fs than the
+// context checks under test do.
+vi.mock('node:fs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:fs')>()),
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
   realpathSync: vi.fn(),
@@ -211,7 +214,11 @@ describe('registry', () => {
   })
 
   it('makes a tool root-capable exactly when it has a resume adapter', () => {
-    expect(ROOT_TOOLS).toEqual(Object.keys(RESUME_ADAPTERS).sort())
+    expect(ROOT_TOOLS).toEqual(
+      ADAPTERS.filter((adapter) => adapter.spec.resume)
+        .map((adapter) => adapter.id)
+        .sort(),
+    )
     expect(ROOT_TOOLS).toEqual(['claude-code', 'codex', 'pi'])
     for (const slug of ROOT_TOOLS) expect(isRootTool(slug)).toBe(true)
     // Canonical slugs only: the root digest covers the tool string as sent.

@@ -26,6 +26,7 @@ import {
 import { isResumeSessionId } from './tui/launch'
 import {
   AGENT_HUB_TOOL,
+  adapterOf,
   getTui,
   isRootCreateTool,
   ROOT_CREATE_TOOLS,
@@ -403,6 +404,9 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
   const entry = parseEntry(value.entry)
   const instructions = rawInstructions === null ? null : parseInstructions(rawInstructions)
   const hub = tool === AGENT_HUB_TOOL
+  const daybreakSelection = getTui(tool as string)?.modelSelection?.daybreak
+  const daybreakModel =
+    daybreakSelection && 'environment' in daybreakSelection ? daybreakSelection.model : undefined
   if (
     (rawInstructions !== null && (!instructions || !supportsInstructions(tool as string))) ||
     (origin !== 'aico' && origin !== 'a-term') ||
@@ -435,14 +439,15 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
       !getTui(tool)?.modelSelection) ||
     (daybreak !== null && typeof daybreak !== 'boolean') ||
     (daybreak !== null && !getTui(tool)?.modelSelection?.daybreak) ||
-    (tool === 'pi' && daybreak !== null && model !== 'openai/gpt-6-sol') ||
-    (agentHubContext !== null && (typeof agentHubContext !== 'boolean' || tool !== 'pi')) ||
+    (daybreak !== null && daybreakModel !== undefined && model !== daybreakModel) ||
+    (agentHubContext !== null &&
+      (typeof agentHubContext !== 'boolean' || !adapterOf(tool)?.capabilities.agentHubContext)) ||
     // Blank Slate runs without extensions or Agent Hub, which carry these options.
     (typeof projectRoot === 'string' &&
       isBlankSlateRoot(projectRoot) &&
       (!supportsBlankSlate(tool as string) ||
         agentHubContext !== null ||
-        (tool === 'pi' && daybreak !== null))) ||
+        (daybreak !== null && getTui(tool as string)?.environmentSelection))) ||
     (getTui(tool)?.modelSelection?.modelProvider !== undefined &&
       (typeof model !== 'string' || !PROVIDER_MODEL.test(model))) ||
     (model !== null &&
@@ -1130,7 +1135,7 @@ export function createRootHandler(
             json(response, 409, { error: 'stale_generation' })
             return
           }
-          if (row.tool !== 'codex') {
+          if (!adapterOf(row.tool)?.capabilities.nativeAdmin) {
             json(response, 422, { error: 'unsupported_tool' })
             return
           }

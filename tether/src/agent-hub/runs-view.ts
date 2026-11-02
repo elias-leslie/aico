@@ -12,18 +12,15 @@
 
 import type { RunView, StepAttempt, StepView } from '@agent-hub/sdk'
 import type { RunMember, TeamGroup } from '../client/index'
+import { ADAPTERS } from '../lifecycle/tui/registry'
 
-/** Agent Hub's step executors as Aico tool slugs (the marks the session lists use). */
-const EXECUTOR_TOOL: Record<string, string> = {
-  pi: 'pi',
-  codex: 'codex',
-  claude_code: 'claude-code',
-  agent_hub: 'agent-hub',
-}
-
-/** The tool slug for a step's executor; a step with none known is an Agent Hub step. */
+/** The tool slug for a step's executor (the marks the session lists use); a
+ * step with none known is an Agent Hub step. */
 export function executorTool(executor: unknown): string {
-  return (typeof executor === 'string' && EXECUTOR_TOOL[executor]) || 'agent-hub'
+  return (
+    (typeof executor === 'string' && ADAPTERS.find((a) => a.executor === executor)?.id) ||
+    'agent-hub'
+  )
 }
 
 /** Where plan changes happen. They stay with the coordinator. */

@@ -9,7 +9,6 @@ import {
   type ContinuitySnapshot,
   currentBootId,
   mergeSnapshot,
-  nodeProcFs,
   observeAgent,
   RESUME_PROMPT,
   type RestoreEntry,
@@ -33,6 +32,7 @@ import { withRootPrompt } from './lifecycle/root-launch'
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { getTui } from './lifecycle/tui/registry'
 import { type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
+import { nodeProcFs } from './proc-fs'
 import type { Recovery } from './recovery'
 
 const OBSERVE_INTERVAL_MS = 60_000

@@ -14,17 +14,12 @@ import { join } from 'node:path'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { ENTRY_SCAN_DEFAULTS, resolveEntryScanConfig } from './config'
-import {
-  ENTRY_HOME_ENV,
-  ENTRY_TOOL_ENV,
-  entryClaudeSession,
-  entryCodexRollout,
-  entryPiSession,
-  nodeProcFs,
-  observeAgent,
-  type ProcFs,
-} from './continuity'
+import { ENTRY_HOME_ENV, ENTRY_TOOL_ENV, observeAgent } from './continuity'
 import { entryHomeFiles } from './entry-files'
+import { entryClaudeSession } from './lifecycle/tui/adapters/claude-code'
+import { entryCodexRollout } from './lifecycle/tui/adapters/codex'
+import { entryPiSession } from './lifecycle/tui/adapters/pi'
+import { nodeProcFs, type ProcFs } from './proc-fs'
 import { findClaudeTranscript } from './recovery-facts'
 
 // Two disposable synthetic homes: `inside` is the entry's home, `other` is

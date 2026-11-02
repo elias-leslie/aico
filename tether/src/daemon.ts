@@ -12,7 +12,7 @@ import {
 } from './agent-hub/config'
 import { RunTracker, readOverRuns, sessionLaunchers, type ToldPause } from './agent-hub/runs'
 import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
-import { AgentStatePoller, AgentStateTracker, nodeFileTail } from './agent-state'
+import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { type AskDelivery, AskStore, aicoOrigin, handOffAsks, type NeedsYouFeed } from './asks'
 import {
   agentExitMarkerDir,
@@ -20,7 +20,7 @@ import {
   resolveShowConfig,
   type TetherPaths,
 } from './config'
-import { nodeProcFs, observeAgent, writeJsonFile } from './continuity'
+import { observeAgent, writeJsonFile } from './continuity'
 import { DeadShells } from './dead-shells'
 import { configureEntryScan } from './entry-files'
 import { parseGraphicalEnvironment } from './env'
@@ -60,7 +60,7 @@ import {
 } from './lifecycle/engine'
 import { setLifecycleInstance } from './lifecycle/ownership'
 import { configureTmuxPaths } from './lifecycle/tmux'
-import { AGENT_HUB_TOOL, bindToolSource, isDeliveryTool } from './lifecycle/tui/registry'
+import { AGENT_HUB_TOOL, adapterOf, bindToolSource, isDeliveryTool } from './lifecycle/tui/registry'
 import {
   bindAgentHub,
   bindAgentStates,
@@ -74,6 +74,7 @@ import {
 import { startMemoryGuard } from './memory-guard'
 import { ModelNotices, readModelNoticeState } from './model-notices'
 import { ModelWatch, readAlternates, readWatchEntries, worktreeFacts } from './model-switch'
+import { nodeFileTail, nodeProcFs } from './proc-fs'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
 import { Continuity } from './reboot'
 import { Recovery, runCommand } from './recovery'
@@ -721,7 +722,7 @@ export async function startDaemon(
           // Codex sets CODEX_THREAD_ID per thread: a subagent's differs from the
           // session's own conversation. Claude subagents share the parent's ids.
           const row = getWidget(waiter)
-          if (row?.tool !== 'codex') return null
+          if (!row || !adapterOf(row.tool)?.capabilities.threadSubagents) return null
           const pane = await verifiedCurrentManagedPane(row).catch(() => null)
           const agent = pane ? observeAgent(nodeProcFs, env.HOME ?? homedir(), pane.pid) : null
           return agent?.resumeId && agent.resumeId !== thread

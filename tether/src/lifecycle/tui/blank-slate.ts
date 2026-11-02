@@ -10,14 +10,14 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { adapterOf } from './registry'
 import type { TuiSpec } from './spec'
 
-/** Tools scripts/aico-blank-slate has an adapter for. Antigravity is absent:
- * its context comes from a user-level plugin no launch flag can skip. */
-export const BLANK_SLATE_TOOLS: readonly string[] = ['claude-code', 'codex', 'pi']
-
+/** Tools scripts/aico-blank-slate has an adapter for (`capabilities.blankSlate`).
+ * Antigravity is not one: its context comes from a user-level plugin no launch
+ * flag can skip. */
 export function supportsBlankSlate(slug: string): boolean {
-  return BLANK_SLATE_TOOLS.includes(slug)
+  return adapterOf(slug)?.capabilities.blankSlate ?? false
 }
 
 /** Parent of every Blank Slate workspace, beside Aico's Personal Workspace.
