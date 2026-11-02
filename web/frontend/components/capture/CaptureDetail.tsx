@@ -197,6 +197,41 @@ function Detail({ capture }: { capture: Capture }) {
     <div className="flex flex-col gap-4" data-testid="capture-detail">
       <Preview capture={capture} />
 
+      <ReadingState capture={capture} />
+
+      {capture.needsCheck &&
+      (capture.text || extractedItems(capture).length) ? (
+        <p
+          role="note"
+          data-testid="capture-check"
+          className="text-[13px]"
+          style={{ color: 'var(--beacon)' }}
+        >
+          Check this: the backup reader (a small model on this computer) read
+          it, so compare it with the picture.
+        </p>
+      ) : null}
+
+      <ListItems capture={capture} />
+
+      {capture.text ? (
+        <section
+          aria-label="Text from the file"
+          className="flex flex-col gap-1"
+        >
+          <h2 className="lantern-sec">Text from the file</h2>
+          <pre
+            className="max-h-[40dvh] overflow-auto whitespace-pre-wrap rounded-md p-3 text-[12px]"
+            style={{
+              background: 'var(--paper)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {capture.text}
+          </pre>
+        </section>
+      ) : null}
+
       <div className="flex flex-col gap-1">
         <label
           htmlFor="capture-caption"
@@ -250,41 +285,6 @@ function Detail({ capture }: { capture: Capture }) {
         <Fact label="Sent">{formatWhen(capture.createdAt)}</Fact>
         <Fact label="Status">{statusWord(capture.status)}</Fact>
       </dl>
-
-      <ReadingState capture={capture} />
-
-      {capture.needsCheck &&
-      (capture.text || extractedItems(capture).length) ? (
-        <p
-          role="note"
-          data-testid="capture-check"
-          className="text-[13px]"
-          style={{ color: 'var(--beacon)' }}
-        >
-          Check this: the backup reader (a small model on this computer) read
-          it, so compare it with the picture.
-        </p>
-      ) : null}
-
-      <ListItems capture={capture} />
-
-      {capture.text ? (
-        <section
-          aria-label="Text from the file"
-          className="flex flex-col gap-1"
-        >
-          <h2 className="lantern-sec">Text from the file</h2>
-          <pre
-            className="max-h-[40dvh] overflow-auto whitespace-pre-wrap rounded-md p-3 text-[12px]"
-            style={{
-              background: 'var(--paper)',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            {capture.text}
-          </pre>
-        </section>
-      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <a
