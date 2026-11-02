@@ -546,8 +546,6 @@ function HostSignIn({
         . <LinkButton onClick={() => void logins.refetch()}>Retry</LinkButton>
       </p>
     )
-  } else if (logins.data.notChecked) {
-    body = <Note flush>{logins.data.notChecked}</Note>
   } else {
     body = (
       <LoginRows

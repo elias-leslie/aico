@@ -141,13 +141,18 @@ describe('login status', () => {
     })
   })
 
-  it('says sign-in is not checked on a host with no agent-hub command', async () => {
+  it('lists the tools as unknown, with their sign-in, on a host with no agent-hub command', async () => {
     const { admin } = setup({
       run: () => ({ code: 127, stdout: '', output: 'bash: line 1: agent-hub: command not found' }),
     })
     const answer = await admin.status('vm-1')
-    expect(answer).toMatchObject({ host: 'vm-1', tools: [], actions: {} })
-    expect(answer.notChecked).toBe('Sign-in is not checked on vm-1: it has no Agent Hub command.')
+    expect(answer).toMatchObject({ host: 'vm-1', agent_hub: 'no Agent Hub command on vm-1' })
+    const tools = answer.tools as { tool: string; state: string }[]
+    expect(tools.map((item) => item.tool)).toEqual(
+      expect.arrayContaining(['claude-code', 'codex', 'pi', 'agy']),
+    )
+    expect(tools.every((item) => item.state === 'unknown')).toBe(true)
+    expect(answer.actions).toMatchObject({ agy: { signIn: true, signOut: 'session' } })
   })
 
   it('refuses while the host is not connected, without running anything', async () => {

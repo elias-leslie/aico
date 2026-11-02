@@ -462,22 +462,30 @@ describe('HostsSheet', () => {
     expect(screen.queryByRole('button', { name: 'Power off' })).toBeNull()
   })
 
-  it('says sign-in is not checked on a host with no Agent Hub command', async () => {
+  it('lists tools as Unknown with Sign in on a host with no Agent Hub command', async () => {
     state.hosts = [host()]
     state.logins['agent-work'] = loginsFor({
-      agent_hub: '',
-      tools: [],
-      actions: {},
-      notChecked:
-        'Sign-in is not checked on agent-work: it has no Agent Hub command.',
+      agent_hub: 'no Agent Hub command on agent-work',
+      tools: [
+        {
+          tool: 'agy',
+          state: 'unknown',
+          source: 'not checked',
+          credentials: [],
+        },
+      ],
+      actions: { agy: { signIn: true, signOut: 'session' } },
     })
     renderSheet()
+    const row = await screen.findByTestId('login-agy')
     expect(
-      await screen.findByText(
-        'Sign-in is not checked on agent-work: it has no Agent Hub command.',
-      ),
+      within(row).getAllByText('Unknown · not checked')[0],
     ).toBeInTheDocument()
-    expect(screen.queryByTestId('agent-hub-away')).toBeNull()
+    expect(
+      within(row).getByRole('button', {
+        name: 'Sign in to agy on agent-work again',
+      }),
+    ).toBeInTheDocument()
   })
 
   it('asks before powering off a host with sessions, then forces', async () => {

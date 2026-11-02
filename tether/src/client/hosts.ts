@@ -39,8 +39,6 @@ export interface HostLogins {
   tools: ToolLoginStatus[]
   checkedAt: number
   actions: Record<string, ToolLoginActions>
-  /** Why sign-in is not checked on this host (it has no Agent Hub command); absent when it was. */
-  notChecked?: string
 }
 
 export interface HostPowerAnswer {

@@ -200,15 +200,20 @@ export class HostAdmin {
     const { entry, control } = this.live(name)
     const result = await this.run(remoteArgv(entry, control, STATUS_LINE), STATUS_TIMEOUT_MS)
     // A host without the Agent Hub command (a full Aico install such as gem, or the
-    // workstation seen from it) has no sign-in to read: say so, not "command not found".
+    // workstation seen from it) cannot say who is signed in. List the tools anyway,
+    // Unknown and with their own sign-in, so the owner can sign in there.
     if (result.code === 127 || /agent-hub: (command )?not found/.test(result.output))
       return {
         host: name,
-        agent_hub: '',
-        tools: [],
-        actions: {},
+        agent_hub: `no Agent Hub command on ${name}`,
+        tools: Object.keys(this.logins()).map((tool) => ({
+          tool,
+          state: 'unknown',
+          source: 'not checked',
+          credentials: [],
+        })),
         checkedAt: Date.now(),
-        notChecked: `Sign-in is not checked on ${name}: it has no Agent Hub command.`,
+        actions: this.actions(),
       }
     if (result.code !== 0)
       throw new HttpError(502, 'login_status_failed', {
@@ -221,14 +226,17 @@ export class HostAdmin {
         host: name,
         reason: 'the host did not answer with JSON',
       })
-    const logins = this.logins()
-    const actions = Object.fromEntries(
-      Object.entries(logins).map(([tool, login]) => [
+    return { ...parsed, host: name, checkedAt: Date.now(), actions: this.actions() }
+  }
+
+  /** What Aico can do per tool: sign in, and how to sign out. */
+  private actions(): Record<string, { signIn: boolean; signOut: string | null }> {
+    return Object.fromEntries(
+      Object.entries(this.logins()).map(([tool, login]) => [
         tool,
         { signIn: !!login.signIn, signOut: login.signOut?.kind ?? null },
       ]),
     )
-    return { ...parsed, host: name, checkedAt: Date.now(), actions }
   }
 
   /** `POST /v1/hosts/:name/power`. On runs the create path's wake in the

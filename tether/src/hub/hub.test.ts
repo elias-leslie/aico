@@ -404,10 +404,13 @@ describe('hub', () => {
 
     it('merges shares oldest first', async () => {
       await relinked()
-      const merged = hub.mergeShares([
+      const mine = [
         share('000000000001', '2026-11-02T09:00:00.000Z'),
         share('000000000002', '2026-11-02T12:00:00.000Z'),
-      ])
+      ]
+      // The host's shares are read right after the link comes up.
+      await vi.waitFor(() => expect(hub.mergeShares(mine)).toHaveLength(3))
+      const merged = hub.mergeShares(mine)
       expect(merged.map((item) => item.id)).toEqual([
         '000000000001',
         'bbbbbbbbbbbb',
