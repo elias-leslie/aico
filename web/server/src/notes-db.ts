@@ -461,7 +461,8 @@ export class NotesStore {
       ).n,
     )
     if (query.before !== undefined) {
-      if (/^[0-9]+$/.test(query.before)) {
+      // A created-at in ms has 13 digits; a capture id is 12 hex, and one made only of digits is still an id.
+      if (/^[0-9]{13,}$/.test(query.before)) {
         where.push('created_at < ?')
         args.push(Number(query.before))
       } else {
