@@ -679,8 +679,8 @@ export interface AskDelivery {
   lost?(wakeId: string): boolean
   /** A short name for a session in a line. */
   nameOf?(sessionId: string): string | null
-  /** Cancel a check-in not yet delivered. */
-  cancel(wakeId: string): void
+  /** Take back a line not yet delivered (`why` is logged). */
+  cancel(wakeId: string, why: string): void
   /** Take back undelivered lines by source on any session (an `[Ask] filed`
    * line once its ask is answered or closed). */
   withdraw?(source: string): void
@@ -833,9 +833,9 @@ export function registerAskRoutes(
     if (!ask) throw new HttpError(404, 'not_found')
     return ask
   }
-  const cancelWake = (id: string) => {
+  const cancelWake = (id: string, why: string) => {
     const wakeId = asks.wakeOf(id)
-    if (wakeId) delivery?.cancel(wakeId)
+    if (wakeId) delivery?.cancel(wakeId, `ask ${id} ${why}`)
     // The launcher's "[Ask] filed" line is stale once the ask is settled.
     delivery?.withdraw?.(`ask:${id}:filed`)
   }
@@ -924,7 +924,7 @@ export function registerAskRoutes(
       }
       if (answer === null && note === null && files.length === 0)
         throw new HttpError(400, 'invalid_body', { detail: 'give an answer, a note or files' })
-      cancelWake(ask.id)
+      cancelWake(ask.id, 'answered again')
       let answered = asks.answer(ask.id, { answer, note, files }, now()) as Ask
       // The asker, or its launcher once the asker has ended (worked out now).
       const to = answerTarget(answered, delivery)
@@ -949,7 +949,7 @@ export function registerAskRoutes(
       const ask = requireAsk(params.id)
       if (ask.state === 'done') return sendJson(res, 200, ask)
       if (ask.state === 'withdrawn') throw new HttpError(409, 'ask_closed', { state: ask.state })
-      cancelWake(ask.id)
+      cancelWake(ask.id, 'closed as done')
       const closed = asks.close(ask.id, 'done', now()) as Ask
       changed(closed)
       sendJson(res, 200, closed)
@@ -958,7 +958,7 @@ export function registerAskRoutes(
       const ask = requireAsk(params.id)
       if (ask.state === 'withdrawn') return sendJson(res, 200, ask)
       if (ask.state === 'done') throw new HttpError(409, 'ask_closed', { state: ask.state })
-      cancelWake(ask.id)
+      cancelWake(ask.id, 'withdrawn')
       const closed = asks.close(ask.id, 'withdrawn', now()) as Ask
       changed(closed)
       sendJson(res, 200, closed)

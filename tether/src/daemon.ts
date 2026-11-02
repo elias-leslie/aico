@@ -336,24 +336,8 @@ export async function startDaemon(
   // A session that is there (not ended), even while its state is unknown.
   const askReceiver = (id: string): boolean => Boolean(getWidget(id))
   context.asks = {
-    wake: (sessionId, text, source) => {
-      const row = getWidget(sessionId)
-      if (!row || !wakes.supports(row)) return null
-      const note = cleanNote(text, wakes.policy().noteMaxChars)
-      if (note === null) return null
-      const now = Date.now()
-      const wake = wakes.store.addEvent({
-        sessionId: row.id,
-        source: source ?? `ask:${now}`,
-        note,
-        now,
-      })
-      // Logged like a producer's line, so an answer whose session ended
-      // before it went out can be queued again (handOffAsks).
-      wakes.deliveries.record({ id: wake.id, sessionId: row.id, source: wake.source ?? 'ask', now })
-      wakes.changed(row.id)
-      return wake.id
-    },
+    wake: (sessionId, text, source) =>
+      wakes.queueAnswer(sessionId, text, source ?? `ask:${Date.now()}`),
     lost: (wakeId) =>
       !wakes.store.get(wakeId) && wakes.deliveries.get(wakeId)?.deliveredAt === null,
     coordinatorOf: (sessionId) => {
@@ -371,10 +355,7 @@ export async function startDaemon(
       const row = getWidget(id)
       return row ? displayTitle(row) : null
     },
-    cancel: (wakeId) => {
-      const wake = wakes.store.get(wakeId)
-      if (wake && wakes.store.remove(wakeId)) wakes.changed(wake.sessionId)
-    },
+    cancel: (wakeId, why) => wakes.cancelLine(wakeId, why),
     withdraw: (source) => {
       wakes.withdrawEvents(null, source)
     },

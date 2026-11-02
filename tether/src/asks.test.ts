@@ -33,6 +33,7 @@ let base: string
 let clock: number
 let woken: { sessionId: string; note: string; id: string }[]
 let cancelled: string[]
+let cancelReasons: string[]
 let changed: string[]
 let wakeable: boolean
 let feeds: NeedsYouFeed[]
@@ -51,6 +52,7 @@ beforeEach(async () => {
   clock = 1_000_000
   woken = []
   cancelled = []
+  cancelReasons = []
   changed = []
   wakeable = true
   feeds = []
@@ -74,7 +76,10 @@ beforeEach(async () => {
     coordinatorOf: (id) => coordinators.get(id) ?? null,
     lost: (wakeId) => lost.has(wakeId),
     nameOf: (id) => (id === '0123abcd' ? 'Disk merge' : null),
-    cancel: (id) => cancelled.push(id),
+    cancel: (id, why) => {
+      cancelled.push(id)
+      cancelReasons.push(why)
+    },
     withdraw: (source) => withdrawn.push(source),
     noteMaxChars: () => 500,
     sessionChanged: (id) => changed.push(id),
@@ -231,6 +236,8 @@ describe('answers', () => {
     // Closing it cancels the pending one too.
     expect((await call('POST', `/v1/asks/${id}/done`)).body.state).toBe('done')
     expect(cancelled).toEqual(['000000000000', '000000000001'])
+    // Each takeback says why, so a dropped answer is never silent.
+    expect(cancelReasons).toEqual([`ask ${id} answered again`, `ask ${id} closed as done`])
     expect((await call('POST', `/v1/asks/${id}/answer`, { option: 0 })).status).toBe(409)
   })
 

@@ -225,6 +225,24 @@ export function isWakeClass(wake: Pick<Wake, 'kind' | 'ride'>): boolean {
   return wake.kind !== 'event' || !wake.ride
 }
 
+/** The line that carries an owner's answer to an ask (`ask:<id>`, not the
+ * launcher's `ask:<id>:filed` or a hand-off). */
+const ANSWER_SOURCE = /^ask:[0-9a-f]{12}$/
+
+/** Whether the session's next natural turn (a prompt, a tool result) may take
+ * this row: every ride-along line, and an owner's answer to an ask. An answer
+ * is also a wake (it pastes once the agent is idle), but a session whose agent
+ * never shows idle (Claude Code counts its background agents as busy) must
+ * still get it with its next turn, never wait for an idle that may not come. */
+export function ridesAlong(wake: Pick<Wake, 'kind' | 'ride' | 'source'>): boolean {
+  return wake.kind === 'event' && (wake.ride || ANSWER_SOURCE.test(wake.source ?? ''))
+}
+
+/** How long, for a log line: seconds under a minute, else whole minutes. */
+export function durationLabel(ms: number): string {
+  return ms < 60_000 ? `${Math.max(0, Math.floor(ms / 1000))} s` : `${Math.floor(ms / 60_000)} min`
+}
+
 /** Whether this row reached the session from outside: a wake-class event
  * line marked `reached` (from another session, or Tether's own lane, run or
  * ask line), or a check-in the owner set. Never a ride-along line (another
@@ -925,7 +943,7 @@ export class WakeScheduler {
     const now = this.ops.now()
     const rows = this.store
       .forSession(sessionId)
-      .filter((wake) => wake.kind === 'event' && wake.ride && wake.dueAt <= now)
+      .filter((wake) => ridesAlong(wake) && wake.dueAt <= now)
     if (!rows.length) return null
     const { text, taken } = composeDelivery(rows, now, this.ops.policy())
     for (const wake of taken) this.store.remove(wake.id)
@@ -936,7 +954,7 @@ export class WakeScheduler {
     }
     this.ops.changed(sessionId)
     this.ops.log(
-      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn)`,
+      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn)${this.heldNote(sessionId, taken)}`,
     )
     return text
   }
@@ -950,7 +968,7 @@ export class WakeScheduler {
     const now = this.ops.now()
     const rows = this.store
       .forSession(sessionId)
-      .filter((wake) => wake.kind === 'event' && wake.ride && wake.dueAt <= now)
+      .filter((wake) => ridesAlong(wake) && wake.dueAt <= now)
     if (!rows.length) return null
     const { text, taken } = composeDelivery(rows, now, this.ops.policy())
     return { text, token: taken.map(rideMark).join(',') }
@@ -963,7 +981,7 @@ export class WakeScheduler {
     const marks = new Set(token.split(','))
     const taken = this.store
       .forSession(sessionId)
-      .filter((wake) => wake.kind === 'event' && wake.ride && marks.has(rideMark(wake)))
+      .filter((wake) => ridesAlong(wake) && marks.has(rideMark(wake)))
     if (!taken.length) return 0
     for (const wake of taken) this.store.remove(wake.id)
     try {
@@ -973,7 +991,7 @@ export class WakeScheduler {
     }
     this.ops.changed(sessionId)
     this.ops.log(
-      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn, confirmed)`,
+      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn, confirmed)${this.heldNote(sessionId, taken)}`,
     )
     return taken.length
   }
@@ -1126,11 +1144,11 @@ export class WakeScheduler {
     const heldNow = this.held.get(sessionId)
     const held = heldNow === RIDE_ONLY ? undefined : heldNow
     this.held.delete(sessionId)
-    const late = Math.floor((this.ops.now() - (current[0]?.dueAt ?? 0)) / 60_000)
+    const late = durationLabel(this.ops.now() - (current[0]?.dueAt ?? 0))
     const events = current.filter((wake) => wake.kind === 'event').length
     this.ops.log(
       `delivered ${current.length - events} check-in(s)${events ? ` and ${events} event line(s)` : ''} to session=${sessionId}${puller ? ' (native)' : ''}` +
-        (held ? `, ${late} min after due (held: ${held})` : '') +
+        (held ? `, ${late} after due (held: ${held})` : '') +
         (current.length < due.length
           ? `; ${due.length - current.length} left for the next paste`
           : ''),
@@ -1154,6 +1172,16 @@ export class WakeScheduler {
       return `someone typed in the last ${quietSeconds}s`
     if (!(await this.ops.inputEmpty(sessionId))) return 'the input line holds a draft'
     return null
+  }
+
+  /** For a log line: how long the oldest of these rows sat queued, and why
+   * the session's delivery was held, when it was held at all. */
+  private heldNote(sessionId: string, rows: readonly Wake[]): string {
+    const reason = this.held.get(sessionId)
+    const queued = Math.min(...rows.map((wake) => wake.dueAt))
+    const age = this.ops.now() - queued
+    if (!reason && age < 5_000) return ''
+    return `, queued ${durationLabel(age)} earlier${reason ? ` (held: ${reason})` : ''}`
   }
 
   /** Log each new reason a session's due rows wait, once. */

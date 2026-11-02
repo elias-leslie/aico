@@ -51,6 +51,7 @@ import {
   applyWakePolicyPatch,
   cleanNote,
   clockLabel,
+  durationLabel,
   type EndedSession,
   inputLineEmpty,
   parseStoredWakePolicy,
@@ -217,6 +218,43 @@ export class WakeService {
     return wake
   }
 
+  /** An owner's answer to an ask, queued on the session that gets it. The
+   * session only has to be there and take lines: its agent state may be
+   * unknown (Tether just restarted), the line waits until the state is read.
+   * The line is logged like a producer's, so an answer whose session ended
+   * before it went out can be queued again (handOffAsks). Returns the row's
+   * id, or null (logged with the reason) when it cannot be queued. */
+  queueAnswer(sessionId: string, text: string, source: string): string | null {
+    const row = getWidget(sessionId)
+    if (!row || !this.receiver(sessionId)) {
+      console.log(
+        `[tether:wakes] answer line ${source} not queued: session=${sessionId} takes no lines`,
+      )
+      return null
+    }
+    const note = cleanNote(text, this.policy().noteMaxChars)
+    if (note === null) {
+      console.log(`[tether:wakes] answer line ${source} not queued: the line is not valid text`)
+      return null
+    }
+    const now = this.now()
+    const wake = this.store.addEvent({ sessionId: row.id, source, note, now })
+    this.deliveries.record({ id: wake.id, sessionId: row.id, source, now })
+    this.changed(row.id)
+    return wake.id
+  }
+
+  /** Take back a queued line its owner no longer wants delivered (`why`), and
+   * say so: a line that never went out is never dropped silently. */
+  cancelLine(wakeId: string, why: string): void {
+    const wake = this.store.get(wakeId)
+    if (!wake || !this.store.remove(wakeId)) return
+    console.log(
+      `[tether:wakes] dropped undelivered line ${wake.source ?? 'check-in'} on session=${wake.sessionId} (${why}), queued ${durationLabel(this.now() - wake.dueAt)} earlier`,
+    )
+    this.changed(wake.sessionId)
+  }
+
   /** Sessions that told another, `from>to` -> when: a lane that messaged its
    * launcher during a turn needs no went-idle line for it (lane-reports.ts).
    * Memory only: after a restart the lane gets its line, as before. */
@@ -280,7 +318,7 @@ export class WakeService {
     for (const id of new Set(withdrawn.map((wake) => wake.sessionId))) if (id) this.changed(id)
     if (withdrawn.length)
       console.log(
-        `[tether:wakes] withdrew ${withdrawn.length} line(s) from ${source}${sessionId ? ` on session=${sessionId}` : ''}`,
+        `[tether:wakes] withdrew ${withdrawn.length} line(s) from ${source}${sessionId ? ` on session=${sessionId}` : ''}, queued ${durationLabel(this.now() - Math.min(...withdrawn.map((wake) => wake.dueAt)))} earlier`,
       )
     return { withdrawn: withdrawn.length, sending }
   }

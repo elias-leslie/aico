@@ -392,6 +392,96 @@ describe('wake scheduler', () => {
     expect(wakes.list()).toEqual([])
   })
 
+  it('an answer to an ask rides along with the next natural turn while the agent stays busy', async () => {
+    const { wakes, clock, log, state, scheduler } = harness()
+    const answer = wakes.addEvent({
+      sessionId: SESSION,
+      source: 'ask:991a6593792d',
+      note: 'Owner answered ask 991a6593792d "Q?": "A"',
+      now: 9_000,
+    })
+    wakes.addEvent({
+      sessionId: SESSION,
+      source: 'ask:991a6593792d:filed',
+      note: 'filed',
+      now: 9_000,
+    })
+    wakes.addEvent({
+      sessionId: SESSION,
+      source: 'lane:x:finished',
+      note: '[Ready] lane',
+      now: 9_000,
+    })
+    // Busy for good (background agents): nothing is pasted, the answer waits.
+    state.idle = false
+    await scheduler.tick()
+    expect(log.delivered).toEqual([])
+    clock.now += 600_000
+    // The next turn takes the answer, and only the answer.
+    expect(scheduler.takeRide(SESSION)).toBe('Owner answered ask 991a6593792d "Q?": "A"')
+    expect(wakes.get(answer.id)).toBeUndefined()
+    expect(wakes.forSession(SESSION).map((row) => row.source)).toEqual([
+      'ask:991a6593792d:filed',
+      'lane:x:finished',
+    ])
+    // The log says how long it was held, and why.
+    expect(log.lines.at(-1)).toBe(
+      `delivered 1 ride-along line(s) to session=${SESSION} (natural turn), queued 10 min earlier (held: the agent is working (claude-status))`,
+    )
+  })
+
+  it('a peeked answer stays queued until its turn confirms it', async () => {
+    const { wakes, state, scheduler } = harness()
+    wakes.addEvent({ sessionId: SESSION, source: 'ask:991a6593792d', note: 'answer', now: 9_000 })
+    state.idle = false
+    await scheduler.tick()
+    const peeked = scheduler.peekRide(SESSION)
+    expect(peeked?.text).toBe('answer')
+    expect(wakes.forSession(SESSION)).toHaveLength(1)
+    expect(scheduler.confirmRide(SESSION, peeked?.token ?? '')).toBe(1)
+    expect(wakes.forSession(SESSION)).toEqual([])
+  })
+
+  it('a held answer survives a restart and goes out when the agent is idle', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'tether-wakes-')), 'tether.db')
+    const first = open(path)
+    insertWidget(SESSION, 'codex', 1_000, { origin: 'aico' })
+    new WakeStore(first.db).addEvent({
+      sessionId: SESSION,
+      source: 'ask:991a6593792d',
+      note: 'answer',
+      now: 9_000,
+    })
+    first.close()
+    // Tether restarted: the state is unknown at first, then working, then idle.
+    const second = open(path)
+    const delivered: string[] = []
+    let agent = 'the agent is unknown (none)' as string | null
+    const scheduler = new WakeScheduler(new WakeStore(second.db), {
+      now: () => 20_000,
+      policy: () => DEFAULT_WAKE_POLICY,
+      busy: async () => agent,
+      inputEmpty: async () => true,
+      lastKeyAt: async () => null,
+      deliver: async (_id, text) => {
+        delivered.push(text)
+        return true
+      },
+      conversationHolder: async () => null,
+      relaunch: async () => ({ status: 'failed', reason: 'unused' }),
+      changed: () => {},
+      log: () => {},
+    })
+    await scheduler.tick()
+    agent = 'the agent is working (claude-status)'
+    await scheduler.tick()
+    expect(delivered).toEqual([])
+    expect(scheduler.heldReason(SESSION)).toBe(agent)
+    agent = null
+    await scheduler.tick()
+    expect(delivered).toEqual(['answer'])
+  })
+
   it('puts the wake back when the paste did not happen', async () => {
     const { wakes, log, state, scheduler, add } = harness()
     const wake = add(9_000, 'note')

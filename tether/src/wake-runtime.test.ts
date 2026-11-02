@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { bindCatalog } from './lifecycle/catalog'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { bindCatalog, insertWidget } from './lifecycle/catalog'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { Store } from './store'
 import { WaitStore } from './waits'
@@ -172,5 +172,50 @@ describe('what reached a lane (its next went-idle line wakes)', () => {
     wakes.noteReplied([LANE], LAUNCHER)
     wakes.noteReplied([LAUNCHER], LAUNCHER)
     expect(reached).toEqual([`${LANE} replied to ${LAUNCHER}`])
+  })
+})
+
+describe('answers to asks', () => {
+  function answerService(now = 100_000) {
+    const store = new Store(':memory:', () => 1_000)
+    stores.push(store)
+    bindCatalog(store.db)
+    insertWidget(LANE, 'claude-code', 1_000, { origin: 'aico' })
+    const context = { store, events: { publish: () => {} } } as unknown as LifecycleApiContext
+    const time = { now }
+    return { wakes: new WakeService(context, { now: () => time.now }), time }
+  }
+
+  it('queues an answer even while the agent state is unknown (Tether just restarted)', () => {
+    const { wakes } = answerService()
+    const id = wakes.queueAnswer(
+      LANE,
+      'Owner answered ask 991a6593792d "Q?": "A"',
+      'ask:991a6593792d',
+    )
+    expect(id).toMatch(/^[0-9a-f]{12}$/)
+    expect(wakes.store.forSession(LANE).map((row) => row.source)).toEqual(['ask:991a6593792d'])
+    expect(wakes.deliveries.get(id as string)).toMatchObject({ deliveredAt: null })
+  })
+
+  it('says why an answer cannot be queued', () => {
+    const { wakes } = answerService()
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(wakes.queueAnswer(HELPER, 'answer', 'ask:991a6593792d')).toBeNull()
+    expect(log).toHaveBeenLastCalledWith(expect.stringContaining('not queued'))
+    log.mockRestore()
+  })
+
+  it('logs a queued answer that is taken back, with how long it waited', () => {
+    const { wakes, time } = answerService()
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const id = wakes.queueAnswer(LANE, 'answer', 'ask:991a6593792d') as string
+    time.now += 120_000
+    wakes.cancelLine(id, 'ask 991a6593792d closed as done')
+    expect(wakes.store.get(id)).toBeUndefined()
+    expect(log).toHaveBeenLastCalledWith(
+      `[tether:wakes] dropped undelivered line ask:991a6593792d on session=${LANE} (ask 991a6593792d closed as done), queued 2 min earlier`,
+    )
+    log.mockRestore()
   })
 })
