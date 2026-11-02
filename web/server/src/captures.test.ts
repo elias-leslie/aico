@@ -2,11 +2,13 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type { Ask } from './asks'
 import { blobPath, sha256 } from './blobs'
 import { type CaptureJson, registerCaptureRoutes } from './captures'
 import { PreviewJobs, type Runner } from './heic'
 import { NotesStore } from './notes-db'
 import { serveRoutes } from './testing'
+import { HttpError } from './tether'
 
 const MAX_BYTES = 1024 * 1024
 const PNG = Buffer.concat([Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'), Buffer.alloc(64, 7)])
@@ -75,6 +77,86 @@ describe('capture routes', () => {
     await server.close()
     store.close()
     rmSync(dir, { recursive: true, force: true })
+  })
+
+  describe('uploads for an ask', () => {
+    const ASK_ID = 'abcdefabcdef'
+    let ask: Partial<Ask> | 'gone'
+    let looked: string[]
+
+    beforeEach(async () => {
+      ask = { id: ASK_ID, state: 'open', wantsFiles: { min: 1, max: 2, hint: null } }
+      looked = []
+      await server.close()
+      server = await serveRoutes((router) =>
+        registerCaptureRoutes(router, {
+          store,
+          blobsDir: blobs,
+          limits: { maxBytes: MAX_BYTES, maxFiles: 10 },
+          previews,
+          asks: {
+            get: async (id) => {
+              looked.push(id)
+              if (ask === 'gone') throw new HttpError(404, 'That question is gone')
+              return ask as Ask
+            },
+          },
+        }),
+      )
+    })
+
+    const detail = async (response: Response) =>
+      ((await response.json()) as { detail: string }).detail
+
+    it('tags the capture with the ask', async () => {
+      const response = await upload(PNG, 'a.png', 'image/png', { ask_id: ASK_ID })
+      expect(response.status).toBe(201)
+      expect((await created(response)).askId).toBe(ASK_ID)
+      expect(looked).toEqual([ASK_ID])
+      expect(store.capturesForAsk(ASK_ID)).toHaveLength(1)
+    })
+
+    it('takes files for an answered ask too, and a retry of a saved file without asking again', async () => {
+      ask = { ...(ask as Ask), state: 'answered' }
+      const first = await upload(PNG, 'a.png', 'image/png', {
+        ask_id: ASK_ID,
+        client_id: 'retry-0001',
+      })
+      expect(first.status).toBe(201)
+      const again = await upload(PNG, 'a.png', 'image/png', {
+        ask_id: ASK_ID,
+        client_id: 'retry-0001',
+      })
+      expect(again.status).toBe(200)
+      expect(looked).toHaveLength(1)
+    })
+
+    it('refuses a closed or gone ask, an ask that wants no files, and one that is full', async () => {
+      for (const state of ['done', 'withdrawn'] as const) {
+        ask = { ...(ask as Ask), state }
+        const refused = await upload(PNG, 'a.png', 'image/png', { ask_id: ASK_ID })
+        expect(refused.status).toBe(409)
+        expect(await detail(refused)).toBe('This question was closed')
+      }
+      ask = 'gone'
+      expect((await upload(PNG, 'a.png', 'image/png', { ask_id: ASK_ID })).status).toBe(409)
+      ask = { id: ASK_ID, state: 'open', wantsFiles: null }
+      const none = await upload(PNG, 'a.png', 'image/png', { ask_id: ASK_ID })
+      expect(none.status).toBe(409)
+      expect(await detail(none)).toBe('This question does not take files')
+
+      ask = { id: ASK_ID, state: 'open', wantsFiles: { min: 1, max: 2, hint: null } }
+      expect((await upload(PNG, 'a.png', 'image/png', { ask_id: ASK_ID })).status).toBe(201)
+      expect((await upload(PDF, 'b.pdf', 'application/pdf', { ask_id: ASK_ID })).status).toBe(201)
+      const full = await upload(JPEG, 'c.jpg', 'image/jpeg', { ask_id: ASK_ID })
+      expect(full.status).toBe(409)
+      expect(await detail(full)).toBe('This question takes at most 2 files')
+      // Nothing was saved for the refused ones.
+      expect(store.capturesForAsk(ASK_ID)).toHaveLength(2)
+      // Removing one makes room.
+      store.tombstoneCapture(store.capturesForAsk(ASK_ID)[0]?.id as string)
+      expect((await upload(JPEG, 'c.jpg', 'image/jpeg', { ask_id: ASK_ID })).status).toBe(201)
+    })
   })
 
   it('hands the page its limits and the accepted types', async () => {

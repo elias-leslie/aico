@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { type Ask, Asks, askNotice, parsePending, validateAsk } from './asks'
+import { NotesStore } from './notes-db'
 
 const ASK: Ask = {
   id: 'abcdefabcdef',
@@ -15,6 +16,8 @@ const ASK: Ask = {
   body: 'Swap becomes a file.\nOne reboot.',
   command: null,
   share: null,
+  wantsFiles: null,
+  files: [],
   blocking: true,
   state: 'open',
   answer: null,
@@ -152,6 +155,167 @@ describe('list and answer', () => {
       body: { option: 0, note: 'go' },
     })
     await expect(asks.act('../x', 'done')).rejects.toMatchObject({ status: 404 })
+  })
+})
+
+describe('asks that want files', () => {
+  const FILE = {
+    id: 'aaaaaaaaaaaa',
+    name: 'odometer.jpg',
+    mime: 'image/jpeg',
+    size: 2048,
+    path: '/data/blobs/aa/x',
+    host: 'davion-sidarli',
+  }
+
+  it('checks the wanted range and the answer files, and treats an older Tether as wanting none', () => {
+    const wanting = { ...ASK, wantsFiles: { min: 1, max: 3, hint: 'odometer' }, files: [FILE] }
+    expect(validateAsk(wanting)).toEqual(wanting)
+    const { wantsFiles: _w, files: _f, ...older } = ASK
+    expect(validateAsk(older)).toMatchObject({ wantsFiles: null, files: [] })
+    for (const patch of [
+      { wantsFiles: { min: 3, max: 2, hint: null } },
+      { wantsFiles: { min: 0, max: 21, hint: null } },
+      { wantsFiles: { min: 0, max: 0, hint: null } },
+      { wantsFiles: { min: 1, max: 2, hint: 'two\nlines' } },
+      { wantsFiles: 'some' },
+      { files: [{ ...FILE, id: 'nope' }] },
+      { files: [{ ...FILE, size: -1 }] },
+      { files: [{ ...FILE, path: 5 }] },
+      { files: 'a.jpg' },
+    ])
+      expect(validateAsk({ ...ASK, ...patch }), JSON.stringify(patch)).toBeNull()
+  })
+
+  /** An ask that wants 1 to 2 files, a captures store with files tagged to it, and a fake Tether. */
+  function setup(ask: Partial<Ask> = {}) {
+    const wanting: Ask = { ...ASK, wantsFiles: { min: 1, max: 2, hint: null }, ...ask }
+    const notes = new NotesStore(':memory:', { hostName: 'door' })
+    const add = (name: string, askId: string | null, hash: string | null = 'a'.repeat(64)) =>
+      notes.insertCapture({
+        clientId: `client-${name}`,
+        askId,
+        kind: 'image',
+        name,
+        mime: 'image/jpeg',
+        size: 10,
+        hash: hash ?? 'a'.repeat(64),
+      }).capture
+    const tether = fakeTether({
+      [`GET /v1/asks/${wanting.id}`]: wanting,
+      [`POST /v1/asks/${wanting.id}/answer`]: { ...wanting, state: 'answered' },
+    })
+    const asks = new Asks({
+      tether: tether.client as never,
+      publicHost: null,
+      run: async () => '',
+      files: { store: notes, blobsDir: '/data/blobs', hostName: 'door' },
+    })
+    return { asks, notes, tether, add, ask: wanting }
+  }
+  const answers = (tether: ReturnType<typeof fakeTether>) =>
+    tether.calls.filter((call) => call.method === 'POST')
+
+  it('forwards the files with their path on this host', async () => {
+    const { asks, tether, add, ask } = setup()
+    const one = add('odometer.jpg', ask.id)
+    const two = add('dash.jpg', ask.id, 'b'.repeat(64))
+    await asks.answer(ask.id, { files: [one.id, two.id], note: 'both' })
+    expect(answers(tether)).toEqual([
+      {
+        method: 'POST',
+        path: `/v1/asks/${ask.id}/answer`,
+        body: {
+          note: 'both',
+          files: [
+            {
+              id: one.id,
+              name: 'odometer.jpg',
+              mime: 'image/jpeg',
+              size: 10,
+              path: `/data/blobs/aa/${'a'.repeat(64)}`,
+              host: 'door',
+            },
+            {
+              id: two.id,
+              name: 'dash.jpg',
+              mime: 'image/jpeg',
+              size: 10,
+              path: `/data/blobs/bb/${'b'.repeat(64)}`,
+              host: 'door',
+            },
+          ],
+        },
+      },
+    ])
+  })
+
+  it('cleans a file name Tether would refuse', async () => {
+    const { asks, tether, add, ask } = setup()
+    const odd = add('re\u200bceipt\u202e.jpg', ask.id)
+    await asks.answer(ask.id, { files: [odd.id] })
+    expect(answers(tether)[0]?.body).toMatchObject({ files: [{ name: 'receipt.jpg' }] })
+  })
+
+  it('refuses a capture from another ask, a missing one and a deleted one', async () => {
+    const { asks, tether, add, notes, ask } = setup()
+    const other = add('other.jpg', 'ffffffffffff')
+    const untagged = add('loose.jpg', null)
+    const deleted = add('gone.jpg', ask.id)
+    notes.tombstoneCapture(deleted.id)
+    for (const id of [other.id, untagged.id, deleted.id, '0123456789ab', 'nope'])
+      await expect(asks.answer(ask.id, { files: [id] }), id).rejects.toMatchObject({ status: 422 })
+    expect(answers(tether)).toEqual([])
+  })
+
+  it('refuses more than the ask wants, files on an ask that wants none, and a closed ask', async () => {
+    const { asks, add, ask } = setup()
+    const ids = [1, 2, 3].map((n) => add(`f${n}.jpg`, ask.id).id)
+    await expect(asks.answer(ask.id, { files: ids })).rejects.toMatchObject({ status: 409 })
+
+    const none = setup({ wantsFiles: null })
+    await expect(
+      none.asks.answer(none.ask.id, { files: [none.add('a.jpg', none.ask.id).id] }),
+    ).rejects.toThrow(/does not take files/)
+
+    const closed = setup({ state: 'withdrawn' })
+    const kept = closed.add('a.jpg', closed.ask.id)
+    await expect(closed.asks.answer(closed.ask.id, { files: [kept.id] })).rejects.toThrow(
+      /closed\. Your files are kept in Captures/,
+    )
+    expect(answers(closed.tether)).toEqual([])
+    // The capture stays, tagged with the ask.
+    expect(closed.notes.capturesForAsk(closed.ask.id).map((c) => c.id)).toEqual([kept.id])
+  })
+
+  it('sends a double submit once', async () => {
+    const { asks, tether, add, ask } = setup()
+    const file = add('a.jpg', ask.id)
+    const [first, second] = await Promise.allSettled([
+      asks.answer(ask.id, { files: [file.id] }),
+      asks.answer(ask.id, { files: [file.id] }),
+    ])
+    expect(first.status).toBe('fulfilled')
+    expect(second.status).toBe('rejected')
+    expect(answers(tether)).toHaveLength(1)
+    // A second tap after the first landed, with the same files, is not sent again.
+    const landed = setup({ state: 'answered' })
+    const same = landed.add('a.jpg', landed.ask.id)
+    landed.ask.files = [
+      { id: same.id, name: 'a.jpg', mime: 'image/jpeg', size: 10, path: null, host: null },
+    ]
+    await landed.asks.answer(landed.ask.id, { files: [same.id] })
+    expect(answers(landed.tether)).toEqual([])
+  })
+
+  it('answers without the files: the note goes alone, or a plain "No files"', async () => {
+    const { asks, tether, ask } = setup()
+    await asks.answer(ask.id, { note: 'not today', skippedFiles: true })
+    await asks.answer(ask.id, { skippedFiles: true })
+    expect(answers(tether).map((call) => call.body)).toEqual([
+      { note: 'not today' },
+      { text: 'No files' },
+    ])
   })
 })
 

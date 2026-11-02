@@ -30,7 +30,12 @@ function serve(): void {
     touched: (id) => store.touchLink(id),
   })
   const shows = new Shows({ tether, publicHost: config.publicHost })
-  const asks = new Asks({ tether, publicHost: config.publicHost })
+  const blobsDir = join(config.dataDir, 'blobs')
+  const asks = new Asks({
+    tether,
+    publicHost: config.publicHost,
+    files: { store: notes, blobsDir, hostName: config.hostName },
+  })
   const background = new Background({
     tether,
     store,
@@ -50,8 +55,9 @@ function serve(): void {
     asks,
     captures: {
       store: notes,
-      blobsDir: join(config.dataDir, 'blobs'),
+      blobsDir,
       limits: config.captures,
+      asks,
     },
   })
   registerNightshiftRoutes(api, config)

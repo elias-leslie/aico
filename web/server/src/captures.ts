@@ -6,6 +6,7 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { pipeline } from 'node:stream/promises'
+import type { Ask } from './asks'
 import { type BlobVariant, blobPath, hasBlob, putOriginal, putVariant } from './blobs'
 import {
   acceptString,
@@ -30,6 +31,9 @@ export interface CaptureDeps {
   /** Tests pass their own to wait on previews. */
   previews?: PreviewJobs
   limiter?: RateLimiter
+  /** Reads an ask from Tether, to check an upload tagged with `ask_id`. Without
+   * it the tag is stored as given. */
+  asks?: { get(id: string): Promise<Ask> }
 }
 
 const RATE_LIMIT = 60
@@ -151,6 +155,24 @@ export function registerCaptureRoutes(
   const types = captureTypes()
   const accept = acceptString()
 
+  /** A file for an ask: the ask must be open or answered, want files and have room. */
+  async function checkAsk(askId: string): Promise<void> {
+    if (!deps.asks) return
+    let ask: Ask
+    try {
+      ask = await deps.asks.get(askId)
+    } catch (error) {
+      if (error instanceof HttpError && error.status === 404)
+        throw new HttpError(409, 'This question was closed')
+      throw error
+    }
+    if (ask.state !== 'open' && ask.state !== 'answered')
+      throw new HttpError(409, 'This question was closed')
+    if (!ask.wantsFiles) throw new HttpError(409, 'This question does not take files')
+    if (store.capturesForAsk(askId).length >= ask.wantsFiles.max)
+      throw new HttpError(409, `This question takes at most ${ask.wantsFiles.max} files`)
+  }
+
   const tooBig = () => new HttpError(413, `That file is over ${megabytes(limits.maxBytes)} MB`)
 
   function previewState(row: CaptureRow): PreviewState {
@@ -212,6 +234,7 @@ export function registerCaptureRoutes(
 
     const earlier = store.findByClientId(clientId)
     if (earlier?.deleted) throw new HttpError(409, 'That file was removed')
+    if (askId && !earlier) await checkAsk(askId)
     if (!earlier && groupId && store.countInGroup(groupId) >= limits.maxFiles)
       throw new HttpError(409, `That batch already has ${limits.maxFiles} files`)
 

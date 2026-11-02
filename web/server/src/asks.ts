@@ -6,9 +6,12 @@
 // approving stays in Nightshift. Every field crosses an agent-controlled
 // boundary, so each is checked again here.
 
+import { resolve } from 'node:path'
 import type { TetherClient } from 'tether/client'
+import { blobPath } from './blobs'
 import { objectBody, type Router } from './http'
 import { tetherCall } from './lifecycle'
+import type { NotesStore } from './notes-db'
 import { type Notice, type RunCommand, resolveNotice, runCommand, sendNotice } from './notice'
 import { HttpError } from './tether'
 
@@ -22,6 +25,26 @@ const NOT_ONE_LINE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u
 // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control characters is the point
 const NOT_TEXT = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u
 const STATES = ['open', 'answered', 'done', 'withdrawn'] as const
+const MAX_FILES = 20
+/** What the answer says when the owner chose to answer without the files. */
+const NO_FILES_TEXT = 'No files'
+
+/** What an ask wants back (Tether API 26). */
+export interface WantsFiles {
+  min: number
+  max: number
+  hint: string | null
+}
+
+/** A file the owner answered with: a capture, and where its bytes are on `host`. */
+export interface AnswerFile {
+  id: string
+  name: string
+  mime: string
+  size: number
+  path: string | null
+  host: string | null
+}
 
 export interface Ask {
   id: string
@@ -33,6 +56,10 @@ export interface Ask {
   body: string | null
   command: string | null
   share: string | null
+  /** The files the ask wants; null when none (and from a Tether older than API 26). */
+  wantsFiles: WantsFiles | null
+  /** The files the owner answered with. */
+  files: AnswerFile[]
   blocking: boolean
   state: (typeof STATES)[number]
   answer: string | null
@@ -48,6 +75,21 @@ export interface Ask {
   answeredAt: number | null
 }
 
+const NOT_ONE_LINE_ALL = new RegExp(NOT_ONE_LINE.source, 'gu')
+
+/** Whether an ask already holds exactly this answer. */
+function sameAnswer(ask: Ask, body: Record<string, unknown>): boolean {
+  const files = (body.files ?? []) as AnswerFile[]
+  const option = typeof body.option === 'number' ? ask.options[body.option] : undefined
+  return (
+    ask.files.length === files.length &&
+    ask.files.every((file, i) => file.id === files[i]?.id) &&
+    (ask.answer ?? null) === (option ?? (body.text as string | undefined) ?? null) &&
+    (ask.note ?? null) ===
+      (typeof body.note === 'string' ? body.note.replace(/\r\n?/g, '\n').trim() || null : null)
+  )
+}
+
 const length = (text: string) => Array.from(text).length
 const line = (value: unknown, max: number): value is string =>
   typeof value === 'string' &&
@@ -58,6 +100,35 @@ const text = (value: unknown, max: number): value is string | null =>
   value === null || (typeof value === 'string' && length(value) <= max && !NOT_TEXT.test(value))
 const time = (value: unknown): value is number =>
   Number.isSafeInteger(value) && (value as number) >= 0
+
+function validWants(value: unknown): value is WantsFiles | null {
+  if (value === null) return true
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const w = value as Record<string, unknown>
+  return (
+    Number.isSafeInteger(w.min) &&
+    Number.isSafeInteger(w.max) &&
+    (w.min as number) >= 0 &&
+    (w.max as number) >= 1 &&
+    (w.max as number) <= MAX_FILES &&
+    (w.min as number) <= (w.max as number) &&
+    (w.hint === null || line(w.hint, 100))
+  )
+}
+
+function validFile(value: unknown): value is AnswerFile {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const f = value as Record<string, unknown>
+  return (
+    typeof f.id === 'string' &&
+    ID.test(f.id) &&
+    line(f.name, 255) &&
+    line(f.mime, 127) &&
+    time(f.size) &&
+    (f.path === null || line(f.path, 4096)) &&
+    (f.host === null || line(f.host, 120))
+  )
+}
 
 /** An ask as Tether sends it, or null when any field is not what Tether sends. */
 export function validateAsk(data: unknown): Ask | null {
@@ -80,6 +151,11 @@ export function validateAsk(data: unknown): Ask | null {
   if (!text(a.body, 4000) || !text(a.command, 2000) || !text(a.note, 1000)) return null
   if (a.share !== null && (typeof a.share !== 'string' || !ID.test(a.share))) return null
   if (a.answer !== null && !line(a.answer, 100)) return null
+  // Absent from a Tether older than API 26: wants none.
+  const wantsFiles = a.wantsFiles ?? null
+  if (!validWants(wantsFiles)) return null
+  const files = a.files ?? []
+  if (!Array.isArray(files) || files.length > MAX_FILES || !files.every(validFile)) return null
   if (typeof a.blocking !== 'boolean') return null
   if (!STATES.includes(a.state as Ask['state'])) return null
   if (a.delivery !== null && a.delivery !== 'wake' && a.delivery !== 'pull') return null
@@ -104,6 +180,8 @@ export function validateAsk(data: unknown): Ask | null {
     body: a.body,
     command: a.command,
     share: a.share as string | null,
+    wantsFiles,
+    files: files as AnswerFile[],
     blocking: a.blocking,
     state: a.state as Ask['state'],
     answer: a.answer as string | null,
@@ -184,14 +262,35 @@ export function parsePending(stdout: string): Approval[] | null {
 /** What Asks needs of Tether. */
 type AskSource = Pick<TetherClient, 'request'> & Partial<Pick<TetherClient, 'getSession'>>
 
+/** What the card sends for an answer; `files` are capture ids, `skippedFiles`
+ * says the owner chose to answer without them. */
+export interface AnswerReply {
+  option?: number
+  text?: string
+  note?: string
+  files?: string[]
+  skippedFiles?: boolean
+}
+
+/** Where the owner's files for an ask live: the captures store and its blob folder. */
+export interface AskFileSource {
+  store: NotesStore
+  blobsDir: string
+  /** This door's name, put on each file so an agent knows which host has the path. */
+  hostName: string
+}
+
 export class Asks {
   private readonly pushed = new Set<string>()
+  /** Asks with an answer on its way to Tether, so a double tap sends it once. */
+  private readonly answering = new Set<string>()
 
   constructor(
     private readonly options: {
       tether: AskSource
       publicHost: string | null
       run?: RunCommand
+      files?: AskFileSource
     },
   ) {}
 
@@ -249,6 +348,65 @@ export class Asks {
     return ask
   }
 
+  /** One ask from Tether; 404 when it is gone. */
+  async get(id: string): Promise<Ask> {
+    if (!ID.test(id)) throw new HttpError(404, 'That question is gone')
+    const { body } = await tetherCall(
+      () => this.options.tether.request<unknown>('GET', `/v1/asks/${id}`),
+      'That question is gone',
+    )
+    const ask = validateAsk(body)
+    if (!ask) throw new HttpError(502, 'Tether answered with an ask that does not check out')
+    return ask
+  }
+
+  /** The answer for `files` (capture ids): each must be a live capture tagged
+   * to this ask, within what the ask wants, with the path of its bytes on this host. */
+  private answerFiles(ask: Ask, ids: string[]): AnswerFile[] {
+    const source = this.options.files
+    if (!source) throw new HttpError(400, 'This server does not take files for questions')
+    if (!ask.wantsFiles) throw new HttpError(409, 'This question does not take files')
+    if (ids.length > ask.wantsFiles.max)
+      throw new HttpError(409, `This question takes at most ${ask.wantsFiles.max} files`)
+    return ids.map((id) => {
+      const capture = ID.test(id) ? source.store.getCapture(id) : null
+      if (!capture || capture.ask_id !== ask.id)
+        throw new HttpError(422, 'One of those files does not belong to this question')
+      return {
+        id: capture.id,
+        name: capture.name.replace(NOT_ONE_LINE_ALL, '').trim().slice(0, 255) || 'file',
+        mime: capture.mime,
+        size: capture.size,
+        path: capture.hash ? resolve(blobPath(source.blobsDir, capture.hash)) : null,
+        host: source.hostName,
+      }
+    })
+  }
+
+  /** The owner's answer to an ask that may want files. Files are checked here,
+   * then Tether gets the answer with their paths. */
+  async answer(id: string, reply: AnswerReply): Promise<Ask> {
+    const { files, skippedFiles, ...rest } = reply
+    const body: Record<string, unknown> = { ...rest }
+    if (!files?.length) {
+      if (skippedFiles && !Object.keys(body).length) body.text = NO_FILES_TEXT
+      return this.act(id, 'answer', body)
+    }
+    if (this.answering.has(id)) throw new HttpError(409, 'Your answer is already being sent')
+    this.answering.add(id)
+    try {
+      const ask = await this.get(id)
+      if (ask.state !== 'open' && ask.state !== 'answered')
+        throw new HttpError(409, 'This question was closed. Your files are kept in Captures.')
+      body.files = this.answerFiles(ask, files)
+      // The same answer again (a second tap after the first landed) changes nothing.
+      if (ask.state === 'answered' && sameAnswer(ask, body)) return ask
+      return await this.act(id, 'answer', body)
+    } finally {
+      this.answering.delete(id)
+    }
+  }
+
   /** Nightshift's pending taps, or null when it cannot be read. */
   async approvals(): Promise<Approval[] | null> {
     try {
@@ -264,19 +422,30 @@ export function registerAskRoutes(router: Router, asks: Asks): void {
 
   router.on('POST', '/api/asks/:askId/answer', async (ctx) => {
     const body = objectBody(await ctx.body())
-    const answer: Record<string, unknown> = {}
+    const reply: AnswerReply = {}
     if (body.option !== undefined) {
       if (!Number.isSafeInteger(body.option)) throw new HttpError(400, 'Pick one of the choices')
-      answer.option = body.option
+      reply.option = body.option as number
     }
     for (const key of ['text', 'note'] as const) {
       const value = body[key]
       if (value === undefined || value === null || value === '') continue
       if (typeof value !== 'string') throw new HttpError(400, `Invalid ${key}`)
-      answer[key] = value
+      reply[key] = value
     }
-    if (!Object.keys(answer).length) throw new HttpError(400, 'Pick a choice or write a note')
-    return { ask: await asks.act(ctx.params.askId, 'answer', answer) }
+    const files = body.files
+    if (files !== undefined && files !== null) {
+      if (!Array.isArray(files) || !files.every((id) => typeof id === 'string'))
+        throw new HttpError(400, 'Invalid files')
+      if (new Set(files).size !== files.length) throw new HttpError(400, 'A file is listed twice')
+      if (files.length) reply.files = files as string[]
+    }
+    if (body.skippedFiles !== undefined && typeof body.skippedFiles !== 'boolean')
+      throw new HttpError(400, 'Invalid skippedFiles')
+    if (body.skippedFiles === true) reply.skippedFiles = true
+    if (!Object.keys(reply).length)
+      throw new HttpError(400, 'Pick a choice, write a note or add files')
+    return { ask: await asks.answer(ctx.params.askId, reply) }
   })
 
   router.on('POST', '/api/asks/:askId/done', async (ctx) => ({
