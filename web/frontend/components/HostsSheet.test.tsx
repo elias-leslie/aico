@@ -454,6 +454,32 @@ describe('HostsSheet', () => {
     expect(state.posts[0].body).toEqual({ action: 'sign_out' })
   })
 
+  it('offers no Power off for a host with no sleep command', async () => {
+    state.hosts = [host({ canSleep: false })]
+    state.logins['agent-work'] = loginsFor()
+    renderSheet()
+    await screen.findByText('Sign-in')
+    expect(screen.queryByRole('button', { name: 'Power off' })).toBeNull()
+  })
+
+  it('says sign-in is not checked on a host with no Agent Hub command', async () => {
+    state.hosts = [host()]
+    state.logins['agent-work'] = loginsFor({
+      agent_hub: '',
+      tools: [],
+      actions: {},
+      notChecked:
+        'Sign-in is not checked on agent-work: it has no Agent Hub command.',
+    })
+    renderSheet()
+    expect(
+      await screen.findByText(
+        'Sign-in is not checked on agent-work: it has no Agent Hub command.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByTestId('agent-hub-away')).toBeNull()
+  })
+
   it('asks before powering off a host with sessions, then forces', async () => {
     state.hosts = [host({ sessions: 2 })]
     state.logins['agent-work'] = loginsFor()

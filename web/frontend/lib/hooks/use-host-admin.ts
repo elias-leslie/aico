@@ -41,6 +41,8 @@ export interface HostLogins {
   tools: ToolLogin[]
   checkedAt: number
   actions: Record<string, ToolActions>
+  /** Why sign-in is not checked on this host; absent when it was. */
+  notChecked?: string
 }
 
 export interface HostActionAnswer {

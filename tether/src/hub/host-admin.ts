@@ -199,6 +199,17 @@ export class HostAdmin {
   async status(name: string): Promise<Record<string, unknown>> {
     const { entry, control } = this.live(name)
     const result = await this.run(remoteArgv(entry, control, STATUS_LINE), STATUS_TIMEOUT_MS)
+    // A host without the Agent Hub command (a full Aico install such as gem, or the
+    // workstation seen from it) has no sign-in to read: say so, not "command not found".
+    if (result.code === 127 || /agent-hub: (command )?not found/.test(result.output))
+      return {
+        host: name,
+        agent_hub: '',
+        tools: [],
+        actions: {},
+        checkedAt: Date.now(),
+        notChecked: `Sign-in is not checked on ${name}: it has no Agent Hub command.`,
+      }
     if (result.code !== 0)
       throw new HttpError(502, 'login_status_failed', {
         host: name,

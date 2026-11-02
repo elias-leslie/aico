@@ -51,6 +51,7 @@ export function registerHostRoutes(router: Router, tether: TetherClient) {
         sessions: host.sessions ?? 0,
         error: host.error ?? null,
         wake: host.wake ?? null,
+        ...(host.canSleep === undefined ? {} : { canSleep: host.canSleep }),
       })),
     }
   })

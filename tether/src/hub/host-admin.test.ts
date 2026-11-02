@@ -141,6 +141,15 @@ describe('login status', () => {
     })
   })
 
+  it('says sign-in is not checked on a host with no agent-hub command', async () => {
+    const { admin } = setup({
+      run: () => ({ code: 127, stdout: '', output: 'bash: line 1: agent-hub: command not found' }),
+    })
+    const answer = await admin.status('vm-1')
+    expect(answer).toMatchObject({ host: 'vm-1', tools: [], actions: {} })
+    expect(answer.notChecked).toBe('Sign-in is not checked on vm-1: it has no Agent Hub command.')
+  })
+
   it('refuses while the host is not connected, without running anything', async () => {
     const { admin, runs } = setup({ state: 'offline' })
     const error = await refusal(admin.status('vm-1'))
@@ -151,11 +160,11 @@ describe('login status', () => {
 
   it('says why when the host command fails or prints no JSON', async () => {
     const failing = setup({
-      run: () => ({ code: 127, stdout: '', output: 'agent-hub: not found' }),
+      run: () => ({ code: 1, stdout: '', output: 'boom' }),
     })
     const error = await refusal(failing.admin.status('vm-1'))
     expect(error.status).toBe(502)
-    expect(error.extra).toMatchObject({ reason: 'agent-hub: not found' })
+    expect(error.extra).toMatchObject({ reason: 'boom' })
     const garbled = setup({ run: () => ({ code: 0, stdout: 'hello', output: 'hello' }) })
     expect((await refusal(garbled.admin.status('vm-1'))).code).toBe('login_status_failed')
   })

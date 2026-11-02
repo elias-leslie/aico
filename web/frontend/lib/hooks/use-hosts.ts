@@ -21,6 +21,8 @@ export interface HostChoice {
   error?: string | null
   /** A start in progress, or why the last one failed. */
   wake?: HostWake | null
+  /** Aico has a way to power it off; null or absent: not known, so offered. */
+  canSleep?: boolean | null
 }
 
 export interface HostWake {

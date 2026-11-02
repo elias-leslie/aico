@@ -131,6 +131,8 @@ export interface HostInfo {
   /** A create bringing this host up (powering on, connecting, checking its
    * services), or why that failed; null otherwise. Also on `peer.state`. */
   wake: HostWake | null
+  /** hosts.json has a `sleep` command, so Aico can power the host off; absent from an older Tether. */
+  canSleep?: boolean
 }
 
 export interface HostWake {
