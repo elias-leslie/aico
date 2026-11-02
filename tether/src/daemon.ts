@@ -447,6 +447,7 @@ export async function startDaemon(
         isLocalSession: (id) => getWidget(id) !== undefined,
         isLocalRoot: (requestId) => getRootRequest(requestId) !== undefined,
         isLocalRun: (runId) => runs.snapshot().items.some((item) => item.runId === runId),
+        isLocalAsk: (id) => askStore.get(id) !== undefined,
         endedBy: (host, id, by) => context.lanes?.remoteEnd(host, id, by),
         leadName,
         claimLocal: (launcherId) => {

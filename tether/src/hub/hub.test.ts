@@ -66,6 +66,9 @@ class FakePeer {
   healthReady: Promise<void> | null = null
   readonly streams = new Set<ServerResponse>()
   roots: Record<string, unknown>[] = []
+  /** Null: an older Tether with no asks or shares routes (404). */
+  asks: Record<string, unknown>[] | null = []
+  shares: Record<string, unknown>[] | null = []
   runs: Record<string, unknown> = {
     status: 'ok',
     error: null,
@@ -123,6 +126,17 @@ class FakePeer {
       return sendJson(res, 200, { items: this.sessions })
     }
     if (url === '/v1/runs') return sendJson(res, 200, this.runs)
+    if (url === '/v1/asks' && this.asks) return sendJson(res, 200, { items: this.asks })
+    if (url === '/v1/shares' && this.shares) return sendJson(res, 200, { items: this.shares })
+    const askRoute = /^\/v1\/asks\/([0-9a-f]{12})(\/(answer|done))?$/.exec(url)
+    if (askRoute && this.asks) {
+      const found = this.asks.find((item) => item.id === askRoute[1])
+      if (!found) return sendJson(res, 404, { error: 'not_found' })
+      if (askRoute[3] === 'answer')
+        return sendJson(res, 200, { ...found, state: 'answered', answer: 'Yes' })
+      if (askRoute[3] === 'done') return sendJson(res, 200, { ...found, state: 'done' })
+      return sendJson(res, 200, found)
+    }
     if (url === '/v1/events') {
       res.writeHead(200, { 'content-type': 'application/x-ndjson' })
       res.write(`${JSON.stringify({ seq: 0, bootId: 'b', type: 'hello', at: 1, data: {} })}\n`)
@@ -190,6 +204,7 @@ describe('hub', () => {
       isLocalSession: (id) => local.has(id),
       isLocalRoot: () => false,
       isLocalRun: () => false,
+      isLocalAsk: (id) => id === 'cccccccccccc',
       leadName: (id) => (id === 'eeee0005' ? 'Aico — Remote hosts' : null),
       claimLocal: (id) =>
         local.has(id) ? { coordinatorId: id, coordinatorColor: '#6fa8ff', parentId: id } : null,
@@ -291,6 +306,144 @@ describe('hub', () => {
       state: 'connected',
       sessions: 2,
       error: null,
+    })
+  })
+
+  describe('asks and shares', () => {
+    const ask = (id: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      session: 'aaaa0001',
+      requester: null,
+      question: 'Go?',
+      options: [],
+      blocking: true,
+      state: 'open',
+      createdAt: 1,
+      updatedAt: 1,
+      ...extra,
+    })
+    const share = (id: string, createdAt: string) => ({
+      id,
+      session: null,
+      title: null,
+      createdAt,
+      kind: 'url',
+      url: 'https://example.com',
+    })
+
+    async function relinked() {
+      // A fresh link-up reads the peer's asks and shares whole.
+      peer.asks = [ask('aaaaaaaaaaaa')]
+      peer.shares = [share('bbbbbbbbbbbb', '2026-11-02T10:00:00.000Z')]
+      await peer.stop()
+      await peer.start()
+      hub.reload()
+      for (const stream of peer.streams) stream.end()
+      await vi.waitFor(() => expect(hub.mergeAsks([], { states: [] }).length).toBeGreaterThan(0), {
+        timeout: 5_000,
+      })
+    }
+
+    it("merges the peer's asks tagged with their host and marks them when the link is down", async () => {
+      await relinked()
+      const local = [{ id: 'cccccccccccc', state: 'open' }]
+      const merged = hub.mergeAsks(local, { states: ['open'] })
+      expect(merged.map((item) => [item.id, item.host, item.peer])).toEqual([
+        ['cccccccccccc', undefined, undefined],
+        ['aaaaaaaaaaaa', 'vm', undefined],
+      ])
+      expect(hub.mergeAsks([], { states: ['done'] })).toEqual([])
+      expect(hub.mergeAsks([], { states: [], session: 'zzzzzzzz' })).toEqual([])
+      await peer.stop()
+      await vi.waitFor(() => expect(state()).not.toBe('connected'), { timeout: 5_000 })
+      // Cached, never live: the mark says why and when.
+      const away = hub.mergeAsks([], { states: [] })
+      expect(away).toHaveLength(1)
+      expect(away[0]).toMatchObject({ id: 'aaaaaaaaaaaa', host: 'vm', peer: { state: 'offline' } })
+    })
+
+    it('relays asks.changed and show.requested with host, and keeps the cache current', async () => {
+      events = []
+      peer.emit('asks.changed', { ask: ask('dddddddddddd'), created: true })
+      peer.emit('show.requested', share('eeeeeeeeeeee', '2026-11-02T11:00:00.000Z'))
+      await vi.waitFor(() => expect(events).toHaveLength(2))
+      expect(events[0]).toMatchObject({
+        type: 'asks.changed',
+        data: { created: true, host: 'vm', ask: { id: 'dddddddddddd', host: 'vm' } },
+      })
+      expect(events[1]).toMatchObject({
+        type: 'show.requested',
+        data: { id: 'eeeeeeeeeeee', host: 'vm' },
+      })
+      // A change replaces the cached copy.
+      peer.emit('asks.changed', { ask: ask('dddddddddddd', { state: 'answered' }), created: false })
+      await vi.waitFor(() => expect(events).toHaveLength(3))
+      const cached = hub.mergeAsks([], { states: [] }).filter((item) => item.id === 'dddddddddddd')
+      expect(cached).toHaveLength(1)
+      expect(cached[0]?.state).toBe('answered')
+      expect(hub.mergeShares([]).map((item) => item.id)).toContain('eeeeeeeeeeee')
+    })
+
+    it("does not echo this host's own asks back, nor what the peer relayed from its own peers", async () => {
+      events = []
+      peer.emit('asks.changed', { ask: ask('cccccccccccc'), created: true })
+      peer.emit('asks.changed', {
+        ask: ask('ffffffffffff', { host: 'other' }),
+        created: true,
+        host: 'other',
+      })
+      peer.emit('show.requested', {
+        ...share('999999999999', '2026-11-02T11:00:00.000Z'),
+        host: 'other',
+      })
+      peer.emit('asks.changed', { ask: ask('dddddddddddd'), created: true })
+      await vi.waitFor(() => expect(events).toHaveLength(1))
+      expect(events[0]?.data.ask).toMatchObject({ id: 'dddddddddddd' })
+      expect(hub.mergeAsks([], { states: [] }).map((item) => item.id)).toEqual(['dddddddddddd'])
+    })
+
+    it('merges shares oldest first', async () => {
+      await relinked()
+      const merged = hub.mergeShares([
+        share('000000000001', '2026-11-02T09:00:00.000Z'),
+        share('000000000002', '2026-11-02T12:00:00.000Z'),
+      ])
+      expect(merged.map((item) => item.id)).toEqual([
+        '000000000001',
+        'bbbbbbbbbbbb',
+        '000000000002',
+      ])
+    })
+
+    it("sends an answer to the owning host's Tether, and refuses it while that host is down", async () => {
+      await relinked()
+      const answered = await call('POST', '/v1/asks/aaaaaaaaaaaa/answer', { text: 'Yes' })
+      expect(answered.status).toBe(200)
+      expect(answered.body).toMatchObject({ id: 'aaaaaaaaaaaa', state: 'answered', host: 'vm' })
+      expect(peer.requests.at(-1)).toEqual({
+        method: 'POST',
+        url: '/v1/asks/aaaaaaaaaaaa/answer',
+        body: { text: 'Yes' },
+      })
+      // This host's own ask is the local router's, not the peer's.
+      const own = await call('POST', '/v1/asks/cccccccccccc/answer', { text: 'Yes' })
+      expect(own.status).toBe(404)
+      expect(own.body).toMatchObject({ local: true })
+      await peer.stop()
+      await vi.waitFor(() => expect(state()).not.toBe('connected'), { timeout: 5_000 })
+      const down = await call('POST', '/v1/asks/aaaaaaaaaaaa/done')
+      expect(down.status).toBe(409)
+      expect(down.body).toMatchObject({ error: 'host_unavailable', host: 'vm' })
+    })
+
+    it('copes with a Tether that has neither route', async () => {
+      peer.asks = null
+      peer.shares = null
+      await peer.stop()
+      await peer.start()
+      for (const stream of peer.streams) stream.end()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
+      expect(hub.mergeAsks([], { states: [] })).toEqual([])
     })
   })
 

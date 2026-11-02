@@ -12,6 +12,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { ShowConfig } from './config'
 import type { EventBus } from './events'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import type { Hub } from './hub/hub'
 
 export const MAX_ASK_OPTIONS = 5
 /** The most files one ask can want or be answered with. */
@@ -793,6 +794,8 @@ export function registerAskRoutes(
     events: EventBus
     show: ShowConfig
     delivery?: AskDelivery
+    /** `GET /v1/asks?hosts=all` adds the linked hosts' asks. */
+    hub?: Pick<Hub, 'mergeAsks'> | null
     /** Keep the tray feed: write it with this on every change and each heartbeat. */
     feed?: {
       write(feed: NeedsYouFeed): void
@@ -887,7 +890,17 @@ export function registerAskRoutes(
       const states = (query.get('state') ?? '').split(',').filter(Boolean) as AskState[]
       if (!states.every((state) => STATES.includes(state)))
         throw new HttpError(400, 'invalid_query', { field: 'state' })
-      sendJson(res, 200, { items: asks.list({ session, requester, states }).map(present) })
+      const items = asks.list({ session, requester, states }).map(present)
+      sendJson(res, 200, {
+        items:
+          options.hub && query.get('hosts') === 'all'
+            ? options.hub.mergeAsks(items as unknown as Record<string, unknown>[], {
+                ...(session ? { session } : {}),
+                ...(requester ? { requester } : {}),
+                states,
+              })
+            : items,
+      })
     })
     .add('GET', '/v1/asks/:id', (_req, res, params) => {
       sendJson(res, 200, present(requireAsk(params.id)))

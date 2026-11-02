@@ -33,6 +33,9 @@ export interface PeerUpdate {
 export interface PeerSnapshot {
   listedAt: number | null
   items: Descriptor[]
+  /** The peer's asks and shares as last seen (absent in a snapshot from before they were relayed). */
+  asks?: Descriptor[]
+  shares?: Descriptor[]
 }
 
 export interface RunsLike {
@@ -46,6 +49,8 @@ export interface PeerDeps {
   publish(type: EventType, data: Record<string, unknown>): void
   /** A session id this hub runs itself: the local copy wins over a peer's. */
   isLocal(id: string): boolean
+  /** An ask id this Tether holds itself. */
+  isLocalAsk?(id: string): boolean
   identity: { get(name: string): PeerIdentity | null; set(name: string, id: PeerIdentity): void }
   persist(name: string, snapshot: PeerSnapshot): void
   /** The descriptor as clients see it: `host`, `peer` and the lead's badge. */
@@ -98,12 +103,22 @@ const RELAYED = new Set<string>([
   'projects.changed',
   'wakes.changed',
   'runs.changed',
+  'asks.changed',
+  'show.requested',
 ])
+
+/** Asks and shares kept per peer (the peer prunes its own by retention; this bounds the cache). */
+const KEPT_ASKS = 200
+const KEPT_SHARES = 200
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null
+}
+
+function hasId(value: unknown): value is Descriptor {
+  return typeof record(value)?.id === 'string'
 }
 
 export function isDescriptor(value: unknown): value is Descriptor {
@@ -146,6 +161,11 @@ export class Peer {
   /** The last root list per query, kept for while the link is down. */
   private readonly rootLists = new Map<string, Record<string, unknown>[]>()
   private runsAnswer: RunsLike | null = null
+  /** The peer's asks and shares (`GET /v1/asks`, `/v1/shares`, then its events), kept
+   * while the link is down; null: never read (an older Tether has neither). */
+  private readonly askItems = new Map<string, Descriptor>()
+  private readonly shareItems = new Map<string, Descriptor>()
+  private asksListedAt: number | null = null
   private failures = 0
   private openUntil = 0
   private controller: AbortController | null = null
@@ -169,6 +189,9 @@ export class Peer {
     this.since = deps.now()
     this.listedAt = cached?.listedAt ?? null
     for (const item of cached?.items ?? []) if (isDescriptor(item)) this.sessions.set(item.id, item)
+    for (const item of cached?.asks ?? []) if (hasId(item)) this.askItems.set(item.id, item)
+    for (const item of cached?.shares ?? []) if (hasId(item)) this.shareItems.set(item.id, item)
+    if (this.askItems.size || this.shareItems.size) this.asksListedAt = cached?.listedAt ?? null
   }
 
   get name(): string {
@@ -232,6 +255,31 @@ export class Peer {
 
   ownsRun(runId: string): boolean {
     return (this.runsAnswer?.items ?? []).some((item) => item.runId === runId)
+  }
+
+  ownsAsk(id: string): boolean {
+    return this.askItems.has(id)
+  }
+
+  /** The peer's asks as clients see them: tagged with `host`, and with `peer`
+   * (why they are not live) while the link is down. */
+  asks(): Descriptor[] {
+    return this.tagged(this.askItems)
+  }
+
+  shares(): Descriptor[] {
+    return this.tagged(this.shareItems)
+  }
+
+  private tagged(items: Map<string, Descriptor>): Descriptor[] {
+    const mark = this.live
+      ? null
+      : { state: this.state, since: this.since, listedAt: this.asksListedAt }
+    return [...items.values()].map((item) => ({
+      ...item,
+      host: this.name,
+      ...(mark ? { peer: mark } : {}),
+    }))
   }
 
   session(id: string): Descriptor | null {
@@ -385,7 +433,12 @@ export class Peer {
   }
 
   private persist(): void {
-    this.deps.persist(this.name, { listedAt: this.listedAt, items: [...this.sessions.values()] })
+    this.deps.persist(this.name, {
+      listedAt: this.listedAt,
+      items: [...this.sessions.values()],
+      asks: [...this.askItems.values()],
+      shares: [...this.shareItems.values()],
+    })
   }
 
   private setState(state: HostState, error: string | null = null): void {
@@ -582,6 +635,7 @@ export class Peer {
     this.failures = 0
     this.openUntil = 0
     await this.refreshRuns()
+    await this.refreshAsks()
     this.setState('connected')
     // Ended while the link was down (or the host was rolled back): the host's
     // own session.ended never reached us, so say it from its fresh list.
@@ -603,9 +657,62 @@ export class Peer {
     }
   }
 
+  /** The peer's asks and shares, whole: a link-up fixes what the stream missed. */
+  private async refreshAsks(): Promise<void> {
+    const read = async (path: string, into: Map<string, Descriptor>, kept: number) => {
+      try {
+        const answer = await peerRequest(this.socket, 'GET', path, undefined, SYNC_TIMEOUT_MS)
+        const items = record(answer.body)?.items
+        if (answer.status !== 200 || !Array.isArray(items)) {
+          // An older Tether has neither route: nothing to relay from it.
+          if (answer.status === 404) into.clear()
+          return false
+        }
+        into.clear()
+        for (const item of items.slice(-kept)) if (hasId(item)) into.set(item.id, item)
+        return true
+      } catch {
+        return false // Keep the last ones; they show as cached once the link is down.
+      }
+    }
+    const [asks, shares] = await Promise.all([
+      read('/v1/asks', this.askItems, KEPT_ASKS),
+      read('/v1/shares', this.shareItems, KEPT_SHARES),
+    ])
+    if (asks || shares) this.asksListedAt = this.deps.now()
+    this.persist()
+  }
+
+  /** Keep the newest `kept` entries of a cache (insertion order is arrival order). */
+  private remember(into: Map<string, Descriptor>, item: Descriptor, kept: number): void {
+    into.delete(item.id)
+    into.set(item.id, item)
+    while (into.size > kept) into.delete(into.keys().next().value as string)
+    this.asksListedAt = this.deps.now()
+    this.persist()
+  }
+
   private relay(event: Record<string, unknown>): void {
     const type = event.type as EventType
     const data = { ...(record(event.data) ?? {}) }
+    if (type === 'asks.changed' || type === 'show.requested') {
+      // No transitive federation: what a peer relays from its own peers is not ours.
+      if (data.host !== undefined && data.host !== null) return
+    }
+    if (type === 'asks.changed') {
+      const ask = record(data.ask)
+      if (!hasId(ask)) return
+      if (this.deps.isLocalAsk?.(ask.id)) return
+      this.remember(this.askItems, ask, KEPT_ASKS)
+      this.deps.publish(type, { ...data, ask: { ...ask, host: this.name }, host: this.name })
+      return
+    }
+    if (type === 'show.requested') {
+      if (!hasId(data)) return
+      this.remember(this.shareItems, data, KEPT_SHARES)
+      this.deps.publish(type, { ...data, host: this.name })
+      return
+    }
     const session = isDescriptor(data.session) ? (data.session as Descriptor) : null
     if (type === 'session.ended' && typeof data.id === 'string') {
       // Once per session: the reconnect sweep may already have said it, and an

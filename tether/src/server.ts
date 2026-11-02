@@ -422,12 +422,13 @@ export function buildRouter(context: ServerContext): Router {
   registerLifecycleRoutes(router, context)
   if (context.runs) registerRunRoutes(router, context.runs, context.stepChats, context.hub)
   const show = context.show ?? resolveShowConfig({})
-  registerShowRoute(router, events, context.store, show)
+  registerShowRoute(router, events, context.store, show, context.hub)
   registerAskRoutes(router, {
     db: context.store.db,
     events,
     show,
     delivery: context.asks,
+    hub: context.hub,
     feed: context.asksFeed,
     now: context.now,
   })

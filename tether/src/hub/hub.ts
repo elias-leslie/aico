@@ -43,7 +43,7 @@ const UPDATE_FAILURES_KEY = 'peer_update_failures'
 const SNAPSHOTS_KEY = 'peer_sessions'
 
 const SESSION_ID = /^[0-9a-f]{8}$/
-const ROUTE = /^\/v1\/(sessions|widgets|roots|wakes|runs)\/([^/?]+)(\/[^?]*)?$/
+const ROUTE = /^\/v1\/(sessions|widgets|roots|wakes|runs|asks)\/([^/?]+)(\/[^?]*)?$/
 /** The session asking for a forwarded End (API 23; lowercase, as Node keeps it). */
 export const ENDED_BY_HEADER = 'tether-ended-by'
 
@@ -55,6 +55,7 @@ export interface HubDeps {
   isLocalSession(id: string): boolean
   isLocalRoot(requestId: string): boolean
   isLocalRun(runId: string): boolean
+  isLocalAsk?(id: string): boolean
   /** The badge name of a local coordinator (`↳ <name>` on a remote lane), or null. */
   leadName(id: string): string | null
   /** Make a local session a coordinator and return the lineage its lanes on
@@ -218,6 +219,7 @@ export class Hub {
         {
           publish: this.deps.publish,
           isLocal: this.deps.isLocalSession,
+          ...(this.deps.isLocalAsk ? { isLocalAsk: this.deps.isLocalAsk } : {}),
           identity: {
             get: (name) => this.identities()[name] ?? null,
             set: (name, id) =>
@@ -312,6 +314,7 @@ export class Hub {
       wake: peer.wake,
       apiVersion: peer.apiVersion,
       update: peer.update,
+      canSleep: peer.entry.sleep !== null,
     }))
   }
 
@@ -453,6 +456,28 @@ export class Hub {
     return merged
   }
 
+  /** Local asks plus each peer's (tagged with `host`; `peer` says why they are not
+   * live while the link is down), filtered as `GET /v1/asks` filters. */
+  mergeAsks(
+    local: Record<string, unknown>[],
+    filter: { session?: string; requester?: string; states: string[] },
+  ): Record<string, unknown>[] {
+    const wanted = (ask: Record<string, unknown>) =>
+      (!filter.session || ask.session === filter.session) &&
+      (!filter.requester || ask.requester === filter.requester) &&
+      (!filter.states.length || filter.states.includes(ask.state as string))
+    const remote = [...this.peers.values()].flatMap((peer) => peer.asks().filter(wanted))
+    return [...local, ...remote]
+  }
+
+  /** Local shares plus each peer's, oldest first so a client's cursor still works. */
+  mergeShares(local: Record<string, unknown>[]): Record<string, unknown>[] {
+    const remote = [...this.peers.values()].flatMap((peer) => peer.shares())
+    if (!remote.length) return local
+    const at = (item: Record<string, unknown>) => Date.parse(String(item.createdAt)) || 0
+    return [...local, ...remote].sort((a, b) => at(a) - at(b))
+  }
+
   /** Every peer's `GET /v1/roots` items for this query, tagged with `host`. */
   async roots(search: string): Promise<Record<string, unknown>[]> {
     const lists = await Promise.all(
@@ -567,6 +592,8 @@ export class Hub {
         if (peer.ownsWake(id)) return peer
       } else if (kind === 'runs') {
         if (!this.deps.isLocalRun(id) && peer.ownsRun(id)) return peer
+      } else if (kind === 'asks') {
+        if (!this.deps.isLocalAsk?.(id) && peer.ownsAsk(id)) return peer
       }
     }
     return null

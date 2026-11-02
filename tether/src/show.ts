@@ -5,6 +5,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { ShowConfig } from './config'
 import type { EventBus } from './events'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import type { Hub } from './hub/hub'
 
 /** The most files and folders one share may name. */
 export const MAX_SHARE_PATHS = 20
@@ -177,6 +178,8 @@ export function registerShowRoute(
   events: EventBus,
   store: { db: DatabaseSync },
   config: ShowConfig,
+  /** `GET /v1/shares?hosts=all` adds the linked hosts' shares. */
+  hub?: Pick<Hub, 'mergeShares'> | null,
 ): void {
   const shares = new ShareStore(store.db, config)
   router
@@ -187,7 +190,13 @@ export function registerShowRoute(
       events.publish('show.requested', share)
       sendJson(res, 201, share)
     })
-    .add('GET', '/v1/shares', (_req, res) => {
-      sendJson(res, 200, { items: shares.list() })
+    .add('GET', '/v1/shares', (_req, res, _params, query) => {
+      const items = shares.list()
+      sendJson(res, 200, {
+        items:
+          hub && query.get('hosts') === 'all'
+            ? hub.mergeShares(items as unknown as Record<string, unknown>[])
+            : items,
+      })
     })
 }
