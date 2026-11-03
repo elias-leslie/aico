@@ -129,6 +129,7 @@ restrict,from="<container ip>",command="/usr/local/sbin/aico-push" ssh-ed25519 A
 
 The script reads one Aico notice on stdin, checks every field, and sends it with the dead-man alarm's own sender
 (`nightshift.deadman.send`, so the app route and Web Push, with credentials only root holds there), once per key.
+The notice's optional `open` link (Aico origin only, plain, at most 300 characters) is what a tap or the Open button opens.
 The key opens no shell and takes no arguments. The host firewall must let the container reach port 22 (one rule in
 the node's `host.fw`). Such a push has no Nightshift item (it shows in the Proxmox push log) and cannot be resolved
 afterwards.
