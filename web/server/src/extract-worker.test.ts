@@ -17,6 +17,7 @@ const GOOD = {
   items: [],
   receipt: null,
   odometer: null,
+  vehicle: null,
 }
 
 describe('extract worker', () => {

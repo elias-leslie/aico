@@ -503,6 +503,13 @@ export class NotesStore {
     )
   }
 
+  /** Live captures of one upload batch, oldest first. */
+  capturesInGroup(groupId: string): CaptureRow[] {
+    return this.db
+      .prepare('SELECT * FROM captures WHERE group_id = ? AND deleted = 0 ORDER BY created_at, id')
+      .all(groupId) as unknown as CaptureRow[]
+  }
+
   /** The captures that answer an ask, oldest first (tombstones left out). */
   capturesForAsk(askId: string): CaptureRow[] {
     return this.db

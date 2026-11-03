@@ -193,6 +193,7 @@ describe('capture router and the portfolio-ai owner', () => {
       kind: 'receipt',
       storeName: '',
       note: '',
+      group: [],
     })
     expect(again).toEqual({ state: 'filed', ref: 'pf-1' })
     expect(byClient.size).toBe(1)
@@ -256,14 +257,14 @@ describe('capture router and the portfolio-ai owner', () => {
     expect(existsSync(blobPath(blobs, second?.hash as string))).toBe(true)
   })
 
-  it('leaves notes and vehicle types ready with a suggestion that says why, and no todo', async () => {
+  it('leaves notes and unconnected vehicle types ready with a suggestion that says why, and no todo', async () => {
     const r = router()
     const grocery = await ready(r, 'grocery_list')
     const car = await ready(r, 'odometer')
     expect(grocery).toMatchObject({ route_state: 'suggested', owner: 'notes' })
     expect(r.describe(grocery as never)).toMatchObject({ canSend: false })
     expect(grocery?.route_note).toContain('Notes')
-    expect(car?.route_note).toContain('Vehicles come later')
+    expect(car?.route_note).toContain("Vehicles isn't connected")
     expect(sent).toHaveLength(0)
     await expect(r.act(car?.id as string, 'send')).rejects.toThrow("isn't set up")
     // A type nobody takes gets no route at all.

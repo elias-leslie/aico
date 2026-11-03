@@ -24,7 +24,8 @@ const GOOD = {
   lines: [{ text: 'TRIP A 44.6', struck: false }],
   items: [],
   receipt: null,
-  odometer: { odometer: 33396, trip: 44.6 },
+  odometer: { odometer: 33396, trip: 44.6, unit: null },
+  vehicle: null,
 }
 
 function runners(agy: ExecResult | Error, ollama?: { status: number; text: string } | Error) {

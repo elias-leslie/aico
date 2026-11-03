@@ -2,7 +2,10 @@
   "owners": {
     "portfolio-ai": { "label": "Portfolio AI" },
     "notes": { "label": "Notes", "later": "Notes are coming soon, so this stays here for now." },
-    "vehicles": { "label": "Vehicles", "later": "Vehicles come later, so this stays here for now." }
+    "vehicles": {
+      "label": "Vehicles",
+      "later": "Vehicles isn't connected on this computer, so this stays here for now."
+    }
   },
   "types": [
     {
@@ -60,6 +63,7 @@
       "id": "odometer",
       "label": "Odometer",
       "owner": "vehicles",
+      "owner_kind": "vehicle_event",
       "auto": false,
       "confirm": true,
       "keep_copy": false,
@@ -70,11 +74,23 @@
       "id": "service_invoice",
       "label": "Service invoice",
       "owner": "vehicles",
+      "owner_kind": "vehicle_event",
       "auto": false,
       "confirm": true,
       "keep_copy": false,
       "question": "Send to Vehicles as a service invoice?",
       "not_label": "Not a service invoice"
+    },
+    {
+      "id": "vehicle_note",
+      "label": "Car note",
+      "owner": "vehicles",
+      "owner_kind": "vehicle_event",
+      "auto": false,
+      "confirm": true,
+      "keep_copy": false,
+      "question": "Send to Vehicles as work done on a car?",
+      "not_label": "Not about a car"
     },
     {
       "id": "other",

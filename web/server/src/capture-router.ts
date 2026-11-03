@@ -13,7 +13,7 @@ import { needsPreview } from './capture-files'
 import type { CaptureTypeRow, CaptureTypeTable } from './capture-types'
 import type { CaptureRow, NotesStore, RoutePlan, RouteState } from './notes-db'
 import { type Notice, type RunNotice, resolveNotice, runCommand, sendNotice } from './notice'
-import type { HandOff, OwnerAdapter } from './owners/types'
+import type { GroupMember, HandOff, OwnerAdapter } from './owners/types'
 import { HttpError } from './tether'
 
 export type RouteAction = 'send' | 'keep' | 'not_this'
@@ -52,6 +52,7 @@ export interface RouterDeps {
 }
 
 const REROUTABLE: readonly (RouteState | null)[] = ['suggested', 'waiting', 'failed']
+const ROUTABLE: readonly RouteState[] = ['suggested', 'confirmed', 'waiting', 'failed']
 
 export const routeKey = (id: string) => `capture:${id}`
 
@@ -188,8 +189,13 @@ export class CaptureRouter {
       const entry = this.deps.table.type(row.type)
       let result: Awaited<ReturnType<OwnerAdapter['send']>>
       try {
-        const job = await this.job(row, entry, adapter.local === true)
-        result = 'failed' in job ? { state: 'failed', reason: job.failed } : await adapter.send(job)
+        const job = await this.job(row, entry, adapter)
+        if ('failed' in job) result = { state: 'failed', reason: job.failed }
+        else if ('wait' in job) result = { state: 'waiting', note: job.wait }
+        else {
+          result = await adapter.send(job)
+          if (result.state === 'filed') await this.fileGroupMates(row, job, result.ref)
+        }
       } catch (error) {
         this.log(`capture ${id}: hand-off crashed: ${(error as Error).stack ?? error}`)
         result = { state: 'failed', reason: 'Something went wrong while sending it' }
@@ -218,22 +224,75 @@ export class CaptureRouter {
   private async job(
     row: CaptureRow,
     entry: CaptureTypeRow | null,
-    local: boolean,
-  ): Promise<HandOff | { failed: string }> {
-    if (!row.hash) return { failed: 'The file is no longer on this computer' }
+    adapter: OwnerAdapter,
+  ): Promise<HandOff | { failed: string } | { wait: string }> {
+    const group = adapter.grouped ? await this.groupOf(row) : null
+    if (group && 'wait' in group) return group
+    if (!row.hash && !group) return { failed: 'The file is no longer on this computer' }
     const preview = needsPreview(row.mime)
-    const bytes = local
-      ? new Uint8Array(0)
-      : await readBlob(this.deps.blobsDir, row.hash, preview ? 'preview' : 'original')
-    if (!bytes) return { failed: 'The picture is not ready to send yet. Try again in a moment' }
+    const bytes =
+      adapter.local || !row.hash
+        ? new Uint8Array(0)
+        : await readBlob(this.deps.blobsDir, row.hash, preview ? 'preview' : 'original')
+    if (!bytes && !group)
+      return { failed: 'The picture is not ready to send yet. Try again in a moment' }
     return {
       capture: row,
       captureId: row.id,
-      bytes,
+      bytes: bytes ?? new Uint8Array(0),
       mime: preview ? 'image/jpeg' : row.mime,
       kind: entry?.owner_kind ?? entry?.id ?? 'capture',
       storeName: storeOf(row),
       note: row.caption,
+      group: group ?? [],
+    }
+  }
+
+  /**
+   * The upload batch a grouped owner takes as one event. Waits while another
+   * file of the batch is still being read; leaves out files the owner already
+   * said no to. Members routed to the same owner go with the event.
+   */
+  private async groupOf(row: CaptureRow): Promise<GroupMember[] | { wait: string }> {
+    const batch = row.group_id ? this.deps.store.capturesInGroup(row.group_id) : [row]
+    if (batch.some((m) => m.status === 'new' || m.status === 'extracting'))
+      return { wait: 'Still reading the other files in this group' }
+    const members: GroupMember[] = []
+    for (const m of batch) {
+      if (m.id !== row.id && m.route_state === 'kept') continue
+      const own =
+        m.id === row.id ||
+        (m.owner === row.owner && !!m.route_state && ROUTABLE.includes(m.route_state))
+      const preview = needsPreview(m.mime)
+      const sendable = own && m.hash && (m.kind === 'image' || m.kind === 'pdf')
+      members.push({
+        capture: m,
+        own,
+        mime: preview ? 'image/jpeg' : m.mime,
+        bytes: sendable
+          ? await readBlob(this.deps.blobsDir, m.hash as string, preview ? 'preview' : 'original')
+          : null,
+      })
+    }
+    return members
+  }
+
+  /** The event covered the whole batch: its other car captures are filed with the same id and purged like this one. */
+  private async fileGroupMates(row: CaptureRow, job: HandOff, ref: string): Promise<void> {
+    const { store } = this.deps
+    for (const { capture, own } of job.group) {
+      if (!own || capture.id === row.id) continue
+      const entry = this.deps.table.type(capture.type)
+      const purge = !(entry?.keep_copy ?? true)
+      const moved = store.transitionRoute(capture.id, ROUTABLE, {
+        route_state: 'confirmed',
+        route_note: null,
+      })
+      if (!moved) continue
+      await this.clearNotice(capture, 'Sent from Aico.')
+      store.fileCapture(capture.id, ref, purge)
+      if (purge && capture.hash) await this.purge(capture.hash)
+      this.log(`capture ${capture.id} filed with ${capture.owner} as ${ref} (with ${row.id})`)
     }
   }
 

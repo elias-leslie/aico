@@ -21,6 +21,7 @@ import { registerExportRoutes } from './notes-export'
 import { NotesOwner } from './owners/notes'
 import { PortfolioAiOwner } from './owners/portfolio-ai'
 import type { OwnerAdapter } from './owners/types'
+import { VehiclesOwner } from './owners/vehicles'
 import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
@@ -52,11 +53,11 @@ function serve(): void {
   })
   const previews = new PreviewJobs(blobsDir, execRunner)
   const adapters = new Map<string, OwnerAdapter>([['notes', new NotesOwner(notes)]])
-  if (config.portfolio.url)
-    adapters.set(
-      'portfolio-ai',
-      new PortfolioAiOwner({ url: config.portfolio.url, tokenFile: config.portfolio.tokenFile }),
-    )
+  if (config.portfolio.url) {
+    const portfolio = { url: config.portfolio.url, tokenFile: config.portfolio.tokenFile }
+    adapters.set('portfolio-ai', new PortfolioAiOwner(portfolio))
+    adapters.set('vehicles', new VehiclesOwner(portfolio))
+  }
   const router = new CaptureRouter({
     store: notes,
     blobsDir,
@@ -65,6 +66,8 @@ function serve(): void {
     ownerUrls: {
       'portfolio-ai':
         config.portfolio.appUrl && `${config.portfolio.appUrl.replace(/\/+$/, '')}/capture`,
+      vehicles:
+        config.portfolio.appUrl && `${config.portfolio.appUrl.replace(/\/+$/, '')}/vehicles`,
     },
     publicHost: config.publicHost,
   })

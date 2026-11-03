@@ -19,9 +19,9 @@ export interface PortfolioAiOptions {
 export const CAPTURE_NAMESPACE = '6f0c2b1e-3a54-4d8e-9a77-5b1d2c9e84a3'
 
 /** portfolio-ai's contract: what it sniffs and its size limit (backend/app/api/captures.py). */
-const ACCEPTED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
-const MAX_BYTES = 15 * 1024 * 1024
-const SUFFIX: Record<string, string> = {
+export const ACCEPTED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
+export const MAX_BYTES = 15 * 1024 * 1024
+export const SUFFIX: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
@@ -49,7 +49,11 @@ function detailOf(body: string): string | null {
   }
 }
 
-export class PortfolioAiOwner implements OwnerAdapter {
+/**
+ * The way to portfolio-ai (the loopback forwarder and the agent token), shared
+ * by everything Aico sends it: receipts here, vehicle events in `vehicles.ts`.
+ */
+export class PortfolioLink {
   private readonly url: string
 
   constructor(private readonly options: PortfolioAiOptions) {
@@ -74,6 +78,65 @@ export class PortfolioAiOwner implements OwnerAdapter {
     }
   }
 
+  /**
+   * Posts a form and maps the answer: 2xx hands the parsed JSON to `ok`; no
+   * connection or a 5xx is `waiting`; 403 and other 4xx are `failed` in words
+   * for the owner. `conflict` replaces the generic sentence for a 409.
+   */
+  async post(
+    path: string,
+    form: FormData,
+    ok: (json: Record<string, unknown>) => HandOffResult,
+    conflict?: string,
+  ): Promise<HandOffResult> {
+    let response: Response
+    try {
+      response = await fetch(`${this.url}${path}`, {
+        method: 'POST',
+        headers: await this.headers(),
+        body: form,
+      })
+    } catch {
+      return { state: 'waiting', note: "Portfolio AI isn't answering right now" }
+    }
+    const body = await response.text().catch(() => '')
+    if (response.status >= 500)
+      return { state: 'waiting', note: `Portfolio AI had an error (${response.status})` }
+    if (response.status === 403)
+      return {
+        state: 'failed',
+        reason: 'Portfolio AI refused Aico. Its agent token file may be missing or out of date',
+      }
+    if (response.status === 409 && conflict) return { state: 'failed', reason: conflict }
+    if (!response.ok) {
+      const detail = detailOf(body)
+      return {
+        state: 'failed',
+        reason: `Portfolio AI said no (${response.status})${detail ? `: ${detail}` : ''}`,
+      }
+    }
+    let json: Record<string, unknown> = {}
+    try {
+      const parsed = JSON.parse(body) as unknown
+      if (parsed && typeof parsed === 'object') json = parsed as Record<string, unknown>
+    } catch {
+      // handled by `ok`: no id means failed
+    }
+    return ok(json)
+  }
+}
+
+export class PortfolioAiOwner implements OwnerAdapter {
+  private readonly link: PortfolioLink
+
+  constructor(options: PortfolioAiOptions) {
+    this.link = new PortfolioLink(options)
+  }
+
+  reachable(): Promise<boolean> {
+    return this.link.reachable()
+  }
+
   async send(job: HandOff): Promise<HandOffResult> {
     if (!ACCEPTED_MIME.has(job.mime))
       return { state: 'failed', reason: 'Portfolio AI takes JPEG, PNG, WebP or PDF receipts' }
@@ -91,40 +154,10 @@ export class PortfolioAiOwner implements OwnerAdapter {
       new Blob([job.bytes], { type: job.mime }),
       `${job.kind}.${SUFFIX[job.mime]}`,
     )
-
-    let response: Response
-    try {
-      response = await fetch(`${this.url}/api/captures`, {
-        method: 'POST',
-        headers: await this.headers(),
-        body: form,
-      })
-    } catch {
-      return { state: 'waiting', note: "Portfolio AI isn't answering right now" }
-    }
-    const body = await response.text().catch(() => '')
-    if (response.status >= 500)
-      return { state: 'waiting', note: `Portfolio AI had an error (${response.status})` }
-    if (response.status === 403)
-      return {
-        state: 'failed',
-        reason: 'Portfolio AI refused Aico. Its agent token file may be missing or out of date',
-      }
-    if (!response.ok) {
-      const detail = detailOf(body)
-      return {
-        state: 'failed',
-        reason: `Portfolio AI said no (${response.status})${detail ? `: ${detail}` : ''}`,
-      }
-    }
-    let id: unknown
-    try {
-      id = (JSON.parse(body) as { id?: unknown }).id
-    } catch {
-      id = undefined
-    }
-    if (typeof id !== 'string' || !id)
-      return { state: 'failed', reason: 'Portfolio AI answered without a capture id' }
-    return { state: 'filed', ref: id }
+    return this.link.post('/api/captures', form, ({ id }) =>
+      typeof id === 'string' && id
+        ? { state: 'filed', ref: id }
+        : { state: 'failed', reason: 'Portfolio AI answered without a capture id' },
+    )
   }
 }

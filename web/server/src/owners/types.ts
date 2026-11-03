@@ -3,6 +3,16 @@
 
 import type { CaptureRow } from '../notes-db'
 
+/** One live capture of the same upload batch (`group_id`), for owners that take a whole group. */
+export interface GroupMember {
+  capture: CaptureRow
+  /** This member is routed to the same owner, so its file goes with the event and it is filed with it. */
+  own: boolean
+  /** The file to send (a HEIC as its JPEG preview); null for context members and files already gone. */
+  bytes: Uint8Array | null
+  mime: string
+}
+
 export interface HandOff {
   /** Aico's capture id; the owner's idempotency key is made from it. */
   captureId: string
@@ -16,6 +26,8 @@ export interface HandOff {
   note: string
   /** The capture itself, for owners that live inside Aico. */
   capture: CaptureRow
+  /** For a `grouped` owner: every live capture in this one's batch, oldest first (this one included). */
+  group: GroupMember[]
 }
 
 export type HandOffResult =
@@ -28,6 +40,8 @@ export type HandOffResult =
 export interface OwnerAdapter {
   /** Lives inside Aico: takes the capture row and needs no file bytes sent. */
   readonly local?: boolean
+  /** Takes the whole batch as one event: the router passes `group` and files every own member with it. */
+  readonly grouped?: boolean
   send(job: HandOff): Promise<HandOffResult>
   /** A cheap look: is the owner reachable? Used before retrying waiting captures. */
   reachable(): Promise<boolean>
