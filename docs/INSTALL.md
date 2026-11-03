@@ -130,9 +130,17 @@ restrict,from="<container ip>",command="/usr/local/sbin/aico-push" ssh-ed25519 A
 The script reads one Aico notice on stdin, checks every field, and sends it with the dead-man alarm's own sender
 (`nightshift.deadman.send`, so the app route and Web Push, with credentials only root holds there), once per key.
 The notice's optional `open` link (Aico origin only, plain, at most 300 characters) is what a tap or the Open button opens.
-The key opens no shell and takes no arguments. The host firewall must let the container reach port 22 (one rule in
-the node's `host.fw`). Such a push has no Nightshift item (it shows in the Proxmox push log) and cannot be resolved
-afterwards.
+The key opens no shell and takes no arguments from the caller. The host firewall must let the container reach port 22
+(one rule in the node's `host.fw`). Such a push has no Nightshift item (it shows in the Proxmox push log, tag
+`aico-push`) and cannot be resolved afterwards.
+
+Another guest uses the same script with its own key: the forced command carries the caller's name
+(`command="/usr/local/sbin/aico-push portfolio"`; no name means `aico`). `CALLERS` in the script holds each caller's
+allowed `source`, key form, link host (`aico.` or `port.` in Nightshift's `open_hosts`), size limits, severities and
+dedupe window, so one caller's key cannot send another's notices. `portfolio` (Portfolio-AI on VM 180, key line
+`restrict,from="<vm ip>",command="/usr/local/sbin/aico-push portfolio" ... portfolio-vm180-push`) takes the notice
+Portfolio-AI builds for `nightshift push --json` as is: kinds alert/todo/info, keys `portfolio-ai:...`, `actions` and
+`cooldown` ignored, `push: "tray"` sent as a silent info, and a repeat of a key is dropped only within 24 hours.
 The Hosts card shows "different Aico version" when the two bundles differ
 (`hello.build_id` is a fingerprint of the server bundle, `AICO_BUILD_ID` overrides it).
 

@@ -87,3 +87,26 @@ def test_send_with_link_adds_the_link_to_both_messages_and_restores_deadman():
     assert seen["web"] == {"title": "t", "url": "/", "open": link}
     assert seen["app"]["actions"] == [{"id": "open", "label": "Open", "tier": "view", "url": link}]
     assert deadman.push is real_push and deadman.fcm_item is real_item
+
+
+def test_portfolio_links_use_the_port_origin_and_may_carry_a_fragment():
+    push = load()
+    port = push.CALLERS["portfolio"]
+    origin = "https://port.example.test"
+    for link in (f"{origin}/vehicles", f"{origin}/money?tab=cards#card-strategy"):
+        assert push.open_link_ok(link, origin, port), link
+    assert not push.open_link_ok(f"{origin}/money#a b", origin, port)
+    # Aico links keep refusing a fragment.
+    assert not push.open_link_ok(f"{ORIGIN}/?ask=1#frag", ORIGIN)
+
+
+def test_origin_is_the_open_host_with_the_callers_prefix(monkeypatch):
+    import sys
+
+    push = load()
+    site = types.SimpleNamespace(open_hosts=lambda: ["dev.example.test", "port.example.test", "aico.example.test"])
+    monkeypatch.setitem(sys.modules, "nightshift", types.SimpleNamespace(siteconf=site))
+    assert push.origin_for(push.CALLERS["aico"]) == "https://aico.example.test"
+    assert push.origin_for(push.CALLERS["portfolio"]) == "https://port.example.test"
+    monkeypatch.setitem(sys.modules, "nightshift", types.SimpleNamespace(siteconf=types.SimpleNamespace(open_hosts=list)))
+    assert push.origin_for(push.CALLERS["portfolio"]) is None
