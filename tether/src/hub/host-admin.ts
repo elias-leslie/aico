@@ -206,12 +206,7 @@ export class HostAdmin {
       return {
         host: name,
         agent_hub: `no Agent Hub command on ${name}`,
-        tools: Object.keys(this.logins()).map((tool) => ({
-          tool,
-          state: 'unknown',
-          source: 'not checked',
-          credentials: [],
-        })),
+        tools: await this.localStatus(name, entry, control),
         checkedAt: Date.now(),
         actions: this.actions(),
       }
@@ -227,6 +222,48 @@ export class HostAdmin {
         reason: 'the host did not answer with JSON',
       })
     return { ...parsed, host: name, checkedAt: Date.now(), actions: this.actions() }
+  }
+
+  /** Without Agent Hub: each tool's own login file on the host says whether it
+   * is signed in (a file can hold an expired login; the tool says so when run). */
+  private async localStatus(
+    name: string,
+    entry: HostEntry,
+    control: string,
+  ): Promise<Record<string, unknown>[]> {
+    const logins = Object.entries(this.logins())
+    const checks = logins
+      .filter(([, login]) => login.local)
+      .map(([tool, login]) => {
+        const { bin, authFile } = login.local as { bin: string; authFile: string }
+        return `printf '%s %s %s\\n' ${shellQuote(tool)} "$(command -v ${shellQuote(bin)} >/dev/null && echo y || echo n)" "$(test -s "$HOME"/${shellQuote(authFile)} && echo y || echo n)"`
+      })
+    const seen = new Map<string, { bin: boolean; file: boolean }>()
+    if (checks.length) {
+      const result = await this.run(
+        remoteArgv(entry, control, checks.join('; ')),
+        STATUS_TIMEOUT_MS,
+      )
+      if (result.code === 0)
+        for (const line of result.stdout.split('\n')) {
+          const [tool, bin, file] = line.trim().split(' ')
+          if (tool) seen.set(tool, { bin: bin === 'y', file: file === 'y' })
+        }
+    }
+    return logins.map(([tool, login]) => {
+      const found = seen.get(tool)
+      const authFile = login.local?.authFile
+      if (!found || !authFile)
+        return { tool, state: 'unknown', source: 'not checked', credentials: [] }
+      if (!found.bin)
+        return { tool, state: 'unknown', source: `not installed on ${name}`, credentials: [] }
+      return {
+        tool,
+        state: found.file ? 'signed_in' : 'needs_sign_in',
+        source: `host:~/${authFile}`,
+        credentials: [],
+      }
+    })
   }
 
   /** What Aico can do per tool: sign in, and how to sign out. */

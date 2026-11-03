@@ -400,6 +400,7 @@ export const pi: TuiAdapter = {
   login: {
     signIn: "echo 'In pi, type /login and pick a provider.'; pi",
     signOut: { kind: 'session', line: "echo 'In pi, type /logout.'; pi" },
+    local: { bin: 'pi', authFile: '.pi/agent/auth.json' },
   },
   models: { events: piModelEvents },
   sessionFile: piSessionFile,

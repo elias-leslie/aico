@@ -397,6 +397,7 @@ export const agy: TuiAdapter = {
   login: {
     signIn: "echo 'agy asks you to sign in when it starts.'; agy",
     signOut: { kind: 'session', line: "echo 'In agy, type /logout.'; agy" },
+    local: { bin: 'agy', authFile: '.gemini/antigravity-cli/antigravity-oauth-token' },
   },
   models: null,
   sessionFile: null,

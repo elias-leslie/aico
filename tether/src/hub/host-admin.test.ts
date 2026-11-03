@@ -155,6 +155,30 @@ describe('login status', () => {
     expect(answer.actions).toMatchObject({ agy: { signIn: true, signOut: 'session' } })
   })
 
+  it("checks each tool's own login file on a host with no agent-hub command", async () => {
+    const { admin, runs } = setup({
+      run: (argv) =>
+        argv.at(-1)?.includes('agent-hub login status')
+          ? { code: 127, stdout: '', output: 'bash: line 1: agent-hub: command not found' }
+          : { code: 0, stdout: 'claude-code n n\ncodex y n\npi n n\nagy y y\n', output: '' },
+    })
+    const answer = await admin.status('vm-1')
+    const tools = Object.fromEntries(
+      (answer.tools as { tool: string; state: string; source: string }[]).map((item) => [
+        item.tool,
+        item,
+      ]),
+    )
+    expect(tools.agy).toMatchObject({
+      state: 'signed_in',
+      source: 'host:~/.gemini/antigravity-cli/antigravity-oauth-token',
+    })
+    expect(tools.codex).toMatchObject({ state: 'needs_sign_in', source: 'host:~/.codex/auth.json' })
+    expect(tools.pi).toMatchObject({ state: 'unknown', source: 'not installed on vm-1' })
+    expect(runs).toHaveLength(2)
+    expect(runs[1]?.at(-1)).toContain('"$HOME"/')
+  })
+
   it('refuses while the host is not connected, without running anything', async () => {
     const { admin, runs } = setup({ state: 'offline' })
     const error = await refusal(admin.status('vm-1'))

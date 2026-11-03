@@ -75,6 +75,9 @@ export interface ToolLogin {
     | null
   /** A served tool: sign-in grants it to the host first (push needs the grant). */
   grant?: boolean
+  /** The tool's command and its own login file (home-relative), for a host
+   * without Agent Hub: Aico checks the file is there instead. */
+  local?: { bin: string; authFile: string }
 }
 
 /** Per-tool facts that live outside Tether (hook scripts, extensions), kept

@@ -625,6 +625,7 @@ export const codex: TuiAdapter = {
   login: {
     signIn: 'codex login --device-auth',
     signOut: { kind: 'command', line: 'codex logout' },
+    local: { bin: 'codex', authFile: '.codex/auth.json' },
   },
   models: { events: codexModelEvents },
   sessionFile: null,
