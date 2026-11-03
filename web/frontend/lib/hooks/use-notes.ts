@@ -58,6 +58,8 @@ export function useNote(id: string | null) {
     queryFn: ({ signal }) => fetchNote(id as string, signal),
     enabled: id !== null,
     refetchInterval: POLL_MS,
+    // Back from the other window (or another app): show its changes at once.
+    refetchOnWindowFocus: true,
     retry: retryOther,
   })
   return {

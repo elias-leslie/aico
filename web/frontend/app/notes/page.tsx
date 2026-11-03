@@ -1,19 +1,67 @@
 'use client'
 
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, SquareArrowOutUpRight } from 'lucide-react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useState } from 'react'
 import { CaptureLauncher } from '@/components/capture/CaptureLauncher'
-import { NoteEditor } from '@/components/notes/NoteEditor'
+import { handOffNote, NoteEditor } from '@/components/notes/NoteEditor'
 import { NoteList } from '@/components/notes/NoteList'
 import { OfflineBanner, ReadOnlyScope } from '@/components/ReadOnly'
-import { isNoteId } from '@/lib/api/notes'
+import { isNoteId, noteHref } from '@/lib/api/notes'
+import { useMediaQuery } from '@/lib/hooks/use-media-query'
+import { popOutNotes, useIsNotesWindow } from '@/lib/notes-window'
+
+const POP_OUT = 'Pop out into its own window'
+
+/** Moves notes into their own window, to snap beside other work; this window
+ * goes back to the sessions. Desktop only: a phone has no side window. */
+function PopOut({ id }: { id: string | null }) {
+  const router = useRouter()
+  const desktop = useMediaQuery('(pointer: fine)')
+  const [blocked, setBlocked] = useState(false)
+  if (!desktop) return null
+  return (
+    <>
+      {blocked && (
+        <span
+          role="alert"
+          className="text-[12px]"
+          style={{ color: 'var(--beacon)' }}
+        >
+          Pop-up blocked
+        </span>
+      )}
+      <button
+        type="button"
+        className="lantern-icon-btn"
+        aria-label={POP_OUT}
+        title={blocked ? 'Allow pop-ups for Aico, then try again' : POP_OUT}
+        data-testid="notes-pop-out"
+        onClick={() => {
+          if (!popOutNotes(id ? noteHref(id) : '/notes')) {
+            setBlocked(true)
+            return
+          }
+          if (id) handOffNote(id)
+          router.push('/')
+        }}
+      >
+        <SquareArrowOutUpRight
+          className="h-[18px] w-[18px]"
+          strokeWidth={1.7}
+        />
+      </button>
+    </>
+  )
+}
 
 /** The Notes page: the list, or one note when the link carries its id. */
 function Notes() {
   const id = useSearchParams().get('id')
   const detail = isNoteId(id)
+  // The popped-out window is only notes: no way back to the sessions here.
+  const popped = useIsNotesWindow()
   return (
     <main
       className="mx-auto flex h-full w-full max-w-xl flex-col px-4"
@@ -22,20 +70,23 @@ function Notes() {
       <OfflineBanner />
       <ReadOnlyScope>
         <header className="flex flex-none items-center gap-2 py-3">
-          <Link
-            href={detail ? '/notes' : '/'}
-            className="lantern-icon-btn"
-            aria-label={detail ? 'Back to notes' : 'Back to sessions'}
-            title={detail ? 'Back to notes' : 'Back to sessions'}
-          >
-            <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
-          </Link>
+          {(detail || !popped) && (
+            <Link
+              href={detail ? '/notes' : '/'}
+              className="lantern-icon-btn"
+              aria-label={detail ? 'Back to notes' : 'Back to sessions'}
+              title={detail ? 'Back to notes' : 'Back to sessions'}
+            >
+              <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
+            </Link>
+          )}
           <h1
             className="min-w-0 flex-1"
             style={{ font: '500 18px/1.2 var(--font-display)' }}
           >
             {detail ? 'Note' : 'Notes'}
           </h1>
+          {!popped && <PopOut id={detail ? id : null} />}
           <CaptureLauncher variant="row" />
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">

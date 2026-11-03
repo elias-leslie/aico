@@ -166,6 +166,11 @@ export function isBlankNote(
  * double mount) cancels them. */
 const blankDeletes = new Map<string, ReturnType<typeof setTimeout>>()
 
+/** Notes opened in another window: leaving them here must not delete them
+ * as blank, since the other window has them open now. */
+const handedOff = new Set<string>()
+export const handOffNote = (id: string) => void handedOff.add(id)
+
 function Editor({
   id,
   note,
@@ -182,6 +187,9 @@ function Editor({
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const bodyBox = useRef<HTMLTextAreaElement>(null)
+  const editorBox = useRef<HTMLDivElement>(null)
+  // A note just made starts with the cursor in its title.
+  const [fresh] = useState(() => isBlankNote(note, note))
 
   const auto = useAutosave({
     base: { title: note.title, body: note.body },
@@ -199,7 +207,7 @@ function Editor({
     blankDeletes.delete(id)
     return () => {
       const { note: last, draft: lastDraft } = latest.current
-      if (!isBlankNote(last, lastDraft)) return
+      if (handedOff.delete(id) || !isBlankNote(last, lastDraft)) return
       blankDeletes.set(
         id,
         setTimeout(() => {
@@ -246,7 +254,11 @@ function Editor({
   ]
 
   return (
-    <div className="flex flex-col gap-3" data-testid="note-editor">
+    <div
+      ref={editorBox}
+      className="flex flex-col gap-3"
+      data-testid="note-editor"
+    >
       {stale && (
         <p
           role="status"
@@ -328,8 +340,21 @@ function Editor({
           font: '500 22px/1.25 var(--font-display)',
           color: 'var(--bone)',
         }}
+        // biome-ignore lint/a11y/noAutofocus: only a note just made, which the owner opened to type in
+        autoFocus={fresh}
         value={draft.title}
         onChange={(event) => auto.edit({ title: event.target.value })}
+        onKeyDown={(event) => {
+          // Enter goes on to the text, or to the add box of a list.
+          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+          event.preventDefault()
+          const next = showBody
+            ? bodyBox.current
+            : editorBox.current?.querySelector<HTMLInputElement>(
+                'input[aria-label="Add an item"]',
+              )
+          next?.focus()
+        }}
       />
 
       <div className="flex items-center gap-2" role="group" aria-label="Kind">
