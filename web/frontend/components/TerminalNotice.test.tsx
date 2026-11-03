@@ -5,6 +5,7 @@ import {
   ConnectionNotice,
   HostNotice,
   ModelSwitchNotice,
+  SignInLinkNotice,
   SizeHolderNotice,
 } from './TerminalNotice'
 
@@ -226,5 +227,32 @@ describe('ModelSwitchNotice', () => {
   it('offers details only for a refusal fallback', () => {
     render(<ModelSwitchNotice change={{ ...REFUSAL, kind: 'substituted' }} />)
     expect(screen.queryByText('Details')).toBeNull()
+  })
+})
+
+describe('SignInLinkNotice', () => {
+  const url = 'https://accounts.google.com/o/oauth2/auth?state=abc&x=1'
+
+  it('is one tappable link that opens in a new tab', () => {
+    render(<SignInLinkNotice url={url} tool="Antigravity" />)
+    const link = screen.getByRole('link', {
+      name: 'Open the Antigravity sign-in page',
+    })
+    expect(link).toHaveAttribute('href', url)
+    expect(link).toHaveAttribute('target', '_blank')
+  })
+
+  it('copies the whole link', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+    render(<SignInLinkNotice url={url} tool="Antigravity" />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Copy link' }))
+    })
+    expect(writeText).toHaveBeenCalledWith(url)
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeVisible()
   })
 })

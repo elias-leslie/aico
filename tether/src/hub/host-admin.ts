@@ -13,6 +13,7 @@ import type { AgentHubConfig } from '../agent-hub/config'
 import { HttpError, type Router, readJsonObject, sendJson } from '../http'
 import type { ToolLogin } from '../lifecycle/tui/adapters/contract'
 import { ADAPTERS } from '../lifecycle/tui/registry'
+import { SIGN_IN_TITLE } from '../lifecycle/tui/sign-in-link'
 import { type HostEntry, hostsFilePath } from './hosts'
 import { linkPaths, SSH_BIN, SSH_MUX_ONLY } from './link'
 import { downReason } from './peer'
@@ -366,7 +367,7 @@ export class HostAdmin {
       this.host(name)
       await this.deps.hub.wakeHost(name)
       if (login.grant) await this.grant(name, tool, true)
-      return this.openSession(name, `Sign in: ${tool}`, login.signIn, body)
+      return this.openSession(name, `${SIGN_IN_TITLE}${tool}`, login.signIn, body)
     }
     if (action !== 'sign_out') throw new HttpError(400, 'invalid_body', { field: 'action' })
     const signOut = login.signOut

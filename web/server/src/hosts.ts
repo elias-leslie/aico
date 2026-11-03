@@ -7,6 +7,7 @@ import {
   hostLogins,
   hostPower,
   hostSignIn,
+  sessionSignInLink,
   type TetherClient,
   TetherError,
   trustHost,
@@ -91,5 +92,12 @@ export function registerHostRoutes(router: Router, tether: TetherClient) {
       }),
     )
     return answer.session ? { ...answer, session: fromTether(answer.session, null) } : answer
+  })
+
+  // The link a sign-in session's tool printed, joined into one URL (null until it shows).
+  router.on('GET', '/api/sessions/:id/sign-in-link', async (ctx) => {
+    const id = ctx.params.id
+    if (!/^[0-9a-f]{8}$/.test(id)) throw new HttpError(422, 'Unknown session')
+    return hostCall(() => sessionSignInLink(tether, id))
   })
 }

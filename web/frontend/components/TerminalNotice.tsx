@@ -237,3 +237,49 @@ export function ModelSwitchNotice({ change }: { change: SessionModelSwitch }) {
     </div>
   )
 }
+
+/** The sign-in page a tool printed in its sign-in session, as one link to tap
+ * or copy (the terminal shows it wrapped across lines, which breaks it). */
+export function SignInLinkNotice({ url, tool }: { url: string; tool: string }) {
+  const [copied, setCopied] = useState<'yes' | 'failed' | null>(null)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied('yes')
+    } catch {
+      setCopied('failed')
+    }
+  }
+  return (
+    <div
+      className="lantern-model-bar"
+      role="status"
+      aria-live="polite"
+      data-testid="sign-in-link-notice"
+    >
+      <p className="line">
+        <span aria-hidden="true" className="dot" />
+        <a
+          className="t"
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'var(--bone)', textDecoration: 'underline' }}
+        >
+          Open the {tool} sign-in page
+        </a>
+        <button
+          type="button"
+          className="lantern-btn small ghost more"
+          onClick={() => void copy()}
+        >
+          {copied === 'yes'
+            ? 'Copied'
+            : copied === 'failed'
+              ? 'Couldn’t copy'
+              : 'Copy link'}
+        </button>
+      </p>
+    </div>
+  )
+}

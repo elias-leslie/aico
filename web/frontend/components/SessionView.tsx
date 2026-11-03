@@ -11,13 +11,19 @@ import {
   ConnectionNotice,
   HostNotice,
   ModelSwitchNotice,
+  SignInLinkNotice,
   SizeHolderNotice,
 } from '@/components/TerminalNotice'
 import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
 import { UnifiedTerminalHeaderContent as UnifiedTerminalHeader } from '@/components/terminal-header'
 import type { ProjectSource } from '@/lib/api/pane-files'
 import { type FilesRequest, setFilesOpener } from '@/lib/files-opener'
-import { powerHost } from '@/lib/hooks/use-host-admin'
+import { useAgentTools } from '@/lib/hooks/use-agent-tools'
+import {
+  powerHost,
+  signInToolOf,
+  useSignInLink,
+} from '@/lib/hooks/use-host-admin'
 import type { TerminalFontSize } from '@/lib/hooks/use-terminal-settings'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import {
@@ -26,6 +32,19 @@ import {
   getSlotWorkingDir,
   isPaneSlot,
 } from '@/lib/utils/slot'
+
+/** The link bar for a sign-in session; mounted only for one, so the query runs only then. */
+function SignInLink({ sessionId, tool }: { sessionId: string; tool: string }) {
+  const link = useSignInLink(sessionId, true)
+  const { enabledTools } = useAgentTools()
+  if (!link.data) return null
+  return (
+    <SignInLinkNotice
+      url={link.data}
+      tool={enabledTools.find((t) => t.slug === tool)?.name ?? tool}
+    />
+  )
+}
 
 export interface SessionViewProps {
   slots: (TerminalSlot | PaneSlot)[]
@@ -104,6 +123,8 @@ export function SessionView({
   const handleRef = useRef<TerminalHandle | null>(null)
   const slot = getShownSlot(slots, activeSessionId)
   const sessionId = slot ? getSlotSessionId(slot) : null
+  // A sign-in session shows the link its tool printed as one tappable link.
+  const signInTool = slot ? signInToolOf(slot.task ?? getSlotName(slot)) : null
   // Its tab's folder, or (a session outside any tab) its own.
   const project: ProjectSource | null =
     slot && isPaneSlot(slot)
@@ -262,6 +283,10 @@ export function SessionView({
             key={slot.modelSwitch.key}
             change={slot.modelSwitch}
           />
+        )}
+
+        {signInTool && sessionId && (
+          <SignInLink sessionId={sessionId} tool={signInTool} />
         )}
 
         {/* On a phone the bar sits above the session, clear of its prompt. */}

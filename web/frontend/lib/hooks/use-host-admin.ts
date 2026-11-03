@@ -192,3 +192,33 @@ export function useOpenSession() {
     [queryClient, router],
   )
 }
+
+/** The title Tether gives a sign-in session (hub/host-admin.ts). */
+const SIGN_IN_TITLE = 'Sign in: '
+
+/** The tool a sign-in session's title names, else null. */
+export function signInToolOf(title: string | null | undefined) {
+  return title?.startsWith(SIGN_IN_TITLE)
+    ? title.slice(SIGN_IN_TITLE.length)
+    : null
+}
+
+/** The sign-in link the tool printed in a sign-in session, as one clean URL.
+ * Asks every 2 s until it shows; null while the tool has not printed it or
+ * when this tool prints none. */
+export function useSignInLink(sessionId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['sign-in-link', sessionId],
+    queryFn: async (): Promise<string | null> => {
+      const res = await fetch(
+        `/api/sessions/${encodeURIComponent(sessionId ?? '')}/sign-in-link`,
+      )
+      if (!res.ok) return null
+      const body: { url?: string | null } = await res.json()
+      return body.url ?? null
+    },
+    enabled: enabled && !!sessionId,
+    retry: false,
+    refetchInterval: (query) => (query.state.data ? false : 2000),
+  })
+}

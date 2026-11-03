@@ -109,3 +109,17 @@ export async function hostSignIn(
     )
   ).body
 }
+
+/** `GET /v1/sessions/:id/sign-in-link`: the link on a sign-in session's screen,
+ * one clean URL, or `url: null` while the tool has not printed it yet. */
+export async function sessionSignInLink(
+  tether: TetherClient,
+  sessionId: string,
+): Promise<{ tool: string; url: string | null }> {
+  return (
+    await tether.request<{ tool: string; url: string | null }>(
+      'GET',
+      `/v1/sessions/${encodeURIComponent(sessionId)}/sign-in-link`,
+    )
+  ).body
+}

@@ -78,6 +78,9 @@ export interface ToolLogin {
   /** The tool's command and its own login file (home-relative), for a host
    * without Agent Hub: Aico checks the file is there instead. */
   local?: { bin: string; authFile: string }
+  /** The sign-in screen prints a URL to open in a browser: its host. Aico then
+   * shows the URL as one clean link (lifecycle/tui/sign-in-link.ts). */
+  signInLink?: { host: string }
 }
 
 /** Per-tool facts that live outside Tether (hook scripts, extensions), kept

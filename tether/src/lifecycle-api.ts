@@ -125,6 +125,7 @@ import {
   getTui,
   supportsInstructions,
 } from './lifecycle/tui/registry'
+import { extractSignInLink, signInToolOf } from './lifecycle/tui/sign-in-link'
 import type { ModelSwitch, ModelWatch } from './model-switch'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { Project, ProjectProvider } from './projects'
@@ -1318,6 +1319,23 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         throw new HttpError(409, 'workload_unavailable')
       }
       sendJson(res, 200, { generation: generationOf(row), text })
+    })
+    // The sign-in link on a `Sign in: <tool>` session's screen, joined into one
+    // URL; `url` is null until the tool has printed it. 404 for any other session.
+    .add('GET', '/v1/sessions/:id/sign-in-link', async (_req, res, params) => {
+      const row = requireSession(params.id)
+      requireTerminal(row)
+      const tool = signInToolOf(row.name)
+      const link = tool ? adapterOf(tool)?.login.signInLink : undefined
+      if (!tool || !link) throw new HttpError(404, 'no_sign_in_link')
+      if (isNeverAllocatedWidget(row)) throw new HttpError(409, 'workload_unavailable')
+      let text: string
+      try {
+        text = await runTmux(captureVisibleTargetArgs(tmuxPaneTargetForWidget(row.id), false))
+      } catch {
+        throw new HttpError(409, 'workload_unavailable')
+      }
+      sendJson(res, 200, { tool, url: extractSignInLink(text, link.host) })
     })
     .add('GET', '/v1/sessions/:id/scrollback', async (_req, res, params, query) => {
       const row = requireSession(params.id)
