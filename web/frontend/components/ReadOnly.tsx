@@ -27,7 +27,7 @@ export function ReadOnlyScope({ children }: { children: React.ReactNode }) {
   return (
     <fieldset
       disabled={offline}
-      className="contents"
+      className="contents [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-60"
       style={{ border: 0, margin: 0, padding: 0, minInlineSize: 0 }}
     >
       {children}
