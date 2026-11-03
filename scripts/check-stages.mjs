@@ -1,5 +1,6 @@
 // Generates what the package data implies, so nothing is listed by hand:
-//   * the per-package quick stages in .st-check.toml (between the markers),
+//   * the per-package quick stages in .st-check.toml (between the markers; biome, tsc
+//     and depcruise, since Vitest is a legacy tool whose quick run is `vitest related`),
 //   * the per-package Biome noRestrictedImports overrides (editor feedback).
 //
 //   node scripts/check-stages.mjs          write both
@@ -26,7 +27,7 @@ const END = '# END generated'
 const q = (value) => JSON.stringify(value)
 const list = (values) => `[${values.map(q).join(', ')}]`
 
-function stage(id, { quickPaths, argv, coveredBy, timeout }) {
+function stage(id, { quickPaths, argv, coveredBy }) {
   return [
     '[[native.stages]]',
     `id = ${q(id)}`,
@@ -37,7 +38,6 @@ function stage(id, { quickPaths, argv, coveredBy, timeout }) {
     'quick = true',
     `quick_paths = ${list(quickPaths)}`,
     `argv = ${list(argv)}`,
-    ...(timeout ? [`timeout_seconds = ${timeout}`] : []),
     '',
   ].join('\n')
 }
@@ -61,16 +61,6 @@ export function tomlBlock(packages = loadPackages(root)) {
         argv: [bin('biome'), 'check', dir],
       }),
       stage(`tsc-${pkg.dir}`, { quickPaths, coveredBy: 'tsc', argv: [bin('tsc'), '-b', dir] }),
-      stage(`vitest-${pkg.dir}`, {
-        quickPaths,
-        coveredBy: 'vitest',
-        argv: [
-          'bash',
-          '-c',
-          `PATH=$PATH:/usr/bin:/bin TMPDIR=/tmp exec ${bin('vitest')} run --project ${pkg.dir}`,
-        ],
-        timeout: 900,
-      }),
       stage(`depcruise-${pkg.dir}`, {
         quickPaths,
         coveredBy: 'depcruise',

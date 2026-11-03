@@ -18,7 +18,7 @@ schema_version = 1
 locks = ["package-lock.json", "native/host-steward/pyproject.toml", "native/host-steward/uv.lock"]
 paths = ["node_modules/.bin"]
 environment_inputs = ["node_modules"]
-legacy_tools = ["ruff", "types", "pytest", "biome", "tsc", "security"]
+legacy_tools = ["ruff", "types", "pytest", "biome", "tsc", "vitest", "security"]
 
 # uilint runs from its checkout (st uilint is the same CLI); its package is a
 # prepared input so isolated acceptance can import it.
@@ -32,10 +32,9 @@ python3 = "/usr/bin/python3"
 # The whole-repo stages below are the full gate. The generated per-package stages
 # further down are quick views of them (`covered_by`): they run only in
 # `st check --quick`, for the package a change touches and the packages that
-# depend on it. Vitest runs here instead of as a legacy tool so the quick lane can
-# select per package; the full output keeps the Tests summary line. Native
-# stages get a bare PATH and a long TMPDIR, which Tether's tests (sh, tmux socket
-# paths) were never written for, so Vitest runs under bash with both restored.
+# depend on it. Vitest stays a legacy tool: the quick lane runs `vitest related`
+# on the changed files (follows imports across packages) and the full gate runs
+# every project once, so it has no per-package stage.
 [[native.stages]]
 id = "tsc"
 kind = "check"
@@ -47,13 +46,6 @@ id = "biome"
 kind = "check"
 coverage = "full"
 argv = ["node_modules/.bin/biome", "check", "."]
-
-[[native.stages]]
-id = "vitest"
-kind = "check"
-coverage = "full"
-argv = ["bash", "-c", "PATH=$PATH:/usr/bin:/bin TMPDIR=/tmp exec node_modules/.bin/vitest run"]
-timeout_seconds = 900
 
 # Package boundaries: .dependency-cruiser.cjs reads the layer data in each
 # package.json; known violations are in .dependency-cruiser-known-violations.json.
@@ -105,17 +97,6 @@ quick_paths = ["packages/fleet/**", "packages/tether-client/**", "package.json",
 argv = ["node_modules/.bin/tsc", "-b", "packages/fleet"]
 
 [[native.stages]]
-id = "vitest-fleet"
-kind = "check"
-coverage = "focused"
-required = false
-covered_by = "vitest"
-quick = true
-quick_paths = ["packages/fleet/**", "packages/tether-client/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
-argv = ["bash", "-c", "PATH=$PATH:/usr/bin:/bin TMPDIR=/tmp exec node_modules/.bin/vitest run --project fleet"]
-timeout_seconds = 900
-
-[[native.stages]]
 id = "depcruise-fleet"
 kind = "check"
 coverage = "focused"
@@ -144,17 +125,6 @@ covered_by = "tsc"
 quick = true
 quick_paths = ["packages/notes/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
 argv = ["node_modules/.bin/tsc", "-b", "packages/notes"]
-
-[[native.stages]]
-id = "vitest-notes"
-kind = "check"
-coverage = "focused"
-required = false
-covered_by = "vitest"
-quick = true
-quick_paths = ["packages/notes/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
-argv = ["bash", "-c", "PATH=$PATH:/usr/bin:/bin TMPDIR=/tmp exec node_modules/.bin/vitest run --project notes"]
-timeout_seconds = 900
 
 [[native.stages]]
 id = "depcruise-notes"
@@ -187,17 +157,6 @@ quick_paths = ["packages/shared/**", "package.json", "package-lock.json", "tscon
 argv = ["node_modules/.bin/tsc", "-b", "packages/shared"]
 
 [[native.stages]]
-id = "vitest-shared"
-kind = "check"
-coverage = "focused"
-required = false
-covered_by = "vitest"
-quick = true
-quick_paths = ["packages/shared/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
-argv = ["bash", "-c", "PATH=$PATH:/usr/bin:/bin TMPDIR=/tmp exec node_modules/.bin/vitest run --project shared"]
-timeout_seconds = 900
-
-[[native.stages]]
 id = "depcruise-shared"
 kind = "check"
 coverage = "focused"
@@ -226,17 +185,6 @@ covered_by = "tsc"
 quick = true
 quick_paths = ["packages/fleet/**", "packages/tether/**", "packages/tether-client/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
 argv = ["node_modules/.bin/tsc", "-b", "packages/tether"]
-
-[[native.stages]]
-id = "vitest-tether"
-kind = "check"
-coverage = "focused"
-required = false
-covered_by = "vitest"
-quick = true
-quick_paths = ["packages/fleet/**", "packages/tether/**", "packages/tether-client/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
-argv = ["bash", "-c", "PATH=$PATH:/usr/bin:/bin TMPDIR=/tmp exec node_modules/.bin/vitest run --project tether"]
-timeout_seconds = 900
 
 [[native.stages]]
 id = "depcruise-tether"
@@ -269,17 +217,6 @@ quick_paths = ["packages/tether-client/**", "package.json", "package-lock.json",
 argv = ["node_modules/.bin/tsc", "-b", "packages/tether-client"]
 
 [[native.stages]]
-id = "vitest-tether-client"
-kind = "check"
-coverage = "focused"
-required = false
-covered_by = "vitest"
-quick = true
-quick_paths = ["packages/tether-client/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
-argv = ["bash", "-c", "PATH=$PATH:/usr/bin:/bin TMPDIR=/tmp exec node_modules/.bin/vitest run --project tether-client"]
-timeout_seconds = 900
-
-[[native.stages]]
 id = "depcruise-tether-client"
 kind = "check"
 coverage = "focused"
@@ -308,17 +245,6 @@ covered_by = "tsc"
 quick = true
 quick_paths = ["packages/tether-client/**", "packages/ui-kit/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
 argv = ["node_modules/.bin/tsc", "-b", "packages/ui-kit"]
-
-[[native.stages]]
-id = "vitest-ui-kit"
-kind = "check"
-coverage = "focused"
-required = false
-covered_by = "vitest"
-quick = true
-quick_paths = ["packages/tether-client/**", "packages/ui-kit/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
-argv = ["bash", "-c", "PATH=$PATH:/usr/bin:/bin TMPDIR=/tmp exec node_modules/.bin/vitest run --project ui-kit"]
-timeout_seconds = 900
 
 [[native.stages]]
 id = "depcruise-ui-kit"
@@ -351,17 +277,6 @@ quick_paths = ["packages/tether-client/**", "packages/ui-kit/**", "packages/web-
 argv = ["node_modules/.bin/tsc", "-b", "packages/web-frontend"]
 
 [[native.stages]]
-id = "vitest-web-frontend"
-kind = "check"
-coverage = "focused"
-required = false
-covered_by = "vitest"
-quick = true
-quick_paths = ["packages/tether-client/**", "packages/ui-kit/**", "packages/web-frontend/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
-argv = ["bash", "-c", "PATH=$PATH:/usr/bin:/bin TMPDIR=/tmp exec node_modules/.bin/vitest run --project web-frontend"]
-timeout_seconds = 900
-
-[[native.stages]]
 id = "depcruise-web-frontend"
 kind = "check"
 coverage = "focused"
@@ -390,17 +305,6 @@ covered_by = "tsc"
 quick = true
 quick_paths = ["packages/notes/**", "packages/shared/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-server/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
 argv = ["node_modules/.bin/tsc", "-b", "packages/web-server"]
-
-[[native.stages]]
-id = "vitest-web-server"
-kind = "check"
-coverage = "focused"
-required = false
-covered_by = "vitest"
-quick = true
-quick_paths = ["packages/notes/**", "packages/shared/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-server/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
-argv = ["bash", "-c", "PATH=$PATH:/usr/bin:/bin TMPDIR=/tmp exec node_modules/.bin/vitest run --project web-server"]
-timeout_seconds = 900
 
 [[native.stages]]
 id = "depcruise-web-server"
