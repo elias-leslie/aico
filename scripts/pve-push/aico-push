@@ -6,6 +6,12 @@ command's stdin (ssh pve-alerts), and this sends it to the owner's phone with th
 (nightshift.deadman.send: the app route and Web Push, using the credentials only root holds here). The key can do
 nothing else: no shell, no arguments (SSH_ORIGINAL_COMMAND is ignored), and the notice is checked field by field.
 
+The notice's optional "open" link is what a tap opens, as for the workstation's own pushes (`nightshift push --open`):
+the Aico origin only (the "aico." host in Nightshift's site config, open_hosts), plain and at most 300 characters.
+deadman.send has no parameter for it, so it is added to the two messages deadman.send builds (the Web Push payload's
+"open", the app item's Open button) by wrapping deadman.push and deadman.fcm_item for that one call. The journal
+(tag aico-push) gets one line per push with the link and which messages carried it.
+
 One push per key: a key already in the push log is answered "already sent" and nothing goes out again.
 Never prints key material, tokens or subscription endpoints.
 """
@@ -13,6 +19,7 @@ Never prints key material, tokens or subscription endpoints.
 import json
 import re
 import sys
+import syslog
 import time
 
 sys.path.insert(0, "/usr/local/lib/nightshift-exec/current")
@@ -21,13 +28,30 @@ MAX_STDIN = 8192
 KEY = re.compile(r"^[a-z]{2,12}:[0-9A-Za-z_.-]{1,64}$")
 SEVERITY = {"warning": "warning", "info": "info"}
 KINDS = {"question", "todo", "info"}
+OPEN_MAX = 300
+OPEN_PATH = r"(/[0-9A-Za-z/_.-]{0,60})?(\?[0-9A-Za-z_.=&-]{1,100})?"
 
 
 def plain(value: object, longest: int) -> bool:
     return isinstance(value, str) and 1 <= len(value) <= longest and value.isprintable()
 
 
-def check(text: str) -> dict | str:
+def aico_origin() -> str | None:
+    """https://<the Aico host>, from Nightshift's site config (the open_hosts entry that starts with "aico.")."""
+    from nightshift import siteconf
+
+    host = next((h for h in siteconf.open_hosts() if h.startswith("aico.")), "")
+    return f"https://{host}" if host else None
+
+
+def open_link_ok(link: object, origin: str | None) -> bool:
+    """A plain link on the Aico origin: https, no user, port, fragment or spaces, at most OPEN_MAX characters."""
+    if origin is None or not isinstance(link, str) or len(link) > OPEN_MAX or not link.isascii():
+        return False
+    return re.fullmatch(re.escape(origin) + OPEN_PATH, link) is not None
+
+
+def check(text: str, origin: str | None = None) -> dict | str:
     """The notice as a dict, or why it is refused."""
     try:
         notice = json.loads(text)
@@ -44,14 +68,39 @@ def check(text: str) -> dict | str:
     key = notice.get("key")
     if not isinstance(key, str) or not KEY.match(key):
         return "bad key"
+    if "open" in notice and not open_link_ok(notice["open"], origin):
+        return "open must be a plain link on the Aico origin"
     return notice
+
+
+def send_with_link(deadman, link: str, *args) -> tuple[tuple[str, bool], set[str]]:
+    """deadman.send(*args) with `link` on its Web Push payload ("open": a tap opens it) and on the app item (an Open
+    button). Returns (send's result, the routes that carried it: web, app)."""
+    carried = set()
+    real_push, real_item = deadman.push, deadman.fcm_item
+
+    def push(sub, payload, *rest, **kw):
+        carried.add("web")
+        return real_push(sub, {**payload, "open": link}, *rest, **kw)
+
+    def item(entry, base):
+        carried.add("app")
+        message = json.loads(real_item(entry, base))
+        message["actions"] = [{"id": "open", "label": "Open", "tier": "view", "url": link}]
+        return json.dumps(message, ensure_ascii=False).encode()
+
+    deadman.push, deadman.fcm_item = push, item
+    try:
+        return deadman.send(*args), carried
+    finally:
+        deadman.push, deadman.fcm_item = real_push, real_item
 
 
 def main() -> int:
     from nightshift import deadman
 
     text = sys.stdin.read(MAX_STDIN + 1)
-    notice = "too long" if len(text) > MAX_STDIN else check(text)
+    notice = "too long" if len(text) > MAX_STDIN else check(text, aico_origin())
     if isinstance(notice, str):
         print(f"refused: {notice}", file=sys.stderr)
         return 2
@@ -61,7 +110,7 @@ def main() -> int:
     if any(isinstance(e, dict) and e.get("key") == key for e in log if isinstance(log, list)):
         print(f"{key}: already sent")
         return 0
-    outcome, retry = deadman.send(
+    args = (
         deadman.load_creds(deadman.CREDS),
         notice["title"],
         notice["body"],
@@ -72,6 +121,13 @@ def main() -> int:
         log_path,
         deadman.load_fcm(deadman.CREDS),
     )
+    link = notice.get("open")
+    if link:
+        (outcome, retry), carried = send_with_link(deadman, link, *args)
+    else:
+        (outcome, retry), carried = deadman.send(*args), set()
+    syslog.openlog("aico-push")
+    syslog.syslog(f"{key}: {outcome} open={link or '-'} carried={','.join(sorted(carried)) or '-'}")
     print(f"{key}: {outcome}")
     return 75 if retry or not outcome.startswith("sent") else 0
 
