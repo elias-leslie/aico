@@ -47,7 +47,11 @@ function loadWorker(fetchImpl: FetchImpl) {
   runInNewContext(SOURCE, {
     self: scope,
     caches: {
-      open: async (name: string) => open(name),
+      // A real cache answers after the page has started reading the response.
+      open: async (name: string) => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        return open(name)
+      },
       keys: async () => [...stores.keys()],
       delete: async (name: string) => stores.delete(name),
     },
@@ -66,7 +70,7 @@ function loadWorker(fetchImpl: FetchImpl) {
     options: { mode?: string; method?: string; range?: boolean } = {},
   ): Promise<Response | null> {
     const pending: Promise<unknown>[] = []
-    let answer: Promise<Response> | null = null
+    const given: { answer: Promise<Response> | null } = { answer: null }
     const headers = new Headers(options.range ? { range: 'bytes=0-9' } : {})
     handlers.fetch?.({
       request: {
@@ -76,13 +80,20 @@ function loadWorker(fetchImpl: FetchImpl) {
         headers,
       },
       respondWith: (promise: Promise<Response>) => {
-        answer = promise
+        given.answer = promise
       },
       waitUntil: (promise: Promise<unknown>) => pending.push(promise),
     })
-    const response = answer ? await answer : null
+    const response = given.answer ? await given.answer : null
+    // The page reads the body at once; the worker's copies must have been taken before that.
+    const body =
+      response && response.status !== 0 ? await response.text() : null
     await Promise.all(pending)
-    return response
+    if (!response || body === null) return response
+    return new Response(body, {
+      status: response.status,
+      headers: response.headers,
+    })
   }
 
   return { handlers, stores, messages, get, scope }

@@ -124,14 +124,17 @@ async function networkFirst(event, kind) {
   if (!fallBack && response) {
     const path = new URL(request.url).pathname
     const notes = path.startsWith('/api/notes')
+    // Copies are taken now: once the page starts reading this answer it cannot be cloned.
+    const toKeep = canKeep(response) ? response.clone() : null
+    const toWarm =
+      toKeep && path === '/api/notes' && !new URL(request.url).searchParams.has('q')
+        ? response.clone()
+        : null
     event.waitUntil(
       (async () => {
         await setState({ offline: false, ...(notes ? { notesAt: Date.now() } : {}) })
-        if (canKeep(response)) {
-          await keep(cacheName, key, response.clone(), kind === 'thumb' ? THUMB_LIMIT : 0)
-          if (path === '/api/notes' && !new URL(request.url).searchParams.has('q'))
-            await warm(response.clone())
-        }
+        if (toKeep) await keep(cacheName, key, toKeep, kind === 'thumb' ? THUMB_LIMIT : 0)
+        if (toWarm) await warm(toWarm)
       })().catch(() => {}),
     )
     return response
