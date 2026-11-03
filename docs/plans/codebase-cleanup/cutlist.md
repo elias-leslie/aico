@@ -69,7 +69,7 @@ Rules that keep it small: `shared` has no I/O and a LOC cap; layer N imports onl
 | `web-frontend` | web-frontend static checks; related tests (288) | 17.7 s | <= 45 s: met |
 | `tether` | tether static checks; related tests (245) | 40.1 s | <= 60 s: met |
 | `tether-client` | tether-client + dependents' static checks; related tests (443) | 22.6 s | no target |
-| whole gate (`st check --acceptance --no-reuse`) | everything | TBD | <= 105 s: TBD |
+| whole gate (`st check --acceptance --no-reuse`) | everything (pytest 789; Vitest 2615 passed, 6 skipped) | 103.2 s (114.0 s before M0b) | <= 105 s: met, by 1.8 s |
 
 Each row is one comment line appended to a source file, `st check --quick --changed-only --no-reuse`, edited back. The first M0b cut ran a generated per-package `vitest --project` stage for every package in the cone instead (notes 12.7 s, ui-kit 37.7 s, web-frontend 32.6 s, tether 88.8 s) and was dropped: whole projects are slower than `vitest related`, which selects tests across packages (an edit in `shared` runs `web-server` tests; one in `tether-client` runs `tether`, `web-frontend`, `web-server` and `ui-kit` tests). A failing generated stage (`required = false`, `covered_by`) still fails `st check --quick` and `st commit`: the quick lane counts every stage's result, and `required` only matters for the full gate (shown with a scratch type error in `notes`: `tsc-notes` and `tsc-web-server` FAIL, exit 1). `st check budget` still reports test_loc +18.8k: its stored baseline is from 2026-10-31 (206 test files, 38,104 lines); today there are 261 files and 56,926 lines, and M0a itself changed it by +6 lines, so this is growth since 10-31, not a path-classification shift.
 
