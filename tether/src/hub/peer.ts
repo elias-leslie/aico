@@ -695,10 +695,10 @@ export class Peer {
   private relay(event: Record<string, unknown>): void {
     const type = event.type as EventType
     const data = { ...(record(event.data) ?? {}) }
-    if (type === 'asks.changed' || type === 'show.requested') {
-      // No transitive federation: what a peer relays from its own peers is not ours.
-      if (data.host !== undefined && data.host !== null) return
-    }
+    // No transitive federation: what a peer relays from its own peers (its events
+    // carry `host`; a host's own never do) is not ours. Two hosts linked both
+    // ways would otherwise bounce every relayed event between them forever.
+    if (data.host !== undefined && data.host !== null) return
     if (type === 'asks.changed') {
       const ask = record(data.ask)
       if (!hasId(ask)) return

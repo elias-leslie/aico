@@ -469,6 +469,24 @@ describe('hub', () => {
     expect((await hub.sessions()).map((item) => item.id)).toEqual(['aaaa0001'])
   })
 
+  it('never relays back what the peer relayed itself (two hosts linked both ways)', async () => {
+    events = []
+    // Echoes: the peer's copies of events it took from its own peers carry `host`.
+    peer.emit('wakes.changed', { sessionId: 'cccc0003', host: 'here' })
+    peer.emit('tools.changed', { change: 'updated', host: 'here' })
+    peer.emit('session.updated', {
+      id: 'dddd0004',
+      host: 'here',
+      session: session('dddd0004', { host: 'here' }),
+    })
+    peer.emit('wakes.changed', { sessionId: 'aaaa0001' })
+    await vi.waitFor(() => expect(events).toHaveLength(1))
+    expect(events[0]).toEqual({
+      type: 'wakes.changed',
+      data: { sessionId: 'aaaa0001', host: 'vm' },
+    })
+  })
+
   it('keeps its hosts through a hosts.json it cannot read, and drops one only when a clean file omits it', async () => {
     const file = join(dir, 'hosts.json')
     const ids = async () => (await hub.sessions()).map((item) => item.id)
