@@ -4,6 +4,9 @@
   "description": "Host list, ssh link and peer HTTP helpers for linking machines.",
   "private": true,
   "license": "Apache-2.0",
+  "aico": {
+    "layer": 3
+  },
   "type": "module",
   "exports": {
     "./hosts": "./src/hosts.ts",

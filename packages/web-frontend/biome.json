@@ -62,5 +62,47 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "**",
+        "!**/*.test.*",
+        "!**/*.config.*",
+        "!**/scripts/**",
+        "!**/test-stubs/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**"
+                    ],
+                    "message": "@aico/web-frontend (layer 6): browser code never imports a server package"
+                  },
+                  {
+                    "group": [
+                      "node:*"
+                    ],
+                    "message": "@aico/web-frontend (layer 6): browser code has no node:* modules"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

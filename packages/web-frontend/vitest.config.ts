@@ -17,6 +17,7 @@ export default defineConfig({
     },
   },
   test: {
+    name: 'web-frontend',
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],

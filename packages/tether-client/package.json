@@ -4,6 +4,9 @@
   "description": "Public client of Tether's socket API: the typed client, file browsing, the terminal engine and the team rule.",
   "private": true,
   "license": "Apache-2.0",
+  "aico": {
+    "layer": 3
+  },
   "type": "module",
   "exports": {
     ".": "./src/client/index.ts",

@@ -4,6 +4,12 @@
   "description": "Per-user session daemon that owns tmux session lifecycle for Aico's web app.",
   "private": true,
   "license": "Apache-2.0",
+  "aico": {
+    "layer": 5,
+    "db": [
+      "tether.db"
+    ]
+  },
   "type": "module",
   "bin": {
     "tether": "bin/tether"

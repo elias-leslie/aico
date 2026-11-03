@@ -4,6 +4,13 @@
   "description": "Aico's web server: the browser and phone app's API and terminal WebSocket over Tether.",
   "private": true,
   "license": "Apache-2.0",
+  "aico": {
+    "layer": 5,
+    "db": [
+      "web.db",
+      "notes.db"
+    ]
+  },
   "type": "module",
   "engines": {
     "node": ">=22.13.0"

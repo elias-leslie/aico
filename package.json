@@ -9,7 +9,10 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
-    "lint": "biome check ."
+    "lint": "biome check .",
+    "boundaries": "node scripts/boundaries.mjs && depcruise packages --config .dependency-cruiser.cjs --ignore-known",
+    "check-stages": "node scripts/check-stages.mjs",
+    "boundaries:baseline": "depcruise packages --config .dependency-cruiser.cjs --output-type baseline > .dependency-cruiser-known-violations.json"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.11",

@@ -33,5 +33,225 @@
       "quoteStyle": "single",
       "semicolons": "asNeeded"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/fleet/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/notes",
+                      "@aico/notes/**",
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/tether-client",
+                      "@aico/tether-client/**",
+                      "@aico/ui-kit",
+                      "@aico/ui-kit/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**"
+                    ],
+                    "message": "@aico/fleet (layer 3): import only packages in lower layers (depcruise is the gate)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/notes/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/fleet",
+                      "@aico/fleet/**",
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/tether-client",
+                      "@aico/tether-client/**",
+                      "@aico/ui-kit",
+                      "@aico/ui-kit/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**"
+                    ],
+                    "message": "@aico/notes (layer 3): import only packages in lower layers (depcruise is the gate)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/shared/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/fleet",
+                      "@aico/fleet/**",
+                      "@aico/notes",
+                      "@aico/notes/**",
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/tether-client",
+                      "@aico/tether-client/**",
+                      "@aico/ui-kit",
+                      "@aico/ui-kit/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**"
+                    ],
+                    "message": "@aico/shared (layer 0): import only packages in lower layers (depcruise is the gate)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/tether-client/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/fleet",
+                      "@aico/fleet/**",
+                      "@aico/notes",
+                      "@aico/notes/**",
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/ui-kit",
+                      "@aico/ui-kit/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**"
+                    ],
+                    "message": "@aico/tether-client (layer 3): import only packages in lower layers (depcruise is the gate)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "packages/ui-kit/**",
+        "!**/*.test.*",
+        "!**/*.config.*",
+        "!**/scripts/**",
+        "!**/test-stubs/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": ["@aico/web-frontend", "@aico/web-frontend/**"],
+                    "message": "@aico/ui-kit (layer 6): import only packages in lower layers (depcruise is the gate)"
+                  },
+                  {
+                    "group": [
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**"
+                    ],
+                    "message": "@aico/ui-kit (layer 6): browser code never imports a server package"
+                  },
+                  {
+                    "group": ["node:*"],
+                    "message": "@aico/ui-kit (layer 6): browser code has no node:* modules"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/web-server/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/ui-kit",
+                      "@aico/ui-kit/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**"
+                    ],
+                    "message": "@aico/web-server (layer 5): import only packages in lower layers (depcruise is the gate)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

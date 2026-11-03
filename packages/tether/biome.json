@@ -22,5 +22,37 @@
       "quoteStyle": "single",
       "semicolons": "asNeeded"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/ui-kit",
+                      "@aico/ui-kit/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**"
+                    ],
+                    "message": "@aico/tether (layer 5): import only packages in lower layers (depcruise is the gate)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

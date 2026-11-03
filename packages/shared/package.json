@@ -4,6 +4,9 @@
   "description": "Ids, time and clocks every package may use (today the hybrid logical clock).",
   "private": true,
   "license": "Apache-2.0",
+  "aico": {
+    "layer": 0
+  },
   "type": "module",
   "exports": {
     "./hlc": "./src/hlc.ts"

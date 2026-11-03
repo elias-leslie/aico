@@ -1,0 +1,2520 @@
+[
+  {
+    "type": "dependency",
+    "from": "packages/ui-kit/src/chat/forward.ts",
+    "to": "fs",
+    "unresolvedTo": "fs",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "browser-code-no-node-builtins"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/ui-kit/src/chat/forward.ts",
+    "to": "path",
+    "unresolvedTo": "path",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "browser-code-no-node-builtins"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/chat.ts",
+    "to": "packages/ui-kit/src/chat/forward.ts",
+    "unresolvedTo": "@aico/ui-kit/chat/forward",
+    "dependencyTypes": [
+      "undetermined",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "layer-down-only"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/chat.ts",
+    "to": "packages/ui-kit/src/chat/types.ts",
+    "unresolvedTo": "@aico/ui-kit/chat/types",
+    "dependencyTypes": [
+      "undetermined",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "layer-down-only"
+    }
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether-client/src/client/run-text.ts",
+    "to": "packages/tether-client/src/client/teams.ts",
+    "unresolvedTo": "./teams",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether-client/src/client/teams.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether-client/src/client/run-text.ts",
+        "dependencyTypes": [
+          "local",
+          "export"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/agent-state.ts",
+    "to": "packages/tether/src/continuity.ts",
+    "unresolvedTo": "./continuity",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/agy.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/agent-state.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+    "unresolvedTo": "./lifecycle/tui/adapters/contract",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/agent-state.ts",
+    "to": "packages/tether/src/lifecycle/tui/registry.ts",
+    "unresolvedTo": "./lifecycle/tui/registry",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/agy.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/agent-state.ts",
+    "to": "packages/tether/src/model-record.ts",
+    "unresolvedTo": "./model-record",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/model-record.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/agy.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/agent-state.ts",
+    "to": "packages/tether/src/proc-fs.ts",
+    "unresolvedTo": "./proc-fs",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/agy.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/continuity.ts",
+    "to": "packages/tether/src/lifecycle/tui/registry.ts",
+    "unresolvedTo": "./lifecycle/tui/registry",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/agy.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/continuity.ts",
+    "to": "packages/tether/src/proc-fs.ts",
+    "unresolvedTo": "./proc-fs",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/entry-files.ts",
+    "to": "packages/tether/src/proc-fs.ts",
+    "unresolvedTo": "./proc-fs",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/entry-files.ts",
+    "to": "packages/tether/src/recovery-facts.ts",
+    "unresolvedTo": "./recovery-facts",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/hub/peer.ts",
+    "to": "packages/tether/src/hub/wake.ts",
+    "unresolvedTo": "./wake",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/hub/wake.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/hub/peer.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle-api.ts",
+    "to": "packages/tether/src/reboot.ts",
+    "unresolvedTo": "./reboot",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/reboot.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle-api.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle-api.ts",
+    "to": "packages/tether/src/recovery.ts",
+    "unresolvedTo": "./recovery",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/recovery.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle-api.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle-api.ts",
+    "to": "packages/tether/src/wake-runtime.ts",
+    "unresolvedTo": "./wake-runtime",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/wake-runtime.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle-api.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/catalog.ts",
+    "to": "packages/tether/src/lifecycle/root-control.ts",
+    "unresolvedTo": "./root-control",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/root-control.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/catalog.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/entries.ts",
+    "to": "packages/tether/src/lifecycle/catalog.ts",
+    "unresolvedTo": "./catalog",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/catalog.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/root-control.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/entries.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/owner-retirement.ts",
+    "to": "packages/tether/src/lifecycle/catalog.ts",
+    "unresolvedTo": "./catalog",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/catalog.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/root-control.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/owner-retirement.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/agy.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+    "unresolvedTo": "./contract",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/agy.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+    "to": "packages/tether/src/agent-state.ts",
+    "unresolvedTo": "../../../agent-state",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+    "unresolvedTo": "./contract",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+    "to": "packages/tether/src/model-record.ts",
+    "unresolvedTo": "../../../model-record",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/model-record.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+    "to": "packages/tether/src/proc-fs.ts",
+    "unresolvedTo": "../../../proc-fs",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+    "to": "packages/tether/src/agent-state.ts",
+    "unresolvedTo": "../../../agent-state",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+    "unresolvedTo": "./contract",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+    "to": "packages/tether/src/model-record.ts",
+    "unresolvedTo": "../../../model-record",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/model-record.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+    "to": "packages/tether/src/proc-fs.ts",
+    "unresolvedTo": "../../../proc-fs",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+    "to": "packages/tether/src/model-record.ts",
+    "unresolvedTo": "../../../model-record",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/model-record.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+    "to": "packages/tether/src/proc-fs.ts",
+    "unresolvedTo": "../../../proc-fs",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+    "to": "packages/tether/src/tools.ts",
+    "unresolvedTo": "../../../tools",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/tools.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+    "to": "packages/tether/src/agent-state.ts",
+    "unresolvedTo": "../../../agent-state",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+    "unresolvedTo": "./contract",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+    "to": "packages/tether/src/model-record.ts",
+    "unresolvedTo": "../../../model-record",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/model-record.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+    "to": "packages/tether/src/proc-fs.ts",
+    "unresolvedTo": "../../../proc-fs",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/registry.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+    "unresolvedTo": "./adapters/claude-code",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/registry.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+    "unresolvedTo": "./adapters/codex",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/registry.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+    "unresolvedTo": "./adapters/contract",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/registry.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+    "unresolvedTo": "./adapters/pi",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/registry.ts",
+    "to": "packages/tether/src/tools.ts",
+    "unresolvedTo": "../../tools",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/tools.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/reboot.ts",
+    "to": "packages/tether/src/recovery.ts",
+    "unresolvedTo": "./recovery",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/recovery.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle-api.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/reboot.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/web-frontend/components/ModeToggle.tsx",
+    "to": "packages/web-frontend/components/ModeTogglePopover.tsx",
+    "unresolvedTo": "./ModeTogglePopover",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/web-frontend/components/ModeTogglePopover.tsx",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-frontend/components/ModeToggle.tsx",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/web-frontend/components/Terminal.tsx",
+    "to": "packages/web-frontend/lib/hooks/use-terminal-websocket.ts",
+    "unresolvedTo": "../lib/hooks/use-terminal-websocket",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/web-frontend/lib/hooks/use-terminal-websocket.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-frontend/components/Terminal.tsx",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/web-server/src/config.ts",
+    "to": "packages/web-server/src/notes-export.ts",
+    "unresolvedTo": "./notes-export",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/web-server/src/notes-export.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/sync/loop.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/sync/blobs.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/sync/engine.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/config.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/web-server/src/sync/blobs.ts",
+    "to": "packages/web-server/src/sync/peer.ts",
+    "unresolvedTo": "./peer",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/web-server/src/sync/peer.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/sync/engine.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/config.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/notes-export.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/sync/loop.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/sync/blobs.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/web-server/src/sync/engine.ts",
+    "to": "packages/web-server/src/config.ts",
+    "unresolvedTo": "../config",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/web-server/src/config.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/notes-export.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/sync/loop.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/sync/engine.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/web-server/src/sync/loop.ts",
+    "to": "packages/web-server/src/sync/peer.ts",
+    "unresolvedTo": "./peer",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/web-server/src/sync/peer.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/sync/engine.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/config.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/notes-export.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/web-server/src/sync/loop.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/agent-state.test.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/asks.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/deliveries.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/doctor.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "dynamic-import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/importer.test.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/importer.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/lane-reports.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/lifecycle/catalog.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/lifecycle/owner-retirement.test.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/lifecycle/root-control.test.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/lifecycle/tui/adapters/agy.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/show.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/store.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/waits.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/tether/src/wakes.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/db.test.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/db.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/notes-data.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/notes-db.test.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/notes-db.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/notes-export.test.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/notes-export.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/notes.test.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/sync/engine.ts",
+    "to": "node:sqlite",
+    "unresolvedTo": "node:sqlite",
+    "dependencyTypes": [
+      "core",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "only-store-imports-sqlite"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/fleet/src/sync-peers.test.ts",
+    "to": "packages/tether-client/src/client/sync-peers.ts",
+    "unresolvedTo": "@aico/tether-client/client/sync-peers",
+    "dependencyTypes": [
+      "undetermined",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "same-layer-import"
+    }
+  }
+]

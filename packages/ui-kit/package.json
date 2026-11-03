@@ -4,6 +4,10 @@
   "description": "Aico's look and the browser pieces shared by the web app and the web server: Lantern tokens, fonts, palette, mouse shim, terminal history and the chat bridge.",
   "private": true,
   "license": "Apache-2.0",
+  "aico": {
+    "layer": 6,
+    "browser": true
+  },
   "type": "module",
   "exports": {
     "./tokens.css": "./src/tokens.css",

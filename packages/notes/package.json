@@ -4,6 +4,9 @@
   "description": "Notes data layer: blobs, capture files and types, HEIC conversion and the vision extraction runners.",
   "private": true,
   "license": "Apache-2.0",
+  "aico": {
+    "layer": 3
+  },
   "type": "module",
   "exports": {
     "./blobs": "./src/blobs.ts",
