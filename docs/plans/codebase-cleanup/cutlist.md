@@ -59,7 +59,18 @@ Rules that keep it small: `shared` has no I/O and a LOC cap; layer N imports onl
 - `.st-check.toml` stages are generated per package (`quick = true`, `quick_paths` = package globs + its dependencies' globs): biome, `tsc -b`, `vitest --project`, depcruise. A change in `shared` fans out to all; elsewhere it stays inside the cone.
 - Native stages run only when `native/<dir>/**` or `contracts/**` changes; Kotlin and live smoke scripts run nightly regardless.
 - Whole repo (all packages, native, `tether-lifecycle-harness.sh`, real-session smoke) runs in the nightly deep lane only.
-- Today's numbers (check receipts, 11-02/03): aico ~105 s, agent-hub ~106-113 s, summitflow ~91 s, nightshift ~100-117 s. Target: any single `st check`, even a `shared` change, at or under 105 s; typical one-package change leaf packages <= 30 s, `tether` <= 60 s, `web-frontend` <= 45 s. Not measured per package yet; M0b records baselines with `st check budget`.
+- Today's numbers (check receipts, 11-02/03): aico ~105 s, agent-hub ~106-113 s, summitflow ~91 s, nightshift ~100-117 s. Target: any single `st check`, even a `shared` change, at or under 105 s; typical one-package change leaf packages <= 30 s, `tether` <= 60 s, `web-frontend` <= 45 s. M0b baselines (2026-11-03, `st check --quick --changed-only --no-reuse` after touching one file; the stages are `scripts/check-stages.mjs` output):
+
+| change in | stages run (cone) | measured | target |
+|---|---|---|---|
+| `notes` (leaf) | notes + web-server | 12.7 s | <= 30 s: met |
+| `ui-kit` (leaf) | ui-kit + web-frontend + web-server | 37.7 s | <= 30 s: missed (the cone holds the two biggest dependents) |
+| `shared` | shared + web-server (only dependent today) | 13.4 s | <= 105 s: met; does not fan out to all yet, nothing but web-server declares `@aico/shared` |
+| `web-frontend` | web-frontend | 32.6 s | <= 45 s: met |
+| `tether` | tether | 88.8 s | <= 60 s: missed (its Vitest project alone is ~80 s) |
+| whole gate (`st check --acceptance --no-reuse`) | everything | 103.9 s (114.0 s before M0b) | <= 105 s: met, by 1 s |
+
+Before M0b the quick lane ran Vitest related to the changed file only (a `notes` edit took 3.9 s); the per-package stages run the whole project of every package in the cone, so small edits got slower in return for a per-package guarantee. `st check budget` still reports test_loc +18.8k: its stored baseline is from 2026-10-31 (206 test files, 38,104 lines); today there are 261 files and 56,926 lines, and M0a itself changed it by +6 lines, so this is growth since 10-31, not a path-classification shift.
 
 ### 1.4 Separate deploys
 - Each unit builds and releases alone: esbuild bundle per service into `~/.local/lib/aico/<unit>/releases/<version>` plus `current` and `previous` symlinks. Frontend ships as a static dir (no `aico-web` restart). Restarting `tether` is safe: tmux owns the processes.
