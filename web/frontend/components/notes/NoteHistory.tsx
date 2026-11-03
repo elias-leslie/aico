@@ -67,8 +67,8 @@ export function NoteHistory({
               </p>
             ) : (history.data ?? []).length === 0 ? (
               <p className="text-[13px]" style={{ color: 'var(--mist)' }}>
-                No earlier versions yet. Aico keeps one when you change the
-                title or the text.
+                No earlier versions yet. Aico keeps one every few minutes while
+                you change the title or the text.
               </p>
             ) : (
               <ul className="flex flex-col gap-2">

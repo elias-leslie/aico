@@ -41,7 +41,7 @@ const ITEMS_AT_CREATE_MAX = 500
 const PAGE_DEFAULT = 100
 const SNIPPET = 200
 const CREATE_KEYS = ['kind', 'title', 'body', 'pinned', 'labels', 'items']
-const PATCH_KEYS = ['title', 'body', 'pinned', 'archived', 'kind']
+const PATCH_KEYS = ['title', 'body', 'pinned', 'archived', 'kind', 'keepRevision']
 
 export interface ItemJson {
   id: string
@@ -337,6 +337,7 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
       pinned: optionalBool(body, 'pinned'),
       archived: optionalBool(body, 'archived'),
       kind: optionalKind(body),
+      keepRevision: optionalBool(body, 'keepRevision'),
     }
     if (!notes.update(row.id, patch)) throw new HttpError(404, 'That note is gone')
     return detail(row.id)

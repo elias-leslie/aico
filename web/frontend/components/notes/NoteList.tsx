@@ -162,11 +162,14 @@ function GroceriesShortcut({
   note: NoteSummary | null
   known: boolean
 }) {
+  const photos = note?.attachmentCount ?? 0
   const text = !known
     ? ''
     : note && note.unchecked + note.checked > 0
       ? counts(note)
-      : 'Nothing on it yet'
+      : photos > 0
+        ? `No items yet · ${photos} ${photos === 1 ? 'photo' : 'photos'}`
+        : 'Nothing on it yet'
   return (
     <Link
       href={noteHref(GROCERIES_ID)}
@@ -233,7 +236,14 @@ export function NoteList() {
     }
   }
 
-  const labels = [...new Set(list.notes.flatMap((note) => note.labels))].sort()
+  // The chosen label stays a chip even where no note has it (the archive), so
+  // the filter can always be turned off.
+  const labels = [
+    ...new Set([
+      ...list.notes.flatMap((note) => note.labels),
+      ...(label === null ? [] : [label]),
+    ]),
+  ].sort()
   const filtering = q !== '' || archived || label !== null
   const groceries =
     list.notes.find((note) => note.source === GROCERIES_SOURCE) ?? null

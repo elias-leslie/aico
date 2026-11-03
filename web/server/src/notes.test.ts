@@ -107,7 +107,10 @@ describe('notes', () => {
       'body:draft 3:edit',
       'body:draft 0:edit',
     ])
-    expect(store.notes.update(note.id, { body: 'draft 4' })?.seq).toBe(
+    wall += MINUTE
+    store.notes.update(note.id, { body: 'draft 0', keepRevision: true }) // a restore keeps what it replaces
+    expect(store.notes.revisions(note.id, 'body')[0]?.text).toBe('draft 4')
+    expect(store.notes.update(note.id, { body: 'draft 0' })?.seq).toBe(
       store.notes.getNote(note.id)?.seq,
     ) // an unchanged text writes nothing
   })

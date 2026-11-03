@@ -132,6 +132,9 @@ export interface NotePatch {
   scope?: string | null
   /** ms; with a title or text change, the edit time to keep instead of now (imports). */
   editedAt?: number
+  /** Keep the old title or text even inside the revision window: a restore
+   * replaces it whole, so it must stay restorable. */
+  keepRevision?: boolean
 }
 
 export interface ItemPatch {
@@ -329,7 +332,7 @@ export class NoteStore {
       for (const field of REVISED_FIELDS) {
         const next = patch[field]
         if (next === undefined || next === current[field]) continue
-        this.recordRevision('notes', id, field, current[field])
+        this.recordRevision('notes', id, field, current[field], patch.keepRevision)
         fields[field] = next
         edited = true
       }
@@ -358,9 +361,16 @@ export class NoteStore {
   /**
    * Keeps `oldText` as an 'edit' revision of a field, unless the field already
    * has one newer than the window, so continuous typing leaves one row per few
-   * minutes, not one per save. Insert-only. Call inside a transaction.
+   * minutes, not one per save; `always` keeps it regardless. Insert-only. Call
+   * inside a transaction.
    */
-  private recordRevision(table: string, rowId: string, field: string, oldText: string): void {
+  private recordRevision(
+    table: string,
+    rowId: string,
+    field: string,
+    oldText: string,
+    always = false,
+  ): void {
     if (oldText === '') return
     const last = this.db
       .prepare(
@@ -369,7 +379,7 @@ export class NoteStore {
       )
       .get(table, rowId, field) as Row
     const now = this.core.now()
-    if (last.at !== null && now - Number(last.at) < this.windowMs) return
+    if (!always && last.at !== null && now - Number(last.at) < this.windowMs) return
     this.insert('note_revisions', {
       id: newId(),
       table_name: table,

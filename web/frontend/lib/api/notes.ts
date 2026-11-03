@@ -201,6 +201,8 @@ export interface NotePatch {
   pinned?: boolean
   archived?: boolean
   kind?: NoteKind
+  /** A restore: the server keeps the text it replaces. */
+  keepRevision?: boolean
 }
 
 export function patchNote(id: string, patch: NotePatch) {

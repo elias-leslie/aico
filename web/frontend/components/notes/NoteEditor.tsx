@@ -191,9 +191,15 @@ function Editor({
   // A note just made starts with the cursor in its title.
   const [fresh] = useState(() => isBlankNote(note, note))
 
+  // Set by Restore: the next save asks the server to keep what it replaces.
+  const restoring = useRef(false)
   const auto = useAutosave({
     base: { title: note.title, body: note.body },
-    save: (patch) => actions.save(patch),
+    save: (patch) => {
+      const keepRevision = restoring.current
+      restoring.current = false
+      return actions.save(keepRevision ? { ...patch, keepRevision } : patch)
+    },
   })
   const { draft } = auto
   const client = useQueryClient()
@@ -415,7 +421,10 @@ function Editor({
         <NoteHistory
           noteId={id}
           onOpenChange={setHistory}
-          onRestore={(field, text) => auto.edit({ [field]: text })}
+          onRestore={(field, text) => {
+            restoring.current = true
+            auto.edit({ [field]: text })
+          }}
         />
       )}
       <ConfirmationDialog
@@ -428,7 +437,12 @@ function Editor({
         error={remove.isError ? remove.error.message : null}
         onCancel={() => setConfirming(false)}
         onConfirm={() =>
-          remove.mutate(note.id, { onSuccess: () => router.replace('/notes') })
+          remove.mutate(note.id, {
+            onSuccess: () => {
+              handOffNote(note.id) // deleted already: leaving needs no blank delete
+              router.replace('/notes')
+            },
+          })
         }
       />
     </div>
