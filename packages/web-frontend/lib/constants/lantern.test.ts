@@ -9,8 +9,8 @@ const read = (path: string) =>
 describe('Lantern tokens on the web', () => {
   it('imports the desktop tokens and fonts instead of copying them', () => {
     const globals = read('../../app/globals.css')
-    expect(globals).toContain('@import "../../ui-kit/src/tokens.css";')
-    expect(globals).toContain('@import "../../ui-kit/fonts/fonts.css";')
+    expect(globals).toContain('@import "@aico/ui-kit/tokens.css";')
+    expect(globals).toContain('@import "@aico/ui-kit/fonts.css";')
     expect(read('../../app/layout.tsx')).not.toContain('next/font')
   })
 

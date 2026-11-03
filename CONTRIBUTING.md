@@ -13,13 +13,17 @@ native/host-steward/.venv/bin/pytest -q
 
 Use focused changes and keep the public install path working from a fresh clone.
 
-The repo holds the whole product: code both front ends share in `shared/`,
-Tether in `tether/` and the web app in `web/`. Running Aico needs
-a Tether daemon; the tests do not, because they use a fake Tether socket.
-Session lifecycle changes (tmux servers, launch, End, roots) go in `tether/`;
-the front ends keep views, view state and rendering. The `st aico` client lives
-in `packages/tether/scripts/`; SummitFlow runs `native/host-steward/aico-root-watch.py`
-from this checkout.
+The repo holds the whole product as npm workspaces. `packages/` is TypeScript:
+`shared`, `tether-client`, `fleet`, `notes`, `ui-kit` (libraries), `tether` (the
+session daemon), `web-server` and `web-frontend`. `native/` is everything else
+(`host-steward`, `pve-sender`) and `contracts/` is data every language tests
+against. Packages import each other only by package name, lower layers only
+(`npm run boundaries` and `.dependency-cruiser.cjs` enforce it). Running Aico
+needs a Tether daemon; the tests do not, because they use a fake Tether socket.
+Session lifecycle changes (tmux servers, launch, End, roots) go in
+`packages/tether`; the front ends keep views, view state and rendering. The
+`st aico` client lives in `packages/tether/scripts/`; SummitFlow runs
+`native/host-steward/aico-root-watch.py` from this checkout.
 
 ## Pull request expectations
 

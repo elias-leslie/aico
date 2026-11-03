@@ -35,7 +35,14 @@
     "optional_workers": [],
     "manual_workers": [
       "tether@default.service"
-    ]
+    ],
+    "manual_worker_sources": {
+      "tether@default.service": [
+        "packages/fleet",
+        "packages/tether-client",
+        "native/host-steward/aico-root-watch.py"
+      ]
+    }
   },
   "hosts": {
     "browser_frontend": "aico.summitflow.dev"

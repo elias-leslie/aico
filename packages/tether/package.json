@@ -16,7 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agent-hub/sdk": "file:vendor/agent-hub-sdk-0.1.4.tgz",
+    "@agent-hub/sdk": "file:../../vendor/agent-hub-sdk-0.1.4.tgz",
     "@aico/fleet": "0.1.0",
     "@aico/tether-client": "0.1.0"
   },

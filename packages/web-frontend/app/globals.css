@@ -1,7 +1,7 @@
 @import "tailwindcss";
-/* The Lantern tokens (packages/ui-kit/src/tokens.css) and typefaces are shared, not copies. */
-@import "../../ui-kit/src/tokens.css";
-@import "../../ui-kit/fonts/fonts.css";
+/* The Lantern tokens and typefaces come from @aico/ui-kit, not copies. */
+@import "@aico/ui-kit/tokens.css";
+@import "@aico/ui-kit/fonts.css";
 
 /* The web's --term-* names, mapped onto the Lantern tokens. One dark theme;
    colours live in tokens.css only. */

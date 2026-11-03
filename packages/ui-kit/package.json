@@ -7,6 +7,7 @@
   "type": "module",
   "exports": {
     "./tokens.css": "./src/tokens.css",
+    "./fonts.css": "./fonts/fonts.css",
     "./chat/chat.css": "./src/chat/chat.css",
     "./chat/chat-view": "./src/chat/chat-view.tsx",
     "./chat/draft": "./src/chat/draft.ts",
@@ -24,7 +25,7 @@
   },
   "dependencies": {
     "@agent-hub/chat-ui": "file:vendor/agent-hub-chat-ui-0.4.7.tgz",
-    "@agent-hub/sdk": "file:../tether/vendor/agent-hub-sdk-0.1.4.tgz",
+    "@agent-hub/sdk": "file:../../vendor/agent-hub-sdk-0.1.4.tgz",
     "@aico/tether-client": "0.1.0",
     "@tanstack/react-query": "5.102.8",
     "@xterm/xterm": "6.0.0",
