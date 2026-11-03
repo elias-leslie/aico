@@ -1,0 +1,19 @@
+{
+  "name": "@aico/fleet",
+  "version": "0.1.0",
+  "description": "Host list, ssh link and peer HTTP helpers for linking machines.",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./hosts": "./src/hosts.ts",
+    "./link": "./src/link.ts",
+    "./peer-http": "./src/peer-http.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@aico/tether-client": "0.1.0"
+  }
+}

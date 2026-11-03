@@ -21,7 +21,7 @@ The Host guard refuses every other route in, so these do not work:
 
 ## Cloudflare tunnel
 
-The public host is `hosts.browser_frontend` in `project.identity.json` (`aico.summitflow.dev` here). The page bakes it in at build (`npm run build` regenerates `web/frontend/lib/generated/project-branding.generated.ts`) and the server reads it at start, so after changing it, rebuild and restart `aico-web`. The server adds `https://<public host>` to its trusted origins by default.
+The public host is `hosts.browser_frontend` in `project.identity.json` (`aico.summitflow.dev` here). The page bakes it in at build (`npm run build` regenerates `packages/web-frontend/lib/generated/project-branding.generated.ts`) and the server reads it at start, so after changing it, rebuild and restart `aico-web`. The server adds `https://<public host>` to its trusted origins by default.
 
 Point the tunnel's ingress for that hostname at the server:
 

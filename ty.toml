@@ -1,10 +1,10 @@
-# ty from the repo root (how `st check` runs it), with the env of Tether's
-# stdlib-only operator scripts.
+# ty from the repo root (how `st check` runs it), with the env of the
+# stdlib-only host-steward scripts.
 [environment]
-python = "./tether/scripts/.venv"
+python = "./native/host-steward/.venv"
 
 [src]
-include = ["tether/scripts", "scripts"]
+include = ["native/host-steward", "native/pve-sender", "packages/tether/scripts", "scripts"]
 
 [rules]
 # Suppress beta-quality rules (ty 0.0.x false positives)

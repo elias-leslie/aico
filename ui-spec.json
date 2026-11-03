@@ -39,12 +39,12 @@
   },
   "source": {
     "include": [
-      "web/frontend/app/**/*.tsx",
-      "web/frontend/components/**/*.tsx",
-      "web/frontend/lib/**/*.ts",
-      "web/frontend/lib/**/*.tsx",
-      "shared/chat/**/*.tsx"
+      "packages/web-frontend/app/**/*.tsx",
+      "packages/web-frontend/components/**/*.tsx",
+      "packages/web-frontend/lib/**/*.ts",
+      "packages/web-frontend/lib/**/*.tsx",
+      "packages/ui-kit/src/chat/**/*.tsx"
     ],
-    "exclude": ["**/*.test.tsx", "**/*.test.ts", "web/frontend/lib/generated/**"]
+    "exclude": ["**/*.test.tsx", "**/*.test.ts", "packages/web-frontend/lib/generated/**"]
   }
 }

@@ -27,7 +27,7 @@ A standalone per-user daemon, **Tether**, owns session lifecycle for both apps:
 - the active-client resize claim
 - `/v1/roots` ([root contract](../root-control.md))
 
-Tether has its own SQLite database and a versioned API on a 0600 Unix socket ([api-v1.md](../../tether/docs/api-v1.md)). It is never network-exposed.
+Tether has its own SQLite database and a versioned API on a 0600 Unix socket ([api-v1.md](../../packages/tether/docs/api-v1.md)). It is never network-exposed.
 
 Apps own **views**. Aico keeps windows, bounds, settings and selections. A-Term keeps panes, layouts and per-project display settings in a small local SQLite file keyed by Tether session ids. Each app keeps its own byte path: a PTY running `tmux attach -S <socket>` against the target Tether returns. Tether never proxies terminal bytes.
 
@@ -36,8 +36,8 @@ The cross-app **Owner** concept is dropped. Either app can end, rename or resize
 Rules that follow:
 
 - **No silent resurrection.** A dead session is never re-created implicitly. Starting new work is always an explicit create, and a root request id can never start work again after End.
-  There are two announced exceptions, and both resume the same session in place rather than start new work. **Reboot restore** relaunches sessions that were running before their tmux server died at a reboot ([reboot-continuity.md](../../tether/docs/reboot-continuity.md)). **Crash restore** (amendment, 2026-10-16) relaunches a session whose pane, agent or tmux server was killed while nobody ended it, once Tether has proven the crash from the journal or the agent's exit status ([crash-recovery.md](../../tether/docs/crash-recovery.md)). Each recovery is announced: the agent gets a synopsis of what happened, the status is in `tether recovery status`, and Nightshift pushes the owner. Loop limits hold a session that keeps crashing instead of relaunching it. An ended session is deleted from the catalog, so neither exception can bring it back.
-- **Instances.** `tether@<instance>.service`. Both apps can share `default`, or each can use its own instance. Only `default` adopts historical tmux servers, and no instance reconciles another instance's units ([compat-contract.md](../../tether/docs/compat-contract.md)).
+  There are two announced exceptions, and both resume the same session in place rather than start new work. **Reboot restore** relaunches sessions that were running before their tmux server died at a reboot ([reboot-continuity.md](../../packages/tether/docs/reboot-continuity.md)). **Crash restore** (amendment, 2026-10-16) relaunches a session whose pane, agent or tmux server was killed while nobody ended it, once Tether has proven the crash from the journal or the agent's exit status ([crash-recovery.md](../../packages/tether/docs/crash-recovery.md)). Each recovery is announced: the agent gets a synopsis of what happened, the status is in `tether recovery status`, and Nightshift pushes the owner. Loop limits hold a session that keeps crashing instead of relaunching it. An ended session is deleted from the catalog, so neither exception can bring it back.
+- **Instances.** `tether@<instance>.service`. Both apps can share `default`, or each can use its own instance. Only `default` adopts historical tmux servers, and no instance reconciles another instance's units ([compat-contract.md](../../packages/tether/docs/compat-contract.md)).
 - **Independent of app rebuilds.** Tether is not a worker of either app's `project.identity.json`. Rebuilding or restarting an app never restarts Tether. Restarting Tether never stops a tmux server, because servers are separate transient units.
 - **GUI view mutations.** Show, position and title are forwarded to a connected Aico GUI client over a channel the GUI opens. With none connected, Tether answers `gui_unavailable` and never starts the desktop.
 

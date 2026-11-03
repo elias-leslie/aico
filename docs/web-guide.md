@@ -71,7 +71,7 @@ For any deployment beyond localhost, put an identity-aware gateway in front firs
 <details>
 <summary><strong>Environment variables</strong></summary>
 
-Copy what you need from `web/.env.example` to `~/.config/credstore/a-term/env` (mode 0600, outside the repo); `aico-web.service` reads it when present. Everything is optional:
+Copy what you need from `packages/web-server/.env.example` to `~/.config/credstore/a-term/env` (mode 0600, outside the repo); `aico-web.service` reads it when present. Everything is optional:
 
 ```bash
 # Tether control socket (default: $XDG_RUNTIME_DIR/tether/default/control.sock)
@@ -107,7 +107,7 @@ AGENT_HUB_URL=http://localhost:8003
 <details>
 <summary><strong>Terminal launchers</strong></summary>
 
-`web/scripts/tclaude`, `tcodex` and `tsession` (Node, sharing the server's code and `web.db`) open a project's agent session from a terminal: they reuse the most recently used Tether session for that project and tool, or create one (it also appears in the web app), then attach with `tether sessions attach`. Run outside tmux, it attaches directly. Inside a tmux client on the same Tether server it switches the client. Inside a different tmux server (for example your default one), tmux cannot switch across servers, so it attaches nested after printing a notice; detach the inner client with its prefix key then `d`. `tsession open --tool codex --project myapp --attach --print` prints Tether's attach target instead. The `tether` CLI must be on `PATH` (or set `TETHER_BIN`).
+`packages/web-server/scripts/tclaude`, `tcodex` and `tsession` (Node, sharing the server's code and `web.db`) open a project's agent session from a terminal: they reuse the most recently used Tether session for that project and tool, or create one (it also appears in the web app), then attach with `tether sessions attach`. Run outside tmux, it attaches directly. Inside a tmux client on the same Tether server it switches the client. Inside a different tmux server (for example your default one), tmux cannot switch across servers, so it attaches nested after printing a notice; detach the inner client with its prefix key then `d`. `tsession open --tool codex --project myapp --attach --print` prints Tether's attach target instead. The `tether` CLI must be on `PATH` (or set `TETHER_BIN`).
 
 </details>
 
@@ -142,7 +142,7 @@ The web app answers on `localhost`, plus one public hostname through a Cloudflar
 
 - `server/src/` — the Node server: `api.ts` (REST), `terminal.ts` (terminal WebSocket), `static.ts` (the page), `background.ts` (Tether events, maintenance), `db.ts` (tabs and project settings), `cli.ts` (`tsession`, `tnotes`)
 - `frontend/app/`, `frontend/components/`, `frontend/lib/` — the Next.js UI, built as a static export into `frontend/out/`
-- `web/scripts/` — launchers and verification; the installer and units are in the root `scripts/`
+- `packages/web-server/scripts/` — launchers and verification; the installer and units are in the root `scripts/`
 
 </details>
 

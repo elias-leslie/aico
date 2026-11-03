@@ -1,0 +1,24 @@
+{
+  "name": "@aico/tether-client",
+  "version": "0.1.0",
+  "description": "Public client of Tether's socket API: the typed client, file browsing, the terminal engine and the team rule.",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/client/index.ts",
+    "./files": "./src/files/browser.ts",
+    "./teams": "./src/client/teams.ts",
+    "./term": "./src/term/index.ts",
+    "./client/contracts": "./src/client/contracts.ts",
+    "./client/run-text": "./src/client/run-text.ts",
+    "./client/sync-peers": "./src/client/sync-peers.ts",
+    "./term/remote": "./src/term/remote.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@xterm/headless": "6.0.0"
+  }
+}

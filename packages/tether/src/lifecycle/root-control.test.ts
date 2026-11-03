@@ -1,0 +1,1690 @@
+import { execFile, execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { mkdtempSync, rmSync, statSync } from 'node:fs'
+import { createServer, request } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+import { fileURLToPath } from 'node:url'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { listenPrivateSocket } from '../http'
+import { UUID_RE as UUID } from '../proc-fs'
+import {
+  allocateWidgetId,
+  getRootRequest,
+  getWidget,
+  insertWidget,
+  listWidgets,
+  recordLauncher,
+  removeWidget,
+  reserveRootRequest,
+  rootRequestForWidget,
+  setWidgetName,
+  type WidgetRow,
+} from './catalog'
+import { LifecycleOwnerLock, type ManagedGateState } from './lifecycle-guard'
+import { sessionGeneration } from './owner-retirement'
+import {
+  createRootHandler,
+  isProjectRootPath,
+  MAX_FRESH_PROMPT_BYTES,
+  parseRootCreate,
+  rootRequestDigest,
+  widgetMutationOperation,
+} from './root-control'
+import {
+  initialLaunchLine,
+  relaunchLine,
+  rootLaunchEnvironment,
+  rootPromptReady,
+  sessionSpec,
+  withRootPrompt,
+} from './root-launch'
+import { codexTui, initStore, registerBuiltinTuis } from './testing'
+import { blankSlateBase } from './tui/blank-slate'
+import { sessionInstructions } from './tui/instructions'
+import { launchLine } from './tui/launch'
+import { getTui } from './tui/registry'
+
+const RETRY_MS = 40
+const ROOT_WATCH = fileURLToPath(
+  new URL('../../../../native/host-steward/aico-root-watch.py', import.meta.url),
+)
+
+function present<T>(value: T | null | undefined): T {
+  if (value === undefined || value === null) throw new Error('fixture value missing')
+  return value
+}
+
+describe('private root workload control', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'aico-root-test-'))
+  const socket = join(fixture, 'aico', 'gui.sock')
+  const database = join(fixture, 'catalog.db')
+  let available = true
+  let uncertain = false
+  // Host admission's answer for the next launch; null admits it.
+  let admission: string | null = null
+  const deferrals = new Map<string, string>()
+  const running = new Set<string>()
+  const launches = new Set<string>()
+  const ensure = vi.fn(async (widgetId: string) => {
+    launches.add(widgetId)
+    if (uncertain) throw new Error('lost response')
+    if (admission) {
+      deferrals.set(widgetId, admission)
+      return
+    }
+    deferrals.delete(widgetId)
+    running.add(widgetId)
+  })
+  const title = vi.fn(async (_widgetId: string, _generation: string, _label: string) => true)
+  const coordinator = vi.fn(
+    async (_widgetId: string, _generation: string, _on: boolean | string) => true,
+  )
+  const status = vi.fn(async (row: WidgetRow) =>
+    running.has(row.id) ? ('running' as const) : ('uncertain' as const),
+  )
+  const handle = createRootHandler(
+    {
+      available: () => available,
+      validate: (input) => input.projectRoot !== '/missing',
+      resumeOwner: (resumeSessionId) =>
+        resumeSessionId === '00000000-0000-4000-8000-0000000000aa' ? 'c0ffee01' : null,
+      launched: (widgetId, launchedBy) => {
+        recordLauncher(widgetId, launchedBy)
+      },
+      ensure,
+      status,
+      mutate: (widgetId, generation, mutation) =>
+        mutation.kind === 'coordinator'
+          ? coordinator(widgetId, generation, mutation.coordinator)
+          : title(widgetId, generation, mutation.label),
+      launchDeferral: (widgetId) => deferrals.get(widgetId) ?? null,
+    },
+    RETRY_MS,
+  )
+  const server = createServer((req, res) => {
+    void handle(req, res)
+  })
+  beforeAll(async () => {
+    registerBuiltinTuis()
+    initStore(database)
+    await listenPrivateSocket(server, socket)
+  })
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+    rmSync(fixture, { recursive: true, force: true })
+  })
+
+  const create = (requestId: string) => ({
+    requestId,
+    tool: 'codex',
+    projectId: 'sample-app',
+    projectRoot: fixture,
+    initialPrompt: 'Only this independent root.',
+    role: 'sample-app-target-root',
+    workRole: 'implementation',
+    leadRootReference: 'portfolio-center',
+  })
+  const call = (
+    path: string,
+    method = 'GET',
+    payload?: unknown,
+    encode: (value: unknown) => string = JSON.stringify,
+  ): Promise<{ status: number; body: Record<string, unknown> }> =>
+    new Promise((resolve, reject) => {
+      const client = request({ socketPath: socket, path, method }, (response) => {
+        let text = ''
+        response.on('data', (part: Buffer) => {
+          text += part.toString('utf8')
+        })
+        response.on('end', () =>
+          resolve({ status: response.statusCode ?? 0, body: JSON.parse(text) }),
+        )
+      })
+      client.once('error', reject)
+      client.end(payload === undefined ? undefined : encode(payload))
+    })
+
+  it('uses owner-only socket permissions', () => {
+    expect(statSync(socket).mode & 0o777).toBe(0o600)
+    expect(statSync(join(fixture, 'aico')).mode & 0o777).toBe(0o700)
+  })
+
+  it('coalesces concurrent retries and rejects a changed request digest', async () => {
+    const input = create('target-1')
+    const results = await Promise.all([
+      call('/v1/roots', 'POST', input),
+      call('/v1/roots', 'POST', input),
+    ])
+    expect(results.map((result) => result.status)).toEqual([200, 200])
+    expect(results[0].body).toEqual(results[1].body)
+    expect(listWidgets()).toHaveLength(1)
+    expect(launches.size).toBe(1)
+    const before = ensure.mock.calls.length
+    expect(await call('/v1/roots', 'POST', { ...input, initialPrompt: 'different' })).toEqual({
+      status: 409,
+      body: { error: 'request_conflict' },
+    })
+    expect(ensure.mock.calls).toHaveLength(before)
+    expect(results[0].body).toMatchObject({
+      owner: 'aico',
+      tool: 'codex',
+      role: 'sample-app-target-root',
+      leadRootReference: 'portfolio-center',
+      status: 'running',
+    })
+  })
+
+  it('reconciles an uncertain launch and a server restart using the same durable identity', async () => {
+    uncertain = true
+    const input = create('target-uncertain')
+    const first = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(202)
+    expect(first.body.status).toBe('uncertain')
+    initStore(database) // simulate reopening the catalog after Electron restart
+    uncertain = false
+    const retry = await call('/v1/roots', 'POST', input)
+    expect(retry.status).toBe(200)
+    expect(retry.body.hostIdentity).toBe(first.body.hostIdentity)
+    expect(listWidgets()).toHaveLength(2)
+    expect(launches.size).toBe(2)
+  })
+
+  it('assigns independent logical identities and retains End tombstones', async () => {
+    const first = await call('/v1/roots/target-1')
+    const second = await call('/v1/roots', 'POST', create('support-1'))
+    expect(second.body.logicalSessionId).not.toBe(first.body.logicalSessionId)
+    expect(second.body.logicalSessionId).toMatch(/^aico-root-/)
+    expect(second.body.hostIdentity).not.toBe(first.body.hostIdentity)
+    const id = second.body.hostIdentity as string
+    removeWidget(id)
+    const before = ensure.mock.calls.length
+    const ended = await call('/v1/roots', 'POST', create('support-1'))
+    expect(ended.status).toBe(200)
+    expect(ended.body).toMatchObject({ hostIdentity: id, generation: null, status: 'ended' })
+    expect(ensure.mock.calls).toHaveLength(before)
+    expect((await call('/v1/roots')).body.roots).toHaveLength(3)
+  })
+
+  it('answers the retired show and position verbs with 410 windows_retired and applies nothing', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const bounds = { x: -10, y: 20, width: 900, height: 560 }
+    const retired = { status: 410, body: { error: 'windows_retired' } }
+    const before = [title, coordinator].map((mock) => mock.mock.calls.length)
+    for (const path of [
+      '/v1/roots/target-1/show',
+      '/v1/roots/target-1/position',
+      '/v1/roots/missing-root/position',
+      `/v1/widgets/${root.widgetId}/show`,
+      `/v1/widgets/${root.widgetId}/position`,
+    ])
+      expect(await call(path, 'POST', { generation, bounds })).toEqual(retired)
+    expect([title, coordinator].map((mock) => mock.mock.calls.length)).toEqual(before)
+  })
+
+  it('renames one exact root through a bounded generation-fenced owner mutation', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const path = '/v1/roots/target-1/title'
+    expect(
+      (await call(path, 'POST', { generation: '0'.repeat(64), label: 'Neri · Hunt' })).status,
+    ).toBe(409)
+    expect(title).not.toHaveBeenCalled()
+    const renamed = await call(path, 'POST', { generation, label: '  Neri · Mattermost Hunt  ' })
+    expect(renamed.status).toBe(200)
+    expect(title).toHaveBeenCalledWith(root.widgetId, generation, 'Neri · Mattermost Hunt')
+    expect(JSON.stringify(renamed.body)).not.toContain('Mattermost Hunt')
+    for (const label of [
+      '',
+      'line\nbreak',
+      'line\u2028break',
+      '\u001bcontrol',
+      'x'.repeat(161),
+      '界'.repeat(54),
+    ]) {
+      expect((await call(path, 'POST', { generation, label })).status).toBe(400)
+    }
+    expect((await call(path, 'POST', { generation, label: 'Neri', extra: true })).status).toBe(400)
+  })
+
+  it('refuses every view mutation for a non-running or ended workload without applying', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const counts = () => [coordinator, title].map((mock) => mock.mock.calls.length)
+    const before = counts()
+    const refused = { status: 409, body: { error: 'workload_unavailable' } }
+    running.delete(root.widgetId)
+    try {
+      expect(
+        await call('/v1/roots/target-1/title', 'POST', { generation, label: 'Focus' }),
+      ).toEqual(refused)
+      expect(
+        await call(`/v1/widgets/${root.widgetId}/coordinator`, 'POST', {
+          generation,
+          coordinator: true,
+        }),
+      ).toEqual(refused)
+    } finally {
+      running.add(root.widgetId)
+    }
+    expect(
+      await call('/v1/roots/support-1/title', 'POST', {
+        generation: '0'.repeat(64),
+        label: 'Focus',
+      }),
+    ).toEqual({
+      status: 410,
+      body: { error: 'ended' },
+    })
+    expect(counts()).toEqual(before)
+  })
+
+  it('serializes root and widget routes for one workload on the widget identity', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const [titles, marks] = [title.mock.calls.length, coordinator.mock.calls.length]
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    title.mockImplementationOnce(async () => {
+      await gate
+      return true
+    })
+    const first = call('/v1/roots/target-1/title', 'POST', { generation, label: 'Focus' })
+    await vi.waitFor(() => expect(title).toHaveBeenCalledTimes(titles + 1))
+    const second = call(`/v1/widgets/${root.widgetId}/coordinator`, 'POST', {
+      generation,
+      coordinator: true,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(coordinator).toHaveBeenCalledTimes(marks)
+    release()
+    expect((await first).status).toBe(200)
+    expect((await second).status).toBe(200)
+    expect(coordinator).toHaveBeenCalledTimes(marks + 1)
+  })
+
+  it('writes root metadata only for an actively dispatched workload under lifecycle ownership', async () => {
+    const root = present(getRootRequest('target-1'))
+    const row = { ...present(getWidget(root.widgetId)), launchState: 'dispatched' as const }
+    const generation = sessionGeneration(row)
+    const owners = new LifecycleOwnerLock()
+    const rename = vi.fn(() => expect(owners.isHeld(row.id)).toBe(true))
+    let gateState: ManagedGateState | null = 'active-workload'
+    let current: WidgetRow = row
+    const verify = vi.fn(async () => {
+      expect(owners.isHeld(row.id)).toBe(true)
+      return gateState
+    })
+    const operations = {
+      acquire: (id: string) => owners.acquire(id),
+      release: (_id: string, owner: NonNullable<ReturnType<typeof owners.acquire>>) => {
+        owners.release(owner)
+      },
+      getWidget: () => current,
+      gateState: verify,
+      apply: rename,
+    }
+    for (const launchState of ['none', 'gated'] as const) {
+      current = { ...row, launchState }
+      expect(await widgetMutationOperation(row.id, sessionGeneration(current), operations)).toBe(
+        false,
+      )
+      expect(verify).not.toHaveBeenCalled()
+      expect(rename).not.toHaveBeenCalled()
+      expect(owners.isHeld(row.id)).toBe(false)
+    }
+    current = row
+    for (const state of ['inert', 'ambiguous', null] as const) {
+      gateState = state
+      expect(await widgetMutationOperation(row.id, generation, operations)).toBe(false)
+      expect(rename).not.toHaveBeenCalled()
+      expect(owners.isHeld(row.id)).toBe(false)
+    }
+    gateState = 'active-workload'
+    expect(await widgetMutationOperation(row.id, generation, operations)).toBe(true)
+    expect(rename).toHaveBeenCalledExactlyOnceWith(row)
+    expect(owners.isHeld(row.id)).toBe(false)
+  })
+
+  it('keeps title writes fenced after running verification and releases ownership on failure', async () => {
+    const root = present(getRootRequest('target-1'))
+    const row = { ...present(getWidget(root.widgetId)), launchState: 'dispatched' as const }
+    const generation = sessionGeneration(row)
+    const owners = new LifecycleOwnerLock()
+    let current: WidgetRow | undefined = row
+    const rename = vi.fn()
+    const verify = vi.fn(async (): Promise<ManagedGateState> => 'active-workload')
+    const operations = {
+      acquire: (id: string) => owners.acquire(id),
+      release: (_id: string, owner: NonNullable<ReturnType<typeof owners.acquire>>) => {
+        owners.release(owner)
+      },
+      getWidget: () => current,
+      gateState: verify,
+      apply: rename,
+    }
+    const competingOwner = present(owners.acquire(row.id))
+    expect(await widgetMutationOperation(row.id, generation, operations)).toBe(false)
+    expect(verify).not.toHaveBeenCalled()
+    owners.release(competingOwner)
+    expect(await widgetMutationOperation(row.id, '0'.repeat(64), operations)).toBe(false)
+    expect(verify).not.toHaveBeenCalled()
+    for (const replacement of [
+      undefined,
+      { ...row, scopeInvocationId: 'replacement' },
+      { ...row, launchState: 'gated' as const },
+    ]) {
+      current = row
+      verify.mockImplementationOnce(async () => {
+        current = replacement
+        return 'active-workload'
+      })
+      expect(await widgetMutationOperation(row.id, generation, operations)).toBe(false)
+      expect(rename).not.toHaveBeenCalled()
+      expect(owners.isHeld(row.id)).toBe(false)
+    }
+    current = row
+    verify.mockRejectedValueOnce(new Error('verification failed'))
+    await expect(widgetMutationOperation(row.id, generation, operations)).rejects.toThrow(
+      'verification failed',
+    )
+    expect(rename).not.toHaveBeenCalled()
+    expect(owners.isHeld(row.id)).toBe(false)
+  })
+
+  it('controls one ordinary widget without a root request and returns only exact identity', async () => {
+    const row = insertWidget('aabbcc01', 'codex')
+    insertWidget('aabbcc02', 'codex')
+    setWidgetName(row.id, 'Private widget title')
+    running.add(row.id)
+    expect(rootRequestForWidget(row.id)).toBeUndefined()
+    const generation = sessionGeneration(row)
+    const path = `/v1/widgets/${row.id}`
+    const descriptor = {
+      owner: 'aico',
+      widgetId: row.id,
+      sessionId: row.sessionId,
+      generation,
+      status: 'running',
+      available: true,
+    }
+    expect(await call(path)).toEqual({ status: 200, body: descriptor })
+    expect(await call(`${path}/title`, 'POST', { generation, label: '  Exact widget  ' })).toEqual({
+      status: 200,
+      body: descriptor,
+    })
+    expect(title).toHaveBeenLastCalledWith(row.id, generation, 'Exact widget')
+    expect(await call(`${path}/coordinator`, 'POST', { generation, coordinator: true })).toEqual({
+      status: 200,
+      body: descriptor,
+    })
+    expect(coordinator).toHaveBeenLastCalledWith(row.id, generation, true)
+    expect((await call(`${path}/coordinator`, 'POST', { generation, coordinator: 1 })).status).toBe(
+      400,
+    )
+    expect(getWidget('aabbcc02')?.name).toBeNull()
+    expect(JSON.stringify(descriptor)).not.toMatch(
+      /Private|label|bounds|prompt|transcript|terminal/,
+    )
+    const receipt = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      execFile(
+        '/usr/bin/python3',
+        [ROOT_WATCH, 'widget', 'title', 'CLI private label', '--root-socket', socket],
+        { encoding: 'utf8', env: { ...process.env, AICO_WIDGET_ID: row.id } },
+        (error, stdout) => {
+          if (error) reject(error)
+          else {
+            try {
+              resolve(JSON.parse(stdout))
+            } catch (failure) {
+              reject(failure)
+            }
+          }
+        },
+      )
+    })
+    expect(receipt).toEqual({ ...descriptor, operation: 'title', applied: true })
+    expect(title).toHaveBeenLastCalledWith(row.id, generation, 'CLI private label')
+    // Async: the owner server answers on this same event loop.
+    const marked = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      execFile(
+        '/usr/bin/python3',
+        [ROOT_WATCH, 'widget', 'coordinator', 'off', '--root-socket', socket],
+        { encoding: 'utf8', env: { ...process.env, AICO_WIDGET_ID: row.id } },
+        (error, stdout) => (error ? reject(error) : resolve(JSON.parse(stdout))),
+      )
+    })
+    expect(marked).toEqual({ ...descriptor, operation: 'coordinator', applied: true })
+    expect(coordinator).toHaveBeenLastCalledWith(row.id, generation, false)
+  })
+
+  it('rejects stale, other-widget, missing, ended and unavailable widget mutations', async () => {
+    const row = present(getWidget('aabbcc01'))
+    const generation = sessionGeneration(row)
+    const path = `/v1/widgets/${row.id}`
+    const before = [title.mock.calls.length, coordinator.mock.calls.length]
+    for (const wrong of ['0'.repeat(64), sessionGeneration(present(getWidget('aabbcc02')))]) {
+      expect(
+        (await call(`${path}/title`, 'POST', { generation: wrong, label: 'Rejected' })).status,
+      ).toBe(409)
+      expect(
+        (await call(`${path}/coordinator`, 'POST', { generation: wrong, coordinator: true }))
+          .status,
+      ).toBe(409)
+    }
+    const ended = insertWidget('aabbcc03', 'codex')
+    removeWidget(ended.id)
+    for (const id of ['aabbcc03', 'aabbcc04']) {
+      expect((await call(`/v1/widgets/${id}`)).status).toBe(404)
+      expect(
+        (await call(`/v1/widgets/${id}/title`, 'POST', { generation, label: 'Rejected' })).status,
+      ).toBe(404)
+    }
+    const unavailable = await call('/v1/widgets/aabbcc02')
+    expect(unavailable.body).toMatchObject({ status: 'uncertain', available: false })
+    expect(
+      (
+        await call('/v1/widgets/aabbcc02/title', 'POST', {
+          generation: unavailable.body.generation,
+          label: 'Rejected',
+        })
+      ).status,
+    ).toBe(409)
+    expect([title.mock.calls.length, coordinator.mock.calls.length]).toEqual(before)
+    expect((await call('/v1/widgets/AABBCC01')).status).toBe(404)
+  })
+
+  it('reuses bounded label validation for ordinary widgets', async () => {
+    const row = present(getWidget('aabbcc01'))
+    const generation = sessionGeneration(row)
+    const path = `/v1/widgets/${row.id}`
+    const before = [title.mock.calls.length, coordinator.mock.calls.length]
+    for (const label of [
+      '',
+      '\u001bcontrol',
+      'line\nbreak',
+      '\u007f',
+      '\u0085',
+      '\u2028',
+      '\u2029',
+      '\ud800',
+      '界'.repeat(54),
+    ]) {
+      expect((await call(`${path}/title`, 'POST', { generation, label })).status).toBe(400)
+    }
+    expect(
+      (await call(`${path}/title`, 'POST', { generation, label: 'Valid', extra: true })).status,
+    ).toBe(400)
+    expect([title.mock.calls.length, coordinator.mock.calls.length]).toEqual(before)
+  })
+
+  it('reports an applied widget mutation whose identity cannot be requalified as uncertain', async () => {
+    const row = insertWidget('aabbcc08', 'codex')
+    running.add(row.id)
+    title.mockImplementationOnce(async (widgetId: string) => {
+      removeWidget(widgetId)
+      return true
+    })
+    expect(
+      await call(`/v1/widgets/${row.id}/title`, 'POST', {
+        generation: sessionGeneration(row),
+        label: 'Applied',
+      }),
+    ).toEqual({ status: 409, body: { error: 'outcome_uncertain' } })
+  })
+
+  it('rejects identity changes during widget inspection or before mutation', async () => {
+    const row = insertWidget('aabbcc05', 'codex')
+    running.add(row.id)
+    status.mockImplementationOnce(async () => {
+      removeWidget(row.id)
+      return 'running'
+    })
+    expect(await call(`/v1/widgets/${row.id}`)).toEqual({
+      status: 409,
+      body: { error: 'stale_generation' },
+    })
+    const replacement = insertWidget('aabbcc06', 'codex')
+    running.add(replacement.id)
+    const before = title.mock.calls.length
+    status.mockImplementationOnce(async () => {
+      removeWidget(replacement.id)
+      return 'running'
+    })
+    expect(
+      (
+        await call(`/v1/widgets/${replacement.id}/title`, 'POST', {
+          generation: sessionGeneration(replacement),
+          label: 'Rejected',
+        })
+      ).status,
+    ).toBe(409)
+    expect(title.mock.calls).toHaveLength(before)
+  })
+
+  it('keeps every view mutation on one identity while holding lifecycle ownership', async () => {
+    const row = { ...present(getWidget('aabbcc01')), launchState: 'dispatched' as const }
+    const generation = sessionGeneration(row)
+    const owners = new LifecycleOwnerLock()
+    let current: WidgetRow | undefined = row
+    const apply = vi.fn(() => expect(owners.isHeld(row.id)).toBe(true))
+    const verify = vi.fn(async (): Promise<ManagedGateState> => {
+      expect(owners.isHeld(row.id)).toBe(true)
+      return 'active-workload'
+    })
+    const operations = {
+      acquire: (id: string) => owners.acquire(id),
+      release: (_id: string, owner: NonNullable<ReturnType<typeof owners.acquire>>) =>
+        owners.release(owner),
+      getWidget: () => current,
+      gateState: verify,
+      apply,
+    }
+    expect(await widgetMutationOperation(row.id, generation, operations)).toBe(true)
+    expect(apply).toHaveBeenCalledExactlyOnceWith(row)
+    apply.mockClear()
+    for (const replacement of [
+      undefined,
+      { ...row, scopeInvocationId: 'changed' },
+      { ...row, id: 'aabbcc02' },
+    ]) {
+      current = row
+      verify.mockImplementationOnce(async () => {
+        current = replacement
+        return 'active-workload'
+      })
+      expect(await widgetMutationOperation(row.id, generation, operations)).toBe(false)
+      expect(apply).not.toHaveBeenCalled()
+      expect(owners.isHeld(row.id)).toBe(false)
+    }
+    current = row
+    verify.mockRejectedValueOnce(new Error('pane check failed'))
+    await expect(widgetMutationOperation(row.id, generation, operations)).rejects.toThrow(
+      'pane check failed',
+    )
+    expect(owners.isHeld(row.id)).toBe(false)
+  })
+
+  it('explicitly reports root-control and directed-delivery unavailability without steering', async () => {
+    available = false
+    expect(await call('/v1/roots', 'POST', create('no-gui'))).toEqual({
+      status: 503,
+      body: { error: 'unavailable' },
+    })
+    expect(getRootRequest('no-gui')).toBeUndefined()
+    available = true
+    expect(
+      (await call('/v1/roots/target-1/send', 'POST', { message: 'never pasted' })).body,
+    ).toMatchObject({ error: 'directed_delivery_unavailable' })
+    expect((await call('/v1/roots')).body.directedDelivery).toMatchObject({ available: false })
+    expect(
+      (await call('/v1/roots', 'POST', { ...create('bad-launch'), projectRoot: '/missing' }))
+        .status,
+    ).toBe(422)
+    expect(getRootRequest('bad-launch')).toBeUndefined()
+  })
+
+  it('exposes one fail-closed clear/submit contract and never claims native acceptance', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const path = '/v1/roots/target-1/admin'
+    const capabilities = await call(path)
+    expect(capabilities.status).toBe(200)
+    expect(capabilities.body.terminalAdmin).toMatchObject({
+      available: false,
+      reason: 'native_tui_atomic_compare_and_apply_unavailable',
+      operations: ['clear', 'submit'],
+      framing: 'bracketed_paste',
+    })
+    const pin = {
+      requestKey: 'scope-seam-1',
+      generation,
+      expectedThreadId: '00000000-0000-4000-8000-000000000001',
+    }
+    for (const operation of [
+      { ...pin, kind: 'clear' },
+      { ...pin, kind: 'submit', text: 'private text' },
+    ]) {
+      const first = await call(path, 'POST', operation)
+      expect(first.status).toBe(503)
+      expect(first.body).toMatchObject({
+        error: 'native_tui_atomic_admin_unavailable',
+        applied: false,
+        requestKey: pin.requestKey,
+        generation,
+        expectedThreadId: pin.expectedThreadId,
+      })
+      expect(JSON.stringify(first.body)).not.toContain('private text')
+      expect(await call(path, 'POST', operation)).toEqual(first)
+    }
+    expect(
+      (await call(path, 'POST', { ...pin, kind: 'clear', generation: '0'.repeat(64) })).status,
+    ).toBe(409)
+    expect((await call(path, 'POST', { ...pin, kind: 'clear', text: 'unexpected' })).status).toBe(
+      400,
+    )
+    expect((await call(path, 'POST', { ...pin, kind: 'submit', text: '\x1b[201~' })).status).toBe(
+      400,
+    )
+    expect(
+      (await call(path, 'POST', { ...pin, kind: 'clear', expectedThreadId: 'invalid' })).status,
+    ).toBe(400)
+    expect(
+      (await call(path, 'POST', { ...pin, kind: 'submit', text: 'x'.repeat(4096) })).status,
+    ).toBe(400)
+    expect(
+      (await call('/v1/roots/support-1/admin', 'POST', { ...pin, kind: 'clear' })).status,
+    ).toBe(410)
+    const unsupported = await call('/v1/roots', 'POST', {
+      ...create('unsupported-admin'),
+      tool: 'claude-code',
+    })
+    expect(
+      (
+        await call('/v1/roots/unsupported-admin/admin', 'POST', {
+          ...pin,
+          kind: 'clear',
+          generation: unsupported.body.generation,
+        })
+      ).status,
+    ).toBe(422)
+  })
+
+  it('cannot use the Aico workload generation as a native-thread fence', () => {
+    const root = present(getRootRequest('target-1'))
+    const row = present(getWidget(root.widgetId))
+    const before = { ...row, nativeThreadId: '00000000-0000-4000-8000-000000000001' }
+    const after = { ...row, nativeThreadId: '00000000-0000-4000-8000-000000000002' }
+    expect(sessionGeneration(before)).toBe(sessionGeneration(after))
+  })
+
+  it('accepts every bounded UTF-8 admin text with JSON escaping at the body boundary', async () => {
+    const root = present(getRootRequest('target-1'))
+    const pin = {
+      kind: 'submit',
+      requestKey: 'x'.repeat(128),
+      generation: sessionGeneration(present(getWidget(root.widgetId))),
+      expectedThreadId: '00000000-0000-4000-8000-000000000001',
+    }
+    const ascii = (value: unknown) =>
+      JSON.stringify(value)
+        .replace(
+          /[\u007f-\uffff]/g,
+          (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+        )
+        .replace(/\\n/g, '\\u000a')
+        .replace(/\\t/g, '\\u0009')
+    for (const text of [`${'界'.repeat(666)}ab`, `x${'\n\t'.repeat(999)}\n`]) {
+      expect(Buffer.byteLength(text)).toBe(2000)
+      const result = await call('/v1/roots/target-1/admin', 'POST', { ...pin, text }, ascii)
+      expect(result.status).toBe(503)
+      expect(result.body.applied).toBe(false)
+      expect(JSON.stringify(result.body)).not.toContain(text)
+    }
+    expect(
+      (await call('/v1/roots/target-1/admin', 'POST', { ...pin, text: '界'.repeat(667) })).status,
+    ).toBe(400)
+  })
+
+  it('serves the actual ST owner executable through the isolated private socket', async () => {
+    const root = present(getRootRequest('target-1'))
+    const generation = sessionGeneration(present(getWidget(root.widgetId)))
+    const run = (args: string[]) =>
+      new Promise<{ code: string | number; body: Record<string, unknown> }>((resolve, reject) => {
+        execFile(
+          '/usr/bin/python3',
+          [ROOT_WATCH, 'admin', 'target-1', ...args, '--root-socket', socket],
+          { encoding: 'utf8' },
+          (error, stdout) => {
+            try {
+              resolve({ code: error?.code ?? 0, body: JSON.parse(stdout) })
+            } catch (failure) {
+              reject(failure)
+            }
+          },
+        )
+      })
+    expect((await run([])).body.terminalAdmin).toMatchObject({ available: false })
+    const denied = await run([
+      'clear',
+      '--generation',
+      generation,
+      '--thread',
+      '00000000-0000-4000-8000-000000000001',
+      '--request-key',
+      'scope-seam-1',
+    ])
+    expect(denied.code).toBe(1)
+    expect(denied.body).toMatchObject({
+      applied: false,
+      reason: 'native_tui_atomic_admin_unavailable',
+    })
+  })
+
+  it('requires an explicit fixed work role only on new requests and fences role changes', async () => {
+    const omitted = { ...create('undeclared-new'), workRole: undefined }
+    expect((await call('/v1/roots', 'POST', omitted)).body).toEqual({ error: 'work_role_required' })
+    expect(getRootRequest('undeclared-new')).toBeUndefined()
+    for (const workRole of ['unknown', 'invalid role', '', 1])
+      expect(parseRootCreate({ ...omitted, workRole })).toBeNull()
+    const input = { ...create('work-role-fixed'), workRoleDisplayName: 'Builder' }
+    const first = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(first.body).toMatchObject({ workRole: 'implementation', workRoleDisplayName: 'Builder' })
+    const root = present(getRootRequest(input.requestId))
+    expect(rootLaunchEnvironment(root.widgetId)).toMatchObject({
+      ST_WORK_ROLE: 'implementation',
+      ST_WORK_ROLE_DISPLAY_NAME: 'Builder',
+      ST_WORK_ROLE_SOURCE: `tether:root:${root.logicalSessionId}`,
+    })
+    expect((await call('/v1/roots', 'POST', input)).body.digest).toBe(first.body.digest)
+    expect((await call('/v1/roots', 'POST', { ...input, workRole: 'research' })).status).toBe(409)
+    expect(
+      (await call('/v1/roots', 'POST', { ...input, workRoleDisplayName: 'Changed' })).status,
+    ).toBe(409)
+    const legacy = present(parseRootCreate({ ...create('legacy-role-retry'), workRole: null }))
+    reserveRootRequest(
+      {
+        requestId: legacy.requestId,
+        widgetId: allocateWidgetId(),
+        logicalSessionId: 'legacy-role-session',
+        role: legacy.role,
+        digest: rootRequestDigest(legacy),
+        createdAt: Date.now(),
+        origin: 'aico',
+        leadRootReference: legacy.leadRootReference,
+        facetCapsuleRef: null,
+      },
+      'codex',
+      legacy.projectId,
+      legacy.projectRoot,
+    )
+    expect((await call('/v1/roots', 'POST', legacy)).status).toBe(200)
+    const legacyRoot = present(getRootRequest(legacy.requestId))
+    expect(rootLaunchEnvironment(legacyRoot.widgetId).ST_WORK_ROLE).toBe('')
+    expect((await call('/v1/roots', 'POST', { ...legacy, workRole: 'coordinator' })).status).toBe(
+      409,
+    )
+  })
+
+  it('rejects arbitrary command injection and canonicalizes exact launch content', () => {
+    const input = { ...create('digest'), workRole: null }
+    expect(parseRootCreate({ ...input, command: ['bash'] })).toBeNull()
+    expect(parseRootCreate({ ...input, tool: 'shell' })).toBeNull()
+    for (const projectRoot of ['/tmp/../other', '/tmp/./x', '/tmp//x', '/tmp/x\0', 'tmp/x'])
+      expect(parseRootCreate({ ...input, projectRoot })).toBeNull()
+    for (const path of ['/tmp/x', '/tmp/x/', '/']) expect(isProjectRootPath(path)).toBe(true)
+    for (const path of ['/tmp/../x', '/tmp/./x', '//tmp', '/tmp/x\0', 'tmp', '', 7, null])
+      expect(isProjectRootPath(path)).toBe(false)
+    expect(parseRootCreate({ ...input, initialPrompt: '\0' })).toBeNull()
+    const parsed = present(parseRootCreate(input))
+    expect(rootRequestDigest(parsed)).toBe(
+      rootRequestDigest(present(parseRootCreate({ ...input }))),
+    )
+    expect(rootRequestDigest(parsed)).toBe(
+      createHash('sha256')
+        .update(
+          JSON.stringify([
+            input.tool,
+            input.projectId,
+            input.projectRoot,
+            input.initialPrompt,
+            input.role,
+            input.leadRootReference,
+            null,
+          ]),
+        )
+        .digest('hex'),
+    )
+    expect(rootRequestDigest(parsed)).not.toBe(rootRequestDigest({ ...parsed, role: 'support' }))
+    expect(rootRequestDigest(parsed)).not.toBe(
+      rootRequestDigest({ ...parsed, leadRootReference: null }),
+    )
+    expect(rootRequestDigest(parsed)).not.toBe(
+      rootRequestDigest({ ...parsed, facetCapsuleRef: 'capsule-2' }),
+    )
+  })
+
+  it('starts a launched lane trimmed to its work role, before the prompt', async () => {
+    const root = present(getRootRequest('target-1'))
+    expect(root.workRole).toBe('implementation')
+    const tool = {
+      slug: 'claude-code',
+      displayName: 'fixture',
+      icon: '',
+      accent: '',
+      enabled: true,
+      order: 0,
+      command: [
+        process.execPath,
+        '-e',
+        'process.stdout.write(JSON.stringify({args:process.argv.slice(1),artifact:process.env.CLAUDE_CODE_DISABLE_ARTIFACT}))',
+        '--',
+      ],
+      processName: 'node',
+    }
+    const lane = sessionSpec(tool, fixture, root.widgetId)
+    await withRootPrompt(root.widgetId, 'Go.', async () => {
+      const result = execFileSync(
+        '/bin/bash',
+        ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, lane))],
+        {
+          env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+          encoding: 'utf8',
+        },
+      )
+      expect(JSON.parse(result)).toEqual({
+        args: ['--disallowedTools=AskUserQuestion,ReportFindings', '--', 'Go.'],
+        artifact: '1',
+      })
+    })
+    // A session nobody launched keeps the whole harness.
+    expect(sessionSpec(tool, fixture, 'ffffffff')).toEqual(tool)
+  })
+
+  it('resumes and relaunches a lane trimmed to its work role too', async () => {
+    const root = present(getRootRequest('target-1'))
+    const tool = {
+      slug: 'claude-code',
+      displayName: 'fixture',
+      icon: '',
+      accent: '',
+      enabled: true,
+      order: 0,
+      command: [
+        process.execPath,
+        '-e',
+        'process.stdout.write(JSON.stringify({args:process.argv.slice(1),artifact:process.env.CLAUDE_CODE_DISABLE_ARTIFACT}))',
+        '--',
+      ],
+      processName: 'node',
+      resume: { sessionIdPattern: UUID, arguments: ['--resume'] },
+    }
+    const lane = sessionSpec(tool, fixture, root.widgetId)
+    const run = (line: string | null) =>
+      JSON.parse(
+        execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', present(line)], {
+          env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+          encoding: 'utf8',
+        }),
+      )
+    const trim = '--disallowedTools=AskUserQuestion,ReportFindings'
+    const resumed = '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d'
+    await withRootPrompt(
+      root.widgetId,
+      'Go on.',
+      async () => {
+        expect(run(initialLaunchLine(root.widgetId, lane)).args).toEqual([
+          trim,
+          '--resume',
+          resumed,
+          '--',
+          'Go on.',
+        ])
+      },
+      resumed,
+    )
+    // A restart with nothing to resume relaunches trimmed too.
+    expect(run(relaunchLine(root.widgetId, lane))).toEqual({ args: [trim], artifact: '1' })
+  })
+
+  it('keeps prompt bytes out of durable storage and safely passes exact launch argv', async () => {
+    const root = present(getRootRequest('target-1'))
+    const prompt = "-flag\n$(printf compromised)\u001b\t'quoted'\n"
+    expect(rootPromptReady(root.widgetId)).toBe(false)
+    const tool = {
+      slug: 'fixture',
+      displayName: 'fixture',
+      icon: '',
+      accent: '',
+      enabled: true,
+      order: 0,
+      command: [
+        process.execPath,
+        '-e',
+        'process.stdout.write(JSON.stringify({args:process.argv.slice(1),prompt:process.env.AICO_ROOT_INITIAL_PROMPT}))',
+      ],
+      processName: 'node',
+    }
+    await withRootPrompt(root.widgetId, prompt, async () => {
+      const environment = rootLaunchEnvironment(root.widgetId)
+      expect(environment.ST_SESSION_ID).toBe(root.logicalSessionId)
+      expect(rootPromptReady(root.widgetId)).toBe(true)
+      const line = present(initialLaunchLine(root.widgetId, tool))
+      expect(line).not.toContain(prompt)
+      const result = execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', line], {
+        env: { PATH: '/usr/bin:/bin', ...environment },
+        encoding: 'utf8',
+      })
+      expect(JSON.parse(result)).toEqual({ args: [prompt] })
+    })
+    expect(rootLaunchEnvironment(root.widgetId)).toEqual({
+      ST_SESSION_ID: root.logicalSessionId,
+      ST_WORK_ROLE: root.workRole,
+      ST_WORK_ROLE_SOURCE: `tether:root:${root.logicalSessionId}`,
+      ST_WORK_ROLE_DISPLAY_NAME: '',
+      AICO_ROOT_INITIAL_LAUNCH: '0',
+      AICO_ROOT_INITIAL_PROMPT: '',
+      AICO_ROOT_RESUME_SESSION_ID: '',
+      AICO_ROOT_MODEL: '',
+      AICO_ROOT_REASONING_EFFORT: '',
+      AICO_ROOT_DAYBREAK: '',
+      AICO_ROOT_AGENT_HUB_CONTEXT: '',
+      AICO_ROOT_FRESH_SESSION_ID: '',
+    })
+    const replacementResult = execFileSync(
+      '/bin/bash',
+      ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+      {
+        env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+        encoding: 'utf8',
+      },
+    )
+    expect(JSON.parse(replacementResult).args).toEqual([])
+    expect(rootPromptReady(root.widgetId)).toBe(false)
+    const reader = new DatabaseSync(database)
+    try {
+      const rows = JSON.stringify(reader.prepare('SELECT * FROM root_requests').all())
+      expect(rows).not.toContain('Only this independent root.')
+      expect(rows).not.toContain(prompt)
+      expect(rootRequestForWidget(root.widgetId)?.requestId).toBe(root.requestId)
+    } finally {
+      reader.close()
+    }
+  })
+
+  it('binds model selection to create idempotency and passes it to the launch', async () => {
+    const input = { ...create('model-selection'), model: 'gpt-6.1-sol', reasoningEffort: 'high' }
+    const parsed = present(parseRootCreate(input))
+    expect(rootRequestDigest(parsed)).not.toBe(
+      rootRequestDigest(present(parseRootCreate(create('model-selection')))),
+    )
+    const first = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(await call('/v1/roots', 'POST', input)).toEqual(first)
+    expect(ensure).toHaveBeenLastCalledWith(first.body.hostIdentity, input.initialPrompt, null, {
+      model: 'gpt-6.1-sol',
+      reasoningEffort: 'high',
+    })
+    expect((await call('/v1/roots', 'POST', { ...input, model: 'another-model' })).status).toBe(409)
+    for (const model of ['', '--flag', 'x\nunsafe', 'x'.repeat(129)])
+      expect(parseRootCreate({ ...input, model })).toBeNull()
+    expect(parseRootCreate({ ...input, reasoningEffort: 'unknown' })).toBeNull()
+    expect(parseRootCreate({ ...input, daybreak: 'off' })).toBeNull()
+    const selected = present(parseRootCreate({ ...input, daybreak: false }))
+    expect(rootRequestDigest(selected)).not.toBe(rootRequestDigest(parsed))
+    // Claude Code takes a model and effort but has no Daybreak switch.
+    expect(parseRootCreate({ ...input, tool: 'claude-code', daybreak: false })).toBeNull()
+  })
+
+  it('launches and resumes Claude Code on the chosen model and effort', async () => {
+    const input = {
+      ...create('claude-selection'),
+      tool: 'claude-code',
+      model: 'claude-haiku-5-5',
+      reasoningEffort: 'low',
+    }
+    expect(parseRootCreate(input)).not.toBeNull()
+    expect(parseRootCreate({ ...input, reasoningEffort: 'max' })).not.toBeNull()
+    expect(parseRootCreate({ ...input, model: null, reasoningEffort: null })).not.toBeNull()
+    // Its own levels: Codex's none and Pi's off/minimal are not Claude Code's.
+    for (const bad of ['none', 'off', 'minimal', 'turbo'])
+      expect(parseRootCreate({ ...input, reasoningEffort: bad })).toBeNull()
+    for (const model of ['--flag', 'x\nunsafe', 'x'.repeat(129)])
+      expect(parseRootCreate({ ...input, model })).toBeNull()
+    expect(parseRootCreate({ ...input, daybreak: false })).toBeNull()
+    const first = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(await call('/v1/roots', 'POST', input)).toEqual(first)
+    expect((await call('/v1/roots', 'POST', { ...input, model: 'claude-opus-5-5' })).status).toBe(
+      409,
+    )
+    const root = present(getRootRequest('claude-selection'))
+    const tool = {
+      ...present(getTui('claude-code')),
+      command: [process.execPath, '-e', 'console.log(JSON.stringify(process.argv.slice(1)))', '--'],
+    }
+    const run = (line: string | null, env: Record<string, string>) =>
+      JSON.parse(
+        execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', present(line)], {
+          env: { PATH: '/usr/bin:/bin', ...env },
+          encoding: 'utf8',
+        }),
+      )
+    for (const resume of [null, '00000000-0000-4000-8000-000000000001'])
+      await withRootPrompt(
+        root.widgetId,
+        'Reply only.',
+        async () => {
+          expect(
+            run(initialLaunchLine(root.widgetId, tool), rootLaunchEnvironment(root.widgetId)),
+          ).toEqual([
+            '--model',
+            'claude-haiku-5-5',
+            '--effort',
+            'low',
+            ...(resume ? ['--resume', resume] : []),
+            '--',
+            'Reply only.',
+          ])
+        },
+        resume,
+        { model: 'claude-haiku-5-5', reasoningEffort: 'low' },
+      )
+    // Every later launch (recovery, restart, reboot restore) keeps them.
+    const later = rootLaunchEnvironment(root.widgetId)
+    for (const line of [initialLaunchLine(root.widgetId, tool), relaunchLine(root.widgetId, tool)])
+      expect(run(line, later)).toEqual(['--model', 'claude-haiku-5-5', '--effort', 'low'])
+  })
+
+  it('passes model and effort as literal argv for fresh and resumed launches', async () => {
+    const root = present(getRootRequest('model-selection'))
+    const tool = {
+      ...codexTui,
+      modelSelection: {
+        model: ['--model'],
+        reasoningEffort: { arguments: ['-c'], key: 'model_reasoning_effort' },
+        daybreak: { arguments: ['-c'], key: 'daybreak' },
+      },
+      command: [
+        process.execPath,
+        '-e',
+        'console.log(JSON.stringify({args:process.argv.slice(1),model:process.env.AICO_ROOT_MODEL,effort:process.env.AICO_ROOT_REASONING_EFFORT}))',
+        '--',
+      ],
+    }
+    for (const resume of [null, '00000000-0000-4000-8000-000000000001'])
+      await withRootPrompt(
+        root.widgetId,
+        'Reply only.',
+        async () => {
+          const result = execFileSync(
+            '/bin/bash',
+            ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+            {
+              env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+              encoding: 'utf8',
+            },
+          )
+          expect(JSON.parse(result)).toEqual({
+            args: [
+              '--model',
+              'gpt-6.1-sol',
+              '-c',
+              'model_reasoning_effort="high"',
+              '-c',
+              'daybreak=false',
+              ...(resume ? ['resume', '--no-daemon', resume] : []),
+              '--',
+              'Reply only.',
+            ],
+          })
+        },
+        resume,
+        { model: 'gpt-6.1-sol', reasoningEffort: 'high', daybreak: false },
+      )
+    // Kept for every later launch (recovery, restart, wake, reboot): with no
+    // launch prompt the agent starts again with the created model and effort.
+    const later = rootLaunchEnvironment(root.widgetId)
+    expect(later).toMatchObject({
+      AICO_ROOT_INITIAL_LAUNCH: '0',
+      AICO_ROOT_INITIAL_PROMPT: '',
+      AICO_ROOT_MODEL: 'gpt-6.1-sol',
+      AICO_ROOT_REASONING_EFFORT: 'high',
+      AICO_ROOT_DAYBREAK: '',
+    })
+    for (const line of [initialLaunchLine(root.widgetId, tool), relaunchLine(root.widgetId, tool)])
+      expect(
+        JSON.parse(
+          execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', present(line)], {
+            env: { PATH: '/usr/bin:/bin', ...later },
+            encoding: 'utf8',
+          }),
+        ),
+      ).toEqual({ args: ['--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort="high"'] })
+    // A root created without options relaunches exactly as before.
+    expect((await call('/v1/roots', 'POST', create('no-selection'))).status).toBe(200)
+    const plain = present(getRootRequest('no-selection'))
+    expect(relaunchLine(plain.widgetId, tool)).toBe(launchLine(tool))
+    expect(rootLaunchEnvironment(plain.widgetId).AICO_ROOT_MODEL).toBe('')
+  })
+
+  it.each([
+    { provider: 'openai-codex', effort: 'xhigh' },
+    { provider: 'openai', effort: 'high' },
+  ])(
+    'launches and resumes Pi with explicit $provider/$effort argv',
+    async ({ provider, effort }) => {
+      const input = {
+        ...create(`pi-selection-${provider}`),
+        tool: 'pi',
+        model: `${provider}/gpt-6.1-sol`,
+        reasoningEffort: effort,
+      }
+      expect(parseRootCreate(input)).not.toBeNull()
+      expect(parseRootCreate({ ...input, model: null })).toBeNull()
+      expect(parseRootCreate({ ...input, model: 'gpt-6.1-sol' })).toBeNull()
+      expect(parseRootCreate({ ...input, daybreak: false })).toBeNull()
+      expect(parseRootCreate({ ...input, reasoningEffort: 'none' })).toBeNull()
+      expect(parseRootCreate({ ...input, reasoningEffort: 'off' })).not.toBeNull()
+      const first = await call('/v1/roots', 'POST', input)
+      expect(first.status).toBe(200)
+      expect(await call('/v1/roots', 'POST', input)).toEqual(first)
+      expect((await call('/v1/roots', 'POST', { ...input, model: 'another/model' })).status).toBe(
+        409,
+      )
+      const root = present(getRootRequest(input.requestId))
+      const tool = {
+        ...present(getTui('pi')),
+        command: [
+          process.execPath,
+          '-e',
+          'console.log(JSON.stringify(process.argv.slice(1)))',
+          '--',
+        ],
+      }
+      for (const resume of [null, '00000000-0000-4000-8000-000000000001'])
+        await withRootPrompt(
+          root.widgetId,
+          'Reply only.',
+          async () => {
+            const output = execFileSync(
+              '/bin/bash',
+              ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+              {
+                env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+                encoding: 'utf8',
+              },
+            )
+            expect(JSON.parse(output)).toEqual([
+              '--provider',
+              provider,
+              '--model',
+              'gpt-6.1-sol',
+              '--thinking',
+              effort,
+              '--approve',
+              ...(resume ? ['--session', resume] : ['--session-id', expect.stringMatching(UUID)]),
+              '--',
+              'Reply only.',
+            ])
+          },
+          resume,
+          { model: input.model, reasoningEffort: input.reasoningEffort },
+        )
+    },
+  )
+
+  it('refuses root options a Blank Slate launch cannot honour', () => {
+    const input = { ...create('blank-1'), projectRoot: join(blankSlateBase(), 'blank-1') }
+    expect(parseRootCreate(input)).not.toBeNull()
+    expect(parseRootCreate({ ...input, tool: 'antigravity' })).toBeNull()
+    expect(
+      parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol', agentHubContext: false }),
+    ).toBeNull()
+    expect(
+      parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol', daybreak: true }),
+    ).toBeNull()
+    expect(parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol' })).not.toBeNull()
+  })
+
+  it('keeps chosen instructions for the root and pins their revision in the digest', async () => {
+    vi.stubEnv('HOME', fixture)
+    try {
+      const instructions = {
+        prompt: 'code-reviewer',
+        name: 'Code Reviewer',
+        revision: '20110df2-9d3f-4e0d-85af-38d9b844a282',
+        content: 'Review carefully.',
+      }
+      const input = { ...create('with-instructions'), instructions }
+      expect(parseRootCreate({ ...input, tool: 'antigravity' })).toBeNull()
+      expect(
+        parseRootCreate({ ...input, instructions: { ...instructions, content: '' } }),
+      ).toBeNull()
+      const plain = present(parseRootCreate(create('with-instructions')))
+      expect(rootRequestDigest(present(parseRootCreate(input)))).not.toBe(rootRequestDigest(plain))
+      const first = await call('/v1/roots', 'POST', input)
+      expect(first.status).toBe(200)
+      const root = present(getRootRequest(input.requestId))
+      expect(sessionInstructions(root.widgetId)).toMatchObject({
+        prompt: 'code-reviewer',
+        revision: instructions.revision,
+      })
+      expect((await call('/v1/roots', 'POST', input)).body.digest).toBe(first.body.digest)
+      const other = { ...instructions, revision: '30110df2-9d3f-4e0d-85af-38d9b844a282' }
+      expect((await call('/v1/roots', 'POST', { ...input, instructions: other })).status).toBe(409)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('carries Pi Daybreak and optional context for fresh and resumed launches without leaking the prompt', async () => {
+    const input = {
+      ...create('pi-daybreak'),
+      tool: 'pi',
+      model: 'openai/gpt-6-sol',
+      reasoningEffort: 'xhigh',
+      daybreak: true,
+      agentHubContext: false,
+    }
+    const parsed = present(parseRootCreate(input))
+    for (const change of [
+      { daybreak: 'on' },
+      { model: 'openai-codex/gpt-6-sol' },
+      { model: 'openai/another-model' },
+      { agentHubContext: 'off' },
+      { tool: 'codex' },
+    ])
+      expect(parseRootCreate({ ...input, ...change })).toBeNull()
+    expect(rootRequestDigest(parsed)).not.toBe(
+      rootRequestDigest(present(parseRootCreate({ ...input, agentHubContext: true }))),
+    )
+    const first = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(ensure).toHaveBeenLastCalledWith(first.body.hostIdentity, input.initialPrompt, null, {
+      model: input.model,
+      reasoningEffort: 'xhigh',
+      daybreak: true,
+      agentHubContext: false,
+    })
+    expect((await call('/v1/roots', 'POST', { ...input, agentHubContext: true })).status).toBe(409)
+    const root = present(getRootRequest(input.requestId))
+    const tool = {
+      ...present(getTui('pi')),
+      command: [
+        process.execPath,
+        '-e',
+        'console.log(JSON.stringify({args:process.argv.slice(1),model:process.env.AICO_ROOT_MODEL,daybreak:process.env.AICO_ROOT_DAYBREAK,context:process.env.AICO_ROOT_AGENT_HUB_CONTEXT,prompt:process.env.AICO_ROOT_INITIAL_PROMPT}))',
+        '--',
+      ],
+    }
+    for (const daybreak of [true, false])
+      for (const resume of [null, '00000000-0000-4000-8000-000000000001'])
+        await withRootPrompt(
+          root.widgetId,
+          'Synthetic prompt.',
+          async () => {
+            const result = execFileSync(
+              '/bin/bash',
+              ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+              {
+                env: { PATH: '/usr/bin:/bin', ...rootLaunchEnvironment(root.widgetId) },
+                encoding: 'utf8',
+              },
+            )
+            expect(JSON.parse(result)).toEqual({
+              args: [
+                '--provider',
+                'openai',
+                '--model',
+                'gpt-6-sol',
+                '--thinking',
+                'xhigh',
+                '--approve',
+                ...(resume ? ['--session', resume] : ['--session-id', expect.stringMatching(UUID)]),
+                '--',
+                'Synthetic prompt.',
+              ],
+              model: input.model,
+              daybreak: daybreak.toString(),
+              context: 'false',
+            })
+          },
+          resume,
+          { model: input.model, reasoningEffort: 'xhigh', daybreak, agentHubContext: false },
+        )
+    // Later launches get the created selection back, never a prompt, and a
+    // new conversation under the id the host picked for that launch.
+    const later = rootLaunchEnvironment(root.widgetId)
+    expect(later.AICO_ROOT_DAYBREAK).toBe('true')
+    expect(later.AICO_ROOT_AGENT_HUB_CONTEXT).toBe('false')
+    expect(later.AICO_ROOT_FRESH_SESSION_ID).toMatch(UUID)
+    expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_FRESH_SESSION_ID).not.toBe(
+      later.AICO_ROOT_FRESH_SESSION_ID,
+    )
+    for (const line of [initialLaunchLine(root.widgetId, tool), relaunchLine(root.widgetId, tool)])
+      expect(
+        JSON.parse(
+          execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', present(line)], {
+            env: { PATH: '/usr/bin:/bin', ...later },
+            encoding: 'utf8',
+          }),
+        ),
+      ).toEqual({
+        args: [
+          '--provider',
+          'openai',
+          '--model',
+          'gpt-6-sol',
+          '--thinking',
+          'xhigh',
+          '--session-id',
+          later.AICO_ROOT_FRESH_SESSION_ID,
+        ],
+        model: input.model,
+        daybreak: 'true',
+        context: 'false',
+      })
+  })
+
+  it('launches Pi with one --approve and carries its chosen session ID to the agent', async () => {
+    const input = { ...create('pi-approve-once'), tool: 'pi', model: 'openai/gpt-6.1-sol' }
+    expect((await call('/v1/roots', 'POST', input)).status).toBe(200)
+    const root = present(getRootRequest(input.requestId))
+    const pi = present(getTui('pi'))
+    expect(pi.command).toEqual(['pi', '--approve'])
+    // The registry argv's own --approve reaches the agent; the launch adds none.
+    const tool = {
+      ...pi,
+      command: [
+        process.execPath,
+        '-e',
+        'console.log(JSON.stringify({args:process.argv.slice(1),session:process.env.TETHER_AGENT_SESSION_ID}))',
+        '--',
+        ...pi.command.slice(1),
+      ],
+    }
+    for (const resume of [null, '00000000-0000-4000-8000-000000000002'])
+      await withRootPrompt(
+        root.widgetId,
+        'Reply only.',
+        async () => {
+          const environment = rootLaunchEnvironment(root.widgetId)
+          const result = JSON.parse(
+            execFileSync(
+              '/bin/bash',
+              ['--noprofile', '--norc', '-c', present(initialLaunchLine(root.widgetId, tool))],
+              { env: { PATH: '/usr/bin:/bin', ...environment }, encoding: 'utf8' },
+            ),
+          ) as { args: string[]; session: string }
+          const session = resume ?? result.session
+          expect(session).toMatch(UUID)
+          // A fresh conversation is the id the host picked for this launch.
+          if (!resume) expect(session).toBe(environment.AICO_ROOT_FRESH_SESSION_ID)
+          expect(result).toEqual({
+            args: [
+              '--approve',
+              '--provider',
+              'openai',
+              '--model',
+              'gpt-6.1-sol',
+              ...(resume ? ['--session', resume] : ['--session-id', session]),
+              '--',
+              'Reply only.',
+            ],
+            session,
+          })
+        },
+        resume,
+        { model: input.model, reasoningEffort: null },
+      )
+    expect(parseRootCreate({ ...input, tool: 'opencode' })).toBeNull()
+  })
+
+  it('refuses a new root that would resume a conversation crash recovery owns', async () => {
+    const before = ensure.mock.calls.length
+    const widgets = listWidgets().length
+    const input = {
+      ...create('resume-pending'),
+      resumeSessionId: '00000000-0000-4000-8000-0000000000aa',
+    }
+    expect(await call('/v1/roots', 'POST', input)).toEqual({
+      status: 409,
+      body: { error: 'recovery_pending', widgetId: 'c0ffee01' },
+    })
+    expect(getRootRequest('resume-pending')).toBeUndefined()
+    expect(listWidgets()).toHaveLength(widgets)
+    expect(ensure.mock.calls).toHaveLength(before)
+  })
+
+  it('refuses a prompt over its launch limit before reserving anything', async () => {
+    const fresh = create('prompt-limit')
+    const fits = { ...fresh, initialPrompt: 'x'.repeat(MAX_FRESH_PROMPT_BYTES) }
+    expect(parseRootCreate(fits)).not.toBeNull()
+    expect(
+      await call('/v1/roots', 'POST', { ...fits, initialPrompt: `${fits.initialPrompt}x` }),
+    ).toEqual({
+      status: 400,
+      body: { error: 'prompt_too_long', limit: MAX_FRESH_PROMPT_BYTES },
+    })
+    const resumed = {
+      ...fresh,
+      resumeSessionId: '00000000-0000-4000-8000-000000000003',
+      initialPrompt: 'x'.repeat(2001),
+    }
+    expect(await call('/v1/roots', 'POST', resumed)).toEqual({
+      status: 400,
+      body: { error: 'prompt_too_long', limit: 2000 },
+    })
+    expect(getRootRequest('prompt-limit')).toBeUndefined()
+  })
+
+  it('says which model a Pi root needs instead of a bare invalid_body', async () => {
+    const pi = { ...create('pi-no-model'), tool: 'pi' }
+    const reason = 'pi needs --model provider/model'
+    expect(parseRootCreate(pi)).toBeNull()
+    expect(await call('/v1/roots', 'POST', pi)).toEqual({
+      status: 400,
+      body: { error: 'invalid_body', field: 'model', reason },
+    })
+    expect(await call('/v1/roots', 'POST', { ...pi, model: 'gpt-6-sol' })).toEqual({
+      status: 400,
+      body: { error: 'invalid_body', field: 'model', reason },
+    })
+    // Another bad field is not blamed on the model, and a tool without a provider flag never is.
+    expect(await call('/v1/roots', 'POST', { ...pi, model: 'openai/gpt-6-sol', role: '' })).toEqual(
+      { status: 400, body: { error: 'invalid_body' } },
+    )
+    expect(await call('/v1/roots', 'POST', { ...create('codex-bad'), role: '' })).toEqual({
+      status: 400,
+      body: { error: 'invalid_body' },
+    })
+    expect(getRootRequest('pi-no-model')).toBeUndefined()
+  })
+
+  it('validates exact native resume and retains idempotency across resume conflicts', async () => {
+    const thread = '00000000-0000-4000-8000-000000000001'
+    const input = { ...create('resume-exact'), resumeSessionId: thread }
+    for (const invalid of [
+      '',
+      'last',
+      thread.toUpperCase().replace('00000001', '0000000A'),
+      `${thread};echo x`,
+      ...['\n', '\r', '\r\n', '\u2028', '\u2029'].map((suffix) => thread + suffix),
+    ]) {
+      expect(parseRootCreate({ ...input, resumeSessionId: invalid })).toBeNull()
+    }
+    // Claude Code resumes through its own adapter; a shell has none.
+    expect(parseRootCreate({ ...input, tool: 'claude-code' })).not.toBeNull()
+    expect(parseRootCreate({ ...input, tool: 'shell' })).toBeNull()
+    expect(parseRootCreate({ ...input, initialPrompt: 'x\runsafe' })).toBeNull()
+    expect(parseRootCreate({ ...input, initialPrompt: 'x'.repeat(2001) })).toBeNull()
+    expect(rootRequestDigest(present(parseRootCreate({ ...input, resumeSessionId: null })))).toBe(
+      rootRequestDigest(present(parseRootCreate(create('resume-exact')))),
+    )
+    const first = await call('/v1/roots', 'POST', input)
+    const retry = await call('/v1/roots', 'POST', input)
+    expect(first.status).toBe(200)
+    expect(retry).toEqual(first)
+    expect(ensure).toHaveBeenLastCalledWith(first.body.hostIdentity, input.initialPrompt, thread)
+    for (const changed of [
+      { ...input, resumeSessionId: '00000000-0000-4000-8000-000000000002' },
+      create('resume-exact'),
+      { ...input, initialPrompt: 'changed recovery instruction' },
+    ]) {
+      expect((await call('/v1/roots', 'POST', changed)).status).toBe(409)
+    }
+  })
+
+  it('launches exact resume argv once through the fresh gate and clears transient variables', async () => {
+    const root = present(getRootRequest('resume-exact'))
+    const thread = '00000000-0000-4000-8000-000000000001'
+    const prompt = "-option\n$(printf injected) 'quoted' 界"
+    const tool = {
+      slug: 'codex',
+      resume: codexTui.resume,
+      displayName: 'fixture',
+      icon: '',
+      accent: '',
+      enabled: true,
+      order: 0,
+      command: [
+        '/usr/bin/python3',
+        '-c',
+        'import json,os,sys; print(json.dumps({"args":sys.argv[1:],"prompt":os.getenv("AICO_ROOT_INITIAL_PROMPT"),"thread":os.getenv("AICO_ROOT_RESUME_SESSION_ID")}))',
+        '--yolo',
+      ],
+      processName: 'python3',
+    }
+    await withRootPrompt(
+      root.widgetId,
+      prompt,
+      async () => {
+        const environment = rootLaunchEnvironment(root.widgetId)
+        expect(environment.AICO_ROOT_RESUME_SESSION_ID).toBe(thread)
+        const line = present(initialLaunchLine(root.widgetId, tool))
+        expect(line).not.toContain(prompt)
+        expect(line).not.toContain(thread)
+        const result = execFileSync('/bin/bash', ['--noprofile', '--norc', '-c', line], {
+          env: { PATH: '/usr/bin:/bin', ...environment },
+          encoding: 'utf8',
+        })
+        expect(JSON.parse(result)).toEqual({
+          args: ['--yolo', 'resume', '--no-daemon', thread, '--', prompt],
+          prompt: null,
+          thread: null,
+        })
+      },
+      thread,
+    )
+    expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_RESUME_SESSION_ID).toBe('')
+    expect(rootPromptReady(root.widgetId)).toBe(false)
+  })
+
+  it('serves exact-create retries and conflicts through the real owner CLI and private socket', async () => {
+    const invoke = (prompt: string, creator?: string, requestId = 'cli-recovery') =>
+      new Promise<{ code: string | number; body: Record<string, unknown> }>((resolve, reject) => {
+        const env = { ...process.env }
+        delete env.AICO_WIDGET_ID
+        if (creator) env.AICO_WIDGET_ID = creator
+        execFile(
+          '/usr/bin/python3',
+          [
+            ROOT_WATCH,
+            'create',
+            requestId,
+            prompt,
+            '--tool',
+            'codex',
+            '--work-role',
+            'implementation',
+            '--project',
+            'sample-app',
+            '--project-root',
+            fixture,
+            '--resume-session',
+            '00000000-0000-4000-8000-000000000001',
+            '--root-socket',
+            socket,
+          ],
+          { encoding: 'utf8', env },
+          (error, stdout) => {
+            try {
+              resolve({ code: error?.code ?? 0, body: JSON.parse(stdout) })
+            } catch (failure) {
+              reject(failure)
+            }
+          },
+        )
+      })
+    const first = await invoke('Reconcile fixture state after crash.')
+    expect(first.code).toBe(0)
+    expect(first.body).toMatchObject({
+      owner: 'aico',
+      requestId: 'cli-recovery',
+      status: 'running',
+    })
+    expect(JSON.stringify(first.body)).not.toContain('Reconcile fixture')
+    expect(await invoke('Reconcile fixture state after crash.')).toEqual(first)
+    expect((await invoke('Changed fixture recovery prompt.')).body.reason).toBe('request_conflict')
+    // Launched from a session: Tether makes that session the coordinator.
+    const lead = present(getWidget('aabbcc01'))
+    const launched = await invoke('Reconcile fixture state after crash.', lead.id, 'cli-launched')
+    expect(launched.code).toBe(0)
+    expect(launched.body.launchedBy).toBe(lead.id)
+    const lane = present(getWidget(String(launched.body.hostIdentity)))
+    expect(present(getWidget(lead.id)).coordinator).toBe(true)
+    expect(lane.coordinatorId).toBe(lead.id)
+    // An unknown launcher never fails the create and names no coordinator.
+    const unknown = await invoke('Reconcile fixture state after crash.', 'abcdef99', 'cli-unknown')
+    expect(unknown.code).toBe(0)
+    expect(present(getWidget(String(unknown.body.hostIdentity))).coordinatorId).toBeNull()
+  })
+
+  it('rolls back a widget and reservation together on catalog conflict', () => {
+    const root = present(getRootRequest('target-1'))
+    const count = listWidgets().length
+    expect(() =>
+      reserveRootRequest(
+        { ...root, requestId: 'rollback', widgetId: 'ffaabbcc' },
+        'codex',
+        'sample-app',
+        fixture,
+      ),
+    ).toThrow()
+    expect(getWidget('ffaabbcc')).toBeUndefined()
+    expect(getRootRequest('rollback')).toBeUndefined()
+    expect(listWidgets()).toHaveLength(count)
+  })
+
+  it('never hands out a widget ID that a root request already holds', () => {
+    const root = present(getRootRequest('target-1'))
+    const ids = [root.widgetId, 'deadbeef']
+    expect(allocateWidgetId(() => ids.shift() ?? 'unused00')).toBe('deadbeef')
+  })
+
+  it('retries a launch host admission deferred and shows why until it starts', async () => {
+    const reason = 'Nightshift has closed agent admission (memory is tight).'
+    admission = reason
+    const first = await call('/v1/roots', 'POST', create('deferred-1'))
+    const widgetId = String(first.body.hostIdentity)
+    expect(running.has(widgetId)).toBe(false)
+    expect(first.body.launch).toMatchObject({ state: 'deferred', reason, attempts: 1 })
+    const launch = first.body.launch as { checkedAt: string; nextRetryAt: string }
+    expect(Date.parse(launch.nextRetryAt) - Date.parse(launch.checkedAt)).toBe(RETRY_MS)
+    // Still deferred: it keeps trying and counts the attempts.
+    await vi.waitFor(async () =>
+      expect((await call('/v1/roots/deferred-1')).body.launch).toMatchObject({ attempts: 2 }),
+    )
+    admission = null
+    await vi.waitFor(async () =>
+      expect((await call('/v1/roots/deferred-1')).body).toMatchObject({
+        status: 'running',
+        launch: null,
+      }),
+    )
+    const calls = ensure.mock.calls.filter(([id]) => id === widgetId).length
+    await new Promise((resolve) => setTimeout(resolve, RETRY_MS * 3))
+    expect(ensure.mock.calls.filter(([id]) => id === widgetId)).toHaveLength(calls)
+  })
+
+  it('stops retrying a deferred launch once its root ends', async () => {
+    admission = 'Nightshift has closed agent admission (memory is tight).'
+    const first = await call('/v1/roots', 'POST', create('deferred-ended'))
+    const widgetId = String(first.body.hostIdentity)
+    removeWidget(widgetId)
+    const calls = ensure.mock.calls.filter(([id]) => id === widgetId).length
+    await new Promise((resolve) => setTimeout(resolve, RETRY_MS * 3))
+    admission = null
+    expect(ensure.mock.calls.filter(([id]) => id === widgetId)).toHaveLength(calls)
+    expect((await call('/v1/roots/deferred-ended')).body).toMatchObject({
+      status: 'ended',
+      launch: null,
+    })
+  })
+})

@@ -5,7 +5,7 @@
 //
 //   node scripts/snapshot-state.mjs      -> ~/.local/state/aico-snapshot/{notes.db,web.db,tether.db,hosts.json}
 //
-// AICO_DATA_DIR / AICO_WEB_DB / AICO_SNAPSHOT_DIR move the folders (defaults as in web/server/src/config.ts).
+// AICO_DATA_DIR / AICO_WEB_DB / AICO_SNAPSHOT_DIR move the folders (defaults as in packages/web-server/src/config.ts).
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'

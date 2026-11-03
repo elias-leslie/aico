@@ -1,22 +1,21 @@
-# One gate for the parts of this repo: shared code at the root, Tether in
-# tether/ and the web app in web/ (web/server and web/frontend). Prepare once:
-# `npm ci` at the root and `uv sync --locked --directory tether/scripts` for
-# the Python env of Tether's operator scripts and their tests.
+# One gate for the whole repo: packages/* (TypeScript), native/* (Python and
+# shell) and the root scripts. Prepare once: `npm ci` at the root and
+# `uv sync --locked --directory native/host-steward` for the Python env of the
+# host-steward scripts and their tests.
 #
-# The tools run from the root: Ruff and Biome pick up each part's nested config,
-# ty reads ty.toml, pytest reads pytest.ini (tether/scripts/tests),
-# Vitest's root config runs the shared, Tether, web/server and web/frontend
-# projects, and tsc checks shared/. Tether, web/server and web/frontend each
-# have their own tsconfig, so they type-check in the native stages below; those
-# run in the quick lane too (`quick = true`) when a TypeScript or JSON file changed.
+# The tools run from the root: Ruff and Biome pick up nested config, ty reads
+# ty.toml, pytest reads pytest.ini (native/host-steward/tests), Vitest's root
+# config runs one project per package, and `tsc -b` builds every package from
+# the root solution tsconfig (project references); it runs in the quick lane
+# too (`quick = true`) when a TypeScript or JSON file changed.
 [paths]
-pytest = "tether/scripts/.venv/bin"
-types = "tether/scripts/.venv/bin"
-ruff = "tether/scripts/.venv/bin"
+pytest = "native/host-steward/.venv/bin"
+types = "native/host-steward/.venv/bin"
+ruff = "native/host-steward/.venv/bin"
 
 [native]
 schema_version = 1
-locks = ["package-lock.json", "tether/scripts/pyproject.toml", "tether/scripts/uv.lock"]
+locks = ["package-lock.json", "native/host-steward/pyproject.toml", "native/host-steward/uv.lock"]
 paths = ["node_modules/.bin"]
 environment_inputs = ["node_modules"]
 legacy_tools = ["ruff", "types", "pytest", "biome", "tsc", "vitest", "security"]
@@ -30,28 +29,12 @@ node = "/usr/local/bin/node"
 python3 = "/usr/bin/python3"
 
 [[native.stages]]
-id = "tether-tsc"
+id = "tsc"
 kind = "check"
 coverage = "full"
 quick = true
 quick_paths = ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.json"]
-argv = ["node_modules/.bin/tsc", "--noEmit", "-p", "tether"]
-
-[[native.stages]]
-id = "web-tsc"
-kind = "check"
-coverage = "full"
-quick = true
-quick_paths = ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.json"]
-argv = ["node_modules/.bin/tsc", "--noEmit", "-p", "web/frontend"]
-
-[[native.stages]]
-id = "web-server-tsc"
-kind = "check"
-coverage = "full"
-quick = true
-quick_paths = ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.json"]
-argv = ["node_modules/.bin/tsc", "--noEmit", "-p", "web/server"]
+argv = ["node_modules/.bin/tsc", "-b"]
 
 # Mechanical UI copy rules from ui-spec.json (uilint). A pass is not a copy review.
 [[native.stages]]
@@ -67,5 +50,5 @@ timeout_seconds = 120
 # TUI but never submits a prompt, so no model request is made.
 [[deep.stages]]
 id = "tether-live-containment"
-argv = ["bash", "-c", "set -e; started=; if ! systemctl --user is-active -q tether@dev.service; then systemctl --user --no-ask-password start tether@dev.service; started=1; fi; trap '[ -n \"$started\" ] && systemctl --user --no-ask-password stop tether@dev.service' EXIT; for i in $(seq 50); do [ -S \"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tether/dev/control.sock\" ] && break; sleep 0.2; done; bash tether/scripts/tether-lifecycle-harness.sh dev; bash tether/scripts/tether-real-session-smoke.sh dev codex"]
+argv = ["bash", "-c", "set -e; started=; if ! systemctl --user is-active -q tether@dev.service; then systemctl --user --no-ask-password start tether@dev.service; started=1; fi; trap '[ -n \"$started\" ] && systemctl --user --no-ask-password stop tether@dev.service' EXIT; for i in $(seq 50); do [ -S \"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tether/dev/control.sock\" ] && break; sleep 0.2; done; bash scripts/live/tether-lifecycle-harness.sh dev; bash scripts/live/tether-real-session-smoke.sh dev codex"]
 timeout_seconds = 600

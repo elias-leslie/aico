@@ -51,12 +51,12 @@ agent stops.
 
 ## Shape (extends existing code; no new daemons)
 
-- **Store** (`tether/src/schema.ts`, `store.ts`): schema v10 adds `wakes` (`id`, `session_id` nullable,
+- **Store** (`packages/tether/src/schema.ts`, `store.ts`): schema v10 adds `wakes` (`id`, `session_id` nullable,
   `due_at`, `note`, `created_at`, `created_by` agent|owner, `kept`, `ended_session` JSON snapshot,
   `attempts`, `last_error`) with an index on `due_at`, and an `AFTER DELETE ON sessions` trigger: delete the
   session's wakes with `kept = 0`, detach (`session_id = NULL`) the kept ones. No foreign key, so kept rows
   survive. Tested on a fresh DB and on a v9 DB upgraded in place.
-- **Scheduler** (`tether/src/wakes.ts`, started by `daemon.ts` after startup reconciliation): one timer for
+- **Scheduler** (`packages/tether/src/wakes.ts`, started by `daemon.ts` after startup reconciliation): one timer for
   the next due wake (clamped below the 24.8-day `setTimeout` limit), re-armed on every change; a short
   re-check interval only while some wake is due; agent-state changes nudge it. Delivery uses
   `pasteIntoRunningSession`; idle comes from `AgentStateTracker`; the empty-input check and the
@@ -80,14 +80,14 @@ agent stops.
 - **Wake policy** (settings key `wake_policy`, defaults): `laterMinutes` 60, `tonightHour` 21,
   `morningHour` 8, `maxPerSession` 5, `noteMaxChars` 500, `quietSeconds` 15, `lateNoticeMinutes` 5,
   `relaunchAttempts` 15.
-- **`st aico wake`**: `tether/scripts/aico-root-watch.py` (the `aico.roots` extension executable) with its
+- **`st aico wake`**: `native/host-steward/aico-root-watch.py` (the `aico.roots` extension executable) with its
   help and an on-demand usage entry in SummitFlow `scripts/lib/extensions/aico.json`. `set`, `list`,
   `cancel`; own session by default, `--widget-id` for another.
 - **Desktop**: tray row detail and a "Check-ins" submenu (Cancel per wake), "Check in later" in the window
   menu with the quick choices, End dialogs with the wake line and *End, keep check-in* (`session-actions.ts`,
   `tray.ts`, renderer `actions.ts`). In-window End shows the native dialog only when the session has wakes.
 - **Web**: chip in the session list, "Check in later" in the session menu (quick choices, custom
-  `datetime-local`), End dialog line and option (`web/frontend`); `web/server` routes proxy to Tether.
+  `datetime-local`), End dialog line and option (`packages/web-frontend`); `packages/web-server` routes proxy to Tether.
 
 ## Verify
 

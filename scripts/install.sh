@@ -11,7 +11,7 @@
 # Installs (rerunning changes only what differs):
 #   node_modules and the Tether/web builds
 #   ~/.local/lib/tether (Tether's bundle, CLI and shims), ~/.local/bin/tether
-#   user units from scripts/systemd/ plus tether/systemd/tether@.service and
+#   user units from scripts/systemd/ plus packages/tether/deploy/tether@.service and
 #   tether-link@.service
 #   ~/.pi/agent/extensions/st-coord.ts, only when SummitFlow is installed
 #
@@ -158,9 +158,9 @@ install_units() {
     install_content "$(render "$unit")" "$UNIT_DIR/$(basename "$unit")" 0644 && changed=1
   done
   # The generic template, for test instances such as tether@dev.
-  install_content "$(cat tether/systemd/tether@.service)" "$UNIT_DIR/tether@.service" 0644 && changed=1
+  install_content "$(cat packages/tether/deploy/tether@.service)" "$UNIT_DIR/tether@.service" 0644 && changed=1
   # One ssh link per remote host in ~/.config/tether/hosts.json (enabled per host).
-  install_content "$(cat tether/systemd/tether-link@.service)" "$UNIT_DIR/tether-link@.service" 0644 && changed=1
+  install_content "$(cat packages/tether/deploy/tether-link@.service)" "$UNIT_DIR/tether-link@.service" 0644 && changed=1
   if [ "$changed" = 1 ]; then
     run systemctl --user daemon-reload ||
       echo "systemd: could not reach the user manager; run 'systemctl --user daemon-reload' later." >&2
@@ -176,8 +176,8 @@ run npm ci --no-audit --no-fund
 run npm run build
 
 step "Tether"
-[ "$DRY_RUN" = 1 ] || [ -f tether/dist/tether.mjs ] || fail "tether/dist/tether.mjs is missing after the build"
-run env TETHER_LIB_DIR="$LIB_DIR" tether/scripts/install-release.sh
+[ "$DRY_RUN" = 1 ] || [ -f packages/tether/dist/tether.mjs ] || fail "packages/tether/dist/tether.mjs is missing after the build"
+run env TETHER_LIB_DIR="$LIB_DIR" packages/tether/scripts/install-release.sh
 install_link "$LIB_DIR/bin/tether" "$BIN_DIR/tether"
 
 if [ -e "$PI_COORD_SOURCE" ]; then

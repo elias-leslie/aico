@@ -1,0 +1,1301 @@
+@import "tailwindcss";
+/* The Lantern tokens (packages/ui-kit/src/tokens.css) and typefaces are shared, not copies. */
+@import "../../ui-kit/src/tokens.css";
+@import "../../ui-kit/fonts/fonts.css";
+
+/* The web's --term-* names, mapped onto the Lantern tokens. One dark theme;
+   colours live in tokens.css only. */
+:root {
+  color-scheme: dark;
+  /* The web's mono is JetBrains Mono (lib/constants/lantern.ts). */
+  --font-mono: "JetBrains Mono", "FreeMono Symbols", ui-monospace, monospace;
+  --terminal-viewport-height: 100dvh;
+
+  --term-bg-deep: var(--ink);
+  --term-bg: var(--ink);
+  --term-bg-surface: var(--rim);
+  /* Opaque lift on the rim: selected rows, pressed keys. */
+  --term-bg-elevated: color-mix(in srgb, var(--rim) 88%, var(--bone));
+  --term-border: var(--paper-veil);
+  --term-border-active: var(--frame-edge);
+  --term-text-primary: var(--bone);
+  --term-text-muted: var(--mist);
+  --term-text-dim: rgb(var(--bone-rgb) / 0.58);
+
+  --term-accent: var(--lantern);
+  --term-accent-muted: var(--lantern-deep);
+  --term-accent-glow: rgb(var(--lantern-rgb) / 0.18);
+  --term-accent-soft: rgb(var(--lantern-rgb) / 0.14);
+  --term-accent-border: rgb(var(--lantern-rgb) / 0.35);
+  --term-accent-foreground: var(--ink);
+
+  --term-success: var(--jade);
+  --term-warning: var(--beacon);
+  --term-error: var(--ember);
+  --term-danger: var(--ember);
+  --term-error-muted: color-mix(in srgb, var(--ember) 12%, transparent);
+  --term-error-text: color-mix(in srgb, var(--ember) 45%, var(--bone));
+  --term-danger-soft: color-mix(in srgb, var(--ember) 15%, transparent);
+  --term-danger-border: color-mix(in srgb, var(--ember) 36%, transparent);
+
+  --term-overlay-backdrop: var(--scrim);
+  --term-surface-glass: rgb(var(--umber-rgb) / 0.96);
+  --term-surface-overlay: rgb(var(--ink-rgb) / 0.34);
+  --term-surface-soft: var(--paper);
+  --term-shadow-dropdown:
+    var(--shadow-soft), 0 0 0 1px rgb(var(--glass-rgb) / 0.06);
+  --term-shadow-modal:
+    var(--shadow-soft), 0 0 0 1px rgb(var(--glass-rgb) / 0.06);
+}
+
+html,
+html {
+  color-scheme: dark;
+  scrollbar-color: var(--paper-veil) transparent;
+  scrollbar-width: thin;
+}
+
+body {
+  overflow: hidden;
+  background: var(--rim);
+  color: var(--bone);
+  font: 14px / 1.4 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* Lantern popovers and sheets: umber with blur. */
+.lantern-sheet {
+  background: var(--term-surface-glass);
+  -webkit-backdrop-filter: blur(28px);
+  backdrop-filter: blur(28px);
+  box-shadow: var(--term-shadow-dropdown);
+}
+
+.lantern-enter {
+  animation: lantern-enter 0.18s var(--ease-arrival);
+}
+
+.lantern-rise {
+  animation: lantern-rise 0.24s var(--ease-arrival);
+}
+
+@keyframes lantern-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes lantern-rise {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+}
+
+/* Section headings in lists and sheets: small caps in mist. */
+.lantern-sec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--mist);
+}
+
+.lantern-sec .n {
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 11px;
+}
+
+/* Buttons: quiet by default; the primary action is an amber outline on an
+   amber wash. */
+.lantern-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--bone);
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  transition:
+    background 0.16s var(--ease-arrival),
+    color 0.16s var(--ease-arrival);
+}
+
+.lantern-btn:hover:not(:disabled) {
+  background: var(--paper-veil);
+}
+
+.lantern-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lantern-btn.small {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.lantern-btn.primary {
+  border-color: var(--lantern);
+  background: rgb(var(--lantern-rgb) / 0.14);
+  color: var(--lantern);
+}
+
+.lantern-btn.primary:hover:not(:disabled) {
+  background: rgb(var(--lantern-rgb) / 0.26);
+}
+
+.lantern-btn.primary:active:not(:disabled) {
+  border-color: var(--lantern-deep);
+}
+
+.lantern-btn.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--mist);
+}
+
+.lantern-btn.ghost:hover:not(:disabled),
+.lantern-btn.ghost[aria-pressed="true"] {
+  background: var(--paper-veil);
+  color: var(--bone);
+}
+
+.lantern-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--mist);
+  transition:
+    background 0.15s var(--ease-arrival),
+    color 0.15s var(--ease-arrival);
+}
+
+.lantern-icon-btn:hover:not(:disabled),
+.lantern-icon-btn[aria-expanded="true"] {
+  background: var(--paper-veil);
+  color: var(--bone);
+}
+
+.lantern-icon-btn.compact {
+  width: 34px;
+  height: 34px;
+}
+
+.lantern-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 6px;
+  background: rgb(var(--ink-rgb) / 0.86);
+  color: var(--mist);
+}
+
+.lantern-field:focus-within {
+  border-color: var(--lantern);
+}
+
+.lantern-field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--bone);
+}
+
+.lantern-field input::placeholder {
+  color: var(--mist);
+}
+
+/* Menu rows (session menu, mode picker). */
+.lantern-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--bone);
+  font-size: 13px;
+  text-align: left;
+}
+
+.lantern-menu-item:hover,
+.lantern-menu-item:focus-visible {
+  background: var(--paper-veil);
+}
+
+.lantern-menu-item svg {
+  flex: none;
+  color: var(--mist);
+}
+
+/* Ember text on umber is under 4.5:1: danger shows in the icon only. */
+.lantern-menu-item.danger svg {
+  color: var(--ember);
+}
+
+/* New session picker. */
+.lantern-seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 8px;
+  background: rgb(var(--ink-rgb) / 0.86);
+}
+
+.lantern-seg button {
+  height: 34px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mist);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.lantern-seg button[aria-pressed="true"] {
+  background: var(--paper-veil);
+  color: var(--bone);
+}
+
+.lantern-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.lantern-tool {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--bone);
+  font-size: 13.5px;
+  text-align: left;
+}
+
+.lantern-tool[aria-pressed="true"] {
+  border-color: var(--lantern);
+  background: rgb(var(--lantern-rgb) / 0.1);
+}
+
+.lantern-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--bone);
+  text-align: left;
+}
+
+.lantern-choice:hover {
+  background: var(--paper);
+}
+
+.lantern-choice[aria-checked="true"] {
+  background: var(--paper-veil);
+}
+
+.lantern-choice .radio {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--mist);
+  border-radius: 50%;
+}
+
+.lantern-choice .path {
+  font: 11.5px var(--font-mono);
+  color: var(--mist);
+}
+
+/* Mist on the selected row's veil is under 4.5:1. */
+.lantern-choice[aria-checked="true"] .path {
+  color: rgb(var(--bone-rgb) / 0.72);
+}
+
+.lantern-choice[aria-checked="true"] .radio {
+  border-color: var(--lantern);
+  box-shadow:
+    inset 0 0 0 3.5px var(--rim),
+    inset 0 0 0 8px var(--lantern);
+}
+
+/* Session rows. */
+.lantern-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--bone);
+  text-align: left;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-row:hover {
+  background: var(--paper);
+}
+
+.lantern-row[aria-current="true"] {
+  background: var(--paper-veil);
+}
+
+.lantern-row[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--lantern);
+}
+
+.lantern-row.needs {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--beacon) 35%, transparent);
+  background: color-mix(in srgb, var(--beacon) 6%, transparent);
+}
+
+.lantern-row .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 450 14.5px / 1.3 var(--font-display);
+}
+
+.lantern-row .meta {
+  grid-column: 2 / 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--mist);
+}
+
+.lantern-row .when {
+  font-size: 12px;
+  color: var(--mist);
+  white-space: nowrap;
+}
+
+/* Coordinator teams: the lead row keeps room for its fold button; lanes
+   sit indented under it on a quiet hairline. */
+.lantern-team {
+  position: relative;
+}
+
+.lantern-row.lead {
+  padding-right: 44px;
+}
+
+.lantern-fold {
+  position: absolute;
+  top: 12px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mist);
+  transition:
+    background 0.15s var(--ease-arrival),
+    transform 0.15s var(--ease-arrival);
+}
+
+.lantern-fold:hover {
+  background: var(--paper-veil);
+  color: var(--bone);
+}
+
+.lantern-fold svg {
+  transition: transform 0.15s var(--ease-arrival);
+}
+
+.lantern-fold[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+/* A note above the list when the workflow runs may be out of date. */
+.lantern-run-notice {
+  margin: 0 10px 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mist);
+}
+
+/* The session list folded to a rail: one agent mark per row. */
+.lantern-rail-item {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-rail-item:hover {
+  background: var(--paper);
+}
+
+.lantern-rail-item[aria-current="true"] {
+  background: var(--paper-veil);
+}
+
+.lantern-rail-item[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--lantern);
+}
+
+.lantern-rail-item.needs {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--beacon) 35%, transparent);
+  background: color-mix(in srgb, var(--beacon) 6%, transparent);
+}
+
+.lantern-rail-item .dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.lantern-rail-count {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--beacon);
+  color: var(--ink);
+  font: 600 10px / 16px var(--font-mono);
+  text-align: center;
+}
+
+/* The open list's right edge: a wide grab area, a thin line on hover. */
+.lantern-resize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  z-index: 5;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.lantern-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-resize:hover::after,
+.lantern-resize:focus-visible::after,
+[data-resizing="true"] > .lantern-resize::after {
+  background: var(--lantern);
+}
+
+.lantern-resize:focus-visible {
+  outline: none;
+}
+
+[data-resizing="true"] {
+  user-select: none;
+}
+
+.lantern-lanes {
+  margin: 2px 0 4px 19px;
+  padding-left: 6px;
+  border-left: 1px solid rgb(var(--glass-rgb) / 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lantern-fold svg {
+    transition: none;
+  }
+}
+
+/* Mist on the veil is under 4.5:1. */
+.lantern-row[aria-current="true"] .meta,
+.lantern-row[aria-current="true"] .when {
+  color: rgb(var(--bone-rgb) / 0.72);
+}
+
+:focus-visible {
+  outline: 1px solid var(--lantern);
+  outline-offset: 2px;
+}
+
+/* xterm styles - ensure consistent font rendering */
+.xterm {
+  height: 100%;
+}
+
+.xterm,
+.xterm-screen,
+.xterm-rows {
+  /* Ensure consistent font rendering for character width calculation */
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  font-feature-settings:
+    "liga" off,
+    "calt" off; /* Disable ligatures */
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.xterm-viewport {
+  /* Keep the viewport width stable while scrolling so xterm's fitted
+     character grid doesn't shift when the native scrollbar activates. */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+/* xterm.css paints the viewport black; the strip under the last whole row
+   should be the terminal's ink. Outranks xterm.css, which loads later. */
+div.xterm .xterm-viewport {
+  background-color: var(--term-bg);
+}
+
+/* Mobile long-press selection layer (lib/hooks/mobile-native-selection.ts):
+   invisible, cell-aligned text over the canvas so the browser can select it. */
+.xterm .xterm-screen .terminal-native-selection {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  white-space: pre;
+  line-height: var(--terminal-cell-height);
+  color: transparent;
+  caret-color: transparent;
+  background: transparent;
+  outline: none;
+  touch-action: none;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.xterm .xterm-screen .terminal-native-selection > div {
+  height: var(--terminal-cell-height);
+  overflow: hidden;
+}
+
+/* New output under a selection: show the captured rows instead. */
+.xterm .xterm-screen .terminal-native-selection.is-frozen {
+  color: var(--terminal-fg);
+  background: var(--terminal-bg);
+}
+
+/* Auto-hiding scrollbar: fades in on scroll, fades out after idle */
+.xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+  background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  transition: background 200ms ease;
+}
+
+.xterm-viewport:hover::-webkit-scrollbar-thumb,
+.xterm-viewport.scrolling::-webkit-scrollbar-thumb {
+  background: var(--paper-veil);
+  border-color: var(--ink);
+}
+
+.xterm-viewport:hover::-webkit-scrollbar-thumb:hover,
+.xterm-viewport.scrolling::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--bone-rgb) / 0.3);
+}
+
+/* Firefox scrollbar */
+.xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.xterm-viewport:hover,
+.xterm-viewport.scrolling {
+  scrollbar-color: var(--paper-veil) transparent;
+}
+
+/* Mobile terminal needs a persistent, wider drag target. Hover/fade behavior
+   is unreliable on touch devices and makes the scrollbar feel unresponsive. */
+.xterm-viewport.mobile-terminal-viewport::-webkit-scrollbar {
+  width: 20px;
+}
+
+.xterm-viewport.mobile-terminal-viewport::-webkit-scrollbar-thumb {
+  background: var(--paper-veil);
+  border-radius: 999px;
+  border: 5px solid var(--ink);
+}
+
+.xterm-viewport.mobile-terminal-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--bone-rgb) / 0.3);
+}
+
+.xterm-viewport.mobile-terminal-viewport {
+  scrollbar-width: auto;
+  scrollbar-color: var(--paper-veil) transparent;
+}
+
+/* A spinner while an action runs (mode switch). */
+@keyframes lantern-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.lantern-spin {
+  animation: lantern-spin 0.8s linear infinite;
+}
+
+/* Make cursor highly visible with glow effect */
+.xterm-cursor-block {
+  box-shadow:
+    0 0 8px var(--bone),
+    0 0 16px rgb(var(--bone-rgb) / 0.5);
+}
+
+.xterm-cursor-outline {
+  box-shadow:
+    0 0 6px var(--bone),
+    0 0 12px rgb(var(--bone-rgb) / 0.4);
+}
+
+/* Focus ring for form inputs */
+.term-input:focus {
+  border-color: var(--term-accent) !important;
+  box-shadow: 0 0 0 1px var(--term-accent-glow);
+}
+
+/* ---- The session's terminal area ---- */
+
+/* Notices that cover the terminal: connection lost, session ended, the
+   host away. */
+.lantern-term-notice {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  text-align: center;
+  background: rgb(var(--ink-rgb) / 0.92);
+  animation: lantern-fade 0.2s var(--ease-arrival);
+}
+
+.lantern-term-notice p {
+  margin: 0;
+}
+
+.lantern-term-notice .t {
+  font: 450 17px / 1.25 var(--font-display);
+  color: var(--bone);
+}
+
+.lantern-term-notice .d {
+  max-width: 34ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mist);
+}
+
+.lantern-term-notice .lantern-btn {
+  margin-top: 10px;
+}
+
+/* Another device holds the size: a slim bar over the session, which stays
+   readable at that device's size underneath. */
+.lantern-size-bar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 12px);
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--frame-edge);
+  border-radius: 8px;
+  background: rgb(var(--ink-rgb) / 0.92);
+  box-shadow: var(--shadow-rim);
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--bone);
+  animation: lantern-fade 0.2s var(--ease-arrival);
+}
+
+.lantern-size-bar p {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lantern-size-bar .d {
+  color: var(--mist);
+}
+
+/* Phone: docked above the session, so the prompt line stays visible. */
+.lantern-size-bar.docked {
+  position: static;
+  justify-content: space-between;
+  max-width: none;
+  margin: 0 4px 4px;
+  box-shadow: none;
+}
+
+/* The agent's model changed or a refusal paused it: a slim line docked
+   above the session, never over its output. Stopped or held is beacon;
+   a model picked in the window stays quiet. */
+.lantern-model-bar {
+  flex: none;
+  margin: 0 4px 4px;
+  border: 1px solid var(--frame-edge);
+  border-radius: 8px;
+  background: var(--ink);
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--mist);
+}
+
+.lantern-model-bar.warn {
+  border-color: color-mix(in srgb, var(--beacon) 35%, transparent);
+  background: color-mix(in srgb, var(--beacon) 6%, var(--ink));
+  color: var(--bone);
+}
+
+.lantern-model-bar .line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 5px 10px;
+}
+
+.lantern-model-bar summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.lantern-model-bar summary::-webkit-details-marker {
+  display: none;
+}
+
+.lantern-model-bar .dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mist);
+}
+
+.lantern-model-bar.warn .dot {
+  background: var(--beacon);
+}
+
+.lantern-model-bar .t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lantern-model-bar .more {
+  flex: none;
+  margin-left: auto;
+  color: var(--mist);
+}
+
+.lantern-model-bar .d {
+  margin: 0;
+  padding: 0 10px 7px 24px;
+  color: var(--mist);
+}
+
+/* Connecting for the first time: a word on the empty terminal, no cover. */
+.lantern-term-notice.quiet {
+  background: transparent;
+  pointer-events: none;
+}
+
+@keyframes lantern-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Jump to latest: shown only while reading above the live bottom. */
+.lantern-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--lantern);
+  border-radius: 16px;
+  background: rgb(var(--umber-rgb) / 0.92);
+  color: var(--lantern);
+  font: 600 12px var(--font-ui);
+  box-shadow: var(--shadow-soft);
+}
+
+@media (pointer: coarse) {
+  .lantern-jump {
+    height: 40px;
+    padding: 0 16px;
+    font-size: 13px;
+  }
+}
+
+/* Compose box: an ink well under the terminal, the field on the rim. */
+.lantern-compose {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 4px 4px;
+  padding: 6px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 6px;
+  background: var(--ink);
+}
+
+.lantern-compose-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.lantern-compose :is(textarea, input) {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 4px;
+  outline: none;
+  background: var(--rim);
+  color: var(--bone);
+  font: 14px / 1.4 var(--font-ui);
+  resize: none;
+}
+
+.lantern-compose :is(textarea, input):focus-visible {
+  border-color: var(--lantern);
+}
+
+.lantern-compose :is(textarea, input)::placeholder {
+  color: var(--mist);
+}
+
+/* Phone key row. A held Ctrl or open keyboard is an amber outline. Keys
+   touch, so each tap target is a full share of the row; the clear side
+   borders draw the gap between the visible keys. */
+.lantern-key {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  border: solid transparent;
+  border-width: 0 2px;
+  border-radius: 8px;
+  background: var(--paper) padding-box;
+  box-shadow: inset 0 0 0 1px var(--paper-veil);
+  color: var(--bone);
+  font: 12px var(--font-mono);
+  letter-spacing: 0.04em;
+  touch-action: manipulation;
+  user-select: none;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-key:active:not(:disabled) {
+  background: var(--paper-veil) padding-box;
+}
+
+.lantern-key:disabled {
+  opacity: 0.5;
+}
+
+.lantern-key[aria-pressed="true"],
+.lantern-key[aria-expanded="true"] {
+  box-shadow: inset 0 0 0 1px var(--lantern);
+  background: rgb(var(--lantern-rgb) / 0.14) padding-box;
+  color: var(--lantern);
+}
+
+/* The phone keyboard's typing target: focusable, never seen. The session's
+   own prompt shows the text. 16px keeps iOS from zooming in on focus. */
+.phone-typing-field {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  overflow: hidden;
+  resize: none;
+  pointer-events: none;
+  font-size: 16px;
+  color: transparent;
+  background: transparent;
+  caret-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lantern-enter,
+  .lantern-rise,
+  .lantern-term-notice,
+  .lantern-size-bar {
+    animation: none;
+  }
+}
+
+/* File browser rows and states. */
+.lantern-file-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding-right: 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--bone);
+  font-size: 14px;
+  text-align: left;
+}
+
+@media (pointer: coarse) {
+  .lantern-file-row {
+    min-height: 42px;
+  }
+}
+
+.lantern-file-row:hover {
+  background: var(--paper);
+}
+
+.lantern-file-row[aria-current="true"] {
+  background: var(--paper-veil);
+}
+
+.lantern-file-row > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--mist);
+}
+
+.lantern-file-row > svg.dir {
+  color: var(--lantern);
+}
+
+.lantern-file-row .n {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lantern-file-row .s {
+  font: 11.5px var(--font-mono);
+  color: var(--mist);
+}
+
+.lantern-file-row[aria-current="true"] .s {
+  color: rgb(var(--bone-rgb) / 0.72);
+}
+
+/* Agent shares in Files: one group per share; the folder line gives way to the name. */
+.lantern-share {
+  border-bottom: 1px solid rgb(var(--glass-rgb) / 0.06);
+  border-radius: 8px;
+  padding-bottom: 4px;
+}
+
+.lantern-share[aria-current="true"] {
+  background: var(--paper);
+}
+
+.lantern-share .lantern-file-row {
+  grid-template-columns: 18px minmax(0, max-content) minmax(0, 1fr);
+  padding-left: 10px;
+}
+
+.lantern-share .lantern-file-row .s {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.files-state {
+  margin: 0;
+  padding: 16px 10px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--mist);
+}
+
+.files-state p {
+  margin: 0;
+}
+
+/* Needs you: the pill that opens the asks drawer, its cards, choices and
+   command box. Amber marks what waits on the owner and the recommendation. */
+.lantern-need-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgb(var(--lantern-rgb) / 0.35);
+  border-radius: 13px;
+  background: rgb(var(--lantern-rgb) / 0.14);
+  color: var(--lantern);
+  font: 600 12px / 1 var(--font-ui);
+  white-space: nowrap;
+  transition: background 0.16s var(--ease-arrival);
+}
+
+.lantern-need-pill:hover {
+  background: rgb(var(--lantern-rgb) / 0.26);
+}
+
+.lantern-need-pill .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.lantern-ask {
+  padding: 10px 12px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 14px;
+}
+
+.lantern-ask[data-blocking="true"] {
+  border-color: rgb(var(--lantern-rgb) / 0.35);
+}
+
+.lantern-ask-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--bone);
+  font-size: 13.5px;
+  text-align: left;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-ask-option:hover {
+  background: var(--paper-veil);
+}
+
+.lantern-ask-option b {
+  min-width: 12px;
+  color: var(--lantern);
+}
+
+.lantern-ask-option em {
+  margin-left: auto;
+  color: var(--lantern);
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.lantern-ask-option[data-recommended="true"] {
+  border-color: rgb(var(--lantern-rgb) / 0.35);
+}
+
+.lantern-ask-option[aria-checked="true"] {
+  border-color: var(--lantern);
+  background: rgb(var(--lantern-rgb) / 0.14);
+}
+
+.lantern-ask-cmd {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 4px 6px 8px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 6px;
+  background: rgb(var(--ink-rgb) / 0.86);
+  font: 12.5px / 1.5 var(--font-mono);
+}
+
+.lantern-ask-cmd code {
+  max-height: 8.5em;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.lantern-ask-note {
+  height: 32px;
+}
+
+/* The open session's own question, between the session and where you type. */
+.lantern-session-ask {
+  margin: 0 8px 6px;
+  border: 1px solid rgb(var(--lantern-rgb) / 0.35);
+  border-radius: 8px;
+  background: rgb(var(--lantern-rgb) / 0.06);
+  font-size: 13px;
+}
+
+.lantern-session-ask-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--bone);
+  text-align: left;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-session-ask-head:hover {
+  background: rgb(var(--lantern-rgb) / 0.08);
+}
+
+.lantern-session-ask-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lantern);
+}
+
+/* On the phone every control in the drawer and the session sheet's tool row is
+   a full 44px touch target. */
+@media (max-width: 767px) {
+  [data-testid="needs-you-drawer"] .lantern-btn,
+  [data-testid="needs-you-drawer"] .lantern-icon-btn,
+  .lantern-sheet-tools .lantern-btn {
+    min-height: 44px;
+  }
+
+  [data-testid="needs-you-drawer"] .lantern-ask-option,
+  [data-testid="needs-you-drawer"] .lantern-ask-note,
+  .lantern-session-ask-head {
+    min-height: 44px;
+  }
+
+  [data-testid="needs-you-drawer"] .lantern-ask-option {
+    align-items: center;
+  }
+
+  /* 16px or the phone zooms the page when the note field takes focus. */
+  [data-testid="needs-you-drawer"] .lantern-ask-note input {
+    font-size: 16px;
+  }
+}

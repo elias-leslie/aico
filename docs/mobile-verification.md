@@ -1,6 +1,6 @@
 # Mobile Verification
 
-Repeatable Android verification for the web app lives in [`scripts/mobile-verification.sh`](../web/scripts/mobile-verification.sh).
+Repeatable Android verification for the web app lives in [`scripts/mobile-verification.sh`](../packages/web-server/scripts/mobile-verification.sh).
 
 The script now launches the emulator directly from the SDK, uses `sg kvm` automatically when the current shell has stale group membership, and defaults to headless mode for automation.
 
@@ -11,7 +11,7 @@ The script now launches the emulator directly from the SDK, uses `sg kvm` automa
 - `adb` installed
 - `agent-browser` (a Chrome DevTools Protocol automation CLI) for scripted inspection; optional for `workflow`
 
-Install the emulator stack with [`scripts/install-android-emulator.sh`](../web/scripts/install-android-emulator.sh) when needed.
+Install the emulator stack with [`scripts/install-android-emulator.sh`](../packages/web-server/scripts/install-android-emulator.sh) when needed.
 
 ## Fast Path
 

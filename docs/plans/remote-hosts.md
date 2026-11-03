@@ -2,7 +2,7 @@
 
 Status: the owner approved this direction on 2026-10-29. It was revised after
 an adversarial review. Phase 1a (the hub and the link) is built; the API is in
-tether/docs/api-v1.md "Remote hosts".
+packages/tether/docs/api-v1.md "Remote hosts".
 
 Owner goal: the owner and coordinators start, watch and steer agents running
 on this workstation or on a Proxmox work VM. They do it from the same Aico
@@ -122,7 +122,7 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
   and the update's state. One that failed after the host began installing is
   tried again only by another hub release; one that installed nothing (no ssh,
   a dropped link, a held lock) on the next link-up. A host that is off is updated on its next link-up and is never
-  started for it (`tether/src/hub/update.ts`, tether/docs/api-v1.md "Updates").
+  started for it (`packages/tether/src/hub/update.ts`, packages/tether/docs/api-v1.md "Updates").
 - Snapshots are taken only when the Tether catalog is empty. Rollback and
   poweroff end sessions first. Clones are made from a clean snapshot.
 
@@ -213,7 +213,7 @@ host in `~/.config/tether/placement.json` order whose live room fits, or answers
   create there). A powered-off host is still judged and reserved before it is
   woken. Tether API 14.
 - `st aico placement --needs ... [--pool NAME]` shows the decision without starting anything.
-- Details and the config fields: tether/docs/api-v1.md "Placement".
+- Details and the config fields: packages/tether/docs/api-v1.md "Placement".
 
 ### Cross-host messaging
 

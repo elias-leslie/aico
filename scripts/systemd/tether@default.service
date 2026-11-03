@@ -2,9 +2,9 @@
 # `st service rebuild aico --worker tether@default` renders this (with
 # __PROJECT_ROOT__ set to the release it built) and restarts the unit, so
 # ExecStartPre installs that release into the stable path before the daemon
-# starts. A plain `st service rebuild aico` does the same when tether/ or this
+# starts. A plain `st service rebuild aico` does the same when packages/tether/ or this
 # file changed since the release the running daemon came from. Otherwise
-# identical to tether/systemd/tether@.service (see its notes: tmux servers are
+# identical to packages/tether/deploy/tether@.service (see its notes: tmux servers are
 # separate units, so a restart never stops a pane).
 [Unit]
 Description=Tether session daemon (default)
@@ -13,9 +13,9 @@ Documentation=https://github.com/elias-leslie/tether
 [Service]
 Type=simple
 Slice=app.slice
-WorkingDirectory=__PROJECT_ROOT__/tether
+WorkingDirectory=__PROJECT_ROOT__/packages/tether
 # "-": a missing release never keeps the installed daemon from starting.
-ExecStartPre=-__PROJECT_ROOT__/tether/scripts/install-release.sh
+ExecStartPre=-__PROJECT_ROOT__/packages/tether/scripts/install-release.sh
 ExecStart=%h/.local/lib/tether/bin/tether --instance default serve
 Restart=on-failure
 RestartSec=2

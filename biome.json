@@ -9,12 +9,11 @@
   "files": {
     "ignoreUnknown": true,
     "includes": [
-      "shared/**",
+      "packages/**",
+      "contracts/**",
       "scripts/**/*.{js,mjs}",
       "vitest.config.ts",
-      "tether/**",
-      "web/server/**",
-      "web/frontend/**"
+      "tsconfig*.json"
     ]
   },
   "formatter": {

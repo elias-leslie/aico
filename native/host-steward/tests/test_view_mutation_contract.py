@@ -1,0 +1,18 @@
+"""The owner's shared view-mutation vectors also bind the Python client."""
+
+import json
+from pathlib import Path
+
+import pytest
+from aico_cli_fixtures import admin
+
+VECTORS = json.loads((Path(__file__).resolve().parents[3] / "contracts/view-mutation-vectors.json").read_text())
+
+
+def test_vector_version():
+    assert VECTORS["version"] == 1
+
+
+@pytest.mark.parametrize("vector", VECTORS["labels"], ids=lambda vector: json.dumps(vector["input"]))
+def test_label_vectors(vector):
+    assert admin.view_label(vector["input"]) == vector["label"]

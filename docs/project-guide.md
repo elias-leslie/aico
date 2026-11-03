@@ -84,7 +84,7 @@ Placement across hosts (`st aico create --host auto --needs mem=6G,cpu=2`)
 also lives in Tether: it picks the first host with room from live readings, or
 answers `at_capacity` with each host's reason. Order, owner reserves and the
 Proxmox node per host are data in `~/.config/tether/placement.json`; see
-tether/docs/api-v1.md "Placement". `st aico placement --needs ...` shows the
+packages/tether/docs/api-v1.md "Placement". `st aico placement --needs ...` shows the
 decision without starting anything.
 
 ## Test, lint, typecheck, build
@@ -108,12 +108,12 @@ npm run check
 
 Every session is a tmux session on a Tether-managed absolute socket, so any
 tmux-capable client on the same machine can attach: `tether sessions attach <id>`
-(or `--print` for the exact argv). The [web app](../web) is another Tether
+(or `--print` for the exact argv). The [web app](../packages/web-server) is another Tether
 client with an authenticated WebSocket, so opening its PWA on a phone
 gives live, two-way access to the same sessions.
 
 An agent's question and a new share reach the owner through Nightshift's notice contract v1 (`nightshift push
---json`, see Nightshift's `docs/notify-contract.md`; sender: `web/server/src/notice.ts`): a question offers Answer
+--json`, see Nightshift's `docs/notify-contract.md`; sender: `packages/web-server/src/notice.ts`): a question offers Answer
 and opens `?ask=<id>`, a share opens `?show=<id>`. A session that waits on the owner for two minutes is a notice from Tether.
 
 ## Architecture
@@ -135,7 +135,7 @@ Browser or phone (the PWA)
 
 Aico degrades when optional tools are missing: unavailable agent CLIs simply fail in their pane. When Tether is unreachable, open views keep their terminals and session actions say control is unavailable; Aico reconnects on its own.
 
-The `st aico` extension's client is `tether/scripts/aico-root-watch.py`; SummitFlow runs it from this checkout. The root contract lives in Tether's `docs/root-control.md` ([pointer](root-control.md)). For the process-containment design and recovery, see Tether's `docs/LIFECYCLE_HARNESS.md` and [the July 2026 incident report](INCIDENT-2026-07-PROCESS-ESCAPES.md). The cutover from the old in-process owner and the Tether API gaps seen then are in [history](history/README.md).
+The `st aico` extension's client is `native/host-steward/aico-root-watch.py`; SummitFlow runs it from this checkout. The root contract lives in Tether's `docs/root-control.md` ([pointer](root-control.md)). For the process-containment design and recovery, see Tether's `docs/LIFECYCLE_HARNESS.md` and [the July 2026 incident report](INCIDENT-2026-07-PROCESS-ESCAPES.md). The cutover from the old in-process owner and the Tether API gaps seen then are in [history](history/README.md).
 
 ## Current limitations
 
@@ -144,4 +144,4 @@ The `st aico` extension's client is `tether/scripts/aico-root-watch.py`; SummitF
 
 ## License
 
-Aico is licensed under the [Apache License 2.0](../LICENSE). See [NOTICE](../NOTICE) for copyright notice and [assets/fonts/README.md](../assets/fonts/README.md) for vendored font license notes.
+Aico is licensed under the [Apache License 2.0](../LICENSE). See [NOTICE](../NOTICE) for copyright notice and [packages/ui-kit/fonts/README.md](../packages/ui-kit/fonts/README.md) for vendored font license notes.

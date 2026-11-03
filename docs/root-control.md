@@ -3,7 +3,7 @@
 A root is a session created through the root contract with a stable caller
 `requestId`. This page is the contract: the routes, the create body and its
 digest, tombstones, the resume adapters, every validation rule, and how the
-`st aico` client relies on them. [api-v1.md](../tether/docs/api-v1.md#roots) lists the routes
+`st aico` client relies on them. [api-v1.md](../packages/tether/docs/api-v1.md#roots) lists the routes
 next to the rest of the v1 API.
 
 The contract came from Aico's desktop app and moved into Tether with the
@@ -20,7 +20,7 @@ The old `$XDG_RUNTIME_DIR/aico/control.sock` and `gui-control.sock` are gone
 (2026-10-24).
 
 The `st aico` client and its tests live in this repo
-(`tether/scripts/aico-root-watch.py`, also installed to
+(`native/host-steward/aico-root-watch.py`, also installed to
 `~/.local/lib/tether/scripts/`). SummitFlow runs it from the aico checkout. `st aico roots`
 lists with `GET /v1/roots?ended=0`, so retained tombstones never push the list
 past the client's root limit.
@@ -46,7 +46,7 @@ nothing. A new root is visible in Aico web as soon as it runs.
 | `GET /v1/widgets/<widgetId>` | none | compact exact widget descriptor below |
 | `POST /v1/widgets/<widgetId>/title` | `{generation,label}` | renames the exact running widget |
 | `POST /v1/widgets/<widgetId>/show`, `.../position` | any | retired: 410 `windows_retired` |
-| `POST /v1/widgets/<widgetId>/coordinator` | `{generation,coordinator}` | see [Coordinators](../tether/docs/api-v1.md#coordinators) |
+| `POST /v1/widgets/<widgetId>/coordinator` | `{generation,coordinator}` | see [Coordinators](../packages/tether/docs/api-v1.md#coordinators) |
 
 Widget routes also address ordinary managed sessions with no root request. The
 widget ID is exactly eight lowercase hexadecimal characters. A successful GET or
@@ -68,7 +68,7 @@ field for that kind. Titles are trimmed with ECMAScript whitespace rules,
 nonempty, at most 160 UTF-8 bytes, and exclude control characters, lone
 surrogates and Unicode line/paragraph separators. Invalid bodies return 400
 `invalid_body`.
-[`contracts/view-mutation-vectors.json`](../tether/contracts/view-mutation-vectors.json)
+[`contracts/view-mutation-vectors.json`](../contracts/view-mutation-vectors.json)
 pins these rules; the TypeScript suite and the Python client's pytest suite both
 run every vector.
 
@@ -422,7 +422,7 @@ requests can still retry with their original body/digest and remain Unknown;
 a new request without a work role returns `400 work_role_required`.
 
 The work role also trims what the session starts with (Blank Slate or not, every
-launch: create, restart, recovery, replacement). `tether/src/lifecycle/tui/lane-tools.json`
+launch: create, restart, recovery, replacement). `packages/tether/src/lifecycle/tui/lane-tools.json`
 holds, per tool, the environment every trimmed role gets and each role's extra
 arguments, all documented harness switches. Claude Code roles other than
 `coordinator` start without the Artifact and Workflow tools, Claude-drafted
@@ -444,7 +444,7 @@ Create accepts exactly `requestId`, `tool` (a root-capable slug, today
 `projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`, `workRole`, optional `workRoleDisplayName`,
 and optional opaque `leadRootReference`, `facetCapsuleRef`, and
 `resumeSessionId`, `model`, `reasoningEffort`, `daybreak` and `agentSlug` (`agent-hub` only). On `/v1` it also accepts `origin`, `aTermSessionId` and
-`launchedBy` ([api-v1.md](../tether/docs/api-v1.md#roots)); none of them is part of the digest.
+`launchedBy` ([api-v1.md](../packages/tether/docs/api-v1.md#roots)); none of them is part of the digest.
 
 `agent-hub` is the one root kind with no terminal: a chat session on an Agent Hub agent
 (`st aico create REQ PROMPT --tool agent-hub --agent SLUG --project P --project-root PATH
@@ -473,7 +473,7 @@ and detail, and `st aico root status` shows `turnState` (`running`, `idle`, `unk
 `queued` and the last `error`. `--blank-slate` gives the chat an empty workspace under
 `/tmp/aico-blank-slate/<request id>` (the scratch Agent Hub accepts as a working directory)
 and needs no `--project-root`; its project is `agent-hub` unless `--project` names another registered project (Agent Hub refuses an unknown project id, which `blank-slate` is).
-[api-v1.md](../tether/docs/api-v1.md#agent-hub-sessions) has the session behavior.
+[api-v1.md](../packages/tether/docs/api-v1.md#agent-hub-sessions) has the session behavior.
 
 A tmux tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`
 reports it as `rootCapable`. Any other tool string, aliases included, returns
@@ -515,7 +515,7 @@ key, widget, and unique logical `ST_SESSION_ID` before launch. Matching retries
 reconcile the same widget; changed content returns 409 `request_conflict`.
 A new request whose resume UUID belongs to a session that crash recovery will
 resume, or holds, returns 409 `recovery_pending` with that `widgetId`
-([crash-recovery.md](../tether/docs/crash-recovery.md)).
+([crash-recovery.md](../packages/tether/docs/crash-recovery.md)).
 Retirement keeps the request tombstone, so retries cannot recreate ended work.
 No prompt or transcript is stored in the catalog. Before first allocation, an
 interrupted request needs the same create body to supply its transient prompt
@@ -542,7 +542,7 @@ View mutations require the current generation and reject stale requests. The
 headless `/v1/sessions/<hostIdentity>/end` owns exact containment retirement.
 
 The direct facade (`st` is the author's workspace tool; `st aico` runs this
-repo's `tether/scripts/aico-root-watch.py`) creates one root without a fleet ledger or
+repo's `native/host-steward/aico-root-watch.py`) creates one root without a fleet ledger or
 catalog prompt retention:
 
 ```sh
@@ -567,10 +567,10 @@ placed roots still hold. The output's `host` names where it went (`local` is
 this computer). When nothing fits it is refused with `reason: at_capacity` and
 `hosts: [{host, reason}]`; nothing was reserved, so repeat it later.
 `st aico placement --needs ...` prints the same decision without starting
-anything ([api-v1.md](../tether/docs/api-v1.md) "Placement").
+anything ([api-v1.md](../packages/tether/docs/api-v1.md) "Placement").
 
 Create is explicit recovery. Automatic reboot recovery is a separate path
-([reboot-continuity.md](../tether/docs/reboot-continuity.md)). The catalog stores the request
+([reboot-continuity.md](../packages/tether/docs/reboot-continuity.md)). The catalog stores the request
 digest rather than a native thread binding or prompt, and ended requests remain
 tombstones. The same request cannot revive ended work. After a second crash, an
 operator still supplies the exact saved thread UUID and a new request ID. A

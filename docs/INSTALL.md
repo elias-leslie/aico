@@ -121,7 +121,7 @@ only the owning host pushes.
 A machine without Nightshift (the gem container) sends its pushes through the Proxmox host: set
 `AICO_PUSH_SSH=pve-alerts` in an `aico-web.service.d` drop-in and give the container an ssh alias `pve-alerts` for
 `root@<pve>` with its own key. On the Proxmox host that key is forced to
-[`scripts/pve-push/aico-push`](../scripts/pve-push/aico-push) (copy it to `/usr/local/sbin/aico-push`, mode 0755):
+[`native/pve-sender/aico-push`](../native/pve-sender/aico-push) (copy it to `/usr/local/sbin/aico-push`, mode 0755):
 
 ```
 restrict,from="<container ip>",command="/usr/local/sbin/aico-push" ssh-ed25519 AAAA... aico-gem-push
@@ -156,15 +156,15 @@ units. The web app keeps its tabs in `${XDG_STATE_HOME:-~/.local/state}/aico/web
 Tether keeps diagnostics for each session (ownership ID, tmux server generation and socket, session and
 pane IDs, pane scope, resource use and lifecycle warnings). Session lifecycle,
 historical `/tmp/tmux-$(id -u)/aico` sessions and incident recovery are Tether's;
-see [`tether/docs/LIFECYCLE_HARNESS.md`](../tether/docs/LIFECYCLE_HARNESS.md). The 2026-07 incident report stays here as
+see [`packages/tether/docs/LIFECYCLE_HARNESS.md`](../packages/tether/docs/LIFECYCLE_HARNESS.md). The 2026-07 incident report stays here as
 history: [`INCIDENT-2026-07-PROCESS-ESCAPES.md`](INCIDENT-2026-07-PROCESS-ESCAPES.md).
 
 ## Development loop
 
 ```bash
 npm run check                                # lint, type checks, TypeScript tests, build
-uv sync --locked --directory tether/scripts  # Python env for Tether's operator scripts
-tether/scripts/.venv/bin/pytest -q            # their tests, from the repo root
+uv sync --locked --directory native/host-steward  # Python env for Tether's operator scripts
+native/host-steward/.venv/bin/pytest -q            # their tests, from the repo root
 ```
 
 ## Optional integrations

@@ -24,7 +24,7 @@
   },
   "runtime": {
     "backend_port": 3002,
-    "backend_dir": "web",
+    "backend_dir": "packages/web-server",
     "frontend_dir": ".",
     "health_endpoint": "/health",
     "infra": []

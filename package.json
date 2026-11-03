@@ -5,27 +5,17 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "build": "npm run build --workspace tether && npm run build --workspace web/server && npm run build --workspace web/frontend",
-    "typecheck": "tsc --noEmit && npm run typecheck --workspace tether && tsc --noEmit -p web/server && tsc --noEmit -p web/frontend",
+    "build": "tsc -b && npm run build --workspaces --if-present",
+    "typecheck": "tsc -b",
     "test": "vitest run",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "lint": "biome check ."
   },
   "devDependencies": {
-    "@agent-hub/chat-ui": "file:vendor/agent-hub-chat-ui-0.4.7.tgz",
-    "@agent-hub/sdk": "file:tether/vendor/agent-hub-sdk-0.1.4.tgz",
     "@biomejs/biome": "2.5.11",
-    "@tanstack/react-query": "5.102.8",
-    "@types/node": "^22.19.7",
-    "@types/react": "19",
-    "@types/react-dom": "19",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "typescript": "^5.7.0",
-    "vitest": "^4.1.12"
-  },
-  "dependencies": {
-    "@xterm/xterm": "^6.0.0"
+    "@types/node": "22.20.4",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12"
   },
   "overrides": {
     "@babel/core": "^7.29.6",
@@ -37,8 +27,6 @@
     "ws": "^8.20.1"
   },
   "workspaces": [
-    "tether",
-    "web/frontend",
-    "web/server"
+    "packages/*"
   ]
 }

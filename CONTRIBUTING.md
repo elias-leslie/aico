@@ -7,8 +7,8 @@ Thanks for taking a look at Aico.
 ```bash
 scripts/install.sh
 npm run check
-uv sync --locked --directory tether/scripts   # Tether's operator-script tests
-tether/scripts/.venv/bin/pytest -q
+uv sync --locked --directory native/host-steward   # Tether's operator-script tests
+native/host-steward/.venv/bin/pytest -q
 ```
 
 Use focused changes and keep the public install path working from a fresh clone.
@@ -18,7 +18,7 @@ Tether in `tether/` and the web app in `web/`. Running Aico needs
 a Tether daemon; the tests do not, because they use a fake Tether socket.
 Session lifecycle changes (tmux servers, launch, End, roots) go in `tether/`;
 the front ends keep views, view state and rendering. The `st aico` client lives
-in `tether/scripts/`; SummitFlow runs `tether/scripts/aico-root-watch.py`
+in `packages/tether/scripts/`; SummitFlow runs `native/host-steward/aico-root-watch.py`
 from this checkout.
 
 ## Pull request expectations

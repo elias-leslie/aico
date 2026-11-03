@@ -48,15 +48,15 @@ The web app has no login of its own and listens on loopback only. Before exposin
 ```bash
 npm ci
 npm run check
-uv sync --locked --directory tether/scripts   # only for Tether's Python operator scripts
+uv sync --locked --directory native/host-steward   # only for Tether's Python operator scripts
 ```
 
-`npm run check` runs lint, type checks, the TypeScript tests of the shared code, Tether, the web server and front end, and the build. Tether's operator-script tests run with `tether/scripts/.venv/bin/pytest` from the root. The author runs everything through his workspace tool (`st check`). Avoid broad process-name cleanup.
+`npm run check` runs lint, type checks, the TypeScript tests of the shared code, Tether, the web server and front end, and the build. Tether's operator-script tests run with `native/host-steward/.venv/bin/pytest` from the root. The author runs everything through his workspace tool (`st check`). Avoid broad process-name cleanup.
 
 ## Documentation
 
 - [Project guide](docs/project-guide.md), [web app guide](docs/web-guide.md) and [install](docs/INSTALL.md).
 - [Glossary](docs/glossary.md), [root control](docs/root-control.md), [agent shares](docs/agent-shares.md), [remote access](docs/remote-access.md) and [mobile verification](docs/mobile-verification.md).
-- Tether: [README](tether/README.md), [API v1](tether/docs/api-v1.md) and the [decision records](docs/adr/).
+- Tether: [README](packages/tether/README.md), [API v1](packages/tether/docs/api-v1.md) and the [decision records](docs/adr/).
 - [History](docs/history/README.md) and the [process incident report](docs/INCIDENT-2026-07-PROCESS-ESCAPES.md).
-- [Changelog](CHANGELOG.md), [security](SECURITY.md), [Apache 2.0 license](LICENSE), [notice](NOTICE) and [font licenses](assets/fonts/README.md).
+- [Changelog](CHANGELOG.md), [security](SECURITY.md), [Apache 2.0 license](LICENSE), [notice](NOTICE) and [font licenses](packages/ui-kit/fonts/README.md).
