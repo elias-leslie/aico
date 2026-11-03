@@ -3,7 +3,7 @@
 import { ArrowLeft, SquareArrowOutUpRight } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { CaptureLauncher } from '@/components/capture/CaptureLauncher'
 import { handOffNote, NoteEditor } from '@/components/notes/NoteEditor'
 import { NoteList } from '@/components/notes/NoteList'
@@ -62,6 +62,17 @@ function Notes() {
   const detail = isNoteId(id)
   // The popped-out window is only notes: no way back to the sessions here.
   const popped = useIsNotesWindow()
+  // Closing the window or switching away ends the edit in hand: an item or
+  // label being typed saves when its box loses focus.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState !== 'hidden') return
+      const box = document.activeElement
+      if (box instanceof HTMLInputElement) box.blur()
+    }
+    document.addEventListener('visibilitychange', onHide)
+    return () => document.removeEventListener('visibilitychange', onHide)
+  }, [])
   return (
     <main
       className="mx-auto flex h-full w-full max-w-xl flex-col px-4"

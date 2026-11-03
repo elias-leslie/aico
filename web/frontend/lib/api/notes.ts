@@ -136,6 +136,7 @@ export function parseNote(value: unknown): NoteDetail {
 }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
+const KEEPALIVE_MAX = 60_000
 
 function send<T>(
   url: string,
@@ -143,12 +144,16 @@ function send<T>(
   body: unknown,
   failure: string,
 ): Promise<T> {
+  const text = body === undefined ? undefined : JSON.stringify(body)
   return apiFetch<T>(
     url,
     {
       method,
-      headers: body === undefined ? undefined : JSON_HEADERS,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: text === undefined ? undefined : JSON_HEADERS,
+      body: text,
+      // A save sent as the window closes still arrives. The browser refuses
+      // keepalive past 64 KB, so a long text goes as an ordinary request.
+      keepalive: new TextEncoder().encode(text ?? '').length < KEEPALIVE_MAX,
     },
     failure,
   )
