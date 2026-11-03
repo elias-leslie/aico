@@ -400,6 +400,9 @@ export class Peer {
       this.replace(answer.body)
       this.failures = 0
     } catch (error) {
+      // Callers that were already in flight when the circuit opened fail too;
+      // the window is open and logged, so they neither count nor log again.
+      if (this.deps.now() < this.openUntil) return this.descriptors()
       this.failures += 1
       if (this.failures >= BREAKER_FAILURES) {
         this.failures = 0

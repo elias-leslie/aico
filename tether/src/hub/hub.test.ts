@@ -986,6 +986,17 @@ describe('hub', () => {
     expect((await hub.sessions()).map((item) => item.id)).toEqual(['aaaa0001', 'bbbb0002'])
   })
 
+  it('logs a failing list once per circuit window, not once per concurrent caller', async () => {
+    hub.close()
+    const lines: string[] = []
+    hub = makeHub({ log: (line) => lines.push(line) })
+    hub.start()
+    await vi.waitFor(() => expect(state()).toBe('connected'))
+    peer.failSessions = true
+    await Promise.all(Array.from({ length: 71 }, () => hub.sessions()))
+    expect(lines.filter((line) => line.includes('session list failed'))).toHaveLength(1)
+  })
+
   it('stops merging a host that answers as another machine until trusted', async () => {
     await peer.stop()
     await vi.waitFor(() => expect(state()).toBe('offline'))
