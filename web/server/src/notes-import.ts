@@ -484,18 +484,36 @@ function keepNote(
 
 // -- Keep: recipes and car notes first ------------------------------------------------
 
-/** What to put at the top of the Keep report: topic id to the words that mark it (title or label). */
-export const PRIORITY_TOPICS: Record<string, RegExp> = {
-  recipe: /recipe|cookbook|cooking|baking/i,
-  car: /\b(car|cars|vehicle|vehicles|truck|auto|oil change|odometer|mileage|tires?)\b/i,
+/**
+ * What to put at the top of the Keep report: per topic, the words that mark it
+ * in a title or label (`name`) and the looser words that only flag a note
+ * whose text mentions them (`text`, listed apart for a second look).
+ */
+export const PRIORITY_TOPICS: Record<string, { name: RegExp; text: RegExp }> = {
+  recipe: {
+    name: /recipe|cookbook|cooking|baking/i,
+    text: /recipe|ingredient|tablespoon|teaspoon|\bbake at\b|simmer/i,
+  },
+  car: {
+    name: /\b(car|cars|vehicle|vehicles|truck|auto|oil change|odometer|mileage|tires?)\b/i,
+    text: /\b(oil change|odometer|mileage|tires?|brakes?|vehicle|dealership)\b/i,
+  },
 }
 
+/** Topics a note's title (an untitled note's first line) or a label names. */
 export function topicsOf(note: ImportNote): string[] {
   const title = note.title || note.body.split('\n', 1)[0]
   return Object.entries(PRIORITY_TOPICS)
-    .filter(
-      ([, pattern]) => pattern.test(title) || note.labels.some((label) => pattern.test(label)),
-    )
+    .filter(([, { name }]) => name.test(title) || note.labels.some((label) => name.test(label)))
+    .map(([topic]) => topic)
+}
+
+/** Topics whose words appear only in the text of the note. */
+export function textTopicsOf(note: ImportNote): string[] {
+  const text = `${note.body}\n${note.items.map((item) => item.text).join('\n')}`
+  const named = topicsOf(note)
+  return Object.entries(PRIORITY_TOPICS)
+    .filter(([topic, { text: pattern }]) => !named.includes(topic) && pattern.test(text))
     .map(([topic]) => topic)
 }
 
@@ -536,8 +554,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 function noteTable(entries: KeepNoteEntry[], outcomes?: Map<string, Outcome>): string[] {
   const rows = [
-    `| Title | Kind | Labels | Items | Files | Flags | ${outcomes ? 'Result' : 'Would'} |`,
-    '| --- | --- | --- | ---: | ---: | --- | --- |',
+    `| Title | Kind | Labels | Items | Files | Flags |${outcomes ? ' Result |' : ''}`,
+    `| --- | --- | --- | ---: | ---: | --- |${outcomes ? ' --- |' : ''}`,
   ]
   for (const entry of entries) {
     const note = entry.note
@@ -547,9 +565,9 @@ function noteTable(entries: KeepNoteEntry[], outcomes?: Map<string, Outcome>): s
       entry.status === 'trashed' ? 'was in trash' : '',
     ].filter(Boolean)
     const missing = entry.attachments.filter((ref) => !ref.found).length
-    const outcome = outcomes?.get(note.source) ?? '-'
+    const outcome = outcomes ? ` ${outcomes.get(note.source) ?? '-'} |` : ''
     rows.push(
-      `| ${shown(note)} | ${note.kind === 'list' ? 'list' : 'note'} | ${cell(note.labels.join(', ')) || '-'} | ${note.items.length || '-'} | ${note.files.length || '-'}${missing ? ` (${missing} missing)` : ''} | ${flags.join(', ') || '-'} | ${outcome} |`,
+      `| ${shown(note)} | ${note.kind === 'list' ? 'list' : 'note'} | ${cell(note.labels.join(', ')) || '-'} | ${note.items.length || '-'} | ${note.files.length || '-'}${missing ? ` (${missing} missing)` : ''} | ${flags.join(', ') || '-'} |${outcome}`,
     )
   }
   return rows
@@ -590,14 +608,11 @@ export function keepReport(
   lines.push(
     `- Attachment files found: ${attachmentFiles}, referenced but missing: ${missingFiles}, in the folder but not referenced: ${unreferenced(folder).length}`,
   )
+  const dropped = { 'colour dropped': 0, 'sharees dropped': 0, ...plan.drops }
   lines.push(
-    `- Dropped: ${
-      Object.keys(plan.drops).length === 0
-        ? 'nothing counted'
-        : Object.entries(plan.drops)
-            .map(([r, n]) => `${r} (${n})`)
-            .join(', ')
-    }`,
+    `- Dropped: ${Object.entries(dropped)
+      .map(([reason, n]) => `${reason} (${n})`)
+      .join(', ')}`,
   )
   lines.push('')
 
@@ -617,6 +632,13 @@ export function keepReport(
   }
 
   const rest = plan.entries.filter((e) => topicsOf(e.note).length === 0)
+  const mentions = rest.filter((e) => textTopicsOf(e.note).length > 0)
+  if (mentions.length > 0) {
+    lines.push('## Worth a look: recipe or car words in the text only', '')
+    for (const entry of mentions)
+      lines.push(`- ${shown(entry.note)}: ${textTopicsOf(entry.note).join(', ')}`)
+    lines.push('')
+  }
   lines.push(`## Other notes (${rest.length})`, '')
   if (rest.length === 0) lines.push('None.', '')
   else lines.push(...noteTable(rest, options.dryRun ? undefined : options.outcomes), '')
@@ -640,9 +662,7 @@ export function keepReport(
   }
 
   lines.push('## Dropped or changed', '')
-  const dropRows = Object.entries(plan.drops)
-  if (dropRows.length === 0) lines.push('Nothing counted.')
-  else for (const [reason, n] of dropRows) lines.push(`- ${reason}: ${n}`)
+  for (const [reason, n] of Object.entries(dropped)) lines.push(`- ${reason}: ${n}`)
   lines.push(
     '- The HTML twin of each note is not read; the JSON carries the same text.',
     '- Links Keep stored beside a note are appended to its text under "Links:".',

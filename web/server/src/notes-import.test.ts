@@ -251,10 +251,19 @@ describe('importing Keep', () => {
 
 describe('the Keep report', () => {
   it('puts recipes and car notes first, then the rest, skips and drops', async () => {
+    writeFileSync(
+      join(keep, 'Odd.json'),
+      JSON.stringify({
+        title: 'Odd',
+        textContent: 'ingredients: flour',
+        createdTimestampUsec: usec('2025-05-01T10:00:00Z'),
+        userEditedTimestampUsec: usec('2025-05-01T10:00:00Z'),
+      }),
+    )
     const p = plan()
     const text = keepReport(p, {
       dryRun: true,
-      counts: { total: 4, created: 4, updated: 0, unchanged: 0, deletedInAico: 0 },
+      counts: { total: 5, created: 5, updated: 0, unchanged: 0, deletedInAico: 0 },
       outcomes: new Map(),
     })
     const at = (s: string) => text.indexOf(s)
@@ -265,6 +274,9 @@ describe('the Keep report', () => {
     expect(text).toContain('Skipped: in the Keep trash (1)')
     expect(text).toContain('colour dropped: 1')
     expect(text).toContain('Nothing was written')
+    expect(text).toContain('Worth a look: recipe or car words in the text only')
+    expect(text).toContain('- Odd: recipe')
+    expect(text).not.toContain('| Would')
   })
 })
 
