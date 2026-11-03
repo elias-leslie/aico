@@ -17,6 +17,7 @@ import { execRunner, PreviewJobs } from './heic'
 import { registerNightshiftRoutes } from './nightshift'
 import { NightshiftRelay, registerNightshiftStream } from './nightshift-stream'
 import { NotesStore } from './notes-db'
+import { registerExportRoutes } from './notes-export'
 import { NotesOwner } from './owners/notes'
 import { PortfolioAiOwner } from './owners/portfolio-ai'
 import type { OwnerAdapter } from './owners/types'
@@ -106,6 +107,7 @@ function serve(): void {
   registerNightshiftRoutes(api, config)
   const sync = startSync({ config, store, notes, blobsDir })
   registerSyncRoutes(api, sync.loop)
+  registerExportRoutes(api, config, sync.loop)
   const nightshift = new NightshiftRelay(config)
   registerNightshiftStream(api, nightshift)
   const server = createWebServer(

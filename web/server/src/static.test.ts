@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { request, type Server } from 'node:http'
+import { type IncomingMessage, request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -32,7 +32,7 @@ beforeEach(async () => {
   const router = new Router().on('GET', '/health', () => ({ status: 'healthy' }))
   const tether = new FakeTether()
   server = createWebServer(
-    { allowedHostnames: ['127.0.0.1'], allowedOrigins: [] },
+    { allowedHostnames: ['127.0.0.1'], allowedOrigins: [], hostName: 'gem' },
     router,
     new TerminalHub({ tether: tether.client, historyLines: 10, touched: () => {} }),
     createStaticSite(root, { agentHubUrl: null, agentHubPort: 8003 }),
@@ -48,6 +48,18 @@ afterEach(async () => {
 })
 
 describe('static site', () => {
+  it('names the answering host on every response, refusals and misses included', async () => {
+    for (const path of ['/', '/health', '/api/nope', '/missing.png'])
+      expect((await fetch(`${base}${path}`)).headers.get('x-aico-host'), path).toBe('gem')
+    const refused = await new Promise<IncomingMessage>((resolve, reject) =>
+      request(`${base}/health`, { headers: { host: 'evil.example' } }, resolve)
+        .on('error', reject)
+        .end(),
+    )
+    expect(refused.statusCode).toBe(403)
+    expect(refused.headers['x-aico-host']).toBe('gem')
+  })
+
   it('serves the page at / with a hashed-script CSP and no caching', async () => {
     const response = await fetch(`${base}/`)
     expect(response.status).toBe(200)

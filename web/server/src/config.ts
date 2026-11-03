@@ -9,6 +9,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defaultTetherSocketPath, hostsFile, tetherSocketPath } from 'tether/client'
 import { DEFAULT_REMOTE_UPLOAD_DIR } from 'tether/term'
+import type { ExportConfig } from './notes-export'
 import type { RouteName, VisionConfig } from './vision-extract'
 
 export interface WebConfig {
@@ -32,6 +33,8 @@ export interface WebConfig {
   buildId: string
   captures: CaptureConfig
   notes: NotesConfig
+  /** The nightly Drive copy of the notes (`AICO_EXPORT_*`). */
+  export: ExportConfig
   sync: SyncConfig
   vision: VisionSettings
   /** The capture type table's override file (the default table ships with Aico). */
@@ -156,6 +159,9 @@ export const DEFAULT_SYNC_INTERVAL_SECONDS = 60
 const DEFAULT_SYNC_IDLE_SECONDS = 30
 const DEFAULT_SYNC_WATCH_MS = 1000
 const DEFAULT_BLOB_GRACE_DAYS = 7
+// The nightly export: the remote and folder names scripts/authorize-notes-drive.sh and the Drive copy agree on.
+const DEFAULT_EXPORT_REMOTE = 'aico-notes-drive'
+const DEFAULT_EXPORT_FOLDER = 'SummitFlow-Notes'
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
 const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
@@ -320,6 +326,19 @@ export function loadConfig(
     notes: {
       revisionWindowMs:
         positiveInt(env.AICO_NOTE_REVISION_MINUTES, DEFAULT_NOTE_REVISION_MINUTES) * 60_000,
+    },
+    export: {
+      stagingDir: join(dataDirPath(env), 'export'),
+      rcloneConfig: resolve(
+        expandHome(
+          env.AICO_EXPORT_RCLONE_CONFIG?.trim() || '~/.config/aico-export/notes-drive.conf',
+          home,
+        ),
+      ),
+      rclonePath: env.AICO_EXPORT_RCLONE?.trim() || 'rclone',
+      remote: env.AICO_EXPORT_REMOTE?.trim() || DEFAULT_EXPORT_REMOTE,
+      folder: env.AICO_EXPORT_FOLDER?.trim() || DEFAULT_EXPORT_FOLDER,
+      deferTo: env.AICO_EXPORT_DEFER_TO?.trim() || null,
     },
     sync: {
       tombstoneMs: positiveInt(env.AICO_SYNC_TOMBSTONE_DAYS, DEFAULT_TOMBSTONE_DAYS) * 86_400_000,

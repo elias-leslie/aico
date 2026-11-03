@@ -4,7 +4,13 @@
 import { createServer, type Server } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer } from 'ws'
-import { applySecurityHeaders, checkRequest, checkUpgrade, type GuardConfig } from './guard'
+import {
+  applySecurityHeaders,
+  checkRequest,
+  checkUpgrade,
+  type GuardConfig,
+  HOST_HEADER,
+} from './guard'
 import { type Router, sendJson } from './http'
 import type { StaticSite } from './static'
 import { TERMINAL_PATH, type TerminalHub } from './terminal'
@@ -26,6 +32,7 @@ export function createWebServer(
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 4 << 20 })
   const server = createServer((req, res) => {
     applySecurityHeaders(res)
+    if (guard.hostName) res.setHeader(HOST_HEADER, guard.hostName)
     const refused = checkRequest(req.method ?? 'GET', req.headers, guard)
     if (refused) return sendJson(res, 403, { error: refused })
     const url = new URL(req.url ?? '/', 'http://localhost')

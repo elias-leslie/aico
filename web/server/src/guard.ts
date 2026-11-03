@@ -20,6 +20,8 @@ export type Refusal = 'host_not_allowed' | 'origin_not_allowed'
 export interface GuardConfig {
   allowedHostnames: readonly string[]
   allowedOrigins: readonly string[]
+  /** Named on every response as `X-Aico-Host`, so the service worker can tell this server from a proxy's error page. */
+  hostName?: string
 }
 
 export function hostAllowed(host: string | undefined, config: GuardConfig): boolean {
@@ -59,6 +61,9 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()',
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
 }
+
+/** Names the answering host. A response without it did not come from aico-web (Cloudflare's own error page, say). */
+export const HOST_HEADER = 'X-Aico-Host'
 
 /** API answers are data, never a page: nothing in them may load or frame. */
 export const API_CSP = "default-src 'none'; frame-ancestors 'none'"

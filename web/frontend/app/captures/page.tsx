@@ -7,6 +7,7 @@ import { Suspense } from 'react'
 import { CaptureDetail } from '@/components/capture/CaptureDetail'
 import { CaptureLauncher } from '@/components/capture/CaptureLauncher'
 import { CaptureList } from '@/components/capture/CaptureList'
+import { OfflineBanner, ReadOnlyScope } from '@/components/ReadOnly'
 
 function Captures() {
   const id = useSearchParams().get('id')
@@ -16,34 +17,37 @@ function Captures() {
       className="mx-auto flex h-full w-full max-w-xl flex-col px-4"
       style={{ color: 'var(--bone)' }}
     >
-      <header className="flex flex-none items-center gap-2 py-3">
-        <Link
-          href={detail ? '/captures' : '/'}
-          className="lantern-icon-btn"
-          aria-label={detail ? 'Back to captures' : 'Back to sessions'}
-          title={detail ? 'Back to captures' : 'Back to sessions'}
-        >
-          <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
-        </Link>
-        <h1
-          className="min-w-0 flex-1"
-          style={{ font: '500 18px/1.2 var(--font-display)' }}
-        >
-          {detail ? 'Capture' : 'Captures'}
-        </h1>
-        <CaptureLauncher variant="row" />
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
-        {detail ? (
-          <CaptureDetail id={id} />
-        ) : id !== null ? (
-          <p className="py-3 text-[13px]" style={{ color: 'var(--mist)' }}>
-            That isn&apos;t a capture link.
-          </p>
-        ) : (
-          <CaptureList />
-        )}
-      </div>
+      <OfflineBanner />
+      <ReadOnlyScope>
+        <header className="flex flex-none items-center gap-2 py-3">
+          <Link
+            href={detail ? '/captures' : '/'}
+            className="lantern-icon-btn"
+            aria-label={detail ? 'Back to captures' : 'Back to sessions'}
+            title={detail ? 'Back to captures' : 'Back to sessions'}
+          >
+            <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
+          </Link>
+          <h1
+            className="min-w-0 flex-1"
+            style={{ font: '500 18px/1.2 var(--font-display)' }}
+          >
+            {detail ? 'Capture' : 'Captures'}
+          </h1>
+          <CaptureLauncher variant="row" />
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
+          {detail ? (
+            <CaptureDetail id={id} />
+          ) : id !== null ? (
+            <p className="py-3 text-[13px]" style={{ color: 'var(--mist)' }}>
+              That isn&apos;t a capture link.
+            </p>
+          ) : (
+            <CaptureList />
+          )}
+        </div>
+      </ReadOnlyScope>
     </main>
   )
 }
