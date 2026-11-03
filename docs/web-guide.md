@@ -140,7 +140,7 @@ The web app answers on `localhost`, plus one public hostname through a Cloudflar
 <details>
 <summary><strong>Architecture</strong></summary>
 
-- `server/src/` — the Node server: `api.ts` (REST), `terminal.ts` (terminal WebSocket), `static.ts` (the page), `background.ts` (Tether events, maintenance), `db.ts` (tabs and project settings), `cli.ts` (`tsession`)
+- `server/src/` — the Node server: `api.ts` (REST), `terminal.ts` (terminal WebSocket), `static.ts` (the page), `background.ts` (Tether events, maintenance), `db.ts` (tabs and project settings), `cli.ts` (`tsession`, `tnotes`)
 - `frontend/app/`, `frontend/components/`, `frontend/lib/` — the Next.js UI, built as a static export into `frontend/out/`
 - `web/scripts/` — launchers and verification; the installer and units are in the root `scripts/`
 
