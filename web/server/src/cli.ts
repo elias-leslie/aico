@@ -2,6 +2,8 @@
 //
 // - `tsession open|list|projects`: open, list and attach Tether sessions
 //   (the Python backend's cli/session_broker.py, same flags and output).
+// - `tnotes import-summitflow|import-keep|verify-keep`: import into Notes
+//   (notes-import-cli.ts).
 // - `tclaude` / `tcodex [project|-l]`: pick a project (fzf), find its folder,
 //   then `tsession open --attach` (the old scripts/lib/project-launcher.sh).
 //
@@ -19,9 +21,10 @@ import { type BrokerTarget, createBroker, normalizeWorkingDir } from './broker'
 import { webDbPath } from './config'
 import { WebStore } from './db'
 import { createLifecycle, type Lifecycle } from './lifecycle'
+import { runNotesCli } from './notes-import-cli'
 import { HttpError } from './tether'
 
-export const CLI_COMMANDS = ['tsession', 'tclaude', 'tcodex']
+export const CLI_COMMANDS = ['tsession', 'tclaude', 'tcodex', 'tnotes']
 
 /** The tool each launcher opens. */
 const LAUNCHER_TOOLS: Readonly<Record<string, string>> = {
@@ -513,6 +516,7 @@ function terminalIo(): CliIo {
 
 /** `aico-web tsession|tclaude|tcodex …` against the user's own Tether and the web app's state. */
 export async function runCli(command: string, argv: string[]): Promise<number> {
+  if (command === 'tnotes') return runNotesCli(argv, terminalIo().repoRoot)
   const env = process.env
   let life: Lifecycle | null = null
   const lifeOf = () => {

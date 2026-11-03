@@ -113,10 +113,14 @@ export interface NewNote {
   title?: string
   body?: string
   pinned?: boolean
+  archived?: boolean
   scope?: string | null
   source?: string | null
   labels?: string[]
   items?: { text: string; checked?: boolean; hint?: string | null }[]
+  /** ms; an import keeps the note's original times (default: now). */
+  createdAt?: number
+  editedAt?: number
 }
 
 export interface NotePatch {
@@ -125,6 +129,9 @@ export interface NotePatch {
   pinned?: boolean
   archived?: boolean
   kind?: NoteKind
+  scope?: string | null
+  /** ms; with a title or text change, the edit time to keep instead of now (imports). */
+  editedAt?: number
 }
 
 export interface ItemPatch {
@@ -291,11 +298,11 @@ export class NoteStore {
       title: input.title ?? '',
       body: input.body ?? '',
       pinned: bit(input.pinned ?? false),
-      archived: 0,
+      archived: bit(input.archived ?? false),
       scope: input.scope ?? null,
       source: input.source ?? null,
-      created_at: now,
-      edited_at: now,
+      created_at: input.createdAt ?? now,
+      edited_at: input.editedAt ?? input.createdAt ?? now,
     })
     for (const item of input.items ?? [])
       this.addItemNow(id, { text: item.text, checked: item.checked, hint: item.hint })
@@ -326,7 +333,8 @@ export class NoteStore {
         fields[field] = next
         edited = true
       }
-      if (edited) fields.edited_at = this.core.now()
+      if (patch.scope !== undefined && patch.scope !== current.scope) fields.scope = patch.scope
+      if (edited) fields.edited_at = patch.editedAt ?? this.core.now()
       if (Object.keys(fields).length === 0) return current
       this.edit('notes', id, current, fields)
       this.reindex(id)
@@ -564,11 +572,32 @@ export class NoteStore {
     })
   }
 
+  /**
+   * Attaches a file that did not come from a capture (an import). `key` makes
+   * the attachment id, so the same file again (or a rerun) is the same row.
+   */
+  attachFile(
+    noteId: string,
+    file: { key: string; hash: string; name: string; mime: string; size: number },
+  ): AttachmentRow | null {
+    return this.core.transaction(() => {
+      if (!this.getNote(noteId)) return null
+      return this.attachNow(noteId, { ...file, captureId: null })
+    })
+  }
+
   private attachNow(
     noteId: string,
-    file: { captureId: string; hash: string; name: string; mime: string; size: number },
+    file: {
+      captureId: string | null
+      key?: string
+      hash: string
+      name: string
+      mime: string
+      size: number
+    },
   ): AttachmentRow {
-    const id = `${noteId}:${file.captureId}`
+    const id = `${noteId}:${file.key ?? file.captureId}`
     const existing = this.db.prepare('SELECT * FROM attachments WHERE id = ?').get(id) as unknown as
       | AttachmentRow
       | undefined

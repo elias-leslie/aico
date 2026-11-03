@@ -1,0 +1,175 @@
+// `aico-web tnotes …`: import SummitFlow's notes and a Google Keep Takeout into
+// Notes, and check the Keep import is complete.
+//
+//   tnotes import-summitflow [--dry-run] [--from-json FILE]
+//   tnotes import-keep <dir> [--dry-run] [--include-trashed]
+//   tnotes verify-keep <dir> [--include-trashed]
+
+import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { dataDirPath, hostNameFrom } from './config'
+import { NotesStore } from './notes-db'
+import {
+  importAll,
+  keepReport,
+  mapSummitflow,
+  planKeep,
+  readKeepFolder,
+  type SummitflowRow,
+  verifyKeep,
+} from './notes-import'
+
+export interface NotesCliIo {
+  out(text: string): void
+  err(text: string): void
+  env: NodeJS.ProcessEnv
+  /** The repo checkout this CLI runs from. */
+  repoRoot: string
+}
+
+/** What the commands need beyond their arguments; tests pass their own. */
+export interface NotesCliDeps {
+  notes: NotesStore
+  blobsDir: string
+  /** SummitFlow's `notes` rows (default: read through `st db query`). */
+  summitflowRows?: (io: NotesCliIo) => SummitflowRow[]
+}
+
+const USAGE = `usage: tnotes <command>
+
+  import-summitflow [--dry-run] [--from-json FILE]
+      Copy SummitFlow's notes into Notes (source summitflow:<id>); a rerun updates them.
+  import-keep <dir> [--dry-run] [--include-trashed]
+      Import a Google Keep Takeout (the folder you extracted, or its Takeout/Keep). Prints the report.
+  verify-keep <dir> [--include-trashed]
+      Check every Keep note, attachment and blob is in Notes; lists anything unmatched. Exit 1 if any.`
+
+class UsageError extends Error {}
+
+function parse(argv: string[], flags: string[], valued: string[] = []) {
+  const set = new Set<string>()
+  const values = new Map<string, string>()
+  const positional: string[] = []
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i]
+    if (flags.includes(arg)) set.add(arg)
+    else if (valued.includes(arg)) {
+      const value = argv[i + 1]
+      if (value === undefined) throw new UsageError(`tnotes: ${arg} needs a value`)
+      values.set(arg, value)
+      i += 1
+    } else if (arg.startsWith('-')) throw new UsageError(`tnotes: unknown option ${arg}`)
+    else positional.push(arg)
+  }
+  return { set, values, positional }
+}
+
+const SQL = "SELECT coalesce(json_agg(row_to_json(n)), '[]'::json) FROM notes n"
+
+/** SummitFlow's notes through `st db query`; a long result comes back as a details file. */
+export function readSummitflowRows(io: NotesCliIo): SummitflowRow[] {
+  const cwd = io.env.AICO_SUMMITFLOW_DIR || join(dirname(io.repoRoot), 'summitflow')
+  const run = spawnSync('st', ['db', '-P', 'summitflow', 'query', '-t', SQL], {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  if (run.error || run.status !== 0)
+    throw new Error(`st db query failed: ${run.error?.message ?? run.stderr.trim() ?? run.status}`)
+  let text = run.stdout.trim()
+  const details = /^DB:OK:\d+\|lines=\d+\|details:([^|]+)\|/.exec(text)
+  if (details) text = readFileSync(resolve(cwd, details[1]), 'utf8')
+  return parseSummitflow(text)
+}
+
+export function parseSummitflow(text: string): SummitflowRow[] {
+  const rows: unknown = JSON.parse(text)
+  if (!Array.isArray(rows)) throw new Error('SummitFlow notes did not come back as a list')
+  return rows as SummitflowRow[]
+}
+
+export async function runNotesCommand(
+  io: NotesCliIo,
+  deps: NotesCliDeps,
+  argv: string[],
+): Promise<number> {
+  try {
+    const [command, ...rest] = argv
+    if (command === 'import-summitflow') {
+      const args = parse(rest, ['--dry-run'], ['--from-json'])
+      if (args.positional.length > 0) throw new UsageError(USAGE)
+      const from = args.values.get('--from-json')
+      const rows = from
+        ? parseSummitflow(readFileSync(from, 'utf8'))
+        : (deps.summitflowRows ?? readSummitflowRows)(io)
+      const dryRun = args.set.has('--dry-run')
+      const { notes, drops } = mapSummitflow(rows)
+      const { counts } = await importAll(deps.notes.notes, deps.blobsDir, notes, dryRun)
+      io.out(
+        `SummitFlow notes${dryRun ? ' (dry run, nothing written)' : ''}: ${counts.total} read, ` +
+          `${counts.created} ${dryRun ? 'to create' : 'created'}, ${counts.updated} ${dryRun ? 'to update' : 'updated'}, ` +
+          `${counts.unchanged} unchanged${counts.deletedInAico ? `, ${counts.deletedInAico} deleted in Aico (left deleted)` : ''}\n`,
+      )
+      for (const [reason, n] of Object.entries(drops)) io.out(`  ${reason}: ${n}\n`)
+      return 0
+    }
+    if (command === 'import-keep' || command === 'verify-keep') {
+      const args = parse(
+        rest,
+        command === 'import-keep' ? ['--dry-run', '--include-trashed'] : ['--include-trashed'],
+      )
+      if (args.positional.length !== 1) throw new UsageError(USAGE)
+      const folder = readKeepFolder(resolve(args.positional[0]))
+      const includeTrashed = args.set.has('--include-trashed')
+      if (command === 'verify-keep') {
+        const result = verifyKeep(deps.notes.notes, deps.blobsDir, folder, includeTrashed)
+        io.out(`${result.report}\n`)
+        return result.problems.length === 0 ? 0 : 1
+      }
+      const dryRun = args.set.has('--dry-run')
+      const plan = planKeep(folder, includeTrashed)
+      const { counts, outcomes } = await importAll(
+        deps.notes.notes,
+        deps.blobsDir,
+        plan.entries.map((entry) => entry.note),
+        dryRun,
+      )
+      io.out(`${keepReport(plan, { dryRun, counts, outcomes })}\n`)
+      return 0
+    }
+    if (command === undefined || command === '-h' || command === '--help') {
+      io.out(`${USAGE}\n`)
+      return command === undefined ? 2 : 0
+    }
+    throw new UsageError(`tnotes: unknown command '${command}'\n${USAGE}`)
+  } catch (error) {
+    if (error instanceof UsageError) {
+      io.err(`${error.message}\n`)
+      return 2
+    }
+    io.err(`tnotes: ${(error as Error).message}\n`)
+    return 1
+  }
+}
+
+/** The real notes.db and blob folder of this machine's Aico. */
+export async function runNotesCli(argv: string[], repoRoot: string): Promise<number> {
+  const env = process.env
+  const dataDir = dataDirPath(env)
+  const notes = new NotesStore(join(dataDir, 'notes.db'), { hostName: hostNameFrom(env) })
+  try {
+    return await runNotesCommand(
+      {
+        out: (text) => process.stdout.write(text),
+        err: (text) => process.stderr.write(text),
+        env,
+        repoRoot,
+      },
+      { notes, blobsDir: join(dataDir, 'blobs') },
+      argv,
+    )
+  } finally {
+    notes.close()
+  }
+}

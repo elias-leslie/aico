@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run a command of the Aico web server bundle (web/server/dist/aico-web.mjs):
-# tsession, tclaude, tcodex. The bundle is rebuilt first when it is missing or
+# tsession, tclaude, tcodex, tnotes. The bundle is rebuilt first when it is missing or
 # older than its sources, so a fresh checkout works without a deploy.
 # Node resolution order: $AICO_NODE, /usr/local/bin/node, /usr/bin/node, PATH.
 
