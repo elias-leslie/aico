@@ -212,3 +212,84 @@ func TestZeroIdleTTLKeepsOtherAgentsLeases(t *testing.T) {
 		t.Fatalf("defaults %+v", got)
 	}
 }
+
+func TestGateCommandsTakeNoShellSnapshot(t *testing.T) {
+	gate := []string{
+		`st check --quick --changed-only`,
+		`cd /x && st commit -m "Fix (the) thing; again > twice" --paths a.ts b.ts`,
+		`ST_CHECK_CHANGED_FILES=a.ts time st check --quick 2>&1 | tail -20`,
+		`aico check --fix | grep FAIL`,
+		`aico tasks done t-1 -m "done"`,
+		`st done t-1`,
+	}
+	other := []string{
+		`st check --quick && echo hi > made.txt`,
+		`st check --quick > out.txt`,
+		`st commit -m x; rm a.ts`,
+		`st checkout main`,
+		`npm run lint`,
+		`aico tasks list`,
+	}
+	for _, c := range gate {
+		if !gateCommand(map[string]any{"tool_input": map[string]any{"command": c}}) {
+			t.Errorf("gate run not recognised: %s", c)
+		}
+	}
+	for _, c := range other {
+		if gateCommand(map[string]any{"tool_input": map[string]any{"cmd": c}}) {
+			t.Errorf("not only a gate run: %s", c)
+		}
+	}
+}
+
+func TestForeignWritersAndCommittedPaths(t *testing.T) {
+	repo := sandbox(t)
+	real, _ := filepath.EvalSymlinks(repo)
+	mine, theirs := filepath.Join(real, "mine.txt"), filepath.Join(real, "theirs.txt")
+	a, b := "44444444-aaaa-4bbb-8ccc-000000000004", "55555555-aaaa-4bbb-8ccc-000000000005"
+	New(testConfig(), edit(a, mine)).Edit()
+	New(testConfig(), edit(b, theirs)).Edit()
+
+	h := New(testConfig(), map[string]any{"session_id": a})
+	got, err := h.Foreign("demo", []string{mine, theirs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || strings.Join(got[theirs], ",") != "cc:555555,lease:cc:555555" {
+		t.Errorf("foreign writers %v, want only theirs.txt by cc:555555 (writer and lease)", got)
+	}
+	n, err := h.Committed("demo", []string{mine})
+	if err != nil || n != 1 {
+		t.Fatalf("committed released %d (%v), want 1", n, err)
+	}
+	var leases []map[string]any
+	var writers map[string][]map[string]any
+	d := storeDoc(t, "demo")
+	_ = json.Unmarshal(d["leases"], &leases)
+	_ = json.Unmarshal(d["writers"], &writers)
+	if len(leases) != 1 || leases[0]["agent_id"] != "cc:555555" {
+		t.Errorf("only the other agent's lease should stay: %v", leases)
+	}
+	if _, ok := writers[mine]; ok || len(writers[theirs]) != 1 {
+		t.Errorf("committed path's writer set should go, the other stays: %v", writers)
+	}
+}
+
+func TestGuardRefusesAnotherAgentsHold(t *testing.T) {
+	repo := sandbox(t)
+	a, b := "66666666-aaaa-4bbb-8ccc-000000000006", "77777777-aaaa-4bbb-8ccc-000000000007"
+	holder := New(testConfig(), map[string]any{"session_id": b})
+	if _, err := holder.Hold("demo", repo, "integration"); err != nil {
+		t.Fatal(err)
+	}
+	if line, err := holder.Guard("demo", repo, "commit", ""); err != nil || line != "" {
+		t.Errorf("own hold should not refuse: %q %v", line, err)
+	}
+	other := New(testConfig(), map[string]any{"session_id": a})
+	for _, op := range []string{"commit", "acceptance"} {
+		line, err := other.Guard("demo", repo, op, "")
+		if err != nil || !strings.Contains(line, op+" refused") || !strings.Contains(line, "cc:777777") {
+			t.Errorf("%s under another agent's hold: %q %v", op, line, err)
+		}
+	}
+}

@@ -20,6 +20,10 @@ import (
 //
 //	aico-hook lease [GLOB...] [--check P | --list [--all] | --take P | --release [GLOB] | --release-all |
 //	                 --heartbeat | --hold PURPOSE] [--task ID]
+//	aico-hook lease --foreign P...     JSON {path: [agent ids]} of the paths other sessions wrote (aico commit)
+//	aico-hook lease --guard OP [--with-ack ID]   exit 1 with the holder line when another agent's hold or a live op
+//	                                             refuses OP (commit, publish, rebuild, acceptance)
+//	aico-hook lease --committed P...   a commit settled these paths: drop my leases on them and their writer sets
 //	aico-hook sessions send TO TEXT [--fyi] [--source-key K] | ack ID yes|no|eta:MIN [NOTE] | confirm ID [--withdraw] | inbox
 //	aico-hook inbox turn|stop|watch [codex|pi]   a hook event on stdin
 //	aico-hook import-legacy [DIR]                carry SummitFlow's lease files into the store, once
@@ -88,8 +92,10 @@ func leaseMain(h *lease.Hook, args []string) int {
 	var (
 		globs                            []string
 		check, take, hold, task          string
+		guard, withAck                   string
 		release                          *string
 		list, all, releaseAll, heartbeat bool
+		foreign, committed               bool
 	)
 	value := func(i *int, flag string) (string, bool) {
 		if *i+1 >= len(args) {
@@ -111,8 +117,16 @@ func leaseMain(h *lease.Hook, args []string) int {
 			releaseAll = true
 		case "--heartbeat":
 			heartbeat = true
+		case "--foreign":
+			foreign = true
+		case "--committed":
+			committed = true
 		case "--check":
 			check, ok = value(&i, a)
+		case "--guard":
+			guard, ok = value(&i, a)
+		case "--with-ack":
+			withAck, ok = value(&i, a)
 		case "--take":
 			take, ok = value(&i, a)
 		case "--hold":
@@ -143,6 +157,20 @@ func leaseMain(h *lease.Hook, args []string) int {
 	p, err := lease.CLIProject()
 	if err != nil {
 		return fail("%v", err)
+	}
+	if foreign || committed {
+		return settledMain(h, p, globs, committed)
+	}
+	if guard != "" {
+		line, err := h.Guard(p.ID, p.Root, guard, withAck)
+		if err != nil {
+			return fail("%s: %s refused: %v; other agents' holds and ops are unknown", p.ID, guard, err)
+		}
+		if line != "" {
+			fmt.Println(line)
+			return 1
+		}
+		return 0
 	}
 	switch {
 	case hold != "":
@@ -223,6 +251,43 @@ func leaseMain(h *lease.Hook, args []string) int {
 		}
 		fmt.Printf("Acquired lease %s on: %s\n", l.LeaseID, strings.Join(l.Globs, ", "))
 	}
+	return 0
+}
+
+// settledMain answers aico commit: --foreign before it (who else wrote these paths) and --committed after it.
+// Paths are relative to the project root (or absolute) and keyed by their real path, as the writer sets are.
+func settledMain(h *lease.Hook, p lease.Project, paths []string, committed bool) int {
+	root := p.Root
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	abs := make([]string, len(paths))
+	rel := map[string]string{}
+	for i, path := range paths {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(root, path)
+		}
+		abs[i] = filepath.Clean(path)
+		rel[abs[i]] = paths[i]
+	}
+	if committed {
+		n, err := h.Committed(p.ID, abs)
+		if err != nil {
+			return fail("%v", err)
+		}
+		fmt.Printf("Released %d lease(s).\n", n)
+		return 0
+	}
+	found, err := h.Foreign(p.ID, abs)
+	if err != nil {
+		return fail("%v", err)
+	}
+	out := map[string][]string{}
+	for path, ids := range found {
+		out[rel[path]] = ids
+	}
+	buf, _ := json.Marshal(out)
+	fmt.Println(string(buf))
 	return 0
 }
 

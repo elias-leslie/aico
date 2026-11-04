@@ -47,6 +47,62 @@ func (h *Hook) snapKey() (key, ownPrefix, cwd string) {
 	return sanitize(sid + "-" + tid), sanitize(sid + "-"), str(h.Payload["cwd"])
 }
 
+// gateCommand: the shell command only runs the repo gate (`st|aico check`, `st|aico commit`, `st done` or
+// `aico tasks done`), optionally after `cd DIR &&`, env assignments or `time`, with its output sent to
+// `2>&1` and a tail, head, grep or cat. These write only the caller's own files (the formatter and generated
+// writes stay within its paths), so any other file that changes while they run is another agent's concurrent
+// edit, never this command's write: no snapshot, so no overlap line and no writer-set entry.
+func gateCommand(payload map[string]any) bool {
+	in, _ := payload["tool_input"].(map[string]any)
+	c, _ := in["command"].(string)
+	if c == "" {
+		c, _ = in["cmd"].(string)
+	}
+	argv, ok := shlexSplit(c)
+	if !ok {
+		return false
+	}
+	if len(argv) > 3 && argv[0] == "cd" && argv[2] == "&&" {
+		argv = argv[3:]
+	}
+	for len(argv) > 0 && envAssign.MatchString(argv[0]) {
+		argv = argv[1:]
+	}
+	if len(argv) > 0 && argv[0] == "time" {
+		argv = argv[1:]
+	}
+	verb := strings.Join(argv[:min(len(argv), 3)], " ")
+	n := 0
+	switch {
+	case strings.HasPrefix(verb+" ", "aico tasks done "):
+		n = 3
+	case len(argv) >= 2 && (argv[0] == "st" && (argv[1] == "check" || argv[1] == "commit" || argv[1] == "done") ||
+		argv[0] == "aico" && (argv[1] == "check" || argv[1] == "commit")):
+		n = 2
+	default:
+		return false
+	}
+	rest := argv[n:]
+	for len(rest) > 0 && !shellOp.MatchString(rest[0]) {
+		rest = rest[1:]
+	}
+	if len(rest) >= 3 && rest[0] == "2>" && rest[1] == "&" && rest[2] == "1" {
+		rest = rest[3:]
+	}
+	if len(rest) >= 2 && rest[0] == "|" && (rest[1] == "tail" || rest[1] == "head" || rest[1] == "grep" || rest[1] == "cat") {
+		rest = rest[2:]
+		for len(rest) > 0 && !shellOp.MatchString(rest[0]) {
+			rest = rest[1:]
+		}
+	}
+	return len(rest) == 0
+}
+
+var envAssign = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+
+// shellOp is a token shlexSplit made of shell punctuation, or a redirection (a quoted argument is never split up).
+var shellOp = regexp.MustCompile(`^(?:[;&|()\n]+|\d*[<>].*)$`)
+
 // snapshot is "<mtime> <abs path>" per present dirty file of repo top and "D <abs path>" per deleted path.
 func snapshot(top string) []string {
 	out, err := exec.Command("git", "-C", top, "status", "--porcelain=v1", "-z", "--untracked-files=all").Output()
@@ -86,7 +142,7 @@ func snapshot(top string) []string {
 // BashPre records the snapshot for this tool call (pure bookkeeping: never output).
 func (h *Hook) BashPre(raw []byte) {
 	key, _, cwd := h.snapKey()
-	if cwd == "" {
+	if cwd == "" || gateCommand(h.Payload) {
 		return
 	}
 	dir := snapDir()

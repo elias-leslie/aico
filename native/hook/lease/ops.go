@@ -332,3 +332,109 @@ func (h *Hook) Check(path string) (blocked bool, line string) {
 
 // SelfIDs are the agent ids this agent answers to (its own and those of earlier contexts in the same harness).
 func (h *Hook) SelfIDs() map[string]bool { m, _ := h.self(); return m }
+
+// Foreign maps each of paths (absolute) that other sessions wrote to their agent ids ("unknown" when the writer
+// could not be told apart), from the writer sets: what committing that path would take from someone else; plus
+// "lease:<agent>" for another agent's live file lease covering it
+// (coord.foreign_writers). Paths only this agent wrote, or nobody, are left out.
+func (h *Hook) Foreign(project string, paths []string) (map[string][]string, error) {
+	s, err := h.storeFor(project)
+	if err != nil {
+		return nil, err
+	}
+	lin := h.lineage()
+	mine, anchor := lin.SessionIDs(h.ID), lin.Anchor
+	d := s.load()
+	selfIDs, selfAnchor := h.self()
+	out := map[string][]string{}
+	for _, p := range paths {
+		for _, e := range d.writers[p] {
+			if id := str(e["agent_id"]); !isOwnWriter(e, mine, anchor) && !contains(out[p], id) {
+				out[p] = append(out[p], id)
+			}
+		}
+		for _, l := range s.purge(d.leases) {
+			if id := "lease:" + l.AgentID; l.Kind == "file" && !isMine(l, selfIDs, selfAnchor) && l.Matches(p) &&
+				!contains(out[p], id) {
+				out[p] = append(out[p], id)
+			}
+		}
+	}
+	return out, nil
+}
+
+// Committed drops what a commit of paths (absolute) settled: this agent's leases on exactly those paths and the
+// paths' writer sets (the work is no longer in flight). It returns how many lease globs it released.
+func (h *Hook) Committed(project string, paths []string) (int, error) {
+	s, err := h.storeFor(project)
+	if err != nil {
+		return 0, err
+	}
+	mine, anchor := h.self()
+	done := map[string]bool{}
+	for _, p := range paths {
+		done[p] = true
+	}
+	n := 0
+	err = s.withLock(func() error {
+		n = 0
+		d := s.load()
+		var keep []Lease
+		for _, l := range s.purge(d.leases) {
+			if l.Kind == "file" && isMine(l, mine, anchor) {
+				var rest []string
+				for _, g := range l.Globs {
+					if done[g] {
+						n++
+					} else {
+						rest = append(rest, g)
+					}
+				}
+				if len(rest) == 0 {
+					continue
+				}
+				l.Globs = rest
+			}
+			keep = append(keep, l)
+		}
+		d.leases = keep
+		for p := range done {
+			delete(d.writers, p)
+		}
+		return s.save(d)
+	})
+	return n, err
+}
+
+// Guard is the line that refuses op (commit, publish, rebuild or acceptance) in project, or "" when nothing does:
+// another agent's hold, or for all but acceptance a live op (a deploy) other than this process's. A yes-ack of
+// request withAck from that holder lets the hold pass.
+func (h *Hook) Guard(project, root, op, withAck string) (string, error) {
+	s, err := h.storeFor(project)
+	if err != nil {
+		return "", err
+	}
+	kinds := []string{"op", "hold"}
+	if op == "acceptance" {
+		kinds = []string{"hold"}
+	}
+	live, err := s.Active(kinds...)
+	if err != nil {
+		return "", err
+	}
+	mine, anchor := h.self()
+	for _, l := range live {
+		if l.Kind == "op" {
+			if l.PID != nil && (*l.PID == os.Getpid() || *l.PID == os.Getppid()) {
+				continue
+			}
+			return h.holderLine(project, l, root) + "; " + op + " refused; wait for it to finish", nil
+		}
+		if isMine(l, mine, anchor) || (withAck != "" && h.AckAuthorizes(withAck, l, project)) {
+			continue
+		}
+		return h.holderLine(project, l, root) + "; " + op + " refused; request handoff: aico sessions send " +
+			l.AgentID + " \"<ask>\", wait for its ack, then rerun with --with-ack <id>", nil
+	}
+	return "", nil
+}
