@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
-import { createServer as portServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Server } from 'node:tls'
 import { Fleet } from '@aico/fleet/fleet'
 import { loadIdentity } from '@aico/fleet/identity'
 import type { FleetSettings } from '@aico/fleet/settings'
@@ -20,15 +20,14 @@ it('carries fenced claims, renewals and late result refusal over two real TLS pe
     publicKey,
     role: 'full' as const,
   }))
-  const getPort = async () => {
-    const server = portServer()
-    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
-    const port = (server.address() as { port: number }).port
-    await new Promise<void>((r) => server.close(() => r()))
-    return port
+  // Read each test listener's actual OS-assigned port, while it stays bound.
+  // Reserving and releasing a different socket leaves a close/rebind race.
+  const boundPort = (fleet: Fleet) => {
+    const server = (fleet as unknown as { server: Server }).server
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('No test TCP listener')
+    return address.port
   }
-  const homePort = await getPort()
-  const peerPort = await getPort()
   const settings = (
     machine: string,
     port: number,
@@ -50,8 +49,8 @@ it('carries fenced claims, renewals and late result refusal over two real TLS pe
     statusMs: 100,
     statusUrl: 'http://127.0.0.1:1',
   })
-  const hs = settings(home.name, homePort, peer.name, peerPort)
-  const ps = settings(peer.name, peerPort, home.name, homePort)
+  const hs = settings(home.name, 0, peer.name, 0)
+  const ps = settings(peer.name, 0, home.name, 0)
   const hf = new Fleet({
     settings: hs,
     identity: home,
@@ -82,7 +81,12 @@ it('carries fenced claims, renewals and late result refusal over two real TLS pe
   const server = await serveLeases(ps.jobsSocket as string, store, [job], peer.name)
   try {
     await hf.start()
+    const peerHome = ps.peers[0]
+    const homePeer = hs.peers[0]
+    if (!peerHome || !homePeer) throw new Error('Missing test peers')
+    peerHome.endpoint.port = boundPort(hf)
     await pf.start()
+    homePeer.endpoint.port = boundPort(pf)
     await vi.waitFor(() => expect(hf.status()[0]?.connected).toBe(true))
     const remote = remoteAuthority(join(hs.peerRoot, peer.name, 'jobs.sock'))
     await expect(
