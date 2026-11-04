@@ -20,6 +20,7 @@ const NOW = Date.UTC(2026, 10, 3, 12, 0, 0)
 const guard = {
   allowedHostnames: ['localhost', '127.0.0.1', 'aico.example.dev'],
   allowedOrigins: [],
+  phoneHosts: ['phone.example.dev'],
 }
 const MINUTE = 60_000
 
@@ -425,6 +426,61 @@ describe('act', () => {
     expect(notify.readMarks().reads.has(stored.id)).toBe(true)
     const odd = await call('POST', `/api/app/items/${stored.id}/act`, { body: { action: 'mute' } })
     expect(odd.status).toBe(400)
+  })
+})
+
+describe('a signed POST is used once', () => {
+  it('answers a copy of the same signed request with 401', async () => {
+    const body = { fcm_token: 'once' }
+    const path = '/api/app/token'
+    const ts = String(Math.floor(NOW / 1000))
+    const sig = sign(
+      'sha256',
+      Buffer.from(canonical('POST', path, ts, Buffer.from(JSON.stringify(body)))),
+      { key: privateKey, dsaEncoding: 'der' },
+    ).toString('base64url')
+    const first = await call('POST', path, { body, headers: { 'x-nightshift-sig': sig } })
+    expect(first.status).toBe(200)
+    const copy = await call('POST', path, { body, headers: { 'x-nightshift-sig': sig } })
+    expect(copy.status).toBe(401)
+    expect(copy.body.error).toMatch(/already used/)
+    expect((await call('POST', path, { body })).status).toBe(200)
+  })
+})
+
+describe('the phone host', () => {
+  const onPhoneHost = (method: string, path: string) =>
+    call(method, path, { headers: { host: 'phone.example.dev' } })
+
+  it('answers the phone routes there, signed like anywhere else', async () => {
+    expect((await onPhoneHost('GET', '/api/app/health')).status).toBe(200)
+    const unsigned = await call('GET', '/api/app/health', {
+      headers: { host: 'phone.example.dev', 'x-nightshift-sig': 'AAAA' },
+    })
+    expect(unsigned.status).toBe(401)
+  })
+
+  it('refuses every other path there, however it is written', async () => {
+    for (const path of [
+      '/api/status',
+      '/api/app',
+      '/api/app/../status',
+      '/api/app/%2e%2e/status',
+      '/api/app/%2E%2E/status',
+      '/api/app/x/%2fstatus',
+      '/api/app//health',
+      '/api/app/..%5cstatus',
+      '/',
+    ]) {
+      const reply = await onPhoneHost('GET', path)
+      expect([path, reply.status]).toEqual([path, 403])
+    }
+    const page = await onPhoneHost('GET', '/api/app/health?x=1')
+    expect(page.status).toBe(200)
+  })
+
+  it('keeps the owner routes on the owner hosts', async () => {
+    expect((await call('GET', '/api/app/health')).status).toBe(200)
   })
 })
 

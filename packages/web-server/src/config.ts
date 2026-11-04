@@ -22,6 +22,8 @@ export interface WebConfig {
   allowedHostnames: string[]
   /** Browser origins allowed to open the terminal WebSocket and to change state. */
   allowedOrigins: string[]
+  /** Public names that reach only the phone app's routes (the host the installed phone app already uses). */
+  phoneHosts: string[]
   /** packages/web-frontend's static export, served at `/`. */
   staticDir: string
   dbPath: string
@@ -185,6 +187,8 @@ interface Identity {
 
 // The Python backend's settings names and defaults, so its EnvironmentFile keeps
 // working; only the upload dir name is Aico's own.
+/** The host the installed phone app already uses (moves to Aico's own name when its Access gate does). */
+const DEFAULT_PHONE_HOST = 'nightshift.summitflow.dev'
 const DEFAULT_CAPTURE_MAX_MB = 25
 const DEFAULT_CAPTURE_MAX_FILES = 20
 /** Least time between two kept revisions of one note field while it is being edited. */
@@ -345,6 +349,7 @@ export function loadConfig(
     port,
     publicHost,
     allowedHostnames: ['localhost', '127.0.0.1', ...(publicHost ? [publicHost] : [])],
+    phoneHosts: (list(env.AICO_PHONE_HOSTS) ?? [DEFAULT_PHONE_HOST]).map((h) => h.toLowerCase()),
     allowedOrigins: list(env.AICO_WEB_ALLOWED_ORIGINS) ?? [
       `http://localhost:${port}`,
       `http://127.0.0.1:${port}`,

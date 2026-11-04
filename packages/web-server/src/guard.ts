@@ -9,6 +9,9 @@
 // - Origin: a WebSocket, or a POST/PUT/PATCH/DELETE, from a page whose Origin
 //   is not in the configured list (`null` included) is refused. Callers that
 //   send no Origin (CLI, agents, curl) are unaffected.
+// - Phone hosts: a second public name (the one the phone app already reaches, through the
+//   tunnel's /api/app/ rule) is answered for the phone app's routes only. Its Access gate is a
+//   service token that opens nothing else, so any other path, and any WebSocket, is refused here.
 
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
 
@@ -20,6 +23,8 @@ export type Refusal = 'host_not_allowed' | 'origin_not_allowed'
 export interface GuardConfig {
   allowedHostnames: readonly string[]
   allowedOrigins: readonly string[]
+  /** Names that reach only the phone app's routes (`/api/app/...`, strictly written), not the owner's pages or API. */
+  phoneHosts?: readonly string[]
   /** Named on every response as `X-Aico-Host`, so the service worker can tell this server from a proxy's error page. */
   hostName?: string
 }
@@ -31,6 +36,24 @@ export function hostAllowed(host: string | undefined, config: GuardConfig): bool
 
 function foreignOrigin(origin: string | undefined, config: GuardConfig): boolean {
   return origin !== undefined && !config.allowedOrigins.includes(origin)
+}
+
+function hostIn(host: string | undefined, names: readonly string[] | undefined): boolean {
+  const match = HOST_PATTERN.exec((host ?? '').toLowerCase())
+  return match !== null && (names ?? []).includes(match[1])
+}
+
+/**
+ * The only request targets a phone host serves, read from the raw request line (before any URL
+ * parser tidies it): `/api/app/` and plain path characters, an optional query. No dot segments
+ * (also percent-encoded), no empty segments, no backslash, no encoded slash.
+ */
+const PHONE_TARGET = /^\/api\/app\/[A-Za-z0-9_~%-][A-Za-z0-9._~%/-]*(\?[A-Za-z0-9._~%=&-]*)?$/
+export function phoneTargetAllowed(target: string | undefined): boolean {
+  if (!target || !PHONE_TARGET.test(target)) return false
+  const path = target.split('?')[0]
+  if (/%(2e|2f|5c|00)/i.test(path) || path.includes('//')) return false
+  return !path.split('/').some((segment) => segment === '.' || segment === '..')
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -56,7 +79,13 @@ export function checkRequest(
   method: string,
   headers: IncomingHttpHeaders,
   config: GuardConfig,
+  target?: string,
 ): Refusal | null {
+  if (hostIn(headers.host, config.phoneHosts))
+    return phoneTargetAllowed(target) &&
+      !(UNSAFE_METHODS.has(method) && foreignOrigin(headers.origin, config))
+      ? null
+      : 'host_not_allowed'
   if (!hostAllowed(headers.host, config)) return 'host_not_allowed'
   if (UNSAFE_METHODS.has(method) && foreignOrigin(headers.origin, config))
     return 'origin_not_allowed'

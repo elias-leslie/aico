@@ -143,6 +143,8 @@ export function cantBuzz(phone: Phone): string {
 export class PhoneRegistry {
   /** Writers go one at a time; every change is read-modify-write of the whole file. */
   private tail: Promise<unknown> = Promise.resolve()
+  /** Signatures of state-changing requests seen inside the clock window (signature -> epoch s it stops counting). */
+  private seen = new Map<string, number>()
 
   constructor(
     readonly path: string,
@@ -187,6 +189,14 @@ export class PhoneRegistry {
       throw new AppError(401, "clock or timestamp off; check the phone's time")
     if (!signatureHolds(phone.sig_pub, method, path, ts, body, header('x-nightshift-sig')))
       throw new AppError(401, 'signature refused; pair the app again')
+    // A signed POST is good for one answer: the clock window alone would let a copy repeat an act.
+    if (method !== 'GET') {
+      for (const [sig, until] of this.seen) if (until <= now) this.seen.delete(sig)
+      const sig = header('x-nightshift-sig')
+      if (this.seen.has(sig))
+        throw new AppError(401, 'request already used; the app signs a new one')
+      this.seen.set(sig, now + CLOCK_SKEW_S * 2)
+    }
     return phone
   }
 

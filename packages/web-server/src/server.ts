@@ -33,7 +33,7 @@ export function createWebServer(
   const server = createServer((req, res) => {
     applySecurityHeaders(res)
     if (guard.hostName) res.setHeader(HOST_HEADER, guard.hostName)
-    const refused = checkRequest(req.method ?? 'GET', req.headers, guard)
+    const refused = checkRequest(req.method ?? 'GET', req.headers, guard, req.url)
     if (refused) return sendJson(res, 403, { error: refused })
     const url = new URL(req.url ?? '/', 'http://localhost')
     router

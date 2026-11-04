@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkRequest, checkUpgrade, hostAllowed } from './guard'
+import { checkRequest, checkUpgrade, hostAllowed, phoneTargetAllowed } from './guard'
 
 const config = {
   allowedHostnames: ['localhost', '127.0.0.1', 'app.example'],
@@ -38,5 +38,44 @@ describe('guard', () => {
     expect(checkUpgrade({ host: 'evil.example', origin: 'https://app.example' }, config)).toBe(
       'host_not_allowed',
     )
+  })
+})
+
+describe('phone hosts', () => {
+  const phone = { ...config, phoneHosts: ['phone.example'] }
+  const host = 'phone.example'
+
+  it('serve the phone routes and nothing else, and never a WebSocket', () => {
+    expect(checkRequest('GET', { host }, phone, '/api/app/items?a=1')).toBeNull()
+    expect(checkRequest('POST', { host }, phone, '/api/app/items/ab12/act')).toBeNull()
+    expect(checkRequest('GET', { host }, phone, '/api/status')).toBe('host_not_allowed')
+    expect(checkRequest('GET', { host }, phone)).toBe('host_not_allowed')
+    expect(
+      checkRequest('POST', { host, origin: 'https://evil.example' }, phone, '/api/app/act'),
+    ).toBe('host_not_allowed')
+    expect(checkUpgrade({ host }, phone)).toBe('host_not_allowed')
+    expect(hostAllowed(host, phone)).toBe(false)
+  })
+
+  it('read the raw request target strictly', () => {
+    for (const ok of ['/api/app/health', '/api/app/items/a-b_c.d%3A1/act', '/api/app/stream?x=1'])
+      expect(phoneTargetAllowed(ok)).toBe(true)
+    for (const bad of [
+      '/api/app',
+      '/api/app/',
+      '/api/apps/health',
+      '/api/app/../x',
+      '/api/app/./x',
+      '/api/app/a/../../x',
+      '/api/app/%2e%2e/x',
+      '/api/app/a%2Fb',
+      '/api/app/a%5Cb',
+      '/api/app/a\\b',
+      '/api/app//x',
+      '/api/app/x#frag',
+      '/api/app/x y',
+      'http://phone.example/api/app/x',
+    ])
+      expect([bad, phoneTargetAllowed(bad)]).toEqual([bad, false])
   })
 })
