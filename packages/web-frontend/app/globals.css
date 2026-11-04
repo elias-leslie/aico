@@ -1399,7 +1399,7 @@ div.xterm .xterm-viewport {
 .status-chip.late,
 .status-chip.warn {
   background: var(--beacon-tint);
-  border-color: rgb(255 189 82 / 0.32);
+  border-color: color-mix(in srgb, var(--beacon) 32%, transparent);
   color: var(--beacon);
 }
 
@@ -1431,8 +1431,8 @@ div.xterm .xterm-viewport {
 }
 
 .status-chip.ok {
-  background: rgb(122 214 138 / 0.1);
-  border-color: rgb(122 214 138 / 0.28);
+  background: color-mix(in srgb, var(--jade) 10%, transparent);
+  border-color: color-mix(in srgb, var(--jade) 28%, transparent);
   color: var(--jade);
 }
 
@@ -1557,7 +1557,7 @@ div.xterm .xterm-viewport {
 }
 
 .status-notice.wait {
-  border-color: rgb(255 189 82 / 0.32);
+  border-color: color-mix(in srgb, var(--beacon) 32%, transparent);
   background: var(--beacon-tint);
 }
 
