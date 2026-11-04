@@ -45,3 +45,9 @@ From `AgentHubChat.tsx`, `ui-kit/src/chat/*` and the `@agent-hub/chat-ui` packag
 2. **Where do chats live?** Recommendation: in the same sidebar session list as your Claude Code, Codex and Pi sessions (same Needs you heading), plus a Chats page for the full list and filters. No separate inbox.
 3. **After a fallback, which model takes the next message?** The harness goes on with the model that answered last (glm-5.3 here), even though gpt-6.1-sol may be back. Recommendation: keep that within one reply, but start each new message from the role's first model again, and say so in the model select ("gpt-6.1-sol, role's first choice"). Today's behaviour would leave a chat on the third choice for good after one 502.
 4. **Should a chat with Hunting or other contained roles be startable from the phone?** Recommendation: yes, the same New chat dialog. The role's rules decide what runs, so the phone needs no extra gate.
+
+## Owner answers (2026-11-04)
+1. Needs you: only a direct question the agent files (`tether ask`); idle chats stay quiet.
+2. Chats sit in the same sidebar session list (same Needs you group), plus a Chats page with filters.
+3. After a failure, the next message goes back to the role's first choice after an outage (provider error), but stays on the new model after a refusal.
+4. Hunting-role chats can be started from the phone too; the role's own limits apply.
