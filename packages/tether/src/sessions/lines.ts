@@ -66,7 +66,7 @@ export function edgeHash(path: string, which: 'head' | 'tail', end: number): str
   }
 }
 
-/** Complete lines from `from` on, stopping once `budget` bytes were read, `each`
+/** Complete lines from `from` on, stopping once `budget` bytes were read (at least one whole line), `each`
  * returns false or the file ends. A last line with no newline yet is left for the next run. */
 export function readForward(
   path: string,
@@ -84,7 +84,9 @@ export function readForward(
     let carryStart = from
     let dropping = false
     let read = 0
-    while (position < size && read < budget) {
+    // The budget ends a read at a line boundary: when no whole line fit in it, the
+    // first line is read to its end, so one line longer than the budget cannot stall the reader.
+    while (position < size && (read < budget || consumed === from)) {
       const chunk = readAt(fd, position, Math.min(CHUNK, size - position))
       if (chunk.length === 0) break
       read += chunk.length

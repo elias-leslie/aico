@@ -281,7 +281,9 @@ export class History {
     }
     totals.parent_id = file.parentNativeId ? `${reader.tool}:${file.parentNativeId}` : null
     totals.read_offset = offset
-    totals.file_size = facts.size
+    // A read the budget cut short saves the size it reached, so the next scan sees the
+    // file as changed and carries on; a partial last line waits for the file to grow.
+    totals.file_size = spent >= budget && offset < facts.size ? offset : facts.size
     totals.file_mtime = facts.mtime
     totals.file_inode = facts.inode
     totals.head_hash = edgeHash(file.path, 'head', offset)

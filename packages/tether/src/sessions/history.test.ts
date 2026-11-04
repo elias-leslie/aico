@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   rmSync,
+  statSync,
   truncateSync,
   writeFileSync,
 } from 'node:fs'
@@ -312,6 +313,50 @@ describe('following a transcript', () => {
     appendFileSync(path, more.slice(40))
     await h.scan()
     expect(h.list()[0]?.tokens).toEqual({ input: 13, cacheRead: 221, cacheWrite: 30, output: 35 })
+  })
+
+  it('finishes a file the budget cut short over the next ticks', async () => {
+    const first = {
+      type: 'user',
+      cwd: '/work/demo',
+      timestamp: '2026-11-04T10:00:00Z',
+      message: { role: 'user', content: 'go' },
+    }
+    const lines = Array.from({ length: 12_000 }, (_, i) => ({
+      type: 'assistant',
+      timestamp: '2026-11-04T10:00:05Z',
+      message: {
+        id: `m${i}`,
+        model: 'claude-test-1',
+        stop_reason: 'end_turn',
+        usage: usage(0, 0, 1),
+        content: [{ type: 'text', text: 'x'.repeat(200) }],
+      },
+    }))
+    const path = claudeFile('-work-demo', 's1', jsonl(first, ...lines))
+    expect(statSync(path).size).toBeGreaterThan(2 << 20)
+    const h = history({ budget: 1 })
+    await h.scan()
+    const afterOne = h.list()[0]?.tokens.output ?? 0
+    expect(afterOne).toBeGreaterThan(0)
+    expect(afterOne).toBeLessThan(12_000)
+    for (let tick = 0; tick < 20; tick++) await h.scan()
+    expect(h.list()[0]?.tokens.output).toBe(12_000)
+    // Finished: a further scan leaves it alone.
+    expect((await h.scan()).files).toBe(0)
+  })
+
+  it('skips a line past the size limit and counts the lines after it', async () => {
+    const huge = jsonl({ type: 'user', message: { role: 'user', content: 'x'.repeat(17 << 20) } })
+    const big = jsonl({ type: 'user', message: { role: 'user', content: 'y'.repeat(5 << 20) } })
+    const [head, ...rest] = claudeSession().split('\n')
+    const tail = rest.join('\n')
+    const path = claudeFile('-work-demo', 's1', `${head}\n${huge}${big}${tail}`)
+    const h = history()
+    await h.scan()
+    expect(h.list()[0]?.tokens).toEqual({ input: 12, cacheRead: 220, cacheWrite: 20, output: 34 })
+    expect((await h.scan()).files).toBe(0)
+    rmSync(path)
   })
 
   it('starts over when the file was rewritten', async () => {
