@@ -30,7 +30,11 @@ aico_checks() {
     \( -name '*.ts' -o -name '*.json' \) -newer "$checks_bundle" -print -quit 2>/dev/null)" ]; then
     PATH="$(dirname "$node"):$PATH" npm --prefix "$checks_dir" run --silent build >&2
   fi
-  exec "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
+  case "$*" in
+    'check --help' | 'check -h' | 'commit --help' | 'commit -h' | 'tasks done --help')
+      exec "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@" ;;
+  esac
+  exec st tools run --label "aico ${1:-checks}" -- "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
 }
 
 [ "${1:-}" = tasks ] && [ "${2:-}" = done ] && aico_checks "$@"

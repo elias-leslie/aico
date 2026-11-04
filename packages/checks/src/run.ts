@@ -190,7 +190,7 @@ export function inputsKey(config: Config, step: Step): string | null {
   const decl = step.decl
   if (!decl?.inputs.length) return null
   const { root } = config
-  const hash = createHash('sha256').update(JSON.stringify(decl))
+  const hash = createHash('sha256').update(JSON.stringify([decl, step.argv]))
   hash.update(git(root, ['ls-tree', '-r', 'HEAD', '--', ...decl.inputs]))
   const dirty = changedFiles(root, decl.inputs)
   for (const [file, id] of blobIds(root, dirty)) hash.update(`${file}\0${id}\n`)

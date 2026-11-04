@@ -82,9 +82,8 @@ export function checkScope(root: string, options: CheckOptions): string[] | null
 }
 
 /**
- * What --fix may rewrite. Named files (--paths, ST_CHECK_CHANGED_FILES) as given; from the caller's own
- * cone, only files no other writer touched: a write the store could not attribute (`unknown`) may be
- * another session's, and a formatter rewrite is not undone by leaving it out of a check.
+ * What --fix may rewrite. Known other writers always stay out. Unattributed writes need an
+ * individually named file, because a directory or glob can sweep up another session's work.
  */
 function fixable(
   root: string,
@@ -92,8 +91,7 @@ function fixable(
   options: CheckOptions,
   out: (line: string) => void,
 ): string[] {
-  if (options.paths?.length || envFiles(options.env ?? process.env) || !options.coordination)
-    return scope
+  if (!options.coordination) return scope
   let foreign: Record<string, string[]>
   try {
     foreign = options.coordination.foreign(root, scope)
@@ -102,12 +100,15 @@ function fixable(
     out(`CHECK:FIX:skipped: ${error.message}`)
     return []
   }
-  const unsure = scope.filter((file) => foreign[file]?.length)
+  const explicit = new Set(options.paths ?? envFiles(options.env ?? process.env) ?? [])
+  const excluded = (file: string) =>
+    othersClaim(foreign[file]) || (!!foreign[file]?.length && !explicit.has(file))
+  const unsure = scope.filter(excluded)
   if (unsure.length)
     out(
-      `CHECK:FIX:left out ${unsure.length} file(s) another session may have written (name yours with --paths to fix them): ${unsure.join(', ')}`,
+      `CHECK:FIX:left out ${unsure.length} file(s) another session wrote or whose writer is unknown (name your own unknown files individually with --paths): ${unsure.join(', ')}`,
     )
-  return scope.filter((file) => !foreign[file]?.length)
+  return scope.filter((file) => !excluded(file))
 }
 
 const BIOME_FIX = [

@@ -239,6 +239,30 @@ describe('the formatter scope', () => {
     })
     expect(readFileSync(join(root, 'src/c.ts'), 'utf8')).toBe('unattributed\n// formatted\n')
   })
+
+  it('does not let a directory or environment override rewrite another session’s files', async () => {
+    const root = repo('')
+    write(
+      root,
+      'node_modules/.bin/biome',
+      `#!/usr/bin/env node\nconst fs=require('fs');for(const f of process.argv.slice(2).filter(a=>!a.startsWith('-')&&a!=='check'))fs.appendFileSync(f,'// formatted\\n')\n`,
+    )
+    chmodSync(join(root, 'node_modules/.bin/biome'), 0o755)
+    write(root, '.gitignore', 'node_modules/\n.dev-tools/\n')
+    const coord = coordination({ 'src/b.ts': ['cc:other'], 'src/c.ts': ['unknown'] })
+    for (const options of [
+      { paths: ['src'], env: {} },
+      { env: { ST_CHECK_CHANGED_FILES: 'src/a.ts:src/b.ts' } },
+    ]) {
+      write(root, 'src/a.ts', 'mine\n')
+      write(root, 'src/b.ts', 'theirs\n')
+      write(root, 'src/c.ts', 'uncertain\n')
+      await runCheck(config(root), { lane: 'quick', fix: true, coordination: coord, ...options })
+      expect(readFileSync(join(root, 'src/a.ts'), 'utf8')).toBe('mine\n// formatted\n')
+      expect(readFileSync(join(root, 'src/b.ts'), 'utf8')).toBe('theirs\n')
+      expect(readFileSync(join(root, 'src/c.ts'), 'utf8')).toBe('uncertain\n')
+    }
+  })
 })
 
 describe('commit', () => {
@@ -423,6 +447,31 @@ describe('receipts', () => {
     expect((await run()).reused).toBe(true)
     write(root, 'src/b.ts', 'a changed dependency\n')
     expect((await run()).reused).toBeUndefined()
+  })
+
+  it('does not reuse a scoped native stage pass for a different file selection', async () => {
+    const root = repo('')
+    write(
+      root,
+      '.st-check.toml',
+      `[native]\nlegacy_tools = []\n[native.tools]\nnode = ${JSON.stringify(process.execPath)}\n[[native.stages]]\nid = "biome"\nkind = "check"\ncoverage = "full"\ninputs = ["src"]\nargv = ["node_modules/.bin/biome", "check", "."]\n`,
+    )
+    write(root, '.gitignore', '.dev-tools/\nnode_modules/\n')
+    write(
+      root,
+      'node_modules/.bin/biome',
+      '#!/usr/bin/env node\nprocess.exit(process.argv.includes("src/b.ts") ? 1 : 0)\n',
+    )
+    chmodSync(join(root, 'node_modules/.bin/biome'), 0o755)
+    const cfg = config(root)
+    const run = (file: string) =>
+      runSteps(
+        cfg,
+        'full',
+        plan(cfg, 'full', [file], () => []),
+      )
+    expect((await run('src/a.ts'))[0].state).toBe('pass')
+    expect((await run('src/b.ts'))[0].state).toBe('fail')
   })
 })
 
