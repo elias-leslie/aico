@@ -134,9 +134,8 @@ export function LogSheet({
         <>
           {log.data.truncated ? (
             <p className="status-sheet-note" role="alert">
-              Cut off: the command was still printing after 10 seconds. These
-              are the last lines it printed by then, which may not be the
-              newest.
+              Cut off after 10 seconds: the command was still printing, so these
+              may not be its newest lines.
             </p>
           ) : (
             !log.data.ok && (

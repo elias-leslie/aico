@@ -196,7 +196,9 @@ describe('StatusPage', () => {
     await screen.findByText('Nightly backup')
     fireEvent.click(screen.getByRole('button', { name: 'Log' }))
     expect(
-      await screen.findByText(/Cut off: the command was still printing/),
+      await screen.findByText(
+        /Cut off after 10 seconds: the command was still printing/,
+      ),
     ).toBeVisible()
     expect(api.calls.find((call) => call.url === '/api/status/log')).toEqual({
       url: '/api/status/log',
