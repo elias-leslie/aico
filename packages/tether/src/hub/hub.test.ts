@@ -222,6 +222,31 @@ describe('hub', () => {
     })
   }
 
+  it('catches a reload fault and retries without losing the loaded peers', () => {
+    const fault = vi.fn()
+    const enabled = vi.fn(() => ['vm'])
+    const other = makeHub({ fleetPeers: enabled, fault })
+    try {
+      other.start()
+      enabled.mockImplementationOnce(() => {
+        throw new Error('broken fleet configuration')
+      })
+      writeFileSync(
+        join(dir, 'hosts.json'),
+        JSON.stringify([{ name: 'vm', ssh: 'vm', socket: '/tmp/new-control.sock' }]),
+      )
+      expect(() => other.reload()).not.toThrow()
+      expect(fault).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'broken fleet configuration' }),
+      )
+      expect(other.hosts()).toHaveLength(1)
+      other.reload()
+      expect(other.hosts()).toHaveLength(1)
+    } finally {
+      other.close()
+    }
+  })
+
   async function call(method: string, path: string, payload?: unknown) {
     return peerRequest(frontSocket, method, path, payload, 5_000)
   }

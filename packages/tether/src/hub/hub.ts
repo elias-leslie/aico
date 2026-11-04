@@ -9,7 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { type HostEntry, hostsFilePath, loadHosts, peerDir } from '@aico/fleet/hosts'
 import { linkPaths } from '@aico/fleet/link'
 import { forwardRequest, PeerUnavailable, peerRequest } from '@aico/fleet/peer-http'
-import { readSettings } from '@aico/fleet/settings'
+import { fleetFile, readSettings } from '@aico/fleet/settings'
 import { API_VERSION } from '../config'
 import type { EventType } from '../events'
 import { HttpError, sendJson } from '../http'
@@ -51,6 +51,7 @@ export interface HubDeps {
   env: NodeJS.ProcessEnv
   /** Tests may provide their in-process peer endpoints. Production uses only configured fleet peers. */
   fleetPeers?: () => string[]
+  fault?(error: unknown): void
   uid?: number
   publish(type: EventType, data: Record<string, unknown>): void
   settings: { get(key: string): string | null; put(key: string, value: string): void }
@@ -173,12 +174,30 @@ export class Hub {
 
   /** Re-read hosts.json when it changed: start, restart or drop peers. */
   reload(): void {
+    try {
+      this.reloadFiles()
+    } catch (error) {
+      this.fileStamp = null
+      this.log(`Link reload failed: ${error instanceof Error ? error.message : String(error)}`)
+      this.deps.fault?.(error)
+    }
+  }
+
+  private reloadFiles(): void {
     let stamp: string | null = null
     try {
       const stat = statSync(this.file)
       stamp = `${stat.ino}:${stat.mtimeMs}:${stat.size}`
     } catch {
       stamp = null
+    }
+    if (!this.deps.fleetPeers) {
+      try {
+        const stat = statSync(fleetFile(this.deps.env))
+        stamp = `${stamp}:fleet:${stat.ino}:${stat.mtimeMs}:${stat.size}`
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
     }
     if (stamp === this.fileStamp && this.reloadTimer) return
     this.fileStamp = stamp

@@ -23,7 +23,8 @@
     "./settings": "./src/settings.ts",
     "./connection": "./src/connection.ts",
     "./fleet": "./src/fleet.ts",
-    "./exec": "./src/exec.ts"
+    "./exec": "./src/exec.ts",
+    "./service": "./src/service.ts"
   },
   "scripts": {
     "test": "vitest run"
