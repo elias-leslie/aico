@@ -38,6 +38,7 @@ let chats: ChatSessions
 let store: WebStore
 let server: ReturnType<typeof createWebServer>
 let db: ReturnType<typeof openAgentDb>
+let asksStalled = false
 let questions: Ask[]
 let pushes: unknown[]
 const question = (session: string): Ask => ({
@@ -80,6 +81,7 @@ beforeEach(async () => {
   db = openAgentDb(':memory:')
   pushes = []
   questions = []
+  asksStalled = false
   chats = new ChatSessions(db, {
     dataDir: folder,
     push: async (report) => {
@@ -92,7 +94,8 @@ beforeEach(async () => {
   const tether = new FakeTether()
   store = new WebStore(':memory:')
   const asks = {
-    list: async () => questions,
+    list: async () => (asksStalled ? new Promise<Ask[]>(() => {}) : questions),
+    snapshot: () => ({ asks: questions, state: asksStalled ? 'stale' : 'ready' }),
     answer: async (id: string, reply: { option?: number; text?: string; note?: string }) => {
       if (reply.text && (reply.text.length > 100 || /[\r\n]/.test(reply.text)))
         throw new Error('Tether requires one-line answer text of at most 100 characters')
@@ -195,6 +198,7 @@ describe('Aico chat routes', () => {
     await call('POST', `/api/chat/${id}/send`, { message: 'Run a command' })
     await started
     off()
+    await call('PUT', `/api/chat/${id}/draft`, { draft: 'Queued one' })
     await call('POST', `/api/chat/${id}/send`, { message: 'Queued one' })
     await call('POST', `/api/chat/${id}/send`, { message: 'Queued two' })
     const stopped = (await call('POST', `/api/chat/${id}/stop`)).body
@@ -289,6 +293,19 @@ describe('Aico chat routes', () => {
       asks: [],
     })
     expect(questions).toEqual([])
+  })
+  it('keeps the chat readable when Tether’s question listing stalls', async () => {
+    const id = await start()
+    asksStalled = true
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 300)
+    try {
+      const response = await fetch(`${base}/api/chat/${id}`, { signal: controller.signal })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ state: 'idle', questionsStatus: 'stale' })
+    } finally {
+      clearTimeout(timer)
+    }
   })
   it('streams completed and partial chat snapshots, and closes a subscriber independently of the run', async () => {
     const id = await start()

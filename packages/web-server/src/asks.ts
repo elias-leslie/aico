@@ -302,6 +302,29 @@ export interface AskFileSource {
 }
 
 export class Asks {
+  private readonly known = new Map<string, Ask>()
+  private loaded = false
+  private listFailed = false
+  private listing: Promise<Ask[]> | null = null
+  onChange?: () => void
+
+  /** Event-fed projection for a chat stream; reading it never waits on Tether. */
+  snapshot() {
+    return {
+      asks: [...this.known.values()],
+      state: this.loaded
+        ? this.listFailed
+          ? 'stale'
+          : 'ready'
+        : this.listFailed
+          ? 'failed'
+          : 'loading',
+    } as const
+  }
+  private remember(ask: Ask) {
+    this.known.set(`${ask.host ?? ''}:${ask.id}`, ask)
+    this.onChange?.()
+  }
   private readonly pushed = new Set<string>()
   /** Asks with an answer on its way to Tether, so a double tap sends it once. */
   private readonly answering = new Set<string>()
@@ -323,6 +346,7 @@ export class Asks {
   async receive(data: unknown): Promise<void> {
     const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
     const ask = validateAsk(record.ask)
+    if (ask) this.remember(ask)
     if (record.created !== true) {
       // A blocking ask that is no longer open stops being a waiting notice.
       if (ask?.blocking && ask.state !== 'open')
@@ -350,12 +374,32 @@ export class Asks {
   }
 
   /** Open and answered asks plus recently closed ones; any failing the checks are left out. */
-  async list(): Promise<Ask[]> {
-    const { body } = await tetherCall(() =>
-      this.options.tether.request<{ items?: unknown }>('GET', '/v1/asks?hosts=all'),
-    )
-    if (!Array.isArray(body?.items)) return []
-    return body.items.map(validateAsk).filter((ask): ask is Ask => ask !== null)
+  list(): Promise<Ask[]> {
+    if (this.listing) return this.listing
+    this.listing = this.readList().finally(() => {
+      this.listing = null
+    })
+    return this.listing
+  }
+  private async readList(): Promise<Ask[]> {
+    try {
+      const { body } = await tetherCall(() =>
+        this.options.tether.request<{ items?: unknown }>('GET', '/v1/asks?hosts=all'),
+      )
+      const items = Array.isArray(body?.items)
+        ? body.items.map(validateAsk).filter((ask): ask is Ask => ask !== null)
+        : []
+      this.known.clear()
+      for (const ask of items) this.known.set(`${ask.host ?? ''}:${ask.id}`, ask)
+      this.loaded = true
+      this.listFailed = false
+      this.onChange?.()
+      return items
+    } catch (error) {
+      this.listFailed = true
+      this.onChange?.()
+      throw error
+    }
   }
 
   async act(
@@ -370,6 +414,7 @@ export class Asks {
     )
     const ask = validateAsk(result)
     if (!ask) throw new HttpError(502, 'Tether answered with an ask that does not check out')
+    this.remember(ask)
     return ask
   }
 
@@ -382,6 +427,7 @@ export class Asks {
     )
     const ask = validateAsk(body)
     if (!ask) throw new HttpError(502, 'Tether answered with an ask that does not check out')
+    this.remember(ask)
     return ask
   }
 

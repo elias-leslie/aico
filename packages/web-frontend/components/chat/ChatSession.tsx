@@ -133,7 +133,11 @@ function ChatDetails({
     { input: number; output: number; cache: number }
   >()
   for (const m of chat.messages)
-    if (m.role === 'assistant' && m.model) {
+    if (
+      m.role === 'assistant' &&
+      m.model &&
+      (!chat.parent || m.turn > (chat.branchTurn ?? 0))
+    ) {
       const sum = perModel.get(m.model) ?? { input: 0, output: 0, cache: 0 }
       sum.input += m.input ?? 0
       sum.output += m.output ?? 0
@@ -264,6 +268,7 @@ function ChatSessionBody({ id }: { id: string }) {
   const body = useRef<HTMLDivElement>(null)
   const initialized = useRef(false)
   const summaryKey = useRef('')
+  const savingDraft = useRef(Promise.resolve())
   const follow = useRef(true)
   const chat = opened.data
   useEffect(() => {
@@ -323,6 +328,7 @@ function ChatSessionBody({ id }: { id: string }) {
   }
   const send = async () => {
     if (!draft.trim() || busy) return
+    await savingDraft.current
     const question = chat?.questions?.[0]
     const value = question
       ? await act('answer', { ask: question.id, message: draft })
@@ -338,16 +344,29 @@ function ChatSessionBody({ id }: { id: string }) {
     }
   }
   const stop = async () => {
+    await savingDraft.current
     const value = await act('stop')
     if (value)
-      setDraft((current) => [current, value.draft].filter(Boolean).join('\n\n'))
+      setDraft((current) =>
+        !current ||
+        value.draft === current ||
+        value.draft.startsWith(`${current}\n\n`)
+          ? value.draft
+          : [current, value.draft].filter(Boolean).join('\n\n'),
+      )
   }
   const saveDraft = () => {
-    void apiFetch(`/api/chat/${id}/draft`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ draft }),
-    }).catch((e: Error) => setError(`Draft not saved: ${e.message}`))
+    const value = draft
+    savingDraft.current = savingDraft.current
+      .then(() =>
+        apiFetch(`/api/chat/${id}/draft`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draft: value }),
+        }),
+      )
+      .then(() => {})
+      .catch((e: Error) => setError(`Draft not saved: ${e.message}`))
   }
   const copy = async (text: string) => {
     try {
@@ -384,7 +403,11 @@ function ChatSessionBody({ id }: { id: string }) {
     )
   const working = chat.state === 'working'
   const ended = chat.state === 'ended'
-  const selectedModel = model || chat.nextModel || chat.chain[0]?.id || ''
+  const selectedModel =
+    model ||
+    (working ? chat.partial?.model || chat.model : chat.nextModel) ||
+    chat.chain[0]?.id ||
+    ''
   const startBranch = async () => {
     if (!branch || busy) return
     const value = await act('branch', {
@@ -475,6 +498,16 @@ function ChatSessionBody({ id }: { id: string }) {
             }}
           >
             <div className="chat-thread">
+              {!disconnected &&
+                (chat.questionsStatus === 'stale' ||
+                  chat.questionsStatus === 'failed') && (
+                  <p className="chat-notice" role="status">
+                    {chat.questionsStatus === 'stale'
+                      ? 'Questions may be out of date.'
+                      : 'Questions couldn’t be loaded.'}{' '}
+                    Your messages are still connected.
+                  </p>
+                )}
               {disconnected && (
                 <p className="chat-notice" role="status">
                   This page lost Aico. The chat may still be running. What

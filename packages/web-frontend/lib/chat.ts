@@ -35,6 +35,7 @@ export interface ChatQuestion {
   body: string | null
 }
 export interface ChatView extends ChatSummary {
+  questionsStatus?: 'loading' | 'ready' | 'stale' | 'failed'
   draft: string
   queued: string[]
   note: string | null

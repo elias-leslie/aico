@@ -7,8 +7,8 @@ import { objectBody, optionalString, RAW, type Router, requiredString } from './
 import { HttpError } from './tether'
 
 export const MAX_CHAT_STREAMS = 24
-export function chatQuestions(asks: Ask[], id: string) {
-  return asks.filter((ask) => ask.session === id && ask.state === 'open')
+export function chatQuestions(asks: readonly Ask[], id: string) {
+  return asks.filter((ask) => !ask.host && ask.session === id && ask.state === 'open')
 }
 export function chatSession(chat: ReturnType<ChatSessions['summary']>, asks: Ask[]) {
   const questions = chat.state === 'ended' ? [] : chatQuestions(asks, chat.id)
@@ -62,11 +62,13 @@ export function registerChatRoutes(
   }
   const view = async (id: string) => {
     const chat = chats.get(id)
-    const questions = chatQuestions(await asks.list(), id)
+    const snapshot = asks.snapshot()
+    const questions = chatQuestions(snapshot.asks, id)
     return {
       ...chat,
       state: questions.length && chat.state !== 'ended' ? 'needs-you' : chat.state,
       questions,
+      questionsStatus: snapshot.state,
     }
   }
   const preferences = (body: Record<string, unknown>) => {
@@ -102,7 +104,12 @@ export function registerChatRoutes(
       })
     }),
   )
-  router.on('GET', '/api/chat/:id', (ctx) => handle(() => view(ctx.params.id)))
+  router.on('GET', '/api/chat/:id', (ctx) =>
+    handle(() => {
+      void asks.list().catch(() => {})
+      return view(ctx.params.id)
+    }),
+  )
   router.on('POST', '/api/chat/:id/send', async (ctx) =>
     handle(async () => {
       const body = objectBody(await ctx.body())
@@ -168,6 +175,7 @@ export function registerChatRoutes(
     handle(async () => {
       if (streams >= MAX_CHAT_STREAMS) throw new HttpError(429, 'Too many chat streams are open.')
       await view(ctx.params.id)
+      void asks.list().catch(() => {})
       const { res } = ctx
       res.writeHead(200, {
         'Content-Type': 'text/event-stream; charset=utf-8',

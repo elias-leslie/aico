@@ -125,6 +125,34 @@ describe('desktop chat', () => {
       'This chat stays as it is.',
     )
   })
+  it('shows the active model while working and keeps inherited usage out of branch totals', () => {
+    const chat = view({
+      state: 'working',
+      model: 'second',
+      nextModel: 'first',
+      partial: { text: 'Writing', model: 'second', turn: 2 },
+      parent: 'source',
+      branchTurn: 1,
+      totals: {
+        startedAt: 1000,
+        tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        toolCalls: 0,
+      },
+    })
+    show(chat)
+    expect(screen.getByRole('combobox', { name: 'Model' })).toHaveValue(
+      'second',
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Details: tokens, models, run' }),
+    )
+    expect(screen.getByLabelText('Chat details')).not.toHaveTextContent('12 in')
+  })
+  it('keeps stale questions separate from a disconnected conversation', () => {
+    show(view({ questionsStatus: 'stale' }))
+    expect(screen.getByText(/Questions may be out of date/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull()
+  })
   it('keeps Idle quiet and only shows the answer card for an explicit question', async () => {
     const { client } = show(view())
     expect(screen.getByText('Idle', { exact: true })).toBeInTheDocument()

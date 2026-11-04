@@ -102,6 +102,7 @@ function serve(): void {
     dataDir: config.dataDir,
     push: tetherPush(process.env, (line) => console.warn('[aico-agent]', line)),
   })
+  asks.onChange = () => chats.changed()
   const background = new Background({
     tether,
     store,

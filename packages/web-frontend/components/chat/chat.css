@@ -514,3 +514,11 @@
     transition: none;
   }
 }
+
+.aico-chat .chat-tool {
+  padding: 0;
+}
+.aico-chat .chat-tool summary {
+  flex-wrap: nowrap;
+  align-items: center;
+}

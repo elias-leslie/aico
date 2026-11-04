@@ -291,7 +291,7 @@ export class ChatSessions {
       const queued = parse<string[]>(row.queued, [])
       queued.push(message)
       this.db
-        .prepare('UPDATE chats SET queued = ? WHERE run_id = ?')
+        .prepare("UPDATE chats SET queued = ?, draft = '' WHERE run_id = ?")
         .run(JSON.stringify(queued), id)
       this.changed(id)
     } else this.launch(id, message, rules, Boolean(model), effort)
