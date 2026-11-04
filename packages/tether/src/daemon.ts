@@ -24,6 +24,7 @@ import {
   type TetherPaths,
 } from './config'
 import { observeAgent, writeJsonFile } from './continuity'
+import { CoordinationDocs } from './coordination/docs'
 import { DeadShells } from './dead-shells'
 import { configureEntryScan } from './entry-files'
 import { parseGraphicalEnvironment } from './env'
@@ -262,7 +263,9 @@ export async function startDaemon(
     graphicalEnv: reconcileEnabled(env) ? userManagerGraphicalEnvironment : undefined,
   })
 
+  const coordDocs = new CoordinationDocs(store.db, Date.now)
   const context = {
+    coordDocs,
     show,
     paths,
     store,
@@ -636,15 +639,15 @@ export async function startDaemon(
   // queue (src/waits.ts); pasted, so only where Tether observes sessions.
   const askStore = new AskStore(store.db)
   let pokeWaits: (kind: PullKind, ref?: string) => void = () => {}
+  coordDocs.onWrite((name) => {
+    if (name === '_coord') pokeWaits('reply')
+  })
   const summitflowRoot =
     env.SUMMITFLOW_SERVICE_STATE_ROOT || join(env.HOME ?? homedir(), '.summitflow', 'services')
   const admissionPath = nightshiftAdmissionPath(env)
   const readers = new PullReaders({
     paths: {
       jobsDir: env.TETHER_WAIT_JOBS_DIR || join(summitflowRoot, 'jobs'),
-      ledger:
-        env.TETHER_WAIT_LEDGER ||
-        join(env.HOME ?? homedir(), '.summitflow', 'leases', '_coord.json'),
       tapDirs: (
         env.TETHER_WAIT_TAP_DIRS ||
         '/var/lib/nightshift/bypass/out:/var/lib/nightshift/agent-responses'
@@ -654,6 +657,7 @@ export async function startDaemon(
       cmdDir: join(paths.stateDir, 'wait-cmd'),
     },
     cmdUnits: systemdCmdUnits(env),
+    ledgerDoc: () => coordDocs.get('_coord'),
     run: (runId) => runs.runState(runId),
     ask: (id) => askStore.get(id),
     agentTitle: (anchor) => {

@@ -6,6 +6,7 @@ import { resolveAgentHubConfig } from './agent-hub/config'
 import type { RunTracker } from './agent-hub/runs'
 import { type AskDelivery, type NeedsYouFeed, registerAskRoutes } from './asks'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
+import { CoordinationDocs, registerCoordinationRoutes } from './coordination/docs'
 import type { EventBus, TetherEvent } from './events'
 import { registerFileRoutes } from './files/api'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
@@ -53,6 +54,8 @@ export interface ServerContext {
   /** Agent-pane memory policy (pane cap, runaway job kills). */
   memoryPolicy?: MemoryPolicyService
   show?: ShowConfig
+  /** The coordination documents (leases, ledger); absent: this server makes its own over the store. */
+  coordDocs?: CoordinationDocs
   /** How an owner's answer reaches the asking session; absent: asks are pull-only. */
   asks?: AskDelivery
   /** The owner's waiting notices; Aico web reports what the owner has seen. */
@@ -437,6 +440,10 @@ export function buildRouter(context: ServerContext): Router {
     feed: context.asksFeed,
     now: context.now,
   })
+  registerCoordinationRoutes(
+    router,
+    context.coordDocs ?? new CoordinationDocs(context.store.db, context.now),
+  )
   if (context.waiting) registerSeenRoute(router, context.waiting, context.now)
   registerFileRoutes(router, (id) => {
     const row = getWidget(id)

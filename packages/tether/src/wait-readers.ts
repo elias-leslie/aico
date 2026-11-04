@@ -25,7 +25,7 @@ import {
   watch,
   writeFileSync,
 } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { CMD_UNIT_PREFIX, JOB_FINAL, type PullKind, type PullRead } from './wait-kinds'
 
 const JOB_ID = /^[0-9a-f]{32}$/
@@ -42,8 +42,6 @@ const PROBE_EVERY_MS = 60_000
 export interface PullReaderPaths {
   /** SummitFlow's service jobs (`<32 hex>.json`). */
   jobsDir: string
-  /** SummitFlow's coordination ledger (`_coord.json`). */
-  ledger: string
   /** Nightshift's tap answers (`<32 hex>.resp.json`): owner taps, agent requests. */
   tapDirs: readonly string[]
   /** Tether's own `cmd` watcher records: `<ref>.json` (what to run),
@@ -101,6 +99,8 @@ export function anchorWidget(
 
 export interface PullReaderDeps {
   paths: PullReaderPaths
+  /** The coordination ledger document (`_coord`, src/coordination/docs.ts): its version and body. */
+  ledgerDoc(): { version: number; doc: Record<string, unknown> }
   /** A run Tether follows (RunTracker.runState). */
   run(runId: string): { state: string | null; launcherId: string | null } | undefined
   /** An ask (AskStore.get). */
@@ -263,9 +263,6 @@ export class PullReaders {
       const id = name.endsWith('.json') ? name.slice(0, -5) : ''
       if (JOB_ID.test(id)) this.deps.poke('job', id)
     })
-    this.watchDir(dirname(paths.ledger), (name) => {
-      if (name === basename(paths.ledger)) this.deps.poke('reply')
-    })
     for (const dir of paths.tapDirs)
       this.watchDir(dir, (name) => {
         const id = name.endsWith('.resp.json') ? name.slice(0, -10) : ''
@@ -422,19 +419,18 @@ export class PullReaders {
   }
 
   private ledger(): Map<string, Record<string, unknown>> | null {
-    const path = this.deps.paths.ledger
-    let key: string
+    let current: { version: number; doc: Record<string, unknown> }
     try {
-      const stat = statSync(path)
-      key = `${stat.mtimeMs}:${stat.size}`
+      current = this.deps.ledgerDoc()
     } catch {
       return null
     }
+    const key = String(current.version)
     if (this.ledgerCache?.key === key) return this.ledgerCache.value
     let value: Map<string, Record<string, unknown>> | null = null
     const anchors = new Map<string, string>()
     try {
-      const raw = readJson(path) as { messages?: unknown }
+      const raw = current.doc as { messages?: unknown }
       const messages = Array.isArray(raw.messages) ? raw.messages : []
       value = new Map()
       for (const message of messages) {

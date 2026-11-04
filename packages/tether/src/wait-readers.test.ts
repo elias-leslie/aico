@@ -22,6 +22,7 @@ let probeAnswer: string | null
 let red: boolean
 let clock: number
 let started: { ref: string; spec: CmdSpec; result: string; runtime: number }[]
+let ledger: { version: number; doc: Record<string, unknown> }
 let stopped: string[]
 let startAnswer: 'started' | 'exists' | 'failed'
 const units: CmdUnits = {
@@ -36,9 +37,9 @@ const units: CmdUnits = {
 
 function readers(): PullReaders {
   return new PullReaders({
+    ledgerDoc: () => ledger,
     paths: {
       jobsDir: join(dir, 'jobs'),
-      ledger: join(dir, 'leases', '_coord.json'),
       tapDirs: [join(dir, 'out'), join(dir, 'agent')],
       cmdDir: join(dir, 'cmd'),
     },
@@ -72,7 +73,8 @@ const job = (state: string, extra: Record<string, unknown> = {}) =>
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'tether-wait-readers-'))
-  for (const sub of ['jobs', 'leases', 'out', 'agent']) mkdirSync(join(dir, sub))
+  for (const sub of ['jobs', 'out', 'agent']) mkdirSync(join(dir, sub))
+  ledger = { version: 0, doc: {} }
   pokes = []
   probes = []
   probeAnswer = null
@@ -132,15 +134,15 @@ describe('PullReaders', () => {
 
   it('reads a reply from the ledger: typed fields only, withdrawn is closed', () => {
     const r = readers()
-    writeFileSync(
-      join(dir, 'leases', '_coord.json'),
-      JSON.stringify({
+    ledger = {
+      version: ledger.version + 1,
+      doc: {
         messages: [
           { id: 'abc123', to: 'cc:1c7a9f', state: 'acked', intent: 'yes', text: 'secret' },
           { id: 'def456', to: 'cc:1', state: 'open', withdrawn: true },
         ],
-      }),
-    )
+      },
+    }
     expect(r.pullRef('reply', 'abc123')).toBe('abc123')
     expect(r.pullRef('reply', '999999')).toBeNull()
     expect(r.read('reply', 'abc123')).toEqual({
@@ -154,16 +156,16 @@ describe('PullReaders', () => {
 
   it("names a reply's recipient by its window title when its anchor is in Aico", () => {
     const r = readers()
-    writeFileSync(
-      join(dir, 'leases', '_coord.json'),
-      JSON.stringify({
+    ledger = {
+      version: ledger.version + 1,
+      doc: {
         messages: [
           { id: 'abc123', to: 'cc:94bdf3', state: 'acked', intent: 'yes' },
           { id: 'def456', to: 'cc:gone01', state: 'open' },
         ],
         identities: { 'cc:94bdf3': { anchor: '4242:99' }, 'cc:gone01': { anchor: '1:1' } },
-      }),
-    )
+      },
+    }
     expect(r.read('reply', 'abc123')).toMatchObject({
       title: 'SummitFlow — One wake per message (cc:94bdf3)',
     })
@@ -220,11 +222,10 @@ describe('PullReaders', () => {
     r.watch()
     try {
       job('running')
-      writeFileSync(join(dir, 'leases', '_coord.json'), '{"messages": []}')
       writeFileSync(join(dir, 'out', `${TAP}.resp.json`), '{"outcome": "applied"}')
-      for (let i = 0; i < 50 && pokes.length < 3; i += 1)
+      for (let i = 0; i < 50 && pokes.length < 2; i += 1)
         await new Promise((resolve) => setTimeout(resolve, 20))
-      expect(pokes).toEqual(expect.arrayContaining([`job:${JOB}`, 'reply:*', `tap:${TAP}`]))
+      expect(pokes).toEqual(expect.arrayContaining([`job:${JOB}`, `tap:${TAP}`]))
     } finally {
       r.stop()
     }
