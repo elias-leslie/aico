@@ -44,7 +44,104 @@ func (h *Hook) snapKey() (key, ownPrefix, cwd string) {
 	if tid == "" {
 		tid = str(h.Payload["toolCallId"])
 	}
-	return sanitize(sid + "-" + tid), sanitize(sid + "-"), str(h.Payload["cwd"])
+	cwd = str(h.Payload["cwd"])
+	if in, ok := h.Payload["tool_input"].(map[string]any); ok {
+		if workdir := str(in["workdir"]); workdir != "" {
+			if filepath.IsAbs(workdir) {
+				cwd = workdir
+			} else {
+				cwd = filepath.Join(cwd, workdir)
+			}
+		}
+	}
+	return sanitize(sid + "-" + tid), sanitize(sid + "-"), cwd
+}
+
+// Literal output destinations of the first simple command. Stop at shell control syntax and
+// never infer a path from expansions or a heredoc body. Other writes remain snapshot-attributed.
+func shellOutputs(payload map[string]any, cwd string) []string {
+	in, _ := payload["tool_input"].(map[string]any)
+	command := str(in["command"])
+	if command == "" {
+		command = str(in["cmd"])
+	}
+	words := strings.Fields(command)
+	if len(words) == 0 {
+		return nil
+	}
+	switch words[0] {
+	case "[[", "if", "while", "until", "for", "case", "select", "function":
+		return nil
+	}
+	var out []string
+	quote := byte(0)
+	for i := 0; i < len(command); i++ {
+		c := command[i]
+		if c == '\\' && quote != '\'' {
+			i++
+			continue
+		}
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		if c == '\'' || c == '"' {
+			quote = c
+			continue
+		}
+		if c == '#' && (i == 0 || strings.ContainsRune(" \t", rune(command[i-1]))) {
+			break
+		}
+		if strings.ContainsRune(";&|(){}\n", rune(c)) {
+			break
+		}
+		if c != '>' {
+			continue
+		}
+		for i+1 < len(command) && command[i+1] == '>' {
+			i++
+		}
+		start := i + 1
+		for start < len(command) && (command[start] == ' ' || command[start] == '\t') {
+			start++
+		}
+		if start == len(command) || strings.ContainsRune("&|", rune(command[start])) {
+			break
+		}
+		end, q := start, byte(0)
+		for end < len(command) {
+			c = command[end]
+			if c == '\\' && q != '\'' {
+				end += 2
+				continue
+			}
+			if q != 0 {
+				if c == q {
+					q = 0
+				}
+			} else if c == '\'' || c == '"' {
+				q = c
+			} else if strings.ContainsRune(" \t\r\n;&|(){}<>", rune(c)) {
+				break
+			}
+			end++
+		}
+		if end > len(command) {
+			break
+		}
+		raw := command[start:end]
+		if words, ok := shlexSplit(raw); ok && len(words) == 1 && words[0] != "" && !strings.ContainsAny(raw, "$`*?[~#") {
+			path := words[0]
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(cwd, path)
+			}
+			out = append(out, path)
+		}
+		i = end - 1
+	}
+	return out
 }
 
 // gateCommand: the shell command only runs the repo gate (`st|aico check`, `st|aico commit`, `st done` or
@@ -144,6 +241,12 @@ func (h *Hook) BashPre(raw []byte) {
 	key, _, cwd := h.snapKey()
 	if cwd == "" || gateCommand(h.Payload) {
 		return
+	}
+	// A literal shell destination carries the same intent as a Write tool. Recording it before
+	// concurrent snapshots lets each shell retain its own files without claiming the other's.
+	for _, path := range shellOutputs(h.Payload, cwd) {
+		intent := &Hook{Cfg: h.Cfg, ID: h.ID, Payload: map[string]any{"tool_input": map[string]any{"file_path": path}}}
+		intent.Edit()
 	}
 	dir := snapDir()
 	if os.MkdirAll(dir, 0o755) != nil {
@@ -385,6 +488,40 @@ func (h *Hook) recordWrites(project string, paths []string, since time.Time, unk
 			}
 		}
 		for _, p := range paths {
+			chosen := entry
+			// A completed overlapping shell may have disappeared from the snapshot directory.
+			// Its named post-write record already accounts for this file's current modification.
+			accounted := false
+			if fi, err := os.Lstat(p); err == nil {
+				for _, e := range d.writers[p] {
+					at, ok := parseStamp(str(e["at"]))
+					if ok && str(e["agent_id"]) != "unknown" && !isOwnWriter(e, mine, anchor) && !at.Before(since) && !at.Before(fi.ModTime()) {
+						accounted = true
+					}
+				}
+			}
+			if accounted {
+				continue
+			}
+			if unknown == "concurrent" {
+				own, foreign := false, false
+				for _, l := range d.leases {
+					if l.Kind != "file" || !l.Matches(p) {
+						continue
+					}
+					if isMine(l, leaseMine, leaseAnchor) {
+						own = true
+					} else {
+						foreign = true
+					}
+				}
+				if foreign && !own {
+					continue
+				}
+				if own && !foreign {
+					chosen = h.writerEntry("", nil)
+				}
+			}
 			clash := false
 			for _, e := range d.writers[p] {
 				if !isOwnWriter(e, mine, anchor) && atOrAfter(str(e["at"])) {
@@ -399,7 +536,7 @@ func (h *Hook) recordWrites(project string, paths []string, since time.Time, unk
 			if clash {
 				addWriter(d.writers, p, clone(concurrent))
 			} else {
-				addWriter(d.writers, p, clone(entry))
+				addWriter(d.writers, p, clone(chosen))
 			}
 		}
 		return s.save(d)

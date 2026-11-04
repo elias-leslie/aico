@@ -136,6 +136,78 @@ func TestShellWritesJoinTheWriterSet(t *testing.T) {
 	}
 }
 
+func TestConcurrentShellCreationsKeepTheirWriters(t *testing.T) {
+	repo := sandbox(t)
+	a, b := "33333333-aaaa-4bbb-8ccc-000000000003", "44444444-aaaa-4bbb-8ccc-000000000004"
+	call := func(sid, file string) map[string]any {
+		return map[string]any{"session_id": sid, "tool_use_id": "shell", "tool_name": "Bash", "cwd": repo,
+			"tool_input": map[string]any{"command": "cat > '" + file + "' <<'EOF'\nnew file\nEOF"}}
+	}
+	ha, hb := New(testConfig(), call(a, "mine.txt")), New(testConfig(), call(b, "their file.txt"))
+	for _, h := range []*Hook{ha, hb} {
+		raw, _ := json.Marshal(h.Payload)
+		h.BashPre(raw)
+	}
+	for _, file := range []string{"mine.txt", "their file.txt"} {
+		if err := os.WriteFile(filepath.Join(repo, file), []byte("new file\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ha.BashPost()
+	hb.BashPost()
+	for _, pair := range []struct {
+		h    *Hook
+		file string
+	}{{ha, "mine.txt"}, {hb, "their file.txt"}} {
+		path := realPath(filepath.Join(repo, pair.file))
+		foreign, err := pair.h.Foreign("demo", []string{path})
+		if err != nil || len(foreign[path]) != 0 {
+			t.Errorf("own shell creation must be fixable: %s: %v (%v)", pair.file, foreign, err)
+		}
+	}
+}
+
+func TestShellOutputPathsAreLiteral(t *testing.T) {
+	for _, tc := range []struct{ command, want string }{
+		{`echo 'quoted > fake' > made.txt`, "/repo/made.txt"},
+		{`printf hi>>"with space.txt"`, "/repo/with space.txt"},
+		{"cat <<'EOF' > made.txt\n> fake\nEOF", "/repo/made.txt"},
+		{`echo hi # > fake`, ""},
+		{`[[ a > fake ]]`, ""},
+		{`echo hi > file#part`, ""},
+		{`echo hi > "$DEST"`, ""},
+		{`cd somewhere && echo hi > fake`, ""},
+		{`echo hi 2>&1`, ""},
+	} {
+		payload := map[string]any{"tool_input": map[string]any{"command": tc.command}}
+		if got := strings.Join(shellOutputs(payload, "/repo"), " "); got != tc.want {
+			t.Errorf("shellOutputs(%q) = %q, want %q", tc.command, got, tc.want)
+		}
+	}
+}
+
+func TestConcurrentIndirectShellWritesRemainUnknown(t *testing.T) {
+	repo := sandbox(t)
+	call := func(sid string) *Hook {
+		h := New(testConfig(), map[string]any{"session_id": sid, "tool_use_id": "shell", "tool_name": "exec_command", "cwd": "/tmp",
+			"tool_input": map[string]any{"cmd": "python make_files.py", "workdir": repo}})
+		raw, _ := json.Marshal(h.Payload)
+		h.BashPre(raw)
+		return h
+	}
+	ha := call("33333333-aaaa-4bbb-8ccc-000000000003")
+	call("44444444-aaaa-4bbb-8ccc-000000000004")
+	path := filepath.Join(repo, "uncertain.txt")
+	if err := os.WriteFile(path, []byte("ambiguous\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ha.BashPost()
+	foreign, err := ha.Foreign("demo", []string{realPath(path)})
+	if err != nil || strings.Join(foreign[realPath(path)], ",") != "unknown" {
+		t.Fatalf("indirect concurrent write must stay unknown: %v (%v)", foreign, err)
+	}
+}
+
 func TestFnmatchFollowsPython(t *testing.T) {
 	for _, c := range []struct {
 		name, pat string
