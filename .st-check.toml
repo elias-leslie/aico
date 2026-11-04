@@ -208,7 +208,7 @@ coverage = "focused"
 required = false
 covered_by = "biome"
 quick = true
-quick_paths = ["packages/jobs/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+quick_paths = ["packages/fleet/**", "packages/jobs/**", "packages/status/**", "packages/store/**", "packages/tether-client/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
 argv = ["node_modules/.bin/biome", "check", "packages/jobs"]
 
 [[native.stages]]
@@ -218,7 +218,7 @@ coverage = "focused"
 required = false
 covered_by = "tsc"
 quick = true
-quick_paths = ["packages/jobs/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+quick_paths = ["packages/fleet/**", "packages/jobs/**", "packages/status/**", "packages/store/**", "packages/tether-client/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
 argv = ["node_modules/.bin/tsc", "-b", "packages/jobs"]
 
 [[native.stages]]
@@ -228,7 +228,7 @@ coverage = "focused"
 required = false
 covered_by = "depcruise"
 quick = true
-quick_paths = ["packages/jobs/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
+quick_paths = ["packages/fleet/**", "packages/jobs/**", "packages/status/**", "packages/store/**", "packages/tether-client/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
 argv = ["node_modules/.bin/depcruise", "packages/jobs", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
 
 [[native.stages]]

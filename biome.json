@@ -195,8 +195,6 @@
                       "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
-                      "@aico/fleet",
-                      "@aico/fleet/**",
                       "@aico/notes",
                       "@aico/notes/**",
                       "@aico/notify",
@@ -216,7 +214,7 @@
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],
-                    "message": "@aico/jobs (layer 5): import only @aico/store, @aico/status (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/jobs (layer 5): import only @aico/store, @aico/status, @aico/fleet (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

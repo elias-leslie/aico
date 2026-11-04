@@ -4,16 +4,18 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { peerDir } from '@aico/fleet/hosts'
 import { machineId, type StatusRow } from '@aico/status'
 import { act } from './act'
+import { remoteAuthority, serveLeases } from './fleet-leases'
 import { type JobDef, readJobs } from './jobs'
-import { JobStore, jobsDbPath } from './leases'
-import { jobRow, Runner } from './runner'
+import { type JobState, JobStore, jobsDbPath } from './leases'
+import { jobRow, type LeaseAuthority, Runner } from './runner'
 
 const USAGE = `Usage: aico jobs <command>
-  list           each job: its home machine (the only one that runs it), when it runs next, who holds it, how it last went
-  run KIND       on KIND's home machine: make it due now; aico-jobs there runs it within seconds
-  serve          run the scheduler (aico-jobs.service): the jobs homed on this machine
+  list           each job: its home machine and lease holder, when it runs next, who holds it, how it last went
+  run KIND       make KIND due at its lease holder; an eligible worker runs it
+  serve          run the scheduler (aico-jobs.service): eligible jobs, using their configured lease holders
   --machine M    act as machine M (tests and drills on one host)
 Settings: AICO_JOBS_FILE (job list, default data/jobs.json), AICO_JOBS_DB (default jobs.db in
 AICO_DATA_DIR or ~/.local/state/aico), AICO_WEB_URL (aico-web, for jobs and Status rows).`
@@ -38,6 +40,9 @@ function settings(env: NodeJS.ProcessEnv) {
     jobsFile: env.AICO_JOBS_FILE?.trim() || here('../data/jobs.json'),
     dbPath: env.AICO_JOBS_DB?.trim() || jobsDbPath(dataDir),
     webUrl,
+    socket:
+      env.AICO_JOBS_SOCKET ||
+      join(env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`, 'aico/jobs.sock'),
   }
 }
 
@@ -54,13 +59,20 @@ async function postRows(webUrl: string, rows: StatusRow[]): Promise<void> {
 
 const time = (ms: number | null) => (ms === null ? '-' : new Date(ms).toLocaleString('sv-SE'))
 
-function list(store: JobStore, jobs: readonly JobDef[], machine: string): void {
+async function list(
+  jobs: readonly JobDef[],
+  authority: (job: JobDef) => LeaseAuthority,
+): Promise<void> {
   for (const job of jobs) {
-    if (job.home !== machine) {
-      console.log(`${job.kind}  home ${job.home}  runs there, not on ${machine}`)
+    let state: JobState | null
+    try {
+      state = await authority(job).get(job.kind)
+    } catch (error) {
+      console.log(
+        `${job.kind}  lease holder ${job.lease_host ?? job.home} unavailable: ${(error as Error).message}`,
+      )
       continue
     }
-    const state = store.get(job.kind)
     if (!state) {
       console.log(`${job.kind}  home ${job.home}  not started by aico-jobs yet`)
       continue
@@ -86,11 +98,18 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     console.error('aico jobs: --machine needs a name')
     return 2
   }
-  const { jobsFile, dbPath, webUrl } = settings(env)
+  const { jobsFile, dbPath, webUrl, socket } = settings(env)
   const jobs = readJobs(jobsFile)
   const store = new JobStore(dbPath)
+  const authority = (job: JobDef) =>
+    (job.lease_host ?? job.home) === machine
+      ? store
+      : remoteAuthority(
+          join(peerDir(env, process.getuid?.(), job.lease_host ?? job.home), 'jobs.sock'),
+        )
   if (command === 'list') {
-    list(store, jobs, machine)
+    await list(jobs, authority)
+    store.close()
     return 0
   }
   if (command === 'run') {
@@ -101,17 +120,27 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       )
       return 2
     }
-    if (job.home !== machine) {
+    let due: boolean
+    try {
+      due =
+        (job.lease_host ?? job.home) === machine
+          ? store.runNow(job.kind, Date.now())
+          : await remoteAuthority(
+              join(peerDir(env, process.getuid?.(), job.lease_host ?? job.home), 'jobs.sock'),
+            ).run(job.kind)
+    } catch (error) {
       console.error(
-        `aico jobs run: ${job.kind} runs only on its home machine, ${job.home}; this is ${machine}. Run it there.`,
+        `aico jobs run: lease holder ${job.lease_host ?? job.home} is not reachable: ${(error as Error).message}`,
       )
+      store.close()
       return 1
     }
-    if (!store.runNow(job.kind, Date.now())) {
+    store.close()
+    if (!due) {
       console.error(`aico jobs run: aico-jobs has not started ${job.kind} yet`)
       return 1
     }
-    console.log(`${job.kind} is due now; aico-jobs here runs it within ${TICK_MS / 1000} s.`)
+    console.log(`${job.kind} is due now; its workers run it within ${TICK_MS / 1000} s.`)
     return 0
   }
   if (command !== 'serve') {
@@ -123,10 +152,12 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     jobs,
     machine,
     holder: `${machine}:${process.pid}`,
+    authority,
     act: act(webUrl),
     postRows: (rows) => postRows(webUrl, rows),
   })
   runner.start()
+  await serveLeases(socket, store, jobs, machine)
   console.log(`[jobs] serving ${jobs.length} job(s) as ${machine} from ${jobsFile}`)
   let ticking = false
   const tick = async () => {

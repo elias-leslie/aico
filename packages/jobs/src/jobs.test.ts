@@ -241,10 +241,11 @@ describe('the runner', () => {
     expect(sent.map((row) => row.id)).toEqual(['jobs/export'])
   })
 
-  it('refuses `run` for a job homed elsewhere and says where it runs', async () => {
+  it('reports an unreachable lease holder when asked to run a remote job', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aico-jobs-'))
     const env = {
       AICO_JOBS_DB: join(dir, 'jobs.db'),
+      XDG_RUNTIME_DIR: dir,
       AICO_WEB_URL: 'http://127.0.0.1:9',
     }
     const lines: string[] = []
@@ -253,16 +254,13 @@ describe('the runner', () => {
     try {
       const code = await main(['run', 'notes-export', '--machine', 'gem'], env)
       expect(code).toBe(1)
-      expect(lines).toEqual([
-        'aico jobs run: notes-export runs only on its home machine, davion-sidarli; this is gem. Run it there.',
-      ])
+      expect(lines[0]).toContain('lease holder davion-sidarli is not reachable')
       lines.length = 0
       await main(['list', '--machine', 'gem'], env)
-      expect(lines).toEqual([
-        'notes-export  home davion-sidarli  runs there, not on gem',
-        'context-import  home davion-sidarli  runs there, not on gem',
-        'usage-collect  home davion-sidarli  runs there, not on gem',
-      ])
+      expect(lines).toHaveLength(3)
+      expect(lines.every((line) => line.includes('lease holder davion-sidarli unavailable'))).toBe(
+        true,
+      )
     } finally {
       spy.mockRestore()
       out.mockRestore()

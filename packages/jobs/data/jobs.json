@@ -1,5 +1,5 @@
 {
-  "description": "Aico's jobs. Each kind runs on its home machine (machine id: the lower-cased short host name) when due, and only there: no other machine runs it until the fleet link (M11) shares leases between machines. at: local time, daily; or every_min: a repeat every that many minutes after it last finished. run: post (a path on the local aico-web) or command (argv).",
+  "description": "Aico jobs. home prefers a machine; lease_host (default home) is the single durable lease authority; workers (default home only) lists machines that may take over after lease_s. at is a daily local time, every_min repeats after completion. run is a local POST or command argv.",
   "jobs": [
     {
       "kind": "notes-export",

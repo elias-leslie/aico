@@ -1,7 +1,5 @@
-// The job definitions (data/jobs.json) and their schedule. A job kind names
-// its home machine, the only machine that runs it (leases live in each host's
-// own jobs.db until M11 carries them over the fleet link, so no other machine
-// can tell whether the home machine ran it); the schedule is a local time of day.
+// Job definitions own placement, the single lease authority, eligible workers
+// and schedules. A missing worker list keeps a job bound to its home machine.
 
 import { readFileSync } from 'node:fs'
 
@@ -16,6 +14,8 @@ export interface JobDef {
   every_min?: number
   run: { post: string } | { command: string[] }
   /** Lease length; the holder renews it every third of this while the job runs. */
+  lease_host?: string
+  workers?: string[]
   lease_s: number
 }
 
@@ -76,6 +76,17 @@ export function parseJobs(value: unknown): JobDef[] {
     )
       action = { command: run.command as string[] }
     else fail(`${where}.run`, '{post: "/path"} or {command: [argv]}')
+    const leaseHost = job.lease_host
+    if (leaseHost !== undefined && (typeof leaseHost !== 'string' || !KIND.test(leaseHost)))
+      fail(`${where}.lease_host`, 'a machine name')
+    const workers = job.workers
+    if (
+      workers !== undefined &&
+      (!Array.isArray(workers) ||
+        !workers.length ||
+        workers.some((name) => typeof name !== 'string' || !KIND.test(name)))
+    )
+      fail(`${where}.workers`, 'a list of machine names')
     return {
       kind,
       what: text(job, 'what', where, 120),
@@ -83,6 +94,8 @@ export function parseJobs(value: unknown): JobDef[] {
       home: text(job, 'home', where, 64).toLowerCase(),
       ...when,
       run: action,
+      ...(leaseHost !== undefined ? { lease_host: leaseHost as string } : {}),
+      ...(workers !== undefined ? { workers: workers as string[] } : {}),
       lease_s: seconds(job, 'lease_s', where),
     }
   })
