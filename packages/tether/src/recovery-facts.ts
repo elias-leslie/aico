@@ -8,6 +8,9 @@ import { closeSync, openSync, readdirSync, readFileSync, statSync } from 'node:f
 import { basename, dirname, join } from 'node:path'
 import { CHECKPOINT_PROMPT, RESUME_PROMPT } from './continuity'
 import { readFdTail } from './entry-files'
+import type { FileReader } from './proc-facts'
+
+export type { FileReader } from './proc-facts'
 
 /** Cause for a tmux server that vanished while its agent was running. tmux
  * runs as a non-main process of an ExitType=cgroup unit, so systemd records no
@@ -261,13 +264,6 @@ export interface TranscriptFacts {
   killed: KilledCall[]
   workflows: WorkflowState[]
   lostBackground: { id: string; output: string | null }[]
-}
-
-export interface FileReader {
-  /** The file's text, or only its last `maxBytes` (starting at a line). */
-  read(path: string, maxBytes?: number): string | null
-  list(path: string): string[]
-  mtime(path: string): number | null
 }
 
 /** The last `maxBytes` of a file, from its first whole line. */

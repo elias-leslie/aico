@@ -5,8 +5,13 @@
 // run while a prompt runs, an ended one while it waits for the next prompt. Tether
 // never reads the agent's own database.
 
-import type { AgentSignal } from '../../../agent-state'
-import { type AgentObservation, observeChosenSession, type ProcFs, UUID_RE } from '../../../proc-fs'
+import type { AgentSignal } from '../../../agent-signal'
+import {
+  type AgentObservation,
+  observeChosenSession,
+  type ProcFs,
+  UUID_RE,
+} from '../../../proc-facts'
 import type { AgentProbe, AgentRunLookup, TuiAdapter } from './contract'
 
 export const AICO_AGENT_PROCESS = 'aico-agent'

@@ -3,7 +3,7 @@
 // (src/lifecycle/tui/adapters); this leaf module has the shared event shape
 // and the value checks they all use. model-switch.ts follows the events.
 
-import type { FileTail } from './proc-fs'
+import type { FileTail } from './proc-facts'
 
 /** Where one session's agent keeps its record. `agent` is the agent's pid:
  * another process in the session starts a new follow (its own launch model). */

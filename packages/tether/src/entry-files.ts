@@ -23,19 +23,9 @@ import {
 } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { ENTRY_SCAN_DEFAULTS, type EntryScanConfig } from './config'
-import type { FileTail, ProcFs } from './proc-fs'
-import type { FileReader } from './recovery-facts'
+import type { EntryHomeFiles, FileReader, FileTail, ProcFs } from './proc-facts'
 
-/** Readers bound to one entry home: none of them reads outside it. */
-export interface EntryHomeFiles {
-  /** The home as the host resolves it (its parent's symlinks resolved): build
-   * paths from this. */
-  home: string
-  fs: ProcFs
-  tail: FileTail
-  reader: FileReader
-  scan: EntryScanConfig
-}
+export type { EntryHomeFiles } from './proc-facts'
 
 let entryScan: EntryScanConfig = ENTRY_SCAN_DEFAULTS
 

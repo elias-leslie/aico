@@ -9,7 +9,7 @@
 // events, hook facts) is plain JSON-serializable data, so a worker on a VM can
 // run the same adapters and send those over the fleet link.
 
-import type { AgentSignal } from '../../../agent-state'
+import type { AgentSignal } from '../../../agent-signal'
 import type { ModelEvent, ModelSource } from '../../../model-record'
 import type {
   AgentObservation,
@@ -17,8 +17,8 @@ import type {
   EntryReaders,
   FileTail,
   ProcFs,
-} from '../../../proc-fs'
-import type { ToolSeed } from '../../../tools'
+} from '../../../proc-facts'
+import type { ToolSeed } from '../../../tool-types'
 import type { ContextHook, ContextStatus, TuiSpec } from '../spec'
 
 /** The `detail` of a `working` signal whose agent finished its own turn while

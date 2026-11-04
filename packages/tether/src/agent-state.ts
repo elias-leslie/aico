@@ -15,6 +15,7 @@
 // A hook's `blocked` holds until the user answers: a UserPromptSubmit report,
 // or a poll whose status changed after the hook fired and is no longer waiting.
 
+import { AGENT_STATES, type AgentSignal, type AgentState } from './agent-signal'
 import { findEntryProcess } from './continuity'
 import type {
   AgentProbe,
@@ -26,8 +27,8 @@ import { ADAPTERS, adapterOf } from './lifecycle/tui/registry'
 import type { ModelSource } from './model-record'
 import { entryReaders, type FileTail, type ProcFs, processTree } from './proc-fs'
 
-export const AGENT_STATES = ['working', 'idle', 'blocked', 'unknown'] as const
-export type AgentState = (typeof AGENT_STATES)[number]
+export type { AgentSignal, AgentState } from './agent-signal'
+export { AGENT_STATES } from './agent-signal'
 
 export interface AgentStateRecord {
   state: AgentState
@@ -46,17 +47,6 @@ export interface AgentStateRecord {
    * while unknown. It only moves forward. A later time while idle means a turn
    * ended, even one too short for the poll to see working (lane reports). */
   stateAgentAt: number
-}
-
-/** One observation of an agent's own state. `at` is when the agent last
- * changed it, when the agent says; hook holds compare against it. */
-export interface AgentSignal {
-  state: Exclude<AgentState, 'unknown'>
-  source: string
-  detail: string | null
-  at: number | null
-  /** The agent's native conversation ID, to match hook reports. */
-  agentSessionId: string | null
 }
 
 // --- hook reports -------------------------------------------------------------
