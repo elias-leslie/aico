@@ -1,0 +1,63 @@
+{
+  "acceptance_receipt": "/srv/workspaces/projects/aico/.git/st/acceptance/9aeb23d3d37cbf9c4d43e60679e16a007e92995fbfb804481ee3cdc5f71a3bcf.json",
+  "live_validation": {
+    "source_commit": "41ec7f1af8154c1f45747111e518eab6a0726db9",
+    "checks": [
+      {
+        "id": "ended-307436f5",
+        "state": "success",
+        "detail": "Own scratch chat ended; 0 open questions; 17 persisted messages."
+      },
+      {
+        "id": "ended-f6577bcc",
+        "state": "success",
+        "detail": "Own scratch chat ended; 0 open questions; 8 persisted messages."
+      },
+      {
+        "id": "ended-7be0690e",
+        "state": "success",
+        "detail": "Own scratch chat ended; 0 open questions; 8 persisted messages."
+      },
+      {
+        "id": "ended-204966af",
+        "state": "success",
+        "detail": "Own scratch chat ended; 0 open questions; 4 persisted messages."
+      },
+      {
+        "id": "deploy",
+        "state": "success",
+        "detail": "Full managed rebuild aico-58385e3d2ed0 succeeded; web active at source 41ec7f1a. Native acceptance: 3237 tests passed, 103.4 s. Tether includes the concurrent catalog repair e612caae."
+      },
+      {
+        "id": "desktop-journey",
+        "state": "success",
+        "detail": "Deployed default implementation role with DeepSeek: first and second messages changed greeting.txt; branched at turn 2 and wrote branch.txt; opened Details. Final-source smoke sent two more replies and reset persisted effort off to From routing."
+      },
+      {
+        "id": "stop-draft",
+        "state": "success",
+        "detail": "Stopped own streaming reply with 700 text characters preserved. The queued note returned once to the composer as a draft (stopped-draft screenshot); later turns continued successfully."
+      },
+      {
+        "id": "needs-you",
+        "state": "success",
+        "detail": "Own chat 7be0690e filed real tether ask a26a476bfcad. Header and sidebar showed Needs you with recommended First. Clicked First; answer delivered, state returned Idle; ask is done with answer First."
+      },
+      {
+        "id": "rendered-states",
+        "state": "success",
+        "detail": "11 actual-component fixture views, no provider calls: loading, empty, open-failed, failed, stopped, resumed, swapped, disconnected, needs-you, questions-failed, rules-unreadable. Separate labeled fixture chrome in each screenshot."
+      },
+      {
+        "id": "uilint",
+        "state": "success",
+        "detail": "Source: 173 files / 3569 items, zero violations. 7 mockup views, all 11 fixture views, and 4 final deployed views have zero violations. Earlier generated model prose containing terminal triggered the product vocabulary rule; model/user content was not censored and the spec was not weakened."
+      },
+      {
+        "id": "cleanup",
+        "state": "success",
+        "detail": "All four created chats ended with zero open questions; both created headless browser sessions closed. No Claude model called. No phone or tester pass started."
+      }
+    ]
+  }
+}
