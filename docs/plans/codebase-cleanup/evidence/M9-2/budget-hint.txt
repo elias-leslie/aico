@@ -1,0 +1,1 @@
+Context is about 801 tokens (budget 1); biggest: tool-usage (~769), Scratch budget proof (~27).

@@ -1,0 +1,14 @@
+{
+  "id": "pi:72f0bf36-0f2e-434d-b1b8-a3c2796bfac3",
+  "tool": "pi",
+  "model": "deepseek-v4.1-flash",
+  "outcome": "completed",
+  "startedAt": 1793834612423,
+  "endedAt": 1793834613876,
+  "tokens": {
+    "input": 6996,
+    "cacheRead": 256,
+    "cacheWrite": 0,
+    "output": 7
+  }
+}

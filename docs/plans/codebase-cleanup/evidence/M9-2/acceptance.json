@@ -1,0 +1,22 @@
+{
+  "before": {
+    "acceptance_id": "379ddbad333989e3e91c7ebde5d3a3a32de9261bc3c095bee2a6d17c0c0c4839",
+    "state": "success",
+    "source": {
+      "commit": "2d1fb2a83d082a625d4fe023972eef1aaaa9bf7f",
+      "tree": "8c6b1b502c7afdbe5eeb0639c23c3d98e3f0d968"
+    },
+    "completed_at": "2026-11-04T22:39:46.916571+00:00",
+    "duration_ms": 139458.735
+  },
+  "after": {
+    "acceptance_id": "bed7d9478e2cc8a5be3a551938321535719e250a958f003a12c2d099be3af699",
+    "state": "success",
+    "source": {
+      "commit": "2b659ff5e147ef7a5e7ffb3199fee2b5435c481c",
+      "tree": "4f171929ce39c5bf9c8db6b376d50ee8796fd15e"
+    },
+    "completed_at": "2026-11-04T23:19:26.229911+00:00",
+    "duration_ms": 143936.848
+  }
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "harness": "*",
+    "role": "*",
+    "warn_tokens": 60000,
+    "jump_pct": 25
+  },
+  {
+    "harness": "claude",
+    "role": "*",
+    "warn_tokens": 60000,
+    "jump_pct": null
+  },
+  {
+    "harness": "codex",
+    "role": "*",
+    "warn_tokens": 32000,
+    "jump_pct": null
+  },
+  {
+    "harness": "pi",
+    "role": "*",
+    "warn_tokens": 12000,
+    "jump_pct": null
+  }
+]

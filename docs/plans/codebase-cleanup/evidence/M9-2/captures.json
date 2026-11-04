@@ -1,0 +1,56 @@
+{
+  "source": "2b659ff5e147ef7a5e7ffb3199fee2b5435c481c",
+  "route": "/agents",
+  "screenshots": [
+    {
+      "file": "cost-1600x900.png",
+      "width": 1600,
+      "height": 900,
+      "sha256": "2702fdf1d5e3816ed7cbde0a1d5cdea25e5a103e29ab13b8e0811b7e44dd5a5c",
+      "capturedAt": "2026-11-04T23:25:53.789926+00:00"
+    },
+    {
+      "file": "cost-390x844.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "5c38e425d963875b51b70c86e3ebf85d933efd81bcf9d054dd07c6bed72718b7",
+      "capturedAt": "2026-11-04T23:25:54.672944+00:00"
+    },
+    {
+      "file": "prompts-1600x900.png",
+      "width": 1600,
+      "height": 900,
+      "sha256": "3a50adb22cc4074e91f5d690f61d9b8ee95f84c9874b55f965930511da67ceaa",
+      "capturedAt": "2026-11-04T23:23:32.259044+00:00"
+    },
+    {
+      "file": "prompts-390x844.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "e7dd35a94d9d1974ad1fffb2177c082f05c0bcceb78b3deacf3aa2beb67c41c2",
+      "capturedAt": "2026-11-04T23:23:33.161062+00:00"
+    },
+    {
+      "file": "roles-1600x900.png",
+      "width": 1600,
+      "height": 900,
+      "sha256": "d389281dc9c01c6b058ff8732b76fff7c10796d8d7774519b25cb49c68dc895a",
+      "capturedAt": "2026-11-04T23:24:07.707761+00:00"
+    },
+    {
+      "file": "roles-390x844.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "3f19a726da4f54869a69174cdba11db42421253ef60b5dea4a2644aaa41a12df",
+      "capturedAt": "2026-11-04T23:24:06.775742+00:00"
+    }
+  ],
+  "copyDataExceptions": {
+    "request": "2fb0a3",
+    "approved": true,
+    "matches": [
+      "Test live Aico/A-Term freely",
+      "Never aim tmux -S at a non-socket path"
+    ]
+  }
+}

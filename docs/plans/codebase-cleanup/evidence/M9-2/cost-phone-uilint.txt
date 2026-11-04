@@ -1,0 +1,8 @@
+copy.old-product-name  html > body > main > section > ul > li:nth-of-type(3) > div > span  "Test live Aico/A-Term freely"  The product is Aico; never A-Term.
+copy.implementation-terms  html > body > main > section > ul > li:nth-of-type(7) > div > span  "Never aim tmux -S at a non-socket path"  Implementation term in UI copy; name the session, device or action the owner recognises.
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: http://127.0.0.1:3002/agents "Agents and prompts · Aico" against the aico spec
+UILINT:fail|violations=2|checks=6|items=205|unverified=0|scope=mechanical-only|not-a-copy-review

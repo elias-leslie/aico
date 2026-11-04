@@ -1,0 +1,7 @@
+omitted: Entered form values were excluded.
+omitted: Closed disclosure content was not captured.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: http://127.0.0.1:3002/agents "Agents and prompts · Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=20|unverified=0|scope=mechanical-only|not-a-copy-review

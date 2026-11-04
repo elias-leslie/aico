@@ -1,0 +1,49 @@
+{
+  "at": "2026-11-04T23:27:41.915Z",
+  "rows": [
+    {
+      "id": "jobs/context-unused",
+      "what": "Loaded context use",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "warn",
+      "meaning": "0 items have no recorded use across at least 3 observed sessions. 2/27 deliveries fully observed; 25 sessions unavailable.",
+      "project": "aico",
+      "last_run": "2026-11-04T23:27:41.806Z",
+      "next_run": "2026-11-05T09:10:00.000Z",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/agents"
+        }
+      ],
+      "updated_at": "2026-11-04T23:27:41.872Z",
+      "shown": "warn",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/context-import",
+      "what": "Agent Hub import into Aico",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Copied 150 memories and 143 prompts from Agent Hub; the project list matches.",
+      "project": "aico",
+      "last_run": "2026-11-04T23:22:21.299Z",
+      "next_run": "2026-11-04T23:32:23.538Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run context-import"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g context-import -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-04T23:22:26.301Z",
+      "shown": "ok",
+      "shown_since": null
+    }
+  ]
+}
