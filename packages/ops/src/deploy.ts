@@ -511,7 +511,8 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
       argv,
       queued_at: new Date().toISOString(),
     })
-    const setenv = ['PATH', 'HOME', 'XDG_RUNTIME_DIR', 'AICO_NODE']
+    // The job runs as the caller (its identity holds the deploy hold the acceptance guard checks).
+    const setenv = ops.deploy.jobEnv
       .filter((name) => deps.env[name])
       .map((name) => `--setenv=${name}=${deps.env[name]}`)
     const queued = deps.run(

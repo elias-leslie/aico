@@ -7,7 +7,24 @@
     "unitSources": {
       "aico-web.service": ["packages/web-frontend"]
     },
-    "healthAttempts": 15
+    "healthAttempts": 15,
+    "jobEnv": [
+      "PATH",
+      "HOME",
+      "XDG_RUNTIME_DIR",
+      "AICO_NODE",
+      "AICO_SESSION_ID",
+      "AICO_AGENT_SLUG",
+      "CLAUDE_CODE_SESSION_ID",
+      "CLAUDE_SESSION_ID",
+      "CODEX_THREAD_ID",
+      "CODEX_SESSION_ID",
+      "PI_SESSION_ID",
+      "ANTIGRAVITY_CONVERSATION_ID",
+      "ST_SESSION_ID",
+      "TMUX",
+      "TMUX_PANE"
+    ]
   },
   "vm": {
     "ssh": "root@davion-gem",

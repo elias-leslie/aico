@@ -269,6 +269,16 @@ describe('deploy', () => {
     expect(await deploy(request({ project: 'summitflow' }), held.root, held.deps)).toBe(NOT_HANDLED)
   })
 
+  it("--detach queues a job that runs as the caller, so its acceptance sees the caller's deploy hold", async () => {
+    const { root, deps, calls, head } = setup()
+    deps.env = { ...deps.env, PATH: '/bin', CLAUDE_CODE_SESSION_ID: 'me', SECRET_TOKEN: 'x' }
+    expect(await deploy(request({ detach: true }), root, deps)).toBe(0)
+    const queued = calls.find((call) => call.startsWith('systemd-run')) ?? ''
+    expect(queued).toContain('--setenv=CLAUDE_CODE_SESSION_ID=me')
+    expect(queued).toContain(`deploy demo --sha ${head} --job aico-`)
+    expect(queued).not.toContain('SECRET_TOKEN')
+  })
+
   it('restores the previous unit when health fails', async () => {
     const { root, deps } = setup()
     const before = '[Service]\nWorkingDirectory=/old/packages/web-server\n'
