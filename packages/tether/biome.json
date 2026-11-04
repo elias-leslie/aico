@@ -40,6 +40,8 @@
                     "group": [
                       "@aico/agent",
                       "@aico/agent/**",
+                      "@aico/checks",
+                      "@aico/checks/**",
                       "@aico/jobs",
                       "@aico/jobs/**",
                       "@aico/notes",
