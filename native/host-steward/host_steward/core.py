@@ -195,6 +195,19 @@ def _say(template: str, fields: Mapping[str, Any]) -> str:
         return template.strip()
 
 
+def _lists(fields: Mapping[str, Any], meanings: Mapping[str, Any]) -> dict[str, Any]:
+    """A list field reads as its first [lists] show items, then the rest as a count ([lists] more)."""
+    style = meanings.get("lists", {})
+    show, more = int(style.get("show", 3)), str(style.get("more", "{shown}"))
+    out = dict(fields)
+    for key, value in fields.items():
+        if isinstance(value, list | tuple):
+            items = [str(item) for item in value]
+            shown = ", ".join(items[:show])
+            out[key] = more.format(shown=shown, n=len(items) - show) if len(items) > show else shown
+    return out
+
+
 def explain(
     code: str,
     fields: Mapping[str, Any],
@@ -205,7 +218,8 @@ def explain(
     """The plain-words text for one signal: what happened, what it means, what happens next.
 
     meanings.toml keys an entry "code:state" (an ok note worth reading) or "code" (a problem); an ok signal
-    with no "code:ok" entry says its `detail` field, else the code."""
+    with no "code:ok" entry says its `detail` field, else the code. A list field is shortened per [lists]."""
+    fields = _lists(fields, meanings)
     table = meanings.get("signal", {})
     entry = table.get(f"{code}:{state}") or (table.get(code) if state != "ok" else None)
     if not isinstance(entry, dict):

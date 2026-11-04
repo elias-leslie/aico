@@ -2,9 +2,10 @@
 
 New for host-steward (Nightshift ran the scrub and self-test timers but kept no row of their results beyond the
 storage check's failed-self-test rule). Reads `btrfs scrub status` for each configured disk and `smartctl -l
-selftest` for the NVMe drive, so the scheduled jobs have live information even before they run here. While
-[acting] scrub / nvme_tests are off the row says the schedule is still Nightshift's. The parsers are shared with
-the scrub and nvme-test jobs.
+selftest` for the NVMe drive, so the scheduled jobs have live information even before they run here. The schedule
+follows [acting] (the runner's ctx.acting): while scrub or nvme_tests is off the row says that schedule is still
+Nightshift's; once on, it is host-steward's timers ([checks.disk-tests] timers), and one that is not enabled warns,
+since nothing else would run it. The parsers are shared with the scrub and nvme-test jobs.
 """
 
 from __future__ import annotations
@@ -12,7 +13,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from host_steward import core
 from host_steward.checks.storage import SELFTEST_FAILED
 from host_steward.core import Ctx, Signal
 
@@ -79,12 +79,6 @@ def short_date(text: str) -> str:
     return f"{match.group(1)} {match.group(2)}" if match else (text or "?")
 
 
-def acting_flags(ctx: Ctx) -> dict[str, bool]:
-    if "acting" in ctx.cfg:
-        return dict(ctx.cfg["acting"])
-    return dict(core.load_data().get("acting", {}))
-
-
 def scrub_signal(ctx: Ctx, entry: dict[str, Any]) -> Signal:
     name, mount = entry["name"], entry["mount"]
     result = ctx.run(["btrfs", "scrub", "status", mount], timeout=30)
@@ -141,7 +135,24 @@ def run(ctx: Ctx) -> list[Signal]:
     signals = [scrub_signal(ctx, entry) for entry in ctx.cfg["scrubs"]]
     signals.append(selftest_signal(ctx))
     signals.append(Signal("disk_tests.last", "ok", {"text": last_results(signals)}, note=True))
-    flags = acting_flags(ctx)
-    if not (flags.get("scrub") and flags.get("nvme_tests")):
-        signals.append(Signal("disk_tests.dry_run", "ok", {}, note=True))
-    return signals
+    return signals + schedule_signals(ctx)
+
+
+def schedule_signals(ctx: Ctx) -> list[Signal]:
+    """Whose schedule runs each kind: Nightshift's while its [acting] switch is off (a note); host-steward's timers
+    once on, each of which must be enabled (systemctl is-enabled) or the row warns."""
+    nightshift = [kind for kind in ctx.cfg["timers"] if not ctx.acting.get(kind)]
+    out = []
+    if nightshift:
+        code = "disk_tests.dry_run" + ("" if len(nightshift) > 1 else f".{nightshift[0]}")
+        out.append(Signal(code, "ok", {}, note=True))
+    off = [
+        timer
+        for kind, timers in ctx.cfg["timers"].items()
+        if ctx.acting.get(kind)
+        for timer in timers
+        if ctx.run(["systemctl", "--no-ask-password", "is-enabled", timer], timeout=30).rc != 0
+    ]
+    if off:
+        out.append(Signal("disk_tests.timer_off", "warn", {"timers": " ".join(off)}))
+    return out

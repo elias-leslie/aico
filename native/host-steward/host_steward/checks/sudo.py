@@ -573,7 +573,11 @@ def evaluate(
                     Signal(
                         "sudo.new_family",
                         "warn",
-                        {"n": len(manual), "families": ", ".join(manual[:8])},
+                        {
+                            "n": len(manual),
+                            "plural": "" if len(manual) == 1 else "s",
+                            "families": manual,
+                        },
                     )
                 )
             else:

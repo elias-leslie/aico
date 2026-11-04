@@ -377,6 +377,10 @@ scrubs = [
   { name = "System disk", mount = "/" },
   { name = "Backup disk", mount = "/mnt/summitflow-native" },
 ]
+# host-steward's timers per [acting] switch: Nightshift's schedule runs that kind while the switch is off; once on,
+# these must be enabled (the cutover enables them) or the row warns.
+timers.scrub = ["host-steward-scrub-native.timer", "host-steward-scrub-root.timer"]
+timers.nvme_tests = ["host-steward-nvme-short-test.timer", "host-steward-nvme-long-test.timer"]
 
 [jobs.scrub]
 # The same lock file Nightshift's scrub units use, so the two never scrub at once.
@@ -486,7 +490,7 @@ pressure_warn_full_pct = 2.0
 pressure_warn_some_pct = 10.0
 # The kill incidents: the last window_h hours; a kill, a unit stop and a Tether crash record within match_s are one
 # loss; kill_loop_count kills in one pane within kill_loop_window_min is a loop; a fresh loss waits tether_grace_s
-# for Tether's own crash record. Paths take {uid} and {home}. These are the live paths: memctl writes them once it acts.
+# for Tether's own crash record. Paths take {uid} and {home}. events is the live record: memctl writes it once it acts.
 window_h = 24
 match_s = 180
 kill_loop_count = 3
@@ -494,10 +498,21 @@ kill_loop_window_min = 60
 tether_grace_s = 300
 heartbeat_stale_s = 60
 events = "{home}/.local/state/nightshift/memory-events.jsonl"
-heartbeat = "/run/user/{uid}/nightshift/memctl.json"
-admission = "/run/user/{uid}/nightshift/admission.json"
 guard = "/run/user/{uid}/tether/default/memory-guard.json"
 recoveries = "{home}/.local/state/tether/default/recoveries.json"
+# The memory controller that acts, whose heartbeat and admission file the row reads: Nightshift's while [acting] memctl
+# is off, host-steward's once it is on (its live files keep Nightshift's names: Tether and SummitFlow read those).
+# name and unit fill the row ("<name>'s memory controller", the unit to restart).
+[checks.memory.memctl.nightshift]
+name = "Nightshift"
+unit = "nightshift-memctl"
+heartbeat = "/run/user/{uid}/nightshift/memctl.json"
+admission = "/run/user/{uid}/nightshift/admission.json"
+[checks.memory.memctl.host-steward]
+name = "host-steward"
+unit = "host-steward-memctl"
+heartbeat = "/run/user/{uid}/nightshift/memctl.json"
+admission = "/run/user/{uid}/nightshift/admission.json"
 
 # ---- Auth tripwire, sudo, docker access, attribution and declarations (M5a-2 F1, ports of Nightshift's security checks)
 

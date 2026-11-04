@@ -748,8 +748,10 @@ class CheckHost:
             "cgroup_user": str(tmp / "cg/user"),
             "cgroup_system": str(tmp / "cg/system"),
             "home": str(tmp / "home"),
-            "heartbeat": str(tmp / "hb.json"),
-            "admission": str(tmp / "adm.json"),
+            "memctl": {
+                who: {**ctl, "heartbeat": str(tmp / "hb.json"), "admission": str(tmp / "adm.json")}
+                for who, ctl in DATA["checks"]["memory"]["memctl"].items()
+            },
             "guard": str(tmp / "guard.json"),
             "events": str(tmp / "events.jsonl"),
             "recoveries": str(tmp / "recoveries.json"),
@@ -783,8 +785,10 @@ class CheckHost:
             return self.daemons
         return self.units
 
-    def ctx(self, state, now=NOW):
-        return core.Ctx(cfg=self.cfg, site=DATA["site"], now=now, run=self.run, state=state)
+    def ctx(self, state, now=NOW, acting=None):
+        return core.Ctx(
+            cfg=self.cfg, site=DATA["site"], now=now, run=self.run, state=state, acting=acting or {}
+        )
 
 
 def codes(signals):
@@ -833,6 +837,32 @@ def test_controllers_report_or_go_stale(tmp_path):
     assert memory.controllers(h.ctx({}))[0].state == "ok"
     (tmp_path / "adm.json").unlink()
     assert memory.controllers(h.ctx({}))[0].fields["ago"] == "has not reported since boot"
+
+
+def test_memctl_alive_reads_and_names_the_acting_controller(tmp_path):
+    """[acting] memctl off: Nightshift's memctl is the one that must report (and the one to restart); on:
+    host-steward's, read at its own configured heartbeat."""
+    h = CheckHost(tmp_path)
+    h.cfg["memctl"]["host-steward"]["heartbeat"] = str(tmp_path / "hs-hb.json")
+    h.cfg["memctl"]["host-steward"]["admission"] = str(tmp_path / "hs-adm.json")
+    h.fresh(at=NOW - 600)  # Nightshift's heartbeat is stale
+    (tmp_path / "hs-hb.json").write_text(json.dumps({"ts": NOW - 5, "state": "green"}))
+    off = memory.controllers(h.ctx({}))[0]
+    assert (off.state, off.fields["name"], off.fields["unit"]) == (
+        "warn",
+        "Nightshift",
+        "nightshift-memctl",
+    )
+    text = core.explain(off.code, off.fields, DATA["meanings"], True, off.state)
+    assert text.startswith("Nightshift's memory controller last reported 10 min ago")
+    assert "systemctl --user restart nightshift-memctl" in text
+    on = memory.controllers(h.ctx({}, acting={"memctl": True}))[0]
+    assert (on.state, on.fields["name"]) == ("ok", "host-steward")
+    (tmp_path / "hs-hb.json").unlink()
+    gone = memory.controllers(h.ctx({}, acting={"memctl": True}))[0]
+    assert "systemctl --user restart host-steward-memctl" in core.explain(
+        gone.code, gone.fields, DATA["meanings"], True, gone.state
+    )
 
 
 def journal_line(ts, message, **extra):
@@ -999,5 +1029,5 @@ def test_memory_check_makes_one_row(tmp_path):
         "memory", memory.run(h.ctx({})), h.cfg, DATA["meanings"], "box", NOW, DATA["caps"]
     )
     assert bad["state"] == "warn" and bad["meaning"].startswith(
-        "The memory controller last reported 10 min ago"
+        "Nightshift's memory controller last reported 10 min ago"
     )

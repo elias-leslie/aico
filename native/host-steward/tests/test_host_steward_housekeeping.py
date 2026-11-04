@@ -486,9 +486,14 @@ def test_latest_selftest_nvme_and_ata():
     )
 
 
-def disk_tests_ctx(run):
-    cfg = {**DATA["checks"]["disk-tests"], "acting": {"scrub": False, "nvme_tests": False}}
-    return core.Ctx(cfg=cfg, site=DATA["site"], now=NOW, run=run)
+def disk_tests_ctx(run, acting=None):
+    return core.Ctx(
+        cfg=DATA["checks"]["disk-tests"],
+        site=DATA["site"],
+        now=NOW,
+        run=run,
+        acting=acting or {"scrub": False, "nvme_tests": False},
+    )
 
 
 def test_disk_tests_check_reports_last_results_and_dry_run():
@@ -513,6 +518,37 @@ def test_disk_tests_check_reports_last_results_and_dry_run():
         row["state"] == "ok"
         and "Nov 1" in row["meaning"]
         and "Short, completed without error, 3 h ago" in row["meaning"]
+    )
+
+
+def test_disk_tests_schedule_follows_the_acting_flags():
+    """Off: Nightshift's schedule (a note per kind still Nightshift's). On: host-steward's timers, and one that is not
+    enabled warns."""
+    timers = DATA["checks"]["disk-tests"]["timers"]
+    enabled = Fake((["is-enabled"], Result(0, "enabled\n")))
+
+    def schedule(run, **acting):
+        return {s.code: s.state for s in disk_tests.schedule_signals(disk_tests_ctx(run, acting))}
+
+    assert schedule(enabled) == {"disk_tests.dry_run": "ok"}
+    assert schedule(enabled, scrub=True) == {"disk_tests.dry_run.nvme_tests": "ok"}
+    assert schedule(enabled, nvme_tests=True) == {"disk_tests.dry_run.scrub": "ok"}
+    assert schedule(enabled, scrub=True, nvme_tests=True) == {}
+    checked = {c[-1] for c in enabled.calls}
+    assert checked == {*timers["scrub"], *timers["nvme_tests"]}
+    root_off = Fake(
+        (["is-enabled", "host-steward-scrub-root.timer"], Result(1, "disabled\n")),
+        (["is-enabled"], Result(0, "enabled\n")),
+    )
+    signals = disk_tests.schedule_signals(disk_tests_ctx(root_off, {"scrub": True, "nvme_tests": True}))
+    assert [(s.code, s.state, s.fields["timers"]) for s in signals] == [
+        ("disk_tests.timer_off", "warn", "host-steward-scrub-root.timer")
+    ]
+    text = core.explain(signals[0].code, signals[0].fields, DATA["meanings"], True, "warn")
+    assert "sudo systemctl enable --now host-steward-scrub-root.timer" in text
+    assert all(
+        core.explain(code, {}, DATA["meanings"], False, "ok").startswith("Nightshift still runs")
+        for code in ("disk_tests.dry_run", "disk_tests.dry_run.scrub", "disk_tests.dry_run.nvme_tests")
     )
 
 

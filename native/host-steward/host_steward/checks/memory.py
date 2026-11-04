@@ -4,8 +4,9 @@ Port of ns/checks/workstation.py's memory pressure (the 15-minute stall delta), 
 incidents) and the memctl / Tether-guard heartbeat probes. The stall rule reads the PSI `total=` counters, so a
 spike between runs is not missed; M5a-1's workstation check keeps the instant avg10 reading. The kill incidents come
 from memctl's record (the live Nightshift path, which host-steward's memctl writes once it acts), the kernel journal,
-the user manager's unit results and Tether's crash records. memctl and the guard are read at their live
-heartbeat paths for the same reason.
+the user manager's unit results and Tether's crash records. The memctl heartbeat read is the acting controller's
+([checks.memory.memctl]: Nightshift's while [acting] memctl is off, host-steward's once it is on), and the row names
+that controller and its unit; Tether's guard is read at its live heartbeat path.
 """
 
 from __future__ import annotations
@@ -23,6 +24,11 @@ from host_steward.memstate import parse_meminfo, parse_psi
 ID = "memory"
 
 
+def acting_memctl(ctx: Ctx) -> dict[str, str]:
+    """The memory controller that acts: host-steward's once [acting] memctl is on, Nightshift's until then."""
+    return ctx.cfg["memctl"]["host-steward" if ctx.acting.get("memctl") else "nightshift"]
+
+
 def paths(ctx: Ctx) -> dict[str, Path]:
     uid = int(ctx.cfg["owner_uid"])
     home = ctx.cfg.get("home")
@@ -32,9 +38,10 @@ def paths(ctx: Ctx) -> dict[str, Path]:
         except KeyError:
             home = f"/home/{ctx.site.get('owner', {}).get('user', 'kasadis')}"
     fill = {"uid": uid, "home": home}
+    ctl = acting_memctl(ctx)
     return {
-        key: Path(str(ctx.cfg[key]).format(**fill))
-        for key in ("events", "heartbeat", "admission", "guard", "recoveries")
+        **{key: Path(str(ctx.cfg[key]).format(**fill)) for key in ("events", "guard", "recoveries")},
+        **{key: Path(str(ctl[key]).format(**fill)) for key in ("heartbeat", "admission")},
     }
 
 
@@ -114,16 +121,21 @@ def load_json(ctx: Ctx, path: Path) -> Any:
         return None
 
 
-def alive(ctx: Ctx, code: str, last: float | None, state: str | None, who: str) -> Signal:
+def alive(
+    ctx: Ctx, code: str, last: float | None, state: str | None, who: dict[str, str]
+) -> Signal:
+    """who: the reporter's fields for the row (name, unit, or who)."""
     stale = float(ctx.cfg["heartbeat_stale_s"])
     if last is not None and ctx.now - last <= stale:
-        return Signal(code, "ok", {"ago": f"{ctx.now - last:.0f}", "state": state or "unknown"})
+        return Signal(
+            code, "ok", {**who, "ago": f"{ctx.now - last:.0f}", "state": state or "unknown"}
+        )
     ago = (
         f"last reported {(ctx.now - last) / 60:.0f} min ago"
         if last
         else "has not reported since boot"
     )
-    return Signal(code, "warn", {"who": who, "ago": ago})
+    return Signal(code, "warn", {**who, "ago": ago})
 
 
 def number(value: Any) -> float | None:
@@ -147,9 +159,16 @@ def controllers(ctx: Ctx) -> list[Signal]:
     )
     guard = load_json(ctx, p["guard"])
     guard_ts = number(guard.get("ts")) if isinstance(guard, dict) else None
+    ctl = acting_memctl(ctx)
     return [
-        alive(ctx, "memory.memctl_alive", max(seen) if seen else None, state, "memctl"),
-        alive(ctx, "memory.guard_alive", guard_ts, None, "Tether's memory guard"),
+        alive(
+            ctx,
+            "memory.memctl_alive",
+            max(seen) if seen else None,
+            state,
+            {"name": ctl["name"], "unit": ctl["unit"]},
+        ),
+        alive(ctx, "memory.guard_alive", guard_ts, None, {"who": "Tether's memory guard"}),
     ]
 
 

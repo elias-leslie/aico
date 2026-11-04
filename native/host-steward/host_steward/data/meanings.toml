@@ -2,6 +2,11 @@
 # worth reading in the row (note) is signal."code:ok". Optional keys: impact, next. {name} fills from the signal's
 # fields; a missing field reads "?". The row shows the worst problem in full and the others in a short line.
 
+# How a list in a finding reads: its first `show` items, then the rest as a count.
+[lists]
+show = 3
+more = "{shown} and {n} more"
+
 # The line a row says when every signal is fine.
 [ok]
 guests = "Guests are running and no segment is open."
@@ -450,9 +455,9 @@ what = "{n} memory kill{plural} in the last {hours} hours: {list}"
 what = "Not read for the kill count: {unread}"
 
 [signal."memory.memctl_alive"]
-what = "The memory controller {ago}"
+what = "{name}'s memory controller {ago}"
 impact = "Heavy-work admission and the kernel kill records are stale"
-next = "Restart it: systemctl --user restart host-steward-memctl"
+next = "Restart it: systemctl --user restart {unit}"
 
 [signal."memory.guard_alive"]
 what = "{who} {ago}"
@@ -486,6 +491,17 @@ what = "Last: {text}"
 [signal."disk_tests.dry_run:ok"]
 what = "Nightshift still runs the scrubs and self-tests until cutover"
 
+[signal."disk_tests.dry_run.scrub:ok"]
+what = "Nightshift still runs the scrubs until cutover"
+
+[signal."disk_tests.dry_run.nvme_tests:ok"]
+what = "Nightshift still runs the NVMe self-tests until cutover"
+
+[signal."disk_tests.timer_off"]
+what = "Not scheduled: {timers} is off"
+impact = "host-steward runs these now, so they won't run on time"
+next = "Turn it on: sudo systemctl enable --now {timers}"
+
 # tripwire, sudo, security
 [signal."tripwire.changed"]
 what = "{host}: {msg}"
@@ -515,7 +531,9 @@ what = "{total} sudo calls in 24 hours, against about {median} a day"
 next = "See what is calling sudo with host-steward check --only sudo --dry-run"
 
 [signal."sudo.new_family"]
-what = "{n} new kinds of sudo command in 24 hours: {families}"
+what = "{n} new sudo command{plural}: {families}"
+impact = "Expected if declared (host-steward or nightshift declare) or run by a known agent; they count as normal after a day"
+next = "Don't know one? journalctl -t sudo --since -1d -g NAME shows who ran it"
 
 [signal."sudo.new_family.auto:ok"]
 what = "{n} new kinds of sudo command, all from known services: {by}"
