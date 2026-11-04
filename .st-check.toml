@@ -84,7 +84,7 @@ kind = "check"
 coverage = "full"
 quick = true
 quick_paths = ["native/android/**"]
-argv = ["bash", "-c", "export ANDROID_HOME=\"${ANDROID_HOME:-$HOME/Android/Sdk}\"; export PATH=/usr/bin:/bin:$PATH; cd native/android && nice -n 19 ./gradlew test --offline --console=plain"]
+argv = ["bash", "-c", "export ANDROID_HOME=\"${ANDROID_HOME:-/home/kasadis/Android/Sdk}\"; export PATH=/usr/bin:/bin:$PATH; export GRADLE_USER_HOME=\"${GRADLE_USER_HOME:-/home/kasadis/.gradle}\"; if [ ! -w \"$GRADLE_USER_HOME\" ]; then rm -rf \"${TMPDIR:-/tmp}/gradle-home\"; mkdir -p \"${TMPDIR:-/tmp}/gradle-home\" && cp -aL --reflink=auto \"$GRADLE_USER_HOME/caches\" \"$GRADLE_USER_HOME/wrapper\" \"${TMPDIR:-/tmp}/gradle-home/\" && export GRADLE_USER_HOME=\"${TMPDIR:-/tmp}/gradle-home\"; fi; cd native/android && nice -n 19 ./gradlew test --offline --console=plain"]
 timeout_seconds = 600
 
 # The tray's Rust tests and lints (native/tray, cargo). The compiler is the one rust-toolchain.toml pins (rustup under
@@ -552,7 +552,7 @@ timeout_seconds = 600
 # The phone app's tests again, from clean (the quick lane reuses Gradle's caches).
 [[deep.stages]]
 id = "gradle-android"
-argv = ["bash", "-c", "export ANDROID_HOME=\"${ANDROID_HOME:-$HOME/Android/Sdk}\"; export PATH=/usr/bin:/bin:$PATH; cd native/android && nice -n 19 ./gradlew clean test --offline --console=plain"]
+argv = ["bash", "-c", "export ANDROID_HOME=\"${ANDROID_HOME:-/home/kasadis/Android/Sdk}\"; export PATH=/usr/bin:/bin:$PATH; export GRADLE_USER_HOME=\"${GRADLE_USER_HOME:-/home/kasadis/.gradle}\"; if [ ! -w \"$GRADLE_USER_HOME\" ]; then rm -rf \"${TMPDIR:-/tmp}/gradle-home\"; mkdir -p \"${TMPDIR:-/tmp}/gradle-home\" && cp -aL --reflink=auto \"$GRADLE_USER_HOME/caches\" \"$GRADLE_USER_HOME/wrapper\" \"${TMPDIR:-/tmp}/gradle-home/\" && export GRADLE_USER_HOME=\"${TMPDIR:-/tmp}/gradle-home\"; fi; cd native/android && nice -n 19 ./gradlew clean test --offline --console=plain"]
 timeout_seconds = 900
 
 # Nightly whole-repo build: `tsc -b --force` ignores the incremental cache and the
