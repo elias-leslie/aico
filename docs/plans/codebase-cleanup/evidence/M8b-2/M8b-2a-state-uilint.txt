@@ -1,0 +1,47 @@
+disconnected: omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/disconnected.html "Aico rendered fixture: disconnected" (state: disconnected) against the aico spec
+UILINT:ok|violations=0|checks=6|items=26|unverified=0|scope=mechanical-only|not-a-copy-review
+empty: omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/empty.html "Aico rendered fixture: empty" (state: empty) against the aico spec
+UILINT:ok|violations=0|checks=6|items=4|unverified=0|scope=mechanical-only|not-a-copy-review
+failed: omitted: Closed disclosure content was not captured.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/failed.html "Aico rendered fixture: failed" (state: failed) against the aico spec
+UILINT:ok|violations=0|checks=6|items=28|unverified=0|scope=mechanical-only|not-a-copy-review
+loading: omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/loading.html "Aico rendered fixture: loading" (state: loading) against the aico spec
+UILINT:ok|violations=0|checks=6|items=3|unverified=0|scope=mechanical-only|not-a-copy-review
+needs-you: omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/needs-you.html "Aico rendered fixture: needs-you" (state: needs-you) against the aico spec
+UILINT:ok|violations=0|checks=6|items=31|unverified=0|scope=mechanical-only|not-a-copy-review
+open-failed: omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/open-failed.html "Aico rendered fixture: open-failed" (state: open-failed) against the aico spec
+UILINT:ok|violations=0|checks=6|items=5|unverified=0|scope=mechanical-only|not-a-copy-review
+questions-failed: omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/questions-failed.html "Aico rendered fixture: questions-failed" (state: questions-failed) against the aico spec
+UILINT:ok|violations=0|checks=6|items=25|unverified=0|scope=mechanical-only|not-a-copy-review
+resumed: omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/resumed.html "Aico rendered fixture: resumed" (state: resumed) against the aico spec
+UILINT:ok|violations=0|checks=6|items=30|unverified=0|scope=mechanical-only|not-a-copy-review
+rules-unreadable: omitted: Entered form values were excluded.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/rules-unreadable.html "Aico rendered fixture: rules-unreadable" (state: rules-unreadable) against the aico spec
+UILINT:ok|violations=0|checks=6|items=17|unverified=0|scope=mechanical-only|not-a-copy-review
+stopped: omitted: Entered form values were excluded.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/stopped.html "Aico rendered fixture: stopped" (state: stopped) against the aico spec
+UILINT:ok|violations=0|checks=6|items=25|unverified=0|scope=mechanical-only|not-a-copy-review
+swapped: omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/.dev-tools/m8b-2a-state-views/swapped.html "Aico rendered fixture: swapped" (state: swapped) against the aico spec
+UILINT:ok|violations=0|checks=6|items=26|unverified=0|scope=mechanical-only|not-a-copy-review

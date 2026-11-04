@@ -1,0 +1,330 @@
+{
+  "milestone": "M8b-2a",
+  "recorded_at": "2026-11-04T21:21:54.283467+00:00",
+  "source_commits": [
+    "f38678b8896c0108a83e9fd7b4f04321c3178f3e",
+    "ddefecbd1b8bd3583b53dc9fffb51727ba644234",
+    "41ec7f1af8154c1f45747111e518eab6a0726db9"
+  ],
+  "source_loc": {
+    "added": 3778,
+    "removed": 5559,
+    "net": -1781
+  },
+  "acceptance_receipt": "/srv/workspaces/projects/aico/.git/st/acceptance/9aeb23d3d37cbf9c4d43e60679e16a007e92995fbfb804481ee3cdc5f71a3bcf.json",
+  "acceptance_before_after": {
+    "before": {
+      "path": "/srv/workspaces/projects/aico/.git/st/acceptance/aa71592fe04e38579d855f181e7d66d067f99d864395442cdcdf460de2748393.json",
+      "id": "aa71592fe04e38579d855f181e7d66d067f99d864395442cdcdf460de2748393",
+      "state": "success",
+      "source": {
+        "commit": "a8eff159db5046965020c8fbedf17c702987aaed",
+        "tree": "b8d9d21a6feb8964eab77f51c72ca5b61b5d4abb"
+      },
+      "duration_ms": 173603.662
+    },
+    "after": {
+      "path": "/srv/workspaces/projects/aico/.git/st/acceptance/9aeb23d3d37cbf9c4d43e60679e16a007e92995fbfb804481ee3cdc5f71a3bcf.json",
+      "id": "9aeb23d3d37cbf9c4d43e60679e16a007e92995fbfb804481ee3cdc5f71a3bcf",
+      "state": "success",
+      "source": {
+        "commit": "41ec7f1af8154c1f45747111e518eab6a0726db9",
+        "tree": "609b72ec6f2463924f41d517c2d1d04c7eb22c5f"
+      },
+      "duration_ms": 140487.89
+    }
+  },
+  "deployment": {
+    "id": "aico-58385e3d2ed0",
+    "project": "aico",
+    "sha": "41ec7f1af8154c1f45747111e518eab6a0726db9",
+    "state": "succeeded",
+    "argv": [
+      "aico",
+      "--sha",
+      "41ec7f1af8154c1f45747111e518eab6a0726db9",
+      "--job",
+      "aico-58385e3d2ed0",
+      "--scope",
+      "full"
+    ],
+    "queued_at": "2026-11-04T21:09:09.529Z",
+    "message": "Deployed 41ec7f1af8: aico-web (116 s)",
+    "units": [
+      "aico-web.service"
+    ],
+    "exit_code": 0,
+    "finished_at": "2026-11-04T21:11:05.205Z"
+  },
+  "live_validation": {
+    "source_commit": "41ec7f1af8154c1f45747111e518eab6a0726db9",
+    "checks": [
+      {
+        "id": "ended-307436f5",
+        "state": "pass",
+        "detail": "Own scratch chat ended; 0 open questions; 17 persisted messages."
+      },
+      {
+        "id": "ended-f6577bcc",
+        "state": "pass",
+        "detail": "Own scratch chat ended; 0 open questions; 8 persisted messages."
+      },
+      {
+        "id": "ended-7be0690e",
+        "state": "pass",
+        "detail": "Own scratch chat ended; 0 open questions; 8 persisted messages."
+      },
+      {
+        "id": "ended-204966af",
+        "state": "pass",
+        "detail": "Own scratch chat ended; 0 open questions; 4 persisted messages."
+      },
+      {
+        "id": "deploy",
+        "state": "pass",
+        "detail": "Full managed rebuild aico-58385e3d2ed0 succeeded; web active at source 41ec7f1a. Native acceptance: 3237 tests passed, 103.4 s. Tether includes the concurrent catalog repair e612caae."
+      },
+      {
+        "id": "desktop-journey",
+        "state": "pass",
+        "detail": "Deployed default implementation role with DeepSeek: first and second messages changed greeting.txt; branched at turn 2 and wrote branch.txt; opened Details. Final-source smoke sent two more replies and reset persisted effort off to From routing."
+      },
+      {
+        "id": "stop-draft",
+        "state": "pass",
+        "detail": "Stopped own streaming reply with 700 text characters preserved. The queued note returned once to the composer as a draft (stopped-draft screenshot); later turns continued successfully."
+      },
+      {
+        "id": "needs-you",
+        "state": "pass",
+        "detail": "Own chat 7be0690e filed real tether ask a26a476bfcad. Header and sidebar showed Needs you with recommended First. Clicked First; answer delivered, state returned Idle; ask is done with answer First."
+      },
+      {
+        "id": "rendered-states",
+        "state": "pass",
+        "detail": "11 actual-component fixture views, no provider calls: loading, empty, open-failed, failed, stopped, resumed, swapped, disconnected, needs-you, questions-failed, rules-unreadable. Separate labeled fixture chrome in each screenshot."
+      },
+      {
+        "id": "uilint",
+        "state": "pass",
+        "detail": "Source: 173 files / 3569 items, zero violations. 7 mockup views, all 11 fixture views, and 4 final deployed views have zero violations. Earlier generated model prose containing terminal triggered the product vocabulary rule; model/user content was not censored and the spec was not weakened."
+      },
+      {
+        "id": "cleanup",
+        "state": "pass",
+        "detail": "All four created chats ended with zero open questions; both created headless browser sessions closed. No Claude model called. No phone or tester pass started."
+      }
+    ]
+  },
+  "live_chat_ids": {
+    "307436f5": {
+      "id": "307436f5",
+      "state": "ended",
+      "effort": "off",
+      "parent": null,
+      "branchTurn": null
+    },
+    "f6577bcc": {
+      "id": "f6577bcc",
+      "state": "ended",
+      "effort": null,
+      "parent": "307436f5",
+      "branchTurn": 2
+    },
+    "7be0690e": {
+      "id": "7be0690e",
+      "state": "ended",
+      "effort": "off",
+      "parent": null,
+      "branchTurn": null
+    },
+    "204966af": {
+      "id": "204966af",
+      "state": "ended",
+      "effort": null,
+      "parent": null,
+      "branchTurn": null
+    }
+  },
+  "journey_sources": {
+    "first_two_messages_details_branch": "f38678b8896c0108a83e9fd7b4f04321c3178f3e",
+    "stop_draft_needs_you_answer": "ddefecbd1b8bd3583b53dc9fffb51727ba644234",
+    "effort_routing_and_final_captures": "41ec7f1af8154c1f45747111e518eab6a0726db9"
+  },
+  "scratch_files": {
+    "greeting.txt": "hello from Aico\nsecond message checked\n",
+    "branch.txt": "branch checked\n"
+  },
+  "screenshot_manifest": [
+    {
+      "file": "M8b-2a-answered.png",
+      "sha256": "acc9ceb8701e935088a86e4ccc734d990588b97973006d3d412f50215a360425",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-branch-dialog.png",
+      "sha256": "4d21d8cb5bf73afbd25d7c80dadd7e15fc70f8c60a6661cf94a35ef05e2ff855",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-branch-final.png",
+      "sha256": "04e839fc9d742cb5d66dc87e0b6c4d149a9768d036e21761d984f8c487222f70",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-branch.png",
+      "sha256": "2b2bd559970b94cc2cadeb99c71bc394a294002ca8b36d587c5136a1bc6aabc7",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-details-final.png",
+      "sha256": "a315546329809911ffa590875009bdaf9e0bf75cc340f48da60a3e21fcb6d4cb",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-details.png",
+      "sha256": "1d6790cd7300fe0b3d591d117ae5c98b9de426a4a0fc30a97a92c35260c7532b",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-effort-routing.png",
+      "sha256": "48b027c8e538c9012eef9967d9ffa6892fab9b9bb5f6fd5f3e622c1696756d00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-ended-final.png",
+      "sha256": "6ddf84adc7bfb53a47516c10711321850f159d477f3b0d3b83d2a0d60ab12b4c",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-ended.png",
+      "sha256": "4c667897c60811ca74c61b1e6d00b3b6f78702676c3444ba0f6407a2c529e827",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-first-reply.png",
+      "sha256": "b83b26ee3ab69c34806c9521a1dfad8010bb61673a3db59a2d0131d5d81d9ec5",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-needs-you.png",
+      "sha256": "3ed70672cb2a6ff39d944927c8c17f9e9e0f03a4169ab06205ed222e44a009bd",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-new-chat-final.png",
+      "sha256": "b8a1aeb2d6eede1dd9cd15294e659873ec9e938f7df023f3deb7c522a4299803",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-new-chat.png",
+      "sha256": "2161fd68dbb6a32bc7e218d25ee26147915d2e5e5db2e87cd90283b14f286e00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-second-reply.png",
+      "sha256": "6bb7e1c0849ef42952ffdce79c1ee016a3299c153105d36a623d3c36f0459c14",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-disconnected.png",
+      "sha256": "c858d697394c64c633c5ca27f2015d13e4332bf00c72e4a7d5746329a4291ebf",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-empty.png",
+      "sha256": "e0f92d957a7c90d01f955c8cbba74c00b8870512dc12a242fb39178f79719919",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-failed.png",
+      "sha256": "c4ed66a3c9a85bf74f9da84a5f0a268ff7f6c4cbb38d8859c698df720caf6033",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-loading.png",
+      "sha256": "ea58f7a839dc5f292e8a196dc1901f3abefdf3a4bd4aa76936cad344da26238f",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-needs-you.png",
+      "sha256": "0116d1efcdb3e76bdd1e09faad4a0d2e4d8a484bfa1e87efe94ede6ad15bfe23",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-open-failed.png",
+      "sha256": "3a5a7b464223081ca57f046ed4bc1886a3ebc682375699ced1b54f48164aa155",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-questions-failed.png",
+      "sha256": "c4b30a171ffed9d79aead578fe5542afb72c9e7b3516871a949176ef616f2126",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-resumed.png",
+      "sha256": "536bee9dd90c0f8a2f762ec7111106d9f08ef52e1eb1e854163b2116d6047a5f",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-rules-unreadable.png",
+      "sha256": "8c25d0b7f9d2ee648460f157feeb577a609e06d9f731731719850d25a6a3b7e9",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-stopped.png",
+      "sha256": "307612f0c26a8a58e02ce907e5237b3087d8fdc77d08f5171179dc7e265f87b3",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-state-swapped.png",
+      "sha256": "336e94af5e1a05c64ebcd5d90c391b6241fc67edbe7161b16bd31792f0817163",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-stopped-draft.png",
+      "sha256": "507ab7b94e992fc74643c66a2ad66a86e381f1ab8544de37a8afba917c0d41b2",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "file": "M8b-2a-streaming.png",
+      "sha256": "3c140e1879a35867da7363bd49f31659c0bc997e08efee75a8c9fbe0fb7b0f97",
+      "width": 1600,
+      "height": 900
+    }
+  ],
+  "verification": {
+    "source_quick": "92 focused tests passed; 6.7 s; .dev-tools/vitest-327883-details.txt",
+    "final_direct_acceptance": "1151 Python passed; 3231 Vitest passed / 6 skipped; source-bound receipt success, 140.5 s",
+    "final_native_deploy_acceptance": "1151 Python passed; 3237 Vitest passed; 103.4 s",
+    "rendered_fixture_driver": "11 temporary evidence-driver tests passed, 773 ms; driver stored as M8b-2a-state-driver.txt outside app source",
+    "required_review": "One read-only Codex review; four actionable findings reproduced and fixed with regressions. Coordinator approved Codex as the required review substitute."
+  },
+  "remaining": "None within the agreed scope. Part 2 phone screens and tester pass excluded."
+}

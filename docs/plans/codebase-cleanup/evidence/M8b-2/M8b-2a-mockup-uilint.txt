@@ -1,0 +1,49 @@
+✓ Aico Chats mockup
+  file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html#list
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html "Aico Chats mockup" against the aico spec
+UILINT:ok|violations=0|checks=6|items=114|unverified=0|scope=mechanical-only|not-a-copy-review
+✓ Aico Chats mockup
+  file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html?still=1#chat
+omitted: Closed disclosure content was not captured.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html "Aico Chats mockup" against the aico spec
+UILINT:ok|violations=0|checks=6|items=121|unverified=0|scope=mechanical-only|not-a-copy-review
+✓ Aico Chats mockup
+  file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html#waiting
+omitted: Closed disclosure content was not captured.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html "Aico Chats mockup" against the aico spec
+UILINT:ok|violations=0|checks=6|items=81|unverified=0|scope=mechanical-only|not-a-copy-review
+✓ Aico Chats mockup
+  file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html#states
+omitted: Closed disclosure content was not captured.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html "Aico Chats mockup" against the aico spec
+UILINT:ok|violations=0|checks=6|items=84|unverified=0|scope=mechanical-only|not-a-copy-review
+✓ Aico Chats mockup
+  file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html?dialog=new#list
+omitted: Entered form values were excluded.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html "Aico Chats mockup" against the aico spec
+UILINT:ok|violations=0|checks=6|items=143|unverified=0|scope=mechanical-only|not-a-copy-review
+✓ Aico Chats mockup
+  file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html?details=1&still=1#chat
+omitted: Closed disclosure content was not captured.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html "Aico Chats mockup" against the aico spec
+UILINT:ok|violations=0|checks=6|items=161|unverified=0|scope=mechanical-only|not-a-copy-review
+✓ Aico Chats mockup
+  file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html?branch=3&still=1#chat
+omitted: Closed disclosure content was not captured.
+omitted: Entered form values were excluded.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: file:///srv/workspaces/projects/aico/docs/mockups/chat/index.html "Aico Chats mockup" against the aico spec
+UILINT:ok|violations=0|checks=6|items=130|unverified=0|scope=mechanical-only|not-a-copy-review

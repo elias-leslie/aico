@@ -1,0 +1,37 @@
+// Temporary rendered-evidence driver; snapshots use the actual components with fixture data.
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, cleanup, render, screen } from '@testing-library/react'
+import { afterEach, it, vi } from 'vitest'
+import { ChatSession } from './ChatSession'
+import { EmptySessionState } from '../EmptySessionState'
+import { NewChatDialog } from './NewChatDialog'
+import type { ChatView } from '@/lib/chat'
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }))
+vi.mock('@/lib/hooks/use-session-attention', () => ({ useSessionAttention: () => ({ forSlot: () => null, needsYouCount: 0 }) }))
+vi.mock('@/lib/hooks/use-terminal-panes', () => ({ usePaneListError: () => ({ isError: false, retry: () => {} }) }))
+class Stream { static current: Stream; onmessage = null; onerror: (() => void) | null = null; constructor() { Stream.current = this }; close() {} }
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+const model = 'opencode-go/deepseek-v4.1-flash'
+const base: ChatView = { id: 'feed0001', title: 'Scratch chat check', role: 'implementation', cwd: '/scratch/chat', state: 'idle', updatedAt: 1793820000000, startedAt: 1793820000000, model, nextModel: model, firstModel: model, last: 'A short reply.', draft: '', queued: [], partial: null, note: null, effort: null, parent: null, branchTurn: null, questions: [], messages: [{ seq: 0, role: 'user', model: null, turn: 1, at: '2026-11-04T19:00:00Z', stop_reason: null, content: [{ type: 'text', text: 'Check the note merge.' }], meta: {}, outcome: null, input: null, cache_read: null, cache_write: null, output: null }, { seq: 1, role: 'assistant', model, turn: 1, at: '2026-11-04T19:00:02Z', stop_reason: 'stop', content: [{ type: 'text', text: 'Both versions of the note are kept.' }], meta: {}, outcome: null, input: 120, cache_read: 0, cache_write: 0, output: 10 }], chain: [{ id: model, effort: 'high' }], handoffs: [], tools: [], totals: { startedAt: 1793820000000, tokens: { input: 120, cacheRead: 0, cacheWrite: 0, output: 10 }, toolCalls: 0 }, outcome: null }
+for (const state of ['loading', 'empty', 'open-failed', 'failed', 'stopped', 'resumed', 'swapped', 'needs-you', 'questions-failed', 'rules-unreadable', 'disconnected']) it(`renders ${state}`, async () => {
+  vi.stubGlobal('EventSource', Stream)
+  Object.defineProperty(HTMLElement.prototype, 'scrollTo', { value: () => {}, configurable: true })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  const chat = { ...base, state: state === 'resumed' ? 'working' : state === 'questions-failed' || state === 'disconnected' ? 'idle' : state }
+  if (state === 'resumed') { chat.note = `${model} is finishing the stopped turn. Its unfinished text stays above as it was.`; chat.partial = { text: 'Picking up where I stopped: both notes are kept.', model, turn: 2 } }
+  if (state === 'stopped') { chat.messages = [...base.messages.slice(0, 1), { ...base.messages[1], stop_reason: 'aborted', content: [{ type: 'text', text: 'Both versions are kept. I still need to' }] }]; chat.draft = 'Queued message restored as a draft.' }
+  if (state === 'failed') chat.outcome = { detail: '503: no provider answered the request.' }
+  if (state === 'swapped') chat.outcome = { requested: model, served: 'different-model' }
+  if (state === 'needs-you') chat.questions = [{ id: '0123456789ab', question: 'Keep both versions of the note?', options: ['Keep both', 'Keep the server copy'], recommended: 0, body: null }]
+  if (state === 'questions-failed') chat.questionsStatus = 'failed'
+  if (!['loading', 'open-failed', 'empty', 'rules-unreadable'].includes(state)) client.setQueryData(['aico-chat', base.id], chat)
+  vi.stubGlobal('fetch', async () => { if (state === 'loading') return new Promise(() => {}); if (state === 'rules-unreadable') return new Response(JSON.stringify({ defaultRole: 'implementation', projects: [{ id: 'scratch', name: 'Scratch', root: '/scratch' }], roles: [{ role: 'implementation', description: 'Build and fix code.', chain: [], error: 'Can’t start this chat. The role’s rules could not be read.' }] })); throw new Error('The Aico server did not answer.') })
+  render(<QueryClientProvider client={client}>{state === 'empty' ? <EmptySessionState slots={[]} onNewSession={() => {}} /> : state === 'rules-unreadable' ? <NewChatDialog onClose={() => {}} /> : <ChatSession id={base.id} />}</QueryClientProvider>)
+  if (state === 'open-failed') await screen.findByText('Couldn’t open this chat')
+  if (state === 'rules-unreadable') await screen.findByText('Can’t start this chat. The role’s rules could not be read.')
+  if (state === 'disconnected') act(() => Stream.current.onerror?.())
+  const folder = `${process.cwd()}/.dev-tools/m8b-2a-state-views/`
+  mkdirSync(folder, { recursive: true })
+  writeFileSync(`${folder}${state}.body.html`, document.body.innerHTML)
+})
