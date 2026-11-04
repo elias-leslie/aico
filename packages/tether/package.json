@@ -10,6 +10,7 @@
       "@aico/shared",
       "@aico/context",
       "@aico/fleet",
+      "@aico/tasks",
       "@aico/tether-client"
     ],
     "db": [
@@ -31,6 +32,7 @@
     "@agent-hub/sdk": "file:../../vendor/agent-hub-sdk-0.1.4.tgz",
     "@aico/context": "0.1.0",
     "@aico/fleet": "0.1.0",
+    "@aico/tasks": "0.1.0",
     "@aico/tether-client": "0.1.0"
   },
   "devDependencies": {

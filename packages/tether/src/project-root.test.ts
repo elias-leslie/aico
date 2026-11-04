@@ -17,6 +17,7 @@ vi.mock('./lifecycle/engine', async (importOriginal) => ({
 
 const TEST_ENV = {
   TETHER_SUMMITFLOW_URL: 'off',
+  AICO_TASKS_DB: '/nonexistent/aico/tasks.db',
   TETHER_RECONCILE: 'off',
   HOME: '/nonexistent',
 }

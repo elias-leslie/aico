@@ -44,6 +44,7 @@
         "packages/fleet",
         "packages/status",
         "packages/store",
+        "packages/tasks",
         "packages/tether-client",
         "packages/usage",
         "vendor",

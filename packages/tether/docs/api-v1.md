@@ -412,6 +412,7 @@ There is no `aider` row, on purpose: Aider isn't installed and no session has ru
 
 `source` is one of:
 
+- `registry`: the projects registry (`aico projects`, `tasks.db`), read on every call and cached for 30 s, once it has projects. Retired projects are excluded. It is the source whenever it has projects, so `POST /v1/projects` answers `409 projects_managed_by_registry`: use `aico projects register`.
 - `summitflow`: from SummitFlow's `GET http://127.0.0.1:8001/api/projects` over loopback with no token, cached for 30 s. Archived projects are excluded.
 - `summitflow-cache`: SummitFlow is unreachable, so the last good answer is served.
 - `local`: SummitFlow is not installed or not reachable and there is no cache. The list comes from `~/.config/tether/projects.json`, a list of `{id, name?, root}`; entries whose roots are not directories are skipped.

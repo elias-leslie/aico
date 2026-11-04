@@ -3,6 +3,7 @@
 # `aico usage`: usage.db (what each subscription has left; packages/usage).
 # `aico jobs`: the scheduler's jobs (packages/jobs, jobs.db).
 # `aico sessions`: the session history, from the running Tether (`tether history`).
+# `aico tasks | projects`: tasks.db (light tasks, claims, the projects registry; packages/tasks).
 # `aico agent run`: Aico's own agent harness (packages/agent, agent.db).
 # Only those commands: anything else (or nothing) prints the usage and exits 2, so this
 # never starts the web server.
@@ -23,6 +24,16 @@ case "${1:-}" in
     fi
     exec "$node" --disable-warning=ExperimentalWarning "$jobs_bundle" "$@"
     ;;
+  tasks | projects)
+    tasks_dir="$AICO_REPO_ROOT/packages/tasks"
+    tasks_bundle="$tasks_dir/dist/aico-tasks.mjs"
+    node="$(aico_web_node)"
+    if [ ! -r "$tasks_bundle" ] || [ -n "$(find "$tasks_dir/src" "$tasks_dir/data" "$AICO_REPO_ROOT/packages/tether-client/src" \
+      "$AICO_REPO_ROOT/packages/store/src" \( -name '*.ts' -o -name '*.json' \) -newer "$tasks_bundle" -print -quit 2>/dev/null)" ]; then
+      PATH="$(dirname "$node"):$PATH" npm --prefix "$tasks_dir" run --silent build >&2
+    fi
+    exec "$node" --disable-warning=ExperimentalWarning "$tasks_bundle" "$@"
+    ;;
   agent)
     shift
     agent_dir="$AICO_REPO_ROOT/packages/agent"
@@ -42,7 +53,7 @@ case "${1:-}" in
   help | -h | --help) exec_aico_web memory --help ;;
   *)
     [ $# -gt 0 ] && echo "aico: unknown command '$1'" >&2
-    echo "Usage: aico <memory|prompt|models|context|usage|jobs|agent|sessions> ...  (aico help lists every command)" >&2
+    echo "Usage: aico <memory|prompt|models|context|usage|jobs|tasks|projects|agent|sessions> ...  (aico help lists every command)" >&2
     exit 2
     ;;
 esac

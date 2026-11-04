@@ -118,6 +118,9 @@ describe('main', () => {
     })
     daemon = await startDaemon(resolvePaths({ instance: 'clitest' }), {
       TETHER_SUMMITFLOW_URL: 'off',
+      AICO_TASKS_DB: '/nonexistent/aico/tasks.db',
+      // A standalone machine, not this host's live fleet link.
+      AICO_FLEET_CONFIG: join(dir, 'no-fleet.json'),
       TETHER_RECONCILE: 'off',
     })
     await daemon.ready

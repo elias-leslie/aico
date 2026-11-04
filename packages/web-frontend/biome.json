@@ -102,6 +102,8 @@
                       "@aico/status/**",
                       "@aico/store",
                       "@aico/store/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",

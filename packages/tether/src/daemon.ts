@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Fleet } from '@aico/fleet/fleet'
 import { readSettings } from '@aico/fleet/settings'
+import { registryProjects } from '@aico/tasks/registry'
 import { createHubApi } from './agent-hub/client'
 import {
   type AgentHubConfig,
@@ -228,6 +229,7 @@ export async function startDaemon(
   const store = new Store(paths.dbPath)
   const events = new EventBus()
   const projects = new ProjectProvider({
+    registry: () => registryProjects(env),
     summitflowUrl: summitflowUrlFromEnv(env),
     localFile: paths.localProjectsFile,
   })

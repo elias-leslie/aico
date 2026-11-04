@@ -382,13 +382,43 @@ quick_paths = ["packages/store/**", "package.json", "package-lock.json", "tsconf
 argv = ["node_modules/.bin/depcruise", "packages/store", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
 
 [[native.stages]]
+id = "biome-tasks"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "biome"
+quick = true
+quick_paths = ["packages/store/**", "packages/tasks/**", "packages/tether-client/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+argv = ["node_modules/.bin/biome", "check", "packages/tasks"]
+
+[[native.stages]]
+id = "tsc-tasks"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "tsc"
+quick = true
+quick_paths = ["packages/store/**", "packages/tasks/**", "packages/tether-client/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+argv = ["node_modules/.bin/tsc", "-b", "packages/tasks"]
+
+[[native.stages]]
+id = "depcruise-tasks"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "depcruise"
+quick = true
+quick_paths = ["packages/store/**", "packages/tasks/**", "packages/tether-client/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
+argv = ["node_modules/.bin/depcruise", "packages/tasks", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
+
+[[native.stages]]
 id = "biome-tether"
 kind = "check"
 coverage = "focused"
 required = false
 covered_by = "biome"
 quick = true
-quick_paths = ["packages/context/**", "packages/fleet/**", "packages/status/**", "packages/store/**", "packages/tether/**", "packages/tether-client/**", "packages/usage/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
+quick_paths = ["packages/context/**", "packages/fleet/**", "packages/status/**", "packages/store/**", "packages/tasks/**", "packages/tether/**", "packages/tether-client/**", "packages/usage/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
 argv = ["node_modules/.bin/biome", "check", "packages/tether"]
 
 [[native.stages]]
@@ -398,7 +428,7 @@ coverage = "focused"
 required = false
 covered_by = "tsc"
 quick = true
-quick_paths = ["packages/context/**", "packages/fleet/**", "packages/status/**", "packages/store/**", "packages/tether/**", "packages/tether-client/**", "packages/usage/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
+quick_paths = ["packages/context/**", "packages/fleet/**", "packages/status/**", "packages/store/**", "packages/tasks/**", "packages/tether/**", "packages/tether-client/**", "packages/usage/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
 argv = ["node_modules/.bin/tsc", "-b", "packages/tether"]
 
 [[native.stages]]
@@ -408,7 +438,7 @@ coverage = "focused"
 required = false
 covered_by = "depcruise"
 quick = true
-quick_paths = ["packages/context/**", "packages/fleet/**", "packages/status/**", "packages/store/**", "packages/tether/**", "packages/tether-client/**", "packages/usage/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
+quick_paths = ["packages/context/**", "packages/fleet/**", "packages/status/**", "packages/store/**", "packages/tasks/**", "packages/tether/**", "packages/tether-client/**", "packages/usage/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
 argv = ["node_modules/.bin/depcruise", "packages/tether", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
 
 [[native.stages]]

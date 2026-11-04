@@ -37,6 +37,44 @@ describe('parseSummitFlowProjects', () => {
   })
 })
 
+describe('ProjectProvider registry source', () => {
+  it('serves the registry once it has projects, and falls back to SummitFlow while it has none', async () => {
+    let registry: { id: string; name: string; root: string }[] = []
+    let asked = 0
+    const provider = new ProjectProvider({
+      registry: () => registry,
+      summitflowUrl: 'http://127.0.0.1:8001/api/projects',
+      localFile: '/nonexistent/projects.json',
+      fetchJson: async () => {
+        asked += 1
+        return rows
+      },
+    })
+    expect((await provider.list({ refresh: true })).source).toBe('summitflow')
+    registry = [
+      { id: 'zeta', name: 'Zeta', root: '/srv/zeta' },
+      { id: 'aico', name: 'Aico', root: '/srv/aico' },
+      { id: 'bad', name: 'Bad', root: 'relative' },
+    ]
+    const list = await provider.list({ refresh: true })
+    expect(list.source).toBe('registry')
+    expect(list.projects.map((project) => project.id)).toEqual(['aico', 'zeta'])
+    expect(asked).toBe(1)
+  })
+
+  it('falls back when the registry cannot be read', async () => {
+    const provider = new ProjectProvider({
+      registry: () => {
+        throw new Error('locked')
+      },
+      summitflowUrl: 'http://x',
+      localFile: '/nonexistent/projects.json',
+      fetchJson: async () => rows,
+    })
+    expect((await provider.list()).source).toBe('summitflow')
+  })
+})
+
 describe('ProjectProvider', () => {
   it('caches SummitFlow, serves the cache while it is down, then falls back to local', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-projects-'))

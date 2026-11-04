@@ -38,6 +38,9 @@
       "path": "packages/tether"
     },
     {
+      "path": "packages/tasks"
+    },
+    {
       "path": "packages/jobs"
     },
     {

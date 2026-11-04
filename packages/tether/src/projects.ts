@@ -1,4 +1,5 @@
-// Project list. SummitFlow is the source when installed (loopback, with the owner or agent token);
+// Project list. The projects registry (tasks.db, `aico projects`) is the source once it has
+// projects; before that SummitFlow when installed (loopback, with the owner or agent token);
 // otherwise a local list. A cached SummitFlow answer is preferred over the
 // local list while SummitFlow is briefly unreachable.
 
@@ -14,7 +15,7 @@ export interface Project {
 }
 
 export interface ProjectList {
-  source: 'summitflow' | 'summitflow-cache' | 'local'
+  source: 'registry' | 'summitflow' | 'summitflow-cache' | 'local'
   fetchedAt: number
   projects: Project[]
 }
@@ -167,6 +168,8 @@ function defaultIsDir(path: string): boolean {
 }
 
 export interface ProjectProviderOptions {
+  /** The open projects of Aico's registry; an empty list means none registered yet. */
+  registry?: () => { id: string; name: string; root: string }[]
   summitflowUrl: string | null
   localFile: string
   ttlMs?: number
@@ -194,7 +197,7 @@ export class ProjectProvider {
   async list(options: { refresh?: boolean } = {}): Promise<ProjectList> {
     if (
       !options.refresh &&
-      this.cache?.source === 'summitflow' &&
+      (this.cache?.source === 'summitflow' || this.cache?.source === 'registry') &&
       this.now() - this.cache.fetchedAt < this.ttlMs
     ) {
       return this.cache
@@ -206,6 +209,25 @@ export class ProjectProvider {
   }
 
   private async load(): Promise<ProjectList> {
+    if (this.options.registry) {
+      try {
+        const rows = this.options.registry().filter((row) => cleanRoot(row.root))
+        if (rows.length > 0) {
+          const projects = rows
+            .map((row) => ({
+              id: row.id,
+              name: row.name,
+              root: normalize(row.root),
+              lifecycle: null,
+            }))
+            .sort((a, b) => a.id.localeCompare(b.id))
+          this.cache = { source: 'registry', fetchedAt: this.now(), projects }
+          return this.cache
+        }
+      } catch {
+        // an unreadable registry falls through to the older sources
+      }
+    }
     const url = this.options.summitflowUrl
     if (url) {
       try {
@@ -259,6 +281,8 @@ export async function registerLocalProject(
   isDir: (p: string) => boolean = defaultIsDir,
 ): Promise<Project> {
   const current = await provider.list({ refresh: true })
+  if (current.source === 'registry')
+    throw new ProjectRegistrationError(409, 'projects_managed_by_registry')
   if (current.source !== 'local')
     throw new ProjectRegistrationError(409, 'projects_managed_by_summitflow')
   const root = cleanRoot(input.root)

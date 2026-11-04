@@ -61,6 +61,8 @@
                       "@aico/shared/**",
                       "@aico/status",
                       "@aico/status/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -111,6 +113,8 @@
                       "@aico/shared/**",
                       "@aico/status",
                       "@aico/status/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -155,6 +159,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -201,6 +207,8 @@
                       "@aico/notify/**",
                       "@aico/shared",
                       "@aico/shared/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -251,6 +259,8 @@
                       "@aico/status/**",
                       "@aico/store",
                       "@aico/store/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -299,6 +309,8 @@
                       "@aico/notes/**",
                       "@aico/shared",
                       "@aico/shared/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -351,6 +363,8 @@
                       "@aico/status/**",
                       "@aico/store",
                       "@aico/store/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -401,6 +415,8 @@
                       "@aico/notify/**",
                       "@aico/shared",
                       "@aico/shared/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -451,6 +467,8 @@
                       "@aico/shared/**",
                       "@aico/status",
                       "@aico/status/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -465,6 +483,56 @@
                       "@aico/web-server/**"
                     ],
                     "message": "@aico/store (layer 1): import only no other package (package.json aico.imports; depcruise is the gate)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/tasks/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
+                      "@aico/context",
+                      "@aico/context/**",
+                      "@aico/fleet",
+                      "@aico/fleet/**",
+                      "@aico/jobs",
+                      "@aico/jobs/**",
+                      "@aico/notes",
+                      "@aico/notes/**",
+                      "@aico/notify",
+                      "@aico/notify/**",
+                      "@aico/shared",
+                      "@aico/shared/**",
+                      "@aico/status",
+                      "@aico/status/**",
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/ui-kit",
+                      "@aico/ui-kit/**",
+                      "@aico/usage",
+                      "@aico/usage/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**"
+                    ],
+                    "message": "@aico/tasks (layer 4): import only @aico/store, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
@@ -503,6 +571,8 @@
                       "@aico/status/**",
                       "@aico/store",
                       "@aico/store/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/ui-kit",
@@ -561,6 +631,8 @@
                       "@aico/status/**",
                       "@aico/store",
                       "@aico/store/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -613,6 +685,8 @@
                       "@aico/notify/**",
                       "@aico/shared",
                       "@aico/shared/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -653,6 +727,8 @@
                       "@aico/jobs/**",
                       "@aico/store",
                       "@aico/store/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/ui-kit",
