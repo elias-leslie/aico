@@ -397,8 +397,12 @@ async function deliverCommand(db: () => Database, rest: string[], io: ContextCli
     if (error instanceof UnknownTool) throw new UsageError(error.message)
     throw error
   }
-  // A hook never adds a second copy of what the launch already delivered.
-  const delivered = env.AICO_CONTEXT_DELIVERED || env.AGENT_HUB_CONTEXT_PREINJECTED_HASH
+  // A hook never adds a second copy of what the launch already delivered, nor of
+  // what Agent Hub's Pi extension adds in process unless it was told to stand down.
+  const delivered =
+    env.AICO_CONTEXT_DELIVERED ||
+    env.AGENT_HUB_CONTEXT_PREINJECTED_HASH ||
+    (format === 'pi' && env.AGENT_HUB_CONTEXT_BYPASS !== '1')
   if (HOOK_FORMATS.includes(format) && delivered && !parsed.flags.has('--force')) return 0
   const project = str(parsed, 'project') ?? env.AICO_PROJECT_ID ?? ''
   const session = str(parsed, 'session') ?? env.AICO_SESSION_ID ?? null

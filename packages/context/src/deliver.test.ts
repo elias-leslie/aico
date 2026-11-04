@@ -199,17 +199,17 @@ describe('aico context deliver', () => {
     expect(forced.out).toContain('additionalContext')
   })
 
+  it("leaves Pi to Agent Hub's extension unless it stands down", async () => {
+    const args = ['--tool', 'pi', '--project', 'alpha', '--format', 'pi']
+    expect(await run(args)).toEqual({ code: 0, out: '', err: '' })
+    expect((await run(args, { AGENT_HUB_CONTEXT_BYPASS: '1' })).out).toContain('## Alpha Policy')
+  })
+
   it('prints nothing for a Blank Slate role', async () => {
-    const result = await run([
-      '--tool',
-      'pi',
-      '--project',
-      'alpha',
-      '--role',
-      'testing',
-      '--format',
-      'pi',
-    ])
+    const result = await run(
+      ['--tool', 'pi', '--project', 'alpha', '--role', 'testing', '--format', 'pi'],
+      { AGENT_HUB_CONTEXT_BYPASS: '1' },
+    )
     expect(result).toEqual({ code: 0, out: '', err: '' })
   })
 

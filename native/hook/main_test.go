@@ -144,6 +144,7 @@ func answer(t *testing.T, argv string, input []byte) map[string]any {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg.Context.Command = nil // the real `aico context deliver` stays out of the examples
 	var payload map[string]any
 	_ = json.Unmarshal(input, &payload)
 	var out Out

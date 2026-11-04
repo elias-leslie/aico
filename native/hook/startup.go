@@ -369,8 +369,8 @@ func codexTrust(args []string) int {
 // ---------------------------------------------------------------- context delivery
 
 // deliverContext runs `aico context deliver --tool T --project P --session S --format F --event E`
-// (contracts/context-delivery.schema.json) and returns its text. An empty command in data/hook.json is the stub
-// that delivers nothing; M7b's cutover sets it.
+// (contracts/context-delivery.schema.json) and returns its text: the deployed release's aico, which prints nothing
+// when the launch already delivered (Tether, or Agent Hub's launchers and Pi extension). An empty command delivers nothing.
 func deliverContext(cfg *Config, tool, event string, payload map[string]any) []string {
 	c := cfg.Context
 	if len(c.Command) == 0 {
