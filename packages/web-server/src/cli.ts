@@ -7,6 +7,7 @@
 // - `tclaude` / `tcodex [project|-l]`: pick a project (fzf), find its folder,
 //   then `tsession open --attach` (the old scripts/lib/project-launcher.sh).
 // - `status`: `st status`, the Status rows from the running server (status-cli.ts).
+// - `memory|prompt|models|context`: `aico ...` against context.db (@aico/context).
 //
 // Attaching is `tether sessions attach <id>`, which follows where the caller
 // already is: outside tmux it attaches, inside the same tmux server it
@@ -17,16 +18,31 @@ import { accessSync, constants, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  agentHubRoute,
+  agentHubSource,
+  CONTEXT_COMMANDS,
+  contextDbPath,
+  runContextCli,
+} from '@aico/context'
+import { machineId } from '@aico/status'
 import { TetherClient, TetherError, TetherUnavailable, tetherSocketPath } from '@aico/tether-client'
 import { type BrokerTarget, createBroker, normalizeWorkingDir } from './broker'
-import { loadConfig, webDbPath } from './config'
+import { dataDirPath, loadConfig, webDbPath } from './config'
 import { WebStore } from './db'
 import { createLifecycle, type Lifecycle } from './lifecycle'
 import { runNotesCli } from './notes-import-cli'
 import { runStatusCli } from './status-cli'
 import { HttpError } from './tether'
 
-export const CLI_COMMANDS = ['tsession', 'tclaude', 'tcodex', 'tnotes', 'status']
+export const CLI_COMMANDS = [
+  'tsession',
+  'tclaude',
+  'tcodex',
+  'tnotes',
+  'status',
+  ...CONTEXT_COMMANDS,
+]
 
 /** The tool each launcher opens. */
 const LAUNCHER_TOOLS: Readonly<Record<string, string>> = {
@@ -527,6 +543,24 @@ export async function runCli(command: string, argv: string[]): Promise<number> {
       baseUrl: `http://127.0.0.1:${port}`,
       fetch,
       now: Date.now,
+    })
+  }
+  if ((CONTEXT_COMMANDS as readonly string[]).includes(command)) {
+    const { port } = loadConfig()
+    const repoRoot = terminalIo().repoRoot
+    return runContextCli(command, argv, {
+      out: (text) => process.stdout.write(text),
+      err: (text) => process.stderr.write(text),
+      dbPath: contextDbPath(dataDirPath()),
+      machine: machineId(),
+      statusUrl: `http://127.0.0.1:${port}/api/status/rows`,
+      fetch,
+      now: () => new Date(),
+      agentHub: {
+        checkout: process.env.AICO_AGENT_HUB_CHECKOUT || join(dirname(repoRoot), 'agent-hub'),
+        source: agentHubSource,
+        route: agentHubRoute,
+      },
     })
   }
   const env = process.env

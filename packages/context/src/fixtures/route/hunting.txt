@@ -1,0 +1,9 @@
+OPTIONS[hunting] policy=v5 facts as of 11-03 20:04; you choose, then st aico create --work-role hunting --tool T [--model M]
+claude-code  DENIED: Owner 2026-11-01: Claude never for active hunting or recon
+codex  gpt-6-sol xhigh daybreak  running on credits
+    5h unknown (its reset passed; last read 1.2d ago); weekly used up until 11-04 05:28 (9h), read 1.2d ago
+    12.6K credits; at the last-7-day pace they last past the 11-04 reset; the earliest credits expire 12-31
+pi  opencode-go/deepseek-v4.1-flash high  has room  | also: opencode-go/glm-5.3 high (when a second hunter model); opencode-go/glm-5.3-flash high (when a cheaper second hunter model)
+    5h 100% left, resets 11-04 01:00 (4h), read 3m ago; weekly 100% left, resets 11-08 19:00 (5.0d), read 8m ago; monthly 55% left, resets 11-26 15:32 (22.8d), read 8m ago
+agent-hub  The Agent Hub agent's own row sets model and effort; --model overrides it.
+antigravity  not launchable from here: Unknown/owner-opened: no guidance yet and Aico cannot launch it.

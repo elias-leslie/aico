@@ -11,6 +11,9 @@
       "path": "packages/status"
     },
     {
+      "path": "packages/context"
+    },
+    {
       "path": "packages/tether-client"
     },
     {

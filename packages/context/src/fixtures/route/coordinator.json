@@ -1,0 +1,273 @@
+{
+  "version": 5,
+  "role": "coordinator",
+  "work_role": "coordinator",
+  "work_roles": [
+    "coordinator",
+    "implementation",
+    "design",
+    "research",
+    "review",
+    "recon",
+    "hunting",
+    "operations",
+    "selection",
+    "verification",
+    "reporting",
+    "mapping",
+    "other"
+  ],
+  "about": "Which model, effort, Daybreak and context each kind of agent gets, by job and tool, and the hard rules on top. st models route --role JOB --tool TOOL reads it; st aico create applies it when --model/--reasoning-effort are not given (explicit flags win). A job's work_roles are the Agent Hub work roles (session_roles.json) whose launches default to it; every registered work role belongs to exactly one job. context: full = Agent Hub delivery in the project; blank-slate = --blank-slate plus a specific brief (create uses it when neither --project nor --blank-slate is given). subagent names the lean Claude Code agent definition (claude-config/agents) to use for this job as a native subagent. deny rows are hard rules: a launch whose job, work role and project match every selector a row names is refused when its tool or model counts as the row's provider (providers says what counts), explicit --model included; Agent Hub agent sessions with a denied work role never fall back or escalate to that provider. Everything else (usage, credits, which tool to pick) is the coordinator's choice from live facts, not an order here. Owner decisions 2026-11-01: /srv/workspaces/handoffs/followups-2026-10-31/token-audit/BRIEF-launch-defaults.md.",
+  "rows": [
+    {
+      "job": "coordinator",
+      "label": "Coordinators",
+      "tool": "claude-code",
+      "model": "claude-opus-5-5",
+      "effort": "xhigh",
+      "daybreak": null,
+      "context": "full",
+      "use": true,
+      "launchable": true,
+      "alternates": [],
+      "subagent": null,
+      "work_roles": ["coordinator"],
+      "why": "Owner 2026-11-01: coordinators run Opus 5.5 xhigh.",
+      "note": null,
+      "allowed": true,
+      "deny_reason": null,
+      "project_default": null,
+      "when": null,
+      "usage": {
+        "provider": "claude",
+        "status": "ok",
+        "windows": [
+          {
+            "window_minutes": 300,
+            "label": "5h",
+            "observed_at": "2026-10-31T02:13:51+00:00",
+            "age_seconds": 341415,
+            "source": "claude_statusline",
+            "used_percent": null,
+            "left_percent": null,
+            "resets_at": null,
+            "resets_in_seconds": null,
+            "state": "not_reported"
+          },
+          {
+            "window_minutes": 10080,
+            "label": "weekly",
+            "observed_at": "2026-11-04T00:47:56+00:00",
+            "age_seconds": 970,
+            "source": "claude_statusline",
+            "used_percent": 85.0,
+            "left_percent": 15.0,
+            "resets_at": "2026-11-06T10:00:00+00:00",
+            "resets_in_seconds": 204953,
+            "state": "ok"
+          }
+        ],
+        "credits": null,
+        "unknown_windows": []
+      },
+      "last_refusal": {
+        "requested_model": "claude-opus-5-5",
+        "at": "2026-11-02T13:57:22.417335+00:00",
+        "role": null,
+        "project": "agent-hub",
+        "category": "cyber",
+        "count": 74
+      }
+    },
+    {
+      "job": "coordinator",
+      "label": "Coordinators",
+      "tool": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "daybreak": false,
+      "context": "full",
+      "use": true,
+      "launchable": true,
+      "alternates": [],
+      "subagent": null,
+      "work_roles": ["coordinator"],
+      "why": "Owner 2026-11-01: Codex non-hunting work runs gpt-6.1-sol xhigh.",
+      "note": null,
+      "allowed": true,
+      "deny_reason": null,
+      "project_default": null,
+      "when": null,
+      "usage": {
+        "provider": "codex",
+        "status": "on_credits",
+        "windows": [
+          {
+            "window_minutes": 300,
+            "label": "5h",
+            "observed_at": "2026-11-02T21:26:31.124000+00:00",
+            "age_seconds": 99455,
+            "source": "codex_session_log",
+            "used_percent": null,
+            "left_percent": null,
+            "resets_at": null,
+            "resets_in_seconds": null,
+            "state": "unknown"
+          },
+          {
+            "window_minutes": 10080,
+            "label": "weekly",
+            "observed_at": "2026-11-02T21:26:31.124000+00:00",
+            "age_seconds": 99455,
+            "source": "codex_session_log",
+            "used_percent": 100.0,
+            "left_percent": 0.0,
+            "resets_at": "2026-11-04T10:28:52+00:00",
+            "resets_in_seconds": 33885,
+            "state": "used_up"
+          }
+        ],
+        "credits": {
+          "balance": 12594.7,
+          "pace_per_day_7d": 847.9,
+          "earliest_expiry": "2026-12-31T23:59:59+00:00",
+          "lasts_days": 14.9,
+          "reset_at": "2026-11-04T10:28:52+00:00",
+          "lasts_past_reset": true
+        },
+        "unknown_windows": ["5h"]
+      },
+      "last_refusal": null
+    },
+    {
+      "job": "coordinator",
+      "label": "Coordinators",
+      "tool": "pi",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "effort": "high",
+      "daybreak": null,
+      "context": "full",
+      "use": true,
+      "launchable": true,
+      "alternates": [
+        {
+          "model": "opencode-go/glm-5.3",
+          "effort": "high",
+          "when": "DeepSeek is unavailable or stuck",
+          "last_refusal": null
+        }
+      ],
+      "subagent": null,
+      "work_roles": ["coordinator"],
+      "why": "Owner 2026-11-01: Pi is the last choice outside hunting (DeepSeek 4.1 Flash, GLM 5.3).",
+      "note": "Owner 2026-11-01: Pi hunts; outside hunting it is the last choice.",
+      "allowed": true,
+      "deny_reason": null,
+      "project_default": null,
+      "when": null,
+      "usage": {
+        "provider": "opencode-go",
+        "status": "ok",
+        "windows": [
+          {
+            "window_minutes": 300,
+            "label": "5h",
+            "observed_at": "2026-11-04T01:00:16.693682+00:00",
+            "age_seconds": 230,
+            "source": "opencode_go_usage",
+            "used_percent": 0.0,
+            "left_percent": 100.0,
+            "resets_at": "2026-11-04T06:00:16.647000+00:00",
+            "resets_in_seconds": 17769,
+            "state": "ok"
+          },
+          {
+            "window_minutes": 10080,
+            "label": "weekly",
+            "observed_at": "2026-11-04T00:55:18.957558+00:00",
+            "age_seconds": 527,
+            "source": "opencode_go_usage",
+            "used_percent": 0.0,
+            "left_percent": 100.0,
+            "resets_at": "2026-11-09T00:00:00+00:00",
+            "resets_in_seconds": 428153,
+            "state": "ok"
+          },
+          {
+            "window_minutes": 43200,
+            "label": "monthly",
+            "observed_at": "2026-11-04T00:55:18.957558+00:00",
+            "age_seconds": 527,
+            "source": "opencode_go_usage",
+            "used_percent": 45.0,
+            "left_percent": 55.0,
+            "resets_at": "2026-11-26T20:32:22+00:00",
+            "resets_in_seconds": 1970895,
+            "state": "ok"
+          }
+        ],
+        "credits": null,
+        "unknown_windows": []
+      },
+      "last_refusal": null
+    },
+    {
+      "job": "coordinator",
+      "label": "Coordinators",
+      "tool": "agent-hub",
+      "model": null,
+      "effort": null,
+      "daybreak": null,
+      "context": "full",
+      "use": true,
+      "launchable": true,
+      "alternates": [],
+      "subagent": null,
+      "work_roles": ["coordinator"],
+      "why": "The Agent Hub agent's own row sets model and effort; --model overrides it.",
+      "note": null,
+      "allowed": true,
+      "deny_reason": null,
+      "project_default": null,
+      "when": null,
+      "usage": {
+        "provider": null,
+        "status": "untracked",
+        "windows": [],
+        "credits": null,
+        "unknown_windows": []
+      },
+      "last_refusal": null
+    },
+    {
+      "job": "coordinator",
+      "label": "Coordinators",
+      "tool": "antigravity",
+      "model": null,
+      "effort": null,
+      "daybreak": null,
+      "context": "full",
+      "use": true,
+      "launchable": false,
+      "alternates": [],
+      "subagent": null,
+      "work_roles": ["coordinator"],
+      "why": "Unknown/owner-opened: no guidance yet and Aico cannot launch it.",
+      "note": null,
+      "allowed": true,
+      "deny_reason": null,
+      "project_default": null,
+      "when": null,
+      "usage": {
+        "provider": null,
+        "status": "untracked",
+        "windows": [],
+        "credits": null,
+        "unknown_windows": []
+      },
+      "last_refusal": null
+    }
+  ],
+  "model_notes": {},
+  "facts_as_of": "2026-11-04T01:04:06.780049+00:00"
+}

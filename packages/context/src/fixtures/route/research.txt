@@ -1,0 +1,11 @@
+OPTIONS[research] policy=v5 facts as of 11-03 20:04; you choose, then st aico create --work-role research --tool T [--model M]
+claude-code  claude-opus-5-5 high  has room  | also: claude-sonnet-5-5 high (when plain fact-gathering nobody acts on directly)
+    5h not reported; weekly 15% left, resets 11-06 05:00 (2.4d), read 16m ago
+    last refusal 11-02 08:57 (cyber), role unknown/agent-hub (74 recorded)
+codex  gpt-6.1-sol xhigh  running on credits
+    5h unknown (its reset passed; last read 1.2d ago); weekly used up until 11-04 05:28 (9h), read 1.2d ago
+    12.6K credits; at the last-7-day pace they last past the 11-04 reset; the earliest credits expire 12-31
+pi  opencode-go/deepseek-v4.1-flash high  has room  | also: opencode-go/glm-5.3 high (when DeepSeek is unavailable or stuck)
+    5h 100% left, resets 11-04 01:00 (4h), read 3m ago; weekly 100% left, resets 11-08 19:00 (5.0d), read 8m ago; monthly 55% left, resets 11-26 15:32 (22.8d), read 8m ago
+agent-hub  The Agent Hub agent's own row sets model and effort; --model overrides it.
+antigravity  not launchable from here: Unknown/owner-opened: no guidance yet and Aico cannot launch it.

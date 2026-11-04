@@ -8,6 +8,7 @@
     "layer": 5,
     "imports": [
       "@aico/shared",
+      "@aico/context",
       "@aico/status",
       "@aico/fleet",
       "@aico/notes",
@@ -28,6 +29,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aico/context": "0.1.0",
     "@aico/notes": "0.1.0",
     "@aico/shared": "0.1.0",
     "@aico/status": "0.1.0",

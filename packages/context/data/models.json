@@ -1,0 +1,75 @@
+{
+  "about": "The models Aico knows: only those the launch policy (roles' launch rows and tool defaults) names. Hand-curated from Agent Hub's catalog on 2026-11-03. provider is whose subscription or CLI serves it; aliases are other names agents use for it.",
+  "models": [
+    {
+      "id": "claude-opus-5-5",
+      "name": "Claude Opus 5.5",
+      "provider": "claude",
+      "family": "claude-opus",
+      "aliases": ["opus"],
+      "context_window": 1000000,
+      "max_output_tokens": 128000
+    },
+    {
+      "id": "claude-sonnet-5-5",
+      "name": "Claude Sonnet 5.5",
+      "provider": "claude",
+      "family": "claude-sonnet",
+      "aliases": ["sonnet", "claude"],
+      "context_window": 1000000,
+      "max_output_tokens": 128000
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "name": "Claude Haiku 5.5",
+      "provider": "claude",
+      "family": "claude-haiku",
+      "aliases": ["haiku"],
+      "context_window": 1000000,
+      "max_output_tokens": 128000
+    },
+    {
+      "id": "codex/gpt-6.1-sol",
+      "name": "GPT-6.1 Sol",
+      "provider": "codex",
+      "family": "gpt",
+      "aliases": ["gpt-6.1-sol", "codex", "codex-gpt-6.1-sol"],
+      "context_window": 272000,
+      "max_output_tokens": 128000
+    },
+    {
+      "id": "codex/gpt-6-sol",
+      "name": "GPT-6 Sol",
+      "provider": "codex",
+      "family": "gpt",
+      "aliases": ["gpt-6-sol", "codex-6-sol"],
+      "context_window": 272000,
+      "max_output_tokens": 128000
+    },
+    {
+      "id": "opencode-go/deepseek-v4.1-flash",
+      "name": "DeepSeek V4.1 Flash (OpenCode Go)",
+      "provider": "opencode-go",
+      "family": "deepseek",
+      "aliases": ["go-deepseek-flash"],
+      "context_window": 1000000,
+      "max_output_tokens": 384000
+    },
+    {
+      "id": "opencode-go/glm-5.3",
+      "name": "GLM-5.3 (OpenCode Go)",
+      "provider": "opencode-go",
+      "family": "glm",
+      "aliases": []
+    },
+    {
+      "id": "opencode-go/glm-5.3-flash",
+      "name": "GLM-5.3-Flash (OpenCode Go)",
+      "provider": "opencode-go",
+      "family": "glm",
+      "aliases": ["go-glm-flash"],
+      "context_window": 1000000,
+      "max_output_tokens": 131072
+    }
+  ]
+}

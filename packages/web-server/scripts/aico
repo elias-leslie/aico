@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# `aico memory | prompt | models | context`: context.db (memories, prompts, roles, launch options).
+set -euo pipefail
+
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/aico-web.sh"
+
+exec_aico_web "$@"

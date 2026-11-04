@@ -84,6 +84,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/context",
+                      "@aico/context/**",
                       "@aico/fleet",
                       "@aico/fleet/**",
                       "@aico/notes",

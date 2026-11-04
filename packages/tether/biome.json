@@ -38,6 +38,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/context",
+                      "@aico/context/**",
                       "@aico/notes",
                       "@aico/notes/**",
                       "@aico/status",
