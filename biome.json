@@ -36,6 +36,52 @@
   },
   "overrides": [
     {
+      "includes": ["packages/agent/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/fleet",
+                      "@aico/fleet/**",
+                      "@aico/jobs",
+                      "@aico/jobs/**",
+                      "@aico/notes",
+                      "@aico/notes/**",
+                      "@aico/notify",
+                      "@aico/notify/**",
+                      "@aico/shared",
+                      "@aico/shared/**",
+                      "@aico/status",
+                      "@aico/status/**",
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/tether-client",
+                      "@aico/tether-client/**",
+                      "@aico/ui-kit",
+                      "@aico/ui-kit/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**"
+                    ],
+                    "message": "@aico/agent (layer 4): import only @aico/store, @aico/context (package.json aico.imports; depcruise is the gate)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/context/**"],
       "linter": {
         "rules": {
@@ -49,6 +95,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/fleet",
                       "@aico/fleet/**",
                       "@aico/jobs",
@@ -95,6 +143,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/jobs",
@@ -141,6 +191,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",
@@ -185,6 +237,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",
@@ -231,6 +285,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",
@@ -275,6 +331,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",
@@ -323,6 +381,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",
@@ -367,6 +427,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",
@@ -415,6 +477,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",
@@ -467,6 +531,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",
@@ -519,6 +585,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/jobs",
                       "@aico/jobs/**",
                       "@aico/store",

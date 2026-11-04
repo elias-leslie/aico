@@ -1,0 +1,233 @@
+// Role rules for one run, read from the context database (models and deny rows through route())
+// and data/harness.json (which providers this harness may register, tool level, guard,
+// egress). They fail closed: anything unreadable, unknown or not allowed is a typed
+// refusal, and nothing runs.
+
+import { existsSync } from 'node:fs'
+import { Catalog, type LaunchPolicy, loadPolicy, openContext, route } from '@aico/context'
+import harnessData from '../data/harness.json' with { type: 'json' }
+
+export type Harness = typeof harnessData
+export const HARNESS: Harness = harnessData
+
+export type RefusalReason =
+  | 'rules_unreadable'
+  | 'unknown_role'
+  | 'model_unknown'
+  | 'model_denied'
+  | 'provider_not_allowed'
+  | 'no_model'
+  | 'unenforceable'
+
+export interface Refused {
+  kind: 'refused'
+  reason: RefusalReason
+  detail: string
+}
+
+/** One model the role may run on, in chain order. */
+export interface ChainModel {
+  /** Aico's catalog id, e.g. codex/gpt-6.1-sol. */
+  id: string
+  /** The pi-ai provider that serves it. */
+  piProvider: string
+  /** The model id inside that provider. */
+  piModel: string
+  effort: string | null
+}
+
+export interface RoleRules {
+  role: string
+  chain: ChainModel[]
+  level: string
+  tools: string[]
+  /** The publication guard hook every bash call goes through, or null when the role runs without it. */
+  guardHook: string | null
+  egress: string
+}
+
+const refused = (reason: RefusalReason, detail: string): Refused => ({
+  kind: 'refused',
+  reason,
+  detail,
+})
+
+/** The launch policy in the context database, or a refusal: a missing or unreadable file never means "allow". */
+export function readPolicy(dbPath: string): LaunchPolicy | Refused {
+  if (!existsSync(dbPath))
+    return refused(
+      'rules_unreadable',
+      `no context database at ${dbPath}; nothing runs without role rules`,
+    )
+  try {
+    const db = openContext(dbPath)
+    try {
+      const policy = loadPolicy(db)
+      return (
+        policy ??
+        refused(
+          'rules_unreadable',
+          `the context database at ${dbPath} has no launch policy; run aico context import-agent-hub`,
+        )
+      )
+    } finally {
+      db.close()
+    }
+  } catch (error) {
+    return refused(
+      'rules_unreadable',
+      `the context database at ${dbPath} could not be read: ${(error as Error).message}`,
+    )
+  }
+}
+
+export interface RulesRequest {
+  role: string
+  model?: string
+  project?: string
+}
+
+/** Why `model` may not run for this role in this harness, or null. */
+function modelRefusal(
+  policy: LaunchPolicy,
+  catalog: Catalog,
+  harness: Harness,
+  request: RulesRequest,
+  model: string,
+): Refused | null {
+  const entry = catalog.get(model)
+  if (!entry) return refused('model_unknown', `'${model}' is not in Aico's model list`)
+  const row = route(policy, catalog, {
+    role: request.role,
+    tool: harness.launch_tool,
+    model: entry.id,
+    ...(request.project && { project: request.project }),
+  }).rows[0]
+  if (!row) return refused('rules_unreadable', `no launch row for role '${request.role}'`)
+  if (row.deny_reason) return refused('model_denied', `${entry.id}: ${row.deny_reason}`)
+  const claude = policy.providers[harness.claude_provider]
+  const names = [entry.id, model].map((name) => name.toLowerCase())
+  if (
+    entry.provider === harness.claude_provider ||
+    claude?.nameTokens.some((token) => names.some((name) => name.includes(token)))
+  )
+    return refused(
+      'provider_not_allowed',
+      `${entry.id}: Claude runs only through claude -p, never in this harness`,
+    )
+  if (!(entry.provider in harness.providers))
+    return refused(
+      'provider_not_allowed',
+      `${entry.id}: provider '${entry.provider}' is not registered in this harness`,
+    )
+  return null
+}
+
+function chainModel(
+  catalog: Catalog,
+  harness: Harness,
+  model: string,
+  effort: string | null,
+): ChainModel {
+  const entry = catalog.get(model) as NonNullable<ReturnType<Catalog['get']>>
+  const prefix = `${entry.provider}/`
+  return {
+    id: entry.id,
+    piProvider: harness.providers[entry.provider as keyof Harness['providers']],
+    piModel: entry.id.startsWith(prefix) ? entry.id.slice(prefix.length) : entry.id,
+    effort,
+  }
+}
+
+/**
+ * The rules for one run: the model chain (`--model` first when given, then the role's
+ * launch rows for the harness's tools and their alternates, each checked against the
+ * deny rows), tool level, guard and egress. A refusal names what failed.
+ */
+export function roleRules(
+  policy: LaunchPolicy,
+  catalog: Catalog,
+  harness: Harness,
+  request: RulesRequest,
+): RoleRules | Refused {
+  if (!policy.jobs.some((job) => job.name === request.role || job.workRoles.includes(request.role)))
+    return refused('unknown_role', `unknown role '${request.role}'`)
+  const roleData = (
+    harness.roles as Record<string, { level: string; guard: boolean; egress: string }>
+  )[request.role]
+  if (!roleData)
+    return refused(
+      'unknown_role',
+      `role '${request.role}' has no harness rules (data/harness.json)`,
+    )
+
+  const wanted: { model: string; effort: string | null }[] = []
+  if (request.model) {
+    const why = modelRefusal(policy, catalog, harness, request, request.model)
+    if (why) return why
+    wanted.push({ model: request.model, effort: null })
+  }
+  for (const tool of harness.chain_tools) {
+    const row = route(policy, catalog, {
+      role: request.role,
+      tool,
+      ...(request.project && { project: request.project }),
+    }).rows[0]
+    if (!row?.model || !row.allowed) continue
+    wanted.push({ model: row.model, effort: row.effort })
+    for (const alt of row.alternates)
+      if (typeof alt.model === 'string')
+        wanted.push({ model: alt.model, effort: (alt.effort as string) ?? row.effort })
+  }
+  const chain: ChainModel[] = []
+  for (const { model, effort } of wanted) {
+    if (modelRefusal(policy, catalog, harness, request, model)) continue
+    const next = chainModel(catalog, harness, model, effort)
+    const same = chain.find((entry) => entry.id === next.id)
+    if (same) same.effort ??= next.effort
+    else chain.push(next)
+  }
+  if (!chain.length)
+    return refused('no_model', `role '${request.role}' has no model this harness may run`)
+
+  if (!harness.egress_supported.includes(roleData.egress))
+    return refused(
+      'unenforceable',
+      `role '${request.role}' needs egress profile '${roleData.egress}', which this harness cannot enforce yet`,
+    )
+  const tools = (harness.levels as Record<string, string[]>)[roleData.level]
+  if (!tools)
+    return refused(
+      'unenforceable',
+      `role '${request.role}' names unknown tool level '${roleData.level}'`,
+    )
+  if (roleData.guard && !existsSync(harness.guard_hook))
+    return refused(
+      'unenforceable',
+      `role '${request.role}' needs the publication guard, not found at ${harness.guard_hook}`,
+    )
+  return {
+    role: request.role,
+    chain,
+    level: roleData.level,
+    tools,
+    guardHook: roleData.guard ? harness.guard_hook : null,
+    egress: roleData.egress,
+  }
+}
+
+/** The context database's rules for one run, or why not. */
+export function loadRoleRules(
+  dbPath: string,
+  request: RulesRequest,
+  harness: Harness = HARNESS,
+  catalog: Catalog = new Catalog(),
+): RoleRules | Refused {
+  const policy = readPolicy(dbPath)
+  if ('kind' in policy) return policy
+  try {
+    return roleRules(policy, catalog, harness, request)
+  } catch (error) {
+    return refused('rules_unreadable', (error as Error).message)
+  }
+}

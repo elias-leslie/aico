@@ -1,0 +1,47 @@
+{
+  "about": "What `aico agent run` may do. Models and deny rows come from context.db (route()); this file says which launch-policy rows the harness serves, which providers it may register, and the role rules context.db does not carry yet (tool level, guard, egress; M8b moves them there). Anything not listed here is refused.",
+  "launch_tool": "agent-hub",
+  "chain_tools": ["codex", "pi"],
+  "providers": {
+    "codex": "openai",
+    "opencode-go": "opencode-go"
+  },
+  "claude_provider": "claude",
+  "levels": {
+    "read": ["read"],
+    "lean": ["read", "bash", "edit", "write"]
+  },
+  "roles": {
+    "implementation": { "level": "lean", "guard": true, "egress": "host" },
+    "operations": { "level": "lean", "guard": true, "egress": "host" },
+    "design": { "level": "lean", "guard": true, "egress": "host" },
+    "research": { "level": "lean", "guard": true, "egress": "host" },
+    "mapping": { "level": "lean", "guard": true, "egress": "host" },
+    "review": { "level": "read", "guard": true, "egress": "host" },
+    "lookup": { "level": "read", "guard": true, "egress": "host" },
+    "hunting": { "level": "lean", "guard": true, "egress": "contained" },
+    "recon": { "level": "lean", "guard": true, "egress": "contained" }
+  },
+  "egress_supported": ["host"],
+  "guard_hook": "/srv/workspaces/projects/summitflow/scripts/lib/publication-pretool-hook",
+  "refusal_codes": {
+    "cyberpolicy": "cyber",
+    "biopolicy": "bio",
+    "misalignmentpolicyviolation": "misalignment",
+    "toomanydenials": "too_many_denials"
+  },
+  "refusal_stop_reasons": ["refusal", "content_filter", "safety"],
+  "prompt": [
+    "You are a coding agent working in {cwd}. You read files, run commands, edit code and write files to finish the task.",
+    "- Use bash for ls, rg, find and running programs; use read for file contents.",
+    "- edit replaces exact text: each oldText must match once. Use write only for new files or full rewrites.",
+    "- Put independent steps in one call or one turn.",
+    "- Be concise. Show file paths."
+  ],
+  "tool_descriptions": {
+    "read": "Read a text file or image. Long files are cut at 2000 lines or 50KB; continue with offset and limit.",
+    "bash": "Run a bash command in the working directory. Returns stdout and stderr, cut to the last 2000 lines or 50KB. timeout is in seconds.",
+    "edit": "Edit one file by exact replacement. Each edits[].oldText must match exactly once in the original file; edits must not overlap.",
+    "write": "Create or overwrite a file; parent directories are created."
+  }
+}

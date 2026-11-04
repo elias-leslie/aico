@@ -1,0 +1,381 @@
+{
+  "version": 5,
+  "about": "Which model, effort, Daybreak and context each kind of agent gets, by job and tool, and the hard rules on top. st models route --role JOB --tool TOOL reads it; st aico create applies it when --model/--reasoning-effort are not given (explicit flags win). A job's work_roles are the Agent Hub work roles (session_roles.json) whose launches default to it; every registered work role belongs to exactly one job. context: full = Agent Hub delivery in the project; blank-slate = --blank-slate plus a specific brief (create uses it when neither --project nor --blank-slate is given). subagent names the lean Claude Code agent definition (claude-config/agents) to use for this job as a native subagent. deny rows are hard rules: a launch whose job, work role and project match every selector a row names is refused when its tool or model counts as the row's provider (providers says what counts), explicit --model included; Agent Hub agent sessions with a denied work role never fall back or escalate to that provider. Everything else (usage, credits, which tool to pick) is the coordinator's choice from live facts, not an order here. Owner decisions 2026-11-01: /srv/workspaces/handoffs/followups-2026-10-31/token-audit/BRIEF-launch-defaults.md.",
+  "usageProviders": ["claude", "codex", "opencode-go"],
+  "workRoles": [
+    "coordinator",
+    "implementation",
+    "design",
+    "research",
+    "review",
+    "recon",
+    "hunting",
+    "operations",
+    "selection",
+    "verification",
+    "reporting",
+    "mapping",
+    "other"
+  ],
+  "jobs": [
+    {
+      "name": "coordinator",
+      "label": "Coordinators",
+      "description": "",
+      "workRoles": ["coordinator"],
+      "context": "full",
+      "subagent": null,
+      "tools": {
+        "claude-code": {
+          "model": "claude-opus-5-5",
+          "effort": "xhigh",
+          "why": "Owner 2026-11-01: coordinators run Opus 5.5 xhigh."
+        }
+      }
+    },
+    {
+      "name": "implementation",
+      "label": "Well-scoped builds and fixes",
+      "description": "",
+      "workRoles": ["implementation"],
+      "context": "full",
+      "subagent": null,
+      "tools": {
+        "claude-code": {
+          "model": "claude-sonnet-5-5",
+          "effort": "high",
+          "alternates": [
+            {
+              "model": "claude-opus-5-5",
+              "effort": "high",
+              "when": "design, hard debugging, or security/root/delete code"
+            }
+          ],
+          "why": "Owner 2026-11-01: Sonnet 5.5 high for well-scoped builds and fixes; Opus 5.5 high for design, hard debugging and security/root/delete code.",
+          "projects": {
+            "neri": {
+              "model": "claude-opus-5-5",
+              "effort": "high",
+              "why": "Owner 2026-10-31: Neri implementation runs Opus 5.5 high."
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "research",
+      "label": "Research, selection and reports someone will act on",
+      "description": "",
+      "workRoles": ["research", "selection", "reporting"],
+      "context": "full",
+      "subagent": null,
+      "tools": {
+        "claude-code": {
+          "model": "claude-opus-5-5",
+          "effort": "high",
+          "alternates": [
+            {
+              "model": "claude-sonnet-5-5",
+              "effort": "high",
+              "when": "plain fact-gathering nobody acts on directly"
+            }
+          ],
+          "why": "Owner 2026-11-01: Opus 5.5 high for research or advice someone will act on; Sonnet 5.5 high for fact-gathering."
+        }
+      }
+    },
+    {
+      "name": "mapping",
+      "label": "Product maps",
+      "description": "",
+      "workRoles": ["mapping"],
+      "context": "full",
+      "subagent": null,
+      "tools": {
+        "claude-code": {
+          "model": "claude-opus-5-5",
+          "effort": "high",
+          "why": "Product-map route 1; maps are research someone acts on (owner 2026-11-01: Opus 5.5 high)."
+        },
+        "codex": {
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh",
+          "daybreak": false,
+          "why": "Product-map route 2: gpt-6.1-sol xhigh (owner 2026-11-01: Codex non-hunting is gpt-6.1-sol xhigh)."
+        },
+        "pi": {
+          "model": "opencode-go/deepseek-v4.1-flash",
+          "effort": "max",
+          "why": "Product-map route 3: DeepSeek 4.1 Flash max."
+        }
+      }
+    },
+    {
+      "name": "design",
+      "label": "UI/UX, product design and product copy, and their review",
+      "description": "",
+      "workRoles": ["design"],
+      "context": "full",
+      "subagent": null,
+      "tools": {
+        "claude-code": {
+          "model": "claude-opus-5-5",
+          "effort": "high",
+          "alternates": [
+            {
+              "model": "claude-sonnet-5-5",
+              "effort": "high",
+              "when": "small copy or styling tweaks"
+            }
+          ],
+          "why": "Owner 2026-11-01: Opus 5.5 high for design work; Sonnet 5.5 high for small copy or styling tweaks."
+        },
+        "codex": {
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh",
+          "daybreak": false,
+          "when": "Claude is unavailable or out of usage",
+          "why": "when Claude is unavailable or out of usage (owner 2026-11-01: design work then runs gpt-6.1-sol xhigh)"
+        },
+        "pi": {
+          "model": "opencode-go/deepseek-v4.1-flash",
+          "effort": "high",
+          "why": "Pi is the last choice for design work."
+        }
+      }
+    },
+    {
+      "name": "review",
+      "label": "Code and report review",
+      "description": "",
+      "workRoles": ["review"],
+      "context": "blank-slate",
+      "subagent": "code-reviewer",
+      "tools": {
+        "claude-code": {
+          "model": "claude-opus-5-5",
+          "effort": "high",
+          "why": "Owner 2026-11-01: reviews run Opus 5.5 high."
+        }
+      }
+    },
+    {
+      "name": "testing",
+      "label": "Testing",
+      "description": "",
+      "workRoles": ["verification"],
+      "context": "blank-slate",
+      "subagent": "user-tester",
+      "tools": {
+        "claude-code": {
+          "model": "claude-haiku-5-5",
+          "effort": "high",
+          "alternates": [
+            {
+              "model": "claude-sonnet-5-5",
+              "effort": "high",
+              "when": "Haiku can't do the job"
+            },
+            {
+              "model": "claude-opus-5-5",
+              "effort": "high",
+              "when": "truly necessary; say why"
+            }
+          ],
+          "why": "Owner 2026-11-01: testing runs Haiku 5.5, Sonnet 5.5 if Haiku can't, Opus only if truly necessary."
+        }
+      }
+    },
+    {
+      "name": "lookup",
+      "label": "Lookups, file finding and mechanical work",
+      "description": "",
+      "workRoles": [],
+      "context": "blank-slate",
+      "subagent": null,
+      "tools": {
+        "claude-code": {
+          "model": "claude-haiku-5-5",
+          "effort": "high",
+          "why": "Owner 2026-11-01: Haiku 5.5 for lookups and file finding."
+        },
+        "pi": {
+          "model": "opencode-go/deepseek-v4.1-flash",
+          "effort": "low",
+          "why": "Pi is the last choice; low effort for mechanical sweeps and lookups."
+        }
+      }
+    },
+    {
+      "name": "operations",
+      "label": "Routine operations",
+      "description": "",
+      "workRoles": ["operations"],
+      "context": "full",
+      "subagent": null,
+      "tools": {
+        "claude-code": {
+          "model": "claude-sonnet-5-5",
+          "effort": "high",
+          "why": "Owner 2026-11-01: Sonnet 5.5 high for routine operations."
+        }
+      }
+    },
+    {
+      "name": "recon",
+      "label": "Security recon",
+      "description": "",
+      "workRoles": ["recon"],
+      "context": "full",
+      "subagent": null,
+      "tools": {
+        "codex": {
+          "model": "gpt-6-sol",
+          "effort": "xhigh",
+          "daybreak": true,
+          "why": "Recon is part of hunting. Owner 2026-11-01: Codex hunting runs the current Daybreak model at xhigh with Daybreak on (Codex's catalog lists gpt-6-sol with Daybreak, checked 2026-11-01; create refuses a model that lost it)."
+        },
+        "pi": {
+          "model": "opencode-go/deepseek-v4.1-flash",
+          "effort": "high",
+          "why": "Same as hunters: DeepSeek 4.1 Flash high."
+        }
+      }
+    },
+    {
+      "name": "hunting",
+      "label": "Hunting",
+      "description": "",
+      "workRoles": ["hunting"],
+      "context": "full",
+      "subagent": null,
+      "tools": {
+        "codex": {
+          "model": "gpt-6-sol",
+          "effort": "xhigh",
+          "daybreak": true,
+          "why": "Owner 2026-11-01: Codex hunting runs the current Daybreak model at xhigh with Daybreak on (Codex's catalog lists gpt-6-sol with Daybreak, checked 2026-11-01; create refuses a model that lost it)."
+        },
+        "pi": {
+          "model": "opencode-go/deepseek-v4.1-flash",
+          "effort": "high",
+          "alternates": [
+            {
+              "model": "opencode-go/glm-5.3",
+              "effort": "high",
+              "when": "a second hunter model"
+            },
+            {
+              "model": "opencode-go/glm-5.3-flash",
+              "effort": "high",
+              "when": "a cheaper second hunter model"
+            }
+          ],
+          "why": "Owner 2026-11-01: Pi hunters run DeepSeek 4.1 Flash high; GLM 5.3 and GLM 5.3 Flash are good hunters too. Neri's hunts.tools picks per hunt."
+        }
+      }
+    },
+    {
+      "name": "other",
+      "label": "Narrow one-off jobs",
+      "description": "",
+      "workRoles": ["other"],
+      "context": "blank-slate",
+      "subagent": null,
+      "tools": {
+        "claude-code": {
+          "model": "claude-opus-5-5",
+          "effort": "high",
+          "why": "Owner 2026-11-01: when unsure, Opus 5.5."
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "claude-code",
+      "label": "Claude Code",
+      "usageProvider": "claude",
+      "note": null,
+      "defaultRow": null
+    },
+    {
+      "name": "codex",
+      "label": "Codex",
+      "usageProvider": "codex",
+      "note": null,
+      "defaultRow": {
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "daybreak": false,
+        "why": "Owner 2026-11-01: Codex non-hunting work runs gpt-6.1-sol xhigh."
+      }
+    },
+    {
+      "name": "pi",
+      "label": "Pi",
+      "usageProvider": null,
+      "note": "Owner 2026-11-01: Pi hunts; outside hunting it is the last choice.",
+      "defaultRow": {
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "effort": "high",
+        "alternates": [
+          {
+            "model": "opencode-go/glm-5.3",
+            "effort": "high",
+            "when": "DeepSeek is unavailable or stuck"
+          }
+        ],
+        "why": "Owner 2026-11-01: Pi is the last choice outside hunting (DeepSeek 4.1 Flash, GLM 5.3)."
+      }
+    },
+    {
+      "name": "agent-hub",
+      "label": "Agent Hub chat",
+      "usageProvider": null,
+      "note": null,
+      "defaultRow": {
+        "model": null,
+        "effort": null,
+        "why": "The Agent Hub agent's own row sets model and effort; --model overrides it."
+      }
+    },
+    {
+      "name": "antigravity",
+      "label": "Antigravity",
+      "usageProvider": null,
+      "note": null,
+      "defaultRow": {
+        "model": null,
+        "effort": null,
+        "launchable": false,
+        "why": "Unknown/owner-opened: no guidance yet and Aico cannot launch it."
+      }
+    }
+  ],
+  "providers": {
+    "claude": {
+      "name": "claude",
+      "label": "Claude",
+      "tools": ["claude-code"],
+      "catalogProviders": ["claude", "anthropic"],
+      "nameTokens": ["claude", "opus", "sonnet", "haiku"],
+      "why": "Claude Code always runs Claude; any other tool runs Claude when the catalog lists the model under a Claude provider or its id names a Claude family (anthropic/claude-opus-5-5 through Pi). Other ids, catalogued or not, are not Claude."
+    }
+  },
+  "deny": [
+    {
+      "provider": "claude",
+      "reason": "Owner 2026-11-01: Claude never for active hunting or recon",
+      "source": "Owner approved 2026-11-01: /srv/workspaces/handoffs/model-choice-2026-11-01/BUILD-PLAN.md (REVIEW.md P1)",
+      "jobs": ["hunting", "recon"]
+    },
+    {
+      "provider": "claude",
+      "reason": "Owner 2026-11-01: Claude never for full case/hunt review",
+      "source": "Owner approved 2026-11-01: /srv/workspaces/handoffs/model-choice-2026-11-01/BUILD-PLAN.md (REVIEW.md P1)",
+      "work_roles": ["verification"],
+      "projects": ["neri-hunters"]
+    }
+  ]
+}

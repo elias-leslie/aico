@@ -84,6 +84,8 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",
