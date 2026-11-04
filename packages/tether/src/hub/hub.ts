@@ -352,8 +352,7 @@ export class Hub {
    * link, a held lock) installed nothing and is tried on the next link-up. A
    * peer that names no API, or a newer one, is left alone. */
   private checkRelease(peer: Peer): void {
-    // Signed fleet updates belong to M11b; production never sends unsigned releases.
-    if (!this.deps.update) return
+    // The production updater sends only verified, signed releases.
     const from = peer.apiVersion
     if (from !== null && from >= API_VERSION && peer.update?.state === 'failed') {
       // Brought up to this API some other way: the failure no longer holds.

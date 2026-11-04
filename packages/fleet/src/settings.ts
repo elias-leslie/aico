@@ -13,7 +13,9 @@ export interface FleetSettings {
   stateDir: string
   allowlist: string
   listen: Endpoint
-  peers: { name: string; endpoint: Endpoint }[]
+  peers: { name: string; endpoint: Endpoint; tools?: string[] }[]
+  mode?: 'full' | 'worker'
+  updatePins?: string
   controlSocket: string
   jobsSocket?: string
   syncSocket: string
@@ -83,6 +85,19 @@ export function readSettings(env: NodeJS.ProcessEnv, controlSocket: string): Fle
     throw new Error('Fleet machine must be this machine’s lower-cased short hostname')
   if (!value.stateDir || !value.allowlist || !value.syncSocket || !value.peerRoot)
     throw new Error('Fleet paths are required')
+  if (value.mode !== undefined && value.mode !== 'full' && value.mode !== 'worker')
+    throw new Error('Fleet mode must be full or worker')
+  if (
+    value.peers.some(
+      (peer) =>
+        peer.tools !== undefined &&
+        (!Array.isArray(peer.tools) ||
+          peer.tools.some(
+            (tool) => typeof tool !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(tool),
+          )),
+    )
+  )
+    throw new Error('Invalid fleet tool grants')
   if (
     [value.retryMinMs, value.retryMaxMs, value.deadMs, value.statusMs].some(
       (n) => !Number.isSafeInteger(n) || n <= 0,

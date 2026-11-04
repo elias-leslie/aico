@@ -17,12 +17,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { remoteArgv } from './host-admin'
 import {
   installStarted,
-  pushRelease,
   RELEASE_FILES,
   releaseId,
   runningRelease,
   UPDATE_BUSY_EXIT,
   UPDATE_INSTALLING,
+  type UpdateTarget,
   updateLine,
 } from './update'
 
@@ -134,7 +134,7 @@ describe('remote Tether update', () => {
   }
 
   it("installs the hub's release on the host and restarts its Tether there", async () => {
-    const result = await pushRelease(release, target, { argv: hostArgv() })
+    const result = await installTestRelease(release, target, { argv: hostArgv() })
     expect(result.code).toBe(0)
     expect(installStarted(result)).toBe(true)
     expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('new bundle\n')
@@ -147,7 +147,7 @@ describe('remote Tether update', () => {
 
   it('puts the previous bundle back when the new one does not answer', async () => {
     put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
-    const result = await pushRelease(release, target, { argv: hostArgv() })
+    const result = await installTestRelease(release, target, { argv: hostArgv() })
     expect(result.code).toBe(1)
     expect(result.output).toBe(
       'the new release did not answer within 1 s; the previous release and its database are back',
@@ -162,7 +162,7 @@ describe('remote Tether update', () => {
   it('puts the database back too when the new release moved its schema and then failed', async () => {
     oldDatabase()
     put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
-    const result = await pushRelease(release, target, { argv: hostArgv() })
+    const result = await installTestRelease(release, target, { argv: hostArgv() })
     expect(result).toMatchObject({
       code: 1,
       output:
@@ -179,7 +179,7 @@ describe('remote Tether update', () => {
   it('says so when the previous release does not answer after the rollback either', async () => {
     put(join(lib, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
     put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
-    const result = await pushRelease(release, target, { argv: hostArgv() })
+    const result = await installTestRelease(release, target, { argv: hostArgv() })
     expect(result.output).toBe(
       'the new release did not answer within 1 s; the previous release and its database are back but did not answer within 1 s either',
     )
@@ -192,7 +192,7 @@ describe('remote Tether update', () => {
       put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
       // The state directory takes no new file (a full or read-only disk).
       chmodSync(state, 0o500)
-      const result = await pushRelease(release, target, { argv: hostArgv() })
+      const result = await installTestRelease(release, target, { argv: hostArgv() })
       expect(result.code).toBe(1)
       const copy = /a copy is in (\S+)\)/.exec(result.output)?.[1] ?? ''
       expect(result.output).toBe(
@@ -208,7 +208,7 @@ describe('remote Tether update', () => {
     const lock = join(lib, '.update.lock')
     holder = spawn('flock', [lock, 'sleep', '30'], { stdio: 'ignore' })
     await vi.waitFor(() => expect(spawnSync('flock', ['-n', lock, 'true']).status).not.toBe(0))
-    const result = await pushRelease(release, target, { argv: hostArgv() })
+    const result = await installTestRelease(release, target, { argv: hostArgv() })
     expect(result).toMatchObject({
       code: UPDATE_BUSY_EXIT,
       output: "another update of this host's Tether is still running",
@@ -219,11 +219,11 @@ describe('remote Tether update', () => {
   })
 
   it('sends nothing without a whole release or a usable instance', async () => {
-    expect((await pushRelease(null, target)).output).toBe(
+    expect((await installTestRelease(null, target)).output).toBe(
       'this Tether does not run from an installed release',
     )
     rmSync(join(release, 'scripts', 'install-release.sh'))
-    expect((await pushRelease(release, target)).output).toBe(
+    expect((await installTestRelease(release, target)).output).toBe(
       `this Tether's release at ${release} has no scripts/install-release.sh`,
     )
     copyFileSync(
@@ -231,8 +231,13 @@ describe('remote Tether update', () => {
       join(release, 'scripts', 'install-release.sh'),
     )
     expect(
-      (await pushRelease(release, { ...target, instance: "x'; rm -rf ~" }, { argv: ['false'] }))
-        .output,
+      (
+        await installTestRelease(
+          release,
+          { ...target, instance: "x'; rm -rf ~" },
+          { argv: ['false'] },
+        )
+      ).output,
     ).toContain('named no usable instance')
     expect(restarts()).toEqual([])
   })
@@ -246,7 +251,7 @@ describe('remote Tether update', () => {
         .map((word) => `'${word.replace(/'/g, `'\\''`)}'`)
         .join(' ')}`,
     ]
-    const result = await pushRelease(release, target, { argv: cut })
+    const result = await installTestRelease(release, target, { argv: cut })
     expect(result.code).not.toBe(0)
     expect(installStarted(result)).toBe(false)
     expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
@@ -256,7 +261,7 @@ describe('remote Tether update', () => {
   it('installs nothing when its database is not where the script looks', async () => {
     // A rollback could not put it back, so an old release would meet a newer schema.
     rmSync(db)
-    const result = await pushRelease(release, target, { argv: hostArgv() })
+    const result = await installTestRelease(release, target, { argv: hostArgv() })
     expect(result.code).toBe(1)
     expect(result.output).toBe(`no Tether database at ${state}; nothing installed`)
     expect(installStarted(result)).toBe(false)
@@ -279,7 +284,7 @@ describe('remote Tether update', () => {
     const installer = readFileSync(join(SCRIPTS, 'install-release.sh'), 'utf8')
     const installed = [...installer.matchAll(/"\$lib_dir\/([^"]+)"/g)].map((match) => match[1])
     expect(installed.length).toBeGreaterThan(0)
-    for (const file of installed) expect(RELEASE_FILES).toContain(file)
+    for (const file of installed) expect([...RELEASE_FILES, 'signed-update.json']).toContain(file)
   })
 
   it('names the release by its bundle', () => {
@@ -298,3 +303,70 @@ describe('remote Tether update', () => {
     expect(runningRelease(undefined)).toBeNull()
   })
 })
+
+// The installer receives only already authenticated release bytes in production.
+function installTestRelease(
+  release: string | null,
+  target: UpdateTarget,
+  options: { timeoutMs?: number; argv?: string[] } = {},
+): Promise<{ code: number | null; stdout: string; output: string }> {
+  const timeoutMs = options.timeoutMs ?? 300000
+  const fail = (output: string) => Promise.resolve({ code: null, stdout: '', output })
+  if (!release) return fail('this Tether does not run from an installed release')
+  const missing = RELEASE_FILES.filter((file) => !existsSync(join(release, file)))
+  if (missing.length)
+    return fail(`this Tether's release at ${release} has no ${missing.join(', ')}`)
+  const instance = target.instance
+  if (!instance || !/^[a-zA-Z0-9_-]+$/.test(instance))
+    return fail(`the host's Tether named no usable instance (${JSON.stringify(instance)})`)
+  const argv =
+    options.argv ??
+    remoteArgv(
+      target.entry,
+      target.control,
+      updateLine(instance, target.entry.socket, 1, target.entry.stateDir),
+    )
+  return new Promise((resolve) => {
+    let stderr = ''
+    let stdout = ''
+    let settled = false
+    const tar = spawn('tar', ['-cf', '-', ...RELEASE_FILES], {
+      cwd: release,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const [command, ...args] = argv as [string, ...string[]]
+    const ssh = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+    const done = (result: { code: number | null; stdout: string; output: string }) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      tar.kill('SIGKILL')
+      resolve(result)
+    }
+    const timer = setTimeout(() => {
+      ssh.kill('SIGKILL')
+      done({ code: null, stdout, output: `timed out after ${Math.round(timeoutMs / 1000)} s` })
+    }, timeoutMs)
+    const keep = (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString('utf8')).slice(-4_096)
+    }
+    ssh.stdout.on('data', (chunk: Buffer) => {
+      stdout = (stdout + chunk.toString('utf8')).slice(-4_096)
+    })
+    tar.stderr.on('data', keep)
+    ssh.stderr.on('data', keep)
+    tar.stdout.pipe(ssh.stdin)
+    // ssh gone early (a dropped master): tar's write fails; ssh's exit says why.
+    ssh.stdin.on('error', () => {})
+    tar.once('error', (error) => {
+      ssh.kill('SIGKILL')
+      done({ code: null, stdout: '', output: `tar: ${error.message}` })
+    })
+    ssh.once('error', (error) => done({ code: null, stdout: '', output: error.message }))
+    ssh.once('close', (code) => {
+      const lines = stderr.trim().split('\n')
+      const last = (lines[lines.length - 1] ?? '').trim().slice(0, 300)
+      done({ code, stdout, output: last || `exit ${code ?? 'error'}` })
+    })
+  })
+}

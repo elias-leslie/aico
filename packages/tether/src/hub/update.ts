@@ -1,26 +1,25 @@
-// Legacy release installer, retained for local tests. Production automatic
-// updates are disabled until M11b adds signed updates over the fleet link.
+// Signed releases travel over the fleet link. The receiver verifies before running
+// this installer in its own user unit, so restarting Tether cannot kill the install.
 
-import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import { requestExec } from '@aico/fleet/exec'
 import type { HostEntry } from '@aico/fleet/hosts'
+import {
+  DEFAULT_UPDATE_PINS,
+  readUpdateKeys,
+  SIGNED_RELEASE,
+  verifyRelease,
+} from '@aico/fleet/releases'
+import { readSettings } from '@aico/fleet/settings'
+import { readPins } from '@aico/fleet/trust'
 import { isInstanceName } from '../config'
-import { type RunResult, remoteArgv, shellQuote } from './host-admin'
+import { type RunResult, shellQuote } from './host-admin'
 
 /** What an installed release holds (scripts/install-release.sh puts them
  * there), as paths inside it. */
-export const RELEASE_FILES = [
-  'dist/tether.mjs',
-  'bin/tether',
-  'scripts/install-release.sh',
-  'scripts/install-shims.sh',
-  'scripts/aico-root-watch.py',
-  'scripts/aico-blank-slate',
-  'shims/tether-shim',
-  'shims/shims.list',
-]
+export { RELEASE_FILES } from '@aico/fleet/releases'
 
 /** How long the copy, install, restart and rollback may take in all: two
  * answer waits, two stops and the copies. */
@@ -80,7 +79,7 @@ export function updateLine(
   answerSec: number = UPDATE_ANSWER_SEC,
   stateDir: string | null = null,
 ): string {
-  const keep = 'dist/tether.mjs bin/tether'
+  const keep = 'dist/tether.mjs bin/tether signed-update.json'
   return [
     'set -eu',
     `instance=${shellQuote(instance)}`,
@@ -179,70 +178,39 @@ export function updateLine(
   ].join('\n')
 }
 
-/** Copy `release` to the host and install it there (see the file comment).
- * `argv` stands in for the ssh command in tests. */
-export function pushRelease(
+/** Only a pinned full peer may send a previously signed release over the link. */
+export async function pushRelease(
   release: string | null,
   target: UpdateTarget,
-  options: { timeoutMs?: number; argv?: string[] } = {},
 ): Promise<RunResult> {
-  const timeoutMs = options.timeoutMs ?? UPDATE_RUN_MS
-  const fail = (output: string) => Promise.resolve({ code: null, stdout: '', output })
+  const fail = (output: string): RunResult => ({ code: null, stdout: '', output })
   if (!release) return fail('this Tether does not run from an installed release')
-  const missing = RELEASE_FILES.filter((file) => !existsSync(join(release, file)))
-  if (missing.length)
-    return fail(`this Tether's release at ${release} has no ${missing.join(', ')}`)
-  const instance = target.instance
-  if (!instance || !isInstanceName(instance))
-    return fail(`the host's Tether named no usable instance (${JSON.stringify(instance)})`)
-  const argv =
-    options.argv ??
-    remoteArgv(
-      target.entry,
-      target.control,
-      updateLine(instance, target.entry.socket, UPDATE_ANSWER_SEC, target.entry.stateDir),
+  if (!target.instance || !isInstanceName(target.instance))
+    return fail('The host named no usable instance')
+  try {
+    const settings = readSettings(process.env, '')
+    if (
+      !settings ||
+      readPins(settings.allowlist).find((pin) => pin.name === settings.machine)?.role !== 'full' ||
+      !readPins(settings.allowlist).some((pin) => pin.name === target.entry.name)
     )
-  return new Promise((resolve) => {
-    let stderr = ''
-    let stdout = ''
-    let settled = false
-    const tar = spawn('tar', ['-cf', '-', ...RELEASE_FILES], {
-      cwd: release,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    const [command, ...args] = argv as [string, ...string[]]
-    const ssh = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] })
-    const done = (result: RunResult) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      tar.kill('SIGKILL')
-      resolve(result)
-    }
-    const timer = setTimeout(() => {
-      ssh.kill('SIGKILL')
-      done({ code: null, stdout, output: `timed out after ${Math.round(timeoutMs / 1000)} s` })
-    }, timeoutMs)
-    const keep = (chunk: Buffer) => {
-      stderr = (stderr + chunk.toString('utf8')).slice(-4_096)
-    }
-    ssh.stdout.on('data', (chunk: Buffer) => {
-      stdout = (stdout + chunk.toString('utf8')).slice(-4_096)
-    })
-    tar.stderr.on('data', keep)
-    ssh.stderr.on('data', keep)
-    tar.stdout.pipe(ssh.stdin)
-    // ssh gone early (a dropped master): tar's write fails; ssh's exit says why.
-    ssh.stdin.on('error', () => {})
-    tar.once('error', (error) => {
-      ssh.kill('SIGKILL')
-      done({ code: null, stdout: '', output: `tar: ${error.message}` })
-    })
-    ssh.once('error', (error) => done({ code: null, stdout: '', output: error.message }))
-    ssh.once('close', (code) => {
-      const lines = stderr.trim().split('\n')
-      const last = (lines[lines.length - 1] ?? '').trim().slice(0, 300)
-      done({ code, stdout, output: last || `exit ${code ?? 'error'}` })
-    })
-  })
+      return fail('Only a full peer may update an approved machine')
+    const input = readFileSync(join(release, SIGNED_RELEASE), 'utf8')
+    verifyRelease(input, readUpdateKeys(settings.updatePins || DEFAULT_UPDATE_PINS))
+    return await requestExec(
+      target.control,
+      [
+        'sh',
+        '-c',
+        'exec "$HOME/.local/lib/tether/bin/tether" fleet receive-update "$@"',
+        'aico-update',
+        target.instance,
+        target.entry.socket,
+        target.entry.stateDir || '',
+      ],
+      Buffer.from(input),
+    )
+  } catch {
+    return fail('No usable signed release; nothing sent')
+  }
 }

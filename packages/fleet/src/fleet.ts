@@ -12,7 +12,8 @@ import type { StatusRow } from '@aico/status'
 import { Connection, type OpenChannel } from './connection'
 import { serveExec } from './exec'
 import { type Identity, loadIdentity, validName } from './identity'
-import { type FleetSettings, localAddress } from './settings'
+import { pushToolLogins } from './secrets'
+import { type FleetSettings, localAddress, readSettings } from './settings'
 import { type Pin, PinCache } from './trust'
 
 export interface FleetOptions {
@@ -55,6 +56,7 @@ export class Fleet {
     this.postRows =
       options.postRows ??
       (async (rows) => {
+        if (s.mode === 'worker') return
         const res = await fetch(s.statusUrl, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -146,6 +148,20 @@ export class Fleet {
           this.stable.set(connection.peer, stable)
           this.log(`${connection.peer}: connected`)
           void this.report()
+          if (
+            this.pins().find((pin) => pin.name === this.options.settings.machine)?.role === 'full'
+          ) {
+            try {
+              const current =
+                readSettings(process.env, this.options.settings.controlSocket) ??
+                this.options.settings
+              void pushToolLogins(current, connection.peer).catch(() =>
+                this.log(`${connection.peer}: tool login delivery failed`),
+              )
+            } catch {
+              this.log(`${connection.peer}: could not read tool grants`)
+            }
+          }
         },
         closed: (connection) => {
           if (this.connections.get(connection.peer) === connection) {
@@ -360,11 +376,13 @@ export class Fleet {
       kind: 'machine',
       machine: peer.name,
       state: peer.connected ? 'ok' : 'warn',
-      meaning: peer.connected
-        ? `Connected to ${peer.name}.`
-        : peer.lastSeen
-          ? `Disconnected from ${peer.name}. Reconnecting.`
-          : `Waiting for ${peer.name} to connect.`,
+      meaning: !this.pins().some((pin) => pin.name === peer.name)
+        ? `Not on the allowlist. Connection refused.`
+        : peer.connected
+          ? `Approved ${this.pins().find((pin) => pin.name === peer.name)?.role}. Connected to ${peer.name}.`
+          : peer.lastSeen
+            ? `Disconnected from ${peer.name}. Reconnecting.`
+            : `Waiting for ${peer.name} to connect.`,
       ...(peer.lastSeen ? { last_run: new Date(peer.lastSeen).toISOString() } : {}),
       next_run: new Date((peer.lastSeen ?? this.startedAt) + s.deadMs).toISOString(),
       actions: [{ kind: 'detail', ref: 'tether hosts' }],

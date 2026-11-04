@@ -39,6 +39,9 @@ install_copy "$repo/scripts/aico-blank-slate" "$lib_dir/scripts/aico-blank-slate
 # (src/hub/update.ts sends the installed release there).
 install_copy "$repo/scripts/install-release.sh" "$lib_dir/scripts/install-release.sh" 0755
 install_copy "$repo/scripts/install-shims.sh" "$lib_dir/scripts/install-shims.sh" 0644
+if [ -f "$repo/signed-update.json" ]; then
+  install_copy "$repo/signed-update.json" "$lib_dir/signed-update.json" 0600
+fi
 # shellcheck source=scripts/install-shims.sh
 source "$repo/scripts/install-shims.sh"
 install_shims "$repo" "$lib_dir"

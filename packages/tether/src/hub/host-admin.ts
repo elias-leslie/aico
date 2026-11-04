@@ -1,18 +1,16 @@
 // The Hosts panel's routes (docs/api-v1.md "Remote hosts"): each host's
-// sign-in state per agent tool, read on the host with `agent-hub login status`
-// through the link's ssh ControlMaster; power on (the create path's wake) and
-// off (hosts.json `sleep`); and sign in or out, which opens a short shell
-// session on the host running the tool's own login, or revokes the host's
-// grant in Agent Hub. No credential value passes through here.
+// sign-in state per agent tool, read through the fleet link; power on and off;
+// tool login delivery from this machine's secrets folder or the tool's own login.
 
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { CLIENT_ID_HEADER, OWNER_TOKEN_HEADER, REQUEST_SOURCE_HEADER } from '@agent-hub/sdk'
-import { execArgv } from '@aico/fleet/exec'
+import { execArgv, requestExec } from '@aico/fleet/exec'
 import { type HostEntry, hostsFilePath } from '@aico/fleet/hosts'
 import { linkPaths } from '@aico/fleet/link'
 import { type PeerAnswer, PeerUnavailable, peerRequest } from '@aico/fleet/peer-http'
+import { pushToolLogins, setToolGrant } from '@aico/fleet/secrets'
+import { readSettings } from '@aico/fleet/settings'
 import type { AgentHubConfig } from '../agent-hub/config'
 import { HttpError, type Router, readJsonObject, sendJson } from '../http'
 import type { ToolLogin } from '../lifecycle/tui/adapters/contract'
@@ -80,14 +78,11 @@ export const DEFAULT_LOGINS: Record<string, ToolLogin> = Object.fromEntries(
   ADAPTERS.map((adapter) => [adapter.id, adapter.login]),
 )
 
-export const STATUS_LINE = 'agent-hub login status --json'
-/** The host's own refresh of its shims after a grant changed. */
-export const INSTALL_LINE = 'agent-hub install'
+export const STATUS_LINE = '"$HOME/.local/lib/tether/bin/tether" fleet login-status'
 const STATUS_TIMEOUT_MS = 20_000
 const COMMAND_TIMEOUT_MS = 30_000
 const SLEEP_TIMEOUT_MS = 120_000
 const CREATE_TIMEOUT_MS = 60_000
-const AGENT_HUB_TIMEOUT_MS = 10_000
 /** How often the hub looks at a sign-in session it opened, to end it once its
  * shell has exited. */
 const SIGN_IN_FOLLOW_MS = 5_000
@@ -109,7 +104,7 @@ export interface HostAdminDeps {
   env: NodeJS.ProcessEnv
   run?: Runner
   peer?: (socket: string, method: string, path: string, body: unknown) => Promise<PeerAnswer>
-  fetch?: typeof fetch
+  grant?: (name: string, tool: string, granted: boolean) => Promise<void>
   readFile?: (path: string) => string
   log?: (message: string) => void
   /** One-shot timer, injectable for tests. */
@@ -158,7 +153,6 @@ export function loadLogins(
 export class HostAdmin {
   private readonly run: Runner
   private readonly peer: NonNullable<HostAdminDeps['peer']>
-  private readonly fetch: typeof fetch
   private readonly read: (path: string) => string
   private readonly log: (message: string) => void
 
@@ -167,7 +161,6 @@ export class HostAdmin {
     this.peer =
       deps.peer ??
       ((socket, method, path, body) => peerRequest(socket, method, path, body, CREATE_TIMEOUT_MS))
-    this.fetch = deps.fetch ?? fetch
     this.read = deps.readFile ?? ((path) => readFileSync(path, 'utf8'))
     this.log = deps.log ?? ((message) => console.log(`[tether:hosts] ${message}`))
   }
@@ -367,7 +360,10 @@ export class HostAdmin {
       if (!login.signIn) throw new HttpError(409, 'sign_in_unsupported', { tool })
       this.host(name)
       await this.deps.hub.wakeHost(name)
-      if (login.grant) await this.grant(name, tool, true)
+      if (login.grant) {
+        await this.grant(name, tool, true)
+        return [200, { host: name, tool, signedIn: true }]
+      }
       return this.openSession(name, `${SIGN_IN_TITLE}${tool}`, login.signIn, body)
     }
     if (action !== 'sign_out') throw new HttpError(400, 'invalid_body', { field: 'action' })
@@ -378,8 +374,11 @@ export class HostAdmin {
     if (signOut.kind === 'revoke') {
       this.host(name)
       await this.grant(name, tool, false)
-      // The shim would now refuse to start the tool; drop it if the host is up.
-      const note = await this.refreshShims(name)
+      const info = this.host(name).info
+      const note =
+        info.state === 'connected'
+          ? null
+          : `${name} is not reachable; its login will be removed when it reconnects`
       return [200, { host: name, tool, signedOut: true, ...(note ? { note } : {}) }]
     }
     const { entry, control } = this.live(name)
@@ -393,51 +392,34 @@ export class HostAdmin {
     return [200, { host: name, tool, signedOut: true }]
   }
 
-  private async refreshShims(name: string): Promise<string | null> {
-    let target: ReturnType<HostAdmin['live']>
-    try {
-      target = this.live(name)
-    } catch {
-      return `${name} is not reachable; its shims update on the next agent-hub install`
-    }
-    const result = await this.run(
-      remoteArgv(target.entry, target.control, INSTALL_LINE),
-      COMMAND_TIMEOUT_MS,
-    )
-    return result.code === 0 ? null : `agent-hub install failed on ${name}: ${result.output}`
-  }
-
-  /** Grant or deny `tool` to the host in Agent Hub (owner API). */
+  /** Per-machine tool grants live with fleet config; delivery uses the pinned link. */
   private async grant(name: string, tool: string, granted: boolean): Promise<void> {
-    const config = this.deps.agentHub
-    const headers: Record<string, string> = { [REQUEST_SOURCE_HEADER]: config.requestSource }
-    if (config.clientId) headers[CLIENT_ID_HEADER] = config.clientId
-    if (config.ownerTokenFile) {
-      try {
-        const token = this.read(config.ownerTokenFile).trim()
-        if (token) headers[OWNER_TOKEN_HEADER] = token
-      } catch {
-        // Agent Hub answers 401/403 below and says so.
-      }
-    }
-    const url = `${config.baseUrl.replace(/\/$/, '')}/api/remote-hosts/${encodeURIComponent(name)}/tools/${encodeURIComponent(tool)}`
-    let response: Response
+    if (this.deps.grant) return this.deps.grant(name, tool, granted)
     try {
-      response = await this.fetch(url, {
-        method: granted ? 'PUT' : 'DELETE',
-        headers,
-        signal: AbortSignal.timeout(AGENT_HUB_TIMEOUT_MS),
+      const settings = readSettings(this.deps.env, '')
+      if (!settings) throw new Error('Fleet is not configured')
+      setToolGrant(settings, name, tool, granted, this.deps.env)
+      if (granted) await pushToolLogins(settings, name, tool, this.deps.env)
+      else if (this.host(name).info.state === 'connected') {
+        const result = await requestExec(
+          join(settings.peerRoot, name, 'exec.sock'),
+          [
+            'sh',
+            '-c',
+            'exec "$HOME/.local/lib/tether/bin/tether" fleet forget-login "$1"',
+            'aico-login',
+            tool,
+          ],
+          Buffer.alloc(0),
+        )
+        if (result.code !== 0) throw new Error('Peer refused login removal')
+      }
+    } catch {
+      throw new HttpError(502, 'login_delivery_failed', {
+        host: name,
+        tool,
+        reason: 'Could not deliver the tool login over the approved fleet link',
       })
-    } catch (error) {
-      throw new HttpError(503, 'agent_hub_unavailable', { reason: (error as Error).message })
-    }
-    if (!response.ok) {
-      let reason = `Agent Hub answered ${response.status}`
-      try {
-        const detail = record(await response.json())?.detail
-        if (typeof detail === 'string') reason = detail
-      } catch {}
-      throw new HttpError(502, 'agent_hub_refused', { host: name, tool, reason })
     }
   }
 

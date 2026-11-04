@@ -43,7 +43,7 @@ function setup(
     sessions?: Record<string, unknown>[]
     run?: (argv: string[]) => RunResult
     peer?: (method: string, path: string, body: unknown) => PeerAnswer
-    fetch?: (url: string, init: RequestInit) => Response
+    grant?: (name: string, tool: string, granted: boolean) => Promise<void>
   } = {},
 ) {
   const runs: string[][] = []
@@ -82,14 +82,10 @@ function setup(
           : { status: 200, body: { delivered: true } })
       )
     },
-    fetch: (async (url: string, init: RequestInit) => {
-      fetches.push({
-        url,
-        method: String(init.method),
-        headers: init.headers as Record<string, string>,
-      })
-      return options.fetch?.(url, init) ?? new Response('{}', { status: 200 })
-    }) as typeof fetch,
+    grant: async (name, tool, granted) => {
+      fetches.push({ url: name + '/' + tool, method: granted ? 'PUT' : 'DELETE', headers: {} })
+      await options.grant?.(name, tool, granted)
+    },
     readFile: (path) => {
       if (path === '/tokens/owner') return 'owner-secret\n'
       throw new Error('ENOENT')
@@ -122,7 +118,9 @@ describe('login status', () => {
   it('runs agent-hub on the host through the link and returns its answer', async () => {
     const { admin, runs } = setup()
     const answer = await admin.status('vm-1')
-    expect(runs[0]).toEqual(remoteArgv(ENTRY, CONTROL, 'agent-hub login status --json'))
+    expect(runs[0]).toEqual(
+      remoteArgv(ENTRY, CONTROL, '"$HOME/.local/lib/tether/bin/tether" fleet login-status'),
+    )
     expect(runs[0]?.slice(0, 5)).toEqual([FLEET_BIN, 'fleet', 'exec', CONTROL, '--'])
     expect(answer).toMatchObject({ ...STATUS, host: 'vm-1' })
     expect(answer.actions).toMatchObject({
@@ -149,7 +147,7 @@ describe('login status', () => {
   it("checks each tool's own login file on a host with no agent-hub command", async () => {
     const { admin, runs } = setup({
       run: (argv) =>
-        argv.at(-1)?.includes('agent-hub login status')
+        argv.at(-1)?.includes('fleet login-status')
           ? { code: 127, stdout: '', output: 'bash: line 1: agent-hub: command not found' }
           : { code: 0, stdout: 'claude-code n n\ncodex y n\npi n n\nagy y y\n', output: '' },
     })
@@ -338,30 +336,24 @@ describe('sign in and out', () => {
     expect(fetches).toEqual([])
   })
 
-  it('grants a served tool before its sign-in, with the owner token', async () => {
+  it('pushes a stored tool login without opening a sign-in session', async () => {
     const { admin, fetches, peerCalls } = setup()
-    await admin.signInOut('vm-1', 'claude-code', { action: 'sign_in' })
-    expect(fetches[0]).toMatchObject({
-      url: 'http://127.0.0.1:8003/api/remote-hosts/vm-1/tools/claude-code',
-      method: 'PUT',
-      headers: {
-        'X-Agent-Hub-Owner-Token': 'owner-secret',
-        'X-Client-Id': 'client-1',
-        'X-Request-Source': 'aico-tether',
-      },
-    })
-    expect(peerCalls[1]?.body).toMatchObject({
-      text: `${DEFAULT_LOGINS['claude-code']?.signIn} && exit`,
-    })
+    const [status, answer] = await admin.signInOut('vm-1', 'claude-code', { action: 'sign_in' })
+    expect(status).toBe(200)
+    expect(answer).toMatchObject({ signedIn: true })
+    expect(fetches).toMatchObject([{ url: 'vm-1/claude-code', method: 'PUT' }])
+    expect(peerCalls).toEqual([])
   })
 
-  it('opens no session when Agent Hub refuses the grant', async () => {
+  it('opens no session when tool login delivery fails', async () => {
     const { admin, peerCalls } = setup({
-      fetch: () => new Response(JSON.stringify({ detail: 'unknown host' }), { status: 404 }),
+      grant: async () => {
+        throw new HttpError(502, 'login_delivery_failed')
+      },
     })
-    const error = await refusal(admin.signInOut('vm-1', 'claude-code', { action: 'sign_in' }))
-    expect(error.code).toBe('agent_hub_refused')
-    expect(error.extra).toMatchObject({ reason: 'unknown host' })
+    expect(
+      (await refusal(admin.signInOut('vm-1', 'claude-code', { action: 'sign_in' }))).code,
+    ).toBe('login_delivery_failed')
     expect(peerCalls).toEqual([])
   })
 
@@ -384,7 +376,7 @@ describe('sign in and out', () => {
     expect(status).toBe(200)
     expect(answer).toEqual({ host: 'vm-1', tool: 'claude-code', signedOut: true })
     expect(fetches[0]?.method).toBe('DELETE')
-    expect(runs[0]).toEqual(remoteArgv(ENTRY, CONTROL, 'agent-hub install'))
+    expect(runs).toEqual([])
   })
 
   it('revokes even while the host is away, and says the shims wait', async () => {
