@@ -1,0 +1,51 @@
+{
+  "milestone": "M11b",
+  "state": "stopped-for-owner-decisions",
+  "observedAt": "2026-11-04",
+  "implementationStarted": false,
+  "hostChangesMade": false,
+  "m11aVerifiedInSource": {
+    "roleLimitedChannels": true,
+    "rootOwnedEnrollmentPins": true,
+    "productionUnsignedUpdatesDisabled": true,
+    "legacyUpdaterUsesSsh": true,
+    "hostAdminStillCallsRemoteHostsApi": true
+  },
+  "remoteHosts": {
+    "source": "Agent Hub remote_hosts, read-only st db query",
+    "active": ["agent-work", "neri-hunters", "neri-local"],
+    "revoked": [
+      "e2e-shim",
+      "neri-box-1",
+      "neri-box-2",
+      "neri-box-3",
+      "neri-box-9900001",
+      "neri-box-9900002",
+      "neri-p2a-helper-fixture",
+      "neri-p2a-helper-lab-fixture",
+      "neri-p2a-helper-live-fixture",
+      "neri-p2a-spike-20261031",
+      "p2a-registration-probe"
+    ],
+    "mappingToMachinesNotYetVerified": true,
+    "noRemoteMachinesAccessed": true
+  },
+  "secretsMetadata": {
+    "existingOpencodeGoFilePresent": true,
+    "storedHostToolEntries": 3,
+    "storedLabEntries": 13,
+    "briefLabEntryCount": 12,
+    "credentialManagerSkipsScopedSecrets": true,
+    "existingStorageDecryptHelperRequiredForScopedEntries": true,
+    "noSecretValuesReadPrintedLoggedOrCommitted": true
+  },
+  "ownerAsks": {
+    "hostScope": "ef061533fd30",
+    "updateSigningKeyCreation": "2b92f6834236"
+  },
+  "acceptance": {
+    "before": "started; receipt pending",
+    "after": "not applicable yet; no implementation changes"
+  },
+  "remaining": "All M11b implementation, extraction, deployment, enrollment and live proof remain. Resolve the host-scope decision and signing-key approval before continuing, as instructed. Agent Hub remains running."
+}
