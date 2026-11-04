@@ -62,8 +62,10 @@ Commands:
   tools rm <slug>
   projects [--refresh]          project list (SummitFlow, else local)
   hosts                         remote hosts this Tether federates, with link state
-  link <host>                   hold the ssh link to a host in hosts.json (used by
-                                tether-link@<host>.service; never powers it on)
+  fleet identity                show this machine’s public enrollment identity and code
+  fleet enroll PUBLIC_FILE      ask the owner to approve a machine
+  fleet approve FILE ASK PINS    root: pin the exact identity approved in Needs you
+  fleet exec SOCKET -- COMMAND  carry a command over an approved fleet connection
 
 The instance defaults to $TETHER_INSTANCE or "default".`
 

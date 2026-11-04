@@ -27,6 +27,12 @@ export async function runFleet(
   io: { out(text: string): void; err(text: string): void },
 ): Promise<number> {
   const [command, ...rest] = args
+  if (!command || command === 'help' || command === '--help') {
+    io.out(
+      'Usage: tether fleet identity | enroll PUBLIC_FILE | approve PUBLIC_FILE ASK_ID ALLOWLIST | exec SOCKET -- COMMAND [ARGS]',
+    )
+    return command ? 0 : 2
+  }
   if (command === 'exec') {
     const at = rest.indexOf('--')
     if (at !== 1 || !rest[0] || !rest[2])
