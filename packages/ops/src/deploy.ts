@@ -644,6 +644,9 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
     message: string,
     units: string[] = [],
     code = state === 'succeeded' ? 0 : 1,
+    // A refusal changed nothing: the old release still serves and the deploying agent sees it.
+    // warn keeps it on the Status screen without raising an owner ask the way failed does.
+    refused = false,
   ) => {
     if (job)
       writeJob(deps, {
@@ -661,7 +664,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         kind: 'service',
         machine: machineId(),
         project: project.id,
-        state: state === 'succeeded' ? 'ok' : 'failed',
+        state: state === 'succeeded' ? 'ok' : refused ? 'warn' : 'failed',
         meaning: message.slice(0, 300),
         last_run: new Date().toISOString(),
       },
@@ -770,7 +773,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         // A hold taken while this deploy waited (queued, or behind another deploy) still refuses it.
         const refused = holdRefusal()
         if (refused) {
-          await finish('failed', `Deploy of ${sha.slice(0, 10)} refused: ${refused}`, [], 2)
+          await finish('failed', `Deploy of ${sha.slice(0, 10)} refused: ${refused}`, [], 2, true)
           throw new Refusal(refused, 2)
         }
         if (!held()) {
@@ -806,6 +809,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         (error as Error).message,
         [],
         error instanceof Refusal ? error.code : 1,
+        error instanceof Refusal,
       )
     throw error
   }

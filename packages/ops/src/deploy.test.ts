@@ -288,7 +288,7 @@ describe('deploy', () => {
       /Acceptance .* failed/,
     )
     expect(existsSync(join(failing.deps.systemdDir, 'demo-web.service'))).toBe(false)
-    expect(failing.rows.at(-1)?.state).toBe('failed')
+    expect(failing.rows.at(-1)?.state).toBe('warn') // nothing deployed: on the Status screen, no owner ask
     rmSync(top, { recursive: true, force: true })
 
     const held = setup({
