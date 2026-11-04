@@ -33,6 +33,7 @@ import { registerStatusRoutes, startSelfRows } from './status'
 import { registerStatusActions, statusNotice } from './status-actions'
 import { registerSyncRoutes, startSync } from './sync/start'
 import { TerminalHub } from './terminal'
+import { registerTrayRoutes } from './tray'
 
 function serve(): void {
   const config = loadConfig()
@@ -134,6 +135,7 @@ function serve(): void {
     notify.notifier.receive(statusNotice(batch, config.publicHost), 'local'),
   )
   notify.register(api)
+  registerTrayRoutes(api, { status, notify: notify.store, asks, publicHost: config.publicHost })
   registerExportRoutes(api, config, sync.loop)
   const nightshift = new NightshiftRelay(config)
   registerNightshiftStream(api, nightshift)
