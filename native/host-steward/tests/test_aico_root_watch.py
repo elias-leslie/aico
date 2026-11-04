@@ -1181,7 +1181,7 @@ def test_cli_does_not_print_invalid_secret_configuration(capsys):
 
 def test_group_lists_the_pane_group_through_the_link_for_a_remote_root(monkeypatch):
     instance = collector()
-    instance.remote = ("agent-work", "agent-work", "/run/user/1000/tether/peers/agent-work/ssh.ctl")
+    instance.remote = ("agent-work", "agent-work", "/run/user/1000/aico/fleet/agent-work/exec.sock")
     seen = []
 
     def run(argv, remote_argv, limit):

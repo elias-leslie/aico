@@ -1,6 +1,5 @@
 """st aico on a remote host (hosts.json): create --host and the hub's remote roots."""
 
-import shlex
 import time
 
 import pytest
@@ -15,7 +14,7 @@ def outside_aico(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1000")
 
 
-CONTROL = "/run/user/1000/tether/peers/agent-work/ssh.ctl"
+CONTROL = "/run/user/1000/aico/fleet/agent-work/exec.sock"
 HOSTS = {"items": [{"name": "agent-work", "ssh": "agent-work", "control": CONTROL, "state": "connected"}]}
 TOOLS = {"items": [{"slug": "claude-code", "enabled": True, "rootCapable": True},
                    {"slug": "shell", "enabled": True, "rootCapable": False}]}
@@ -134,7 +133,6 @@ def test_the_link_to_a_host_is_the_hubs_own_control_socket():
 
 @pytest.mark.parametrize("item", [
     {"name": "agent-work", "ssh": "agent-work", "control": "/tmp/elsewhere.ctl"},
-    {"name": "agent-work", "ssh": "-oProxyCommand=x", "control": CONTROL},
     {"name": "other", "ssh": "other", "control": CONTROL},
 ])
 def test_a_link_that_does_not_check_out_is_unavailable(item):
@@ -157,11 +155,9 @@ def test_a_remote_roots_tmux_runs_through_the_link(monkeypatch):
     with pytest.raises(admin.Unavailable):
         remote.command(["display-message", "-p", "-t", "%1", "#{pane_id} x"], 100)
     argv = seen[0]
-    assert argv[:11] == [admin.SSH, "-F", "/dev/null", "-T", "-o", "BatchMode=yes",
-                         "-o", "ProxyCommand=false", "-S", CONTROL, "agent-work"]
-    assert argv[11] == "--"
-    assert shlex.split(argv[12]) == [admin.REMOTE_TMUX, "-S", "/tmp/tmux-1000/default",
-                                     "display-message", "-p", "-t", "%1", "#{pane_id} x"]
+    assert argv == [admin.TETHER_BIN, "fleet", "exec", CONTROL, "--",
+                    admin.REMOTE_TMUX, "-S", "/tmp/tmux-1000/default",
+                    "display-message", "-p", "-t", "%1", "#{pane_id} x"]
 
 
 def test_roots_of_a_host_the_hub_cannot_reach_are_reported_unavailable():
@@ -563,3 +559,7 @@ def test_host_local_with_needs_books_here_without_asking_a_host_for_its_tools(mo
     assert payload["host"] == "local" and "pool" not in payload
     assert payload["needs"] == {"memBytes": 4 * 1024 ** 3, "cpu": 1, "caps": []}
     assert output[0]["status"] == "running" and output[0]["host"] == "local"
+
+
+def test_link_uses_pinned_name_and_exec_socket_without_ssh_metadata():
+    assert collector((200, {"items": [{"name": "agent-work", "control": CONTROL}]})).link("agent-work") == ("agent-work", "agent-work", CONTROL)

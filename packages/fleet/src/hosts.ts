@@ -1,6 +1,6 @@
 // The hosts registry (docs/plans/remote-hosts.md "Hosts registry"):
 // `~/.config/tether/hosts.json` lists the remote Tethers this hub federates
-// and how `tether-link@<host>` reaches them. It is data, validated here; a
+// with their placement and power settings. It is data, validated here; a
 // missing file means no peers, which is exactly a standalone Tether.
 
 import { readFileSync } from 'node:fs'
@@ -15,10 +15,8 @@ export interface HostEntry {
   /** The remote Tether's control socket. */
   socket: string
   /** The remote Aico's sync socket (`$XDG_RUNTIME_DIR/aico/sync.sock` there), forwarded to
-   * `<peerDir>/sync.sock` by the same ssh master; null: this host does not sync. */
+   * `<peerDir>/sync.sock` by the fleet link; null: this host does not sync. */
   sync: string | null
-  /** Workstation ports exposed to the host through `-R` (loopback both ends). */
-  forwards: number[]
   /** The command that powers the host on: run by a create, never by the link. */
   wake: string[] | null
   /** The command that powers the host off (the Hosts panel's power control). */
@@ -61,7 +59,6 @@ const FIELDS = new Set([
   'ssh',
   'socket',
   'sync',
-  'forwards',
   'wake',
   'sleep',
   'status',
@@ -85,7 +82,7 @@ export function hostsFilePath(env: NodeJS.ProcessEnv): string {
   return join(configRoot, 'tether', 'hosts.json')
 }
 
-/** `$XDG_RUNTIME_DIR/aico/fleet/<name>`: the link's ssh.ctl and forwarded control.sock. */
+/** `$XDG_RUNTIME_DIR/aico/fleet/<name>`: the link’s local proxy sockets. */
 export function peerDir(env: NodeJS.ProcessEnv, uid: number | undefined, name: string): string {
   const runtime = env.XDG_RUNTIME_DIR || `/run/user/${uid ?? process.getuid?.() ?? 0}`
   return join(runtime, 'aico', 'fleet', name)
@@ -94,11 +91,6 @@ export function peerDir(env: NodeJS.ProcessEnv, uid: number | undefined, name: s
 function absolutePath(value: unknown): string | null {
   if (typeof value !== 'string' || !isAbsolute(value) || normalize(value) !== value) return null
   return /[\s\0]/.test(value) ? null : value
-}
-
-function port(value: unknown): number | null {
-  const n = typeof value === 'string' && /^\d{1,5}$/.test(value) ? Number(value) : value
-  return typeof n === 'number' && Number.isSafeInteger(n) && n >= 1 && n <= 65_535 ? n : null
 }
 
 function compiles(pattern: string): boolean {
@@ -149,13 +141,6 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
     if (!sync || Buffer.byteLength(sync) > MAX_SOCKET_BYTES)
       return `${name}: sync must be an absolute path`
   }
-  let forwards: number[] = []
-  if (raw.forwards !== undefined) {
-    if (!Array.isArray(raw.forwards)) return `${name}: forwards must be a list of ports`
-    const ports = raw.forwards.map(port)
-    if (ports.some((p) => p === null)) return `${name}: forwards must be ports 1-65535`
-    forwards = [...new Set(ports as number[])]
-  }
   const wake = argv(raw.wake)
   if (wake === false) return `${name}: wake must be a non-empty argv list`
   const sleep = argv(raw.sleep)
@@ -194,7 +179,6 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
     ssh,
     socket,
     sync,
-    forwards,
     wake,
     sleep,
     status,

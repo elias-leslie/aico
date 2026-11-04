@@ -29,7 +29,6 @@ import os
 import re
 import select
 import selectors
-import shlex
 import signal
 import socket
 import subprocess
@@ -166,10 +165,9 @@ WIDGET = r"[0-9a-f]{8}"
 ROOT_OWNERS = ("aico", "a-term")
 # Agent tool slugs, as Tether's registry spells them (src/tools.ts SLUG_RE).
 TOOL_SLUG = r"[a-z0-9_-]{1,50}"
-# A remote host's name in ~/.config/tether/hosts.json, and its ssh Host alias.
+# A remote host’s name in the Aico fleet registry.
 HOST_NAME = r"[a-z0-9][a-z0-9-]{0,31}"
-SSH_ALIAS = r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
-SSH = "/usr/bin/ssh"
+TETHER_BIN = os.environ.get("AICO_TETHER_BIN") or str(Path.home() / ".local/lib/tether/bin/tether")
 REMOTE_TMUX = "/usr/bin/tmux"
 PGREP = "/usr/bin/pgrep"
 # A create on a host may first power it on and wait for it, and for an update of its
@@ -807,19 +805,16 @@ class Collector:
                         "host": data.get("host")}
 
     def link(self, host: object) -> tuple[str, str, str]:
-        """How to reach a remote host's tmux: the alias and ControlMaster of the
-        hub's link to it (GET /v1/hosts), checked like the apps check them."""
+        """Use the named peer’s fleet exec socket, checked against GET /v1/hosts."""
         if not isinstance(host, str) or not re.fullmatch(HOST_NAME, host):
             raise Unavailable("host_unavailable")
         if host not in self.links:
             status, data = self.receipt(self.owner_socket, "/v1/hosts", timeout=1)
             items = data.get("items") if status == 200 else None
             for item in items if isinstance(items, list) else []:
-                alias = item.get("ssh") if isinstance(item, dict) else None
-                if (isinstance(item, dict) and item.get("name") == host and isinstance(alias, str)
-                        and re.fullmatch(SSH_ALIAS, alias)
-                        and item.get("control") == f"{runtime_dir()}/tether/peers/{host}/ssh.ctl"):
-                    self.links[host] = (host, alias, item["control"])
+                if (isinstance(item, dict) and item.get("name") == host
+                        and item.get("control") == f"{runtime_dir()}/aico/fleet/{host}/exec.sock"):
+                    self.links[host] = (host, host, item["control"])
         if host not in self.links:
             raise Unavailable("host_unavailable")
         return self.links[host]
@@ -993,11 +988,9 @@ class Collector:
     def run(self, argv: list[str], remote_argv: list[str], limit: int) -> bytes:
         self.remaining()
         if self.remote:
-            # Through the hub's ssh link only (ProxyCommand=false: no direct-connect
-            # fallback when the master refuses); the remote shell gets one quoted command.
-            _, alias, control = self.remote
-            argv = [SSH, "-F", "/dev/null", "-T", "-o", "BatchMode=yes", "-o", "ProxyCommand=false",
-                    "-S", control, alias, "--", shlex.join(remote_argv)]
+            # The pinned carrier preserves literal argv; no remote shell or SSH fallback.
+            _, _, control = self.remote
+            argv = [TETHER_BIN, "fleet", "exec", control, "--", *remote_argv]
         try:
             process = subprocess.Popen(argv,
                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,

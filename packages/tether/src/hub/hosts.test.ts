@@ -9,7 +9,6 @@ const VALID = {
   name: 'agent-work',
   ssh: 'agent-work',
   socket: '/run/user/1000/tether/default/control.sock',
-  forwards: ['8001', 8003],
   wake: ['st', 'vm', 'start', '200'],
   health: ['http://127.0.0.1:8001/health', 'http://127.0.0.1:8003/health'],
 }
@@ -28,7 +27,6 @@ describe('hosts registry', () => {
           ssh: 'agent-work',
           socket: '/run/user/1000/tether/default/control.sock',
           sync: null,
-          forwards: [8001, 8003],
           wake: ['st', 'vm', 'start', '200'],
           sleep: null,
           status: null,
@@ -73,8 +71,6 @@ describe('hosts registry', () => {
     [{ ...VALID, sync: 'run/aico/sync.sock' }, 'sync must be an absolute path'],
     [{ ...VALID, sync: '/run/../etc/x.sock' }, 'sync must be an absolute path'],
     [{ ...VALID, sync: `/${'a'.repeat(120)}` }, 'sync must be an absolute path'],
-    [{ ...VALID, forwards: ['80a'] }, 'forwards must be ports'],
-    [{ ...VALID, forwards: [70_000] }, 'forwards must be ports'],
     [{ ...VALID, wake: [] }, 'wake must be a non-empty argv list'],
     [{ ...VALID, sleep: ['st', ''] }, 'sleep must be a non-empty argv list'],
     [{ ...VALID, status: 'st vm status 200' }, 'status must be a non-empty argv list'],
@@ -138,4 +134,11 @@ it('uses fleet sockets for control, commands and sync', () => {
     forwarded: '/run/peers/a/control.sock',
     sync: '/run/peers/a/sync.sock',
   })
+})
+
+it('ignores obsolete reverse forwards while keeping the peer', () => {
+  const result = parseHosts(JSON.stringify([{ ...VALID, forwards: [8001] }]))
+  expect(result.hosts).toHaveLength(1)
+  expect(result.hosts[0]).not.toHaveProperty('forwards')
+  expect(result.errors.join(' ')).toContain('forwards')
 })
