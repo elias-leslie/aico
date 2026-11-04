@@ -1,0 +1,135 @@
+[
+  {
+    "name": "hello",
+    "valid": true,
+    "frame": {
+      "type": "hello",
+      "version": 1,
+      "machine": "peer-a",
+      "publicKey": "test-public-key"
+    }
+  },
+  {
+    "name": "auth",
+    "valid": true,
+    "frame": {
+      "type": "auth",
+      "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    }
+  },
+  {
+    "name": "control",
+    "valid": true,
+    "frame": {
+      "type": "control",
+      "id": "c-1",
+      "op": "open",
+      "target": "control"
+    }
+  },
+  {
+    "name": "event",
+    "valid": true,
+    "frame": {
+      "type": "event",
+      "id": "c-1",
+      "op": "open",
+      "target": "control"
+    }
+  },
+  {
+    "name": "sync",
+    "valid": true,
+    "frame": {
+      "type": "sync",
+      "id": "c-1",
+      "op": "open",
+      "target": "sync"
+    }
+  },
+  {
+    "name": "terminal-view",
+    "valid": true,
+    "frame": {
+      "type": "terminal-view",
+      "id": "c-1",
+      "op": "open",
+      "target": "exec",
+      "argv": ["/usr/bin/tmux", "-C"]
+    }
+  },
+  {
+    "name": "data",
+    "valid": true,
+    "frame": {
+      "type": "sync",
+      "id": "c-1",
+      "op": "data",
+      "data": "aGVsbG8="
+    }
+  },
+  {
+    "name": "end",
+    "valid": true,
+    "frame": {
+      "type": "control",
+      "id": "c-1",
+      "op": "end"
+    }
+  },
+  {
+    "name": "close",
+    "valid": true,
+    "frame": {
+      "type": "control",
+      "id": "c-1",
+      "op": "close"
+    }
+  },
+  {
+    "name": "unknown frame",
+    "valid": false,
+    "frame": {
+      "type": "secret"
+    }
+  },
+  {
+    "name": "extra field",
+    "valid": false,
+    "frame": {
+      "type": "auth",
+      "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "token": "no"
+    }
+  },
+  {
+    "name": "bad bytes",
+    "valid": false,
+    "frame": {
+      "type": "sync",
+      "id": "c-1",
+      "op": "data",
+      "data": "!"
+    }
+  },
+  {
+    "name": "missing exec argv",
+    "valid": false,
+    "frame": {
+      "type": "terminal-view",
+      "id": "c-1",
+      "op": "open",
+      "target": "exec"
+    }
+  },
+  {
+    "name": "unknown version",
+    "valid": false,
+    "frame": {
+      "type": "hello",
+      "version": 2,
+      "machine": "a",
+      "publicKey": "test-public-key"
+    }
+  }
+]

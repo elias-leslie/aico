@@ -155,10 +155,6 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
-                      "@aico/status",
-                      "@aico/status/**",
-                      "@aico/store",
-                      "@aico/store/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/tether-client",
@@ -172,7 +168,7 @@
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],
-                    "message": "@aico/fleet (layer 3): import only @aico/shared (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/fleet (layer 3): import only @aico/shared, @aico/store, @aico/status (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

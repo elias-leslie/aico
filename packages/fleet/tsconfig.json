@@ -8,6 +8,12 @@
   "references": [
     {
       "path": "../tether-client"
+    },
+    {
+      "path": "../store"
+    },
+    {
+      "path": "../status"
     }
   ]
 }
