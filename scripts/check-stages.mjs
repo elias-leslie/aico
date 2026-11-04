@@ -11,7 +11,7 @@
 // `covered_by` the whole-repo stage of the same tool, so the full gate runs the
 // whole-repo stage once and nothing loses coverage.
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -75,6 +75,18 @@ export function tomlBlock(packages = loadPackages(root)) {
       }),
     )
   }
+  // Files outside packages/ (root config, scripts/, contracts/) get one quick Biome
+  // stage, so a quick check still lints them; the lockfile is Biome-ignored.
+  const rootFiles = readdirSync(root)
+    .filter((name) => /\.[cm]?[jt]s$|\.jsonc?$/.test(name) && name !== 'package-lock.json')
+    .sort()
+  out.push(
+    stage('biome-root', {
+      quickPaths: ['scripts/**', 'contracts/**', ...rootFiles],
+      coveredBy: 'biome',
+      argv: [bin('biome'), 'check', 'scripts', 'contracts', ...rootFiles],
+    }),
+  )
   // Native dirs run only when native/<dir> or the fixture they read changes. Python
   // and shell otherwise stay on the repo-wide ruff, ty and pytest, which already
   // select by changed path; the stage here is the contracts/ fixture test.
