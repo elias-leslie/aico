@@ -77,6 +77,8 @@ timeout_seconds = 120
 
 # The three native stages below (android, tray, hook) declare `inputs`: the full gate reuses their last pass
 # while those paths are unchanged, so a TypeScript-only change doesn't pay ~70 s of cold Gradle, cargo and Go builds.
+# Each runs in its own directory (cwd): a stage at the repo root also binds every node_modules and venv, so a
+# lockfile change anywhere would rerun it.
 # The phone app's unit tests (native/android, Kotlin). Gradle runs offline from the cached wrapper
 # and dependencies, at low priority; the SDK is the one in ~/Android/Sdk unless ANDROID_HOME says
 # otherwise. Release signing is not touched (no keystore needed to test).
@@ -87,7 +89,8 @@ coverage = "full"
 quick = true
 quick_paths = ["native/android/**"]
 inputs = ["native/android", "contracts"]
-argv = ["bash", "-c", "export ANDROID_HOME=\"${ANDROID_HOME:-/home/kasadis/Android/Sdk}\"; export PATH=/usr/bin:/bin:$PATH; export GRADLE_USER_HOME=\"${GRADLE_USER_HOME:-/home/kasadis/.gradle}\"; if [ ! -w \"$GRADLE_USER_HOME\" ]; then rm -rf \"${TMPDIR:-/tmp}/gradle-home\"; mkdir -p \"${TMPDIR:-/tmp}/gradle-home\" && cp -aL --reflink=auto \"$GRADLE_USER_HOME/caches\" \"$GRADLE_USER_HOME/wrapper\" \"${TMPDIR:-/tmp}/gradle-home/\" && export GRADLE_USER_HOME=\"${TMPDIR:-/tmp}/gradle-home\"; fi; cd native/android && nice -n 19 ./gradlew --no-daemon -Dorg.gradle.jvmargs=-Xmx1536m -Dkotlin.compiler.execution.strategy=in-process --max-workers=2 test --offline --console=plain"]
+cwd = "native/android"
+argv = ["bash", "-c", "export ANDROID_HOME=\"${ANDROID_HOME:-/home/kasadis/Android/Sdk}\"; export PATH=/usr/bin:/bin:$PATH; export GRADLE_USER_HOME=\"${GRADLE_USER_HOME:-/home/kasadis/.gradle}\"; if [ ! -w \"$GRADLE_USER_HOME\" ]; then rm -rf \"${TMPDIR:-/tmp}/gradle-home\"; mkdir -p \"${TMPDIR:-/tmp}/gradle-home\" && cp -aL --reflink=auto \"$GRADLE_USER_HOME/caches\" \"$GRADLE_USER_HOME/wrapper\" \"${TMPDIR:-/tmp}/gradle-home/\" && export GRADLE_USER_HOME=\"${TMPDIR:-/tmp}/gradle-home\"; fi; nice -n 19 ./gradlew --no-daemon -Dorg.gradle.jvmargs=-Xmx1536m -Dkotlin.compiler.execution.strategy=in-process --max-workers=2 test --offline --console=plain"]
 timeout_seconds = 600
 
 # The tray's Rust tests and lints (native/tray, cargo). The compiler is the one rust-toolchain.toml pins (rustup under
@@ -100,7 +103,8 @@ coverage = "full"
 quick = true
 quick_paths = ["native/tray/**", "packages/web-server/src/tray.ts"]
 inputs = ["native/tray", "packages/web-server/src/tray.ts"]
-argv = ["bash", "-c", "export PATH=/usr/bin:/bin:$PATH; export CARGO_HOME=\"${CARGO_HOME:-/home/kasadis/.cargo}\" RUSTUP_HOME=\"${RUSTUP_HOME:-/home/kasadis/.rustup}\"; export PATH=\"$CARGO_HOME/bin:$PATH\" CARGO_TARGET_DIR=\"${CARGO_TARGET_DIR:-/home/kasadis/.cache/aico-tray/target}\"; if [ ! -w \"$CARGO_TARGET_DIR\" ] || [ ! -w \"$CARGO_HOME\" ]; then T=\"${TMPDIR:-/tmp}/aico-tray-cargo\"; rm -rf \"$T\"; mkdir -p \"$T/home\" && ln -s \"$CARGO_HOME/registry\" \"$CARGO_HOME/git\" \"$T/home/\"; if [ ! -w \"$CARGO_TARGET_DIR\" ]; then cp -aL --reflink=auto \"$CARGO_TARGET_DIR\" \"$T/target\" 2>/dev/null || mkdir -p \"$T/target\"; export CARGO_TARGET_DIR=\"$T/target\"; fi; export CARGO_HOME=\"$T/home\" CARGO_NET_OFFLINE=true; fi; cd native/tray && nice -n 19 cargo clippy --all-targets --locked -- -D warnings && nice -n 19 cargo test --locked"]
+cwd = "native/tray"
+argv = ["bash", "-c", "export PATH=/usr/bin:/bin:$PATH; export CARGO_HOME=\"${CARGO_HOME:-/home/kasadis/.cargo}\" RUSTUP_HOME=\"${RUSTUP_HOME:-/home/kasadis/.rustup}\"; export PATH=\"$CARGO_HOME/bin:$PATH\" CARGO_TARGET_DIR=\"${CARGO_TARGET_DIR:-/home/kasadis/.cache/aico-tray/target}\"; if [ ! -w \"$CARGO_TARGET_DIR\" ] || [ ! -w \"$CARGO_HOME\" ]; then T=\"${TMPDIR:-/tmp}/aico-tray-cargo\"; rm -rf \"$T\"; mkdir -p \"$T/home\" && ln -s \"$CARGO_HOME/registry\" \"$CARGO_HOME/git\" \"$T/home/\"; if [ ! -w \"$CARGO_TARGET_DIR\" ]; then cp -aL --reflink=auto \"$CARGO_TARGET_DIR\" \"$T/target\" 2>/dev/null || mkdir -p \"$T/target\"; export CARGO_TARGET_DIR=\"$T/target\"; fi; export CARGO_HOME=\"$T/home\" CARGO_NET_OFFLINE=true; fi; nice -n 19 cargo clippy --all-targets --locked -- -D warnings && nice -n 19 cargo test --locked"]
 timeout_seconds = 900
 
 # aico-hook's vet and tests (native/hook, Go; no third-party modules). The build cache is the owner's unless it
@@ -112,7 +116,8 @@ coverage = "full"
 quick = true
 quick_paths = ["native/hook/**", "contracts/**"]
 inputs = ["native/hook", "contracts"]
-argv = ["bash", "-c", "export PATH=/usr/bin:/bin:$PATH GOTOOLCHAIN=local GOFLAGS=-mod=readonly; export GOCACHE=\"${GOCACHE:-/home/kasadis/.cache/go-build}\" GOPATH=\"${GOPATH:-/home/kasadis/go}\"; if [ ! -w \"$GOCACHE\" ]; then export GOCACHE=\"${TMPDIR:-/tmp}/aico-hook-gocache\"; fi; if [ ! -w \"$GOPATH\" ]; then export GOPATH=\"${TMPDIR:-/tmp}/aico-hook-gopath\"; fi; cd native/hook && nice -n 19 go vet ./... && nice -n 19 go test ./..."]
+cwd = "native/hook"
+argv = ["bash", "-c", "export PATH=/usr/bin:/bin:$PATH GOTOOLCHAIN=local GOFLAGS=-mod=readonly; export GOCACHE=\"${GOCACHE:-/home/kasadis/.cache/go-build}\" GOPATH=\"${GOPATH:-/home/kasadis/go}\"; if [ ! -w \"$GOCACHE\" ]; then export GOCACHE=\"${TMPDIR:-/tmp}/aico-hook-gocache\"; fi; if [ ! -w \"$GOPATH\" ]; then export GOPATH=\"${TMPDIR:-/tmp}/aico-hook-gopath\"; fi; nice -n 19 go vet ./... && nice -n 19 go test ./..."]
 timeout_seconds = 300
 
 # BEGIN generated by scripts/check-stages.mjs (npm run check-stages); do not edit by hand
@@ -325,6 +330,36 @@ covered_by = "depcruise"
 quick = true
 quick_paths = ["packages/notify/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
 argv = ["node_modules/.bin/depcruise", "packages/notify", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
+
+[[native.stages]]
+id = "biome-ops"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "biome"
+quick = true
+quick_paths = ["packages/ops/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+argv = ["node_modules/.bin/biome", "check", "packages/ops"]
+
+[[native.stages]]
+id = "tsc-ops"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "tsc"
+quick = true
+quick_paths = ["packages/ops/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+argv = ["node_modules/.bin/tsc", "-b", "packages/ops"]
+
+[[native.stages]]
+id = "depcruise-ops"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "depcruise"
+quick = true
+quick_paths = ["packages/ops/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
+argv = ["node_modules/.bin/depcruise", "packages/ops", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
 
 [[native.stages]]
 id = "biome-shared"

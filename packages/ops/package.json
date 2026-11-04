@@ -1,0 +1,30 @@
+{
+  "name": "@aico/ops",
+  "version": "0.1.0",
+  "description": "Host operations: aico deploy (a project's units from the exact commit it started on), aico logs, aico snapshots (Btrfs points) and aico vm (Proxmox guests over root SSH).",
+  "private": true,
+  "license": "Apache-2.0",
+  "aico": {
+    "layer": 4,
+    "imports": [
+      "@aico/status"
+    ]
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --log-level=error --outfile=dist/aico-ops.mjs --banner:js=\"// Aico ops bundle. Built by npm run build; do not edit.\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aico/status": "0.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

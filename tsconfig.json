@@ -35,6 +35,9 @@
       "path": "packages/notes"
     },
     {
+      "path": "packages/ops"
+    },
+    {
       "path": "packages/ui-kit"
     },
     {

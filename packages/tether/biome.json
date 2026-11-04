@@ -48,6 +48,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/status",
                       "@aico/status/**",
                       "@aico/store",

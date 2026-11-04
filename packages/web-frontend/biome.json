@@ -98,6 +98,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/status",

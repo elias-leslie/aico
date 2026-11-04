@@ -59,6 +59,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/status",
@@ -113,6 +115,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/store",
@@ -167,6 +171,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/status",
@@ -221,6 +227,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/tasks",
                       "@aico/tasks/**",
                       "@aico/tether",
@@ -271,6 +279,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/tasks",
@@ -325,6 +335,8 @@
                       "@aico/jobs/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/status",
                       "@aico/status/**",
                       "@aico/store",
@@ -381,6 +393,8 @@
                       "@aico/jobs/**",
                       "@aico/notes",
                       "@aico/notes/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/tasks",
@@ -401,6 +415,64 @@
                       "@aico/webtools/**"
                     ],
                     "message": "@aico/notify (layer 2): import only @aico/store, @aico/status (package.json aico.imports; depcruise is the gate)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/ops/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
+                      "@aico/checks",
+                      "@aico/checks/**",
+                      "@aico/context",
+                      "@aico/context/**",
+                      "@aico/fleet",
+                      "@aico/fleet/**",
+                      "@aico/jobs",
+                      "@aico/jobs/**",
+                      "@aico/notes",
+                      "@aico/notes/**",
+                      "@aico/notify",
+                      "@aico/notify/**",
+                      "@aico/shared",
+                      "@aico/shared/**",
+                      "@aico/store",
+                      "@aico/store/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/tether-client",
+                      "@aico/tether-client/**",
+                      "@aico/ui-kit",
+                      "@aico/ui-kit/**",
+                      "@aico/usage",
+                      "@aico/usage/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
+                    ],
+                    "message": "@aico/ops (layer 4): import only @aico/status (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
@@ -437,6 +509,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/status",
                       "@aico/status/**",
                       "@aico/store",
@@ -495,6 +569,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/tasks",
@@ -549,6 +625,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/status",
@@ -607,6 +685,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/tether",
@@ -659,6 +739,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/status",
                       "@aico/status/**",
                       "@aico/store",
@@ -721,6 +803,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/status",
@@ -783,6 +867,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/tasks",
@@ -829,6 +915,8 @@
                       "@aico/checks/**",
                       "@aico/jobs",
                       "@aico/jobs/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/store",
                       "@aico/store/**",
                       "@aico/tasks",
@@ -879,6 +967,8 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
+                      "@aico/ops",
+                      "@aico/ops/**",
                       "@aico/shared",
                       "@aico/shared/**",
                       "@aico/tasks",

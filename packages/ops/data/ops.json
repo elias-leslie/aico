@@ -1,0 +1,23 @@
+{
+  "deploy": {
+    "releasesDir": "~/.local/lib/aico/releases",
+    "jobsDir": "~/.local/state/aico/deploys",
+    "keepReleases": 3,
+    "rootSources": ["package.json", "package-lock.json", "tsconfig.base.json", "vendor"],
+    "unitSources": {
+      "aico-web.service": ["packages/web-frontend"]
+    },
+    "healthAttempts": 15
+  },
+  "vm": {
+    "ssh": "root@davion-gem",
+    "powerPools": ["summitflow", "summitflow-ops", "summitflow-power"],
+    "snapshotPools": ["summitflow"],
+    "labRegistry": "/var/lib/nightshift/findings/registry.json",
+    "labHours": 4
+  },
+  "snapshots": {
+    "catalogue": "~/.local/share/st/snaps",
+    "workspacesRoot": "/srv/workspaces"
+  }
+}
