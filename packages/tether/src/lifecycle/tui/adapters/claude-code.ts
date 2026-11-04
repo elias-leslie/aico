@@ -654,8 +654,7 @@ export const claudeCode: TuiAdapter = {
     ],
   },
   login: {
-    signIn:
-      'agent-hub native claude setup-token && agent-hub credential push claude-code && agent-hub install',
+    signIn: 'claude auth login',
     signOut: { kind: 'revoke' },
     grant: true,
     local: { bin: 'claude', authFile: '.claude/.credentials.json' },
