@@ -54,6 +54,31 @@ func TestConcurrentWriterLosesNothing(t *testing.T) {
 }
 
 // A store that does not answer is never read as empty: nothing is written over it, and the edit warns.
+// Many writers on one document: a change that keeps losing the race is redone well past a handful of tries
+// (live, 30 concurrent edit hooks lost 9 leases to a 5-try limit).
+func TestManyLostRacesStillLand(t *testing.T) {
+	repo := sandbox(t)
+	real, _ := filepath.EvalSymlinks(repo)
+	lost := 0
+	fake.BeforePut = func(name string) {
+		if name == "demo" && lost < 12 {
+			lost++
+			fake.Put("demo", fake.Doc("demo"))
+		}
+	}
+	if _, err := agent(sidA, "").Acquire("demo", real, []string{"a.txt"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if fake.Conflicts != 12 {
+		t.Fatalf("want 12 refused writes, got %d", fake.Conflicts)
+	}
+	var leases []Lease
+	_ = json.Unmarshal(storeDoc(t, "demo")["leases"], &leases)
+	if len(leases) != 1 || leases[0].AgentID != "cc:111111" {
+		t.Fatalf("lease lost: %+v", leases)
+	}
+}
+
 func TestEditWithStoreDownWarnsAndWritesNothing(t *testing.T) {
 	repo := sandbox(t)
 	file := filepath.Join(repo, "a.txt")

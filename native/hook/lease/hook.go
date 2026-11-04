@@ -97,10 +97,11 @@ func (h *Hook) Edit() (blocked bool, text string) {
 		}
 	}
 	var lines, unleased []string
+	var why error
 	for _, p := range paths {
 		line, err := h.claim(p)
 		if err != nil {
-			unleased = append(unleased, p)
+			unleased, why = append(unleased, p), err
 			continue
 		}
 		if line != "" {
@@ -108,9 +109,8 @@ func (h *Hook) Edit() (blocked bool, text string) {
 		}
 	}
 	if len(unleased) > 0 {
-		lines = append(lines, fmt.Sprintf("WARNING: coordination store unavailable (Tether did not answer): %s not leased "+
-			"and not recorded as yours; the edit goes ahead, and st commit refuses until the store is back",
-			strings.Join(unleased, ", ")))
+		lines = append(lines, fmt.Sprintf("WARNING: %v: %s not leased and not recorded as yours; the edit goes ahead, "+
+			"and st commit refuses until the store answers", why, strings.Join(unleased, ", ")))
 	}
 	return false, strings.Join(lines, "\n")
 }

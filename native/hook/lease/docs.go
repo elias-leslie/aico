@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -31,7 +32,8 @@ import (
 
 const (
 	callLimit   = 2500 * time.Millisecond // one call, outside a hook's budget (the CLI verbs)
-	casAttempts = 5                       // reads and writes of one change before giving up
+	casAttempts = 40                      // reads and writes of one change before giving up (a hook call's budget ends it sooner)
+	casBackoff  = 4 * time.Millisecond    // the jittered pause after a lost race grows by this per attempt (at most 10x)
 )
 
 // ErrNoStore is a coordination store that did not answer (Tether is not running, or refused).
@@ -257,6 +259,8 @@ func updateDoc(name string, fn func() error) error {
 		if attempt+1 >= casAttempts {
 			return fmt.Errorf("%w: %s kept changing under %d tries", ErrNoStore, name, casAttempts)
 		}
+		// Many writers at once: spread the retries so each round has a winner instead of the same pile-up.
+		time.Sleep(time.Duration(rand.Int64N(int64(min(attempt+1, 10)) * int64(casBackoff))))
 	}
 }
 
