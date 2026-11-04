@@ -9,7 +9,7 @@ vi.mock('./capture/CaptureLauncher', () => ({
   CaptureLauncher: () => <i data-testid="capture-mock" />,
 }))
 vi.mock('./HostsButton', () => ({ HostsLauncher: () => null }))
-vi.mock('./health/HealthButton', () => ({ HealthLauncher: () => null }))
+vi.mock('./status/StatusLauncher', () => ({ StatusLauncher: () => null }))
 const needsYou = vi.hoisted(() => ({ open: false }))
 vi.mock('./asks/NeedsYou', () => ({
   NeedsYouLauncher: () => <i data-testid="needs-you-mock" />,

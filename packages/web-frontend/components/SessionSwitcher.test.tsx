@@ -12,7 +12,7 @@ vi.mock('./HostsButton', () => ({
     </button>
   ),
 }))
-vi.mock('./health/HealthButton', () => ({ HealthLauncher: () => null }))
+vi.mock('./status/StatusLauncher', () => ({ StatusLauncher: () => null }))
 vi.mock('./asks/NeedsYou', () => ({
   NeedsYouLauncher: () => <i data-testid="needs-you-mock" />,
 }))

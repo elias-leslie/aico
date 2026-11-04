@@ -109,7 +109,7 @@ export function useHostNeedsYou(): void {
 }
 
 /** Where the launcher sits: the session bar on a desktop (`pill`), the
- * session list's tool row beside Health and Hosts (`tool`: labelled), its
+ * session list's tool row beside Status and Hosts (`tool`: labelled), its
  * folded rail (`icon`), the phone's session bar (`compact`: the count alone,
  * nothing when nothing waits), the session sheet (`row`: labelled, mounted
  * only while the sheet is open) or no button at all (`none`: a session's own
@@ -145,8 +145,8 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
     [me],
   )
 
-  // Agents' questions and Nightshift approvals only; Nightshift's checks
-  // count under Health.
+  // Agents' questions and Nightshift approvals only; check results
+  // count under Status.
   const summary =
     count === 0
       ? 'Needs you: no agent questions or approvals waiting'
@@ -505,7 +505,7 @@ function NeedsYouBody({
                 <Note>
                   {sent
                     ? 'Nothing else waiting.'
-                    : 'No agent questions waiting. Nightshift’s own checks are under Health.'}
+                    : 'No agent questions waiting. Check results are under Status.'}
                 </Note>
                 {onBack && (
                   <button

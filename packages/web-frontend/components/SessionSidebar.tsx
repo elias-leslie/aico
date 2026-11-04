@@ -12,9 +12,9 @@ import {
 } from './asks/NeedsYou'
 import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostsLauncher } from './HostsButton'
-import { HealthLauncher } from './health/HealthButton'
 import { NotesLauncher } from './notes/NotesLauncher'
 import { SessionList, SessionRail, sessionsHeading } from './SessionList'
+import { StatusLauncher } from './status/StatusLauncher'
 
 /** The list's width: the default, its limits, and the keyboard step. */
 export const SIDE_LIST_WIDTH = { initial: 320, min: 240, max: 560, step: 16 }
@@ -128,7 +128,7 @@ export function SessionSidebar({
         <CaptureLauncher variant="icon" />
         <NotesLauncher variant="icon" />
         <HostsLauncher icon />
-        <HealthLauncher variant="icon" />
+        <StatusLauncher variant="icon" />
         <nav
           aria-label="Sessions"
           data-testid="session-list"
@@ -181,7 +181,7 @@ export function SessionSidebar({
         <NeedsYouLauncher variant="tool" />
         <CaptureLauncher variant="row" />
         <NotesLauncher variant="row" />
-        <HealthLauncher variant="row" />
+        <StatusLauncher variant="row" />
         <HostsLauncher />
       </div>
       <nav

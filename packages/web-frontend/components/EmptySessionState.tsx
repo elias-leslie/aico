@@ -8,9 +8,9 @@ import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouLauncher } from './asks/NeedsYou'
 import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostsLauncher } from './HostsButton'
-import { HealthLauncher } from './health/HealthButton'
 import { NotesLauncher } from './notes/NotesLauncher'
 import { SessionList } from './SessionList'
+import { StatusLauncher } from './status/StatusLauncher'
 
 interface EmptySessionStateProps {
   /** Running sessions the user can open. */
@@ -18,7 +18,7 @@ interface EmptySessionStateProps {
   onOpen?: (slot: TerminalSlot | PaneSlot) => void
   onNewSession?: () => void
   /** No session list beside this (a phone or a narrow window): show Needs
-   * you, Health and Hosts here, as the session sheet does. */
+   * you, Status and Hosts here, as the session sheet does. */
   showLaunchers?: boolean
 }
 
@@ -46,7 +46,7 @@ export function EmptySessionState({
           <NeedsYouLauncher variant="row" />
           <CaptureLauncher variant="row" />
           <NotesLauncher variant="row" />
-          <HealthLauncher variant="row" />
+          <StatusLauncher variant="row" />
           <HostsLauncher />
         </header>
       )}

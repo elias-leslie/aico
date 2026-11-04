@@ -10,7 +10,7 @@ const { renamePane, updateSession } = vi.hoisted(() => ({
 }))
 
 vi.mock('../HostsButton', () => ({ HostsButton: () => null }))
-vi.mock('../health/HealthButton', () => ({ HealthLauncher: () => null }))
+vi.mock('../status/StatusLauncher', () => ({ StatusLauncher: () => null }))
 vi.mock('../asks/NeedsYou', () => ({
   NeedsYouLauncher: () => <i data-testid="needs-you-mock" />,
 }))

@@ -150,8 +150,8 @@ vi.mock('./capture/CaptureLauncher', () => ({
 vi.mock('./asks/NeedsYou', () => ({
   NeedsYouLauncher: () => <button type="button">Needs you</button>,
 }))
-vi.mock('./health/HealthButton', () => ({
-  HealthLauncher: () => <button type="button">Health</button>,
+vi.mock('./status/StatusLauncher', () => ({
+  StatusLauncher: () => <a href="/status">Status</a>,
 }))
 vi.mock('./HostsButton', () => ({ HostsLauncher: () => null }))
 
@@ -234,13 +234,13 @@ describe('SessionView', () => {
     expect(notice.nextElementSibling).toBe(frame)
   })
 
-  it('with no session open and no list beside it, offers Needs you and Health', () => {
+  it('with no session open and no list beside it, offers Needs you and Status', () => {
     const { rerender } = render(
       <SessionView fontSize={14} slots={[]} activeSessionId={null} />,
     )
     expect(screen.getByText('No session open.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Needs you' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Health' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Status' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Capture' })).toBeVisible()
     rerender(
       <SessionView fontSize={14} slots={[]} activeSessionId={null} sideList />,

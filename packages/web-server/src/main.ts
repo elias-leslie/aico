@@ -126,7 +126,7 @@ function serve(): void {
   registerNightshiftRoutes(api, config)
   const sync = startSync({ config, store, notes, blobsDir })
   registerSyncRoutes(api, sync.loop)
-  registerStatusRoutes(api, status, notify)
+  registerStatusRoutes(api, status, notify, machine)
   registerStatusActions(api, { status, machine, tether })
   // The phone alert rule: checked on every write of rows. aico-web's own heartbeat writes every
   // few minutes, so a backup or machine row that goes late is seen then too.

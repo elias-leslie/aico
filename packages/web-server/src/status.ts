@@ -1,8 +1,9 @@
 // Status rows over HTTP, and the rows aico-web writes about itself.
 //
 //   GET    /api/status          the rows as a reader sees them (late and unknown applied), problems
-//                               first, plus the rollup. Filters: state, kind, machine, project (comma
-//                               lists), q (text), sort (problems, what, updated, next).
+//                               first, plus the rollup, the badge summary and this machine's id.
+//                               Filters: state, kind, machine, project (comma lists), q (text),
+//                               sort (problems, what, updated, next).
 //   POST   /api/status/rows     one row or a list (contracts/status-row.schema.json), all or none.
 //   DELETE /api/status/rows?id= drops a row whose thing is gone.
 //
@@ -85,12 +86,14 @@ export interface RowsChanged {
   rowRemoved(id: string): void
 }
 
+/** `machine`: this server's machine, sent with the rows so the page knows which refs run here. */
 export function registerStatusRoutes(
   router: Router,
   status: StatusStore,
   changed?: RowsChanged,
+  machine?: string,
 ): void {
-  router.on('GET', '/api/status', (ctx) => status.read(filterFrom(ctx.query)))
+  router.on('GET', '/api/status', (ctx) => ({ ...status.read(filterFrom(ctx.query)), machine }))
   router.on('POST', '/api/status/rows', async (ctx) => {
     requireThisMachine(ctx.req)
     const rows = parseRows(await ctx.body())

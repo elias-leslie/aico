@@ -29,9 +29,14 @@
         "ignore_case": true,
         "in": ["text", "attr"],
         "message": "Implementation term in UI copy; name the session, device or action the owner recognises."
+      },
+      {
+        "id": "product-name-spelling",
+        "regex": "\\b(?!Aico\\b|aico\\b)[Aa][Ii][Cc][Oo]\\b",
+        "in": ["text", "attr"],
+        "message": "Spell the product Aico; lowercase aico is the project id (Status shows ids as ids)."
       }
-    ],
-    "names": [{"name": "Aico", "in": ["text", "attr"]}]
+    ]
   },
   "visual": {
     "max_page_luminance": 0.02,

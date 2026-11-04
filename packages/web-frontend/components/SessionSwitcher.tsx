@@ -19,10 +19,10 @@ import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostBadge } from './HostBadge'
 import { HostsButton } from './HostsButton'
 import { HostsSheet } from './HostsSheet'
-import { HealthLauncher } from './health/HealthButton'
 import { NotesLauncher } from './notes/NotesLauncher'
 import { SessionList, sessionsHeading } from './SessionList'
 import { SessionTitle } from './SessionTitle'
+import { StatusLauncher } from './status/StatusLauncher'
 
 export interface SessionSwitcherProps {
   /** The session on screen */
@@ -165,7 +165,7 @@ export function SessionSwitcher({
             <NeedsYouLauncher variant="row" />
             <CaptureLauncher variant="row" />
             <NotesLauncher variant="row" />
-            <HealthLauncher variant="row" />
+            <StatusLauncher variant="row" />
             <HostsButton onClick={openHosts} />
           </div>
         </div>
@@ -209,7 +209,7 @@ export function SessionSwitcher({
                 <NeedsYouLauncher variant="row" />
                 <CaptureLauncher variant="row" />
                 <NotesLauncher variant="row" />
-                <HealthLauncher variant="row" />
+                <StatusLauncher variant="row" />
                 <HostsButton onClick={openHosts} />
               </div>
               {list}
