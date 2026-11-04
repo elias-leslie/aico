@@ -5,10 +5,10 @@
   "license": "Apache-2.0",
   "aico": {
     "layer": 6,
-    "browser": true,
-    "allow": [
+    "imports": [
       "@aico/ui-kit"
-    ]
+    ],
+    "browser": true
   },
   "funding": "https://github.com/sponsors/elias-leslie",
   "scripts": {

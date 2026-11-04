@@ -5,7 +5,8 @@
   "private": true,
   "license": "Apache-2.0",
   "aico": {
-    "layer": 0
+    "layer": 0,
+    "imports": []
   },
   "type": "module",
   "exports": {

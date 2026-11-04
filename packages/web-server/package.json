@@ -6,6 +6,12 @@
   "license": "Apache-2.0",
   "aico": {
     "layer": 5,
+    "imports": [
+      "@aico/shared",
+      "@aico/fleet",
+      "@aico/notes",
+      "@aico/tether-client"
+    ],
     "db": [
       "web.db",
       "notes.db"

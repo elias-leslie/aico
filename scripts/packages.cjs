@@ -1,6 +1,6 @@
-// The package graph, read from packages/*/package.json. Layers, import
-// exceptions, DB files and workspace dependencies are data there; the boundary
-// rules, the affected-package list and the generated check stages all read this.
+// The package graph, read from packages/*/package.json. Layers, the exact
+// packages each may import (`aico.imports`), DB files and workspace dependencies are data there; the boundary
+// rules, boundaries.mjs and the generated check stages all read this.
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -18,7 +18,7 @@ function loadPackages(root = path.resolve(__dirname, '..')) {
         json,
         layer: aico.layer,
         browser: aico.browser === true,
-        allow: aico.allow ?? [],
+        imports: aico.imports ?? [],
         db: aico.db ?? [],
         deps: [],
       }
@@ -31,6 +31,13 @@ function loadPackages(root = path.resolve(__dirname, '..')) {
     pkg.deps = [...new Set(names)].filter((name) => byName.has(name)).sort()
   }
   return packages
+}
+
+// The one same-layer import the rules allow (root package.json aico.sameLayerImports):
+// { '@aico/web-frontend': ['@aico/ui-kit'] }.
+function sameLayerImports(root = path.resolve(__dirname, '..')) {
+  const json = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+  return json.aico?.sameLayerImports ?? {}
 }
 
 // The package and every workspace package it depends on, directly or not.
@@ -57,7 +64,7 @@ const ROOT_FILES = [
 ]
 
 const SKIP_DIRS = new Set(['node_modules', '.next', 'out', 'dist', '.tsbuild', '.venv', '__pycache__'])
-const SOURCE = /\.(ts|tsx|mjs|cjs|py|sh)$/
+const SOURCE = /\.(ts|tsx|mjs|cjs|css|py|sh)$/
 
 function* walk(dir) {
   if (!fs.existsSync(dir)) return
@@ -97,4 +104,4 @@ function contractReaders(root = path.resolve(__dirname, '..')) {
   return { fixtures, readers: [...found.values()] }
 }
 
-module.exports = { loadPackages, cone, contractReaders, ROOT_FILES, walk }
+module.exports = { loadPackages, sameLayerImports, cone, contractReaders, ROOT_FILES, walk }

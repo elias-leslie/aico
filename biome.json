@@ -62,7 +62,7 @@
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],
-                    "message": "@aico/fleet (layer 3): import only packages in lower layers (depcruise is the gate)"
+                    "message": "@aico/fleet (layer 3): import only @aico/shared (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
@@ -98,7 +98,7 @@
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],
-                    "message": "@aico/notes (layer 3): import only packages in lower layers (depcruise is the gate)"
+                    "message": "@aico/notes (layer 3): import only @aico/shared (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
@@ -136,7 +136,7 @@
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],
-                    "message": "@aico/shared (layer 0): import only packages in lower layers (depcruise is the gate)"
+                    "message": "@aico/shared (layer 0): import only no other package (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
@@ -172,7 +172,7 @@
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],
-                    "message": "@aico/tether-client (layer 3): import only packages in lower layers (depcruise is the gate)"
+                    "message": "@aico/tether-client (layer 3): import only @aico/shared (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
@@ -200,17 +200,23 @@
                 },
                 "patterns": [
                   {
-                    "group": ["@aico/web-frontend", "@aico/web-frontend/**"],
-                    "message": "@aico/ui-kit (layer 6): import only packages in lower layers (depcruise is the gate)"
-                  },
-                  {
                     "group": [
+                      "@aico/fleet",
+                      "@aico/fleet/**",
+                      "@aico/notes",
+                      "@aico/notes/**",
+                      "@aico/shared",
+                      "@aico/shared/**",
                       "@aico/tether",
                       "@aico/tether/**",
+                      "@aico/tether-client",
+                      "@aico/tether-client/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**",
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],
-                    "message": "@aico/ui-kit (layer 6): browser code never imports a server package"
+                    "message": "@aico/ui-kit (layer 6): import only no other package (package.json aico.imports; depcruise is the gate)"
                   },
                   {
                     "group": ["node:*"],
@@ -244,7 +250,7 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**"
                     ],
-                    "message": "@aico/web-server (layer 5): import only packages in lower layers (depcruise is the gate)"
+                    "message": "@aico/web-server (layer 5): import only @aico/shared, @aico/fleet, @aico/notes, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

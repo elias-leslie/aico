@@ -84,12 +84,20 @@
                 "patterns": [
                   {
                     "group": [
+                      "@aico/fleet",
+                      "@aico/fleet/**",
+                      "@aico/notes",
+                      "@aico/notes/**",
+                      "@aico/shared",
+                      "@aico/shared/**",
                       "@aico/tether",
                       "@aico/tether/**",
+                      "@aico/tether-client",
+                      "@aico/tether-client/**",
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],
-                    "message": "@aico/web-frontend (layer 6): browser code never imports a server package"
+                    "message": "@aico/web-frontend (layer 6): import only @aico/ui-kit (package.json aico.imports; depcruise is the gate)"
                   },
                   {
                     "group": [

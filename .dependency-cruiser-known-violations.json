@@ -1,60 +1,85 @@
 [
   {
-    "type": "dependency",
+    "type": "reachability",
     "from": "packages/ui-kit/src/chat/forward.ts",
     "to": "fs",
-    "unresolvedTo": "fs",
-    "dependencyTypes": [
-      "core",
-      "import"
-    ],
     "rule": {
       "severity": "error",
-      "name": "browser-code-no-node-builtins"
-    }
+      "name": "browser-code-reaches-no-node-builtins"
+    },
+    "via": [
+      {
+        "name": "fs",
+        "dependencyTypes": [
+          "core",
+          "import"
+        ]
+      }
+    ]
   },
   {
-    "type": "dependency",
+    "type": "reachability",
+    "from": "packages/ui-kit/src/chat/forward.ts",
+    "to": "http",
+    "rule": {
+      "severity": "error",
+      "name": "browser-code-reaches-no-node-builtins"
+    },
+    "via": [
+      {
+        "name": "packages/tether-client/src/client/index.ts",
+        "dependencyTypes": [
+          "undetermined",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether-client/src/client/client.ts",
+        "dependencyTypes": [
+          "local",
+          "export"
+        ]
+      },
+      {
+        "name": "http",
+        "dependencyTypes": [
+          "core",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "reachability",
     "from": "packages/ui-kit/src/chat/forward.ts",
     "to": "path",
-    "unresolvedTo": "path",
-    "dependencyTypes": [
-      "core",
-      "import"
-    ],
     "rule": {
       "severity": "error",
-      "name": "browser-code-no-node-builtins"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "packages/web-server/src/chat.ts",
-    "to": "packages/ui-kit/src/chat/forward.ts",
-    "unresolvedTo": "@aico/ui-kit/chat/forward",
-    "dependencyTypes": [
-      "undetermined",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "layer-down-only"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "packages/web-server/src/chat.ts",
-    "to": "packages/ui-kit/src/chat/types.ts",
-    "unresolvedTo": "@aico/ui-kit/chat/types",
-    "dependencyTypes": [
-      "undetermined",
-      "type-only",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "layer-down-only"
-    }
+      "name": "browser-code-reaches-no-node-builtins"
+    },
+    "via": [
+      {
+        "name": "packages/tether-client/src/client/index.ts",
+        "dependencyTypes": [
+          "undetermined",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether-client/src/client/client.ts",
+        "dependencyTypes": [
+          "local",
+          "export"
+        ]
+      },
+      {
+        "name": "path",
+        "dependencyTypes": [
+          "core",
+          "import"
+        ]
+      }
+    ]
   },
   {
     "type": "cycle",
@@ -2514,7 +2539,153 @@
     ],
     "rule": {
       "severity": "error",
-      "name": "same-layer-import"
+      "name": "package-imports-allowlist"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/ui-kit/src/chat/forward.test.ts",
+    "to": "packages/tether-client/src/client/index.ts",
+    "unresolvedTo": "@aico/tether-client",
+    "dependencyTypes": [
+      "undetermined",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "package-imports-allowlist"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/ui-kit/src/chat/forward.ts",
+    "to": "packages/tether-client/src/client/index.ts",
+    "unresolvedTo": "@aico/tether-client",
+    "dependencyTypes": [
+      "undetermined",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "package-imports-allowlist"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-frontend/components/SessionList.runs.test.tsx",
+    "to": "packages/tether-client/src/client/teams.ts",
+    "unresolvedTo": "@aico/tether-client/teams",
+    "dependencyTypes": [
+      "undetermined",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "package-imports-allowlist"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-frontend/components/SessionList.tsx",
+    "to": "packages/tether-client/src/client/teams.ts",
+    "unresolvedTo": "@aico/tether-client/teams",
+    "dependencyTypes": [
+      "undetermined",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "package-imports-allowlist"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-frontend/components/StepViewer.test.tsx",
+    "to": "packages/tether-client/src/client/teams.ts",
+    "unresolvedTo": "@aico/tether-client/teams",
+    "dependencyTypes": [
+      "undetermined",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "package-imports-allowlist"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-frontend/components/StepViewer.tsx",
+    "to": "packages/tether-client/src/client/teams.ts",
+    "unresolvedTo": "@aico/tether-client/teams",
+    "dependencyTypes": [
+      "undetermined",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "package-imports-allowlist"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-frontend/lib/hooks/use-session-attention.ts",
+    "to": "packages/tether-client/src/client/teams.ts",
+    "unresolvedTo": "@aico/tether-client/teams",
+    "dependencyTypes": [
+      "undetermined",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "package-imports-allowlist"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-frontend/lib/hooks/use-workflow-runs.ts",
+    "to": "packages/tether-client/src/client/teams.ts",
+    "unresolvedTo": "@aico/tether-client/teams",
+    "dependencyTypes": [
+      "undetermined",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "package-imports-allowlist"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/chat.ts",
+    "to": "packages/ui-kit/src/chat/forward.ts",
+    "unresolvedTo": "@aico/ui-kit/chat/forward",
+    "dependencyTypes": [
+      "undetermined",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "package-imports-allowlist"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "packages/web-server/src/chat.ts",
+    "to": "packages/ui-kit/src/chat/types.ts",
+    "unresolvedTo": "@aico/ui-kit/chat/types",
+    "dependencyTypes": [
+      "undetermined",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "package-imports-allowlist"
     }
   }
 ]

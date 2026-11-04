@@ -48,14 +48,14 @@ Native (not TypeScript, each reads `contracts/` and imports nothing from `packag
 Rules that keep it small: `shared` has no I/O and a LOC cap; layer N imports only layers below it; deployables (layer 5) never import each other (HTTP/socket only, via `tether-client`); one package owns each DB file (`tether.db`, `notes.db`, `status.db`, `context.db`, `usage.db`, `tasks.db`, `jobs.db`); any other package asks the owner's API.
 
 ### 1.2 Enforcement
-- `dependency-cruiser` (`.dependency-cruiser.cjs`): layer-down-only, no deep imports (only a package's `exports`), no cycles, only `store` may import `node:sqlite`, `web-frontend` may not import `node:*` or server packages. Layer is a field in each `package.json`.
+- `dependency-cruiser` (`.dependency-cruiser.cjs`): each package imports only the packages in its `aico.imports` (the "may import" column above, restricted to packages that exist; `boundaries.mjs` keeps every entry to a lower layer, except the one `web-frontend` -> `ui-kit` pair in the root `package.json` `aico.sameLayerImports`), no deep imports (only a package's `exports`), no cycles, only `store` may import `node:sqlite`, `web-frontend` may not import `node:*` (also through an imported package) or server packages. Layer and `imports` are fields in each `package.json`.
 - `tsc -b` with project `references` per package: a package cannot type-import what it does not reference.
 - Biome `noRestrictedImports` overrides per package (editor-time feedback only).
 - `scripts/boundaries.mjs` (adopted idea): exact-pinned deps, unique DB file name per package, every native dir tests `contracts/` fixtures (drift fixtures for fleet link and phone API only).
 - Python: ruff + ty + pytest; Go: `go vet` + `go test`; Rust: `cargo clippy/test`; Kotlin: `gradle test` (closes X3).
 
 ### 1.3 Checks and tests only for what changed
-- `scripts/affected.mjs` (~80 lines): `git diff` files to packages, add reverse dependents from `package.json`, emit the list. No Nx/Turbo.
+- No affected-package script (no Nx/Turbo): each package's `quick_paths` cone (its globs plus those of every package it depends on, from `package.json`, via `scripts/packages.cjs`) decides what a change touches.
 - `.st-check.toml` stages are generated per package (`quick = true`, `quick_paths` = package globs + its dependencies' globs): biome, `tsc -b`, depcruise. Vitest stays a legacy tool: the quick lane runs `vitest related` on the changed files (it follows imports across packages) and the full gate runs every project once. A change in `shared` fans out to all; elsewhere it stays inside the cone.
 - Native stages run only when `native/<dir>/**` or `contracts/**` changes; Kotlin and live smoke scripts run nightly regardless.
 - Whole repo (all packages, native, `tether-lifecycle-harness.sh`, real-session smoke) runs in the nightly deep lane only.
@@ -75,7 +75,7 @@ Each row is one comment line appended to a source file, `st check --quick --chan
 
 ### 1.4 Separate deploys
 - Each unit builds and releases alone: esbuild bundle per service into `~/.local/lib/aico/<unit>/releases/<version>` plus `current` and `previous` symlinks. Frontend ships as a static dir (no `aico-web` restart). Restarting `tether` is safe: tmux owns the processes.
-- `aico deploy <unit>` (alias `st service rebuild aico --scope <unit>`) picks units from the affected-package graph: a `store` change rebuilds `tether`, `jobs`, `web-server`, `cli`; a `web-frontend` change rebuilds only the static dir.
+- `aico deploy <unit>` (alias `st service rebuild aico --scope <unit>`) picks units from the same package cones: a `store` change rebuilds `tether`, `jobs`, `web-server`, `cli`; a `web-frontend` change rebuilds only the static dir.
 - Fleet: each machine installs the same units; switches pick UI, data copy, worker.
 
 ### 1.5 Existing aico code mapped (src LOC, tests excluded)
@@ -296,7 +296,7 @@ One agent per milestone, from a brief of <= 60 lines. Sizing rule: <= ~8k new li
 | # | milestone | scope | needs | size | old service stoppable after |
 |---|---|---|---|---|---|
 | M0a | Restructure | move this plan and cut list into `aico/docs/plans/`; move to `packages/` + `native/`, `tsc -b` references, vitest projects, delete dead aico code (C1, a_term, pycache), no behavior change | - | M | - |
-| M0b | Boundaries and fast checks | dependency-cruiser, `boundaries.mjs`, `affected.mjs`, generated `st-check` stages, per-package baselines, nightly deep lane | M0a | S | - |
+| M0b | Boundaries and fast checks | dependency-cruiser, `boundaries.mjs`, generated `st-check` stages, per-package baselines, nightly deep lane | M0a | S | - |
 | M1 | Status rows (early, others report into it) | `contracts/status-row.schema.json`, `status` package, loopback HTTP write API, `aico status` / `st status`, Python and Go writer helpers, late and unknown rules | M0b | M | - |
 | M2 | Status screen | mockup review with owner first, then screen + tray badge + phone read the same rows; project page = filtered list | M1 | M | SF dashboard, notifications bell, Alerts-history pages (sf-39, sf-38) once M3 and M4 also feed it |
 | M3 | Jobs and notify | `jobs` (fenced leases, home machine per kind), `notify` (notice schema, Needs-you, outbox, FCM sender), OmniNull push endpoint (notice + Status rows) | M1 | M | Nightshift web board/PWA, digest, Web Push, notify-critical, web unit (ns-10, ns-17, ns-11, ns-30, ns-26) after M4 |

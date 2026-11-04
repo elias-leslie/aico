@@ -4,6 +4,13 @@
   "description": "AI companion with a browser and phone view, all over Tether-owned tmux sessions.",
   "license": "Apache-2.0",
   "type": "module",
+  "aico": {
+    "sameLayerImports": {
+      "@aico/web-frontend": [
+        "@aico/ui-kit"
+      ]
+    }
+  },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "tsc -b",
