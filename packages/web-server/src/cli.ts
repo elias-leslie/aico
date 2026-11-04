@@ -7,6 +7,7 @@
 // - `tclaude` / `tcodex [project|-l]`: pick a project (fzf), find its folder,
 //   then `tsession open --attach` (the old scripts/lib/project-launcher.sh).
 // - `status`: `st status`, the Status rows from the running server (status-cli.ts).
+// - `app publish-apk|drill|status`: the phone app's update and outage drill (app-cli.ts).
 // - `memory|prompt|models|context`: `aico ...` against context.db (@aico/context).
 //
 // Attaching is `tether sessions attach <id>`, which follows where the caller
@@ -27,6 +28,7 @@ import {
 } from '@aico/context'
 import { machineId } from '@aico/status'
 import { TetherClient, TetherError, TetherUnavailable, tetherSocketPath } from '@aico/tether-client'
+import { runAppCli } from './app-cli'
 import { type BrokerTarget, createBroker, normalizeWorkingDir } from './broker'
 import { dataDirPath, loadConfig, webDbPath } from './config'
 import { WebStore } from './db'
@@ -41,6 +43,7 @@ export const CLI_COMMANDS = [
   'tcodex',
   'tnotes',
   'status',
+  'app',
   ...CONTEXT_COMMANDS,
 ]
 
@@ -535,6 +538,13 @@ function terminalIo(): CliIo {
 /** `aico-web tsession|tclaude|tcodex …` against the user's own Tether and the web app's state. */
 export async function runCli(command: string, argv: string[]): Promise<number> {
   if (command === 'tnotes') return runNotesCli(argv, terminalIo().repoRoot)
+  if (command === 'app')
+    return runAppCli(argv, {
+      out: (text) => process.stdout.write(text),
+      err: (text) => process.stderr.write(text),
+      dataDir: dataDirPath(),
+      now: Date.now,
+    })
   if (command === 'status') {
     const { port } = loadConfig()
     return runStatusCli(argv, {
