@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Lantern ink (packages/ui-kit/src/tokens.css), also the icon shell -->
+    <color name="ns_bg">#0B0D11</color>
+    <color name="ns_icon_bg">#0B0D11</color>
+</resources>

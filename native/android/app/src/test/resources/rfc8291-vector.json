@@ -1,0 +1,8 @@
+{
+ "_doc": "shared16 is the RFC 8291 16-byte receiver secret. Throwaway test vector made by nightshift.deadman.encrypt; the key exists only here.",
+ "receiver_d": "lc8hcYGSSDAAaGexCdchMNjlWzpYOBPiQ4ZLBRA8aWk",
+ "receiver_pub": "BI7O7LeAmTS8UgvzyS-fb1RKWjDsY8RA92dr9hbzcHJ_bfB08mn83F-Ogk5WMYIeZ3--MNnw1ejhXD-gmWkIQLw",
+ "shared16": "tZdSZk5odnXoSE7Wu62C_A",
+ "ct": "tyMPIFge6Uw6YQKcFmNVrAAAEABBBEPTgEfMlvQSXerkFLfJ9oU18hdr4zFk4c-aCl064X8c686hhHcaOeSyY6HcDwX9N8g0s84DLNmASZzveR-5PayVB2ikwgH7jwIlLS-BBkJ47_akfqF1tX7483D9BRq3tVI24k7HxO84vSWM9Jd8t0JQ4byIqG7frMp8KZoL632Q3cDRztHDN-3_P47HTWqwOIk_W-d5s8WP9VSFP0gu0dexPLB3TGHm283QRXRk4yZBQk9bDXuuMfhvZR4CjJ19cuseLz7Zw7GJsZw-Tr2C_l0vbEfWV44rFbMRJNmi_WV28GXswe7zMql9TFzHZNkZF2HD_BaUIgmhGZa-c0c35_y6DWZEcAu5XBchREOvR7RwgjJAtfJbprFYf_Yz3AJhwEERBNWAuSCB1qVC6MQ8fzhIPPrrDnBa_kZVAs9yJsVOdRDgHNaYfdgTFlCuhFy2yZ7e9XEUzAuae7RuAZ8BPAATHyNlVD9VlKhj9juCmMBLnIWUMFJwc4KoQFoFj4XlzbsVbQJF8OWo3-pZTMHUVwBqMGHweapXv-yq6buBPoAGbtdh0r5CdUIbpId7nGo4kGDt21KZsuT7Of1qDSLickp3dZluLJT5DQNNKiOgZtRQwzgKa42uLnVaxKbASQyWmQVF",
+ "plaintext": "{\"v\": 1, \"id\": \"0123456789ab\", \"title\": \"TEST (ignore) vector\", \"body\": \"Body \\u00fc\", \"severity\": \"critical\", \"channel\": \"critical\", \"tag\": \"t1\", \"group\": \"nightshift\", \"kind\": \"test\", \"ts\": 1793480000, \"url\": \"https://nightshift.summitflow.dev/n/0123456789ab\", \"actions\": [{\"id\": \"open\", \"label\": \"Open\", \"url\": \"https://nightshift.summitflow.dev/n/0123456789ab\"}], \"public\": \"Nightshift: critical\"}"
+}

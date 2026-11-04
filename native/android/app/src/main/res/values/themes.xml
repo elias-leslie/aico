@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Nightshift" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ns_bg</item>
+        <item name="android:statusBarColor">@color/ns_bg</item>
+        <item name="android:navigationBarColor">@color/ns_bg</item>
+    </style>
+    <style name="Theme.Nightshift.Hop" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoDisplay">true</item>
+    </style>
+</resources>
