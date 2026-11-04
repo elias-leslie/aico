@@ -1,0 +1,76 @@
+{
+  "chat": "805a082f",
+  "projection": "Text and tool calls only; provider thinking and signatures omitted.",
+  "messages": [
+    {
+      "seq": 0,
+      "role": "user",
+      "model": null,
+      "content": [
+        {
+          "type": "text",
+          "text": "Test only: ask me one direct question that needs my answer, with First and Second as choices and First recommended. Put it in my Needs you list so I can answer it there. Do not edit files."
+        }
+      ]
+    },
+    {
+      "seq": 1,
+      "role": "assistant",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "content": [
+        {
+          "type": "toolCall",
+          "name": "bash",
+          "arguments": {
+            "command": "tether ask create \"Test question: which option should I record as your answer?\" --option \"First\" --option \"Second\" --recommend 1",
+            "timeout": 60
+          }
+        }
+      ]
+    },
+    {
+      "seq": 2,
+      "role": "toolResult",
+      "model": null,
+      "content": [
+        {
+          "type": "text",
+          "text": "Asked: 1143e40a8226. The owner sees it in Aico under Needs you. In your reply, restate the one-line question with your recommendation and say it is asked in Aico. The answer comes to this session as a message when you are idle; or read it with tether ask get 1143e40a8226.\n"
+        }
+      ]
+    },
+    {
+      "seq": 3,
+      "role": "assistant",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "content": [
+        {
+          "type": "text",
+          "text": "Question asked in Aico (Needs you list, id `1143e40a8226`):\n\n**\"Test question: which option should I record as your answer?\"** \u2014 Options: **First** (recommended) or **Second**.\n\nNo files were edited. I'll pick up your answer when it arrives."
+        }
+      ]
+    },
+    {
+      "seq": 4,
+      "role": "user",
+      "model": null,
+      "content": [
+        {
+          "type": "text",
+          "text": "[Answer to your question: Test question: which option should I record as your answer?]\nFirst"
+        }
+      ]
+    },
+    {
+      "seq": 5,
+      "role": "assistant",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "content": [
+        {
+          "type": "text",
+          "text": "Recorded: **First**.\n\nTest complete \u2014 question was asked in Aico's Needs you list, your answer came back to this session, and no files were touched."
+        }
+      ]
+    }
+  ]
+}

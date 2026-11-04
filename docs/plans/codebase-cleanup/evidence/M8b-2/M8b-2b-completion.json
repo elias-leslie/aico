@@ -1,0 +1,71 @@
+{
+  "acceptance_receipt": "/srv/workspaces/projects/aico/.git/st/acceptance/de8cedd3dd1cf1a36d86c93f77489fd6ab640e1d56efcbb3493aad87799dcd82.json",
+  "live_validation": {
+    "source_commit": "a221fd7a3b706b2c0b13365d2f811c5dc8b78d9d",
+    "checks": [
+      {
+        "id": "phone-layout",
+        "state": "success",
+        "detail": "390x844 deployed phone list, replies, focused compact header, attachment sheet and pending uploads; no horizontal page overflow. Source scans and captured uilint snapshots have zero violations.",
+        "artifact": "M8b-2b-waiting.png",
+        "sha256": "031ab376874292920997d0bdca33348c4874f4f740cfe51c52a66e3f43ee18f2"
+      },
+      {
+        "id": "keyboard-and-stop",
+        "state": "success",
+        "detail": "Emulated visible viewport 558px. Newest reply scroll gap 0; body ends at composer top; composer bottom 558. Real pointer click on composer Stop preserved TEXTAREA focus and 1095 streamed integers as unfinished code.",
+        "artifact": "M8b-2b-stopped-kb.png",
+        "sha256": "d25f6ed335e1b111ec8915281b8ede249f710e20042468ad6b548a203530f840"
+      },
+      {
+        "id": "capture-payload",
+        "state": "success",
+        "detail": "Actual uploaded screenshot PNG and text log reached codex/gpt-6.1-sol as an image block and text. It correctly read the photo title and log sentence. Own captures stayed ready with owner/route_state null.",
+        "artifact": "M8b-2b-attachment-payload.json",
+        "sha256": "7e2754dcfdfcd29079b571c5d7025274469b81cba5fe7b08ea150e24c472cab6"
+      },
+      {
+        "id": "upload-navigation",
+        "state": "success",
+        "detail": "A real upload load callback was held to inspect Saving. Back and reopening retained the upload and ready file; releasing it completed both, then they were sent.",
+        "artifact": "M8b-2b-uploading.png",
+        "sha256": "d7cf7d8f628defd84b3e9740205fe21c01dca26d70e5105132c78e266a621ab4"
+      },
+      {
+        "id": "natural-question",
+        "state": "success",
+        "detail": "Fresh DeepSeek request before the prompt fix claimed a question was surfaced but had none. Identical fresh request after the fix filed one with a single bash call; First was immediately self-answered and arrived as a new chat message.",
+        "artifact": "M8b-2b-natural-question.json",
+        "sha256": "7b5849006214d3c924adc654018ec4789e937d2787914c2f499d58e286516c65"
+      },
+      {
+        "id": "contained-roles",
+        "state": "success",
+        "detail": "At 390px, Hunting selected in the normal dialog with a routed non-Claude model and Start enabled. No hunting chat started. Mock transport tests submit Hunting and Recon through the same start contract.",
+        "artifact": "M8b-2b-contained-role.png",
+        "sha256": "5738b500fd321ea53765ad5c1811f2e3b00ab0838a85438e68eba2ba6e19d59a"
+      },
+      {
+        "id": "draft-on-back",
+        "state": "success",
+        "detail": "Latest Keep this phone draft survives immediate Back and reopening; a regression failed first.",
+        "artifact": "M8b-2b-draft-restored.png",
+        "sha256": "d46a43cb36b6c65a313d80e7b687b8788125617e05d70f09e5d6cd365337f39e"
+      },
+      {
+        "id": "answer-keeps-draft",
+        "state": "success",
+        "detail": "Final deployed app: recommended choice clicked in the shared Needs you panel, the answer was delivered, and Keep this phone draft plus capture fc7a9d916dc0 remained. Route copy says Answer goes to this chat. See M8b-2b-answer-draft-live.json.",
+        "artifact": "M8b-2b-answer-draft-live.json",
+        "sha256": "a15fc5e8341076021e979e2a7184cad670c461a5568bbc45b1069af4aba7380b"
+      },
+      {
+        "id": "cleanup",
+        "state": "success",
+        "detail": "All 6 main test chats and all 4 tester chats verified Ended with zero questions. Both Pi roots ended, their browsers reported closed; main browser closed. Three remaining own test captures removed through the app API.",
+        "artifact": "M8b-2b-cleanup.json",
+        "sha256": "7fc937006c3289e15ea75f87d7ded79d2dfb5df9221e3a3e3b93e1dc24c70bad"
+      }
+    ]
+  }
+}
