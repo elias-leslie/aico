@@ -2,7 +2,10 @@ package lease
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -88,4 +91,53 @@ func seenKeys(agent string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ImportLegacySeen carries what SummitFlow's inbox hook had shown each agent (<dir>/<agent>.seen.json, the
+// agent id with ":" written "_") into the "_seen" document, keeping the later time per key, so items an agent
+// has already seen are not shown again after the cutover. It returns the agents imported.
+func ImportLegacySeen(dir string) ([]string, error) {
+	files, err := filepath.Glob(filepath.Join(dir, "*.seen.json"))
+	if err != nil {
+		return nil, err
+	}
+	var done []string
+	err = withDocLock(seenDoc, func() error {
+		doc := readDoc(seenDoc)
+		out := map[string]any{}
+		for a, raw := range doc {
+			var set seenSet
+			if json.Unmarshal(raw, &set) == nil {
+				out[a] = set
+			}
+		}
+		cutoff := float64(time.Now().Add(-seenKeep).UnixNano()) / 1e9
+		for _, f := range files {
+			raw, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			var old seenSet
+			if json.Unmarshal(raw, &old) != nil {
+				continue
+			}
+			agent := strings.TrimSuffix(filepath.Base(f), ".seen.json")
+			if prefix, rest, ok := strings.Cut(agent, "_"); ok {
+				agent = prefix + ":" + rest
+			}
+			set, _ := out[agent].(seenSet)
+			if set == nil {
+				set = seenSet{}
+				out[agent] = set
+			}
+			for k, t := range old {
+				if t >= cutoff && t > set[k] {
+					set[k] = t
+				}
+			}
+			done = append(done, agent)
+		}
+		return writeDoc(seenDoc, out)
+	})
+	return done, err
 }

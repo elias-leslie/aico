@@ -23,6 +23,7 @@ import (
 //	aico-hook sessions send TO TEXT [--fyi] [--source-key K] | ack ID yes|no|eta:MIN [NOTE] | confirm ID [--withdraw] | inbox
 //	aico-hook inbox turn|stop|watch [codex|pi]   a hook event on stdin
 //	aico-hook import-legacy [DIR]                carry SummitFlow's lease files into the store, once
+//	aico-hook import-legacy --seen [DIR]         carry what its inbox hook had shown each agent (adds, never replaces)
 
 func isCoordMode(m string) bool {
 	return m == "lease" || m == "sessions" || m == "inbox" || m == "import-legacy"
@@ -31,6 +32,18 @@ func isCoordMode(m string) bool {
 func coordMain(mode string, args []string) int {
 	switch mode {
 	case "import-legacy":
+		if len(args) > 0 && args[0] == "--seen" { // what the old inbox hook had shown, without touching the documents
+			dir := filepath.Join(os.Getenv("XDG_RUNTIME_DIR"), "st-coord-inbox")
+			if len(args) > 1 {
+				dir = args[1]
+			}
+			agents, err := lease.ImportLegacySeen(dir)
+			if err != nil {
+				return fail("seen import: %v", err)
+			}
+			fmt.Printf("imported seen state of %d agent(s): %s\n", len(agents), strings.Join(agents, ", "))
+			return 0
+		}
 		dir := "~/.summitflow/leases"
 		if len(args) > 0 {
 			dir = args[0]

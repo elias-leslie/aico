@@ -119,6 +119,24 @@ func TestImportLegacy(t *testing.T) {
 	}
 }
 
+func TestImportLegacySeenKeepsShownItemsShown(t *testing.T) {
+	sandbox(t)
+	dir := t.TempDir()
+	now := float64(time.Now().UnixNano()) / 1e9
+	body, _ := json.Marshal(map[string]float64{"74c9a2:fyi": now - 60, "old:req": now - 3*86400})
+	if err := os.WriteFile(filepath.Join(dir, "cc_111111.seen.json"), body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	agents, err := ImportLegacySeen(dir)
+	if err != nil || len(agents) != 1 || agents[0] != "cc:111111" {
+		t.Fatalf("import: %v %v", agents, err)
+	}
+	keys := seenKeys("cc:111111")
+	if len(keys) != 1 || keys[0] != "74c9a2:fyi" {
+		t.Errorf("a shown item stays shown and a day-old one is dropped: %v", keys)
+	}
+}
+
 // ---------------------------------------------------------------- handshakes
 
 func register(t *testing.T, hs ...*Hook) {
