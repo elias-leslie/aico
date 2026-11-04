@@ -15,6 +15,8 @@ export interface ConnectionOptions {
   pins(): Pin[]
   expected?: string
   deadMs: number
+  maxChannels?: number
+  bufferBytes?: number
   open(channel: Duplex, request: OpenChannel, peer: string): void
   ready(connection: Connection): void
   closed(connection: Connection): void
@@ -28,6 +30,8 @@ export class Connection {
   lastSeen = Date.now()
   authenticated = false
   private hello = false
+  private readonly blocked = new Set<string>()
+  private readonly peerKey: string
   private readonly decoder = new Decoder()
   private readonly channels = new Map<string, { type: ChannelKind; stream: Duplex }>()
 
@@ -45,7 +49,15 @@ export class Connection {
     )
       throw new Error('Peer key is not approved')
     this.peer = pin.name
-    socket.setTimeout(options.deadMs, () => socket.destroy(new Error('Fleet connection is silent')))
+    this.peerKey = key
+    const silence = setInterval(
+      () => {
+        if (Date.now() - this.lastSeen >= options.deadMs)
+          socket.destroy(new Error('Fleet connection is silent'))
+      },
+      Math.min(1000, options.deadMs / 2),
+    )
+    silence.unref()
     socket.setKeepAlive(true)
     socket.on('data', (chunk: Buffer) => {
       try {
@@ -56,6 +68,7 @@ export class Connection {
       }
     })
     socket.once('close', () => {
+      clearInterval(silence)
       for (const { stream } of this.channels.values())
         stream.destroy(new Error('Fleet link closed'))
       this.channels.clear()
@@ -81,11 +94,7 @@ export class Connection {
     try {
       return this.options
         .pins()
-        .some(
-          (pin) =>
-            pin.name === this.peer &&
-            pin.publicKey === certificateKey(this.socket.getPeerCertificate().raw),
-        )
+        .some((pin) => pin.name === this.peer && pin.publicKey === this.peerKey)
     } catch {
       return false
     }
@@ -148,6 +157,10 @@ export class Connection {
     if (!this.authenticated) throw new Error('Fleet peer has not authenticated')
     if (frame.op === 'open') {
       if (this.channels.has(frame.id)) throw new Error('Duplicate fleet channel')
+      if (this.channels.size >= (this.options.maxChannels ?? 128)) {
+        this.send({ type: frame.type, id: frame.id, op: 'close' })
+        return
+      }
       const stream = this.channel(frame.id, frame.type)
       this.options.open(
         stream,
@@ -160,11 +173,10 @@ export class Connection {
     if (!entry) return // A local caller may already have closed it.
     if (entry.type !== frame.type) throw new Error('Fleet channel kind changed')
     if (frame.op === 'data') {
-      if (entry.stream.readableLength > 16 * 1024 * 1024) {
-        entry.stream.destroy(new Error('Fleet channel receiver is not reading'))
-        return
+      if (!entry.stream.push(Buffer.from(frame.data, 'base64'))) {
+        this.blocked.add(frame.id)
+        this.socket.pause()
       }
-      entry.stream.push(Buffer.from(frame.data, 'base64'))
     } else if (frame.op === 'end') entry.stream.push(null)
     else entry.stream.destroy()
   }
@@ -172,17 +184,24 @@ export class Connection {
   private channel(id: string, type: ChannelKind): Duplex {
     const connection = this
     const stream = new Duplex({
-      read() {},
+      highWaterMark: this.options.bufferBytes ?? 256 * 1024,
+      read() {
+        connection.unblock(id)
+      },
       write(chunk: Buffer, _encoding, callback) {
         try {
-          for (let offset = 0; offset < chunk.length; offset += 65536) {
+          let offset = 0
+          const next = (error?: Error | null) => {
+            if (error || offset >= chunk.length) {
+              callback(error)
+              return
+            }
             const end = Math.min(chunk.length, offset + 65536)
-            connection.send(
-              { type, id, op: 'data', data: chunk.subarray(offset, end).toString('base64') },
-              end === chunk.length ? callback : undefined,
-            )
+            const data = chunk.subarray(offset, end).toString('base64')
+            offset = end
+            connection.send({ type, id, op: 'data', data }, next)
           }
-          if (!chunk.length) callback()
+          next()
         } catch (error) {
           callback(error as Error)
         }
@@ -192,6 +211,7 @@ export class Connection {
       },
       destroy(error, callback) {
         connection.channels.delete(id)
+        connection.unblock(id)
         connection.send({ type, id, op: 'close' })
         callback(error)
       },
@@ -201,7 +221,14 @@ export class Connection {
     return stream
   }
 
+  private unblock(id: string): void {
+    if (this.blocked.delete(id) && !this.blocked.size && !this.socket.destroyed)
+      this.socket.resume()
+  }
+
   open(request: OpenChannel): Duplex {
+    if (this.channels.size >= (this.options.maxChannels ?? 128))
+      throw new Error('Fleet channel limit reached')
     if (!this.authenticated || !this.approved())
       throw new Error('Fleet peer is not trusted and connected')
     const id = randomUUID()

@@ -27,8 +27,8 @@ async function pair() {
   const a = loadIdentity(join(root, 'a'), 'peer-a')
   const b = loadIdentity(join(root, 'b'), 'peer-b')
   let pins: Pin[] = [
-    { name: a.name, publicKey: a.publicKey },
-    { name: b.name, publicKey: b.publicKey },
+    { name: a.name, publicKey: a.publicKey, role: 'full' },
+    { name: b.name, publicKey: b.publicKey, role: 'full' },
   ]
   const aPort = await port()
   const bPort = await port()
@@ -157,12 +157,12 @@ describe('pinned TLS fleet peers', () => {
   })
   it('refuses an unknown key before any application channel opens', async () => {
     const p = await pair()
-    p.setPins([{ name: p.a.name, publicKey: p.a.publicKey }])
+    p.setPins([{ name: p.a.name, publicKey: p.a.publicKey, role: 'full' }])
     // Each machine approves itself; neither approves the other.
     const fb = new Fleet({
       settings: p.sb,
       identity: p.b,
-      pins: () => [{ name: p.b.name, publicKey: p.b.publicKey }],
+      pins: () => [{ name: p.b.name, publicKey: p.b.publicKey, role: 'full' }],
       postRows: async () => {},
       log: () => {},
     })
@@ -178,7 +178,7 @@ describe('pinned TLS fleet peers', () => {
     await p.fb.start()
     await p.fa.start()
     await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
-    p.setPins([{ name: p.a.name, publicKey: p.a.publicKey }])
+    p.setPins([{ name: p.a.name, publicKey: p.a.publicKey, role: 'full' }])
     await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(false))
     await new Promise<void>((resolve) => setTimeout(resolve, 100))
     expect(p.fa.status()[0]?.connected).toBe(false)
@@ -188,4 +188,180 @@ describe('pinned TLS fleet peers', () => {
       expect(lanAddress(address)).toBe(false)
     expect(lanAddress('192.168.1.5')).toBe(true)
   })
+})
+
+async function authenticatedClient(
+  p: Awaited<ReturnType<typeof pair>>,
+  options: Record<string, unknown> = {},
+) {
+  const { connect } = await import('node:tls')
+  const { Connection } = await import('./connection')
+  const pins = [p.a, p.b].map(({ name, publicKey }) =>
+    Object.assign({ name, publicKey }, { role: 'full' as const }),
+  )
+  return new Promise<InstanceType<typeof Connection>>((resolve, reject) => {
+    const socket = connect({
+      host: '127.0.0.1',
+      port: p.sb.listen.port,
+      key: p.a.key.export({ format: 'pem', type: 'pkcs8' }),
+      cert: p.a.cert,
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.3',
+    })
+    cleanup.push(() => {
+      socket.destroy()
+    })
+    socket.on('error', reject)
+    socket.once('secureConnect', () => {
+      try {
+        new Connection(
+          socket,
+          Object.assign(
+            {
+              identity: p.a,
+              pins: () => pins,
+              expected: p.b.name,
+              deadMs: 5000,
+              open: () => {},
+              ready: resolve,
+              closed: () => {},
+              log: () => {},
+            },
+            options,
+          ),
+        )
+      } catch (error) {
+        reject(error)
+      }
+    })
+  })
+}
+
+it.each(['control', 'exec'])('refuses a worker opening %s on a full peer', async (target) => {
+  const p = await pair()
+  p.setPins([
+    Object.assign({ name: p.a.name, publicKey: p.a.publicKey }, { role: 'worker' as const }),
+    Object.assign({ name: p.b.name, publicKey: p.b.publicKey }, { role: 'full' as const }),
+  ])
+  await echo(p.sb.controlSocket)
+  await p.fb.start()
+  await p.fa.start()
+  await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
+  const refused = await new Promise<boolean>((resolve) => {
+    const socket = createConnection(join(p.sa.peerRoot, `peer-b/${target}.sock`))
+    let data = false
+    socket.on('error', () => {})
+    socket.on('data', () => {
+      data = true
+      socket.destroy()
+    })
+    socket.on('close', () => resolve(!data))
+    socket.once('connect', () =>
+      socket.end(
+        target === 'exec'
+          ? `${JSON.stringify([process.execPath, '-e', "console.log('must not run')"])}\n`
+          : 'control',
+      ),
+    )
+    socket.once('error', () => resolve(true))
+  })
+  expect(refused).toBe(true)
+})
+
+it('replaces a half-open authenticated connection with the fresh connection', async () => {
+  const p = await pair()
+  await p.fb.start()
+  const first = await authenticatedClient(p)
+  const next = await authenticatedClient(p)
+  await vi.waitFor(() => expect(first.socket.destroyed).toBe(true))
+  expect(next.socket.destroyed).toBe(false)
+  expect(p.fb.status()[0]?.connected).toBe(true)
+})
+
+it('counts only received bytes for silence, even while sending data', async () => {
+  const p = await pair()
+  const tls = await import('node:tls')
+  const { Connection } = await import('./connection')
+  const { encodeFrame } = await import('./frames')
+  const pins = [p.a, p.b].map(({ name, publicKey }) =>
+    Object.assign({ name, publicKey }, { role: 'full' as const }),
+  )
+  let accepted: import('node:tls').TLSSocket | undefined
+  let writes = 0
+  const server = tls.createServer(
+    {
+      key: p.b.key.export({ format: 'pem', type: 'pkcs8' }),
+      cert: p.b.cert,
+      requestCert: true,
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.3',
+    },
+    (socket) => {
+      accepted = socket
+      new Connection(socket, {
+        identity: p.b,
+        pins: () => pins,
+        deadMs: 80,
+        open: () => {},
+        ready: () => {},
+        closed: () => {},
+        log: () => {},
+      })
+      const timer = setInterval(() => {
+        if (!socket.destroyed) {
+          writes++
+          socket.write(encodeFrame({ type: 'event', id: 'quiet-peer', op: 'data', data: 'eA==' }))
+        }
+      }, 5)
+      socket.once('close', () => clearInterval(timer))
+    },
+  )
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+  const client = tls.connect({
+    host: '127.0.0.1',
+    port: (server.address() as { port: number }).port,
+    key: p.a.key.export({ format: 'pem', type: 'pkcs8' }),
+    cert: p.a.cert,
+    rejectUnauthorized: false,
+    minVersion: 'TLSv1.3',
+  })
+  client.on('data', () => {})
+  client.on('error', () => {})
+  cleanup.push(async () => {
+    client.destroy()
+    accepted?.destroy()
+    await new Promise<void>((r) => server.close(() => r()))
+  })
+  await vi.waitFor(() => expect(accepted?.destroyed).toBe(true), { timeout: 500 })
+  expect(writes).toBeGreaterThan(1)
+})
+
+it('caps incoming channels without dropping the peer connection', async () => {
+  const p = await pair()
+  Object.assign(p.sb, { maxChannels: 2 })
+  await echo(p.sb.controlSocket)
+  await p.fb.start()
+  const client = await authenticatedClient(p)
+  const a = client.open({ type: 'control', target: 'control' })
+  const b = client.open({ type: 'control', target: 'control' })
+  const excess = client.open({ type: 'control', target: 'control' })
+  await vi.waitFor(() => expect(excess.destroyed).toBe(true))
+  expect(client.socket.destroyed).toBe(false)
+  a.destroy()
+  b.destroy()
+})
+
+it('pauses TLS for a full channel buffer and resumes without losing bytes', async () => {
+  const p = await pair()
+  await echo(p.sb.controlSocket)
+  await p.fb.start()
+  const client = await authenticatedClient(p, { bufferBytes: 128 })
+  const pause = vi.spyOn(client.socket, 'pause')
+  const stream = client.open({ type: 'control', target: 'control' })
+  const payload = Buffer.alloc(512 * 1024, 0x61)
+  stream.end(payload)
+  await vi.waitFor(() => expect(pause).toHaveBeenCalled())
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(chunk as Buffer)
+  expect(Buffer.concat(chunks)).toEqual(payload)
 })

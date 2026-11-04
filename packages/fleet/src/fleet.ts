@@ -13,7 +13,7 @@ import { Connection, type OpenChannel } from './connection'
 import { serveExec } from './exec'
 import { type Identity, loadIdentity, validName } from './identity'
 import { type FleetSettings, localAddress } from './settings'
-import { type Pin, readPins } from './trust'
+import { type Pin, PinCache } from './trust'
 
 export interface FleetOptions {
   settings: FleetSettings
@@ -21,6 +21,7 @@ export interface FleetOptions {
   pins?: () => Pin[]
   postRows?: (rows: StatusRow[]) => Promise<void>
   log?: (message: string) => void
+  failed?: (error: Error) => void
 }
 
 /** One connection per unordered machine pair; the lower name is the dialer.
@@ -33,8 +34,11 @@ export class Fleet {
   private readonly attempts = new Map<string, number>()
   private readonly seen = new Map<string, number>()
   private readonly unix: UnixServer[] = []
+  private readonly local = new Set<Socket>()
   private readonly identity: Identity
   private readonly pins: () => Pin[]
+  private readonly pinCache?: PinCache
+  private readonly stable = new Map<string, NodeJS.Timeout>()
   private readonly log: (message: string) => void
   private readonly postRows: (rows: StatusRow[]) => Promise<void>
   private server: Server | null = null
@@ -45,7 +49,8 @@ export class Fleet {
   constructor(private readonly options: FleetOptions) {
     const s = options.settings
     this.identity = options.identity ?? loadIdentity(s.stateDir, s.machine)
-    this.pins = options.pins ?? (() => readPins(s.allowlist))
+    this.pinCache = options.pins ? undefined : new PinCache(s.allowlist)
+    this.pins = options.pins ?? (this.pinCache as PinCache).get
     this.log = options.log ?? ((message) => console.log(`[fleet] ${message}`))
     this.postRows =
       options.postRows ??
@@ -64,6 +69,7 @@ export class Fleet {
     const s = this.options.settings
     if (!localAddress(s.listen.address))
       throw new Error('Fleet listener must bind a local LAN address')
+    this.pinCache?.refresh()
     this.pins() // Refuse a missing or malformed allowlist before listening.
     for (const peer of s.peers) {
       if (!validName(peer.name) || peer.name === s.machine)
@@ -91,9 +97,17 @@ export class Fleet {
         resolve()
       })
     })
-    this.server.on('error', (error) => this.log(`Listener failed: ${error.message}`))
+    this.server.on('error', (error) => {
+      this.log(`Listener failed: ${error.message}`)
+      this.options.failed?.(error)
+    })
     for (const peer of s.peers) if (s.machine < peer.name) this.dial(peer.name)
     this.timer = setInterval(() => {
+      try {
+        this.pinCache?.refresh()
+      } catch (error) {
+        this.log(`Pins unavailable: ${(error as Error).message}`)
+      }
       for (const connection of this.connections.values()) connection.recheck()
       void this.report()
     }, s.statusMs)
@@ -110,6 +124,8 @@ export class Fleet {
         pins: this.pins,
         ...(expected ? { expected } : {}),
         deadMs: this.options.settings.deadMs,
+        maxChannels: this.options.settings.maxChannels,
+        bufferBytes: this.options.settings.bufferBytes,
         log: this.log,
         open: (stream, request, peer) => this.openLocal(stream, request, peer),
         ready: (connection) => {
@@ -118,17 +134,23 @@ export class Fleet {
             return
           }
           const current = this.connections.get(connection.peer)
-          if (current && current !== connection) {
-            socket.destroy(new Error('Duplicate fleet connection'))
-            return
-          }
           this.connections.set(connection.peer, connection)
-          this.attempts.delete(connection.peer)
+          if (current && current !== connection) current.socket.destroy()
+          clearTimeout(this.stable.get(connection.peer))
+          const stable = setTimeout(() => {
+            if (this.connections.get(connection.peer) === connection)
+              this.attempts.delete(connection.peer)
+            this.stable.delete(connection.peer)
+          }, this.options.settings.stableMs ?? 30000)
+          stable.unref()
+          this.stable.set(connection.peer, stable)
           this.log(`${connection.peer}: connected`)
           void this.report()
         },
         closed: (connection) => {
           if (this.connections.get(connection.peer) === connection) {
+            clearTimeout(this.stable.get(connection.peer))
+            this.stable.delete(connection.peer)
             this.seen.set(connection.peer, connection.lastSeen)
             this.connections.delete(connection.peer)
             this.log(`${connection.peer}: disconnected`)
@@ -159,8 +181,26 @@ export class Fleet {
       rejectUnauthorized: false,
     })
     this.connecting.add(socket)
-    socket.setTimeout(s.deadMs, () => socket.destroy(new Error('Fleet connection is silent')))
-    socket.once('secureConnect', () => this.accept(socket, name))
+    // Before TLS authentication, bound only the absence of received wire bytes.
+    let lastSeen = Date.now()
+    const received = () => {
+      lastSeen = Date.now()
+    }
+    socket.on('data', received)
+    const silence = setInterval(
+      () => {
+        if (Date.now() - lastSeen >= s.deadMs)
+          socket.destroy(new Error('Fleet connection is silent'))
+      },
+      Math.min(1000, s.deadMs / 2),
+    )
+    silence.unref()
+    socket.once('close', () => clearInterval(silence))
+    socket.once('secureConnect', () => {
+      clearInterval(silence)
+      socket.off('data', received)
+      this.accept(socket, name)
+    })
     socket.on('error', () => {})
     socket.once('close', () => {
       this.connecting.delete(socket)
@@ -199,7 +239,11 @@ export class Fleet {
       if (live) throw new Error(`Another link holds ${path}`)
       unlinkSync(path)
     }
-    const server = createUnixServer({ allowHalfOpen: true }, connection)
+    const server = createUnixServer({ allowHalfOpen: true }, (socket) => {
+      this.local.add(socket)
+      socket.once('close', () => this.local.delete(socket))
+      connection(socket)
+    })
     this.unix.push(server)
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject)
@@ -209,7 +253,10 @@ export class Fleet {
         resolve()
       })
     })
-    server.on('error', (error) => this.log(`Local fleet socket failed: ${error.message}`))
+    server.on('error', (error) => {
+      this.log(`Local fleet socket failed: ${error.message}`)
+      this.options.failed?.(error)
+    })
   }
 
   private forward(name: string, target: string, socket: Socket): void {
@@ -226,6 +273,7 @@ export class Fleet {
         socket.pipe(channel).pipe(socket)
         socket.once('close', () => channel.destroy())
         channel.once('error', () => socket.destroy())
+        channel.once('close', () => socket.destroy())
       } catch {
         socket.destroy()
       }
@@ -263,8 +311,13 @@ export class Fleet {
     socket.on('data', hello)
   }
 
-  private openLocal(channel: Duplex, request: OpenChannel, _peer: string): void {
+  private openLocal(channel: Duplex, request: OpenChannel, peer: string): void {
     const s = this.options.settings
+    const pin = this.pins().find((entry) => entry.name === peer)
+    if (!pin || (pin.role !== 'full' && !['sync', 'jobs'].includes(request.target))) {
+      channel.destroy(new Error('Peer role does not allow this action'))
+      return
+    }
     if (request.target === 'exec' && request.argv) {
       serveExec(channel, request.argv)
       return
@@ -285,6 +338,8 @@ export class Fleet {
     socket.on('error', (error) => channel.destroy(error))
     channel.on('error', () => socket.destroy())
     channel.once('close', () => socket.destroy())
+    // Only the authenticated carrier supplies this preamble, before untrusted HTTP bytes.
+    if (request.target === 'jobs') socket.write(`${peer}\n`)
     channel.pipe(socket).pipe(channel)
   }
 
@@ -325,8 +380,10 @@ export class Fleet {
     this.stopping = true
     if (this.timer) clearInterval(this.timer)
     for (const timer of this.retry.values()) clearTimeout(timer)
+    for (const timer of this.stable.values()) clearTimeout(timer)
     for (const socket of this.connecting) socket.destroy()
     for (const socket of this.accepted) socket.destroy()
+    for (const socket of this.local) socket.destroy()
     for (const connection of this.connections.values()) connection.socket.destroy()
     await Promise.all(
       [...this.unix, ...(this.server ? [this.server] : [])].map(

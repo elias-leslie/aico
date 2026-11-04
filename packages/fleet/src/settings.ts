@@ -18,6 +18,9 @@ export interface FleetSettings {
   jobsSocket?: string
   syncSocket: string
   peerRoot: string
+  stableMs?: number
+  maxChannels?: number
+  bufferBytes?: number
   retryMinMs: number
   retryMaxMs: number
   deadMs: number
@@ -87,6 +90,11 @@ export function readSettings(env: NodeJS.ProcessEnv, controlSocket: string): Fle
     value.retryMaxMs < value.retryMinMs
   )
     throw new Error('Fleet retry, silence and Status intervals must be positive')
+  for (const key of ['stableMs', 'maxChannels', 'bufferBytes'] as const) {
+    const n = value[key]
+    if (n !== undefined && (!Number.isSafeInteger(n) || n <= 0))
+      throw new Error(`Invalid fleet ${key}`)
+  }
   const status = new URL(value.statusUrl)
   if (status.protocol !== 'http:' || status.hostname !== '127.0.0.1')
     throw new Error('Fleet Status writer must use loopback HTTP')

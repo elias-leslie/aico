@@ -62,7 +62,7 @@ Commands:
   tools rm <slug>
   projects [--refresh]          project list (SummitFlow, else local)
   hosts                         remote hosts this Tether federates, with link state
-  fleet identity                show this machine’s public enrollment identity and code
+  fleet identity ROLE           show the public enrollment key and code (full|worker)
   fleet enroll PUBLIC_FILE      ask the owner to approve a machine
   fleet approve FILE ASK PINS    root: pin the exact identity approved in Needs you
   fleet exec SOCKET -- COMMAND  carry a command over an approved fleet connection
@@ -498,7 +498,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         return runFleet([sub ?? '', ...rest], paths, io)
       case 'link':
         io.err(
-          'The fleet link runs with the daemon. Use tether fleet identity to enroll this machine.',
+          'The fleet link runs with the daemon. Use tether fleet identity full|worker to enroll this machine.',
         )
         return 2
       case 'roots':

@@ -1,7 +1,8 @@
 // All lease writes reach one configured authority; no local fallback during a
 // partition. Its own clock decides due/expiry and its durable fence rejects late results.
 import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from 'node:fs'
-import { createServer, request, type Server } from 'node:http'
+import { createServer, request } from 'node:http'
+import { createServer as createCarrier, createConnection, type Server, type Socket } from 'node:net'
 import { dirname } from 'node:path'
 import type { JobDef } from './jobs'
 import { nextRun } from './jobs'
@@ -24,6 +25,7 @@ export function leaseCall(
   jobs: readonly JobDef[],
   authority: string,
   call: LeaseCall,
+  caller: string,
   now = Date.now(),
 ): unknown {
   const job = jobs.find(
@@ -35,6 +37,7 @@ export function leaseCall(
   if (call.op === 'run') return store.runNow(job.kind, now)
   if (call.op === 'claim') {
     const who = call.who
+    if (who?.machine !== caller) throw new Error('Job caller does not match the pinned machine')
     if (!who || typeof who.holder !== 'string' || !who.holder || !workers.includes(who.machine))
       throw new Error('Machine is not a worker for this job')
     return store.claim(
@@ -46,6 +49,7 @@ export function leaseCall(
     )
   }
   const lease = call.lease
+  if (lease?.machine !== caller) throw new Error('Job caller does not match the pinned machine')
   if (!lease || lease.kind !== job.kind || !workers.includes(lease.machine))
     throw new Error('Invalid job lease')
   const held = store.get(job.kind)
@@ -71,19 +75,24 @@ export async function serveLeases(
   store: JobStore,
   jobs: readonly JobDef[],
   authority: string,
-): Promise<Server> {
+): Promise<Server & { closeAllConnections(): void }> {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   if (existsSync(path)) {
     if (!lstatSync(path).isSocket()) throw new Error('Lease path is not a socket')
     // The service is the sole owner; a second runner must never unlink it.
-    const live = await remoteCall(path, { op: 'get', kind: jobs[0]?.kind ?? '' }).then(
-      () => true,
-      (error: Error) => !/ECONNREFUSED|ENOENT/.test(error.message),
-    )
+    const live = await new Promise<boolean>((resolve) => {
+      const socket = createConnection(path)
+      socket.once('connect', () => {
+        socket.destroy()
+        resolve(true)
+      })
+      socket.once('error', () => resolve(false))
+    })
     if (live) throw new Error('Another lease server holds the socket')
     unlinkSync(path)
   }
-  const server = createServer((req, res) => {
+  const callers = new WeakMap<Socket, string>()
+  const http = createServer((req, res) => {
     let text = ''
     req.on('data', (chunk: Buffer) => {
       text += chunk.toString()
@@ -92,7 +101,13 @@ export async function serveLeases(
     req.on('end', () => {
       try {
         if (req.method !== 'POST' || req.url !== '/lease') throw new Error('Unknown lease route')
-        const value = leaseCall(store, jobs, authority, JSON.parse(text) as LeaseCall)
+        const value = leaseCall(
+          store,
+          jobs,
+          authority,
+          JSON.parse(text) as LeaseCall,
+          callers.get(req.socket) ?? '',
+        )
         res.setHeader('content-type', 'application/json')
         res.end(JSON.stringify({ value }))
       } catch (error) {
@@ -105,6 +120,43 @@ export async function serveLeases(
       }
     })
   })
+  // The fleet carrier prepends its authenticated pin name. HTTP headers/body
+  // cannot replace it, including on keep-alive requests over the same channel.
+  const sockets = new Set<Socket>()
+  const server = Object.assign(
+    createCarrier((socket) => {
+      sockets.add(socket)
+      socket.on('error', () => {})
+      socket.once('close', () => sockets.delete(socket))
+      let prefix = Buffer.alloc(0)
+      const identify = (chunk: Buffer) => {
+        prefix = Buffer.concat([prefix, chunk])
+        const end = prefix.indexOf(10)
+        if ((end < 0 && prefix.length > 63) || end > 63) {
+          socket.destroy()
+          return
+        }
+        if (end < 0) return
+        const caller = prefix.subarray(0, end).toString()
+        if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(caller)) {
+          socket.destroy()
+          return
+        }
+        socket.pause()
+        socket.off('data', identify)
+        callers.set(socket, caller)
+        if (prefix.length > end + 1) socket.unshift(prefix.subarray(end + 1))
+        http.emit('connection', socket)
+        socket.resume()
+      }
+      socket.on('data', identify)
+    }),
+    {
+      closeAllConnections: () => {
+        for (const socket of sockets) socket.destroy()
+      },
+    },
+  )
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
     server.listen(path, () => {

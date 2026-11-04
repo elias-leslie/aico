@@ -15,7 +15,11 @@ it('carries fenced claims, renewals and late result refusal over two real TLS pe
   const root = mkdtempSync(join(tmpdir(), 'fleet-job-'))
   const home = loadIdentity(join(root, 'home'), 'runner-home')
   const peer = loadIdentity(join(root, 'peer'), 'lease-holder')
-  const pins = [home, peer].map(({ name, publicKey }) => ({ name, publicKey }))
+  const pins = [home, peer].map(({ name, publicKey }) => ({
+    name,
+    publicKey,
+    role: 'full' as const,
+  }))
   const getPort = async () => {
     const server = portServer()
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
@@ -81,6 +85,9 @@ it('carries fenced claims, renewals and late result refusal over two real TLS pe
     await pf.start()
     await vi.waitFor(() => expect(hf.status()[0]?.connected).toBe(true))
     const remote = remoteAuthority(join(hs.peerRoot, peer.name, 'jobs.sock'))
+    await expect(
+      remote.claim(job.kind, { holder: 'forged', machine: peer.name }, 0, 0),
+    ).rejects.toThrow('pinned machine')
     const old = await remote.claim(job.kind, { holder: 'home-runner', machine: home.name }, 0, 0)
     expect(old?.fence).toBe(1)
     if (!old) throw new Error('No home lease')
@@ -144,15 +151,17 @@ it('uses authority configuration and clock for claims, never caller TTL or sched
       [job],
       'holder',
       { op: 'claim', kind: 'job', who: { holder: 'x', machine: 'unknown' } },
+      'peer',
       1000,
     ),
-  ).toThrow('not a worker')
+  ).toThrow('pinned machine')
   expect(
     leaseCall(
       store,
       [job],
       'holder',
       { op: 'claim', kind: 'job', who: { holder: 'p', machine: 'peer' } },
+      'peer',
       1000,
     ),
   ).toBeNull()
@@ -161,6 +170,7 @@ it('uses authority configuration and clock for claims, never caller TTL or sched
     [job],
     'holder',
     { op: 'claim', kind: 'job', who: { holder: 'h', machine: 'home' } },
+    'home',
     1000,
   )
   expect(lease).toMatchObject({ fence: 1 })
