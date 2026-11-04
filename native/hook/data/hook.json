@@ -1,6 +1,5 @@
 {
   "lease": {
-    "dir": "~/.summitflow/leases",
     "idle_ttl_minutes": 30,
     "active_minutes": 10,
     "registry_hours": 24,
@@ -18,6 +17,10 @@
     "command": ["~/.summitflow/services/projects/aico/current/source/packages/web-server/scripts/aico", "context", "deliver"],
     "timeout_seconds": 8,
     "tool": { "claude": "claude-code", "codex": "codex", "pi": "pi" }
+  },
+  "inbox": {
+    "memory": ["bash", "~/.claude/hooks/coord-inbox.sh", "memory"],
+    "timeout_seconds": 5
   },
   "startup_brief": {
     "release": "~/.summitflow/services/projects/summitflow/current/source",

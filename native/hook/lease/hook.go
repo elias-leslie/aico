@@ -14,6 +14,8 @@ type Hook struct {
 	Payload map[string]any
 	ID      Identity
 	lin     *Lineage
+	// Extra is text the inbox hook adds to what it shows on a turn event (the memory notice), set by the caller.
+	Extra func(event string) string
 }
 
 func New(cfg Config, payload map[string]any) *Hook {

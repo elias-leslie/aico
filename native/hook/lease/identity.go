@@ -231,33 +231,24 @@ func anchorAlive(anchor string) bool {
 	return err == nil && n >= 0 && processAlive(n, start)
 }
 
-// ---------------------------------------------------------------- registry (_coord.json)
+// ---------------------------------------------------------------- registry (the _coord document)
 
-func (c Config) coordPath() string { return filepath.Join(c.dir(), "_coord.json") }
+const coordDoc = "_coord"
 
 func (c Config) loadDoc() map[string]any {
-	raw, err := os.ReadFile(c.coordPath())
-	if err != nil {
-		return map[string]any{}
-	}
-	var d map[string]any
-	if json.Unmarshal(raw, &d) != nil || d == nil {
-		return map[string]any{}
+	d := map[string]any{}
+	for k, v := range readDoc(coordDoc) {
+		var x any
+		if json.Unmarshal(v, &x) == nil {
+			d[k] = x
+		}
 	}
 	return d
 }
 
-func (c Config) saveDoc(d map[string]any) error {
-	buf, err := marshal(d, " ")
-	if err != nil {
-		return err
-	}
-	return replaceFile(c.coordPath(), filepath.Join(c.dir(), fmt.Sprintf("_coord.%d.tmp", os.Getpid())), buf)
-}
+func (c Config) saveDoc(d map[string]any) error { return writeDoc(coordDoc, d) }
 
-func (c Config) withCoordLock(fn func() error) error {
-	return lockFile(filepath.Join(c.dir(), "_coord.lock"), fn)
-}
+func (c Config) withCoordLock(fn func() error) error { return withDocLock(coordDoc, fn) }
 
 func rows(d map[string]any, key string) map[string]map[string]any {
 	out := map[string]map[string]any{}

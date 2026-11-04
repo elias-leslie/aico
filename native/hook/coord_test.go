@@ -1,0 +1,119 @@
+package main
+
+import (
+	"io"
+	"os"
+	"strings"
+	"testing"
+)
+
+// capture runs fn with stdout and stderr redirected and returns both.
+func capture(t *testing.T, fn func() int) (code int, out, errOut string) {
+	t.Helper()
+	oldOut, oldErr := os.Stdout, os.Stderr
+	ro, wo, _ := os.Pipe()
+	re, we, _ := os.Pipe()
+	os.Stdout, os.Stderr = wo, we
+	code = fn()
+	os.Stdout, os.Stderr = oldOut, oldErr
+	wo.Close()
+	we.Close()
+	o, _ := io.ReadAll(ro)
+	e, _ := io.ReadAll(re)
+	return code, string(o), string(e)
+}
+
+func as(t *testing.T, session string) { t.Setenv("CLAUDE_CODE_SESSION_ID", session) }
+
+const (
+	sessA = "11111111-aaaa-4bbb-8ccc-000000000001"
+	sessB = "22222222-aaaa-4bbb-8ccc-000000000002"
+)
+
+func TestLeaseVerbsAndHandshakeFromTheCommandLine(t *testing.T) {
+	repo := sandbox(t)
+	t.Chdir(repo)
+	run := func(session, mode string, args ...string) (int, string, string) {
+		as(t, session)
+		return capture(t, func() int { return coordMain(mode, args) })
+	}
+
+	if code, out, _ := run(sessA, "lease", "src/**", "--task", "T1"); code != 0 || !strings.HasPrefix(out, "Acquired lease ") {
+		t.Fatalf("acquire: %d %q", code, out)
+	}
+	if code, out, _ := run(sessB, "lease", "--list"); code != 0 || !strings.Contains(out, "cc:111111 · lease:'") || !strings.Contains(out, "task:T1") {
+		t.Fatalf("list: %d %q", code, out)
+	}
+	if code, _, errOut := run(sessB, "lease", "--check", "src/a.go"); code != 0 || !strings.HasPrefix(errOut, "WARNING: ") {
+		t.Fatalf("check: %d %q", code, errOut)
+	}
+	if code, out, _ := run(sessA, "lease", "--release-all"); code != 0 || out != "Released 1 lease(s).\n" {
+		t.Fatalf("release: %d %q", code, out)
+	}
+	if code, _, errOut := run(sessA, "lease", "list"); code != 2 || !strings.Contains(errOut, "use --list") {
+		t.Fatalf("an action word is not a path: %d %q", code, errOut)
+	}
+
+	code, out, _ := run(sessA, "sessions", "send", "cc:222222", "please look at the lease change", "--source-key", "k1")
+	if code != 0 || !strings.HasPrefix(out, "sent ") {
+		t.Fatalf("send: %d %q", code, out)
+	}
+	id := strings.Fields(out)[1]
+	if _, again, _ := run(sessA, "sessions", "send", "cc:222222", "other", "--source-key", "k1"); !strings.HasPrefix(again, "existing "+id) {
+		t.Errorf("duplicate send: %q", again)
+	}
+	if _, inbox, _ := run(sessB, "sessions", "inbox"); !strings.HasPrefix(inbox, id+" open cc:111111->cc:222222 - | please look") {
+		t.Errorf("recipient inbox: %q", inbox)
+	}
+	if _, inbox, _ := run(sessA, "sessions", "inbox"); !strings.HasPrefix(inbox, id+" open/unseen ") {
+		t.Errorf("sender inbox: %q", inbox)
+	}
+	if code, _, errOut := run(sessB, "sessions", "ack", id, "no"); code != 2 || !strings.Contains(errOut, "needs a short reason") {
+		t.Errorf("no without a reason: %d %q", code, errOut)
+	}
+	if code, out, _ := run(sessB, "sessions", "ack", id, "yes", "done, see the diff"); code != 0 || !strings.HasPrefix(out, "acked "+id+" yes") {
+		t.Errorf("ack: %d %q", code, out)
+	}
+	if code, out, _ := run(sessA, "sessions", "confirm", id); code != 0 || out != "closed "+id+"\n" {
+		t.Errorf("confirm: %d %q", code, out)
+	}
+	if code, _, errOut := run(sessA, "sessions", "send", "cc:222222", "x", "--delivery", "fleet-stream"); code != 2 || !strings.Contains(errOut, "handshakes only") {
+		t.Errorf("fleet delivery stays in st: %d %q", code, errOut)
+	}
+}
+
+func TestInboxHookPrintsHookJSON(t *testing.T) {
+	repo := sandbox(t)
+	t.Chdir(repo)
+	as(t, sessA)
+	if code, _, _ := capture(t, func() int {
+		return coordMain("sessions", []string{"send", "cc:222222", "urgent: build is red"})
+	}); code != 0 {
+		t.Fatal("send failed")
+	}
+	as(t, sessB)
+	stdin(t, `{"hook_event_name":"UserPromptSubmit","session_id":"`+sessB+`","prompt":"hi"}`)
+	code, out, _ := capture(t, func() int { return coordMain("inbox", []string{"turn"}) })
+	if code != 0 || !strings.Contains(out, `"hookEventName":"UserPromptSubmit"`) || !strings.Contains(out, "URGENT REQUEST") {
+		t.Fatalf("turn: %d %q", code, out)
+	}
+	stdin(t, `{"hook_event_name":"UserPromptSubmit","session_id":"`+sessB+`"}`)
+	if _, out, _ = capture(t, func() int { return coordMain("inbox", []string{"turn"}) }); out != "" {
+		t.Errorf("shown once: %q", out)
+	}
+	stdin(t, `{}`)
+	if code, out, _ = capture(t, func() int { return coordMain("inbox", []string{"watch"}) }); code != 0 || out != "" {
+		t.Errorf("watch is a no-op: %d %q", code, out)
+	}
+}
+
+// stdin replaces os.Stdin with text for the rest of the test.
+func stdin(t *testing.T, text string) {
+	t.Helper()
+	r, w, _ := os.Pipe()
+	_, _ = w.WriteString(text)
+	w.Close()
+	old := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = old })
+}

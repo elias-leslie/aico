@@ -4,6 +4,7 @@
 //	aico-hook claude|codex|pi   a hook event on stdin (Claude-style JSON; the event is hook_event_name)
 //	aico-hook guard             the guard only: {} or a PreToolUse deny (Aico's agent harness)
 //	aico-hook codex-trust       mark this config's Codex hooks trusted through Codex's own /hooks flow
+//	aico-hook lease|sessions|inbox|import-legacy   the agent's coordination verbs and inbox hook (coord.go)
 //
 // Output is the Claude Code hook JSON on stdout (Codex reads the same; the Pi extension maps it), exit 0.
 // The guard fails closed: when guard.json cannot be loaded, or anything on the guard path panics or runs past
@@ -47,7 +48,11 @@ type Config struct {
 	} `json:"tools"`
 	shell, edit   *regexp.Regexp // Tools, compiled by loadConfig
 	GitHubPATHint string         `json:"github_pat_hint"`
-	Context       struct {
+	Inbox         struct {
+		Memory         []string `json:"memory"`
+		TimeoutSeconds float64  `json:"timeout_seconds"`
+	} `json:"inbox"`
+	Context struct {
 		Command        []string          `json:"command"`
 		TimeoutSeconds float64           `json:"timeout_seconds"`
 		Tool           map[string]string `json:"tool"`
@@ -132,6 +137,9 @@ func main() {
 		os.Exit(2)
 	}
 	mode := os.Args[1]
+	if isCoordMode(mode) {
+		os.Exit(coordMain(mode, os.Args[2:]))
+	}
 	if mode == "codex-trust" {
 		os.Exit(codexTrust(os.Args[2:]))
 	}

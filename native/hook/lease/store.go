@@ -1,12 +1,10 @@
 // Package lease is the coordination side of aico-hook: edit leases, writer sets,
-// shell-write attribution and the identity registry, on the stores `st lease`,
-// `st sessions` and `st commit` read (~/.summitflow/leases, SummitFlow
-// cli/lib/leases.py and coord_lineage.py) until M10a moves them. Field names,
-// file names, locks and timestamps stay as SummitFlow writes them.
+// shell-write attribution and the identity registry, on Tether's coordination
+// store (docs.go). Field names and timestamps stay as SummitFlow's leases.py and
+// coord_lineage.py wrote them, since `st commit` and `st check` still read them.
 package lease
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -16,20 +14,18 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"time"
 )
 
 // Config is the decided part of the coordination policy (data/hook.json "lease").
 type Config struct {
-	Dir             string `json:"dir"`               // default ~/.summitflow/leases; ST_LEASES_DIR overrides
-	IdleTTLMinutes  int    `json:"idle_ttl_minutes"`  // a file/hold lease idle this long is released
-	ActiveMinutes   int    `json:"active_minutes"`    // reserved: st's ACTIVE_WINDOW
-	RegistryHours   int    `json:"registry_hours"`    // identity rows kept this long after last use
-	NoteHours       int    `json:"note_hours"`        // peer reset notes kept this long
-	UnackedMinutes  int    `json:"unacked_minutes"`   // a request unanswered this long surfaces once to its sender
-	SnapshotMaxMins int    `json:"snapshot_max_mins"` // stale shell snapshots are removed after this
-	RegistrySaveSec int    `json:"registry_save_sec"` // registry rows are rewritten at most this often
+	IdleTTLMinutes  int `json:"idle_ttl_minutes"`  // a file/hold lease idle this long is released
+	ActiveMinutes   int `json:"active_minutes"`    // reserved: st's ACTIVE_WINDOW
+	RegistryHours   int `json:"registry_hours"`    // identity rows kept this long after last use
+	NoteHours       int `json:"note_hours"`        // peer reset notes kept this long
+	UnackedMinutes  int `json:"unacked_minutes"`   // a request unanswered this long surfaces once to its sender
+	SnapshotMaxMins int `json:"snapshot_max_mins"` // stale shell snapshots are removed after this
+	RegistrySaveSec int `json:"registry_save_sec"` // registry rows are rewritten at most this often
 }
 
 // withDefaults puts st's values in place of a missing, zero or negative window: with a zero idle TTL every lease
@@ -48,17 +44,6 @@ func (c Config) withDefaults() Config {
 }
 
 func (c Config) idleTTL() time.Duration { return time.Duration(c.IdleTTLMinutes) * time.Minute }
-
-// Dir is where the stores live.
-func (c Config) dir() string {
-	if v := os.Getenv("ST_LEASES_DIR"); v != "" {
-		return v
-	}
-	if c.Dir != "" {
-		return expandHome(c.Dir)
-	}
-	return filepath.Join(home(), ".summitflow", "leases")
-}
 
 func home() string {
 	if h := os.Getenv("HOME"); h != "" {
@@ -202,26 +187,8 @@ func (c Config) store(project string) (*Store, error) {
 	return &Store{cfg: c.withDefaults(), project: project}, nil
 }
 
-func (s *Store) path(suffix string) string { return filepath.Join(s.cfg.dir(), s.project+suffix) }
-
-// withLock runs fn under the project's exclusive flock (leases._lock).
-func (s *Store) withLock(fn func() error) error { return lockFile(s.path(".lock"), fn) }
-
-func lockFile(path string, fn func() error) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:errcheck
-	return fn()
-}
+// withLock runs fn holding the project document's lock (leases._lock).
+func (s *Store) withLock(fn func() error) error { return withDocLock(s.project, fn) }
 
 // Writers maps an absolute path to its writer entries ({agent_id, session_id, anchor, at, sensitive[, reason, by]}).
 type Writers map[string][]map[string]any
@@ -231,17 +198,7 @@ type doc struct {
 	writers Writers
 }
 
-func (s *Store) read() map[string]json.RawMessage {
-	raw, err := os.ReadFile(s.path(".json"))
-	if err != nil {
-		return map[string]json.RawMessage{}
-	}
-	var out map[string]json.RawMessage
-	if json.Unmarshal(raw, &out) != nil || out == nil {
-		return map[string]json.RawMessage{}
-	}
-	return out
-}
+func (s *Store) read() map[string]json.RawMessage { return readDoc(s.project) }
 
 func (s *Store) load() doc {
 	raw := s.read()
@@ -331,32 +288,7 @@ func (s *Store) save(d doc) error {
 		Leases  []Lease `json:"leases"`
 		Writers Writers `json:"writers,omitempty"`
 	}{leases, d.writers}
-	buf, err := marshal(out, "  ")
-	if err != nil {
-		return err
-	}
-	return replaceFile(s.path(".json"), s.path(".tmp"), buf)
-}
-
-func marshal(v any, indent string) ([]byte, error) {
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", indent)
-	if err := enc.Encode(v); err != nil {
-		return nil, err
-	}
-	return bytes.TrimRight(b.Bytes(), "\n"), nil
-}
-
-func replaceFile(path, tmp string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeDoc(s.project, out)
 }
 
 func (s *Store) purge(leases []Lease) []Lease {
@@ -396,17 +328,7 @@ func (s *Store) Active(kinds ...string) ([]Lease, error) {
 }
 
 // allProjects lists the project stores (leases.all_projects).
-func (c Config) allProjects() []string {
-	entries, _ := os.ReadDir(c.dir())
-	var out []string
-	for _, e := range entries {
-		name := e.Name()
-		if strings.HasSuffix(name, ".json") && !strings.HasPrefix(name, "_") {
-			out = append(out, strings.TrimSuffix(name, ".json"))
-		}
-	}
-	return out
-}
+func (c Config) allProjects() []string { return projectDocs() }
 
 // ---------------------------------------------------------------- time, procs, helpers
 

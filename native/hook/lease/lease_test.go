@@ -1,6 +1,7 @@
 package lease
 
 import (
+	"aico/hook/testtether"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -20,9 +21,8 @@ func testConfig() Config {
 func sandbox(t *testing.T) (repo string) {
 	t.Helper()
 	tmp := t.TempDir()
-	t.Setenv("ST_LEASES_DIR", filepath.Join(tmp, "leases"))
 	t.Setenv("XDG_RUNTIME_DIR", filepath.Join(tmp, "run"))
-	t.Setenv("TETHER_SOCKET", filepath.Join(tmp, "none.sock"))
+	fake = testtether.Start(t, filepath.Join(tmp, "tether"))
 	t.Setenv("ST_COORD_ANCHOR", "")
 	t.Setenv("ST_COORD_HARNESS", "")
 	t.Setenv("ST_COORD_SENSITIVE", "")
@@ -44,15 +44,14 @@ func edit(sid, path string) map[string]any {
 		"tool_input": map[string]any{"file_path": path}, "cwd": filepath.Dir(path)}
 }
 
+// fake is this test's Tether (coordination documents in memory).
+var fake *testtether.Server
+
 func storeDoc(t *testing.T, project string) map[string]json.RawMessage {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(os.Getenv("ST_LEASES_DIR"), project+".json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var d map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &d); err != nil {
-		t.Fatal(err)
+	d := fake.Doc(project)
+	if d == nil {
+		t.Fatalf("no %s document in the store", project)
 	}
 	return d
 }
@@ -181,37 +180,6 @@ func TestShortID(t *testing.T) {
 		if got := ShortID(in); got != want {
 			t.Errorf("ShortID(%q) = %q, want %q", in, got, want)
 		}
-	}
-}
-
-// TestStoreReadableBySummitFlow: SummitFlow's st lease keeps reading this store until M10a. Skipped where the
-// SummitFlow checkout is absent (set AICO_HOOK_SF to its backend directory to point elsewhere).
-func TestStoreReadableBySummitFlow(t *testing.T) {
-	backend := os.Getenv("AICO_HOOK_SF")
-	if backend == "" {
-		backend = "/srv/workspaces/projects/summitflow/backend"
-	}
-	py := filepath.Join(backend, ".venv/bin/python")
-	if _, err := os.Stat(py); err != nil {
-		t.Skip("SummitFlow backend not present")
-	}
-	repo := sandbox(t)
-	file := filepath.Join(repo, "a.txt")
-	New(testConfig(), edit("44444444-aaaa-4bbb-8ccc-000000000004", file)).Edit()
-	New(testConfig(), edit("55555555-aaaa-4bbb-8ccc-000000000005", file)).Edit()
-	code := `import sys; sys.path.insert(0, sys.argv[1])
-from cli.lib import leases
-print(" ".join(sorted(l.agent_id for l in leases.list_active("demo"))))
-print(len(leases.writers("demo").get(sys.argv[2], [])))`
-	real, _ := filepath.EvalSymlinks(repo)
-	cmd := exec.Command(py, "-I", "-c", code, backend, filepath.Join(real, "a.txt"))
-	cmd.Env = append(os.Environ(), "ST_LEASES_DIR="+os.Getenv("ST_LEASES_DIR"))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("SummitFlow could not read the store: %v\n%s", err, out)
-	}
-	if got := strings.Fields(string(out)); len(got) != 3 || got[0] != "cc:444444" || got[1] != "cc:555555" || got[2] != "2" {
-		t.Errorf("SummitFlow sees %q", out)
 	}
 }
 

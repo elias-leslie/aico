@@ -1,6 +1,7 @@
 package main
 
 import (
+	"aico/hook/testtether"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -46,6 +47,7 @@ func sandbox(t *testing.T) string {
 				t.Fatal(err)
 			}
 			cfg["context"].(map[string]any)["command"] = []any{}
+			cfg["inbox"].(map[string]any)["memory"] = []any{}
 			raw, _ = json.Marshal(cfg)
 		}
 		if err := os.WriteFile(filepath.Join(data, name), raw, 0o644); err != nil {
@@ -53,9 +55,8 @@ func sandbox(t *testing.T) string {
 		}
 	}
 	t.Setenv("AICO_HOOK_DATA", data)
-	t.Setenv("ST_LEASES_DIR", filepath.Join(tmp, "leases"))
 	t.Setenv("XDG_RUNTIME_DIR", filepath.Join(tmp, "run"))
-	t.Setenv("TETHER_SOCKET", filepath.Join(tmp, "none.sock"))
+	testtether.Start(t, filepath.Join(tmp, "tether"))
 	t.Setenv("ST_COORD_ANCHOR", "")
 	for _, k := range []string{"ST_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID",
 		"CODEX_THREAD_ID", "PI_SESSION_ID", "ANTIGRAVITY_CONVERSATION_ID", "TMUX", "TMUX_PANE"} {
