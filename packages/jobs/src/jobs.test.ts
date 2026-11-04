@@ -85,6 +85,11 @@ describe('the schedule', () => {
       every_min: 10,
       run: { command: expect.arrayContaining(['import-agent-hub']) },
     })
+    const command = shipped.find((job) => job.kind === 'context-import')!.run
+    expect('command' in command && command.command[0]).toBe(
+      new URL('../../web-server/scripts/aico', new URL('../data/jobs.json', import.meta.url))
+        .pathname,
+    )
   })
 
   it('reads the shipped job list and refuses a bad one by field', () => {

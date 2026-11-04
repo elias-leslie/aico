@@ -82,6 +82,10 @@ describe('unit selection from package cones', () => {
       stale: [],
     })
   })
+  it('context and usage changes restart the scheduler that calls their CLI bundle', () => {
+    expect(pick(['packages/context/src/db.ts']).restart).toContain('aico-jobs.service')
+    expect(pick(['packages/usage/src/db.ts']).restart).toContain('aico-jobs.service')
+  })
 
   it('a docs-only change restarts nothing; an explicit scope or worker still does', () => {
     expect(pick(['docs/notes.md']).restart).toEqual([])

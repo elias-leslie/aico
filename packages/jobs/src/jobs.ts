@@ -2,6 +2,7 @@
 // and schedules. A missing worker list keeps a job bound to its home machine.
 
 import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 
 export interface JobDef {
   kind: string
@@ -102,7 +103,13 @@ export function parseJobs(value: unknown): JobDef[] {
 }
 
 export function readJobs(path: string): JobDef[] {
-  return parseJobs(JSON.parse(readFileSync(path, 'utf8')))
+  return parseJobs(JSON.parse(readFileSync(path, 'utf8'))).map((job) => {
+    if (!('command' in job.run)) return job
+    const [file, ...args] = job.run.command
+    return file?.startsWith('.')
+      ? { ...job, run: { command: [resolve(dirname(path), file), ...args] } }
+      : job
+  })
 }
 
 /** The first local `at` (HH:MM) strictly after `after`. */
