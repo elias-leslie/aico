@@ -1,10 +1,25 @@
 // context.db: memories, prompts, roles with their launch rows, context budgets,
 // project permissions and the models the launch policy names; route() answers
-// `models route`; the Agent Hub import fills it (cutlist 3.1).
+// `models route`; deliver() builds each session's context; the Agent Hub import
+// fills it (cutlist 3.1).
 
 export { agentHubRoute, agentHubSource } from './agent-hub'
 export { CONTEXT_COMMANDS, type ContextCliIo, runContextCli } from './cli'
 export { contextDbPath, type Database, openContext } from './db'
+export {
+  type Activity,
+  DELIVERY,
+  type DeliverRequest,
+  type Delivery,
+  deliver,
+  deliveryTools,
+  readToolUsage,
+  recordDelivery,
+  type Section,
+  type Source,
+  setDeliveryTool,
+  toolId,
+} from './deliver'
 export { type AgentHubSource, type ImportResult, importAgentHub } from './import'
 export { type LaunchPolicy, loadPolicy } from './launch'
 export {

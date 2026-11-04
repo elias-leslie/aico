@@ -6,6 +6,16 @@ import { readFileSync } from 'node:fs'
 import importData from '../data/agent-hub-import.json' with { type: 'json' }
 import { type Database, openContext } from './db'
 import {
+  type Activity,
+  deliver,
+  deliveryTools,
+  recordDelivery,
+  type Source,
+  setDeliveryTool,
+  toolId,
+  UnknownTool,
+} from './deliver'
+import {
   formatLaunch,
   formatMemories,
   formatMemoryList,
@@ -50,6 +60,14 @@ export interface ContextCliIo {
     source(checkout: string): AgentHubSource
     route(role: string, project?: string): { payload: unknown } | { error: string }
   }
+  /** `context deliver`: the environment it reads (session, role, already-delivered
+   * markers) and its two computed sources; absent, deliver has neither block. */
+  delivery?: {
+    env: NodeJS.ProcessEnv
+    toolUsage(): Promise<Source<string>>
+    /** The other sessions in a project, from Tether. */
+    activity(project: string, except: string | null): Promise<Source<Activity[]>>
+  }
 }
 
 const USAGE = `Usage: aico <memory|prompt|models|context> ...
@@ -62,6 +80,9 @@ const USAGE = `Usage: aico <memory|prompt|models|context> ...
   aico prompt get SLUG
   aico models route --role R [--tool T] [--model M] [--project P] [--json]
   aico context import-agent-hub [--checkout DIR] [--json]
+  aico context deliver --tool T [--project P] [--session S] [--role R] [--coordinator]
+                       [--event E] [--format text|json|claude|codex|pi] [--force]
+  aico context delivery [TOOL on|off]
 `
 
 class UsageError extends Error {}
@@ -351,8 +372,92 @@ async function postStatus(
   }
 }
 
+const DELIVER_FLAGS = {
+  '--tool': 'tool',
+  '--project': 'project',
+  '--session': 'session',
+  '--role': 'role',
+  '--event': 'event',
+  '--format': 'format',
+}
+const FORMATS = ['text', 'json', 'claude', 'codex', 'pi'] as const
+const HOOK_FORMATS: readonly string[] = ['claude', 'codex', 'pi']
+
+/** `context deliver`: contracts/context-delivery.schema.json is the contract. */
+async function deliverCommand(db: () => Database, rest: string[], io: ContextCliIo) {
+  const parsed = parse(rest, DELIVER_FLAGS, ['--coordinator', '--force'])
+  const env = io.delivery?.env ?? {}
+  const format = oneOf(parsed, 'format', FORMATS) ?? 'text'
+  const name = str(parsed, 'tool')
+  if (!name) throw new UsageError('context deliver needs --tool')
+  let tool: string
+  try {
+    tool = toolId(name)
+  } catch (error) {
+    if (error instanceof UnknownTool) throw new UsageError(error.message)
+    throw error
+  }
+  // A hook never adds a second copy of what the launch already delivered.
+  const delivered = env.AICO_CONTEXT_DELIVERED || env.AGENT_HUB_CONTEXT_PREINJECTED_HASH
+  if (HOOK_FORMATS.includes(format) && delivered && !parsed.flags.has('--force')) return 0
+  const project = str(parsed, 'project') ?? env.AICO_PROJECT_ID ?? ''
+  const session = str(parsed, 'session') ?? env.AICO_SESSION_ID ?? null
+  const [toolUsage, activity] = await Promise.all([
+    io.delivery?.toolUsage(),
+    project ? io.delivery?.activity(project, session) : undefined,
+  ])
+  let result: ReturnType<typeof deliver>
+  try {
+    const opened = db()
+    result = deliver(opened, {
+      tool,
+      project,
+      session,
+      role: str(parsed, 'role') ?? env.ST_WORK_ROLE ?? null,
+      coordinator: parsed.flags.has('--coordinator'),
+      ...(toolUsage === undefined ? {} : { toolUsage }),
+      ...(activity === undefined ? {} : { activity }),
+      now: io.now(),
+    })
+    if (HOOK_FORMATS.includes(format) && result.text)
+      recordDelivery(opened, result, `hook:${format}`, io.now())
+  } catch (error) {
+    io.err(`aico context deliver: ${(error as Error).message}\n`)
+    return 1
+  }
+  for (const gap of result.missing) io.err(`aico context deliver: no ${gap.id}: ${gap.reason}\n`)
+  if (format === 'json') io.out(`${JSON.stringify(result, null, 2)}\n`)
+  else if (format === 'claude' || format === 'codex') {
+    if (result.text)
+      io.out(
+        `${JSON.stringify({ hookSpecificOutput: { hookEventName: str(parsed, 'event') ?? 'SessionStart', additionalContext: result.text } })}\n`,
+      )
+  } else io.out(result.text ? `${result.text}\n` : '')
+  return 0
+}
+
+function deliverySwitch(db: Database, rest: string[], io: ContextCliIo): number {
+  const [tool, state, ...extra] = rest
+  if (tool !== undefined) {
+    if (extra.length || (state !== 'on' && state !== 'off'))
+      throw new UsageError('context delivery takes TOOL on|off')
+    try {
+      setDeliveryTool(db, tool, state === 'on')
+    } catch (error) {
+      if (error instanceof UnknownTool) throw new UsageError(error.message)
+      throw error
+    }
+  }
+  const tools = deliveryTools(db)
+  io.out(
+    `Tether delivers Aico's context to: ${tools.length ? tools.join(', ') : 'none'} (the rest get Agent Hub's)\n`,
+  )
+  return 0
+}
+
 async function context(db: Database, argv: string[], io: ContextCliIo): Promise<number> {
   const [sub, ...rest] = argv
+  if (sub === 'delivery') return deliverySwitch(db, rest, io)
   if (sub !== 'import-agent-hub') throw new UsageError(`unknown context command ${sub ?? '(none)'}`)
   const parsed = parse(rest, { '--checkout': 'checkout' }, ['--json'])
   const checkout = str(parsed, 'checkout') ?? io.agentHub.checkout
@@ -390,6 +495,17 @@ export async function runContextCli(
   }
   let db: Database | null = null
   try {
+    // Deliver opens the file itself, after its fast already-delivered check, and
+    // answers a broken file with one line instead of a stack.
+    if (command === 'context' && argv[0] === 'deliver')
+      return await deliverCommand(
+        () => {
+          db = openContext(io.dbPath)
+          return db
+        },
+        argv.slice(1),
+        io,
+      )
     db = openContext(io.dbPath)
     if (command === 'memory') return memory(db, argv, io)
     if (command === 'prompt') return prompt(db, argv, io)
@@ -401,6 +517,6 @@ export async function runContextCli(
     io.err(`${error.message}\n\n${USAGE}`)
     return 2
   } finally {
-    db?.close()
+    ;(db as Database | null)?.close()
   }
 }

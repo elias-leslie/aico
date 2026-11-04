@@ -574,6 +574,8 @@ export const codex: TuiAdapter = {
   spec: {
     resume: { sessionIdPattern: UUID_RE, arguments: ['resume', '--no-daemon'] },
     instructions: { arguments: ['-c'], key: 'developer_instructions' },
+    // Lossless additive developer instructions; hook output is cut to a preview.
+    contextDelivery: { kind: 'config', arguments: ['-c'], key: 'developer_instructions' },
     modelSelection: {
       model: ['--model'],
       reasoningEffort: { arguments: ['-c'], key: 'model_reasoning_effort' },

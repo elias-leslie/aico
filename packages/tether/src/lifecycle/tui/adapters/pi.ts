@@ -329,6 +329,8 @@ export const pi: TuiAdapter = {
       freshArguments: ['--session-id'],
     },
     instructions: { arguments: ['--append-system-prompt'] },
+    // `--append-system-prompt` takes a file's contents, and may be given twice.
+    contextDelivery: { kind: 'file', arguments: ['--append-system-prompt'] },
     inputLine: 'ruled',
     modelSelection: {
       model: ['--model'],

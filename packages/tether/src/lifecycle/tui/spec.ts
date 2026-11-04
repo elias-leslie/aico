@@ -75,6 +75,24 @@ export interface TuiSpec {
   instructions?: { arguments: string[]; key?: string }
   /** Set per session by `withInstructions`: the snapshot file each launch reads. */
   chosenInstructions?: { file: string; label: string }
+  /** How the tool takes Aico's context delivery (delivery.ts): `claude-md`, a
+   * CLAUDE.md in a directory added with `arguments` (and `env`); `config`,
+   * `arguments` then `key=<TOML string>`; `file`, `arguments` then a file whose
+   * text the tool appends to its system prompt. */
+  contextDelivery?:
+    | { kind: 'claude-md'; arguments: string[]; env: Record<string, string> }
+    | { kind: 'config'; arguments: string[]; key: string }
+    | { kind: 'file'; arguments: string[] }
+  /** Set per launch by `withContextDelivery`: the shell words and environment
+   * that hand this launch's delivery to the tool. `instructions`: the chosen
+   * instructions are in the delivery, so the launch adds no second copy. */
+  deliveredContext?: {
+    arguments: string[]
+    env: Record<string, string>
+    instructions: boolean
+    hash: string
+    bytes: number
+  }
   /** Arguments the launch line adds when `command` lacks them (Pi's `--approve`). */
   ensureArgs?: string[]
   /** Launch settings travel in AICO_ROOT_* variables the tool's extension reads (Pi). */

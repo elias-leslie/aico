@@ -9,6 +9,8 @@
 //   role names kept from Agent Hub's agent rows; role_prompts links prompts to them.
 // - launch_tools, launch_providers, launch_deny: the rest of the launch policy.
 // - context_budgets, project_permissions, settings.
+// - deliveries and delivery_items: what each context delivery loaded into a
+//   session, item by item with its size (deliver.ts), for the context cost view.
 
 import { join } from 'node:path'
 import { type Database, openDatabase } from '@aico/store'
@@ -147,6 +149,33 @@ const MIGRATIONS = [
    CREATE TABLE settings (
      key TEXT PRIMARY KEY,
      value TEXT NOT NULL
+   ) STRICT;`,
+  // Context delivery inventory (deliver.ts): one row per delivery that reached a
+  // session, one item row per prompt, memory or computed block it held or cut.
+  `CREATE TABLE deliveries (
+     id INTEGER PRIMARY KEY,
+     at TEXT NOT NULL,
+     tool TEXT NOT NULL,
+     project TEXT,
+     session TEXT,
+     role TEXT,
+     channel TEXT NOT NULL,
+     hash TEXT NOT NULL,
+     bytes INTEGER NOT NULL,
+     budget INTEGER NOT NULL,
+     over INTEGER NOT NULL DEFAULT 0,
+     missing TEXT NOT NULL DEFAULT '[]'
+   ) STRICT;
+   CREATE INDEX deliveries_at ON deliveries (at);
+   CREATE TABLE delivery_items (
+     delivery_id INTEGER NOT NULL REFERENCES deliveries (id) ON DELETE CASCADE,
+     position INTEGER NOT NULL,
+     section TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     item TEXT NOT NULL,
+     bytes INTEGER NOT NULL,
+     cut INTEGER NOT NULL DEFAULT 0,
+     PRIMARY KEY (delivery_id, position)
    ) STRICT;`,
 ]
 

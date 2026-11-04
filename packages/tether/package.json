@@ -8,6 +8,7 @@
     "layer": 5,
     "imports": [
       "@aico/shared",
+      "@aico/context",
       "@aico/fleet",
       "@aico/tether-client"
     ],
@@ -28,6 +29,7 @@
   },
   "dependencies": {
     "@agent-hub/sdk": "file:../../vendor/agent-hub-sdk-0.1.4.tgz",
+    "@aico/context": "0.1.0",
     "@aico/fleet": "0.1.0",
     "@aico/tether-client": "0.1.0"
   },

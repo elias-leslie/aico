@@ -55,14 +55,20 @@ export function parseAgentExitMarker(text: string): AgentExitMarker | null {
  * it applies to the launched process. Universal — never branches on slug. */
 export function launchLine(spec: TuiSpec): string | null {
   if (spec.command.length === 0) return null
-  const env = { ...BASE_TUI_ENV, ...(spec.env ?? {}) }
+  const delivered = spec.deliveredContext
+  const env = { ...BASE_TUI_ENV, ...(spec.env ?? {}), ...(delivered?.env ?? {}) }
   const prefix = [
     '/usr/bin/env',
     '-u',
     'NO_COLOR',
     ...Object.entries(env).map(([k, v]) => `${k}=${shellQuote(v)}`),
   ]
-  return [...prefix, ...spec.command.map(shellQuote), ...instructionArguments(spec)].join(' ')
+  return [
+    ...prefix,
+    ...spec.command.map(shellQuote),
+    ...(delivered?.arguments ?? []),
+    ...(delivered?.instructions ? [] : instructionArguments(spec)),
+  ].join(' ')
 }
 
 /** The chosen instructions as shell words read from the snapshot file at

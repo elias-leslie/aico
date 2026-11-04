@@ -40,7 +40,9 @@
     ],
     "manual_worker_sources": {
       "tether@default.service": [
+        "packages/context",
         "packages/fleet",
+        "packages/store",
         "packages/tether-client",
         "vendor",
         "package-lock.json",

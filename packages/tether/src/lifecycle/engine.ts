@@ -170,6 +170,7 @@ import {
 } from './tmux-server-state'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './tui/blank-slate'
 import { ensureContext, finalizeContext } from './tui/context'
+import { forgetDelivery, withContextDelivery, withLastDelivery } from './tui/delivery'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
 import { type AgentExitMarker, paneCommand, paneGatePath, parseAgentExitMarker } from './tui/launch'
 import { agentProcessNames, getTui, listTuis } from './tui/registry'
@@ -1730,12 +1731,17 @@ async function recoverInterruptedManagedPane(
       }
     }
     try {
+      // Built before the launch intent is recorded: a dispatched gate is never
+      // replayed, so nothing slow sits between that mark and the launch.
+      const tool = await withContextDelivery(
+        sessionSpec(getTui(current.tool ?? 'shell'), current.projectRoot, current.id),
+        current.id,
+      )
       const intentRow = persistManagedGateLaunchIntent(current, verified.pid)
       if (!intentRow) return 'blocked'
       const dispatchedRow = markManagedGateDispatched(intentRow)
       if (!dispatchedRow) return 'blocked'
       current = dispatchedRow
-      const tool = sessionSpec(getTui(current.tool ?? 'shell'), current.projectRoot, current.id)
       const line = sessionLaunchLine(current.id, tool ? initialLaunchLine(current.id, tool) : null)
       // Re-observe immediately before the one-time transition out of the gate.
       const immediatelyCurrent = await verifiedCurrentManagedPane(current)
@@ -2129,9 +2135,8 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
   // into its dedicated cgroup, then launch the TUI through that contained shell.
   // Embedding the TUI in new-session lets it fork before tmux's asynchronous
   // cgroup move and was the path that put every tool in app-aico-9189.scope.
-  const tool = sessionSpec(
-    getTui(rowBeforeCreate.tool ?? 'shell'),
-    rowBeforeCreate.projectRoot,
+  const tool = await withContextDelivery(
+    sessionSpec(getTui(rowBeforeCreate.tool ?? 'shell'), rowBeforeCreate.projectRoot, widgetId),
     widgetId,
   )
   const line = sessionLaunchLine(widgetId, tool ? initialLaunchLine(widgetId, tool) : null)
@@ -2313,7 +2318,7 @@ async function probeRunningContexts(): Promise<void> {
   for (const row of listWidgets()) {
     if (quitting) return
     if (cachedSessionStatus(row) !== 'running') continue
-    const tool = sessionSpec(getTui(row.tool), row.projectRoot, row.id)
+    const tool = withLastDelivery(sessionSpec(getTui(row.tool), row.projectRoot, row.id), row.id)
     if (tool) await probeContext(row.id, tool)
   }
 }
@@ -2466,6 +2471,12 @@ export async function respawnAndRelaunch(
       }
     }
 
+    // Built before the pending scope is recorded, so the delivery's file writes
+    // never sit inside the replacement's crash window.
+    const launched = await withContextDelivery(
+      sessionSpec(tool, options.cwd ?? previous.projectRoot, widgetId),
+      widgetId,
+    )
     let result: RespawnResult = { status: 'replaced' }
     try {
       if (
@@ -2484,7 +2495,6 @@ export async function respawnAndRelaunch(
       const expected = getWidget(widgetId)
       if (!expected?.pendingScopeUnit) return { status: 'stale' }
 
-      const launched = sessionSpec(tool, options.cwd ?? previous.projectRoot, widgetId)
       const line = sessionLaunchLine(
         widgetId,
         launched
@@ -2786,6 +2796,7 @@ async function discardWidgetOwned(
       })
       statusCache.delete(id)
       contextStatuses.delete(id)
+      forgetDelivery(id)
       ensureFailures.delete(id)
       publishSession(id, { ended: true })
       await publishPromotedLanes(id)

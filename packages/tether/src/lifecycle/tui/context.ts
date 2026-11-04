@@ -41,6 +41,14 @@ export function staticContextStatus(spec: TuiSpec): ContextStatus | null {
 export async function ensureContext(spec: TuiSpec): Promise<ContextStatus> {
   const fixed = staticContextStatus(spec)
   if (fixed || !spec.context) return fixed as ContextStatus
+  const delivered = spec.deliveredContext
+  if (delivered)
+    return withChosen(spec, {
+      state: 'available',
+      detail: delivered.bytes
+        ? `Aico delivered this session's context at launch (${delivered.bytes} bytes, ${delivered.hash.slice(0, 8)})`
+        : "Aico delivers this session's context; its role adds none",
+    })
   return withChosen(spec, await probeHook(spec, spec.context))
 }
 

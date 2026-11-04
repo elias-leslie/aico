@@ -151,7 +151,10 @@ export interface TuiAdapter {
     ensureArgs: string[]
   }
   /** Fields of the TuiSpec this tool declares (resume, flags, input line). */
-  spec: Pick<TuiSpec, 'resume' | 'instructions' | 'modelSelection' | 'inputLine'>
+  spec: Pick<
+    TuiSpec,
+    'resume' | 'instructions' | 'contextDelivery' | 'modelSelection' | 'inputLine'
+  >
   capabilities: Capabilities
   /** Entry API version that first took this tool in `POST /v1/roots` `entry`; null: never. */
   entryApiVersion: number | null

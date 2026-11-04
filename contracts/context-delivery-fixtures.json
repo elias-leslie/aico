@@ -1,0 +1,307 @@
+{
+  "about": "Fixture contexts for context delivery: the context.db rows (roles, prompts, memories), the computed blocks, and the deliveries every caller must agree on. packages/context deliver.test.ts checks deliver() against `cases`; packages/tether's adapter conformance suite materializes each case for every tool that takes a delivery and checks the tool would read exactly `text`. Ids are made up; no real memory or project is named.",
+  "now": "2026-11-03T12:00:00.000Z",
+  "roles": [
+    { "name": "implementation", "work_roles": ["implementation"], "context": "full" },
+    { "name": "coordinator", "work_roles": ["coordinator"], "context": "full" },
+    { "name": "testing", "work_roles": ["verification"], "context": "blank-slate" }
+  ],
+  "prompts": [
+    {
+      "slug": "safety",
+      "name": "Safety Rules",
+      "kind": "global_guardrail",
+      "is_global": 1,
+      "content": "Never delete backups.\n"
+    },
+    {
+      "slug": "narration",
+      "name": "Plain Narration",
+      "kind": "global_mandate",
+      "is_global": 1,
+      "content": "Say what happened first."
+    },
+    {
+      "slug": "coding",
+      "name": "Coding Practice",
+      "kind": "standard",
+      "is_global": 1,
+      "content": "Add a regression test for each fixed defect."
+    },
+    {
+      "slug": "alpha-policy",
+      "name": "Alpha Policy",
+      "kind": "standard",
+      "is_global": 0,
+      "context_policy": {
+        "scope": "project",
+        "targets": ["alpha"],
+        "activation": "always",
+        "required": true,
+        "format": "full"
+      },
+      "content": "Alpha ships through its own release script."
+    },
+    {
+      "slug": "beta-policy",
+      "name": "Beta Policy",
+      "kind": "standard",
+      "is_global": 0,
+      "context_policy": { "scope": "project", "targets": ["beta"] },
+      "content": "Beta only."
+    },
+    {
+      "slug": "reviewer-notes",
+      "name": "Reviewer Notes",
+      "kind": "standard",
+      "is_global": 0,
+      "context_policy": { "scope": "agent", "targets": ["implementation"] },
+      "content": "Implementation sessions read the review checklist."
+    },
+    {
+      "slug": "coder-system",
+      "name": "Coder System Prompt",
+      "kind": "agent_system",
+      "is_global": 0,
+      "content": "A role's own system prompt; never delivered as context."
+    },
+    {
+      "slug": "on-demand",
+      "name": "On Demand",
+      "kind": "standard",
+      "is_global": 0,
+      "context_policy": {
+        "scope": "global",
+        "activation": "on_demand",
+        "required": false,
+        "format": "full"
+      },
+      "content": "Only when asked."
+    }
+  ],
+  "memories": [
+    {
+      "id": "11111111-0000-4000-8000-000000000001",
+      "scope": "global",
+      "scope_id": "",
+      "tier": "guardrail",
+      "content": "Older global guardrail.",
+      "created_at": "2026-10-01T00:00:00Z"
+    },
+    {
+      "id": "22222222-0000-4000-8000-000000000002",
+      "scope": "global",
+      "scope_id": "",
+      "tier": "guardrail",
+      "content": "Newer global guardrail.\n",
+      "created_at": "2026-10-20T00:00:00Z"
+    },
+    {
+      "id": "33333333-0000-4000-8000-000000000003",
+      "scope": "project",
+      "scope_id": "alpha",
+      "tier": "guardrail",
+      "content": "Alpha guardrail.",
+      "created_at": "2026-09-01T00:00:00Z"
+    },
+    {
+      "id": "44444444-0000-4000-8000-000000000004",
+      "scope": "project",
+      "scope_id": "beta",
+      "tier": "guardrail",
+      "content": "Beta guardrail.",
+      "created_at": "2026-10-25T00:00:00Z"
+    },
+    {
+      "id": "55555555-0000-4000-8000-000000000005",
+      "scope": "global",
+      "scope_id": "",
+      "tier": "guardrail",
+      "content": "Coordinators only.",
+      "applicability": { "audience_tags": ["aico-coordinator", "work-role:coordinator"] },
+      "created_at": "2026-10-10T00:00:00Z"
+    },
+    {
+      "id": "66666666-0000-4000-8000-000000000006",
+      "scope": "global",
+      "scope_id": "",
+      "tier": "guardrail",
+      "content": "Coordinators and sessions with no known role.",
+      "applicability": {
+        "audience_tags": ["aico-coordinator", "work-role:coordinator", "work-role:unknown"]
+      },
+      "created_at": "2026-10-11T00:00:00Z"
+    },
+    {
+      "id": "77777777-0000-4000-8000-000000000007",
+      "scope": "global",
+      "scope_id": "",
+      "tier": "guardrail",
+      "content": "Everyone but implementation.",
+      "applicability": { "exclude_audience_tags": ["work-role:implementation"] },
+      "created_at": "2026-10-12T00:00:00Z"
+    },
+    {
+      "id": "88888888-0000-4000-8000-000000000008",
+      "scope": "global",
+      "scope_id": "",
+      "tier": "mandate",
+      "content": "Claude Code only.",
+      "applicability": { "consumer_surfaces": ["claude"] },
+      "created_at": "2026-10-13T00:00:00Z"
+    },
+    {
+      "id": "99999999-0000-4000-8000-000000000009",
+      "scope": "global",
+      "scope_id": "",
+      "tier": "mandate",
+      "content": "A global mandate.",
+      "created_at": "2026-10-14T00:00:00Z"
+    },
+    {
+      "id": "aaaaaaaa-0000-4000-8000-00000000000a",
+      "scope": "global",
+      "scope_id": "",
+      "tier": "guardrail",
+      "content": "Only for a coordination task.",
+      "triggers": ["coordination"],
+      "created_at": "2026-10-15T00:00:00Z"
+    },
+    {
+      "id": "bbbbbbbb-0000-4000-8000-00000000000b",
+      "scope": "global",
+      "scope_id": "",
+      "tier": "reference",
+      "content": "A reference: found by search, never delivered.",
+      "created_at": "2026-10-16T00:00:00Z"
+    },
+    {
+      "id": "cccccccc-0000-4000-8000-00000000000c",
+      "scope": "global",
+      "scope_id": "",
+      "tier": "mandate",
+      "content": "Coding profile only, not startup.",
+      "applicability": { "consumer_profiles": ["agent_coding"] },
+      "created_at": "2026-10-17T00:00:00Z"
+    },
+    {
+      "id": "dddddddd-0000-4000-8000-00000000000d",
+      "scope": "agent",
+      "scope_id": "implementation",
+      "tier": "mandate",
+      "content": "Implementation role mandate.",
+      "created_at": "2026-10-18T00:00:00Z"
+    }
+  ],
+  "toolUsage": "mandates:\n- st commit -m \"msg\" — commit a verified checkpoint\n",
+  "activity": [
+    { "at": "2026-11-03T10:00:00.000Z", "tool": "codex", "name": "Release script fixes" },
+    { "at": "2026-11-03T11:30:00.000Z", "tool": "claude-code", "name": "Alpha review" },
+    { "at": "2026-11-03T11:45:00.000Z", "tool": "pi", "name": "" },
+    { "at": "2026-10-01T11:45:00.000Z", "tool": "pi", "name": "Too old to show" }
+  ],
+  "cases": [
+    {
+      "name": "Claude Code in project alpha, no role",
+      "request": { "tool": "claude-code", "project": "alpha", "session": "a1b2c3d4" },
+      "sections": [
+        "prompt:safety",
+        "memories:guardrail",
+        "prompt:narration",
+        "memories:mandate",
+        "prompt:alpha-policy",
+        "prompt:coding",
+        "activity",
+        "tool-usage"
+      ],
+      "memories": [
+        "33333333",
+        "22222222",
+        "77777777",
+        "66666666",
+        "11111111",
+        "99999999",
+        "88888888"
+      ],
+      "cut": [],
+      "text": "## Safety Rules\nNever delete backups.\n\n## Runtime Memory\n- [G:33333333] Alpha guardrail.\n- [G:22222222] Newer global guardrail.\n- [G:77777777] Everyone but implementation.\n- [G:66666666] Coordinators and sessions with no known role.\n- [G:11111111] Older global guardrail.\n\n## Plain Narration\nSay what happened first.\n\n## Runtime Memory\n- [M:99999999] A global mandate.\n- [M:88888888] Claude Code only.\n\n## Alpha Policy\nAlpha ships through its own release script.\n\n## Coding Practice\nAdd a regression test for each fixed defect.\n\n## Recent Activity\n- [30m ago] claude-code: Alpha review\n- [2h ago] codex: Release script fixes\n\n<tool-usage>\nmandates:\n- st commit -m \"msg\" — commit a verified checkpoint\n</tool-usage>"
+    },
+    {
+      "name": "Codex implementation session in project alpha",
+      "request": {
+        "tool": "codex",
+        "project": "alpha",
+        "session": "a1b2c3d5",
+        "role": "implementation"
+      },
+      "sections": [
+        "prompt:safety",
+        "memories:guardrail",
+        "prompt:narration",
+        "memories:mandate",
+        "prompt:alpha-policy",
+        "prompt:reviewer-notes",
+        "prompt:coding",
+        "activity",
+        "tool-usage"
+      ],
+      "memories": ["33333333", "22222222", "11111111", "dddddddd", "99999999"],
+      "cut": []
+    },
+    {
+      "name": "Pi coordinator outside any project",
+      "request": {
+        "tool": "pi",
+        "session": "a1b2c3d6",
+        "role": "coordinator",
+        "coordinator": true
+      },
+      "sections": [
+        "prompt:safety",
+        "memories:guardrail",
+        "prompt:narration",
+        "memories:mandate",
+        "prompt:coding",
+        "tool-usage"
+      ],
+      "memories": ["22222222", "77777777", "66666666", "55555555", "11111111", "99999999"],
+      "cut": []
+    },
+    {
+      "name": "A Blank Slate role gets nothing",
+      "request": {
+        "tool": "claude-code",
+        "project": "alpha",
+        "session": "a1b2c3d7",
+        "role": "testing"
+      },
+      "sections": [],
+      "memories": [],
+      "cut": [],
+      "text": ""
+    },
+    {
+      "name": "A small budget cuts activity, then tool usage, then instructions, never guardrails or mandates",
+      "request": { "tool": "codex", "project": "alpha", "session": "a1b2c3d8" },
+      "budgetBytes": 440,
+      "sections": [
+        "prompt:safety",
+        "memories:guardrail",
+        "prompt:narration",
+        "memories:mandate",
+        "prompt:alpha-policy"
+      ],
+      "memories": ["33333333", "22222222", "77777777", "66666666", "11111111", "99999999"],
+      "cut": ["activity", "tool-usage", "prompt:coding"]
+    },
+    {
+      "name": "A budget below the required sections cuts everything else and says it is over",
+      "request": { "tool": "pi", "project": "alpha", "session": "a1b2c3d9" },
+      "budgetBytes": 100,
+      "sections": ["prompt:safety", "memories:guardrail", "prompt:narration", "memories:mandate"],
+      "memories": ["33333333", "22222222", "77777777", "66666666", "11111111", "99999999"],
+      "cut": ["activity", "tool-usage", "prompt:coding", "prompt:alpha-policy"],
+      "over": true
+    }
+  ]
+}

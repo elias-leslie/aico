@@ -15,7 +15,8 @@
   },
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./delivery-fixture": "./src/delivery-fixture.ts"
   },
   "scripts": {
     "test": "vitest run"

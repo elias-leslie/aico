@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aico/context-delivery.schema.json",
+  "title": "Aico context delivery",
+  "description": "What `aico context deliver` (packages/context deliver()) returns. CLI: `aico context deliver --tool T --project P --session S [--role R] [--coordinator] [--event E] [--format text|json|claude|codex|pi] [--force]`. --tool is a Tether adapter id: claude-code, codex or pi (claude and claude_code mean claude-code). --project is the project id; omit it (or pass '') for a session outside any project, which gets global context only. --session is the Aico session id (or the tool's own id when there is none); it only labels the inventory row. --role is the work role or Aico role (default: $ST_WORK_ROLE); --coordinator marks a coordinator session. --event names the hook event for the claude and codex envelopes (default SessionStart). Formats: text (default) prints the delivered text; json prints this object; claude and codex print the tool's hook stdout, {\"hookSpecificOutput\":{\"hookEventName\":E,\"additionalContext\":TEXT}}; pi prints the text for Pi's system prompt. Already delivered: when $AICO_CONTEXT_DELIVERED is set (Tether wrote the delivery at launch: a CLAUDE.md dir for Claude Code, developer_instructions for Codex, --append-system-prompt for Pi) or $AGENT_HUB_CONTEXT_PREINJECTED_HASH is set (Agent Hub's launcher delivered), the claude, codex and pi formats print nothing and exit 0, so a hook never adds a second copy; --force prints anyway; text and json always print. Exit: 0 delivered (or nothing to add), 1 failed (one line on stderr naming why: the hook should say so plainly in the tool's output), 2 usage error. Claude Code keeps hook context over 10,000 characters as a file plus a short preview, so Tether-launched Claude sessions get the CLAUDE.md dir and the hook path is only for Claude sessions started outside Tether.",
+  "type": "object",
+  "required": [
+    "tool",
+    "project",
+    "session",
+    "role",
+    "hash",
+    "bytes",
+    "budget",
+    "sections",
+    "cut",
+    "text"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tool": { "enum": ["claude-code", "codex", "pi"] },
+    "project": { "type": ["string", "null"] },
+    "session": { "type": ["string", "null"] },
+    "role": { "type": ["string", "null"] },
+    "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "sha256 of text." },
+    "bytes": { "type": "integer", "minimum": 0, "description": "UTF-8 bytes of text." },
+    "budget": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The tool's byte budget (packages/context/data/delivery.json)."
+    },
+    "over": {
+      "type": "boolean",
+      "description": "True when the sections that are never cut (guardrails, mandates) alone exceed the budget."
+    },
+    "sections": {
+      "type": "array",
+      "description": "The delivered sections in order; text is their bodies joined by one blank line.",
+      "items": { "$ref": "#/$defs/section" }
+    },
+    "cut": {
+      "type": "array",
+      "description": "Sections the budget removed, in the order it removed them.",
+      "items": { "$ref": "#/$defs/section" }
+    },
+    "missing": {
+      "type": "array",
+      "description": "Sections that should be there but whose source failed (tool usage command, session list): the reason, never an empty section.",
+      "items": {
+        "type": "object",
+        "required": ["id", "reason"],
+        "properties": { "id": { "type": "string" }, "reason": { "type": "string" } }
+      }
+    },
+    "text": { "type": "string" }
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "required": ["id", "kind", "title", "bytes", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "prompt:<slug>, memories:<kind>, tool-usage or activity."
+        },
+        "kind": {
+          "enum": [
+            "guardrail",
+            "mandate",
+            "project",
+            "role",
+            "instruction",
+            "activity",
+            "tool-usage"
+          ],
+          "description": "Render order is the enum order (authority first). The budget cuts sections in the order packages/context/data/delivery.json cutOrder lists, the last section of a kind first; guardrail and mandate are never cut."
+        },
+        "title": { "type": "string" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "items": {
+          "type": "array",
+          "description": "What the section holds: a prompt slug, memory ids, or the computed source.",
+          "items": {
+            "type": "object",
+            "required": ["id", "bytes"],
+            "properties": {
+              "id": { "type": "string" },
+              "bytes": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

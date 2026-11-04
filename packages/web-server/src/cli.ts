@@ -24,6 +24,7 @@ import {
   agentHubSource,
   CONTEXT_COMMANDS,
   contextDbPath,
+  readToolUsage,
   runContextCli,
 } from '@aico/context'
 import { machineId } from '@aico/status'
@@ -54,6 +55,27 @@ const LAUNCHER_TOOLS: Readonly<Record<string, string>> = {
 }
 
 export const EXIT_UNAVAILABLE = 69
+
+/** A project's other named sessions, for the delivered context's Recent Activity. */
+async function sessionActivity(project: string, except: string | null) {
+  try {
+    const client = new TetherClient(tetherSocketPath(process.env, process.getuid?.()))
+    return (
+      (await client.listSessions())
+        // `except` is the asking session: its Tether id or its pane's AICO_SESSION_ID.
+        .filter(
+          (s) =>
+            s.projectId === project &&
+            s.name &&
+            s.id !== except &&
+            `aico-widget-${s.id}` !== except,
+        )
+        .map((s) => ({ at: s.createdAt, tool: s.tool, name: s.name as string }))
+    )
+  } catch (error) {
+    return { error: `Tether's session list: ${(error as Error).message}` }
+  }
+}
 
 export interface CliIo {
   out(text: string): void
@@ -570,6 +592,11 @@ export async function runCli(command: string, argv: string[]): Promise<number> {
         checkout: process.env.AICO_AGENT_HUB_CHECKOUT || join(dirname(repoRoot), 'agent-hub'),
         source: agentHubSource,
         route: agentHubRoute,
+      },
+      delivery: {
+        env: process.env,
+        toolUsage: () => readToolUsage(),
+        activity: (project, except) => sessionActivity(project, except),
       },
     })
   }

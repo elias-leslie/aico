@@ -574,6 +574,13 @@ export const claudeCode: TuiAdapter = {
   spec: {
     resume: { sessionIdPattern: UUID_RE, arguments: ['--resume'] },
     instructions: { arguments: ['--append-system-prompt'] },
+    // A CLAUDE.md in an added directory, read like a project's own: it is part of
+    // every subagent's context too, and has no hook output's 10k-character cap.
+    contextDelivery: {
+      kind: 'claude-md',
+      arguments: ['--add-dir'],
+      env: { CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1' },
+    },
     // Claude Code's documented --model and --effort (claude --help); an override
     // wins over the user's settings, which a Blank Slate session keeps.
     modelSelection: {
