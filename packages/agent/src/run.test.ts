@@ -38,7 +38,7 @@ import {
   touchesCredentials,
   writeRefusal,
 } from './tools'
-import { findRun, MIGRATIONS, openAgentDb, Transcript } from './transcript'
+import { findRun, MIGRATIONS, openAgentDb, processKey, Transcript } from './transcript'
 
 function setup(guardHook: string | null = null, firstApi = 'faux-openai') {
   const first = fauxProvider({
@@ -238,7 +238,7 @@ describe('runAgent', () => {
       expect.objectContaining({ reason: 'provider_error', handoff_tokens: 0 }),
     ])
     expect(lines.join('\n')).toMatch(
-      /provider error on codex\/gpt-6.1-sol \(HTTP 500: upstream\); opencode-go\/deepseek-v4.1-flash takes the turn/,
+      /turn 2: provider error on codex\/gpt-6.1-sol \(HTTP 500: upstream\); opencode-go\/deepseek-v4.1-flash takes it as turn 3/,
     )
     const models = db
       .prepare(
@@ -374,6 +374,61 @@ describe('runAgent', () => {
     expect(JSON.stringify(rows)).not.toContain('fake-token')
     expect(JSON.stringify(rows[1])).toContain('plain words')
     vi.unstubAllEnvs()
+  })
+
+  it("stores no diff for an edit of a credential path: Pi's details are withheld with the content", async () => {
+    const { first, db, run } = setup()
+    const agentDir = mkdtempSync(join(tmpdir(), 'aico-agent-pidir-'))
+    const secret = join(agentDir, 'auth.json')
+    writeFileSync(secret, '{"openai":{"access":"old-fake-token"}}\n')
+    vi.stubEnv('PI_CODING_AGENT_DIR', agentDir)
+    first.setResponses([
+      fauxAssistantMessage(
+        fauxToolCall(
+          'edit',
+          { path: secret, edits: [{ oldText: 'old-fake-token', newText: 'new-value' }] },
+          { id: 'c-edit' },
+        ),
+      ),
+      fauxAssistantMessage('done'),
+    ])
+    try {
+      const result = await run('task')
+      expect(readFileSync(secret, 'utf8')).toContain('new-value')
+      const row = db
+        .prepare("SELECT content, meta FROM messages WHERE run_id = ? AND role = 'toolResult'")
+        .get(result.runId) as { content: string; meta: string }
+      expect(JSON.parse(row.content)).toMatchObject({ withheld: expect.any(String) })
+      expect(JSON.parse(row.meta)).not.toHaveProperty('details')
+      expect(`${row.content}${row.meta}`).not.toContain('old-fake-token')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('ends the run as an error, with no fallback, when our own code throws mid-turn', async () => {
+    // agent.db fails under a listener (a tool call cannot be stored).
+    const broken = setup()
+    broken.first.setResponses([
+      fauxAssistantMessage(fauxToolCall('bash', { command: 'echo hi' })),
+      fauxAssistantMessage('never'),
+    ])
+    broken.db.exec('DROP TABLE tool_calls')
+    const stored = await broken.run('task')
+    expect(stored.outcome).toMatchObject({ kind: 'error', model: 'codex/gpt-6.1-sol' })
+    expect(stored.handoffs).toEqual([])
+    expect(broken.second.state.callCount).toBe(0)
+    // A listener (the log) throws.
+    const { first, second, run } = setup()
+    first.setResponses([fauxAssistantMessage('answer')])
+    const result = await run('task', {
+      log: (line) => {
+        if (line.startsWith('turn 1')) throw new Error('log sink broke')
+      },
+    })
+    expect(result.outcome).toMatchObject({ kind: 'error', detail: 'log sink broke' })
+    expect(result.handoffs).toEqual([])
+    expect(second.state.callCount).toBe(0)
   })
 })
 
@@ -622,7 +677,8 @@ describe('resume and branch', () => {
     expect(again.outcome).toMatchObject({ kind: 'done', text: 'done now' })
     expect(seen).toContain('the task')
     expect(seen).not.toContain('HTTP 50')
-    // A finished run needs a prompt to go on.
+    // A finished run needs a prompt to go on; it is refused before the row changes.
+    const before = db.prepare('SELECT * FROM runs WHERE id = ?').get(one.runId)
     const done = await runAgent({
       rules,
       task: null,
@@ -636,6 +692,94 @@ describe('resume and branch', () => {
       kind: 'error',
       detail: expect.stringMatching(/give a prompt/),
     })
+    expect(db.prepare('SELECT * FROM runs WHERE id = ?').get(one.runId)).toEqual(before)
+  })
+
+  it('counts turns from responses: a prompt stored before a crash does not use one up', async () => {
+    const { first, db, rules, cwd, models } = setup()
+    const crashed = new Transcript(db, 'crashed-run', {
+      role: 'implementation',
+      cwd,
+      task: 'the task',
+      chain: rules.chain,
+    })
+    crashed.message({
+      role: 'user',
+      message: { role: 'user', content: 'the task', timestamp: Date.now() },
+      content: 'the task',
+    })
+    first.setResponses([fauxAssistantMessage('answered after the crash')])
+    const result = await runAgent({
+      rules,
+      task: null,
+      cwd,
+      db,
+      models,
+      contextFiles: [],
+      resume: findRun(db, 'crashed-run'),
+    })
+    expect(result.outcome).toMatchObject({ kind: 'done', text: 'answered after the crash' })
+    expect(result.turns).toEqual([{ turn: 1, model: 'codex/gpt-6.1-sol', stop: 'stop' }])
+    const turns = db
+      .prepare('SELECT role, turn FROM messages WHERE run_id = ? ORDER BY seq')
+      .all('crashed-run')
+      .map((r) => `${r.role}:${r.turn}`)
+    expect(turns).toEqual(['user:1', 'assistant:1'])
+  })
+
+  it('refuses a second process resuming a run another live process holds', async () => {
+    const { first, db, run, rules, cwd } = setup()
+    first.setResponses([fauxAssistantMessage('one'), fauxAssistantMessage('two')])
+    const one = await run('task')
+    // Another process (this one's parent, alive) holds the run.
+    const parent = processKey(process.ppid)
+    db.prepare('UPDATE runs SET owner = ? WHERE id = ?').run(parent, one.runId)
+    const before = db.prepare('SELECT * FROM runs WHERE id = ?').get(one.runId)
+    const again = () =>
+      runAgent({
+        rules,
+        task: 'go on',
+        cwd,
+        db,
+        models: one.models,
+        contextFiles: [],
+        resume: findRun(db, one.runId),
+      })
+    await expect(again()).rejects.toThrow(`is in use by process ${process.ppid}`)
+    expect(db.prepare('SELECT * FROM runs WHERE id = ?').get(one.runId)).toEqual(before)
+    // Once the holder is gone (a pid that ended), the run is free again.
+    const gone = spawnSync('true').pid
+    db.prepare('UPDATE runs SET owner = ? WHERE id = ?').run(`${gone}:1`, one.runId)
+    expect((await again()).outcome).toMatchObject({ kind: 'done', text: 'two' })
+    expect(db.prepare('SELECT owner FROM runs WHERE id = ?').get(one.runId)).toEqual({
+      owner: processKey(process.pid),
+    })
+  })
+
+  it('goes on with the model that last answered, not the head of the chain', async () => {
+    const { first, second, db, run, rules, cwd } = setup()
+    first.setResponses([
+      fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'HTTP 503' }),
+    ])
+    second.setResponses([fauxAssistantMessage('second answered'), fauxAssistantMessage('again')])
+    const one = await run('task')
+    expect(one.outcome).toMatchObject({ kind: 'done', model: 'opencode-go/deepseek-v4.1-flash' })
+    const lines: string[] = []
+    const two = await runAgent({
+      rules,
+      task: 'more',
+      cwd,
+      db,
+      models: one.models,
+      contextFiles: [],
+      resume: findRun(db, one.runId),
+      log: (line) => lines.push(line),
+    })
+    expect(two.outcome).toMatchObject({ kind: 'done', model: 'opencode-go/deepseek-v4.1-flash' })
+    expect(first.state.callCount).toBe(1)
+    expect(lines).toContain(
+      'goes on with opencode-go/deepseek-v4.1-flash, the model that last answered in this run',
+    )
   })
 
   it('branches at a turn: the new run has the conversation up to that turn and nothing after', async () => {

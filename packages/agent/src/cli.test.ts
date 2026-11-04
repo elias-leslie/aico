@@ -178,6 +178,30 @@ describe('aico agent run --resume / --branch, and show', () => {
     })
     expect(await main(['show', 'nope'], env)).toBe(1)
   })
+
+  it('refuses --resume with nothing to continue, leaving the finished run as it was', async () => {
+    const env = { AICO_DATA_DIR: dataDir() }
+    const { provider, models } = faux()
+    provider.setResponses([fauxAssistantMessage('one')])
+    const id = '1f6a2b4c-1d2e-4f30-8a9b-0c1d2e3f4a5b'
+    const out = io()
+    expect(
+      await main(['run', '--role', 'implementation', '--run-id', id, 'first'], env, deps(models)),
+    ).toBe(0)
+    const read = () => {
+      const db = openAgentDb(join(env.AICO_DATA_DIR, 'agent.db'))
+      try {
+        return db.prepare('SELECT * FROM runs WHERE id = ?').get(id)
+      } finally {
+        db.close()
+      }
+    }
+    const before = read()
+    expect(before).toMatchObject({ outcome: 'done' })
+    expect(await main(['run', '--resume', id], env, deps(models))).toBe(1)
+    expect(out.err()).toContain('give a prompt to go on')
+    expect(read()).toEqual(before)
+  })
 })
 
 describe('aico agent run --interactive', () => {

@@ -248,6 +248,7 @@ function runRequest(
     ...(branchTurn !== undefined && stored && { branch: { from: stored, turn: branchTurn } }),
     ...(values['run-id'] && { runId: values['run-id'] }),
     ...(unstarted && { runId: values.resume }),
+    ...(values.model && stored && { keepHead: true }),
     ...(values.effort && { effort: values.effort }),
     ...(refuseAt && { testRefuseAt: refuseAt }),
     ...(values['test-unreachable'] && { testUnreachable: values['test-unreachable'] }),

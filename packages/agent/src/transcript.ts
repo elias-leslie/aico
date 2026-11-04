@@ -6,6 +6,7 @@
 // message, or a compaction with its summary), numbered by seq, so a run can be resumed or
 // branched at a turn, and Pi's compaction and context builder read them unchanged.
 
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Database, openDatabase } from '@aico/store'
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
@@ -97,6 +98,8 @@ export const MIGRATIONS = [
    ALTER TABLE runs ADD COLUMN branch_turn INTEGER;
    ALTER TABLE messages ADD COLUMN turn INTEGER;
    ALTER TABLE messages ADD COLUMN meta TEXT;`,
+  // The process that holds a run (pid:start time): one process at a time goes on in it.
+  `ALTER TABLE runs ADD COLUMN owner TEXT;`,
 ]
 
 export function agentDbPath(dataDir: string): string {
@@ -121,6 +124,8 @@ export interface MessageRow {
   role: string
   /** The whole message as the model saw it (for resume); `content` is what is stored. */
   message?: AgentMessage
+  /** The content is withheld (a credential path): Pi's `details` (an edit's diff) are not stored either. */
+  withheld?: boolean
   model?: string | null
   served_model?: string | null
   stop_reason?: string | null
@@ -163,6 +168,8 @@ export interface StoredRun {
 interface StoredMessage {
   seq: number
   role: string
+  model: string | null
+  stop_reason: string | null
   turn: number | null
   meta: string | null
   content: string
@@ -170,6 +177,26 @@ interface StoredMessage {
 }
 
 const now = () => new Date().toISOString()
+
+/** A process as a run's owner: its pid and start time, so a reused pid is not mistaken for it. */
+export function processKey(pid: number): string | null {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+    // Fields after the command name (which may hold spaces); the start time is field 22.
+    const start = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]
+    return `${pid}:${start}`
+  } catch {
+    return null
+  }
+}
+
+/** Whether the process an owner key names still runs. */
+function holderAlive(owner: string): boolean {
+  const pid = Number(owner.split(':')[0])
+  return Number.isInteger(pid) && pid > 0 && processKey(pid) === owner
+}
+
+const SELF = processKey(process.pid) ?? `${process.pid}:`
 
 /** The run with this id, or the one run whose id starts with it. */
 export function findRun(db: Database, idOrPrefix: string): StoredRun {
@@ -215,6 +242,8 @@ export class Transcript {
   private toolSeq = 0
   /** Assistant responses so far: the current turn's number. */
   turn = 0
+  /** The model that gave the last answer (not a failed response), for a run read back. */
+  lastModel: string | null = null
   /** The newest tool_calls row for each call id. */
   private readonly toolRows = new Map<string, number>()
   /** The run's Pi session entries, oldest first (messages as the model saw them). */
@@ -234,7 +263,7 @@ export class Transcript {
   ) {
     if (run)
       db.prepare(
-        'INSERT INTO runs (id, role, cwd, task, chain, started_at, parent_id, branch_turn) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO runs (id, role, cwd, task, chain, started_at, parent_id, branch_turn, owner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ).run(
         runId,
         run.role,
@@ -244,21 +273,47 @@ export class Transcript {
         now(),
         run.parentId ?? null,
         run.branchTurn ?? null,
+        SELF,
       )
   }
 
-  /** An existing run, to go on from where it stopped. */
-  static resume(db: Database, runId: string): Transcript {
+  /** An existing run as stored, read only: `claim()` it before going on in it. */
+  static open(db: Database, runId: string): Transcript {
     const transcript = new Transcript(db, runId, null)
     transcript.load(transcript.rows(runId))
     const max = (sql: string) =>
       Number((db.prepare(sql).get(runId) as { next: number | null }).next ?? 0)
     transcript.toolSeq = max('SELECT max(seq) + 1 AS next FROM tool_calls WHERE run_id = ?')
     transcript.handoffSeq = max('SELECT max(seq) + 1 AS next FROM handoffs WHERE run_id = ?')
-    db.prepare(
-      'UPDATE runs SET ended_at = NULL, outcome = NULL, outcome_detail = NULL WHERE id = ?',
-    ).run(runId)
     return transcript
+  }
+
+  /**
+   * Makes this process the run's one owner and reopens it, or throws when another live
+   * process holds it. The owner changes only from the holder this process read (a
+   * compare-and-set), so two processes resuming at once cannot both win.
+   */
+  claim(): void {
+    const row = this.db.prepare('SELECT owner FROM runs WHERE id = ?').get(this.runId) as
+      | { owner: string | null }
+      | undefined
+    if (!row) throw new Error(`no run '${this.runId}' in agent.db`)
+    const held = (owner: string | null) =>
+      new Error(
+        `run ${this.runId} is in use by process ${owner?.split(':')[0] ?? 'unknown'}; go on there, or once it ends`,
+      )
+    if (row.owner && row.owner !== SELF && holderAlive(row.owner)) throw held(row.owner)
+    const taken = this.db
+      .prepare(
+        'UPDATE runs SET owner = ?, ended_at = NULL, outcome = NULL, outcome_detail = NULL WHERE id = ? AND owner IS ?',
+      )
+      .run(SELF, this.runId, row.owner)
+    if (Number(taken.changes) !== 1) {
+      const now = this.db.prepare('SELECT owner FROM runs WHERE id = ?').get(this.runId) as {
+        owner: string | null
+      }
+      throw held(now.owner)
+    }
   }
 
   /** A new run holding `from`'s conversation up to the end of its turn `turn` (its
@@ -271,7 +326,10 @@ export class Transcript {
     task: string,
   ): Transcript {
     const rows = new Transcript(db, from.id, null).rows(from.id)
-    const turns = rows.reduce((top, row) => Math.max(top, row.turn ?? 0), 0)
+    const turns = rows.reduce(
+      (top, row) => (row.role === 'assistant' ? Math.max(top, row.turn ?? 0) : top),
+      0,
+    )
     if (!Number.isInteger(turn) || turn < 1 || turn > turns)
       throw new Error(`run ${from.id} has turns 1 to ${turns}; there is no turn ${turn}`)
     const kept = rows.filter((row) => (row.turn ?? 0) <= turn)
@@ -298,7 +356,7 @@ export class Transcript {
   private rows(runId: string): StoredMessage[] {
     return this.db
       .prepare(
-        'SELECT seq, role, turn, meta, content, at FROM messages WHERE run_id = ? ORDER BY seq',
+        'SELECT seq, role, model, stop_reason, turn, meta, content, at FROM messages WHERE run_id = ? ORDER BY seq',
       )
       .all(runId) as unknown as StoredMessage[]
   }
@@ -307,7 +365,11 @@ export class Transcript {
     for (const row of rows) {
       this.entries.push(entryOf(row, this.entries.at(-1)?.id ?? null))
       this.seq = row.seq + 1
+      // Turns are responses: a prompt stored before a crash does not use one up.
+      if (row.role !== 'assistant') continue
       this.turn = Math.max(this.turn, row.turn ?? 0)
+      if (row.model && row.stop_reason !== 'error' && row.stop_reason !== 'aborted')
+        this.lastModel = row.model
     }
   }
 
@@ -353,6 +415,7 @@ export class Transcript {
       string,
       unknown
     >
+    if (row.withheld) delete meta.details
     const seq = this.insert(row.role, row.content, meta, turn, row)
     if (row.message)
       this.entries.push({

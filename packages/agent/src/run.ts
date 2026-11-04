@@ -76,8 +76,10 @@ export interface RunOptions {
   db: Database
   /** The id of a new run (Tether picks one); default a fresh UUID. */
   runId?: string
-  /** Go on in this stored run. */
+  /** Go on in this stored run (from the model that last answered in it). */
   resume?: StoredRun
+  /** Start a resumed or branched run at the head of the chain (an explicit --model), not at the model that last answered. */
+  keepHead?: boolean
   /** A new run with this stored run's conversation up to the end of turn `turn`. */
   branch?: { from: StoredRun; turn: number }
   /** Pi's compaction settings; default Pi's own. */
@@ -192,9 +194,29 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
   const log = options.log ?? (() => {})
   const settings = options.compaction ?? DEFAULT_COMPACTION_SETTINGS
   const started = Date.now()
-  const transcript = options.resume
-    ? Transcript.resume(db, options.resume.id)
-    : options.branch
+  let transcript: Transcript
+  if (options.resume) {
+    transcript = Transcript.open(db, options.resume.id)
+    const history = contextMessages(transcript.entries)
+    // Nothing to go on with: refused before the run is touched.
+    if (options.task === null && (history.length === 0 || history.at(-1)?.role === 'assistant'))
+      return {
+        runId: transcript.runId,
+        outcome: {
+          kind: 'error',
+          model: transcript.lastModel ?? rules.chain[0]?.id ?? '',
+          detail: 'the run finished its last turn: give a prompt to go on',
+        },
+        tokens: { input: 0, cache_read: 0, cache_write: 0, output: 0 },
+        toolCalls: 0,
+        wallMs: Date.now() - started,
+        handoffs: [],
+        turns: [],
+        compactions: 0,
+      }
+    transcript.claim()
+  } else {
+    transcript = options.branch
       ? Transcript.branch(
           db,
           options.branch.from,
@@ -208,6 +230,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
           task: options.task ?? '',
           chain: rules.chain,
         })
+  }
   const runId = transcript.runId
   await options.onStart?.(runId)
   const totals: Tokens = { input: 0, cache_read: 0, cache_write: 0, output: 0 }
@@ -258,18 +281,18 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
             },
       )
     const history = contextMessages(transcript.entries)
-    if (options.task === null && (history.length === 0 || history.at(-1)?.role === 'assistant'))
-      return finish({
-        kind: 'error',
-        model: inUse,
-        detail: 'the run finished its last turn: give a prompt to go on',
-      })
 
     const contextFiles =
       options.contextFiles ?? loadProjectContextFiles({ cwd, agentDir: getAgentDir() })
     const markers = credentialMarkers([getAgentDir(), ...harness.credential_paths], homedir())
     const withheld = new Set<string>()
-    let current = 0
+    /** Responses the provider's own stream ended in error: only these fall back down the chain. */
+    const fromProvider = new WeakSet<AssistantMessage>()
+    // A resumed or branched run goes on with the model that last answered in it.
+    const answered = options.keepHead ? null : transcript.lastModel
+    const resumeAt = answered ? chain.findIndex(({ entry }) => entry.id === answered) : -1
+    let current = Math.max(0, resumeAt)
+    if (resumeAt > 0) log(`goes on with ${answered}, the model that last answered in this run`)
     let firstModelRequests = 0
     let swap: ModelSwap | null = null
     const at = () => chain[current] as (typeof chain)[number]
@@ -280,11 +303,23 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
       context: Parameters<Models['streamSimple']>[1],
       streamOptions: Parameters<Models['streamSimple']>[2],
     ) => {
-      if (current === 0 && ++firstModelRequests === options.testRefuseAt)
-        return syntheticRefusal(model)
-      if (options.testUnreachable === at().entry.id)
-        return models.streamSimple({ ...model, baseUrl: UNREACHABLE }, context, streamOptions)
-      return models.streamSimple(model, context, streamOptions)
+      const stream =
+        current === 0 && ++firstModelRequests === options.testRefuseAt
+          ? syntheticRefusal(model)
+          : models.streamSimple(
+              options.testUnreachable === at().entry.id
+                ? { ...model, baseUrl: UNREACHABLE }
+                : model,
+              context,
+              streamOptions,
+            )
+      stream.result().then(
+        (message) => {
+          if (message.stopReason === 'error') fromProvider.add(message)
+        },
+        () => {},
+      )
+      return stream
     }
 
     const pi = await piCompaction()
@@ -404,6 +439,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
           return transcript.message({
             role: message.role,
             message,
+            withheld: Boolean(callId && withheld.has(callId)),
             content:
               callId && withheld.has(callId)
                 ? {
@@ -451,6 +487,9 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
       const last = lastAssistant(agent.state.messages)
       const { entry, model } = at()
       if (!last) return finish({ kind: 'error', model: entry.id, detail: 'no response' })
+      if (last.stopReason === 'error' && !fromProvider.has(last))
+        // Our own exception (a listener, agent.db): the run stops; no other model takes it.
+        return finish({ kind: 'error', model: entry.id, detail: last.errorMessage ?? 'error' })
       if (last.stopReason !== 'error' && last.stopReason !== 'aborted') {
         // A finished response over the threshold compacts now, without a retry (as Pi).
         if (overThreshold() || isContextOverflow(last, model.contextWindow))
@@ -493,7 +532,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
       // A provider error: the next model in the chain takes this same turn.
       hand(last, { from: entry.id, to: next.entry.id, reason: 'provider_error', handoff_tokens: 0 })
       log(
-        `turn ${transcript.turn}: provider error on ${entry.id} (${detail}); ${next.entry.id} takes the turn`,
+        `turn ${transcript.turn}: provider error on ${entry.id} (${detail}); ${next.entry.id} takes it as turn ${transcript.turn + 1}`,
       )
     }
   }
