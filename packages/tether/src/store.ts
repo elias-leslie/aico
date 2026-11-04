@@ -34,6 +34,7 @@ import {
   SETTINGS_SQL,
   SHARES_SQL,
   TMUX_SERVERS_TABLE_SQL,
+  TRANSCRIPTS_SQL,
   WAITS_ARMED_BY_COLUMNS,
   WAITS_SQL,
   WAKES_RIDE_COLUMNS,
@@ -487,6 +488,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(30, now)
+      }
+      if (current < 31) {
+        // v31: the session history (transcript rows read by src/sessions/).
+        this.db.exec(TRANSCRIPTS_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(31, now)
       }
     })
   }

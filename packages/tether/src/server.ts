@@ -30,6 +30,8 @@ import {
   withActiveProject,
 } from './projects'
 import { registerRunRoutes, type StepChatSource } from './runs-api'
+import { registerHistoryRoutes } from './sessions/api'
+import type { History } from './sessions/history'
 import { registerShowRoute } from './show'
 import type { Store, ToolPatch } from './store'
 import { type AgentTool, parseCommand, type ToolSeed, ToolValidationError } from './tools'
@@ -67,6 +69,8 @@ export interface ServerContext {
   stepChats?: StepChatSource
   /** The remote hosts this Tether federates (docs/api-v1.md "Remote hosts"). */
   hub?: Hub
+  /** The session history (`/v1/history`); absent: the routes answer 404. */
+  history?: History
 }
 
 /** Which machine answers on this socket: a hub compares it on every link-up,
@@ -420,6 +424,7 @@ export function buildRouter(context: ServerContext): Router {
     return hostAdmin
   })
   registerLifecycleRoutes(router, context)
+  if (context.history) registerHistoryRoutes(router, context.history)
   if (context.runs) registerRunRoutes(router, context.runs, context.stepChats, context.hub)
   const show = context.show ?? resolveShowConfig({})
   registerShowRoute(router, events, context.store, show, context.hub)

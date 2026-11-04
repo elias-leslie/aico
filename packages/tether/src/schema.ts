@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 30
+export const SCHEMA_VERSION = 31
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -772,3 +772,48 @@ export const ASK_FILES_COLUMNS: readonly { table: string; column: string; sql: s
     sql: 'ALTER TABLE asks ADD COLUMN files TEXT CHECK(files IS NULL OR json_valid(files))',
   },
 ]
+
+/**
+ * v31: the session history (src/sessions/). One row per conversation a tool
+ * kept a transcript for, keyed `<tool>:<the tool's own id>`: what a reader needs
+ * (tool, model, project, start, end, outcome, token totals, tool-call count) and
+ * where its reader stopped. The transcript stays with the tool; events are read
+ * from it on demand. `ignored` rows are transcripts Tether does not read
+ * (a project it must not index); they hold only the path.
+ */
+export const TRANSCRIPTS_SQL = `
+  CREATE TABLE IF NOT EXISTS transcripts (
+    id            TEXT PRIMARY KEY CHECK(length(id) BETWEEN 3 AND 200),
+    tool          TEXT NOT NULL,
+    native_id     TEXT NOT NULL,
+    parent_id     TEXT,
+    project       TEXT,
+    cwd           TEXT,
+    model         TEXT,
+    path          TEXT NOT NULL UNIQUE,
+    started_at    INTEGER,
+    ended_at      INTEGER,
+    outcome       TEXT CHECK(outcome IS NULL OR outcome IN ('completed', 'aborted', 'error')),
+    input_tokens       INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens      INTEGER NOT NULL DEFAULT 0,
+    tool_calls    INTEGER NOT NULL DEFAULT 0,
+    ignored       INTEGER NOT NULL DEFAULT 0,
+    read_offset   INTEGER NOT NULL DEFAULT 0,
+    file_size     INTEGER NOT NULL DEFAULT 0,
+    file_mtime    INTEGER NOT NULL DEFAULT 0,
+    file_inode    INTEGER NOT NULL DEFAULT 0,
+    head_hash     TEXT,
+    tail_hash     TEXT,
+    reader_state  TEXT
+  );
+  CREATE INDEX IF NOT EXISTS transcripts_recent ON transcripts(ended_at DESC) WHERE ignored = 0;
+  CREATE INDEX IF NOT EXISTS transcripts_parent ON transcripts(parent_id) WHERE parent_id IS NOT NULL;
+  CREATE TABLE IF NOT EXISTS transcript_files (
+    transcript_id TEXT NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
+    path          TEXT NOT NULL,
+    writes        INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (transcript_id, path)
+  );
+`

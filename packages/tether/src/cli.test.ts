@@ -226,7 +226,7 @@ describe('tether hosts', () => {
           ssh: 'neri-hunters',
           state: 'live',
           sessions: 2,
-          apiVersion: 26,
+          apiVersion: 27,
           update: null,
         },
         {
@@ -239,7 +239,7 @@ describe('tether hosts', () => {
         },
       ],
     })
-    expect(out[0]).toMatch(/^ {2}neri-hunters +live +api 26 {2}sessions 2$/)
+    expect(out[0]).toMatch(/^ {2}neri-hunters +live +api 27 {2}sessions 2$/)
     expect(out[1]).toContain('api ?')
     expect(out[1]).toContain('update failed: the host has no flock')
     expect(out.join('\n')).not.toContain('undefined')

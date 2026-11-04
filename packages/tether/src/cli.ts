@@ -11,6 +11,7 @@ import { runDoctor } from './doctor'
 import { applyImport, formatPlan, planImportForPath, summarize } from './importer'
 import { NOTE_USAGE, runNote } from './note-cli'
 import { withOwnWidget } from './own-session'
+import { HISTORY_USAGE, runHistory } from './sessions/cli'
 import { Store } from './store'
 import { VERSION } from './version'
 
@@ -44,6 +45,8 @@ Commands:
   ask create|get|list|done|withdraw
                                 put a question to the owner in Aico and read
                                 the answer (tether ask --help)
+  history list|show|events      recent sessions of Claude Code, Codex and Pi and what
+                                they said and did (aico sessions ...; tether history --help)
   capture list|get|file         read the owner's photos and files saved in Aico
                                 (tether capture --help)
   note list|get|add|item|groceries
@@ -520,6 +523,12 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           withOwnWidget(process.env),
           process.cwd(),
         )
+      case 'history':
+        if (sub === undefined || sub === '--help' || sub === 'help') {
+          io.out(HISTORY_USAGE)
+          return sub === undefined ? 2 : 0
+        }
+        return runHistory(io, paths, json, parsed.args.slice(1))
       case 'capture':
         if (sub === undefined || sub === '--help' || sub === 'help') {
           io.out(CAPTURE_USAGE)

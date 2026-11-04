@@ -80,6 +80,7 @@ import { Continuity } from './reboot'
 import { Recovery, runCommand } from './recovery'
 import type { StepChatSource } from './runs-api'
 import { createTetherServer } from './server'
+import { type History, historyFromEnv, startHistoryScan } from './sessions/history'
 import { persistSizeHolders } from './size-holder'
 import { Store } from './store'
 import { VERSION } from './version'
@@ -265,6 +266,7 @@ export async function startDaemon(
     projects,
     projectRoots,
     activeProjectFile: activeProjectFileFromEnv(env, env.HOME ?? homedir()),
+    history: undefined as History | undefined,
     startedAt: Date.now(),
     continuity: undefined as Continuity | undefined,
     recovery: undefined as Recovery | undefined,
@@ -293,6 +295,10 @@ export async function startDaemon(
           listWidgets().flatMap((row) => (row.scopeUnit ? [[row.scopeUnit, row.id] as const] : [])),
         ),
     }),
+  }
+  if (reconcileEnabled(env)) {
+    // The session history: each tool's transcripts, read in small passes.
+    context.history = historyFromEnv(store.db, env, projectRoots)
   }
   if (reconcileEnabled(env)) {
     const graphical = () => userManagerGraphicalEnvironment()
@@ -882,6 +888,7 @@ export async function startDaemon(
   const projectNames = setInterval(learn, PROJECT_NAMES_MS)
   projectNames.unref()
   void context.continuity?.start()
+  startHistoryScan(context.history)
   void ready.then(() => context.recovery?.start()).catch(() => {})
   if (waiting)
     void ready
