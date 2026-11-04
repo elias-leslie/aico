@@ -6,57 +6,79 @@
       {
         "id": "ended-307436f5",
         "state": "success",
-        "detail": "Own scratch chat ended; 0 open questions; 17 persisted messages."
+        "detail": "Own scratch chat ended; 0 open questions; 17 persisted messages.",
+        "artifact": "M8b-2a-live.json",
+        "sha256": "9aad1206d0844904953ee1105717f366b2e6370c980d242c1d085c737f6269a8"
       },
       {
         "id": "ended-f6577bcc",
         "state": "success",
-        "detail": "Own scratch chat ended; 0 open questions; 8 persisted messages."
+        "detail": "Own scratch chat ended; 0 open questions; 8 persisted messages.",
+        "artifact": "M8b-2a-live.json",
+        "sha256": "9aad1206d0844904953ee1105717f366b2e6370c980d242c1d085c737f6269a8"
       },
       {
         "id": "ended-7be0690e",
         "state": "success",
-        "detail": "Own scratch chat ended; 0 open questions; 8 persisted messages."
+        "detail": "Own scratch chat ended; 0 open questions; 8 persisted messages.",
+        "artifact": "M8b-2a-live.json",
+        "sha256": "9aad1206d0844904953ee1105717f366b2e6370c980d242c1d085c737f6269a8"
       },
       {
         "id": "ended-204966af",
         "state": "success",
-        "detail": "Own scratch chat ended; 0 open questions; 4 persisted messages."
+        "detail": "Own scratch chat ended; 0 open questions; 4 persisted messages.",
+        "artifact": "M8b-2a-live.json",
+        "sha256": "9aad1206d0844904953ee1105717f366b2e6370c980d242c1d085c737f6269a8"
       },
       {
         "id": "deploy",
         "state": "success",
-        "detail": "Full managed rebuild aico-58385e3d2ed0 succeeded; web active at source 41ec7f1a. Native acceptance: 3237 tests passed, 103.4 s. Tether includes the concurrent catalog repair e612caae."
+        "detail": "Full managed rebuild aico-58385e3d2ed0 succeeded; web active at source 41ec7f1a. Native acceptance: 3237 tests passed, 103.4 s. Tether includes the concurrent catalog repair e612caae.",
+        "artifact": "M8b-2a-live.json",
+        "sha256": "9aad1206d0844904953ee1105717f366b2e6370c980d242c1d085c737f6269a8"
       },
       {
         "id": "desktop-journey",
         "state": "success",
-        "detail": "Deployed default implementation role with DeepSeek: first and second messages changed greeting.txt; branched at turn 2 and wrote branch.txt; opened Details. Final-source smoke sent two more replies and reset persisted effort off to From routing."
+        "detail": "Deployed default implementation role with DeepSeek: first and second messages changed greeting.txt; branched at turn 2 and wrote branch.txt; opened Details. Final-source smoke sent two more replies and reset persisted effort off to From routing.",
+        "artifact": "M8b-2a-branch-final.png",
+        "sha256": "04e839fc9d742cb5d66dc87e0b6c4d149a9768d036e21761d984f8c487222f70"
       },
       {
         "id": "stop-draft",
         "state": "success",
-        "detail": "Stopped own streaming reply with 700 text characters preserved. The queued note returned once to the composer as a draft (stopped-draft screenshot); later turns continued successfully."
+        "detail": "Stopped own streaming reply with 700 text characters preserved. The queued note returned once to the composer as a draft (stopped-draft screenshot); later turns continued successfully.",
+        "artifact": "M8b-2a-stopped-draft.png",
+        "sha256": "507ab7b94e992fc74643c66a2ad66a86e381f1ab8544de37a8afba917c0d41b2"
       },
       {
         "id": "needs-you",
         "state": "success",
-        "detail": "Own chat 7be0690e filed real tether ask a26a476bfcad. Header and sidebar showed Needs you with recommended First. Clicked First; answer delivered, state returned Idle; ask is done with answer First."
+        "detail": "Own chat 7be0690e filed real tether ask a26a476bfcad. Header and sidebar showed Needs you with recommended First. Clicked First; answer delivered, state returned Idle; ask is done with answer First.",
+        "artifact": "M8b-2a-needs-you.png",
+        "sha256": "3ed70672cb2a6ff39d944927c8c17f9e9e0f03a4169ab06205ed222e44a009bd"
       },
       {
         "id": "rendered-states",
         "state": "success",
-        "detail": "11 actual-component fixture views, no provider calls: loading, empty, open-failed, failed, stopped, resumed, swapped, disconnected, needs-you, questions-failed, rules-unreadable. Separate labeled fixture chrome in each screenshot."
+        "detail": "11 actual-component fixture views, no provider calls: loading, empty, open-failed, failed, stopped, resumed, swapped, disconnected, needs-you, questions-failed, rules-unreadable. Separate labeled fixture chrome in each screenshot.",
+        "artifact": "M8b-2a-state-uilint.txt",
+        "sha256": "d59ba69eb4314233d2b6940bb02d1eabd6668908ea598e5bac9a8c9ce8b9bc0d"
       },
       {
         "id": "uilint",
         "state": "success",
-        "detail": "Source: 173 files / 3569 items, zero violations. 7 mockup views, all 11 fixture views, and 4 final deployed views have zero violations. Earlier generated model prose containing terminal triggered the product vocabulary rule; model/user content was not censored and the spec was not weakened."
+        "detail": "Source: 173 files / 3569 items, zero violations. 7 mockup views, all 11 fixture views, and 4 final deployed views have zero violations. Earlier generated model prose containing terminal triggered the product vocabulary rule; model/user content was not censored and the spec was not weakened.",
+        "artifact": "M8b-2a-live-uilint.txt",
+        "sha256": "c0a690cb54b1d9a4ab21214ad21c0537fcaabb7a2aefb900d8fb70854588035b"
       },
       {
         "id": "cleanup",
         "state": "success",
-        "detail": "All four created chats ended with zero open questions; both created headless browser sessions closed. No Claude model called. No phone or tester pass started."
+        "detail": "All four created chats ended with zero open questions; both created headless browser sessions closed. No Claude model called. No phone or tester pass started.",
+        "artifact": "M8b-2a-live.json",
+        "sha256": "9aad1206d0844904953ee1105717f366b2e6370c980d242c1d085c737f6269a8"
       }
     ]
   }
