@@ -403,3 +403,47 @@ it('flushes a final response before closing the local proxy socket', async () =>
     write.mockRestore()
   }
 })
+
+it('releases its upstream socket after the peer closes a channel', async () => {
+  const p = await pair()
+  let upstream: Socket | undefined
+  let forwarded: Socket | undefined
+  const server = createServer({ allowHalfOpen: true }, (socket) => {
+    upstream = socket
+    socket.on('error', () => {})
+    socket.once('data', () => socket.write('opened'))
+  })
+  cleanup.push(async () => {
+    upstream?.destroy()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  })
+  await new Promise<void>((resolve) => server.listen(p.sb.controlSocket, resolve))
+  await p.fb.start()
+  const client = await authenticatedClient(p)
+  const original = Socket.prototype._write
+  const write = vi.spyOn(Socket.prototype, '_write').mockImplementation(function (
+    this: Socket,
+    chunk,
+    encoding,
+    callback,
+  ) {
+    // The last plain request write is the fleet's connection to our service.
+    if (
+      Buffer.from(chunk).toString() === 'request' &&
+      !(this as Socket & { server?: Server }).server
+    )
+      forwarded = this
+    original.call(this, chunk, encoding, callback)
+  })
+  try {
+    const stream = client.open({ type: 'control', target: 'control' })
+    const opened = new Promise<void>((resolve) => stream.once('data', () => resolve()))
+    stream.write('request')
+    await opened
+    stream.destroy()
+    expect(forwarded).toBeDefined()
+    await vi.waitFor(() => expect(forwarded?.destroyed).toBe(true))
+  } finally {
+    write.mockRestore()
+  }
+})

@@ -273,7 +273,7 @@ export class Fleet {
         socket.pipe(channel).pipe(socket)
         socket.once('close', () => channel.destroy())
         channel.once('error', () => socket.destroy())
-        channel.once('close', () => socket.end())
+        channel.once('close', () => socket.end(() => socket.destroy()))
       } catch {
         socket.destroy()
       }
@@ -337,7 +337,7 @@ export class Fleet {
     const socket = createConnection({ path, allowHalfOpen: true })
     socket.on('error', (error) => channel.destroy(error))
     channel.on('error', () => socket.destroy())
-    channel.once('close', () => socket.end())
+    channel.once('close', () => socket.end(() => socket.destroy()))
     // Only the authenticated carrier supplies this preamble, before untrusted HTTP bytes.
     if (request.target === 'jobs') socket.write(`${peer}\n`)
     channel.pipe(socket).pipe(channel)
