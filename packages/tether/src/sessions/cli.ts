@@ -29,7 +29,8 @@ export interface HistoryIo {
 
 function when(at: number | null): string {
   if (at === null) return '-'
-  return new Date(at).toISOString().slice(0, 16).replace('T', ' ')
+  // Local time, as the person reading it keeps it (sv-SE prints YYYY-MM-DD HH:MM:SS).
+  return new Date(at).toLocaleString('sv-SE').slice(0, 16)
 }
 
 function count(n: number): string {

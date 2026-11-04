@@ -544,4 +544,18 @@ describe('routes and command', () => {
       '[5] - user: a b',
     )
   })
+
+  it('prints times in local time, not UTC', () => {
+    const zone = process.env.TZ
+    process.env.TZ = 'America/New_York'
+    try {
+      const at = Date.parse('2026-11-04T18:53:00Z')
+      expect(formatEvent({ offset: 1, at, role: 'user', kind: 'text', text: 'hi' })).toBe(
+        '[1] 2026-11-04 13:53 user: hi',
+      )
+    } finally {
+      if (zone === undefined) delete process.env.TZ
+      else process.env.TZ = zone
+    }
+  })
 })

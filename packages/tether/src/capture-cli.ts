@@ -125,7 +125,8 @@ const kb = (bytes: number) =>
     ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.round(bytes / 1024))} KB`
 
-const when = (ms: number) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16)
+/** Local time as YYYY-MM-DD HH:MM. */
+const when = (ms: number) => new Date(ms).toLocaleString('sv-SE').slice(0, 16)
 
 function listLine(item: CaptureJson): string {
   const caption = item.caption ? `  "${item.caption.replace(/\s+/g, ' ').slice(0, 60)}"` : ''

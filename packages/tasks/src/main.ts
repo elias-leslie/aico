@@ -13,7 +13,7 @@ function sessionDescriber(env: NodeJS.ProcessEnv): Deps['describeSession'] {
     try {
       const session = await client.historySession(id)
       const outcome = session.outcome ? `, ${session.outcome}` : ''
-      return `${session.tool}, ${session.model ?? 'unknown model'}, started ${session.startedAt === null ? 'unknown' : new Date(session.startedAt).toISOString().slice(0, 16).replace('T', ' ')}${outcome}`
+      return `${session.tool}, ${session.model ?? 'unknown model'}, started ${session.startedAt === null ? 'unknown' : new Date(session.startedAt).toLocaleString('sv-SE').slice(0, 16)}${outcome}`
     } catch {
       return null
     }

@@ -25,7 +25,7 @@ export function subtaskLine(subtask: Subtask): string {
 }
 
 export function time(ms: number | null): string {
-  return ms === null ? '-' : new Date(ms).toISOString().slice(0, 16).replace('T', ' ')
+  return ms === null ? '-' : new Date(ms).toLocaleString('sv-SE').slice(0, 16)
 }
 
 export interface ContextInput {
