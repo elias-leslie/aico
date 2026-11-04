@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # `aico memory | prompt | models | context`: context.db (memories, prompts, roles, launch options).
 # `aico jobs`: the scheduler's jobs (packages/jobs, jobs.db).
+# `aico agent run`: Aico's own agent harness (packages/agent, agent.db).
 # Only those commands: anything else (or nothing) prints the usage and exits 2, so this
 # never starts the web server.
 set -euo pipefail
@@ -16,10 +17,22 @@ case "${1:-}" in
     [ -r "$jobs_bundle" ] || PATH="$(dirname "$node"):$PATH" npm --prefix "$AICO_REPO_ROOT/packages/jobs" run --silent build >&2
     exec "$node" --disable-warning=ExperimentalWarning "$jobs_bundle" "$@"
     ;;
+  agent)
+    shift
+    agent_dir="$AICO_REPO_ROOT/packages/agent"
+    agent_bundle="$agent_dir/dist/aico-agent.mjs"
+    node="$(aico_web_node)"
+    if [ ! -r "$agent_bundle" ] || [ -n "$(find "$agent_dir/src" "$agent_dir/data" "$AICO_REPO_ROOT/packages/context/src" \
+      "$AICO_REPO_ROOT/packages/context/data" "$AICO_REPO_ROOT/packages/store/src" \( -name '*.ts' -o -name '*.json' \) \
+      -newer "$agent_bundle" -print -quit 2>/dev/null)" ]; then
+      PATH="$(dirname "$node"):$PATH" npm --prefix "$agent_dir" run --silent build >&2
+    fi
+    exec "$node" --disable-warning=ExperimentalWarning "$agent_bundle" "$@"
+    ;;
   help | -h | --help) exec_aico_web memory --help ;;
   *)
     [ $# -gt 0 ] && echo "aico: unknown command '$1'" >&2
-    echo "Usage: aico <memory|prompt|models|context|jobs> ...  (aico help lists every command)" >&2
+    echo "Usage: aico <memory|prompt|models|context|jobs|agent> ...  (aico help lists every command)" >&2
     exit 2
     ;;
 esac
