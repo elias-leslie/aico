@@ -456,3 +456,65 @@ export class Transcript {
       )
   }
 }
+
+/** A run's totals and the model of each turn, as Tether's session history keeps them. */
+export interface RunReport {
+  id: string
+  role: string
+  cwd: string
+  startedAt: number
+  endedAt: number | null
+  /** The history's outcome: a finished answer is `completed`, any other end an `error`. */
+  outcome: 'completed' | 'error' | null
+  tokens: { input: number; cacheRead: number; cacheWrite: number; output: number }
+  toolCalls: number
+  turns: { turn: number; model: string; stop: string }[]
+}
+
+/** The latest turns a report carries (the history keeps at most this many). */
+const REPORT_TURNS = 1000
+
+export function runReport(db: Database, runId: string): RunReport {
+  const run = db.prepare('SELECT * FROM runs WHERE id = ?').get(runId) as unknown as
+    | (StoredRun & {
+        started_at: string
+        input: number
+        cache_read: number
+        cache_write: number
+        output: number
+        tool_calls: number
+      })
+    | undefined
+  if (!run) throw new Error(`no run '${runId}' in agent.db`)
+  const turns = (
+    db
+      .prepare(
+        `SELECT turn, model, stop_reason FROM messages WHERE run_id = ? AND role = 'assistant'
+         ORDER BY seq DESC LIMIT ${REPORT_TURNS}`,
+      )
+      .all(runId) as { turn: number | null; model: string | null; stop_reason: string | null }[]
+  )
+    .reverse()
+    .map((row) => ({
+      turn: row.turn ?? 0,
+      model: row.model || 'unknown',
+      stop: row.stop_reason || 'unknown',
+    }))
+  const ended = run.ended_at === null ? null : Date.parse(run.ended_at)
+  return {
+    id: run.id,
+    role: run.role,
+    cwd: run.cwd,
+    startedAt: Date.parse(run.started_at),
+    endedAt: ended,
+    outcome: ended === null ? null : run.outcome === 'done' ? 'completed' : 'error',
+    tokens: {
+      input: run.input,
+      cacheRead: run.cache_read,
+      cacheWrite: run.cache_write,
+      output: run.output,
+    },
+    toolCalls: run.tool_calls,
+    turns,
+  }
+}

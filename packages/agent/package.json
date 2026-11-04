@@ -8,7 +8,8 @@
     "layer": 4,
     "imports": [
       "@aico/store",
-      "@aico/context"
+      "@aico/context",
+      "@aico/tether-client"
     ],
     "db": [
       "agent.db"
@@ -25,6 +26,7 @@
   "dependencies": {
     "@aico/context": "0.1.0",
     "@aico/store": "0.1.0",
+    "@aico/tether-client": "0.1.0",
     "@earendil-works/pi-agent-core": "1.4.0",
     "@earendil-works/pi-ai": "1.4.0",
     "@earendil-works/pi-coding-agent": "1.4.0"

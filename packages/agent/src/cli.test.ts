@@ -9,7 +9,7 @@ import { createModels, fauxAssistantMessage, fauxProvider } from '@earendil-work
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { main } from './cli'
 import type { RoleRules } from './rules'
-import { openAgentDb } from './transcript'
+import { openAgentDb, type RunReport } from './transcript'
 
 const rules: RoleRules = {
   role: 'implementation',
@@ -48,6 +48,8 @@ const deps = (models: ReturnType<typeof faux>['models']) => ({
   rules: () => rules,
   models,
   cwd: dataDir(),
+  // Never the live Tether.
+  push: async () => {},
 })
 
 afterEach(() => vi.restoreAllMocks())
@@ -200,5 +202,72 @@ describe('aico agent run --interactive', () => {
     })
     db.close()
     expect(await main(['run', '--interactive', '--json', '--role', 'x'], env)).toBe(2)
+  })
+
+  it('starts a run Tether resumes before its first prompt fresh under that id', async () => {
+    io()
+    const env = { AICO_DATA_DIR: dataDir() }
+    const { provider, models } = faux()
+    provider.setResponses([fauxAssistantMessage('one')])
+    const prompts = ['first', null]
+    const id = '1a6a2b4c-1d2e-4f30-8a9b-0c1d2e3f4a5b'
+    expect(
+      await main(['run', '--interactive', '--role', 'implementation', '--resume', id], env, {
+        ...deps(models),
+        prompt: async () => prompts.shift() ?? null,
+      }),
+    ).toBe(0)
+    const db = openAgentDb(join(env.AICO_DATA_DIR, 'agent.db'))
+    expect(db.prepare('SELECT id FROM runs').all()).toEqual([{ id }])
+    db.close()
+  })
+})
+
+describe('telling Tether', () => {
+  it('pushes the run at its start and end: totals, tool calls and the model of each turn', async () => {
+    io()
+    const env = { AICO_DATA_DIR: dataDir() }
+    const { provider, models } = faux()
+    provider.setResponses([fauxAssistantMessage('one'), fauxAssistantMessage('two')])
+    const pushed: RunReport[] = []
+    const prompts = ['second', null]
+    expect(
+      await main(['run', '--interactive', '--role', 'implementation', 'first'], env, {
+        ...deps(models),
+        prompt: async () => prompts.shift() ?? null,
+        push: async (report) => {
+          pushed.push(report)
+        },
+      }),
+    ).toBe(0)
+    expect(pushed.map((report) => [report.endedAt === null, report.outcome])).toEqual([
+      [true, null],
+      [false, 'completed'],
+      [true, null],
+      [false, 'completed'],
+    ])
+    const last = pushed.at(-1) as RunReport
+    expect(new Set(pushed.map((report) => report.id)).size).toBe(1)
+    expect(last).toMatchObject({
+      role: 'implementation',
+      toolCalls: 0,
+      turns: [
+        { turn: 1, model: 'codex/gpt-6.1-sol', stop: 'stop' },
+        { turn: 2, model: 'codex/gpt-6.1-sol', stop: 'stop' },
+      ],
+    })
+    expect(last.tokens.input + last.tokens.output).toBeGreaterThan(0)
+  })
+
+  it('runs and logs it when Tether is not there', async () => {
+    const out = io()
+    const dir = dataDir()
+    const env = { AICO_DATA_DIR: dir, TETHER_SOCKET: join(dir, 'no-tether.sock') }
+    const { provider, models } = faux()
+    provider.setResponses([fauxAssistantMessage('done')])
+    const { push: _live, ...withoutPush } = deps(models)
+    expect(await main(['run', '--role', 'implementation', 'task'], env, withoutPush)).toBe(0)
+    expect(out.out()).toBe('done\n')
+    expect(out.err()).toContain('not in the session history:')
   })
 })

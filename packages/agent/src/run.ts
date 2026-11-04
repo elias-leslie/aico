@@ -82,6 +82,8 @@ export interface RunOptions {
   branch?: { from: StoredRun; turn: number }
   /** Pi's compaction settings; default Pi's own. */
   compaction?: CompactionSettings
+  /** Called once the run is stored, before its first request (the CLI tells Tether). */
+  onStart?: (runId: string) => Promise<void> | void
   /** Thinking level for every model; else each chain row's effort; else high. */
   effort?: string
   /** Test hook: the Nth provider request on the first model returns a synthetic refusal. */
@@ -207,6 +209,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
           chain: rules.chain,
         })
   const runId = transcript.runId
+  await options.onStart?.(runId)
   const totals: Tokens = { input: 0, cache_read: 0, cache_write: 0, output: 0 }
   const handoffs: HandoffStat[] = []
   const turns: RunResult['turns'] = []

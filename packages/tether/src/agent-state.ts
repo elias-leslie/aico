@@ -16,7 +16,12 @@
 // or a poll whose status changed after the hook fired and is no longer waiting.
 
 import { findEntryProcess } from './continuity'
-import type { AgentProbe, StateContext, TuiAdapter } from './lifecycle/tui/adapters/contract'
+import type {
+  AgentProbe,
+  AgentRunLookup,
+  StateContext,
+  TuiAdapter,
+} from './lifecycle/tui/adapters/contract'
 import { ADAPTERS, adapterOf } from './lifecycle/tui/registry'
 import type { ModelSource } from './model-record'
 import { entryReaders, type FileTail, type ProcFs, processTree } from './proc-fs'
@@ -270,6 +275,8 @@ export class AgentStatePoller {
       seams?: Record<string, unknown>
       /** Each poll's agent record, for the model watch (model-switch.ts). */
       models?: (id: string, source: ModelSource) => void
+      /** Runs pushed to the session history (the Aico agent's state). */
+      runs?: AgentRunLookup
     } = {},
   ) {}
 
@@ -311,6 +318,7 @@ export class AgentStatePoller {
       pids,
       ...(this.options.tail ? { tail: this.options.tail } : {}),
       ...(this.options.seams ? { seams: this.options.seams } : {}),
+      ...(this.options.runs ? { runs: this.options.runs } : {}),
     }
   }
 

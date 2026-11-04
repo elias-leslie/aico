@@ -11,6 +11,7 @@ import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { callSocket } from '../client'
 import { HttpError, Router, sendError } from '../http'
 import { Store } from '../store'
 import { registerHistoryRoutes } from './api'
@@ -496,6 +497,46 @@ describe('routes and command', () => {
     expect((await run('show', 'nope')).err).toMatch(/No session with that id/)
     expect((await run('show', 's')).err).toMatch(/More than one session/)
     expect((await run('bogus')).code).toBe(2)
+  })
+
+  it('keeps the Aico agent runs it is pushed, with the model of each turn', async () => {
+    const id = '6f20c425-600a-4119-8229-302e58fc6d17'
+    const pushed = (endedAt: number | null, turns: unknown[]) => ({
+      cwd: '/work/demo',
+      role: 'implementation',
+      startedAt: now - 5000,
+      endedAt,
+      outcome: endedAt === null ? null : 'completed',
+      tokens: { input: 100, cacheRead: 50, cacheWrite: 0, output: 20 },
+      toolCalls: 2,
+      turns,
+    })
+    const put = (body: unknown, runId = id) =>
+      callSocket(socket, 'PUT', `/v1/history/aico-agent/${runId}`, body)
+    expect((await put(pushed(null, []))).body).toEqual({ kept: true })
+    const turns = [
+      { turn: 1, model: 'codex/gpt-6.1-sol', stop: 'error' },
+      { turn: 2, model: 'opencode-go/deepseek-v4.1-flash', stop: 'stop' },
+    ]
+    expect((await put(pushed(now, turns))).status).toBe(200)
+    const list = await run('list', '--tool', 'aico-agent')
+    expect(list.out).toContain(`aico-agent:${id}`)
+    expect(list.out).toContain('2 calls')
+    const show = await run('show', '6f20c425')
+    expect(show.out).toContain('model: opencode-go/deepseek-v4.1-flash   outcome: completed')
+    expect(show.out).toContain('tokens: in 100, cache read 50, cache write 0, out 20')
+    expect(show.out).toContain('turn 1  codex/gpt-6.1-sol  error')
+    expect(show.out).toContain(`messages: aico agent show ${id}`)
+    const events = await run('events', '6f20c425', '--limit', '1')
+    expect(events.out).toContain('turn 2: opencode-go/deepseek-v4.1-flash (stop)')
+    expect(events.out).toContain('older: --before 1')
+    // A skipped project is not kept; a malformed push is refused.
+    expect(
+      (await put({ ...pushed(now, []), cwd: '/work/neri' }, `${id.slice(0, 35)}0`)).body,
+    ).toEqual({ kept: false })
+    expect((await put({ ...pushed(now, []), outcome: 'done' })).status).toBe(400)
+    expect((await put({ ...pushed(now, []), extra: 1 })).status).toBe(400)
+    expect((await put(pushed(now, []), 'x')).status).toBe(400)
   })
 
   it('formats an event on one line', () => {

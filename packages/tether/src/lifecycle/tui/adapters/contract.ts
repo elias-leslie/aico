@@ -36,7 +36,14 @@ export interface StateContext {
   pids: number[]
   tail?: FileTail
   seams?: Record<string, unknown>
+  /** Runs agents push to the session history, by their own id (the Aico agent's state). */
+  runs?: AgentRunLookup
 }
+
+/** A pushed run's start and end (ms), or null when it has not been pushed. */
+export type AgentRunLookup = (
+  runId: string,
+) => { startedAt: number | null; endedAt: number | null } | null
 
 /** The agent found in a pane: one reader of its own state. */
 export interface AgentProbe {

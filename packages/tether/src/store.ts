@@ -496,6 +496,15 @@ export class Store {
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(31, now)
       }
+      if (current < 32) {
+        // v32: Aico's own agent harness joins the tool registry (as v15 did for the
+        // Agent Hub chat): added unless its slug is already taken.
+        const agent = DEFAULT_TOOLS.find((tool) => tool.slug === 'aico-agent')
+        if (agent && !this.getTool(agent.slug)) this.insertTool(agent, now)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(32, now)
+      }
     })
   }
 

@@ -10,7 +10,8 @@ import type { Models } from '@earendil-works/pi-ai'
 import { type NextPrompt, promptReader } from './prompt'
 import { loadRoleRules, type Refused, type RoleRules, type RulesRequest } from './rules'
 import { type RunOptions, type RunResult, runAgent } from './run'
-import { agentDbPath, findRun, openAgentDb, type StoredRun } from './transcript'
+import { type PushRun, tetherPush } from './tether'
+import { agentDbPath, findRun, openAgentDb, runReport, type StoredRun } from './transcript'
 
 export const USAGE = `Usage:
   aico agent run --role ROLE [--model MODEL] [--effort LEVEL] [--json] "<task>"
@@ -59,6 +60,8 @@ export interface CliDeps {
   cwd?: string
   /** The interactive prompt (default: stdin). */
   prompt?: NextPrompt
+  /** Tells Tether about a run at its start and end (default: over Tether's socket). */
+  push?: PushRun
 }
 
 class Usage extends Error {}
@@ -115,15 +118,22 @@ export async function main(
       process.stderr.write(`aico agent: refused (${rules.reason}): ${rules.detail}\n`)
       return EXIT.refused as number
     }
-    const once = (task: string | null) =>
-      runAgent({
+    const log = (line: string) => process.stderr.write(`· ${line}\n`)
+    const push = deps.push ?? tetherPush(env, log)
+    const tell = (runId: string) => push(runReport(db, runId))
+    const once = async (task: string | null) => {
+      const result = await runAgent({
         ...request,
         task,
         rules,
         db,
         ...(deps.models && { models: deps.models }),
-        log: (line) => process.stderr.write(`· ${line}\n`),
+        log,
+        onStart: tell,
       })
+      await tell(result.runId)
+      return result
+    }
     if (!values.interactive) return report(await once(request.task), Boolean(values.json))
     return await interactive(request, once, db, deps.prompt)
   } catch (error) {
@@ -206,7 +216,14 @@ function runRequest(
 ): Omit<RunOptions, 'rules' | 'db' | 'cwd'> & { role: string; cwd: string } {
   let stored: StoredRun | undefined
   let branchTurn: number | undefined
-  if (values.resume) stored = findRun(db, values.resume)
+  // Tether resumes a session by the run id it chose; a run that never got a prompt has no
+  // row yet, so it starts fresh under that id.
+  const unstarted =
+    values.interactive &&
+    values.resume !== undefined &&
+    UUID.test(values.resume) &&
+    !db.prepare('SELECT 1 FROM runs WHERE id = ?').get(values.resume)
+  if (values.resume && !unstarted) stored = findRun(db, values.resume)
   else if (values.branch) {
     const match = BRANCH.exec(values.branch) as RegExpExecArray
     stored = findRun(db, match[1] as string)
@@ -230,6 +247,7 @@ function runRequest(
     ...(values.resume && stored && { resume: stored }),
     ...(branchTurn !== undefined && stored && { branch: { from: stored, turn: branchTurn } }),
     ...(values['run-id'] && { runId: values['run-id'] }),
+    ...(unstarted && { runId: values.resume }),
     ...(values.effort && { effort: values.effort }),
     ...(refuseAt && { testRefuseAt: refuseAt }),
     ...(values['test-unreachable'] && { testUnreachable: values['test-unreachable'] }),

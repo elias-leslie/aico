@@ -2687,5 +2687,202 @@
       "severity": "error",
       "name": "package-imports-allowlist"
     }
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+    "to": "packages/tether/src/agent-state.ts",
+    "unresolvedTo": "../../../agent-state",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+    "unresolvedTo": "./contract",
+    "dependencyTypes": [
+      "local",
+      "type-only",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/contract.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+    "to": "packages/tether/src/proc-fs.ts",
+    "unresolvedTo": "../../../proc-fs",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/proc-fs.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/entry-files.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/recovery-facts.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/continuity.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "packages/tether/src/lifecycle/tui/registry.ts",
+    "to": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+    "unresolvedTo": "./adapters/aico-agent",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-cycles"
+    },
+    "cycle": [
+      {
+        "name": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/agent-state.ts",
+        "dependencyTypes": [
+          "local",
+          "type-only",
+          "import"
+        ]
+      },
+      {
+        "name": "packages/tether/src/lifecycle/tui/registry.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
   }
 ]

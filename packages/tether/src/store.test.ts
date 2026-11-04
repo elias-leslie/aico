@@ -240,6 +240,7 @@ describe('Store schema', () => {
       'agy',
       'pi',
       'agent-hub',
+      'aico-agent',
       'shell',
     ])
     expect(migrated.defaultTool()?.slug).toBe('codex')
@@ -344,6 +345,7 @@ describe('agent tools', () => {
       'agy',
       'pi',
       'agent-hub',
+      'aico-agent',
       'shell',
     ])
     expect(store.defaultTool()?.slug).toBe('codex')

@@ -865,7 +865,10 @@ export async function startDaemon(
     },
     nodeProcFs,
     env.HOME ?? homedir(),
-    models ? { models: (id, source) => models.see(id, source, nodeFileTail) } : {},
+    {
+      ...(models ? { models: (id, source) => models.see(id, source, nodeFileTail) } : {}),
+      ...(context.history ? { runs: context.history.agentRun } : {}),
+    },
   )
   if (reconcileEnabled(env)) void ready.then(() => agentPoller.start()).catch(() => {})
   if (reconcileEnabled(env)) void ready.then(() => hubRuntime.start()).catch(() => {})

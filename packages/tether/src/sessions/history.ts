@@ -67,6 +67,32 @@ export interface SessionDetail extends SessionSummary {
   files: { path: string; writes: number }[]
   /** Subagent transcripts of this conversation: their count and token total. */
   subagents: { count: number; tokens: Tokens; toolCalls: number }
+  /** A pushed run's turns and the model that ran each (the Aico agent); absent otherwise. */
+  turns?: RunTurn[]
+}
+
+/** The tool that pushes its runs instead of keeping a transcript Tether reads. */
+export const PUSHED_TOOL = 'aico-agent'
+
+export interface RunTurn {
+  turn: number
+  model: string
+  /** How the turn ended (`stop`, `toolUse`, `error`...). */
+  stop: string
+}
+
+/** What `aico agent run` pushes at its start and end (`PUT /v1/history/aico-agent/:run`). */
+export interface PushedRun {
+  runId: string
+  cwd: string
+  role: string | null
+  startedAt: number
+  /** Null while a prompt runs. */
+  endedAt: number | null
+  outcome: Outcome | null
+  tokens: Tokens
+  toolCalls: number
+  turns: RunTurn[]
 }
 
 export interface EventPage {
@@ -412,6 +438,63 @@ export class History {
       .run(this.now() - this.options.keepMs)
   }
 
+  // --- pushed runs ----------------------------------------------------------
+
+  /** A run the Aico agent pushed: its row replaces what it pushed before. Its path is
+   * the command that shows the whole run; its turns are kept in `reader_state`. A run
+   * in a skipped folder is not kept: returns false. */
+  record(run: PushedRun): boolean {
+    if (this.blocked(run.cwd)) return false
+    const id = `${PUSHED_TOOL}:${run.runId}`
+    const model = run.turns.at(-1)?.model ?? null
+    const project = this.options.projectOf?.(run.cwd) ?? basename(run.cwd)
+    this.db
+      .prepare(
+        `INSERT INTO transcripts (id, tool, native_id, path, project, cwd, model, started_at, ended_at,
+           outcome, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, tool_calls,
+           file_mtime, reader_state)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET project = excluded.project, cwd = excluded.cwd,
+           model = excluded.model, started_at = excluded.started_at, ended_at = excluded.ended_at,
+           outcome = excluded.outcome, input_tokens = excluded.input_tokens,
+           cache_read_tokens = excluded.cache_read_tokens, cache_write_tokens = excluded.cache_write_tokens,
+           output_tokens = excluded.output_tokens, tool_calls = excluded.tool_calls,
+           file_mtime = excluded.file_mtime, reader_state = excluded.reader_state`,
+      )
+      .run(
+        id,
+        PUSHED_TOOL,
+        run.runId,
+        `aico agent show ${run.runId}`,
+        project,
+        run.cwd,
+        model,
+        run.startedAt,
+        run.endedAt,
+        run.outcome,
+        run.tokens.input,
+        run.tokens.cacheRead,
+        run.tokens.cacheWrite,
+        run.tokens.output,
+        run.toolCalls,
+        this.now(),
+        JSON.stringify({ role: run.role, turns: run.turns }),
+      )
+    return true
+  }
+
+  /** A pushed run's start and end, by the agent's own run id (its live state). */
+  readonly agentRun = (
+    runId: string,
+  ): { startedAt: number | null; endedAt: number | null } | null => {
+    const row = this.db
+      .prepare('SELECT started_at, ended_at FROM transcripts WHERE id = ?')
+      .get(`${PUSHED_TOOL}:${runId}`) as
+      | { started_at: number | null; ended_at: number | null }
+      | undefined
+    return row ? { startedAt: row.started_at, endedAt: row.ended_at } : null
+  }
+
   // --- reading --------------------------------------------------------------
 
   list(options: { limit?: number; tool?: string; project?: string } = {}): SessionSummary[] {
@@ -474,6 +557,7 @@ export class History {
     }
     return {
       ...summaryOf({ ...row, files_written: files.length }),
+      ...(row.tool === PUSHED_TOOL && { turns: pushedTurns(row) }),
       path: row.path,
       files,
       subagents: {
@@ -495,10 +579,11 @@ export class History {
     row: Row,
     options: { limit?: number; before?: number; from?: number },
   ): EventPage | 'gone' {
+    const limit = Math.min(Math.max(options.limit ?? 100, 1), 500)
+    if (row.tool === PUSHED_TOOL) return turnEvents(row, limit, options)
     const reader = readerFor(row.tool)
     const facts = fileFacts(row.path)
     if (!reader || !facts) return 'gone'
-    const limit = Math.min(Math.max(options.limit ?? 100, 1), 500)
     const state = reader.initialState()
     const budget = 32 << 20
     const parse = (text: string, offset: number): SessionEvent[] => {
@@ -564,6 +649,44 @@ function summaryOf(row: Row & { files_written: number }): SessionSummary {
     tokens: tokensOf(row),
     toolCalls: row.tool_calls,
     filesWritten: row.files_written,
+  }
+}
+
+function pushedTurns(row: Row): RunTurn[] {
+  try {
+    return (JSON.parse(row.reader_state ?? '{}') as { turns?: RunTurn[] }).turns ?? []
+  } catch {
+    return []
+  }
+}
+
+/** A pushed run's events: one note per turn naming the model that ran it (its messages
+ * stay with the agent: `aico agent show`). An event's offset is its turn's index. */
+function turnEvents(
+  row: Row,
+  limit: number,
+  options: { before?: number; from?: number },
+): EventPage {
+  const all = pushedTurns(row).map(
+    (turn, index): SessionEvent => ({
+      offset: index,
+      at: null,
+      role: 'system',
+      kind: 'note',
+      text: `turn ${turn.turn}: ${turn.model} (${turn.stop})`,
+      model: turn.model,
+    }),
+  )
+  const start =
+    options.from !== undefined
+      ? Math.min(options.from, all.length)
+      : Math.max(0, Math.min(options.before ?? all.length, all.length) - limit)
+  const end = Math.min(all.length, start + limit)
+  return {
+    items: all.slice(start, end),
+    older: start > 0 ? start : null,
+    newer: end < all.length ? end : null,
+    size: all.length,
   }
 }
 

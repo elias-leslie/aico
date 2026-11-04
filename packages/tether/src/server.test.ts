@@ -60,7 +60,7 @@ describe('control socket', () => {
       status: 'ok',
       instance: 'test',
       apiVersion: 28,
-      schemaVersion: 31,
+      schemaVersion: 32,
       lifecycle: 'disabled',
     })
     const version = await call('GET', '/v1/version')
@@ -233,7 +233,7 @@ describe('agent tools API', () => {
   it('lists, creates from a command string, patches and deletes', async () => {
     const list = await call('GET', '/v1/tools')
     expect(list.body).toMatchObject({ defaultSlug: 'codex' })
-    expect((list.body as { items: unknown[] }).items.length).toBe(6)
+    expect((list.body as { items: unknown[] }).items.length).toBe(7)
     // Clients take tool names, colours and root capability from here.
     expect(
       (list.body as { items: { slug: string; rootCapable: boolean }[] }).items.map((t) => [
@@ -246,6 +246,7 @@ describe('agent tools API', () => {
       ['agy', false],
       ['pi', true],
       ['agent-hub', true],
+      ['aico-agent', true],
       ['shell', false],
     ])
 

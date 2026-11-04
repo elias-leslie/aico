@@ -9,11 +9,11 @@ import type { SessionEvent } from './types'
 
 export const HISTORY_USAGE = `Usage:
   aico sessions list [--tool T] [--project P] [--limit N] [--json]
-      Recent sessions of Claude Code, Codex and Pi, newest first.
+      Recent sessions of Claude Code, Codex, Pi and the Aico agent, newest first.
   aico sessions show <id> [--json]
       One session: model, project, start and end, outcome, tokens, tool
-      calls, files written and its subagents. <id> is the id in the list or the
-      start of the tool's own id.
+      calls, files written and its subagents (an Aico agent run: the model of
+      each turn). <id> is the id in the list or the start of the tool's own id.
   aico sessions events <id> [--limit N] [--before OFFSET | --from OFFSET] [--json]
       What was said and done, read from the tool's transcript. The last N by
       default (50); --before OFFSET pages back, --from OFFSET reads forward.
@@ -149,6 +149,11 @@ export async function runHistory(
       io.out(
         `subagents: ${item.subagents.count}, ${item.subagents.toolCalls} tool calls, tokens: ${formatTokens(item.subagents.tokens)}`,
       )
+    }
+    if (item.turns) {
+      for (const turn of item.turns) io.out(`  turn ${turn.turn}  ${turn.model}  ${turn.stop}`)
+      io.out(`messages: ${item.path}`)
+      return 0
     }
     io.out(`transcript: ${item.path}`)
     return 0

@@ -6,6 +6,7 @@
 
 import type { AgentTool, ContextHook as ToolContextHook } from '../../tools'
 import { agy } from './adapters/agy'
+import { aicoAgent } from './adapters/aico-agent'
 import { claudeCode } from './adapters/claude-code'
 import { codex } from './adapters/codex'
 import type { TuiAdapter } from './adapters/contract'
@@ -13,8 +14,10 @@ import { pi } from './adapters/pi'
 import type { ContextHook, TuiSpec } from './spec'
 
 /** Every agent TUI Tether knows, one adapter each (adapters/contract.ts), in the
- * order an agent is looked for in a pane's processes. */
-export const ADAPTERS: readonly TuiAdapter[] = [claudeCode, codex, pi, agy]
+ * order an agent is looked for in a pane's processes. The Aico agent comes before
+ * Pi: both start under TETHER_AGENT_SESSION_ID, and Pi's search does not check the
+ * process name. */
+export const ADAPTERS: readonly TuiAdapter[] = [claudeCode, codex, aicoAgent, pi, agy]
 
 /** The adapter of a canonical tool slug. */
 export function adapterOf(slug: unknown): TuiAdapter | undefined {

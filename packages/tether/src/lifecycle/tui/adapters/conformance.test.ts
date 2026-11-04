@@ -115,6 +115,18 @@ const FIXTURES: Record<string, (phase: Phase) => StateContext> = {
     }
     return { fs: procfs(files), home: '/h', pids: [40], tail: tailOf(files) }
   },
+  'aico-agent': (phase) => ({
+    fs: procfs({
+      '/proc/60/comm': 'aico-agent\n',
+      '/proc/60/environ': `TETHER_AGENT_SESSION_ID=${SESSION}\0`,
+    }),
+    home: '/h',
+    pids: [60],
+    runs: (id: string) =>
+      id === SESSION
+        ? { startedAt: Date.parse(AT), endedAt: phase === 'busy' ? null : Date.parse(AT) }
+        : null,
+  }),
   agy: (phase) => {
     const snapshot: AgySnapshot = {
       maxIdx: phase === 'busy' ? 8 : 7,

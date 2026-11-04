@@ -5,5 +5,5 @@
   },
   "include": ["src/**/*.ts", "src/**/*.json", "data/*.json", "vitest.config.ts"],
   "exclude": ["node_modules", "dist", ".tsbuild"],
-  "references": [{ "path": "../store" }, { "path": "../context" }]
+  "references": [{ "path": "../store" }, { "path": "../context" }, { "path": "../tether-client" }]
 }

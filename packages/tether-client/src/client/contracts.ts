@@ -410,7 +410,7 @@ export interface HistoryTokens {
 
 export interface HistorySession {
   id: string
-  tool: 'claude-code' | 'codex' | 'pi'
+  tool: 'claude-code' | 'codex' | 'pi' | 'aico-agent'
   parentId: string | null
   project: string | null
   cwd: string | null
@@ -424,7 +424,29 @@ export interface HistorySession {
   filesWritten: number
 }
 
+/** One turn of an Aico agent run and the model that ran it. */
+export interface HistoryTurn {
+  turn: number
+  model: string
+  stop: string
+}
+
+/** What the Aico agent pushes at a run's start and end (`PUT /v1/history/aico-agent/:run`). */
+export interface AgentRunPush {
+  cwd: string
+  role: string | null
+  startedAt: number
+  /** null while a prompt runs. */
+  endedAt: number | null
+  outcome: HistoryOutcome | null
+  tokens: HistoryTokens
+  toolCalls: number
+  turns: HistoryTurn[]
+}
+
 export interface HistoryDetail extends HistorySession {
+  /** An Aico agent run's turns; absent for other tools. */
+  turns?: HistoryTurn[]
   path: string
   files: { path: string; writes: number }[]
   subagents: { count: number; tokens: HistoryTokens; toolCalls: number }

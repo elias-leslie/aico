@@ -2,7 +2,7 @@
 // transcript record of one tool into a `Fold` (what the record adds to the
 // session's row) and the `SessionEvent`s the transcript view shows.
 
-export type HistoryTool = 'claude-code' | 'codex' | 'pi'
+export type HistoryTool = 'claude-code' | 'codex' | 'pi' | 'aico-agent'
 export type Outcome = 'completed' | 'aborted' | 'error'
 
 export interface Usage {

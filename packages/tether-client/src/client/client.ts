@@ -9,6 +9,7 @@
 import { request } from 'node:http'
 import { join } from 'node:path'
 import {
+  type AgentRunPush,
   type AttachAnswer,
   type HistoryDetail,
   type HistoryEventPage,
@@ -169,6 +170,13 @@ export class TetherClient {
     if (options.tool) query.set('tool', options.tool)
     if (options.project) query.set('project', options.project)
     return this.json('GET', `/v1/history${query.size ? `?${query}` : ''}`)
+  }
+
+  /** The Aico agent's run, pushed at its start and end; `kept` is false in a skipped folder. */
+  pushAgentRun(runId: string, run: AgentRunPush): Promise<{ kept: boolean }> {
+    return this.json('PUT', `/v1/history/aico-agent/${encodeURIComponent(runId)}`, run, {
+      timeoutMs: 3000,
+    })
   }
 
   historySession(id: string): Promise<HistoryDetail> {
