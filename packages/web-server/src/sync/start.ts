@@ -3,6 +3,7 @@
 
 import { readFileSync } from 'node:fs'
 import type { Server } from 'node:http'
+import { readSettings } from '@aico/fleet/settings'
 import { syncPeers } from '@aico/tether-client'
 import type { WebConfig } from '../config'
 import type { WebStore } from '../db'
@@ -32,11 +33,14 @@ export function startSync(options: {
     blobsDir,
     peers: () => {
       try {
+        const configured = new Set(
+          readSettings(process.env, config.tetherSocket)?.peers.map((peer) => peer.name) ?? [],
+        )
         return syncPeers(
           readFileSync(config.sync.hostsFile, 'utf8'),
           process.env,
           process.getuid?.(),
-        )
+        ).filter((peer) => configured.has(peer.name))
       } catch {
         return []
       }

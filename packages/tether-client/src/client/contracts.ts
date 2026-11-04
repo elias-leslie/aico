@@ -146,7 +146,7 @@ export interface HostInfo {
   name: string
   /** The ssh Host alias the link uses. */
   ssh: string
-  /** The link's ssh ControlMaster socket (`$XDG_RUNTIME_DIR/tether/peers/<name>/exec.sock`). */
+  /** The link's ssh ControlMaster socket (`$XDG_RUNTIME_DIR/aico/fleet/<name>/exec.sock`). */
   control: string
   /** The host's Tether state directory, when hosts.json names one. */
   stateDir?: string

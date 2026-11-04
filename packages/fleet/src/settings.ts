@@ -68,6 +68,13 @@ export function readSettings(env: NodeJS.ProcessEnv, controlSocket: string): Fle
     throw new Error(
       'Fleet endpoints must be literal LAN addresses; listener must belong to this machine',
     )
+  const peerRoot = join(
+    env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`,
+    'aico',
+    'fleet',
+  )
+  if (value.peerRoot !== peerRoot)
+    throw new Error('Fleet proxies must use the Aico fleet runtime directory')
   const machine = machineName(hostname())
   if (value.machine !== machine)
     throw new Error('Fleet machine must be this machine’s lower-cased short hostname')

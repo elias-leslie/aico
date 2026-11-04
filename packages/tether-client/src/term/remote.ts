@@ -59,7 +59,7 @@ export function remoteHostOf(
 /** The fleet command socket socket for `host` (`tether-link@<host>`). */
 export function controlSocketPath(host: string, env: NodeJS.ProcessEnv = process.env): string {
   const runtime = env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`
-  return `${runtime}/tether/peers/${host}/exec.sock`
+  return `${runtime}/aico/fleet/${host}/exec.sock`
 }
 
 /** True when `path` is a Tether instance's tmux socket on that host. */

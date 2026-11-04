@@ -127,7 +127,7 @@ describe('hosts registry', () => {
     expect(hostsFilePath({ XDG_CONFIG_HOME: '/c', TETHER_HOSTS_FILE: '/t/h.json' })).toBe(
       '/t/h.json',
     )
-    expect(peerDir({ XDG_RUNTIME_DIR: '/run/user/7' }, 7, 'vm')).toBe('/run/user/7/tether/peers/vm')
+    expect(peerDir({ XDG_RUNTIME_DIR: '/run/user/7' }, 7, 'vm')).toBe('/run/user/7/aico/fleet/vm')
   })
 })
 

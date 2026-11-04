@@ -30,7 +30,7 @@ const ENTRY: HostEntry = {
   wakeTimeoutSec: 240,
   stateDir: null,
 }
-const CONTROL = '/run/user/1000/tether/peers/vm-1/exec.sock'
+const CONTROL = '/run/user/1000/aico/fleet/vm-1/exec.sock'
 
 const STATUS = {
   host: 'vm-1',

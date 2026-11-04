@@ -106,7 +106,7 @@ describe('attach target', () => {
 
 describe('remote attach target', () => {
   const runtime = { ...env, XDG_RUNTIME_DIR: '/run/user/1000' }
-  const control = '/run/user/1000/tether/peers/agent-work/exec.sock'
+  const control = '/run/user/1000/aico/fleet/agent-work/exec.sock'
   const remoteSocket = `/home/kasadis/.local/state/tether/default/tmux/${hex}/server.sock`
   const answer = {
     generation: 'a'.repeat(64),
@@ -164,7 +164,7 @@ describe('remote attach target', () => {
     bad({ fleet: { ...answer.fleet, alias: '-oProxyCommand=id' } })
     bad({ fleet: { ...answer.fleet, alias: '10.20.0.114' } })
     bad({ fleet: { ...answer.fleet, control: '/tmp/exec.sock' } })
-    bad({ fleet: { ...answer.fleet, control: '/run/user/1000/tether/peers/other/exec.sock' } })
+    bad({ fleet: { ...answer.fleet, control: '/run/user/1000/aico/fleet/other/exec.sock' } })
     bad({ fleet: { ...answer.fleet, stateDir: '/srv/../etc' } })
     bad({ argv: ['/usr/bin/tmux', '-S', '/tmp/evil.sock', 'attach-session', '-t', '$3'] })
     bad({

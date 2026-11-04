@@ -14,7 +14,7 @@ describe('shellQuote', () => {
 describe('controlSocketPath', () => {
   it("is the link's master under the runtime dir", () => {
     expect(controlSocketPath('w', { XDG_RUNTIME_DIR: '/run/user/7' })).toBe(
-      '/run/user/7/tether/peers/w/exec.sock',
+      '/run/user/7/aico/fleet/w/exec.sock',
     )
   })
 })

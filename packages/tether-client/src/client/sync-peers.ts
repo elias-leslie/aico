@@ -44,7 +44,7 @@ export function syncPeers(
     if (typeof sync !== 'string' || !isAbsolute(sync) || normalize(sync) !== sync) continue
     if (/[\s\0]/.test(sync) || Buffer.byteLength(sync) > MAX_SOCKET_BYTES) continue
     if (peers.some((peer) => peer.name === name)) continue
-    peers.push({ name, socket: join(runtime, 'tether', 'peers', name, 'sync.sock') })
+    peers.push({ name, socket: join(runtime, 'aico', 'fleet', name, 'sync.sock') })
   }
   return peers
 }

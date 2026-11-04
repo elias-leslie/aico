@@ -85,6 +85,10 @@ comes up). `tether hosts` shows each host's `apiVersion` and last `update`.
 
 ### A second machine running Aico (notes on both)
 
+Runtime peer connections now use the [pinned fleet link](fleet-link.md). The
+SSH deployment command below is a manual bootstrap/rescue route. Do not enable
+SSH peer link units: configure and approve the fleet keys instead.
+
 A host without SummitFlow (such as the gem container) gets the same build from
 the workstation's checkout:
 

@@ -19,7 +19,7 @@ import { RemoteUploadError, remoteUploadArgv, uploadToHost } from './remote-uplo
 const remote: RemoteHost = {
   host: 'agent-work',
   alias: 'agent-work-vm',
-  control: '/run/user/1000/tether/peers/agent-work/exec.sock',
+  control: '/run/user/1000/aico/fleet/agent-work/exec.sock',
   stateDir: null,
 }
 

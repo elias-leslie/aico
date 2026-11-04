@@ -17,7 +17,8 @@ and [Node crypto](https://nodejs.org/docs/latest-v22.x/api/crypto.html).
 
 `contracts/fleet-frames.schema.json` defines hello, auth, control, event, sync and
 terminal-view frames. Channel opens name a local service (control, sync, jobs)
-or carry a command argv (exec). Data frames carry bytes as base64. Terminal
+or carry a command argv (exec). Proxies live under `$XDG_RUNTIME_DIR/aico/fleet`,
+separate from legacy SSH sockets. Data frames carry bytes as base64. Terminal
 commands preserve literal argv, stdout, stderr, stdin and exit status.
 
 ## Enrollment
@@ -52,7 +53,8 @@ data. A missing file leaves a standalone machine. Required fields:
 - `stateDir`: its Aico state directory; `allowlist`: the public root-owned file.
 - `listen`: `{ "address": "LAN-IP", "port": PORT }`.
 - `peers`: `[{ "name": "peer-short-hostname", "endpoint": { "address": "LAN-IP", "port": PORT } }]`.
-- `syncSocket`, optional `jobsSocket`, and `peerRoot`: local service/proxy paths.
+- `syncSocket`, optional `jobsSocket`, and `peerRoot`: local service paths;
+  `peerRoot` is `$XDG_RUNTIME_DIR/aico/fleet`.
 - `retryMinMs`, `retryMaxMs`, `deadMs`, `statusMs`, and `statusUrl`.
 
 Listeners must name an existing local private IPv4 or loopback address. Public

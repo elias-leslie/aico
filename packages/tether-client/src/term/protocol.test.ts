@@ -168,7 +168,7 @@ const remoteArgv = [
   FLEET_BIN,
   'fleet',
   'exec',
-  '/run/user/1000/tether/peers/w/exec.sock',
+  '/run/user/1000/aico/fleet/w/exec.sock',
   '--',
   'env',
   'LANG=C.UTF-8',

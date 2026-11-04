@@ -14,7 +14,7 @@ describe('sync peers', () => {
       { ...ENTRY, name: 'gem', sync: '/run/user/1000/aico/other.sock' },
     ])
     expect(syncPeers(text, ENV, 7)).toEqual([
-      { name: 'gem', socket: '/run/user/7/tether/peers/gem/sync.sock' },
+      { name: 'gem', socket: '/run/user/7/aico/fleet/gem/sync.sock' },
     ])
   })
 

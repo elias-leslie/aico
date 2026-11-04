@@ -85,10 +85,10 @@ export function hostsFilePath(env: NodeJS.ProcessEnv): string {
   return join(configRoot, 'tether', 'hosts.json')
 }
 
-/** `$XDG_RUNTIME_DIR/tether/peers/<name>`: the link's ssh.ctl and forwarded control.sock. */
+/** `$XDG_RUNTIME_DIR/aico/fleet/<name>`: the link's ssh.ctl and forwarded control.sock. */
 export function peerDir(env: NodeJS.ProcessEnv, uid: number | undefined, name: string): string {
   const runtime = env.XDG_RUNTIME_DIR || `/run/user/${uid ?? process.getuid?.() ?? 0}`
-  return join(runtime, 'tether', 'peers', name)
+  return join(runtime, 'aico', 'fleet', name)
 }
 
 function absolutePath(value: unknown): string | null {

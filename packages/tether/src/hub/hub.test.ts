@@ -239,7 +239,7 @@ describe('hub', () => {
         { name: 'vm', ssh: 'vm', socket: '/run/user/1000/tether/default/control.sock' },
       ]),
     )
-    const peerDirectory = join(dir, 'tether', 'peers', 'vm')
+    const peerDirectory = join(dir, 'aico', 'fleet', 'vm')
     mkdirSync(peerDirectory, { recursive: true })
     peer = new FakePeer(join(peerDirectory, 'control.sock'))
     peer.sessions = [
@@ -307,7 +307,7 @@ describe('hub', () => {
     expect(hub.hosts()[0]).toMatchObject({
       name: 'vm',
       ssh: 'vm',
-      control: join(dir, 'tether', 'peers', 'vm', 'exec.sock'),
+      control: join(dir, 'aico', 'fleet', 'vm', 'exec.sock'),
       state: 'connected',
       sessions: 2,
       error: null,
@@ -785,7 +785,7 @@ describe('hub', () => {
         argv: ['/usr/bin/tmux'],
         env: {},
         host: 'vm',
-        fleet: { alias: 'vm', control: join(dir, 'tether', 'peers', 'vm', 'exec.sock') },
+        fleet: { alias: 'vm', control: join(dir, 'aico', 'fleet', 'vm', 'exec.sock') },
       },
     })
     expect((await call('GET', '/v1/sessions/aaaa0001')).body).toMatchObject({
@@ -1065,7 +1065,7 @@ describe('hub', () => {
       expect(targets).toEqual([
         {
           entry: expect.objectContaining({ name: 'vm', ssh: 'vm' }),
-          control: join(dir, 'tether', 'peers', 'vm', 'exec.sock'),
+          control: join(dir, 'aico', 'fleet', 'vm', 'exec.sock'),
           instance: 'default',
         },
       ])
@@ -1591,7 +1591,7 @@ describe('hub', () => {
         FLEET_BIN,
         'fleet',
         'exec',
-        join(dir, 'tether', 'peers', 'vm', 'exec.sock'),
+        join(dir, 'aico', 'fleet', 'vm', 'exec.sock'),
         '--',
       ])
       const steps = events
