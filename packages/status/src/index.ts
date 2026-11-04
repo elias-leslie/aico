@@ -3,6 +3,14 @@
 // over loopback HTTP or, in aico-web itself, call StatusStore directly.
 
 export {
+  type AlertBatch,
+  type AlertChange,
+  type AlertHook,
+  alerting,
+  alertText,
+  transitions,
+} from './alerts'
+export {
   ACTION_KINDS,
   type Action,
   type ActionKind,
@@ -15,8 +23,10 @@ export {
   type StatusRow,
 } from './row'
 export {
+  counted,
   type Filter,
   PROBLEMS,
+  type Problem,
   type Rollup,
   SHOWN,
   type Shown,
@@ -25,6 +35,9 @@ export {
   type Sort,
   type StatusView,
   type StoredRow,
+  type Summary,
+  summary,
+  type UnknownWhy,
   view,
 } from './show'
 export { machineId, StatusStore, statusDbPath } from './store'

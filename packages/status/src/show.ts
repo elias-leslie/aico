@@ -6,6 +6,9 @@
 // Unknown: every other row of a machine whose own machine row is late or off
 // shows "unknown" since then, and of a machine with no machine row at all
 // (shown_since null). Unknown is a problem; it is never counted as ok.
+//
+// The badge (owner rule, 2026-11-03): rows that show unknown only because their machine row says
+// off (turned off on purpose) stay on the screen as unknown but out of the badge count and alerts.
 
 import type { Kind, StatusRow } from './row'
 
@@ -22,12 +25,18 @@ export type Shown = (typeof SHOWN)[number]
 
 /** Shown states that are problems (listed first); the rest fold into the healthy count. */
 export const PROBLEMS: readonly Shown[] = ['failed', 'late', 'unknown', 'warn']
+export type Problem = 'failed' | 'late' | 'unknown' | 'warn'
+
+/** Why a row shows unknown: its machine row says off, went late, or there is none. */
+export type UnknownWhy = 'off' | 'late' | 'missing'
 
 export interface ShownRow extends StatusRow {
   updated_at: string
   shown: Shown
   /** For late and unknown: since when (RFC 3339 UTC). */
   shown_since: string | null
+  /** Only on unknown rows. */
+  unknown_why?: UnknownWhy
 }
 
 export const SORTS = ['problems', 'what', 'updated', 'next'] as const
@@ -50,10 +59,27 @@ export interface Rollup {
   counts: Record<Shown, number>
 }
 
+/** What the tray badge and the phone read: all rows, whatever the filter. */
+export interface Summary {
+  /** Problems that count: unknown rows of a machine turned off on purpose are left out. */
+  problems: number
+  /** The worst shown state among the counted problems, or null. */
+  worst: Shown | null
+  /** Counted problems by state. */
+  counts: Record<Problem, number>
+  /** Rows on a machine turned off on purpose: shown unknown, not counted. */
+  quiet: number
+  healthy: number
+  /** The first three counted problems, worst first. */
+  top: ShownRow[]
+}
+
 export interface StatusView {
   generated_at: string
   /** Of the rows that pass the filter. */
   rollup: Rollup
+  /** Of every row, for the badge. */
+  summary: Summary
   rows: ShownRow[]
 }
 
@@ -71,18 +97,26 @@ function lateSince(stored: StoredRow, now: number): number | null {
 export function show(rows: readonly StoredRow[], now: number): ShownRow[] {
   // Per machine with a machine row: since when it says the machine is not reporting (late or
   // off), else null.
-  const silent = new Map<string, number | null>()
+  const silent = new Map<string, { since: number; why: UnknownWhy } | null>()
   for (const stored of rows) {
     if (stored.row.kind !== 'machine') continue
-    const since = stored.row.state === 'off' ? stored.updatedAt : lateSince(stored, now)
-    silent.set(stored.row.machine, since)
+    const off = stored.row.state === 'off'
+    const since = off ? stored.updatedAt : lateSince(stored, now)
+    silent.set(stored.row.machine, since === null ? null : { since, why: off ? 'off' : 'late' })
   }
   return rows.map((stored) => {
     const base = { ...stored.row, updated_at: iso(stored.updatedAt) }
     if (stored.row.kind !== 'machine') {
       const machine = silent.get(stored.row.machine)
-      if (machine === undefined) return { ...base, shown: 'unknown', shown_since: null }
-      if (machine !== null) return { ...base, shown: 'unknown', shown_since: iso(machine) }
+      if (machine === undefined)
+        return { ...base, shown: 'unknown', shown_since: null, unknown_why: 'missing' }
+      if (machine !== null)
+        return {
+          ...base,
+          shown: 'unknown',
+          shown_since: iso(machine.since),
+          unknown_why: machine.why,
+        }
     }
     const late = lateSince(stored, now)
     if (late !== null) return { ...base, shown: 'late', shown_since: iso(late) }
@@ -128,8 +162,34 @@ export function rollup(rows: readonly ShownRow[]): Rollup {
   return { problems, healthy: rows.length - problems, counts }
 }
 
-/** `select` and `rollup` together: what the API and the CLI read. */
+/** Whether a row counts toward the badge and alerts: a problem not on a machine turned off on purpose. */
+export function counted(row: ShownRow): boolean {
+  return PROBLEMS.includes(row.shown) && row.unknown_why !== 'off'
+}
+
+export function summary(rows: readonly ShownRow[]): Summary {
+  const problems = select(rows.filter(counted))
+  const counts = Object.fromEntries(PROBLEMS.map((state) => [state, 0])) as Summary['counts']
+  for (const row of problems) counts[row.shown as Problem] += 1
+  const quiet = rows.filter((row) => row.unknown_why === 'off').length
+  return {
+    problems: problems.length,
+    worst: problems[0]?.shown ?? null,
+    counts,
+    quiet,
+    healthy: rows.filter((row) => !PROBLEMS.includes(row.shown)).length,
+    top: problems.slice(0, 3),
+  }
+}
+
+/** `select`, `rollup` and `summary` together: what the API and the CLI read. */
 export function view(rows: readonly StoredRow[], now: number, filter: Filter = {}): StatusView {
-  const selected = select(show(rows, now), filter)
-  return { generated_at: iso(now), rollup: rollup(selected), rows: selected }
+  const shown = show(rows, now)
+  const selected = select(shown, filter)
+  return {
+    generated_at: iso(now),
+    rollup: rollup(selected),
+    summary: summary(shown),
+    rows: selected,
+  }
 }

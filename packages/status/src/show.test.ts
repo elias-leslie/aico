@@ -86,4 +86,36 @@ describe('view', () => {
     expect(ids({ sort: 'updated' })).toEqual(['b/three', 'b/four', 'a/one', 'a/two'])
     expect(ids({ sort: 'next' })).toEqual(['b/three', 'a/one', 'b/four', 'a/two'])
   })
+
+  it('says why a row is unknown and keeps a machine turned off on purpose out of the badge', () => {
+    const rows = [
+      ...ALL,
+      stored({
+        id: 'c/machine',
+        what: 'c',
+        kind: 'machine',
+        machine: 'c',
+        state: 'off',
+        next_run: '2026-11-03T13:00:00Z',
+      }),
+      stored({ id: 'c/job', what: 'C job', machine: 'c', state: 'failed', meaning: 'Broke.' }),
+      stored({ id: 'd/job', what: 'D job', machine: 'd' }),
+    ]
+    const result = view(rows, NOW)
+    const byId = new Map(result.rows.map((row) => [row.id, row]))
+    expect(byId.get('c/job')).toMatchObject({ shown: 'unknown', unknown_why: 'off' })
+    expect(byId.get('d/job')).toMatchObject({ shown: 'unknown', unknown_why: 'missing' })
+    expect(byId.get('a/one')?.unknown_why).toBeUndefined()
+    // The screen still counts both unknown rows; the badge leaves out c's.
+    expect(result.rollup.counts.unknown).toBe(2)
+    expect(result.summary).toMatchObject({
+      problems: 3,
+      worst: 'failed',
+      counts: { failed: 1, late: 1, unknown: 1, warn: 0 },
+      quiet: 1,
+    })
+    expect(result.summary.top.map((row) => row.id)).toEqual(['a/two', 'b/three', 'd/job'])
+    // The summary covers every row, whatever the filter.
+    expect(view(rows, NOW, { machine: ['a'] }).summary.problems).toBe(3)
+  })
 })
