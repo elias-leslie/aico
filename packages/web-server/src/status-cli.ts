@@ -115,7 +115,7 @@ export function formatStatus(
   const out: string[] = []
   out.push(
     rollup.problems === 0
-      ? `Nothing needs you: ${plural(rollup.healthy, 'row')} healthy (${healthyParts}).`
+      ? `No problems: ${plural(rollup.healthy, 'row')} healthy (${healthyParts}).`
       : `${plural(rollup.problems, 'problem')}, ${rollup.healthy} healthy.`,
   )
   const shown = all ? rows : rows.filter((row) => row.shown !== 'ok' && row.shown !== 'off')
