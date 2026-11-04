@@ -86,6 +86,8 @@
                     "group": [
                       "@aico/agent",
                       "@aico/agent/**",
+                      "@aico/checks",
+                      "@aico/checks/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",

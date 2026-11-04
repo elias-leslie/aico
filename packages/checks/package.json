@@ -1,0 +1,32 @@
+{
+  "name": "@aico/checks",
+  "version": "0.1.0",
+  "description": "The repo gate: aico check (each repo's .st-check.toml stages, quick and full lanes, acceptance on the committed tree), aico commit (path-scoped) and the check, commit and tree receipt behind aico tasks done.",
+  "private": true,
+  "license": "Apache-2.0",
+  "aico": {
+    "layer": 4,
+    "imports": [
+      "@aico/status",
+      "@aico/tasks"
+    ]
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --log-level=error --outfile=dist/aico-checks.mjs --banner:js=\"// Aico checks bundle. Built by npm run build; do not edit.\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aico/status": "0.1.0",
+    "@aico/tasks": "0.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}
