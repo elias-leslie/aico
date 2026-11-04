@@ -4,6 +4,7 @@
 // claims, and status.db rows (the Status problems are the host findings).
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { SessionDescriptor } from '@aico/tether-client'
 import policy from '../data/pulse-brief.json' with { type: 'json' }
@@ -220,7 +221,11 @@ export function items(
 ) {
   return findings.map((f): BriefItem => {
     const tail = openFor(f.since, now, cfg)
-    let body = `${f.machine}: ${f.what}: ${f.meaning}`.replace(/\s+/g, ' ').trim()
+    // The first sentence of the finding, and the machine only when it is not this one: `aico pulse` has the rest.
+    const flat = f.meaning.replace(/\s+/g, ' ').trim()
+    const meaning = flat.split(/(?<=[.!?])\s/)[0] ?? ''
+    const where = f.machine === hostname() ? '' : `${f.machine}: `
+    let body = `${where}${f.what}: ${meaning}`.trim()
     const room = cfg.max_item_chars - tail.length
     if (body.length > room) body = `${body.slice(0, room - 1)}…`
     const critical = f.shown === 'failed'

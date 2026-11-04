@@ -3,7 +3,7 @@
   "reshow_hours": 24,
   "stuck_after_hours": 24,
   "max_lines": 15,
-  "max_item_chars": 170,
+  "max_item_chars": 100,
   "lease_idle_minutes": 30,
   "roles": {
     "coordinator": { "host": true, "projects": "all", "host_first": true },

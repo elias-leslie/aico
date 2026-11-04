@@ -24,7 +24,7 @@
     "./registry": "./src/projects.ts"
   },
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/aico-tasks.mjs --banner:js=\"// Aico tasks bundle. Built by npm run build; do not edit.\"",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --log-level=error --outfile=dist/aico-tasks.mjs --banner:js=\"// Aico tasks bundle. Built by npm run build; do not edit.\"",
     "test": "vitest run"
   },
   "dependencies": {
