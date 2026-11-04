@@ -96,7 +96,10 @@ export function signatureHolds(
       format: 'der',
       type: 'spki',
     })
-    return verify('sha256', Buffer.from(canonical(method, path, ts, body)), key, unb64u(sig))
+    // Only the one spelling the app writes: Node's decoder would take padding and stray characters.
+    const der = unb64u(sig)
+    if (b64u(der) !== sig) return false
+    return verify('sha256', Buffer.from(canonical(method, path, ts, body)), key, der)
   } catch {
     return false
   }
@@ -143,12 +146,17 @@ export function cantBuzz(phone: Phone): string {
 export class PhoneRegistry {
   /** Writers go one at a time; every change is read-modify-write of the whole file. */
   private tail: Promise<unknown> = Promise.resolve()
-  /** Signatures of state-changing requests seen inside the clock window (signature -> epoch s it stops counting). */
+  /** Signed state-changing requests seen inside the clock window (request key -> epoch s it stops counting). */
   private seen = new Map<string, number>()
 
+  /**
+   * `startedAt` (epoch s) is when this process began: the replay memory is in-process, so a signed
+   * POST dated before it may have been used before a restart and is refused as used.
+   */
   constructor(
     readonly path: string,
     seedFrom?: string,
+    private readonly startedAt = Math.floor(Date.now() / 1000),
   ) {
     if (!existsSync(path) && seedFrom && existsSync(seedFrom)) {
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
@@ -187,16 +195,24 @@ export class PhoneRegistry {
     const ts = header('x-nightshift-ts')
     if (!/^\d+$/.test(ts) || Math.abs(Number(ts) - now) > CLOCK_SKEW_S)
       throw new AppError(401, "clock or timestamp off; check the phone's time")
+    // A signed POST is good for one answer: the clock window alone would let a copy repeat an act.
+    // The key is the signed request itself, never the signature text (which can be respelled, or
+    // re-signed as (r, n-s)), and a copy of a used request is told so (409) before its signature
+    // matters: only a request that verified is remembered, so a forgery cannot burn a real one.
+    let key: string | null = null
+    if (method !== 'GET') {
+      if (Number(ts) < this.startedAt)
+        throw new AppError(409, 'request already used; the app signs a new one')
+      key = createHash('sha256')
+        .update(`${phone.id}\n${canonical(method, path, ts, body)}`)
+        .digest('base64url')
+      for (const [seen, until] of this.seen) if (until <= now) this.seen.delete(seen)
+      if (this.seen.has(key))
+        throw new AppError(409, 'request already used; the app signs a new one')
+    }
     if (!signatureHolds(phone.sig_pub, method, path, ts, body, header('x-nightshift-sig')))
       throw new AppError(401, 'signature refused; pair the app again')
-    // A signed POST is good for one answer: the clock window alone would let a copy repeat an act.
-    if (method !== 'GET') {
-      for (const [sig, until] of this.seen) if (until <= now) this.seen.delete(sig)
-      const sig = header('x-nightshift-sig')
-      if (this.seen.has(sig))
-        throw new AppError(401, 'request already used; the app signs a new one')
-      this.seen.set(sig, now + CLOCK_SKEW_S * 2)
-    }
+    if (key) this.seen.set(key, now + CLOCK_SKEW_S * 2)
     return phone
   }
 
@@ -266,10 +282,15 @@ export class PhoneRegistry {
     })
   }
 
-  /** The outage probe reached us (shown on the app's Status screen). */
-  probed(id: string, now: number): Promise<void> {
+  /**
+   * The outage probe reached us (shown on the app's Status screen). Only a request signed later
+   * than the last recorded probe moves it, so a replayed copy cannot make a dead phone look alive;
+   * the time kept never runs ahead of this clock.
+   */
+  probed(id: string, now: number, signedAt: number): Promise<void> {
     return this.change(id, (phone) => {
-      phone.last_probe = now
+      if (signedAt <= (phone.last_probe ?? 0)) return
+      phone.last_probe = Math.min(now, signedAt)
     })
   }
 }

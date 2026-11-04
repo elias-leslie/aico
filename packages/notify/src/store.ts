@@ -125,13 +125,15 @@ export class NotifyStore {
       if (notice.key && notice.severity !== 'ok') {
         const earlier = this.db
           .prepare(
-            `SELECT id FROM notices WHERE source = ? AND key = ? AND received_at > ?
-             ORDER BY received_at DESC LIMIT 1`,
+            `SELECT id, doc FROM notices WHERE source = ? AND key = ? AND received_at > ?
+             ORDER BY received_at DESC, rowid DESC LIMIT 1`,
           )
           .get(notice.source, notice.key, now - notice.cooldown * 1000) as
-          | { id: string }
+          | { id: string; doc: string }
           | undefined
-        if (earlier) {
+        // A problem that comes back after its recovery is news again: only a newest notice that
+        // is itself still a problem makes this one a repeat.
+        if (earlier && (JSON.parse(earlier.doc) as Notice).severity !== 'ok') {
           this.db
             .prepare('UPDATE notices SET repeats = repeats + 1, repeated_at = ? WHERE id = ?')
             .run(now, earlier.id)

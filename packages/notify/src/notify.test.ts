@@ -64,6 +64,30 @@ describe('the outbox', () => {
     expect(store.accept(warning, 'local', ['dev1'], at()).repeat).toBe(false)
   })
 
+  it('a problem that comes back after its recovery is stored and queued again', async () => {
+    const { store, outbox, sent, advance, at } = setup()
+    const first = store.accept(warning, 'local', ['dev1'], at())
+    advance(1_000)
+    const ok = store.accept(
+      { ...warning, severity: 'ok', title: 'Disk fine' },
+      'local',
+      ['dev1'],
+      at(),
+    )
+    expect(ok.repeat).toBe(false)
+    advance(1_000)
+    const back = store.accept(warning, 'local', ['dev1'], at())
+    expect(back.repeat).toBe(false)
+    expect(back.id).not.toBe(first.id)
+    expect(store.get(ok.id)?.repeats).toBe(0)
+    expect(store.list().map((n) => n.id)).toContain(back.id)
+    await outbox.kick()
+    expect(sent).toEqual([first.id, ok.id, back.id])
+    // and one more of the same inside the cooldown is a repeat of the new one
+    advance(1_000)
+    expect(store.accept(warning, 'local', ['dev1'], at())).toEqual({ id: back.id, repeat: true })
+  })
+
   it('retries with a growing wait, then gives up after a day', async () => {
     const { store, outbox, sent, advance, at } = setup(Array(100).fill('retry'))
     const { id } = store.accept(warning, 'local', ['dev1'], at())

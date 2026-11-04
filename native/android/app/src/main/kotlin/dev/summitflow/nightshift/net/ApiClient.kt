@@ -161,7 +161,10 @@ class ApiClient(
 
     private fun exec(req: Request, timeoutSec: Long): ApiResult {
         val answers = Answers()
-        val client = BASE.newBuilder().callTimeout(timeoutSec, TimeUnit.SECONDS).eventListener(answers).build()
+        // A signed POST is good once at home. OkHttp's silent resend would repeat the same signed bytes
+        // (home answers 409 to the copy); a failed POST is left to the caller, which signs a new one.
+        val client = BASE.newBuilder().callTimeout(timeoutSec, TimeUnit.SECONDS).eventListener(answers)
+            .retryOnConnectionFailure(req.method != "POST").build()
         val result = try {
             client.newCall(req).execute().use { r ->
                 val read = try { Result.success(r.body?.string().orEmpty()) } catch (e: Exception) { Result.failure(e) }
@@ -185,6 +188,7 @@ class ApiClient(
         val said = (json?.get("error") as? kotlinx.serialization.json.JsonPrimitive)?.content
         return when {
             code == 401 -> "Home doesn't know this phone any more (or the clock is off): pair again."
+            code == 409 -> said ?: "Home had that request already; try again."
             code == 403 -> "The gate refused this phone."
             said != null -> said
             else -> "Home answered $code."

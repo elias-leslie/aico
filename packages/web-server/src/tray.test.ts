@@ -187,6 +187,17 @@ describe('agent reports', () => {
     expect(tray.read_marks.pushes.find((p: { id: string }) => p.id === back).over_at).toBeNull()
   })
 
+  it('lists every unread report, however many newer notices came after it', () => {
+    const old = send({ severity: 'warning', title: 'Old report', body: 'x' }, NOW - 3_000_000)
+    for (let i = 0; i < 70; i++)
+      send({ severity: 'info', title: `FYI ${i}`, body: 'x' }, NOW - 2_000_000 + i * 1000)
+    const tray = read()
+    expect(tray.notifications.map((n: { id: string }) => n.id)).toEqual([old])
+    expect(tray.counts.unread).toBe(1)
+    // the log the corner cards read is still the 60 newest
+    expect(tray.read_marks.pushes).toHaveLength(60)
+  })
+
   it('a different key does not end it, and neither does another sender', () => {
     const alert = send({ severity: 'warning', key: 'disk:root' }, NOW - 300_000)
     send({ severity: 'ok', key: 'disk:home' }, NOW - 100_000)

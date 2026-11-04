@@ -55,6 +55,8 @@ export interface AppApiDeps {
   dataDir: string
   /** Epoch ms. */
   now?: () => number
+  /** How often a live feed checks the list, health and that its phone is still paired. */
+  watchMs?: number
 }
 
 // -- Words -------------------------------------------------------------------------------
@@ -255,7 +257,8 @@ interface Snapshot {
 }
 
 export class AppApi {
-  private readonly streams = new Set<ServerResponse>()
+  /** Each live feed with the device that opened it. */
+  private readonly streams = new Map<ServerResponse, string>()
 
   constructor(private readonly deps: AppApiDeps) {}
 
@@ -393,7 +396,11 @@ export class AppApi {
       'GET',
       '/api/app/health',
       this.wrap(async (ctx, phone, _body, phones) => {
-        await this.deps.phones.probed(phone.id, Math.floor(this.now() / 1000))
+        await this.deps.phones.probed(
+          phone.id,
+          Math.floor(this.now() / 1000),
+          Number(ctx.req.headers['x-nightshift-ts']),
+        )
         if (drillUntil(this.deps.dataDir, this.now())) {
           sendJson(ctx.res, 503, { drill: true })
           return RAW
@@ -480,9 +487,12 @@ export class AppApi {
     router.on(
       'GET',
       '/api/app/stream',
-      this.wrap(async (ctx) => {
+      this.wrap(async (ctx, phone) => {
+        // One feed per phone, newest wins: a copy of an old request, or a connection the phone
+        // lost without closing, never crowds out the phone's own new feed.
+        this.closeStreams(phone.id)
         if (this.streams.size >= MAX_STREAMS) throw new AppError(429, 'too many live feeds')
-        this.stream(ctx)
+        this.stream(ctx, phone.id)
         return RAW
       }),
     )
@@ -494,14 +504,14 @@ export class AppApi {
    * and a `health` event when health's words change. A Last-Event-ID that is no time this process
    * could have issued is answered with `reset`.
    */
-  private stream(ctx: RequestContext): void {
+  private stream(ctx: RequestContext, device: string): void {
     const { req, res } = ctx
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-store',
       'X-Accel-Buffering': 'no',
     })
-    this.streams.add(res)
+    this.streams.set(res, device)
     const send = (event: string, data: unknown) =>
       res.write(`id: ${this.now()}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
     res.write('retry: 3000\n\n')
@@ -517,7 +527,13 @@ export class AppApi {
       try {
         const snap = await this.snapshot()
         const next = createHash('sha256').update(JSON.stringify(snap)).digest('hex').slice(0, 12)
-        const phones = this.deps.phones.all() ?? []
+        const all = this.deps.phones.all()
+        // A phone that was unpaired (or whose file entry is gone) loses its feeds at the next tick.
+        if (all && !all.some((phone) => phone.id === device)) {
+          this.closeStreams(device)
+          return
+        }
+        const phones = all ?? []
         const nextLine = String(this.health(phones).line)
         if (rev && next !== rev) send('item', { rev: next })
         if (line && nextLine !== line) send('health', { line: nextLine })
@@ -529,7 +545,7 @@ export class AppApi {
     }
     void watch()
     const keep = setInterval(() => res.write(': keepalive\n\n'), KEEPALIVE_MS)
-    const poll = setInterval(() => void watch(), WATCH_MS)
+    const poll = setInterval(() => void watch(), this.deps.watchMs ?? WATCH_MS)
     const end = () => {
       clearInterval(keep)
       clearInterval(poll)
@@ -539,7 +555,16 @@ export class AppApi {
     res.on('error', end)
   }
 
+  /** Ends every live feed `device` has open. */
+  private closeStreams(device: string): void {
+    for (const [res, owner] of this.streams) {
+      if (owner !== device) continue
+      this.streams.delete(res)
+      res.end()
+    }
+  }
+
   stop(): void {
-    for (const res of this.streams) res.end()
+    for (const res of this.streams.keys()) res.end()
   }
 }

@@ -310,14 +310,14 @@ export function buildTray(input: TrayInput): Record<string, unknown> {
     })
 
   // The notice log the corner cards and the unread count read, oldest first.
-  const recent = input.notices
-    .filter((stored) => stored.receivedAt >= now - LOOKBACK_MS)
-    .slice(0, LOG_MAX)
+  // Every notice in the lookback decides what is unread and what ended; only the log is cut.
+  const recent = input.notices.filter((stored) => stored.receivedAt >= now - LOOKBACK_MS)
   const log: Record<string, unknown>[] = []
   const ended = new Map<string, number | null>()
-  for (const stored of recent) {
+  for (const [index, stored] of recent.entries()) {
     const { notice } = stored
     ended.set(stored.id, expired(stored, now) ? now : endedAt(stored, recent))
+    if (index >= LOG_MAX) continue
     log.push({
       id: stored.id,
       ts: seconds(stored.receivedAt),

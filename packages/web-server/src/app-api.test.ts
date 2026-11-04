@@ -9,7 +9,7 @@ import { NotifyStore, parseNotice } from '@aico/notify'
 import { type StatusRow, StatusStore } from '@aico/status'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AppApi, setDrill } from './app-api'
-import { canonical, deviceIdOf, PhoneRegistry } from './app-phones'
+import { AppError, canonical, deviceIdOf, PhoneRegistry } from './app-phones'
 import { publishApk } from './app-release'
 import type { Ask } from './asks'
 import { Router } from './http'
@@ -113,7 +113,7 @@ beforeEach(async () => {
     file,
     JSON.stringify([{ id: device, sig_pub: sigPub, enc_pub: 'x', auth: 'y', fcm_token: 'old' }]),
   )
-  phones = new PhoneRegistry(file)
+  phones = new PhoneRegistry(file, undefined, NOW / 1000 - 3600)
   clock = NOW
   status = new StatusStore(':memory:', () => clock)
   notify = new NotifyStore(':memory:')
@@ -135,6 +135,7 @@ beforeEach(async () => {
     publicHost: 'aico.example.dev',
     dataDir: dir,
     now: () => NOW,
+    watchMs: 40,
   })
   const router = new Router()
   api.register(router)
@@ -266,6 +267,19 @@ describe('health', () => {
     expect((await call('GET', '/api/app/health')).status).toBe(200)
   })
 
+  it('moves the probe only for a request signed later than the last one', async () => {
+    reports(1, 1)
+    const at = NOW / 1000
+    await call('GET', '/api/app/health', { ts: at - 30 })
+    expect(phones.get(device)?.last_probe).toBe(at - 30)
+    await call('GET', '/api/app/health', { ts: at - 60 }) // a copy of an older request
+    expect(phones.get(device)?.last_probe).toBe(at - 30)
+    await call('GET', '/api/app/health', { ts: at - 30 })
+    expect(phones.get(device)?.last_probe).toBe(at - 30)
+    await call('GET', '/api/app/health', { ts: at + 100 }) // never ahead of this clock
+    expect(phones.get(device)?.last_probe).toBe(at)
+  })
+
   it('says why the phone cannot buzz, after an ack says notifications are off', async () => {
     reports(1, 1)
     await call('POST', '/api/app/ack', {
@@ -389,8 +403,12 @@ describe('act', () => {
     expect(closed.status).toBe(409)
     expect(closed.body.error).toBe('No longer open.')
     asks = [ask({ options: ['No', 'Never'] })]
-    const changed = await call('POST', '/api/app/items/a1b2c3d4e5f6/act', { body: { action } })
+    const changed = await call('POST', '/api/app/items/a1b2c3d4e5f6/act', {
+      body: { action },
+      ts: NOW / 1000 + 1,
+    })
     expect(changed.status).toBe(409)
+    expect(changed.body.error).toBe('No longer open.')
     expect(answered).toEqual([])
   })
 
@@ -430,21 +448,89 @@ describe('act', () => {
 })
 
 describe('a signed POST is used once', () => {
-  it('answers a copy of the same signed request with 401', async () => {
-    const body = { fcm_token: 'once' }
-    const path = '/api/app/token'
-    const ts = String(Math.floor(NOW / 1000))
-    const sig = sign(
-      'sha256',
-      Buffer.from(canonical('POST', path, ts, Buffer.from(JSON.stringify(body)))),
-      { key: privateKey, dsaEncoding: 'der' },
-    ).toString('base64url')
-    const first = await call('POST', path, { body, headers: { 'x-nightshift-sig': sig } })
-    expect(first.status).toBe(200)
-    const copy = await call('POST', path, { body, headers: { 'x-nightshift-sig': sig } })
-    expect(copy.status).toBe(401)
+  const body = { fcm_token: 'once' }
+  const path = '/api/app/token'
+  const signOnce = (ts = String(Math.floor(NOW / 1000))) =>
+    sign('sha256', Buffer.from(canonical('POST', path, ts, Buffer.from(JSON.stringify(body)))), {
+      key: privateKey,
+      dsaEncoding: 'der',
+    })
+  const send = (sig: string) => call('POST', path, { body, headers: { 'x-nightshift-sig': sig } })
+
+  it('answers a copy of the same signed request with 409, and a new signature is a new request', async () => {
+    const sig = signOnce().toString('base64url')
+    expect((await send(sig)).status).toBe(200)
+    const copy = await send(sig)
+    expect(copy.status).toBe(409)
     expect(copy.body.error).toMatch(/already used/)
-    expect((await call('POST', path, { body })).status).toBe(200)
+    expect((await call('POST', path, { body, ts: NOW / 1000 + 1 })).status).toBe(200)
+  })
+
+  it('does not let a respelled signature through as a new key', async () => {
+    const sig = signOnce().toString('base64url')
+    expect((await send(sig)).status).toBe(200)
+    for (const spelled of [`${sig}=`, `${sig}!`]) expect((await send(spelled)).status).toBe(409)
+  })
+
+  it('refuses a respelled signature before any use, and that does not burn the real one', async () => {
+    const sig = signOnce().toString('base64url')
+    for (const spelled of [`${sig}=`, `${sig}!`]) expect((await send(spelled)).status).toBe(401)
+    expect((await send(sig)).status).toBe(200)
+  })
+
+  it('treats the other half of the same signature (r, n-s) as the same request', async () => {
+    const n = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n
+    const der = signOnce()
+    // DER: 30 len 02 rl r 02 sl s
+    const rl = der[3] as number
+    const r = der.subarray(4, 4 + rl)
+    const s = BigInt(`0x${der.subarray(6 + rl).toString('hex')}`)
+    const flipped = n - s
+    const sBytes = Buffer.from(flipped.toString(16).padStart(64, '0'), 'hex')
+    const sInt = sBytes[0] & 0x80 ? Buffer.concat([Buffer.from([0]), sBytes]) : sBytes
+    const body2 = Buffer.concat([
+      Buffer.from([2, r.length]),
+      r,
+      Buffer.from([2, sInt.length]),
+      sInt,
+    ])
+    const other = Buffer.concat([Buffer.from([0x30, body2.length]), body2])
+    expect(other.equals(der)).toBe(false)
+    expect((await send(der.toString('base64url'))).status).toBe(200)
+    expect((await send(other.toString('base64url'))).status).toBe(409)
+  })
+
+  it('does not reopen after a restart: a POST signed before the process started is refused', () => {
+    const file = phones.path
+    const later = new PhoneRegistry(file, undefined, NOW / 1000 + 10)
+    const bodyBuf = Buffer.from(JSON.stringify(body))
+    const ts = String(Math.floor(NOW / 1000))
+    const sig = sign('sha256', Buffer.from(canonical('POST', path, ts, bodyBuf)), {
+      key: privateKey,
+      dsaEncoding: 'der',
+    }).toString('base64url')
+    const headers = {
+      'x-nightshift-device': device,
+      'x-nightshift-ts': ts,
+      'x-nightshift-sig': sig,
+    }
+    let caught: unknown
+    try {
+      later.verify('POST', path, headers, bodyBuf, NOW / 1000 + 20)
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(AppError)
+    expect((caught as AppError).status).toBe(409)
+    // a GET is not remembered at all, so it is not held back
+    const get = {
+      ...headers,
+      'x-nightshift-sig': sign('sha256', Buffer.from(canonical('GET', path, ts, Buffer.alloc(0))), {
+        key: privateKey,
+        dsaEncoding: 'der',
+      }).toString('base64url'),
+    }
+    expect(later.verify('GET', path, get, Buffer.alloc(0), NOW / 1000 + 20).id).toBe(device)
   })
 })
 
@@ -558,6 +644,71 @@ describe('update and apk', () => {
   })
 })
 
+/** Opens the live feed as the test phone; `closed` settles when the server ends it. */
+function openFeed(): Promise<{ closed: Promise<void>; open: () => boolean; drop: () => void }> {
+  const path = '/api/app/stream'
+  const ts = String(Math.floor(NOW / 1000))
+  const sig = sign('sha256', Buffer.from(canonical('GET', path, ts, Buffer.alloc(0))), {
+    key: privateKey,
+    dsaEncoding: 'der',
+  }).toString('base64url')
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        host: '127.0.0.1',
+        port,
+        path,
+        headers: {
+          host: `127.0.0.1:${port}`,
+          'x-nightshift-device': device,
+          'x-nightshift-ts': ts,
+          'x-nightshift-sig': sig,
+        },
+      },
+      (res) => {
+        let over = false
+        const closed = new Promise<void>((done) => {
+          res.on('end', () => {
+            over = true
+            done()
+          })
+          res.on('close', () => {
+            over = true
+            done()
+          })
+        })
+        res.resume()
+        resolve({ closed, open: () => !over, drop: () => req.destroy() })
+      },
+    )
+    req.on('error', (error) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ECONNRESET') reject(error)
+    })
+    req.end()
+  })
+}
+
+describe('live feeds', () => {
+  it('keeps one feed per phone: a new one closes the oldest', async () => {
+    const first = await openFeed()
+    const second = await openFeed()
+    await first.closed
+    expect(first.open()).toBe(false)
+    expect(second.open()).toBe(true)
+    const third = await openFeed()
+    await second.closed
+    expect(third.open()).toBe(true)
+    third.drop()
+  })
+
+  it('closes a phone feed once the phone is unpaired', async () => {
+    const feed = await openFeed()
+    writeFileSync(phones.path, '[]')
+    await feed.closed
+    expect(feed.open()).toBe(false)
+  })
+})
+
 describe('live feed', () => {
   it('opens with retry and hello, then a reset for an id from the future', async () => {
     const text = await new Promise<string>((resolve, reject) => {
@@ -665,6 +816,7 @@ describe('the phone API contract', () => {
     asks = [ask({ state: 'answered' })]
     const closed = await call('POST', '/api/app/act', {
       body: { row: 'q:a1b2c3d4e5f6', action: choice },
+      ts: NOW / 1000 + 1,
     })
     expect(closed.status).toBe(409)
     expect(closed.body).toEqual(fixtures.error)
