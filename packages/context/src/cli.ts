@@ -341,6 +341,8 @@ function importLines(result: ImportResult): string {
     ...(result.missingRoles.length
       ? [`  role names not found in Agent Hub: ${result.missingRoles.join(', ')}`]
       : []),
+    // Last line: the plain summary a job's Status row shows.
+    `Copied ${result.memories} memories and ${result.prompts} prompts from Agent Hub; ${hash.match ? 'the project list matches' : 'the project list does not match Agent Hub'}.`,
   ].join('\n')
 }
 
