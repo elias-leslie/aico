@@ -48,6 +48,6 @@ From `AgentHubChat.tsx`, `ui-kit/src/chat/*` and the `@agent-hub/chat-ui` packag
 
 ## Owner answers (2026-11-04)
 1. Needs you: only a direct question the agent files (`tether ask`); idle chats stay quiet.
-2. Chats sit in the same sidebar session list (same Needs you group), plus a Chats page with filters.
+2. Chats sit in the same sidebar session list (same Needs you group), marked with a chat icon. No separate Chats page (owner 2026-11-04: drop it).
 3. After a failure, the next message goes back to the role's first choice after an outage (provider error), but stays on the new model after a refusal.
 4. Hunting-role chats can be started from the phone too; the role's own limits apply.
