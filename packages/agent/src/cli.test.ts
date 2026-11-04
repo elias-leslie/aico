@@ -20,6 +20,8 @@ const rules: RoleRules = {
   tools: ['read'],
   guardHook: null,
   egress: 'host',
+  hosts: null,
+  contain: null,
 }
 
 function faux() {
@@ -124,5 +126,79 @@ describe('aico agent run', () => {
     ).toBe(1)
     expect(JSON.parse(out.out())).toMatchObject({ outcome: { kind: 'error' } })
     expect(out.err()).toMatch(/^aico agent: error: .*\n$/)
+  })
+})
+
+describe('aico agent run --resume / --branch, and show', () => {
+  it('refuses bad combinations before opening agent.db', async () => {
+    const out = io()
+    expect(await main(['run', '--resume', 'a', '--branch', 'a@1'], {})).toBe(2)
+    expect(await main(['run', '--branch', 'a', 'task'], {})).toBe(2)
+    expect(await main(['run', '--role', 'implementation', '--run-id', 'x', 'task'], {})).toBe(2)
+    expect(out.err()).toContain('--resume and --branch do not go together')
+    expect(out.err()).toContain('--branch takes RUN@TURN')
+    expect(out.err()).toContain('--run-id takes a UUID')
+  })
+
+  it('resumes by id prefix, branches at a turn, and show lists each turn with its model', async () => {
+    const out = io()
+    const env = { AICO_DATA_DIR: dataDir() }
+    const { provider, models } = faux()
+    provider.setResponses([
+      fauxAssistantMessage('one'),
+      fauxAssistantMessage('two'),
+      fauxAssistantMessage('branched'),
+    ])
+    const id = '0f6a2b4c-1d2e-4f30-8a9b-0c1d2e3f4a5b'
+    expect(
+      await main(['run', '--role', 'implementation', '--run-id', id, 'first'], env, deps(models)),
+    ).toBe(0)
+    expect(await main(['run', '--resume', id.slice(0, 8), 'second'], env, deps(models))).toBe(0)
+    expect(
+      await main(['run', '--role', 'research', '--resume', id, 'third'], env, deps(models)),
+    ).toBe(2)
+    expect(out.err()).toContain("is a 'implementation' run")
+    expect(await main(['run', '--branch', `${id}@1`, 'other'], env, deps(models))).toBe(0)
+    expect(out.out()).toBe('one\ntwo\nbranched\n')
+
+    const shown = io()
+    expect(await main(['show', id.slice(0, 8)], env)).toBe(0)
+    expect(shown.out()).toMatch(/turn 1 {2}codex\/gpt-6\.1-sol {2}stop/)
+    expect(shown.out()).toMatch(/turn 2 {2}codex\/gpt-6\.1-sol {2}stop/)
+    const db = openAgentDb(join(env.AICO_DATA_DIR, 'agent.db'))
+    const branch = db.prepare('SELECT id FROM runs WHERE parent_id = ?').get(id) as { id: string }
+    db.close()
+    const json = io()
+    expect(await main(['show', branch.id, '--json'], env)).toBe(0)
+    expect(JSON.parse(json.out())).toMatchObject({
+      run: { parent_id: id, branch_turn: 1, outcome: 'done' },
+      turns: [{ turn: 1 }, { turn: 2 }],
+    })
+    expect(await main(['show', 'nope'], env)).toBe(1)
+  })
+})
+
+describe('aico agent run --interactive', () => {
+  it('waits for the first prompt, then goes on in the same run after each answer', async () => {
+    const out = io()
+    const env = { AICO_DATA_DIR: dataDir() }
+    const { provider, models } = faux()
+    provider.setResponses([fauxAssistantMessage('one'), fauxAssistantMessage('two')])
+    const prompts = ['first', 'second', null]
+    const prompt = async () => prompts.shift() ?? null
+    expect(
+      await main(['run', '--interactive', '--role', 'implementation', '--', ''], env, {
+        ...deps(models),
+        prompt,
+      }),
+    ).toBe(0)
+    expect(out.out()).toBe('one\ntwo\n')
+    const db = openAgentDb(join(env.AICO_DATA_DIR, 'agent.db'))
+    expect(db.prepare('SELECT count(*) AS n FROM runs').get()).toEqual({ n: 1 })
+    expect(db.prepare("SELECT count(*) AS n FROM messages WHERE role = 'user'").get()).toEqual({
+      n: 2,
+    })
+    db.close()
+    expect(await main(['run', '--interactive', '--json', '--role', 'x'], env)).toBe(2)
   })
 })

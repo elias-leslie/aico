@@ -1,8 +1,9 @@
 // One `aico agent run`: the loop policy around pi-agent-core's Agent. The role rules pick
-// the model chain and tools (or refuse); every message, tool call and handoff goes to
-// agent.db as it happens; a refusal hands the same conversation to the next model in the
-// chain with a short note; a model swap stops the run. Compaction is not wired in: this
-// slice runs single tasks that fit the context window.
+// the model chain and tools (or refuse); every message, tool call, handoff and compaction
+// goes to agent.db as it happens. A refusal hands the same conversation to the next model
+// in the chain with a short note; a provider error (not a refusal, not a tool error) hands
+// that turn to the next model; a model swap stops the run. A run can be resumed, or
+// branched at a turn, from agent.db, and Pi's compaction keeps a long one in the window.
 
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
@@ -21,16 +22,22 @@ import {
   type Model,
   type Models,
 } from '@earendil-works/pi-ai'
+import { isContextOverflow } from '@earendil-works/pi-ai/utils/overflow'
 import {
+  compact,
+  convertToLlm,
+  DEFAULT_COMPACTION_SETTINGS,
   estimateTokens,
   getAgentDir,
   loadProjectContextFiles,
+  shouldCompact,
 } from '@earendil-works/pi-coding-agent'
+import { type CompactionSettings, contextMessages, piCompaction } from './compaction'
 import { type ModelRefusal, type ModelSwap, refusalOf, swapOf } from './outcomes'
 import { allowedModels } from './providers'
 import { type ChainModel, HARNESS, type Harness, type Refused, type RoleRules } from './rules'
 import { credentialMarkers, guardBash, leanTools, touchesCredentials } from './tools'
-import { type Tokens, Transcript } from './transcript'
+import { type StoredRun, type Tokens, Transcript } from './transcript'
 
 export type Outcome =
   | { kind: 'done'; model: string; text: string }
@@ -42,6 +49,7 @@ export type Outcome =
 export interface HandoffStat {
   from: string
   to: string
+  /** The refusal category, or `provider_error` for a turn-level fallback. */
   reason: string
   handoff_tokens: number
   context_messages: number
@@ -55,17 +63,31 @@ export interface RunResult {
   toolCalls: number
   wallMs: number
   handoffs: HandoffStat[]
+  /** The model that answered each turn of this invocation, by the run's turn number. */
+  turns: { turn: number; model: string; stop: string }[]
+  compactions: number
 }
 
 export interface RunOptions {
   rules: RoleRules
-  task: string
+  /** The prompt; null goes on from a resumed run whose last turn did not finish. */
+  task: string | null
   cwd: string
   db: Database
+  /** The id of a new run (Tether picks one); default a fresh UUID. */
+  runId?: string
+  /** Go on in this stored run. */
+  resume?: StoredRun
+  /** A new run with this stored run's conversation up to the end of turn `turn`. */
+  branch?: { from: StoredRun; turn: number }
+  /** Pi's compaction settings; default Pi's own. */
+  compaction?: CompactionSettings
   /** Thinking level for every model; else each chain row's effort; else high. */
   effort?: string
   /** Test hook: the Nth provider request on the first model returns a synthetic refusal. */
   testRefuseAt?: number
+  /** Test hook: this chain model is sent to an address that refuses connections. */
+  testUnreachable?: string
   /** The provider collection; defaults to the allowed pi-ai providers with Pi's credentials. */
   models?: Models
   /** Project context files (AGENTS.md and the like); defaults to Pi's loader for `cwd`. */
@@ -73,6 +95,18 @@ export interface RunOptions {
   harness?: Harness
   log?: (line: string) => void
 }
+
+/** Where --test-unreachable sends a model: the discard port, which refuses connections. */
+/** A base URL's host name, or the URL itself when it does not parse (never inside a profile). */
+function hostOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).hostname
+  } catch {
+    return baseUrl
+  }
+}
+
+const UNREACHABLE = 'http://127.0.0.1:9/v1'
 
 const LEVELS: readonly ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
@@ -90,16 +124,6 @@ export function systemPrompt(
   for (const { path, content } of contextFiles)
     parts.push(`<project_instructions path="${path}">\n${content}\n</project_instructions>`)
   return parts.join('\n\n')
-}
-
-function usageOf(message: AssistantMessage): Tokens {
-  const usage = message.usage
-  return {
-    input: usage?.input ?? 0,
-    cache_read: usage?.cacheRead ?? 0,
-    cache_write: usage?.cacheWrite ?? 0,
-    output: usage?.output ?? 0,
-  }
 }
 
 const tokensOf = (messages: readonly AgentMessage[]) =>
@@ -153,46 +177,89 @@ export function handoffNote(from: string, to: string, refusal: ModelRefusal): st
 /** pi-ai's Claude wire protocol: never spoken by this harness, whichever provider serves it. */
 const CLAUDE_API = 'anthropic-messages'
 
+const usageTokens = (usage: AssistantMessage['usage'] | undefined): Tokens => ({
+  input: usage?.input ?? 0,
+  cache_read: usage?.cacheRead ?? 0,
+  cache_write: usage?.cacheWrite ?? 0,
+  output: usage?.output ?? 0,
+})
+
 export async function runAgent(options: RunOptions): Promise<RunResult> {
   const harness = options.harness ?? HARNESS
   const { rules, cwd, db } = options
   const log = options.log ?? (() => {})
+  const settings = options.compaction ?? DEFAULT_COMPACTION_SETTINGS
   const started = Date.now()
-  const runId = randomUUID()
-  const transcript = new Transcript(db, runId, {
-    role: rules.role,
-    cwd,
-    task: options.task,
-    chain: rules.chain,
-  })
+  const transcript = options.resume
+    ? Transcript.resume(db, options.resume.id)
+    : options.branch
+      ? Transcript.branch(
+          db,
+          options.branch.from,
+          options.branch.turn,
+          options.runId ?? randomUUID(),
+          options.task ?? '',
+        )
+      : new Transcript(db, options.runId ?? randomUUID(), {
+          role: rules.role,
+          cwd,
+          task: options.task ?? '',
+          chain: rules.chain,
+        })
+  const runId = transcript.runId
   const totals: Tokens = { input: 0, cache_read: 0, cache_write: 0, output: 0 }
   const handoffs: HandoffStat[] = []
+  const turns: RunResult['turns'] = []
+  let compactions = 0
   let toolCalls = 0
   let inUse = rules.chain[0]?.id ?? ''
   const finish = (outcome: Outcome): RunResult => {
     const wallMs = Date.now() - started
     const detail = outcome.kind === 'done' ? { model: outcome.model } : outcome
     transcript.finish(outcome.kind, detail, totals, toolCalls, wallMs)
-    return { runId, outcome, tokens: totals, toolCalls, wallMs, handoffs }
+    return { runId, outcome, tokens: totals, toolCalls, wallMs, handoffs, turns, compactions }
+  }
+  const add = (usage: Tokens) => {
+    for (const key of Object.keys(totals) as (keyof Tokens)[]) totals[key] += usage[key]
   }
 
   const loop = async (): Promise<RunResult> => {
     const models =
       options.models ?? allowedModels(new Set(rules.chain.map((entry) => entry.piProvider)))
     const chain: { entry: ChainModel; model: Model<Api> }[] = []
+    const outside: string[] = []
     for (const entry of rules.chain) {
       const model = models.getModel(entry.piProvider, entry.piModel)
+      const host = model && hostOf(model.baseUrl)
       if (!model)
         log(`skip ${entry.id}: provider ${entry.piProvider} has no model ${entry.piModel}`)
       else if (model.api === CLAUDE_API)
         log(`skip ${entry.id}: it speaks ${CLAUDE_API}; Claude runs only through claude -p`)
-      else chain.push({ entry, model })
+      else if (rules.hosts && !rules.hosts.includes(host as string)) {
+        outside.push(`${entry.id} at ${host}`)
+        log(`skip ${entry.id}: ${host} is outside egress profile '${rules.egress}'`)
+      } else chain.push({ entry, model })
     }
     if (!chain.length)
+      return finish(
+        outside.length
+          ? {
+              kind: 'refused',
+              reason: 'egress_denied',
+              detail: `egress profile '${rules.egress}' allows ${rules.hosts?.join(', ')}; no chain model is there (${outside.join('; ')})`,
+            }
+          : {
+              kind: 'refused',
+              reason: 'no_model',
+              detail: 'no chain model is served by the registered providers',
+            },
+      )
+    const history = contextMessages(transcript.entries)
+    if (options.task === null && (history.length === 0 || history.at(-1)?.role === 'assistant'))
       return finish({
-        kind: 'refused',
-        reason: 'no_model',
-        detail: 'no chain model is served by the registered providers',
+        kind: 'error',
+        model: inUse,
+        detail: 'the run finished its last turn: give a prompt to go on',
       })
 
     const contextFiles =
@@ -202,22 +269,46 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
     let current = 0
     let firstModelRequests = 0
     let swap: ModelSwap | null = null
-    const first = chain[0] as (typeof chain)[number]
-    inUse = first.entry.id
+    const at = () => chain[current] as (typeof chain)[number]
+    inUse = at().entry.id
 
-    const agent = new Agent({
+    const streamFn = (
+      model: Model<Api>,
+      context: Parameters<Models['streamSimple']>[1],
+      streamOptions: Parameters<Models['streamSimple']>[2],
+    ) => {
+      if (current === 0 && ++firstModelRequests === options.testRefuseAt)
+        return syntheticRefusal(model)
+      if (options.testUnreachable === at().entry.id)
+        return models.streamSimple({ ...model, baseUrl: UNREACHABLE }, context, streamOptions)
+      return models.streamSimple(model, context, streamOptions)
+    }
+
+    const pi = await piCompaction()
+    const overThreshold = () =>
+      settings.enabled &&
+      at().model.contextWindow > 0 &&
+      shouldCompact(
+        pi.estimateContextTokens(contextMessages(transcript.entries)).tokens,
+        at().model.contextWindow,
+        settings,
+      )
+
+    const agent: Agent = new Agent({
       initialState: {
         systemPrompt: systemPrompt(harness, cwd, contextFiles),
-        model: first.model,
-        thinkingLevel: thinking(first.model, options.effort ?? first.entry.effort),
-        tools: leanTools(cwd, rules.tools, harness.tool_descriptions) as AgentTool[],
-        messages: [],
+        model: at().model,
+        thinkingLevel: thinking(at().model, options.effort ?? at().entry.effort),
+        tools: leanTools(cwd, rules.tools, harness.tool_descriptions, rules.contain) as AgentTool[],
+        messages: history,
       },
       sessionId: runId,
-      streamFn: (model, context, streamOptions) => {
-        if (current === 0 && ++firstModelRequests === options.testRefuseAt)
-          return syntheticRefusal(model)
-        return models.streamSimple(model, context, streamOptions)
+      convertToLlm,
+      streamFn,
+      // Pi compacts before the next response when the context is over the threshold.
+      prepareNextTurnWithContext: async (turn) => {
+        if (!overThreshold() || !(await compactNow('threshold'))) return undefined
+        return { context: { ...turn.context, messages: agent.state.messages.slice() } }
       },
       beforeToolCall: async ({ toolCall, args }) => {
         if (swap) return { block: true, reason: 'The run stopped: the provider swapped the model.' }
@@ -229,6 +320,68 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
         return { block: true, reason }
       },
     })
+
+    /** Pi's compaction of the run so far; true when it compacted. */
+    async function compactNow(reason: 'threshold' | 'overflow'): Promise<boolean> {
+      const preparation = pi.prepareCompaction(transcript.entries, settings)
+      if (!preparation) return false
+      try {
+        const result = await compact(
+          preparation,
+          at().model,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          agent.state.thinkingLevel,
+          streamFn,
+        )
+        add(usageTokens(result.usage))
+        transcript.compaction({
+          summary: result.summary,
+          firstKeptSeq: Number(result.firstKeptEntryId),
+          tokensBefore: result.tokensBefore,
+          details: result.details,
+          model: at().entry.id,
+        })
+        agent.state.messages = contextMessages(transcript.entries)
+        compactions++
+        log(
+          `compacted (${reason}) on ${at().entry.id}: ${result.tokensBefore} tokens summarized, kept from message ${result.firstKeptEntryId}`,
+        )
+        return true
+      } catch (error) {
+        log(`compaction failed (${reason}): ${(error as Error)?.message ?? String(error)}`)
+        return false
+      }
+    }
+
+    /** The next model takes over; the dropped response never reaches it. */
+    const hand = (
+      failed: AssistantMessage,
+      stat: Omit<HandoffStat, 'context_messages' | 'context_tokens'>,
+    ) => {
+      const kept = agent.state.messages.filter((message) => message !== failed)
+      agent.state.messages = kept
+      const full: HandoffStat = {
+        ...stat,
+        context_messages: kept.filter((message) => message.role !== 'system').length,
+        context_tokens: tokensOf(kept),
+      }
+      handoffs.push(full)
+      transcript.handoff({
+        from_model: full.from,
+        to_model: full.to,
+        reason: full.reason,
+        handoff_tokens: full.handoff_tokens,
+        context_messages: full.context_messages,
+        context_tokens: full.context_tokens,
+      })
+      current++
+      inUse = at().entry.id
+      agent.state.model = at().model
+      agent.state.thinkingLevel = thinking(at().model, options.effort ?? at().entry.effort)
+    }
 
     agent.subscribe((event) => {
       if (event.type === 'tool_execution_start') {
@@ -247,6 +400,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
           const callId = 'toolCallId' in message ? message.toolCallId : undefined
           return transcript.message({
             role: message.role,
+            message,
             content:
               callId && withheld.has(callId)
                 ? {
@@ -256,12 +410,13 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
                 : content,
           })
         }
-        const usage = usageOf(message)
-        for (const key of Object.keys(totals) as (keyof Tokens)[]) totals[key] += usage[key]
-        const requested = (chain[current] as (typeof chain)[number]).entry
+        const usage = usageTokens(message.usage)
+        add(usage)
+        const requested = at().entry
         const outcome = refusalOf(message, harness) ?? swapOf(message, requested.piModel)
         transcript.message({
           role: 'assistant',
+          message,
           model: requested.id,
           served_model: message.responseModel ?? null,
           stop_reason: message.stopReason,
@@ -271,6 +426,8 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
           content: message.content,
           usage,
         })
+        turns.push({ turn: transcript.turn, model: requested.id, stop: message.stopReason })
+        log(`turn ${transcript.turn}: ${requested.id} (${message.stopReason})`)
         if (outcome?.kind === 'model_swap' && !swap) {
           swap = outcome
           log(`model swap: asked ${outcome.requested}, served ${outcome.served}`)
@@ -279,57 +436,62 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
       }
     })
 
-    let input: string = options.task
+    let input: string | null = options.task
+    let overflowRetried = false
     for (;;) {
-      await agent.prompt(input)
+      // Pi checks the context before it sends a prompt.
+      if (overThreshold()) await compactNow('threshold')
+      if (input === null) await agent.continue()
+      else await agent.prompt(input)
+      input = null
       if (swap) return finish(swap)
       const last = lastAssistant(agent.state.messages)
-      const at = chain[current] as (typeof chain)[number]
-      if (!last) return finish({ kind: 'error', model: at.entry.id, detail: 'no response' })
-      if (last.stopReason !== 'error' && last.stopReason !== 'aborted')
-        return finish({ kind: 'done', model: at.entry.id, text: textOf(last) })
-      const refusal = refusalOf(last, harness)
-      if (!refusal)
-        return finish({
-          kind: 'error',
-          model: at.entry.id,
-          detail: last.errorMessage ?? last.stopReason,
-        })
-      const next = chain[current + 1]
-      if (!next) return finish({ kind: 'model_refused', model: at.entry.id, refusal })
-
-      // Hand the conversation over: drop the empty refused response, keep everything else.
-      const kept = agent.state.messages.filter((message) => message !== last)
-      agent.state.messages = kept
-      input = handoffNote(at.entry.id, next.entry.id, refusal)
-      const stat: HandoffStat = {
-        from: at.entry.id,
-        to: next.entry.id,
-        reason: refusal.category,
-        handoff_tokens: estimateTokens({
-          role: 'user',
-          content: input,
-          timestamp: Date.now(),
-        } as AgentMessage),
-        context_messages: kept.filter((message) => message.role !== 'system').length,
-        context_tokens: tokensOf(kept),
+      const { entry, model } = at()
+      if (!last) return finish({ kind: 'error', model: entry.id, detail: 'no response' })
+      if (last.stopReason !== 'error' && last.stopReason !== 'aborted') {
+        // A finished response over the threshold compacts now, without a retry (as Pi).
+        if (overThreshold() || isContextOverflow(last, model.contextWindow))
+          await compactNow('threshold')
+        return finish({ kind: 'done', model: entry.id, text: textOf(last) })
       }
-      handoffs.push(stat)
-      transcript.handoff({
-        from_model: stat.from,
-        to_model: stat.to,
-        reason: stat.reason,
-        handoff_tokens: stat.handoff_tokens,
-        context_messages: stat.context_messages,
-        context_tokens: stat.context_tokens,
-      })
+      if (last.stopReason === 'error' && isContextOverflow(last, model.contextWindow)) {
+        // Pi: compact and retry the turn once.
+        if (overflowRetried || !(await compactNow('overflow')))
+          return finish({
+            kind: 'error',
+            model: entry.id,
+            detail: `context overflow, and compaction could not recover it: ${last.errorMessage}`,
+          })
+        overflowRetried = true
+        agent.state.messages = agent.state.messages.filter((message) => message !== last)
+        continue
+      }
+      const next = chain[current + 1]
+      const refusal = refusalOf(last, harness)
+      if (refusal) {
+        if (!next) return finish({ kind: 'model_refused', model: entry.id, refusal })
+        input = handoffNote(entry.id, next.entry.id, refusal)
+        hand(last, {
+          from: entry.id,
+          to: next.entry.id,
+          reason: refusal.category,
+          handoff_tokens: estimateTokens({
+            role: 'user',
+            content: input,
+            timestamp: Date.now(),
+          } as AgentMessage),
+        })
+        log(`handoff ${entry.id} -> ${next.entry.id} (${refusal.category})`)
+        continue
+      }
+      const detail = last.errorMessage ?? last.stopReason
+      if (last.stopReason === 'aborted' || !next)
+        return finish({ kind: 'error', model: entry.id, detail })
+      // A provider error: the next model in the chain takes this same turn.
+      hand(last, { from: entry.id, to: next.entry.id, reason: 'provider_error', handoff_tokens: 0 })
       log(
-        `handoff ${stat.from} -> ${stat.to} (${refusal.category}); ${stat.handoff_tokens} handoff tokens`,
+        `turn ${transcript.turn}: provider error on ${entry.id} (${detail}); ${next.entry.id} takes the turn`,
       )
-      current++
-      inUse = next.entry.id
-      agent.state.model = next.model
-      agent.state.thinkingLevel = thinking(next.model, options.effort ?? next.entry.effort)
     }
   }
 

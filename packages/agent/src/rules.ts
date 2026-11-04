@@ -3,6 +3,7 @@
 // egress). They fail closed: anything unreadable, unknown or not allowed is a typed
 // refusal, and nothing runs.
 
+import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { Catalog, type LaunchPolicy, loadPolicy, openContext, route } from '@aico/context'
@@ -20,6 +21,7 @@ export type RefusalReason =
   | 'no_model'
   | 'unenforceable'
   | 'project_unknown'
+  | 'egress_denied'
 
 export interface Refused {
   kind: 'refused'
@@ -45,7 +47,12 @@ export interface RoleRules {
   tools: string[]
   /** The publication guard hook every bash call goes through, or null when the role runs without it. */
   guardHook: string | null
+  /** The egress profile's name. */
   egress: string
+  /** The hosts models may be reached at, or null for any host. */
+  hosts: string[] | null
+  /** The command bash runs under to have no network, or null when tools use the host's network. */
+  contain: string[] | null
 }
 
 const refused = (reason: RefusalReason, detail: string): Refused => ({
@@ -247,10 +254,17 @@ export function roleRules(
   if (!chain.length)
     return refused('no_model', `role '${request.role}' has no model this harness may run`)
 
-  if (!harness.egress_supported.includes(roleData.egress))
+  const hosts = (harness.egress_profiles as Record<string, string[]>)[roleData.egress]
+  if (!hosts?.length)
     return refused(
       'unenforceable',
-      `role '${request.role}' needs egress profile '${roleData.egress}', which this harness cannot enforce yet`,
+      `role '${request.role}' needs egress profile '${roleData.egress}', which data/harness.json does not define`,
+    )
+  const open = hosts.includes('*')
+  if (!open && !contains(harness.contain_command))
+    return refused(
+      'unenforceable',
+      `role '${request.role}' runs its tools without network, and '${harness.contain_command.join(' ')}' does not work on this host`,
     )
   const tools = (harness.levels as Record<string, string[]>)[roleData.level]
   if (!tools)
@@ -270,7 +284,25 @@ export function roleRules(
     tools,
     guardHook: roleData.guard ? harness.guard_hook : null,
     egress: roleData.egress,
+    hosts: open ? null : hosts,
+    contain: open ? null : harness.contain_command,
   }
+}
+
+const containChecked = new Map<string, boolean>()
+
+/** Whether `command true` runs here (a network namespace needs unprivileged user namespaces). */
+function contains(command: readonly string[]): boolean {
+  const key = command.join('\0')
+  let works = containChecked.get(key)
+  if (works === undefined) {
+    const [file, ...args] = command
+    works =
+      Boolean(file) &&
+      spawnSync(file as string, [...args, 'true'], { stdio: 'ignore', timeout: 5000 }).status === 0
+    containChecked.set(key, works)
+  }
+  return works
 }
 
 /** The context database's rules for one run, or why not. The project comes from `request.cwd` unless given. */

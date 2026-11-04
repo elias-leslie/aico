@@ -1,5 +1,5 @@
 {
-  "about": "What `aico agent run` may do. Models and deny rows come from context.db (route()); this file says which launch-policy rows the harness serves, which providers it may register, and the role rules context.db does not carry yet (tool level, guard, egress; M8b moves them there). Anything not listed here is refused.",
+  "about": "What `aico agent run` may do. Models and deny rows come from context.db (route()); this file says which launch-policy rows the harness serves, which providers it may register, and the role rules context.db does not carry yet (tool level, guard, egress profile). Anything not listed here is refused.",
   "launch_tool": "agent-hub",
   "chain_tools": ["codex", "pi"],
   "providers": {
@@ -22,7 +22,12 @@
     "hunting": { "level": "lean", "guard": true, "egress": "contained" },
     "recon": { "level": "lean", "guard": true, "egress": "contained" }
   },
-  "egress_supported": ["host"],
+  "egress_about": "Which hosts a role's run may reach. [\"*\"] is the host's own network. Any other list: models only at those hosts (a chain model elsewhere is skipped, and with none left the run is refused), and bash runs in a private network namespace with only loopback (contain_command); if that command fails here, the role is refused. Tools reaching listed hunt targets needs a filtering proxy; until then a contained role's tools reach no host.",
+  "egress_profiles": {
+    "host": ["*"],
+    "contained": ["api.openai.com", "opencode.ai"]
+  },
+  "contain_command": ["unshare", "--user", "--map-current-user", "--net"],
   "credential_paths_about": "Tool results for calls that name these paths (and Pi's agent dir, where Pi keeps auth.json) are kept out of agent.db: only their length is stored.",
   "credential_paths": [
     "~/.ssh",

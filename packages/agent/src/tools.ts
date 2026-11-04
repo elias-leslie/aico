@@ -1,6 +1,7 @@
 // Pi's read, bash, edit and write tools, unchanged except for what the model is told:
 // our own one-line descriptions, and parameter schemas without Pi's prose. The
-// publication guard runs before every bash call when the role needs it.
+// publication guard runs before every bash call when the role needs it, and a contained
+// role's bash runs inside the contain command (a network namespace with only loopback).
 
 import { spawn } from 'node:child_process'
 import { isAbsolute, join, relative, resolve } from 'node:path'
@@ -34,17 +35,28 @@ function bare(schema: unknown): unknown {
   return out
 }
 
-/** The level's tools for `cwd`, described by `descriptions`. */
+const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`
+
+/** The level's tools for `cwd`, described by `descriptions`; bash runs under `contain` when given. */
 export function leanTools(
   cwd: string,
   names: readonly string[],
   descriptions: Record<string, string>,
+  contain: readonly string[] | null = null,
 ): AgentTool[] {
   return names.map((name) => {
     const factory = FACTORIES[name]
     const description = descriptions[name]
     if (!factory || !description) throw new Error(`no tool '${name}'`)
-    const tool = factory(cwd)
+    const tool =
+      name === 'bash' && contain
+        ? (createBashTool(cwd, {
+            spawnHook: (spawn) => ({
+              ...spawn,
+              command: `exec ${contain.map(quote).join(' ')} bash -c ${quote(spawn.command)}`,
+            }),
+          }) as AgentTool)
+        : factory(cwd)
     return { ...tool, description, parameters: bare(tool.parameters) as AgentTool['parameters'] }
   })
 }

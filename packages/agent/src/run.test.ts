@@ -2,6 +2,7 @@
 // hands the same conversation to the next model, the test hook is off unless set, a
 // model swap stops the run, and the guard blocks bash.
 
+import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -21,7 +22,7 @@ import type { RoleRules } from './rules'
 import { HARNESS } from './rules'
 import { runAgent } from './run'
 import { credentialMarkers, guardBash, touchesCredentials } from './tools'
-import { MIGRATIONS, openAgentDb, Transcript } from './transcript'
+import { findRun, MIGRATIONS, openAgentDb, Transcript } from './transcript'
 
 function setup(guardHook: string | null = null, firstApi = 'faux-openai') {
   const first = fauxProvider({
@@ -52,12 +53,16 @@ function setup(guardHook: string | null = null, firstApi = 'faux-openai') {
     tools: ['read', 'bash', 'edit', 'write'],
     guardHook,
     egress: 'host',
+    hosts: null,
+    contain: null,
   }
   const cwd = mkdtempSync(join(tmpdir(), 'aico-agent-run-'))
   const db = openAgentDb(':memory:')
-  const run = (task: string, extra: Partial<Parameters<typeof runAgent>[0]> = {}) =>
-    runAgent({ rules, task, cwd, db, models, contextFiles: [], ...extra })
-  return { first, second, cwd, db, run, rules }
+  const run = async (task: string, extra: Partial<Parameters<typeof runAgent>[0]> = {}) => ({
+    ...(await runAgent({ rules, task, cwd, db, models, contextFiles: [], ...extra })),
+    models,
+  })
+  return { first, second, cwd, db, run, rules, models }
 }
 
 const texts = (context: TranscriptContext) => JSON.stringify(context.messages)
@@ -188,14 +193,83 @@ describe('runAgent', () => {
     })
   })
 
-  it('reports a plain provider error as an error, not a refusal', async () => {
+  it('hands a turn that fails with a provider error to the next model, and logs who ran each turn', async () => {
+    const { first, second, db, run } = setup()
+    let seen = ''
+    first.setResponses([
+      fauxAssistantMessage(fauxToolCall('bash', { command: 'echo marker-77' })),
+      fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'HTTP 500: upstream' }),
+    ])
+    second.setResponses([
+      (context) => {
+        seen = texts(context)
+        return fauxAssistantMessage('second model finished the turn')
+      },
+    ])
+    const lines: string[] = []
+    const result = await run('task', { log: (line) => lines.push(line) })
+    expect(result.outcome).toMatchObject({ kind: 'done', model: 'opencode-go/deepseek-v4.1-flash' })
+    // The same turn, no handoff note: the conversation goes on from the tool result.
+    expect(seen).toContain('marker-77')
+    expect(seen).not.toContain('[handoff]')
+    expect(seen).not.toContain('HTTP 500')
+    expect(result.turns).toEqual([
+      { turn: 1, model: 'codex/gpt-6.1-sol', stop: expect.any(String) },
+      { turn: 2, model: 'codex/gpt-6.1-sol', stop: 'error' },
+      { turn: 3, model: 'opencode-go/deepseek-v4.1-flash', stop: 'stop' },
+    ])
+    expect(result.handoffs).toEqual([
+      expect.objectContaining({ reason: 'provider_error', handoff_tokens: 0 }),
+    ])
+    expect(lines.join('\n')).toMatch(
+      /provider error on codex\/gpt-6.1-sol \(HTTP 500: upstream\); opencode-go\/deepseek-v4.1-flash takes the turn/,
+    )
+    const models = db
+      .prepare(
+        "SELECT turn, model FROM messages WHERE run_id = ? AND role = 'assistant' ORDER BY seq",
+      )
+      .all(result.runId)
+    expect(models.at(-1)).toEqual({ turn: 3, model: 'opencode-go/deepseek-v4.1-flash' })
+  })
+
+  it('ends with the error when the last model in the chain fails too', async () => {
     const { first, second, run } = setup()
     first.setResponses([
       fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'HTTP 500: upstream' }),
     ])
+    second.setResponses([
+      fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'connect ECONNREFUSED' }),
+    ])
     const result = await run('task')
-    expect(result.outcome).toMatchObject({ kind: 'error', detail: 'HTTP 500: upstream' })
+    expect(result.outcome).toMatchObject({ kind: 'error', detail: 'connect ECONNREFUSED' })
+    expect(result.handoffs).toHaveLength(1)
+  })
+
+  it('keeps a failed tool call on the same model: a tool error is not a provider error', async () => {
+    const { first, second, run } = setup()
+    first.setResponses([
+      fauxAssistantMessage(fauxToolCall('read', { path: 'missing.txt' })),
+      fauxAssistantMessage('the file is missing'),
+    ])
+    const result = await run('task')
+    expect(result.outcome).toMatchObject({ kind: 'done', model: 'codex/gpt-6.1-sol' })
+    expect(result.handoffs).toEqual([])
     expect(second.state.callCount).toBe(0)
+  })
+
+  it('sends --test-unreachable model to an address that refuses connections', async () => {
+    const { first, second, run } = setup()
+    const asked: string[] = []
+    first.setResponses([
+      (_context, _options, _state, model) => {
+        asked.push(model.baseUrl)
+        return fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'fetch failed' })
+      },
+    ])
+    second.setResponses([fauxAssistantMessage('took over')])
+    const result = await run('task', { testUnreachable: 'codex/gpt-6.1-sol' })
+    expect(asked).toEqual(['http://127.0.0.1:9/v1'])
+    expect(result.outcome).toMatchObject({ kind: 'done', model: 'opencode-go/deepseek-v4.1-flash' })
   })
 
   it('runs every bash call through the guard and keeps blocked calls from running', async () => {
@@ -284,6 +358,296 @@ describe('runAgent', () => {
     expect(JSON.stringify(rows)).not.toContain('fake-token')
     expect(JSON.stringify(rows[1])).toContain('plain words')
     vi.unstubAllEnvs()
+  })
+})
+
+describe('egress profile', () => {
+  /** The same models, with `provider`'s endpoint moved to `baseUrl`. */
+  const movedTo = (
+    models: ReturnType<typeof setup>['models'],
+    provider: string,
+    baseUrl: string,
+  ) => {
+    const moved = Object.create(models) as typeof models
+    moved.getModel = ((p: string, id: string) => {
+      const model = models.getModel(p, id)
+      return model && p === provider ? { ...model, baseUrl } : model
+    }) as typeof models.getModel
+    return moved
+  }
+
+  it('skips a chain model whose host is outside the profile; the next one inside runs', async () => {
+    const { second, rules, run, models } = setup()
+    second.setResponses([fauxAssistantMessage('inside')])
+    const lines: string[] = []
+    const result = await run('task', {
+      rules: { ...rules, egress: 'contained', hosts: ['localhost'] },
+      models: movedTo(models, 'openai', 'https://api.example.com/v1'),
+      log: (line) => lines.push(line),
+    })
+    expect(result.outcome).toMatchObject({ kind: 'done', text: 'inside' })
+    expect(lines).toContain(
+      "skip codex/gpt-6.1-sol: api.example.com is outside egress profile 'contained'",
+    )
+  })
+
+  it('refuses the run when no chain model is inside the profile', async () => {
+    const { first, rules, run } = setup()
+    const result = await run('task', {
+      rules: { ...rules, egress: 'contained', hosts: ['api.openai.com', 'opencode.ai'] },
+    })
+    expect(result.outcome).toMatchObject({ kind: 'refused', reason: 'egress_denied' })
+    expect(first.state.callCount).toBe(0)
+  })
+
+  const unshare = HARNESS.contain_command
+  const namespaces =
+    spawnSync(unshare[0] as string, [...unshare.slice(1), 'true'], { stdio: 'ignore' }).status === 0
+  it.skipIf(!namespaces)("runs a contained role's bash with only loopback", async () => {
+    const { first, rules, run, db } = setup()
+    first.setResponses([
+      fauxAssistantMessage(
+        fauxToolCall('bash', { command: "tail -n +3 /proc/net/dev | cut -d: -f1 | tr -d ' '" }),
+      ),
+      fauxAssistantMessage('checked'),
+    ])
+    const contained = await run('task', {
+      rules: { ...rules, egress: 'contained', hosts: ['localhost'], contain: unshare },
+    })
+    expect(contained.outcome.kind).toBe('done')
+    const row = db.prepare("SELECT content FROM messages WHERE role = 'toolResult'").get()
+    expect(JSON.parse(String(row?.content))).toEqual([{ type: 'text', text: 'lo\n' }])
+  })
+})
+
+describe('resume and branch', () => {
+  it('resumes a run from agent.db: the next prompt sees the whole conversation', async () => {
+    const { first, db, run, rules, cwd } = setup()
+    first.setResponses([
+      fauxAssistantMessage(fauxToolCall('bash', { command: 'echo marker-12' })),
+      fauxAssistantMessage('first answer'),
+    ])
+    const one = await run('first task')
+    let seen = ''
+    first.appendResponses([
+      (context) => {
+        seen = texts(context)
+        return fauxAssistantMessage('second answer')
+      },
+    ])
+    const stored = findRun(db, one.runId.slice(0, 8))
+    const two = await runAgent({
+      rules,
+      task: 'second task',
+      cwd,
+      db,
+      models: one.models,
+      contextFiles: [],
+      resume: stored,
+    })
+    expect(two.runId).toBe(one.runId)
+    expect(two.outcome).toMatchObject({ kind: 'done', text: 'second answer' })
+    for (const text of ['first task', 'marker-12', 'first answer', 'second task'])
+      expect(seen).toContain(text)
+    expect(two.turns).toEqual([{ turn: 3, model: 'codex/gpt-6.1-sol', stop: 'stop' }])
+    const row = db
+      .prepare('SELECT outcome, tool_calls, output FROM runs WHERE id = ?')
+      .get(one.runId)
+    expect(row).toMatchObject({ outcome: 'done', tool_calls: 1 })
+    expect(Number(row?.output)).toBe(one.tokens.output + two.tokens.output)
+    const turns = db
+      .prepare('SELECT role, turn FROM messages WHERE run_id = ? ORDER BY seq')
+      .all(one.runId)
+      .map((r) => `${r.role}:${r.turn}`)
+    expect(turns).toEqual([
+      'user:1',
+      'assistant:1',
+      'toolResult:1',
+      'assistant:2',
+      'user:3',
+      'assistant:3',
+    ])
+  })
+
+  it('resumes a run whose last turn failed without a new prompt', async () => {
+    const { first, second, db, run, rules, cwd } = setup()
+    first.setResponses([
+      fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'HTTP 500' }),
+    ])
+    second.setResponses([
+      fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'HTTP 502' }),
+    ])
+    const one = await run('the task')
+    expect(one.outcome.kind).toBe('error')
+    let seen = ''
+    first.appendResponses([
+      (context) => {
+        seen = texts(context)
+        return fauxAssistantMessage('done now')
+      },
+    ])
+    const stored = findRun(db, one.runId)
+    const again = await runAgent({
+      rules,
+      task: null,
+      cwd,
+      db,
+      models: one.models,
+      contextFiles: [],
+      resume: stored,
+    })
+    expect(again.outcome).toMatchObject({ kind: 'done', text: 'done now' })
+    expect(seen).toContain('the task')
+    expect(seen).not.toContain('HTTP 50')
+    // A finished run needs a prompt to go on.
+    const done = await runAgent({
+      rules,
+      task: null,
+      cwd,
+      db,
+      models: one.models,
+      contextFiles: [],
+      resume: findRun(db, one.runId),
+    })
+    expect(done.outcome).toMatchObject({
+      kind: 'error',
+      detail: expect.stringMatching(/give a prompt/),
+    })
+  })
+
+  it('branches at a turn: the new run has the conversation up to that turn and nothing after', async () => {
+    const { first, db, run, rules, cwd } = setup()
+    first.setResponses([
+      fauxAssistantMessage(fauxToolCall('bash', { command: 'echo turn-one' })),
+      fauxAssistantMessage(fauxToolCall('bash', { command: 'echo turn-two' })),
+      fauxAssistantMessage('finished'),
+    ])
+    const one = await run('the task')
+    let seen = ''
+    first.appendResponses([
+      (context) => {
+        seen = texts(context)
+        return fauxAssistantMessage('branch answer')
+      },
+    ])
+    const branch = await runAgent({
+      rules,
+      task: 'try another way',
+      cwd,
+      db,
+      models: one.models,
+      contextFiles: [],
+      branch: { from: findRun(db, one.runId), turn: 1 },
+    })
+    expect(branch.runId).not.toBe(one.runId)
+    expect(branch.outcome).toMatchObject({ kind: 'done', text: 'branch answer' })
+    expect(seen).toContain('turn-one')
+    expect(seen).not.toContain('turn-two')
+    expect(seen).toContain('try another way')
+    expect(
+      db.prepare('SELECT parent_id, branch_turn FROM runs WHERE id = ?').get(branch.runId),
+    ).toEqual({
+      parent_id: one.runId,
+      branch_turn: 1,
+    })
+    // The source run is untouched.
+    expect(
+      db.prepare('SELECT count(*) AS n FROM messages WHERE run_id = ?').get(one.runId),
+    ).toEqual({ n: 6 })
+    await expect(
+      runAgent({
+        rules,
+        task: 'x',
+        cwd,
+        db,
+        models: one.models,
+        contextFiles: [],
+        branch: { from: findRun(db, one.runId), turn: 9 },
+      }),
+    ).rejects.toThrow(/turns 1 to 3/)
+  })
+})
+
+describe('compaction', () => {
+  const SUMMARY = 'SUMMARY-OF-EARLIER-WORK'
+  /** Pi's two summarization requests: the history summary and a split turn's prefix. */
+  const summarizing = (context: TranscriptContext) =>
+    /context summarization assistant|Create a concise checkpoint/.test(texts(context))
+
+  it('compacts a long run with Pi, the way Pi triggers it, and the run goes on', async () => {
+    const { cwd, db, run, rules } = setup()
+    writeFileSync(join(cwd, 'big.txt'), `${'lorem ipsum dolor sit amet '.repeat(300)}\n`)
+    const script = [
+      fauxAssistantMessage(fauxToolCall('read', { path: 'big.txt' })),
+      fauxAssistantMessage(fauxToolCall('read', { path: 'big.txt' })),
+      fauxAssistantMessage(fauxToolCall('read', { path: 'big.txt' })),
+      fauxAssistantMessage('all read'),
+    ]
+    let afterCompaction = ''
+    let compacted = false
+    const step = (context: TranscriptContext) => {
+      if (summarizing(context)) {
+        compacted = true
+        return fauxAssistantMessage(SUMMARY)
+      }
+      if (compacted && !afterCompaction) afterCompaction = texts(context)
+      return script.shift() ?? fauxAssistantMessage('extra')
+    }
+    const settings = { enabled: true, reserveTokens: 1500, keepRecentTokens: 1200 }
+    const lines: string[] = []
+    const result = await run('read big.txt three times', {
+      compaction: settings,
+      log: (line) => lines.push(line),
+      models: (() => {
+        // A small window, so three reads go over the threshold.
+        const models = createModels()
+        const small = fauxProvider({
+          provider: 'openai',
+          api: 'faux-openai-small',
+          models: [{ id: 'gpt-6.1-sol', reasoning: true, contextWindow: 4000 }],
+        })
+        small.setResponses(Array.from({ length: 12 }, () => step))
+        models.setProvider(small.provider)
+        return models
+      })(),
+    })
+    expect(result.outcome).toMatchObject({ kind: 'done', text: 'all read' })
+    expect(result.compactions).toBeGreaterThanOrEqual(1)
+    expect(lines.join('\n')).toMatch(/compacted \(threshold\)/)
+    expect(afterCompaction).toContain(SUMMARY)
+    const row = db
+      .prepare("SELECT content, meta FROM messages WHERE run_id = ? AND role = 'compaction'")
+      .get(result.runId)
+    expect(String(row?.content)).toContain(SUMMARY)
+    expect(JSON.parse(String(row?.meta)).firstKeptSeq).toBeGreaterThan(0)
+
+    // A resumed run starts from the summary, not the whole history.
+    let resumed = ''
+    const again = createModels()
+    const next = fauxProvider({
+      provider: 'openai',
+      api: 'faux-openai-again',
+      models: [{ id: 'gpt-6.1-sol', reasoning: true, contextWindow: 400_000 }],
+    })
+    next.setResponses([
+      (context) => {
+        resumed = texts(context)
+        return fauxAssistantMessage('resumed')
+      },
+    ])
+    again.setProvider(next.provider)
+    const two = await runAgent({
+      rules,
+      task: 'and now?',
+      cwd,
+      db,
+      models: again,
+      contextFiles: [],
+      resume: findRun(db, result.runId),
+    })
+    expect(two.outcome).toMatchObject({ kind: 'done', text: 'resumed' })
+    expect(resumed).toContain(SUMMARY)
+    expect(resumed).not.toContain('read big.txt three times')
   })
 })
 

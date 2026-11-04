@@ -74,10 +74,9 @@ describe('role rules', () => {
       expect(entry.id).not.toMatch(/claude|fable/)
   })
 
-  it('refuses unknown models, unknown roles and roles whose egress it cannot enforce', () => {
+  it('refuses unknown models and unknown roles', () => {
     expect(refusal(rules('implementation', 'mystery-model-9')).reason).toBe('model_unknown')
     expect(refusal(rules('juggling')).reason).toBe('unknown_role')
-    expect(refusal(rules('hunting')).reason).toBe('unenforceable')
   })
 
   it('refuses when the guard the role needs is missing', () => {
@@ -88,6 +87,50 @@ describe('role rules', () => {
       { role: 'implementation' },
     )
     expect(refusal(result).reason).toBe('unenforceable')
+  })
+})
+
+describe('hunting role', () => {
+  // A harness whose contain command works everywhere, so these tests do not depend on user namespaces.
+  const contained: Harness = { ...harness, contain_command: ['env'] }
+  const hunting = (model?: string, with_: Harness = contained) =>
+    roleRules(policy, catalog, with_, { role: 'hunting', ...(model && { model }) })
+
+  it('runs on non-Claude models only, inside the contained egress profile', () => {
+    const result = hunting() as RoleRules
+    expect(result.chain.map((entry) => entry.id)).toEqual([
+      'codex/gpt-6-sol',
+      'opencode-go/deepseek-v4.1-flash',
+      'opencode-go/glm-5.3',
+      'opencode-go/glm-5.3-flash',
+    ])
+    expect(result).toMatchObject({
+      egress: 'contained',
+      hosts: ['api.openai.com', 'opencode.ai'],
+      contain: ['env'],
+    })
+    expect((rules('implementation') as RoleRules).hosts).toBeNull()
+  })
+
+  it('refuses any Claude model: by the deny row, by provider, or by name', () => {
+    expect(refusal(hunting('fable')).reason).toBe('model_denied')
+    expect(refusal(hunting('opencode-go/claude-haiku-5-5')).reason).toMatch(
+      /model_denied|provider_not_allowed|model_unknown/,
+    )
+    // With the deny row gone, the harness still never runs Claude.
+    const open = { ...policy, deny: [] }
+    expect(
+      refusal(roleRules(open, catalog, contained, { role: 'hunting', model: 'fable' })).reason,
+    ).toBe('provider_not_allowed')
+  })
+
+  it('fails closed when its egress profile is missing or cannot be enforced here', () => {
+    const missing = { ...contained, egress_profiles: { host: ['*'] } } as unknown as Harness
+    expect(refusal(hunting(undefined, missing)).detail).toMatch(/egress profile 'contained'/)
+    const broken = { ...contained, contain_command: [join(dir, 'no-such-command')] }
+    const result = refusal(hunting(undefined, broken))
+    expect(result.reason).toBe('unenforceable')
+    expect(result.detail).toMatch(/without network/)
   })
 })
 
