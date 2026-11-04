@@ -23,7 +23,9 @@
           "/home/kasadis/.summitflow/services/projects/aico/current/source/packages/web-server/scripts/aico",
           "context",
           "import-agent-hub",
-          "--no-status"
+          "--no-status",
+          "--checkout",
+          "/srv/workspaces/projects/agent-hub"
         ]
       },
       "lease_s": 300
