@@ -1,7 +1,8 @@
 """PVE memory errors: uncorrected events, corrected-event spikes and new regions, from the kernel journal and rasdaemon.
 
 Port of ns/checks/ecc.py and the ECC rules in ns/checks/pve.py, without the metric history database and its
-multi-week trend rules (trends: a later job). The window is the 8 days the PVE snippet reads. Memory-controller
+multi-week trend rules (trends: a later job). The window is the 8 days the PVE snippet reads. A region with
+corrected errors is new when this check's saved state has not seen it: the first run adopts every region it finds. Memory-controller
 records only: one machine check is logged by up to four banks within the same second, so records are grouped into
 events first. The data file caps corrected-error signals (this PVE host reports them without DRAM ECC: record
 only); uncorrected errors and a new region still fail.
@@ -103,7 +104,23 @@ def group_events(records: list[dict[str, Any]], gap_s: float, region_shift: int)
     return events
 
 
-def evaluate(sections: dict[str, str], cfg: dict[str, Any], now: float) -> list[Signal]:
+def remember_regions(regions: set[int], state: dict[str, Any], now: float, hold_s: float) -> list[int]:
+    """Memory regions with corrected errors that this check had not seen before, still inside the hold window.
+    The first run adopts every region in the journal window silently (the history Nightshift kept in its database)."""
+    known = {int(r) for r in state.get("regions", [])}
+    first = "regions" not in state
+    new = state.setdefault("new", {})
+    for region in sorted(regions - known):
+        if not first:
+            new[str(region)] = now
+    state["regions"] = sorted(known | regions)
+    state["new"] = {r: t for r, t in new.items() if now - float(t) <= hold_s}
+    return sorted(int(r) for r in state["new"])
+
+
+def evaluate(
+    sections: dict[str, str], cfg: dict[str, Any], now: float, state: dict[str, Any]
+) -> list[Signal]:
     first, journal = parse_journal(sections.get("ecc", ""))
     records = [r for r in journal + parse_rasdaemon(sections.get("rasmce", "")) if r["umc"]]
     events = group_events(records, float(cfg["event_gap_s"]), int(cfg["region_shift"]))
@@ -129,11 +146,10 @@ def evaluate(sections: dict[str, str], cfg: dict[str, Any], now: float) -> list[
         out.append(Signal("ecc.corrected", "warn", {"n": last}, note=True))
     else:
         out.append(Signal("ecc.corrected", "ok", {"n": 0}))
-    recent = {e["region"] for e in events if e["kind"] == "CE" and e["region"] is not None and e["ts"] > now - DAY}
-    earlier = {e["region"] for e in events if e["kind"] == "CE" and e["region"] is not None and e["ts"] <= now - DAY}
-    new = recent - earlier if earlier else set()
-    if new:
-        out.append(Signal("ecc.new_region", "failed", {"n": len(new)}))
+    regions = {e["region"] for e in events if e["kind"] == "CE" and e["region"] is not None}
+    held = remember_regions(regions, state, now, float(cfg["hold_hours"]) * 3600)
+    if held:
+        out.append(Signal("ecc.new_region", "failed", {"n": len(held)}))
     return out
 
 
@@ -141,4 +157,4 @@ def run(ctx: Ctx) -> list[Signal]:
     sections, why = collect(ctx)
     if sections is None:
         return [Signal("pve.unreachable", "warn", {"why": why})]
-    return evaluate(sections, ctx.cfg, ctx.now)
+    return evaluate(sections, ctx.cfg, ctx.now, ctx.state)

@@ -96,6 +96,8 @@ spike_factor = 3.0
 spike_min = 50
 event_gap_s = 2.0
 region_shift = 21
+# A region with corrected errors that this check had not seen stays a problem for this long (the first run adopts the ones it finds).
+hold_hours = 72
 
 [checks.thermal]
 what = "Temperatures"

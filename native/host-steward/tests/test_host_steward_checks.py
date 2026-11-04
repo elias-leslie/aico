@@ -310,6 +310,19 @@ def test_ecc_a_spike_over_the_baseline_and_a_new_region():
     assert out["ecc.spike"] == "warn"
 
 
+def test_ecc_a_new_memory_region_fails_for_the_hold_window_after_the_first_run_adopts_the_known_ones():
+    def at(now, *regions):
+        lines = "".join(f"CE {now - 500 - i * 100 - j} 0 0 0x{r * 0x200000 + 0x1000 * j:x} 1\n" for i, r in enumerate(regions) for j in (0, 1))
+        text = pve_answer(ecc_text=f"FIRST {int(now) - 8 * 86400}\n{lines}")
+        return core.Ctx(cfg=DATA["checks"]["ecc"], site=DATA["site"], now=now, run=pve_run(text), state=state)
+
+    state = {}
+    assert "ecc.new_region" not in states(ecc.run(at(NOW, 1, 2)))
+    assert states(ecc.run(at(NOW + 3600, 1, 2, 3)))["ecc.new_region"] == "failed"
+    assert states(ecc.run(at(NOW + 7200, 1, 2, 3)))["ecc.new_region"] == "failed"
+    assert "ecc.new_region" not in states(ecc.run(at(NOW + 80 * 3600, 1, 2, 3)))
+
+
 def sensors_text(cpu_c, nvme_c=40):
     return (
         f"T k10temp Tctl {cpu_c * 1000} 0 0\nT nvme Composite {nvme_c * 1000} 84850 94850\nT amdgpu edge 40000 0 0\n"
