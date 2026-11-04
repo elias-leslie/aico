@@ -300,7 +300,8 @@ export function StatusPage({ project = '' }: { project?: string }) {
             <p>
               <b>{machine.machine} isn’t answering.</b> No word since{' '}
               {at(machine.since ? Date.parse(machine.since) : null, now)}, so
-              its {plural(machine.rows, 'row')} show unknown. The rest are
+              its {plural(machine.rows, 'row')}{' '}
+              {machine.rows === 1 ? 'shows' : 'show'} unknown. The rest are
               current.
             </p>
             {context.hosts.has(machine.machine) && (
@@ -433,9 +434,7 @@ export function StatusPage({ project = '' }: { project?: string }) {
       <div className="status-rows">
         <div className="status-empty">
           <h3>No rows to show</h3>
-          The list comes back when the server answers.{' '}
-          <code className="mono">aico status</code> on any machine reads the
-          same rows.
+          The list comes back when the server answers.
         </div>
       </div>
     )
@@ -456,7 +455,11 @@ export function StatusPage({ project = '' }: { project?: string }) {
       <div className="status-rows">
         <div className="status-empty">
           <h3>Nothing matches</h3>
-          {plural(scope.length, 'row')} hidden by these filters.{' '}
+          {plural(
+            all.filter((row) => !project || row.project === project).length,
+            'row',
+          )}{' '}
+          hidden by these filters.{' '}
           <button
             type="button"
             className="lantern-btn ghost small"
@@ -478,7 +481,8 @@ export function StatusPage({ project = '' }: { project?: string }) {
             {rowsOf(problems)}
           </section>
         ) : (
-          !filter.states.length && (
+          !filter.states.length &&
+          !filter.search.trim() && (
             <div className="status-rows">
               <div className="status-empty compact">
                 <h3>No problems</h3>

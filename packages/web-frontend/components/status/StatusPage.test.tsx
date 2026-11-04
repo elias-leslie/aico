@@ -114,6 +114,7 @@ describe('StatusPage', () => {
       target: { value: 'nothing like it' },
     })
     expect(screen.getByText('Nothing matches')).toBeVisible()
+    expect(screen.getByText(/3 rows hidden by these filters/)).toBeVisible()
     fireEvent.click(screen.getAllByRole('button', { name: 'Clear filters' })[0])
     fireEvent.click(screen.getByRole('button', { name: '2 OK' }))
     expect(screen.queryByText('Nightly backup')).toBeNull()

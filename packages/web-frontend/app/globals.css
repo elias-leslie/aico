@@ -2153,4 +2153,8 @@ div.xterm .xterm-viewport {
   .status-rows.skeleton .status-row {
     grid-template-columns: 1fr auto;
   }
+
+  .status-rows.skeleton .status-row > div:first-child {
+    display: none;
+  }
 }
