@@ -261,6 +261,7 @@ describe('the runner', () => {
       expect(lines).toEqual([
         'notes-export  home davion-sidarli  runs there, not on gem',
         'context-import  home davion-sidarli  runs there, not on gem',
+        'usage-collect  home davion-sidarli  runs there, not on gem',
       ])
     } finally {
       spy.mockRestore()
