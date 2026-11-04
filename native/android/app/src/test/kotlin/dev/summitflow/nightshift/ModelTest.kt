@@ -1,11 +1,17 @@
 package dev.summitflow.nightshift
 
 import dev.summitflow.nightshift.crypto.B64
+import dev.summitflow.nightshift.net.Act
+import dev.summitflow.nightshift.net.ApiResult
+import dev.summitflow.nightshift.update.UpdateRules
+import dev.summitflow.nightshift.model.Health
 import dev.summitflow.nightshift.model.Item
+import dev.summitflow.nightshift.model.ItemsSnapshot
 import dev.summitflow.nightshift.model.Origins
 import dev.summitflow.nightshift.model.PairingException
 import dev.summitflow.nightshift.model.PairingParser
 import dev.summitflow.nightshift.model.Push
+import dev.summitflow.nightshift.model.obj
 import dev.summitflow.nightshift.model.parseObject
 import dev.summitflow.nightshift.model.usableActions
 import org.junit.Assert.assertEquals
@@ -15,6 +21,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import java.io.File
 
 class ModelTest {
     private fun payload(json: String) = B64.encode(json.toByteArray())
@@ -151,5 +158,55 @@ class ModelTest {
         val item = Item.parse(src)!!
         assertEquals(item, Item.parse(item.toJson()))
         assertNotNull(item.actions.single().url)
+    }
+}
+
+/** The server's samples in contracts/phone-api-fixtures.json: what aico-web answers on its app routes, parsed as the app does. */
+class PhoneApiContractTest {
+    private val fixtures = parseObject(
+        File("../../../contracts/phone-api-fixtures.json").also { assertTrue("run from native/android/app: $it", it.exists()) }.readText(),
+    )
+
+    @Test fun itemsParseIntoRowsWithTheirButtons() {
+        val snap = ItemsSnapshot.parse(fixtures.obj("items")!!, 1)
+        assertEquals(2, snap.needsYou.size)
+        assertEquals(1, snap.recent.size)
+        assertEquals(1793808000L, snap.health?.now)
+        val problem = snap.needsYou[0]
+        assertEquals("critical", problem.severity)
+        assertNull(problem.itemId)
+        assertEquals("open", problem.actions.single().id)
+        val question = snap.needsYou[1]
+        assertEquals("a1b2c3d4e5f6", question.itemId)
+        assertEquals("plain", question.actions[0].tier)
+        assertNull(question.actions[0].url)
+        assertEquals("Yes", question.actions[0].label)
+        // A press on a question's button goes to the item's act route with the choice id.
+        val route = Act.route(question.rowId, question.itemId, question.actions[0].id)
+        assertEquals("/api/app/items/a1b2c3d4e5f6/act", route.path)
+        assertEquals("a1b2c3d4e5f6", snap.itemIdFor("q:a1b2c3d4e5f6"))
+        assertEquals("0123456789ab", snap.recent[0].itemId)
+    }
+
+    @Test fun rowsOnlyOpenOriginsTheAppTrusts() {
+        val snap = ItemsSnapshot.parse(fixtures.obj("items")!!, 1)
+        val origins = Origins.withAico(listOf("https://nightshift.summitflow.dev"), "https://aico.example.dev")
+        assertEquals(1, snap.needsYou[0].usableActions(origins).size)
+        assertEquals(0, snap.needsYou[0].usableActions(listOf("https://nightshift.summitflow.dev")).size)
+    }
+
+    @Test fun healthAndUpdateAndAnswersParse() {
+        val health = Health.parse(fixtures.obj("health")!!)
+        assertEquals(true, health.ok)
+        assertEquals(1793806800L, health.checkedAt)
+        val manifest = UpdateRules.parse(fixtures.obj("update")!!)
+        assertEquals(13L, manifest.versionCode)
+        assertEquals("/api/app/apk", manifest.download)
+        val answer = Act.read(ApiResult.Ok(fixtures.obj("act")!!))
+        assertTrue(answer.ok)
+        assertEquals("Answered: Yes.", answer.text)
+        val closed = Act.read(ApiResult.Err(409, "x", fixtures.obj("error")))
+        assertFalse(closed.ok)
+        assertEquals("No longer open.", closed.text)
     }
 }

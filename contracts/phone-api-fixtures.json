@@ -1,0 +1,92 @@
+{
+  "_about": "What aico-web's /api/app/* answers and what the phone app parses (native/android, packages/web-server/src/app-api.ts). The server test checks its real answers have these shapes; the app's tests parse these samples. Change both sides together.",
+  "health": {
+    "ok": true,
+    "now": 1793808000,
+    "checked_at": 1793806800,
+    "phone_confirmed_at": 1793807400,
+    "line": "last check 11:40, phone confirmed 11:50"
+  },
+  "items": {
+    "health": {
+      "ok": true,
+      "now": 1793808000,
+      "checked_at": 1793806800,
+      "phone_confirmed_at": null,
+      "line": "last check 11:40, phone confirmed never"
+    },
+    "needs_you": [
+      {
+        "id": "k:here/backups",
+        "title": "Backups failed",
+        "body": "Last run failed.",
+        "severity": "critical",
+        "state": "Failed",
+        "ts": 1793807700,
+        "age": "5m",
+        "url": "https://aico.example.dev/status",
+        "item": null,
+        "actions": [
+          {
+            "id": "open",
+            "label": "Open Status",
+            "tier": "view",
+            "url": "https://aico.example.dev/status"
+          }
+        ]
+      },
+      {
+        "id": "q:a1b2c3d4e5f6",
+        "title": "Install the update?",
+        "body": "It takes a minute.",
+        "severity": "warning",
+        "state": "Needs your answer",
+        "ts": 1793807400,
+        "age": "10m",
+        "url": "https://aico.example.dev/?ask=a1b2c3d4e5f6",
+        "item": "a1b2c3d4e5f6",
+        "actions": [
+          { "id": "choice:0:3b5d5c37", "label": "Yes", "tier": "plain" },
+          {
+            "id": "open",
+            "label": "Open in Aico",
+            "tier": "view",
+            "url": "https://aico.example.dev/?ask=a1b2c3d4e5f6"
+          }
+        ]
+      }
+    ],
+    "recent": [
+      {
+        "id": "n:0123456789ab",
+        "title": "Disk is filling",
+        "body": "90 percent.",
+        "severity": "warning",
+        "state": "",
+        "ts": 1793807700,
+        "age": "5m ago",
+        "url": "https://aico.example.dev/status",
+        "item": "0123456789ab",
+        "actions": [
+          {
+            "id": "open",
+            "label": "Open",
+            "tier": "view",
+            "url": "https://aico.example.dev/status"
+          },
+          { "id": "mark-read", "label": "Mark read", "tier": "view" }
+        ]
+      }
+    ]
+  },
+  "update": {
+    "version_code": 13,
+    "version_name": "0.3.0",
+    "sha256": "660e7502cc7561b8ef7807d0dfb2ddd92ef548873a55865000ac58722636318f",
+    "size": 3122402,
+    "download": "/api/app/apk"
+  },
+  "act": { "ok": true, "text": "Answered: Yes.", "item": "a1b2c3d4e5f6" },
+  "error": { "error": "No longer open." },
+  "drill": { "drill": true }
+}

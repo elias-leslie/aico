@@ -4,6 +4,7 @@ import { request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { NotifyStore, parseNotice } from '@aico/notify'
 import { type StatusRow, StatusStore } from '@aico/status'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -542,5 +543,98 @@ describe('live feed', () => {
     })
     expect(text).toContain('retry: 3000')
     expect(text.indexOf('event: reset')).toBeLessThan(text.indexOf('event: hello'))
+  })
+})
+
+// contracts/phone-api-fixtures.json: the shapes the phone app parses (its tests read the same file).
+describe('the phone API contract', () => {
+  const fixtures = JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL('../../../contracts/phone-api-fixtures.json', import.meta.url)),
+      'utf8',
+    ),
+  )
+
+  /** Keys and value types; an array is the sorted set of its elements' shapes. */
+  function shape(value: unknown): unknown {
+    if (value === null) return 'null'
+    if (Array.isArray(value))
+      return [...new Set(value.map((item) => JSON.stringify(shape(item))))].sort()
+    if (typeof value === 'object')
+      return Object.fromEntries(
+        Object.entries(value as object)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, item]) => [key, shape(item)]),
+      )
+    return typeof value
+  }
+
+  it('health, items, act, errors and the drill answer in those shapes', async () => {
+    reports(1, 1)
+    status.upsert([
+      row({
+        id: 'here/backups',
+        what: 'Backups',
+        kind: 'backup',
+        state: 'failed',
+        meaning: 'Failed.',
+      }),
+    ])
+    asks = [ask()]
+    notify.accept(
+      parseNotice({
+        v: 1,
+        source: 'tester',
+        kind: 'alert',
+        severity: 'warning',
+        title: 'Disk is filling',
+        body: '90 percent.',
+        push: 'phone',
+        open: 'https://aico.example.dev/status',
+      }),
+      'local',
+      [device],
+      NOW,
+    )
+    // phone_confirmed_at is null until a phone has acked; the fixture's items sample is that case.
+    const items = (await call('GET', '/api/app/items')).body
+    expect(shape(items)).toEqual(shape(fixtures.items))
+    await call('POST', '/api/app/ack', { body: { acks: [] } })
+    expect(shape((await call('GET', '/api/app/health')).body)).toEqual(shape(fixtures.health))
+    const choice = items.needs_you[1].actions[0].id
+    const act = (
+      await call('POST', '/api/app/act', { body: { row: 'q:a1b2c3d4e5f6', action: choice } })
+    ).body
+    expect(shape(act)).toEqual(shape(fixtures.act))
+    asks = [ask({ state: 'answered' })]
+    const closed = await call('POST', '/api/app/act', {
+      body: { row: 'q:a1b2c3d4e5f6', action: choice },
+    })
+    expect(closed.status).toBe(409)
+    expect(closed.body).toEqual(fixtures.error)
+    setDrill(dir, 5, NOW)
+    expect((await call('GET', '/api/app/health')).body).toEqual(fixtures.drill)
+  })
+
+  it('update answers in the manifest shape', async () => {
+    publishApk(
+      dir,
+      (() => {
+        const out = join(dir, 'build')
+        mkdirSync(out, { recursive: true })
+        writeFileSync(
+          join(out, 'app-release.apk'),
+          Buffer.concat([Buffer.from('PK'), Buffer.alloc(40)]),
+        )
+        writeFileSync(
+          join(out, 'output-metadata.json'),
+          JSON.stringify({
+            elements: [{ outputFile: 'app-release.apk', versionCode: 13, versionName: '0.3.0' }],
+          }),
+        )
+        return join(out, 'app-release.apk')
+      })(),
+    )
+    expect(shape((await call('GET', '/api/app/update')).body)).toEqual(shape(fixtures.update))
   })
 })
