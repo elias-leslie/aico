@@ -116,21 +116,26 @@ def _one_of(row: Mapping[str, Any], field: str, values: tuple[str, ...]) -> str:
     return value
 
 
-def _actions(value: Any) -> list[dict[str, str]] | None:
+def _actions(value: Any) -> list[dict[str, Any]] | None:
     if value is None:
         return None
     if not isinstance(value, list) or len(value) > MAX_ACTIONS:
         raise RowError("actions", f"must be a list of at most {MAX_ACTIONS}")
     actions = []
     for item in value:
-        if not isinstance(item, dict) or set(item) - {"kind", "ref"}:
-            raise RowError("actions", "each action is an object with only kind and ref")
+        if not isinstance(item, dict) or set(item) - {"kind", "ref", "owner_only"}:
+            raise RowError("actions", "each action has kind, ref and optional owner_only")
         if item.get("kind") not in ACTION_KINDS:
             raise RowError("actions", f"an action's kind must be one of {', '.join(ACTION_KINDS)}")
         ref = item.get("ref")
         if not isinstance(ref, str) or not 0 < len(ref) <= MAX_ACTION_REF:
             raise RowError("actions", f"an action's ref is 1 to {MAX_ACTION_REF} characters")
-        actions.append({"kind": item["kind"], "ref": ref})
+        action: dict[str, Any] = {"kind": item["kind"], "ref": ref}
+        if "owner_only" in item:
+            if not isinstance(item["owner_only"], bool):
+                raise RowError("actions", "owner_only must be a boolean")
+            action["owner_only"] = item["owner_only"]
+        actions.append(action)
     return actions
 
 

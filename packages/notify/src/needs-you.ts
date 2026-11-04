@@ -1,5 +1,5 @@
 // Needs you: what asks the owner something shows there as a Tether ask, the
-// one ask store. A Status row that turns failed raises one ask, withdrawn when
+// one ask store. A failed Status row with an owner-only action raises an ask, withdrawn when
 // the row recovers; a notice that asks something (a todo, an alert offering
 // "That was me", a question not already an ask) raises one too. The owner's
 // "That was me" on an OmniNull alert goes back to the hub's verdict route.
@@ -73,7 +73,7 @@ export function noticeAsk(id: string, notice: Notice): AskRequest {
 }
 
 export function rowAsk(row: StatusRow): AskRequest {
-  const run = row.actions?.find((action) => action.kind === 'run')
+  const run = row.actions?.find((action) => action.owner_only === true && action.kind === 'run')
   return {
     requester: ROW_REQUESTER,
     question: cut(oneLine(`${row.what} failed on ${row.machine}`), 200),
@@ -116,16 +116,17 @@ export class NeedsYou {
     if (stored?.askId) await this.options.asks.close(stored.askId, 'withdraw')
   }
 
-  /** Rows just written: a failed row raises its one ask; a row that recovered withdraws it. */
+  /** Only a failed row with an owner-only action raises an ask; other rows withdraw old asks. */
   async rowsWritten(rows: readonly StatusRow[]): Promise<void> {
     const { store, asks } = this.options
     for (const row of rows) {
       const raised = store.rowAsk(row.id)
-      if (row.state === 'failed' && !raised) {
+      const ownerAction = row.actions?.some((action) => action.owner_only === true) ?? false
+      if (row.state === 'failed' && ownerAction && !raised) {
         store.setRowAsk(row.id, await asks.create(rowAsk(row)), this.now)
-      } else if (row.state !== 'failed' && raised) {
-        store.dropRowAsk(row.id)
+      } else if ((row.state !== 'failed' || !ownerAction) && raised) {
         await asks.close(raised, 'withdraw')
+        store.dropRowAsk(row.id)
       }
     }
   }

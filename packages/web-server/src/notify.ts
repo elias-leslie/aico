@@ -238,6 +238,13 @@ export class NotifyHub {
 
   /** Recovers rows a stopped process left mid-send, then runs the outbox every pass. */
   start(): void {
+    // Reconcile existing row asks too: an ordinary failed job no longer needs
+    // the owner's answer just because it was recorded before this rule.
+    void this.needsYou
+      .rowsWritten(this.deps.status.rows().map(({ row }) => row))
+      .catch((error) =>
+        console.error('[notify] Status ask reconciliation failed:', (error as Error).message),
+      )
     const recovered = this.outbox.recover()
     if (recovered)
       console.log(`[notify] ${recovered} send(s) left unfinished at the last stop, not resent`)

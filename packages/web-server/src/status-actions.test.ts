@@ -256,12 +256,12 @@ describe('statusNotice', () => {
     },
   })
 
-  it('is a phone alert the notice contract takes', () => {
+  it('keeps failed rows as tray alerts under the notice contract', () => {
     const notice = parseNotice(statusNotice(batchOf(shown()), 'aico.example.dev', 6 * 3600))
     expect(notice).toMatchObject({
       source: 'aico',
       severity: 'critical',
-      push: 'phone',
+      push: 'tray',
       title: '1 failed: Job',
       body: 'Broke. 4 healthy.',
       key: 'status:here/job=failed',
@@ -279,10 +279,10 @@ describe('statusNotice', () => {
     expect(parseNotice(statusNotice(batchOf(...many), null, 60)).key).toBe(key)
   })
 
-  it('a row that flaps reaches the phone once per cooldown', () => {
+  it('a row that flaps reaches the tray once per cooldown', () => {
     const notify = new NotifyStore(':memory:')
     const send = (at: number) =>
-      notify.accept(parseNotice(statusNotice(batchOf(shown()), null, 3600)), 'local', ['p'], at)
+      notify.accept(parseNotice(statusNotice(batchOf(shown()), null, 3600)), 'local', [], at)
     const t0 = Date.parse('2026-11-03T12:00:00Z')
     expect(send(t0).repeat).toBe(false)
     expect(send(t0 + 25 * 60_000).repeat).toBe(true)

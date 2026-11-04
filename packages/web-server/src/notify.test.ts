@@ -202,7 +202,26 @@ describe('POST /api/ominull/push', () => {
 })
 
 describe('Needs you through Status rows', () => {
-  it('a failing row posted on loopback raises one ask; recovering withdraws it', async () => {
+  it('withdraws previously raised ordinary failed-row asks when the hub starts', async () => {
+    const old = {
+      id: 'jobs/old-agent-problem',
+      what: 'Old agent problem',
+      kind: 'job' as const,
+      machine: 'here',
+      state: 'failed' as const,
+      meaning: 'The agent can investigate.',
+    }
+    status.upsert([old])
+    hub.store.setRowAsk(old.id, 'old-row-ask', 0)
+    hub.start()
+    await settle()
+    expect(tetherCalls.map((call) => [call.method, call.path])).toEqual([
+      ['POST', '/v1/asks/old-row-ask/withdraw'],
+    ])
+    expect(hub.store.rowAsk(old.id)).toBeNull()
+  })
+
+  it('a failing owner-only action posted on loopback raises one ask; recovering withdraws it', async () => {
     const failing = {
       id: 'jobs/notes-export',
       what: 'Notes export to Drive',
@@ -210,7 +229,7 @@ describe('Needs you through Status rows', () => {
       machine: 'here',
       state: 'failed',
       meaning: 'No Drive login.',
-      actions: [{ kind: 'run', ref: 'aico jobs run notes-export' }],
+      actions: [{ kind: 'run', ref: 'aico jobs run notes-export', owner_only: true }],
     }
     await call('POST', '/api/status/rows', { body: failing })
     await settle()

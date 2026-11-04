@@ -6,8 +6,17 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "what", "kind", "machine", "state", "meaning"],
-  "if": { "properties": { "kind": { "const": "machine" } }, "required": ["kind"] },
-  "then": { "required": ["next_run"] },
+  "if": {
+    "properties": {
+      "kind": {
+        "const": "machine"
+      }
+    },
+    "required": ["kind"]
+  },
+  "then": {
+    "required": ["next_run"]
+  },
   "properties": {
     "id": {
       "description": "Stable key the writer chooses, unique across the fleet: start it with the machine, e.g. 'davion-sidarli/notes-export'. Posting the same id again replaces the row.",
@@ -66,8 +75,18 @@
         "additionalProperties": false,
         "required": ["kind", "ref"],
         "properties": {
-          "kind": { "enum": ["run", "log", "detail", "look"] },
-          "ref": { "type": "string", "minLength": 1, "maxLength": 500 }
+          "kind": {
+            "enum": ["run", "log", "detail", "look"]
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "owner_only": {
+            "type": "boolean",
+            "description": "Only the owner can act or decide. A failed row raises an owner ask only when an action explicitly sets this to true."
+          }
         }
       }
     }

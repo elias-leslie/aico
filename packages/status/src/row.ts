@@ -25,6 +25,8 @@ export type ActionKind = (typeof ACTION_KINDS)[number]
 export interface Action {
   kind: ActionKind
   ref: string
+  /** A failed row asks the owner only for an explicitly owner-only action. */
+  owner_only?: boolean
 }
 
 export interface StatusRow {
@@ -143,7 +145,7 @@ function actions(value: unknown): Action[] | undefined {
     if (!item || typeof item !== 'object' || Array.isArray(item))
       throw new RowError('actions', 'each action is an object with kind and ref')
     const action = item as Record<string, unknown>
-    const extra = Object.keys(action).find((key) => key !== 'kind' && key !== 'ref')
+    const extra = Object.keys(action).find((key) => !['kind', 'ref', 'owner_only'].includes(key))
     if (extra) throw new RowError('actions', `an action has no field ${extra}`)
     if (
       typeof action.kind !== 'string' ||
@@ -153,7 +155,13 @@ function actions(value: unknown): Action[] | undefined {
     const ref = action.ref
     if (typeof ref !== 'string' || ref.length === 0 || length(ref) > LIMITS.actions.ref)
       throw new RowError('actions', `an action's ref is 1 to ${LIMITS.actions.ref} characters`)
-    return { kind: action.kind as ActionKind, ref }
+    if (action.owner_only !== undefined && typeof action.owner_only !== 'boolean')
+      throw new RowError('actions', 'owner_only must be a boolean')
+    return {
+      kind: action.kind as ActionKind,
+      ref,
+      ...(action.owner_only !== undefined && { owner_only: action.owner_only as boolean }),
+    }
   })
 }
 

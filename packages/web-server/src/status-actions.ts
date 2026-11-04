@@ -240,7 +240,7 @@ export function statusKey(batch: AlertBatch): string {
 }
 
 /**
- * The owner notice for a Status alert batch (contracts/notice.schema.json): to the phone, once
+ * The Status alert notice (contracts/notice.schema.json): failed rows stay on the tray; once
  * per `cooldownS` for the same changes, so a row that flaps doesn't push every time.
  */
 export function statusNotice(
@@ -259,7 +259,7 @@ export function statusNotice(
     body: body.slice(0, 1000),
     key: statusKey(batch),
     cooldown: cooldownS,
-    push: 'phone',
+    push: failed ? 'tray' : 'phone',
     ...(publicHost ? { open: `https://${publicHost}/status` } : {}),
   }
 }

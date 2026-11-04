@@ -222,12 +222,45 @@ const row = (state: StatusRow['state']): StatusRow => ({
 })
 
 describe('Needs you', () => {
-  it('raises one ask for a failing row and withdraws it when the row recovers', async () => {
+  it('leaves ordinary failed rows to Status instead of asking the owner', async () => {
+    const store = new NotifyStore(':memory:')
+    const asks = new FakeAsks()
+    await new NeedsYou({ store, asks }).rowsWritten([row('failed')])
+    expect(asks.created).toEqual([])
+    expect(store.rowAsk(row('failed').id)).toBeNull()
+    store.close()
+  })
+
+  it('uses only the explicitly owner-only action in a failed row ask', async () => {
+    const store = new NotifyStore(':memory:')
+    const asks = new FakeAsks()
+    const owner = { kind: 'run' as const, ref: 'owner-approved action', owner_only: true }
+    await new NeedsYou({ store, asks }).rowsWritten([
+      { ...row('failed'), actions: [...(row('failed').actions ?? []), owner] },
+    ])
+    expect(asks.created).toMatchObject([{ command: 'owner-approved action' }])
+    store.close()
+  })
+
+  it('withdraws an old failed-row ask when the row has no owner-only action', async () => {
+    const store = new NotifyStore(':memory:')
+    store.setRowAsk(row('failed').id, 'legacy-ask', 0)
+    const asks = new FakeAsks()
+    await new NeedsYou({ store, asks }).rowsWritten([row('failed')])
+    expect(asks.created).toEqual([])
+    expect(asks.closed).toEqual([['legacy-ask', 'withdraw']])
+    expect(store.rowAsk(row('failed').id)).toBeNull()
+    store.close()
+  })
+
+  it('raises one ask for a failing owner-only action and withdraws it when the row recovers', async () => {
     const store = new NotifyStore(':memory:')
     const asks = new FakeAsks()
     const needsYou = new NeedsYou({ store, asks })
-    await needsYou.rowsWritten([row('failed')])
-    await needsYou.rowsWritten([row('failed')])
+    const action = { kind: 'run' as const, ref: 'aico jobs run backup', owner_only: true }
+    const failed = { ...row('failed'), actions: [action] }
+    await needsYou.rowsWritten([failed])
+    await needsYou.rowsWritten([failed])
     expect(asks.created).toEqual([
       {
         requester: 'Aico Status',
@@ -239,7 +272,7 @@ describe('Needs you', () => {
     ])
     await needsYou.rowsWritten([row('ok')])
     expect(asks.closed).toEqual([['ask1', 'withdraw']])
-    await needsYou.rowsWritten([row('failed')])
+    await needsYou.rowsWritten([failed])
     expect(asks.created).toHaveLength(2)
     await needsYou.rowRemoved('davion-sidarli/backup')
     expect(asks.closed).toEqual([
