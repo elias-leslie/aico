@@ -12,9 +12,13 @@ case "${1:-}" in
   memory | prompt | models | context) exec_aico_web "$@" ;;
   jobs)
     shift
-    jobs_bundle="$AICO_REPO_ROOT/packages/jobs/dist/aico-jobs.mjs"
+    jobs_dir="$AICO_REPO_ROOT/packages/jobs"
+    jobs_bundle="$jobs_dir/dist/aico-jobs.mjs"
     node="$(aico_web_node)"
-    [ -r "$jobs_bundle" ] || PATH="$(dirname "$node"):$PATH" npm --prefix "$AICO_REPO_ROOT/packages/jobs" run --silent build >&2
+    if [ ! -r "$jobs_bundle" ] || [ -n "$(find "$jobs_dir/src" "$AICO_REPO_ROOT/packages/status/src" \
+      "$AICO_REPO_ROOT/packages/store/src" -name '*.ts' -newer "$jobs_bundle" -print -quit 2>/dev/null)" ]; then
+      PATH="$(dirname "$node"):$PATH" npm --prefix "$jobs_dir" run --silent build >&2
+    fi
     exec "$node" --disable-warning=ExperimentalWarning "$jobs_bundle" "$@"
     ;;
   agent)
