@@ -42,11 +42,13 @@ func cleanText(text string, limit int) (string, error) {
 	return flat, nil
 }
 
-// withLedger runs fn on the live messages under the registry lock; fn returns true when it changed a row (the
-// messages are then saved, which also drops rows older than 24 hours).
+// withLedger runs fn on the live messages as one change of the registry; fn returns true when it changed a row
+// (the messages are then saved, which also drops rows older than 24 hours). fn runs again on a fresh read when
+// someone else saved first, so it must set its results on every run.
 func (h *Hook) withLedger(fn func(rows []map[string]any, d map[string]any) ([]map[string]any, bool, error)) error {
 	var ferr error
 	err := h.Cfg.withCoordLock(func() error {
+		ferr = nil
 		d := h.Cfg.loadDoc()
 		rows := h.ledger(d, time.Now().UTC())
 		rows, changed, e := fn(rows, d)
@@ -112,6 +114,7 @@ func (h *Hook) Send(o SendOpts) (row map[string]any, duplicate bool, err error) 
 	}
 	now := time.Now().UTC()
 	err = h.withLedger(func(rows []map[string]any, d map[string]any) ([]map[string]any, bool, error) {
+		row, duplicate = nil, false
 		for _, r := range rows {
 			if str(r["from"]) != h.ID.AgentID || str(r["to"]) != o.To {
 				continue
@@ -290,7 +293,7 @@ func (h *Hook) Inbox() []map[string]any {
 	d := h.Cfg.loadDoc()
 	lin := h.lineage()
 	mine := lin.SelfIDs(h.ID)
-	seen := h.seenFor(mine)
+	seen, _ := h.seenFor(mine) // a listing, not a shown-once surface: unread seen state lists every row
 	var out []map[string]any
 	for _, r := range h.ledger(d, time.Now().UTC()) {
 		to, from, state := str(r["to"]), str(r["from"]), str(r["state"])
@@ -330,5 +333,6 @@ func (h *Hook) fyiShown(r map[string]any) bool {
 	if loadSeen(str(r["to"])).has(key) {
 		return true
 	}
-	return h.seenFor(h.lineage().SelfIDs(h.ID)).has(key)
+	seen, _ := h.seenFor(h.lineage().SelfIDs(h.ID))
+	return seen.has(key)
 }

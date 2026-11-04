@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { openTasksDb } from './db'
 import { Registry } from './projects'
@@ -7,6 +10,7 @@ import {
   type MigrationRule,
   type SfQuery,
   type SfRow,
+  stQuery,
 } from './summitflow-import'
 import { TaskStore } from './tasks'
 
@@ -265,5 +269,45 @@ describe('tasks import', () => {
     expect(report).toMatchObject({ updated: 1, keptNewerHere: 1 })
     expect(store.require('task-aa').status).toBe('completed')
     expect(store.require('task-ba')).toMatchObject({ status: 'running', title: 'title task-ba' })
+  })
+})
+
+describe('stQuery', () => {
+  const secret = 'NERI ROW TITLE'
+  const withDetails = (body: string) => {
+    const root = mkdtempSync(join(tmpdir(), 'sfq-'))
+    mkdirSync(join(root, '.dev-tools'))
+    const rel = '.dev-tools/db-query-1-details.txt'
+    writeFileSync(join(root, rel), body)
+    return { root, file: join(root, rel), pointer: `DB:OK:1|lines=1|details:${rel}|hint:x` }
+  }
+
+  it('removes the details file and never quotes row text when the answer is unreadable', () => {
+    const { root, file, pointer } = withDetails(`[{"title": "${secret}", `)
+    const query = stQuery(root, () => pointer)
+    let message = ''
+    try {
+      query('SELECT 1')
+    } catch (error) {
+      message = (error as Error).message
+    }
+    expect(message).toMatch(/unreadable JSON \(\d+ bytes\)/)
+    expect(message).not.toContain(secret)
+    expect(existsSync(file)).toBe(false)
+  })
+
+  it('removes the details file when the run itself fails', () => {
+    const { root, file, pointer } = withDetails(`[{"title": "${secret}"}]`)
+    const query = stQuery(root, () => {
+      throw Object.assign(new Error(`Command failed: ${secret}`), { status: 1, stdout: pointer })
+    })
+    expect(() => query('SELECT 1')).toThrow(/^st db query failed \(exit 1\): DB:OK:1$/)
+    expect(existsSync(file)).toBe(false)
+  })
+
+  it('reads and removes a details file on success', () => {
+    const { root, file, pointer } = withDetails('[{"id": "p1"}]')
+    expect(stQuery(root, () => pointer)('SELECT 1')).toEqual([{ id: 'p1' }])
+    expect(existsSync(file)).toBe(false)
   })
 })

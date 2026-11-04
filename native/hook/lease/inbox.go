@@ -143,8 +143,10 @@ func (h *Hook) peekRide() *ride {
 	return &ride{widget, *out.Token, *out.Text}
 }
 
-func (r *ride) confirm() {
-	_, _ = tetherCall("DELETE", "/v1/sessions/"+url.PathEscape(r.widget)+"/due?token="+url.QueryEscape(r.token), nil, nil)
+// confirm tells Tether the lines are taken; false when it did not answer (they are not shown then).
+func (r *ride) confirm() bool {
+	_, err := tetherCall("DELETE", "/v1/sessions/"+url.PathEscape(r.widget)+"/due?token="+url.QueryEscape(r.token), nil, nil)
+	return err == nil
 }
 
 // throttled: a PostToolUse check ran for this thread less than throttleEvery ago (the stamp is its own record).
@@ -188,12 +190,19 @@ func (h *Hook) InboxHook(mode, provider string) (context, block string) {
 	if mode == "turn" && postTool && (subagent != "" || h.throttled(event)) {
 		return "", ""
 	}
-	extra := ""
+	var notice chan string // the memory notice runs beside the store calls, within its own short timeout
 	if mode == "turn" && h.Extra != nil {
-		extra = h.Extra(event)
+		notice = make(chan string, 1)
+		go func() { notice <- h.Extra(event) }()
+	}
+	extra := func() string {
+		if notice == nil {
+			return ""
+		}
+		return <-notice
 	}
 	if subagent != "" || event == "SessionStart" || event == "SubagentStart" {
-		return extra, ""
+		return extra(), ""
 	}
 	h.Cfg.Observe(h.ID, false, false, false) // registered every turn: an agent that only reads must stay addressable
 	agent := h.ID.AgentID
@@ -201,21 +210,38 @@ func (h *Hook) InboxHook(mode, provider string) (context, block string) {
 	if mode == "turn" && takesRide(provider, event, worker) {
 		rd = h.peekRide()
 	}
-	items := h.Pending()
-	fresh := due(h.seenFor(h.lineage().SelfIDs(h.ID)), items)
-	mark := func(its []Item) {
-		var keys []string
-		for _, it := range its {
+	var fresh []Item
+	if seen, err := h.seenFor(h.lineage().SelfIDs(h.ID)); err == nil { // unread seen state: show nothing this turn
+		fresh = due(seen, h.Pending())
+	}
+	waiting := false
+	for _, it := range fresh {
+		waiting = waiting || strings.HasSuffix(it.Key, ":req") // only a waiting requester justifies continuing Stop
+	}
+	if mode == "stop" && !waiting {
+		fresh = nil
+	}
+	// What is shown is recorded first and shown only once recorded: a record that fails shows nothing now (it
+	// shows on a later turn), never the same item twice. Every store call here shares the hook call's budget,
+	// far inside the harness's timeout, so the answer is printed right after the record, not killed before.
+	if len(fresh) > 0 {
+		keys := make([]string, 0, len(fresh))
+		for _, it := range fresh {
 			keys = append(keys, it.Key)
 		}
-		_ = markSeen(agent, keys)
+		if err := markSeen(agent, keys); err != nil {
+			fresh = nil
+		}
+	}
+	if rd != nil && !rd.confirm() {
+		rd = nil // Tether keeps the lines for the next turn
+	}
+	if wasQueued(agent) { // a queued [Message] line nothing waits for any more is taken back before it is pasted
+		h.WithdrawStale(agent)
 	}
 	if mode == "stop" {
-		for _, it := range fresh {
-			if strings.HasSuffix(it.Key, ":req") { // only a waiting requester justifies continuing
-				mark(fresh)
-				return "", render(fresh)
-			}
+		if len(fresh) > 0 {
+			return "", render(fresh)
 		}
 		return "", ""
 	}
@@ -226,20 +252,10 @@ func (h *Hook) InboxHook(mode, provider string) (context, block string) {
 	if rd != nil {
 		parts = append(parts, rd.text)
 	}
-	if extra != "" {
-		parts = append(parts, extra)
+	if x := extra(); x != "" {
+		parts = append(parts, x)
 	}
-	context = strings.Join(parts, "\n\n")
-	if len(fresh) > 0 {
-		mark(fresh)
-	}
-	if rd != nil {
-		rd.confirm()
-	}
-	if wasQueued(agent) { // a queued [Message] line nothing waits for any more is taken back before it is pasted
-		h.WithdrawStale(agent)
-	}
-	return context, ""
+	return strings.Join(parts, "\n\n"), ""
 }
 
 // StopJSON is Claude Code's and Codex's Stop answer: the turn continues so the agent answers.

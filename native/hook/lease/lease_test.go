@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func testConfig() Config {
@@ -23,6 +24,7 @@ func sandbox(t *testing.T) (repo string) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", filepath.Join(tmp, "run"))
 	fake = testtether.Start(t, filepath.Join(tmp, "tether"))
+	SetBudget(time.Now(), 0)
 	t.Setenv("ST_COORD_ANCHOR", "")
 	t.Setenv("ST_COORD_HARNESS", "")
 	t.Setenv("ST_COORD_SENSITIVE", "")

@@ -26,6 +26,12 @@ type Config struct {
 	UnackedMinutes  int `json:"unacked_minutes"`   // a request unanswered this long surfaces once to its sender
 	SnapshotMaxMins int `json:"snapshot_max_mins"` // stale shell snapshots are removed after this
 	RegistrySaveSec int `json:"registry_save_sec"` // registry rows are rewritten at most this often
+	StoreBudgetMs   int `json:"store_budget_ms"`   // one hook call's time for all its coordination store calls
+}
+
+// StoreBudget is one hook call's time for all its store calls (SetBudget).
+func (c Config) StoreBudget() time.Duration {
+	return time.Duration(c.withDefaults().StoreBudgetMs) * time.Millisecond
 }
 
 // withDefaults puts st's values in place of a missing, zero or negative window: with a zero idle TTL every lease
@@ -35,7 +41,7 @@ func (c Config) withDefaults() Config {
 		v   *int
 		def int
 	}{{&c.IdleTTLMinutes, 30}, {&c.ActiveMinutes, 10}, {&c.RegistryHours, 24}, {&c.NoteHours, 24},
-		{&c.UnackedMinutes, 10}, {&c.SnapshotMaxMins, 120}, {&c.RegistrySaveSec, 60}} {
+		{&c.UnackedMinutes, 10}, {&c.SnapshotMaxMins, 120}, {&c.RegistrySaveSec, 60}, {&c.StoreBudgetMs, 1500}} {
 		if *f.v <= 0 {
 			*f.v = f.def
 		}
@@ -172,7 +178,7 @@ func translate(pat string) string {
 	return b.String()
 }
 
-// Store is one project's lease file, read and written under its flock.
+// Store is one project's lease document, changed by compare-and-set (docs.go).
 type Store struct {
 	cfg     Config
 	project string
@@ -187,8 +193,8 @@ func (c Config) store(project string) (*Store, error) {
 	return &Store{cfg: c.withDefaults(), project: project}, nil
 }
 
-// withLock runs fn holding the project document's lock (leases._lock).
-func (s *Store) withLock(fn func() error) error { return withDocLock(s.project, fn) }
+// withLock runs fn as one change of the project document (leases._lock); fn runs again when someone saved first.
+func (s *Store) withLock(fn func() error) error { return updateDoc(s.project, fn) }
 
 // Writers maps an absolute path to its writer entries ({agent_id, session_id, anchor, at, sensitive[, reason, by]}).
 type Writers map[string][]map[string]any
@@ -306,6 +312,7 @@ func (s *Store) purge(leases []Lease) []Lease {
 func (s *Store) Active(kinds ...string) ([]Lease, error) {
 	var out []Lease
 	err := s.withLock(func() error {
+		out = nil
 		d := s.load()
 		live := s.purge(d.leases)
 		if len(live) != len(d.leases) {

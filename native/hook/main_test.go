@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"aico/hook/guard"
+	"aico/hook/lease"
 )
 
 const schemaPath = "../../contracts/hook-payloads.schema.json" // contracts/hook-payloads.schema.json
@@ -57,6 +58,7 @@ func sandbox(t *testing.T) string {
 	t.Setenv("AICO_HOOK_DATA", data)
 	t.Setenv("XDG_RUNTIME_DIR", filepath.Join(tmp, "run"))
 	testtether.Start(t, filepath.Join(tmp, "tether"))
+	lease.SetBudget(time.Now(), 0)
 	t.Setenv("ST_COORD_ANCHOR", "")
 	for _, k := range []string{"ST_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID",
 		"CODEX_THREAD_ID", "PI_SESSION_ID", "ANTIGRAVITY_CONVERSATION_ID", "TMUX", "TMUX_PANE"} {

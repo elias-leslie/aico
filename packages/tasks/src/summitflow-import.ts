@@ -6,7 +6,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readFileSync, unlinkSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { transaction } from '@aico/store'
 import type { Database } from './db'
@@ -28,26 +28,52 @@ export function loadRule(path: string): MigrationRule {
 
 const SF_ROOT = '/srv/workspaces/projects/summitflow'
 
+/** Runs `st` with args in cwd and returns its stdout; a failed run throws with `stdout` attached. */
+export type StRun = (args: string[], cwd: string) => string
+
+const runSt: StRun = (args, cwd) =>
+  execFileSync('st', args, { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+
+/** The status word of st's answer (`DB:ERR:...` up to its first `|`): never row text. */
+const statusOf = (out: string): string =>
+  (out.split('\n')[0] ?? '').split('|')[0]?.slice(0, 80) ?? ''
+
 /**
  * `st db query` keeps answers over ~1.5 KB in a details file under the project's .dev-tools and
- * prints a pointer; that file is read here and removed (it is regenerable scratch).
+ * prints a pointer; that file is read here and removed (it is regenerable scratch), also when the
+ * run or the parse fails. Errors name the status and sizes only, never the rows' text.
  */
-export function stQuery(root = SF_ROOT): SfQuery {
+export function stQuery(root = SF_ROOT, run: StRun = runSt): SfQuery {
+  const details = (out: string): string | null => {
+    const pointer = /^DB:[A-Z]+:\d+\|lines=\d+\|details:([^|]+)\|/m.exec(out)
+    return pointer ? join(root, pointer[1] as string) : null
+  }
   return (sql) => {
     const wrapped = `SELECT coalesce(jsonb_agg(t), '[]'::jsonb) FROM (${sql}) t`
-    let out = execFileSync('st', ['db', '-P', 'summitflow', 'query', '-t', wrapped], {
-      cwd: root,
-      encoding: 'utf8',
-      maxBuffer: 256 * 1024 * 1024,
-    }).trim()
-    const pointer = /^DB:OK:\d+\|lines=\d+\|details:([^|]+)\|/.exec(out)
-    if (pointer) {
-      const file = join(root, pointer[1] as string)
-      out = readFileSync(file, 'utf8').trim()
-      unlinkSync(file)
+    let out: string
+    try {
+      out = run(['db', '-P', 'summitflow', 'query', '-t', wrapped], root).trim()
+    } catch (error) {
+      const stdout = String((error as { stdout?: unknown }).stdout ?? '')
+      const file = details(stdout)
+      if (file) rmSync(file, { force: true })
+      const status = (error as { status?: unknown }).status
+      throw new Error(`st db query failed (exit ${String(status ?? '?')}): ${statusOf(stdout)}`)
     }
-    if (!out.startsWith('[')) throw new Error(`st db query failed: ${out.slice(0, 160)}`)
-    return JSON.parse(out) as SfRow[]
+    const file = details(out)
+    if (file) {
+      try {
+        out = readFileSync(file, 'utf8').trim()
+      } finally {
+        rmSync(file, { force: true })
+      }
+    }
+    if (!out.startsWith('[')) throw new Error(`st db query failed: ${statusOf(out)}`)
+    try {
+      return JSON.parse(out) as SfRow[]
+    } catch {
+      throw new Error(`st db query answered unreadable JSON (${out.length} bytes)`)
+    }
   }
 }
 

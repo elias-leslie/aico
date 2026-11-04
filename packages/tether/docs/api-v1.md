@@ -1083,11 +1083,9 @@ The one store for agent coordination, kept in `tether.db` (table `coord_docs`, c
 
 - `GET /v1/coordination/docs` lists `{items: [{name, version, updatedAt}]}`.
 - `GET /v1/coordination/docs/:name` returns `{name, version, doc, updatedAt}`; an unwritten document reads as `{}` at version 0.
-- `PUT /v1/coordination/docs/:name` with `{doc, lock}` replaces the document (at most 2 MB) and returns `{name, version}`. While the document is locked, only the holder's token writes: `409 locked`.
-- `POST /v1/coordination/docs/:name/lock` with `{waitMs?, ttlMs?}` (each at most 10 s) returns `{lock}` once the document is free, else `423 lock_busy`. A lock a crashed holder left goes after its ttl.
-- `DELETE /v1/coordination/docs/:name/lock?lock=TOKEN` releases it: `{released}`.
+- `PUT /v1/coordination/docs/:name` with `{doc, version}` replaces the document (at most 2 MB) when it is still at `version`, the one the writer read (0 for an unwritten document), and returns `{name, version}` with the new version. Otherwise `409 version_conflict` with `{version}`, the current one.
 
-A writer locks, reads, writes with the token, then releases: the exclusive file lock the lease files used to have. A reader that gets no answer treats the document as empty for that call (leases are advisory).
+A writer reads, changes the document and writes it back with the version it read (compare-and-set); on `version_conflict` it reads again and redoes its change, a few times at most. Nothing is held between the read and the write, so a writer that gives up or dies leaves nothing behind, and no update is lost. A reader that gets no answer must not treat the document as empty: aico-hook skips the coordination part of that call (leases are advisory, the edit goes ahead with a warning), and SummitFlow's safety checks (`st commit`'s sweep check, the coordination guard) refuse with "coordination store unavailable".
 
 ## Health and version
 

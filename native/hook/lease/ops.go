@@ -144,6 +144,7 @@ func (h *Hook) Heartbeat(project string) (int, error) {
 	now := stamp(time.Now())
 	n := 0
 	err = s.withLock(func() error {
+		n = 0
 		d := s.load()
 		d.leases = s.purge(d.leases)
 		for i := range d.leases {
@@ -167,6 +168,7 @@ func (h *Hook) Release(project, root, glob string, all bool) (int, error) {
 	mine, anchor := h.self()
 	n := 0
 	err = s.withLock(func() error {
+		n = 0
 		d := s.load()
 		live := s.purge(d.leases)
 		before := len(live)

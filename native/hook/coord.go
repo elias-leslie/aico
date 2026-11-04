@@ -270,7 +270,7 @@ func sessionsMain(h *lease.Hook, args []string) int {
 			fmt.Println("closed " + pos[0])
 		}
 	case "inbox":
-		inboxList(h)
+		return inboxList(h)
 	default:
 		return fail("unknown sessions verb %q", verb)
 	}
@@ -367,9 +367,15 @@ func ack(h *lease.Hook, pos []string) int {
 
 func s(v any) string { str, _ := v.(string); return str }
 
-func inboxList(h *lease.Hook) {
+// inboxList is `st sessions inbox`: the rows, then the notices the hook would add (acks to confirm, unanswered
+// requests of mine, peer reset notes), as SummitFlow's inbox printed them.
+func inboxList(h *lease.Hook) int {
 	mine := h.SelfIDs()
-	for _, r := range h.Inbox() {
+	rows := h.Inbox()
+	if err := lease.Unavailable(); err != nil {
+		return fail("%v; requests are unknown, not none (is Tether running?)", err)
+	}
+	for _, r := range rows {
 		state := s(r["state"])
 		if state == "open" && mine[s(r["from"])] {
 			if h.Surfaced(r) {
@@ -390,6 +396,10 @@ func inboxList(h *lease.Hook) {
 		}
 		fmt.Printf("%s %s %s->%s %s | %s\n", s(r["id"]), state, s(r["from"]), s(r["to"]), detail, s(r["text"]))
 	}
+	for _, line := range h.Notices() {
+		fmt.Println(line)
+	}
+	return 0
 }
 
 // ---------------------------------------------------------------- the inbox hook
@@ -423,6 +433,7 @@ func inboxMain(args []string) int {
 		fmt.Fprintf(os.Stderr, "aico-hook inbox could not read hook.json: %v\n", err)
 		return 0
 	}
+	lease.SetBudget(started, cfg.Lease.StoreBudget())
 	h := lease.New(cfg.Lease, payload)
 	h.Extra = func(event string) string { return memoryNotice(cfg, provider, raw) }
 	context, block := h.InboxHook(mode, provider)
@@ -457,12 +468,13 @@ func memoryNotice(cfg *Config, provider string, raw []byte) string {
 	}
 	timeout := time.Duration(cfg.Inbox.TimeoutSeconds * float64(time.Second))
 	if timeout <= 0 {
-		timeout = 5 * time.Second
+		timeout = 1500 * time.Millisecond // it runs beside the store calls, well inside the hook's own timeout
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Stdin = bytes.NewReader(raw)
+	cmd.WaitDelay = 100 * time.Millisecond // a child the script left holding stdout does not stretch the timeout
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if cmd.Run() != nil {

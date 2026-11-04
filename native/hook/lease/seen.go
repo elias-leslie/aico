@@ -29,10 +29,14 @@ func loadSeen(agent string) seenSet {
 	return out
 }
 
-// seenFor merges the seen sets of every id in the family.
-func (h *Hook) seenFor(ids map[string]bool) seenSet {
+// seenFor merges the seen sets of every id in the family. When the store does not answer it is an error, not an
+// empty set: the caller then shows nothing this turn rather than everything again.
+func (h *Hook) seenFor(ids map[string]bool) (seenSet, error) {
 	out := seenSet{}
-	doc := readDoc(seenDoc)
+	doc, err := loadDocErr(seenDoc)
+	if err != nil {
+		return nil, err
+	}
 	for id := range ids {
 		var one seenSet
 		if raw, ok := doc[id]; ok && json.Unmarshal(raw, &one) == nil {
@@ -41,7 +45,23 @@ func (h *Hook) seenFor(ids map[string]bool) seenSet {
 			}
 		}
 	}
-	return out
+	return out, nil
+}
+
+// seenDocument is the "_seen" document as {agent: set}, read inside a change (an error when it cannot be read).
+func seenDocument() (map[string]any, error) {
+	doc, err := loadDocErr(seenDoc)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{}
+	for a, raw := range doc {
+		var set seenSet
+		if json.Unmarshal(raw, &set) == nil {
+			out[a] = set
+		}
+	}
+	return out, nil
 }
 
 // markSeen records keys as shown to agent now, dropping day-old entries.
@@ -49,14 +69,10 @@ func markSeen(agent string, keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
-	return withDocLock(seenDoc, func() error {
-		doc := readDoc(seenDoc)
-		out := map[string]any{}
-		for a, raw := range doc {
-			var set seenSet
-			if json.Unmarshal(raw, &set) == nil {
-				out[a] = set
-			}
+	return updateDoc(seenDoc, func() error {
+		out, err := seenDocument()
+		if err != nil {
+			return err
 		}
 		set, _ := out[agent].(seenSet)
 		if set == nil {
@@ -102,14 +118,11 @@ func ImportLegacySeen(dir string) ([]string, error) {
 		return nil, err
 	}
 	var done []string
-	err = withDocLock(seenDoc, func() error {
-		doc := readDoc(seenDoc)
-		out := map[string]any{}
-		for a, raw := range doc {
-			var set seenSet
-			if json.Unmarshal(raw, &set) == nil {
-				out[a] = set
-			}
+	err = updateDoc(seenDoc, func() error {
+		done = nil
+		out, err := seenDocument()
+		if err != nil {
+			return err
 		}
 		cutoff := float64(time.Now().Add(-seenKeep).UnixNano()) / 1e9
 		for _, f := range files {

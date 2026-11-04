@@ -1,5 +1,6 @@
-// Package testtether is a stand-in for Tether's control socket in tests: the coordination documents and lock
-// (docs/api-v1.md "Coordination") in memory, an empty session list, and a record of the deliveries posted.
+// Package testtether is a stand-in for Tether's control socket in tests: the coordination documents with their
+// versions and compare-and-set writes (docs/api-v1.md "Coordination") in memory, an empty session list, and a
+// record of the deliveries posted.
 package testtether
 
 import (
@@ -16,18 +17,22 @@ import (
 )
 
 type Server struct {
-	mu         sync.Mutex
-	docs       map[string]json.RawMessage
-	version    map[string]int
-	locks      map[string]string
-	Sessions   []map[string]any
+	mu       sync.Mutex
+	docs     map[string]json.RawMessage
+	version  map[string]int
+	Sessions []map[string]any
+	// BeforePut, when set, runs before each document write is judged (without the server's mutex), so a test
+	// can save the document "from another process" between a writer's read and its write.
+	BeforePut  func(name string)
+	Puts       map[string]int   // writes accepted per document
+	Conflicts  int              // writes refused as version_conflict
 	Deliveries []map[string]any // each POST .../deliveries body, with "session" added
 }
 
 // Start serves on a control.sock in a short temp dir (dir is unused, kept for callers) and points TETHER_SOCKET at it.
 func Start(t *testing.T, dir string) *Server {
 	t.Helper()
-	s := &Server{docs: map[string]json.RawMessage{}, version: map[string]int{}, locks: map[string]string{}}
+	s := &Server{docs: map[string]json.RawMessage{}, version: map[string]int{}, Puts: map[string]int{}}
 	// A unix socket path is limited to about 100 bytes, which a test's own temp dir can exceed.
 	short, err := os.MkdirTemp("/tmp", "ttether")
 	if err != nil {
@@ -74,6 +79,9 @@ func reply(w http.ResponseWriter, code int, v any) {
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.Path
 	body, _ := io.ReadAll(r.Body)
+	if r.Method == "PUT" && s.BeforePut != nil {
+		s.BeforePut(strings.TrimPrefix(p, "/v1/coordination/docs/"))
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
@@ -94,21 +102,6 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/v1/coordination/docs/"):
 		name := strings.TrimPrefix(p, "/v1/coordination/docs/")
 		switch {
-		case strings.HasSuffix(name, "/lock") && r.Method == "POST":
-			name = strings.TrimSuffix(name, "/lock")
-			if s.locks[name] != "" {
-				reply(w, 423, map[string]any{"error": "lock_busy"})
-				return
-			}
-			s.locks[name] = "tok" + name
-			reply(w, 200, map[string]any{"lock": s.locks[name]})
-		case strings.HasSuffix(name, "/lock") && r.Method == "DELETE":
-			name = strings.TrimSuffix(name, "/lock")
-			released := s.locks[name] != "" && s.locks[name] == r.URL.Query().Get("lock")
-			if released {
-				delete(s.locks, name)
-			}
-			reply(w, 200, map[string]any{"released": released})
 		case r.Method == "GET":
 			doc := s.docs[name]
 			if doc == nil {
@@ -117,16 +110,22 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			reply(w, 200, map[string]any{"name": name, "version": s.version[name], "doc": doc})
 		case r.Method == "PUT":
 			var in struct {
-				Doc  json.RawMessage `json:"doc"`
-				Lock string          `json:"lock"`
+				Doc     json.RawMessage `json:"doc"`
+				Version *int            `json:"version"`
 			}
 			_ = json.Unmarshal(body, &in)
-			if s.locks[name] != "" && s.locks[name] != in.Lock {
-				reply(w, 409, map[string]any{"error": "locked"})
+			if in.Version == nil {
+				reply(w, 400, map[string]any{"error": "invalid_body", "field": "version"})
+				return
+			}
+			if *in.Version != s.version[name] {
+				s.Conflicts++
+				reply(w, 409, map[string]any{"error": "version_conflict", "version": s.version[name]})
 				return
 			}
 			s.docs[name] = in.Doc
 			s.version[name]++
+			s.Puts[name]++
 			reply(w, 200, map[string]any{"name": name, "version": s.version[name]})
 		}
 	default:

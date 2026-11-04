@@ -96,11 +96,21 @@ func (h *Hook) Edit() (blocked bool, text string) {
 			}
 		}
 	}
-	var lines []string
+	var lines, unleased []string
 	for _, p := range paths {
-		if line := h.claim(p); line != "" {
+		line, err := h.claim(p)
+		if err != nil {
+			unleased = append(unleased, p)
+			continue
+		}
+		if line != "" {
 			lines = append(lines, "WARNING: "+line)
 		}
+	}
+	if len(unleased) > 0 {
+		lines = append(lines, fmt.Sprintf("WARNING: coordination store unavailable (Tether did not answer): %s not leased "+
+			"and not recorded as yours; the edit goes ahead, and st commit refuses until the store is back",
+			strings.Join(unleased, ", ")))
 	}
 	return false, strings.Join(lines, "\n")
 }
@@ -125,16 +135,17 @@ func (h *Hook) opBlock(proj Project, real string) string {
 	return ""
 }
 
-// claim leases one file to this agent (leases.claim + coord.claim_edit); a foreign lease gives one line.
-func (h *Hook) claim(path string) string {
+// claim leases one file to this agent (leases.claim + coord.claim_edit); a foreign lease gives one line. An
+// error is a store that did not answer: the file is not leased.
+func (h *Hook) claim(path string) (string, error) {
 	target := expandHome(path)
 	proj, ok := ProjectFor(target)
 	if !ok {
-		return ""
+		return "", nil
 	}
 	s, err := h.Cfg.store(proj.ID)
 	if err != nil {
-		return ""
+		return "", nil
 	}
 	real := filepath.Clean(realPath(target))
 	lin := h.lineage()
@@ -142,7 +153,8 @@ func (h *Hook) claim(path string) string {
 	session := lin.SessionIDs(h.ID)
 	now := stamp(time.Now())
 	var conflict *Lease
-	_ = s.withLock(func() error {
+	err = s.withLock(func() error {
+		conflict = nil
 		d := s.load()
 		d.leases = s.purge(d.leases)
 		for i := range d.leases {
@@ -176,12 +188,15 @@ func (h *Hook) claim(path string) string {
 		addWriter(d.writers, real, h.writerEntry("", ptr(own.Sensitive)))
 		return s.save(d)
 	})
+	if err != nil {
+		return "", err
+	}
 	if conflict == nil {
-		return ""
+		return "", nil
 	}
 	return fmt.Sprintf("%s; edit allowed, both of you are now its writers and st commit refuses to sweep it; "+
 		`tell them: st sessions send %s "<what changed>" --delivery handshake`,
-		h.holderLine(proj.ID, *conflict, proj.Root), conflict.AgentID)
+		h.holderLine(proj.ID, *conflict, proj.Root), conflict.AgentID), nil
 }
 
 func (h *Hook) writerEntry(unknown string, sensitive *bool) map[string]any {
@@ -268,7 +283,9 @@ func (h *Hook) Notices() []string {
 	addressed := func(to string) bool { return h.addresses(to, mine, lin.doc) }
 	out = append(out, h.popNotes(addressed)...)
 	now := time.Now().UTC()
+	var lines []string
 	_ = h.Cfg.withCoordLock(func() error {
+		lines = nil
 		d := h.Cfg.loadDoc()
 		msgs := h.ledger(d, now)
 		changed := false
@@ -283,7 +300,7 @@ func (h *Hook) Notices() []string {
 			if len(ids) > 3 {
 				ids = ids[:3]
 			}
-			out = append(out, fmt.Sprintf("INBOX %d request(s) %s awaiting your ack: st sessions inbox", len(toMe), strings.Join(ids, ",")))
+			lines = append(lines, fmt.Sprintf("INBOX %d request(s) %s awaiting your ack: st sessions inbox", len(toMe), strings.Join(ids, ",")))
 		}
 		unacked := time.Duration(h.Cfg.UnackedMinutes) * time.Minute
 		for _, r := range msgs {
@@ -296,12 +313,12 @@ func (h *Hook) Notices() []string {
 				if truthy(r["eta_min"]) {
 					intent += fmt.Sprintf(" %sm", str(r["eta_min"]))
 				}
-				out = append(out, fmt.Sprintf("ACK %s %s from %s; close: st sessions confirm %s", str(r["id"]), intent, pyStr(r["acked_by"]), str(r["id"])))
+				lines = append(lines, fmt.Sprintf("ACK %s %s from %s; close: st sessions confirm %s", str(r["id"]), intent, pyStr(r["acked_by"]), str(r["id"])))
 				r["ack_seen"] = true
 				changed = true
 			} else if state == "open" && !truthy(r["surfaced_at"]) && !truthy(r["intent"]) {
 				if created, ok := parseStamp(str(r["created"])); ok && now.Sub(created) >= unacked {
-					out = append(out, fmt.Sprintf("UNACKED %s -> %s (%s); escalate or route around", str(r["id"]), str(r["to"]), age(str(r["created"]), now)))
+					lines = append(lines, fmt.Sprintf("UNACKED %s -> %s (%s); escalate or route around", str(r["id"]), str(r["to"]), age(str(r["created"]), now)))
 					r["surfaced_at"] = stamp(now)
 					changed = true
 				}
@@ -317,7 +334,7 @@ func (h *Hook) Notices() []string {
 		}
 		return nil
 	})
-	return out
+	return append(out, lines...)
 }
 
 // ledger is the live handshake rows: 24 h, with lapsed eta acks reopened (coord._load_ledger).
@@ -363,6 +380,7 @@ func (h *Hook) popNotes(isMe func(string) bool) []string {
 	now := time.Now().UTC()
 	ttl := time.Duration(h.Cfg.NoteHours) * time.Hour
 	_ = h.Cfg.withCoordLock(func() error {
+		out = nil
 		d := h.Cfg.loadDoc()
 		var kept []any
 		for _, n := range list(d, "notes") {

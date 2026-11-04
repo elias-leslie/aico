@@ -296,7 +296,7 @@ func (h *Hook) Wake(to, sender string, reply bool) (string, error) {
 // markQueued remembers that a line is queued for agent (or taken back), so the turn hook asks Tether to drop a
 // stale one only when there is one. Kept in its own document, {agent id: true}.
 func markQueued(agent string, queued bool) error {
-	return withDocLock(queuedDoc, func() error {
+	return updateDoc(queuedDoc, func() error {
 		out := map[string]any{}
 		for k, v := range readDoc(queuedDoc) {
 			out[k] = v

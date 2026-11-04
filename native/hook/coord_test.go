@@ -3,8 +3,12 @@ package main
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"aico/hook/lease"
 )
 
 // capture runs fn with stdout and stderr redirected and returns both.
@@ -116,4 +120,29 @@ func stdin(t *testing.T, text string) {
 	old := os.Stdin
 	os.Stdin = r
 	t.Cleanup(func() { os.Stdin = old })
+}
+
+// st sessions inbox, delegated here, still prints the notices after the rows (an ack to confirm), and says so
+// when the store does not answer instead of listing nothing.
+func TestSessionsInboxPrintsNoticesAndRefusesUnknown(t *testing.T) {
+	repo := sandbox(t)
+	t.Chdir(repo)
+	run := func(session string, args ...string) (int, string, string) {
+		as(t, session)
+		return capture(t, func() int { return coordMain("sessions", args) })
+	}
+	_, out, _ := run(sessA, "send", "cc:222222", "can I take the lease file")
+	id := strings.Fields(out)[1]
+	if code, _, _ := run(sessB, "ack", id, "eta:5"); code != 0 {
+		t.Fatal("ack failed")
+	}
+	_, inbox, _ := run(sessA, "inbox")
+	if !strings.Contains(inbox, id+" acked ") || !strings.Contains(inbox, "ACK "+id+" eta 5m from cc:222222; close: st sessions confirm "+id) {
+		t.Fatalf("inbox lacks the row or the ack notice: %q", inbox)
+	}
+	t.Setenv("TETHER_SOCKET", filepath.Join(t.TempDir(), "gone.sock"))
+	lease.SetBudget(time.Now(), 0)
+	if code, out, errOut := run(sessA, "inbox"); code != 2 || out != "" || !strings.Contains(errOut, "coordination store unavailable") {
+		t.Fatalf("store down: %d %q %q", code, out, errOut)
+	}
 }

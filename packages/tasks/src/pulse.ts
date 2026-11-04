@@ -33,6 +33,20 @@ export interface PulseSources {
   docNames(): Promise<string[] | null>
   doc(name: string): Promise<Record<string, unknown> | null>
   findings(): Finding[] | null
+  /** Whether the process an op lease names still runs (pid and its start tick); /proc by default. */
+  alive?(pid: number, start: string | null): boolean
+}
+
+/** The kernel start tick of pid (/proc/<pid>/stat field 22), as aico-hook stamps op leases with it. */
+export function processAlive(pid: number, start: string | null): boolean {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
+    return start === null || fields[19] === start
+  } catch {
+    return false
+  }
 }
 
 export interface Lease {
@@ -101,7 +115,12 @@ export async function collect(src: PulseSources, cfg: Policy = policy): Promise<
       }
       for (const l of (Array.isArray(doc.leases) ? doc.leases : []) as Row[]) {
         const idle = minutesSince(l.last_heartbeat, now)
-        if (idle >= cfg.lease_idle_minutes || l.taken_over_by) continue
+        // An op lease lives as long as its process, whatever its heartbeat; the others go idle. A lease taken
+        // over (`taken_over_by`) is the taker's own: its agent is the current holder.
+        if (l.kind === 'op') {
+          const start = typeof l.pid_start === 'string' ? l.pid_start : null
+          if (typeof l.pid !== 'number' || !(src.alive ?? processAlive)(l.pid, start)) continue
+        } else if (idle >= cfg.lease_idle_minutes) continue
         leases.push({
           agent: text(l.agent_id),
           project: name,

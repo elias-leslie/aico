@@ -6,7 +6,8 @@
     "note_hours": 24,
     "unacked_minutes": 10,
     "snapshot_max_mins": 120,
-    "registry_save_sec": 60
+    "registry_save_sec": 60,
+    "store_budget_ms": 1500
   },
   "tools": {
     "shell": "^(Bash|bash|exec_command|shell)$",
@@ -20,7 +21,7 @@
   },
   "inbox": {
     "memory": ["bash", "~/.claude/hooks/coord-inbox.sh", "memory"],
-    "timeout_seconds": 5
+    "timeout_seconds": 1.5
   },
   "startup_brief": {
     "command": ["~/bin/aico", "pulse", "--start"],

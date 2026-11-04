@@ -52,6 +52,29 @@ function setup(findings: Finding[] | null = [finding({})]) {
           last_heartbeat: iso(5),
         },
         { agent_id: 'cc:222222', kind: 'file', globs: ['/srv/aico/old'], last_heartbeat: iso(45) },
+        {
+          agent_id: 'cc:333333',
+          kind: 'file',
+          globs: ['/srv/aico/taken.ts'],
+          last_heartbeat: iso(2),
+          taken_over_by: 'cc:333333',
+        },
+        {
+          agent_id: 'st:op1',
+          kind: 'op',
+          globs: ['/srv/aico/**'],
+          pid: 41,
+          pid_start: '9',
+          last_heartbeat: iso(90),
+        },
+        {
+          agent_id: 'st:op2',
+          kind: 'op',
+          globs: ['/srv/aico/**'],
+          pid: 42,
+          pid_start: '9',
+          last_heartbeat: iso(1),
+        },
       ],
     },
     _coord: {
@@ -73,6 +96,7 @@ function setup(findings: Finding[] | null = [finding({})]) {
     docNames: async () => Object.keys(docs),
     doc: async (name) => docs[name] ?? {},
     findings: () => findings,
+    alive: (pid) => pid === 41,
   }
   return { db, registry, sources }
 }
@@ -87,6 +111,11 @@ describe('aico pulse', () => {
       lines.some((l) => l.startsWith('  lease cc:111111 /srv/aico/a/** task:T1 idle:5m')),
     ).toBe(true)
     expect(lines.join('\n')).not.toContain('/srv/aico/old')
+    // A taken-over lease shows its current holder; an op lease shows while its process runs, however old
+    // its heartbeat, and not once the process is gone.
+    expect(lines.some((l) => l.startsWith('  lease cc:333333 /srv/aico/taken.ts'))).toBe(true)
+    expect(lines.some((l) => l.startsWith('  op st:op1 /srv/aico/**'))).toBe(true)
+    expect(lines.join('\n')).not.toContain('st:op2')
     expect(lines).toContain('Handshakes: 1 open')
     expect(lines).toContain('  abc123 open cc:111111->cc:222222 7m')
     expect(lines).toContain('Status: 1 problem')

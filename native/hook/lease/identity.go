@@ -248,7 +248,7 @@ func (c Config) loadDoc() map[string]any {
 
 func (c Config) saveDoc(d map[string]any) error { return writeDoc(coordDoc, d) }
 
-func (c Config) withCoordLock(fn func() error) error { return withDocLock(coordDoc, fn) }
+func (c Config) withCoordLock(fn func() error) error { return updateDoc(coordDoc, fn) }
 
 func rows(d map[string]any, key string) map[string]map[string]any {
 	out := map[string]map[string]any{}
@@ -423,8 +423,25 @@ func (c Config) Observe(id Identity, reset, subagent, emit bool) []string {
 	}
 	now := time.Now().UTC()
 	at := stamp(now)
+	// Most calls change nothing (a known identity, saved recently, no notice to hand over): one read, no write.
+	d0, err := loadDocErr(coordDoc)
+	if err != nil {
+		return nil
+	}
+	var reg map[string]any
+	if raw, ok := d0["identities"]; ok && json.Unmarshal(raw, &reg) == nil {
+		if mine, ok := reg[id.AgentID].(map[string]any); ok {
+			if str(mine["anchor"]) != id.Anchor {
+				return nil // live on another process: never move it
+			}
+			if !(emit && truthy(mine["notice"])) && fresh(mine["saved"], time.Duration(c.RegistrySaveSec)*time.Second, now) {
+				return nil
+			}
+		}
+	}
 	var out []string
 	_ = c.withCoordLock(func() error {
+		out = nil
 		d := c.loadDoc()
 		ids := c.pruneIdentities(rows(d, "identities"), now)
 		if mine, ok := ids[id.AgentID]; ok {

@@ -35,6 +35,7 @@ import (
 	"regexp"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"aico/hook/guard"
 	"aico/hook/lease"
@@ -130,6 +131,9 @@ func mustJSON(v any) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
+// started is when this process began: a hook call's store budget counts from here.
+var started = time.Now()
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: aico-hook claude|codex|pi|guard|codex-trust")
@@ -184,6 +188,7 @@ func handle(mode, event string, payload map[string]any, raw []byte) (out Out) {
 		return Out{Event: event, Context: append(out.Context, fmt.Sprintf("aico-hook could not read hook.json (%v): "+
 			"file leases, overlap hints and session start were skipped; the guard still ran. Tell the owner.", err))}
 	}
+	lease.SetBudget(started, cfg.Lease.StoreBudget())
 	more := dispatch(cfg, mode, event, payload, raw)
 	more.Context = append(out.Context, more.Context...)
 	return more
