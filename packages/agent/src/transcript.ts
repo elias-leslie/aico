@@ -5,7 +5,7 @@
 import { join } from 'node:path'
 import { type Database, openDatabase } from '@aico/store'
 
-const MIGRATIONS = [
+export const MIGRATIONS = [
   `CREATE TABLE runs (
      id TEXT PRIMARY KEY,
      role TEXT NOT NULL,
@@ -63,6 +63,27 @@ const MIGRATIONS = [
      context_tokens INTEGER NOT NULL,
      PRIMARY KEY (run_id, seq)
    ) STRICT;`,
+  // Tool calls get their own sequence: providers may reuse a call id every turn.
+  `CREATE TABLE tool_calls_v2 (
+     run_id TEXT NOT NULL REFERENCES runs (id) ON DELETE CASCADE,
+     seq INTEGER NOT NULL,
+     call_id TEXT NOT NULL,
+     name TEXT NOT NULL,
+     args TEXT NOT NULL,
+     is_error INTEGER,
+     result_chars INTEGER,
+     blocked TEXT,
+     started_at TEXT NOT NULL,
+     ended_at TEXT,
+     PRIMARY KEY (run_id, seq)
+   ) STRICT;
+   INSERT INTO tool_calls_v2
+     SELECT run_id, row_number() OVER (PARTITION BY run_id ORDER BY started_at, rowid) - 1, call_id,
+            name, args, is_error, result_chars, blocked, started_at, ended_at
+     FROM tool_calls;
+   DROP TABLE tool_calls;
+   ALTER TABLE tool_calls_v2 RENAME TO tool_calls;
+   CREATE INDEX tool_calls_call ON tool_calls (run_id, call_id);`,
 ]
 
 export function agentDbPath(dataDir: string): string {
@@ -108,6 +129,9 @@ const now = () => new Date().toISOString()
 export class Transcript {
   private seq = 0
   private handoffSeq = 0
+  private toolSeq = 0
+  /** The newest tool_calls row for each call id. */
+  private readonly toolRows = new Map<string, number>()
 
   constructor(
     private readonly db: Database,
@@ -144,30 +168,27 @@ export class Transcript {
   }
 
   toolStart(callId: string, name: string, args: unknown): void {
+    const seq = this.toolSeq++
+    this.toolRows.set(callId, seq)
     this.db
       .prepare(
-        'INSERT OR REPLACE INTO tool_calls (run_id, call_id, name, args, started_at) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO tool_calls (run_id, seq, call_id, name, args, started_at) VALUES (?, ?, ?, ?, ?, ?)',
       )
-      .run(this.runId, callId, name, JSON.stringify(args ?? {}), now())
+      .run(this.runId, seq, callId, name, JSON.stringify(args ?? {}), now())
   }
 
-  toolEnd(
-    callId: string,
-    isError: boolean,
-    resultChars: number,
-    blocked: string | null = null,
-  ): void {
+  toolEnd(callId: string, isError: boolean, resultChars: number): void {
     this.db
       .prepare(
-        'UPDATE tool_calls SET is_error = ?, result_chars = ?, blocked = COALESCE(?, blocked), ended_at = ? WHERE run_id = ? AND call_id = ?',
+        'UPDATE tool_calls SET is_error = ?, result_chars = ?, ended_at = ? WHERE run_id = ? AND seq = ?',
       )
-      .run(isError ? 1 : 0, resultChars, blocked, now(), this.runId, callId)
+      .run(isError ? 1 : 0, resultChars, now(), this.runId, this.toolRows.get(callId) ?? -1)
   }
 
   blocked(callId: string, reason: string): void {
     this.db
-      .prepare('UPDATE tool_calls SET blocked = ? WHERE run_id = ? AND call_id = ?')
-      .run(reason, this.runId, callId)
+      .prepare('UPDATE tool_calls SET blocked = ? WHERE run_id = ? AND seq = ?')
+      .run(reason, this.runId, this.toolRows.get(callId) ?? -1)
   }
 
   handoff(row: HandoffRow): void {

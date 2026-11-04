@@ -4,6 +4,7 @@
 // refusal, and nothing runs.
 
 import { existsSync } from 'node:fs'
+import { resolve, sep } from 'node:path'
 import { Catalog, type LaunchPolicy, loadPolicy, openContext, route } from '@aico/context'
 import harnessData from '../data/harness.json' with { type: 'json' }
 
@@ -18,6 +19,7 @@ export type RefusalReason =
   | 'provider_not_allowed'
   | 'no_model'
   | 'unenforceable'
+  | 'project_unknown'
 
 export interface Refused {
   kind: 'refused'
@@ -52,8 +54,19 @@ const refused = (reason: RefusalReason, detail: string): Refused => ({
   detail,
 })
 
-/** The launch policy in the context database, or a refusal: a missing or unreadable file never means "allow". */
-export function readPolicy(dbPath: string): LaunchPolicy | Refused {
+/** A registered project: its id and the folder it lives in. */
+export interface ProjectRoot {
+  id: string
+  root: string
+}
+
+export interface ContextRules {
+  policy: LaunchPolicy
+  projects: ProjectRoot[]
+}
+
+/** The launch policy and project roots in the context database, or a refusal: a missing or unreadable file never means "allow". */
+export function readPolicy(dbPath: string): ContextRules | Refused {
   if (!existsSync(dbPath))
     return refused(
       'rules_unreadable',
@@ -63,13 +76,19 @@ export function readPolicy(dbPath: string): LaunchPolicy | Refused {
     const db = openContext(dbPath)
     try {
       const policy = loadPolicy(db)
-      return (
-        policy ??
-        refused(
+      if (!policy)
+        return refused(
           'rules_unreadable',
           `the context database at ${dbPath} has no launch policy; run aico context import-agent-hub`,
         )
-      )
+      const projects = (
+        db
+          .prepare(
+            "SELECT project_id, root_path FROM project_permissions WHERE coalesce(root_path, '') != ''",
+          )
+          .all() as { project_id: string; root_path: string }[]
+      ).map((row) => ({ id: row.project_id, root: row.root_path }))
+      return { policy, projects }
     } finally {
       db.close()
     }
@@ -81,10 +100,24 @@ export function readPolicy(dbPath: string): LaunchPolicy | Refused {
   }
 }
 
+/** The registered project whose root holds `cwd` (the deepest one), as `st` resolves it from the working folder. */
+export function projectFor(projects: readonly ProjectRoot[], cwd: string): string | undefined {
+  const here = resolve(cwd)
+  let best: ProjectRoot | undefined
+  for (const project of projects) {
+    const root = resolve(project.root)
+    const inside = here === root || here.startsWith(root === sep ? root : `${root}${sep}`)
+    if (inside && (!best || root.length > resolve(best.root).length)) best = project
+  }
+  return best?.id
+}
+
 export interface RulesRequest {
   role: string
   model?: string
   project?: string
+  /** The working folder; the project comes from it when `project` is not given. */
+  cwd?: string
 }
 
 /** Why `model` may not run for this role in this harness, or null. */
@@ -105,6 +138,7 @@ function modelRefusal(
   }).rows[0]
   if (!row) return refused('rules_unreadable', `no launch row for role '${request.role}'`)
   if (row.deny_reason) return refused('model_denied', `${entry.id}: ${row.deny_reason}`)
+  // roleRules refuses a policy without the Claude entry before any model is checked.
   const claude = policy.providers[harness.claude_provider]
   const names = [entry.id, model].map((name) => name.toLowerCase())
   if (
@@ -161,6 +195,29 @@ export function roleRules(
       `role '${request.role}' has no harness rules (data/harness.json)`,
     )
 
+  if (!(harness.claude_provider in policy.providers))
+    return refused(
+      'rules_unreadable',
+      `the launch policy has no '${harness.claude_provider}' provider entry, so Claude models cannot be told apart`,
+    )
+  if (!request.project) {
+    const job =
+      policy.jobs.find((entry) => entry.name === request.role) ??
+      policy.jobs.find((entry) => entry.workRoles.includes(request.role))
+    const workRole = policy.workRoles.includes(request.role) ? request.role : null
+    const scoped = policy.deny.find(
+      (row) =>
+        row.projects?.length &&
+        (!row.jobs || (job !== undefined && row.jobs.includes(job.name))) &&
+        (!row.work_roles || (workRole !== null && row.work_roles.includes(workRole))),
+    )
+    if (scoped)
+      return refused(
+        'project_unknown',
+        `role '${request.role}' has deny rules for projects (${scoped.projects?.join(', ')}), and the working folder is in no registered project`,
+      )
+  }
+
   const wanted: { model: string; effort: string | null }[] = []
   if (request.model) {
     const why = modelRefusal(policy, catalog, harness, request, request.model)
@@ -216,17 +273,19 @@ export function roleRules(
   }
 }
 
-/** The context database's rules for one run, or why not. */
+/** The context database's rules for one run, or why not. The project comes from `request.cwd` unless given. */
 export function loadRoleRules(
   dbPath: string,
   request: RulesRequest,
   harness: Harness = HARNESS,
   catalog: Catalog = new Catalog(),
 ): RoleRules | Refused {
-  const policy = readPolicy(dbPath)
-  if ('kind' in policy) return policy
+  const context = readPolicy(dbPath)
+  if ('kind' in context) return context
+  const project =
+    request.project ?? (request.cwd ? projectFor(context.projects, request.cwd) : undefined)
   try {
-    return roleRules(policy, catalog, harness, request)
+    return roleRules(context.policy, catalog, harness, { ...request, ...(project && { project }) })
   } catch (error) {
     return refused('rules_unreadable', (error as Error).message)
   }

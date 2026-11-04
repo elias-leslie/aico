@@ -21,7 +21,13 @@ export interface ModelSwap {
 /** Lower case without `_` and `-`, so cyberPolicy, cyber_policy and cyber-policy match. */
 const normal = (value: string) => value.replace(/[_-]/g, '').toLowerCase()
 
-/** The refusal in a failed response, or null when it failed for another reason (or did not fail). */
+/**
+ * The refusal in a failed response, or null when it failed for another reason (or did not
+ * fail). Only structured signals count: the provider's raw stop reason (incomplete.content_filter),
+ * an error that starts with a refusal code (`cyber_policy: ...`, `Error Code cyberPolicy: ...`)
+ * or names an incomplete response's reason (`Response incomplete: content_filter`). The bare
+ * words "safety" or "refusal" elsewhere in an error are not a refusal.
+ */
 export function refusalOf(
   message: AssistantMessage,
   harness: Harness = HARNESS,
@@ -30,12 +36,18 @@ export function refusalOf(
   const detail = message.errorMessage ?? message.rawStopReason ?? ''
   const codes = harness.refusal_codes as Record<string, string>
   const stops = new Set(harness.refusal_stop_reasons.map(normal))
-  for (const word of `${message.rawStopReason ?? ''} ${detail}`.split(/[^A-Za-z0-9_-]+/)) {
-    const key = normal(word)
-    if (!key) continue
-    const category = codes[key] ?? (stops.has(key) ? word : undefined)
+  const stopCategory = (word: string) => (stops.has(normal(word)) ? word : undefined)
+  for (const part of (message.rawStopReason ?? '').split(/[^A-Za-z0-9_-]+/)) {
+    const category = codes[normal(part)] ?? stopCategory(part)
     if (category) return { kind: 'refusal', category, detail }
   }
+  const error = message.errorMessage ?? ''
+  const code = /^\s*(?:error code\s+)?([A-Za-z_-]+)\s*(?::|$)/i.exec(error)?.[1]
+  const coded = code ? codes[normal(code)] : undefined
+  if (coded) return { kind: 'refusal', category: coded, detail }
+  const incomplete = /^\s*response incomplete:\s*([A-Za-z_-]+)\s*$/i.exec(error)?.[1]
+  const stopped = incomplete ? stopCategory(incomplete) : undefined
+  if (stopped) return { kind: 'refusal', category: stopped, detail }
   return null
 }
 

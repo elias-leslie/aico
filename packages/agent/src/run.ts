@@ -5,6 +5,7 @@
 // slice runs single tasks that fit the context window.
 
 import { randomUUID } from 'node:crypto'
+import { homedir } from 'node:os'
 import type { Database } from '@aico/store'
 import {
   Agent,
@@ -28,7 +29,7 @@ import {
 import { type ModelRefusal, type ModelSwap, refusalOf, swapOf } from './outcomes'
 import { allowedModels } from './providers'
 import { type ChainModel, HARNESS, type Harness, type Refused, type RoleRules } from './rules'
-import { guardBash, leanTools } from './tools'
+import { credentialMarkers, guardBash, leanTools, touchesCredentials } from './tools'
 import { type Tokens, Transcript } from './transcript'
 
 export type Outcome =
@@ -149,14 +150,15 @@ export function handoffNote(from: string, to: string, refusal: ModelRefusal): st
   return `[handoff] ${from} stopped with a ${refusal.category} refusal. You are ${to}: continue the task from this conversation; nothing above is lost.`
 }
 
+/** pi-ai's Claude wire protocol: never spoken by this harness, whichever provider serves it. */
+const CLAUDE_API = 'anthropic-messages'
+
 export async function runAgent(options: RunOptions): Promise<RunResult> {
   const harness = options.harness ?? HARNESS
   const { rules, cwd, db } = options
   const log = options.log ?? (() => {})
   const started = Date.now()
   const runId = randomUUID()
-  const models =
-    options.models ?? allowedModels(new Set(rules.chain.map((entry) => entry.piProvider)))
   const transcript = new Transcript(db, runId, {
     role: rules.role,
     cwd,
@@ -166,145 +168,176 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
   const totals: Tokens = { input: 0, cache_read: 0, cache_write: 0, output: 0 }
   const handoffs: HandoffStat[] = []
   let toolCalls = 0
-
-  const chain: { entry: ChainModel; model: Model<Api> }[] = []
-  for (const entry of rules.chain) {
-    const model = models.getModel(entry.piProvider, entry.piModel)
-    if (model) chain.push({ entry, model })
-    else log(`skip ${entry.id}: provider ${entry.piProvider} has no model ${entry.piModel}`)
-  }
+  let inUse = rules.chain[0]?.id ?? ''
   const finish = (outcome: Outcome): RunResult => {
     const wallMs = Date.now() - started
     const detail = outcome.kind === 'done' ? { model: outcome.model } : outcome
     transcript.finish(outcome.kind, detail, totals, toolCalls, wallMs)
     return { runId, outcome, tokens: totals, toolCalls, wallMs, handoffs }
   }
-  if (!chain.length)
-    return finish({
-      kind: 'refused',
-      reason: 'no_model',
-      detail: 'no chain model is served by the registered providers',
-    })
 
-  const contextFiles =
-    options.contextFiles ?? loadProjectContextFiles({ cwd, agentDir: getAgentDir() })
-  let current = 0
-  let firstModelRequests = 0
-  let swap: ModelSwap | null = null
-  const first = chain[0] as (typeof chain)[number]
-
-  const agent = new Agent({
-    initialState: {
-      systemPrompt: systemPrompt(harness, cwd, contextFiles),
-      model: first.model,
-      thinkingLevel: thinking(first.model, options.effort ?? first.entry.effort),
-      tools: leanTools(cwd, rules.tools, harness.tool_descriptions) as AgentTool[],
-      messages: [],
-    },
-    sessionId: runId,
-    streamFn: (model, context, streamOptions) => {
-      if (current === 0 && ++firstModelRequests === options.testRefuseAt)
-        return syntheticRefusal(model)
-      return models.streamSimple(model, context, streamOptions)
-    },
-    beforeToolCall: async ({ toolCall, args }) => {
-      if (!rules.guardHook || toolCall.name !== 'bash') return undefined
-      const command = String((args as { command?: unknown })?.command ?? '')
-      const reason = await guardBash(rules.guardHook, command, cwd, toolCall.id)
-      if (!reason) return undefined
-      transcript.blocked(toolCall.id, reason)
-      return { block: true, reason }
-    },
-  })
-
-  agent.subscribe((event) => {
-    if (event.type === 'tool_execution_start') {
-      toolCalls++
-      transcript.toolStart(event.toolCallId, event.toolName, event.args)
-      log(`tool ${event.toolName}`)
-    } else if (event.type === 'tool_execution_end') {
-      const chars = JSON.stringify(event.result?.content ?? '').length
-      transcript.toolEnd(event.toolCallId, Boolean(event.isError), chars)
-    } else if (event.type === 'message_end') {
-      const message = event.message
-      if (message.role === 'system') return
-      if (message.role !== 'assistant')
-        return transcript.message({
-          role: message.role,
-          content: 'content' in message ? message.content : message,
-        })
-      const usage = usageOf(message)
-      for (const key of Object.keys(totals) as (keyof Tokens)[]) totals[key] += usage[key]
-      const requested = (chain[current] as (typeof chain)[number]).entry
-      const outcome = refusalOf(message, harness) ?? swapOf(message, requested.piModel)
-      transcript.message({
-        role: 'assistant',
-        model: requested.id,
-        served_model: message.responseModel ?? null,
-        stop_reason: message.stopReason,
-        outcome:
-          outcome ??
-          (message.errorMessage ? { kind: 'error', detail: message.errorMessage } : null),
-        content: message.content,
-        usage,
-      })
-      if (outcome?.kind === 'model_swap' && !swap) {
-        swap = outcome
-        log(`model swap: asked ${outcome.requested}, served ${outcome.served}`)
-        agent.abort()
-      }
+  const loop = async (): Promise<RunResult> => {
+    const models =
+      options.models ?? allowedModels(new Set(rules.chain.map((entry) => entry.piProvider)))
+    const chain: { entry: ChainModel; model: Model<Api> }[] = []
+    for (const entry of rules.chain) {
+      const model = models.getModel(entry.piProvider, entry.piModel)
+      if (!model)
+        log(`skip ${entry.id}: provider ${entry.piProvider} has no model ${entry.piModel}`)
+      else if (model.api === CLAUDE_API)
+        log(`skip ${entry.id}: it speaks ${CLAUDE_API}; Claude runs only through claude -p`)
+      else chain.push({ entry, model })
     }
-  })
-
-  let input: string = options.task
-  for (;;) {
-    await agent.prompt(input)
-    if (swap) return finish(swap)
-    const last = lastAssistant(agent.state.messages)
-    const at = chain[current] as (typeof chain)[number]
-    if (!last) return finish({ kind: 'error', model: at.entry.id, detail: 'no response' })
-    if (last.stopReason !== 'error' && last.stopReason !== 'aborted')
-      return finish({ kind: 'done', model: at.entry.id, text: textOf(last) })
-    const refusal = refusalOf(last, harness)
-    if (!refusal)
+    if (!chain.length)
       return finish({
-        kind: 'error',
-        model: at.entry.id,
-        detail: last.errorMessage ?? last.stopReason,
+        kind: 'refused',
+        reason: 'no_model',
+        detail: 'no chain model is served by the registered providers',
       })
-    const next = chain[current + 1]
-    if (!next) return finish({ kind: 'model_refused', model: at.entry.id, refusal })
 
-    // Hand the conversation over: drop the empty refused response, keep everything else.
-    const kept = agent.state.messages.filter((message) => message !== last)
-    agent.state.messages = kept
-    input = handoffNote(at.entry.id, next.entry.id, refusal)
-    const stat: HandoffStat = {
-      from: at.entry.id,
-      to: next.entry.id,
-      reason: refusal.category,
-      handoff_tokens: estimateTokens({
-        role: 'user',
-        content: input,
-        timestamp: Date.now(),
-      } as AgentMessage),
-      context_messages: kept.filter((message) => message.role !== 'system').length,
-      context_tokens: tokensOf(kept),
-    }
-    handoffs.push(stat)
-    transcript.handoff({
-      from_model: stat.from,
-      to_model: stat.to,
-      reason: stat.reason,
-      handoff_tokens: stat.handoff_tokens,
-      context_messages: stat.context_messages,
-      context_tokens: stat.context_tokens,
+    const contextFiles =
+      options.contextFiles ?? loadProjectContextFiles({ cwd, agentDir: getAgentDir() })
+    const markers = credentialMarkers([getAgentDir(), ...harness.credential_paths], homedir())
+    const withheld = new Set<string>()
+    let current = 0
+    let firstModelRequests = 0
+    let swap: ModelSwap | null = null
+    const first = chain[0] as (typeof chain)[number]
+    inUse = first.entry.id
+
+    const agent = new Agent({
+      initialState: {
+        systemPrompt: systemPrompt(harness, cwd, contextFiles),
+        model: first.model,
+        thinkingLevel: thinking(first.model, options.effort ?? first.entry.effort),
+        tools: leanTools(cwd, rules.tools, harness.tool_descriptions) as AgentTool[],
+        messages: [],
+      },
+      sessionId: runId,
+      streamFn: (model, context, streamOptions) => {
+        if (current === 0 && ++firstModelRequests === options.testRefuseAt)
+          return syntheticRefusal(model)
+        return models.streamSimple(model, context, streamOptions)
+      },
+      beforeToolCall: async ({ toolCall, args }) => {
+        if (swap) return { block: true, reason: 'The run stopped: the provider swapped the model.' }
+        if (!rules.guardHook || toolCall.name !== 'bash') return undefined
+        const command = String((args as { command?: unknown })?.command ?? '')
+        const reason = await guardBash(rules.guardHook, command, cwd, toolCall.id)
+        if (!reason) return undefined
+        transcript.blocked(toolCall.id, reason)
+        return { block: true, reason }
+      },
     })
-    log(
-      `handoff ${stat.from} -> ${stat.to} (${refusal.category}); ${stat.handoff_tokens} handoff tokens`,
-    )
-    current++
-    agent.state.model = next.model
-    agent.state.thinkingLevel = thinking(next.model, options.effort ?? next.entry.effort)
+
+    agent.subscribe((event) => {
+      if (event.type === 'tool_execution_start') {
+        toolCalls++
+        if (touchesCredentials(event.args, cwd, markers)) withheld.add(event.toolCallId)
+        transcript.toolStart(event.toolCallId, event.toolName, event.args)
+        log(`tool ${event.toolName}`)
+      } else if (event.type === 'tool_execution_end') {
+        const chars = JSON.stringify(event.result?.content ?? '').length
+        transcript.toolEnd(event.toolCallId, Boolean(event.isError), chars)
+      } else if (event.type === 'message_end') {
+        const message = event.message
+        if (message.role === 'system') return
+        if (message.role !== 'assistant') {
+          const content = 'content' in message ? message.content : message
+          const callId = 'toolCallId' in message ? message.toolCallId : undefined
+          return transcript.message({
+            role: message.role,
+            content:
+              callId && withheld.has(callId)
+                ? {
+                    withheld: 'the call names a credential path',
+                    chars: JSON.stringify(content).length,
+                  }
+                : content,
+          })
+        }
+        const usage = usageOf(message)
+        for (const key of Object.keys(totals) as (keyof Tokens)[]) totals[key] += usage[key]
+        const requested = (chain[current] as (typeof chain)[number]).entry
+        const outcome = refusalOf(message, harness) ?? swapOf(message, requested.piModel)
+        transcript.message({
+          role: 'assistant',
+          model: requested.id,
+          served_model: message.responseModel ?? null,
+          stop_reason: message.stopReason,
+          outcome:
+            outcome ??
+            (message.errorMessage ? { kind: 'error', detail: message.errorMessage } : null),
+          content: message.content,
+          usage,
+        })
+        if (outcome?.kind === 'model_swap' && !swap) {
+          swap = outcome
+          log(`model swap: asked ${outcome.requested}, served ${outcome.served}`)
+          agent.abort()
+        }
+      }
+    })
+
+    let input: string = options.task
+    for (;;) {
+      await agent.prompt(input)
+      if (swap) return finish(swap)
+      const last = lastAssistant(agent.state.messages)
+      const at = chain[current] as (typeof chain)[number]
+      if (!last) return finish({ kind: 'error', model: at.entry.id, detail: 'no response' })
+      if (last.stopReason !== 'error' && last.stopReason !== 'aborted')
+        return finish({ kind: 'done', model: at.entry.id, text: textOf(last) })
+      const refusal = refusalOf(last, harness)
+      if (!refusal)
+        return finish({
+          kind: 'error',
+          model: at.entry.id,
+          detail: last.errorMessage ?? last.stopReason,
+        })
+      const next = chain[current + 1]
+      if (!next) return finish({ kind: 'model_refused', model: at.entry.id, refusal })
+
+      // Hand the conversation over: drop the empty refused response, keep everything else.
+      const kept = agent.state.messages.filter((message) => message !== last)
+      agent.state.messages = kept
+      input = handoffNote(at.entry.id, next.entry.id, refusal)
+      const stat: HandoffStat = {
+        from: at.entry.id,
+        to: next.entry.id,
+        reason: refusal.category,
+        handoff_tokens: estimateTokens({
+          role: 'user',
+          content: input,
+          timestamp: Date.now(),
+        } as AgentMessage),
+        context_messages: kept.filter((message) => message.role !== 'system').length,
+        context_tokens: tokensOf(kept),
+      }
+      handoffs.push(stat)
+      transcript.handoff({
+        from_model: stat.from,
+        to_model: stat.to,
+        reason: stat.reason,
+        handoff_tokens: stat.handoff_tokens,
+        context_messages: stat.context_messages,
+        context_tokens: stat.context_tokens,
+      })
+      log(
+        `handoff ${stat.from} -> ${stat.to} (${refusal.category}); ${stat.handoff_tokens} handoff tokens`,
+      )
+      current++
+      inUse = next.entry.id
+      agent.state.model = next.model
+      agent.state.thinkingLevel = thinking(next.model, options.effort ?? next.entry.effort)
+    }
+  }
+
+  try {
+    return await loop()
+  } catch (error) {
+    const detail = (error as Error)?.message ?? String(error)
+    log(`error: ${detail}`)
+    return finish({ kind: 'error', model: inUse, detail })
   }
 }

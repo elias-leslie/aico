@@ -11,6 +11,7 @@ import {
   HARNESS,
   type Harness,
   loadRoleRules,
+  projectFor,
   type Refused,
   type RoleRules,
   readPolicy,
@@ -90,7 +91,76 @@ describe('role rules', () => {
   })
 })
 
+describe('projects', () => {
+  const projects = [
+    { id: 'home', root: '/home/someone' },
+    { id: 'aico', root: '/srv/workspaces/projects/aico' },
+    { id: 'aico-web', root: '/srv/workspaces/projects/aico/packages/web' },
+  ]
+
+  it('finds the deepest registered root that holds the working folder', () => {
+    expect(projectFor(projects, '/srv/workspaces/projects/aico/packages/web/src')).toBe('aico-web')
+    expect(projectFor(projects, '/srv/workspaces/projects/aico')).toBe('aico')
+    expect(projectFor(projects, '/srv/workspaces/projects/aico-old')).toBeUndefined()
+    expect(projectFor(projects, '/tmp')).toBeUndefined()
+  })
+
+  // A copy of the live policy whose implementation job has a deny row for one project.
+  const scoped: LaunchPolicy = {
+    ...policy,
+    providers: {
+      ...policy.providers,
+      codex: {
+        name: 'codex',
+        label: 'Codex',
+        tools: [],
+        catalogProviders: ['codex'],
+        nameTokens: [],
+        why: 'test',
+      } as LaunchPolicy['providers'][string],
+    },
+    deny: [
+      ...policy.deny,
+      {
+        provider: 'codex',
+        reason: 'no codex in secret-project',
+        source: 'test',
+        jobs: ['implementation'],
+        projects: ['secret-project'],
+      } as LaunchPolicy['deny'][number],
+    ],
+  }
+
+  it('refuses when the role has project deny rows and the project is unknown', () => {
+    const result = refusal(roleRules(scoped, catalog, harness, { role: 'implementation' }))
+    expect(result.reason).toBe('project_unknown')
+    expect(result.detail).toContain('secret-project')
+  })
+
+  it('applies the project deny row once the project is known', () => {
+    const inside = roleRules(scoped, catalog, harness, {
+      role: 'implementation',
+      project: 'secret-project',
+    }) as RoleRules
+    expect(inside.chain.map((entry) => entry.id)).not.toContain('codex/gpt-6.1-sol')
+    const elsewhere = roleRules(scoped, catalog, harness, {
+      role: 'implementation',
+      project: 'aico',
+    }) as RoleRules
+    expect(elsewhere.chain[0]?.id).toBe('codex/gpt-6.1-sol')
+  })
+})
+
 describe('fail closed', () => {
+  it('refuses when the launch policy has no Claude provider entry', () => {
+    const { claude: _, ...providers } = policy.providers
+    const result = roleRules({ ...policy, providers }, catalog, harness, {
+      role: 'implementation',
+    })
+    expect(refusal(result).reason).toBe('rules_unreadable')
+    expect(refusal(result).detail).toContain("no 'claude' provider entry")
+  })
+
   it('refuses when context.db is missing', () => {
     const result = loadRoleRules(
       join(dir, 'nope', 'context.db'),

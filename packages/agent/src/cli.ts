@@ -4,7 +4,8 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { contextDbPath } from '@aico/context'
-import { loadRoleRules } from './rules'
+import type { Models } from '@earendil-works/pi-ai'
+import { loadRoleRules, type Refused, type RoleRules, type RulesRequest } from './rules'
 import { type RunResult, runAgent } from './run'
 import { agentDbPath, openAgentDb } from './transcript'
 
@@ -35,7 +36,18 @@ export function dataDir(env: NodeJS.ProcessEnv): string {
   )
 }
 
-export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
+/** What tests swap out: the rules source and the provider collection. */
+export interface CliDeps {
+  rules?: (dbPath: string, request: RulesRequest) => RoleRules | Refused
+  models?: Models
+  cwd?: string
+}
+
+export async function main(
+  argv: string[],
+  env: NodeJS.ProcessEnv = process.env,
+  deps: CliDeps = {},
+): Promise<number> {
   let parsed: ReturnType<typeof parse>
   try {
     parsed = parse(argv)
@@ -53,12 +65,19 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     process.stderr.write(`aico agent run: --role and a task are required\n${USAGE}\n`)
     return 2
   }
+  const fromEnv = values['test-refuse-at'] === undefined && Boolean(env.AICO_AGENT_TEST_REFUSE_AT)
   const refuseAt =
     Number(values['test-refuse-at'] ?? env.AICO_AGENT_TEST_REFUSE_AT ?? 0) || undefined
+  if (refuseAt && fromEnv)
+    process.stderr.write(
+      `aico agent: AICO_AGENT_TEST_REFUSE_AT=${refuseAt} is set: request ${refuseAt} to the first model gets a synthetic refusal\n`,
+    )
 
   const dir = dataDir(env)
-  const rules = loadRoleRules(contextDbPath(dir), {
+  const cwd = deps.cwd ?? process.cwd()
+  const rules = (deps.rules ?? loadRoleRules)(contextDbPath(dir), {
     role: values.role,
+    cwd,
     ...(values.model && { model: values.model }),
   })
   if ('kind' in rules) {
@@ -68,20 +87,29 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     return EXIT.refused as number
   }
 
-  const db = openAgentDb(agentDbPath(dir))
   let result: RunResult
   try {
-    result = await runAgent({
-      rules,
-      task,
-      cwd: process.cwd(),
-      db,
-      ...(values.effort && { effort: values.effort }),
-      ...(refuseAt && { testRefuseAt: refuseAt }),
-      log: (line) => process.stderr.write(`· ${line}\n`),
-    })
-  } finally {
-    db.close()
+    const db = openAgentDb(agentDbPath(dir))
+    try {
+      result = await runAgent({
+        rules,
+        task,
+        cwd,
+        db,
+        ...(values.effort && { effort: values.effort }),
+        ...(refuseAt && { testRefuseAt: refuseAt }),
+        ...(deps.models && { models: deps.models }),
+        log: (line) => process.stderr.write(`· ${line}\n`),
+      })
+    } finally {
+      db.close()
+    }
+  } catch (error) {
+    const detail = (error as Error)?.message ?? String(error)
+    if (values.json)
+      process.stdout.write(`${JSON.stringify({ outcome: { kind: 'error', detail } })}\n`)
+    process.stderr.write(`aico agent: error: ${detail}\n`)
+    return EXIT.error as number
   }
   const { outcome } = result
   if (values.json) process.stdout.write(`${JSON.stringify(result)}\n`)

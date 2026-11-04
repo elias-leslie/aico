@@ -3,8 +3,9 @@
 // model swap stops the run, and the guard blocks bash.
 
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { openDatabase } from '@aico/store'
 import {
   type AssistantMessage,
   createModels,
@@ -13,17 +14,19 @@ import {
   fauxToolCall,
   type TranscriptContext,
 } from '@earendil-works/pi-ai'
-import { describe, expect, it } from 'vitest'
+import { getAgentDir } from '@earendil-works/pi-coding-agent'
+import { describe, expect, it, vi } from 'vitest'
 import { refusalOf, swapOf } from './outcomes'
 import type { RoleRules } from './rules'
+import { HARNESS } from './rules'
 import { runAgent } from './run'
-import { guardBash } from './tools'
-import { openAgentDb } from './transcript'
+import { credentialMarkers, guardBash, touchesCredentials } from './tools'
+import { MIGRATIONS, openAgentDb, Transcript } from './transcript'
 
-function setup(guardHook: string | null = null) {
+function setup(guardHook: string | null = null, firstApi = 'faux-openai') {
   const first = fauxProvider({
     provider: 'openai',
-    api: 'faux-openai',
+    api: firstApi,
     models: [{ id: 'gpt-6.1-sol', reasoning: true }],
   })
   const second = fauxProvider({
@@ -52,9 +55,9 @@ function setup(guardHook: string | null = null) {
   }
   const cwd = mkdtempSync(join(tmpdir(), 'aico-agent-run-'))
   const db = openAgentDb(':memory:')
-  const run = (task: string, extra: { testRefuseAt?: number } = {}) =>
+  const run = (task: string, extra: Partial<Parameters<typeof runAgent>[0]> = {}) =>
     runAgent({ rules, task, cwd, db, models, contextFiles: [], ...extra })
-  return { first, second, cwd, db, run }
+  return { first, second, cwd, db, run, rules }
 }
 
 const texts = (context: TranscriptContext) => JSON.stringify(context.messages)
@@ -215,6 +218,126 @@ describe('runAgent', () => {
       .get(result.runId)
     expect(call).toMatchObject({ blocked: 'no publishing', is_error: 1 })
   })
+
+  it('stops a swapped model before its tool calls run', async () => {
+    const { first, cwd, run } = setup()
+    first.setResponses([
+      (): AssistantMessage => ({
+        ...fauxAssistantMessage(fauxToolCall('write', { path: 'swapped.txt', content: 'x' })),
+        responseModel: 'gpt-5-mini',
+      }),
+      fauxAssistantMessage('should not be asked'),
+    ])
+    const result = await run('task')
+    expect(result.outcome).toMatchObject({ kind: 'model_swap', served: 'gpt-5-mini' })
+    expect(existsSync(join(cwd, 'swapped.txt'))).toBe(false)
+    expect(first.state.callCount).toBe(1)
+  })
+
+  it('never runs a model that speaks the Claude API, whatever the chain says', async () => {
+    const { first, second, run } = setup(null, 'anthropic-messages')
+    second.setResponses([fauxAssistantMessage('second model answered')])
+    const result = await run('task')
+    expect(result.outcome).toMatchObject({ kind: 'done', model: 'opencode-go/deepseek-v4.1-flash' })
+    expect(first.state.callCount).toBe(0)
+  })
+
+  it('finishes the run as an error when something throws mid-run', async () => {
+    const { db, run, rules } = setup()
+    const broken = {
+      getModel: () => {
+        throw new Error('provider list broke')
+      },
+    } as unknown as Parameters<typeof runAgent>[0]['models']
+    const result = await run('task', { models: broken, rules })
+    expect(result.outcome).toEqual({
+      kind: 'error',
+      model: 'codex/gpt-6.1-sol',
+      detail: 'provider list broke',
+    })
+    const row = db.prepare('SELECT outcome FROM runs WHERE id = ?').get(result.runId)
+    expect(row).toMatchObject({ outcome: 'error' })
+  })
+
+  it('keeps the result of a call that reads a credential path out of agent.db', async () => {
+    const { first, cwd, db, run } = setup()
+    writeFileSync(join(cwd, 'plain.txt'), 'plain words\n')
+    // A stand-in agent dir: the test never touches Pi's real auth file.
+    const agentDir = mkdtempSync(join(tmpdir(), 'aico-agent-pidir-'))
+    const secret = join(agentDir, 'auth.json')
+    writeFileSync(secret, '{"openai":{"access":"fake-token"}}\n')
+    vi.stubEnv('PI_CODING_AGENT_DIR', agentDir)
+    first.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall('read', { path: secret }, { id: 'c-secret' }),
+        fauxToolCall('read', { path: 'plain.txt' }, { id: 'c-plain' }),
+      ]),
+      fauxAssistantMessage('done'),
+    ])
+    const result = await run('task')
+    const rows = db
+      .prepare("SELECT content FROM messages WHERE run_id = ? AND role = 'toolResult' ORDER BY seq")
+      .all(result.runId)
+      .map((row) => JSON.parse(String(row.content)))
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ withheld: expect.any(String), chars: expect.any(Number) })
+    expect(JSON.stringify(rows)).not.toContain('fake-token')
+    expect(JSON.stringify(rows[1])).toContain('plain words')
+    vi.unstubAllEnvs()
+  })
+})
+
+describe('credential paths', () => {
+  const home = homedir()
+  const markers = credentialMarkers([getAgentDir(), ...HARNESS.credential_paths], home)
+
+  it('spots every spelling of a credential path, in any tool', () => {
+    const cwd = join(home, 'work')
+    expect(touchesCredentials({ path: '~/.pi/agent/auth.json' }, cwd, markers)).toBe(true)
+    expect(touchesCredentials({ command: 'cat $HOME/.ssh/id_ed25519' }, cwd, markers)).toBe(true)
+    const braced = ['cat $', '{HOME}/.codex/auth.json'].join('')
+    expect(touchesCredentials({ command: braced }, cwd, markers)).toBe(true)
+    expect(touchesCredentials({ path: '../.pi/agent/auth.json' }, cwd, markers)).toBe(true)
+    expect(touchesCredentials({ path: 'src/index.ts' }, cwd, markers)).toBe(false)
+    expect(touchesCredentials({ command: 'ls -la' }, cwd, markers)).toBe(false)
+  })
+})
+
+describe('transcript', () => {
+  it('keeps every tool call when a provider reuses call ids each turn', () => {
+    const db = openAgentDb(':memory:')
+    const transcript = new Transcript(db, 'r1', { role: 'r', cwd: '/', task: 't', chain: [] })
+    transcript.toolStart('call_1', 'bash', { command: 'one' })
+    transcript.toolEnd('call_1', false, 3)
+    transcript.toolStart('call_1', 'bash', { command: 'two' })
+    transcript.blocked('call_1', 'no')
+    transcript.toolEnd('call_1', true, 5)
+    const rows = db
+      .prepare('SELECT seq, args, is_error, result_chars, blocked FROM tool_calls ORDER BY seq')
+      .all()
+    expect(rows).toEqual([
+      { seq: 0, args: '{"command":"one"}', is_error: 0, result_chars: 3, blocked: null },
+      { seq: 1, args: '{"command":"two"}', is_error: 1, result_chars: 5, blocked: 'no' },
+    ])
+  })
+
+  it('migrates a first-version agent.db, keeping its tool calls', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'aico-agent-db-')), 'agent.db')
+    const old = openDatabase(path, MIGRATIONS.slice(0, 1))
+    old.exec(
+      "INSERT INTO runs (id, role, cwd, task, started_at) VALUES ('r', 'x', '/', 't', 'now')",
+    )
+    old.exec(
+      "INSERT INTO tool_calls (run_id, call_id, name, args, started_at) VALUES ('r', 'a', 'read', '{}', '1'), ('r', 'b', 'bash', '{}', '2')",
+    )
+    old.close()
+    const db = openAgentDb(path)
+    expect(db.prepare('SELECT seq, call_id FROM tool_calls ORDER BY seq').all()).toEqual([
+      { seq: 0, call_id: 'a' },
+      { seq: 1, call_id: 'b' },
+    ])
+    db.close()
+  })
 })
 
 describe('guardBash', () => {
@@ -231,6 +354,49 @@ describe('guardBash', () => {
     expect(await guardBash(join(dir, 'missing'), 'ls', dir, 'c3')).toMatch(/refused/)
     expect(await guardBash(allow, 'ls', dir, 'c4')).toBeNull()
   })
+
+  it('allows only {} or an explicit allow: ask, unknown answers and the legacy block refuse', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-agent-guard-'))
+    const answer = (name: string, json: string) => {
+      const path = join(dir, name)
+      writeFileSync(path, `cat >/dev/null; echo '${json}'\n`)
+      return path
+    }
+    const said = (decision: string) =>
+      `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"${decision}"}}`
+    expect(await guardBash(answer('allow', said('allow')), 'ls', dir, 'c1')).toBeNull()
+    expect(await guardBash(answer('ask', said('ask')), 'ls', dir, 'c2')).toMatch(/refused/)
+    expect(await guardBash(answer('odd', said('maybe')), 'ls', dir, 'c3')).toMatch(/refused/)
+    expect(
+      await guardBash(answer('legacy', '{"decision":"block","reason":"old"}'), 'ls', dir, 'c4'),
+    ).toMatch(/block.*old.*refused/)
+    expect(await guardBash(answer('list', '[]'), 'ls', dir, 'c5')).toMatch(/refused/)
+  })
+
+  it('kills the whole hook process group on timeout, grandchildren included', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-agent-guard-'))
+    const pidFile = join(dir, 'pid')
+    const hook = join(dir, 'slow')
+    // The grandchild keeps stdout open, as the Python command-guard does.
+    writeFileSync(hook, `cat >/dev/null; sh -c 'echo $$ > ${pidFile}; exec sleep 30'\n`)
+    const started = Date.now()
+    expect(await guardBash(hook, 'ls', dir, 'c1', 300)).toMatch(/timeout/)
+    expect(Date.now() - started).toBeLessThan(5_000)
+    const pid = Number(readFileSync(pidFile, 'utf8'))
+    await new Promise((done) => setTimeout(done, 100))
+    expect(() => process.kill(pid, 0)).toThrow()
+  })
+
+  it.skipIf(!existsSync(HARNESS.guard_hook))(
+    'agrees with the installed publication guard',
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'aico-agent-guard-'))
+      expect(await guardBash(HARNESS.guard_hook, 'ls -la', dir, 'c1')).toBeNull()
+      expect(await guardBash(HARNESS.guard_hook, 'git push origin main', dir, 'c2')).toMatch(
+        /publication/i,
+      )
+    },
+  )
 })
 
 describe('outcomes', () => {
@@ -248,6 +414,10 @@ describe('outcomes', () => {
         ?.category,
     ).toBe('content_filter')
     expect(refusalOf(error('HTTP 429: rate limited'))).toBeNull()
+    expect(refusalOf(error('HTTP 400: invalid safety settings'))).toBeNull()
+    expect(refusalOf(error('upstream refusal to connect'))).toBeNull()
+    expect(refusalOf(error('Error: see cyber_policy docs'))).toBeNull()
+    expect(refusalOf(error('Provider failed', 'incomplete.safety'))?.category).toBe('safety')
     expect(refusalOf(fauxAssistantMessage('cyber_policy is a phrase'))).toBeNull()
   })
 

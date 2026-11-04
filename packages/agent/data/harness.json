@@ -23,6 +23,15 @@
     "recon": { "level": "lean", "guard": true, "egress": "contained" }
   },
   "egress_supported": ["host"],
+  "credential_paths_about": "Tool results for calls that name these paths (and Pi's agent dir, where Pi keeps auth.json) are kept out of agent.db: only their length is stored.",
+  "credential_paths": [
+    "~/.ssh",
+    "~/.codex/auth.json",
+    "~/.claude/.credentials.json",
+    "~/.config/gh/hosts.yml",
+    "~/.netrc",
+    "~/.aws"
+  ],
   "guard_hook": "/srv/workspaces/projects/summitflow/scripts/lib/publication-pretool-hook",
   "refusal_codes": {
     "cyberpolicy": "cyber",
