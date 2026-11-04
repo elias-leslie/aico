@@ -48,7 +48,27 @@ function stage(id, { quickPaths, argv, coveredBy }) {
   ].join('\n')
 }
 
+// Root-level file names the root .gitignore ignores (its plain and `*` patterns; no
+// negation or paths). Read from the file, not `git`: the check stages run without it.
+function ignoredRootFiles() {
+  const path = join(root, '.gitignore')
+  const patterns = existsSync(path)
+    ? readFileSync(path, 'utf8')
+        .split('\n')
+        .map((line) => line.trim().replace(/^\//, ''))
+        .filter(
+          (line) => line && !line.startsWith('#') && !line.startsWith('!') && !line.includes('/'),
+        )
+    : []
+  const rules = patterns.map(
+    (pattern) =>
+      new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`),
+  )
+  return (name) => rules.some((rule) => rule.test(name))
+}
+
 export function tomlBlock(packages = loadPackages(root)) {
+  const ignored = ignoredRootFiles()
   const { readers } = contractReaders(root)
   const bin = (name) => `node_modules/.bin/${name}`
   const out = []
@@ -77,8 +97,10 @@ export function tomlBlock(packages = loadPackages(root)) {
   }
   // Files outside packages/ (root config, scripts/, contracts/) get one quick Biome
   // stage, so a quick check still lints them; the lockfile is Biome-ignored.
+  // Git-ignored files (a local .fallowrc.json) are left out: a fresh clone has none.
   const rootFiles = readdirSync(root)
     .filter((name) => /\.[cm]?[jt]s$|\.jsonc?$/.test(name) && name !== 'package-lock.json')
+    .filter((name) => !ignored(name))
     .sort()
   out.push(
     stage('biome-root', {

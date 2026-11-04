@@ -383,8 +383,8 @@ coverage = "focused"
 required = false
 covered_by = "biome"
 quick = true
-quick_paths = ["scripts/**", "contracts/**", ".dependency-cruiser-known-violations.json", ".dependency-cruiser.cjs", ".fallowrc.json", "biome.json", "package.json", "project.identity.json", "tsconfig.base.json", "tsconfig.json", "ui-spec.json", "vitest.config.ts"]
-argv = ["node_modules/.bin/biome", "check", "scripts", "contracts", ".dependency-cruiser-known-violations.json", ".dependency-cruiser.cjs", ".fallowrc.json", "biome.json", "package.json", "project.identity.json", "tsconfig.base.json", "tsconfig.json", "ui-spec.json", "vitest.config.ts"]
+quick_paths = ["scripts/**", "contracts/**", ".dependency-cruiser-known-violations.json", ".dependency-cruiser.cjs", "biome.json", "package.json", "project.identity.json", "tsconfig.base.json", "tsconfig.json", "ui-spec.json", "vitest.config.ts"]
+argv = ["node_modules/.bin/biome", "check", "scripts", "contracts", ".dependency-cruiser-known-violations.json", ".dependency-cruiser.cjs", "biome.json", "package.json", "project.identity.json", "tsconfig.base.json", "tsconfig.json", "ui-spec.json", "vitest.config.ts"]
 
 [[native.stages]]
 id = "contracts-host-steward"
