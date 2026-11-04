@@ -1,0 +1,11 @@
+[Unit]
+Description=Host steward daily housekeeping (journal, package and app caches, SummitFlow retention); a dry run until [acting] housekeeping is on
+After=local-fs.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/host-steward/host-steward housekeeping
+StateDirectory=host-steward
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=30min

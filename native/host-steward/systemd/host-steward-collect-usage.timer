@@ -1,0 +1,10 @@
+[Unit]
+Description=Host steward nightly usage evidence collection
+
+[Timer]
+OnCalendar=*-*-* 04:40
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

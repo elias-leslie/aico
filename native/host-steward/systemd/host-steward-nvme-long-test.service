@@ -1,0 +1,7 @@
+[Unit]
+Description=Host steward NVMe SMART long self-test; a dry run until [acting] nvme_tests is on
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/host-steward/host-steward nvme-test long
+StateDirectory=host-steward

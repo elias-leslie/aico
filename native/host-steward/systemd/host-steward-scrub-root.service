@@ -1,0 +1,11 @@
+[Unit]
+Description=Host steward Btrfs scrub of /; a dry run until [acting] scrub is on
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/host-steward/host-steward scrub --target root
+StateDirectory=host-steward
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=6h

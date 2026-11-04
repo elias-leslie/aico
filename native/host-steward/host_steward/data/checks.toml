@@ -15,11 +15,23 @@ backup_receipt = "/home/kasadis/.local/state/summitflow/backup-freshness/proxmox
 backup_required_targets = ["pve-cluster-config", "pve-host-files", "pve-vm-100-browser-state"]
 backup_alert_age_h = 6.0
 
+# Controllers that change the host (kill processes, delete scratch data, start scrubs and self-tests). Each is a
+# dry run until its switch here is true: it reports what it would do and does nothing. Nightshift's own controllers
+# act until cutover; the cutover turns these on in the same step that stops Nightshift's.
+[acting]
+memctl = false
+housekeeping = false
+space_guard = false
+scrub = false
+nvme_tests = false
+
 # Signals the owner decided are record-only: they stay in the row's text but never past this state.
 # First matching pattern wins. GEM10 logs corrected memory errors without DRAM ECC (owner 2026-10-30).
 [caps]
 "ecc.corrected" = "ok"
 "ecc.spike" = "ok"
+# The memory trend (corrected-event rate, overflow flags) is on record only for the same reason; uncorrected errors and a new region fail through ecc.uncorrected and ecc.new_region.
+"pve.ecc.trend" = "ok"
 
 [checks.workstation]
 what = "Workstation health"
@@ -62,6 +74,21 @@ disk_crit_tight_free_gib = 10.0
 disk_warn_free_gib = 15.0
 disk_warn_tight_pct = 85.0
 disk_warn_tight_free_gib = 30.0
+# Fill rate: hours until the reserve at the short and long window's pace (the pace is capped at the last
+# fill_recent_hours'); the short window decides failed, either one warn. sample_keep_hours of free-space samples are kept.
+fill_short_hours = 6
+fill_long_hours = 24
+fill_recent_hours = 1
+fill_critical_hours = 12
+fill_warning_hours = 48
+sample_keep_hours = 48
+# The space guard's report is old news after this long (reclaim and ballast notes are dropped).
+guard_fresh_s = 7200
+# The guard writes space-guard.json and growers.json in the jobs directory beside the state file; until it has run
+# there, Nightshift's copies (newest wins) and ring of samples are read, never written.
+guard_inherit = ["/var/lib/nightshift/housekeeping/space-guard.json"]
+growers_inherit = ["/var/lib/nightshift/housekeeping/growers.json"]
+samples_inherit = "/var/lib/nightshift/storage-samples.json"
 # missing: the state when the disk is not mounted (default failed). balance: rate against the reserve.
 disks = [
   { name = "System disk", path = "/", btrfs = true, balance = true },
@@ -146,6 +173,32 @@ what = "System journal"
 every_min = 15
 slack_min = 10
 corrupt_keep_days = 7
+# Signature mining. The two files sit beside the state file; the first run adopts adopt_from (Nightshift's cluster
+# state, read-only) when cluster_file does not exist yet.
+cluster_file = "journal-state.json"
+signatures_file = "journal-signatures.json"
+adopt_from = "/var/lib/nightshift/journal-state.json"
+initial_since = "-24h"
+max_entries = 300000
+top_n = 50
+max_clusters_per_ident = 400
+max_clusters_per_group = 200
+similarity = 0.5
+retain_days = 30
+# Known signatures (seeded from the 2026-10-11 audit). label: noise = ignore; known-issue = tracked backlog item.
+# Patterns match at the START of the message: text mid-line is attacker-controllable and must never turn an alert
+# into noise.
+known = [
+  { name = "summitflow-publication-guard-fixture", pattern = 'summitflow publication guard DEGRADED', label = "noise", note = "SummitFlow test fixtures logging mid-edit SyntaxError fallback" },
+  { name = "pam-systemd-release-session", pattern = 'pam_systemd\(.*\): Failed to release session: Access denied', label = "noise", note = "Release-session denial for short-lived login sessions" },
+  { name = "pam-lastlog-missing", pattern = 'PAM (unable to dlopen\(|adding faulty module: )\S*pam_lastlog\.so', label = "known-issue", note = "pam_lastlog referenced but absent (backlog)" },
+  { name = "ibus-dup-bus", pattern = '(\S+: )?Two services allocated for the same bus name org\.freedesktop\.IBus|Failed to put bus name to hashmap', label = "known-issue", note = "IBus duplicate session bus (backlog)" },
+  { name = "gnome-background-home", pattern = "Failed to load background 'file:///home/", label = "noise", note = "GNOME background URI points at home dir" },
+  { name = "gnome-shell-stack", pattern = '^\s*(\S+@(resource|file):///|Stack trace:|### Promise created here)', label = "noise", note = "GJS stack trace continuation lines" },
+  { name = "electron-int3", pattern = 'traps: .{1,40}?\[\d+\] trap int3', label = "known-issue", note = "Electron int3 crashes (backlog)" },
+  { name = "failed-transient-unit", pattern = '^run-u\d+\.service: ', label = "noise", note = "Other agents' transient test units" },
+  { name = "secret-service-dup", pattern = 'asked to register item /org/freedesktop/secrets/', label = "noise", note = "gnome-keyring duplicate item registration" },
+]
 
 [checks.gates]
 what = "Public login gates"
@@ -179,3 +232,594 @@ keys = ["firmware", "keys", "dropbear", "forwards", "upnp", "services", "parenta
 # State a held change makes: failed for SSH keys and server settings, ok (noted) for firmware.
 severity = { firmware = "ok", keys = "failed", dropbear = "failed", forwards = "warn", upnp = "warn", services = "warn", parental = "warn" }
 labels = { firmware = "firmware", keys = "SSH login keys", dropbear = "SSH server settings", forwards = "port forwards", upnp = "UPnP settings", services = "enabled services", parental = "parental-control setup" }
+
+# The push path (ns-36 detection; nothing is sent from here, the Proxmox sender does that). Each path is judged on
+# its own; Aico's is not judged until one of its units exists. stale_min: how long a heartbeat may be quiet.
+# confirm_min: how long a unit problem must hold before the row fails.
+[checks.floor]
+what = "Push path"
+every_min = 15
+slack_min = 10
+owner_uid = 1000
+stale_min = 30
+confirm_min = 10
+uptime_file = "/proc/uptime"
+
+[[checks.floor.paths]]
+name = "Aico"
+user_units = ["aico-web.service"]
+optional_user_units = ["aico-jobs.service"]
+system_units = []
+skip_when_absent = true
+
+# Nightshift's own path, until the cutover stops it.
+[[checks.floor.paths]]
+name = "Nightshift"
+user_units = ["nightshift-notify-critical.service", "nightshift-notify-critical.path", "nightshift-notify-critical.timer"]
+system_units = ["nightshift-outbox.service", "nightshift-outbox.path", "nightshift-outbox.timer"]
+heartbeat_unit = "nightshift-notify-critical.service"
+delivery_file = "/var/lib/nightshift/items/delivery.json"
+skip_when_absent = true
+
+[checks.probes]
+what = "Workstation probes"
+every_min = 15
+slack_min = 10
+modules_root = "/lib/modules"
+# st browser appends one line per fall back from the browser VM to local Chrome (empty: off).
+fallbacks_file = "/home/kasadis/.local/state/st-browser/local-fallbacks.jsonl"
+# The PVE guest name of the browser VM: fallbacks while it was stopped on purpose are a note.
+browser_vm = "st-browser"
+# The PVE guests check saves its guest task history here (beside the state file); without it every fallback counts.
+guests_file = "pve-guests.json"
+warn_rss_gib = 3.0
+warn_fallbacks_24h = 10
+
+# Usage evidence (ns-27): the check takes the /proc sample each pass and watches the nightly collection; the
+# collect-usage job (timer at 04:40, see systemd/) does the full collection. The file starts fresh; nothing is pruned.
+[checks.usage]
+what = "Usage evidence"
+every_min = 15
+slack_min = 10
+db = "/var/lib/host-steward/usage.sqlite3"
+stale_hours = 36
+# Users whose systemd user manager is snapshotted (empty: the site owner).
+user_managers = []
+pacct_files = ["/var/log/account/pacct.0", "/var/log/account/pacct"]
+lastcomm_timeout = 600
+job_what = "Usage evidence collection"
+job_every_min = 1440
+job_slack_min = 120
+
+# Jobs that change the host (M5a-2, ns-28). Each is a dry run until its [acting] switch is true. Settings and lists
+# live here; the code only knows the order of the steps.
+[jobs.housekeeping]
+what = "Daily housekeeping"
+every_min = 1440
+slack_min = 180
+journal_vacuum = "2G"
+spotify_cache = "/home/{owner}/snap/spotify/common/.cache"
+spotify_pattern = '(^|/)spotify( |$)'
+spotify_min_gib = 4
+guestfs_dir = "/var/tmp/.guestfs-0"
+guestfs_pattern = 'guestfs|libguestfs|qemu.*appliance'
+guestfs_stale_days = 7
+# Old versions beyond the newest keep_versions (and anything linked or running) in the families marked prune.
+keep_versions = 2
+versioned = [
+  { name = "Playwright browsers", root = "~/.cache/ms-playwright", group = "stem", order = "version", prune = true },
+]
+# SummitFlow's daily retention as the owner; --if-stale skips it while its own 04:00 maintenance ran recently.
+daily_commands = [["st", "cleanup", "host", "--if-stale", "30"]]
+daily_timeout_s = 1800
+
+[jobs.space-guard]
+what = "Disk space guard"
+every_min = 15
+slack_min = 10
+# The disks it guards (the storage check's balance disks); label names the ballast mount point.
+disks = [{ name = "System disk", path = "/", label = "root" }]
+# Nightshift's record of the ballast, read once so a first dry run knows what exists.
+inherit_state = "/var/lib/nightshift/housekeeping/space-guard.json"
+ballast_gib = 6
+# The subvolume keeps Nightshift's name: it already holds the ballast file.
+ballast_subvol = "@nightshift-ballast"
+ballast_file = "ballast"
+top_mounts = "/run/host-steward-ballast"
+ballast_recheck_h = 24
+# SummitFlow's reclaim commands, run in order as the owner while a disk is under the line. {path} is the disk,
+# {target_gib} the free space to restore; a {cmd, paths} entry only applies to those disks.
+reclaim_commands = [
+  ["st", "cleanup", "reclaim", "--filesystem", "{path}", "--target-free-gib", "{target_gib}"],
+  { cmd = ["st", "autosnap", "prune", "--pressure"], paths = ["/srv/workspaces"] },
+]
+reclaim_timeout_s = 900
+# The journal tier runs only on the disk that holds this path.
+journal_path = "/var/log"
+journal_vacuum = "1G"
+# Bounded balances: each pass relocates at most balance_limit data chunks. Near full means unallocated or free
+# space below these, where the released ballast buys exactly one pass.
+balance_percents = [0, 25, 50, 75, 85]
+balance_limit = 16
+balance_timeout_s = 600
+near_full_unallocated_gib = 1
+near_full_free_gib = 15
+# Where the space goes: direct children of these roots, measured daily (every grow_pressure_h under the warning line).
+grow_roots = [
+  "/tmp", "/var/tmp", "/home/{owner}", "/var/lib", "/var/lib/docker", "/var/log", "/var/cache",
+  "/srv/models", "/srv/scratch", "/srv/workspaces/projects",
+]
+grow_full_h = 24
+grow_pressure_h = 2
+grow_top = 12
+
+# Last scrub and self-test results, read-only. The scrub and nvme-test jobs act per [acting] scrub / nvme_tests.
+[checks.disk-tests]
+what = "Scrubs and disk self-tests"
+every_min = 360
+slack_min = 60
+nvme_device = "/dev/nvme0"
+scrubs = [
+  { name = "System disk", mount = "/" },
+  { name = "Backup disk", mount = "/mnt/summitflow-native" },
+]
+
+[jobs.scrub]
+# The same lock file Nightshift's scrub units use, so the two never scrub at once.
+lock = "/run/lock/nightshift-btrfs-scrub.lock"
+btrfs = "/usr/bin/btrfs"
+args = ["scrub", "start", "-Bd", "-c", "3"]
+[jobs.scrub.targets.native]
+what = "Backup disk scrub"
+mount = "/mnt/summitflow-native"
+# The native scrub runs inside SummitFlow's backup window, as Nightshift's unit does.
+wrap = ["/usr/local/sbin/summitflow-backup-window", "run", "native", "--"]
+timeout_s = 28800
+every_min = 44640
+slack_min = 2880
+[jobs.scrub.targets.root]
+what = "System disk scrub"
+mount = "/"
+wrap = []
+timeout_s = 21600
+every_min = 44640
+slack_min = 2880
+
+[jobs.nvme-test]
+smartctl = "/usr/sbin/smartctl"
+device = "/dev/nvme0"
+[jobs.nvme-test.kinds.short]
+what = "NVMe short self-test"
+every_min = 10080
+slack_min = 1440
+[jobs.nvme-test.kinds.long]
+what = "NVMe long self-test"
+every_min = 43200
+slack_min = 2880
+
+# --- memory (F3: memctl, the memory check) ---------------------------------------------------------------------
+
+# memctl: the memory controller (a user service, `host-steward memctl`). Sizes are GiB, PSI and swap percent.
+# Green/amber/red with hysteresis (leaving a worse state needs the better state's margin); see memstate.py.
+[memctl]
+tick_s = 10
+expires_s = 30
+row_every_s = 300
+offload_min_gib = 8
+amber_avail_gib = 8
+green_avail_gib = 10
+red_avail_gib = 3
+amber_from_red_avail_gib = 5
+amber_psi = 5.0
+green_psi = 3.0
+red_psi = 20.0
+amber_from_red_psi = 18.0
+amber_swap = 75.0
+green_swap = 60.0
+# Swap use alone is parked pages, not pressure: it counts only while available memory is below this and PSI shows stalls.
+swap_matters_avail_gib = 12
+swap_matters_psi = 2.0
+green_swap_matters_psi = 1.0
+# Memory PSI alone can spike during rebuild bursts with plenty free: it makes red only below this much available.
+psi_red_matters_avail_gib = 6
+outside_hog_min_gib = 1
+note_gap_s = 1800
+outside_hog_after_s = 120
+guard_fresh_s = 30
+cmdline_head = 200
+cache_cmd_min_mib = 256
+recent_s = 120
+counter_grace_s = 30
+stop_match_s = 60
+result_grace_s = 30
+result_give_up_s = 300
+tether_refresh_s = 60
+disk_lines_refresh_s = 60
+admission_margin_gib = 2
+agent_comms = ["claude", "codex"]
+agent_bins = ["claude", "codex", "codex-real"]
+
+# {runtime} is the owner's runtime dir ($XDG_RUNTIME_DIR), {home} the owner's home. live_* are the files Tether and
+# SummitFlow read (the Nightshift names stay: those readers expect them); dry_* are written while [acting] memctl is
+# false. shared_dir gets a second copy of the verdict and the records, live only. ballast_state is the space guard's
+# state file (the ballast it holds counts as free for amber); state_file carries the pve check's offload note.
+[memctl.paths]
+live_admission = "{runtime}/nightshift/admission.json"
+live_heartbeat = "{runtime}/nightshift/memctl.json"
+live_events = "{home}/.local/state/nightshift/memory-events.jsonl"
+dry_admission = "{runtime}/host-steward/admission.json"
+dry_heartbeat = "{runtime}/host-steward/memctl.json"
+dry_events = "{home}/.local/state/host-steward/memory-events.jsonl"
+shared_dir = "/run/nightshift"
+tether_state = "{home}/.local/state/tether/default"
+tether_runtime = "{runtime}/tether/default"
+ballast_state = "/var/lib/nightshift/housekeeping/space-guard.json"
+state_file = "/var/lib/host-steward/state.json"
+
+[checks.memory]
+what = "Memory"
+every_min = 15
+slack_min = 10
+owner_uid = 1000
+meminfo = "/proc/meminfo"
+psi_memory = "/proc/pressure/memory"
+cgroup_user = "/sys/fs/cgroup/user.slice/user-{uid}.slice/user@{uid}.service"
+cgroup_system = "/sys/fs/cgroup/system.slice"
+# Stalled share of wall time since the previous run (PSI total= counters): warn at either.
+pressure_warn_full_pct = 2.0
+pressure_warn_some_pct = 10.0
+# The kill incidents: the last window_h hours; a kill, a unit stop and a Tether crash record within match_s are one
+# loss; kill_loop_count kills in one pane within kill_loop_window_min is a loop; a fresh loss waits tether_grace_s
+# for Tether's own crash record. Paths take {uid} and {home}. These are the live paths: memctl writes them once it acts.
+window_h = 24
+match_s = 180
+kill_loop_count = 3
+kill_loop_window_min = 60
+tether_grace_s = 300
+heartbeat_stale_s = 60
+events = "{home}/.local/state/nightshift/memory-events.jsonl"
+heartbeat = "/run/user/{uid}/nightshift/memctl.json"
+admission = "/run/user/{uid}/nightshift/admission.json"
+guard = "/run/user/{uid}/tether/default/memory-guard.json"
+recoveries = "{home}/.local/state/tether/default/recoveries.json"
+
+# ---- Auth tripwire, sudo, docker access, attribution and declarations (M5a-2 F1, ports of Nightshift's security checks)
+
+# Shared by the tripwire and sudo checks. paths is a floor (more_paths only adds); {owner_home} is the site owner's home.
+# State files sit beside state.json: tripwire/<host>.json and sudo-baseline.json (Nightshift's layout, so its baselines
+# were copied in by hand). A change stays a problem for hold_hours.
+[site.auth]
+paths = [
+  "/etc/sudoers", "/etc/sudoers.d/*", "/etc/ssh/sshd_config", "/etc/ssh/sshd_config.d/*", "/etc/pam.d/*",
+  "/root/.ssh/authorized_keys", "/root/.ssh/authorized_keys2", "{owner_home}/.ssh/authorized_keys",
+  "{owner_home}/.ssh/authorized_keys2",
+]
+more_paths = []
+# PVE: root's authorized_keys is a symlink into /etc/pve/priv; the target is tracked as well.
+pve_extra_paths = ["/etc/pve/priv/authorized_keys"]
+sudoers_globs = ["/etc/sudoers", "/etc/sudoers.d/*"]
+hold_hours = 24.0
+tripwire_dir = "tripwire"
+sudo_file = "sudo-baseline.json"
+
+# Listeners that reviewed, deployed commits introduce. A tripwire change whose every listener is one of these (same
+# role, address, port and process name, and where "unit" is given the same cgroup unit) is a note naming the ref.
+# Address forms: [fe80::]%veth* = a link-local bind on any container veth, [fe80::]%docker-bridge and
+# <address>%docker-bridge = on any Docker bridge. Add an entry in the same commit that adds the listener.
+[[site.auth.expected_listeners]]
+role = "workstation"
+listen = "udp [fe80::]%veth*:3702"
+processes = ["python3"]
+unit = "user@1000.service/session.slice/gvfs-daemon.service"
+ref = "GNOME gvfsd's wsdd (WS-Discovery) on each container veth's link-local address; veths rotate with containers"
+
+[[site.auth.expected_listeners]]
+role = "workstation"
+listen = "udp [fe80::]%docker-bridge:3702"
+processes = ["python3"]
+unit = "user@1000.service/session.slice/gvfs-daemon.service"
+ref = "GNOME gvfsd's wsdd on each Docker bridge's link-local address (docker0, br-<id>: one per docker network)"
+
+[[site.auth.expected_listeners]]
+role = "workstation"
+listen = "udp <address>%docker-bridge:3702"
+processes = ["python3"]
+unit = "user@1000.service/session.slice/gvfs-daemon.service"
+ref = "GNOME gvfsd's wsdd on each Docker bridge's own address (checked live: the address is on docker0 or a br-<id>)"
+
+[[site.auth.expected_listeners]]
+role = "pve"
+listen = "tcp *:3021"
+processes = ["python3"]
+ref = "Nightwatch fallback status page on the PVE host (nightshift-nightwatch serve 3021)"
+
+# Declarations (host_steward/declare.py): `host-steward declare` / `lab-use`. The fresh files sit in agent-hints, which
+# install-root.sh makes writable by the owner; the first-seen file is the root reader's own. legacy_* are Nightshift's
+# files, read too until Nightshift stops. roles name the hosts a declaration may use instead of a host name.
+[site.declarations]
+file = "/var/lib/host-steward/agent-hints/declarations.json"
+lab_use_file = "/var/lib/host-steward/agent-hints/lab-use.json"
+first_seen_file = "/var/lib/host-steward/declare/first-seen.json"
+legacy_files = ["/var/lib/nightshift/agent-hints/declarations.json"]
+legacy_lab_use = ["/var/lib/nightshift/agent-hints/lab-use.json"]
+owner_user = "kasadis"
+max_hours = 24
+since_max_h = 4
+retain_h = 26
+max_entries = 50
+max_bytes = 65536
+
+[site.declarations.roles]
+workstation = "davion-sidarli"
+pve = "davion-gem"
+router = "gl-router"
+ids = "ominull"
+
+# Who made a change (host_steward/attribution.py). tools: process name -> label. own_projects: trusted-unit project ->
+# label for our own services. The env names are what an Aico session exports.
+[site.attribution]
+env_widget = "AICO_WIDGET_ID"
+env_project = "AICO_PROJECT_ID"
+label_widget = "Agent in session {widget}"
+label_outside = "{tool} session outside Aico"
+tools = { claude = "Claude Code", codex = "Codex" }
+own_projects = { nightshift = "Nightshift", host-steward = "Host steward" }
+
+# The exact services that count as our automation: this install's own units, and SummitFlow-managed project
+# services (copied from Nightshift's site.json, plus host-steward's). A "name@.service" entry covers that template's
+# instances. Adding one is a loosening.
+[site.trusted_units.system]
+"nightshift-agent-requests.service" = "nightshift"
+"nightshift-approvals.service" = "nightshift"
+"nightshift-approve.service" = "nightshift"
+"nightshift-grant.service" = "nightshift"
+"nightshift-boot-mark.service" = "nightshift"
+"nightshift-btrfs-scrub-native.service" = "nightshift"
+"nightshift-btrfs-scrub-root.service" = "nightshift"
+"nightshift-check.service" = "nightshift"
+"nightshift-collect-usage.service" = "nightshift"
+"nightshift-coord@.service" = "nightshift"
+"nightshift-exec@.service" = "nightshift"
+"nightshift-fcm-token.service" = "nightshift"
+"nightshift-housekeeping.service" = "nightshift"
+"nightshift-input-watch.service" = "nightshift"
+"nightshift-nvme-long-test.service" = "nightshift"
+"nightshift-nvme-short-test.service" = "nightshift"
+"nightshift-outbox.service" = "nightshift"
+"nightshift-runner@.service" = "nightshift"
+"nightshift-space-guard.service" = "nightshift"
+"nightshift-zswap.service" = "nightshift"
+"summitflow-backup-window-guard.service" = "summitflow"
+"summitflow-dnsmasq.service" = "summitflow"
+"summitflow-host-monitor.service" = "summitflow"
+"host-steward-check.service" = "host-steward"
+"host-steward-collect-usage.service" = "host-steward"
+"host-steward-space-guard.service" = "host-steward"
+"host-steward-housekeeping.service" = "host-steward"
+"host-steward-nvme-long-test.service" = "host-steward"
+"host-steward-nvme-short-test.service" = "host-steward"
+"host-steward-scrub-native.service" = "host-steward"
+"host-steward-scrub-root.service" = "host-steward"
+
+[site.trusted_units.user]
+"host-steward-memctl.service" = "host-steward"
+"nightshift-couriers.service" = "nightshift"
+"nightshift-daily-pass.service" = "nightshift"
+"nightshift-app-adb.service" = "nightshift"
+"nightshift-decide.service" = "nightshift"
+"nightshift-desktop-approve.service" = "nightshift"
+"nightshift-digest.service" = "nightshift"
+"nightshift-display-guard.service" = "nightshift"
+"nightshift-drill.service" = "nightshift"
+"nightshift-memctl.service" = "nightshift"
+"nightshift-notify-critical.service" = "nightshift"
+"nightshift-postboot.service" = "nightshift"
+"nightshift-web.service" = "nightshift"
+"agent-browser-idle-reaper.service" = "browser-automation"
+"agent-hub-backend.service" = "agent-hub"
+"agent-hub-frontend.service" = "agent-hub"
+"agent-hub-hatchet-agent-worker.service" = "agent-hub"
+"agent-hub-hatchet-ops-worker.service" = "agent-hub"
+"agent-hub-neri-local-qwen.service" = "agent-hub"
+"aico-web.service" = "aico"
+"browser-automation-web.service" = "browser-automation"
+"codex-session-close-inactive.service" = "summitflow"
+"codex-session-sync.service" = "summitflow"
+"jobinator-4000-backend.service" = "jobinator-4000"
+"jobinator-4000-frontend.service" = "jobinator-4000"
+"jobinator-4000-hatchet-worker.service" = "jobinator-4000"
+"portfolio-backend.service" = "portfolio-ai"
+"portfolio-frontend.service" = "portfolio-ai"
+"portfolio-hatchet-worker.service" = "portfolio-ai"
+"summitflow-backend.service" = "summitflow"
+"summitflow-frontend.service" = "summitflow"
+"summitflow-hatchet-worker.service" = "summitflow"
+"summitflow-infra-reconcile.service" = "summitflow"
+"tether@default.service" = "aico"
+"sf-rebuild-agent-hub.service" = "agent-hub"
+"sf-rebuild-aico.service" = "aico"
+"sf-rebuild-browser-automation.service" = "browser-automation"
+"sf-rebuild-code-intelligence.service" = "code-intelligence"
+"sf-rebuild-jobinator-4000.service" = "jobinator-4000"
+"sf-rebuild-nightshift.service" = "nightshift"
+"sf-rebuild-ominull.service" = "ominull"
+"sf-rebuild-portfolio-ai.service" = "portfolio-ai"
+"sf-rebuild-summitflow.service" = "summitflow"
+
+[checks.tripwire]
+what = "Login and listener changes"
+every_min = 15
+slack_min = 10
+# Host names as the declarations and baselines know them, and the words the rows use for them.
+hosts = { workstation = "davion-sidarli", pve = "davion-gem" }
+labels = { workstation = "the workstation", pve = "the PVE host" }
+dpkg_log = "/var/log/dpkg.log"
+cloudflared_config = "/etc/cloudflared/config.yml"
+# A daemon that comes back within this long after a boot is boot noise.
+boot_window_min = 45
+# Most explained-change notes one row carries.
+notes_max = 3
+
+[checks.sudo]
+what = "Sudo use"
+every_min = 15
+slack_min = 10
+host = "davion-sidarli"
+notes_max = 3
+initial_since = "-14d"
+# The sudo binaries whose journal lines count (the journal's _EXE of the line). This host runs sudo-rs; a filter on
+# /usr/bin/sudo alone saw no calls at all (Nightshift reads 0 a day since 2026-10-25).
+sudo_exes = ["/usr/bin/sudo", "/usr/lib/cargo/bin/sudo"]
+# Baseline: the 24h total is judged against the median of earlier 24h windows once learn_days are stored (seed until then).
+learn_days = 3
+seed_daily_total = 620
+spike_factor = 2.0
+spike_min_extra = 1000
+family_spike_factor = 3.0
+family_spike_min = 150
+# Families that never count as new or spiking (host tools whose volume follows their timers). Globs.
+known_families = [
+  "nightshift-checks check", "nightshift-checks check *", "nightshift-checks journal-signatures",
+  "host-steward check", "host-steward check *", "host-steward collect-usage",
+]
+# Extra exact caller unit names that are scheduled automation (the site's trusted units always count).
+automation_units = []
+# Commands that touch these are sensitive (a write is a problem unless an agent or a declaration explains it).
+sensitive = '''/etc/sudoers|visudo|/etc/ssh/|sshd_config|/etc/pam\.d|authorized_keys|pam-auth-update'''
+# Tools whose first non-option word is a subcommand (the family is "tool sub").
+subcommand_tools = [
+  "nightshift-checks", "host-steward", "btrfs", "systemctl", "apt", "apt-get", "dpkg", "snap", "ufw", "ip", "docker",
+  "pct", "qm", "zfs", "lvm", "journalctl", "loginctl", "machinectl", "nmcli", "update-alternatives", "flatpak", "git",
+]
+# The host's own root tools. reads: subcommands that only read. free_text: options whose values are prose (a note
+# naming /etc/sudoers.d touches nothing).
+[checks.sudo.own_tools."/usr/local/sbin/nightshift-checks"]
+reads = ["check", "journal-signatures", "collect-usage"]
+free_text = ["--note", "--reason"]
+
+[checks.sudo.own_tools."/usr/local/bin/host-steward"]
+reads = ["check", "collect-usage", "declare", "lab-use"]
+free_text = ["--note", "--reason"]
+
+[checks.security]
+what = "Docker access"
+every_min = 15
+slack_min = 10
+group_file = "/etc/group"
+socket = "/var/run/docker.sock"
+
+# --- PVE guests, the asset registry and trends (F2: ns-01 leftovers, ns-23) -------------------------------------------
+
+# Site values for the guest/asset checks. lan_bridges: PVE bridges that are the home LAN; lab_vlans: VLAN tags on them
+# that count as off the LAN (tag 1 never does). lab_use_files: where agent sessions declare they use a parked machine
+# (`host-steward declare`, and Nightshift's own file until cutover); the registry reads them as root.
+[site.assets]
+lan_bridges = ["vmbr0"]
+lab_vlans = []
+lab_use_files = ["/var/lib/host-steward/agent-hints/lab-use.json", "/var/lib/nightshift/agent-hints/lab-use.json"]
+
+# An isolated lab segment: its bridge must never be up without its nftables filter table.
+[[site.segment_guards]]
+bridge = "labnet"
+nft_table = "inet lab_isolation"
+
+[checks.guests]
+what = "PVE guests"
+every_min = 15
+slack_min = 10
+# The thin-pool storage whose VM disks should have discard on (so freed space returns to the pool).
+pool_storage = "local-lvm"
+guest_disk_warn_pct = 85.0
+guest_disk_crit_pct = 95.0
+# The guests and their start/stop history, saved beside the state file for the probes check.
+guests_file = "pve-guests.json"
+
+[checks.assets]
+what = "Asset registry"
+every_min = 15
+slack_min = 10
+# A parked machine running with no lab-use declaration and no automation start: a warning, and a failure once it has
+# been that way this long (sooner when it holds data).
+unexplained_hours = 12.0
+unexplained_data_hours = 1.0
+
+# Trends over the daily readings the pve, storage, ecc and guests checks record (/var/lib/host-steward/history.sqlite3).
+# On its first run the check copies Nightshift's daily history once (read-only) so projections start with their weeks of
+# data. A spec's host is a site role; severity is the state of a worsening verdict; the tier step (assets.toml classes)
+# raises data signals to failed on a host that holds data. Rule kinds are in trend.py.
+[checks.trends]
+what = "Trends"
+every_min = 15
+slack_min = 10
+names = { pve = "PVE host", workstation = "Workstation" }
+
+[checks.trends.seed]
+source = "/var/lib/nightshift/history.sqlite3"
+mark = "seed:nightshift"
+hosts = { davion-gem = "pve", davion-sidarli = "workstation" }
+metrics = [
+  "disk.media_errors", "disk.spare_used_pct", "disk.wear_pct", "disk.realloc", "disk.pending", "disk.used_pct",
+  "pool.data_pct", "pool.meta_pct", "guest.disk_used_pct", "mem.ce", "mem.ce_overflow", "mem.ue",
+]
+
+[[checks.trends.specs]]
+code = "pve.ecc.trend"
+host = "pve"
+label = "memory"
+severity = "failed"
+digest_always = true
+rules = [
+  { metric = "mem.ce", kind = "rate", label = "corrected", factor = 2.0, floor = 10.0, hold_h = 72.0 },
+  { metric = "mem.ce_overflow", kind = "rate", label = "Error_overflow", factor = 2.0, floor = 10.0 },
+  { metric = "mem.ue", kind = "any", label = "uncorrected", hold_h = 72.0, push = false },
+]
+
+[[checks.trends.specs]]
+code = "pve.smart.trend"
+host = "pve"
+label = "disks"
+severity = "failed"
+rules = [
+  { metric = "disk.media_errors", kind = "counter", label = "media errors" },
+  { metric = "disk.wear_pct", kind = "projection", label = "wear", limit = 100.0, horizon_days = 90.0, fmt = "{:.0f}%" },
+  { metric = "disk.spare_used_pct", kind = "counter", label = "spare used", floor = 5.0, fmt = "{:.0f}%" },
+]
+
+[[checks.trends.specs]]
+code = "storage.smart_trend"
+host = "workstation"
+label = "disks"
+severity = "failed"
+rules = [
+  { metric = "disk.media_errors", kind = "counter", label = "media errors" },
+  { metric = "disk.realloc", kind = "counter", label = "reallocated sectors" },
+  { metric = "disk.pending", kind = "counter", label = "pending sectors" },
+  { metric = "disk.wear_pct", kind = "projection", label = "wear", limit = 100.0, horizon_days = 90.0, fmt = "{:.0f}%" },
+]
+
+# limit = the pool's failed line (checks.pve thin_crit): a test keeps the two equal.
+[[checks.trends.specs]]
+code = "pve.thin.trend"
+host = "pve"
+label = "thin pool"
+rules = [
+  { metric = "pool.data_pct", kind = "projection", label = "data", limit = 92.0, horizon_days = 30.0, fmt = "{:.1f}%" },
+  { metric = "pool.meta_pct", kind = "projection", label = "metadata", limit = 92.0, horizon_days = 30.0, fmt = "{:.1f}%" },
+]
+
+[[checks.trends.specs]]
+code = "storage.disk_trend"
+host = "workstation"
+label = "disks"
+rules = [
+  { metric = "disk.used_pct", kind = "projection", label = "used", limit = 95.0, horizon_days = 21.0, critical_days = 3.0, fmt = "{:.0f}%", reset_drop = 3.0, robust = true },
+]
+
+# limit = checks.guests guest_disk_crit_pct.
+[[checks.trends.specs]]
+code = "pve.guest_disk_trend"
+host = "pve"
+label = "guest disks"
+rules = [
+  { metric = "guest.disk_used_pct", kind = "projection", label = "used", limit = 95.0, horizon_days = 21.0, critical_days = 3.0, fmt = "{:.0f}%", dim_name = "VM ", reset_drop = 3.0, robust = true },
+]

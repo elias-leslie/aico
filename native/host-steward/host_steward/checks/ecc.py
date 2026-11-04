@@ -1,7 +1,8 @@
 """PVE memory errors: uncorrected events, corrected-event spikes and new regions, from the kernel journal and rasdaemon.
 
-Port of ns/checks/ecc.py and the ECC rules in ns/checks/pve.py, without the metric history database and its
-multi-week trend rules (trends: a later job). The window is the 8 days the PVE snippet reads. A region with
+Port of ns/checks/ecc.py and the ECC rules in ns/checks/pve.py. Each run also puts the days of the journal window
+into the trend history (corrected events, events with the overflow flag, uncorrected events per day; the trends
+check evaluates the multi-week rules). The window is the 8 days the PVE snippet reads. A region with
 corrected errors is new when this check's saved state has not seen it: the first run adopts every region it finds. Memory-controller
 records only: one machine check is logged by up to four banks within the same second, so records are grouped into
 events first. The data file caps corrected-error signals (this PVE host reports them without DRAM ECC: record
@@ -15,6 +16,7 @@ import statistics
 from datetime import datetime
 from typing import Any
 
+from host_steward import history
 from host_steward.checks.pve import collect
 from host_steward.core import Ctx, Signal
 
@@ -51,6 +53,7 @@ def parse_journal(text: str) -> tuple[float | None, list[dict[str, Any]]]:
                     "src": "j",
                     "ts": ts,
                     "kind": p[0],
+                    "over": len(p) > 3 and p[3] == "1",
                     "addr": _hex(p[4]) if len(p) > 4 else None,
                     "umc": p[5] == "1" if len(p) > 5 else True,
                 }
@@ -68,7 +71,13 @@ def parse_rasdaemon(text: str) -> list[dict[str, Any]]:
             ts = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S %z").timestamp()
         except ValueError:
             continue
-        kind = "UE" if re.search(r"[Uu]ncorrected|[Dd]eferred|[Ff]atal", m.group(2)) else "CE" if "orrected" in m.group(2) else ""
+        kind = (
+            "UE"
+            if re.search(r"[Uu]ncorrected|[Dd]eferred|[Ff]atal", m.group(2))
+            else "CE"
+            if "orrected" in m.group(2)
+            else ""
+        )
         if kind:
             addr = re.search(r"\baddr=(0x[0-9a-fA-F]+)", line)
             out.append(
@@ -83,7 +92,9 @@ def parse_rasdaemon(text: str) -> list[dict[str, Any]]:
     return out
 
 
-def group_events(records: list[dict[str, Any]], gap_s: float, region_shift: int) -> list[dict[str, Any]]:
+def group_events(
+    records: list[dict[str, Any]], gap_s: float, region_shift: int
+) -> list[dict[str, Any]]:
     """One event per machine check and source; its region is the 2 MiB region at least two banks agree on."""
     events: list[dict[str, Any]] = []
     open_event: dict[tuple[str, str], dict[str, Any]] = {}
@@ -91,9 +102,10 @@ def group_events(records: list[dict[str, Any]], gap_s: float, region_shift: int)
     for r in sorted(records, key=lambda e: (e["src"], e["kind"], e["ts"])):
         ev = open_event.get((r["src"], r["kind"]))
         if ev is None or r["ts"] - ev["ts"] > gap_s:
-            ev = {"src": r["src"], "kind": r["kind"], "ts": r["ts"], "region": None}
+            ev = {"src": r["src"], "kind": r["kind"], "ts": r["ts"], "region": None, "over": False}
             open_event[(r["src"], r["kind"])] = ev
             events.append(ev)
+        ev["over"] = ev["over"] or bool(r.get("over"))
         if r["addr"] is not None:
             addrs.setdefault(id(ev), []).append(r["addr"] >> region_shift)
     for ev in events:
@@ -104,7 +116,9 @@ def group_events(records: list[dict[str, Any]], gap_s: float, region_shift: int)
     return events
 
 
-def remember_regions(regions: set[int], state: dict[str, Any], now: float, hold_s: float) -> list[int]:
+def remember_regions(
+    regions: set[int], state: dict[str, Any], now: float, hold_s: float
+) -> list[int]:
     """Memory regions with corrected errors that this check had not seen before, still inside the hold window.
     The first run adopts every region in the journal window silently (the history Nightshift kept in its database)."""
     known = {int(r) for r in state.get("regions", [])}
@@ -118,15 +132,61 @@ def remember_regions(regions: set[int], state: dict[str, Any], now: float, hold_
     return sorted(int(r) for r in state["new"])
 
 
+def daily_counts(events: list[dict[str, Any]], now: float) -> dict[str, dict[str, int]]:
+    """Events per local day for the last 8 days: {day: {ce, ce_overflow, ue}} (the days the journal window covers)."""
+    out: dict[str, dict[str, int]] = {}
+    for e in events:
+        if e["src"] != "j" or now - e["ts"] > 8 * DAY:
+            continue
+        day = history.day_of(e["ts"])
+        row = out.setdefault(day, {"ce": 0, "ce_overflow": 0, "ue": 0})
+        if e["kind"] == "UE":
+            row["ue"] += 1
+        else:
+            row["ce"] += 1
+            row["ce_overflow"] += bool(e.get("over"))
+    return out
+
+
+def record_history(
+    cache: dict[str, Any], events: list[dict[str, Any]], first: float | None, now: float
+) -> None:
+    """Whole days of the journal window into the trend history: a count per day, zero for a quiet day the journal
+    covers (so a quiet stretch counts as quiet, not as missing). Recording a day again replaces its count."""
+    counts = daily_counts(events, now)
+    for offset in range(8):  # the oldest day of the 8 day window is only partly covered
+        ts = now - offset * DAY
+        day = history.day_of(ts)
+        if first is None or day <= history.day_of(first):
+            continue
+        row = counts.get(day, {"ce": 0, "ce_overflow": 0, "ue": 0})
+        for metric, key in (("mem.ce", "ce"), ("mem.ce_overflow", "ce_overflow"), ("mem.ue", "ue")):
+            history.record(cache, metric, "pve", float(row[key]), "", ts, "last", "events")
+
+
 def evaluate(
-    sections: dict[str, str], cfg: dict[str, Any], now: float, state: dict[str, Any]
+    sections: dict[str, str],
+    cfg: dict[str, Any],
+    now: float,
+    state: dict[str, Any],
+    cache: dict[str, Any] | None = None,
 ) -> list[Signal]:
     first, journal = parse_journal(sections.get("ecc", ""))
     records = [r for r in journal + parse_rasdaemon(sections.get("rasmce", "")) if r["umc"]]
     events = group_events(records, float(cfg["event_gap_s"]), int(cfg["region_shift"]))
+    if cache is not None:
+        record_history(cache, events, first, now)
 
-    def count(kind: str, lo: float, hi: float) -> int:  # either source can miss records: the larger count
-        return max((sum(1 for e in events if e["src"] == s and e["kind"] == kind and lo < e["ts"] <= hi) for s in "jr"), default=0)
+    def count(
+        kind: str, lo: float, hi: float
+    ) -> int:  # either source can miss records: the larger count
+        return max(
+            (
+                sum(1 for e in events if e["src"] == s and e["kind"] == kind and lo < e["ts"] <= hi)
+                for s in "jr"
+            ),
+            default=0,
+        )
 
     out: list[Signal] = []
     uncorrected = count("UE", now - DAY, now)
@@ -157,4 +217,4 @@ def run(ctx: Ctx) -> list[Signal]:
     sections, why = collect(ctx)
     if sections is None:
         return [Signal("pve.unreachable", "warn", {"why": why})]
-    return evaluate(sections, ctx.cfg, ctx.now, ctx.state)
+    return evaluate(sections, ctx.cfg, ctx.now, ctx.state, ctx.cache)

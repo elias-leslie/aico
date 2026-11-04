@@ -1,0 +1,192 @@
+# The asset registry: one entry per host, router, guest or endpoint the checks rate. Copied from Nightshift's
+# deploy/system/site.json (its `assets`); this file is where the owner changes a tier.
+#
+# tier: critical | standard | lab. kind: host | router | vm | ct | template | endpoint. presence: always_on |
+# intermittent | parked. data: holds data or secrets. isolated: declared isolated (counts only with PVE NIC evidence).
+# role: which host checks apply (workstation | pve | router). hosts: names a host check reports under.
+# names: PVE guest names, lowercase. backup_targets: backup receipt source ids covering its data.
+# Guests PVE has that are not listed here are discovered by the assets check and tiered at first sight.
+
+# What kind of signal each check family raises, for the tier step (assets.tier_state). First match wins.
+# security: never lowered, raised on a critical asset. data: failed on an asset that holds data. health: lab assets
+# only note it. Anything unmatched is health.
+[tiers]
+classes = [
+  ["*.crashed", "health"], ["*.unavailable", "health"], ["*.history", "health"],
+  ["tripwire.state", "health"], ["tripwire.*", "security"], ["security.*", "security"], ["canary.*", "security"],
+  ["weak.*", "security"], ["backups.*", "data"], ["pve.backup.*", "data"], ["*.smart*", "data"],
+  ["pve.ecc.*", "data"], ["ecc.*", "data"], ["pve.thin.*", "data"],
+]
+# Tags and pools PVE can put on a guest to suggest a tier (honoured only when present the first time it is seen).
+tag_tiers = { "tier-critical" = "critical", "tier-standard" = "standard", "tier-lab" = "lab", "lab" = "lab" }
+
+[[assets]]
+id = "davion-gem"
+tier = "critical"
+kind = "host"
+role = "pve"
+hosts = ["davion-gem"]
+names = ["davion-gem"]
+backup_targets = ["pve-cluster-config", "pve-host-files"]
+data = true
+at_rest = false
+note = "Proxmox VE host; /vault on its plain root fs"
+
+[[assets]]
+id = "gl-router"
+tier = "critical"
+kind = "router"
+role = "router"
+hosts = ["gl-router"]
+names = ["gl-axt1800", "gl-router"]
+note = "GL.iNet gateway; Nightshift reads status only"
+
+[[assets]]
+id = "davion-sidarli"
+tier = "critical"
+kind = "host"
+role = "workstation"
+hosts = ["davion-sidarli"]
+names = ["davion-sidarli"]
+data = true
+at_rest = false
+note = "owner workstation: projects, databases, secrets"
+
+[[assets]]
+id = "ominull-hub"
+tier = "critical"
+kind = "ct"
+vmid = 150
+hosts = ["ominull"]
+names = ["ominull-hub", "ominull"]
+backup_targets = ["ominull-production-state"]
+data = true
+note = "OmniNull hub: fleet telemetry and response keys"
+
+[[assets]]
+id = "blackbox-vault"
+tier = "critical"
+kind = "ct"
+vmid = 140
+names = ["blackbox-vault", "linux-blackbox-vault"]
+backup_targets = ["blackbox-vault-archive", "pve-host-files", "blackbox-archive"]
+data = true
+at_rest = false
+presence = "parked"
+note = "household photo archive (client-encrypted media, plaintext metadata and device key)"
+
+[[assets]]
+id = "st-browser"
+tier = "standard"
+kind = "vm"
+vmid = 100
+names = ["st-browser"]
+backup_targets = ["pve-vm-100-browser-state"]
+data = true
+note = "SummitFlow browser VM: logged-in browser profiles"
+
+[[assets]]
+id = "st-ci-runner"
+tier = "standard"
+kind = "vm"
+vmid = 130
+names = ["st-ci-runner"]
+note = "SummitFlow CI runner"
+
+[[assets]]
+id = "restic-append"
+tier = "standard"
+kind = "ct"
+vmid = 160
+names = ["restic-append"]
+data = true
+backup_copy = true
+at_rest = true
+note = "append-only restic repository (restic encrypts at rest); no network, forced-command ssh only"
+
+[[assets]]
+id = "opencanary"
+tier = "standard"
+kind = "ct"
+vmid = 170
+names = ["opencanary"]
+note = "LAN honeypot"
+
+[[assets]]
+id = "wfp-target-win11"
+tier = "lab"
+kind = "vm"
+vmid = 110
+names = ["wfp-target-win11"]
+presence = "parked"
+isolated = true
+
+[[assets]]
+id = "fydor-lab-win11"
+tier = "lab"
+kind = "vm"
+vmid = 111
+names = ["fydor-lab-win11"]
+presence = "parked"
+isolated = true
+
+[[assets]]
+id = "ominull-target-linux"
+tier = "lab"
+kind = "vm"
+vmid = 112
+names = ["ominull-target-linux", "linux-ominull-target-linux"]
+presence = "parked"
+isolated = true
+
+[[assets]]
+id = "neri-lab"
+tier = "lab"
+kind = "vm"
+vmid = 120
+names = ["neri-lab"]
+presence = "intermittent"
+isolated = true
+
+[[assets]]
+id = "neri-gitlab"
+tier = "lab"
+kind = "vm"
+vmid = 121
+names = ["neri-gitlab"]
+presence = "parked"
+isolated = true
+
+[[assets]]
+id = "neri-wordpress-core"
+tier = "lab"
+kind = "vm"
+vmid = 123
+names = ["neri-wordpress-core"]
+presence = "parked"
+isolated = true
+
+[[assets]]
+id = "neri-woocommerce-multisite"
+tier = "lab"
+kind = "vm"
+vmid = 124
+names = ["neri-woocommerce-multisite"]
+presence = "parked"
+isolated = true
+
+[[assets]]
+id = "ubuntu-2404-cloud"
+tier = "lab"
+kind = "template"
+vmid = 9000
+names = ["ubuntu-2404-cloud"]
+presence = "parked"
+
+[[assets]]
+id = "ubuntu-2404-agent-ready"
+tier = "lab"
+kind = "template"
+vmid = 9001
+names = ["ubuntu-2404-agent-ready"]
+presence = "parked"

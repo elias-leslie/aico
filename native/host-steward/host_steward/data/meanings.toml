@@ -4,6 +4,17 @@
 
 # The line a row says when every signal is fine.
 [ok]
+guests = "Guests are running and no segment is open."
+assets = "Every asset has a tier and no parked machine is running unexplained."
+trends = "No slow trend is getting worse."
+tripwire = "Login settings and listening ports match the last check."
+sudo = "Sudo use looks normal."
+security = "Nobody is in the docker group and its socket is locked down."
+disk-tests = "Scrubs and self-tests found nothing wrong."
+memory = "No memory stalls or kills, and memctl and Tether's guard are reporting."
+floor = "The push path is up."
+usage = "Usage evidence is being collected."
+probes = "The next boot will find a GPU driver and no agent Chrome is eating memory."
 workstation = "The workstation looks healthy."
 storage = "Disks have room, Btrfs is healthy and SMART is clean."
 perf = "No units are crash-looping and swap is calm."
@@ -334,3 +345,316 @@ next = "Re-install the status key"
 [signal."router.script_missing"]
 what = "The router {how}"
 next = "Re-install the status script"
+
+# probes
+[signal."probes.nvidia.missing"]
+what = "Next boot would have no GPU driver: kernel {kernels} has no NVIDIA {branch} module"
+impact = "The graphics driver would not load after a reboot"
+next = "Install {package} before rebooting"
+
+[signal."probes.nvidia.fallback:ok"]
+what = "An old fallback kernel ({kernels}) has no NVIDIA {branch} module; it is not the default or running kernel"
+
+[signal."probes.browser"]
+what = "{count} agent-driven local Chrome ({gib} GiB); {recent} fallbacks from the browser VM to local Chrome in 24h{off}"
+impact = "Agent browsers belong on the browser VM; local ones eat workstation memory"
+next = "Check why the browser VM is not answering and close stray local Chrome"
+
+[signal."probes.browser:ok"]
+what = "{count} agent-driven local Chrome ({gib} GiB); {recent} fallbacks to local Chrome in 24h{off}"
+
+# journal signatures
+[signal."journal.signatures:ok"]
+what = "{new} new unlabeled journal signatures in 24h ({tracked} tracked)"
+
+[signal."journal.signatures.unreadable"]
+what = "Could not read the journal's warnings"
+next = "Run journalctl -p warning by hand and read the error"
+
+[signal."journal.signatures.unwritable"]
+what = "Could not save the journal signatures ({why})"
+next = "Check the free space and permissions in the host-steward state folder"
+
+[signal."floor.down"]
+what = "The {path} push path is down: {why}"
+impact = "Alerts to the owner's phone may not leave this host"
+next = "Restart the named units; check the journal for why they stopped"
+
+[signal."floor.watching:ok"]
+what = "The {path} push path is being watched: {why}"
+
+[signal."floor.none"]
+what = "No push path is installed to judge"
+next = "Install Aico's web server, or check the [[checks.floor.paths]] list"
+
+[signal."usage.collect_stale"]
+what = "Usage evidence was last collected {how}"
+impact = "The 30-day list of what ran is going out of date"
+next = "Check host-steward-collect-usage.timer and run host-steward collect-usage"
+
+[signal."usage.sample_failed"]
+what = "The usage sample could not be saved ({why})"
+next = "Check free space and the usage file's folder"
+
+[signal."usage.collected:ok"]
+what = "Collected {records} usage records from {sources} sources"
+
+[signal."usage.acct_unavailable"]
+what = "Collected {records} usage records from {sources} sources, but process accounting (acct, lastcomm) could not be read"
+impact = "Programs that run only briefly are missing from the evidence"
+next = "Install the acct package or check /var/log/account"
+
+[signal."usage.collect_failed"]
+what = "The usage collection broke ({why})"
+next = "Run host-steward collect-usage and read the log"
+
+# --- memory ---
+
+[signal."memory.stall"]
+what = "Memory stalled tasks for {full}% of the last {min} minutes (some tasks {some}%); {avail} GiB available. Most stalled: {top}"
+impact = "Sessions and builds slow down while this lasts"
+next = "memctl and the kernel act on their own; look at what is using the memory if it keeps up"
+
+[signal."memory.stall:ok"]
+what = "Memory stalls {full}% over the last {min} minutes; {avail} GiB available"
+
+[signal."memory.kills"]
+what = "{n} memory kill{plural} in the last {hours} hours: {list}"
+impact = "A session or its work was lost or cut short"
+next = "Resume the session if it was not resumed, and see what held the memory"
+
+[signal."memory.kills:ok"]
+what = "{n} memory kill{plural} in the last {hours} hours: {list}"
+
+[signal."memory.kills.unread:ok"]
+what = "Not read for the kill count: {unread}"
+
+[signal."memory.memctl_alive"]
+what = "The memory controller {ago}"
+impact = "Heavy-work admission and the kernel kill records are stale"
+next = "Restart it: systemctl --user restart host-steward-memctl"
+
+[signal."memory.guard_alive"]
+what = "{who} {ago}"
+impact = "Nothing stops a runaway agent job before the kernel does"
+next = "Restart it: systemctl --user restart tether@default"
+
+[signal."disk_tests.scrub"]
+what = "The last scrub of {name} is {status} ({started}) with: {errors}"
+impact = "A scrub reads every block and checks it; errors mean some data did not match its checksum"
+next = "Run btrfs scrub status on that disk and look at the device errors in the storage row"
+
+[signal."disk_tests.scrub.unreadable"]
+what = "The scrub result of {name} ({mount}) could not be read"
+next = "Check the disk is mounted and run btrfs scrub status {mount}"
+
+[signal."disk_tests.selftest"]
+what = "The latest NVMe self-test on {device} did not pass: {kind}, {status}, {when}"
+impact = "The drive reported a problem with itself"
+next = "Read smartctl -a {device} and plan a replacement or a backup check"
+
+[signal."disk_tests.selftest.unreadable"]
+what = "The NVMe self-test log of {device} could not be read"
+next = "Run smartctl -l selftest {device} by hand"
+
+[signal."disk_tests.selftest.none"]
+what = "No NVMe self-test has been recorded on {device} yet"
+
+[signal."disk_tests.last:ok"]
+what = "Last: {text}"
+
+[signal."disk_tests.dry_run:ok"]
+what = "Nightshift still runs the scrubs and self-tests until cutover"
+
+# tripwire, sudo, security
+[signal."tripwire.changed"]
+what = "{host}: {msg}"
+impact = "Nothing explains it"
+next = "Check it, then run: host-steward security-ack --event {id} --note WHY"
+
+[signal."tripwire.recorded:ok"]
+what = "{host}: {msg}"
+
+[signal."tripwire.declared:ok"]
+what = "{host}: {msg}. {said}"
+
+[signal."tripwire.unavailable"]
+what = "Could not check login settings and ports on {host} ({why})"
+next = "Check the host-steward state folder and run host-steward check --only tripwire"
+
+[signal."tripwire.unreachable"]
+what = "Could not reach {host} to check its login settings and ports ({why})"
+next = "Check that the PVE host answers over ssh"
+
+[signal."sudo.unreadable"]
+what = "Could not read sudo use ({why})"
+next = "Run journalctl -t sudo by hand and read the error"
+
+[signal."sudo.spike"]
+what = "{total} sudo calls in 24 hours, against about {median} a day"
+next = "See what is calling sudo with host-steward check --only sudo --dry-run"
+
+[signal."sudo.new_family"]
+what = "{n} new kinds of sudo command in 24 hours: {families}"
+
+[signal."sudo.new_family.auto:ok"]
+what = "{n} new kinds of sudo command, all from known services: {by}"
+
+[signal."sudo.family_spike"]
+what = "Sudo command spikes: {spikes}"
+
+[signal."sudo.family_spike.auto:ok"]
+what = "Sudo command spikes, all from known services: {by}"
+
+[signal."sudo.failure"]
+what = "A sudo login failed for {user}: {detail} ({when})"
+next = "If it was you, run: host-steward security-ack --event {id} --note WHY"
+
+[signal."sudo.sensitive"]
+what = "sudo touched {targets}: {families} ({user}, {hour}, {n} commands)"
+impact = "Nothing explains it, and a bad edit can lock the owner out"
+next = "Check it, then run: host-steward security-ack --event {id} --note WHY"
+
+[signal."sudo.declared:ok"]
+what = "sudo touched {targets} ({hour}). {said}"
+
+[signal."sudo.recorded:ok"]
+what = "{msg}"
+
+[signal."security.docker"]
+what = "Docker access is open: {problems}"
+impact = "Anyone in the docker group has root"
+next = "Take them out of the group and put the socket back to root:docker 0660"
+
+[signal."security.docker.unreadable"]
+what = "Could not check Docker access ({why})"
+
+# --- PVE guests, the asset registry, storage fill rate, trends (F2) ---
+[signal."guests.unreachable"]
+what = "Could not read the PVE guests ({why})"
+impact = "Guest state, disks and segment guards are not being checked"
+next = "Check that the PVE host answers over SSH"
+
+[signal."guests.none"]
+what = "PVE lists no guests"
+impact = "Either the read failed or every guest is gone"
+next = "Look at the PVE host"
+
+[signal."guests.stopped"]
+what = "{n} guests that should start at boot are down: {names}{held}"
+impact = "Whatever runs in them is not running"
+next = "Start them, or stop them on purpose in Proxmox"
+
+[signal."guests.stopped:ok"]
+what = "Stopped on purpose: {held}"
+
+[signal."guests.discard_off"]
+what = "{n} thin-pool VM disks have discard off ({where}){pending}"
+impact = "Data deleted inside the guest never returns to the pool, so the pool fills faster"
+next = "Turn discard on for those disks"
+
+[signal."guests.agent_down"]
+what = "The guest agent does not answer on {n} VMs ({vmids})"
+impact = "Disk use inside them cannot be read"
+next = "Start the agent in the guest"
+
+[signal."guests.disk"]
+what = "{name} ({vmid}) {mount} is {pct}% full ({free} GiB free)"
+impact = "The guest stops working when its disk fills"
+next = "Free space inside the guest or grow its disk"
+
+[signal."guests.segment"]
+what = "The lab segment {bridge} is up without its filter table {table}"
+impact = "Lab machines can reach the home network"
+next = "Load the isolation rules on the PVE host, or take the bridge down"
+
+[signal."guests.segment:ok"]
+what = "Lab segment {bridge}: {how} (filter table {table})"
+
+[signal."assets.config"]
+what = "{n} entries in the asset list were refused (first: {first})"
+impact = "Those machines are not rated"
+next = "Fix the entry in assets.toml"
+
+[signal."assets.pve_meta_unavailable:ok"]
+what = "PVE could not be read, so the registry was not compared with it ({why})"
+
+[signal."assets.parked_in_use:ok"]
+what = "{asset} is parked and running{held}: {by} says {reason} (until {until})"
+
+[signal."assets.parked_token:ok"]
+what = "{asset} is parked and was started by automation ({user}) at {at}"
+
+[signal."assets.parked_running"]
+what = "{asset} is parked but running{held}: {how}"
+impact = "A machine that should be off is on"
+next = "Stop it, or say you are using it with host-steward declare --what vm"
+
+[signal."assets.suggestion:ok"]
+what = "{n} PVE tier marks differ from the asset list (first: {first})"
+
+[signal."assets.tier_lowered:ok"]
+what = "{n} machines have a lower tier than last time (first: {first})"
+
+[signal."assets.discovered:ok"]
+what = "{n} PVE guests are not in the asset list and were tiered at first sight: {names}"
+
+[signal."assets.lab_on_lan"]
+what = "{asset} is a lab machine running with {nics} on the LAN bridge ({why})"
+impact = "A lab machine can reach the home network"
+next = "Move its network card to the lab bridge, or stop it"
+
+[signal."assets.lab_not_isolated"]
+what = "{asset} is a lab machine but is not verified isolated: {why}"
+impact = "Its tier assumes it cannot reach the LAN"
+next = "Check its network cards and the PVE firewall"
+
+[signal."storage.fill"]
+what = "{name} is filling {rate} GiB/h and reaches the backup reserve in about {hours} h{held}"
+impact = "Backups stop at the reserve"
+next = "Find what is growing and free it"
+
+[signal."storage.ballast:ok"]
+what = "{name} holds {gib} GiB of emergency ballast"
+
+[signal."storage.reclaim.exhausted"]
+what = "{name}: the space guard ran every reclaim step ({tiers}) and only {free} GiB is free, under the {reserve} GiB reserve{held}"
+impact = "Nothing automatic is left to free space"
+next = "Free space by hand; the largest growers are listed"
+
+[signal."storage.reclaim.ran:ok"]
+what = "{name}: the space guard's reclaim ({tiers}) took free space from {before} to {after} GiB"
+
+[signal."pve.thin.trend"]
+what = "{line}"
+impact = "Guests freeze if the pool fills"
+next = "Free space (discard, snapshot pruning) or grow the pool before then"
+
+[signal."pve.smart.trend"]
+what = "{line}"
+impact = "A PVE disk is wearing or failing"
+next = "Check backups and plan a replacement"
+
+[signal."storage.smart_trend"]
+what = "{line}"
+impact = "A workstation disk is wearing or failing"
+next = "Check backups and plan a replacement"
+
+[signal."storage.disk_trend"]
+what = "{line}"
+impact = "Backups and builds stop when it fills"
+next = "Find what is growing and free it"
+
+[signal."pve.guest_disk_trend"]
+what = "{line}"
+impact = "A guest stops working when its disk fills"
+next = "Free space in the guest or grow its disk"
+
+[signal."pve.ecc.trend"]
+what = "{line}"
+
+[signal."trends.seeded:ok"]
+what = "Copied {n} daily readings from Nightshift's history"
+
+[signal."trends.none"]
+what = "No readings recorded yet"

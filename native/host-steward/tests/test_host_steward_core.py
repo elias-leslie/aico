@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -91,8 +92,11 @@ def test_a_long_meaning_is_cut_to_the_row_limit():
 
 def test_run_command_turns_a_missing_program_and_a_timeout_into_results():
     assert core.run_command(["/no/such/program"]).rc == 127
-    assert core.run_command(["sleep", "5"], timeout=0.1).rc == 124
-    assert core.run_command(["cat"], input_text="hi").out == "hi"
+    assert core.run_command([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.5).rc == 124
+    assert (
+        core.run_command([sys.executable, "-c", "import sys; sys.stdout.write(sys.stdin.read())"], input_text="hi").out
+        == "hi"
+    )
 
 
 def test_state_round_trips_and_a_missing_or_broken_file_is_empty(tmp_path):
@@ -219,10 +223,14 @@ def test_install_script_copies_the_package_data_and_units(tmp_path, monkeypatch)
 
     env = {
         **os.environ,
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HS_NO_SYSTEMCTL": "1",
         "HS_PREFIX": str(tmp_path / "lib"),
         "HS_BIN": str(tmp_path / "bin"),
         "HS_UNIT_DIR": str(tmp_path / "units"),
+        "HS_USER_UNIT_DIR": str(tmp_path / "user-units"),
+        "HS_SUDOERS_DIR": str(tmp_path / "sudoers.d"),
+        "HS_STATE_DIR": str(tmp_path / "state"),
     }
     here = Path(__file__).resolve().parents[1]
     subprocess.run([str(here / "install-root.sh")], env=env, check=True, capture_output=True)
@@ -233,6 +241,9 @@ def test_install_script_copies_the_package_data_and_units(tmp_path, monkeypatch)
     assert "OnCalendar=*:0/15" in timer
     service = (tmp_path / "units/host-steward-check.service").read_text()
     assert "ExecStart=/usr/local/lib/host-steward/host-steward check" in service
+    assert (tmp_path / "user-units/host-steward-memctl.service").is_file()
+    assert not (tmp_path / "units/host-steward-memctl.service").exists()
+    assert "systemctl start host-steward-space-guard.service" in (tmp_path / "sudoers.d/60-host-steward").read_text()
     done = subprocess.run(
         [str(tmp_path / "lib/host-steward"), "check", "--only", "nope"], capture_output=True, text=True, check=False
     )

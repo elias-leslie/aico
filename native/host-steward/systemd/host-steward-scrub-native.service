@@ -1,0 +1,12 @@
+[Unit]
+Description=Host steward Btrfs scrub of /mnt/summitflow-native; a dry run until [acting] scrub is on
+RequiresMountsFor=/mnt/summitflow-native
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/host-steward/host-steward scrub --target native
+StateDirectory=host-steward
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=8h

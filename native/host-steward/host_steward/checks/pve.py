@@ -13,6 +13,7 @@ import json
 import re
 from typing import Any
 
+from host_steward import history
 from host_steward.core import Ctx, Signal
 
 ID = "pve"
@@ -73,7 +74,9 @@ def collect(ctx: Ctx) -> tuple[dict[str, str] | None, str]:
     result = ctx.run(ssh_command(cfg), timeout=float(cfg["ssh_timeout"]), input_text=SCRIPT)
     sections = split_sections(result.out)
     answer: tuple[dict[str, str] | None, str] = (
-        (sections, "") if "end" in sections else (None, (result.err.strip() or f"exit {result.rc}")[-120:])
+        (sections, "")
+        if "end" in sections
+        else (None, (result.err.strip() or f"exit {result.rc}")[-120:])
     )
     ctx.cache["pve"] = answer
     return answer
@@ -117,8 +120,12 @@ def storage(sections: dict[str, str], cfg: dict[str, Any]) -> list[Signal]:
     fullest = max(max(p["data"], p["metadata"]) for p in pools)
     for vg in parse_vgs(sections.get("vgs", "")):
         gib = vg["free"] / 1024**3
-        low = gib < cfg["vg_free_warn_gib"] and fullest >= warn  # no room only matters while a pool is filling
-        out.append(Signal("pve.vg.free", "warn" if low else "ok", {"vg": vg["name"], "gib": f"{gib:.0f}"}))
+        low = (
+            gib < cfg["vg_free_warn_gib"] and fullest >= warn
+        )  # no room only matters while a pool is filling
+        out.append(
+            Signal("pve.vg.free", "warn" if low else "ok", {"vg": vg["name"], "gib": f"{gib:.0f}"})
+        )
     return out
 
 
@@ -144,7 +151,13 @@ def smart(sections: dict[str, str]) -> list[Signal]:
             nvme = data.get("nvme_smart_health_information_log") or {}
             passed = (data.get("smart_status") or {}).get("passed")
             if passed is False or nvme.get("critical_warning") or nvme.get("media_errors"):
-                out.append(Signal("pve.smart", "failed", {"dev": dev, "why": "health check failed or media errors"}))
+                out.append(
+                    Signal(
+                        "pve.smart",
+                        "failed",
+                        {"dev": dev, "why": "health check failed or media errors"},
+                    )
+                )
             else:
                 out.append(Signal("pve.smart", "ok", {"dev": dev}))
             dev = None
@@ -152,7 +165,9 @@ def smart(sections: dict[str, str]) -> list[Signal]:
 
 
 def kernel_key(version: str) -> tuple[int, ...]:
-    return tuple(int(n) for n in re.findall(r"\d+", version.split("-pve")[0])) + (1 if "pve" in version else 0,)
+    return tuple(int(n) for n in re.findall(r"\d+", version.split("-pve")[0])) + (
+        1 if "pve" in version else 0,
+    )
 
 
 def reboot(sections: dict[str, str], cfg: dict[str, Any], now: float) -> Signal:
@@ -187,11 +202,48 @@ def rasdaemon(sections: dict[str, str]) -> Signal:
     return Signal("pve.rasdaemon", "warn")
 
 
+def smart_readings(sections: dict[str, str]) -> list[tuple[str, float, str, str]]:
+    """(metric, value, serial, kind) per disk from the SMART answers, for the trend history."""
+    out, dev = [], None
+    for line in sections.get("smart", "").splitlines():
+        if line.startswith("DEV "):
+            dev = line[4:].strip()
+        elif dev and line.strip():
+            try:
+                data = json.loads(line)
+            except ValueError:
+                data = {}
+            nvme = data.get("nvme_smart_health_information_log") or {}
+            serial = str(data.get("serial_number") or dev)
+            for key, metric, kind in (
+                ("media_errors", "disk.media_errors", "counter"),
+                ("percentage_used", "disk.wear_pct", "gauge"),
+            ):
+                if isinstance(nvme.get(key), int | float):
+                    out.append((metric, float(nvme[key]), serial, kind))
+            if isinstance(nvme.get("available_spare"), int | float):
+                out.append(
+                    ("disk.spare_used_pct", 100.0 - float(nvme["available_spare"]), serial, "gauge")
+                )
+            dev = None
+    return out
+
+
+def record_readings(ctx: Ctx, sections: dict[str, str]) -> None:
+    """The pool, metadata and disk readings into the trend history (the trends check evaluates them)."""
+    for pool in parse_pools(sections.get("lvs", "")):
+        history.record(ctx.cache, "pool.data_pct", "pve", pool["data"], pool["name"], agg="max")
+        history.record(ctx.cache, "pool.meta_pct", "pve", pool["metadata"], pool["name"], agg="max")
+    for metric, value, serial, kind in smart_readings(sections):
+        history.record(ctx.cache, metric, "pve", value, serial, agg="max", kind=kind)
+
+
 def run(ctx: Ctx) -> list[Signal]:
     sections, why = collect(ctx)
     if sections is None:
         return [Signal("pve.unreachable", "failed", {"why": why})]
     cfg = ctx.cfg
+    record_readings(ctx, sections)
     return [
         *storage(sections, cfg),
         failed_units(sections),

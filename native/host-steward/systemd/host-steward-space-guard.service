@@ -1,0 +1,10 @@
+[Unit]
+Description=Host steward disk pressure guard (reclaim tiers and ballast under the reserve, bounded balance when allocation is low); a dry run until [acting] space_guard is on
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/host-steward/host-steward space-guard
+StateDirectory=host-steward
+Nice=19
+TimeoutStartSec=1h

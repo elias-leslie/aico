@@ -1,0 +1,10 @@
+[Unit]
+Description=Monthly host steward Btrfs scrub of /mnt/summitflow-native
+
+[Timer]
+OnCalendar=Sun *-*-15..21 08:00:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -133,7 +133,11 @@ def _say(template: str, fields: Mapping[str, Any]) -> str:
 
 
 def explain(
-    code: str, fields: Mapping[str, Any], meanings: Mapping[str, Any], full: bool, state: str = "warn"
+    code: str,
+    fields: Mapping[str, Any],
+    meanings: Mapping[str, Any],
+    full: bool,
+    state: str = "warn",
 ) -> str:
     """The plain-words text for one signal: what happened, what it means, what happens next.
 
@@ -198,4 +202,44 @@ def make_row(
             {"kind": "run", "ref": f"host-steward check --only {check}"},
             {"kind": "log", "ref": "journalctl -u host-steward-check.service"},
         ],
+    }
+
+
+def acting(data: Mapping[str, Any], name: str) -> bool:
+    """Whether a controller that changes the host is switched on. [acting] in checks.toml; every piece starts off
+    (dry run) so only one controller, Nightshift's or this one, acts at a time. Cutover turns them on together."""
+    return bool(data.get("acting", {}).get(name, False))
+
+
+def job_row(
+    name: str,
+    what: str,
+    state: str,
+    meaning: str,
+    machine: str,
+    now: float,
+    every_min: float,
+    slack_min: float,
+    kind: str = "job",
+    actions: Sequence[Mapping[str, str]] | None = None,
+) -> dict[str, Any]:
+    """The Status row for a piece that is not a check (a controller, a collector, a timer job)."""
+    at = datetime.fromtimestamp(now, UTC)
+    text = (
+        meaning
+        if len(meaning) <= MEANING_LIMIT
+        else meaning[: MEANING_LIMIT - 1].rstrip() + "\u2026"
+    )
+    return {
+        "id": f"{machine}/{kind}-{name}",
+        "what": what,
+        "kind": kind,
+        "machine": machine,
+        "state": state,
+        "meaning": text,
+        "last_run": at,
+        "next_run": at + timedelta(minutes=every_min + slack_min),
+        "actions": list(
+            actions or [{"kind": "log", "ref": f"journalctl -u host-steward-{name}.service"}]
+        ),
     }

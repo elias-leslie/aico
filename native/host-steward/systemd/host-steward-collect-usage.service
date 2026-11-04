@@ -1,0 +1,10 @@
+[Unit]
+Description=Host steward: 30-day usage evidence collector (never prunes)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/host-steward/host-steward collect-usage
+StateDirectory=host-steward
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=30min

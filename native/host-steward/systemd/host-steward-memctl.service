@@ -1,0 +1,18 @@
+[Unit]
+Description=Host steward memory controller (host memory state, heavy-work admission, kernel kill records)
+Documentation=file:///usr/local/lib/host-steward/host_steward/data/checks.toml
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/host-steward/host-steward memctl
+Restart=always
+RestartSec=5
+MemoryMax=256M
+MemoryLow=128M
+CPUWeight=1000
+# Last for the kernel OOM killer to pick among user units: memctl must keep publishing the host state when memory is critical.
+OOMScoreAdjust=-500
+ManagedOOMPreference=avoid
+
+[Install]
+WantedBy=default.target
