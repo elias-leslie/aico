@@ -14,11 +14,17 @@ import {
   configureEngine,
   engineRetirementOperations,
   internalSessionState,
+  rootManagedGateState,
   verifiedCurrentManagedPane,
 } from './engine'
 import { retireOwnedSession } from './owner-retirement'
 import { setLifecycleInstance } from './ownership'
-import { configureTmuxPaths, serverRosterArgs } from './tmux'
+import {
+  configureTmuxPaths,
+  listSessionPanesTargetArgs,
+  serverRosterArgs,
+  sessionIdTargetArgs,
+} from './tmux'
 import { bindToolSource } from './tui/registry'
 
 const mocks = vi.hoisted(() => ({
@@ -30,11 +36,14 @@ const mocks = vi.hoisted(() => ({
   stopOwnedPaneScope: vi.fn(),
 }))
 
-vi.mock('node:child_process', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:child_process')>()),
-  execFile: mocks.execFile,
-  execFileSync: mocks.execFileSync,
-}))
+vi.mock('node:child_process', async (importOriginal) => {
+  const { promisify } = await import('node:util')
+  return {
+    ...(await importOriginal<typeof import('node:child_process')>()),
+    execFile: Object.assign(mocks.execFile, { [promisify.custom]: mocks.execFile }),
+    execFileSync: mocks.execFileSync,
+  }
+})
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>()
   mocks.realReadFileSync = actual.readFileSync as (...args: unknown[]) => unknown
@@ -74,7 +83,9 @@ function seed(fields: { tmuxSessionId?: string | null } = {}): WidgetRow {
 }
 
 function roster(...lines: string[]): void {
-  mocks.execFileSync.mockReturnValue(lines.map((line) => `${line}\n`).join(''))
+  const stdout = lines.map((line) => `${line}\n`).join('')
+  mocks.execFileSync.mockReturnValue(stdout)
+  mocks.execFile.mockResolvedValue({ stdout, stderr: '' })
 }
 
 beforeAll(() => {
@@ -142,10 +153,93 @@ beforeEach(() => {
 })
 
 describe('engine session state', () => {
+  it('shares only in-flight server probes and never blocks on synchronous tmux reads', async () => {
+    const row = seed({ tmuxSessionId: '$3' })
+    roster(`${SERVER_PID}\t$3\taico-${row.id}\t100`)
+    mocks.execFileSync.mockImplementation(() => {
+      throw new Error('synchronous tmux probe blocks the control socket')
+    })
+    expect(
+      await Promise.all([
+        internalSessionState(row.id),
+        internalSessionState(row.id),
+        internalSessionState(row.id),
+      ]),
+    ).toEqual(['present', 'present', 'present'])
+    expect(mocks.execFile).toHaveBeenCalledTimes(1)
+    expect(mocks.scopeIdentity).toHaveBeenCalledTimes(1)
+    expect(mocks.execFileSync).not.toHaveBeenCalled()
+    roster(`4321\t$3\taico-${row.id}\t100`)
+    expect(await internalSessionState(row.id)).toBe('unknown')
+    expect(mocks.execFile).toHaveBeenCalledTimes(2)
+  })
+
+  it('coalesces exact root gate probes while reading pane identity asynchronously and freshly', async () => {
+    const seeded = seed({ tmuxSessionId: '$3' })
+    const unit = 'tmux-spawn-00000000-0000-4000-8000-000000000001.scope'
+    const group = `/user.slice/user-${process.getuid?.()}.slice/user@${process.getuid?.()}.service/app.slice/${unit}`
+    const invocation = 'c'.repeat(32)
+    store.db
+      .prepare(`UPDATE sessions SET pane_id = '%7', scope_unit = ?,
+      scope_invocation_id = ? WHERE id = ?`)
+      .run(unit, invocation, seeded.id)
+    const row = getWidget(seeded.id) as WidgetRow
+    const target = { socket: SOCKET, session: '$3' }
+    const procRead = mocks.readFileSync.getMockImplementation()
+    mocks.readFileSync.mockImplementation((path: unknown, ...rest: unknown[]) => {
+      if (path === '/proc/4321/stat')
+        return `4321 (codex) ${Array.from({ length: 20 }, (_, i) => (i === 19 ? '123' : '0')).join(' ')}`
+      if (path === '/proc/4321/cgroup') return `0::${group}\n`
+      if (path === '/proc/4321/environ')
+        return [
+          'AICO_OWNER=aico',
+          'AICO_WORKLOAD_CLASS=durable-session',
+          `AICO_WIDGET_ID=${row.id}`,
+          `AICO_SESSION_ID=${row.sessionId}`,
+          `AICO_TMUX_SERVER_ID=${SERVER}`,
+          'AICO_LIFECYCLE_VERSION=1',
+          '',
+        ].join('\0')
+      if (path === '/proc/4321/cmdline') return 'codex\0'
+      return procRead?.(path, ...rest)
+    })
+    mocks.scopeIdentity.mockImplementation(async (name: string) => ({
+      loadState: 'loaded',
+      activeState: 'active',
+      job: '',
+      controlGroup: name === unit ? group : SERVER_CGROUP,
+      invocationId: name === unit ? invocation : SERVER_INVOCATION,
+    }))
+    mocks.execFile.mockImplementation(async (_file: string, args: string[]) => {
+      const key = JSON.stringify(args)
+      if (key === JSON.stringify(serverRosterArgs(SOCKET)))
+        return { stdout: `${SERVER_PID}\t$3\taico-${row.id}\t100\n` }
+      if (key === JSON.stringify(listSessionPanesTargetArgs(target)))
+        return { stdout: '%7\t4321\n' }
+      if (key === JSON.stringify(sessionIdTargetArgs(target))) return { stdout: '$3\n' }
+      throw new Error('unexpected subprocess')
+    })
+    mocks.execFileSync.mockImplementation(() => {
+      throw new Error('synchronous probe')
+    })
+    expect(
+      await Promise.all([
+        rootManagedGateState(row),
+        rootManagedGateState(row),
+        rootManagedGateState(row),
+      ]),
+    ).toEqual(['active-workload', 'active-workload', 'active-workload'])
+    expect(mocks.execFile).toHaveBeenCalledTimes(3)
+    expect(mocks.execFileSync).not.toHaveBeenCalled()
+    expect(await rootManagedGateState({ ...row, paneId: '%8' })).toBeNull()
+    expect(await rootManagedGateState(row)).toBe('active-workload')
+    expect(mocks.execFile).toHaveBeenCalledTimes(9)
+  })
+
   it('proves a missing-ID session absent from the exact verified server roster', async () => {
     const row = seed()
     expect(await internalSessionState(row.id)).toBe('absent')
-    expect(mocks.execFileSync).toHaveBeenCalledExactlyOnceWith(
+    expect(mocks.execFile).toHaveBeenCalledExactlyOnceWith(
       '/usr/bin/tmux',
       serverRosterArgs(SOCKET),
       expect.objectContaining({ timeout: expect.any(Number) }),
@@ -185,7 +279,7 @@ describe('engine session state', () => {
 
   it('keeps state unknown when the exact live server does not answer', async () => {
     const row = seed()
-    mocks.execFileSync.mockImplementation(() => {
+    mocks.execFile.mockImplementation(() => {
       throw Object.assign(new Error('transport failed'), {
         stderr: `no server running on ${SOCKET}`,
       })
@@ -220,11 +314,11 @@ describe('engine retirement operations', () => {
       status: 'ended',
     })
     expect(getWidget(row.id)).toBeUndefined()
-    expect(mocks.execFileSync.mock.calls.length).toBeGreaterThan(0)
-    for (const [, args] of mocks.execFileSync.mock.calls) {
+    expect(mocks.execFile.mock.calls.length).toBeGreaterThan(0)
+    for (const [, args] of mocks.execFile.mock.calls) {
       expect(args).toEqual(serverRosterArgs(SOCKET))
     }
-    expect(mocks.execFile).not.toHaveBeenCalled()
+    expect(mocks.execFileSync).not.toHaveBeenCalled()
     expect(mocks.stopOwnedPaneScope).not.toHaveBeenCalled()
   })
 

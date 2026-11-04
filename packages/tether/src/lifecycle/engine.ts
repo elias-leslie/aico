@@ -101,6 +101,7 @@ import {
   type RetirementResult,
   retireOwnedSession,
   type SessionState,
+  sessionGeneration,
 } from './owner-retirement'
 import { readCgroupPopulated, scopeIdentity, stopOwnedPaneScope } from './owner-scope'
 import {
@@ -654,7 +655,7 @@ async function recoverProvisioningTmuxServer(
 ): Promise<TmuxServerRow | null> {
   if (server.kind !== 'managed' || server.phase !== 'provisioning') return null
   if (!ownsServerRow(server)) return null
-  const roster = readTmuxServerRoster(server.socketPath)
+  const roster = await readTmuxServerRoster(server.socketPath)
   if (roster.evidence.status === 'reachable') {
     const pid = roster.evidence.serverPid
     try {
@@ -710,7 +711,7 @@ async function recoverProvisioningTmuxServer(
 }
 
 async function provisioningTmuxServerProvablyAbsent(server: TmuxServerRow): Promise<boolean> {
-  const roster = readTmuxServerRoster(server.socketPath)
+  const roster = await readTmuxServerRoster(server.socketPath)
   if (roster.evidence.status !== 'transport-failure') return false
   const identity = await scopeIdentity(server.scopeUnit)
   const uid = process.getuid?.() ?? -1
@@ -1002,17 +1003,16 @@ export interface ManagedPaneProcess {
 /** Observe one exact server-side session/pane generation. The managed-session
  * contract is deliberately one pane; split sessions are preserved but no
  * lifecycle operation is authorized until the user resolves the ambiguity. */
-function currentPaneProcess(widgetId: string): ManagedPaneProcess | null {
+async function currentPaneProcess(widgetId: string): Promise<ManagedPaneProcess | null> {
   try {
     const row = getWidget(widgetId)
     const target = tmuxTargetForWidget(widgetId)
-    const paneLines = execFileSync(TMUX_BIN, listSessionPanesTargetArgs(target), {
+    const { stdout: panes } = await execFileAsync(TMUX_BIN, listSessionPanesTargetArgs(target), {
       encoding: 'utf8',
       env: terminalClientEnv(),
       timeout: TMUX_QUERY_TIMEOUT_MS,
     })
-      .split('\n')
-      .filter(Boolean)
+    const paneLines = panes.split('\n').filter(Boolean)
     if (paneLines.length !== 1) {
       console.warn(
         `[tether:lifecycle] preserving ${widgetId}: expected one pane, observed ${paneLines.length}`,
@@ -1021,11 +1021,12 @@ function currentPaneProcess(widgetId: string): ManagedPaneProcess | null {
     }
     const [paneId, pidText] = paneLines[0].split('\t')
     const pid = Number(pidText)
-    const tmuxSessionId = execFileSync(TMUX_BIN, sessionIdTargetArgs(target), {
+    const { stdout: sessionId } = await execFileAsync(TMUX_BIN, sessionIdTargetArgs(target), {
       encoding: 'utf8',
       env: terminalClientEnv(),
       timeout: TMUX_QUERY_TIMEOUT_MS,
-    }).trim()
+    })
+    const tmuxSessionId = sessionId.trim()
     if (!/^%\d+$/.test(paneId) || !/^\$\d+$/.test(tmuxSessionId)) return null
     if (!Number.isInteger(pid) || pid <= 0) return null
     if (row?.tmuxSessionId && row.tmuxSessionId !== tmuxSessionId) {
@@ -1052,8 +1053,8 @@ function currentPaneProcess(widgetId: string): ManagedPaneProcess | null {
 
 /** Resolve only the narrow cgroup assigned to this exact tmux pane. Broad app,
  * GNOME, user, and session scopes are intentionally rejected by the parser. */
-function currentPaneScope(widgetId: string): string | null {
-  return currentPaneProcess(widgetId)?.scopeUnit ?? null
+async function currentPaneScope(widgetId: string): Promise<string | null> {
+  return (await currentPaneProcess(widgetId))?.scopeUnit ?? null
 }
 
 // Ubuntu tmux creates a systemd pane scope asynchronously. That ordering is the
@@ -1065,7 +1066,7 @@ const PANE_SCOPE_POLL_MS = 25
 
 async function waitForCurrentPaneScope(widgetId: string): Promise<ManagedPaneProcess | null> {
   const deadline = Date.now() + PANE_SCOPE_SETTLE_MS
-  const pane = currentPaneProcess(widgetId)
+  const pane = await currentPaneProcess(widgetId)
   if (!pane) return null
   if (pane.scopeUnit) return pane
   do {
@@ -1073,7 +1074,7 @@ async function waitForCurrentPaneScope(widgetId: string): Promise<ManagedPanePro
     try {
       const scopeUnit = paneScopeFromCgroup(readFileSync(`/proc/${pane.pid}/cgroup`, 'utf8'))
       if (scopeUnit) {
-        const current = currentPaneProcess(widgetId)
+        const current = await currentPaneProcess(widgetId)
         if (
           !current ||
           current.pid !== pane.pid ||
@@ -1100,16 +1101,15 @@ interface TmuxRosterRead {
   detail: string
 }
 
-function readTmuxServerRoster(
+async function readTmuxServerRoster(
   socketPath: string,
   expected?: { serverId: string; serverPid: number },
-): TmuxRosterRead {
+): Promise<TmuxRosterRead> {
   try {
-    const stdout = execFileSync(TMUX_BIN, serverRosterArgs(socketPath), {
+    const { stdout } = await execFileAsync(TMUX_BIN, serverRosterArgs(socketPath), {
       encoding: 'utf8',
       env: terminalClientEnv(),
       timeout: TMUX_QUERY_TIMEOUT_MS,
-      stdio: ['ignore', 'pipe', 'pipe'],
     })
     const entries: TmuxServerRosterEntry[] = []
     for (const line of stdout.split('\n').filter(Boolean)) {
@@ -1137,12 +1137,15 @@ function readTmuxServerRoster(
       if (!expected) {
         return { evidence: { status: 'unavailable' }, entries: [], detail: 'empty roster' }
       }
-      const identity = execFileSync(TMUX_BIN, serverIdentityEnvironmentTargetArgs(socketPath), {
-        encoding: 'utf8',
-        env: terminalClientEnv(),
-        timeout: TMUX_QUERY_TIMEOUT_MS,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      const { stdout: identity } = await execFileAsync(
+        TMUX_BIN,
+        serverIdentityEnvironmentTargetArgs(socketPath),
+        {
+          encoding: 'utf8',
+          env: terminalClientEnv(),
+          timeout: TMUX_QUERY_TIMEOUT_MS,
+        },
+      )
       if (!matchesServerIdentityEnvironment(identity, expected.serverId)) {
         return {
           evidence: { status: 'unavailable' },
@@ -1210,7 +1213,22 @@ async function tmuxServerUnitEvidence(server: TmuxServerRow): Promise<TmuxServer
   }
 }
 
-async function observeTmuxServer(server: TmuxServerRow): Promise<TmuxServerRuntimeState> {
+const tmuxServerObservations = new Map<string, Promise<TmuxServerRuntimeState>>()
+
+/** Concurrent readers share a fresh probe of the same immutable server tuple.
+ * Completed observations are never reused as absence or cleanup authority. */
+function observeTmuxServer(server: TmuxServerRow): Promise<TmuxServerRuntimeState> {
+  const key = JSON.stringify(server)
+  const pending = tmuxServerObservations.get(key)
+  if (pending) return pending
+  const next = observeTmuxServerOnce(server).finally(() => {
+    if (tmuxServerObservations.get(key) === next) tmuxServerObservations.delete(key)
+  })
+  tmuxServerObservations.set(key, next)
+  return next
+}
+
+async function observeTmuxServerOnce(server: TmuxServerRow): Promise<TmuxServerRuntimeState> {
   if (server.phase === 'dead') {
     tmuxServerRuntimeStates.set(server.id, 'dead')
     tmuxServerRosters.delete(server.id)
@@ -1220,7 +1238,7 @@ async function observeTmuxServer(server: TmuxServerRow): Promise<TmuxServerRunti
     tmuxServerRuntimeStates.set(server.id, 'ambiguous')
     return 'ambiguous'
   }
-  const roster = readTmuxServerRoster(
+  const roster = await readTmuxServerRoster(
     server.socketPath,
     server.serverPid ? { serverId: server.id, serverPid: server.serverPid } : undefined,
   )
@@ -1317,8 +1335,8 @@ async function adoptHistoricalTmuxServer(): Promise<TmuxServerRow | null> {
 
   // Double-read the legacy roster before recording identity. No profile update,
   // key send, respawn, or scope mutation occurs on this observation path.
-  const first = readTmuxServerRoster(TMUX_SOCKET)
-  const second = readTmuxServerRoster(TMUX_SOCKET)
+  const first = await readTmuxServerRoster(TMUX_SOCKET)
+  const second = await readTmuxServerRoster(TMUX_SOCKET)
   if (
     first.evidence.status !== 'reachable' ||
     second.evidence.status !== 'reachable' ||
@@ -1565,7 +1583,7 @@ export async function verifiedCurrentManagedPane(
   ) {
     return null
   }
-  const pane = currentPaneProcess(row.id)
+  const pane = await currentPaneProcess(row.id)
   if (
     !pane ||
     pane.scopeUnit !== row.scopeUnit ||
@@ -1651,7 +1669,7 @@ async function recoverInterruptedManagedPane(
   row: WidgetRow,
   options: { dispatchGate?: boolean } = {},
 ): Promise<ManagedPaneRecovery> {
-  const observed = currentPaneProcess(row.id)
+  const observed = await currentPaneProcess(row.id)
   if (!observed) return row.lifecycleVersion === 0 ? 'legacy' : 'blocked'
   if (!managedPaneMarkersMatch(row, observed.pid)) {
     return row.lifecycleVersion === 0 ? 'legacy' : 'blocked'
@@ -2644,7 +2662,22 @@ export function switchProject(
   })
 }
 
-export async function rootManagedGateState(row: WidgetRow): Promise<ManagedGateState | null> {
+const rootGateObservations = new Map<string, Promise<ManagedGateState | null>>()
+
+/** Coalesce overlapping root/API/poll reads, never a later generation or a
+ * subsequent probe. This prevents request fan-out from multiplying forks. */
+export function rootManagedGateState(row: WidgetRow): Promise<ManagedGateState | null> {
+  const key = sessionGeneration(row)
+  const pending = rootGateObservations.get(key)
+  if (pending) return pending
+  const next = rootManagedGateStateOnce(row).finally(() => {
+    if (rootGateObservations.get(key) === next) rootGateObservations.delete(key)
+  })
+  rootGateObservations.set(key, next)
+  return next
+}
+
+async function rootManagedGateStateOnce(row: WidgetRow): Promise<ManagedGateState | null> {
   if ((await internalSessionState(row.id)) !== 'present') return null
   const pane = await verifiedCurrentManagedPane(row)
   const identity = row.scopeUnit ? await scopeIdentity(row.scopeUnit) : null
@@ -2920,7 +2953,7 @@ async function reconcileManagedWidget(row: WidgetRow, useServerSnapshot = false)
         return
       }
       if (state === 'present') {
-        const observed = currentPaneScope(current.id)
+        const observed = await currentPaneScope(current.id)
         if (!observed) {
           console.warn(
             `[tether:lifecycle] preserving legacy pending ${pending}: live pane scope is unknown`,
