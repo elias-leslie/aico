@@ -1,5 +1,5 @@
-// route() against `st models route --role R [--project P] --json` answers (policy v5)
-// captured 2026-11-03, and formatOptions against `st models route` text for the same
+// route() against `st models route --role R [--project P] [--model M] --json` answers (policy v5)
+// captured 2026-11-03 (named role[@project][~model]), and formatOptions against `st models route` text for the same
 // answer (rendered by st-cli's own formatter, New York time).
 
 import { readdirSync, readFileSync } from 'node:fs'
@@ -24,11 +24,12 @@ describe('route', () => {
     const expected = JSON.parse(
       readFileSync(join(DIR, 'route', `${name}.json`), 'utf8'),
     ) as RoutePayload
-    const [role, project] = name.split('@') as [string, string | undefined]
+    const [where, model] = name.split('~') as [string, string | undefined]
+    const [role, project] = where.split('@') as [string, string | undefined]
     const payload = route(
       policy,
       catalog,
-      { role, ...(project && { project }) },
+      { role, ...(project && { project }), ...(model && { model }) },
       factsFromAgentHub(expected),
       expected.facts_as_of,
     )
@@ -50,11 +51,28 @@ describe('route', () => {
     expect(checked.rows[0]?.allowed).toBe(false)
   })
 
+  it.each(['hunting', 'recon'])(
+    'refuses a model it does not know on %s, whatever the tool',
+    (role) => {
+      const payload = route(policy, catalog, { role, model: 'mystery-model-9' })
+      expect(payload.rows.map((row) => row.allowed)).toEqual(payload.rows.map(() => false))
+      for (const row of payload.rows.filter((row) => row.tool !== 'claude-code'))
+        expect(row.deny_reason).toMatch(/^Unknown model 'mystery-model-9'/)
+      // No deny row covers implementation, so there is nothing to refuse.
+      const free = route(policy, catalog, { role: 'implementation', model: 'mystery-model-9' })
+      expect(free.rows.every((row) => row.allowed)).toBe(true)
+    },
+  )
+
   it('names the choices for an unknown role or tool, and says when facts are missing', () => {
     expect(() => route(policy, catalog, { role: 'nope' })).toThrow(UnknownLaunchKey)
     expect(() => route(policy, catalog, { tool: 'nope' })).toThrow(/claude-code/)
     const bare = route(policy, catalog, { role: 'implementation' })
     expect(bare.facts_as_of).toBeUndefined()
     expect(formatOptions(bare, 'implementation')).toContain('usage facts unavailable')
+    bare.facts_error = 'Agent Hub usage facts did not answer within 20s'
+    expect(formatOptions(bare, 'implementation')).toContain(
+      '  usage facts unavailable (Agent Hub usage facts did not answer within 20s); allowed and denied are still right',
+    )
   })
 })

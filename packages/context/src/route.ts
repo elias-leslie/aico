@@ -114,7 +114,12 @@ export function denyReason(
 ): string | null {
   for (const row of denyRows(policy, where.job, where.workRole, where.project)) {
     const provider = policy.providers[row.provider]
-    if (provider && countsAs(provider, catalog, tool, model)) return row.reason
+    // Fail closed: a rule naming a provider Aico does not know, or a model it
+    // cannot place, refuses rather than lets the launch through.
+    if (!provider) return `${row.reason} (provider '${row.provider}' is not in the launch policy)`
+    if (countsAs(provider, catalog, tool, model)) return row.reason
+    if (model && !catalog.get(model))
+      return `Unknown model '${model}': it is not in Aico's model list, so it cannot be checked against this rule: ${row.reason}`
   }
   return null
 }
@@ -215,6 +220,8 @@ export interface RoutePayload {
   rows: LaunchRow[]
   model_notes: Record<string, unknown>
   facts_as_of?: string
+  /** Why there are no usage facts (the source did not answer), as Agent Hub reports it. */
+  facts_error?: string
 }
 
 /**

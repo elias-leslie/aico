@@ -61,11 +61,12 @@ export function putPrompt(db: Database, prompt: Omit<Prompt, 'version'>, reason:
   const before = db.prepare('SELECT content, version FROM prompts WHERE id = ?').get(prompt.id) as
     | { content: string; version: number }
     | undefined
-  const version = !before
-    ? 1
-    : before.content === prompt.content
-      ? before.version
-      : before.version + 1
+  // A prompt removed and later brought back continues its old revision numbers.
+  const last = db
+    .prepare('SELECT max(version) AS version FROM prompt_revisions WHERE prompt_id = ?')
+    .get(prompt.id) as { version: number | null }
+  const version =
+    before && before.content === prompt.content ? before.version : (last.version ?? 0) + 1
   db.prepare(
     `INSERT INTO prompts (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET slug = excluded.slug, name = excluded.name,

@@ -200,8 +200,10 @@ export function formatOptions(payload: RoutePayload, role: string, project?: str
   const lines = [
     `OPTIONS[${role}${where}] policy=v${payload.version} facts as of ${when(payload.facts_as_of)}; you choose, then st aico create --work-role ${role}${project ? ` --project ${project}` : ''} --tool T [--model M]`,
   ]
-  if (!payload.facts_as_of)
-    lines.push('  usage facts unavailable; allowed and denied are still right')
+  if (payload.facts_error || !payload.facts_as_of)
+    lines.push(
+      `  usage facts unavailable${payload.facts_error ? ` (${payload.facts_error})` : ''}; allowed and denied are still right`,
+    )
   for (const row of payload.rows) lines.push(...optionLines(row))
   return lines.join('\n')
 }

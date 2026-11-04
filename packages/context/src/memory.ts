@@ -243,6 +243,12 @@ export function ftsQuery(text: string): string | null {
 /**
  * Best matches first. A project or agent scope also searches the global
  * memories, as every session in that scope is told both.
+ *
+ * Not the same ranking as `st memory search`: Agent Hub's search is semantic
+ * (embeddings), this one is FTS5 words ranked by bm25. On 2026-11-03 the top
+ * result matched on 4 of 4 topics, but the top 5 differ; for "deploy service
+ * rebuild" Agent Hub's first hit (2b5032f1) is not in this top 5. M7 decides
+ * which search `st memory` uses before cutting it over.
  */
 export function searchMemories(
   db: Database,

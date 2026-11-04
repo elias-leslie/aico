@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { runContextCli } from './cli'
 import { openContext } from './db'
@@ -10,7 +13,7 @@ import {
   WORK_ROLES_FILE,
 } from './import'
 import { loadPolicy } from './launch'
-import { getMemories, searchMemories } from './memory'
+import { addMemory, getMemories, searchMemories } from './memory'
 import { getPrompt, rolePrompts } from './prompts'
 
 const NOW = '2026-11-03T12:00:00.000Z'
@@ -87,12 +90,10 @@ class FakeHub implements AgentHubSource {
       tier: 1,
     }),
   ]
-  archived: string[] = []
   prompts = [
     prompt(1, 'coder-system', 'You write code.\nCarefully.'),
     prompt(2, 'policy', 'Be brief.'),
   ]
-  disabled: number[] = []
   projectLines = PROJECT_LINES
   projectHash = sha256(PROJECT_LINES.join('\n'))
   rows(sql: string): string[] {
@@ -120,10 +121,8 @@ class FakeHub implements AgentHubSource {
           prompt_ids: [1, 99],
         },
       ])
-    if (sql.includes('NOT enabled')) return lines(this.disabled)
     if (sql.includes('FROM prompts')) return lines(this.prompts)
     if (sql.includes('memory_settings')) return lines([{ enabled: true, total_budget: 4000 }])
-    if (sql.includes("status <> 'active'")) return lines(this.archived)
     if (sql.includes('FROM memories')) return lines(this.memories)
     throw new Error(`unexpected query: ${sql}`)
   }
@@ -181,20 +180,49 @@ describe('importAgentHub', () => {
     db.close()
   })
 
-  it('takes new text as a new version and drops rows Agent Hub archived or disabled', () => {
+  it('takes new text as a new version and drops rows Agent Hub no longer has', () => {
     const db = openContext(':memory:')
     const hub = new FakeHub()
     importAgentHub(db, hub, options)
+    const local = addMemory(db, { content: 'written here, not imported' }, NOW)
+    // Archived, disabled or hard-deleted upstream: gone from the active/enabled answer.
     hub.prompts = [prompt(1, 'coder-system', 'You write tested code.')]
-    hub.disabled = [2]
     hub.memories = [memory('11111111-aaaa', { version: 3, content: 'new text' })]
-    hub.archived = ['22222222-bbbb']
     const result = importAgentHub(db, hub, options)
     expect(result.removed).toEqual({ memories: 1, prompts: 1 })
     expect(getPrompt(db, 'coder-system')?.version).toBe(2)
     expect(count(db, 'prompt_revisions')).toBe(3)
     expect(getMemories(db, ['11111111']).found[0]?.content).toBe('new text')
-    expect(count(db, 'memory_revisions')).toBe(3)
+    expect(count(db, 'memory_revisions')).toBe(4)
+    expect(getMemories(db, ['22222222', local.id]).found.map((item) => item.id)).toEqual([local.id])
+    db.close()
+  })
+
+  it('takes a slug reused under a new id', () => {
+    const db = openContext(':memory:')
+    const hub = new FakeHub()
+    importAgentHub(db, hub, options)
+    hub.prompts = [
+      prompt(1, 'coder-system', 'You write code.\nCarefully.'),
+      prompt(3, 'policy', 'Be briefer.'),
+    ]
+    const result = importAgentHub(db, hub, options)
+    expect(result.removed.prompts).toBe(1)
+    expect(getPrompt(db, 'policy')).toMatchObject({ id: 3, content: 'Be briefer.', version: 1 })
+    db.close()
+  })
+
+  it('writes nothing when Agent Hub answers with no memories or no prompts', () => {
+    const db = openContext(':memory:')
+    const hub = new FakeHub()
+    importAgentHub(db, hub, options)
+    for (const empty of ['memories', 'prompts'] as const) {
+      const broken = new FakeHub()
+      broken[empty] = []
+      expect(() => importAgentHub(db, broken, options)).toThrow('nothing was written')
+    }
+    expect(count(db, 'memories')).toBe(2)
+    expect(count(db, 'prompts')).toBe(2)
     db.close()
   })
 
@@ -237,7 +265,11 @@ describe('aico context import-agent-hub', () => {
           return new Response('{}', { status: 200 })
         }) as typeof fetch,
         now: () => new Date(NOW),
-        agentHub: { checkout: '/nowhere', source: () => hub, route: () => null },
+        agentHub: {
+          checkout: '/nowhere',
+          source: () => hub,
+          route: () => ({ error: 'not asked' }),
+        },
       },
     }
   }
@@ -267,6 +299,22 @@ describe('aico context import-agent-hub', () => {
     const run = io(hub)
     expect(await runContextCli('context', ['import-agent-hub'], run.io)).toBe(1)
     expect(run.posted).toEqual([expect.objectContaining({ state: 'failed' })])
+  })
+
+  it('still answers models route when usage facts time out, and says so', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-context-'))
+    try {
+      const run = io(new FakeHub())
+      run.io.dbPath = join(dir, 'context.db')
+      run.io.agentHub.route = () => ({ error: 'Agent Hub usage facts did not answer within 20s' })
+      expect(await runContextCli('context', ['import-agent-hub'], run.io)).toBe(0)
+      expect(await runContextCli('models', ['route', '--role', 'implementation'], run.io)).toBe(0)
+      expect(run.out.join('')).toContain(
+        'usage facts unavailable (Agent Hub usage facts did not answer within 20s); allowed and denied are still right',
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('answers usage errors with the usage text', async () => {

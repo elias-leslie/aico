@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 # `aico memory | prompt | models | context`: context.db (memories, prompts, roles, launch options).
+# Only those commands: anything else (or nothing) prints the usage and exits 2, so this
+# never starts the web server.
 set -euo pipefail
 
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/aico-web.sh"
 
-exec_aico_web "$@"
+case "${1:-}" in
+  memory | prompt | models | context) exec_aico_web "$@" ;;
+  help | -h | --help) exec_aico_web memory --help ;;
+  *)
+    [ $# -gt 0 ] && echo "aico: unknown command '$1'" >&2
+    echo "Usage: aico <memory|prompt|models|context> ...  (aico help lists every command)" >&2
+    exit 2
+    ;;
+esac

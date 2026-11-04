@@ -48,7 +48,7 @@ export interface ImportResult {
   rolePrompts: number
   budgets: number
   projectRows: number
-  /** Rows removed here because Agent Hub archived or disabled them since the last run. */
+  /** Imported rows removed here because Agent Hub archived, disabled or deleted them since the last run. */
   removed: { memories: number; prompts: number }
   /** sha256 of the project rows: in Agent Hub, as received, and as stored here. */
   projectHash: { source: string; received: string; stored: string; match: boolean }
@@ -128,14 +128,12 @@ const SQL = {
   memories: `SELECT row_to_json(t)::text FROM (SELECT id, group_id, scope, scope_id, summary, content,
       tags, tier, pinned, render_mode, trigger_task_types, applicability, loaded_count, helpful_count,
       harmful_count, version, created_at, updated_at FROM memories WHERE status = 'active' ORDER BY id) t`,
-  archivedMemories: `SELECT to_json(id::text)::text FROM memories WHERE status <> 'active' ORDER BY id`,
   memorySettings: `SELECT row_to_json(t)::text FROM (SELECT enabled, total_budget, budget_enabled,
       max_mandates, max_guardrails, reference_index_enabled, continuity_enabled,
       continuity_max_sessions, active_variant FROM memory_settings ORDER BY id) t`,
   prompts: `SELECT row_to_json(t)::text FROM (SELECT id, slug, name, description, content,
       prompt_type, is_global, boot_eligible, context_policy, updated_at FROM prompts
       WHERE enabled ORDER BY id) t`,
-  disabledPrompts: `SELECT to_json(id)::text FROM prompts WHERE NOT enabled ORDER BY id`,
   agents: (slugs: readonly string[]) => `SELECT row_to_json(t)::text FROM (SELECT a.slug, a.name,
       a.description, a.updated_at, (SELECT jsonb_agg(ap.prompt_id ORDER BY ap.priority, ap.prompt_id)
         FROM agent_prompts ap JOIN prompts p ON p.id = ap.prompt_id AND p.enabled
@@ -173,7 +171,6 @@ export function importAgentHub(
 ): ImportResult {
   const reason = 'imported from Agent Hub'
   const memories = rowsOf<SourceMemory>(source, SQL.memories).map(memoryOf)
-  const archived = rowsOf<string>(source, SQL.archivedMemories)
   const settings = rowsOf<Record<string, unknown>>(source, SQL.memorySettings)
   const prompts = rowsOf<{
     id: number
@@ -187,7 +184,6 @@ export function importAgentHub(
     context_policy: unknown
     updated_at: string
   }>(source, SQL.prompts)
-  const disabled = rowsOf<number>(source, SQL.disabledPrompts)
   const agents = rowsOf<{
     slug: string
     name: string
@@ -210,13 +206,36 @@ export function importAgentHub(
     JSON.parse(source.file(WORK_ROLES_FILE)),
   )
 
+  // An empty answer is a broken source, not an empty Agent Hub: deleting
+  // everything on it would wipe context.db.
+  if (memories.length === 0 || prompts.length === 0)
+    throw new Error(
+      `Agent Hub returned ${memories.length} active memories and ${prompts.length} enabled prompts; nothing was written`,
+    )
+
   let removedMemories = 0
   let removedPrompts = 0
   let links = 0
   transaction(db, () => {
+    // Imported rows Agent Hub no longer has active or enabled (archived, disabled or
+    // deleted) go first, so a slug reused under a new id cannot collide.
+    removedMemories = Number(
+      db
+        .prepare(
+          `DELETE FROM memories WHERE id NOT IN (SELECT value FROM json_each(?))
+           AND id IN (SELECT memory_id FROM memory_revisions WHERE reason = ?)`,
+        )
+        .run(JSON.stringify(memories.map((memory) => memory.id)), reason).changes,
+    )
+    removedPrompts = Number(
+      db
+        .prepare(
+          `DELETE FROM prompts WHERE id NOT IN (SELECT value FROM json_each(?))
+           AND id IN (SELECT prompt_id FROM prompt_revisions WHERE reason = ?)`,
+        )
+        .run(JSON.stringify(prompts.map((prompt) => prompt.id)), reason).changes,
+    )
     for (const memory of memories) putMemory(db, memory, reason, memory.updatedAt)
-    const dropMemory = db.prepare('DELETE FROM memories WHERE id = ?')
-    for (const id of archived) removedMemories += Number(dropMemory.run(id).changes)
     if (settings[0]) putSetting(db, 'memory', settings[0])
 
     for (const prompt of prompts)
@@ -236,8 +255,6 @@ export function importAgentHub(
         },
         reason,
       )
-    const dropPrompt = db.prepare('DELETE FROM prompts WHERE id = ?')
-    for (const id of disabled) removedPrompts += Number(dropPrompt.run(id).changes)
 
     savePolicy(db, policy, options.now)
     const putRole = db.prepare(

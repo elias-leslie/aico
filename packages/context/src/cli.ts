@@ -48,7 +48,7 @@ export interface ContextCliIo {
   agentHub: {
     checkout: string
     source(checkout: string): AgentHubSource
-    route(role: string, project?: string): unknown | null
+    route(role: string, project?: string): { payload: unknown } | { error: string }
   }
 }
 
@@ -267,7 +267,11 @@ function models(db: Database, argv: string[], io: ContextCliIo): number {
   const model = str(parsed, 'model')
   const project = str(parsed, 'project')
   const answer = io.agentHub.route(role, project)
-  const facts = answer && typeof answer === 'object' ? factsFromAgentHub(answer) : null
+  const factsError = usageFactsError(answer)
+  const facts =
+    factsError === null && 'payload' in answer
+      ? factsFromAgentHub(answer.payload as { rows?: unknown })
+      : null
   const now = io.now().toISOString()
   let payload: ReturnType<typeof route>
   try {
@@ -285,17 +289,27 @@ function models(db: Database, argv: string[], io: ContextCliIo): number {
     }
     throw error
   }
+  if (factsError !== null) payload.facts_error = factsError
   if (parsed.flags.has('--json')) io.out(`${JSON.stringify(payload, null, 2)}\n`)
   else if (tool) io.out(`${formatLaunch(payload)}\n`)
   else io.out(`${formatOptions(payload, role, project)}\n`)
   return 0
 }
 
+/** Why the usage facts are missing (the call failed, or Agent Hub had none), or null. */
+function usageFactsError(answer: { payload: unknown } | { error: string }): string | null {
+  if ('error' in answer) return answer.error
+  const payload = answer.payload as { facts_as_of?: unknown; facts_error?: unknown } | null
+  if (!payload || typeof payload !== 'object') return 'Agent Hub usage facts were not an object'
+  if (typeof payload.facts_error === 'string') return payload.facts_error
+  return payload.facts_as_of ? null : 'Agent Hub gave no usage facts'
+}
+
 function importLines(result: ImportResult): string {
   const hash = result.projectHash
   return [
     `IMPORTED memories=${result.memories} memory_settings=${result.memorySettings} prompts=${result.prompts} jobs=${result.jobs} named_roles=${result.namedRoles} role_prompts=${result.rolePrompts} budgets=${result.budgets} project_rows=${result.projectRows}`,
-    `  removed (archived or disabled in Agent Hub since): memories=${result.removed.memories} prompts=${result.removed.prompts}`,
+    `  removed (archived, disabled or deleted in Agent Hub since): memories=${result.removed.memories} prompts=${result.removed.prompts}`,
     `  project rows sha256 ${hash.match ? 'match' : 'MISMATCH'}: source=${hash.source} received=${hash.received} stored=${hash.stored}`,
     ...(result.missingRoles.length
       ? [`  role names not found in Agent Hub: ${result.missingRoles.join(', ')}`]
