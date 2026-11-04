@@ -107,4 +107,4 @@ Not moved here: `st memory save` still writes to Agent Hub, so new memories reac
   fixed in dad7cc54, acceptance success on dad7cc54 and again (fresh, by the deploy) on 66f8cc93.
 - `st check --quick --changed-only`: pass on every commit's paths (context 22 tests, tether
   delivery conformance 23 tests, go-hook vet and tests).
-- Deployed: aico release 66f8cc93, tether@default restarted onto it, aico-hook e54b76cc9ff5 installed.
+- Deployed: aico release 66f8cc93 (tether@default restarted onto dad7cc54; 66f8cc93 changes only the CLI and hook), aico-hook e54b76cc9ff5 installed.
