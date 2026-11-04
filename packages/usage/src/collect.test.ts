@@ -505,4 +505,25 @@ describe('Codex across runs and homes', () => {
       db.prepare("SELECT SUM(requests) AS n FROM daily WHERE project = 'private'").get(),
     ).toEqual({ n: 3 })
   })
+
+  it('hides a cursor saved earlier for a file that is now private, and keeps counting it', async () => {
+    const db = openUsage(':memory:')
+    const path = writeCodexLog(lines(2), { cwd: '/srv/workspaces/projects/neri-old' })
+    // As an older collector saved it: path, working directory and id in the clear.
+    db.prepare('INSERT INTO cursors (path, offset, state) VALUES (?, 0, ?)').run(
+      path,
+      JSON.stringify({ cwd: '/srv/workspaces/projects/neri-old', id: 't1' }),
+    )
+    await collect(db, io())
+    const dump = JSON.stringify(db.prepare('SELECT * FROM cursors').all())
+    expect(dump).not.toMatch(/neri/i)
+    expect(dump).not.toContain(path)
+    expect(dump).not.toContain('"t1"')
+    expect(requests(db)).toBe(2)
+    await collect(db, io())
+    expect(requests(db)).toBe(2)
+    expect(
+      db.prepare("SELECT SUM(requests) AS n FROM daily WHERE project = 'private'").get(),
+    ).toEqual({ n: 2 })
+  })
 })

@@ -201,7 +201,7 @@ function pass(db: Database, options: CodexOptions): CodexResult {
       result.unreadable += 1
     }
   }
-  const keyOf = (path: string) => (options.isPrivate(path) ? `private:${sha(path)}` : path)
+  const hashedKey = (path: string) => `private:${sha(path)}`
   // Files with a saved cursor that changed in size, wherever their day folder is (a session
   // that runs for days appends to the folder it began in). A private file's cursor is keyed by
   // a hash, so it can only be found again in the recent day folders.
@@ -222,6 +222,7 @@ function pass(db: Database, options: CodexOptions): CodexResult {
       // gone
     }
   }
+  hidePrivateCursors(db, options, saved)
   const events: ReadingEvent[] = []
   const balances: Balance[] = []
   const rollups = new Map<string, Rollup>()
@@ -233,8 +234,7 @@ function pass(db: Database, options: CodexOptions): CodexResult {
   }
 
   for (const file of [...files.values()].sort((a, b) => a.mtime - b.mtime)) {
-    const cursorKey = keyOf(file.path)
-    const prior = saved.get(cursorKey)
+    const prior = saved.get(hashedKey(file.path)) ?? saved.get(file.path)
     let state: FileState = prior
       ? JSON.parse(prior.state)
       : { private: options.isPrivate(file.path) }
@@ -268,7 +268,7 @@ function pass(db: Database, options: CodexOptions): CodexResult {
     if (offset >= file.size) {
       if (file.size === 0 || state.head) continue
       state.head = headHash(file.path, file.size)
-      cursors.set(cursorKey, { offset, state })
+      cursors.set(file.path, { offset, state })
       continue
     }
     state.head ??= headHash(file.path, file.size)
@@ -380,7 +380,7 @@ function pass(db: Database, options: CodexOptions): CodexResult {
       result.files += 1
       result.bytes += end - offset
     }
-    cursors.set(cursorKey, { offset: old ? file.size : end, state })
+    cursors.set(file.path, { offset: old ? file.size : end, state })
   }
 
   // Credit draws: against a running minimum, in time order.
@@ -438,9 +438,39 @@ function pass(db: Database, options: CodexOptions): CodexResult {
   const save = db.prepare(
     'INSERT INTO cursors (path, offset, state) VALUES (?, ?, ?) ON CONFLICT (path) DO UPDATE SET offset = excluded.offset, state = excluded.state',
   )
-  for (const [path, cursor] of cursors) save.run(path, cursor.offset, JSON.stringify(cursor.state))
+  for (const [path, cursor] of cursors) {
+    // A private file's cursor is keyed by a hash, so its path is not stored.
+    const key = cursor.state.private ? hashedKey(path) : path
+    if (key !== path) db.prepare('DELETE FROM cursors WHERE path = ?').run(path)
+    save.run(key, cursor.offset, JSON.stringify(cursor.state))
+  }
   putState(db, 'codex.runmin', runmin)
   return result
+}
+
+/**
+ * Cursors saved before a path or working directory was marked private still hold its path, working
+ * directory or session id: re-key them by hash and drop the rest (idempotent; the counts stay).
+ */
+function hidePrivateCursors(
+  db: Database,
+  options: CodexOptions,
+  saved: Map<string, { offset: number; state: string }>,
+): void {
+  const drop = db.prepare('DELETE FROM cursors WHERE path = ?')
+  const put = db.prepare('INSERT OR REPLACE INTO cursors (path, offset, state) VALUES (?, ?, ?)')
+  for (const [path, cursor] of [...saved]) {
+    if (path.startsWith('private:')) continue
+    const state = JSON.parse(cursor.state) as FileState
+    if (!state.private && !options.isPrivate(path) && !options.isPrivate(state.cwd ?? '')) continue
+    const hidden: FileState = { ...state, private: true, cwd: undefined }
+    if (state.id) hidden.id = sha(state.id)
+    drop.run(path)
+    saved.delete(path)
+    const key = `private:${sha(path)}`
+    put.run(key, cursor.offset, JSON.stringify(hidden))
+    saved.set(key, { offset: cursor.offset, state: JSON.stringify(hidden) })
+  }
 }
 
 /** A parsed JSON line, or undefined when it is not JSON. Codex's log shape is its own: every field is checked where used. */
