@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { collectCodex } from './codex'
 import { collect } from './collect'
 import { openUsage } from './db'
 import { latestReadings, loadFacts } from './facts'
@@ -69,23 +70,29 @@ function tokenCount(at: number, over: { balance?: number; total: number; weekly?
   })
 }
 
-function writeCodexLog(lines: string[]) {
-  const day = new Date(NOW)
+function writeCodexLog(
+  lines: string[],
+  where: { root?: string; daysAgo?: number; name?: string; cwd?: string; meta?: object } = {},
+) {
+  const day = new Date(NOW - (where.daysAgo ?? 0) * 24 * HOUR)
   const folder = join(
-    home,
-    'codex',
+    where.root ?? join(home, 'codex'),
     String(day.getFullYear()),
     String(day.getMonth() + 1).padStart(2, '0'),
     String(day.getDate()).padStart(2, '0'),
   )
   mkdirSync(folder, { recursive: true })
-  const path = join(folder, 'rollout-1.jsonl')
+  const path = join(folder, where.name ?? 'rollout-1.jsonl')
   writeFileSync(
     path,
     `${[
       JSON.stringify({
         type: 'session_meta',
-        payload: { id: 't1', cwd: '/srv/workspaces/projects/aico/x' },
+        payload: {
+          id: 't1',
+          cwd: where.cwd ?? '/srv/workspaces/projects/aico/x',
+          ...where.meta,
+        },
       }),
       JSON.stringify({
         type: 'turn_context',
@@ -94,7 +101,8 @@ function writeCodexLog(lines: string[]) {
       ...lines,
     ].join('\n')}\n`,
   )
-  utimesSync(path, NOW / 1000, NOW / 1000)
+  const stamp = (NOW - (where.daysAgo ?? 0) * 24 * HOUR) / 1000
+  utimesSync(path, stamp, stamp)
   return path
 }
 
@@ -344,5 +352,157 @@ describe('facts that cannot be trusted', () => {
     const facts = loadFacts(db, { plans: [], lots: [] }, done.at)
     expect(facts.unreadable?.claude).toMatch(/^its last collection failed/)
     expect(facts.unreadable?.codex).toBeUndefined()
+  })
+})
+
+describe('Codex across runs and homes', () => {
+  const requests = (db: ReturnType<typeof openUsage>) =>
+    (db.prepare('SELECT SUM(requests) AS n FROM daily').get() as { n: number | null }).n ?? 0
+  const lines = (n: number, from = 0) =>
+    Array.from({ length: n }, (_, i) =>
+      tokenCount(NOW - (n - i) * 60_000, { total: 1100 * (from + i + 1) }),
+    )
+
+  it('counts the same lines once when two collects run over them', async () => {
+    const file = join(dir, 'shared.db')
+    const first = openUsage(file)
+    const second = openUsage(file)
+    writeCodexLog(lines(3))
+    await collect(first, io())
+    await collect(second, io())
+    expect(requests(first)).toBe(3)
+    first.close()
+    second.close()
+  })
+
+  it('replaces what a shrunk or rewritten file added instead of adding to it', async () => {
+    const db = openUsage(':memory:')
+    const path = writeCodexLog(lines(4))
+    await collect(db, io())
+    expect(requests(db)).toBe(4)
+    // Shorter file.
+    writeCodexLog(lines(2))
+    await collect(db, io())
+    expect(requests(db)).toBe(2)
+    // Longer again, different first line (another session wrote it).
+    writeCodexLog(lines(3), { meta: { id: 't2' } })
+    await collect(db, io())
+    expect(requests(db)).toBe(3)
+    // Nothing changed: nothing moves.
+    await collect(db, io())
+    expect(requests(db)).toBe(3)
+    expect(path).toBeTruthy()
+  })
+
+  it('reads the tail only of a file nobody wrote to since the cutover', () => {
+    const db = openUsage(':memory:')
+    const pad = JSON.stringify({
+      type: 'event_msg',
+      payload: { type: 'other', text: 'x'.repeat(900) },
+    })
+    const path = writeCodexLog(
+      [
+        tokenCount(NOW - 50 * HOUR, { total: 1100, balance: 4000 }),
+        ...Array.from({ length: 400 }, () => pad),
+        tokenCount(NOW - 49 * HOUR, { total: 2200, balance: 3000 }),
+      ],
+      { daysAgo: 2 },
+    )
+    const result = collectCodex(db, {
+      roots: [join(home, 'codex')],
+      homes: [`${home}/`],
+      isPrivate: () => false,
+      now: NOW,
+      cutoverDay: localDay(NOW),
+      lotTimes: [],
+    })
+    expect(result.readings).toBeGreaterThan(0)
+    expect(result.bytes).toBeLessThan(300_000)
+    expect(requests(db)).toBe(0)
+    expect(db.prepare('SELECT credits_drawn FROM daily').all()).toEqual([])
+    expect(path).toBeTruthy()
+  })
+
+  it('skips the lines a subagent inherited from its parent', async () => {
+    const db = openUsage(':memory:')
+    const numbered = (ordinal: number, total: number) =>
+      JSON.stringify({
+        ordinal,
+        ...JSON.parse(tokenCount(NOW - 60_000 * (5 - ordinal), { total })),
+      })
+    writeCodexLog([numbered(0, 1100), numbered(1, 2200), numbered(2, 3300), numbered(3, 4400)], {
+      meta: { subagent_history_start_ordinal: 2 },
+    })
+    await collect(db, io())
+    expect(requests(db)).toBe(2)
+  })
+
+  it('reads a long-running session in an old day folder, and not a folder older than the lookback', async () => {
+    const db = openUsage(':memory:')
+    const path = writeCodexLog(lines(1), { daysAgo: 7 })
+    utimesSync(path, NOW / 1000, NOW / 1000)
+    await collect(db, io())
+    expect(requests(db)).toBe(1)
+    // Three days on, the session appends to the folder it began in, now outside the lookback.
+    const later = NOW + 72 * HOUR
+    writeFileSync(path, `${tokenCount(later, { total: 9900 })}\n`, { flag: 'a' })
+    utimesSync(path, later / 1000, later / 1000)
+    await collect(db, io({ now: later }))
+    expect(requests(db)).toBe(2)
+    // A file nobody has read, in a folder older than the lookback, is not walked.
+    writeCodexLog(lines(2), { daysAgo: 12, name: 'rollout-2.jsonl' })
+    await collect(db, io({ now: later }))
+    expect(requests(db)).toBe(2)
+  })
+
+  it('reads every native home, keeps only numbers from a private one, and says nothing of it', async () => {
+    const db = openUsage(':memory:')
+    const hostHomes = join(home, '.local', 'state', 'agent-hub', 'host-homes')
+    const open = join(hostHomes, 'agent-work')
+    const hidden = join(hostHomes, 'neri-test')
+    const env = { XDG_STATE_HOME: join(home, 'state') }
+    // This home, an ordinary host copy, and a copy whose name marks it private.
+    writeCodexLog(lines(1), { root: join(home, '.codex', 'sessions') })
+    writeCodexLog(lines(2, 1), { root: join(open, '.codex', 'sessions') })
+    writeCodexLog(lines(3, 3), {
+      root: join(hidden, '.codex', 'sessions'),
+      cwd: '/srv/workspaces/projects/neri-secret',
+    })
+    for (const [folder, used] of [
+      [open, 30],
+      [hidden, 60],
+    ] as const) {
+      mkdirSync(join(folder, '.local', 'state', 'claude-usage'), { recursive: true })
+      writeFileSync(
+        join(folder, '.local', 'state', 'claude-usage', 'rate-limits.json'),
+        JSON.stringify({
+          observed_at: (NOW - 5000 + used * 10) / 1000,
+          rate_limits: {
+            seven_day: { used_percentage: used, resets_at: (NOW + 40 * HOUR) / 1000 },
+          },
+        }),
+      )
+    }
+    const done = await collect(db, io({ env }))
+    expect(done.failed).toEqual([])
+    expect(requests(db)).toBe(6)
+    // Claude's newest-wins merge saw both host snapshots (the higher use stands).
+    expect(
+      latestReadings(db, new Date(NOW).toISOString()).find((r) => r.provider === 'claude')
+        ?.used_percent,
+    ).toBe(60)
+    // Nothing of the private home is stored or reported: not its name, a path, a working directory or an id.
+    const stored = JSON.stringify([
+      db.prepare('SELECT * FROM daily').all(),
+      db.prepare('SELECT * FROM cursors').all(),
+      db.prepare('SELECT * FROM state').all(),
+      db.prepare('SELECT * FROM readings').all(),
+      done,
+    ])
+    expect(stored).not.toMatch(/neri/i)
+    expect(stored).not.toContain('hidden')
+    expect(
+      db.prepare("SELECT SUM(requests) AS n FROM daily WHERE project = 'private'").get(),
+    ).toEqual({ n: 3 })
   })
 })

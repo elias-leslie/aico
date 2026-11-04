@@ -18,6 +18,15 @@ export function statuslinePath(env: NodeJS.ProcessEnv, home: string): string {
   return join(state, config.claude.statusline)
 }
 
+/** The snapshot of every native home: this user's (XDG_STATE_HOME aware), then each other home's. */
+export function statuslinePaths(env: NodeJS.ProcessEnv, home: string, homes: string[]): string[] {
+  return homes.map((other) =>
+    other === home
+      ? statuslinePath(env, home)
+      : join(other, '.local', 'state', config.claude.statusline),
+  )
+}
+
 /** Reads the snapshot; the number of readings stored (0 when nothing is new or the file is absent). */
 export function collectClaude(db: Database, path: string, minIntervalS: number): number {
   if (!existsSync(path)) return 0
@@ -25,6 +34,7 @@ export function collectClaude(db: Database, path: string, minIntervalS: number):
   try {
     data = JSON.parse(readFileSync(path, 'utf8'))
   } catch {
+    // No path in the message: a snapshot may sit in a home whose name is not reported.
     throw new Error("Claude Code's usage snapshot is not readable JSON")
   }
   const observed = seconds(data.observed_at)

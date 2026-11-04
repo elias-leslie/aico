@@ -933,7 +933,7 @@ def status_row(
         every,
         every,
         kind="service",
-        actions=[{"kind": "log", "ref": "journalctl --user -u host-steward-memctl.service"}],
+        actions=[{"kind": "log", "ref": "journalctl --user -u host-steward-memctl.service -n 200 --no-pager"}],
     )
 
 

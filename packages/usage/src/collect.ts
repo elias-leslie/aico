@@ -2,11 +2,12 @@
 // readings (and Codex's credit draws), and remember when and what could not be read.
 // A provider that fails is reported by name; the others are still read.
 
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import config from '../data/usage.json' with { type: 'json' }
-import { collectClaude, statuslinePath } from './claude'
+import { collectClaude, statuslinePaths } from './claude'
 import { collectCodex } from './codex'
 import { type Database, getState, putState } from './db'
+import { nativeHomes, privateMatcher } from './homes'
 import { collectOpenCode } from './opencode'
 import { localDay, type Plans } from './plans'
 import { micros } from './windows'
@@ -48,11 +49,23 @@ export async function collect(db: Database, io: CollectIo): Promise<Collected> {
   }
   const gap = config.reading_min_interval_s
 
-  try {
-    collectClaude(db, statuslinePath(io.env, io.home), gap)
-  } catch (error) {
-    fail('claude', error)
+  // Claude's and Codex's files of every native home. A home or file that cannot be read is
+  // counted, never named (some homes are not to be named in anything the collector says).
+  const homes = nativeHomes(io.env, io.home)
+  let claudeRead = 0
+  let claudeBroken = 0
+  for (const path of statuslinePaths(io.env, io.home, homes)) {
+    try {
+      collectClaude(db, path, gap)
+      claudeRead += 1
+    } catch {
+      claudeBroken += 1
+    }
   }
+  if (claudeBroken && !claudeRead)
+    fail('claude', new Error("Claude Code's usage snapshot is not readable JSON"))
+  else if (claudeBroken)
+    problems.claude = `${claudeBroken} of ${claudeBroken + claudeRead} usage snapshots are not readable JSON`
 
   try {
     const lotTimes = [
@@ -61,15 +74,22 @@ export async function collect(db: Database, io: CollectIo): Promise<Collected> {
         (row) => Date.parse(row.at),
       ),
     ]
-    collectCodex(db, {
-      root: io.env.AICO_CODEX_SESSIONS || join(io.home, config.codex.sessions),
-      homes: [`${io.home}/`],
+    const configured = (io.env.AICO_CODEX_SESSIONS ?? '').split(delimiter).filter(Boolean)
+    const result = collectCodex(db, {
+      roots: configured.length ? configured : homes.map((h) => join(h, config.codex.sessions)),
+      homes: homes.map((h) => `${h}/`),
+      isPrivate: privateMatcher(config.private_words),
       now: io.now,
       cutoverDay: cutoverDay(db, io.now),
       lotTimes,
     })
-  } catch (error) {
-    fail('codex', new Error(`Codex's session logs could not be read: ${(error as Error).message}`))
+    if (result.unreadable && result.unreadable === result.roots)
+      fail('codex', new Error("Codex's session logs could not be read"))
+    else if (result.unreadable)
+      problems.codex = `${result.unreadable} of ${result.roots} Codex session folders could not be read`
+  } catch {
+    // The message could carry a file path; say only what failed.
+    fail('codex', new Error("Codex's session logs could not be read"))
   }
 
   try {

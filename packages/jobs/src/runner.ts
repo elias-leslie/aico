@@ -171,7 +171,10 @@ export function jobRow(job: JobDef, state: JobState): StatusRow {
     next_run: iso(state.nextRun),
     actions: [
       { kind: 'run', ref: `aico jobs run ${job.kind}` },
-      { kind: 'log', ref: `journalctl --user -u aico-jobs.service -g ${job.kind}` },
+      {
+        kind: 'log',
+        ref: `journalctl --user -u aico-jobs.service -g ${job.kind} -n 200 --no-pager`,
+      },
     ],
   }
 }

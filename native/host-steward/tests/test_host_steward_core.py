@@ -76,6 +76,7 @@ def test_the_row_is_a_valid_status_row_with_slack_and_run_and_log_actions():
     assert row["next_run"] - row["last_run"] == core.timedelta(minutes=25)
     assert [a["kind"] for a in row["actions"]] == ["run", "log"]
     assert row["actions"][0]["ref"] == "sudo -n systemctl start host-steward-check.service"
+    assert row["actions"][1]["ref"].endswith("-n 200 --no-pager")  # a log ref never pages or dumps the whole journal
     assert aico_status.check_row(row)["kind"] == "check"
 
 

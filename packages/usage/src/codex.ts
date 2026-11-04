@@ -9,7 +9,13 @@
 //   - per local day, model, project and speed: requests and tokens, and the credits drawn.
 // A log file nobody has written to since the cutover day is read for its readings only
 // (its tail, once). Conversation text is never kept.
+// The whole pass runs in one write transaction, so two collects at once count a line once. A
+// file that shrank or was rewritten is read again from its start and replaces what it
+// contributed (credit draws are against the running minimum, so they never repeat).
+// A file in a home or working directory marked private contributes numbers only: its cursor
+// is keyed by a hash of its path, and neither its working directory nor its id is kept.
 
+import { createHash } from 'node:crypto'
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { transaction } from '@aico/store'
@@ -29,6 +35,27 @@ interface FileState {
   histStart?: number
   lastTotal?: number
   id?: string
+  /** Only numbers are kept from this file. */
+  private?: boolean
+  /** Hash of the file's first bytes: a different one means the file was rewritten. */
+  head?: string
+  /** What this file added to the daily rows (key to requests, input, cached, output). */
+  rolls?: Record<string, [number, number, number, number]>
+}
+
+const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16)
+
+/** The first bytes' hash of a file (a rewritten file starts differently), or '' when empty. */
+function headHash(path: string, size: number): string {
+  if (size === 0) return ''
+  const fd = openSync(path, 'r')
+  try {
+    const buffer = Buffer.alloc(Math.min(256, size))
+    const read = readSync(fd, buffer, 0, buffer.length, 0)
+    return sha(buffer.subarray(0, read).toString('latin1'))
+  } finally {
+    closeSync(fd)
+  }
 }
 
 interface Balance {
@@ -52,6 +79,9 @@ export interface CodexResult {
   /** Credits drawn found this pass. */
   drawn: number
   newLots: number
+  /** Session folders that exist, and how many of them could not be read (counts only, never names). */
+  roots: number
+  unreadable: number
 }
 
 /** The project a working directory belongs to: the first folder under a workspaces root, else its name. */
@@ -91,12 +121,11 @@ function* newLines(path: string, offset: number, end: number): Generator<[string
   }
 }
 
+type Found = { path: string; size: number; mtime: number }
+
 /** The JSONL files under the sessions root changed since `sinceMs`, newest day folders only. */
-function recentFiles(
-  root: string,
-  sinceMs: number,
-): { path: string; size: number; mtime: number }[] {
-  const out: { path: string; size: number; mtime: number }[] = []
+function recentFiles(root: string, sinceMs: number): Found[] {
+  const out: Found[] = []
   const start = new Date(sinceMs - 86400_000)
   const end = new Date(Date.now() + 86400_000)
   for (let at = start.getTime(); at <= end.getTime(); at += 86400_000) {
@@ -119,15 +148,17 @@ function recentFiles(
       }
     }
   }
-  return out.sort((a, b) => a.mtime - b.mtime)
+  return out
 }
 
 const num = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : 0
 
 export interface CodexOptions {
-  /** The sessions root (HOME/.codex/sessions). */
-  root: string
+  /** The sessions roots, one per native home (HOME/.codex/sessions). */
+  roots: string[]
+  /** True for a path or working directory this collector keeps only numbers from. */
+  isPrivate: (text: string) => boolean
   /** Home folders whose names stand for the project (for a working directory under them). */
   homes: readonly string[]
   now: number
@@ -138,36 +169,114 @@ export interface CodexOptions {
 }
 
 export function collectCodex(db: Database, options: CodexOptions): CodexResult {
-  const { root, now, cutoverDay } = options
+  // One write transaction for the whole pass: a second collect waits here, then reads the
+  // cursors the first one saved, so no line is counted twice.
+  return transaction(db, () => pass(db, options))
+}
+
+function pass(db: Database, options: CodexOptions): CodexResult {
+  const { now, cutoverDay } = options
   const cfg = config.codex
-  const result: CodexResult = { files: 0, bytes: 0, readings: 0, drawn: 0, newLots: 0 }
-  if (!existsSync(root)) return result
+  const result: CodexResult = {
+    files: 0,
+    bytes: 0,
+    readings: 0,
+    drawn: 0,
+    newLots: 0,
+    roots: 0,
+    unreadable: 0,
+  }
   const [y, m, d] = cutoverDay.split('-').map(Number) as [number, number, number]
   const cutoverMs = new Date(y, m - 1, d).getTime()
   const lookbackMs = now - config.lookback_days * 86400_000
-  const files = recentFiles(root, Math.min(cutoverMs, lookbackMs))
-  const cursorOf = db.prepare('SELECT offset, state FROM cursors WHERE path = ?')
+  // Never earlier than the lookback (not the cutover: once that is old, every run would walk
+  // every folder since it): an older file is read only when it has a cursor.
+  const files = new Map<string, Found>()
+  const roots = options.roots.filter((root) => existsSync(root))
+  result.roots = roots.length
+  for (const root of roots) {
+    try {
+      for (const file of recentFiles(root, lookbackMs)) files.set(file.path, file)
+    } catch {
+      result.unreadable += 1
+    }
+  }
+  const keyOf = (path: string) => (options.isPrivate(path) ? `private:${sha(path)}` : path)
+  // Files with a saved cursor that changed in size, wherever their day folder is (a session
+  // that runs for days appends to the folder it began in). A private file's cursor is keyed by
+  // a hash, so it can only be found again in the recent day folders.
+  const saved = new Map<string, { offset: number; state: string }>()
+  for (const row of db.prepare('SELECT path, offset, state FROM cursors').all() as unknown as {
+    path: string
+    offset: number
+    state: string
+  }[]) {
+    saved.set(row.path, row)
+    if (row.path.startsWith('private:') || files.has(row.path)) continue
+    if (!roots.some((root) => row.path.startsWith(`${root}/`))) continue
+    try {
+      const stat = statSync(row.path)
+      if (stat.size !== row.offset)
+        files.set(row.path, { path: row.path, size: stat.size, mtime: stat.mtimeMs })
+    } catch {
+      // gone
+    }
+  }
   const events: ReadingEvent[] = []
   const balances: Balance[] = []
   const rollups = new Map<string, Rollup>()
   const cursors = new Map<string, { offset: number; state: FileState }>()
+  const roll = (key: string): Rollup => {
+    const found = rollups.get(key) ?? { requests: 0, input: 0, cached: 0, output: 0, drawn: 0 }
+    rollups.set(key, found)
+    return found
+  }
 
-  for (const file of files) {
-    const saved = cursorOf.get(file.path) as { offset: number; state: string } | undefined
-    let offset = saved && saved.offset <= file.size ? saved.offset : 0
-    const state: FileState = saved && saved.offset <= file.size ? JSON.parse(saved.state) : {}
-    // Untouched since before the cutover and never read: its tail is all that can still matter.
-    const old = !saved && file.mtime < cutoverMs
-    if (old) {
-      if (file.mtime < lookbackMs) {
-        cursors.set(file.path, { offset: file.size, state })
-        continue
+  for (const file of [...files.values()].sort((a, b) => a.mtime - b.mtime)) {
+    const cursorKey = keyOf(file.path)
+    const prior = saved.get(cursorKey)
+    let state: FileState = prior
+      ? JSON.parse(prior.state)
+      : { private: options.isPrivate(file.path) }
+    let offset = prior?.offset ?? 0
+    // Shrunk, or its first bytes changed: the file was replaced. Read it again from the start
+    // and take back what the old one added.
+    if (prior) {
+      let replaced = prior.offset > file.size
+      if (!replaced && state.head) {
+        try {
+          replaced = headHash(file.path, file.size) !== state.head
+        } catch {
+          continue
+        }
       }
-      offset = Math.max(file.size - cfg.tail_bytes, 0)
+      if (replaced) {
+        for (const [key, [requests, input, cached, output]] of Object.entries(state.rolls ?? {})) {
+          const back = roll(key)
+          back.requests -= requests
+          back.input -= input
+          back.cached -= cached
+          back.output -= output
+        }
+        state = { private: state.private }
+        offset = 0
+      }
     }
-    if (offset >= file.size) continue
+    // Untouched since before the cutover and never read: its tail is all that can still matter.
+    const old = !prior && file.mtime < cutoverMs
+    if (old) offset = Math.max(file.size - cfg.tail_bytes, 0)
+    if (offset >= file.size) {
+      if (file.size === 0 || state.head) continue
+      state.head = headHash(file.path, file.size)
+      cursors.set(cursorKey, { offset, state })
+      continue
+    }
+    state.head ??= headHash(file.path, file.size)
+    state.rolls ??= {}
+    const mine = state.rolls
     let first = old && offset > 0
     let end = offset
+    const projectName = () => (state.private ? 'private' : projectOf(state.cwd, options.homes))
     for (const [line, after] of newLines(file.path, offset, file.size)) {
       end = after
       if (first) {
@@ -177,11 +286,18 @@ export function collectCodex(db: Database, options: CodexOptions): CodexResult {
       const head = line.slice(0, 400)
       if (head.includes('"session_meta"')) {
         const meta = safe(line)?.payload
-        if (meta && (!state.id || meta.id === state.id)) {
-          state.id = meta.id
-          state.cwd = meta.cwd ?? state.cwd
-          if (Number.isInteger(meta.subagent_history_start_ordinal))
-            state.histStart = meta.subagent_history_start_ordinal
+        if (meta) {
+          const hide = state.private || options.isPrivate(String(meta.cwd ?? ''))
+          const id = hide && meta.id !== undefined ? sha(String(meta.id)) : meta.id
+          if (!state.id || id === state.id) {
+            state.id = id
+            if (hide) {
+              state.private = true
+              state.cwd = undefined
+            } else state.cwd = meta.cwd ?? state.cwd
+            if (Number.isInteger(meta.subagent_history_start_ordinal))
+              state.histStart = meta.subagent_history_start_ordinal
+          }
         }
         continue
       }
@@ -205,6 +321,10 @@ export function collectCodex(db: Database, options: CodexOptions): CodexResult {
         Number(/"ordinal":\s*(\d+)/.exec(head)?.[1] ?? Number.POSITIVE_INFINITY) < state.histStart
       if (inherited) continue
       const counts = !old && localDay(at) >= cutoverDay
+      const key = () =>
+        [localDay(at), state.model ?? 'unknown', projectName(), state.speed ?? 'standard'].join(
+          '\n',
+        )
       const limits = payload.rate_limits
       if (limits && typeof limits === 'object') {
         const credits = limits.credits
@@ -213,17 +333,7 @@ export function collectCodex(db: Database, options: CodexOptions): CodexResult {
           const value = Number(credits.balance)
           if (Number.isFinite(value)) balance = value
         }
-        if (balance !== null && counts)
-          balances.push({
-            at,
-            balance,
-            key: [
-              localDay(at),
-              state.model ?? 'unknown',
-              projectOf(state.cwd, options.homes),
-              state.speed ?? 'standard',
-            ].join('\n'),
-          })
+        if (balance !== null && counts) balances.push({ at, balance, key: key() })
         for (const name of ['primary', 'secondary']) {
           const window = limits[name]
           if (
@@ -249,26 +359,28 @@ export function collectCodex(db: Database, options: CodexOptions): CodexResult {
         num(last.input_tokens) + num(last.cached_input_tokens) + num(last.output_tokens) > 0
       if (positive && total !== state.lastTotal) {
         state.lastTotal = total
-        const key = [
-          localDay(at),
-          state.model ?? 'unknown',
-          projectOf(state.cwd, options.homes),
-          state.speed ?? 'standard',
-        ].join('\n')
-        const roll = rollups.get(key) ?? { requests: 0, input: 0, cached: 0, output: 0, drawn: 0 }
+        const rollKey = key()
         const cached = num(last.cached_input_tokens)
-        roll.requests += 1
-        roll.input += Math.max(num(last.input_tokens) - cached, 0)
-        roll.cached += cached
-        roll.output += num(last.output_tokens)
-        rollups.set(key, roll)
+        const input = Math.max(num(last.input_tokens) - cached, 0)
+        const output = num(last.output_tokens)
+        const add = roll(rollKey)
+        add.requests += 1
+        add.input += input
+        add.cached += cached
+        add.output += output
+        const own = mine[rollKey] ?? [0, 0, 0, 0]
+        mine[rollKey] = own
+        own[0] += 1
+        own[1] += input
+        own[2] += cached
+        own[3] += output
       }
     }
     if (end !== offset) {
       result.files += 1
       result.bytes += end - offset
     }
-    cursors.set(file.path, { offset: old ? file.size : end, state })
+    cursors.set(cursorKey, { offset: old ? file.size : end, state })
   }
 
   // Credit draws: against a running minimum, in time order.
@@ -286,16 +398,8 @@ export function collectCodex(db: Database, options: CodexOptions): CodexResult {
       }
       runmin = event.balance
     } else if (event.balance < runmin) {
-      const roll = rollups.get(event.key) ?? {
-        requests: 0,
-        input: 0,
-        cached: 0,
-        output: 0,
-        drawn: 0,
-      }
-      roll.drawn += runmin - event.balance
+      roll(event.key).drawn += runmin - event.balance
       result.drawn += runmin - event.balance
-      rollups.set(event.key, roll)
       runmin = event.balance
     }
   }
@@ -310,35 +414,32 @@ export function collectCodex(db: Database, options: CodexOptions): CodexResult {
        output_tokens = output_tokens + excluded.output_tokens,
        credits_drawn = credits_drawn + excluded.credits_drawn`,
   )
-  transaction(db, () => {
-    for (const [key, roll] of rollups) {
-      const [day, model, project, speed] = key.split('\n') as [string, string, string, string]
-      upsert.run(
-        day,
-        model.slice(0, 100),
-        project.slice(0, 200),
-        speed,
-        roll.requests,
-        roll.input,
-        roll.cached,
-        roll.output,
-        roll.drawn,
-      )
-    }
-    const lot = db.prepare(
-      'INSERT OR IGNORE INTO detected_lots (provider, at, credits) VALUES (?, ?, ?)',
+  for (const [key, entry] of rollups) {
+    const [day, model, project, speed] = key.split('\n') as [string, string, string, string]
+    upsert.run(
+      day,
+      model.slice(0, 100),
+      project.slice(0, 200),
+      speed,
+      entry.requests,
+      entry.input,
+      entry.cached,
+      entry.output,
+      entry.drawn,
     )
-    for (const found of newLots) lot.run('codex', new Date(found.at).toISOString(), found.credits)
-    result.newLots = newLots.length
-    for (const event of events.sort((a, b) => a.observedAt - b.observedAt))
-      if (storeReading(db, event, config.reading_min_interval_s)) result.readings += 1
-    const save = db.prepare(
-      'INSERT INTO cursors (path, offset, state) VALUES (?, ?, ?) ON CONFLICT (path) DO UPDATE SET offset = excluded.offset, state = excluded.state',
-    )
-    for (const [path, cursor] of cursors)
-      save.run(path, cursor.offset, JSON.stringify(cursor.state))
-    putState(db, 'codex.runmin', runmin)
-  })
+  }
+  const lot = db.prepare(
+    'INSERT OR IGNORE INTO detected_lots (provider, at, credits) VALUES (?, ?, ?)',
+  )
+  for (const found of newLots) lot.run('codex', new Date(found.at).toISOString(), found.credits)
+  result.newLots = newLots.length
+  for (const event of events.sort((a, b) => a.observedAt - b.observedAt))
+    if (storeReading(db, event, config.reading_min_interval_s)) result.readings += 1
+  const save = db.prepare(
+    'INSERT INTO cursors (path, offset, state) VALUES (?, ?, ?) ON CONFLICT (path) DO UPDATE SET offset = excluded.offset, state = excluded.state',
+  )
+  for (const [path, cursor] of cursors) save.run(path, cursor.offset, JSON.stringify(cursor.state))
+  putState(db, 'codex.runmin', runmin)
   return result
 }
 

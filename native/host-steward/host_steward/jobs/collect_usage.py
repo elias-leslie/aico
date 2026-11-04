@@ -47,7 +47,7 @@ def build_row(
         aico_status.machine_id(), now, float(cfg["job_every_min"]), float(cfg["job_slack_min"]),
         actions=[
             {"kind": "run", "ref": "sudo -n systemctl start host-steward-collect-usage.service"},
-            {"kind": "log", "ref": "journalctl -u host-steward-collect-usage.service"},
+            {"kind": "log", "ref": "journalctl -u host-steward-collect-usage.service -n 200 --no-pager"},
         ],
     )  # fmt: skip
 

@@ -1,5 +1,5 @@
 {
-  "about": "How Aico reads each subscription's usage. providers: the subscriptions it tracks, in the order the Status page lists them. lookback_days: readings older than this are dropped. reading_min_interval_s: a reading of the same window with no more use is kept only this often. late_after_min: a spend row goes late when no collection refreshed it for this long (the collect job runs every 5 minutes, see packages/jobs/data/jobs.json). unknown_after_min: routing reads every provider as unknown once the last collection is older than this (a few collection periods). Paths: statusline is under XDG_STATE_HOME, sessions under HOME, key_file under the Aico data directory.",
+  "about": "How Aico reads each subscription's usage. providers: the subscriptions it tracks, in the order the Status page lists them. lookback_days: readings older than this are dropped. reading_min_interval_s: a reading of the same window with no more use is kept only this often. late_after_min: a spend row goes late when no collection refreshed it for this long (the collect job runs every 5 minutes, see packages/jobs/data/jobs.json). unknown_after_min: routing reads every provider as unknown once the last collection is older than this (a few collection periods). native_homes: the homes whose Claude statusline snapshot and Codex session logs are read (~ is this user's home, a trailing /* is every folder under it; AICO_NATIVE_HOMES replaces the list). private_words: a home or working directory containing one of these words contributes only token and credit numbers (its name, paths and ids are never stored or reported). Paths: statusline is under XDG_STATE_HOME, sessions under HOME, key_file under the Aico data directory.",
   "providers": [
     {
       "id": "claude",
@@ -17,6 +17,8 @@
   "lookback_days": 8,
   "late_after_min": 15,
   "unknown_after_min": 30,
+  "native_homes": ["~", "~/.local/state/agent-hub/host-homes/*"],
+  "private_words": ["neri"],
   "claude": {
     "statusline": "claude-usage/rate-limits.json",
     "windows": {

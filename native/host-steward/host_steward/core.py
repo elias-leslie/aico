@@ -278,7 +278,7 @@ def make_row(
         "actions": [
             # sudoers allows starting the unit, which runs every check that is due (no unit takes --only)
             {"kind": "run", "ref": "sudo -n systemctl start host-steward-check.service"},
-            {"kind": "log", "ref": "journalctl -u host-steward-check.service"},
+            {"kind": "log", "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"},
         ],
     }
 
@@ -352,6 +352,6 @@ def job_row(
         "last_run": at,
         "next_run": at + timedelta(minutes=every_min + slack_min),
         "actions": list(
-            actions or [{"kind": "log", "ref": f"journalctl -u host-steward-{name}.service"}]
+            actions or [{"kind": "log", "ref": f"journalctl -u host-steward-{name}.service -n 200 --no-pager"}]
         ),
     }

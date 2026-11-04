@@ -100,7 +100,7 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
         target["every_min"],
         target["slack_min"],
         actions=[
-            {"kind": "log", "ref": f"journalctl -u host-steward-{name}.service"},
+            {"kind": "log", "ref": f"journalctl -u host-steward-{name}.service -n 200 --no-pager"},
         ],
     )
     if not args.no_post:

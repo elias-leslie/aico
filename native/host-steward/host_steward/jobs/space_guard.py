@@ -698,7 +698,7 @@ def status_row(cfg: dict[str, Any], state: str, meaning: str, now: float) -> dic
         cfg["slack_min"],
         actions=[
             {"kind": "run", "ref": "sudo -n systemctl start host-steward-space-guard.service"},
-            {"kind": "log", "ref": "journalctl -u host-steward-space-guard.service"},
+            {"kind": "log", "ref": "journalctl -u host-steward-space-guard.service -n 200 --no-pager"},
         ],
     )
 

@@ -191,7 +191,7 @@ def row_text(result: dict[str, Any], live: bool) -> tuple[str, str]:
 def job_actions() -> list[dict[str, str]]:
     return [
         {"kind": "run", "ref": f"sudo -n systemctl start host-steward-{NAME}.service"},
-        {"kind": "log", "ref": f"journalctl -u host-steward-{NAME}.service"},
+        {"kind": "log", "ref": f"journalctl -u host-steward-{NAME}.service -n 200 --no-pager"},
     ]
 
 
