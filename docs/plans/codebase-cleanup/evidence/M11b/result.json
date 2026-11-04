@@ -102,7 +102,7 @@
       "done": true,
       "change": "Only secrets directory requires mode 0700; existing 0755 tool folders accept 0600 files. Delivery map saved first so failures remain tracked for revoke.",
       "tests": [
-        "secrets-delivery.test.ts: 0755 tool folder and tracked failed delivery"
+        "secrets.test.ts: 0755 tool folder and tracked failed delivery"
       ]
     },
     "5": {
@@ -171,7 +171,7 @@
     "sourceCommit": "813f05f9f68c45c10fdd9719f5428893b99b8ac5",
     "singleFinalPostReviewManagedDeploy": true,
     "services": "aico-web, aico-jobs and tether@default active",
-    "hold": "Integration hold kept throughout deployment and live proof; released after this evidence checkpoint, with confirmation in completion report.",
+    "hold": "Integration hold kept throughout deployment and live proof; all lane leases and the hold released. st lease --list verified No active leases.",
     "sessionsMayDisruptChecked": true,
     "nightshiftDeclared": true,
     "CT190Snapshot": "m11b-before-final",
@@ -181,7 +181,9 @@
       "agent-work": "active",
       "neri-hunters": "active"
     },
-    "firewall": "Only the two worker addresses to workstation/CT190 TCP 7449 and CT190 to worker TCP 7449 were added to the lab rules. Workstation accepts the observed PVE SNAT address on its LAN listener. No public bind."
+    "firewall": "Only the two worker addresses to workstation/CT190 TCP 7449 and CT190 to worker TCP 7449 were added to the lab rules. Workstation accepts the observed PVE SNAT address on its LAN listener. No public bind.",
+    "holdReleased": true,
+    "coordinatorNotified": true
   },
   "enrollment": {
     "asks": {
@@ -422,5 +424,8 @@
       }
     ]
   },
-  "remaining": []
+  "remaining": [],
+  "evidenceCommits": [
+    "59ab6961c6511a09437b9dd88a2a72e71b133a74"
+  ]
 }
