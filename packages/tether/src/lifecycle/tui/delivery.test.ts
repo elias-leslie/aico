@@ -13,7 +13,13 @@ import { contextDbPath, DELIVERY, deliver, openContext, setDeliveryTool } from '
 import { DELIVERY_FIXTURE, fixtureDb, fixtureRequest } from '@aico/context/delivery-fixture'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Store } from '../../store'
-import { bindCatalog, insertWidget, setWidgetName, setWidgetProject } from '../catalog'
+import {
+  bindCatalog,
+  insertWidget,
+  reserveRootRequest,
+  setWidgetName,
+  setWidgetProject,
+} from '../catalog'
 import type { TuiAdapter } from './adapters/contract'
 import {
   deliveryDir,
@@ -216,5 +222,49 @@ describe('withContextDelivery', () => {
     const spec = codex()
     const broken = { ...deps, env: { HOME: root, AICO_DATA_DIR: join(root, 'nowhere') } }
     expect(await withContextDelivery(spec, 'e0000001', broken)).toBe(spec)
+  })
+  it('keeps explicit Codex instructions for a blank-slate role in a normal workspace', async () => {
+    switched(true)
+    reserveRootRequest(
+      {
+        requestId: 'blank-role-proof',
+        digest: 'test',
+        widgetId: 'e0000003',
+        logicalSessionId: 'logical-proof',
+        role: 'lane',
+        workRole: 'blank-proof',
+        leadRootReference: null,
+        facetCapsuleRef: null,
+        createdAt: deps.now().getTime(),
+        origin: 'aico',
+      },
+      'codex',
+      'alpha',
+      root,
+    )
+    const db = openContext(contextDbPath(env.AICO_DATA_DIR))
+    db.prepare(
+      "INSERT INTO roles (name, label, context, position, updated_at) VALUES ('blank-proof', 'Blank proof', 'blank-slate', 99, ?)",
+    ).run(deps.now().toISOString())
+    const chosenFile = join(root, 'explicit-proof.md')
+    const chosen = 'Review only. Do not modify files.'
+    writeFileSync(chosenFile, chosen)
+    try {
+      const spec = await withContextDelivery(
+        { ...codex(), chosenInstructions: { file: chosenFile, label: 'proof' } },
+        'e0000003',
+        deps,
+      )
+      const started = start(spec)
+      expect(
+        read(spec.contextDelivery as NonNullable<TuiSpec['contextDelivery']>, started),
+      ).toEqual([chosen])
+      const items = db
+        .prepare('SELECT item FROM delivery_items WHERE item = ? AND cut = 0')
+        .all(`file:${chosenFile}`)
+      expect(items).toHaveLength(1)
+    } finally {
+      db.close()
+    }
   })
 })

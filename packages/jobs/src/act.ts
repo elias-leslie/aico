@@ -37,14 +37,17 @@ function post(url: string): Promise<Answer> {
 /** The answer's own sentence (`message` or `detail`), else the HTTP status. */
 export function answerResult({ status, body }: Answer): JobResult {
   let said: string | null = null
+  let reported: JobResult['state'] | null = null
   try {
-    const parsed = JSON.parse(body) as { message?: unknown; detail?: unknown }
+    const parsed = JSON.parse(body) as { message?: unknown; detail?: unknown; state?: unknown }
+    if (parsed.state === 'ok' || parsed.state === 'warn' || parsed.state === 'failed')
+      reported = parsed.state
     said = typeof parsed.message === 'string' ? parsed.message : null
     said ??= typeof parsed.detail === 'string' ? parsed.detail : null
   } catch {}
   const ok = status >= 200 && status < 300
   return {
-    state: ok ? 'ok' : 'failed',
+    state: ok ? (reported ?? 'ok') : 'failed',
     meaning: said ?? (ok ? 'Finished.' : `Aico answered ${status}.`),
   }
 }

@@ -139,6 +139,10 @@ export async function withContextDelivery<T extends TuiSpec | undefined>(
       return spec
     }
     const now = deps.now()
+    const chosen =
+      how.kind === 'config' && how.key === spec.instructions?.key && spec.chosenInstructions
+        ? readFileSync(spec.chosenInstructions.file, 'utf8')
+        : null
     const delivery = deliver(db, {
       tool: spec.slug,
       project: row.projectId,
@@ -148,14 +152,23 @@ export async function withContextDelivery<T extends TuiSpec | undefined>(
       toolUsage: await deps.toolUsage(row.projectRoot ?? undefined),
       activity: projectActivity(widgetId, row.projectId),
       now,
+      ...(chosen && spec.chosenInstructions
+        ? {
+            sources: [
+              {
+                id: `file:${spec.chosenInstructions.file}`,
+                title: 'Session instructions',
+                type: 'file' as const,
+                text: chosen,
+                required: true,
+              },
+            ],
+          }
+        : {}),
     })
     // Codex takes one developer_instructions: the chosen instructions join the
     // delivery in it, after the context as Agent Hub's launcher put them.
-    const chosen =
-      how.kind === 'config' && how.key === spec.instructions?.key && spec.chosenInstructions
-        ? readFileSync(spec.chosenInstructions.file, 'utf8')
-        : null
-    const text = chosen ? [delivery.text, chosen].filter(Boolean).join('\n\n') : delivery.text
+    const text = delivery.text
     const { files, delivered } = deliveryLaunch(how, dir, text, delivery.hash, chosen !== null)
     rmSync(dir, { recursive: true, force: true })
     mkdirSync(dir, { recursive: true, mode: 0o700 })

@@ -11,6 +11,7 @@ import {
   useHostNeedsYou,
   useNeedsYouState,
 } from './asks/NeedsYou'
+import { ContextLauncher } from './ContextLauncher'
 import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostsLauncher } from './HostsButton'
 import { HistoryLauncher } from './history/HistoryLauncher'
@@ -132,6 +133,7 @@ export function SessionSidebar({
         <HostsLauncher icon />
         <StatusLauncher variant="icon" />
         <HistoryLauncher variant="icon" />
+        <ContextLauncher variant="icon" />
         <nav
           aria-label="Sessions"
           data-testid="session-list"
@@ -193,6 +195,7 @@ export function SessionSidebar({
         <NotesLauncher variant="row" />
         <StatusLauncher variant="row" />
         <HistoryLauncher variant="row" />
+        <ContextLauncher variant="row" />
         <HostsLauncher />
       </div>
       <nav

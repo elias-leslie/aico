@@ -99,7 +99,8 @@ export function savePolicy(db: Database, policy: LaunchPolicy, at: string): void
   } satisfies LaunchSetting)
   const jobNames = policy.jobs.map((job) => job.name)
   db.prepare(
-    `DELETE FROM roles WHERE context IS NOT NULL AND name NOT IN (SELECT value FROM json_each(?))`,
+    `DELETE FROM roles WHERE context IS NOT NULL AND name NOT IN (SELECT value FROM json_each(?))
+      AND name NOT IN (SELECT item FROM context_local_edits WHERE kind = 'role')`,
   ).run(JSON.stringify(jobNames))
   const putRole = db.prepare(
     `INSERT INTO roles (name, label, description, work_roles, context, subagent, tools, position, updated_at)

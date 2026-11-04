@@ -478,6 +478,7 @@ export class ChatSessions {
         prepared = true
         const result = await runAgent({
           db: this.db,
+          contextDbPath: contextDbPath(this.options.dataDir),
           onStart: () => this.push(id),
           rules,
           cwd: run.cwd,

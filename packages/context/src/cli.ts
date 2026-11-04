@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { routeFacts } from '@aico/usage'
 import importData from '../data/agent-hub-import.json' with { type: 'json' }
 import { startedBy } from './ancestry'
+import { bindContextSession } from './cost'
 import { type Database, openContext } from './db'
 import {
   type Activity,
@@ -412,7 +413,18 @@ async function deliverCommand(db: () => Database, rest: string[], io: ContextCli
     marked ||
     env.AGENT_HUB_CONTEXT_PREINJECTED_HASH ||
     (format === 'pi' && env.AGENT_HUB_CONTEXT_BYPASS !== '1')
-  if (HOOK_FORMATS.includes(format) && delivered && !parsed.flags.has('--force')) return 0
+  if (HOOK_FORMATS.includes(format) && delivered && !parsed.flags.has('--force')) {
+    // Startup knows both ids while the agent is alive. Keep the link so the
+    // nightly pass can observe this exact conversation after its session ends.
+    const native = str(parsed, 'session')
+    if (marked && env.AICO_SESSION_ID && native)
+      try {
+        bindContextSession(db(), tool, env.AICO_SESSION_ID, native)
+      } catch (error) {
+        io.err(`Context session link was not saved: ${(error as Error).message}\n`)
+      }
+    return 0
+  }
   // No --project: the pane's. Either way deliver() gives project scope only to a
   // project in the registry, and a folder name the hook guessed gets global context.
   const project = str(parsed, 'project') ?? env.AICO_PROJECT_ID ?? ''

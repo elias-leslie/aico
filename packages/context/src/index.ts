@@ -5,6 +5,19 @@
 
 export { agentHubSource } from './agent-hub'
 export { CONTEXT_COMMANDS, type ContextCliIo, runContextCli } from './cli'
+export {
+  bindContextSession,
+  budgetHint,
+  COST,
+  type CostDelivery,
+  estimatedTokens,
+  type InventoryItem,
+  observeDelivery,
+  recentDeliveries,
+  tokenBudget,
+  type UseEvent,
+  unusedItems,
+} from './cost'
 export { contextDbPath, type Database, openContext } from './db'
 export {
   type Activity,
@@ -20,6 +33,7 @@ export {
   setDeliveryTool,
   toolId,
 } from './deliver'
+export { ContextEditError, contextCatalog, editPrompt, editRole } from './editor'
 export { type AgentHubSource, type ImportResult, importAgentHub } from './import'
 export { type LaunchPolicy, loadPolicy } from './launch'
 export {

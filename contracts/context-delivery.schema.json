@@ -77,6 +77,10 @@
           "description": "Render order is the enum order (authority first). The budget cuts sections in the order packages/context/data/delivery.json cutOrder lists, the last section of a kind first; guardrail and mandate are never cut."
         },
         "title": { "type": "string" },
+        "required": {
+          "type": "boolean",
+          "description": "Caller-supplied instructions that the byte budget must never cut."
+        },
         "bytes": { "type": "integer", "minimum": 0 },
         "items": {
           "type": "array",

@@ -177,6 +177,31 @@ const MIGRATIONS = [
      cut INTEGER NOT NULL DEFAULT 0,
      PRIMARY KEY (delivery_id, position)
    ) STRICT;`,
+  `ALTER TABLE delivery_items ADD COLUMN title TEXT;
+   ALTER TABLE delivery_items ADD COLUMN item_type TEXT;
+   ALTER TABLE delivery_items ADD COLUMN content_hash TEXT;
+   CREATE TABLE context_observations (
+     delivery_id INTEGER PRIMARY KEY REFERENCES deliveries(id) ON DELETE CASCADE,
+     observed_at TEXT NOT NULL,
+     complete INTEGER NOT NULL,
+     source TEXT NOT NULL
+   ) STRICT;
+   CREATE TABLE context_uses (
+     delivery_id INTEGER NOT NULL REFERENCES deliveries(id) ON DELETE CASCADE,
+     item TEXT NOT NULL,
+     at TEXT NOT NULL,
+     evidence TEXT NOT NULL,
+     PRIMARY KEY(delivery_id, item)
+   ) STRICT;
+   CREATE TABLE context_local_edits (
+     kind TEXT NOT NULL,
+     item TEXT NOT NULL,
+     PRIMARY KEY(kind, item)
+   ) STRICT;
+   CREATE TABLE role_context_overrides (
+     role TEXT PRIMARY KEY REFERENCES roles(name) ON DELETE CASCADE,
+     mode TEXT NOT NULL CHECK (mode IN ('default', 'blank-slate'))
+   ) STRICT;`,
 ]
 
 /** The context DB file in a data directory. */

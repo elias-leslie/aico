@@ -10,7 +10,8 @@
 
 import { createHash } from 'node:crypto'
 import { transaction } from '@aico/store'
-import { type Database, putSetting } from './db'
+import { type Database, getSetting, putSetting } from './db'
+import { localRoles } from './editor'
 import { policyFromAgentHub, savePolicy } from './launch'
 import { type Memory, putMemory, type Scope, TIERS } from './memory'
 import { putPrompt } from './prompts'
@@ -231,6 +232,7 @@ export function importAgentHub(
       db
         .prepare(
           `DELETE FROM prompts WHERE id NOT IN (SELECT value FROM json_each(?))
+           AND slug NOT IN (SELECT item FROM context_local_edits WHERE kind = 'prompt')
            AND id IN (SELECT prompt_id FROM prompt_revisions WHERE reason = ?)`,
         )
         .run(JSON.stringify(prompts.map((prompt) => prompt.id)), reason).changes,
@@ -238,7 +240,14 @@ export function importAgentHub(
     for (const memory of memories) putMemory(db, memory, reason, memory.updatedAt)
     if (settings[0]) putSetting(db, 'memory', settings[0])
 
-    for (const prompt of prompts)
+    const editedRoles = localRoles(db)
+    for (const prompt of prompts) {
+      if (
+        db
+          .prepare("SELECT 1 FROM context_local_edits WHERE kind = 'prompt' AND item = ?")
+          .get(prompt.slug)
+      )
+        continue
       putPrompt(
         db,
         {
@@ -255,6 +264,7 @@ export function importAgentHub(
         },
         reason,
       )
+    }
 
     savePolicy(db, policy, options.now)
     const putRole = db.prepare(
@@ -280,11 +290,10 @@ export function importAgentHub(
       })
     })
 
-    db.exec('DELETE FROM context_budgets')
     const putBudget = db.prepare(
-      'INSERT INTO context_budgets (harness, role, warn_tokens, jump_pct, note, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT OR IGNORE INTO context_budgets (harness, role, warn_tokens, jump_pct, note, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
     )
-    for (const budget of budgets)
+    for (const budget of getSetting(db, 'budgets.imported') ? [] : budgets)
       putBudget.run(
         budget.harness,
         budget.role,
@@ -293,6 +302,18 @@ export function importAgentHub(
         budget.note,
         budget.updated_at,
       )
+    putSetting(db, 'budgets.imported', true)
+    for (const role of editedRoles) {
+      db.prepare(
+        'UPDATE roles SET label = ?, description = ?, context = ?, updated_at = ? WHERE name = ?',
+      ).run(role.label, role.description, role.context, role.updated_at, role.name)
+      db.prepare('DELETE FROM role_prompts WHERE role = ?').run(role.name)
+      role.links.forEach((id, i) => {
+        db.prepare(
+          'INSERT OR IGNORE INTO role_prompts SELECT ?, id, ? FROM prompts WHERE id = ?',
+        ).run(role.name, i, id)
+      })
+    }
 
     db.exec('DELETE FROM project_permissions')
     const putProject = db.prepare(

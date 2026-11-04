@@ -1,0 +1,9 @@
+{
+  "about": "Token sizes are estimates from UTF-8 bytes, not provider billing. An unused candidate needs this many completely observed recent sessions without a use marker. Incomplete or missing transcripts stay unknown. Only assistant citations and tool loads count, never the delivered text. Excluded projects are never observed by this view.",
+  "bytesPerToken": 4,
+  "recentDays": 7,
+  "minObservedSessions": 3,
+  "biggestItems": 3,
+  "excludedProjects": ["neri", "neri-hunters"],
+  "nightly": { "at": "04:10", "noticeCooldownSeconds": 86400 }
+}

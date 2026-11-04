@@ -6,6 +6,7 @@ import { openUsage, putState, storeReading, usageDbPath } from '@aico/usage'
 import { describe, expect, it } from 'vitest'
 import { runContextCli } from './cli'
 import { openContext } from './db'
+import { contextCatalog, editPrompt, editRole } from './editor'
 import {
   type AgentHubSource,
   importAgentHub,
@@ -140,6 +141,40 @@ const count = (db: ReturnType<typeof openContext>, table: string) =>
   (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
 
 describe('importAgentHub', () => {
+  it('carries budgets once and preserves prompt/role edits on refresh', () => {
+    const db = openContext(':memory:')
+    try {
+      const hub = new FakeHub()
+      importAgentHub(db, hub, options)
+      const p = getPrompt(db, 'coder-system')!
+      editPrompt(
+        db,
+        p.slug,
+        { ...p, name: 'Local prompt', content: 'Local text.', contextPolicy: { scope: '' } },
+        '2026-11-04T12:00:00Z',
+      )
+      const r = contextCatalog(db).roles.find((r) => r.name === 'coder')!
+      editRole(
+        db,
+        r.name,
+        { ...r, label: 'Local role', context: 'default', prompts: [p.id] },
+        '2026-11-04T12:00:00Z',
+      )
+      db.prepare('UPDATE context_budgets SET warn_tokens = 7').run()
+      importAgentHub(db, hub, options)
+      expect(getPrompt(db, p.slug)).toMatchObject({ content: 'Local text.', name: 'Local prompt' })
+      expect(contextCatalog(db).roles.find((r) => r.name === 'coder')).toMatchObject({
+        label: 'Local role',
+        context: 'default',
+        prompts: [p.id],
+      })
+      expect(db.prepare('SELECT warn_tokens FROM context_budgets').get()).toMatchObject({
+        warn_tokens: 7,
+      })
+    } finally {
+      db.close()
+    }
+  })
   it('copies the rows and gives the same counts when run again', () => {
     const db = openContext(':memory:')
     const hub = new FakeHub()

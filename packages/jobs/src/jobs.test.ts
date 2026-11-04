@@ -257,7 +257,9 @@ describe('the runner', () => {
       expect(lines[0]).toContain('lease holder davion-sidarli is not reachable')
       lines.length = 0
       await main(['list', '--machine', 'gem'], env)
-      expect(lines).toHaveLength(3)
+      expect(lines).toHaveLength(
+        readJobs(new URL('../data/jobs.json', import.meta.url).pathname).length,
+      )
       expect(lines.every((line) => line.includes('lease holder davion-sidarli unavailable'))).toBe(
         true,
       )

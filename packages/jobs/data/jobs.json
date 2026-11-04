@@ -31,6 +31,15 @@
       "lease_s": 300
     },
     {
+      "kind": "context-unused",
+      "what": "Loaded context use",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "at": "04:10",
+      "run": { "post": "/api/context/check" },
+      "lease_s": 300
+    },
+    {
       "kind": "usage-collect",
       "what": "Usage collection",
       "project": "aico",

@@ -204,6 +204,36 @@ describe('aico context deliver', () => {
     })
     expect((await run([...args, '--force'], marker, tree)).out).toContain('additionalContext')
   })
+  it('links the latest launch to its exact native conversation even when injection stands down', async () => {
+    const db = openContext(dbPath)
+    try {
+      recordDelivery(
+        db,
+        deliver(db, { tool: 'codex', session: 'own-proof', role: 'testing' }),
+        'launch',
+        new Date(DELIVERY_FIXTURE.now),
+      )
+    } finally {
+      db.close()
+    }
+    await run(
+      ['--tool', 'codex', '--session', 'native-proof', '--format', 'codex'],
+      { AICO_SESSION_ID: 'own-proof', AICO_CONTEXT_DELIVERED: 'abc', AICO_CONTEXT_PID: '80' },
+      { 100: 90, 90: 80 },
+    )
+    const read = openContext(dbPath)
+    try {
+      expect(
+        read
+          .prepare(
+            'SELECT o.source FROM context_observations o JOIN deliveries d ON d.id = o.delivery_id WHERE d.session = ?',
+          )
+          .get('own-proof'),
+      ).toMatchObject({ source: 'codex:native-proof' })
+    } finally {
+      read.close()
+    }
+  })
 
   it('delivers to a session the launched agent started in turn', async () => {
     const args = ['--tool', 'codex', '--project', 'alpha', '--format', 'codex']

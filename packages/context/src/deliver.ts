@@ -9,6 +9,7 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import config from '../data/delivery.json' with { type: 'json' }
+import { budgetHint, type ItemType } from './cost'
 import { type Database, getSetting, json, putSetting } from './db'
 
 export type DeliveryConfig = typeof config
@@ -50,12 +51,17 @@ export interface DeliverRequest {
   toolUsage?: Source<string>
   /** The project's other sessions; omitted: none asked for. */
   activity?: Source<Activity[]>
+  /** Caller-owned files, skills or rules actually handed to the agent. */
+  sources?: { id: string; title: string; type: ItemType; text: string; required?: boolean }[]
   now?: Date
 }
 
 export interface Item {
   id: string
   bytes: number
+  title?: string
+  type?: ItemType
+  hash?: string
 }
 
 export interface Section {
@@ -64,6 +70,7 @@ export interface Section {
   title: string
   bytes: number
   items: Item[]
+  required?: boolean
 }
 
 export interface Delivery {
@@ -89,6 +96,7 @@ type Missing = { id: string; reason: string }[]
 
 const SEPARATOR = '\n\n'
 const bytesOf = (text: string) => Buffer.byteLength(text)
+const hashOf = (text: string) => createHash('sha256').update(text).digest('hex')
 
 export class UnknownTool extends Error {}
 
@@ -139,9 +147,11 @@ function consumerOf(
     for (const work of lower(safeJson(row.work_roles, []))) known.add(work)
   const tags = new Set<string>()
   const row = role
-    ? (db.prepare('SELECT work_roles, context FROM roles WHERE name = ?').get(role) as
-        | { work_roles: string; context: string | null }
-        | undefined)
+    ? (db
+        .prepare(
+          'SELECT r.work_roles, coalesce(o.mode, r.context) AS context FROM roles r LEFT JOIN role_context_overrides o ON o.role = r.name WHERE r.name = ?',
+        )
+        .get(role) as { work_roles: string; context: string | null } | undefined)
     : undefined
   if (role) {
     const works = row ? lower(safeJson(row.work_roles, [])) : [role.toLowerCase()]
@@ -217,6 +227,7 @@ function objectColumn<T extends object>(text: unknown, fallback: T): T {
 // --- prompts ------------------------------------------------------------------
 
 interface PromptRow {
+  id: number
   slug: string
   name: string
   description: string
@@ -245,10 +256,17 @@ function promptSections(
 ): Built[] {
   const rows = db
     .prepare(
-      'SELECT slug, name, description, content, kind, is_global, context_policy FROM prompts ORDER BY slug',
+      'SELECT id, slug, name, description, content, kind, is_global, context_policy FROM prompts ORDER BY slug',
     )
     .all() as unknown as PromptRow[]
   const sections: Built[] = []
+  const linked = new Set(
+    (
+      db.prepare('SELECT prompt_id FROM role_prompts WHERE role = ?').all(who.role ?? '') as {
+        prompt_id: number
+      }[]
+    ).map((p) => p.prompt_id),
+  )
   for (const row of rows) {
     let policy: Policy
     try {
@@ -261,8 +279,9 @@ function promptSections(
       continue
     }
     const targets = policy.targets ?? []
-    const scoped =
-      policy.scope === 'global'
+    const scoped = linked.has(row.id)
+      ? 'role'
+      : policy.scope === 'global'
         ? 'instruction'
         : policy.scope === 'project' && who.project && targets.includes(who.project)
           ? 'project'
@@ -294,7 +313,15 @@ function promptSections(
       kind,
       title: row.name,
       bytes: bytesOf(body),
-      items: [{ id: `prompt:${row.slug}`, bytes: bytesOf(body) }],
+      items: [
+        {
+          id: `prompt:${row.slug}`,
+          title: row.name,
+          type: 'prompt',
+          hash: hashOf(body),
+          bytes: bytesOf(body),
+        },
+      ],
       body,
     })
   }
@@ -305,6 +332,7 @@ function promptSections(
 
 interface MemoryRow {
   id: string
+  summary: string
   scope: string
   scope_id: string
   tier: 'guardrail' | 'mandate'
@@ -325,7 +353,7 @@ function memorySections(
 ): Built[] {
   const rows = db
     .prepare(
-      `SELECT id, scope, scope_id, tier, content, triggers, applicability FROM memories
+      `SELECT id, summary, scope, scope_id, tier, content, triggers, applicability FROM memories
        WHERE tier IN ('guardrail', 'mandate')
          AND (scope = 'global' OR (scope = 'project' AND scope_id = ?) OR (scope = 'agent' AND scope_id = ?))
        ORDER BY created_at DESC, id`,
@@ -352,6 +380,8 @@ function memorySections(
       .filter((row) => row.tier === tier)
       .map((row) => ({
         id: `memory:${row.id}`,
+        title:
+          row.summary || row.content.trim().split('\n')[0]?.slice(0, 100) || `memory:${row.id}`,
         line: `- [${tier === 'guardrail' ? 'G' : 'M'}:${row.id.slice(0, 8)}] ${row.content.trim()}`,
       }))
     if (!lines.length) continue
@@ -361,7 +391,13 @@ function memorySections(
       kind: tier,
       title: 'Runtime Memory',
       bytes: bytesOf(body),
-      items: lines.map((entry) => ({ id: entry.id, bytes: bytesOf(entry.line) + 1 })),
+      items: lines.map((entry) => ({
+        id: entry.id,
+        title: entry.title,
+        type: 'memory',
+        hash: hashOf(entry.line),
+        bytes: bytesOf(entry.line) + 1,
+      })),
       body,
     })
   }
@@ -430,6 +466,7 @@ function fit(sections: Built[], budget: number, settings: DeliveryConfig) {
     if (NEVER_CUT.includes(kind)) continue
     for (let index = kept.length - 1; index >= 0 && total(kept) > budget; index--) {
       const section = kept[index] as Built
+      if (section.required) continue
       if (section.kind !== kind) continue
       kept.splice(index, 1)
       cut.push(section)
@@ -457,10 +494,29 @@ function selected(
   settings: DeliveryConfig,
   missing: Missing,
 ): Built[] {
-  const sections = [
-    ...promptSections(db, who, settings, missing),
-    ...memorySections(db, who, settings, missing),
-  ]
+  const sections = who.blank
+    ? []
+    : [...promptSections(db, who, settings, missing), ...memorySections(db, who, settings, missing)]
+  for (const source of request.sources ?? [])
+    if (source.text.trim())
+      sections.push({
+        id: source.id,
+        kind: 'instruction',
+        title: source.title,
+        bytes: bytesOf(source.text),
+        required: source.required,
+        items: [
+          {
+            id: source.id,
+            title: source.title,
+            type: source.type,
+            hash: hashOf(source.text),
+            bytes: bytesOf(source.text),
+          },
+        ],
+        body: source.text,
+      })
+  if (who.blank) return sections.filter((s) => s.required)
   if (failed(request.activity)) missing.push({ id: 'activity', reason: request.activity.error })
   else if (request.activity && who.project) {
     const section = activitySection(request.activity, request.now ?? new Date(), settings)
@@ -483,8 +539,8 @@ export function deliver(
   const tool = toolId(request.tool, settings)
   const missing: Missing = []
   const who = consumerOf(db, request, tool, missing)
-  // A Blank Slate role gets nothing added, computed blocks included.
-  const sections = who.blank ? [] : selected(db, who, request, settings, missing)
+  // Blank Slate skips shared context; explicit required caller instructions survive.
+  const sections = selected(db, who, request, settings, missing)
   // Stable: within a kind, prompts keep slug order and memory groups their tier order.
   sections.sort((a, b) => KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind))
   const limits = (
@@ -495,22 +551,40 @@ export function deliver(
   const budget = request.hook
     ? Math.min(limits.budgetBytes, limits.hookBudgetBytes ?? limits.budgetBytes)
     : limits.budgetBytes
-  const { kept, cut, over } = fit(sections, budget, settings)
-  const text = kept.map((section) => section.body).join(SEPARATOR)
-  return {
+  let { kept, cut, over } = fit(sections, budget, settings)
+  const result = (): Delivery => ({
     tool,
     project: who.project,
     session: request.session?.trim() || null,
     role: who.role,
-    hash: createHash('sha256').update(text).digest('hex'),
-    bytes: bytesOf(text),
+    hash: createHash('sha256')
+      .update(kept.map((s) => s.body).join(SEPARATOR))
+      .digest('hex'),
+    bytes: bytesOf(kept.map((s) => s.body).join(SEPARATOR)),
     budget,
-    over,
+    over:
+      over && kept.reduce((sum, s) => sum + s.bytes + SEPARATOR.length, -SEPARATOR.length) > budget,
     sections: kept.map(publicSection),
     cut: cut.map(publicSection),
     missing,
-    text,
+    text: kept.map((s) => s.body).join(SEPARATOR),
+  })
+  const hint = budgetHint(db, result())
+  if (hint) {
+    const room = budget - bytesOf(hint) - SEPARATOR.length
+    ;({ kept, cut, over } = fit(sections, Math.max(0, room), settings))
+    const line = budgetHint(db, result())
+    if (line)
+      kept.push({
+        id: 'context-budget',
+        kind: 'activity',
+        title: 'Context budget',
+        body: line,
+        bytes: bytesOf(line),
+        items: [{ id: 'context-budget', bytes: bytesOf(line) }],
+      })
   }
+  return result()
 }
 
 /** Keep what a delivery loaded into a session (and what it cut), item by item, and
@@ -521,7 +595,7 @@ export function recordDelivery(
   channel: string,
   at: Date,
   settings: DeliveryConfig = DELIVERY,
-): void {
+): number {
   const oldest = new Date(at.getTime() - settings.keepDays * 86_400_000).toISOString()
   db.prepare('DELETE FROM deliveries WHERE at < ?').run(oldest)
   const row = db
@@ -543,7 +617,7 @@ export function recordDelivery(
       JSON.stringify(delivery.missing),
     ) as { id: number }
   const insert = db.prepare(
-    'INSERT INTO delivery_items (delivery_id, position, section, kind, item, bytes, cut) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO delivery_items (delivery_id, position, section, kind, item, bytes, cut, title, item_type, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   )
   let position = 0
   for (const [sections, cut] of [
@@ -552,7 +626,19 @@ export function recordDelivery(
   ] as const)
     for (const section of sections)
       for (const item of section.items)
-        insert.run(row.id, position++, section.id, section.kind, item.id, item.bytes, cut)
+        insert.run(
+          row.id,
+          position++,
+          section.id,
+          section.kind,
+          item.id,
+          item.bytes,
+          cut,
+          item.title ?? section.title,
+          item.type ?? null,
+          item.hash ?? null,
+        )
+  return row.id
 }
 
 // --- the per-tool switch --------------------------------------------------------

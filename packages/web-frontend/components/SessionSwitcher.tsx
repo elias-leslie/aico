@@ -14,6 +14,7 @@ import {
 } from '@/lib/utils/slot'
 import { NeedsYouCount } from './AttentionBadge'
 import { NeedsYouLauncher } from './asks/NeedsYou'
+import { ContextLauncher } from './ContextLauncher'
 import { CoordinatorBadge } from './CoordinatorBadge'
 import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostBadge } from './HostBadge'
@@ -168,6 +169,7 @@ export function SessionSwitcher({
             <NotesLauncher variant="row" />
             <StatusLauncher variant="row" />
             <HistoryLauncher variant="row" />
+            <ContextLauncher variant="row" />
             <HostsButton onClick={openHosts} />
           </div>
         </div>
@@ -213,6 +215,7 @@ export function SessionSwitcher({
                 <NotesLauncher variant="row" />
                 <StatusLauncher variant="row" />
                 <HistoryLauncher variant="row" />
+                <ContextLauncher variant="row" />
                 <HostsButton onClick={openHosts} />
               </div>
               {list}

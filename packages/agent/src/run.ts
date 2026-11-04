@@ -35,6 +35,7 @@ import {
   shouldCompact,
 } from '@earendil-works/pi-coding-agent'
 import { type CompactionSettings, contextMessages, piCompaction } from './compaction'
+import { recordAgentContext } from './context-cost'
 import { type ModelRefusal, type ModelSwap, refusalOf, swapOf } from './outcomes'
 import { allowedModels, sessionHeaders } from './providers'
 import { type ChainModel, HARNESS, type Harness, type Refused, type RoleRules } from './rules'
@@ -107,6 +108,8 @@ export interface RunOptions {
   models?: Models
   /** Project context files (AGENTS.md and the like); defaults to Pi's loader for `cwd`. */
   contextFiles?: { path: string; content: string }[]
+  /** Inventory destination; supplied by CLI/chat, absent in isolated runs/tests. */
+  contextDbPath?: string
   harness?: Harness
   log?: (line: string) => void
 }
@@ -244,10 +247,12 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
   let toolCalls = 0
   let inUse = rules.chain[0]?.id ?? ''
   let detachAbort = () => {}
+  let recordUse: ReturnType<typeof recordAgentContext>
   const finish = (outcome: Outcome): RunResult => {
     const wallMs = Date.now() - started
     const detail = outcome.kind === 'done' ? { model: outcome.model } : outcome
     transcript.finish(outcome.kind, detail, totals, toolCalls, wallMs)
+    recordUse?.finish(outcome.kind === 'done')
     return { runId, outcome, tokens: totals, toolCalls, wallMs, handoffs, turns, compactions }
   }
   const add = (usage: Tokens) => {
@@ -289,6 +294,35 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
 
     const contextFiles =
       options.contextFiles ?? loadProjectContextFiles({ cwd, agentDir: getAgentDir() })
+    recordUse = recordAgentContext(
+      options.contextDbPath,
+      { id: runId, role: rules.role, cwd },
+      [
+        {
+          id: 'rule:aico-agent',
+          title: 'Aico agent instructions',
+          type: 'rule',
+          text: harness.prompt.join('\n').replaceAll('{cwd}', cwd),
+        },
+        ...(options.sessionId
+          ? [
+              {
+                id: 'rule:aico-chat',
+                title: 'Chat instructions',
+                type: 'rule' as const,
+                text: harness.chat.prompt.join('\n'),
+              },
+            ]
+          : []),
+        ...contextFiles.map(({ path, content }) => ({
+          id: `file:${path}`,
+          title: path,
+          type: 'file' as const,
+          text: `<project_instructions path="${path}">\n${content}\n</project_instructions>`,
+        })),
+      ],
+      log,
+    )
     const markers = credentialMarkers([getAgentDir(), ...harness.credential_paths], homedir())
     const withheld = new Set<string>()
     /** Responses the provider's own stream ended in error: only these fall back down the chain. */
@@ -439,6 +473,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
     options.signal?.addEventListener('abort', abort, { once: true })
     detachAbort = () => options.signal?.removeEventListener('abort', abort)
     const unsubscribe = agent.subscribe((event) => {
+      if (event.type === 'message_end') recordUse?.message(event.message)
       // Observers project deltas only; stored rows remain the transcript's authority.
       options.onEvent?.(
         event,

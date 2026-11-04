@@ -19,6 +19,7 @@ import { CaptureRouter } from './capture-router'
 import { readChatAttachments } from './chat-attachments'
 import { CLI_COMMANDS, runCli } from './cli'
 import { HISTORY_LINES, loadConfig } from './config'
+import { registerContextRoutes } from './context'
 import { WebStore } from './db'
 import { ExtractWorker } from './extract-worker'
 import { NotesStore } from './notes-db'
@@ -29,6 +30,7 @@ import { PortfolioAiOwner } from './owners/portfolio-ai'
 import type { OwnerAdapter } from './owners/types'
 import { VehiclesOwner } from './owners/vehicles'
 import { createWebServer } from './server'
+import { createServiceAppsServer } from './service-apps'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
 import { registerStatusRoutes, startSelfRows } from './status'
@@ -141,6 +143,14 @@ function serve(): void {
     },
   })
   const sync = startSync({ config, store, notes, blobsDir })
+  registerContextRoutes(api, {
+    dataDir: config.dataDir,
+    machine,
+    publicHost: config.publicHost,
+    tether,
+    status,
+    notifier: notify.notifier,
+  })
   registerSyncRoutes(api, sync.loop)
   const runs = new StatusRuns()
   registerStatusRoutes(api, status, { changed: notify, machine, running: () => runs.ids() })
@@ -169,6 +179,19 @@ function serve(): void {
   registerExportRoutes(api, config, sync.loop)
   const server = createWebServer(config, api, terminals, createStaticSite(config.staticDir))
 
+  const serviceApps = config.serviceApps.listen
+    ? createServiceAppsServer({ status, notify, tether })
+    : null
+  if (serviceApps && config.serviceApps.listen) {
+    const { host, port } = config.serviceApps.listen
+    serviceApps.on('error', (error) =>
+      console.error('[aico-web] app LAN listener failed:', error.message),
+    )
+    serviceApps.listen(port, host, () =>
+      console.log(`[aico-web] app LAN listener on ${host}:${port}`),
+    )
+  }
+
   background.start()
   notify.start()
   reader.start()
@@ -190,6 +213,8 @@ function serve(): void {
     console.log(`[aico-web] ${signal}: stopping`)
     void chats.shutdown()
     ;(selfRows as ReturnType<typeof startSelfRows> | null)?.stop(signal)
+    serviceApps?.close()
+    serviceApps?.closeAllConnections()
     background.stop()
     reader.stop()
     terminals.stop()

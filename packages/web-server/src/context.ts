@@ -1,0 +1,227 @@
+// The agents/prompts page and its nightly check. Context owns its DB and
+// inventory; Tether alone reads native transcripts. We ask only for sessions
+// with a delivery, and retain markers rather than conversation text.
+import {
+  COST,
+  ContextEditError,
+  type CostDelivery,
+  contextCatalog,
+  contextDbPath,
+  type Database,
+  editPrompt,
+  editRole,
+  observeDelivery,
+  openContext,
+  recentDeliveries,
+  type UseEvent,
+  unusedItems,
+} from '@aico/context'
+import type { Notifier } from '@aico/notify'
+import type { StatusRow, StatusStore } from '@aico/status'
+import type { TetherClient } from '@aico/tether-client'
+import { fromThisMachine } from './guard'
+import { objectBody, type Router } from './http'
+import { HttpError } from './tether'
+
+export interface ContextDeps {
+  dataDir: string
+  machine: string
+  publicHost: string | null
+  tether: Pick<TetherClient, 'getSession' | 'historySession' | 'historyEvents'>
+  status: Pick<StatusStore, 'upsert'>
+  notifier: Pick<Notifier, 'receive'>
+  now?: () => Date
+}
+
+/** Missing, clipped, changing or unfinished evidence leaves absence unknown. */
+export async function observeContext(
+  db: Database,
+  tether: ContextDeps['tether'],
+  now: Date,
+): Promise<number> {
+  const deliveries = recentDeliveries(db, now)
+  const groups = new Map<string, CostDelivery[]>()
+  for (const d of deliveries)
+    if (d.session && d.tool !== 'aico-agent') {
+      const source = (
+        db.prepare('SELECT source FROM context_observations WHERE delivery_id = ?').get(d.id) as
+          | { source: string }
+          | undefined
+      )?.source
+      const key = JSON.stringify([d.tool, d.session, source])
+      groups.set(key, [...(groups.get(key) ?? []), d])
+    }
+  let unavailable = 0
+  for (const group of groups.values()) {
+    const d = group[0] as CostDelivery
+    let historyId = (
+      db.prepare('SELECT source FROM context_observations WHERE delivery_id = ?').get(d.id) as
+        | { source: string }
+        | undefined
+    )?.source
+    try {
+      if (!historyId) {
+        let native = d.session as string
+        try {
+          const live = await tether.getSession(native)
+          if (live.projectId !== d.project) throw new Error('session project changed')
+          native = live.resumeId ?? ''
+        } catch (error) {
+          if (!(error instanceof Error && 'status' in error && error.status === 404)) throw error
+        }
+        if (!native) throw new Error('native conversation unknown')
+        historyId = `${d.tool}:${native}`
+      }
+      const detail = await tether.historySession(historyId)
+      if (detail.project !== d.project || COST.excludedProjects.includes(detail.project ?? ''))
+        throw new Error('session project differs')
+      let from = 0
+      let size: number | null = null
+      let complete = detail.outcome === 'completed'
+      const events: UseEvent[] = []
+      for (;;) {
+        const page = await tether.historyEvents(historyId, { from, limit: 500 })
+        if (size !== null && size !== page.size) complete = false
+        size = page.size
+        for (const event of page.items)
+          if (event.role === 'assistant') {
+            events.push(event)
+            if (event.text.endsWith('…') || event.at === null) complete = false
+          }
+        if (page.newer === null) break
+        if (page.newer <= from) throw new Error('transcript cursor did not advance')
+        from = page.newer
+      }
+      complete &&= events.length > 0
+      for (const delivery of group) {
+        const scoped = events.filter((e) => e.at !== null && e.at >= Date.parse(delivery.at))
+        observeDelivery(
+          db,
+          delivery,
+          scoped,
+          complete && scoped.some((e) => e.kind === 'text' && e.text.trim()),
+          historyId,
+          now,
+        )
+      }
+    } catch {
+      unavailable++
+      // Clear a formerly complete observation when its evidence cannot be checked.
+      for (const delivery of group) observeDelivery(db, delivery, [], false, historyId ?? '', now)
+    }
+  }
+  return unavailable
+}
+
+/** Both the scheduler and manual runs replace this same Status row. */
+export function nightlyRow(
+  deliveries: CostDelivery[],
+  unavailable: number,
+  machine: string,
+  now: Date,
+): StatusRow {
+  const unused = unusedItems(deliveries)
+  const observed = deliveries.filter((d) => d.observed).length
+  const next = new Date(now)
+  const [hour, minute] = COST.nightly.at.split(':').map(Number) as [number, number]
+  next.setHours(hour, minute, 0, 0)
+  if (next <= now) next.setDate(next.getDate() + 1)
+  const meaning = !deliveries.length
+    ? 'No recent deliveries. Usage is unknown.'
+    : `${unused.length} items have no recorded use across at least ${COST.minObservedSessions} observed sessions. ${observed}/${deliveries.length} deliveries fully observed${unavailable ? `; ${unavailable} sessions unavailable` : ''}.`
+  return {
+    id: 'jobs/context-unused',
+    what: 'Loaded context use',
+    kind: 'job',
+    machine,
+    project: 'aico',
+    state:
+      unused.length || unavailable || observed < deliveries.length || !deliveries.length
+        ? 'warn'
+        : 'ok',
+    meaning,
+    last_run: now.toISOString(),
+    next_run: next.toISOString(),
+    actions: [{ kind: 'detail', ref: '/agents' }],
+  }
+}
+
+export async function checkContext(db: Database, deps: ContextDeps) {
+  const now = deps.now?.() ?? new Date()
+  const unavailable = await observeContext(db, deps.tether, now)
+  const deliveries = recentDeliveries(db, now)
+  const row = nightlyRow(deliveries, unavailable, deps.machine, now)
+  deps.status.upsert([row])
+  const unused = unusedItems(deliveries)
+  if (unused.length)
+    deps.notifier.receive(
+      {
+        v: 1,
+        source: 'aico',
+        kind: 'info',
+        severity: 'warning',
+        push: 'tray',
+        key: 'context-unused',
+        title: `${unused.length} context items have no recorded use`,
+        body: unused
+          .map(
+            (i) => `${i.title} (${i.tool}, ${i.role ?? 'no role'}, ${i.project ?? 'no project'})`,
+          )
+          .join('; ')
+          .slice(0, 1000),
+        detail: `Last ${COST.recentDays} days; at least ${COST.minObservedSessions} fully observed sessions per item. Citations and recorded loads only; this does not measure influence on a model.`,
+        ...(deps.publicHost
+          ? {
+              open: `https://${deps.publicHost}/agents`,
+              actions: ['open', 'mark-read'],
+              primary: 'open',
+            }
+          : { actions: ['mark-read'], primary: 'mark-read' }),
+        cooldown: COST.nightly.noticeCooldownSeconds,
+      },
+      'local',
+    )
+  return { state: row.state, message: row.meaning }
+}
+
+export function registerContextRoutes(router: Router, deps: ContextDeps): void {
+  const withDb = async <T>(work: (db: Database) => T | Promise<T>): Promise<T> => {
+    const db = openContext(contextDbPath(deps.dataDir))
+    try {
+      return await work(db)
+    } catch (error) {
+      if (error instanceof ContextEditError) throw new HttpError(error.status, error.message)
+      throw error
+    } finally {
+      db.close()
+    }
+  }
+  router.on('GET', '/api/context', () =>
+    withDb((db) => ({
+      ...contextCatalog(db),
+      deliveries: recentDeliveries(db, deps.now?.()),
+      recentDays: COST.recentDays,
+      minObservedSessions: COST.minObservedSessions,
+      bytesPerToken: COST.bytesPerToken,
+      at: (deps.now?.() ?? new Date()).toISOString(),
+    })),
+  )
+  router.on('PUT', '/api/context/prompts/:slug', async (ctx) => {
+    const body = objectBody(await ctx.body())
+    return withDb((db) => {
+      editPrompt(db, ctx.params.slug, body, (deps.now?.() ?? new Date()).toISOString())
+      return { saved: true }
+    })
+  })
+  router.on('PUT', '/api/context/roles/:name', async (ctx) => {
+    const body = objectBody(await ctx.body())
+    return withDb((db) => {
+      editRole(db, ctx.params.name, body, (deps.now?.() ?? new Date()).toISOString())
+      return { saved: true }
+    })
+  })
+  router.on('POST', '/api/context/check', (ctx) => {
+    if (!fromThisMachine(ctx.req)) throw new HttpError(403, 'Run this check on the Aico host.')
+    return withDb((db) => checkContext(db, deps))
+  })
+}

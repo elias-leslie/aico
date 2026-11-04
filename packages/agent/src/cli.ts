@@ -127,6 +127,7 @@ export async function main(
         task,
         rules,
         db,
+        contextDbPath: contextDbPath(dir),
         ...(deps.models && { models: deps.models }),
         log,
         onStart: tell,
