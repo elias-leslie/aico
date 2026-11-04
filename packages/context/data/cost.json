@@ -5,5 +5,5 @@
   "minObservedSessions": 3,
   "biggestItems": 3,
   "excludedProjects": ["neri", "neri-hunters"],
-  "nightly": { "at": "04:10", "noticeCooldownSeconds": 86400 }
+  "nightly": { "noticeCooldownSeconds": 86400 }
 }

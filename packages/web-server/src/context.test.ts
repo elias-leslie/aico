@@ -53,7 +53,7 @@ function deps(
       machine: 'test',
       publicHost: 'aico.example',
       tether,
-      status: { upsert: (items: unknown[]) => rows.push(...items) },
+      status: { upsert: (items: unknown[]) => rows.push(...items), read: () => ({ rows: [] }) },
       notifier: {
         receive: (notice: Record<string, unknown>) => {
           notices.push(notice)
@@ -66,6 +66,8 @@ function deps(
 it('writes one nightly row and one tray-only info notice when items qualify', async () => {
   const db = seed()
   const d = deps()
+  d.options.status.read = () =>
+    ({ rows: [{ id: 'jobs/context-unused', next_run: '2026-11-05T09:10:00Z' }] }) as never
   try {
     const result = await checkContext(db, d.options)
     expect(result.state).toBe('warn')
@@ -74,6 +76,7 @@ it('writes one nightly row and one tray-only info notice when items qualify', as
       id: 'jobs/context-unused',
       kind: 'job',
       state: 'warn',
+      next_run: '2026-11-05T09:10:00.000Z',
     })
     expect(d.notices).toHaveLength(1)
     expect(d.notices[0]).toMatchObject({ push: 'tray', kind: 'info', key: 'context-unused' })

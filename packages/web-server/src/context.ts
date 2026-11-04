@@ -28,7 +28,7 @@ export interface ContextDeps {
   machine: string
   publicHost: string | null
   tether: Pick<TetherClient, 'getSession' | 'historySession' | 'historyEvents'>
-  status: Pick<StatusStore, 'upsert'>
+  status: Pick<StatusStore, 'upsert' | 'read'>
   notifier: Pick<Notifier, 'receive'>
   now?: () => Date
 }
@@ -119,13 +119,10 @@ export function nightlyRow(
   unavailable: number,
   machine: string,
   now: Date,
+  nextRun?: string,
 ): StatusRow {
   const unused = unusedItems(deliveries)
   const observed = deliveries.filter((d) => d.observed).length
-  const next = new Date(now)
-  const [hour, minute] = COST.nightly.at.split(':').map(Number) as [number, number]
-  next.setHours(hour, minute, 0, 0)
-  if (next <= now) next.setDate(next.getDate() + 1)
   const meaning = !deliveries.length
     ? 'No recent deliveries. Usage is unknown.'
     : `${unused.length} items have no recorded use across at least ${COST.minObservedSessions} observed sessions. ${observed}/${deliveries.length} deliveries fully observed${unavailable ? `; ${unavailable} sessions unavailable` : ''}.`
@@ -141,7 +138,7 @@ export function nightlyRow(
         : 'ok',
     meaning,
     last_run: now.toISOString(),
-    next_run: next.toISOString(),
+    ...(nextRun ? { next_run: nextRun } : {}),
     actions: [{ kind: 'detail', ref: '/agents' }],
   }
 }
@@ -150,7 +147,9 @@ export async function checkContext(db: Database, deps: ContextDeps) {
   const now = deps.now?.() ?? new Date()
   const unavailable = await observeContext(db, deps.tether, now)
   const deliveries = recentDeliveries(db, now)
-  const row = nightlyRow(deliveries, unavailable, deps.machine, now)
+  // The jobs scheduler owns the schedule, including the next run after a manual pass.
+  const nextRun = deps.status.read().rows.find((r) => r.id === 'jobs/context-unused')?.next_run
+  const row = nightlyRow(deliveries, unavailable, deps.machine, now, nextRun)
   deps.status.upsert([row])
   const unused = unusedItems(deliveries)
   if (unused.length)
