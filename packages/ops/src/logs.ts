@@ -5,12 +5,14 @@ import type { Project } from './deploy'
 import { canonical } from './deploy'
 import type { Runner } from './sh'
 
+// One level only, as `st logs -l` shows it: journal priorities grouped the way st names them.
 const LEVELS: Record<string, string> = {
-  ERROR: 'err',
-  WARN: 'warning',
-  WARNING: 'warning',
-  INFO: 'info',
-  DEBUG: 'debug',
+  CRITICAL: 'emerg..crit',
+  ERROR: 'err..err',
+  WARN: 'warning..warning',
+  WARNING: 'warning..warning',
+  INFO: 'notice..info',
+  DEBUG: 'debug..debug',
 }
 
 export interface LogsRequest {

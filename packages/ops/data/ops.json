@@ -24,12 +24,12 @@
       "ST_SESSION_ID",
       "TMUX",
       "TMUX_PANE"
-    ]
+    ],
+    "installedOps": "~/.local/lib/aico/ops"
   },
   "vm": {
-    "ssh": "root@davion-gem",
-    "powerPools": ["summitflow", "summitflow-ops", "summitflow-power"],
-    "snapshotPools": ["summitflow"],
+    "apiBase": "http://127.0.0.1:8001/api",
+    "timeoutSeconds": 900,
     "labRegistry": "/var/lib/nightshift/findings/registry.json",
     "labHours": 4
   },

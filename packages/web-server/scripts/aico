@@ -35,15 +35,34 @@ aico_checks() {
 
 [ "${1:-}" = tasks ] && [ "${2:-}" = done ] && aico_checks "$@"
 
-# The ops bundle; rebuilt when its sources (or the packages it bundles) are newer.
+# Ops runs from the installed release. A first install builds an export of HEAD, never dirty sources.
 aico_ops() {
-  local ops_dir="$AICO_REPO_ROOT/packages/ops" node
-  local ops_bundle="$ops_dir/dist/aico-ops.mjs"
+  local node sha installed ops_bundle bootstrap
   node="$(aico_web_node)"
-  if [ ! -r "$ops_bundle" ] || [ -n "$(find "$ops_dir/src" "$ops_dir/data" "$AICO_REPO_ROOT/packages/status/src" \
-    "$AICO_REPO_ROOT/packages/store/src" \( -name '*.ts' -o -name '*.json' \) -newer "$ops_bundle" -print -quit 2>/dev/null)" ]; then
-    PATH="$(dirname "$node"):$PATH" npm --prefix "$ops_dir" run --silent build >&2
+  sha="$(git -C "$AICO_REPO_ROOT" rev-parse HEAD)"
+  installed="${AICO_OPS_INSTALLED:-$(git -C "$AICO_REPO_ROOT" show "$sha:packages/ops/data/ops.json" | \
+    "$node" -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>console.log(JSON.parse(s).deploy.installedOps.replace(/^~(?=\/)/,process.env.HOME)))')}"
+  ops_bundle="$installed/packages/ops/dist/aico-ops.mjs"
+  if [ ! -r "$ops_bundle" ]; then
+    bootstrap="$installed.bootstrap"
+    mkdir -p "$bootstrap"
+    (
+      flock 9
+      [ ! -r "$ops_bundle" ] || exit 0
+      [ ! -r "$bootstrap/$sha/packages/ops/dist/aico-ops.mjs" ] || exit 0
+      local staging
+      staging="$(mktemp -d "$bootstrap/.$sha.XXXXXX")"
+      trap 'rm -rf -- "$staging"' EXIT
+      git -C "$AICO_REPO_ROOT" archive "$sha" | tar -x -C "$staging"
+      cd "$staging"
+      PATH="$(dirname "$node"):$PATH" st tools run --label 'Build committed Aico ops' -- bash -c \
+        'npm ci --no-audit --no-fund --prefer-offline && npm run --silent build -w packages/ops' >&2
+      mv -- "$staging" "$bootstrap/$sha"
+    ) 9>"$bootstrap/build.lock"
+    [ -r "$ops_bundle" ] || ops_bundle="$bootstrap/$sha/packages/ops/dist/aico-ops.mjs"
   fi
+  # Pin the real file: a detached job keeps this version even when another deploy moves the link.
+  ops_bundle="$(readlink -f -- "$ops_bundle")"
   AICO_REPO_ROOT="$AICO_REPO_ROOT" exec "$node" --disable-warning=ExperimentalWarning "$ops_bundle" "$@"
 }
 

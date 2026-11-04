@@ -27,12 +27,24 @@ describe('aico logs', () => {
       '--since',
       '-2h',
       '-p',
-      'err',
+      'err..err',
     ])
     const sys = parseLogsArgs(['redis-server']) as Exclude<ReturnType<typeof parseLogsArgs>, string>
     expect(journalArgs(sys, project, units([], ['redis-server.service']))?.[0]).toBe('-u')
     const all = parseLogsArgs(['aico']) as Exclude<ReturnType<typeof parseLogsArgs>, string>
     expect(journalArgs(all, project, units([]))).toContain('aico-web.service')
+  })
+
+  it('-l shows only that level, as st logs -l does', () => {
+    const level = (name: string) => {
+      const req = parseLogsArgs(['tether@default', '-l', name])
+      if (typeof req === 'string') throw new Error(req)
+      const args = journalArgs(req, project, units(['tether@default.service'])) ?? []
+      return args[args.indexOf('-p') + 1]
+    }
+    expect(level('WARN')).toBe('warning..warning')
+    expect(level('info')).toBe('notice..info')
+    expect(level('CRITICAL')).toBe('emerg..crit')
   })
 
   it('answers null for a unit neither manager has, and refuses bad options', () => {

@@ -3,7 +3,8 @@
 // entry fields), so either tool lists, and SummitFlow's timer still prunes, the other's points.
 // A point is a read-only snapshot of the nearest subvolume holding the project (for /srv/workspaces
 // projects that is the whole workspace). Restore swaps a project that is its own subvolume for a
-// writable copy of a point; inside the production workspace it is refused, as st refuses it.
+// writable copy of a point (after saving the current tree as a point, so it can be undone); inside the
+// production workspace it is refused, as st refuses it.
 // Both take SummitFlow's physical and per-scope locks (flock), so the two never interleave.
 
 import { randomBytes } from 'node:crypto'
@@ -110,16 +111,19 @@ export function loadPoints(deps: SnapDeps, scope: Scope): Point[] {
   if (!existsSync(path)) return []
   const raw = JSON.parse(readFileSync(path, 'utf8'))
   if (!Array.isArray(raw)) throw new Refusal(`Snapshot manifest has an unexpected format: ${path}`)
-  return (raw as Point[])
-    .filter((entry) => entry && typeof entry === 'object' && entry.scope_path === scope.root)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+  // The same list, in the same order, st's preview resolves -N against: every entry, newest first by
+  // created_at compared as plain text (a stable sort, as Python's).
+  return (raw as Point[]).filter((entry) => entry && typeof entry === 'object').sort(newestFirst)
 }
+
+const newestFirst = (a: Point, b: Point) =>
+  a.created_at === b.created_at ? 0 : a.created_at < b.created_at ? 1 : -1
 
 function savePoints(deps: SnapDeps, scope: Scope, update: (all: Point[]) => Point[]) {
   const path = manifestPath(deps, scope)
   mkdirSync(dirname(path), { recursive: true })
   const all = existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as Point[]) : []
-  const next = update(all).sort((a, b) => b.created_at.localeCompare(a.created_at))
+  const next = update(all).sort(newestFirst)
   const temporary = `${path}.${process.pid}.tmp`
   writeFileSync(temporary, JSON.stringify(next, null, 2))
   renameSync(temporary, path)
@@ -230,9 +234,18 @@ export function take(deps: SnapDeps, scope: Scope, name: string | null): Point {
   return point
 }
 
-/** Destructive: the project root becomes a writable copy of the point; its current contents are deleted. */
-export function restore(deps: SnapDeps, scope: Scope, target: string): Point {
+/**
+ * The project root becomes a writable copy of the point. Its current contents are first saved as a
+ * point of their own (named pre-restore), so the restore can be undone with another restore.
+ */
+export function restore(
+  deps: SnapDeps,
+  scope: Scope,
+  target: string,
+): { point: Point; saved: Point } {
   const point = find(loadPoints(deps, scope), target)
+  if (point.scope_path !== scope.root)
+    throw new Refusal(`Snapshot ${point.id} belongs to ${point.scope_path}, not ${scope.root}`)
   if (point.capture_root !== scope.root || deps.boundary(scope.root) !== scope.root)
     throw new Refusal(
       'Restore needs a project that is its own subvolume; for a shared workspace recover single files instead',
@@ -246,6 +259,7 @@ export function restore(deps: SnapDeps, scope: Scope, target: string): Point {
   const old = `${scope.root}.__rollback_old__`
   if (existsSync(old))
     throw new Refusal(`Rollback staging path already exists: ${old}; clean it up first`)
+  const saved = take(deps, scope, 'pre-restore')
   renameSync(scope.root, old)
   const made = deps.run('btrfs', ['subvolume', 'snapshot', point.snapshot_path, scope.root])
   if (made.code !== 0) {
@@ -260,7 +274,7 @@ export function restore(deps: SnapDeps, scope: Scope, target: string): Point {
   savePoints(deps, scope, (all) =>
     all.map((entry) => (entry.id === point.id ? { ...entry, last_restored_at: at } : entry)),
   )
-  return { ...point, last_restored_at: at }
+  return { point: { ...point, last_restored_at: at }, saved }
 }
 
 const line = (index: number, p: Point) =>
@@ -303,9 +317,12 @@ export function snapshots(argv: string[], deps: SnapDeps, cwd = process.cwd()): 
   }
   if (verb === 'restore') {
     if (!args[0]) throw new Refusal('aico snapshots restore needs a snapshot id, name or -N', 2)
-    const point = restore(deps, scope, args[0])
+    const { point, saved } = restore(deps, scope, args[0])
     deps.out(
       `ROLLED_BACK ${point.id}|name:${point.name ?? '-'}|scope:project:${scope.project}|backend:btrfs`,
+    )
+    deps.out(
+      `The tree before the restore is snapshot ${saved.id}; undo with: st rollback ${saved.id}`,
     )
     return 0
   }

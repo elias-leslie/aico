@@ -1,7 +1,7 @@
 {
   "name": "@aico/ops",
   "version": "0.1.0",
-  "description": "Host operations: aico deploy (a project's units from the exact commit it started on), aico logs, aico snapshots (Btrfs points) and aico vm (Proxmox guests over root SSH).",
+  "description": "Host operations: aico deploy (a project's units from the exact commit it started on), aico logs, aico snapshots (Btrfs points) and aico vm (Proxmox guests through SummitFlow's VM route).",
   "private": true,
   "license": "Apache-2.0",
   "aico": {

@@ -76,11 +76,48 @@ describe('aico snapshots', () => {
 
     writeFileSync(join(root, 'f.txt'), 'two\n')
     writeFileSync(join(root, 'new.txt'), 'x\n')
-    restore(deps, scope, '-1')
+    const { saved } = restore(deps, scope, '-1')
     expect(readFileSync(join(root, 'f.txt'), 'utf8')).toBe('one\n')
     expect(existsSync(join(root, 'new.txt'))).toBe(false)
     expect(existsSync(`${root}.__rollback_old__`)).toBe(false)
-    expect(loadPoints(deps, scope)[0]?.last_restored_at).toBe('2026-11-04T12:00:00.000Z')
+    expect(loadPoints(deps, scope).find((p) => p.id === point.id)?.last_restored_at).toBe(
+      '2026-11-04T12:00:00.000Z',
+    )
+    // The tree it replaced was saved first, so the restore can be undone.
+    expect(saved.name).toBe('pre-restore')
+    restore(deps, scope, saved.id)
+    expect(readFileSync(join(root, 'f.txt'), 'utf8')).toBe('two\n')
+    expect(readFileSync(join(root, 'new.txt'), 'utf8')).toBe('x\n')
+  })
+
+  it("resolves -N against the list st rollback's preview shows: every entry, newest first as text", () => {
+    const { deps, scope } = setup()
+    const entry = (id: string, created_at: string, scope_path = scope.root) =>
+      ({ id, name: null, created_at, scope_path }) as unknown as Point
+    const dir = join(deps.catalogue, 'scratch', 'project-scratch')
+    mkdirSync(dir, { recursive: true })
+    // st writes microseconds and +00:00, Aico writes milliseconds and Z; Python orders them as plain text.
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify([
+        entry('st-1', '2026-11-04T12:00:00.000000+00:00'),
+        entry('aico-1', '2026-11-04T12:00:00.000Z'),
+        entry('elsewhere', '2026-11-04T13:00:00.000Z', '/other/root'),
+        entry('st-0', '2026-11-04T11:59:59.999999+00:00'),
+      ]),
+    )
+    const python = run('python3', [
+      '-c',
+      'import json,sys; e=json.load(open(sys.argv[1])); e.sort(key=lambda x: x["created_at"], reverse=True); print(" ".join(x["id"] for x in e))',
+      join(dir, 'manifest.json'),
+    ]).out.trim()
+    expect(
+      loadPoints(deps, scope)
+        .map((p) => p.id)
+        .join(' '),
+    ).toBe(python)
+    expect(find(loadPoints(deps, scope), '-1').id).toBe('elsewhere')
+    expect(() => restore(deps, scope, '-1')).toThrow(/belongs to \/other\/root/)
   })
 
   it('refuses restore inside the production workspace or of a shared-boundary point', () => {

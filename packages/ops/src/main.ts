@@ -15,7 +15,7 @@ import {
 import { journalArgs, parseLogsArgs } from './logs'
 import { run } from './sh'
 import { snapDeps, snapshots } from './snapshots'
-import { vm } from './vm'
+import { routeOp, vm } from './vm'
 
 const USAGE = `Usage:
   aico deploy [PROJECT] [--scope full|backend|frontend|worker|UNIT] [--worker UNIT]... [--include-all-workers]
@@ -28,7 +28,7 @@ const USAGE = `Usage:
       read-only Btrfs points of the project (the catalogue st snap keeps); restore only for a project
       that is its own subvolume outside the production workspace
   aico vm list | status ID | start ID [--hours H --reason R] | stop ID | snapshot ID [NAME]
-      Proxmox guests over root SSH; power and snapshots only for the pools in data/ops.json`
+      Proxmox guests through SummitFlow's VM route (its API token; Proxmox enforces the token's pools)`
 
 /** The repo this launcher belongs to: AICO_REPO_ROOT, else the nearest project.identity.json above cwd. */
 export function repoRoot(env = process.env, cwd = process.cwd()): string {
@@ -76,7 +76,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
         rest,
         snapDeps(run, (line) => console.log(line), env),
       )
-    if (verb === 'vm') return vm(rest, run, (line) => console.log(line), err)
+    if (verb === 'vm') return await vm(rest, routeOp(env), run, (line) => console.log(line), err)
     if (verb === 'help' || verb === '--help' || verb === '-h' || !verb) {
       console.log(USAGE)
       return verb ? 0 : 2
