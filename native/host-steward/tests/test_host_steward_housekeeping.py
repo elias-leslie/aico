@@ -123,9 +123,9 @@ def test_actor_live_runs_the_command():
     assert fake.calls == [["echo", "a"]] and actor.would == []
 
 
-def test_switches_start_off():
-    assert not any(DATA["acting"].values())
-    assert set(DATA["acting"]) >= {"housekeeping", "space_guard", "scrub", "nvme_tests"}
+def test_every_controller_has_a_switch():
+    assert set(DATA["acting"]) >= {"memctl", "housekeeping", "space_guard", "scrub", "nvme_tests"}
+    assert all(isinstance(on, bool) for on in DATA["acting"].values())
 
 
 # housekeeping
@@ -429,7 +429,11 @@ def test_space_guard_job_posts_a_dry_run_row_and_keeps_the_ballast_record(tmp_pa
     )
     fake = Fake(*BTRFS_OK, (["btrfs", "filesystem", "usage"], Result(0, usage())))
     monkeypatch.setattr(core, "run_command", fake)
-    data = {**DATA, "jobs": {**DATA["jobs"], "space-guard": guard_cfg(tmp_path)}}
+    data = {
+        **DATA,
+        "jobs": {**DATA["jobs"], "space-guard": guard_cfg(tmp_path)},
+        "acting": {**DATA["acting"], "space_guard": False},
+    }
     rows = []
     code = space_guard.main(argparse.Namespace(no_post=False), data, rows.append)
     assert (
@@ -629,6 +633,31 @@ def test_scrub_live_uses_the_wrapper_and_the_lock(tmp_path):
         ),
     )
     assert state == "warn" and "exit 1" in text
+
+
+def test_status_rows_say_the_timer_runs_it_and_start_nothing(tmp_path, monkeypatch):
+    """--status (install-root.sh after a switch flips): the row follows [acting] at once and nothing is started."""
+    fake = Fake(
+        (["btrfs", "scrub", "status"], Result(0, SCRUB_OUT)),
+        (["smartctl", "-l"], Result(0, NVME_LOG)),
+        (["smartctl", "-A"], Result(0, "Power On Hours: 9,190\n")),
+        (["is-enabled"], Result(1, "disabled\n")),
+        (["is-active"], Result(3, "inactive\n")),
+    )
+    monkeypatch.setattr(core, "run_command", fake)
+    rows = []
+    args = argparse.Namespace(target="root", no_post=False, status=True)
+    assert scrub.main(args, scrub_data(tmp_path, live=True), rows.append) == 0
+    live = {**DATA, "acting": {**DATA["acting"], "nvme_tests": True}}
+    args = argparse.Namespace(kind="long", no_post=False, status=True)
+    assert nvme_test.main(args, live, rows.append) == 0
+    assert rows[0]["meaning"].startswith("Runs on host-steward's timer; last scrub finished")
+    assert rows[1]["meaning"].startswith("Runs on host-steward's timer; last self-test Short")
+    assert not any("start" in call or "-t" in call for call in fake.calls)
+    rows.clear()
+    dry = argparse.Namespace(target="root", no_post=False, status=True)
+    scrub.main(dry, scrub_data(tmp_path), rows.append)
+    assert rows[0]["meaning"].startswith("Dry run: would scrub /;")
 
 
 def test_scrub_unknown_target(tmp_path):

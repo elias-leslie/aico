@@ -16,14 +16,15 @@ backup_required_targets = ["pve-cluster-config", "pve-host-files", "pve-vm-100-b
 backup_alert_age_h = 6.0
 
 # Controllers that change the host (kill processes, delete scratch data, start scrubs and self-tests). Each is a
-# dry run until its switch here is true: it reports what it would do and does nothing. Nightshift's own controllers
-# act until cutover; the cutover turns these on in the same step that stops Nightshift's.
+# dry run until its switch here is true: it reports what it would do and does nothing. Cut over from Nightshift's
+# on 2026-11-03 (M5a step A: its timers and memctl disabled, not masked). Rolling one back: switch it off, rerun
+# install-root.sh, re-enable its Nightshift counterpart below.
 [acting]
-memctl = false
-housekeeping = false
-space_guard = false
-scrub = false
-nvme_tests = false
+memctl = true
+housekeeping = true
+space_guard = true
+scrub = true
+nvme_tests = true
 
 # Nightshift's units that do the same work as each controller above. A controller switched on above still stands down
 # (does nothing, posts a warn row saying why) while any of its counterparts is enabled or active, so two never act at

@@ -674,6 +674,7 @@ def test_main_once_dry_writes_only_its_own_files(tmp_path, monkeypatch):
     h = Host(tmp_path)
     data = copy.deepcopy(DATA)
     data["checks"]["storage"]["disks"] = []
+    data["acting"]["memctl"] = False
     monkeypatch.setattr(memctl, "build", lambda *a: h.controller(now=0))
     posted = []
     code = memctl.main(Namespace(once=True, preview=False), data, posted.append)

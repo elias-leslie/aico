@@ -167,7 +167,11 @@ def test_the_space_guard_writes_iso_time(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(core, "run_command", fake)
     cfg = {**DATA["jobs"]["space-guard"], "top_mounts": str(tmp_path / "tops"), "grow_roots": []}
-    data = {**DATA, "jobs": {**DATA["jobs"], "space-guard": cfg}}
+    data = {
+        **DATA,
+        "jobs": {**DATA["jobs"], "space-guard": cfg},
+        "acting": {**DATA["acting"], "space_guard": False},
+    }
     space_guard.main(argparse.Namespace(no_post=True), data, lambda row: True)
     saved = json.loads((acts.job_dir() / "space-guard.json").read_text())
     assert isinstance(saved["at"], str) and abs(core.timestamp(saved["at"]) - time.time()) < 60
@@ -192,6 +196,7 @@ def test_the_storage_check_reads_nightshifts_file_until_space_guard_acts(tmp_pat
 def test_memctl_reads_the_ballast_record_the_cutover_flag_picks():
     data = copy.deepcopy(DATA)
     paths = data["memctl"]["paths"]
+    data["acting"]["space_guard"] = False
     assert memctl.ballast_file(data) == Path(paths["ballast_state"])
     data["acting"]["space_guard"] = True
     assert memctl.ballast_file(data) == Path(paths["ballast_state_own"])
@@ -348,9 +353,9 @@ def test_a_dry_job_never_asks_systemctl(tmp_path, monkeypatch):
     fake = Fake((["smartctl", "-l"], Result(0, "")), (["smartctl", "-A"], Result(0, "")))
     monkeypatch.setattr(core, "run_command", fake)
     rows = []
-    nvme_test.main(
-        argparse.Namespace(kind="short", no_post=False), copy.deepcopy(DATA), rows.append
-    )
+    data = copy.deepcopy(DATA)
+    data["acting"]["nvme_tests"] = False
+    nvme_test.main(argparse.Namespace(kind="short", no_post=False), data, rows.append)
     assert rows[0]["state"] == "ok" and not any(call[0] == "systemctl" for call in fake.calls)
 
 

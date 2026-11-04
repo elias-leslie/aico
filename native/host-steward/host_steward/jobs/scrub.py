@@ -2,9 +2,10 @@
 
 Same command and the same lock file as nightshift-btrfs-scrub-*.service: `flock LOCK [wrap...] btrfs scrub
 start -Bd -c 3 MOUNT`, where the backup disk's scrub runs inside SummitFlow's backup window. The calendars are the
-timers in systemd/ (Sun 01..07 for the system disk, Sun 15..21 for the backup disk, 08:00), installed but not
-enabled until cutover. With [acting] scrub off it only says "would run: ..." and posts a "Dry run" row that also
-carries the last real result (btrfs scrub status).
+timers in systemd/ (Sun 01..07 for the system disk, Sun 15..21 for the backup disk, 08:00), which install-root.sh
+enables while [acting] scrub is on. With it off it only says "would run: ..." and posts a "Dry run" row that also
+carries the last real result (btrfs scrub status). --status posts the row for the schedule and last result and
+starts nothing (install-root.sh runs it, so the row follows the switch at once rather than at the next timer).
 """
 
 from __future__ import annotations
@@ -30,6 +31,9 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--no-post", action="store_true", help="print the result, post no Status row"
+    )
+    parser.add_argument(
+        "--status", action="store_true", help="post the row (schedule, last result), scrub nothing"
     )
 
 
@@ -79,6 +83,10 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
     if actor.live and (why := core.refusal(data, "scrub", core.run_command)):
         actor.live = False  # stands down: no scrub, no look at the disk, just the warning
         state, meaning, detail = "warn", why, {"refused": True}
+    elif getattr(args, "status", False) and actor.live:
+        actor.live = False  # the timer runs it; this only says so
+        meaning = f"Runs on host-steward's timer; {last_result(actor, target['mount'])}."
+        state, detail = "ok", {"status": True}
     else:
         state, meaning, detail = run_scrub(cfg, target, actor)
     name = f"scrub-{args.target}"

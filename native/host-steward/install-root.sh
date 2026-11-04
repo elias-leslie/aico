@@ -4,8 +4,9 @@
 # links the launcher into $HS_BIN, installs the units into $HS_UNIT_DIR and the sudoers line into $HS_SUDOERS_DIR,
 # and enables the timers that are safe beside Nightshift's: the check pass, the usage collector, and housekeeping
 # and the space guard (dry runs until [acting] is switched on in checks.toml). The scrub and NVMe self-test timers
-# are installed but NOT enabled (Nightshift's still run them); cutover enables them. The memory controller is a
-# user unit of $HS_OWNER (installed to $HS_USER_UNIT_DIR, enabled as a dry run).
+# follow [acting] scrub / nvme_tests: enabled while on, disabled while off (Nightshift's run them then), and their
+# Status rows are reposted at once (--status starts nothing). The memory controller is a user unit of $HS_OWNER
+# (installed to $HS_USER_UNIT_DIR, enabled; it acts per [acting] memctl).
 # HS_NO_SYSTEMCTL=1 copies files only (tests).
 set -euo pipefail
 
@@ -46,6 +47,22 @@ install -m 0440 "$here/sudoers/60-host-steward" "$sudoers_dir/60-host-steward"
 if [ "${HS_NO_SYSTEMCTL:-0}" != 1 ]; then
   systemctl --no-ask-password daemon-reload
   systemctl --no-ask-password enable --now "${enable_timers[@]}"
+  read -r scrub_on nvme_on < <(python3 -c 'import sys, tomllib
+a = tomllib.load(open(sys.argv[1], "rb")).get("acting", {})
+print(int(bool(a.get("scrub"))), int(bool(a.get("nvme_tests"))))' "$here/host_steward/data/checks.toml")
+  for pair in "$scrub_on host-steward-scrub-native.timer host-steward-scrub-root.timer" \
+    "$nvme_on host-steward-nvme-short-test.timer host-steward-nvme-long-test.timer"; do
+    read -r on timers <<<"$pair"
+    # shellcheck disable=SC2086 # two timer names
+    if [ "$on" = 1 ]; then systemctl --no-ask-password enable --now $timers
+    else systemctl --no-ask-password disable --now $timers; fi
+  done
+  for target in native root; do
+    "$prefix/host-steward" scrub --target "$target" --status >/dev/null || echo "scrub $target row: exit $?"
+  done
+  for kind in short long; do
+    "$prefix/host-steward" nvme-test "$kind" --status >/dev/null || echo "nvme-test $kind row: exit $?"
+  done
   owner_uid="$(id -u "$owner")"
   user_env=(env "XDG_RUNTIME_DIR=/run/user/$owner_uid" "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$owner_uid/bus")
   runuser -u "$owner" -- "${user_env[@]}" systemctl --user daemon-reload
