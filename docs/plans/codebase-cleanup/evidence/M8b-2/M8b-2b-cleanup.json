@@ -1,0 +1,109 @@
+{
+  "main_chats": [
+    {
+      "id": "a1d16743",
+      "models": [
+        "codex/gpt-6.1-sol"
+      ],
+      "questions": 0,
+      "state": "ended"
+    },
+    {
+      "id": "4427d069",
+      "models": [
+        "codex/gpt-6.1-sol"
+      ],
+      "questions": 0,
+      "state": "ended"
+    },
+    {
+      "id": "c9ff7230",
+      "models": [
+        "opencode-go/deepseek-v4.1-flash"
+      ],
+      "questions": 0,
+      "state": "ended"
+    },
+    {
+      "id": "805a082f",
+      "models": [
+        "opencode-go/deepseek-v4.1-flash"
+      ],
+      "questions": 0,
+      "state": "ended"
+    },
+    {
+      "id": "b608d12e",
+      "models": [
+        "opencode-go/deepseek-v4.1-flash"
+      ],
+      "questions": 0,
+      "state": "ended"
+    },
+    {
+      "id": "01ce3874",
+      "models": [
+        "opencode-go/deepseek-v4.1-flash",
+        "codex/gpt-6.1-sol"
+      ],
+      "questions": 0,
+      "state": "ended"
+    }
+  ],
+  "tester_chats": [
+    {
+      "id": "0927999c",
+      "models": [
+        "opencode-go/deepseek-v4.1-flash"
+      ],
+      "questions": 0,
+      "state": "ended"
+    },
+    {
+      "id": "20d0e053",
+      "models": [
+        "opencode-go/deepseek-v4.1-flash"
+      ],
+      "questions": 0,
+      "state": "ended"
+    },
+    {
+      "id": "2e08298c",
+      "models": [
+        "opencode-go/deepseek-v4.1-flash"
+      ],
+      "questions": 0,
+      "state": "ended"
+    },
+    {
+      "id": "5131e230",
+      "models": [
+        "opencode-go/deepseek-v4.1-flash"
+      ],
+      "questions": 0,
+      "state": "ended"
+    }
+  ],
+  "test_captures": [
+    {
+      "deleted": true,
+      "id": "b22ae8539031"
+    },
+    {
+      "deleted": true,
+      "id": "52046702fe5d"
+    },
+    {
+      "deleted": true,
+      "id": "fc7a9d916dc0"
+    }
+  ],
+  "main_browser": {
+    "name": "m8b2b-live",
+    "state": "closed"
+  },
+  "tester_browsers": {
+    "phone": "reported closed and tester root ended",
+    "desktop": "reported closed and tester root ended"
+  }
+}

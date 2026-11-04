@@ -1,0 +1,621 @@
+{
+  "milestone": "M8b-2b",
+  "recorded_at": "2026-11-04T22:25:20.218263+00:00",
+  "source_commits": [
+    "4eab2572ed690801fdb12ca3479348cd603e3ba0",
+    "cf12bb0c3956292085d2e37148751154ae07a163",
+    "f8b3c7d12990a21b3630ea3c5487a692c25f2cf8",
+    "9924eb9106f4edf4480b26b5fa403003297511f4",
+    "e2e76c88c275399f4e6a6daf809cfa4b1ce3bb1e",
+    "830ca2021c4f4e31674c32bc9a3f158539632cb0",
+    "5ea59796d674a6659faab1006099939a93590730",
+    "a221fd7a3b706b2c0b13365d2f811c5dc8b78d9d"
+  ],
+  "source_loc": {
+    "added": 1592,
+    "removed": 152,
+    "net": 1440
+  },
+  "acceptance_receipt": "/srv/workspaces/projects/aico/.git/st/acceptance/de8cedd3dd1cf1a36d86c93f77489fd6ab640e1d56efcbb3493aad87799dcd82.json",
+  "acceptance_before_after": {
+    "before": {
+      "acceptance_artifact": "/srv/workspaces/projects/aico/.git/st/acceptance/0b6f305388f2100c51c0d1c72f96e59c8c18365e564814cdde1102c336a99acd.json",
+      "acceptance_id": "0b6f305388f2100c51c0d1c72f96e59c8c18365e564814cdde1102c336a99acd",
+      "state": "success",
+      "source_commit": "d90e8dc6b32135c747dd93bdd697eb4f4a6d8467",
+      "duration_ms": 147079.024
+    },
+    "after": {
+      "acceptance_artifact": "/srv/workspaces/projects/aico/.git/st/acceptance/de8cedd3dd1cf1a36d86c93f77489fd6ab640e1d56efcbb3493aad87799dcd82.json",
+      "acceptance_id": "de8cedd3dd1cf1a36d86c93f77489fd6ab640e1d56efcbb3493aad87799dcd82",
+      "state": "success",
+      "source_commit": "a221fd7a3b706b2c0b13365d2f811c5dc8b78d9d",
+      "duration_ms": 145382.337
+    }
+  },
+  "deployment": {
+    "id": "aico-0632d52b0bbf",
+    "project": "aico",
+    "sha": "a221fd7a3b706b2c0b13365d2f811c5dc8b78d9d",
+    "state": "succeeded",
+    "argv": [
+      "aico",
+      "--sha",
+      "a221fd7a3b706b2c0b13365d2f811c5dc8b78d9d",
+      "--job",
+      "aico-0632d52b0bbf",
+      "--scope",
+      "full"
+    ],
+    "queued_at": "2026-11-04T22:14:01.913Z",
+    "message": "Deployed a221fd7a3b: aico-web (116 s)",
+    "units": [
+      "aico-web.service"
+    ],
+    "exit_code": 0,
+    "finished_at": "2026-11-04T22:15:57.908Z"
+  },
+  "live_validation": {
+    "source_commit": "a221fd7a3b706b2c0b13365d2f811c5dc8b78d9d",
+    "checks": [
+      {
+        "id": "phone-layout",
+        "state": "success",
+        "detail": "390x844 deployed phone list, replies, focused compact header, attachment sheet and pending uploads; no horizontal page overflow. Source scans and captured uilint snapshots have zero violations."
+      },
+      {
+        "id": "keyboard-and-stop",
+        "state": "success",
+        "detail": "Emulated visible viewport 558px. Newest reply scroll gap 0; body ends at composer top; composer bottom 558. Real pointer click on composer Stop preserved TEXTAREA focus and 1095 streamed integers as unfinished code."
+      },
+      {
+        "id": "capture-payload",
+        "state": "success",
+        "detail": "Actual uploaded screenshot PNG and text log reached codex/gpt-6.1-sol as an image block and text. It correctly read the photo title and log sentence. Own captures stayed ready with owner/route_state null."
+      },
+      {
+        "id": "upload-navigation",
+        "state": "success",
+        "detail": "A real upload load callback was held to inspect Saving. Back and reopening retained the upload and ready file; releasing it completed both, then they were sent."
+      },
+      {
+        "id": "natural-question",
+        "state": "success",
+        "detail": "Fresh DeepSeek request before the prompt fix claimed a question was surfaced but had none. Identical fresh request after the fix filed one with a single bash call; First was immediately self-answered and arrived as a new chat message."
+      },
+      {
+        "id": "contained-roles",
+        "state": "success",
+        "detail": "At 390px, Hunting selected in the normal dialog with a routed non-Claude model and Start enabled. No hunting chat started. Mock transport tests submit Hunting and Recon through the same start contract."
+      },
+      {
+        "id": "draft-on-back",
+        "state": "success",
+        "detail": "Latest Keep this phone draft survives immediate Back and reopening; a regression failed first."
+      },
+      {
+        "id": "answer-keeps-draft",
+        "state": "success",
+        "detail": "Final deployed app: recommended choice clicked in the shared Needs you panel, the answer was delivered, and Keep this phone draft plus capture fc7a9d916dc0 remained. Route copy says Answer goes to this chat. See M8b-2b-answer-draft-live.json."
+      },
+      {
+        "id": "cleanup",
+        "state": "success",
+        "detail": "All 6 main test chats and all 4 tester chats verified Ended with zero questions. Both Pi roots ended, their browsers reported closed; main browser closed. Three remaining own test captures removed through the app API."
+      }
+    ]
+  },
+  "testers": {
+    "model": "opencode-go/deepseek-v4.1-flash",
+    "role_route": "st models route --role testing; launch uses work-role verification (testing is the job name)",
+    "desktop": {
+      "report": "M8b-2b-tester-desktop.md",
+      "goals_first_pass": "5 of 6 passed; Needs you failed and was reproduced/fixed/live-retested",
+      "chats": [
+        "0927999c",
+        "20d0e053"
+      ],
+      "root": "m8b2b-tester-desktop",
+      "ended": true
+    },
+    "phone": {
+      "report": "M8b-2b-tester-phone.md",
+      "goals_first_pass": "6 completed; Needs you required a second request; friction findings validated and fixed",
+      "chats": [
+        "2e08298c",
+        "5131e230"
+      ],
+      "root": "m8b2b-tester-phone",
+      "ended": true
+    },
+    "findings_and_disposition": "M8b-2b-tester-findings.md"
+  },
+  "required_review": {
+    "report": "M8b-2b-review.md",
+    "reviewer": "Codex native subagent phone_chat_review",
+    "coordinator_validated": true
+  },
+  "main_chat_ids": [
+    "a1d16743",
+    "4427d069",
+    "c9ff7230",
+    "805a082f",
+    "b608d12e",
+    "01ce3874"
+  ],
+  "screenshots": [
+    {
+      "path": "M8b-2b-answer-route.png",
+      "sha256": "130486002d4ca5a09ab76ebc6ca6599f928076d0c0bcfdf5dc8752190f6fd2b7",
+      "captured_at": "2026-11-04T22:17:49.844730+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-attach.png",
+      "sha256": "d6f54df67b5bcdfd603a1bbec315a7a6d5c42b3f6b82ff6b49dfc23eb8687292",
+      "captured_at": "2026-11-04T22:13:26.115031+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-attached.png",
+      "sha256": "6c1f87cd0d02787fe23af576f8f1d4e73826f16053006e6cce5593394acfde50",
+      "captured_at": "2026-11-04T22:14:26.326331+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-branch-dialog.png",
+      "sha256": "3446a22f5348a733e75755fe5c4dffd15ee69de0e01f2ed9112d927b87bc27e4",
+      "captured_at": "2026-11-04T22:15:02.796118+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-branch.png",
+      "sha256": "2110a6095c6659bd4d28a6c368248f00efe9a36f47e524b2fb3c87f27851120d",
+      "captured_at": "2026-11-04T22:15:37.040858+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-chat.png",
+      "sha256": "f98cb6c95454ef49934b5deb2a440ec575e3851ef0ecb095a1286038f6a3b3bc",
+      "captured_at": "2026-11-04T22:10:12.584863+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-contained-role.png",
+      "sha256": "5738b500fd321ea53765ad5c1811f2e3b00ab0838a85438e68eba2ba6e19d59a",
+      "captured_at": "2026-11-04T22:09:06.124423+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-details.png",
+      "sha256": "434a8c5a31c14e20879ba064d6896ba8139aa7ddf79609edcff869882973ef56",
+      "captured_at": "2026-11-04T22:15:38.939899+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-draft-restored.png",
+      "sha256": "d46a43cb36b6c65a313d80e7b687b8788125617e05d70f09e5d6cd365337f39e",
+      "captured_at": "2026-11-04T22:12:35.797946+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-ended.png",
+      "sha256": "9d219d3230cc88b4fba065bd681aeea1e926f5d42603050cad0e058ea94300bb",
+      "captured_at": "2026-11-04T22:22:55.856360+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-kb.png",
+      "sha256": "15de57a41e8cd05e72ea98c49e087b134bd3905ea9e3346ce3d9c83f67893865",
+      "captured_at": "2026-11-04T22:11:03.232952+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-list.png",
+      "sha256": "4d251eff25e7bd011dad7860a2b317fe8f54c5e0757d3b16592915632165ac75",
+      "captured_at": "2026-11-04T22:19:23.818765+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-new-chat.png",
+      "sha256": "fb87872f318fc3bd98ac8fb97e7f32e0efff2ba059c59ee41465804ded15e9f7",
+      "captured_at": "2026-11-04T22:09:26.930873+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-stopped-kb.png",
+      "sha256": "d25f6ed335e1b111ec8915281b8ede249f710e20042468ad6b548a203530f840",
+      "captured_at": "2026-11-04T22:11:04.734152+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-desktop-01-chat-started.png",
+      "sha256": "75c25f26c530bcf0d753164d271b604609a5c94fa9c5b033c27ea4a1b7809bc1",
+      "captured_at": "2026-11-04T21:45:38.751582+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-02-first-reply.png",
+      "sha256": "f4e1609fe407adccf1765b5d02ac8d6e776c17c8ddfa3b654d824cc2489d9cc9",
+      "captured_at": "2026-11-04T21:46:04.751106+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-03-question.png",
+      "sha256": "bc24091c20b852d0f4b59ae94e4a48af12e3729c065a216765867a1abae944c5",
+      "captured_at": "2026-11-04T21:46:48.142710+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-04-streaming.png",
+      "sha256": "d86e4ddad84d0ee564d0414fc43ab3d3985a5cfe03b1ce180af8a1808850e03e",
+      "captured_at": "2026-11-04T21:48:10.296663+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-05-before-stop.png",
+      "sha256": "060f785ba88614bdf3eae9e7727b6c0c912201b9e8209fcef4f955f5b248a5ef",
+      "captured_at": "2026-11-04T21:48:21.995903+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-06-after-stop.png",
+      "sha256": "6e91fea219224b6760144697ba58063241ffa9d4f0beff453693d984a31c4403",
+      "captured_at": "2026-11-04T21:48:30.378075+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-07-branch-dialog.png",
+      "sha256": "668d0b47bc477a5741adcfcaadffe7129f27b3d690e77bfb590d5aca511d7e1f",
+      "captured_at": "2026-11-04T21:49:10.164896+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-08-branched.png",
+      "sha256": "457e9672d6bb0eefa6bdddfb41837843d1a8866913030be4a2373feeb6ded3c8",
+      "captured_at": "2026-11-04T21:49:50.015721+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-09-details.png",
+      "sha256": "46a4da4ba58dc2e18e1ce5f09bb12728cbbec00c53fc21f552df1e226b15f156",
+      "captured_at": "2026-11-04T21:50:06.751069+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-10-branch-ended.png",
+      "sha256": "f2475b50d3a8dba6be24fcdd7db70f88b507ed082c3dcf8e7903eff9edc54d57",
+      "captured_at": "2026-11-04T21:50:44.317851+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-11-ended-view.png",
+      "sha256": "27fdb85ed8e0607941f748cb3563e0c8397d2bcfc33b383010cdec35db8b7fb5",
+      "captured_at": "2026-11-04T21:51:00.337185+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-desktop-12-original-ended.png",
+      "sha256": "604ca58f61d14a2d15ce9e7dc9319173d98ab7e37198139a98e5dc923a97adc9",
+      "captured_at": "2026-11-04T21:51:39.922013+00:00",
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "path": "M8b-2b-tester-needs-before.png",
+      "sha256": "ad72bb01919c1b72f3b14aa0fa1a66388675832ae0d47316bf597bfab968dbc2",
+      "captured_at": "2026-11-04T21:55:32.922931+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-01-home.png",
+      "sha256": "2286808395df09c632d47cddbb71ebc5cc6f212751d4ce1901c8925dca65bb46",
+      "captured_at": "2026-11-04T21:44:34.919306+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-02-new-chat-sheet.png",
+      "sha256": "f3884263f5cc97d53f7fc6e9fb5de0f12d0202153c49bb245900add3350e59bf",
+      "captured_at": "2026-11-04T21:44:52.424654+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-03-chat-filled.png",
+      "sha256": "3ae19d065c63864263b84109cf8af6948d17a79dc7c57c08476cdf1d2d0abfa2",
+      "captured_at": "2026-11-04T21:45:14.594097+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-04-first-reply.png",
+      "sha256": "1db2bfb3875eafff06895ba983364b1c3c2b701063788d4c99f82df574035e5c",
+      "captured_at": "2026-11-04T21:45:42.194651+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-05-question-in-chat.png",
+      "sha256": "e5a582fd31622a0a6b798b11abed60c115c36f66746ca7a4b52cbe3de76b8e93",
+      "captured_at": "2026-11-04T21:46:15.095315+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-06-question-card-in-chat.png",
+      "sha256": "7ed13b8641dc84e27813806ef2e51cbe08a3d4535ae7d25ab9bc364fbb107f92",
+      "captured_at": "2026-11-04T21:48:18.993958+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-07-sessions-needs-you.png",
+      "sha256": "56003f1dd20aebc3ea0b92c84de499228f36f00ede34eb28ef27c42ed15a856c",
+      "captured_at": "2026-11-04T21:48:29.307053+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-08-needs-you-dialog.png",
+      "sha256": "b66f5514161a5721b2d551a2780b9cebca22e9e2d9ee42fe59781ac849802652",
+      "captured_at": "2026-11-04T21:48:39.689267+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-09-streaming-before-stop.png",
+      "sha256": "af0dee1041aad21d8b1b569b8fa1e7ed349dd2b3ea3ad1f151cc88e92e255b33",
+      "captured_at": "2026-11-04T21:51:35.468626+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-10-after-stop.png",
+      "sha256": "4de30aa4e8e1f23a7a87ed23851e20f7310c47474a38d32b3f1dac7fb27fbb3f",
+      "captured_at": "2026-11-04T21:51:45.303126+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-11-before-branch.png",
+      "sha256": "6fd3610c2f1588ed4995d30fb2294606325abc41362c56f2ce340eb133d3c577",
+      "captured_at": "2026-11-04T21:52:07.281587+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-12-branch-dialog.png",
+      "sha256": "56f5e36678bef0e894f0f3231cdea394ae50de97d3b9efbd1def4d087000a94a",
+      "captured_at": "2026-11-04T21:52:32.385114+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-13-branch-chat.png",
+      "sha256": "e1f853b8a3332d115a2788b4bea76a2565bfc64977ea795f35d495b827e84e99",
+      "captured_at": "2026-11-04T21:53:34.212417+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-14-details.png",
+      "sha256": "78308917fa418320a4ce653fe145c92c2c4479b8c38d4d8284e2aa083e18a203",
+      "captured_at": "2026-11-04T21:54:00.907981+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-15-after-details.png",
+      "sha256": "78308917fa418320a4ce653fe145c92c2c4479b8c38d4d8284e2aa083e18a203",
+      "captured_at": "2026-11-04T21:54:43.807889+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-16-details-reopen.png",
+      "sha256": "88c2fe15c879c03b58d4650c9f5beaaa94b3c0f488174ec5cdf9de71a7b538b9",
+      "captured_at": "2026-11-04T21:55:04.393154+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-17-end-chat-confirm.png",
+      "sha256": "32c8d93f317374ce6c95f2c8e0d474329192f5ca2424fb024d2007f463a507d5",
+      "captured_at": "2026-11-04T21:55:56.037423+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-18-sessions-after.png",
+      "sha256": "a5c62e8d9356392ecac6fa2327154859008643b273341096e05aa1727b509698",
+      "captured_at": "2026-11-04T21:56:12.758779+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-tester-phone-19-sessions-final.png",
+      "sha256": "de86f170e739765c26fbb530769f0c0cc03810942120eb410c5f45a315ca5a0f",
+      "captured_at": "2026-11-04T21:56:49.040552+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-uploading.png",
+      "sha256": "d7cf7d8f628defd84b3e9740205fe21c01dca26d70e5105132c78e266a621ab4",
+      "captured_at": "2026-11-04T22:14:17.959150+00:00",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "path": "M8b-2b-waiting.png",
+      "sha256": "031ab376874292920997d0bdca33348c4874f4f740cfe51c52a66e3f43ee18f2",
+      "captured_at": "2026-11-04T22:19:22.665740+00:00",
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "capture_method": {
+    "browser": "managed headless local Chrome; browser VM unavailable and coordinator approved fallback",
+    "phone_viewport": [
+      390,
+      844
+    ],
+    "keyboard": "visualViewport height emulated at 558; no physical OS keyboard pixels",
+    "pointer": "coarse media emulated for the capture picker because st browser device emulation changed UA but not pointer capability",
+    "pending_upload": "actual upload completed on server; browser XHR load callback deliberately held to retain the Saving state, then released; no product state fabricated",
+    "android": "native/android/.../push/OpenLinkActivity.kt opens allowed Aico URLs in Custom Tabs; physical Android keyboard/camera picker not tested"
+  },
+  "known_check_failure_fixed": {
+    "test": "packages/jobs/src/fleet-leases.test.ts",
+    "failure": "EADDRINUSE while a selected ephemeral port was no longer reserved",
+    "fix": "Both real TLS listeners bind port 0; peers use their actual bound ports. Test only; coordinator approved."
+  },
+  "cleanup": {
+    "main_chats": [
+      {
+        "id": "a1d16743",
+        "models": [
+          "codex/gpt-6.1-sol"
+        ],
+        "questions": 0,
+        "state": "ended"
+      },
+      {
+        "id": "4427d069",
+        "models": [
+          "codex/gpt-6.1-sol"
+        ],
+        "questions": 0,
+        "state": "ended"
+      },
+      {
+        "id": "c9ff7230",
+        "models": [
+          "opencode-go/deepseek-v4.1-flash"
+        ],
+        "questions": 0,
+        "state": "ended"
+      },
+      {
+        "id": "805a082f",
+        "models": [
+          "opencode-go/deepseek-v4.1-flash"
+        ],
+        "questions": 0,
+        "state": "ended"
+      },
+      {
+        "id": "b608d12e",
+        "models": [
+          "opencode-go/deepseek-v4.1-flash"
+        ],
+        "questions": 0,
+        "state": "ended"
+      },
+      {
+        "id": "01ce3874",
+        "models": [
+          "opencode-go/deepseek-v4.1-flash",
+          "codex/gpt-6.1-sol"
+        ],
+        "questions": 0,
+        "state": "ended"
+      }
+    ],
+    "tester_chats": [
+      {
+        "id": "0927999c",
+        "models": [
+          "opencode-go/deepseek-v4.1-flash"
+        ],
+        "questions": 0,
+        "state": "ended"
+      },
+      {
+        "id": "20d0e053",
+        "models": [
+          "opencode-go/deepseek-v4.1-flash"
+        ],
+        "questions": 0,
+        "state": "ended"
+      },
+      {
+        "id": "2e08298c",
+        "models": [
+          "opencode-go/deepseek-v4.1-flash"
+        ],
+        "questions": 0,
+        "state": "ended"
+      },
+      {
+        "id": "5131e230",
+        "models": [
+          "opencode-go/deepseek-v4.1-flash"
+        ],
+        "questions": 0,
+        "state": "ended"
+      }
+    ],
+    "test_captures": [
+      {
+        "deleted": true,
+        "id": "b22ae8539031"
+      },
+      {
+        "deleted": true,
+        "id": "52046702fe5d"
+      },
+      {
+        "deleted": true,
+        "id": "fc7a9d916dc0"
+      }
+    ],
+    "main_browser": {
+      "name": "m8b2b-live",
+      "state": "closed"
+    },
+    "tester_browsers": {
+      "phone": "reported closed and tester root ended",
+      "desktop": "reported closed and tester root ended"
+    }
+  },
+  "tests": {
+    "quick": "Passed for every source checkpoint; final source checkpoint quick 3.2 s; focused answer-path suite 58 passed.",
+    "acceptance_vitest": {
+      "passed": 3251,
+      "skipped": 6
+    },
+    "acceptance_python": {
+      "passed": 1151
+    },
+    "before_seconds": 147.1,
+    "after_seconds": 145.4
+  }
+}

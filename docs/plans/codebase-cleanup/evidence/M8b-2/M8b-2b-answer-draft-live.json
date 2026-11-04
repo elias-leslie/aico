@@ -1,0 +1,24 @@
+{
+  "before": {
+    "attachments": [
+      "fc7a9d916dc0"
+    ],
+    "draft": "Keep this phone draft",
+    "state": "stopped"
+  },
+  "ask": "3ecd7c482f7e",
+  "route": {
+    "text": "Answer goes to this chat"
+  },
+  "click": {
+    "clicked": true
+  },
+  "after": {
+    "attachments": [
+      "fc7a9d916dc0"
+    ],
+    "draft": "Keep this phone draft",
+    "questions": 0,
+    "state": "working"
+  }
+}

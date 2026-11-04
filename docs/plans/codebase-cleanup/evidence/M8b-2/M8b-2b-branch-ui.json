@@ -1,0 +1,745 @@
+{
+  "kind": "uilint-ui-snapshot",
+  "motion": [
+    {
+      "durations_ms": [
+        150,
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > button:nth-of-type(1)"
+    },
+    {
+      "durations_ms": [
+        150,
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > button:nth-of-type(2)"
+    },
+    {
+      "durations_ms": [
+        180
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(1) > div"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(1) > div > button"
+    },
+    {
+      "durations_ms": [
+        180
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > div"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > div > button:nth-of-type(1)"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > div > button:nth-of-type(2)"
+    },
+    {
+      "durations_ms": [
+        180
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > div"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > div > button"
+    },
+    {
+      "durations_ms": [
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > div > details > summary"
+    },
+    {
+      "durations_ms": [
+        180
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(4) > div:nth-of-type(1) > div"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(4) > div:nth-of-type(1) > div > button:nth-of-type(1)"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(4) > div:nth-of-type(1) > div > button:nth-of-type(2)"
+    },
+    {
+      "durations_ms": [
+        150,
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > button:nth-of-type(1)"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > button:nth-of-type(2)"
+    }
+  ],
+  "omissions": [
+    "Closed disclosure content was not captured.",
+    "Shadow-root content was not extracted.",
+    "Only this route and state were captured; hover, focus, other routes and colour schemes were not.",
+    "Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen."
+  ],
+  "page": {
+    "background_stack": [
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html"
+      },
+      {
+        "color": "rgba(28, 31, 36, 1)",
+        "image": false,
+        "selector": "html > body"
+      },
+      {
+        "color": "rgba(11, 13, 17, 1)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2)"
+      },
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2) > div"
+      },
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2) > div > div"
+      },
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2) > div > div > div"
+      },
+      {
+        "color": "rgba(11, 13, 17, 1)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2) > div > div > div > div"
+      }
+    ],
+    "color_scheme": "dark",
+    "first_block": {
+      "height": 844,
+      "selector": "html > body > div:nth-of-type(2)",
+      "top": 0,
+      "width": 390
+    },
+    "prefers_dark": false
+  },
+  "schema_version": 2,
+  "source": {
+    "captured_at": "2026-11-04T22:15:37.383Z",
+    "ready_state": "complete",
+    "state": "",
+    "title": "Aico",
+    "url": "https://aico.summitflow.dev/"
+  },
+  "surfaces": [
+    {
+      "color": "rgba(28, 31, 36, 1)",
+      "height": 844,
+      "selector": "html > body",
+      "width": 390
+    },
+    {
+      "color": "rgba(11, 13, 17, 1)",
+      "height": 844,
+      "selector": "html > body > div:nth-of-type(2)",
+      "width": 390
+    },
+    {
+      "color": "rgba(11, 13, 17, 1)",
+      "height": 844,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div",
+      "width": 390
+    },
+    {
+      "color": "rgba(28, 31, 36, 1)",
+      "height": 81,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header",
+      "width": 390
+    },
+    {
+      "color": "rgba(245, 240, 233, 0.12)",
+      "height": 160,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1)",
+      "width": 351
+    },
+    {
+      "color": "rgba(245, 240, 233, 0.12)",
+      "height": 138,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3)",
+      "width": 351
+    },
+    {
+      "color": "rgba(11, 13, 17, 0.35)",
+      "height": 37,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > div > details",
+      "width": 366
+    },
+    {
+      "color": "rgba(28, 31, 36, 1)",
+      "height": 50,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1)",
+      "width": 374
+    },
+    {
+      "color": "rgba(229, 166, 71, 0.14)",
+      "height": 40,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > button:nth-of-type(2)",
+      "width": 40
+    },
+    {
+      "color": "rgba(11, 13, 17, 1)",
+      "height": 26,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(1) > select",
+      "width": 356
+    },
+    {
+      "color": "rgba(11, 13, 17, 1)",
+      "height": 26,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(2) > select",
+      "width": 100
+    }
+  ],
+  "texts": [
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > button:nth-of-type(1)",
+      "text": "Back to sessions"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(28, 31, 36, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > span:nth-of-type(1)",
+      "text": "Idle"
+    },
+    {
+      "attr": "title",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > h1",
+      "text": "Branch at turn 1 · Test phone chat"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(28, 31, 36, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Fraunces, Georgia, serif",
+      "font_size_px": 16,
+      "font_weight": 500,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > h1",
+      "text": "Branch at turn 1 · Test phone chat"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > button:nth-of-type(2)",
+      "text": "Details: tokens, models, run"
+    },
+    {
+      "attr": "title",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > button:nth-of-type(2)",
+      "text": "Details: tokens, models, run"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "You"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "5:09 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(1) > div > button",
+      "text": "Copy"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(2) > span",
+      "text": "Test phone chat Reply"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 700,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(2) > span > strong",
+      "text": "Ready"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(2) > span",
+      "text": ". Do not use tools, ask questions or edit files."
+    },
+    {
+      "attr": "title",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "Turn 1 · In 0 · from cache 0 · written to cache 0 · out 0"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "\"JetBrains Mono\", \"FreeMono Symbols\", ui-monospace, monospace",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "opencode-go/deepseek-v4.1-flash"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "Turn 1 ·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "unfinished"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > div > button:nth-of-type(1)",
+      "text": "Branch from here"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > div > button:nth-of-type(2)",
+      "text": "Copy"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "You"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "5:15 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > div > button",
+      "text": "Copy"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": "Test only: reply exactly Branch ready. Do not use tools, ask questions or continue the numbers."
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > div > p",
+      "text": "opencode-go/deepseek-v4.1-flash didn’t answer (provider error). codex/gpt-6.1-sol took the same request as turn 3 and goes on from here."
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > div > details > summary",
+      "text": "Show what the provider said"
+    },
+    {
+      "attr": "title",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(4) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "Turn 3 · In 512 · from cache 0 · written to cache 0 · out 32"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "\"JetBrains Mono\", \"FreeMono Symbols\", ui-monospace, monospace",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(4) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "codex/gpt-6.1-sol"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(4) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "Turn 3 ·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(4) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "5:15 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(4) > div:nth-of-type(1) > div > button:nth-of-type(1)",
+      "text": "Branch from here"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(4) > div:nth-of-type(1) > div > button:nth-of-type(2)",
+      "text": "Copy"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(4) > div:nth-of-type(2) > span",
+      "text": "Branch ready."
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > button:nth-of-type(1)",
+      "text": "Add photos or files"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > textarea",
+      "text": "Message"
+    },
+    {
+      "attr": "placeholder",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > textarea",
+      "text": "Message"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > button:nth-of-type(2)",
+      "text": "Send"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(1) > select",
+      "text": "Model"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "\"JetBrains Mono\", \"FreeMono Symbols\", ui-monospace, monospace",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(1) > select",
+      "text": "codex/gpt-6.1-sol, role’s first choice"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(2)",
+      "text": "Effort"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(2) > select",
+      "text": "Effort"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "\"JetBrains Mono\", \"FreeMono Symbols\", ui-monospace, monospace",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(2) > select",
+      "text": "From routing"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > span > span:nth-of-type(2)",
+      "text": "Next turn"
+    }
+  ],
+  "viewport": {
+    "device_pixel_ratio": 1,
+    "height": 844,
+    "width": 390
+  }
+}

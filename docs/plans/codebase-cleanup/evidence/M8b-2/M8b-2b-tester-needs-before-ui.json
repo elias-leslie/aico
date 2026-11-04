@@ -1,0 +1,787 @@
+{
+  "kind": "uilint-ui-snapshot",
+  "motion": [
+    {
+      "durations_ms": [
+        150,
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > button:nth-of-type(1)"
+    },
+    {
+      "durations_ms": [
+        150,
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > button:nth-of-type(2)"
+    },
+    {
+      "durations_ms": [
+        180
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(1) > div"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(1) > div > button"
+    },
+    {
+      "durations_ms": [
+        180
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > div"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > div > button:nth-of-type(1)"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > div > button:nth-of-type(2)"
+    },
+    {
+      "durations_ms": [
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > details > summary"
+    },
+    {
+      "durations_ms": [
+        180
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > div"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > div > button:nth-of-type(1)"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > div > button:nth-of-type(2)"
+    },
+    {
+      "durations_ms": [
+        150,
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > button:nth-of-type(1)"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > button:nth-of-type(2)"
+    }
+  ],
+  "omissions": [
+    "Closed disclosure content was not captured.",
+    "Shadow-root content was not extracted.",
+    "Only this route and state were captured; hover, focus, other routes and colour schemes were not.",
+    "Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen."
+  ],
+  "page": {
+    "background_stack": [
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html"
+      },
+      {
+        "color": "rgba(28, 31, 36, 1)",
+        "image": false,
+        "selector": "html > body"
+      },
+      {
+        "color": "rgba(11, 13, 17, 1)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2)"
+      },
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2) > div"
+      },
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2) > div > div"
+      },
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2) > div > div > div"
+      },
+      {
+        "color": "rgba(11, 13, 17, 1)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2) > div > div > div > div"
+      }
+    ],
+    "color_scheme": "dark",
+    "first_block": {
+      "height": 844,
+      "selector": "html > body > div:nth-of-type(2)",
+      "top": 0,
+      "width": 390
+    },
+    "prefers_dark": false
+  },
+  "schema_version": 2,
+  "source": {
+    "captured_at": "2026-11-04T21:55:33.238Z",
+    "ready_state": "complete",
+    "state": "",
+    "title": "Aico",
+    "url": "https://aico.summitflow.dev/"
+  },
+  "surfaces": [
+    {
+      "color": "rgba(28, 31, 36, 1)",
+      "height": 844,
+      "selector": "html > body",
+      "width": 390
+    },
+    {
+      "color": "rgba(11, 13, 17, 1)",
+      "height": 844,
+      "selector": "html > body > div:nth-of-type(2)",
+      "width": 390
+    },
+    {
+      "color": "rgba(11, 13, 17, 1)",
+      "height": 844,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div",
+      "width": 390
+    },
+    {
+      "color": "rgba(28, 31, 36, 1)",
+      "height": 81,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header",
+      "width": 390
+    },
+    {
+      "color": "rgba(245, 240, 233, 0.12)",
+      "height": 183,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1)",
+      "width": 351
+    },
+    {
+      "color": "rgba(28, 31, 36, 1)",
+      "height": 35,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > details",
+      "width": 366
+    },
+    {
+      "color": "rgba(28, 31, 36, 1)",
+      "height": 73,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1)",
+      "width": 374
+    },
+    {
+      "color": "rgba(229, 166, 71, 0.14)",
+      "height": 40,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > button:nth-of-type(2)",
+      "width": 40
+    },
+    {
+      "color": "rgba(11, 13, 17, 1)",
+      "height": 26,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(1) > select",
+      "width": 160
+    },
+    {
+      "color": "rgba(11, 13, 17, 1)",
+      "height": 26,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(2) > select",
+      "width": 84
+    }
+  ],
+  "texts": [
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > button:nth-of-type(1)",
+      "text": "Back to sessions"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(28, 31, 36, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > span:nth-of-type(1)",
+      "text": "Idle"
+    },
+    {
+      "attr": "title",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > h1",
+      "text": "Test only: ask me one direct question that needs my answer, with First and Second as choices and Fir"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(28, 31, 36, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Fraunces, Georgia, serif",
+      "font_size_px": 16,
+      "font_weight": 500,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > h1",
+      "text": "Test only: ask me one direct question that needs my answer, with First and Second as choices and Fir"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > button:nth-of-type(2)",
+      "text": "Details: tokens, models, run"
+    },
+    {
+      "attr": "title",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > header > button:nth-of-type(2)",
+      "text": "Details: tokens, models, run"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "You"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "4:54 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(1) > div > button",
+      "text": "Copy"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(1) > div:nth-of-type(2) > span",
+      "text": "Test only: ask me one direct question that needs my answer, with First and Second as choices and First recommended. Put it in my Needs you list so I can answer it there. Do not edit files."
+    },
+    {
+      "attr": "title",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "Turn 1 · In 812 · from cache 0 · written to cache 0 · out 233"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "\"JetBrains Mono\", \"FreeMono Symbols\", ui-monospace, monospace",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "opencode-go/deepseek-v4.1-flash"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "Turn 1 ·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "4:55 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > div > button:nth-of-type(1)",
+      "text": "Branch from here"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > div:nth-of-type(1) > div > button:nth-of-type(2)",
+      "text": "Copy"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(28, 31, 36, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "\"JetBrains Mono\", \"FreeMono Symbols\", ui-monospace, monospace",
+      "font_size_px": 11.04,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > details > summary > code",
+      "text": "bash · ls -a /srv/scratch/aico-M8b-2b-live | head -50"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(28, 31, 36, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(2) > details > summary > span",
+      "text": ". .. phone-photo.png sync-log.txt"
+    },
+    {
+      "attr": "title",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "Turn 2 · In 299 · from cache 768 · written to cache 0 · out 124"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "\"JetBrains Mono\", \"FreeMono Symbols\", ui-monospace, monospace",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > span:nth-of-type(1)",
+      "text": "opencode-go/deepseek-v4.1-flash"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "Turn 2 ·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > span:nth-of-type(2)",
+      "text": "4:55 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > div > button:nth-of-type(1)",
+      "text": "Branch from here"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(1) > div > button:nth-of-type(2)",
+      "text": "Copy"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": "Here's my question (also surfaced in your"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 700,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span > strong:nth-of-type(1)",
+      "text": "Needs you"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": "list — no files touched):"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 700,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span > strong:nth-of-type(2)",
+      "text": "Which option should I use as the default for this test?"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": "-"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 700,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span > strong:nth-of-type(3)",
+      "text": "First (recommended)"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": ": Use First as the default and proceed with it. -"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 700,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span > strong:nth-of-type(4)",
+      "text": "Second"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": ": Use Second instead. Reply with"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 700,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span > strong:nth-of-type(5)",
+      "text": "First"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": "or"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 700,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span > strong:nth-of-type(6)",
+      "text": "Second"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(1) > div > article:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": "."
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > button:nth-of-type(1)",
+      "text": "Add photos or files"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > textarea",
+      "text": "Message"
+    },
+    {
+      "attr": "placeholder",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > textarea",
+      "text": "Message"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(1) > button:nth-of-type(2)",
+      "text": "Send"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(1) > select",
+      "text": "Model"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "\"JetBrains Mono\", \"FreeMono Symbols\", ui-monospace, monospace",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(1) > select",
+      "text": "opencode-go/deepseek-v4.1-flash"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(2) > select",
+      "text": "Effort"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "\"JetBrains Mono\", \"FreeMono Symbols\", ui-monospace, monospace",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > label:nth-of-type(2) > select",
+      "text": "From routing"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > div > div > div > div > div > div > div:nth-of-type(2) > form > div:nth-of-type(2) > span > span:nth-of-type(2)",
+      "text": "Next turn"
+    }
+  ],
+  "viewport": {
+    "device_pixel_ratio": 1,
+    "height": 844,
+    "width": 390
+  }
+}

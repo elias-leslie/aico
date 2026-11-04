@@ -1,0 +1,212 @@
+
+waiting 2026-11-04T21:48:19.429892+00:00
+omitted: Closed disclosure content was not captured.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico · 2 need you" against the aico spec
+UILINT:ok|violations=0|checks=6|items=110|unverified=0|scope=mechanical-only|not-a-copy-review
+
+list 2026-11-04T21:48:26.488240+00:00
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico · 2 need you" against the aico spec
+UILINT:ok|violations=0|checks=6|items=48|unverified=0|scope=mechanical-only|not-a-copy-review
+
+details 2026-11-04T21:48:58.365577+00:00
+omitted: Closed disclosure content was not captured.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=133|unverified=0|scope=mechanical-only|not-a-copy-review
+
+chat first deployed source 4eab2572
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=36|unverified=0|scope=mechanical-only|not-a-copy-review
+
+attach first deployed source 4eab2572
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=51|unverified=0|scope=mechanical-only|not-a-copy-review
+
+attached first deployed source 4eab2572
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=51|unverified=0|scope=mechanical-only|not-a-copy-review
+
+uploading first deployed source 4eab2572
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=46|unverified=0|scope=mechanical-only|not-a-copy-review
+
+branch-dialog 2026-11-04T21:50:48.266970+00:00
+omitted: Closed disclosure content was not captured.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=136|unverified=0|scope=mechanical-only|not-a-copy-review
+
+branch 2026-11-04T21:51:45.939021+00:00
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=40|unverified=0|scope=mechanical-only|not-a-copy-review
+checked: /srv/workspaces/projects/aico against the aico spec
+UILINT:ok|violations=0|checks=5|files=176|items=3625|unverified=0|scope=mechanical-only|not-a-copy-review
+
+tester-needs-before 2026-11-04T21:55:33.474571+00:00
+omitted: Closed disclosure content was not captured.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=46|unverified=0|scope=mechanical-only|not-a-copy-review
+
+kb 2026-11-04T21:57:41.097847+00:00
+omitted: Closed disclosure content was not captured.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=42|unverified=0|scope=mechanical-only|not-a-copy-review
+
+contained-role 2026-11-04T22:09:06.676465+00:00
+omitted: Shadow-root content was not extracted.
+omitted: Entered form values were excluded.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=98|unverified=0|scope=mechanical-only|not-a-copy-review
+
+new-chat 2026-11-04T22:09:27.497971+00:00
+omitted: Shadow-root content was not extracted.
+omitted: Entered form values were excluded.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=98|unverified=0|scope=mechanical-only|not-a-copy-review
+
+chat 2026-11-04T22:10:13.117677+00:00
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=32|unverified=0|scope=mechanical-only|not-a-copy-review
+
+kb 2026-11-04T22:10:47.937449+00:00
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=41|unverified=0|scope=mechanical-only|not-a-copy-review
+
+kb 2026-11-04T22:11:03.764898+00:00
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=41|unverified=0|scope=mechanical-only|not-a-copy-review
+
+stopped-kb 2026-11-04T22:11:05.274800+00:00
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=44|unverified=0|scope=mechanical-only|not-a-copy-review
+
+draft-restored 2026-11-04T22:12:36.336496+00:00
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=50|unverified=0|scope=mechanical-only|not-a-copy-review
+
+attach 2026-11-04T22:13:26.671547+00:00
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=57|unverified=0|scope=mechanical-only|not-a-copy-review
+
+uploading 2026-11-04T22:14:18.527149+00:00
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=49|unverified=0|scope=mechanical-only|not-a-copy-review
+
+attached 2026-11-04T22:14:26.878085+00:00
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=48|unverified=0|scope=mechanical-only|not-a-copy-review
+
+branch-dialog 2026-11-04T22:15:03.359805+00:00
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=65|unverified=0|scope=mechanical-only|not-a-copy-review
+
+branch 2026-11-04T22:15:37.635987+00:00
+omitted: Closed disclosure content was not captured.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=41|unverified=0|scope=mechanical-only|not-a-copy-review
+
+details 2026-11-04T22:15:39.509148+00:00
+omitted: Closed disclosure content was not captured.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=88|unverified=0|scope=mechanical-only|not-a-copy-review
+
+answer-route 2026-11-04T22:17:50.388697+00:00
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico · 1 needs you" against the aico spec
+UILINT:ok|violations=0|checks=6|items=87|unverified=0|scope=mechanical-only|not-a-copy-review
+
+waiting 2026-11-04T22:19:23.209585+00:00
+omitted: Entered form values were excluded.
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico · 1 needs you" against the aico spec
+UILINT:ok|violations=0|checks=6|items=69|unverified=0|scope=mechanical-only|not-a-copy-review
+
+list 2026-11-04T22:19:24.351741+00:00
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/ "Aico · 1 needs you" against the aico spec
+UILINT:ok|violations=0|checks=6|items=76|unverified=0|scope=mechanical-only|not-a-copy-review
+checked: /srv/workspaces/projects/aico against the aico spec
+UILINT:ok|violations=0|checks=5|files=176|items=3634|unverified=0|scope=mechanical-only|not-a-copy-review

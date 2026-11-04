@@ -1,0 +1,55 @@
+Aico | https://aico.summitflow.dev/?session=01ce3874
+- complementary "Chat details"
+  - sectionheader
+    - heading "Details" [level=2, ref=e881]
+    - button "Close details" [ref=e882]
+  - heading "CHAT TOTALS" [level=3, ref=e876]
+  - paragraph
+    - StaticText "Input counts new tokens. Cache counts are separate."
+  - DescriptionList
+    - term "Started"
+    - definition
+      - StaticText "5:15 PM"
+    - term "Project folder"
+    - definition
+      - StaticText "/srv/scratch/aico-M8b-2b-live"
+    - term "Tokens in"
+    - definition
+      - StaticText "512"
+    - term "From cache"
+    - definition
+      - StaticText "0"
+    - term "Written to cache"
+    - definition
+      - StaticText "0"
+    - term "Tokens out"
+    - definition
+      - StaticText "32"
+    - term "Tool calls"
+    - definition
+      - StaticText "0"
+    - term "Handoffs"
+    - definition
+      - StaticText "1"
+    - term "Summaries"
+    - definition
+      - StaticText "0"
+  - heading "PER MODEL" [level=3, ref=e877]
+  - code
+    - StaticText "opencode-go/deepseek-v4.1-flash"
+  - paragraph
+    - StaticText "0 in · 0 from cache · 0 out"
+  - code
+    - StaticText "codex/gpt-6.1-sol"
+  - paragraph
+    - StaticText "512 in · 0 from cache · 32 out"
+  - heading "RUN" [level=3, ref=e878]
+  - button "aico agent show 01ce3874" [ref=e879]
+    - code
+      - StaticText "aico agent show 01ce3874"
+  - paragraph
+    - StaticText "Branched from turn 1 of b608d12e."
+  - button "End chat" [ref=e880]
+--
+Act: st browser --local-ai --session m8b2b-live step click @e1 | step fill @e2 TEXT. Content missing (still loading)? st browser --local-ai --session m8b2b-live wait --load networkidle, then observe again.
+JSON receipt: /home/kasadis/.local/state/browser-automation/sessions/ca6b0e4635b09aa7080d/receipts/browser-observe-799334bf598e.json
