@@ -141,6 +141,7 @@ function statusText(usage: Partial<Usage>): string {
 }
 
 function usageLine(usage: Partial<Usage>): string {
+  if (usage.unreadable) return usage.unreadable
   const windows = usage.windows ?? []
   if (!windows.length) return usage.status !== 'untracked' ? 'no usage readings' : ''
   return windows.map(windowText).join('; ')

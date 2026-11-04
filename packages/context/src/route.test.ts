@@ -137,4 +137,37 @@ describe('route', () => {
       '  usage facts unavailable (Agent Hub usage facts did not answer within 20s); allowed and denied are still right',
     )
   })
+
+  it('says when the facts were collected, and reads stale or failed providers as unknown', () => {
+    const now = '2026-11-04T12:00:00.000Z'
+    const reading = {
+      provider: 'codex',
+      window_minutes: 10080,
+      observed_at: '2026-10-30T12:00:00.000Z',
+      used_percent: 10,
+      resets_at: '2026-11-06T12:00:00.000Z',
+      source: 'codex',
+    }
+    const roomy: Facts = {
+      readings: [reading, { ...reading, provider: 'claude' }],
+      credits: { codex: { balance: 900, pace_per_day_7d: 10, earliest_expiry: null } },
+      refusals: [],
+      collected_at: '2026-10-30T12:00:00.000Z',
+    }
+    const codex = (facts: Facts) => {
+      const payload = route(policy, catalog, { role: 'implementation', tool: 'codex' }, facts, now)
+      return { payload, usage: payload.rows[0]?.usage }
+    }
+    // As of the real collection time, not now.
+    expect(codex(roomy).payload.facts_as_of).toBe('2026-10-30T12:00:00.000Z')
+    expect(codex(roomy).usage?.status).toBe('ok')
+    // Collected five days ago: unknown, with no windows and no credit room.
+    const stale = codex({ ...roomy, unreadable: { codex: 'last collected 7200 minutes ago' } })
+    expect(stale.usage).toMatchObject({ status: 'unknown', windows: [], credits: null })
+    expect(formatOptions(stale.payload, 'implementation')).toContain('last collected 7200')
+    expect(formatOptions(stale.payload, 'implementation')).not.toContain('has room')
+    // A failed collection of one provider leaves the others alone.
+    const failed = { ...roomy, unreadable: { claude: 'its last collection failed' } }
+    expect(codex(failed).usage?.status).toBe('ok')
+  })
 })

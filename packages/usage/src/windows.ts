@@ -40,6 +40,10 @@ export interface Facts {
   credits: Record<string, Credit>
   /** Newest first. */
   refusals: Refusal[]
+  /** When the facts were last collected (ISO); routing says "as of" this. */
+  collected_at?: string
+  /** Providers whose facts cannot be trusted now, by provider id, with the plain reason. */
+  unreadable?: Record<string, string>
 }
 
 export const WINDOW_LABELS: Record<number, string> = {
@@ -84,6 +88,8 @@ export interface Usage {
       })
     | null
   unknown_windows: string[]
+  /** Why nothing is said about this provider: its facts are stale or its last collection failed. */
+  unreadable?: string
 }
 
 /** The reading no longer says how much is used: its reset passed, or it names none and its window is over. */

@@ -53,7 +53,7 @@ describe('creditFacts', () => {
   ])
 
   it('gives the balance, the 7-day pace and the earliest expiry among lots with credits', () => {
-    const facts = creditFacts([grant, open], drawn, '2026-11-04')
+    const facts = creditFacts([grant, open], drawn, '2026-11-04T12:00:00Z')
     expect(facts.balance).toBe(500)
     // The 7 days are Oct 29 to Nov 4: the Nov 1 and Nov 3 draws count, Oct 20 does not.
     expect(facts.pace_per_day_7d).toBe(42.9)
@@ -61,9 +61,24 @@ describe('creditFacts', () => {
   })
 
   it('names the expiry of a lot that still has credits', () => {
-    const facts = creditFacts([grant, open], new Map([['2026-11-01', 100]]), '2026-11-04')
+    const facts = creditFacts([grant, open], new Map([['2026-11-01', 100]]), '2026-11-04T12:00:00Z')
     expect(facts.balance).toBe(1400)
     expect(facts.earliest_expiry).toBe('2026-12-31T23:59:59Z')
+  })
+})
+
+describe('an expired lot', () => {
+  it('leaves its unused credits out of the balance and the expiry list', () => {
+    const old = lot(300, '2026-09-01T00:00:00Z', '2026-10-31T23:59:59Z')
+    const now = '2026-11-04T12:00:00Z'
+    // 100 drawn came out of the lot that expires first; the other 200 expired unused.
+    const facts = creditFacts([old, open], new Map([['2026-10-20', 100]]), now)
+    expect(facts.balance).toBe(500)
+    expect(facts.earliest_expiry).toBeNull()
+    // Only expired credits are left: nothing to run on.
+    expect(creditFacts([old], new Map(), now).balance).toBe(0)
+    // Expiring exactly now counts as expired.
+    expect(creditFacts([lot(50, '2026-09-01T00:00:00Z', now)], new Map(), now).balance).toBe(0)
   })
 })
 

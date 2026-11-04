@@ -316,3 +316,33 @@ describe('the spend card', () => {
     expect(rows[1]?.meaning).toBe('Unknown. No usage readings yet.')
   })
 })
+
+describe('facts that cannot be trusted', () => {
+  it('takes the real collection time and marks old or failed providers unreadable', async () => {
+    writeStatusline(NOW - 60_000, 40, NOW + 40 * HOUR)
+    const db = openUsage(':memory:')
+    const done = await collect(db, io())
+    const at = new Date(NOW).toISOString()
+    const fresh = loadFacts(db, { plans: [], lots: [] }, at)
+    expect(fresh.collected_at).toBe(done.at)
+    // The Codex and OpenCode readings failed or were never set up; Claude read fine.
+    expect(fresh.unreadable?.claude).toBeUndefined()
+    expect(fresh.unreadable?.['opencode-go']).toBeUndefined()
+    // Five days on with no new collection: every provider reads unknown.
+    const later = new Date(NOW + 5 * 24 * HOUR).toISOString()
+    const stale = loadFacts(db, { plans: [], lots: [] }, later)
+    expect(Object.keys(stale.unreadable ?? {}).sort()).toEqual(['claude', 'codex', 'opencode-go'])
+    expect(stale.collected_at).toBe(done.at)
+  })
+
+  it('marks a provider whose last collection failed', async () => {
+    mkdirSync(join(home, 'state', 'claude-usage'), { recursive: true })
+    writeFileSync(join(home, 'state', 'claude-usage', 'rate-limits.json'), '{not json')
+    const db = openUsage(':memory:')
+    const done = await collect(db, io())
+    expect(done.failed).toEqual(['claude'])
+    const facts = loadFacts(db, { plans: [], lots: [] }, done.at)
+    expect(facts.unreadable?.claude).toMatch(/^its last collection failed/)
+    expect(facts.unreadable?.codex).toBeUndefined()
+  })
+})

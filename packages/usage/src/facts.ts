@@ -3,7 +3,7 @@
 // balance from its lots and the credits drawn since, and the newest refusals.
 
 import config from '../data/usage.json' with { type: 'json' }
-import type { Database } from './db'
+import { type Database, getState } from './db'
 import { creditFacts, type Lot, localDay, type Plans } from './plans'
 import { type Credit, type Facts, micros, type Reading, type Refusal } from './windows'
 
@@ -70,7 +70,6 @@ export function creditsOf(db: Database, plans: Plans, now: string): Record<strin
   const lotsBy = new Map<string, Lot[]>()
   for (const lot of [...plans.lots, ...detected])
     lotsBy.set(lot.provider, [...(lotsBy.get(lot.provider) ?? []), lot])
-  const today = localDay(Date.parse(now))
   const credits: Record<string, Credit> = {}
   for (const [provider, lots] of lotsBy) {
     const firstDay = lots.map((lot) => localDay(lot.granted_at)).sort()[0] as string
@@ -81,7 +80,7 @@ export function creditsOf(db: Database, plans: Plans, now: string): Record<strin
       )
       .all(provider, firstDay) as unknown as { day: string; drawn: number }[]
     for (const row of rows) drawnByDay.set(row.day, row.drawn)
-    credits[provider] = creditFacts(lots, drawnByDay, today)
+    credits[provider] = creditFacts(lots, drawnByDay, now)
   }
   return credits
 }
@@ -104,11 +103,29 @@ export function recentRefusals(db: Database): Refusal[] {
 
 /** Everything routing and the spend rows need, as of `now`. */
 export function loadFacts(db: Database, plans: Plans, now: string): Facts {
-  return {
+  const facts: Facts = {
     readings: latestReadings(db, now),
     credits: creditsOf(db, plans, now),
     refusals: recentRefusals(db),
   }
+  const saved = getState<{ at: string; problems?: Record<string, string>; failed?: string[] }>(
+    db,
+    'collected',
+  )
+  if (!saved) return facts
+  facts.collected_at = saved.at
+  // Stale facts, or a provider that failed on the last collection, are unknown to routing.
+  const staleMin = (micros(now) - micros(saved.at)) / 60e6
+  const unreadable: Record<string, string> = {}
+  for (const { id } of config.providers) {
+    if (staleMin > config.unknown_after_min)
+      unreadable[id] = `last collected ${Math.floor(staleMin)} minutes ago, too old to trust`
+    else if (saved.failed?.includes(id))
+      unreadable[id] =
+        `its last collection failed${saved.problems?.[id] ? `: ${saved.problems[id]}` : ''}`
+  }
+  if (Object.keys(unreadable).length) facts.unreadable = unreadable
+  return facts
 }
 
 /** Records a refusal (the agent harness and Tether call this when a provider refuses a model). */

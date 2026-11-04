@@ -117,14 +117,21 @@ export function pacePerDay(drawnByDay: Map<string, number>, today: string): numb
   return sum / 7
 }
 
-/** Balance, the last-7-day pace and the earliest expiry among lots that still have credits. */
+/**
+ * Balance, the last-7-day pace and the earliest expiry among lots that still have credits at
+ * `now` (ISO). Draws are assigned to lots as ever (earliest expiry first); a lot that expired
+ * by `now` keeps what was left of it out of the balance.
+ */
 export function creditFacts(
   lots: Lot[],
   drawnByDay: Map<string, number>,
-  today: string,
+  now: string,
 ): { balance: number; pace_per_day_7d: number; earliest_expiry: string | null } {
+  const today = localDay(now)
   const drawn = [...drawnByDay.values()].reduce((sum, value) => sum + value, 0)
-  const states = drawDown(lots, drawn)
+  const states = drawDown(lots, drawn).filter(
+    (state) => !state.lot.expires_at || micros(state.lot.expires_at) > micros(now),
+  )
   const balance = states.reduce((sum, state) => sum + state.remaining, 0)
   const expiries = states
     .filter((state) => state.remaining > 0 && state.lot.expires_at)

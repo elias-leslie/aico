@@ -298,12 +298,17 @@ function attachFacts(
 ): void {
   const windows = windowFacts(facts.readings, now)
   for (const row of payload.rows) {
-    row.usage = optionUsage(usageProvider(policy, row.tool, row.model), windows, facts.credits)
+    const provider = usageProvider(policy, row.tool, row.model)
+    const unreadable = provider ? facts.unreadable?.[provider] : undefined
+    // Stale or failed facts say nothing: unknown, never zero used and never room.
+    row.usage = unreadable
+      ? { provider, status: 'unknown', windows: [], credits: null, unknown_windows: [], unreadable }
+      : optionUsage(provider, windows, facts.credits)
     row.last_refusal = row.allowed ? lastRefusal(catalog, row.model, facts.refusals) : null
     for (const alt of row.alternates)
       alt.last_refusal = row.allowed
         ? lastRefusal(catalog, (alt.model as string | null) ?? null, facts.refusals)
         : null
   }
-  payload.facts_as_of = now
+  payload.facts_as_of = facts.collected_at ?? now
 }
