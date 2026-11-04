@@ -1,10 +1,15 @@
 // Pi's read, bash, edit and write tools, unchanged except for what the model is told:
 // our own one-line descriptions, and parameter schemas without Pi's prose. The
-// publication guard runs before every bash call when the role needs it, and a contained
-// role's bash runs inside the contain command (a network namespace with only loopback).
+// publication guard runs before every bash call when the role needs it. A contained
+// role's bash runs in a sandbox (contain_command: no network but loopback, a read-only
+// system with only the working folder writable, private /tmp and /run, sockets masked,
+// session variables cleared), and its write and edit stay inside the working folder.
 
 import { spawn } from 'node:child_process'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { constants, existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { AgentTool } from '@earendil-works/pi-agent-core'
 import {
   createBashTool,
@@ -12,6 +17,16 @@ import {
   createReadTool,
   createWriteTool,
 } from '@earendil-works/pi-coding-agent'
+
+/** How a contained role's tools run (data/harness.json contain_*). */
+export interface Contain {
+  /** The sandbox command bash runs under, before the per-call binds. */
+  command: readonly string[]
+  /** Folders hidden from bash (sockets live there); `~/` is the home folder. */
+  hide: readonly string[]
+  /** Variables bash does not get; a trailing `*` matches a prefix. */
+  unsetEnv: readonly string[]
+}
 
 const FACTORIES: Readonly<Record<string, (cwd: string) => AgentTool>> = {
   read: createReadTool as (cwd: string) => AgentTool,
@@ -37,26 +52,149 @@ function bare(schema: unknown): unknown {
 
 const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`
 
-/** The level's tools for `cwd`, described by `descriptions`; bash runs under `contain` when given. */
+const within = (path: string, dirs: readonly string[]) =>
+  dirs.some((dir) => path === dir || path.startsWith(dir === sep ? dir : `${dir}${sep}`))
+
+/** The real paths of the sockets listening on this host (/proc/net/unix), existing ones only. */
+export function listeningSockets(table = '/proc/net/unix'): string[] {
+  let text: string
+  try {
+    text = readFileSync(table, 'utf8')
+  } catch {
+    return []
+  }
+  const out = new Set<string>()
+  for (const line of text.split('\n').slice(1)) {
+    const fields = line.trim().split(/\s+/)
+    const path = fields.slice(7).join(' ')
+    if (fields[3] !== '00010000' || !path.startsWith('/')) continue
+    try {
+      if (lstatSync(path).isSocket()) out.add(realpathSync(path))
+    } catch {}
+  }
+  return [...out]
+}
+
+/** The full sandbox command for one bash call in `cwd`, up to the program it runs. */
+export function sandboxArgs(contain: Contain, cwd: string, home = homedir()): string[] {
+  const root = realpathSync(cwd)
+  const args = [...contain.command]
+  const masked = args.flatMap((arg, i) => (arg === '--tmpfs' ? [args[i + 1] as string] : []))
+  for (const raw of contain.hide) {
+    const dir = raw.startsWith('~/') ? join(home, raw.slice(2)) : raw
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue
+    const real = realpathSync(dir)
+    if (within(real, masked)) continue
+    args.push('--tmpfs', real)
+    masked.push(real)
+  }
+  args.push('--bind', root, root)
+  const git = join(root, '.git')
+  if (existsSync(git)) args.push('--ro-bind', git, git)
+  // The working folder is the host's again under its bind, so its sockets are masked too.
+  for (const socket of listeningSockets())
+    if (!within(socket, masked) || within(socket, [root]))
+      args.push('--ro-bind', '/dev/null', socket)
+  args.push('--chdir', cwd)
+  return args
+}
+
+/** `env` without the variables `unset` names (a trailing `*` matches a prefix). */
+export function clearedEnv(env: NodeJS.ProcessEnv, unset: readonly string[]): NodeJS.ProcessEnv {
+  const gone = (key: string) =>
+    unset.some((name) => (name.endsWith('*') ? key.startsWith(name.slice(0, -1)) : key === name))
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !gone(key)))
+}
+
+/** The real path `path` reaches: its own when it exists, else its nearest existing folder's plus the rest. */
+function reach(path: string): string {
+  let head = resolve(path)
+  const rest: string[] = []
+  for (;;) {
+    try {
+      return join(realpathSync(head), ...rest)
+    } catch {
+      const up = dirname(head)
+      if (up === head) return resolve(path)
+      rest.unshift(basename(head))
+      head = up
+    }
+  }
+}
+
+/** Why a contained role may not write `path`, or null: only inside the working folder, never in a .git folder. */
+export function writeRefusal(cwd: string, path: string): string | null {
+  const root = reach(cwd)
+  const rel = relative(root, reach(path))
+  if (rel.startsWith('..') || isAbsolute(rel))
+    return `${path} is outside the working folder ${root}; this role writes only there`
+  if (rel.split(sep).includes('.git'))
+    return `${path} is inside a .git folder; this role does not write there`
+  return null
+}
+
+function contained(cwd: string): (path: string) => void {
+  return (path) => {
+    const why = writeRefusal(cwd, path)
+    if (why) throw new Error(why)
+  }
+}
+
+/** A contained role's version of a tool, or the plain one. */
+function toolFor(name: string, cwd: string, contain: Contain | null): AgentTool {
+  const factory = FACTORIES[name]
+  if (!factory) throw new Error(`no tool '${name}'`)
+  if (!contain) return factory(cwd)
+  const check = contained(cwd)
+  if (name === 'bash')
+    return createBashTool(cwd, {
+      spawnHook: (context) => ({
+        ...context,
+        command: `exec ${sandboxArgs(contain, context.cwd).map(quote).join(' ')} bash -c ${quote(context.command)}`,
+        env: clearedEnv(context.env, contain.unsetEnv),
+      }),
+    }) as AgentTool
+  if (name === 'write')
+    return createWriteTool(cwd, {
+      operations: {
+        mkdir: async (dir) => {
+          check(dir)
+          await mkdir(dir, { recursive: true })
+        },
+        writeFile: async (path, content) => {
+          check(path)
+          await writeFile(path, content, 'utf-8')
+        },
+      },
+    }) as AgentTool
+  if (name === 'edit')
+    return createEditTool(cwd, {
+      operations: {
+        access: async (path) => {
+          check(path)
+          await access(path, constants.R_OK | constants.W_OK)
+        },
+        readFile: (path) => readFile(path),
+        writeFile: async (path, content) => {
+          check(path)
+          await writeFile(path, content, 'utf-8')
+        },
+      },
+    }) as AgentTool
+  return factory(cwd)
+}
+
+/** The level's tools for `cwd`, described by `descriptions`; contained when `contain` is given. */
 export function leanTools(
   cwd: string,
   names: readonly string[],
   descriptions: Record<string, string>,
-  contain: readonly string[] | null = null,
+  contain: Contain | null = null,
 ): AgentTool[] {
   return names.map((name) => {
-    const factory = FACTORIES[name]
     const description = descriptions[name]
-    if (!factory || !description) throw new Error(`no tool '${name}'`)
-    const tool =
-      name === 'bash' && contain
-        ? (createBashTool(cwd, {
-            spawnHook: (spawn) => ({
-              ...spawn,
-              command: `exec ${contain.map(quote).join(' ')} bash -c ${quote(spawn.command)}`,
-            }),
-          }) as AgentTool)
-        : factory(cwd)
+    if (!description) throw new Error(`no tool '${name}'`)
+    const tool = toolFor(name, cwd, contain)
     return { ...tool, description, parameters: bare(tool.parameters) as AgentTool['parameters'] }
   })
 }

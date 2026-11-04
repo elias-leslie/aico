@@ -107,7 +107,11 @@ describe('hunting role', () => {
     expect(result).toMatchObject({
       egress: 'contained',
       hosts: ['api.openai.com', 'opencode.ai'],
-      contain: ['env'],
+      contain: {
+        command: ['env'],
+        hide: harness.contain_hide,
+        unsetEnv: harness.contain_unset_env,
+      },
     })
     expect((rules('implementation') as RoleRules).hosts).toBeNull()
   })
@@ -130,7 +134,7 @@ describe('hunting role', () => {
     const broken = { ...contained, contain_command: [join(dir, 'no-such-command')] }
     const result = refusal(hunting(undefined, broken))
     expect(result.reason).toBe('unenforceable')
-    expect(result.detail).toMatch(/without network/)
+    expect(result.detail).toMatch(/runs its tools contained/)
   })
 })
 

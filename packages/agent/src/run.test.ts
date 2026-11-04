@@ -3,7 +3,17 @@
 // model swap stops the run, and the guard blocks bash.
 
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { createServer, type Server } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openDatabase } from '@aico/store'
@@ -21,7 +31,13 @@ import { refusalOf, swapOf } from './outcomes'
 import type { RoleRules } from './rules'
 import { HARNESS } from './rules'
 import { runAgent } from './run'
-import { credentialMarkers, guardBash, touchesCredentials } from './tools'
+import {
+  type Contain,
+  credentialMarkers,
+  guardBash,
+  touchesCredentials,
+  writeRefusal,
+} from './tools'
 import { findRun, MIGRATIONS, openAgentDb, Transcript } from './transcript'
 
 function setup(guardHook: string | null = null, firstApi = 'faux-openai') {
@@ -399,24 +415,131 @@ describe('egress profile', () => {
     expect(result.outcome).toMatchObject({ kind: 'refused', reason: 'egress_denied' })
     expect(first.state.callCount).toBe(0)
   })
+})
 
-  const unshare = HARNESS.contain_command
-  const namespaces =
-    spawnSync(unshare[0] as string, [...unshare.slice(1), 'true'], { stdio: 'ignore' }).status === 0
-  it.skipIf(!namespaces)("runs a contained role's bash with only loopback", async () => {
-    const { first, rules, run, db } = setup()
+describe('contained tools', () => {
+  const contain: Contain = {
+    command: HARNESS.contain_command,
+    hide: HARNESS.contain_hide,
+    unsetEnv: HARNESS.contain_unset_env,
+  }
+  const containedRules = (rules: RoleRules): RoleRules => ({
+    ...rules,
+    egress: 'contained',
+    hosts: ['localhost'],
+    contain,
+  })
+  const listen = (path: string) =>
+    new Promise<Server>((done) => {
+      const server = createServer()
+      server.listen(path, () => done(server))
+    })
+  const results = (db: ReturnType<typeof setup>['db'], runId: string) =>
+    db
+      .prepare("SELECT content FROM messages WHERE run_id = ? AND role = 'toolResult' ORDER BY seq")
+      .all(runId)
+      .map((row) => JSON.stringify(JSON.parse(String(row.content))))
+
+  // No skip: a host where the sandbox does not start fails here (and the role is refused there).
+  it('the contain command starts on this host', () => {
+    const [file, ...args] = HARNESS.contain_command
+    expect(spawnSync(file as string, [...args, 'true'], { stdio: 'ignore' }).status).toBe(0)
+  })
+
+  it("runs a contained role's bash with only loopback, no user bus, Tether socket or tmux, and a read-only system", async () => {
+    const { first, rules, run, db, cwd } = setup()
+    mkdirSync(join(cwd, '.git', 'hooks'), { recursive: true })
+    const socket = join(cwd, 'tether.sock')
+    const server = await listen(socket)
+    const connect = `python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).connect(sys.argv[1])' ${socket}`
+    // Outside the sandbox the socket answers, so a refusal inside means the sandbox.
+    expect(spawnSync('bash', ['-c', connect]).status).toBe(0)
+    vi.stubEnv('TETHER_SOCKET', socket)
+    const tried = (label: string, command: string) =>
+      `if ${command} >/dev/null 2>&1; then echo "${label} reached"; else echo "${label} refused"; fi`
+    const script = [
+      "tail -n +3 /proc/net/dev | cut -d: -f1 | tr -d ' '",
+      'echo "env ${TETHER_SOCKET:-none} ${XDG_RUNTIME_DIR:-none} ${DBUS_SESSION_BUS_ADDRESS:-none}"',
+      tried('systemctl', 'systemctl --user show-environment'),
+      tried('bus', `XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user show-environment`),
+      tried('tether', connect),
+      tried('tmux', 'tmux ls'),
+      tried('home', 'touch ~/.aico-contained-probe'),
+      tried('hooks', 'touch .git/hooks/pre-commit'),
+      tried('folder', 'touch inside.txt'),
+    ].join('\n')
     first.setResponses([
-      fauxAssistantMessage(
-        fauxToolCall('bash', { command: "tail -n +3 /proc/net/dev | cut -d: -f1 | tr -d ' '" }),
-      ),
+      fauxAssistantMessage(fauxToolCall('bash', { command: script })),
       fauxAssistantMessage('checked'),
     ])
-    const contained = await run('task', {
-      rules: { ...rules, egress: 'contained', hosts: ['localhost'], contain: unshare },
-    })
-    expect(contained.outcome.kind).toBe('done')
-    const row = db.prepare("SELECT content FROM messages WHERE role = 'toolResult'").get()
-    expect(JSON.parse(String(row?.content))).toEqual([{ type: 'text', text: 'lo\n' }])
+    try {
+      const result = await run('task', { rules: containedRules(rules) })
+      expect(result.outcome.kind).toBe('done')
+      const text = JSON.parse(results(db, result.runId)[0] as string)[0].text as string
+      expect(text.split('\n')).toEqual([
+        'lo',
+        'env none none none',
+        'systemctl refused',
+        'bus refused',
+        'tether refused',
+        'tmux refused',
+        'home refused',
+        'hooks refused',
+        'folder reached',
+        '',
+      ])
+      expect(existsSync(join(homedir(), '.aico-contained-probe'))).toBe(false)
+      expect(existsSync(join(cwd, 'inside.txt'))).toBe(true)
+    } finally {
+      vi.unstubAllEnvs()
+      server.close()
+    }
+  })
+
+  it("keeps a contained role's write and edit inside the working folder and out of .git", async () => {
+    const { first, rules, run, cwd } = setup()
+    const outside = mkdtempSync(join(tmpdir(), 'aico-agent-outside-'))
+    writeFileSync(join(outside, 'kept.txt'), 'original\n')
+    symlinkSync(outside, join(cwd, 'link'))
+    mkdirSync(join(cwd, '.git', 'hooks'), { recursive: true })
+    const unit = join(homedir(), '.config', 'systemd', 'user', 'aico-contained-probe.service')
+    first.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall('write', { path: join(outside, 'new.txt'), content: 'x' }),
+        fauxToolCall('write', { path: '../escape.txt', content: 'x' }),
+        fauxToolCall('write', { path: 'link/through.txt', content: 'x' }),
+        fauxToolCall('write', { path: '.git/hooks/pre-commit', content: '#!/bin/sh\n' }),
+        fauxToolCall('write', { path: unit, content: '[Service]\n' }),
+        fauxToolCall('edit', {
+          path: join(outside, 'kept.txt'),
+          edits: [{ oldText: 'original', newText: 'changed' }],
+        }),
+        fauxToolCall('write', { path: 'sub/ok.txt', content: 'fine' }),
+      ]),
+      fauxAssistantMessage('done'),
+    ])
+    try {
+      const result = await run('task', { rules: containedRules(rules) })
+      expect(result.outcome.kind).toBe('done')
+      expect(existsSync(join(outside, 'new.txt'))).toBe(false)
+      expect(existsSync(join(cwd, '..', 'escape.txt'))).toBe(false)
+      expect(existsSync(join(outside, 'through.txt'))).toBe(false)
+      expect(existsSync(join(cwd, '.git', 'hooks', 'pre-commit'))).toBe(false)
+      expect(existsSync(unit)).toBe(false)
+      expect(readFileSync(join(outside, 'kept.txt'), 'utf8')).toBe('original\n')
+      expect(readFileSync(join(cwd, 'sub', 'ok.txt'), 'utf8')).toBe('fine')
+    } finally {
+      rmSync(unit, { force: true })
+    }
+  })
+
+  it('refuses paths outside the folder or in .git, through symlinks too', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'aico-agent-refusal-'))
+    symlinkSync('/etc', join(cwd, 'etc'))
+    expect(writeRefusal(cwd, join(cwd, 'a', 'b.txt'))).toBeNull()
+    expect(writeRefusal(cwd, join(cwd, 'etc', 'passwd'))).toMatch(/outside the working folder/)
+    expect(writeRefusal(cwd, join(cwd, 'x', '.git', 'config'))).toMatch(/inside a .git folder/)
+    expect(writeRefusal(cwd, join(homedir(), '.bashrc'))).toMatch(/outside/)
   })
 })
 

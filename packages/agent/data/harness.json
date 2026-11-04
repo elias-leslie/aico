@@ -22,12 +22,39 @@
     "hunting": { "level": "lean", "guard": true, "egress": "contained" },
     "recon": { "level": "lean", "guard": true, "egress": "contained" }
   },
-  "egress_about": "Which hosts a role's run may reach. [\"*\"] is the host's own network. Any other list: models only at those hosts (a chain model elsewhere is skipped, and with none left the run is refused), and bash runs in a private network namespace with only loopback (contain_command); if that command fails here, the role is refused. Tools reaching listed hunt targets needs a filtering proxy; until then a contained role's tools reach no host.",
+  "egress_about": "Which hosts a role's run may reach. [\"*\"] is the host's own network. Any other list: models only at those hosts (a chain model elsewhere is skipped, and with none left the run is refused), and the role's tools are contained: bash runs under contain_command (no network but loopback, its own processes, a read-only system with only the working folder writable and its .git read-only, a private /tmp and /run, the contain_hide folders and every listening socket outside them masked, the contain_unset_env variables cleared), and write and edit refuse paths outside the working folder or inside a .git folder. If contain_command fails here, the role is refused. Tools reaching listed hunt targets needs a filtering proxy; until then a contained role's tools reach no host.",
   "egress_profiles": {
     "host": ["*"],
     "contained": ["api.openai.com", "opencode.ai"]
   },
-  "contain_command": ["unshare", "--user", "--map-current-user", "--net"],
+  "contain_command": [
+    "bwrap",
+    "--unshare-all",
+    "--die-with-parent",
+    "--new-session",
+    "--ro-bind",
+    "/",
+    "/",
+    "--dev",
+    "/dev",
+    "--proc",
+    "/proc",
+    "--tmpfs",
+    "/tmp",
+    "--tmpfs",
+    "/run"
+  ],
+  "contain_hide": ["~/.local/state/tether"],
+  "contain_unset_env": [
+    "DBUS*",
+    "TETHER*",
+    "TMUX*",
+    "XDG_RUNTIME_DIR",
+    "SSH_AUTH_SOCK",
+    "WAYLAND_DISPLAY",
+    "DISPLAY",
+    "TMPDIR"
+  ],
   "credential_paths_about": "Tool results for calls that name these paths (and Pi's agent dir, where Pi keeps auth.json) are kept out of agent.db: only their length is stored.",
   "credential_paths": [
     "~/.ssh",

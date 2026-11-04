@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { Catalog, type LaunchPolicy, loadPolicy, openContext, route } from '@aico/context'
 import harnessData from '../data/harness.json' with { type: 'json' }
+import type { Contain } from './tools'
 
 export type Harness = typeof harnessData
 export const HARNESS: Harness = harnessData
@@ -51,8 +52,8 @@ export interface RoleRules {
   egress: string
   /** The hosts models may be reached at, or null for any host. */
   hosts: string[] | null
-  /** The command bash runs under to have no network, or null when tools use the host's network. */
-  contain: string[] | null
+  /** How a contained role's tools run (bash in a sandbox, writes kept to the working folder), or null when they run on the host. */
+  contain: Contain | null
 }
 
 const refused = (reason: RefusalReason, detail: string): Refused => ({
@@ -271,7 +272,7 @@ export function roleRules(
   if (!open && !contains(harness.contain_command))
     return refused(
       'unenforceable',
-      `role '${request.role}' runs its tools without network, and '${harness.contain_command.join(' ')}' does not work on this host`,
+      `role '${request.role}' runs its tools contained, and '${harness.contain_command.join(' ')}' does not work on this host`,
     )
   const tools = (harness.levels as Record<string, string[]>)[roleData.level]
   if (!tools)
@@ -292,13 +293,19 @@ export function roleRules(
     guardHook: roleData.guard ? harness.guard_hook : null,
     egress: roleData.egress,
     hosts: open ? null : hosts,
-    contain: open ? null : harness.contain_command,
+    contain: open
+      ? null
+      : {
+          command: harness.contain_command,
+          hide: harness.contain_hide,
+          unsetEnv: harness.contain_unset_env,
+        },
   }
 }
 
 const containChecked = new Map<string, boolean>()
 
-/** Whether `command true` runs here (a network namespace needs unprivileged user namespaces). */
+/** Whether `command true` runs here (the sandbox needs unprivileged user namespaces). */
 function contains(command: readonly string[]): boolean {
   const key = command.join('\0')
   let works = containChecked.get(key)
