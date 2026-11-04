@@ -284,6 +284,16 @@ describe('Aico chat routes', () => {
       stop_reason: 'aborted',
     })
   })
+  it('can return an explicitly chosen effort to routing', async () => {
+    const id = await start()
+    first.setResponses([fauxAssistantMessage('low'), fauxAssistantMessage('routed')])
+    await call('POST', `/api/chat/${id}/send`, { message: 'Use low effort', effort: 'low' })
+    await chats.settled(id)
+    expect(chats.get(id).effort).toBe('low')
+    await call('POST', `/api/chat/${id}/send`, { message: 'Use the role’s effort', effort: null })
+    await chats.settled(id)
+    expect(chats.get(id).effort).toBeNull()
+  })
   it('ends with an open question in Finished rather than Needs you', async () => {
     const id = await start()
     questions = [question(id)]

@@ -153,6 +153,41 @@ describe('desktop chat', () => {
     expect(screen.getByText(/Questions may be out of date/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull()
   })
+  it('shows the saved effort and can explicitly return to routing', async () => {
+    const { fetcher } = show(view({ effort: 'off' }))
+    expect(screen.getByRole('combobox', { name: 'Effort' })).toHaveValue('off')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Effort' }), {
+      target: { value: '' },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), {
+      target: { value: 'Use routing' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(fetcher).toHaveBeenCalled())
+    const request = fetcher.mock.calls.find((args) =>
+      String(args[0]).endsWith('/send'),
+    )
+    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+      effort: null,
+    })
+  })
+  it('keeps an explicit model visible until its first streaming update', async () => {
+    const { fetcher } = show(view())
+    fetcher.mockResolvedValueOnce(
+      new Response(JSON.stringify(view({ state: 'working' }))),
+    )
+    fireEvent.change(screen.getByRole('combobox', { name: 'Model' }), {
+      target: { value: 'second' },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), {
+      target: { value: 'Use the second model' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await screen.findByRole('button', { name: 'Stop' })
+    expect(screen.getByRole('combobox', { name: 'Model' })).toHaveValue(
+      'second',
+    )
+  })
   it('keeps Idle quiet and only shows the answer card for an explicit question', async () => {
     const { client } = show(view())
     expect(screen.getByText('Idle', { exact: true })).toBeInTheDocument()

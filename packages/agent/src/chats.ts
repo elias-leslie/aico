@@ -227,7 +227,7 @@ export class ChatSessions {
     cwd: string
     message: string
     model?: string
-    effort?: string
+    effort?: string | null
     branch?: { id: string; turn: number }
   }) {
     let { role, cwd } = input
@@ -276,14 +276,14 @@ export class ChatSessions {
     this.launch(id, input.message, rules, Boolean(input.model), input.effort)
     return this.get(id)
   }
-  send(id: string, message: string, model?: string, effort?: string) {
+  send(id: string, message: string, model?: string, effort?: string | null) {
     const row = this.row(id)
     if (row.state === 'ended')
       throw new ChatError(409, 'This chat ended. Branch from a reply to start a new one.')
     const run = findRun(this.db, id)
     const rules = this.pick(this.rules(run.role, run.cwd), model)
     if (this.active.has(id)) {
-      if (model || effort)
+      if (model || effort !== undefined)
         throw new ChatError(
           409,
           'Stop this reply before changing its model or effort. Your message is kept below.',
@@ -297,7 +297,7 @@ export class ChatSessions {
     } else this.launch(id, message, rules, Boolean(model), effort)
     return this.get(id)
   }
-  resume(id: string, selectedModel?: string, selectedEffort?: string) {
+  resume(id: string, selectedModel?: string, selectedEffort?: string | null) {
     const row = this.row(id)
     if (!['stopped', 'failed', 'swapped'].includes(row.state))
       throw new ChatError(409, 'This chat has no unfinished reply.')
@@ -314,10 +314,10 @@ export class ChatSessions {
     this.db
       .prepare('UPDATE chats SET note = ? WHERE run_id = ?')
       .run(
-        `Resumed at ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. ${rules.chain[0]?.id}, the model that answered last, is finishing the stopped turn. Its unfinished text stays above as it was.`,
+        `Resumed at ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. ${rules.chain[0]?.id} is finishing the stopped turn. Its unfinished text stays above as it was.`,
         id,
       )
-    this.launch(id, null, rules, true, selectedEffort ?? row.effort ?? undefined)
+    this.launch(id, null, rules, true, selectedEffort === undefined ? row.effort : selectedEffort)
     return this.get(id)
   }
   async stop(id: string, end = false) {
@@ -398,16 +398,16 @@ export class ChatSessions {
     task: string | null,
     rules: RoleRules,
     keepHead: boolean,
-    effort?: string,
+    effort?: string | null,
   ) {
     if (this.active.has(id)) throw new ChatError(409, 'This chat is already working.')
     const controller = new AbortController()
-    effort ??= this.row(id).effort ?? undefined
+    const configuredEffort = effort === undefined ? this.row(id).effort : effort
     this.db
       .prepare(
         "UPDATE chats SET state = 'working', updated_at = ?, draft = CASE WHEN ? THEN '' ELSE draft END, effort = ? WHERE run_id = ?",
       )
-      .run(Date.now(), task !== null ? 1 : 0, effort ?? null, id)
+      .run(Date.now(), task !== null ? 1 : 0, configuredEffort ?? null, id)
     const done = Promise.resolve().then(async () => {
       try {
         const run = findRun(this.db, id)
@@ -419,7 +419,7 @@ export class ChatSessions {
           task,
           resume: run,
           keepHead,
-          effort,
+          effort: configuredEffort ?? undefined,
           models: this.options.models,
           contextFiles: this.options.contextFiles,
           sessionId: id,

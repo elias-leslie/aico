@@ -73,7 +73,7 @@ export function registerChatRoutes(
   }
   const preferences = (body: Record<string, unknown>) => {
     const model = optionalString(body, 'model', { max: 200 })
-    const effort = optionalString(body, 'effort', { max: 20 })
+    const effort = body.effort === null ? null : optionalString(body, 'effort', { max: 20 })
     if (effort && !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(effort))
       throw new HttpError(422, 'Choose a supported effort.')
     return { model, effort }

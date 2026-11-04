@@ -256,7 +256,7 @@ function ChatSessionBody({ id }: { id: string }) {
   const [connection, setConnection] = useState(0)
   const [draft, setDraft] = useState('')
   const [model, setModel] = useState('')
-  const [effort, setEffort] = useState('')
+  const [effort, setEffort] = useState<string | null>(null)
   const [details, setDetails] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -277,6 +277,9 @@ function ChatSessionBody({ id }: { id: string }) {
       initialized.current = true
     }
   }, [chat])
+  useEffect(() => {
+    if (chat?.state && chat.state !== 'working') setModel('')
+  }, [chat?.state])
   const ready = Boolean(opened.data)
   // biome-ignore lint/correctness/useExhaustiveDependencies: connection explicitly reopens the stream; token updates do not
   useEffect(() => {
@@ -335,11 +338,10 @@ function ChatSessionBody({ id }: { id: string }) {
       : await act('send', {
           message: draft,
           ...(!working && model && { model }),
-          ...(!working && effort && { effort }),
+          ...(!working && effort !== null && { effort: effort || null }),
         })
     if (value) {
       setDraft('')
-      setModel('')
       follow.current = true
     }
   }
@@ -404,8 +406,9 @@ function ChatSessionBody({ id }: { id: string }) {
   const working = chat.state === 'working'
   const ended = chat.state === 'ended'
   const selectedModel =
-    model ||
-    (working ? chat.partial?.model || chat.model : chat.nextModel) ||
+    (working
+      ? chat.partial?.model || model || chat.model
+      : model || chat.nextModel) ||
     chat.chain[0]?.id ||
     ''
   const startBranch = async () => {
@@ -466,7 +469,7 @@ function ChatSessionBody({ id }: { id: string }) {
             onClick={() =>
               void act('resume', {
                 ...(model && { model }),
-                ...(effort && { effort }),
+                ...(effort !== null && { effort: effort || null }),
               })
             }
           >
@@ -659,8 +662,8 @@ function ChatSessionBody({ id }: { id: string }) {
               )}
               {working && (
                 <p className="chat-muted" role="status">
-                  {chat.partial?.model || chat.model || selectedModel} is
-                  writing…
+                  {chat.partial?.model || model || chat.model || selectedModel}{' '}
+                  is writing…
                 </p>
               )}
               {chat.questions?.map((question) => (
@@ -767,7 +770,7 @@ function ChatSessionBody({ id }: { id: string }) {
                     Effort{' '}
                     <select
                       aria-label="Effort"
-                      value={effort}
+                      value={effort ?? chat.effort ?? ''}
                       disabled={working}
                       onChange={(e) => setEffort(e.target.value)}
                     >
