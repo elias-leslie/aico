@@ -116,9 +116,7 @@ describe('remote Tether update', () => {
     `HOME=${home}`,
     `PATH=${bin}:/usr/bin:/bin`,
     `XDG_STATE_HOME=${join(home, '.local', 'state')}`,
-    'sh',
-    '-c',
-    remoteArgv(entry, '/run/x/ssh.ctl', updateLine('default', entry.socket, 1)).at(-1) ?? '',
+    ...remoteArgv(entry, '/run/x/exec.sock', updateLine('default', entry.socket, 1)).slice(-3),
   ]
   const target = { entry, control: '/run/x/ssh.ctl', instance: 'default' }
   const restarts = () =>

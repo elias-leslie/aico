@@ -76,7 +76,7 @@ export function remoteAttachAnswer(host: string, generation = 'g1') {
     ],
     env: { TERM: 'xterm-256color' },
     host,
-    ssh: { alias: host, control: `${runtime}/tether/peers/${host}/ssh.ctl` },
+    fleet: { alias: host, control: `${runtime}/tether/peers/${host}/exec.sock` },
   }
 }
 

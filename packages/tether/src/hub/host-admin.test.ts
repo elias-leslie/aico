@@ -1,3 +1,7 @@
+import { execArgv } from '@aico/fleet/exec'
+
+const FLEET_BIN = execArgv('', [])[0] as string
+
 import type { HostEntry } from '@aico/fleet/hosts'
 import type { PeerAnswer } from '@aico/fleet/peer-http'
 import { describe, expect, it, vi } from 'vitest'
@@ -26,7 +30,7 @@ const ENTRY: HostEntry = {
   wakeTimeoutSec: 240,
   stateDir: null,
 }
-const CONTROL = '/run/user/1000/tether/peers/vm-1/ssh.ctl'
+const CONTROL = '/run/user/1000/tether/peers/vm-1/exec.sock'
 
 const STATUS = {
   host: 'vm-1',
@@ -120,19 +124,7 @@ describe('login status', () => {
     const { admin, runs } = setup()
     const answer = await admin.status('vm-1')
     expect(runs[0]).toEqual(remoteArgv(ENTRY, CONTROL, 'agent-hub login status --json'))
-    expect(runs[0]?.slice(0, 11)).toEqual([
-      '/usr/bin/ssh',
-      '-F',
-      '/dev/null',
-      '-T',
-      '-o',
-      'BatchMode=yes',
-      '-o',
-      'ProxyCommand=false',
-      '-S',
-      CONTROL,
-      'vm-1',
-    ])
+    expect(runs[0]?.slice(0, 5)).toEqual([FLEET_BIN, 'fleet', 'exec', CONTROL, '--'])
     expect(answer).toMatchObject({ ...STATUS, host: 'vm-1' })
     expect(answer.actions).toMatchObject({
       'claude-code': { signIn: true, signOut: 'revoke' },
@@ -430,7 +422,7 @@ describe('sign in and out', () => {
 describe('helpers', () => {
   it('quotes the remote line for the login shell', () => {
     const argv = remoteArgv(ENTRY, CONTROL, "echo 'hi'; pi")
-    expect(argv.at(-1)).toBe(`bash -lc 'echo '\\''hi'\\''; pi'`)
+    expect(argv.slice(-3)).toEqual(['bash', '-lc', "echo 'hi'; pi"])
   })
 
   it('reads the JSON object from the status output', () => {

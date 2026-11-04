@@ -15,6 +15,7 @@ export interface FleetSettings {
   listen: Endpoint
   peers: { name: string; endpoint: Endpoint }[]
   controlSocket: string
+  jobsSocket?: string
   syncSocket: string
   peerRoot: string
   retryMinMs: number

@@ -1,6 +1,6 @@
 // A peer over a unix socket: the PeerTransport the engine pulls through, plus
 // the two calls around it (a blob, a nudge). The socket is the local end of the
-// peer's ssh forward, or a plain socket in tests.
+// peer's fleet channel, or a plain socket in tests.
 
 import { request } from 'node:http'
 import type { BlobVariant } from '@aico/notes/blobs'

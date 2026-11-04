@@ -28,7 +28,6 @@ import { readFile } from 'node:fs/promises'
 import { availableParallelism, homedir, loadavg } from 'node:os'
 import { isAbsolute, join, normalize } from 'node:path'
 import type { HostEntry } from '@aico/fleet/hosts'
-import { SSH_BIN } from '@aico/fleet/link'
 import { peerRequest } from '@aico/fleet/peer-http'
 import {
   type AgentAdmissionLimits,
@@ -888,10 +887,9 @@ export class Placement {
     let pveRoom = Number.POSITIVE_INFINITY
     let pveDetail = ''
     if (ref) {
-      const result = await this.run(
-        [SSH_BIN, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', ref.ssh, '--', proxmoxLine(ref)],
-        READ_MS,
-      )
+      const authority = this.deps.peer(ref.ssh)
+      if (!authority?.live) return this.unknown(name, `Proxmox authority ${ref.ssh} is not linked`)
+      const result = await this.readGuest(authority, proxmoxLine(ref))
       if (result.code !== 0)
         return this.unknown(name, `the Proxmox reading failed (${clean(result.output, 80)})`)
       try {

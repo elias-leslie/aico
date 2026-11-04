@@ -5,7 +5,7 @@ import {
   type Socket,
   type Server as UnixServer,
 } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { Duplex } from 'node:stream'
 import { connect, createServer, type Server, type TLSSocket } from 'node:tls'
 import type { StatusRow } from '@aico/status'
@@ -28,6 +28,7 @@ export interface FleetOptions {
 export class Fleet {
   private readonly connections = new Map<string, Connection>()
   private readonly connecting = new Set<TLSSocket>()
+  private readonly accepted = new Set<TLSSocket>()
   private readonly retry = new Map<string, NodeJS.Timeout>()
   private readonly attempts = new Map<string, number>()
   private readonly seen = new Map<string, number>()
@@ -39,6 +40,7 @@ export class Fleet {
   private server: Server | null = null
   private timer: NodeJS.Timeout | null = null
   private stopping = false
+  private readonly startedAt = Date.now()
 
   constructor(private readonly options: FleetOptions) {
     const s = options.settings
@@ -62,15 +64,13 @@ export class Fleet {
     const s = this.options.settings
     if (!localAddress(s.listen.address))
       throw new Error('Fleet listener must bind a local LAN address')
-    const pins = this.pins()
-    if (!pins.some((pin) => pin.name === s.machine && pin.publicKey === this.identity.publicKey))
-      throw new Error('This machine key is not approved')
+    this.pins() // Refuse a missing or malformed allowlist before listening.
     for (const peer of s.peers) {
       if (!validName(peer.name) || peer.name === s.machine)
         throw new Error('Invalid fleet peer name')
       const dir = join(s.peerRoot, peer.name)
       mkdirSync(dir, { recursive: true, mode: 0o700 })
-      for (const target of ['control', 'sync', 'exec'] as const) {
+      for (const target of ['control', 'sync', 'exec', 'jobs'] as const) {
         const path = join(dir, `${target}.sock`)
         await this.listenUnix(path, (socket) => this.forward(peer.name, target, socket))
       }
@@ -102,6 +102,8 @@ export class Fleet {
   }
 
   private accept(socket: TLSSocket, expected?: string): void {
+    this.accepted.add(socket)
+    socket.once('close', () => this.accepted.delete(socket))
     try {
       new Connection(socket, {
         identity: this.identity,
@@ -272,7 +274,9 @@ export class Fleet {
         ? s.controlSocket
         : request.target === 'sync'
           ? s.syncSocket
-          : null
+          : request.target === 'jobs'
+            ? (s.jobsSocket ?? join(dirname(s.syncSocket), 'jobs.sock'))
+            : null
     if (!path) {
       channel.destroy(new Error('Unknown fleet target'))
       return
@@ -307,7 +311,7 @@ export class Fleet {
           ? `Disconnected from ${peer.name}. Reconnecting.`
           : `Waiting for ${peer.name} to connect.`,
       ...(peer.lastSeen ? { last_run: new Date(peer.lastSeen).toISOString() } : {}),
-      next_run: new Date((peer.lastSeen ?? Date.now()) + s.deadMs).toISOString(),
+      next_run: new Date((peer.lastSeen ?? this.startedAt) + s.deadMs).toISOString(),
       actions: [{ kind: 'detail', ref: 'tether hosts' }],
     }))
     try {
@@ -322,6 +326,7 @@ export class Fleet {
     if (this.timer) clearInterval(this.timer)
     for (const timer of this.retry.values()) clearTimeout(timer)
     for (const socket of this.connecting) socket.destroy()
+    for (const socket of this.accepted) socket.destroy()
     for (const connection of this.connections.values()) connection.socket.destroy()
     await Promise.all(
       [...this.unix, ...(this.server ? [this.server] : [])].map(

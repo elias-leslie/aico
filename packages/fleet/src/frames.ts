@@ -34,7 +34,7 @@ export function parseFrame(value: unknown): Frame {
       throw new Error('Invalid channel id')
     if (f.op === 'open') {
       fields = ['type', 'id', 'op', 'target', 'argv']
-      if (typeof f.target !== 'string' || !['control', 'sync', 'exec'].includes(f.target))
+      if (typeof f.target !== 'string' || !['control', 'sync', 'exec', 'jobs'].includes(f.target))
         throw new Error('Invalid channel target')
       if (
         f.argv !== undefined &&

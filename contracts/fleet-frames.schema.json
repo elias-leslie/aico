@@ -53,7 +53,7 @@
           "const": "open"
         },
         "target": {
-          "enum": ["control", "sync", "exec"]
+          "enum": ["control", "sync", "exec", "jobs"]
         },
         "argv": {
           "type": "array",
@@ -77,7 +77,7 @@
         {
           "properties": {
             "target": {
-              "enum": ["control", "sync"]
+              "enum": ["control", "sync", "jobs"]
             }
           },
           "not": {

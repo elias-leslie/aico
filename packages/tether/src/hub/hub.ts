@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { type HostEntry, hostsFilePath, loadHosts, peerDir } from '@aico/fleet/hosts'
 import { linkPaths } from '@aico/fleet/link'
 import { forwardRequest, PeerUnavailable, peerRequest } from '@aico/fleet/peer-http'
+import { readSettings } from '@aico/fleet/settings'
 import { API_VERSION } from '../config'
 import type { EventType } from '../events'
 import { HttpError, sendJson } from '../http'
@@ -49,6 +50,8 @@ export const ENDED_BY_HEADER = 'tether-ended-by'
 
 export interface HubDeps {
   env: NodeJS.ProcessEnv
+  /** Tests may provide their in-process peer endpoints. Production uses only configured fleet peers. */
+  fleetPeers?: () => string[]
   uid?: number
   publish(type: EventType, data: Record<string, unknown>): void
   settings: { get(key: string): string | null; put(key: string, value: string): void }
@@ -182,7 +185,14 @@ export class Hub {
     }
     if (stamp === this.fileStamp && this.reloadTimer) return
     this.fileStamp = stamp
-    const { hosts, errors, readable, held, missing } = loadHosts(this.file)
+    const loaded = loadHosts(this.file)
+    const enabled = new Set(
+      this.deps.fleetPeers?.() ??
+        readSettings(this.deps.env, '')?.peers.map((peer) => peer.name) ??
+        [],
+    )
+    const { errors, readable, held, missing } = loaded
+    const hosts = loaded.hosts.filter((entry) => enabled.has(entry.name))
     for (const error of errors) this.log(`hosts.json: ${error}`)
     // A file that does not parse (often an editor's half-written save) changes
     // nothing: dropping its hosts would close every window on them.
@@ -327,6 +337,8 @@ export class Hub {
    * link, a held lock) installed nothing and is tried on the next link-up. A
    * peer that names no API, or a newer one, is left alone. */
   private checkRelease(peer: Peer): void {
+    // Signed fleet updates belong to M11b; production never sends unsigned releases.
+    if (!this.deps.update) return
     const from = peer.apiVersion
     if (from !== null && from >= API_VERSION && peer.update?.state === 'failed') {
       // Brought up to this API some other way: the failure no longer holds.
@@ -619,7 +631,7 @@ export class Hub {
       )
     if (typeof value.requestId === 'string') peer.rememberRoot(value.requestId)
     if (attach && status === 200)
-      out.ssh = {
+      out.fleet = {
         alias: peer.entry.ssh,
         control: peer.control,
         ...(peer.entry.stateDir ? { stateDir: peer.entry.stateDir } : {}),

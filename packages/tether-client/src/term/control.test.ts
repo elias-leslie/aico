@@ -4,6 +4,7 @@ import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ControlTerminal, type ControlTerminalOptions } from './control'
 import { SEED_FLAGS } from './protocol'
+import { FLEET_BIN } from './remote'
 
 // The link against a scripted tmux: what it sends on stdin, and what it makes
 // of the replies and output fed back on stdout.
@@ -82,7 +83,7 @@ describe('ControlTerminal pid', () => {
 
   it("over ssh tells a host's refused session (its MaxSessions) from a dropped link", async () => {
     const ssh = [
-      '/usr/bin/ssh',
+      FLEET_BIN,
       '-S',
       '/c',
       'h',
@@ -96,7 +97,7 @@ describe('ControlTerminal pid', () => {
     ]
     const exits: boolean[] = []
     for (const stderr of [
-      'mux_client_request_session: session request failed: Session open refused by peer\nConnection closed by UNKNOWN port 65535\n',
+      'mux_client_request_session: session request failed: Fleet peer is disconnected\nConnection closed by UNKNOWN port 65535\n',
       'Connection to h closed by remote host.\n',
     ]) {
       const tmux = fakeTmux()
@@ -118,19 +119,7 @@ describe('ControlTerminal pid', () => {
   it('over ssh knows no pid until tmux on the host says (the child is ssh)', async () => {
     const tmux = fakeTmux()
     const remote = new ControlTerminal(
-      [
-        '/usr/bin/ssh',
-        '-S',
-        '/c',
-        'h',
-        '--',
-        '/usr/bin/tmux',
-        '-S',
-        "'/s'",
-        'attach',
-        '-t',
-        "'$1'",
-      ],
+      [FLEET_BIN, '-S', '/c', 'h', '--', '/usr/bin/tmux', '-S', "'/s'", 'attach', '-t', "'$1'"],
       {},
       null,
       { historyLines: 100, spawn: () => tmux.child },

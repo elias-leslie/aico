@@ -32,7 +32,7 @@ import {
   SEED_FLAGS,
   tmuxCommandArgv,
 } from './protocol'
-import { SSH_BIN, SSH_SESSION_REFUSED } from './remote'
+import { FLEET_BIN, FLEET_SESSION_REFUSED } from './remote'
 
 /** What a viewer uses of its terminal link. */
 export interface TerminalLink {
@@ -215,12 +215,12 @@ export class ControlTerminal implements TerminalLink {
    * runs on the host, so it is -1 until tmux says. */
   get pid(): number {
     if (this.clientPid > 0) return this.clientPid
-    return this.attachArgv[0] === SSH_BIN ? -1 : (this.child.pid ?? -1)
+    return this.attachArgv[0] === FLEET_BIN ? -1 : (this.child.pid ?? -1)
   }
 
   get refusedByHost(): boolean {
     return (
-      this.exited && this.attachArgv[0] === SSH_BIN && SSH_SESSION_REFUSED.test(this.stderrTail)
+      this.exited && this.attachArgv[0] === FLEET_BIN && FLEET_SESSION_REFUSED.test(this.stderrTail)
     )
   }
 

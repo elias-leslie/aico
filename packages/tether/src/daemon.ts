@@ -3,6 +3,8 @@ import { chmodSync, mkdirSync, readFileSync } from 'node:fs'
 import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { Fleet } from '@aico/fleet/fleet'
+import { readSettings } from '@aico/fleet/settings'
 import { createHubApi } from './agent-hub/client'
 import {
   type AgentHubConfig,
@@ -781,6 +783,9 @@ export async function startDaemon(
     store.close()
     throw error
   }
+  const fleetSettings = readSettings(env, paths.socket)
+  const fleet = fleetSettings ? new Fleet({ settings: fleetSettings }) : null
+  if (fleet) await fleet.start()
   const ready = startLifecycle({ reconcile: reconcileEnabled(env) })
   hosts?.start()
   // Agent state: hook reports always; the poll only where Tether observes tmux.
@@ -918,6 +923,7 @@ export async function startDaemon(
     hosts,
     ready,
     close: async () => {
+      await fleet?.close()
       hosts?.close()
       stopLifecycle()
       context.memoryPolicy.stop()

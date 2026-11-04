@@ -13,12 +13,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { RemoteHost } from './remote'
+import { FLEET_BIN } from './remote'
 import { RemoteUploadError, remoteUploadArgv, uploadToHost } from './remote-upload'
 
 const remote: RemoteHost = {
   host: 'agent-work',
   alias: 'agent-work-vm',
-  control: '/run/user/1000/tether/peers/agent-work/ssh.ctl',
+  control: '/run/user/1000/tether/peers/agent-work/exec.sock',
   stateDir: null,
 }
 
@@ -31,12 +32,15 @@ afterEach(() => {
 function fakeSsh(home: string, seen: string[][] = [], exitCode?: number): typeof spawn {
   return ((bin: string, args: string[], options: object) => {
     seen.push([bin, ...args])
-    const line = args.slice(args.indexOf('--') + 1).join(' ')
-    const program = exitCode === undefined ? `${line}` : `exit ${exitCode}`
-    return realSpawn('/bin/sh', ['-c', program], {
-      ...options,
-      env: { PATH: process.env.PATH, HOME: home },
-    })
+    const argv = args.slice(args.indexOf('--') + 1)
+    return realSpawn(
+      exitCode === undefined ? argv[0] : '/bin/sh',
+      exitCode === undefined ? argv.slice(1) : ['-c', `exit ${exitCode}`],
+      {
+        ...options,
+        env: { PATH: process.env.PATH, HOME: home },
+      },
+    )
   }) as unknown as typeof spawn
 }
 
@@ -49,15 +53,8 @@ function setup() {
 describe('remoteUploadArgv', () => {
   it('rides the link master only and quotes every word the host reads', () => {
     const argv = remoteUploadArgv(remote, "~/up loads/it's", 'a.png', 12, 90_000)
-    expect(argv.slice(0, 2)).toEqual(['/usr/bin/ssh', '-F'])
-    expect(argv).toContain('ProxyCommand=false')
-    expect(argv.slice(argv.indexOf('-S'), argv.indexOf('--') + 1)).toEqual([
-      '-S',
-      remote.control,
-      'agent-work-vm',
-      '--',
-    ])
-    expect(argv.slice(-5)).toEqual(['sh', `'~/up loads/it'\\''s'`, "'a.png'", '2', '12'])
+    expect(argv.slice(0, 5)).toEqual([FLEET_BIN, 'fleet', 'exec', remote.control, '--'])
+    expect(argv.slice(-5)).toEqual(['sh', "~/up loads/it's", 'a.png', '2', '12'])
   })
 
   it('refuses a name or folder that could leave the folder or the line', () => {

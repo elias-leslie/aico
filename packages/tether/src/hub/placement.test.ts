@@ -147,17 +147,25 @@ describe('placement', () => {
       env,
       hostNames: () => world.hosts,
       peer: (name): PeerView | null =>
-        name === 'vm'
+        name === 'pve'
           ? {
-              entry: ENTRY,
-              live: world.peerLive,
-              state: world.peerState,
-              socket: '/sock',
-              control: '/ctl',
+              entry: { ...ENTRY, name: 'pve' },
+              live: true,
+              state: 'connected',
+              socket: '/pve-sock',
+              control: '/pve-ctl',
             }
-          : name === 'box' && world.hosts.includes('box')
-            ? { ...world.box, socket: '/box-sock', control: '/box-ctl' }
-            : null,
+          : name === 'vm'
+            ? {
+                entry: ENTRY,
+                live: world.peerLive,
+                state: world.peerState,
+                socket: '/sock',
+                control: '/ctl',
+              }
+            : name === 'box' && world.hosts.includes('box')
+              ? { ...world.box, socket: '/box-sock', control: '/box-ctl' }
+              : null,
       localRoot: (id) => world.local[id] ?? 'live',
       existingHost: (id) => (id in world.existing ? world.existing[id] : undefined),
       settings: {
@@ -173,7 +181,7 @@ describe('placement', () => {
       run: async (argv) => {
         world.runs.push(argv)
         const line = argv.at(-1) ?? ''
-        if (argv[0] === '/usr/bin/ssh' && argv.includes('pve'))
+        if (argv.includes('/pve-ctl'))
           return world.proxmox === null
             ? {
                 code: 255,
@@ -183,7 +191,7 @@ describe('placement', () => {
             : { code: 0, stdout: world.proxmox, output: '' }
         if (line.includes(GUEST_LINE)) return { code: 0, stdout: world.guest, output: '' }
         if (line.includes('cat ') && line.includes('live-ready.json')) {
-          const marker = world.files[argv.includes('box') ? 'box:live-ready' : 'vm:live-ready']
+          const marker = world.files[argv.includes('/box-ctl') ? 'box:live-ready' : 'vm:live-ready']
           return marker === undefined
             ? { code: 1, stdout: '', output: 'No such file' }
             : { code: 0, stdout: marker, output: '' }
@@ -821,7 +829,7 @@ describe('placement', () => {
       files: { [here]: marker, 'box:live-ready': marker.replace('fp-1', 'fp-0') },
     })
     expect((await running.placement.check(live, 'hunt'))[0]).toMatchObject({ fits: true })
-    expect(running.world.runs.some((argv) => argv.includes('box'))).toBe(false)
+    expect(running.world.runs.some((argv) => argv.includes('/box-ctl'))).toBe(false)
     // Missing or stale on this computer: unknown, asleep or not, whatever the slot has.
     const reason = async (world: Partial<World>) =>
       (await setup(config, { hosts: ['box'], ...world }).placement.check(live, 'hunt'))[0]

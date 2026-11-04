@@ -1,13 +1,10 @@
-// Attaching to a session on another host. The local Tether hub answers for a
-// remote session with the peer's own attach answer plus `host` and that
-// host's `ssh` (alias, the link's control socket, and optionally its state
-// dir). The tmux client then runs on the host, over the link's ssh master.
-//
-// ssh hands the remote command to the host's shell as one line, so every
-// remote argument that came from an answer is quoted here: a target like `$3`
-// would otherwise expand there.
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+// A remote tmux process carries literal argv and terminal bytes over the
+// authenticated fleet connection. No remote shell expands session targets.
 
-export const SSH_BIN = '/usr/bin/ssh'
+export const FLEET_BIN =
+  process.env.TETHER_BIN || join(process.env.HOME || homedir(), '.local/lib/tether/bin/tether')
 
 const HOST = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const ALIAS = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
@@ -34,18 +31,20 @@ export interface RemoteHost {
 /** The `host` and `ssh` of an attach answer, or null for a local session;
  * throws when they are present but not trustworthy. */
 export function remoteHostOf(
-  answer: { host?: unknown; ssh?: unknown },
+  answer: { host?: unknown; fleet?: unknown },
   env: NodeJS.ProcessEnv = process.env,
 ): RemoteHost | null {
   if (answer.host === undefined || answer.host === null) return null
-  const ssh = answer.ssh as { alias?: unknown; control?: unknown; stateDir?: unknown } | undefined
+  const fleet = answer.fleet as
+    | { alias?: unknown; control?: unknown; stateDir?: unknown }
+    | undefined
   const { host } = answer
-  if (typeof host !== 'string' || !HOST.test(host) || !ssh || typeof ssh !== 'object')
+  if (typeof host !== 'string' || !HOST.test(host) || !fleet || typeof fleet !== 'object')
     throw new Error('unexpected remote host')
-  const { alias, control, stateDir } = ssh
+  const { alias, control, stateDir } = fleet
   if (typeof alias !== 'string' || !ALIAS.test(alias) || IPV4.test(alias))
-    throw new Error('unexpected ssh alias')
-  if (control !== controlSocketPath(host, env)) throw new Error('unexpected ssh control socket')
+    throw new Error('unexpected fleet peer')
+  if (control !== controlSocketPath(host, env)) throw new Error('unexpected fleet command socket')
   if (
     stateDir !== undefined &&
     stateDir !== null &&
@@ -57,10 +56,10 @@ export function remoteHostOf(
   return { host, alias, control, stateDir: typeof stateDir === 'string' ? stateDir : null }
 }
 
-/** The link's ssh master socket for `host` (`tether-link@<host>`). */
+/** The fleet command socket socket for `host` (`tether-link@<host>`). */
 export function controlSocketPath(host: string, env: NodeJS.ProcessEnv = process.env): string {
   const runtime = env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`
-  return `${runtime}/tether/peers/${host}/ssh.ctl`
+  return `${runtime}/tether/peers/${host}/exec.sock`
 }
 
 /** True when `path` is a Tether instance's tmux socket on that host. */
@@ -78,50 +77,33 @@ export function remoteAttachArgv(
   target: string,
 ): string[] {
   return [
-    ...sshPrefix(remote),
+    ...fleetPrefix(remote),
     // LANG and -u: tmux marks the client UTF-8 (non-ASCII is underscores otherwise).
     'env',
     'LANG=C.UTF-8',
     tmuxBin,
     '-u',
     '-S',
-    shellQuote(socket),
+    socket,
     'attach-session',
     '-t',
-    shellQuote(target),
+    target,
   ]
 }
 
 /** ssh's own words when the host's sshd refuses another session on the link's
  * master (its MaxSessions is reached): the host is up, it just has no room. */
-export const SSH_SESSION_REFUSED = /Session open refused by peer|session request failed/
+export const FLEET_SESSION_REFUSED = /Fleet peer is disconnected/
 
-/** Options for an ssh that rides the link's master and nothing else.
- * ProxyCommand=false: when the master refuses (or is gone), ssh would otherwise
- * fall back to a direct connection to the alias, which fails with a misleading
- * reason (or worse, connects around the link). The daemon's copy is
- * src/hub/link.ts (the bundles stay apart); a test keeps them equal. */
-export const SSH_MUX_ONLY = [
-  '-F',
-  '/dev/null',
-  '-T',
-  '-o',
-  'BatchMode=yes',
-  '-o',
-  'ProxyCommand=false',
-]
-
-function sshPrefix(remote: RemoteHost): string[] {
-  // -F /dev/null: no user config can redirect it; the master already holds
-  // the connection, so the alias only names it.
-  return [SSH_BIN, ...SSH_MUX_ONLY, '-S', remote.control, remote.alias, '--']
+function fleetPrefix(remote: RemoteHost): string[] {
+  return [FLEET_BIN, 'fleet', 'exec', remote.control, '--']
 }
 
 /** Where the tmux binary sits in an attach argv: first, or after ssh's `--`. */
 export function tmuxIndex(argv: readonly string[]): number {
-  if (argv[0] !== SSH_BIN) return 0
+  if (argv[0] !== FLEET_BIN) return 0
   const dashes = argv.indexOf('--')
   const at = argv.findIndex((arg, i) => i > dashes && arg.endsWith('/tmux'))
-  if (dashes < 0 || at < 0) throw new Error('ssh attach argv has no tmux')
+  if (dashes < 0 || at < 0) throw new Error('fleet attach argv has no tmux')
   return at
 }

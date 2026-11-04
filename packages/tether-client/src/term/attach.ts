@@ -32,7 +32,7 @@ export function trustedSocket(path: unknown, env: NodeJS.ProcessEnv = process.en
  * built from Tether's answer: only the socket and target are taken from it.
  * With `host` (a session on another host) the argv runs tmux there over ssh. */
 export function attachFromTether(
-  answer: { argv: string[]; env: Record<string, string>; host?: unknown; ssh?: unknown },
+  answer: { argv: string[]; env: Record<string, string>; host?: unknown; fleet?: unknown },
   env: NodeJS.ProcessEnv = process.env,
 ): { argv: string[]; env: Record<string, string>; host: string | null } {
   const { argv } = answer

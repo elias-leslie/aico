@@ -1,13 +1,12 @@
 import { spawnSync } from 'node:child_process'
 import { isAbsolute, resolve } from 'node:path'
-import { hostsFilePath, loadHosts, peerDir } from '@aico/fleet/hosts'
-import { linkPaths, runLink } from '@aico/fleet/link'
 import { ASK_USAGE, runAsk } from './ask-cli'
 import { CAPTURE_USAGE, runCapture } from './capture-cli'
 import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { startDaemon } from './daemon'
 import { runDoctor } from './doctor'
+import { runFleet } from './fleet-cli'
 import { applyImport, formatPlan, planImportForPath, summarize } from './importer'
 import { NOTE_USAGE, runNote } from './note-cli'
 import { withOwnWidget } from './own-session'
@@ -493,18 +492,13 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
       }
       case 'hosts':
         return api(io, paths, json, 'GET', '/v1/hosts')
-      case 'link': {
-        const { hosts, errors } = loadHosts(hostsFilePath(process.env))
-        const host = hosts.find((entry) => entry.name === sub)
-        if (!host) {
-          for (const error of errors) io.err(`tether link: hosts.json: ${error}`)
-          io.err(
-            `tether link: no host ${JSON.stringify(sub ?? '')} in ${hostsFilePath(process.env)}`,
-          )
-          return 2
-        }
-        return runLink(host, linkPaths(peerDir(process.env, process.getuid?.(), host.name)))
-      }
+      case 'fleet':
+        return runFleet([sub ?? '', ...rest], paths, io)
+      case 'link':
+        io.err(
+          'The fleet link runs with the daemon. Use tether fleet identity to enroll this machine.',
+        )
+        return 2
       case 'roots':
         if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/roots')
         if (sub === 'show' && rest[0])

@@ -1,10 +1,7 @@
-// Sending a file to the host a remote session runs on. The bytes go over the
-// link's ssh master (never a new connection) into a private uploads folder
-// there, and the host's own path comes back for the program to read. The
-// folder is the caller's config (`DEFAULT_REMOTE_UPLOAD_DIR` unless set).
+// Upload bytes travel over the pinned fleet connection to the session’s machine.
 
 import { spawn } from 'node:child_process'
-import { type RemoteHost, SSH_BIN, SSH_MUX_ONLY, shellQuote } from './remote'
+import { FLEET_BIN, type RemoteHost } from './remote'
 
 /** Under the host user's home: `~/` is expanded there, not here. */
 export const DEFAULT_REMOTE_UPLOAD_DIR = '~/.cache/aico/uploads'
@@ -61,18 +58,17 @@ export function remoteUploadArgv(
   if (!/^(?:~\/|\/)[^\0\n]*$/.test(dir)) throw new Error('unexpected upload folder')
   const minutes = Math.max(1, Math.ceil(maxAgeMs / 60_000))
   return [
-    SSH_BIN,
-    ...SSH_MUX_ONLY,
-    '-S',
+    FLEET_BIN,
+    'fleet',
+    'exec',
     remote.control,
-    remote.alias,
     '--',
     'sh',
     '-c',
-    shellQuote(REMOTE_SCRIPT),
+    REMOTE_SCRIPT,
     'sh',
-    shellQuote(dir),
-    shellQuote(name),
+    dir,
+    name,
     String(minutes),
     String(size),
   ]

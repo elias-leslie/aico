@@ -5,7 +5,7 @@
 // before the create is sent. The link unit never wakes a host; a create does.
 
 import { spawn } from 'node:child_process'
-import { SSH_BIN, SSH_MUX_ONLY } from '@aico/fleet/link'
+import { execArgv } from '@aico/fleet/exec'
 import { HttpError } from '../http'
 import type { Peer } from './peer'
 
@@ -75,49 +75,15 @@ export const defaultGateRuntime: GateRuntime = {
         resolve({ code, output: lastLine(output) })
       })
     }),
-  kick: (host) => {
-    const [command = 'systemctl', ...args] = kickArgv(host)
-    const child = spawn(command, args, { stdio: 'ignore' })
-    child.once('error', () => {})
-  },
+  kick: () => {},
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
   linkGraceMs: 10_000,
 }
 
-/** SIGUSR1 makes `tether link` retry at once (tether-link@.service). Only the
- * unit's main process: `systemctl kill` signals every process by default, and
- * ssh exits on SIGUSR1, which would drop a live link and every remote terminal
- * on it. A link that is up ignores the kick. */
-export function kickArgv(host: string): string[] {
-  return [
-    'systemctl',
-    '--user',
-    'kill',
-    '--kill-whom=main',
-    '-s',
-    'USR1',
-    `tether-link@${host}.service`,
-  ]
-}
-
 /** The argv that fetches one health URL on the host, through the link's ControlMaster. */
 export function healthArgv(peer: Peer, url: string): string[] {
-  return [
-    SSH_BIN,
-    ...SSH_MUX_ONLY,
-    '-S',
-    peer.control,
-    peer.entry.ssh,
-    '--',
-    'curl',
-    '-fsS',
-    '-m',
-    '3',
-    '-o',
-    '/dev/null',
-    url,
-  ]
+  return execArgv(peer.control, ['curl', '-fsS', '-m', '3', '-o', '/dev/null', url])
 }
 
 /** Read through a call: the state changes while a create waits. */

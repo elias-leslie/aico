@@ -2,9 +2,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { hostsFilePath, loadHosts, parseHosts, peerDir } from '@aico/fleet/hosts'
-import { LINK_BACKOFF_MAX_MS, linkArgv, linkBackoff, linkPaths } from '@aico/fleet/link'
+import { linkPaths } from '@aico/fleet/link'
 import { afterEach, describe, expect, it } from 'vitest'
-import { kickArgv } from './wake'
 
 const VALID = {
   name: 'agent-work',
@@ -123,18 +122,6 @@ describe('hosts registry', () => {
     expect(errors).toEqual(['agent-work: duplicate name; the first entry is used'])
   })
 
-  it('kicks only the link process, never its ssh (ssh exits on SIGUSR1)', () => {
-    expect(kickArgv('agent-work')).toEqual([
-      'systemctl',
-      '--user',
-      'kill',
-      '--kill-whom=main',
-      '-s',
-      'USR1',
-      'tether-link@agent-work.service',
-    ])
-  })
-
   it('resolves the registry and peer paths from the environment', () => {
     expect(hostsFilePath({ HOME: '/home/u' })).toBe('/home/u/.config/tether/hosts.json')
     expect(hostsFilePath({ XDG_CONFIG_HOME: '/c', TETHER_HOSTS_FILE: '/t/h.json' })).toBe(
@@ -144,66 +131,11 @@ describe('hosts registry', () => {
   })
 })
 
-describe('link', () => {
-  it('builds one ssh master that forwards the control socket and the ports', () => {
-    const host = parseHosts(JSON.stringify([VALID])).hosts[0]
-    if (!host) throw new Error('no host')
-    const paths = linkPaths('/run/user/1000/tether/peers/agent-work')
-    expect(linkArgv(host, paths)).toEqual([
-      '-N',
-      '-T',
-      '-M',
-      '-S',
-      '/run/user/1000/tether/peers/agent-work/ssh.ctl',
-      '-o',
-      'ControlPersist=no',
-      '-o',
-      'ExitOnForwardFailure=yes',
-      '-o',
-      'StreamLocalBindUnlink=yes',
-      '-o',
-      'StreamLocalBindMask=0177',
-      '-o',
-      'ServerAliveInterval=5',
-      '-o',
-      'ServerAliveCountMax=3',
-      '-o',
-      'ConnectTimeout=5',
-      '-o',
-      'BatchMode=yes',
-      '-o',
-      'LogLevel=ERROR',
-      '-L',
-      '/run/user/1000/tether/peers/agent-work/control.sock:/run/user/1000/tether/default/control.sock',
-      '-R',
-      '127.0.0.1:8001:127.0.0.1:8001',
-      '-R',
-      '127.0.0.1:8003:127.0.0.1:8003',
-      '--',
-      'agent-work',
-    ])
-  })
-
-  it('forwards the remote Aico sync socket on the same master when the host has one', () => {
-    const host = parseHosts(
-      JSON.stringify([{ ...VALID, forwards: [], sync: '/run/user/1000/aico/sync.sock' }]),
-    ).hosts[0]
-    if (!host) throw new Error('no host')
-    expect(host.sync).toBe('/run/user/1000/aico/sync.sock')
-    const argv = linkArgv(host, linkPaths('/run/user/1000/tether/peers/agent-work'))
-    const forwards = argv.flatMap((arg, i) => (arg === '-L' ? [argv[i + 1]] : []))
-    expect(forwards).toEqual([
-      '/run/user/1000/tether/peers/agent-work/control.sock:/run/user/1000/tether/default/control.sock',
-      '/run/user/1000/tether/peers/agent-work/sync.sock:/run/user/1000/aico/sync.sock',
-    ])
-    expect(parseHosts(JSON.stringify([VALID])).hosts[0]?.sync).toBeNull()
-  })
-
-  it('backs off with jitter up to a cap', () => {
-    expect(linkBackoff(0, () => 0)).toBe(1_000)
-    expect(linkBackoff(0, () => 1)).toBe(2_000)
-    expect(linkBackoff(3, () => 0.5)).toBe(12_000)
-    expect(linkBackoff(40, () => 1)).toBe(LINK_BACKOFF_MAX_MS)
-    expect(linkBackoff(40, () => 0)).toBe(LINK_BACKOFF_MAX_MS / 2)
+it('uses fleet sockets for control, commands and sync', () => {
+  expect(linkPaths('/run/peers/a')).toEqual({
+    dir: '/run/peers/a',
+    control: '/run/peers/a/exec.sock',
+    forwarded: '/run/peers/a/control.sock',
+    sync: '/run/peers/a/sync.sock',
   })
 })

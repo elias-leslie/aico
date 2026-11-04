@@ -159,8 +159,13 @@ export class Connection {
     const entry = this.channels.get(frame.id)
     if (!entry) return // A local caller may already have closed it.
     if (entry.type !== frame.type) throw new Error('Fleet channel kind changed')
-    if (frame.op === 'data') entry.stream.push(Buffer.from(frame.data, 'base64'))
-    else if (frame.op === 'end') entry.stream.push(null)
+    if (frame.op === 'data') {
+      if (entry.stream.readableLength > 16 * 1024 * 1024) {
+        entry.stream.destroy(new Error('Fleet channel receiver is not reading'))
+        return
+      }
+      entry.stream.push(Buffer.from(frame.data, 'base64'))
+    } else if (frame.op === 'end') entry.stream.push(null)
     else entry.stream.destroy()
   }
 
@@ -169,7 +174,18 @@ export class Connection {
     const stream = new Duplex({
       read() {},
       write(chunk: Buffer, _encoding, callback) {
-        connection.send({ type, id, op: 'data', data: chunk.toString('base64') }, callback)
+        try {
+          for (let offset = 0; offset < chunk.length; offset += 65536) {
+            const end = Math.min(chunk.length, offset + 65536)
+            connection.send(
+              { type, id, op: 'data', data: chunk.subarray(offset, end).toString('base64') },
+              end === chunk.length ? callback : undefined,
+            )
+          }
+          if (!chunk.length) callback()
+        } catch (error) {
+          callback(error as Error)
+        }
       },
       final(callback) {
         connection.send({ type, id, op: 'end' }, callback)

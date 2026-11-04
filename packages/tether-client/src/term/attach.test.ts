@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { TetherUnavailable } from '../client/index'
 import { attachEnvironment, attachFromTether, ownAttachTarget, trustedSocket } from './attach'
+import { FLEET_BIN } from './remote'
 
 const hex = 'ab'.repeat(16)
 const env = { HOME: '/home/me' }
@@ -105,41 +106,34 @@ describe('attach target', () => {
 
 describe('remote attach target', () => {
   const runtime = { ...env, XDG_RUNTIME_DIR: '/run/user/1000' }
-  const control = '/run/user/1000/tether/peers/agent-work/ssh.ctl'
+  const control = '/run/user/1000/tether/peers/agent-work/exec.sock'
   const remoteSocket = `/home/kasadis/.local/state/tether/default/tmux/${hex}/server.sock`
   const answer = {
     generation: 'a'.repeat(64),
     argv: ['/usr/bin/tmux', '-S', remoteSocket, 'attach-session', '-t', '$3'],
     env: { TERM: 'xterm-256color' },
     host: 'agent-work',
-    ssh: { alias: 'agent-work', control },
+    fleet: { alias: 'agent-work', control },
   }
 
   it('runs tmux on the host over the link, every remote word quoted', () => {
     const target = ownAttachTarget(answer, runtime, 'agent-work')
     expect(target.host).toBe('agent-work')
     expect(target.argv).toEqual([
-      '/usr/bin/ssh',
-      '-F',
-      '/dev/null',
-      '-T',
-      '-o',
-      'BatchMode=yes',
-      '-o',
-      'ProxyCommand=false',
-      '-S',
+      FLEET_BIN,
+      'fleet',
+      'exec',
       control,
-      'agent-work',
       '--',
       'env',
       'LANG=C.UTF-8',
       '/usr/bin/tmux',
       '-u',
       '-S',
-      `'${remoteSocket}'`,
+      remoteSocket,
       'attach-session',
       '-t',
-      "'$3'",
+      '$3',
     ])
   })
 
@@ -149,11 +143,11 @@ describe('remote attach target', () => {
       {
         ...answer,
         argv: ['/usr/bin/tmux', '-S', socket, 'attach', '-t', '$3'],
-        ssh: { ...answer.ssh, stateDir: '/srv/state' },
+        fleet: { ...answer.fleet, stateDir: '/srv/state' },
       },
       runtime,
     )
-    expect(target.argv).toContain(`'${socket}'`)
+    expect(target.argv).toContain(socket)
     expect(() => ownAttachTarget(answer, { ...runtime }, null)).toThrow(TetherUnavailable)
   })
 
@@ -166,12 +160,12 @@ describe('remote attach target', () => {
     bad({}, 'other-host')
     bad({ host: 'a b' })
     bad({ host: '../x' })
-    bad({ ssh: undefined })
-    bad({ ssh: { ...answer.ssh, alias: '-oProxyCommand=id' } })
-    bad({ ssh: { ...answer.ssh, alias: '10.20.0.114' } })
-    bad({ ssh: { ...answer.ssh, control: '/tmp/ssh.ctl' } })
-    bad({ ssh: { ...answer.ssh, control: '/run/user/1000/tether/peers/other/ssh.ctl' } })
-    bad({ ssh: { ...answer.ssh, stateDir: '/srv/../etc' } })
+    bad({ fleet: undefined })
+    bad({ fleet: { ...answer.fleet, alias: '-oProxyCommand=id' } })
+    bad({ fleet: { ...answer.fleet, alias: '10.20.0.114' } })
+    bad({ fleet: { ...answer.fleet, control: '/tmp/exec.sock' } })
+    bad({ fleet: { ...answer.fleet, control: '/run/user/1000/tether/peers/other/exec.sock' } })
+    bad({ fleet: { ...answer.fleet, stateDir: '/srv/../etc' } })
     bad({ argv: ['/usr/bin/tmux', '-S', '/tmp/evil.sock', 'attach-session', '-t', '$3'] })
     bad({
       argv: [

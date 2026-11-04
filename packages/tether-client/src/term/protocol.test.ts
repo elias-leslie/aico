@@ -11,6 +11,7 @@ import {
   socketArgsOf,
   tmuxCommandArgv,
 } from './protocol'
+import { FLEET_BIN } from './remote'
 
 const ESC = '\x1b'
 
@@ -155,36 +156,29 @@ describe('controlArgv', () => {
 
   it('puts -C after the remote tmux, never after ssh (its compression flag)', () => {
     const argv = controlArgv(remoteArgv)
-    expect(argv.slice(0, 15)).toEqual(remoteArgv.slice(0, 15))
-    expect(argv.slice(15, 17)).toEqual(['-C', '-u'])
-    expect(argv.indexOf('-C')).toBe(15)
+    expect(argv.slice(0, 8)).toEqual(remoteArgv.slice(0, 8))
+    expect(argv.slice(8, 10)).toEqual(['-C', '-u'])
+    expect(argv.indexOf('-C')).toBe(8)
     expect(argv.slice(-2)).toEqual(['-f', 'pause-after=5'])
-    expect(() => controlArgv([...remoteArgv.slice(0, 12), 'tmux', 'attach'])).toThrow()
+    expect(() => controlArgv([...remoteArgv.slice(0, 5), 'tmux', 'attach'])).toThrow()
   })
 })
 
 const remoteArgv = [
-  '/usr/bin/ssh',
-  '-F',
-  '/dev/null',
-  '-T',
-  '-o',
-  'BatchMode=yes',
-  '-o',
-  'ProxyCommand=false',
-  '-S',
-  '/run/user/1000/tether/peers/w/ssh.ctl',
-  'w',
+  FLEET_BIN,
+  'fleet',
+  'exec',
+  '/run/user/1000/tether/peers/w/exec.sock',
   '--',
   'env',
   'LANG=C.UTF-8',
   '/usr/bin/tmux',
   '-u',
   '-S',
-  "'/home/k/s.sock'",
+  '/home/k/s.sock',
   'attach-session',
   '-t',
-  "'$3'",
+  '$3',
 ]
 
 describe('socketArgsOf', () => {
@@ -194,7 +188,7 @@ describe('socketArgsOf', () => {
   })
 
   it("reads the remote tmux's, not ssh's -S", () => {
-    expect(socketArgsOf(remoteArgv)).toEqual(['-S', "'/home/k/s.sock'"])
+    expect(socketArgsOf(remoteArgv)).toEqual(['-S', '/home/k/s.sock'])
   })
 })
 
@@ -207,14 +201,14 @@ describe('tmuxCommandArgv', () => {
       ),
     ).toEqual(['/usr/bin/tmux', '-S', '/s', 'load-buffer', '-'])
     expect(tmuxCommandArgv(remoteArgv, ['load-buffer', '-b', "a'b", '-'])).toEqual([
-      ...remoteArgv.slice(0, 15),
+      ...remoteArgv.slice(0, 8),
       '-u',
       '-S',
-      "'/home/k/s.sock'",
-      "'load-buffer'",
-      "'-b'",
-      `'a'\\''b'`,
-      "'-'",
+      '/home/k/s.sock',
+      'load-buffer',
+      '-b',
+      "a'b",
+      '-',
     ])
   })
 })

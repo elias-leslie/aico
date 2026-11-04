@@ -10,13 +10,19 @@ import { describe, expect, it } from 'vitest'
 const SRC = import.meta.dirname
 
 describe('package boundaries', () => {
-  it('keeps the daemon and apps copies of the link-only ssh options equal', async () => {
-    const [hub, term] = await Promise.all([
-      import('@aico/fleet/link'),
+  it('keeps daemon and client fleet command prefixes equal', async () => {
+    const [fleet, term] = await Promise.all([
+      import('@aico/fleet/exec'),
       import('@aico/tether-client/term/remote'),
     ])
-    expect(hub.SSH_MUX_ONLY).toEqual(term.SSH_MUX_ONLY)
-    expect(hub.SSH_BIN).toBe(term.SSH_BIN)
+    expect(fleet.execArgv('/peer/exec.sock', ['/usr/bin/tmux'])).toEqual([
+      term.FLEET_BIN,
+      'fleet',
+      'exec',
+      '/peer/exec.sock',
+      '--',
+      '/usr/bin/tmux',
+    ])
   })
 
   it('builds the daemon bundle from no tether-client client or term input', async () => {

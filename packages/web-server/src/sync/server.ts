@@ -1,6 +1,6 @@
 // The sync listener: `/sync/*` on a unix socket and nowhere else (never the
 // TCP port, so the Host/Origin guard does not apply). A peer reaches it through
-// the ssh forward of its tether-link, and that key is the authentication. The
+// its pinned-key fleet connection. The
 // socket is 0600 in a 0700 directory.
 
 import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from 'node:fs'

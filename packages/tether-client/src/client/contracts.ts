@@ -146,7 +146,7 @@ export interface HostInfo {
   name: string
   /** The ssh Host alias the link uses. */
   ssh: string
-  /** The link's ssh ControlMaster socket (`$XDG_RUNTIME_DIR/tether/peers/<name>/ssh.ctl`). */
+  /** The link's ssh ControlMaster socket (`$XDG_RUNTIME_DIR/tether/peers/<name>/exec.sock`). */
   control: string
   /** The host's Tether state directory, when hosts.json names one. */
   stateDir?: string
@@ -281,7 +281,7 @@ export interface AttachAnswer {
   /** The remote host of a forwarded session; absent for a local one. */
   host?: string | null
   /** How to reach that host through its link (the hub's hosts.json entry). */
-  ssh?: { alias: string; control: string; stateDir?: string }
+  fleet?: { alias: string; control: string; stateDir?: string }
 }
 
 export interface TetherTool {
@@ -392,7 +392,7 @@ export function parseAttachAnswer(body: unknown): AttachAnswer {
     argv: value.argv,
     env: value.env,
     ...(value.host !== undefined ? { host: value.host } : {}),
-    ...(value.ssh !== undefined ? { ssh: value.ssh } : {}),
+    ...(value.fleet !== undefined ? { fleet: value.fleet } : {}),
   }
 }
 

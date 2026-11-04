@@ -1,6 +1,7 @@
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { TetherError } from '@aico/tether-client'
+import { FLEET_BIN } from '@aico/tether-client/term/remote'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { WebSocket } from 'ws'
 import { Router } from './http'
@@ -631,7 +632,7 @@ describe('a session on another host', () => {
     const view = open(session.id)
     await start(view)
     await until(() => links.length === 1)
-    expect(links[0].argv[0]).toBe('/usr/bin/ssh')
+    expect(links[0].argv[0]).toBe(FLEET_BIN)
     await view.next((f) => 'host_state' in f)
     expect(hostStates(view)).toEqual(['live'])
     view.ws.close()

@@ -2,7 +2,7 @@
 // and the pane state a seed is built from. Pure functions and the line parser;
 // the client that runs tmux is control.ts.
 
-import { SSH_BIN, shellQuote, tmuxIndex } from './remote'
+import { FLEET_BIN, tmuxIndex } from './remote'
 
 /** Seconds tmux may fall behind before it pauses the pane (then the client reseeds). */
 export const PAUSE_AFTER_SECONDS = 5
@@ -159,12 +159,12 @@ export function socketArgsOf(argv: readonly string[]): string[] {
  * same ssh prefix when it is remote. */
 export function tmuxCommandArgv(attachArgv: readonly string[], args: readonly string[]): string[] {
   const tmuxAt = tmuxIndex(attachArgv)
-  const remote = attachArgv[0] === SSH_BIN
+  const remote = attachArgv[0] === FLEET_BIN
   return [
     ...attachArgv.slice(0, tmuxAt + 1),
     ...(remote ? ['-u'] : []),
     ...socketArgsOf(attachArgv),
-    ...(remote ? args.map(shellQuote) : args),
+    ...args,
   ]
 }
 

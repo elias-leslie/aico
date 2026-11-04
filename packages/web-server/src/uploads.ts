@@ -180,7 +180,7 @@ export function uploadTargets(
       try {
         return remoteHostOf({
           host,
-          ssh: { alias: row.ssh, control: row.control, stateDir: row.stateDir },
+          fleet: { alias: row.ssh, control: row.control, stateDir: row.stateDir },
         })
       } catch (error) {
         console.error(`[aico-web] unexpected link details for host=${host}:`, error)

@@ -1,15 +1,5 @@
-// Remote Tether updates (docs/plans/remote-hosts.md "Updates"). A peer whose
-// health names an older `apiVersion` than this hub gets this hub's installed
-// release over the link's ssh ControlMaster: the release files go as one tar
-// stream, the host installs them with the release's own install-release.sh
-// into its ~/.local/lib/tether, and tether@<instance> restarts there. The
-// restart is a stop, a copy of the instance's database (with its WAL), then a
-// start: a new release migrates the database as it starts, and an older one
-// refuses a newer schema. When the restarted Tether does not answer within the
-// bound, the host stops it, puts its previous bundle, launcher and database
-// back and starts on them. One update runs on a host at a time (a flock).
-// Nothing here powers a host on: a host that is off is updated when its link
-// next comes up.
+// Legacy release installer, retained for local tests. Production automatic
+// updates are disabled until M11b adds signed updates over the fleet link.
 
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'

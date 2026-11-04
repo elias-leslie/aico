@@ -1,3 +1,7 @@
+import { execArgv } from '@aico/fleet/exec'
+
+const FLEET_BIN = execArgv('', [])[0] as string
+
 import { mkdirSync, mkdtempSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import {
   createServer,
@@ -194,6 +198,7 @@ describe('hub', () => {
 
   function makeHub(overrides: Partial<HubDeps> = {}): Hub {
     return new Hub({
+      fleetPeers: () => ['vm', 'fresh', 'a', 'b'],
       env: { XDG_RUNTIME_DIR: dir, TETHER_HOSTS_FILE: join(dir, 'hosts.json') },
       uid: 1000,
       publish: (type, data) => events.push({ type, data }),
@@ -302,7 +307,7 @@ describe('hub', () => {
     expect(hub.hosts()[0]).toMatchObject({
       name: 'vm',
       ssh: 'vm',
-      control: join(dir, 'tether', 'peers', 'vm', 'ssh.ctl'),
+      control: join(dir, 'tether', 'peers', 'vm', 'exec.sock'),
       state: 'connected',
       sessions: 2,
       error: null,
@@ -788,7 +793,7 @@ describe('hub', () => {
         argv: ['/usr/bin/tmux'],
         env: {},
         host: 'vm',
-        ssh: { alias: 'vm', control: join(dir, 'tether', 'peers', 'vm', 'ssh.ctl') },
+        fleet: { alias: 'vm', control: join(dir, 'tether', 'peers', 'vm', 'exec.sock') },
       },
     })
     expect((await call('GET', '/v1/sessions/aaaa0001')).body).toMatchObject({
@@ -1068,7 +1073,7 @@ describe('hub', () => {
       expect(targets).toEqual([
         {
           entry: expect.objectContaining({ name: 'vm', ssh: 'vm' }),
-          control: join(dir, 'tether', 'peers', 'vm', 'ssh.ctl'),
+          control: join(dir, 'tether', 'peers', 'vm', 'exec.sock'),
           instance: 'default',
         },
       ])
@@ -1590,18 +1595,12 @@ describe('hub', () => {
       expect(runs.filter((argv) => argv[0] === 'wake')).toHaveLength(1)
       // Health ran on the host through the link's ControlMaster.
       const check = runs.find((argv) => argv.includes('curl'))
-      expect(check?.slice(0, 11)).toEqual([
-        '/usr/bin/ssh',
-        '-F',
-        '/dev/null',
-        '-T',
-        '-o',
-        'BatchMode=yes',
-        '-o',
-        'ProxyCommand=false',
-        '-S',
-        join(dir, 'tether', 'peers', 'vm', 'ssh.ctl'),
-        'vm',
+      expect(check?.slice(0, 5)).toEqual([
+        FLEET_BIN,
+        'fleet',
+        'exec',
+        join(dir, 'tether', 'peers', 'vm', 'exec.sock'),
+        '--',
       ])
       const steps = events
         .filter((event) => event.type === 'peer.state')
