@@ -1,0 +1,158 @@
+{
+  "milestone": "M11a",
+  "implementation_commits": [
+    "cb4dbce09ced582c19a3a893e12529eaaf5427a6",
+    "8535257295733ef8d4dd8164c4bd36e7a613b6d8",
+    "39fc4a72b08745dae32bc1c4c0f728814c542b79",
+    "aa34c56fbfaff94ab5c0cb72f0acde73761ce224",
+    "885df33545b39ae0c1fff27032af34a4de50d67e",
+    "30440d01d33401f0ad7c9a38ad1f5d85a9ff0759"
+  ],
+  "machines": {
+    "workstation": "davion-sidarli",
+    "CT190_on_davion_gem": "aico"
+  },
+  "crypto": {
+    "transport": "Node TLS 1.3",
+    "identity": "Ed25519",
+    "CA": false,
+    "certificate_wrapper": "OpenSSL; Node lacks certificate issuance API",
+    "new_crypto_library": false
+  },
+  "frames": [
+    "hello",
+    "auth",
+    "control",
+    "event",
+    "sync",
+    "terminal-view"
+  ],
+  "listeners": {
+    "davion-sidarli": "192.168.86.128:7449",
+    "aico": "192.168.86.59:7449",
+    "public_bind": false,
+    "workstation_firewall_source": "192.168.86.59 only"
+  },
+  "enrollment": {
+    "owner_approved": true,
+    "asks": [
+      "0bcc7a88b400",
+      "e47691533cdb"
+    ],
+    "asks_closed": true,
+    "pins": "root-owned, not writable by daemon",
+    "machine_key_modes": "0600 verified on both machines"
+  },
+  "notes": {
+    "ids": {
+      "workstation": "21d893b65edc",
+      "container": "f8dd06861844"
+    },
+    "workstation_to_CT190": true,
+    "CT190_to_workstation": true,
+    "test_notes_archived": true
+  },
+  "live_terminal_view_stream": {
+    "stdin_stdout": "fleet-stream-proof",
+    "literal_argument_and_stderr": "$3",
+    "exit_status": 7,
+    "verified": true
+  },
+  "unknown_key_live": {
+    "TLS_established": true,
+    "application_bytes_received": 0,
+    "refused": true,
+    "server_log": "Peer refused: Peer key is not approved"
+  },
+  "two_machine_job_takeover": {
+    "home": "davion-sidarli",
+    "authority": "aico",
+    "winner": "aico",
+    "fenceBefore": 1,
+    "fenceAfter": 2,
+    "lateResultStatus": 409,
+    "lateRenewStatus": 409,
+    "meaning": "M11a job completed on aico",
+    "verifiedAt": "2026-11-04T12:49:11.769Z"
+  },
+  "job_cleanup": {
+    "normal_definitions_restored": true,
+    "normal_jobs_per_runner": 3,
+    "proof_job_retired": true,
+    "proof_status": "off"
+  },
+  "liveness": {
+    "before": {
+      "id": "fleet/davion-sidarli/aico",
+      "machine": "aico",
+      "state": "ok",
+      "shown": "ok",
+      "last_run": "2026-11-04T12:54:32.127Z",
+      "next_run": "2026-11-04T12:59:32.127Z",
+      "meaning": "Connected to aico."
+    },
+    "late": {
+      "id": "fleet/davion-sidarli/aico",
+      "machine": "aico",
+      "state": "warn",
+      "shown": "late",
+      "last_run": "2026-11-04T12:54:32.127Z",
+      "next_run": "2026-11-04T12:59:32.127Z",
+      "meaning": "Disconnected from aico. Reconnecting.",
+      "observedAt": "2026-11-04T12:59:33.077Z"
+    },
+    "reconnected": {
+      "id": "fleet/davion-sidarli/aico",
+      "machine": "aico",
+      "state": "ok",
+      "shown": "ok",
+      "last_run": "2026-11-04T13:04:49.987Z",
+      "next_run": "2026-11-04T13:09:49.987Z",
+      "meaning": "Connected to aico.",
+      "verifiedAt": "2026-11-04T13:04:57.094625+00:00"
+    },
+    "remote_command_after_reconnect": "aico",
+    "wait_notification": "The wait notification reported failure; the command recorded the late row, and a separate live Status read confirmed it."
+  },
+  "checks": {
+    "before": {
+      "source": "e8606e82c80c6e947b66bd08b3fbc15fc5efa046",
+      "python_passed": 1151,
+      "typescript_passed": 3024,
+      "typescript_skipped": 6
+    },
+    "after": {
+      "source": "885df33545b39ae0c1fff27032af34a4de50d67e",
+      "python_passed": 1151,
+      "typescript_passed": 3045,
+      "typescript_skipped": 6,
+      "receipt": "ef0ed4d87fe3235893dfc1840ecbca7fae5fe0dc15000c6bbdcd6e0f21b4b326"
+    },
+    "deployed_help_checkpoint": "30440d01d33401f0ad7c9a38ad1f5d85a9ff0759",
+    "fleet_edit_quick_seconds": 47.61,
+    "cross_cutting_quick_seconds": 104.5,
+    "mechanical_copy_lint_violations": 0
+  },
+  "preservation": {
+    "CT190_snapshot": "m11a-before-link",
+    "previous_CT190_source_retained": true,
+    "M11b_started": false
+  },
+  "remaining": [],
+  "completedAt": "2026-11-04T13:04:57.094638+00:00",
+  "choices": [
+    "Only the lower short hostname dials; either peer opens channels.",
+    "IPv4 LAN listeners use literal local addresses; no public bind or CA.",
+    "Job definitions name one lease holder and explicit eligible workers; no local lease fallback during a partition.",
+    "Production unsigned automatic peer updates stay disabled for M11b.",
+    "Other hosts remain for M11b, per the coordinator cancellation; neither worker VM was accessed."
+  ],
+  "source_diff": {
+    "base": "e8606e82c80c6e947b66bd08b3fbc15fc5efa046",
+    "through": "30440d01d33401f0ad7c9a38ad1f5d85a9ff0759",
+    "files": 68,
+    "added_lines": 2404,
+    "removed_lines": 697
+  },
+  "verification_note": "A later cleanup rebuild was blocked by the parallel builder\u2019s prepared dependency/configuration inputs. The normal jobs configuration was restored through systemd against the already accepted release; no parallel source was edited."
+}
