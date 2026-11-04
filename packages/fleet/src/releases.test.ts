@@ -34,13 +34,13 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 it('verifies and stages the entire release signed by an approved Ed25519 key', () => {
-  const envelope = signRelease(join(dir, 'release'), keyPath)
+  const envelope = signRelease(join(dir, 'release'), keyPath, 2)
   const stage = stageRelease(envelope, join(dir, 'staged'), [pair.publicKey])
   expect(readFileSync(join(stage, 'dist/tether.mjs'), 'utf8')).toBe('fixture dist/tether.mjs')
   expect(verifyRelease(envelope, [pair.publicKey]).files).toHaveLength(RELEASE_FILES.length)
 })
 it('refuses unsigned, tampered and wrongly signed releases before creating the stage', () => {
-  const envelope = signRelease(join(dir, 'release'), keyPath)
+  const envelope = signRelease(join(dir, 'release'), keyPath, 2)
   const parsed = JSON.parse(envelope)
   const tampered = JSON.stringify({
     ...parsed,
@@ -73,5 +73,5 @@ it('rejects empty, duplicate, excessive and non-Ed25519 pins, and writable pin f
 })
 it('refuses to sign with an exposed private key', () => {
   chmodSync(keyPath, 0o644)
-  expect(() => signRelease(join(dir, 'release'), keyPath)).toThrow('0600')
+  expect(() => signRelease(join(dir, 'release'), keyPath, 2)).toThrow('0600')
 })

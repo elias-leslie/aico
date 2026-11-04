@@ -3,11 +3,15 @@ import { createConnection, createServer, type Server, Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { requestExec } from './exec'
 import { Fleet } from './fleet'
 import { loadIdentity } from './identity'
 import type { FleetSettings } from './settings'
 import { lanAddress } from './settings'
 import type { Pin } from './trust'
+
+const pushedLogins = vi.hoisted(() => vi.fn(async () => []))
+vi.mock('./secrets', () => ({ pushToolLogins: pushedLogins }))
 
 const cleanup: (() => Promise<unknown> | void)[] = []
 afterEach(async () => {
@@ -57,6 +61,7 @@ async function pair() {
   const makeA = () =>
     new Fleet({
       settings: sa,
+      env: { AICO_FLEET_CONFIG: join(root, 'no-config') },
       identity: a,
       pins: () => pins,
       postRows: async () => {},
@@ -65,6 +70,7 @@ async function pair() {
   const makeB = () =>
     new Fleet({
       settings: sb,
+      env: { AICO_FLEET_CONFIG: join(root, 'no-config') },
       identity: b,
       pins: () => pins,
       postRows: async () => {},
@@ -446,4 +452,30 @@ it('releases its upstream socket after the peer closes a channel', async () => {
   } finally {
     write.mockRestore()
   }
+})
+
+it('pushes tool logins after a full peer authenticates a new link', async () => {
+  pushedLogins.mockClear()
+  const p = await pair()
+  await p.fb.start()
+  await p.fa.start()
+  await vi.waitFor(() => expect(pushedLogins).toHaveBeenCalledWith(p.sa, p.b.name))
+})
+
+it('carries a complete signed-release-sized input and its final exec result', async () => {
+  const p = await pair()
+  await p.fb.start()
+  await p.fa.start()
+  await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
+  const result = await requestExec(
+    join(p.sa.peerRoot, p.b.name, 'exec.sock'),
+    [
+      process.execPath,
+      '-e',
+      'let size=0;process.stdin.on("data",data=>size+=data.length);process.stdin.on("end",()=>console.log(size))',
+    ],
+    Buffer.alloc(2 * 1024 * 1024, 120),
+  )
+  expect(result.code).toBe(0)
+  expect(result.stdout.trim()).toBe(String(2 * 1024 * 1024))
 })

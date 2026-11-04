@@ -27,8 +27,12 @@ interface ReleaseFile {
   path: string
   body: string
 }
-interface Release {
+export interface Release {
   format: 'aico-update-v1'
+  apiVersion: number
+  releaseHash: string
+  bundleHash: string
+  issuedAt: number
   files: ReleaseFile[]
 }
 interface SignedRelease {
@@ -57,15 +61,37 @@ export function readUpdateKeys(path = DEFAULT_UPDATE_PINS): KeyObject[] {
     throw new Error('Update pins must be root-owned and not writable by other users')
   return parseUpdateKeys(JSON.parse(readFileSync(path, 'utf8')))
 }
-export function signRelease(release: string, privateKeyPath: string): string {
+export function bundleHash(release: string): string {
+  return createHash('sha256')
+    .update(readFileSync(join(release, 'dist/tether.mjs')))
+    .digest('hex')
+}
+const releaseFiles = (release: string): ReleaseFile[] =>
+  RELEASE_FILES.map((path) => ({
+    path,
+    body: readFileSync(join(release, path)).toString('base64'),
+  }))
+const hashFiles = (files: ReleaseFile[]) =>
+  createHash('sha256').update(JSON.stringify(files)).digest('hex')
+export function releaseHash(release: string): string {
+  return hashFiles(releaseFiles(release))
+}
+export function signRelease(
+  release: string,
+  privateKeyPath: string,
+  apiVersion: number,
+  issuedAt = Date.now(),
+): string {
   const key = createPrivateKey(privateFile(privateKeyPath))
   if (key.asymmetricKeyType !== 'ed25519') throw new Error('Update signer must be Ed25519')
+  const files = releaseFiles(release)
   const payload = JSON.stringify({
     format: 'aico-update-v1',
-    files: RELEASE_FILES.map((path) => ({
-      path,
-      body: readFileSync(join(release, path)).toString('base64'),
-    })),
+    apiVersion,
+    releaseHash: hashFiles(files),
+    bundleHash: bundleHash(release),
+    issuedAt,
+    files,
   })
   return JSON.stringify({ payload, signature: sign(null, bytes(payload), key).toString('base64') })
 }
@@ -83,6 +109,11 @@ export function verifyRelease(input: string, keys: KeyObject[]): Release {
     const payload = JSON.parse(envelope.payload) as Release
     if (
       payload.format !== 'aico-update-v1' ||
+      !Number.isSafeInteger(payload.apiVersion) ||
+      payload.apiVersion < 1 ||
+      !Number.isSafeInteger(payload.issuedAt) ||
+      payload.issuedAt < 1 ||
+      typeof payload.releaseHash !== 'string' ||
       !Array.isArray(payload.files) ||
       payload.files.length !== RELEASE_FILES.length ||
       payload.files.some(
@@ -93,10 +124,34 @@ export function verifyRelease(input: string, keys: KeyObject[]): Release {
       )
     )
       throw new Error()
+    if (
+      createHash('sha256')
+        .update(Buffer.from(payload.files[0]?.body ?? '', 'base64'))
+        .digest('hex') !== payload.bundleHash ||
+      hashFiles(payload.files) !== payload.releaseHash
+    )
+      throw new Error()
     return payload
   } catch {
     throw new Error('Update refused: signature or release contents are invalid')
   }
+}
+/** API versions never go backwards; the signed issue order also covers same-API releases. */
+export function newerRelease(
+  candidate: Release,
+  installedApi: number,
+  installedHash: string,
+  installed?: Release,
+): boolean {
+  if (
+    candidate.apiVersion < installedApi ||
+    (installed && candidate.apiVersion < installed.apiVersion)
+  )
+    throw new Error('Update refused: older API version')
+  if (candidate.releaseHash === installedHash) return false
+  if (installed && candidate.issuedAt <= installed.issuedAt)
+    throw new Error('Update refused: older signed release')
+  return true
 }
 /** Authenticate the complete release before writing any executable file. */
 export function stageRelease(input: string, destination: string, keys: KeyObject[]): string {

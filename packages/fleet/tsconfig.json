@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": ".tsbuild"
   },
-  "include": ["src/**/*.ts", "vitest.config.ts"],
+  "include": ["src/**/*.ts", "vitest.config.ts", "src/**/*.json"],
   "exclude": ["node_modules", "dist", ".tsbuild"],
   "references": [
     {

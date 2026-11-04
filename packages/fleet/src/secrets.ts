@@ -14,6 +14,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { requestExec } from './exec'
 import { type FleetSettings, fleetFile } from './settings'
+import staticLogins from './static-logins.json' with { type: 'json' }
 import { readPins } from './trust'
 
 export interface ToolSecret {
@@ -46,8 +47,8 @@ export function privateFile(path: string): Buffer {
 export function writePrivate(path: string, value: string | Buffer): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   const dir = lstatSync(dirname(path))
-  if (!dir.isDirectory() || dir.uid !== process.getuid?.() || dir.mode & 0o077)
-    throw new Error('Secrets folder must be owner-only with mode 0700')
+  if (!dir.isDirectory() || dir.uid !== process.getuid?.())
+    throw new Error('Login destination folder must belong to this user')
   const temp = `${path}.${process.pid}.tmp`
   try {
     const fd = openSync(
@@ -73,6 +74,7 @@ export function parseToolSecrets(value: unknown): ToolSecret[] {
   return value.map((item: unknown) => {
     if (!item || typeof item !== 'object') throw new Error('Invalid tool login map')
     const { tool, name, file, envVar, authFile } = item as Record<string, unknown>
+    const allowed = staticLogins.find((entry) => entry.tool === tool && entry.name === name)
     if (
       typeof tool !== 'string' ||
       !NAME.test(tool) ||
@@ -80,6 +82,9 @@ export function parseToolSecrets(value: unknown): ToolSecret[] {
       !NAME.test(name) ||
       typeof file !== 'string' ||
       !NAME.test(file) ||
+      !allowed ||
+      allowed.envVar !== envVar ||
+      allowed.authFile !== authFile ||
       !!envVar === !!authFile ||
       (envVar !== undefined &&
         (typeof envVar !== 'string' || !/^[A-Z_][A-Z0-9_]*$/.test(envVar))) ||
@@ -133,17 +138,22 @@ export function receiveLogins(input: string, env = process.env): string[] {
     throw new Error('Invalid tool login delivery')
   for (const tool of new Set(loadToolSecrets(env).map((entry) => entry.tool)))
     if (!delivery.tools.includes(tool)) forgetLogin(tool, env)
-  entries.forEach((entry, i) => {
-    const value = values[i] as string
-    writePrivate(join(secretsDir(env), entry.file), value)
-    if (entry.authFile) writePrivate(join(env.HOME || homedir(), entry.authFile), value)
-  })
+  mkdirSync(secretsDir(env), { recursive: true, mode: 0o700 })
+  const folder = lstatSync(secretsDir(env))
+  if (!folder.isDirectory() || folder.uid !== process.getuid?.() || folder.mode & 0o077)
+    throw new Error('Secrets folder must be owner-only with mode 0700')
   const ids = new Set(entries.map((entry) => `${entry.tool}/${entry.name}`))
   const combined = [
     ...loadToolSecrets(env).filter((entry) => !ids.has(`${entry.tool}/${entry.name}`)),
     ...entries,
   ]
+  // Record destinations first: even a partial delivery can always be revoked.
   writePrivate(toolLoginsFile(env), JSON.stringify(combined))
+  entries.forEach((entry, i) => {
+    const value = values[i] as string
+    writePrivate(join(secretsDir(env), entry.file), value)
+    if (entry.authFile) writePrivate(join(env.HOME || homedir(), entry.authFile), value)
+  })
   return entries.map((entry) => entry.file)
 }
 export function forgetLogin(tool: string, env = process.env): void {

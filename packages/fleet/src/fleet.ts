@@ -18,6 +18,7 @@ import { type Pin, PinCache } from './trust'
 
 export interface FleetOptions {
   settings: FleetSettings
+  env?: NodeJS.ProcessEnv
   identity?: Identity
   pins?: () => Pin[]
   postRows?: (rows: StatusRow[]) => Promise<void>
@@ -153,8 +154,10 @@ export class Fleet {
           ) {
             try {
               const current =
-                readSettings(process.env, this.options.settings.controlSocket) ??
-                this.options.settings
+                readSettings(
+                  this.options.env ?? process.env,
+                  this.options.settings.controlSocket,
+                ) ?? this.options.settings
               void pushToolLogins(current, connection.peer).catch(() =>
                 this.log(`${connection.peer}: tool login delivery failed`),
               )

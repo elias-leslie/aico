@@ -1,18 +1,18 @@
 // Enrollment crosses the owner's existing Needs-you surface. Only public key
 // material is displayed or copied; root pins it after the exact ask is approved.
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import { runExec } from '@aico/fleet/exec'
+import { hostsFilePath, loadHosts } from '@aico/fleet/hosts'
 import { enrollmentCode, fingerprint, loadIdentity, machineName } from '@aico/fleet/identity'
 import {
   DEFAULT_UPDATE_PINS,
-  RELEASE_FILES,
   readUpdateKeys,
   SIGNED_RELEASE,
   signRelease,
-  stageRelease,
+  verifyRelease,
 } from '@aico/fleet/releases'
 import {
   forgetLogin,
@@ -25,9 +25,8 @@ import {
 import { readSettings } from '@aico/fleet/settings'
 import { approvePin, type Pin, parsePins } from '@aico/fleet/trust'
 import { callSocket } from './client'
-import { isInstanceName, type TetherPaths } from './config'
-import { shellQuote } from './hub/host-admin'
-import { pushRelease, updateLine } from './hub/update'
+import { API_VERSION, type TetherPaths } from './config'
+import { pushRelease, receiveUpdate, updateResult } from './hub/update'
 
 async function input(limit: number): Promise<string> {
   const chunks: Buffer[] = []
@@ -113,7 +112,7 @@ export async function runFleet(
   if (command === 'sign-update') {
     const release = rest[0]
     if (!release) throw new Error('Usage: tether fleet sign-update RELEASE')
-    const envelope = signRelease(release, join(secretsDir(), 'update-signing-key'))
+    const envelope = signRelease(release, join(secretsDir(), 'update-signing-key'), API_VERSION)
     writeFileSync(join(release, SIGNED_RELEASE), envelope, { mode: 0o600 })
     io.out('Release signed')
     return 0
@@ -123,55 +122,36 @@ export async function runFleet(
     const settings = readSettings(process.env, paths.socket)
     if (!settings || !name || !release)
       throw new Error('Usage: tether fleet push-update MACHINE RELEASE [INSTANCE]')
+    const entry = loadHosts(hostsFilePath(process.env)).hosts.find((host) => host.name === name)
+    if (!entry) throw new Error('Machine has no hosts entry')
     const result = await pushRelease(release, {
-      entry: {
-        name,
-        socket: `/run/user/${process.getuid?.() ?? 1000}/tether/${instance}/control.sock`,
-        stateDir: null,
-      } as import('@aico/fleet/hosts').HostEntry,
+      entry,
       control: join(settings.peerRoot, name, 'exec.sock'),
       instance,
     })
     io.out(result.stdout || result.output)
     return result.code ?? 1
   }
-  if (command === 'receive-update') {
-    const [instance, socket, stateDir] = rest
-    if (!instance || !isInstanceName(instance) || !socket?.startsWith('/'))
-      throw new Error('Invalid update target')
-    const settings = readSettings(process.env, paths.socket)
-    if (!settings) throw new Error('Fleet is not configured')
-    const stage = stageRelease(
-      await input(64 * 1024 * 1024),
-      join(settings.stateDir, 'updates'),
-      readUpdateKeys(settings.updatePins || DEFAULT_UPDATE_PINS),
-    )
-    const archive = join(stage, 'release.tar')
-    const packed = spawnSync('tar', ['-cf', archive, ...RELEASE_FILES, SIGNED_RELEASE], {
-      cwd: stage,
-    })
-    if (packed.status !== 0) throw new Error('Could not stage the signed release')
-    const script = join(stage, 'install.sh')
-    writeFileSync(script, updateLine(instance, socket, undefined, stateDir || null), {
-      mode: 0o700,
-    })
-    const result = spawnSync(
-      'systemd-run',
-      [
-        '--user',
-        '--no-ask-password',
-        '--collect',
-        '--quiet',
-        '--property=Type=exec',
-        'bash',
-        '-c',
-        `bash ${shellQuote(script)} < ${shellQuote(archive)}`,
-      ],
-      { encoding: 'utf8' },
-    )
-    if (result.status !== 0) throw new Error('Could not start the signed update')
-    io.out('Signed update accepted')
+  if (command === 'verify-update') {
+    if (!rest[0]) throw new Error('Usage: tether fleet verify-update ENVELOPE [PINS]')
+    verifyRelease(readFileSync(rest[0], 'utf8'), readUpdateKeys(rest[1] || DEFAULT_UPDATE_PINS))
+    io.out('Signed release verified')
     return 0
+  }
+  if (command === 'update-result') {
+    const result = updateResult(rest[0] || '', rest[1] || '')
+    io.out(JSON.stringify(result))
+    return 0
+  }
+  if (command === 'receive-update') {
+    const result = receiveUpdate(await input(64 * 1024 * 1024), {
+      instance: rest[0] || '',
+      socket: rest[1] || '',
+      stateDir: rest[2] || null,
+      id: rest[3] || '',
+    })
+    io.out(result.stdout || result.output)
+    return result.code ?? 1
   }
   if (!command || command === 'help' || command === '--help') {
     io.out(

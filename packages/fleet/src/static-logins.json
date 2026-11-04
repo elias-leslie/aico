@@ -1,0 +1,5 @@
+[
+  { "tool": "claude-code", "name": "oauth-token", "envVar": "CLAUDE_CODE_OAUTH_TOKEN" },
+  { "tool": "pi", "name": "opencode-go", "envVar": "OPENCODE_API_KEY" },
+  { "tool": "st", "name": "summitflow-agent-token", "authFile": ".config/agent-tokens/summitflow" }
+]

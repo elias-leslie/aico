@@ -1,4 +1,12 @@
-import { chmodSync, existsSync, lstatSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
@@ -43,16 +51,18 @@ it('stores pushed logins privately and supplies them to the tool environment wit
 })
 it('writes an auth file as 0600 and removes a revoked login on the next push', () => {
   const file = {
-    tool: 'codex',
-    name: 'login',
-    file: 'host-tool-codex-login',
-    authFile: '.codex/auth.json',
+    tool: 'st',
+    name: 'summitflow-agent-token',
+    file: 'host-tool-st-summitflow-agent-token',
+    authFile: '.config/agent-tokens/summitflow',
     value: 'fixture-auth',
   }
-  receiveLogins(JSON.stringify({ entries: [file], tools: ['codex'] }), env)
-  expect(lstatSync(join(home, '.codex/auth.json')).mode & 0o777).toBe(0o600)
+  mkdirSync(join(home, '.config/agent-tokens'), { recursive: true, mode: 0o755 })
+  chmodSync(join(home, '.config/agent-tokens'), 0o755)
+  receiveLogins(JSON.stringify({ entries: [file], tools: ['st'] }), env)
+  expect(lstatSync(join(home, '.config/agent-tokens/summitflow')).mode & 0o777).toBe(0o600)
   receiveLogins(JSON.stringify({ entries: [], tools: [] }), env)
-  expect(existsSync(join(home, '.codex/auth.json'))).toBe(false)
+  expect(existsSync(join(home, '.config/agent-tokens/summitflow'))).toBe(false)
   expect(loadToolSecrets(env)).toEqual([])
 })
 it('rejects traversal, malformed or ungranted deliveries without echoing secret input', () => {
@@ -76,3 +86,45 @@ it('refuses readable or symlinked source secrets', () => {
   expect(() => privateFile(join(home, 'link'))).toThrow('0600')
   forgetLogin('unknown', env)
 })
+
+it('refuses rotating logins and a static entry pointing at an arbitrary auth file', () => {
+  for (const entry of [
+    { tool: 'codex', name: 'login', file: 'codex', authFile: '.codex/auth.json' },
+    { tool: 'pi', name: 'oauth', file: 'pi', authFile: '.pi/agent/auth.json' },
+    { tool: 'st', name: 'summitflow-agent-token', file: 'st', authFile: '.ssh/authorized_keys' },
+  ]) {
+    expect(() => parseToolSecrets([entry])).toThrow('Invalid tool login map')
+    expect(() =>
+      receiveLogins(
+        JSON.stringify({ entries: [{ ...entry, value: 'fixture' }], tools: [entry.tool] }),
+        env,
+      ),
+    ).toThrow('Invalid tool login map')
+  }
+})
+it.skipIf(process.getuid?.() === 0)(
+  'records destinations before a partial delivery, so revocation removes written files',
+  () => {
+    const folder = join(home, '.config/agent-tokens')
+    mkdirSync(folder, { recursive: true, mode: 0o755 })
+    chmodSync(folder, 0o555)
+    const entry = {
+      tool: 'st',
+      name: 'summitflow-agent-token',
+      file: 'host-tool-st',
+      authFile: '.config/agent-tokens/summitflow',
+      value: 'fixture',
+    }
+    try {
+      expect(() =>
+        receiveLogins(JSON.stringify({ entries: [entry], tools: ['st'] }), env),
+      ).toThrow()
+      expect(loadToolSecrets(env)).toMatchObject([{ tool: 'st', file: entry.file }])
+      expect(existsSync(join(secretsDir(env), entry.file))).toBe(true)
+    } finally {
+      chmodSync(folder, 0o755)
+    }
+    forgetLogin('st', env)
+    expect(existsSync(join(secretsDir(env), entry.file))).toBe(false)
+  },
+)

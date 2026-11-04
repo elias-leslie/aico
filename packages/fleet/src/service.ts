@@ -27,7 +27,11 @@ export class FleetService {
     try {
       this.settings = readSettings(this.env, this.controlSocket)
       if (!this.settings || this.stopped) return
-      this.fleet = new Fleet({ settings: this.settings, failed: (error) => this.fault(error) })
+      this.fleet = new Fleet({
+        settings: this.settings,
+        env: this.env,
+        failed: (error) => this.fault(error),
+      })
       await this.fleet.start()
     } catch (error) {
       await this.failed(error)

@@ -1,372 +1,285 @@
-import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
+import { generateKeyPairSync } from 'node:crypto'
 import {
-  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readlinkSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { hostname, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HostEntry } from '@aico/fleet/hosts'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { remoteArgv } from './host-admin'
+import {
+  RELEASE_FILES,
+  releaseHash,
+  SIGNED_RELEASE,
+  signRelease,
+  verifyRelease,
+} from '@aico/fleet/releases'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { API_VERSION } from '../config'
 import {
   installStarted,
-  RELEASE_FILES,
-  releaseId,
-  runningRelease,
+  pushRelease,
+  receiveUpdate,
   UPDATE_BUSY_EXIT,
-  UPDATE_INSTALLING,
-  type UpdateTarget,
-  updateLine,
+  updateResult,
 } from './update'
 
-const SCRIPTS = join(import.meta.dirname, '..', '..', 'scripts')
-
-const entry: HostEntry = {
-  name: 'vm',
-  ssh: 'vm',
-  socket: '/run/user/1000/tether/default/control.sock',
-  sync: null,
-  wake: null,
-  sleep: null,
-  status: null,
-  statusOff: '\\bstopped\\b',
-  health: [],
-  wakeTimeoutSec: 240,
+const mocks = vi.hoisted(() => ({ exec: vi.fn(), pins: vi.fn(), keys: vi.fn(), run: vi.fn() }))
+vi.mock('@aico/fleet/exec', async (original) => ({
+  ...(await original<typeof import('@aico/fleet/exec')>()),
+  requestExec: mocks.exec,
+}))
+vi.mock('@aico/fleet/trust', async (original) => ({
+  ...(await original<typeof import('@aico/fleet/trust')>()),
+  readPins: mocks.pins,
+}))
+vi.mock('@aico/fleet/releases', async (original) => ({
+  ...(await original<typeof import('@aico/fleet/releases')>()),
+  readUpdateKeys: mocks.keys,
+}))
+vi.mock('node:child_process', async (original) => ({
+  ...(await original<typeof import('node:child_process')>()),
+  spawnSync: mocks.run,
+}))
+let dir: string, release: string, lib: string, signer: string, state: string, report: string
+const pair = generateKeyPairSync('ed25519')
+const machine = hostname().split('.')[0]?.toLowerCase() as string
+const entry = {
+  name: 'worker',
+  socket: '/run/user/4321/tether/default/control.sock',
   stateDir: null,
-}
-
-function put(path: string, text: string, mode = 0o644): void {
+} as HostEntry
+const target = { entry, control: '/test/exec.sock', instance: 'default' }
+const id = '11111111-1111-1111-1111-111111111111'
+function put(path: string, text: string, mode = 0o644) {
   mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, text)
-  chmodSync(path, mode)
+  writeFileSync(path, text, { mode })
 }
-
-describe('remote Tether update', () => {
-  let dir: string
-  let release: string
-  let home: string
-  let lib: string
-  let bin: string
-  /** The host Tether's database (resolvePaths: $XDG_STATE_HOME/tether/<instance>). */
-  let state: string
-  let db: string
-  let holder: ChildProcess | null
-
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'tether-update-'))
-    release = join(dir, 'release')
-    home = join(dir, 'home')
-    lib = join(home, '.local', 'lib', 'tether')
-    bin = join(dir, 'bin')
-    state = join(home, '.local', 'state', 'tether', 'default')
-    db = join(state, 'tether.db')
-    holder = null
-    // A Tether that answered its link has opened its database.
-    put(db, 'schema 25\n', 0o600)
-    // This hub's installed release, as install-release.sh lays it out.
-    put(join(release, 'dist', 'tether.mjs'), 'new bundle\n')
-    put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 0\n', 0o755)
-    mkdirSync(join(release, 'scripts'), { recursive: true })
-    for (const script of ['install-release.sh', 'install-shims.sh'])
-      copyFileSync(join(SCRIPTS, script), join(release, 'scripts', script))
-    put(join(release, 'scripts', 'aico-root-watch.py'), '# watch\n', 0o755)
-    put(join(release, 'scripts', 'aico-blank-slate'), '# blank\n', 0o755)
-    put(join(release, 'shims', 'tether-shim'), '#!/bin/sh\n', 0o755)
-    put(join(release, 'shims', 'shims.list'), 'git prepend --no-pager\n')
-    // The host's older release.
-    put(join(lib, 'dist', 'tether.mjs'), 'old bundle\n')
-    put(join(lib, 'bin', 'tether'), '#!/bin/sh\nexit 0\n', 0o755)
-    // A stand-in systemctl that records what it was asked. A start (or
-    // restart) on the new bundle migrates the database, as Tether's Store does.
+function sign() {
+  const input = signRelease(release, signer, API_VERSION, 2000)
+  put(join(release, SIGNED_RELEASE), input)
+  return input
+}
+beforeEach(async () => {
+  dir = mkdtempSync(join(tmpdir(), 'aico-update-'))
+  release = join(dir, 'release')
+  lib = join(dir, 'home/.local/lib/tether')
+  state = join(dir, 'state')
+  signer = join(dir, 'signer')
+  put(signer, pair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(), 0o600)
+  for (const file of RELEASE_FILES)
     put(
-      join(bin, 'systemctl'),
-      [
-        '#!/bin/sh',
-        `echo "$*" >> "${join(dir, 'systemctl.log')}"`,
-        'case "$*" in *start*)',
-        `  if grep -q "new bundle" "${join(lib, 'dist', 'tether.mjs')}" && [ -f "${db}" ]; then`,
-        `    echo "schema 28" > "${db}"; echo "wal 28" > "${db}-wal"`,
-        '  fi;;',
-        'esac',
-        '',
-      ].join('\n'),
+      join(release, file),
+      file === 'bin/tether' ? '#!/bin/sh\nexit 0\n' : `fixture ${file}\n`,
       0o755,
     )
-  })
-
-  afterEach(() => {
-    holder?.kill('SIGKILL')
-    if (existsSync(state)) chmodSync(state, 0o700)
-    rmSync(dir, { recursive: true, force: true })
-  })
-
-  /** The host side as the hub runs it over ssh: the remote command ssh hands
-   * the host's shell (remoteArgv's `bash -lc '<line>'`), here in a local one. */
-  const hostArgv = () => [
-    'env',
-    '-i',
-    `HOME=${home}`,
-    `PATH=${bin}:/usr/bin:/bin`,
-    `XDG_STATE_HOME=${join(home, '.local', 'state')}`,
-    ...remoteArgv(entry, '/run/x/exec.sock', updateLine('default', entry.socket, 1)).slice(-3),
-  ]
-  const target = { entry, control: '/run/x/ssh.ctl', instance: 'default' }
-  const restarts = () =>
-    existsSync(join(dir, 'systemctl.log'))
-      ? readFileSync(join(dir, 'systemctl.log'), 'utf8').trim().split('\n')
-      : []
-  const stop = '--user --no-ask-password stop tether@default'
-  const start = '--user --no-ask-password start tether@default'
-  /** The host's database before the update, at an older schema. */
-  function oldDatabase(): void {
-    put(db, 'schema 20\n', 0o600)
-    put(`${db}-wal`, 'wal 20\n', 0o600)
-    put(`${db}-shm`, 'shm\n', 0o600)
-    // The old release answers only on a schema it can read.
-    put(join(lib, 'bin', 'tether'), `#!/bin/sh\ngrep -q "schema 20" "${db}"\n`, 0o755)
-  }
-
-  it("installs the hub's release on the host and restarts its Tether there", async () => {
-    const result = await installTestRelease(release, target, { argv: hostArgv() })
-    expect(result.code).toBe(0)
-    expect(installStarted(result)).toBe(true)
-    expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('new bundle\n')
-    // The host can pass the release on in turn: the installer came with it.
-    expect(existsSync(join(lib, 'scripts', 'install-release.sh'))).toBe(true)
-    expect(existsSync(join(lib, 'scripts', 'install-shims.sh'))).toBe(true)
-    expect(readlinkSync(join(lib, 'shims', 'git'))).toBe('tether-shim')
-    expect(restarts()).toEqual([stop, start])
-  })
-
-  it('puts the previous bundle back when the new one does not answer', async () => {
-    put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
-    const result = await installTestRelease(release, target, { argv: hostArgv() })
-    expect(result.code).toBe(1)
-    expect(result.output).toBe(
-      'the new release did not answer within 1 s; the previous release and its database are back',
-    )
-    // It failed after the host began installing: the same release would again.
-    expect(installStarted(result)).toBe(true)
-    expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
-    expect(readFileSync(join(lib, 'bin', 'tether'), 'utf8')).toBe('#!/bin/sh\nexit 0\n')
-    expect(restarts()).toEqual([stop, start, stop, start])
-  })
-
-  it('puts the database back too when the new release moved its schema and then failed', async () => {
-    oldDatabase()
-    put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
-    const result = await installTestRelease(release, target, { argv: hostArgv() })
-    expect(result).toMatchObject({
-      code: 1,
-      output:
-        'the new release did not answer within 1 s; the previous release and its database are back',
-    })
-    // What the old release can read, with its WAL; the stale index is dropped.
-    expect(readFileSync(db, 'utf8')).toBe('schema 20\n')
-    expect(readFileSync(`${db}-wal`, 'utf8')).toBe('wal 20\n')
-    expect(existsSync(`${db}-shm`)).toBe(false)
-    expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
-    expect(restarts()).toEqual([stop, start, stop, start])
-  })
-
-  it('says so when the previous release does not answer after the rollback either', async () => {
-    put(join(lib, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
-    put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
-    const result = await installTestRelease(release, target, { argv: hostArgv() })
-    expect(result.output).toBe(
-      'the new release did not answer within 1 s; the previous release and its database are back but did not answer within 1 s either',
-    )
-  })
-
-  it.skipIf(process.getuid?.() === 0)(
-    'never starts the previous release on a database it could not put back',
-    async () => {
-      oldDatabase()
-      put(join(release, 'bin', 'tether'), '#!/bin/sh\nexit 1\n', 0o755)
-      // The state directory takes no new file (a full or read-only disk).
-      chmodSync(state, 0o500)
-      const result = await installTestRelease(release, target, { argv: hostArgv() })
-      expect(result.code).toBe(1)
-      const copy = /a copy is in (\S+)\)/.exec(result.output)?.[1] ?? ''
-      expect(result.output).toBe(
-        `the new release did not answer within 1 s; its database could not be put back (a copy is in ${copy}), so tether@default stays stopped`,
-      )
-      expect(readFileSync(join(copy, 'tether.db'), 'utf8')).toBe('schema 20\n')
-      expect(restarts()).toEqual([stop, start, stop])
-      rmSync(dirname(copy), { recursive: true, force: true })
-    },
-  )
-
-  it('runs one update on a host at a time', async () => {
-    const lock = join(lib, '.update.lock')
-    holder = spawn('flock', [lock, 'sleep', '30'], { stdio: 'ignore' })
-    await vi.waitFor(() => expect(spawnSync('flock', ['-n', lock, 'true']).status).not.toBe(0))
-    const result = await installTestRelease(release, target, { argv: hostArgv() })
-    expect(result).toMatchObject({
-      code: UPDATE_BUSY_EXIT,
-      output: "another update of this host's Tether is still running",
-    })
-    expect(installStarted(result)).toBe(false)
-    expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
-    expect(restarts()).toEqual([])
-  })
-
-  it('sends nothing without a whole release or a usable instance', async () => {
-    expect((await installTestRelease(null, target)).output).toBe(
-      'this Tether does not run from an installed release',
-    )
-    rmSync(join(release, 'scripts', 'install-release.sh'))
-    expect((await installTestRelease(release, target)).output).toBe(
-      `this Tether's release at ${release} has no scripts/install-release.sh`,
-    )
+  for (const script of ['install-release.sh', 'install-shims.sh'])
     copyFileSync(
-      join(SCRIPTS, 'install-release.sh'),
-      join(release, 'scripts', 'install-release.sh'),
+      join(import.meta.dirname, '../../scripts', script),
+      join(release, 'scripts', script),
     )
-    expect(
-      (
-        await installTestRelease(
-          release,
-          { ...target, instance: "x'; rm -rf ~" },
-          { argv: ['false'] },
-        )
-      ).output,
-    ).toContain('named no usable instance')
-    expect(restarts()).toEqual([])
-  })
-
-  it('installs nothing when the release does not arrive whole', async () => {
-    // A link that drops mid-copy: the host gets a cut-off tar stream.
-    const cut = [
-      'sh',
-      '-c',
-      `head -c 100 | ${hostArgv()
-        .map((word) => `'${word.replace(/'/g, `'\\''`)}'`)
-        .join(' ')}`,
-    ]
-    const result = await installTestRelease(release, target, { argv: cut })
-    expect(result.code).not.toBe(0)
-    expect(installStarted(result)).toBe(false)
-    expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
-    expect(restarts()).toEqual([])
-  })
-
-  it('installs nothing when its database is not where the script looks', async () => {
-    // A rollback could not put it back, so an old release would meet a newer schema.
-    rmSync(db)
-    const result = await installTestRelease(release, target, { argv: hostArgv() })
-    expect(result.code).toBe(1)
-    expect(result.output).toBe(`no Tether database at ${state}; nothing installed`)
-    expect(installStarted(result)).toBe(false)
-    expect(readFileSync(join(lib, 'dist', 'tether.mjs'), 'utf8')).toBe('old bundle\n')
-    expect(restarts()).toEqual([])
-  })
-
-  it("looks for the database under the host's stateDir when hosts.json sets one", () => {
-    expect(updateLine('default', entry.socket, 1, '/srv/tether-state')).toContain(
-      'state=\'/srv/tether-state\'/"$instance"',
+  put(join(release, 'shims/shims.list'), '')
+  for (const file of RELEASE_FILES)
+    put(
+      join(lib, file),
+      file === 'dist/tether.mjs' ? 'previous bundle' : readFileSync(join(release, file), 'utf8'),
+      0o755,
     )
-    expect(updateLine('default', entry.socket, 1)).toContain('XDG_STATE_HOME')
-  })
-
-  it('sees the install marker when a login profile printed before it on the same line', () => {
-    expect(installStarted({ code: 1, stdout: `motd${UPDATE_INSTALLING}\n`, output: '' })).toBe(true)
-  })
-
-  it('lists every file install-release.sh installs', () => {
-    const installer = readFileSync(join(SCRIPTS, 'install-release.sh'), 'utf8')
-    const installed = [...installer.matchAll(/"\$lib_dir\/([^"]+)"/g)].map((match) => match[1])
-    expect(installed.length).toBeGreaterThan(0)
-    for (const file of installed) expect([...RELEASE_FILES, 'signed-update.json']).toContain(file)
-  })
-
-  it('names the release by its bundle', () => {
-    const first = releaseId(release)
-    expect(first).toMatch(/^[0-9a-f]{16}$/)
-    put(join(release, 'dist', 'tether.mjs'), 'newer bundle\n')
-    expect(releaseId(release)).not.toBe(first)
-    expect(releaseId(null)).toBe('none')
-  })
-
-  it('finds the installed release this process runs from', () => {
-    expect(runningRelease('/home/u/.local/lib/tether/dist/tether.mjs')).toBe(
-      '/home/u/.local/lib/tether',
-    )
-    expect(runningRelease('/repo/node_modules/vitest/vitest.mjs')).toBeNull()
-    expect(runningRelease(undefined)).toBeNull()
+  put(join(dir, 'home/.local/state/tether/default/tether.db'), 'fixture db')
+  put(join(dir, 'bin/systemctl'), '#!/bin/sh\nexit 0\n', 0o755)
+  const config = join(dir, 'fleet.json')
+  put(
+    config,
+    JSON.stringify({
+      machine,
+      stateDir: state,
+      allowlist: '/test/pins',
+      listen: { address: '127.0.0.1', port: 7449 },
+      peers: [{ name: 'worker', endpoint: { address: '127.0.0.1', port: 7450 } }],
+      syncSocket: join(dir, 'sync.sock'),
+      peerRoot: '/run/user/' + process.getuid?.() + '/aico/fleet',
+      retryMinMs: 1,
+      retryMaxMs: 1,
+      deadMs: 300000,
+      statusMs: 5000,
+      statusUrl: 'http://127.0.0.1:3002/api/status/rows',
+    }),
+  )
+  vi.stubEnv('HOME', join(dir, 'home'))
+  vi.stubEnv('AICO_FLEET_CONFIG', config)
+  vi.stubEnv('TETHER_LIB_DIR', lib)
+  vi.stubEnv('PATH', join(dir, 'bin') + ':/usr/bin:/bin')
+  mocks.pins.mockReturnValue([
+    { name: machine, role: 'full' },
+    { name: 'worker', role: 'worker' },
+  ])
+  mocks.keys.mockReturnValue([pair.publicKey])
+  mocks.exec.mockReset()
+  const real = await vi.importActual<typeof import('node:child_process')>('node:child_process')
+  report = ''
+  mocks.run.mockImplementation((command, args, options) => {
+    if (command === 'systemd-run') {
+      report = args.at(-1)
+      return { status: 0, stdout: '', stderr: '' }
+    }
+    return real.spawnSync(command, args, options)
   })
 })
-
-// The installer receives only already authenticated release bytes in production.
-function installTestRelease(
-  release: string | null,
-  target: UpdateTarget,
-  options: { timeoutMs?: number; argv?: string[] } = {},
-): Promise<{ code: number | null; stdout: string; output: string }> {
-  const timeoutMs = options.timeoutMs ?? 300000
-  const fail = (output: string) => Promise.resolve({ code: null, stdout: '', output })
-  if (!release) return fail('this Tether does not run from an installed release')
-  const missing = RELEASE_FILES.filter((file) => !existsSync(join(release, file)))
-  if (missing.length)
-    return fail(`this Tether's release at ${release} has no ${missing.join(', ')}`)
-  const instance = target.instance
-  if (!instance || !/^[a-zA-Z0-9_-]+$/.test(instance))
-    return fail(`the host's Tether named no usable instance (${JSON.stringify(instance)})`)
-  const argv =
-    options.argv ??
-    remoteArgv(
-      target.entry,
-      target.control,
-      updateLine(instance, target.entry.socket, 1, target.entry.stateDir),
-    )
-  return new Promise((resolve) => {
-    let stderr = ''
-    let stdout = ''
-    let settled = false
-    const tar = spawn('tar', ['-cf', '-', ...RELEASE_FILES], {
-      cwd: release,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    const [command, ...args] = argv as [string, ...string[]]
-    const ssh = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] })
-    const done = (result: { code: number | null; stdout: string; output: string }) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      tar.kill('SIGKILL')
-      resolve(result)
+afterEach(() => {
+  vi.unstubAllEnvs()
+  rmSync(dir, { recursive: true, force: true })
+})
+it('refuses unsigned releases, worker senders and unpinned recipients before exec', async () => {
+  expect((await pushRelease(release, target)).code).toBeNull()
+  sign()
+  mocks.pins.mockReturnValue([
+    { name: machine, role: 'worker' },
+    { name: 'worker', role: 'worker' },
+  ])
+  expect((await pushRelease(release, target)).output).toContain('full peer')
+  mocks.pins.mockReturnValue([{ name: machine, role: 'full' }])
+  expect((await pushRelease(release, target)).output).toContain('approved')
+  expect(mocks.exec).not.toHaveBeenCalled()
+})
+it('refuses a stale signed envelope whose bundle differs from the running release', async () => {
+  sign()
+  put(join(release, 'dist/tether.mjs'), 'newer bundle')
+  expect((await pushRelease(release, target)).output).toContain('stale')
+  expect(mocks.exec).not.toHaveBeenCalled()
+})
+it('verifies receive-update before any installer runs, rejects old APIs and treats equal hashes as a no-op', () => {
+  const envelope = sign()
+  expect(() =>
+    receiveUpdate('{}', { instance: 'default', socket: entry.socket, stateDir: null, id }),
+  ).toThrow('Update refused')
+  const older = signRelease(release, signer, API_VERSION - 1, 1000)
+  expect(() =>
+    receiveUpdate(older, { instance: 'default', socket: entry.socket, stateDir: null, id }),
+  ).toThrow('older API')
+  for (const file of RELEASE_FILES)
+    put(join(lib, file), readFileSync(join(release, file), 'utf8'), 0o755)
+  expect(
+    receiveUpdate(envelope, { instance: 'default', socket: entry.socket, stateDir: null, id })
+      .stdout,
+  ).toBe('Already installed')
+  expect(report).toBe('')
+})
+it('refuses an older signed release even within the same API version', () => {
+  const older = sign()
+  const current = join(dir, 'current')
+  for (const file of RELEASE_FILES) put(join(current, file), 'newer ' + file)
+  put(join(lib, SIGNED_RELEASE), signRelease(current, signer, API_VERSION, 3000))
+  expect(() =>
+    receiveUpdate(older, { instance: 'default', socket: entry.socket, stateDir: null, id }),
+  ).toThrow('older signed release')
+})
+it('reports the real busy result and succeeds on a subsequent signed push', async () => {
+  const input = sign()
+  const digest = verifyRelease(input, [pair.publicKey]).releaseHash
+  mkdirSync(lib, { recursive: true })
+  const holder = spawn(
+    'flock',
+    [join(lib, '.update.lock'), 'bash', '-c', 'echo ready; read value'],
+    { stdio: ['pipe', 'pipe', 'ignore'] },
+  )
+  await new Promise<void>((resolve) => holder.stdout.once('data', () => resolve()))
+  mocks.exec.mockImplementation(async (_socket, argv: string[], body: Buffer) => {
+    if (argv[2]?.includes('receive-update')) {
+      const result = receiveUpdate(body.toString(), {
+        instance: argv[4] as string,
+        socket: argv[5] as string,
+        stateDir: null,
+        id: argv[7] as string,
+      })
+      try {
+        execFileSync('bash', ['-c', report], { env: process.env, stdio: 'pipe' })
+      } catch {}
+      return result
     }
-    const timer = setTimeout(() => {
-      ssh.kill('SIGKILL')
-      done({ code: null, stdout, output: `timed out after ${Math.round(timeoutMs / 1000)} s` })
-    }, timeoutMs)
-    const keep = (chunk: Buffer) => {
-      stderr = (stderr + chunk.toString('utf8')).slice(-4_096)
+    return {
+      code: 0,
+      stdout: JSON.stringify(updateResult(argv[4] as string, argv[5] as string)),
+      output: '',
     }
-    ssh.stdout.on('data', (chunk: Buffer) => {
-      stdout = (stdout + chunk.toString('utf8')).slice(-4_096)
-    })
-    tar.stderr.on('data', keep)
-    ssh.stderr.on('data', keep)
-    tar.stdout.pipe(ssh.stdin)
-    // ssh gone early (a dropped master): tar's write fails; ssh's exit says why.
-    ssh.stdin.on('error', () => {})
-    tar.once('error', (error) => {
-      ssh.kill('SIGKILL')
-      done({ code: null, stdout: '', output: `tar: ${error.message}` })
-    })
-    ssh.once('error', (error) => done({ code: null, stdout: '', output: error.message }))
-    ssh.once('close', (code) => {
-      const lines = stderr.trim().split('\n')
-      const last = (lines[lines.length - 1] ?? '').trim().slice(0, 300)
-      done({ code, stdout, output: last || `exit ${code ?? 'error'}` })
-    })
   })
-}
+  try {
+    const busy = await pushRelease(release, target)
+    expect(busy.code).toBe(UPDATE_BUSY_EXIT)
+    expect(installStarted(busy)).toBe(false)
+  } finally {
+    holder.stdin.end()
+    await new Promise((resolve) => holder.once('close', resolve))
+  }
+  const result = await pushRelease(release, target)
+  expect(result.code).toBe(0)
+  expect(installStarted(result)).toBe(true)
+  expect(releaseHash(lib)).toBe(digest)
+})
+
+it('removes stale update metadata when an unsigned local release is installed', () => {
+  put(join(lib, SIGNED_RELEASE), 'stale metadata')
+  mkdirSync(join(release, 'scripts/shims'), { recursive: true })
+  for (const file of ['tether-shim', 'shims.list'])
+    copyFileSync(join(release, 'shims', file), join(release, 'scripts/shims', file))
+  execFileSync('bash', [join(release, 'scripts/install-release.sh')], {
+    env: process.env,
+    stdio: 'pipe',
+  })
+  expect(existsSync(join(lib, SIGNED_RELEASE))).toBe(false)
+})
+
+it('worker installation stops at failed signature verification before replacing code', () => {
+  const before = readFileSync(join(lib, 'dist/tether.mjs'), 'utf8')
+  put(join(dir, 'bin/sudo'), '#!/bin/sh\nexit 0\n', 0o755)
+  put(
+    join(dir, 'bin/node'),
+    '#!/bin/sh\n[ "$1" = "-e" ] && exit 0\necho verification-refused >&2\nexit 1\n',
+    0o755,
+  )
+  put(join(dir, 'commands.json'), '[]')
+  const script = join(import.meta.dirname, '../../../../scripts/install-worker.sh')
+  expect(() =>
+    execFileSync(
+      'bash',
+      [
+        script,
+        release,
+        process.env.AICO_FLEET_CONFIG as string,
+        signer,
+        signer,
+        join(dir, 'commands.json'),
+      ],
+      { env: process.env, stdio: 'pipe' },
+    ),
+  ).toThrow()
+  expect(readFileSync(join(lib, 'dist/tether.mjs'), 'utf8')).toBe(before)
+})
+
+it('reports a failed health check and restores the prior release and database', () => {
+  const oldHash = releaseHash(lib)
+  put(join(release, 'bin/tether'), '#!/bin/sh\nexit 1\n', 0o755)
+  put(join(dir, 'bin/sleep'), '#!/bin/sh\nexit 0\n', 0o755)
+  put(
+    join(dir, 'bin/systemctl'),
+    `#!/bin/sh\ncase "$*" in *start*) if grep -q "exit 1" "${join(lib, 'bin/tether')}"; then echo changed > "${join(dir, 'home/.local/state/tether/default/tether.db')}"; fi;; esac\nexit 0\n`,
+    0o755,
+  )
+  const input = sign()
+  const digest = verifyRelease(input, [pair.publicKey]).releaseHash
+  receiveUpdate(input, { instance: 'default', socket: entry.socket, stateDir: null, id })
+  expect(() => execFileSync('bash', ['-c', report], { env: process.env, stdio: 'pipe' })).toThrow()
+  expect(updateResult(id, digest)).toMatchObject({
+    code: 1,
+    output: expect.stringContaining('previous release'),
+  })
+  expect(releaseHash(lib)).toBe(oldHash)
+  expect(readFileSync(join(dir, 'home/.local/state/tether/default/tether.db'), 'utf8')).toBe(
+    'fixture db',
+  )
+  expect(existsSync(join(lib, SIGNED_RELEASE))).toBe(false)
+})

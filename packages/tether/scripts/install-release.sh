@@ -41,6 +41,8 @@ install_copy "$repo/scripts/install-release.sh" "$lib_dir/scripts/install-releas
 install_copy "$repo/scripts/install-shims.sh" "$lib_dir/scripts/install-shims.sh" 0644
 if [ -f "$repo/signed-update.json" ]; then
   install_copy "$repo/signed-update.json" "$lib_dir/signed-update.json" 0600
+else
+  rm -f "$lib_dir/signed-update.json"
 fi
 # shellcheck source=scripts/install-shims.sh
 source "$repo/scripts/install-shims.sh"

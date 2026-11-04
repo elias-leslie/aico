@@ -22,6 +22,7 @@ chmod 0600 "$config_dir/worker-hosts.json"
 sudo install -d -m 0755 /etc/aico
 sudo install -o root -g root -m 0644 "$peers" /etc/aico/fleet-peers.json
 sudo install -o root -g root -m 0644 "$updates" /etc/aico/update-pins.json
+node "$release/dist/tether.mjs" fleet verify-update "$release/signed-update.json" /etc/aico/update-pins.json
 if [ ! -d "$release/scripts/shims" ]; then
   mkdir -p "$release/scripts/shims"
   cp "$release/shims/tether-shim" "$release/shims/shims.list" "$release/scripts/shims/"

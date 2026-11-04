@@ -1,7 +1,8 @@
 import { generateKeyPairSync } from 'node:crypto'
 import { enrollmentCode, fingerprint, publicKeyOf } from '@aico/fleet/identity'
-import { expect, it } from 'vitest'
-import { approvedEnrollment, enrollmentBody, enrollmentQuestion } from './fleet-cli'
+import { expect, it, vi } from 'vitest'
+import type { TetherPaths } from './config'
+import { approvedEnrollment, enrollmentBody, enrollmentQuestion, runFleet } from './fleet-cli'
 
 it('requires the exact machine, short code and an answered Approve ask', () => {
   const pin = {
@@ -28,4 +29,36 @@ it('requires the exact machine, short code and an answered Approve ask', () => {
     enrollmentCode(other.name, other.publicKey),
   )
   expect(approvedEnrollment(other, ask)).toBe(false)
+})
+
+const push = vi.hoisted(() => vi.fn(async () => ({ code: 0, stdout: 'accepted', output: '' })))
+vi.mock('./hub/update', async (original) => ({
+  ...(await original<typeof import('./hub/update')>()),
+  pushRelease: push,
+}))
+vi.mock('@aico/fleet/settings', async (original) => ({
+  ...(await original<typeof import('@aico/fleet/settings')>()),
+  readSettings: () => ({ peerRoot: '/fleet' }),
+}))
+vi.mock('@aico/fleet/hosts', async (original) => ({
+  ...(await original<typeof import('@aico/fleet/hosts')>()),
+  loadHosts: () => ({
+    hosts: [
+      { name: 'worker', socket: '/run/user/4321/tether/default/control.sock', stateDir: '/state' },
+    ],
+  }),
+}))
+it('takes the remote update socket from the hosts entry, independently of this uid', async () => {
+  await runFleet(
+    ['push-update', 'worker', '/release'],
+    { socket: '/local/control.sock' } as TetherPaths,
+    { out: () => {}, err: () => {} },
+  )
+  expect(push).toHaveBeenCalledWith(
+    '/release',
+    expect.objectContaining({
+      entry: expect.objectContaining({ socket: '/run/user/4321/tether/default/control.sock' }),
+      control: '/fleet/worker/exec.sock',
+    }),
+  )
 })

@@ -1,20 +1,27 @@
 // Signed releases travel over the fleet link. The receiver verifies before running
 // this installer in its own user unit, so restarting Tether cannot kill the install.
 
-import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { createHash, randomUUID } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { requestExec } from '@aico/fleet/exec'
 import type { HostEntry } from '@aico/fleet/hosts'
 import {
+  bundleHash,
   DEFAULT_UPDATE_PINS,
+  newerRelease,
+  RELEASE_FILES,
   readUpdateKeys,
+  releaseHash,
   SIGNED_RELEASE,
+  stageRelease,
   verifyRelease,
 } from '@aico/fleet/releases'
 import { readSettings } from '@aico/fleet/settings'
 import { readPins } from '@aico/fleet/trust'
-import { isInstanceName } from '../config'
+import { API_VERSION, isInstanceName } from '../config'
 import { type RunResult, shellQuote } from './host-admin'
 
 /** What an installed release holds (scripts/install-release.sh puts them
@@ -79,7 +86,7 @@ export function updateLine(
   answerSec: number = UPDATE_ANSWER_SEC,
   stateDir: string | null = null,
 ): string {
-  const keep = 'dist/tether.mjs bin/tether signed-update.json'
+  const keep = [...RELEASE_FILES, SIGNED_RELEASE].join(' ')
   return [
     'set -eu',
     `instance=${shellQuote(instance)}`,
@@ -87,7 +94,7 @@ export function updateLine(
     'unit="tether@$instance"',
     // The stable path tether@.service runs from, and the instance's database
     // where src/config.ts resolvePaths puts it (production units override neither).
-    'lib="$HOME/.local/lib/tether"',
+    'lib="${TETHER_LIB_DIR:-$HOME/.local/lib/tether}"',
     // hosts.json `stateDir` replaces ~/.local/state/tether when the host sets it.
     stateDir
       ? `state=${shellQuote(stateDir)}/"$instance"`
@@ -155,7 +162,7 @@ export function updateLine(
     'fi',
     'if [ "$stopped" = 1 ]; then systemctl --user --no-ask-password stop "$unit" || true; fi',
     `for file in ${keep}; do`,
-    '  if [ -f "$stage/old/$file" ]; then cp -p "$stage/old/$file" "$lib/$file.rollback" && mv -f "$lib/$file.rollback" "$lib/$file"; fi',
+    '  if [ -f "$stage/old/$file" ]; then cp -p "$stage/old/$file" "$lib/$file.rollback" && mv -f "$lib/$file.rollback" "$lib/$file"; elif [ "$file" = signed-update.json ]; then rm -f "$lib/$file"; fi',
     'done',
     'back="the previous release is back"',
     'if [ "$saved" = 1 ]; then',
@@ -178,7 +185,99 @@ export function updateLine(
   ].join('\n')
 }
 
-/** Only a pinned full peer may send a previously signed release over the link. */
+/** The result survives Tether's own restart and is fetched over the new connection. */
+function jobFile(stateDir: string, id: string): string {
+  if (!/^[a-f0-9-]{36}$/.test(id)) throw new Error('Invalid update id')
+  return join(stateDir, 'updates', 'jobs', `${id}.json`)
+}
+export function updateResult(id: string, expectedHash: string, env = process.env): RunResult {
+  const settings = readSettings(env, '')
+  if (!settings || !/^[a-f0-9]{64}$/.test(expectedHash))
+    throw new Error('Invalid update result request')
+  const file = jobFile(settings.stateDir, id)
+  if (!existsSync(file)) return { code: null, stdout: '', output: 'Update is still running' }
+  const result = JSON.parse(readFileSync(file, 'utf8')) as RunResult & { releaseHash: string }
+  if (result.releaseHash !== expectedHash || !Number.isInteger(result.code))
+    throw new Error('Invalid update result')
+  const lib = env.TETHER_LIB_DIR || join(env.HOME || homedir(), '.local/lib/tether')
+  if (result.code === 0 && releaseHash(lib) !== expectedHash)
+    return {
+      code: 1,
+      stdout: UPDATE_INSTALLING,
+      output: 'Installed release does not match the signed update',
+    }
+  return { code: result.code, stdout: result.stdout, output: result.output }
+}
+export function receiveUpdate(
+  input: string,
+  target: { instance: string; socket: string; stateDir: string | null; id: string },
+  env = process.env,
+): RunResult {
+  if (!isInstanceName(target.instance) || !target.socket.startsWith('/'))
+    throw new Error('Invalid update target')
+  const settings = readSettings(env, '')
+  if (!settings) throw new Error('Fleet is not configured')
+  const keys = readUpdateKeys(settings.updatePins || DEFAULT_UPDATE_PINS)
+  const candidate = verifyRelease(input, keys)
+  const lib = env.TETHER_LIB_DIR || join(env.HOME || homedir(), '.local/lib/tether')
+  const installedFile = join(lib, SIGNED_RELEASE)
+  const installed = existsSync(installedFile)
+    ? verifyRelease(readFileSync(installedFile, 'utf8'), keys)
+    : undefined
+  if (!newerRelease(candidate, API_VERSION, releaseHash(lib), installed))
+    return { code: 0, stdout: 'Already installed', output: '' }
+  const resultFile = jobFile(settings.stateDir, target.id)
+  if (existsSync(resultFile)) return updateResult(target.id, candidate.releaseHash, env)
+  const stage = stageRelease(input, join(settings.stateDir, 'updates'), keys)
+  const archive = join(stage, 'release.tar')
+  if (
+    spawnSync('tar', ['-cf', archive, ...RELEASE_FILES, SIGNED_RELEASE], { cwd: stage }).status !==
+    0
+  )
+    throw new Error('Could not stage the signed release')
+  const script = join(stage, 'install.sh')
+  const log = join(stage, 'install.log')
+  writeFileSync(script, updateLine(target.instance, target.socket, undefined, target.stateDir), {
+    mode: 0o700,
+  })
+  mkdirSync(dirname(resultFile), { recursive: true, mode: 0o700 })
+  const report = [
+    `bash ${shellQuote(script)} < ${shellQuote(archive)} > ${shellQuote(log)} 2>&1`,
+    'code=$?',
+    `python3 - ${shellQuote(resultFile)} ${shellQuote(log)} "$code" ${shellQuote(candidate.releaseHash)} <<'PY'`,
+    'import json, os, shutil, sys',
+    'from pathlib import Path',
+    'path, log, code, digest = sys.argv[1:]',
+    'text = Path(log).read_text()',
+    `result = dict(code=int(code), releaseHash=digest, stdout=${JSON.stringify(UPDATE_INSTALLING)} if ${JSON.stringify(UPDATE_INSTALLING)} in text else "", output=text.strip().split("\\n")[-1][-300:])`,
+    'temporary = path + ".tmp"',
+    'fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)',
+    'with os.fdopen(fd, "w") as file: json.dump(result, file)',
+    'os.replace(temporary, path)',
+    'shutil.rmtree(Path(log).parent)',
+    'PY',
+    'exit "$code"',
+  ].join('\n')
+  const started = spawnSync(
+    'systemd-run',
+    [
+      '--user',
+      '--no-ask-password',
+      '--collect',
+      '--quiet',
+      '--property=Type=exec',
+      'bash',
+      '-c',
+      report,
+    ],
+    { encoding: 'utf8' },
+  )
+  if (started.status !== 0)
+    return { code: 1, stdout: '', output: 'Could not start the signed update' }
+  return { code: 0, stdout: 'Signed update accepted', output: '' }
+}
+
+/** Only a pinned full peer may send a signed payload matching its running bundle. */
 export async function pushRelease(
   release: string | null,
   target: UpdateTarget,
@@ -187,17 +286,22 @@ export async function pushRelease(
   if (!release) return fail('this Tether does not run from an installed release')
   if (!target.instance || !isInstanceName(target.instance))
     return fail('The host named no usable instance')
+  let installing = false
   try {
     const settings = readSettings(process.env, '')
+    const pins = settings ? readPins(settings.allowlist) : []
     if (
       !settings ||
-      readPins(settings.allowlist).find((pin) => pin.name === settings.machine)?.role !== 'full' ||
-      !readPins(settings.allowlist).some((pin) => pin.name === target.entry.name)
+      pins.find((pin) => pin.name === settings.machine)?.role !== 'full' ||
+      !pins.some((pin) => pin.name === target.entry.name)
     )
       return fail('Only a full peer may update an approved machine')
     const input = readFileSync(join(release, SIGNED_RELEASE), 'utf8')
-    verifyRelease(input, readUpdateKeys(settings.updatePins || DEFAULT_UPDATE_PINS))
-    return await requestExec(
+    const signed = verifyRelease(input, readUpdateKeys(settings.updatePins || DEFAULT_UPDATE_PINS))
+    if (signed.bundleHash !== bundleHash(release) || signed.releaseHash !== releaseHash(release))
+      return fail('Signed release is stale; nothing sent')
+    const id = randomUUID()
+    const start = await requestExec(
       target.control,
       [
         'sh',
@@ -207,10 +311,45 @@ export async function pushRelease(
         target.instance,
         target.entry.socket,
         target.entry.stateDir || '',
+        id,
       ],
       Buffer.from(input),
     )
+    if (start.code !== 0 && start.code !== 255) return start
+    if (start.stdout.includes('Already installed')) return start
+    installing = true
+    const deadline = Date.now() + UPDATE_RUN_MS
+    while (Date.now() < deadline) {
+      const answer = await requestExec(
+        target.control,
+        [
+          'sh',
+          '-c',
+          'exec "$HOME/.local/lib/tether/bin/tether" fleet update-result "$@"',
+          'aico-update',
+          id,
+          signed.releaseHash,
+        ],
+        Buffer.alloc(0),
+      )
+      if (answer.code === 0) {
+        const result = JSON.parse(answer.stdout) as RunResult
+        if (result.code !== null) return result
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
+    return {
+      code: 1,
+      stdout: UPDATE_INSTALLING,
+      output: 'The signed update did not report its result before the update deadline',
+    }
   } catch {
+    if (installing)
+      return {
+        code: 1,
+        stdout: UPDATE_INSTALLING,
+        output: 'Could not read the signed update result',
+      }
     return fail('No usable signed release; nothing sent')
   }
 }
