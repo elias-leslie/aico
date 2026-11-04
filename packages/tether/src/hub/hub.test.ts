@@ -70,6 +70,7 @@ class FakePeer {
   healthReady: Promise<void> | null = null
   readonly streams = new Set<ServerResponse>()
   roots: Record<string, unknown>[] = []
+  rootListHandler: ReturnType<typeof createRootHandler> | null = null
   /** Null: an older Tether with no asks or shares routes (404). */
   asks: Record<string, unknown>[] | null = []
   shares: Record<string, unknown>[] | null = []
@@ -172,8 +173,10 @@ class FakePeer {
       res.end('"status":"running"}')
       return
     }
-    if (url.startsWith('/v1/roots?') && req.method === 'GET')
+    if (url.startsWith('/v1/roots?') && req.method === 'GET') {
+      if (this.rootListHandler) return this.rootListHandler(req, res)
       return sendJson(res, 200, { owner: 'aico', roots: this.roots })
+    }
     if (url === '/v1/roots' && req.method === 'POST')
       return sendJson(res, 201, { requestId: 'req-1', widgetId: 'dddd0004' })
     const end = /^\/v1\/sessions\/([0-9a-f]{8})\/end$/.exec(url)
@@ -200,6 +203,7 @@ describe('hub', () => {
   let settings: Map<string, string>
   let rootHandler: ReturnType<typeof createRootHandler> | null
   const local = new Set<string>(['eeee0005'])
+  const localRoots = new Map<string, string>()
 
   function makeHub(overrides: Partial<HubDeps> = {}): Hub {
     return new Hub({
@@ -212,7 +216,8 @@ describe('hub', () => {
         put: (key, value) => settings.set(key, value),
       },
       isLocalSession: (id) => local.has(id),
-      isLocalRoot: () => false,
+      isLocalRoot: (id, logical) =>
+        localRoots.has(id) && (logical === undefined || localRoots.get(id) === logical),
       isLocalRun: () => false,
       isLocalAsk: (id) => id === 'cccccccccccc',
       leadName: (id) => (id === 'eeee0005' ? 'Aico — Remote hosts' : null),
@@ -262,6 +267,7 @@ describe('hub', () => {
     dir = mkdtempSync(join(tmpdir(), 'tether-hub-'))
     events = []
     settings = new Map()
+    localRoots.clear()
     rootHandler = null
     writeFileSync(
       join(dir, 'hosts.json'),
@@ -1810,6 +1816,63 @@ describe('hub', () => {
         reason: 'vm is not reachable and has no wake command',
       })
     })
+  })
+
+  it('stops repeat root federation hops when a peer routes back to the same handler', async () => {
+    initStore(join(dir, 'root-loop.db'))
+    let federations = 0
+    peer.rootListHandler = createRootHandler({
+      available: () => true,
+      validate: () => true,
+      ensure: async () => {},
+      mutate: async () => false,
+      status: async () => 'running',
+      remoteRoots: async (search) => {
+        federations += 1
+        // Fail fast on the old recursive path instead of waiting for its
+        // nested peer deadlines; the real socket/handler chain stays intact.
+        if (federations > 1) return []
+        return [
+          {
+            requestId: 'worker-root',
+            logicalSessionId: 'worker-logical',
+            hostIdentity: 'abcd0001',
+            host: 'worker',
+          },
+          ...(await hub.roots(search)),
+        ]
+      },
+    })
+    expect(await hub.roots('ended=0')).toEqual([
+      {
+        requestId: 'worker-root',
+        logicalSessionId: 'worker-logical',
+        hostIdentity: 'abcd0001',
+        host: 'vm',
+      },
+    ])
+    expect(federations).toBe(1)
+  })
+
+  it('drops reflected local roots and duplicate routes while keeping real indirect roots', async () => {
+    localRoots.set('root-local', 'logical-local')
+    peer.roots = [
+      { requestId: 'root-local', hostIdentity: 'eeee0005', logicalSessionId: 'logical-local' },
+      { requestId: 'root-local', hostIdentity: 'dddd0004', logicalSessionId: 'logical-other' },
+      { requestId: 'root-remote', hostIdentity: 'aaaa0001' },
+      { requestId: 'root-remote', hostIdentity: 'aaaa0001', host: 'another-route' },
+      { requestId: 'root-worker', hostIdentity: 'bbbb0002', host: 'worker' },
+    ]
+    expect(await hub.roots('ended=0')).toEqual([
+      {
+        requestId: 'root-local',
+        hostIdentity: 'dddd0004',
+        logicalSessionId: 'logical-other',
+        host: 'vm',
+      },
+      { requestId: 'root-remote', hostIdentity: 'aaaa0001', host: 'vm' },
+      { requestId: 'root-worker', hostIdentity: 'bbbb0002', host: 'vm' },
+    ])
   })
 
   it('lists the peer roots tagged with host, and keeps them while it is down', async () => {

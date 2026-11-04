@@ -665,6 +665,9 @@ export function createRootHandler(
   // A failed or disconnected request retains its reservation. Subsequent calls
   // reconcile that exact widget through Aico's existing launch gate.
   const pending = new Map<string, Promise<void>>()
+  // A peer may route back here (directly or through other workers). Carry
+  // visited handlers so real indirect roots remain visible without cycling.
+  const rootListHop = randomUUID()
   const serialize = async (key: string, action: () => Promise<void>) => {
     const prior = pending.get(key) ?? Promise.resolve()
     const next = prior.catch(() => {}).then(action)
@@ -961,13 +964,17 @@ export function createRootHandler(
           json(response, 400, { error: 'invalid_query' })
           return
         }
+        const remoteQuery = new URLSearchParams(query)
+        remoteQuery.append('via', rootListHop)
         const [local, remote] = await Promise.all([
           Promise.all(
             listRootRequests({ origin: origin ?? undefined, includeEnded: ended !== '0' }).map(
               describe,
             ),
           ),
-          operations.remoteRoots?.(query.toString()) ?? [],
+          query.getAll('via').includes(rootListHop)
+            ? []
+            : (operations.remoteRoots?.(remoteQuery.toString()) ?? []),
         ])
         json(response, 200, {
           owner: origin ?? 'aico',

@@ -56,7 +56,8 @@ export interface HubDeps {
   publish(type: EventType, data: Record<string, unknown>): void
   settings: { get(key: string): string | null; put(key: string, value: string): void }
   isLocalSession(id: string): boolean
-  isLocalRoot(requestId: string): boolean
+  /** With an identity, match only that exact root, not a same-named remote root. */
+  isLocalRoot(requestId: string, logicalSessionId?: string): boolean
   isLocalRun(runId: string): boolean
   isLocalAsk?(id: string): boolean
   /** The badge name of a local coordinator (`↳ <name>` on a remote lane), or null. */
@@ -509,7 +510,17 @@ export class Hub {
     const lists = await Promise.all(
       [...this.peers.values()].map((peer) => peer.listRoots(search, LIST_TIMEOUT_MS)),
     )
-    return lists.flat()
+    const seen = new Set<string>()
+    return lists.flat().filter((item) => {
+      const id = item.requestId
+      if (typeof id !== 'string') return true
+      const logical = item.logicalSessionId
+      if (typeof logical === 'string' && this.deps.isLocalRoot(id, logical)) return false
+      const identity = JSON.stringify([id, logical, item.hostIdentity])
+      if (seen.has(identity)) return false
+      seen.add(identity)
+      return true
+    })
   }
 
   private knownPeer(name: unknown): Peer {

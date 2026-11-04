@@ -459,7 +459,13 @@ export async function startDaemon(
           put: (key, value) => store.putSetting(key, value, Date.now()),
         },
         isLocalSession: (id) => getWidget(id) !== undefined,
-        isLocalRoot: (requestId) => getRootRequest(requestId) !== undefined,
+        isLocalRoot: (requestId, logicalSessionId) => {
+          const root = getRootRequest(requestId)
+          return (
+            root !== undefined &&
+            (logicalSessionId === undefined || root.logicalSessionId === logicalSessionId)
+          )
+        },
         isLocalRun: (runId) => runs.snapshot().items.some((item) => item.runId === runId),
         isLocalAsk: (id) => askStore.get(id) !== undefined,
         endedBy: (host, id, by) => context.lanes?.remoteEnd(host, id, by),
