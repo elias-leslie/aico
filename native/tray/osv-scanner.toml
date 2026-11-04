@@ -1,0 +1,2 @@
+# The desktop client uses the GTK4 bindings (gtk4-rs 0.11: glib 0.22, gtk 4.x), with gdk4-x11 and x11rb for the X11
+# window placement GTK4 no longer offers (anchor.rs, x11.rs). No advisories are ignored.

@@ -1,0 +1,20 @@
+[Unit]
+Description=Aico tray: problems, approvals and questions in the top bar; Approve signs with the security key
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Tray cards use absolute placement, which GTK's native Wayland backend ignores.
+# Xwayland retains that contract on both Wayland and Xorg desktops.
+Environment=GDK_BACKEND=x11
+# aico-web's loopback port; the tray reads GET /api/tray there.
+Environment=AICO_WEB_PORT=3002
+ExecStart=%h/.local/lib/aico/tray/current/aico-tray
+Restart=on-failure
+RestartSec=10s
+MemoryMax=96M
+Nice=5
+
+[Install]
+WantedBy=graphical-session.target

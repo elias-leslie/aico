@@ -40,7 +40,21 @@ const MIGRATIONS = [
      ask_id TEXT NOT NULL,
      raised_at INTEGER NOT NULL
    ) STRICT`,
+  // What the owner has read on the desktop: a notice marked read (or its ask), and the time of the
+  // last Mark all read. The tray counts only what is neither.
+  `CREATE TABLE notice_reads (
+     notice_id TEXT PRIMARY KEY,
+     read_at INTEGER NOT NULL,
+     via TEXT NOT NULL
+   ) STRICT;
+   CREATE TABLE marks (
+     name TEXT PRIMARY KEY,
+     at INTEGER NOT NULL
+   ) STRICT`,
 ]
+
+/** A read mark is kept this long: the tray looks back a week. */
+const READ_KEPT_MS = 30 * 86_400_000
 
 /** The notify DB file in a data directory. */
 export function notifyDbPath(dataDir: string): string {
@@ -103,11 +117,12 @@ export class NotifyStore {
   /**
    * Logs a notice and queues it for each phone in `devices` (none for a desktop-only notice).
    * A notice whose key the same source sent within its cooldown is a repeat: counted on the first
-   * one and never queued again, so a sender that retries until accepted sends once.
+   * one and never queued again, so a sender that retries until accepted sends once. An `ok` is
+   * never a repeat: a recovery is news, and it is what ends the earlier notice for the tray.
    */
   accept(notice: Notice, via: Via, devices: readonly string[], now: number): Accepted {
     return transaction(this.db, () => {
-      if (notice.key) {
+      if (notice.key && notice.severity !== 'ok') {
         const earlier = this.db
           .prepare(
             `SELECT id FROM notices WHERE source = ? AND key = ? AND received_at > ?
@@ -355,6 +370,51 @@ export class NotifyStore {
 
   dropRowAsk(rowId: string): void {
     this.db.prepare('DELETE FROM row_asks WHERE row_id = ?').run(rowId)
+  }
+
+  // -- Reads --------------------------------------------------------------------------
+
+  /** The owner read these (a notice id, or the id of an ask); the first read time stays. */
+  markRead(ids: readonly string[], via: string, now: number): void {
+    transaction(this.db, () => {
+      const insert = this.db.prepare(
+        'INSERT OR IGNORE INTO notice_reads (notice_id, read_at, via) VALUES (?, ?, ?)',
+      )
+      for (const id of new Set(ids)) insert.run(id, now, via)
+      this.db.prepare('DELETE FROM notice_reads WHERE read_at < ?').run(now - READ_KEPT_MS)
+    })
+  }
+
+  /** Mark all read: everything that came at or before `at` (epoch ms) is read. Never moves back. */
+  markAllRead(at: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO marks (name, at) VALUES ('read_all', ?)
+         ON CONFLICT (name) DO UPDATE SET at = MAX(at, excluded.at)`,
+      )
+      .run(at)
+  }
+
+  /** When each marked notice was read, and the last Mark all read (0: never). */
+  readMarks(): { readAllAt: number; reads: Map<string, number> } {
+    const all = this.db.prepare("SELECT at FROM marks WHERE name = 'read_all'").get() as
+      | { at: number }
+      | undefined
+    const rows = this.db
+      .prepare('SELECT notice_id, read_at FROM notice_reads')
+      .all() as unknown as { notice_id: string; read_at: number }[]
+    return {
+      readAllAt: Number(all?.at ?? 0),
+      reads: new Map(rows.map((row) => [row.notice_id, Number(row.read_at)])),
+    }
+  }
+
+  /** The Tether asks that stand for failing Status rows (they show as those rows, not as questions). */
+  rowAskIds(): Set<string> {
+    const rows = this.db.prepare('SELECT ask_id FROM row_asks').all() as unknown as {
+      ask_id: string
+    }[]
+    return new Set(rows.map((row) => row.ask_id))
   }
 
   close(): void {

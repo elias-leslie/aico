@@ -61,3 +61,6 @@ AGENT_AUDIT.md
 /.bash_history
 /aico-uploads/
 /logs/
+
+# Rust (native/tray)
+native/tray/target/

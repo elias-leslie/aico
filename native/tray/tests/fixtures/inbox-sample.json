@@ -1,0 +1,583 @@
+{
+ "approvals": [
+  {
+   "actions": [
+    {
+     "approve": {
+      "kind": "elevate",
+      "request": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+     },
+     "hint": "Opens the approval card: approve or deny there; your security key confirms either.",
+     "id": "approve",
+     "label": "Approve",
+     "primary": true,
+     "tier": "key"
+    },
+    {
+     "hint": "Where this item lives.",
+     "id": "open",
+     "label": "Open",
+     "primary": false,
+     "tier": "view",
+     "url": "https://approve.example.org/e/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }
+   ],
+   "body": "Approve with your security key within 15 min or deny.",
+   "id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+   "kind": "elevate",
+   "left": 780.0,
+   "left_text": "13 min left",
+   "notice": "3e331322cf01",
+   "open": "https://approve.example.org/e/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+   "title": "Open GitHub admin for 30 min?"
+  }
+ ],
+ "at": 1800000000.0,
+ "counts": {
+  "approvals": 1,
+  "board": 3,
+  "ended_today": 0,
+  "needs": 2,
+  "open": 1,
+  "questions": 0,
+  "reports": 1,
+  "unread": 4
+ },
+ "elsewhere": "All notifications on the website",
+ "health": "Health unknown: no current data for this machine",
+ "links": {
+  "dashboard": "https://nightshift.example.org/",
+  "needs_you": "https://nightshift.example.org/#needs-you",
+  "notices": "https://nightshift.example.org/n"
+ },
+ "more": 0,
+ "needs": [
+  {
+   "actions": [
+    {
+     "answer": {
+      "key": "workstation:auth:auth.config",
+      "since": "2026-10-30T19:07:42.924876+00:00",
+      "title": "Workstation: Auth config changed"
+     },
+     "hint": "That was me, or it's normal. Nightshift learns from it.",
+     "id": "expected",
+     "label": "Expected",
+     "primary": true,
+     "tier": "plain"
+    },
+    {
+     "answer": {
+      "key": "workstation:auth:auth.config",
+      "since": "2026-10-30T19:07:42.924876+00:00",
+      "title": "Workstation: Auth config changed"
+     },
+     "hint": "Not me, or not normal. It stays open and an agent looks into it at once.",
+     "id": "not-expected",
+     "label": "Not expected",
+     "primary": false,
+     "tier": "plain"
+    },
+    {
+     "hint": "No more pushes about this for 12 hours.",
+     "id": "mute",
+     "label": "Mute repeats 12 h",
+     "mute": {
+      "key": "workstation:auth:auth.config",
+      "until": null,
+      "what": "No more pushes about \"Workstation: Auth config changed\" for 12 hours."
+     },
+     "primary": false,
+     "tier": "plain"
+    },
+    {
+     "hint": "An agent investigates, fixes what it can and says whether this should have reached you at all.",
+     "id": "look-into",
+     "item": "workstation:auth:auth.config",
+     "label": "Look into it",
+     "primary": false,
+     "tier": "plain"
+    },
+    {
+     "hint": "Where this item lives.",
+     "id": "open",
+     "label": "Open",
+     "primary": false,
+     "tier": "view",
+     "url": "https://nightshift.example.org/n/1f390239f2dc"
+    },
+    {
+     "hint": "Clears it from new. Changes nothing else.",
+     "id": "mark-read",
+     "ids": [
+      "1f390239f2dc"
+     ],
+     "label": "Mark read",
+     "primary": false,
+     "tier": "view"
+    }
+   ],
+   "age": 18000.000202178955,
+   "age_text": "5h",
+   "answered": "",
+   "card": {
+    "actions": [
+     {
+      "answer": {
+       "key": "workstation:auth:auth.config",
+       "since": "2026-10-30T19:07:42.924876+00:00",
+       "title": "Workstation: Auth config changed"
+      },
+      "hint": "That was me, or it's normal. Nightshift learns from it.",
+      "id": "expected",
+      "label": "Expected",
+      "primary": true,
+      "tier": "plain"
+     },
+     {
+      "answer": {
+       "key": "workstation:auth:auth.config",
+       "since": "2026-10-30T19:07:42.924876+00:00",
+       "title": "Workstation: Auth config changed"
+      },
+      "hint": "Not me, or not normal. It stays open and an agent looks into it at once.",
+      "id": "not-expected",
+      "label": "Not expected",
+      "primary": false,
+      "tier": "plain"
+     },
+     {
+      "hint": "No more pushes about this for 12 hours.",
+      "id": "mute",
+      "label": "Mute repeats 12 h",
+      "mute": {
+       "key": "workstation:auth:auth.config",
+       "until": null,
+       "what": "No more pushes about \"Workstation: Auth config changed\" for 12 hours."
+      },
+      "primary": false,
+      "tier": "plain"
+     },
+     {
+      "hint": "An agent investigates, fixes what it can and says whether this should have reached you at all.",
+      "id": "look-into",
+      "item": "1f390239f2dc",
+      "label": "Look into it",
+      "primary": false,
+      "tier": "plain"
+     },
+     {
+      "hint": "Where this item lives.",
+      "id": "open",
+      "label": "Open",
+      "primary": false,
+      "tier": "view",
+      "url": "https://nightshift.example.org/n/1f390239f2dc"
+     },
+     {
+      "hint": "Clears it from new. Changes nothing else.",
+      "id": "mark-read",
+      "ids": [
+       "1f390239f2dc"
+      ],
+      "label": "Mark read",
+      "primary": false,
+      "tier": "view"
+     }
+    ],
+    "answer": {
+     "key": "workstation:auth:auth.config",
+     "since": "2026-10-30T19:07:42.924876+00:00",
+     "title": "Workstation: Auth config changed"
+    },
+    "answered": null,
+    "approve": null,
+    "body": "Auth config changed: /etc/pam.d/sshd added.",
+    "commands": [],
+    "current": [],
+    "delivery": "delivered to 2 of 2 devices",
+    "details": [],
+    "fields": [],
+    "id": "1f390239f2dc",
+    "kind": "Finding",
+    "links": [],
+    "lookinto": null,
+    "mute": {
+     "key": "workstation:auth:auth.config",
+     "until": null
+    },
+    "now": {
+     "cls": "attention",
+     "label": "Needs your answer",
+     "rest": "Open for 5h. Owner decision: this is on the owner-only list, so Nightshift will not change it.",
+     "todo": "Check it now."
+    },
+    "postboot": null,
+    "sent_as": "warning",
+    "severity": "warning",
+    "snapshot": "fresh",
+    "source": "",
+    "title": "Workstation: Auth config changed",
+    "ts": 1799996400.0,
+    "who": "you"
+   },
+   "host": "workstation",
+   "key": "workstation:auth:auth.config",
+   "kind": "owner",
+   "lookinto": null,
+   "notice": "1f390239f2dc",
+   "open": "https://nightshift.example.org/n/1f390239f2dc",
+   "severity": "warning",
+   "text": [
+    "Owner decision: this is on the owner-only list, so Nightshift will not change it."
+   ],
+   "title": "Auth config changed: /etc/pam.d/sshd added",
+   "unread": [
+    "1f390239f2dc"
+   ]
+  },
+  {
+   "actions": [
+    {
+     "hint": "An agent investigates, fixes what it can and says whether this should have reached you at all.",
+     "id": "look-into",
+     "item": "hypervisor:disk:disk.free",
+     "label": "Look into it",
+     "primary": true,
+     "tier": "plain"
+    },
+    {
+     "hint": "Where this item lives.",
+     "id": "open",
+     "label": "Open",
+     "primary": false,
+     "tier": "view",
+     "url": "https://nightshift.example.org/n/2743f7e191f5"
+    },
+    {
+     "hint": "Clears it from new. Changes nothing else.",
+     "id": "mark-read",
+     "ids": [
+      "2743f7e191f5"
+     ],
+     "label": "Mark read",
+     "primary": false,
+     "tier": "view"
+    }
+   ],
+   "age": 18000.000196695328,
+   "age_text": "5h",
+   "answered": "",
+   "card": {
+    "actions": [
+     {
+      "hint": "An agent investigates, fixes what it can and says whether this should have reached you at all.",
+      "id": "look-into",
+      "item": "2743f7e191f5",
+      "label": "Look into it",
+      "primary": true,
+      "tier": "plain"
+     },
+     {
+      "hint": "Where this item lives.",
+      "id": "open",
+      "label": "Open",
+      "primary": false,
+      "tier": "view",
+      "url": "https://nightshift.example.org/n/2743f7e191f5"
+     },
+     {
+      "hint": "Clears it from new. Changes nothing else.",
+      "id": "mark-read",
+      "ids": [
+       "2743f7e191f5"
+      ],
+      "label": "Mark read",
+      "primary": false,
+      "tier": "view"
+     }
+    ],
+    "answer": null,
+    "answered": null,
+    "approve": null,
+    "body": "Disk 97% full on /var.",
+    "commands": [],
+    "current": [],
+    "delivery": "delivered to 2 of 2 devices",
+    "details": [],
+    "fields": [],
+    "id": "2743f7e191f5",
+    "kind": "Critical finding",
+    "links": [],
+    "lookinto": null,
+    "mute": null,
+    "now": {
+     "cls": "critical",
+     "label": "Still open",
+     "rest": "Open for 5h. No automatic fix; you get a push if it stays. Steward reviews it on the next run.",
+     "todo": ""
+    },
+    "postboot": null,
+    "sent_as": "critical",
+    "severity": "critical",
+    "snapshot": "fresh",
+    "source": "",
+    "title": "Hypervisor: Disk 97% full",
+    "ts": 1799998200.0,
+    "who": "agent"
+   },
+   "host": "hypervisor",
+   "key": "hypervisor:disk:disk.free",
+   "kind": "critical",
+   "lookinto": null,
+   "notice": "2743f7e191f5",
+   "open": "https://nightshift.example.org/n/2743f7e191f5",
+   "severity": "critical",
+   "text": [
+    "No automatic fix."
+   ],
+   "title": "Disk 97% full on /var",
+   "unread": [
+    "2743f7e191f5"
+   ]
+  }
+ ],
+ "notifications": [
+  {
+   "actions": [
+    {
+     "hint": "An agent investigates, fixes what it can and says whether this should have reached you at all.",
+     "id": "look-into",
+     "item": "74995ad5bedc",
+     "label": "Look into it",
+     "primary": true,
+     "tier": "plain"
+    },
+    {
+     "hint": "No more pushes about this for 12 hours.",
+     "id": "mute",
+     "label": "Mute repeats 12 h",
+     "mute": {
+      "key": "manual:77",
+      "until": null,
+      "what": "No more pushes about \"Browser VM is down\" for 12 hours."
+     },
+     "primary": false,
+     "tier": "plain"
+    },
+    {
+     "hint": "Where this item lives.",
+     "id": "open",
+     "label": "Open",
+     "primary": false,
+     "tier": "view",
+     "url": "https://nightshift.example.org/n/74995ad5bedc"
+    },
+    {
+     "hint": "Clears it from new. Changes nothing else.",
+     "id": "mark-read",
+     "ids": [
+      "74995ad5bedc"
+     ],
+     "label": "Mark read",
+     "primary": false,
+     "tier": "view"
+    }
+   ],
+   "ask": null,
+   "asked": "",
+   "body": "The browser VM has not answered for 10 minutes. Check it with st vm status 100.",
+   "card": {
+    "actions": [
+     {
+      "hint": "An agent investigates, fixes what it can and says whether this should have reached you at all.",
+      "id": "look-into",
+      "item": "74995ad5bedc",
+      "label": "Look into it",
+      "primary": true,
+      "tier": "plain"
+     },
+     {
+      "hint": "No more pushes about this for 12 hours.",
+      "id": "mute",
+      "label": "Mute repeats 12 h",
+      "mute": {
+       "key": "manual:77",
+       "until": null,
+       "what": "No more pushes about \"Browser VM is down\" for 12 hours."
+      },
+      "primary": false,
+      "tier": "plain"
+     },
+     {
+      "hint": "Where this item lives.",
+      "id": "open",
+      "label": "Open",
+      "primary": false,
+      "tier": "view",
+      "url": "https://nightshift.example.org/n/74995ad5bedc"
+     },
+     {
+      "hint": "Clears it from new. Changes nothing else.",
+      "id": "mark-read",
+      "ids": [
+       "74995ad5bedc"
+      ],
+      "label": "Mark read",
+      "primary": false,
+      "tier": "view"
+     }
+    ],
+    "answer": null,
+    "answered": null,
+    "approve": null,
+    "body": "The browser VM has not answered for 10 minutes. Check it with st vm status 100.",
+    "commands": [
+     "st vm status 100"
+    ],
+    "current": [],
+    "delivery": "delivered to 2 of 2 devices",
+    "details": [],
+    "fields": [],
+    "id": "74995ad5bedc",
+    "kind": "From an agent or script",
+    "links": [],
+    "lookinto": null,
+    "mute": {
+     "key": "manual:77",
+     "until": null
+    },
+    "now": {
+     "cls": "unknown",
+     "label": "No update",
+     "rest": "Nothing newer about this has come in, so whether it is still going on is not known.",
+     "todo": ""
+    },
+    "postboot": null,
+    "sent_as": "warning",
+    "severity": "warning",
+    "snapshot": "fresh",
+    "source": "",
+    "title": "Browser VM is down",
+    "ts": 1799999400.0,
+    "who": ""
+   },
+   "id": "74995ad5bedc",
+   "kind": "manual",
+   "lookinto": null,
+   "open": "https://nightshift.example.org/n/74995ad5bedc",
+   "pills": [
+    {
+     "cls": "",
+     "label": "No update"
+    }
+   ],
+   "pushes": 1,
+   "severity": "warning",
+   "title": "Browser VM is down",
+   "ts": 1799999400.0,
+   "unread": [
+    "74995ad5bedc"
+   ]
+  },
+  {
+   "actions": [
+    {
+     "hint": "Where this item lives.",
+     "id": "open",
+     "label": "Open",
+     "primary": true,
+     "tier": "view",
+     "url": "https://nightshift.example.org/n/ef655b86aea2"
+    },
+    {
+     "hint": "Clears it from new. Changes nothing else.",
+     "id": "mark-read",
+     "ids": [
+      "40e64e4e8387",
+      "ef655b86aea2"
+     ],
+     "label": "Mark read",
+     "primary": false,
+     "tier": "view"
+    }
+   ],
+   "ask": null,
+   "asked": "",
+   "body": "The nightly backup failed.",
+   "card": {
+    "actions": [
+     {
+      "hint": "Where this item lives.",
+      "id": "open",
+      "label": "Open",
+      "primary": true,
+      "tier": "view",
+      "url": "https://nightshift.example.org/n/ef655b86aea2"
+     },
+     {
+      "hint": "Clears it from new. Changes nothing else.",
+      "id": "mark-read",
+      "ids": [
+       "ef655b86aea2",
+       "40e64e4e8387"
+      ],
+      "label": "Mark read",
+      "primary": false,
+      "tier": "view"
+     }
+    ],
+    "answer": null,
+    "answered": null,
+    "approve": null,
+    "body": "The nightly backup failed.",
+    "commands": [],
+    "current": [],
+    "delivery": "delivered to 2 of 2 devices",
+    "details": [],
+    "fields": [],
+    "id": "ef655b86aea2",
+    "kind": "Finding",
+    "links": [],
+    "lookinto": null,
+    "mute": null,
+    "now": {
+     "cls": "ok",
+     "label": "Resolved",
+     "rest": "The checks no longer report it. Nothing for you to do.",
+     "todo": ""
+    },
+    "postboot": null,
+    "sent_as": "warning",
+    "severity": "ok",
+    "snapshot": "fresh",
+    "source": "",
+    "title": "Backup failed",
+    "ts": 1799992800.0,
+    "who": ""
+   },
+   "id": "ef655b86aea2",
+   "kind": "finding",
+   "lookinto": null,
+   "open": "https://nightshift.example.org/n/ef655b86aea2",
+   "pills": [
+    {
+     "cls": "ok",
+     "label": "Resolved"
+    }
+   ],
+   "pushes": 1,
+   "severity": "ok",
+   "title": "Backup failed",
+   "ts": 1799999900.0,
+   "unread": [
+    "40e64e4e8387",
+    "ef655b86aea2"
+   ]
+  }
+ ],
+ "questions": [],
+ "questions_unknown": null,
+ "snapshot": "fresh",
+ "version": 1
+}

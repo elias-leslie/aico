@@ -1,0 +1,322 @@
+{
+ "version": 1,
+ "at": 1793793600,
+ "snapshot": "fresh",
+ "health": "2 problems: Trends failed, Sudo use warning",
+ "needs": [
+  {
+   "key": "here/trends",
+   "kind": "problem",
+   "severity": "critical",
+   "title": "Trends failed",
+   "text": [
+    "Trends says failed."
+   ],
+   "host": "here",
+   "age": null,
+   "age_text": "",
+   "notice": null,
+   "unread": [],
+   "open": "https://aico.example.dev/status",
+   "card": null,
+   "lookinto": null,
+   "actions": [
+    {
+     "id": "open",
+     "label": "Open Status",
+     "tier": "view",
+     "hint": "The Status page, where it can be run or looked into.",
+     "primary": true,
+     "url": "https://aico.example.dev/status"
+    }
+   ],
+   "answered": ""
+  },
+  {
+   "key": "here/sudo",
+   "kind": "problem",
+   "severity": "warning",
+   "title": "Sudo use warning",
+   "text": [
+    "Sudo use says warn."
+   ],
+   "host": "here",
+   "age": null,
+   "age_text": "",
+   "notice": null,
+   "unread": [],
+   "open": "https://aico.example.dev/status",
+   "card": null,
+   "lookinto": null,
+   "actions": [
+    {
+     "id": "open",
+     "label": "Open Status",
+     "tier": "view",
+     "hint": "The Status page, where it can be run or looked into.",
+     "primary": true,
+     "url": "https://aico.example.dev/status"
+    }
+   ],
+   "answered": ""
+  }
+ ],
+ "approvals": [
+  {
+   "id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+   "kind": "elevate",
+   "title": "Open GitHub admin for 30 min?",
+   "body": "Approve with your security key within 13 min or deny.",
+   "left": 780,
+   "left_text": "13 min left",
+   "open": "https://approve.example/e/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+   "notice": null,
+   "actions": [
+    {
+     "id": "approve",
+     "label": "Approve",
+     "tier": "key",
+     "hint": "Opens the approval card: approve or deny there; your security key confirms either.",
+     "primary": true,
+     "approve": {
+      "request": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "kind": "elevate"
+     }
+    },
+    {
+     "id": "open",
+     "label": "Open",
+     "tier": "view",
+     "hint": "Where this item lives.",
+     "primary": false,
+     "url": "https://approve.example/e/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }
+   ]
+  }
+ ],
+ "questions": [
+  {
+   "id": "cccccccccccc",
+   "key": "ask:cccccccccccc",
+   "source": "aico",
+   "kind": "question",
+   "severity": "warning",
+   "title": "Ship it?",
+   "text": [],
+   "age": 60,
+   "age_text": "1m",
+   "open": "https://aico.example.dev/?ask=cccccccccccc",
+   "unread": [],
+   "test": false,
+   "actions": [
+    {
+     "id": "open",
+     "label": "Open in Aico",
+     "tier": "view",
+     "hint": "The question in Aico, where you can also answer in your own words.",
+     "primary": false,
+     "url": "https://aico.example.dev/?ask=cccccccccccc"
+    }
+   ],
+   "question": "Ship it?",
+   "options": [
+    "Yes",
+    "No"
+   ],
+   "recommended": 0,
+   "body": null,
+   "command": null,
+   "requester": "builder",
+   "session": null,
+   "blocking": true,
+   "state": "open",
+   "answer": null,
+   "note": null,
+   "createdAt": 1793793540000,
+   "answeredAt": null
+  }
+ ],
+ "questions_unknown": null,
+ "notifications": [
+  {
+   "id": "a00000000001",
+   "kind": "manual",
+   "severity": "critical",
+   "title": "Disk full",
+   "body": "The root disk is full.",
+   "pills": [],
+   "asked": "",
+   "pushes": 1,
+   "ts": 1793793000,
+   "unread": [
+    "a00000000001"
+   ],
+   "open": "",
+   "ask": null,
+   "card": {
+    "id": "a00000000001",
+    "title": "Disk full",
+    "body": "The root disk is full.",
+    "kind": "From agent",
+    "ts": 1793793000,
+    "delivery": "",
+    "now": null,
+    "current": [],
+    "who": "",
+    "snapshot": "",
+    "details": [],
+    "commands": [],
+    "links": [],
+    "actions": [
+     {
+      "id": "mark-read",
+      "label": "Mark read",
+      "tier": "view",
+      "hint": "Clears it from new. Changes nothing else.",
+      "primary": false,
+      "ids": [
+       "a00000000001"
+      ]
+     }
+    ]
+   },
+   "lookinto": null,
+   "actions": [
+    {
+     "id": "mark-read",
+     "label": "Mark read",
+     "tier": "view",
+     "hint": "Clears it from new. Changes nothing else.",
+     "primary": false,
+     "ids": [
+      "a00000000001"
+     ]
+    }
+   ]
+  }
+ ],
+ "more": 0,
+ "counts": {
+  "needs": 2,
+  "approvals": 1,
+  "board": 3,
+  "questions": 1,
+  "unread": 1,
+  "open": 0,
+  "reports": 1,
+  "ended_today": 0
+ },
+ "elsewhere": "Open the Status page",
+ "links": {
+  "dashboard": "https://aico.example.dev/status",
+  "needs_you": "https://aico.example.dev/status",
+  "notices": "https://aico.example.dev/status"
+ },
+ "summary": {
+  "needs_you": 2,
+  "snapshot": "fresh",
+  "health": "2 problems: Trends failed, Sudo use warning",
+  "grant_labels": {
+   "github-admin": "GitHub admin",
+   "owner-chrome": "your main Chrome",
+   "owner-email": "your email inbox"
+  },
+  "unread_rows": [
+   [
+    "a00000000001"
+   ]
+  ]
+ },
+ "read_marks": {
+  "read_all_at": 0,
+  "pushes": [
+   {
+    "id": "a00000000002",
+    "ts": 1793792700,
+    "read_at": null,
+    "over_at": 1793793300,
+    "push": {
+     "id": "a00000000002",
+     "ts": 1793792700,
+     "kind": "manual",
+     "severity": "warning",
+     "title": "VPN down",
+     "body": "x",
+     "key": "vpn:down",
+     "result": "sent",
+     "refs": {}
+    }
+   },
+   {
+    "id": "a00000000001",
+    "ts": 1793793000,
+    "read_at": null,
+    "over_at": null,
+    "push": {
+     "id": "a00000000001",
+     "ts": 1793793000,
+     "kind": "manual",
+     "severity": "critical",
+     "title": "Disk full",
+     "body": "The root disk is full.",
+     "key": "",
+     "result": "sent",
+     "refs": {}
+    }
+   },
+   {
+    "id": "a00000000000",
+    "ts": 1793793300,
+    "read_at": null,
+    "over_at": null,
+    "push": {
+     "id": "a00000000000",
+     "ts": 1793793300,
+     "kind": "manual",
+     "severity": "ok",
+     "title": "VPN back",
+     "body": "x",
+     "key": "vpn:down",
+     "result": "sent",
+     "refs": {}
+    }
+   },
+   {
+    "id": "cccccccccccc",
+    "ts": 1793793540,
+    "read_at": null,
+    "over_at": null,
+    "push": {
+     "id": "cccccccccccc",
+     "ts": 1793793540,
+     "kind": "manual",
+     "severity": "warning",
+     "title": "An agent is waiting on you",
+     "body": "builder has a question for you. Open Aico to answer it.",
+     "key": "ask:cccccccccccc",
+     "result": "sent",
+     "refs": {
+      "open": "https://aico.example.dev/?ask=cccccccccccc"
+     }
+    }
+   },
+   {
+    "id": "eeeeeeeeeeee",
+    "ts": 1793793600,
+    "read_at": null,
+    "over_at": null,
+    "push": {
+     "id": "eeeeeeeeeeee",
+     "ts": 1793793600,
+     "kind": "approve",
+     "severity": "warning",
+     "title": "Open GitHub admin for 30 min?",
+     "body": "",
+     "key": "approve:elevate:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+     "result": "sent",
+     "refs": {}
+    }
+   }
+  ]
+ }
+}

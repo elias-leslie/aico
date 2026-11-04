@@ -1,0 +1,7 @@
+{
+  "uuid": "nightshift-tray@summitflow.dev",
+  "name": "Aico tray",
+  "description": "Aico in the top bar: a click drops the Aico inbox from it. The inbox itself is the Aico tray app (dev.summitflow.NightshiftTray).",
+  "shell-version": ["50"],
+  "version": 1
+}

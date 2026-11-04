@@ -1,0 +1,30 @@
+[package]
+name = "aico-tray"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Aico tray: the problem count and panel in the top bar, native approvals with the security key, no browser"
+
+[[bin]]
+name = "aico-tray"
+path = "src/main.rs"
+
+[dependencies]
+aes-gcm = "0.11"
+async-channel = "2"
+gdk4-x11 = "0.11"
+glib-unix = "0.22"
+gtk = { package = "gtk4", version = "0.11" }
+hkdf = "0.13"
+libc = "0.2"
+libloading = "0.8"
+p256 = { version = "0.14", default-features = false, features = ["arithmetic", "ecdh", "std"] }
+serde_json = "1"
+sha2 = "0.11"
+x11rb = "0.14"
+zeroize = "1"
+
+[profile.release]
+opt-level = "s"
+panic = "abort"
+strip = true
