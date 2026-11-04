@@ -1,0 +1,203 @@
+{
+  "reasons": {
+    "publication": "Use the canonical ST publication workflow.",
+    "hook_disable": "Publication hooks must remain enabled.",
+    "evaluation_error": "Publication guard could not evaluate tool input; execution refused."
+  },
+  "payload": {
+    "connector_mutations": [
+      "merge_pull_request", "create_release", "update_release", "delete_release", "push_files",
+      "create_or_update_file", "create_repository"
+    ],
+    "shell_tools": ["bash", "exec_command", "shell"]
+  },
+  "shell": {
+    "executables": ["bash", "ksh", "sh", "zsh"],
+    "keywords": ["!", "do", "elif", "else", "if", "then", "time", "until", "while"],
+    "xargs_value_options": [
+      "--arg-file", "--delimiter", "--max-args", "--max-chars", "--max-lines", "--max-procs",
+      "--process-slot-var", "-E", "-I", "-L", "-P", "-a", "-d", "-n", "-s"
+    ],
+    "command_wrappers": ["builtin", "command", "nohup"],
+    "option_wrappers": ["nice", "stdbuf", "timeout"],
+    "env_value_options": ["--argv0", "--chdir", "--split-string", "--unset", "-C", "-S", "-u"],
+    "sudo_value_options": [
+      "--chdir", "--chroot", "--close-from", "--command-timeout", "--group", "--host", "--prompt",
+      "--user", "-C", "-D", "-R", "-T", "-g", "-h", "-p", "-u"
+    ],
+    "uv_value_options": [
+      "--allow-insecure-host", "--build-constraints", "--cache-dir", "--color", "--config-file",
+      "--config-setting", "--config-settings-package", "--constraints", "--default-index",
+      "--directory", "--env-file", "--exclude-newer", "--exclude-newer-package", "--extra",
+      "--extra-index-url", "--find-links", "--fork-strategy", "--from", "--group", "--index",
+      "--index-strategy", "--index-url", "--keyring-provider", "--link-mode", "--no-binary-package",
+      "--no-build-isolation-package", "--no-build-package", "--no-extra", "--no-group",
+      "--no-sources-package", "--only-group", "--overrides", "--package", "--prerelease",
+      "--project", "--python", "--python-platform", "--refresh-package", "--reinstall-package",
+      "--resolution", "--torch-backend", "--upgrade-group", "--upgrade-package", "--with",
+      "--with-editable", "--with-requirements", "-C", "-P", "-b", "-c", "-f", "-i", "-p", "-w"
+    ],
+    "nested_inert_words": ["eval", "source", "."]
+  },
+  "publication": {
+    "read_only": ["cat", "echo", "grep", "head", "less", "printf", "rg", "tail"],
+    "disable_pattern": "(?i)(?:--no-verify|--dangerously-bypass-hook-trust|--disable-hooks)\\b|(?:SF_COMMAND_GUARD_DISABLE|GIT_ALLOW_SECRET|SECRETGUARD_DISABLE)\\s*=\\s*[\"']?1|(?:core\\.hookspath|hooks\\.enabled)\\s*=|(?:--disable\\s+hooks|features\\.hooks\\s*=\\s*false)\\b|(?:git\\s+config\\b[^\\n]*(?:--unset|--remove-section)[^\\n]*(?:core\\.hooks|hooks))",
+    "hook_config_key": "core.hookspath",
+    "config_read_flags": ["--get", "--get-all", "--get-regexp"],
+    "git_global_options_with_value": ["-C", "-c", "--git-dir", "--work-tree", "--config-env", "--namespace", "--exec-path"],
+    "git_publish_subcommands": ["push", "send-pack"],
+    "gh_release_actions": ["create", "edit", "delete", "upload"],
+    "gh_repo_actions": ["create", "delete", "archive", "unarchive", "rename"],
+    "gh_visibility_flag": "--visibility",
+    "gh_field_short": ["-f", "-F"],
+    "gh_field_long": ["--field", "--raw-field", "--input"],
+    "http_clients": ["curl", "http", "https", "wget", "xh", "xhs"],
+    "http_body_short": ["-d", "-F", "-T"],
+    "http_body_long": [
+      "--data", "--data-raw", "--data-binary", "--data-urlencode", "--json", "--form",
+      "--upload-file", "--post-data", "--post-file", "--body-data", "--body-file"
+    ],
+    "mutating_verbs": ["DELETE", "PATCH", "POST", "PUT"],
+    "mutating_method_pattern": "(?i)(?:-X(?:=|\\s*)|--(?:method|request)(?:=|\\s+))[\"']?(?:POST|PUT|PATCH|DELETE)\\b",
+    "github_api_pattern": "\\b(?:api|uploads)\\.github\\.com\\b",
+    "endpoint_patterns": [
+      "/(?:git/(?:refs|commits|trees|blobs)|contents|releases|pulls/[^\\s]+/merge)\\b",
+      "/(?:branches/[^\\s]+/protection|rulesets|(?:[^\\s]+/)?archive)\\b",
+      "\\b(?:archived|visibility|public)\\s*="
+    ],
+    "graphql_words": ["mutation", "graphql"]
+  },
+  "heredoc": {
+    "operator_pattern": "<<(-?)[ \\t]*(?:'([^'\\n]+)'|\\\"([^\\\"\\n]+)\\\"|\\\\?([A-Za-z_][\\p{L}\\p{N}_.\\-]*))",
+    "consumer_boundary_pattern": "\\$\\(|`|\\(|;|&&|\\|\\||\\|",
+    "pipeline_boundary_pattern": ";|&&|\\|\\|",
+    "prefix_boundary_pattern": ";|&&|\\|\\||\\||\\$\\(|`|\\(",
+    "substitution_pattern": "\\$\\(([^()]*)\\)|`([^`]*)`",
+    "data_sinks": ["cat", "tee"]
+  },
+  "git": {
+    "global_options_with_value": [
+      "--config-env", "--exec-path", "--git-dir", "--namespace", "--super-prefix", "--work-tree",
+      "-c"
+    ],
+    "disposable_roots": ["/tmp", "/var/tmp", "/dev/shm", "/srv/scratch"],
+    "shared_main_branches": ["main", "master", "origin/main", "origin/master"],
+    "shared_main_suffixes": [":main", ":master"],
+    "broad_pathspecs": ["*", ".", "./", ":(top)", ":/", ":/*"],
+    "stash_read_or_apply": ["apply", "branch", "create", "list", "pop", "show", "store"],
+    "stash_drop_actions": ["drop", "clear"]
+  },
+  "paths": {
+    "mounted_storage_roots": ["/mnt", "/media"],
+    "proxmox_data_roots": ["/var/lib/vz", "/etc/pve"],
+    "protected_parents": ["/home", "/srv", "/srv/workspaces/projects"],
+    "protected_exact": ["/srv/workspaces/projects"],
+    "remote_cwd": "/root",
+    "snapshot_store": "/mnt/summitflow-native",
+    "snapshot_dir_names": [".btrbk", ".snapshots"],
+    "snapshot_name_parts": ["snap", "btrbk"]
+  },
+  "disk": {
+    "harmless_devices": [
+      "/dev/full", "/dev/null", "/dev/random", "/dev/stderr", "/dev/stdin", "/dev/stdout",
+      "/dev/tty", "/dev/urandom", "/dev/zero"
+    ],
+    "harmless_device_prefixes": ["/dev/fd/", "/dev/shm/", "/dev/pts/", "/dev/loop"],
+    "formatters": ["mkdosfs", "mke2fs", "mkexfatfs", "mkntfs", "mkswap"],
+    "format_prefix": "mkfs",
+    "discarders": ["blkdiscard"],
+    "parted_writes": [
+      "cp", "disk_set", "disk_toggle", "mkfs", "mklabel", "mkpart", "mkpartfs", "mktable", "move",
+      "name", "rescue", "resize", "resizepart", "rm", "set", "toggle", "type"
+    ],
+    "sgdisk_read_only": [
+      "--backup", "--help", "--info", "--list-types", "--pretend", "--print", "--print-mbr",
+      "--set-alignment", "--verify", "--version", "-?", "-L", "-O", "-P", "-V", "-a", "-b", "-i",
+      "-p", "-v"
+    ],
+    "partitioner_read_only": {
+      "fdisk": ["--list", "--list-details", "-l", "-x"],
+      "sfdisk": [
+        "--dump", "--json", "--list", "--list-free", "--no-act", "--show-geometry", "--show-size",
+        "--verify", "-F", "-J", "-V", "-d", "-g", "-l", "-n", "-s"
+      ],
+      "gdisk": ["-l"],
+      "cfdisk": []
+    },
+    "cryptsetup_destructive": ["erase", "lukserase", "luksformat", "lukskillslot"]
+  },
+  "backup": {
+    "restic_value_options": [
+      "--cacert", "--cache-dir", "--compression", "--http-user-agent", "--key-hint",
+      "--limit-download", "--limit-upload", "--option", "--pack-size", "--password-command",
+      "--password-file", "--repo", "--repository-file", "--retry-lock", "--stuck-request-timeout",
+      "--tls-client-cert", "-o", "-p", "-r"
+    ],
+    "restic_actions": ["forget", "prune"],
+    "restic_key_actions": ["remove", "rm"],
+    "rclone_destructive": ["cleanup", "delete", "deletefile", "purge", "rmdir", "rmdirs"],
+    "rclone_mirrors": ["move", "sync"],
+    "rclone_value_options": [
+      "--backup-dir", "--bwlimit", "--checkers", "--compare-dest", "--config", "--contimeout",
+      "--copy-dest", "--drive-root-folder-id", "--exclude", "--exclude-from", "--files-from",
+      "--filter", "--filter-from", "--include", "--include-from", "--log-file", "--log-level",
+      "--low-level-retries", "--max-age", "--max-delete", "--max-size", "--max-transfer",
+      "--min-age", "--min-size", "--order-by", "--retries", "--stats", "--suffix", "--timeout",
+      "--tpslimit", "--transfers", "--user-agent"
+    ],
+    "rclone_remote_pattern": "^[A-Za-z0-9_][\\p{L}\\p{N}_. \\-]*:",
+    "btrbk_value_options": ["--config", "--format", "--lockfile", "--loglevel", "--override", "-c", "-l"],
+    "btrbk_actions": ["clean", "prune"],
+    "dmsetup_value_options": ["-j", "--major", "-m", "--minor", "-u", "--uuid"],
+    "dmsetup_actions": ["remove", "remove_all"],
+    "dmsetup_scratch_marker": "loop",
+    "btrfs_value_options": ["-i", "--subvolid", "--format"]
+  },
+  "find": {
+    "global_options": ["-H", "-L", "-P"],
+    "selective": [
+      "-empty", "-ilname", "-iname", "-inum", "-ipath", "-iregex", "-iwholename", "-lname", "-name",
+      "-path", "-regex", "-samefile", "-wholename"
+    ],
+    "deleting_executables": ["rm", "rmdir", "shred", "unlink"],
+    "exec_options": ["-exec", "-execdir", "-ok", "-okdir"]
+  },
+  "proxmox": {
+    "guest_tools": ["qm", "pct"],
+    "volume_tools": ["lvremove", "vgremove", "pvremove"],
+    "zfs_tools": ["zfs", "zpool"]
+  },
+  "ssh": {
+    "value_option_letters": "BDEFIJLOPQRSWbceilmopw"
+  },
+  "messages": {
+    "git_force_push_main": "BLOCKED:git push --force main:Force push to main/master destroys shared history; publish with 'st vcs publish'.",
+    "git_reset_hard": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'.",
+    "git_clean": "BLOCKED:git clean:Permanently deletes untracked files other agents may own; remove your own files by explicit path (rm <path>), preview with 'git clean -n'.",
+    "git_checkout_all": "BLOCKED:git checkout .:Discards every agent's uncommitted changes in this shared checkout; name your own files: 'git checkout -- <path>'.",
+    "git_restore_all": "BLOCKED:git restore .:Discards every agent's uncommitted changes in this shared checkout; name your own files: 'git restore -- <path>'.",
+    "git_stash_drop": "BLOCKED:git stash drop/clear:Permanently deletes stashed work; leave stashes in place and inspect them with 'git stash list' / 'git stash show'.",
+    "git_stash": "BLOCKED:git stash:Sweeps other agents' uncommitted changes out of this shared checkout; checkpoint your own files with 'st commit --paths <path>' instead.",
+    "rm_protected_root": "BLOCKED:rm -r {target}:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead.",
+    "disk_advice": "destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it.",
+    "format_device": "BLOCKED:{name}:Formatting or discarding a device {disk_advice}",
+    "wipefs": "BLOCKED:wipefs:Erasing filesystem signatures {disk_advice} List with plain 'wipefs <dev>'.",
+    "dd_device": "BLOCKED:dd of=/dev:Writing raw data to a device {disk_advice} Write to a regular file instead.",
+    "parted": "BLOCKED:parted:Changing a partition table {disk_advice} Inspect with 'parted -l' or 'parted <dev> print'.",
+    "sgdisk": "BLOCKED:sgdisk:Changing a GPT {disk_advice} Inspect with 'sgdisk -p <dev>'.",
+    "partitioner": "BLOCKED:{name}:Repartitioning a disk {disk_advice} Inspect with 'lsblk' or 'fdisk -l'.",
+    "cryptsetup": "BLOCKED:cryptsetup:Formatting or erasing a LUKS header makes the data unrecoverable; it {disk_advice}",
+    "btrfs_subvolume_delete": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'.",
+    "restic": "BLOCKED:restic {action}:Permanently deletes backup snapshots, data, or keys; retention runs only from the scheduled SummitFlow backup jobs. Inspect with 'restic snapshots' or preview with '--dry-run'.",
+    "rclone_mirror": "BLOCKED:rclone {action}:Mirroring onto a remote deletes destination files that the source lacks (offsite backups such as summitflow-drive live there); offsite uploads run only from the scheduled backup jobs. Preview with --dry-run, or use 'rclone copy', which never deletes.",
+    "rclone_delete": "BLOCKED:rclone {action}:Deletes files on a remote (offsite backups such as summitflow-drive live there); offsite expiry runs only from the scheduled backup jobs. Inspect with 'rclone ls'/'rclone lsd' or add --dry-run.",
+    "btrbk": "BLOCKED:btrbk {action}:Deletes btrbk snapshots and backups outside the scheduled retention run; preview with 'btrbk -n' / '--dry-run' or inspect with 'btrbk list'.",
+    "dmsetup": "BLOCKED:dmsetup {action}:Tearing down a device-mapper device (LUKS, LVM) under a mounted system can corrupt or strand its data; only loop-backed scratch mappings may be removed. Inspect with 'dmsetup ls'.",
+    "find_delete": "BLOCKED:find {target} -delete:Bulk delete across a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; narrow it with -name/-path to files you own, or delete specific subpaths.",
+    "proxmox_advice": "destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'.",
+    "proxmox_guest": "BLOCKED:{name} destroy:This {proxmox_advice}",
+    "proxmox_volume": "BLOCKED:{name}:This {proxmox_advice}",
+    "pvesm_free": "BLOCKED:pvesm free:This {proxmox_advice}",
+    "pvesh_delete": "BLOCKED:pvesh delete:This API call {proxmox_advice}"
+  }
+}

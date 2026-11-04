@@ -1,0 +1,1087 @@
+{
+  "description": "Every string constant of SummitFlow's irreversible-hook, publication-guard and publication-runtime tests (denied and allowed fixtures alike, plus incidental strings), judged with cwd in a shared checkout, where whole-tree git discards and stash are refused (the main corpus runs in /tmp, where they are exempt). Answers recorded from the SummitFlow hook.",
+  "version": 1,
+  "env": { "HOME": "/home/guard-fixture" },
+  "source": "summitflow-tests",
+  "cwd": "/srv/workspaces/projects/summitflow",
+  "cases": [
+    { "command": "\nEOF", "expect": "allow" },
+    { "command": " -c 'import no_such_st_module'\n", "expect": "allow" },
+    { "command": " blob ", "expect": "allow" },
+    { "command": " refs/heads/main ", "expect": "allow" },
+    { "command": "! ", "expect": "allow" },
+    { "command": "\"", "expect": "allow" },
+    { "command": "\"\n}", "expect": "allow" },
+    { "command": "\", \"api_key\": \"", "expect": "allow" },
+    { "command": "#!/bin/sh\necho \"$@\" >> ", "expect": "allow" },
+    { "command": "#!/bin/sh\necho 'sensitive-fixture-output' >&2\nexit 2\n", "expect": "allow" },
+    {
+      "command": "#!/bin/sh\nenv | grep '^GIT_' | grep -v '^GIT_NO_REPLACE_OBJECTS=' && exit 9\nexit 0\n",
+      "expect": "allow"
+    },
+    { "command": "#!/bin/sh\nexec ", "expect": "allow" },
+    { "command": "#!/bin/sh\nexit 0\n", "expect": "allow" },
+    { "command": "#!/bin/sh\nexit 2\n", "expect": "allow" },
+    { "command": "#!/bin/sh\nexit 7\n", "expect": "allow" },
+    { "command": "#!/bin/sh\nprintf '%s\\n' \"$@\" > '", "expect": "allow" },
+    { "command": "'", "expect": "allow" },
+    { "command": "'\n", "expect": "allow" },
+    { "command": "'\ncat >> '", "expect": "allow" },
+    { "command": "(", "expect": "allow" },
+    { "command": ")", "expect": "allow" },
+    { "command": ")\nEOF", "expect": "allow" },
+    { "command": "*.example\n", "expect": "allow" },
+    { "command": "*.secret\n*.pass\n.env\n*.key\n", "expect": "allow" },
+    { "command": "--config", "expect": "allow" },
+    { "command": "--report-path", "expect": "allow" },
+    { "command": "--stdin", "expect": "allow" },
+    { "command": "-C", "expect": "allow" },
+    { "command": "-I", "expect": "allow" },
+    { "command": "-S", "expect": "allow" },
+    { "command": "-c", "expect": "allow" },
+    { "command": "-lc", "expect": "allow" },
+    { "command": "-p", "expect": "allow" },
+    { "command": "-q", "expect": "allow" },
+    { "command": "-t summitflow-st", "expect": "allow" },
+    { "command": "-w", "expect": "allow" },
+    { "command": ".config/git/hooks/pre-push", "expect": "allow" },
+    { "command": ".config/git/secretguard", "expect": "allow" },
+    { "command": ".git/hooks/pre-push", "expect": "allow" },
+    { "command": ".git/shallow", "expect": "allow" },
+    { "command": ".npmrc", "expect": "allow" },
+    { "command": ".npmrc\n.*\n", "expect": "allow" },
+    { "command": ".npmrc\n.env\n", "expect": "allow" },
+    { "command": "/", "expect": "allow" },
+    {
+      "command": "/bin/rm -rf -- /home/kasadis",
+      "expect": "BLOCKED:rm -r /home/kasadis:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    { "command": "/home/kasadis", "expect": "allow" },
+    { "command": "/nonexistent-publication-fixture", "expect": "allow" },
+    { "command": "/srv/workspaces/projects/summitflow", "expect": "allow" },
+    { "command": "/tmp", "expect": "allow" },
+    { "command": "/tmp/clone", "expect": "allow" },
+    { "command": "/tmp/fixture-destination", "expect": "allow" },
+    { "command": "/tmp/scratch-clone", "expect": "allow" },
+    {
+      "command": "/usr/bin/git -C /repo push",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "/usr/bin/python3", "expect": "allow" },
+    { "command": "/usr/bin:/bin", "expect": "allow" },
+    { "command": "0", "expect": "allow" },
+    { "command": "040000 tree ", "expect": "allow" },
+    { "command": "100644", "expect": "allow" },
+    { "command": "100755", "expect": "allow" },
+    { "command": "120000", "expect": "allow" },
+    { "command": ":", "expect": "allow" },
+    { "command": ":/usr/bin:/bin", "expect": "allow" },
+    { "command": "; done", "expect": "allow" },
+    { "command": "; fi", "expect": "allow" },
+    { "command": "; }", "expect": "allow" },
+    {
+      "command": "A checkout copy whose backend/.venv is empty, as on 2026-10-09.",
+      "expect": "allow"
+    },
+    { "command": "BLOCKED:", "expect": "allow" },
+    { "command": "Bash", "expect": "allow" },
+    { "command": "Commit", "expect": "allow" },
+    { "command": "File", "expect": "allow" },
+    { "command": "Fixture", "expect": "allow" },
+    { "command": "GITLEAKS_CONFIG", "expect": "allow" },
+    {
+      "command": "GIT_ALLOW_SECRET=1 st vcs publish",
+      "expect": "Publication hooks must remain enabled."
+    },
+    { "command": "GIT_DIR", "expect": "allow" },
+    { "command": "GIT_INDEX_FILE", "expect": "allow" },
+    { "command": "GIT_OBJECT_DIRECTORY", "expect": "allow" },
+    { "command": "GIT_SHALLOW_FILE", "expect": "allow" },
+    { "command": "GIT_WORK_TREE", "expect": "allow" },
+    { "command": "HEAD", "expect": "allow" },
+    { "command": "HOME", "expect": "allow" },
+    { "command": "Malformed", "expect": "allow" },
+    { "command": "No module named 'no_such_st_module'", "expect": "allow" },
+    { "command": "OS interpreter required", "expect": "allow" },
+    { "command": "PATH", "expect": "allow" },
+    { "command": "PreToolUse", "expect": "allow" },
+    { "command": "RuleID", "expect": "allow" },
+    { "command": "SCRATCH_ROOT", "expect": "allow" },
+    { "command": "SUMMITFLOW_JOURNAL_ALERTS", "expect": "allow" },
+    { "command": "StartLine", "expect": "allow" },
+    { "command": "SyntaxError", "expect": "allow" },
+    { "command": "TMPDIR", "expect": "allow" },
+    { "command": "TemporaryDirectory", "expect": "allow" },
+    {
+      "command": "The PreToolUse publication hook must survive a broken backend/.venv.\n\nRegression: on 2026-10-09 backend/.venv was emptied and the hook, which ran\nunder that venv, denied every agent shell for about four hours.\n",
+      "expect": "allow"
+    },
+    {
+      "command": "The live PreToolUse hook denies a small irreversible command set.\n\nRegression: the destructive guard in command_guard had no live caller, so the\nshared hook let ``git reset --hard``/``git clean -fd``/``rm -rf <project>``\nthrough in checkouts shared by many agents.\n",
+      "expect": "allow"
+    },
+    { "command": "Write", "expect": "allow" },
+    { "command": "XDG_STATE_HOME", "expect": "allow" },
+    { "command": "[]", "expect": "allow" },
+    { "command": "__pycache__", "expect": "allow" },
+    { "command": "_git", "expect": "allow" },
+    { "command": "`", "expect": "allow" },
+    { "command": "a", "expect": "allow" },
+    { "command": "adapter", "expect": "allow" },
+    { "command": "admission is unavailable", "expect": "allow" },
+    { "command": "allowlist.txt", "expect": "allow" },
+    { "command": "autosnap", "expect": "allow" },
+    { "command": "backend", "expect": "allow" },
+    { "command": "backend/.venv/bin", "expect": "allow" },
+    { "command": "backend/app/__init__.py", "expect": "allow" },
+    { "command": "backend/app/services", "expect": "allow" },
+    { "command": "backend/app/services/_publication_guard.py", "expect": "allow" },
+    { "command": "bash", "expect": "allow" },
+    {
+      "command": "bash -c \"$(cat <<'EOF'\ngit commit --no-verify\nEOF\n)\"",
+      "expect": "Publication hooks must remain enabled."
+    },
+    {
+      "command": "bash -c 'wipefs --all /dev/sda'",
+      "expect": "BLOCKED:wipefs:Erasing filesystem signatures destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it. List with plain 'wipefs <dev>'."
+    },
+    { "command": "bash -lc \"cd /repo && ", "expect": "allow" },
+    {
+      "command": "bash -lc 'git reset --hard'",
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    { "command": "bash -lc 'st commit -m local'", "expect": "allow" },
+    { "command": "bash <<'EOF'\n", "expect": "allow" },
+    {
+      "command": "bash <<'EOF'\ngit reset --hard\nEOF",
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    { "command": "bin", "expect": "allow" },
+    { "command": "body, mode", "expect": "allow" },
+    { "command": "broken", "expect": "allow" },
+    { "command": "btrbk --dry-run prune", "expect": "allow" },
+    {
+      "command": "btrbk -c /etc/btrbk/btrbk.conf clean",
+      "expect": "BLOCKED:btrbk clean:Deletes btrbk snapshots and backups outside the scheduled retention run; preview with 'btrbk -n' / '--dry-run' or inspect with 'btrbk list'."
+    },
+    { "command": "btrbk -n clean", "expect": "allow" },
+    { "command": "btrbk list snapshots", "expect": "allow" },
+    {
+      "command": "btrbk prune home",
+      "expect": "BLOCKED:btrbk prune:Deletes btrbk snapshots and backups outside the scheduled retention run; preview with 'btrbk -n' / '--dry-run' or inspect with 'btrbk list'."
+    },
+    { "command": "btrbk run", "expect": "allow" },
+    {
+      "command": "btrfs subvolume delete /mnt/summitflow-native/home.20261001",
+      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'."
+    },
+    {
+      "command": "btrfs subvolume delete /srv/.btrbk/srv.20261010",
+      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'."
+    },
+    { "command": "btrfs subvolume delete /srv/scratch/testvol", "expect": "allow" },
+    { "command": "btrfs subvolume list /", "expect": "allow" },
+    { "command": "btrfs subvolume snapshot / /x", "expect": "allow" },
+    { "command": "capture", "expect": "allow" },
+    {
+      "command": "cat <<'EOF' > t/fixture.sh\ngit config core.hooksPath /dev/null; ",
+      "expect": "allow"
+    },
+    { "command": "cat <<'EOF' | sh\n", "expect": "allow" },
+    {
+      "command": "cat <<'EOF' | sh\ngit clean -fd\nEOF",
+      "expect": "BLOCKED:git clean:Permanently deletes untracked files other agents may own; remove your own files by explicit path (rm <path>), preview with 'git clean -n'."
+    },
+    {
+      "command": "cat > /tmp/notes.md <<'EOF'\ngit reset --hard\nrm -rf /\nEOF",
+      "expect": "allow"
+    },
+    { "command": "cat > out.txt <<EOF\n$(", "expect": "allow" },
+    {
+      "command": "cat >> t/notes.md <<-EOF\n\tdon't set core.hooksPath = anything\n\tEOF\necho done",
+      "expect": "allow"
+    },
+    { "command": "cat README.md", "expect": "allow" },
+    { "command": "cause", "expect": "allow" },
+    {
+      "command": "cd /srv/.btrbk && btrfs subvolume delete srv.2026",
+      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'."
+    },
+    {
+      "command": "cd /srv/workspaces/projects && rm -rf summitflow",
+      "expect": "BLOCKED:rm -r /srv/workspaces/projects/summitflow:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    { "command": "cd /tmp/x && git clean -fdx && git stash", "expect": "allow" },
+    {
+      "command": "cd backend && git reset --hard origin/main",
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    { "command": "cd backend && uv sync --locked", "expect": "allow" },
+    { "command": "checkout", "expect": "allow" },
+    { "command": "cmd", "expect": "allow" },
+    { "command": "code", "expect": "allow" },
+    {
+      "command": "codex --dangerously-bypass-hook-trust",
+      "expect": "Publication hooks must remain enabled."
+    },
+    { "command": "codex --disable hooks", "expect": "Publication hooks must remain enabled." },
+    {
+      "command": "codex -c features.hooks=false",
+      "expect": "Publication hooks must remain enabled."
+    },
+    { "command": "command", "expect": "allow" },
+    { "command": "command ", "expect": "allow" },
+    { "command": "commit-tree", "expect": "allow" },
+    { "command": "config", "expect": "allow" },
+    { "command": "config.txt", "expect": "allow" },
+    { "command": "core.hooksPath", "expect": "allow" },
+    { "command": "core.hooksPath=", "expect": "Publication hooks must remain enabled." },
+    { "command": "cryptsetup luksDump /dev/sda2", "expect": "allow" },
+    {
+      "command": "cryptsetup luksFormat /dev/sdc",
+      "expect": "BLOCKED:cryptsetup:Formatting or erasing a LUKS header makes the data unrecoverable; it destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it."
+    },
+    { "command": "cryptsetup luksFormat /srv/scratch/test.img", "expect": "allow" },
+    {
+      "command": "curl --request=POST https://api.github.com/repos/o/r/releases",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "curl -H 'Authorization: x' https://api.github.com/repos/o/r/contents/f --data-binary @f.json",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "curl -X PATCH https://api.github.com/repos/o/r/git/refs/heads/main -d @ref.json",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "curl -X POST http://localhost:8001/api/git/fetch", "expect": "allow" },
+    { "command": "curl -s https://api.github.com/repos/o/r/releases", "expect": "allow" },
+    {
+      "command": "curl https://api.github.com/graphql -d '{\"query\":\"mutation { x }\"}'",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "cwd", "expect": "allow" },
+    { "command": "dd if=/dev/sda of=/srv/scratch/disk.img", "expect": "allow" },
+    { "command": "dd if=/dev/zero of=./file bs=1M count=1", "expect": "allow" },
+    { "command": "dd if=/dev/zero of=./file bs=1M count=10", "expect": "allow" },
+    {
+      "command": "dd if=/dev/zero of=/dev/sda bs=1M",
+      "expect": "BLOCKED:dd of=/dev:Writing raw data to a device destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it. Write to a regular file instead."
+    },
+    { "command": "dd if=x of=/dev/null", "expect": "allow" },
+    {
+      "command": "dd if=x of=/dev/sda",
+      "expect": "BLOCKED:dd of=/dev:Writing raw data to a device destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it. Write to a regular file instead."
+    },
+    { "command": "degraded", "expect": "allow" },
+    { "command": "deny", "expect": "allow" },
+    { "command": "denylist.txt", "expect": "allow" },
+    { "command": "deploy/password.pass", "expect": "allow" },
+    { "command": "destination", "expect": "allow" },
+    { "command": "details redacted", "expect": "allow" },
+    { "command": "dir", "expect": "allow" },
+    { "command": "dmsetup info luks-root", "expect": "allow" },
+    { "command": "dmsetup ls", "expect": "allow" },
+    {
+      "command": "dmsetup remove /dev/mapper/pve-root",
+      "expect": "BLOCKED:dmsetup remove:Tearing down a device-mapper device (LUKS, LVM) under a mounted system can corrupt or strand its data; only loop-backed scratch mappings may be removed. Inspect with 'dmsetup ls'."
+    },
+    { "command": "dmsetup remove test-loop0", "expect": "allow" },
+    {
+      "command": "dmsetup remove_all",
+      "expect": "BLOCKED:dmsetup remove_all:Tearing down a device-mapper device (LUKS, LVM) under a mounted system can corrupt or strand its data; only loop-backed scratch mappings may be removed. Inspect with 'dmsetup ls'."
+    },
+    { "command": "echo $(", "expect": "allow" },
+    {
+      "command": "echo $(git reset --hard)",
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    { "command": "echo 'git checkout .'", "expect": "allow" },
+    { "command": "echo 'restic forget'", "expect": "allow" },
+    { "command": "echo Z2l0IHB1c2g= | base64 -d | bash", "expect": "allow" },
+    { "command": "echo `", "expect": "allow" },
+    {
+      "command": "echo main | xargs git push origin",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "env", "expect": "allow" },
+    { "command": "env -i PATH=/usr/bin ", "expect": "allow" },
+    {
+      "command": "env MODE=x bash -lc 'git push'",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "eval \"$(ssh-agent -s)\"", "expect": "allow" },
+    { "command": "eval 'echo restic forget'", "expect": "allow" },
+    {
+      "command": "eval 'git push origin main'",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "eval 'ls; qm destroy 101'",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    {
+      "command": "eval 'restic forget abc123'",
+      "expect": "BLOCKED:restic forget:Permanently deletes backup snapshots, data, or keys; retention runs only from the scheduled SummitFlow backup jobs. Inspect with 'restic snapshots' or preview with '--dry-run'."
+    },
+    { "command": "eval 'st backup storage list'", "expect": "allow" },
+    {
+      "command": "eval qm destroy 101",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    { "command": "evaluate_irreversible_command", "expect": "allow" },
+    {
+      "command": "exec -a x qm destroy 101",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    {
+      "command": "exec git push origin main",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "exec qm destroy 101",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    {
+      "command": "exec restic forget abc123",
+      "expect": "BLOCKED:restic forget:Permanently deletes backup snapshots, data, or keys; retention runs only from the scheduled SummitFlow backup jobs. Inspect with 'restic snapshots' or preview with '--dry-run'."
+    },
+    { "command": "exec st backup storage safety", "expect": "allow" },
+    {
+      "command": "exec uv run qm destroy 101",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    { "command": "exec_command", "expect": "allow" },
+    { "command": "extension/config.json", "expect": "allow" },
+    { "command": "extension/manifest-agents.json", "expect": "allow" },
+    { "command": "extension/manifest-agents.json.bak", "expect": "allow" },
+    { "command": "extension/manifest.json", "expect": "allow" },
+    { "command": "f", "expect": "allow" },
+    { "command": "fdisk -l", "expect": "allow" },
+    { "command": "fdisk -l /dev/sda", "expect": "allow" },
+    {
+      "command": "fdisk /dev/sda",
+      "expect": "BLOCKED:fdisk:Repartitioning a disk destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it. Inspect with 'lsblk' or 'fdisk -l'."
+    },
+    { "command": "file", "expect": "allow" },
+    { "command": "file_path", "expect": "allow" },
+    { "command": "find . -name '*.pyc' -delete", "expect": "allow" },
+    { "command": "find . -name x", "expect": "allow" },
+    {
+      "command": "find . -type f -delete",
+      "expect": "BLOCKED:find /srv/workspaces/projects/summitflow -delete:Bulk delete across a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; narrow it with -name/-path to files you own, or delete specific subpaths."
+    },
+    {
+      "command": "find /mnt/summitflow-native -mtime +30 -delete",
+      "expect": "BLOCKED:find /mnt/summitflow-native -delete:Bulk delete across a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; narrow it with -name/-path to files you own, or delete specific subpaths."
+    },
+    {
+      "command": "find /srv/workspaces -type f -delete",
+      "expect": "BLOCKED:find /srv/workspaces -delete:Bulk delete across a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; narrow it with -name/-path to files you own, or delete specific subpaths."
+    },
+    {
+      "command": "find /srv/workspaces/projects/summitflow -exec rm -rf {} +",
+      "expect": "BLOCKED:find /srv/workspaces/projects/summitflow -delete:Bulk delete across a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; narrow it with -name/-path to files you own, or delete specific subpaths."
+    },
+    { "command": "find /tmp/foo -delete", "expect": "allow" },
+    {
+      "command": "find ~ -delete",
+      "expect": "BLOCKED:find /home/guard-fixture -delete:Bulk delete across a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; narrow it with -name/-path to files you own, or delete specific subpaths."
+    },
+    { "command": "fixture", "expect": "allow" },
+    { "command": "fixture\n", "expect": "allow" },
+    { "command": "fixture infrastructure detail", "expect": "allow" },
+    { "command": "fixture@example.invalid", "expect": "allow" },
+    { "command": "for r in a; do ", "expect": "allow" },
+    { "command": "generic-api-key", "expect": "allow" },
+    { "command": "gh", "expect": "allow" },
+    {
+      "command": "gh api -X DELETE repos/a/b/branches/main/protection",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "gh api -X PATCH repos/a/b -F archived=true",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "gh api -X PATCH repos/a/b -F visibility=public",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "gh api -X PUT repos/a/b/pulls/2/merge",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "gh api -XPATCH repos/a/b -F archived=true",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "gh api graphql -f query='mutation { x }'",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "gh api repos/a/b/git/refs -f ref=main",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "gh api repos/a/b/releases", "expect": "allow" },
+    {
+      "command": "gh api repos/o/r/git/refs --input=ref.json",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "gh api repos/o/r/git/refs --raw-field=ref=refs/heads/release --raw-field=sha=abc",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "gh api repos/o/r/git/refs -fref=refs/heads/x",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "gh api repos/o/r/git/refs/heads/main", "expect": "allow" },
+    { "command": "gh pr merge 4", "expect": "Use the canonical ST publication workflow." },
+    { "command": "gh pr view 4", "expect": "allow" },
+    { "command": "gh release create v1", "expect": "Use the canonical ST publication workflow." },
+    { "command": "gh release list", "expect": "allow" },
+    { "command": "git", "expect": "allow" },
+    { "command": "git ", "expect": "allow" },
+    {
+      "command": "git -C /srv/workspaces/projects/summitflow reset --hard",
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    { "command": "git -C /tmp/scratch-repo reset --hard", "expect": "allow" },
+    {
+      "command": "git -c core.hooksPath=/tmp push",
+      "expect": "Publication hooks must remain enabled."
+    },
+    {
+      "command": "git checkout -- .",
+      "expect": "BLOCKED:git checkout .:Discards every agent's uncommitted changes in this shared checkout; name your own files: 'git checkout -- <path>'."
+    },
+    { "command": "git checkout -- backend/app/x.py", "expect": "allow" },
+    {
+      "command": "git checkout .",
+      "expect": "BLOCKED:git checkout .:Discards every agent's uncommitted changes in this shared checkout; name your own files: 'git checkout -- <path>'."
+    },
+    {
+      "command": "git checkout HEAD -- .",
+      "expect": "BLOCKED:git checkout .:Discards every agent's uncommitted changes in this shared checkout; name your own files: 'git checkout -- <path>'."
+    },
+    { "command": "git checkout main", "expect": "allow" },
+    {
+      "command": "git clean --force -d",
+      "expect": "BLOCKED:git clean:Permanently deletes untracked files other agents may own; remove your own files by explicit path (rm <path>), preview with 'git clean -n'."
+    },
+    {
+      "command": "git clean -f",
+      "expect": "BLOCKED:git clean:Permanently deletes untracked files other agents may own; remove your own files by explicit path (rm <path>), preview with 'git clean -n'."
+    },
+    {
+      "command": "git clean -fd",
+      "expect": "BLOCKED:git clean:Permanently deletes untracked files other agents may own; remove your own files by explicit path (rm <path>), preview with 'git clean -n'."
+    },
+    {
+      "command": "git clean -fdx",
+      "expect": "BLOCKED:git clean:Permanently deletes untracked files other agents may own; remove your own files by explicit path (rm <path>), preview with 'git clean -n'."
+    },
+    { "command": "git clean -n -d", "expect": "allow" },
+    { "command": "git clean -nfd", "expect": "allow" },
+    {
+      "command": "git clean -xdf",
+      "expect": "BLOCKED:git clean:Permanently deletes untracked files other agents may own; remove your own files by explicit path (rm <path>), preview with 'git clean -n'."
+    },
+    {
+      "command": "git commit --no-verify -m x",
+      "expect": "Publication hooks must remain enabled."
+    },
+    {
+      "command": "git commit -m \"$(cat <<'EOF'\nStop git reset --hard and git clean -fd; rm -rf /srv\nEOF\n)\"",
+      "expect": "allow"
+    },
+    { "command": "git config --get core.hooksPath", "expect": "allow" },
+    {
+      "command": "git config --global core.hooksPath /tmp/none",
+      "expect": "Publication hooks must remain enabled."
+    },
+    {
+      "command": "git config --unset core.hooksPath",
+      "expect": "Publication hooks must remain enabled."
+    },
+    {
+      "command": "git config core.hooksPath /dev/null",
+      "expect": "Publication hooks must remain enabled."
+    },
+    { "command": "git diff", "expect": "allow" },
+    { "command": "git fetch", "expect": "allow" },
+    { "command": "git log", "expect": "allow" },
+    { "command": "git log --oneline -5", "expect": "allow" },
+    { "command": "git push", "expect": "Use the canonical ST publication workflow." },
+    {
+      "command": "git push --force origin main",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "git push origin main", "expect": "Use the canonical ST publication workflow." },
+    {
+      "command": "git reset --hard",
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    {
+      "command": "git reset --hard HEAD",
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    {
+      "command": "git reset --hard HEAD~1",
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    { "command": "git reset --soft HEAD~1", "expect": "allow" },
+    { "command": "git reset HEAD backend/x.py", "expect": "allow" },
+    {
+      "command": "git restore -- :/",
+      "expect": "BLOCKED:git restore .:Discards every agent's uncommitted changes in this shared checkout; name your own files: 'git restore -- <path>'."
+    },
+    { "command": "git restore -- backend/app/x.py", "expect": "allow" },
+    { "command": "git restore --staged .", "expect": "allow" },
+    {
+      "command": "git restore --worktree --source HEAD .",
+      "expect": "BLOCKED:git restore .:Discards every agent's uncommitted changes in this shared checkout; name your own files: 'git restore -- <path>'."
+    },
+    {
+      "command": "git restore .",
+      "expect": "BLOCKED:git restore .:Discards every agent's uncommitted changes in this shared checkout; name your own files: 'git restore -- <path>'."
+    },
+    {
+      "command": "git send-pack origin main",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "git stash",
+      "expect": "BLOCKED:git stash:Sweeps other agents' uncommitted changes out of this shared checkout; checkpoint your own files with 'st commit --paths <path>' instead."
+    },
+    {
+      "command": "git stash -u",
+      "expect": "BLOCKED:git stash:Sweeps other agents' uncommitted changes out of this shared checkout; checkpoint your own files with 'st commit --paths <path>' instead."
+    },
+    {
+      "command": "git stash clear",
+      "expect": "BLOCKED:git stash drop/clear:Permanently deletes stashed work; leave stashes in place and inspect them with 'git stash list' / 'git stash show'."
+    },
+    {
+      "command": "git stash drop",
+      "expect": "BLOCKED:git stash drop/clear:Permanently deletes stashed work; leave stashes in place and inspect them with 'git stash list' / 'git stash show'."
+    },
+    { "command": "git stash list", "expect": "allow" },
+    { "command": "git stash pop", "expect": "allow" },
+    {
+      "command": "git stash push -m wip",
+      "expect": "BLOCKED:git stash:Sweeps other agents' uncommitted changes out of this shared checkout; checkpoint your own files with 'st commit --paths <path>' instead."
+    },
+    {
+      "command": "git stash save wip",
+      "expect": "BLOCKED:git stash:Sweeps other agents' uncommitted changes out of this shared checkout; checkpoint your own files with 'st commit --paths <path>' instead."
+    },
+    { "command": "git stash show -p", "expect": "allow" },
+    { "command": "git status", "expect": "allow" },
+    { "command": "gitleaks", "expect": "allow" },
+    { "command": "gitleaks is not installed", "expect": "allow" },
+    { "command": "global", "expect": "allow" },
+    { "command": "hash-object", "expect": "allow" },
+    { "command": "heavy_work", "expect": "allow" },
+    { "command": "history traversal started", "expect": "allow" },
+    { "command": "home", "expect": "allow" },
+    { "command": "hookEventName", "expect": "allow" },
+    { "command": "hookSpecificOutput", "expect": "allow" },
+    { "command": "hooks", "expect": "allow" },
+    {
+      "command": "http PATCH https://api.github.com/repos/o/r archived=true",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "https://example.invalid/a/b", "expect": "allow" },
+    { "command": "https://example.invalid/fixture/repo.git", "expect": "allow" },
+    { "command": "https://user:password@example.invalid/repo", "expect": "allow" },
+    { "command": "if git diff --quiet; then ", "expect": "allow" },
+    { "command": "if git diff --quiet; then git status; fi", "expect": "allow" },
+    {
+      "command": "import sys; sys.path.insert(0, sys.argv[1]); import app.services.publication_hook;print(sorted(m for m in sys.modules if m.split('.')[0] not in sys.stdlib_module_names and m != '__main__' and not m.startswith('app')))",
+      "expect": "allow"
+    },
+    { "command": "init", "expect": "allow" },
+    { "command": "irreversible_blkdiscard", "expect": "allow" },
+    { "command": "irreversible_btrbk_clean", "expect": "allow" },
+    { "command": "irreversible_btrbk_prune", "expect": "allow" },
+    { "command": "irreversible_btrfs_subvolume_delete", "expect": "allow" },
+    { "command": "irreversible_cryptsetup", "expect": "allow" },
+    { "command": "irreversible_dd_of_dev", "expect": "allow" },
+    { "command": "irreversible_dmsetup_remove", "expect": "allow" },
+    { "command": "irreversible_dmsetup_remove_all", "expect": "allow" },
+    { "command": "irreversible_fdisk", "expect": "allow" },
+    { "command": "irreversible_find_home_kasadis_delete", "expect": "allow" },
+    { "command": "irreversible_find_mnt_summitflow_native_delete", "expect": "allow" },
+    { "command": "irreversible_find_srv_workspaces_delete", "expect": "allow" },
+    { "command": "irreversible_find_srv_workspaces_projects_summitflow_delete", "expect": "allow" },
+    { "command": "irreversible_lvremove", "expect": "allow" },
+    { "command": "irreversible_mkfs", "expect": "allow" },
+    { "command": "irreversible_mkfs_ext4", "expect": "allow" },
+    { "command": "irreversible_parted", "expect": "allow" },
+    { "command": "irreversible_pct_destroy", "expect": "allow" },
+    { "command": "irreversible_pvesh_delete", "expect": "allow" },
+    { "command": "irreversible_pvesm_free", "expect": "allow" },
+    { "command": "irreversible_qm_destroy", "expect": "allow" },
+    { "command": "irreversible_rclone_cleanup", "expect": "allow" },
+    { "command": "irreversible_rclone_delete", "expect": "allow" },
+    { "command": "irreversible_rclone_deletefile", "expect": "allow" },
+    { "command": "irreversible_rclone_move", "expect": "allow" },
+    { "command": "irreversible_rclone_purge", "expect": "allow" },
+    { "command": "irreversible_rclone_rmdirs", "expect": "allow" },
+    { "command": "irreversible_rclone_sync", "expect": "allow" },
+    { "command": "irreversible_restic_forget", "expect": "allow" },
+    { "command": "irreversible_restic_key", "expect": "allow" },
+    { "command": "irreversible_restic_prune", "expect": "allow" },
+    { "command": "irreversible_sfdisk", "expect": "allow" },
+    { "command": "irreversible_sgdisk", "expect": "allow" },
+    { "command": "irreversible_vgremove", "expect": "allow" },
+    { "command": "irreversible_wipefs", "expect": "allow" },
+    { "command": "irreversible_zfs_destroy", "expect": "allow" },
+    { "command": "is_mount", "expect": "allow" },
+    { "command": "jj git push", "expect": "Use the canonical ST publication workflow." },
+    { "command": "jj log", "expect": "allow" },
+    { "command": "key", "expect": "allow" },
+    { "command": "line", "expect": "allow" },
+    { "command": "live_base", "expect": "allow" },
+    { "command": "logger", "expect": "allow" },
+    { "command": "logger.log", "expect": "allow" },
+    { "command": "loud", "expect": "allow" },
+    { "command": "ls\n", "expect": "allow" },
+    {
+      "command": "ls && git stash && git pull",
+      "expect": "BLOCKED:git stash:Sweeps other agents' uncommitted changes out of this shared checkout; checkpoint your own files with 'st commit --paths <path>' instead."
+    },
+    { "command": "ls -la /srv", "expect": "allow" },
+    { "command": "lvremove --test pve/x", "expect": "allow" },
+    { "command": "lvs", "expect": "allow" },
+    { "command": "manifest_version", "expect": "allow" },
+    { "command": "mcp__github__get_issue", "expect": "allow" },
+    { "command": "mcp__github__merge_pull_request", "expect": "allow" },
+    {
+      "command": "mkdir -p t && cat > t/data.txt <<'EOF'\nfoo; core.hooksPath=/dev/null\nEOF",
+      "expect": "allow"
+    },
+    {
+      "command": "mkfs.ext4 $DEV",
+      "expect": "BLOCKED:mkfs.ext4:Formatting or discarding a device destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it."
+    },
+    { "command": "mkfs.ext4 /dev/loop5", "expect": "allow" },
+    {
+      "command": "mkfs.ext4 /dev/sda1",
+      "expect": "BLOCKED:mkfs.ext4:Formatting or discarding a device destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it."
+    },
+    {
+      "command": "mkfs.ext4 /dev/sdb",
+      "expect": "BLOCKED:mkfs.ext4:Formatting or discarding a device destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it."
+    },
+    { "command": "mkfs.ext4 /srv/scratch/disk.img", "expect": "allow" },
+    { "command": "mktree", "expect": "allow" },
+    { "command": "must-not-reach-scanner", "expect": "allow" },
+    { "command": "nested/.npmrc", "expect": "allow" },
+    { "command": "new.txt", "expect": "allow" },
+    {
+      "command": "nice -n 5 timeout 5 git push",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "nohup ", "expect": "allow" },
+    { "command": "not-the-repo", "expect": "allow" },
+    { "command": "oid", "expect": "allow" },
+    { "command": "old.txt", "expect": "allow" },
+    { "command": "old_branch", "expect": "allow" },
+    { "command": "one two three", "expect": "allow" },
+    { "command": "parted -l", "expect": "allow" },
+    {
+      "command": "parted -s /dev/sda mklabel gpt",
+      "expect": "BLOCKED:parted:Changing a partition table destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it. Inspect with 'parted -l' or 'parted <dev> print'."
+    },
+    { "command": "parted /dev/sda print", "expect": "allow" },
+    { "command": "password.pass", "expect": "allow" },
+    { "command": "password.txt", "expect": "allow" },
+    { "command": "path", "expect": "allow" },
+    { "command": "path, body", "expect": "allow" },
+    { "command": "path,body,mode", "expect": "allow" },
+    { "command": "payload", "expect": "allow" },
+    { "command": "payload, denied", "expect": "allow" },
+    { "command": "pct list", "expect": "allow" },
+    { "command": "permissionDecision", "expect": "allow" },
+    { "command": "permissionDecisionReason", "expect": "allow" },
+    { "command": "policy", "expect": "allow" },
+    { "command": "policy defect", "expect": "allow" },
+    { "command": "printf '%s\\n' 'core.hooksPath=/dev/null' > t/data.txt", "expect": "allow" },
+    {
+      "command": "printf main | xargs -I{} git push origin {}",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "private, options", "expect": "allow" },
+    { "command": "private-key", "expect": "allow" },
+    { "command": "publication_guard_entry", "expect": "allow" },
+    { "command": "publish-fixture-", "expect": "allow" },
+    { "command": "push", "expect": "allow" },
+    { "command": "push origin main", "expect": "allow" },
+    {
+      "command": "pvesh delete /nodes/davion-gem/qemu/101",
+      "expect": "BLOCKED:pvesh delete:This API call destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    { "command": "pvesh get /nodes", "expect": "allow" },
+    { "command": "pytest backend/tests", "expect": "allow" },
+    { "command": "python", "expect": "allow" },
+    { "command": "python3 - <<'EOF'\nprint('git stash drop')\nEOF", "expect": "allow" },
+    {
+      "command": "python3 - <<'EOF'\nrun('git -c core.hooksPath=/dev/null commit')\nEOF",
+      "expect": "Publication hooks must remain enabled."
+    },
+    { "command": "qm list", "expect": "allow" },
+    { "command": "quiet", "expect": "allow" },
+    { "command": "raise SyntaxError('mid-edit')\n", "expect": "allow" },
+    {
+      "command": "rclone --config /x/rclone.conf deletefile gdrive:a/b",
+      "expect": "BLOCKED:rclone deletefile:Deletes files on a remote (offsite backups such as summitflow-drive live there); offsite expiry runs only from the scheduled backup jobs. Inspect with 'rclone ls'/'rclone lsd' or add --dry-run."
+    },
+    {
+      "command": "rclone --config /x/rclone.conf sync --transfers 4 /data gdrive:backup",
+      "expect": "BLOCKED:rclone sync:Mirroring onto a remote deletes destination files that the source lacks (offsite backups such as summitflow-drive live there); offsite uploads run only from the scheduled backup jobs. Preview with --dry-run, or use 'rclone copy', which never deletes."
+    },
+    {
+      "command": "rclone cleanup summitflow-drive:",
+      "expect": "BLOCKED:rclone cleanup:Deletes files on a remote (offsite backups such as summitflow-drive live there); offsite expiry runs only from the scheduled backup jobs. Inspect with 'rclone ls'/'rclone lsd' or add --dry-run."
+    },
+    { "command": "rclone copy /data gdrive:x", "expect": "allow" },
+    { "command": "rclone delete /tmp/local", "expect": "allow" },
+    {
+      "command": "rclone delete summitflow-drive:backups",
+      "expect": "BLOCKED:rclone delete:Deletes files on a remote (offsite backups such as summitflow-drive live there); offsite expiry runs only from the scheduled backup jobs. Inspect with 'rclone ls'/'rclone lsd' or add --dry-run."
+    },
+    { "command": "rclone delete summitflow-drive:x --dry-run", "expect": "allow" },
+    { "command": "rclone ls summitflow-drive:", "expect": "allow" },
+    { "command": "rclone lsd summitflow-drive:", "expect": "allow" },
+    {
+      "command": "rclone move ./out summitflow-drive:x",
+      "expect": "BLOCKED:rclone move:Mirroring onto a remote deletes destination files that the source lacks (offsite backups such as summitflow-drive live there); offsite uploads run only from the scheduled backup jobs. Preview with --dry-run, or use 'rclone copy', which never deletes."
+    },
+    { "command": "rclone move summitflow-drive:x ./local", "expect": "allow" },
+    {
+      "command": "rclone purge summitflow-drive:",
+      "expect": "BLOCKED:rclone purge:Deletes files on a remote (offsite backups such as summitflow-drive live there); offsite expiry runs only from the scheduled backup jobs. Inspect with 'rclone ls'/'rclone lsd' or add --dry-run."
+    },
+    {
+      "command": "rclone rmdirs summitflow-drive:x",
+      "expect": "BLOCKED:rclone rmdirs:Deletes files on a remote (offsite backups such as summitflow-drive live there); offsite expiry runs only from the scheduled backup jobs. Inspect with 'rclone ls'/'rclone lsd' or add --dry-run."
+    },
+    { "command": "rclone sync /a /b", "expect": "allow" },
+    { "command": "rclone sync /data gdrive:backup --dry-run", "expect": "allow" },
+    {
+      "command": "rclone sync /srv/backups summitflow-drive:archive",
+      "expect": "BLOCKED:rclone sync:Mirroring onto a remote deletes destination files that the source lacks (offsite backups such as summitflow-drive live there); offsite uploads run only from the scheduled backup jobs. Preview with --dry-run, or use 'rclone copy', which never deletes."
+    },
+    { "command": "rclone sync summitflow-drive:archive /srv/scratch/restore", "expect": "allow" },
+    { "command": "refs/heads/a", "expect": "allow" },
+    { "command": "refs/heads/b", "expect": "allow" },
+    { "command": "refs/heads/main", "expect": "allow" },
+    { "command": "refs/heads/main ", "expect": "allow" },
+    { "command": "repo", "expect": "allow" },
+    { "command": "report", "expect": "allow" },
+    { "command": "restic -r /mnt/x check", "expect": "allow" },
+    {
+      "command": "restic -r /mnt/x forget --keep-last 1 --prune",
+      "expect": "BLOCKED:restic forget:Permanently deletes backup snapshots, data, or keys; retention runs only from the scheduled SummitFlow backup jobs. Inspect with 'restic snapshots' or preview with '--dry-run'."
+    },
+    { "command": "restic forget --dry-run --keep-last 3", "expect": "allow" },
+    {
+      "command": "restic key remove abc",
+      "expect": "BLOCKED:restic key:Permanently deletes backup snapshots, data, or keys; retention runs only from the scheduled SummitFlow backup jobs. Inspect with 'restic snapshots' or preview with '--dry-run'."
+    },
+    {
+      "command": "restic prune",
+      "expect": "BLOCKED:restic prune:Permanently deletes backup snapshots, data, or keys; retention runs only from the scheduled SummitFlow backup jobs. Inspect with 'restic snapshots' or preview with '--dry-run'."
+    },
+    { "command": "restic snapshots", "expect": "allow" },
+    { "command": "reviewed global adapter is not installed", "expect": "allow" },
+    { "command": "rg 'git reset --hard' docs", "expect": "allow" },
+    { "command": "rg core.hooksPath scripts", "expect": "allow" },
+    {
+      "command": "rm -Rf /etc",
+      "expect": "BLOCKED:rm -r /etc:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    { "command": "rm -f /srv/workspaces", "expect": "allow" },
+    {
+      "command": "rm -fr $HOME",
+      "expect": "BLOCKED:rm -r /home/guard-fixture:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "rm -r /srv/workspaces/projects/summitflow/",
+      "expect": "BLOCKED:rm -r /srv/workspaces/projects/summitflow:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    { "command": "rm -rf $BUILD_DIR", "expect": "allow" },
+    {
+      "command": "rm -rf .",
+      "expect": "BLOCKED:rm -r /srv/workspaces/projects/summitflow:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "rm -rf /",
+      "expect": "BLOCKED:rm -r /:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "rm -rf /media/kasadis/Backups/davion-gem",
+      "expect": "BLOCKED:rm -r /media/kasadis/Backups/davion-gem:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "rm -rf /mnt/summitflow-native",
+      "expect": "BLOCKED:rm -r /mnt/summitflow-native:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "rm -rf /srv",
+      "expect": "BLOCKED:rm -r /srv:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "rm -rf /srv/workspaces",
+      "expect": "BLOCKED:rm -r /srv/workspaces:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "rm -rf /srv/workspaces/projects/*",
+      "expect": "BLOCKED:rm -r /srv/workspaces/projects:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "rm -rf /srv/workspaces/projects/summitflow",
+      "expect": "BLOCKED:rm -r /srv/workspaces/projects/summitflow:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    { "command": "rm -rf /srv/workspaces/projects/summitflow/frontend/.next", "expect": "allow" },
+    { "command": "rm -rf /srv/workspaces/st-local-acceptance.hf9oW2", "expect": "allow" },
+    { "command": "rm -rf /tmp/claude-1000/foo", "expect": "allow" },
+    { "command": "rm -rf build/", "expect": "allow" },
+    { "command": "rm -rf node_modules", "expect": "allow" },
+    {
+      "command": "rm -rf ~",
+      "expect": "BLOCKED:rm -r /home/guard-fixture:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "rm -rf ~/",
+      "expect": "BLOCKED:rm -r /home/guard-fixture:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    { "command": "rm_protected_root", "expect": "allow" },
+    { "command": "run_inherited", "expect": "allow" },
+    { "command": "s3cr3t", "expect": "allow" },
+    { "command": "scan", "expect": "allow" },
+    { "command": "scanner", "expect": "allow" },
+    { "command": "scratch", "expect": "allow" },
+    { "command": "scripts", "expect": "allow" },
+    { "command": "scripts/lib", "expect": "allow" },
+    { "command": "scripts/lib/publication-pre-push", "expect": "allow" },
+    { "command": "scripts/lib/publication-pretool-hook", "expect": "allow" },
+    { "command": "scripts/lib/publication_guard_entry.py", "expect": "allow" },
+    { "command": "scripts/st", "expect": "allow" },
+    { "command": "secret-sensitive", "expect": "allow" },
+    { "command": "secret-sensitive|sensitive content", "expect": "allow" },
+    { "command": "secret.secret", "expect": "allow" },
+    { "command": "sensitive-fixture-output", "expect": "allow" },
+    {
+      "command": "sfdisk /dev/sda < layout",
+      "expect": "BLOCKED:sfdisk:Repartitioning a disk destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it. Inspect with 'lsblk' or 'fdisk -l'."
+    },
+    {
+      "command": "sgdisk --zap-all /dev/sdb",
+      "expect": "BLOCKED:sgdisk:Changing a GPT destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it. Inspect with 'sgdisk -p <dev>'."
+    },
+    {
+      "command": "sgdisk -n 1:0:0 /dev/sdb",
+      "expect": "BLOCKED:sgdisk:Changing a GPT destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it. Inspect with 'sgdisk -p <dev>'."
+    },
+    { "command": "sgdisk -p /dev/sda", "expect": "allow" },
+    { "command": "sh -c '", "expect": "allow" },
+    { "command": "shallow", "expect": "allow" },
+    { "command": "shell", "expect": "allow" },
+    { "command": "sleep 1 & ", "expect": "allow" },
+    { "command": "source", "expect": "allow" },
+    {
+      "command": "ssh -p 22 -i key davion-gem lvremove -y pve/vm-101-disk-0",
+      "expect": "BLOCKED:lvremove:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    { "command": "ssh -t host", "expect": "allow" },
+    { "command": "ssh host uptime", "expect": "allow" },
+    {
+      "command": "ssh proxmox-gem \"bash -c 'qm destroy 9'\"",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    { "command": "ssh proxmox-gem 'qm config 101'", "expect": "allow" },
+    {
+      "command": "ssh proxmox-gem 'sudo rm -rf /etc/pve/qemu-server'",
+      "expect": "BLOCKED:rm -r /etc/pve/qemu-server:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "ssh proxmox-gem 'zfs destroy -r rpool/data'",
+      "expect": "BLOCKED:zfs destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    {
+      "command": "ssh proxmox-gem <<'EOF'\nqm destroy 101\nEOF",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    { "command": "ssh proxmox-gem pvesh get /cluster/resources", "expect": "allow" },
+    {
+      "command": "ssh proxmox-gem pvesm free local-lvm:vm-101-disk-0",
+      "expect": "BLOCKED:pvesm free:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    {
+      "command": "ssh proxmox-gem qm destroy 101",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    { "command": "ssh proxmox-gem qm list", "expect": "allow" },
+    {
+      "command": "ssh proxmox-gem rm -rf /var/lib/vz",
+      "expect": "BLOCKED:rm -r /var/lib/vz:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "command": "ssh proxmox-gem vgremove pve",
+      "expect": "BLOCKED:vgremove:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    { "command": "ssh proxmox-gem zfs list", "expect": "allow" },
+    {
+      "command": "ssh root@192.168.86.39 'pct destroy 200 --purge'",
+      "expect": "BLOCKED:pct destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    {
+      "command": "ssh root@192.168.86.39 'pvesh delete /storage/local-lvm'",
+      "expect": "BLOCKED:pvesh delete:This API call destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    { "command": "st", "expect": "allow" },
+    {
+      "command": "st backup storage approve-deletion restic-retention --target local --owner-approved 'ok'",
+      "expect": "allow"
+    },
+    { "command": "st backup storage list", "expect": "allow" },
+    { "command": "st backup storage safety", "expect": "allow" },
+    { "command": "st check --quick --changed-only", "expect": "allow" },
+    { "command": "st check pytest -- tests", "expect": "allow" },
+    {
+      "command": "st commit -m \"$(cat <<'EOF'\nfix: document --no-verify misuse\nEOF\n)\"",
+      "expect": "allow"
+    },
+    { "command": "st commit -m 'local'", "expect": "allow" },
+    { "command": "st commit -m 'never run git reset --hard or rm -rf /'", "expect": "allow" },
+    { "command": "st commit -m 'never run qm destroy or mkfs /dev/sda'", "expect": "allow" },
+    { "command": "st commit -m local", "expect": "allow" },
+    { "command": "st runtime unavailable", "expect": "allow" },
+    { "command": "st service rebuild summitflow --detach", "expect": "allow" },
+    {
+      "command": "st vcs publish --source fixture --sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --now",
+      "expect": "allow"
+    },
+    { "command": "st vcs publish --source fixture --sha abc --now", "expect": "allow" },
+    { "command": "state", "expect": "allow" },
+    { "command": "state/summitflow/command-guard-degraded.log", "expect": "allow" },
+    { "command": "status", "expect": "allow" },
+    {
+      "command": "sudo -u owner git config --local core.hooksPath x",
+      "expect": "Publication hooks must remain enabled."
+    },
+    {
+      "command": "sudo blkdiscard /dev/nvme1n1",
+      "expect": "BLOCKED:blkdiscard:Formatting or discarding a device destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it."
+    },
+    {
+      "command": "sudo btrbk clean",
+      "expect": "BLOCKED:btrbk clean:Deletes btrbk snapshots and backups outside the scheduled retention run; preview with 'btrbk -n' / '--dry-run' or inspect with 'btrbk list'."
+    },
+    {
+      "command": "sudo btrfs sub del /.snapshots/12/snapshot",
+      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'."
+    },
+    {
+      "command": "sudo cryptsetup erase /dev/nvme0n1p2",
+      "expect": "BLOCKED:cryptsetup:Formatting or erasing a LUKS header makes the data unrecoverable; it destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it."
+    },
+    {
+      "command": "sudo dd if=img.iso of=/dev/disk/by-id/usb-X status=progress",
+      "expect": "BLOCKED:dd of=/dev:Writing raw data to a device destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it. Write to a regular file instead."
+    },
+    {
+      "command": "sudo dmsetup remove luks-root",
+      "expect": "BLOCKED:dmsetup remove:Tearing down a device-mapper device (LUKS, LVM) under a mounted system can corrupt or strand its data; only loop-backed scratch mappings may be removed. Inspect with 'dmsetup ls'."
+    },
+    {
+      "command": "sudo env RESTIC_PASSWORD_FILE=x restic -r rclone:summitflow-drive:r forget --keep-daily 1",
+      "expect": "BLOCKED:restic forget:Permanently deletes backup snapshots, data, or keys; retention runs only from the scheduled SummitFlow backup jobs. Inspect with 'restic snapshots' or preview with '--dry-run'."
+    },
+    { "command": "sudo git push", "expect": "Use the canonical ST publication workflow." },
+    {
+      "command": "sudo git reset --hard",
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    {
+      "command": "sudo mkfs -t ext4 /dev/nvme0n1p3",
+      "expect": "BLOCKED:mkfs:Formatting or discarding a device destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it."
+    },
+    {
+      "command": "sudo mkfs.ext4 /dev/sdb1",
+      "expect": "BLOCKED:mkfs.ext4:Formatting or discarding a device destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it."
+    },
+    { "command": "sweep", "expect": "allow" },
+    { "command": "sys.stdin", "expect": "allow" },
+    { "command": "syslog", "expect": "allow" },
+    {
+      "command": "tee t/data.txt <<'EOF' >/dev/null\nx | git config core.hooksPath /dev/null\nEOF",
+      "expect": "allow"
+    },
+    {
+      "command": "timeout --signal=KILL 5 git push",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "timeout -k 2 30s git push",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "timeout 5 git -c core.hooksPath=/x commit",
+      "expect": "Publication hooks must remain enabled."
+    },
+    {
+      "command": "timeout 5 git push origin main",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "command": "timeout 5 git send-pack origin main",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "timeout 5 git status", "expect": "allow" },
+    { "command": "tool_input", "expect": "allow" },
+    { "command": "tool_name", "expect": "allow" },
+    { "command": "tracked", "expect": "allow" },
+    { "command": "unavailable", "expect": "allow" },
+    { "command": "uv pip install restic", "expect": "allow" },
+    { "command": "uv run git push", "expect": "Use the canonical ST publication workflow." },
+    { "command": "uv run pytest", "expect": "allow" },
+    {
+      "command": "uv run qm destroy 101",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    {
+      "command": "uv run restic forget abc123",
+      "expect": "BLOCKED:restic forget:Permanently deletes backup snapshots, data, or keys; retention runs only from the scheduled SummitFlow backup jobs. Inspect with 'restic snapshots' or preview with '--dry-run'."
+    },
+    { "command": "uv run st backup storage safety", "expect": "allow" },
+    { "command": "uv sync", "expect": "allow" },
+    { "command": "uv sync --locked", "expect": "allow" },
+    {
+      "command": "uv tool run qm destroy 101",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    {
+      "command": "uvx qm destroy 101",
+      "expect": "BLOCKED:qm destroy:This destroys Proxmox/LVM/ZFS storage or guests with no undo; VM and storage lifecycle is owner-run. Inspect with 'qm list', 'pct list', 'lvs', 'zfs list', or 'pvesm status'."
+    },
+    { "command": "uvx ruff check .", "expect": "allow" },
+    {
+      "command": "wget --post-data='{}' https://api.github.com/repos/o/r/git/refs",
+      "expect": "Use the canonical ST publication workflow."
+    },
+    { "command": "while true; do ", "expect": "allow" },
+    {
+      "command": "wipefs -a /dev/sdb",
+      "expect": "BLOCKED:wipefs:Erasing filesystem signatures destroys every byte on a real disk and agents never run it; practice on an image file or loop device under /srv/scratch, or ask the owner to run it. List with plain 'wipefs <dev>'."
+    },
+    { "command": "wipefs /dev/sda", "expect": "allow" },
+    { "command": "zfs destroy -n rpool/x", "expect": "allow" },
+    { "command": "{ ", "expect": "allow" },
+    { "command": "{\"manifest_version\": 3,\n\"key\": \"", "expect": "allow" }
+  ]
+}

@@ -1,0 +1,735 @@
+{
+  "description": "Whole PreToolUse payloads that are not the plain Bash-command shape: GitHub connector tool names, a missing or malformed tool_input or command, list-form commands, Codex exec_command with `cmd`, odd tool_name and cwd values, and the same command judged in different working directories. `payload` is passed to Evaluate as given; `expect` is what SummitFlow's hook answered (`allow` or the deny reason). `note` says what the case checks.",
+  "version": 1,
+  "env": { "HOME": "/home/guard-fixture" },
+  "source": "summitflow-hook-tests",
+  "cases": [
+    {
+      "note": "GitHub connector tool merge_pull_request is a publication",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__merge_pull_request",
+        "tool_input": { "owner": "o", "repo": "r" }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "GitHub connector tool create_release is a publication",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__create_release",
+        "tool_input": { "owner": "o", "repo": "r" }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "GitHub connector tool update_release is a publication",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__update_release",
+        "tool_input": { "owner": "o", "repo": "r" }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "GitHub connector tool delete_release is a publication",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__delete_release",
+        "tool_input": { "owner": "o", "repo": "r" }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "GitHub connector tool push_files is a publication",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__push_files",
+        "tool_input": { "owner": "o", "repo": "r" }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "GitHub connector tool create_or_update_file is a publication",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__create_or_update_file",
+        "tool_input": { "owner": "o", "repo": "r" }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "GitHub connector tool create_repository is a publication",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__create_repository",
+        "tool_input": { "owner": "o", "repo": "r" }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "GitHub connector tool with the name in capitals",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__GitHub__MERGE_PULL_REQUEST",
+        "tool_input": {}
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "read-only GitHub connector tool get_issue",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__get_issue",
+        "tool_input": { "owner": "o" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "read-only GitHub connector tool list_pull_requests",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__list_pull_requests",
+        "tool_input": { "owner": "o" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "read-only GitHub connector tool search_code",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__search_code",
+        "tool_input": { "owner": "o" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "read-only GitHub connector tool get_file_contents",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__github__get_file_contents",
+        "tool_input": { "owner": "o" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "file tool without a command",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": { "file_path": "file" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "edit tool without a command",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Edit",
+        "tool_input": { "file_path": "f", "old_string": "a", "new_string": "b" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "shell tool name with no command in the input",
+      "payload": { "hook_event_name": "PreToolUse", "tool_name": "exec_command", "tool_input": {} },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "Bash tool with an empty input",
+      "payload": { "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {} },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "shell tool with an empty input",
+      "payload": { "hook_event_name": "PreToolUse", "tool_name": "shell", "tool_input": {} },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "tool name containing bash with no command",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__tools__run_bash",
+        "tool_input": {}
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "no tool_input at all",
+      "payload": { "hook_event_name": "PreToolUse", "tool_name": "Bash" },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "tool_input null",
+      "payload": { "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": null },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "tool_input a string",
+      "payload": { "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": "git push" },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "tool_input a list",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": ["git", "push"]
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "empty payload",
+      "payload": {},
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "payload without a tool name, with a command",
+      "payload": { "tool_input": { "command": "git push" } },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "payload without a tool name or command",
+      "payload": { "tool_input": {} },
+      "expect": "allow"
+    },
+    {
+      "note": "tool_name null with no command",
+      "payload": { "hook_event_name": "PreToolUse", "tool_name": null, "tool_input": {} },
+      "expect": "allow"
+    },
+    {
+      "note": "tool_name a list naming bash, no command",
+      "payload": { "hook_event_name": "PreToolUse", "tool_name": ["bash"], "tool_input": {} },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "tool_name a number, no command",
+      "payload": { "hook_event_name": "PreToolUse", "tool_name": 5, "tool_input": {} },
+      "expect": "allow"
+    },
+    {
+      "note": "tool_name a list naming a connector mutation",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": ["merge_pull_request"],
+        "tool_input": {}
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "command null",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": null }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command null beats cmd",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": null, "cmd": "git push" }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command wins over cmd",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "ls", "cmd": "git push" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "cmd wins when command is absent",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "exec_command",
+        "tool_input": { "cmd": "git push origin main" }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "Codex exec_command with an allowed cmd",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "exec_command",
+        "tool_input": { "cmd": "st commit -m local" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "Codex exec_command denied by the irreversible rules",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "exec_command",
+        "tool_input": { "cmd": "rm -rf /srv/workspaces" },
+        "cwd": "/tmp"
+      },
+      "expect": "BLOCKED:rm -r /srv/workspaces:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "note": "cmd as a list",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "exec_command",
+        "tool_input": { "cmd": ["git", "push"] }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "cmd as an allowed list",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "exec_command",
+        "tool_input": { "cmd": ["ls", "-la"] }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "command as a list: publication",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "shell",
+        "tool_input": { "command": ["git", "push"] }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "command as a list: bash -lc with a discard",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "shell",
+        "tool_input": { "command": ["bash", "-lc", "git clean -fd"] },
+        "cwd": "/srv/workspaces/projects/summitflow"
+      },
+      "expect": "BLOCKED:git clean:Permanently deletes untracked files other agents may own; remove your own files by explicit path (rm <path>), preview with 'git clean -n'."
+    },
+    {
+      "note": "command as a list: allowed",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "shell",
+        "tool_input": { "command": ["echo", "hello world"] }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "command as a list needing quotes",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "shell",
+        "tool_input": { "command": ["echo", "it's", "a b", "", "$HOME"] }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "command as a list: recursive delete",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "shell",
+        "tool_input": { "command": ["rm", "-rf", "/srv/workspaces"] }
+      },
+      "expect": "BLOCKED:rm -r /srv/workspaces:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "note": "command as a list with one word",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "shell",
+        "tool_input": { "command": ["ls"] }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "command as an empty list",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "shell",
+        "tool_input": { "command": [] }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command as a list with a non-string",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "shell",
+        "tool_input": { "command": ["git", 1] }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command as a list with a null",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "shell",
+        "tool_input": { "command": ["git", null] }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command as a list with non-ASCII words",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "shell",
+        "tool_input": { "command": ["echo", "héllo", "日本"] }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "command a number",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": 5 }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command true",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": true }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command an object",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": { "x": 1 } }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command empty string",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "" }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command only spaces",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "   " }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command only newlines and tabs (the policy refuses it; SummitFlow's shell prefilter alone would let it through, and the Go hook has no prefilter)",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "\n\t \r\n" }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "command only a non-breaking space",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": " " }
+      },
+      "expect": "Publication guard could not evaluate tool input; execution refused."
+    },
+    {
+      "note": "cwd missing, irreversible command allowed",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git status" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "cwd empty string treated as missing",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git status" },
+        "cwd": ""
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "cwd a number is ignored",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git status" },
+        "cwd": 5
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "cwd null is ignored",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git status" },
+        "cwd": null
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "git reset --hard judged in /srv/workspaces/projects/summitflow",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "/srv/workspaces/projects/summitflow"
+      },
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    {
+      "note": "git reset --hard judged in /srv/workspaces/projects/aico",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "/srv/workspaces/projects/aico"
+      },
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    {
+      "note": "git reset --hard judged in /tmp",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "/tmp"
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "git reset --hard judged in /tmp/scratch-clone",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "/tmp/scratch-clone"
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "git reset --hard judged in /srv/scratch/work",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "/srv/scratch/work"
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "git reset --hard judged in /dev/shm/x",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "/dev/shm/x"
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "git reset --hard judged in /var/tmp",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "/var/tmp"
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "git reset --hard judged in /mnt/x",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "/mnt/x"
+      },
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    {
+      "note": "git reset --hard judged in relative/dir",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "relative/dir"
+      },
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    {
+      "note": "git reset --hard judged in ~",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "~"
+      },
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    {
+      "note": "git reset --hard judged in /home/guard-fixture/projects/x",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "/home/guard-fixture/projects/x"
+      },
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    {
+      "note": "git reset --hard judged in /",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git reset --hard" },
+        "cwd": "/"
+      },
+      "expect": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+    },
+    {
+      "note": "rm -rf with a relative operand, cwd /srv/workspaces/projects",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "rm -rf aico" },
+        "cwd": "/srv/workspaces/projects"
+      },
+      "expect": "BLOCKED:rm -r /srv/workspaces/projects/aico:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "note": "rm -rf with a relative operand, cwd /srv",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "rm -rf workspaces" },
+        "cwd": "/srv"
+      },
+      "expect": "BLOCKED:rm -r /srv/workspaces:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "note": "rm -rf ~ with the fixture HOME",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "rm -rf ~" },
+        "cwd": "/tmp"
+      },
+      "expect": "BLOCKED:rm -r /home/guard-fixture:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "note": "rm -rf $HOME with the fixture HOME",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "rm -rf $HOME" },
+        "cwd": "/tmp"
+      },
+      "expect": "BLOCKED:rm -r /home/guard-fixture:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "note": "rm -rf ~user is unknown and left alone",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "rm -rf ~nobody-such-user" },
+        "cwd": "/tmp"
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "cd ~ then rm -rf .",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "cd ~ && rm -rf ." },
+        "cwd": "/tmp"
+      },
+      "expect": "BLOCKED:rm -r /home/guard-fixture:Recursive delete of a protected root (home, /srv, workspace or project root, mounted storage) is irreversible; delete the specific subpaths you own instead."
+    },
+    {
+      "note": "Bash command with extra payload fields",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "git push", "description": "push", "timeout": 5 },
+        "session_id": "s",
+        "transcript_path": "/tmp/t.jsonl",
+        "permission_mode": "default"
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "Bash tool name in lower case",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "bash",
+        "tool_input": { "command": "gh pr merge 4" }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "command with a non-ASCII word",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "echo héllo wörld && git push" }
+      },
+      "expect": "Use the canonical ST publication workflow."
+    },
+    {
+      "note": "command with an invalid escape for the shell",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "echo 'unclosed" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "command with a trailing backslash",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "echo hi \\" }
+      },
+      "expect": "allow"
+    },
+    {
+      "note": "hook-disable text in a heredoc for python",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "python3 - <<'EOF'\nprint('--no-verify')\nEOF" }
+      },
+      "expect": "Publication hooks must remain enabled."
+    },
+    {
+      "note": "hook-disable text in a commit message heredoc",
+      "payload": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "st commit -m \"$(cat <<'EOF'\nfix: document --no-verify misuse\nEOF\n)\""
+        }
+      },
+      "expect": "allow"
+    }
+  ]
+}
