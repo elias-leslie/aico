@@ -2,7 +2,8 @@
 
 Port of ns/checks/pve.py's storage, failed-units, smart and host sections. One ssh round trip runs read-only
 shell snippets on the PVE host through the pinned hop key (collect), and the other PVE checks (ecc, thermal)
-share that answer within a run. Left out: guest (VM and container) state, NIC and segment guards, honeypot and
+share that answer within a run. It also keeps the offload note memctl publishes in the admission file while memory
+is tight (Nightshift's perf check did): the PVE host and its free memory while it answers, none while it does not. Left out: guest (VM and container) state, NIC and segment guards, honeypot and
 evidence copies, the dead-man heartbeat and the executor manifest (M5b and later), apt (an info line).
 Not installed on gem itself: gem has no Aico web server to take loopback rows yet (needs the fleet link).
 """
@@ -43,6 +44,7 @@ END { out() }'
 echo "===NS rasdaemon"; systemctl is-active rasdaemon 2>/dev/null
 echo "===NS rasmce"; ras-mc-ctl --errors 2>/dev/null | awk '/^MCE events:/ { f = 1; next } /^$/ { f = 0 } f && /^[0-9]+ [0-9][0-9][0-9][0-9]-/' | tail -n 1000
 echo "===NS hwmon"; for h in /sys/class/hwmon/hwmon*; do n=$(cat "$h/name" 2>/dev/null); for t in "$h"/temp*_input; do [ -r "$t" ] || continue; b=${t%_input}; l=$(cat "${b}_label" 2>/dev/null | tr " " _); echo "T ${n:-unknown} ${l:--} $(cat "$t" 2>/dev/null || echo x) $(cat "${b}_max" 2>/dev/null || echo 0) $(cat "${b}_crit" 2>/dev/null || echo 0)"; done; done
+echo "===NS mem"; grep -m1 '^MemAvailable:' /proc/meminfo
 echo "===NS end"
 """
 
@@ -243,8 +245,20 @@ def record_readings(ctx: Ctx, sections: dict[str, str]) -> None:
         history.record(ctx.cache, metric, "pve", value, serial, ctx.now, agg="max", kind=kind)
 
 
+def offload_note(ctx: Ctx, sections: dict[str, str] | None) -> None:
+    """state offload = {host, mem_available_gib} while the PVE host answers (memctl's read_offload applies its own
+    minimum); dropped when it does not, or its memory is unreadable."""
+    found = re.search(r"MemAvailable:\s+(\d+)\s*kB", (sections or {}).get("mem", ""))
+    if found:
+        gib = round(int(found.group(1)) / 2**20, 1)
+        ctx.state["offload"] = {"host": ctx.site["pve"]["name"], "mem_available_gib": gib}
+    else:
+        ctx.state.pop("offload", None)
+
+
 def run(ctx: Ctx) -> list[Signal]:
     sections, why = collect(ctx)
+    offload_note(ctx, sections)
     if sections is None:
         return [Signal("pve.unreachable", "failed", {"why": why})]
     cfg = ctx.cfg

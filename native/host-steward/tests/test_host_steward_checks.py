@@ -22,6 +22,7 @@ from host_steward.checks import (
     thermal,
     workstation,
 )
+from host_steward.jobs import memctl
 
 DATA = core.load_data()
 NOW = 1_800_000_000.0
@@ -246,6 +247,7 @@ def pve_answer(lvs=LVS, vg_free="50000000000B", up=86400, failed="", smart_ok=Tr
             "===NS rasdaemon", ras,
             "===NS rasmce", "",
             "===NS hwmon", hwmon,
+            "===NS mem", "MemAvailable:   25165824 kB",
             "===NS end",
         ]
     )  # fmt: skip
@@ -277,6 +279,20 @@ def test_pve_unreachable_is_a_failed_row_for_pve_and_a_warning_for_the_others():
     assert states(pve.run(ctx("pve", down))) == {"pve.unreachable": "failed"}
     assert states(ecc.run(ctx("ecc", down))) == {"pve.unreachable": "warn"}
     assert states(thermal.run(ctx("thermal", down, hwmon_root="/nonexistent")))["thermal.unavailable"] == "warn"
+
+
+def test_pve_keeps_the_offload_note_memctl_publishes(tmp_path):
+    """While the PVE host answers, state offload names it with its free memory (memctl reads it, as it read
+    Nightshift's perf finding); unreachable drops it, so memctl never offers a host it cannot reach."""
+    state: dict = {}
+    pve.run(ctx("pve", pve_run(), state=state))
+    assert state["offload"] == {"host": "davion-gem", "mem_available_gib": 24.0}
+    doc = {"checks": {"pve": state}}
+    (tmp_path / "state.json").write_text(json.dumps(doc))
+    assert memctl.read_offload(tmp_path / "state.json", 8 * 2**30) == "davion-gem"
+    assert memctl.read_offload(tmp_path / "state.json", 32 * 2**30) is None
+    pve.run(ctx("pve", pve_run("", rc=255, err="Connection timed out"), state=state))
+    assert "offload" not in state
 
 
 def test_pve_is_asked_once_per_run_for_all_three_checks(tmp_path):
