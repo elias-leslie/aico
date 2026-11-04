@@ -74,7 +74,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/agent (layer 4): import only @aico/store, @aico/context, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
                   }
@@ -126,7 +128,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/checks (layer 4): import only @aico/status, @aico/tasks (package.json aico.imports; depcruise is the gate)"
                   }
@@ -178,7 +182,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/context (layer 3): import only @aico/store, @aico/usage (package.json aico.imports; depcruise is the gate)"
                   }
@@ -228,7 +234,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/fleet (layer 3): import only @aico/shared, @aico/store, @aico/status (package.json aico.imports; depcruise is the gate)"
                   }
@@ -278,7 +286,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/jobs (layer 5): import only @aico/store, @aico/status, @aico/fleet (package.json aico.imports; depcruise is the gate)"
                   }
@@ -332,7 +342,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/notes (layer 3): import only @aico/shared (package.json aico.imports; depcruise is the gate)"
                   }
@@ -384,7 +396,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/notify (layer 2): import only @aico/store, @aico/status (package.json aico.imports; depcruise is the gate)"
                   }
@@ -440,7 +454,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/shared (layer 0): import only no other package (package.json aico.imports; depcruise is the gate)"
                   }
@@ -494,7 +510,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/status (layer 2): import only @aico/store (package.json aico.imports; depcruise is the gate)"
                   }
@@ -548,7 +566,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/store (layer 1): import only no other package (package.json aico.imports; depcruise is the gate)"
                   }
@@ -598,7 +618,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/tasks (layer 4): import only @aico/status, @aico/store, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
                   }
@@ -652,7 +674,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/tether-client (layer 3): import only @aico/shared (package.json aico.imports; depcruise is the gate)"
                   }
@@ -714,7 +738,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/ui-kit (layer 6): import only no other package (package.json aico.imports; depcruise is the gate)"
                   },
@@ -770,7 +796,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/usage (layer 2): import only @aico/store, @aico/status (package.json aico.imports; depcruise is the gate)"
                   }
@@ -810,9 +838,65 @@
                       "@aico/ui-kit",
                       "@aico/ui-kit/**",
                       "@aico/web-frontend",
-                      "@aico/web-frontend/**"
+                      "@aico/web-frontend/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/web-server (layer 5): import only @aico/shared, @aico/context, @aico/notify, @aico/status, @aico/usage, @aico/fleet, @aico/notes, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/webtools/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "warn",
+              "options": {
+                "paths": {
+                  "node:sqlite": "Only the store package imports node:sqlite."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "@aico/agent",
+                      "@aico/agent/**",
+                      "@aico/checks",
+                      "@aico/checks/**",
+                      "@aico/context",
+                      "@aico/context/**",
+                      "@aico/fleet",
+                      "@aico/fleet/**",
+                      "@aico/jobs",
+                      "@aico/jobs/**",
+                      "@aico/notes",
+                      "@aico/notes/**",
+                      "@aico/notify",
+                      "@aico/notify/**",
+                      "@aico/shared",
+                      "@aico/shared/**",
+                      "@aico/tasks",
+                      "@aico/tasks/**",
+                      "@aico/tether",
+                      "@aico/tether/**",
+                      "@aico/tether-client",
+                      "@aico/tether-client/**",
+                      "@aico/ui-kit",
+                      "@aico/ui-kit/**",
+                      "@aico/usage",
+                      "@aico/usage/**",
+                      "@aico/web-frontend",
+                      "@aico/web-frontend/**",
+                      "@aico/web-server",
+                      "@aico/web-server/**"
+                    ],
+                    "message": "@aico/webtools (layer 3): import only @aico/store, @aico/status (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

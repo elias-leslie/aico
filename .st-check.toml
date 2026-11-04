@@ -627,6 +627,36 @@ quick_paths = ["packages/context/**", "packages/fleet/**", "packages/notes/**", 
 argv = ["node_modules/.bin/depcruise", "packages/web-server", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
 
 [[native.stages]]
+id = "biome-webtools"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "biome"
+quick = true
+quick_paths = ["packages/status/**", "packages/store/**", "packages/webtools/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+argv = ["node_modules/.bin/biome", "check", "packages/webtools"]
+
+[[native.stages]]
+id = "tsc-webtools"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "tsc"
+quick = true
+quick_paths = ["packages/status/**", "packages/store/**", "packages/webtools/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+argv = ["node_modules/.bin/tsc", "-b", "packages/webtools"]
+
+[[native.stages]]
+id = "depcruise-webtools"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "depcruise"
+quick = true
+quick_paths = ["packages/status/**", "packages/store/**", "packages/webtools/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
+argv = ["node_modules/.bin/depcruise", "packages/webtools", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
+
+[[native.stages]]
 id = "biome-root"
 kind = "check"
 coverage = "focused"

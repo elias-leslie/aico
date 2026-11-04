@@ -59,7 +59,9 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",
-                      "@aico/web-server/**"
+                      "@aico/web-server/**",
+                      "@aico/webtools",
+                      "@aico/webtools/**"
                     ],
                     "message": "@aico/tether (layer 5): import only @aico/shared, @aico/context, @aico/fleet, @aico/tasks, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
                   }

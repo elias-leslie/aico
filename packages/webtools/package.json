@@ -1,0 +1,33 @@
+{
+  "name": "@aico/webtools",
+  "version": "0.1.0",
+  "description": "aico web search|research|fetch|batch|refocus: keyless public web search, page fetch with readable extraction and focus, a call counter and its Status row.",
+  "private": true,
+  "license": "Apache-2.0",
+  "aico": {
+    "layer": 3,
+    "imports": [
+      "@aico/store",
+      "@aico/status"
+    ],
+    "db": [
+      "webtools.db"
+    ]
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/aico-webtools.mjs --banner:js=\"// Aico web tools bundle. Built by npm run build; do not edit.\nimport { createRequire as __aicoRequire } from 'node:module'; const require = __aicoRequire(import.meta.url);\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aico/status": "0.1.0",
+    "@aico/store": "0.1.0",
+    "parse5": "7.3.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}
