@@ -44,6 +44,8 @@ export interface ExportConfig {
   folder: string
   /** A peer (hosts.json name) that does this export while the link to it is up; null: always export. */
   deferTo: string | null
+  /** How long after a run the next is due before its Status row shows late. */
+  dueMs: number
 }
 
 export interface StagingSummary {
@@ -550,11 +552,13 @@ const STATUS_CODES: Record<ExportStatus, number> = {
 /**
  * `POST /api/export/notes` (`{force?: true}`): the nightly run, started by aico-notes-export.service. Answers 200
  * for a copy or a skip, 503 when this host has no Drive login yet, 502 when rclone failed; `detail` says why.
+ * Every finished run, an unexpected error included, goes to `report` (the Status row).
  */
 export function registerExportRoutes(
   router: Router,
   config: { export: ExportConfig; dataDir: string },
   loop: Pick<SyncLoop, 'status'>,
+  report: (result: ExportResult) => void = () => {},
 ): void {
   let running = false
   const rclone = rcloneRunner(config.export.rclonePath)
@@ -573,7 +577,11 @@ export function registerExportRoutes(
         peers: () => loop.status().map(({ name, state }) => ({ name, state })),
         rclone,
         force: body?.force === true,
+      }).catch((error: unknown) => {
+        report({ status: 'failed', message: `The export stopped: ${(error as Error).message}` })
+        throw error
       })
+      report(result)
       console.log(`[aico-web] notes export: ${result.status}: ${result.message}`)
       const status = STATUS_CODES[result.status]
       sendJson(ctx.res, status, status === 200 ? result : { ...result, detail: result.message })

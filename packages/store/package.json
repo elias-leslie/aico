@@ -1,0 +1,20 @@
+{
+  "name": "@aico/store",
+  "version": "0.1.0",
+  "description": "The only code that touches node:sqlite: open a package's DB file (0600, WAL) and run its versioned migrations.",
+  "private": true,
+  "license": "Apache-2.0",
+  "aico": {
+    "layer": 1,
+    "imports": [
+      "@aico/shared"
+    ]
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  }
+}

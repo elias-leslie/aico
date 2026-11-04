@@ -40,6 +40,10 @@
                     "group": [
                       "@aico/notes",
                       "@aico/notes/**",
+                      "@aico/status",
+                      "@aico/status/**",
+                      "@aico/store",
+                      "@aico/store/**",
                       "@aico/ui-kit",
                       "@aico/ui-kit/**",
                       "@aico/web-frontend",

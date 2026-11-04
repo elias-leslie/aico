@@ -90,13 +90,18 @@ export function tomlBlock(packages = loadPackages(root)) {
   // Native dirs run only when native/<dir> or the fixture they read changes. Python
   // and shell otherwise stay on the repo-wide ruff, ty and pytest, which already
   // select by changed path; the stage here is the contracts/ fixture test.
+  // One stage per native dir, running every test there that reads any fixture.
+  const testsByDir = new Map()
   for (const row of readers.filter((item) => item.kind === 'native')) {
     const tests = row.readers.filter((file) => /\/tests\/test_[^/]+\.py$/.test(file))
+    testsByDir.set(row.dir, [...new Set([...(testsByDir.get(row.dir) ?? []), ...tests])].sort())
+  }
+  for (const [dir, tests] of testsByDir) {
     if (tests.length === 0) continue
     out.push(
-      stage(`contracts-${row.dir}`, {
-        quickPaths: [`native/${row.dir}/**`, 'contracts/**'],
-        argv: [`native/${row.dir}/.venv/bin/pytest`, '-q', ...tests],
+      stage(`contracts-${dir}`, {
+        quickPaths: [`native/${dir}/**`, 'contracts/**'],
+        argv: [`native/${dir}/.venv/bin/pytest`, '-q', ...tests],
       }),
     )
   }
@@ -138,7 +143,11 @@ export function biomeOverrides(packages = loadPackages(root)) {
             noRestrictedImports: {
               level: 'warn',
               options: {
-                paths: { 'node:sqlite': 'Only the store package imports node:sqlite.' },
+                // store is the one package that may (cutlist 1.1).
+                paths:
+                  pkg.dir === 'store'
+                    ? {}
+                    : { 'node:sqlite': 'Only the store package imports node:sqlite.' },
                 patterns,
               },
             },

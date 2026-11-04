@@ -7,6 +7,7 @@ import { loadCaptureTypes } from '@aico/notes/capture-types'
 import { execRunner, PreviewJobs } from '@aico/notes/heic'
 import { extract } from '@aico/notes/vision-extract'
 import { realRunners } from '@aico/notes/vision-extract/runners'
+import { StatusStore, statusDbPath } from '@aico/status'
 import { TetherClient } from '@aico/tether-client'
 import { buildApi } from './api'
 import { Asks } from './asks'
@@ -27,6 +28,7 @@ import { VehiclesOwner } from './owners/vehicles'
 import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
+import { exportRow, registerStatusRoutes, startSelfRows } from './status'
 import { registerSyncRoutes, startSync } from './sync/start'
 import { TerminalHub } from './terminal'
 
@@ -37,6 +39,7 @@ function serve(): void {
     hostName: config.hostName,
     revisionWindowMs: config.notes.revisionWindowMs,
   })
+  const status = new StatusStore(statusDbPath(config.dataDir))
 
   const tether = new TetherClient(config.tetherSocket)
   const terminals = new TerminalHub({
@@ -110,7 +113,14 @@ function serve(): void {
   registerNightshiftRoutes(api, config)
   const sync = startSync({ config, store, notes, blobsDir })
   registerSyncRoutes(api, sync.loop)
-  registerExportRoutes(api, config, sync.loop)
+  registerStatusRoutes(api, status)
+  registerExportRoutes(api, config, sync.loop, (result) => {
+    try {
+      status.upsert([exportRow(config.hostName, result, Date.now(), config.export.dueMs)])
+    } catch (error) {
+      console.error('[aico-web] notes export status row failed:', error)
+    }
+  })
   const nightshift = new NightshiftRelay(config)
   registerNightshiftStream(api, nightshift)
   const server = createWebServer(
@@ -125,8 +135,15 @@ function serve(): void {
 
   background.start()
   reader.start()
+  let selfRows: ReturnType<typeof startSelfRows> | null = null
   server.listen(config.port, config.host, () => {
     console.log(`[aico-web] listening on http://${config.host}:${config.port}`)
+    selfRows = startSelfRows({
+      status,
+      hostName: config.hostName,
+      address: `${config.host}:${config.port}`,
+      heartbeatMs: config.status.heartbeatMs,
+    })
   })
 
   let stopping = false
@@ -134,6 +151,7 @@ function serve(): void {
     if (stopping) return
     stopping = true
     console.log(`[aico-web] ${signal}: stopping`)
+    ;(selfRows as ReturnType<typeof startSelfRows> | null)?.stop(signal)
     background.stop()
     reader.stop()
     terminals.stop()
@@ -142,6 +160,7 @@ function serve(): void {
     server.close(() => {
       store.close()
       notes.close()
+      status.close()
       process.exit(0)
     })
     server.closeAllConnections()

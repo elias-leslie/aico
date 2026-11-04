@@ -1,0 +1,27 @@
+{
+  "name": "@aico/status",
+  "version": "0.1.0",
+  "description": "Status rows (contracts/status-row.schema.json): the row check, status.db, the late and unknown rules, filters, sort and rollup.",
+  "private": true,
+  "license": "Apache-2.0",
+  "aico": {
+    "layer": 2,
+    "imports": [
+      "@aico/shared",
+      "@aico/store"
+    ],
+    "db": [
+      "status.db"
+    ]
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aico/store": "0.1.0"
+  }
+}

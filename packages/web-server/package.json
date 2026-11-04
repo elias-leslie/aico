@@ -8,6 +8,8 @@
     "layer": 5,
     "imports": [
       "@aico/shared",
+      "@aico/store",
+      "@aico/status",
       "@aico/fleet",
       "@aico/notes",
       "@aico/tether-client"
@@ -29,6 +31,7 @@
   "dependencies": {
     "@aico/notes": "0.1.0",
     "@aico/shared": "0.1.0",
+    "@aico/status": "0.1.0",
     "@aico/tether-client": "0.1.0",
     "@aico/ui-kit": "0.1.0",
     "ws": "8.22.0"

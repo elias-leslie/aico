@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run a command of the Aico web server bundle (packages/web-server/dist/aico-web.mjs):
-# tsession, tclaude, tcodex, tnotes. The bundle is rebuilt first when it is missing or
+# tsession, tclaude, tcodex, tnotes, status. The bundle is rebuilt first when it is missing or
 # older than its sources, so a fresh checkout works without a deploy.
 # Node resolution order: $AICO_NODE, /usr/local/bin/node, /usr/bin/node, PATH.
 
@@ -27,6 +27,7 @@ aico_web_stale() {
   [ ! -r "$AICO_WEB_BUNDLE" ] && return 0
   [ -n "$(find "$AICO_WEB_SERVER/src" "$AICO_REPO_ROOT/packages/tether-client/src" "$AICO_REPO_ROOT/packages/notes/src" \
     "$AICO_REPO_ROOT/packages/shared/src" "$AICO_REPO_ROOT/packages/ui-kit/src" \
+    "$AICO_REPO_ROOT/packages/store/src" "$AICO_REPO_ROOT/packages/status/src" \
     -name '*.ts' -newer "$AICO_WEB_BUNDLE" -print -quit 2>/dev/null)" ]
 }
 

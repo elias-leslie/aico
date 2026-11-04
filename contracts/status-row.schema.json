@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aico/status-row",
+  "title": "Status row (as a writer posts it)",
+  "description": "One row per check, job, backup, service, VM, machine, link, grant or repo (plan.md 'Status: one screen for the whole fleet'). Writers POST rows to aico-web on loopback (POST /api/status/rows, one row or an array). The server stamps updated_at and works out the shown state: a row past next_run is 'late' (since next_run); rows of a machine whose own kind=machine row is late or off are 'unknown'. Readers (GET /api/status) get each row back with updated_at, shown and shown_since. Every validator (packages/status, native/host-steward/aico_status.py) tests against this file and contracts/status-row-fixtures.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "what", "kind", "machine", "state", "meaning"],
+  "properties": {
+    "id": {
+      "description": "Stable key the writer chooses, unique across the fleet: start it with the machine, e.g. 'davion-sidarli/notes-export'. Posting the same id again replaces the row.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]*$",
+      "maxLength": 200
+    },
+    "what": {
+      "description": "What it is, in a few plain words ('Notes export to Drive').",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "kind": {
+      "description": "machine is the host's own row: the unknown rule reads it.",
+      "enum": ["check", "job", "backup", "service", "vm", "machine", "link", "grant", "repo"]
+    },
+    "machine": {
+      "description": "The host it runs on or is about (its host name).",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "maxLength": 100
+    },
+    "project": {
+      "description": "Project slug, when it belongs to one.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "maxLength": 100
+    },
+    "state": {
+      "description": "What the writer last saw. off: stopped or paused on purpose (never late, not a problem). late and unknown are never written; the reader derives them.",
+      "enum": ["ok", "warn", "failed", "off"]
+    },
+    "meaning": {
+      "description": "What the state means, in plain words ('Copied 412 notes to Drive.').",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "last_run": {
+      "description": "When it last ran or was last checked (RFC 3339).",
+      "type": "string",
+      "format": "date-time"
+    },
+    "next_run": {
+      "description": "When the next report is due (RFC 3339), slack included. Past it the row shows 'late since' this time. Leave it out for rows with no schedule.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "actions": {
+      "description": "What a person or agent can do about it, as data; the screen and CLI decide how to offer each. run: the command that runs it now. log: the command or path that shows its log. detail: an Aico app path with more. look: where a session looking into it should start (a path, project or hint).",
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "ref"],
+        "properties": {
+          "kind": { "enum": ["run", "log", "detail", "look"] },
+          "ref": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    }
+  }
+}

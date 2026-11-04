@@ -1,0 +1,376 @@
+{
+  "description": "Replay fixtures for contracts/status-row.schema.json. valid: rows every validator accepts. invalid: rows every validator refuses, naming `field`. replay: rows as stored (row plus the updated_at the server stamped), read at `now`; `expect` is each row's shown state and shown_since (null when none), in the default order (problems first: failed, late, unknown, warn; then ok and off; ties by what (compared by code unit, so capitals first), then id), and `rollup` the problem and healthy counts.",
+  "version": 1,
+  "valid": [
+    {
+      "name": "smallest row",
+      "row": {
+        "id": "davion-sidarli/aico-web",
+        "what": "Aico web server",
+        "kind": "service",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Running."
+      }
+    },
+    {
+      "name": "every field",
+      "row": {
+        "id": "davion-sidarli/notes-export",
+        "what": "Notes export to Drive",
+        "kind": "job",
+        "machine": "davion-sidarli",
+        "project": "aico",
+        "state": "failed",
+        "meaning": "This machine has no Drive login yet.",
+        "last_run": "2026-11-03T08:30:00Z",
+        "next_run": "2026-11-04T09:30:00.000+00:00",
+        "actions": [
+          { "kind": "run", "ref": "systemctl --user start aico-notes-export.service" },
+          { "kind": "log", "ref": "journalctl --user -u aico-web.service" },
+          { "kind": "detail", "ref": "/notes" },
+          { "kind": "look", "ref": "aico" }
+        ]
+      }
+    },
+    {
+      "name": "offset times and an off VM",
+      "row": {
+        "id": "davion-gem/vm/180",
+        "what": "VM 180 (apps)",
+        "kind": "vm",
+        "machine": "davion-gem",
+        "state": "off",
+        "meaning": "Stopped on purpose.",
+        "last_run": "2026-11-02T22:30:00-05:00",
+        "actions": []
+      }
+    }
+  ],
+  "invalid": [
+    { "name": "not an object", "row": ["davion-sidarli/x"], "field": "row" },
+    {
+      "name": "missing id",
+      "row": { "what": "X", "kind": "job", "machine": "m", "state": "ok", "meaning": "Fine." },
+      "field": "id"
+    },
+    {
+      "name": "id with a space",
+      "row": {
+        "id": "m/a b",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine."
+      },
+      "field": "id"
+    },
+    {
+      "name": "unknown kind",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "cron",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine."
+      },
+      "field": "kind"
+    },
+    {
+      "name": "late is derived, never written",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "late",
+        "meaning": "Fine."
+      },
+      "field": "state"
+    },
+    {
+      "name": "empty meaning",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": ""
+      },
+      "field": "meaning"
+    },
+    {
+      "name": "what too long",
+      "row": {
+        "id": "m/x",
+        "what": "wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine."
+      },
+      "field": "what"
+    },
+    {
+      "name": "project with capitals",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "project": "Aico",
+        "state": "ok",
+        "meaning": "Fine."
+      },
+      "field": "project"
+    },
+    {
+      "name": "time without a zone",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine.",
+        "next_run": "2026-11-03 03:30"
+      },
+      "field": "next_run"
+    },
+    {
+      "name": "impossible month",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine.",
+        "last_run": "2026-13-03T00:00:00Z"
+      },
+      "field": "last_run"
+    },
+    {
+      "name": "unknown action",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine.",
+        "actions": [{ "kind": "click", "ref": "x" }]
+      },
+      "field": "actions"
+    },
+    {
+      "name": "five actions",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine.",
+        "actions": [
+          { "kind": "run", "ref": "a" },
+          { "kind": "run", "ref": "b" },
+          { "kind": "run", "ref": "c" },
+          { "kind": "run", "ref": "d" },
+          { "kind": "run", "ref": "e" }
+        ]
+      },
+      "field": "actions"
+    },
+    {
+      "name": "extra field",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine.",
+        "updated_at": "2026-11-03T00:00:00Z"
+      },
+      "field": "updated_at"
+    }
+  ],
+  "replay": [
+    {
+      "name": "late, unknown and healthy",
+      "now": "2026-11-03T12:00:00Z",
+      "rows": [
+        {
+          "updated_at": "2026-11-03T11:58:00Z",
+          "row": {
+            "id": "a/machine",
+            "what": "a",
+            "kind": "machine",
+            "machine": "a",
+            "state": "ok",
+            "meaning": "Reporting.",
+            "next_run": "2026-11-03T12:08:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-03T11:00:00Z",
+          "row": {
+            "id": "a/backup",
+            "what": "Backup",
+            "kind": "backup",
+            "machine": "a",
+            "state": "ok",
+            "meaning": "Copied.",
+            "next_run": "2026-11-03T11:30:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-03T11:00:00Z",
+          "row": {
+            "id": "a/check",
+            "what": "Disk check",
+            "kind": "check",
+            "machine": "a",
+            "state": "warn",
+            "meaning": "Disk 86% full.",
+            "next_run": "2026-11-03T13:00:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-03T11:00:00Z",
+          "row": {
+            "id": "a/export",
+            "what": "Export",
+            "kind": "job",
+            "machine": "a",
+            "state": "failed",
+            "meaning": "No login.",
+            "next_run": "2026-11-04T09:30:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-03T11:00:00Z",
+          "row": {
+            "id": "a/web",
+            "what": "Web",
+            "kind": "service",
+            "machine": "a",
+            "state": "ok",
+            "meaning": "Running.",
+            "next_run": "2026-11-03T12:10:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-01T00:00:00Z",
+          "row": {
+            "id": "a/vm",
+            "what": "VM",
+            "kind": "vm",
+            "machine": "a",
+            "state": "off",
+            "meaning": "Stopped on purpose.",
+            "next_run": "2026-11-01T01:00:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-03T09:00:00Z",
+          "row": {
+            "id": "b/machine",
+            "what": "b",
+            "kind": "machine",
+            "machine": "b",
+            "state": "ok",
+            "meaning": "Reporting.",
+            "next_run": "2026-11-03T09:10:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-03T09:00:00Z",
+          "row": {
+            "id": "b/job",
+            "what": "Job on b",
+            "kind": "job",
+            "machine": "b",
+            "state": "ok",
+            "meaning": "Done.",
+            "next_run": "2026-11-03T18:00:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-03T09:00:00Z",
+          "row": {
+            "id": "b/failed",
+            "what": "Check on b",
+            "kind": "check",
+            "machine": "b",
+            "state": "failed",
+            "meaning": "Broken.",
+            "next_run": "2026-11-03T18:00:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-03T08:00:00Z",
+          "row": {
+            "id": "c/link",
+            "what": "Link to c",
+            "kind": "link",
+            "machine": "c",
+            "state": "ok",
+            "meaning": "Up."
+          }
+        }
+      ],
+      "expect": [
+        { "id": "a/export", "shown": "failed", "shown_since": null },
+        { "id": "a/backup", "shown": "late", "shown_since": "2026-11-03T11:30:00.000Z" },
+        { "id": "b/machine", "shown": "late", "shown_since": "2026-11-03T09:10:00.000Z" },
+        { "id": "b/failed", "shown": "unknown", "shown_since": "2026-11-03T09:10:00.000Z" },
+        { "id": "b/job", "shown": "unknown", "shown_since": "2026-11-03T09:10:00.000Z" },
+        { "id": "a/check", "shown": "warn", "shown_since": null },
+        { "id": "c/link", "shown": "ok", "shown_since": null },
+        { "id": "a/web", "shown": "ok", "shown_since": null },
+        { "id": "a/machine", "shown": "ok", "shown_since": null },
+        { "id": "a/vm", "shown": "off", "shown_since": null }
+      ],
+      "rollup": { "problems": 6, "healthy": 4 }
+    },
+    {
+      "name": "a machine switched off makes its rows unknown",
+      "now": "2026-11-03T12:00:00Z",
+      "rows": [
+        {
+          "updated_at": "2026-11-03T10:00:00Z",
+          "row": {
+            "id": "d/machine",
+            "what": "d",
+            "kind": "machine",
+            "machine": "d",
+            "state": "off",
+            "meaning": "Shut down."
+          }
+        },
+        {
+          "updated_at": "2026-11-03T09:00:00Z",
+          "row": {
+            "id": "d/backup",
+            "what": "Backup on d",
+            "kind": "backup",
+            "machine": "d",
+            "state": "ok",
+            "meaning": "Copied.",
+            "next_run": "2026-11-03T11:00:00Z"
+          }
+        }
+      ],
+      "expect": [
+        { "id": "d/backup", "shown": "unknown", "shown_since": "2026-11-03T10:00:00.000Z" },
+        { "id": "d/machine", "shown": "off", "shown_since": null }
+      ],
+      "rollup": { "problems": 1, "healthy": 1 }
+    }
+  ]
+}

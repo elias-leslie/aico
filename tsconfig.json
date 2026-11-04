@@ -5,6 +5,12 @@
       "path": "packages/shared"
     },
     {
+      "path": "packages/store"
+    },
+    {
+      "path": "packages/status"
+    },
+    {
       "path": "packages/tether-client"
     },
     {

@@ -35,6 +35,8 @@ export interface WebConfig {
   notes: NotesConfig
   /** The nightly Drive copy of the notes (`AICO_EXPORT_*`). */
   export: ExportConfig
+  /** How often aico-web reports its own Status rows (`AICO_STATUS_HEARTBEAT_SECONDS`). */
+  status: { heartbeatMs: number }
   sync: SyncConfig
   vision: VisionSettings
   /** The capture type table's override file (the default table ships with Aico). */
@@ -162,6 +164,9 @@ const DEFAULT_BLOB_GRACE_DAYS = 7
 // The nightly export: the remote and folder names scripts/authorize-notes-drive.sh and the Drive copy agree on.
 const DEFAULT_EXPORT_REMOTE = 'aico-notes-drive'
 const DEFAULT_EXPORT_FOLDER = 'SummitFlow-Notes'
+// The export timer runs daily; its Status row is late an hour after the next run was due.
+const DEFAULT_EXPORT_DUE_HOURS = 25
+const DEFAULT_STATUS_HEARTBEAT_SECONDS = 5 * 60
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
 const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
@@ -339,6 +344,11 @@ export function loadConfig(
       remote: env.AICO_EXPORT_REMOTE?.trim() || DEFAULT_EXPORT_REMOTE,
       folder: env.AICO_EXPORT_FOLDER?.trim() || DEFAULT_EXPORT_FOLDER,
       deferTo: env.AICO_EXPORT_DEFER_TO?.trim() || null,
+      dueMs: positiveInt(env.AICO_EXPORT_DUE_HOURS, DEFAULT_EXPORT_DUE_HOURS) * 3_600_000,
+    },
+    status: {
+      heartbeatMs:
+        positiveInt(env.AICO_STATUS_HEARTBEAT_SECONDS, DEFAULT_STATUS_HEARTBEAT_SECONDS) * 1000,
     },
     sync: {
       tombstoneMs: positiveInt(env.AICO_SYNC_TOMBSTONE_DAYS, DEFAULT_TOMBSTONE_DAYS) * 86_400_000,

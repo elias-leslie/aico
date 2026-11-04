@@ -10,7 +10,7 @@
 //   is not in the configured list (`null` included) is refused. Callers that
 //   send no Origin (CLI, agents, curl) are unaffected.
 
-import type { IncomingHttpHeaders, ServerResponse } from 'node:http'
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
 
 const HOST_PATTERN = /^([a-z0-9.-]+)(:[0-9]{1,5})?$/
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -31,6 +31,24 @@ export function hostAllowed(host: string | undefined, config: GuardConfig): bool
 
 function foreignOrigin(origin: string | undefined, config: GuardConfig): boolean {
   return origin !== undefined && !config.allowedOrigins.includes(origin)
+}
+
+const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+const LOOPBACK_NAMES = new Set(['127.0.0.1', 'localhost'])
+/** Set by a proxy in front of this server (Caddy, cloudflared): the request came from elsewhere. */
+const FORWARDING_HEADERS = ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'cf-connecting-ip']
+
+/**
+ * Whether a program on this machine sent the request straight to the loopback port: a loopback
+ * peer, a loopback Host, no proxy's forwarding headers and no browser Origin. The public host
+ * reaches this server through Caddy on loopback too, so the peer address alone is not enough.
+ */
+export function fromThisMachine(req: IncomingMessage): boolean {
+  if (!LOOPBACK_ADDRESSES.has(req.socket.remoteAddress ?? '')) return false
+  const host = HOST_PATTERN.exec((req.headers.host ?? '').toLowerCase())
+  if (!host || !LOOPBACK_NAMES.has(host[1] as string)) return false
+  if (req.headers.origin !== undefined) return false
+  return !FORWARDING_HEADERS.some((name) => req.headers[name] !== undefined)
 }
 
 /** Why an HTTP request is refused, or null. */

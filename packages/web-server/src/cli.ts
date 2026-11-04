@@ -6,6 +6,7 @@
 //   (notes-import-cli.ts).
 // - `tclaude` / `tcodex [project|-l]`: pick a project (fzf), find its folder,
 //   then `tsession open --attach` (the old scripts/lib/project-launcher.sh).
+// - `status`: `st status`, the Status rows from the running server (status-cli.ts).
 //
 // Attaching is `tether sessions attach <id>`, which follows where the caller
 // already is: outside tmux it attaches, inside the same tmux server it
@@ -18,13 +19,14 @@ import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { TetherClient, TetherError, TetherUnavailable, tetherSocketPath } from '@aico/tether-client'
 import { type BrokerTarget, createBroker, normalizeWorkingDir } from './broker'
-import { webDbPath } from './config'
+import { loadConfig, webDbPath } from './config'
 import { WebStore } from './db'
 import { createLifecycle, type Lifecycle } from './lifecycle'
 import { runNotesCli } from './notes-import-cli'
+import { runStatusCli } from './status-cli'
 import { HttpError } from './tether'
 
-export const CLI_COMMANDS = ['tsession', 'tclaude', 'tcodex', 'tnotes']
+export const CLI_COMMANDS = ['tsession', 'tclaude', 'tcodex', 'tnotes', 'status']
 
 /** The tool each launcher opens. */
 const LAUNCHER_TOOLS: Readonly<Record<string, string>> = {
@@ -517,6 +519,16 @@ function terminalIo(): CliIo {
 /** `aico-web tsession|tclaude|tcodex …` against the user's own Tether and the web app's state. */
 export async function runCli(command: string, argv: string[]): Promise<number> {
   if (command === 'tnotes') return runNotesCli(argv, terminalIo().repoRoot)
+  if (command === 'status') {
+    const { port } = loadConfig()
+    return runStatusCli(argv, {
+      out: (text) => process.stdout.write(text),
+      err: (text) => process.stderr.write(text),
+      baseUrl: `http://127.0.0.1:${port}`,
+      fetch,
+      now: Date.now,
+    })
+  }
   const env = process.env
   let life: Lifecycle | null = null
   const lifeOf = () => {
