@@ -199,7 +199,22 @@ export interface Planned {
 
 const PY = ['.py', '.pyi']
 const VITEST = ['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx', '.vue']
-const BIOME = ['.css', '.js', '.json', '.jsonc', '.jsx', '.md', '.mdx', '.scss', '.ts', '.tsx']
+const BIOME = [
+  '.css',
+  '.js',
+  '.json',
+  '.jsonc',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.mts',
+  '.cts',
+  '.md',
+  '.mdx',
+  '.scss',
+  '.ts',
+  '.tsx',
+]
 const TSC = ['.js', '.jsx', '.ts', '.tsx']
 const PYTEST_CONFIG = ['pyproject.toml', 'pytest.ini', 'setup.cfg', 'tox.ini']
 const JS_CONFIG = ['package.json', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lock']
@@ -385,6 +400,50 @@ function tsconfigArgs(root: string, dir: string): string[] {
 
 /** Every tracked or untracked, not ignored file (what a full secret scan reads). */
 export type ListFiles = () => string[]
+
+/** Keep a declared Biome check inside the changed set, including per-package quick views. */
+function scopedBiome(config: Config, decl: StageDecl, changed: string[]): string[] | null {
+  const args = decl.argv.slice(2)
+  const flags: string[] = []
+  const paths: string[] = []
+  // Biome's switches without a value; other bare options consume their next argument.
+  const switches = new Set([
+    '--write',
+    '--fix',
+    '--unsafe',
+    '--verbose',
+    '--staged',
+    '--changed',
+    '--no-errors-on-unmatched',
+  ])
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (arg === '--') {
+      paths.push(...args.slice(i + 1))
+      break
+    }
+    if (!arg.startsWith('-')) paths.push(arg)
+    else {
+      flags.push(arg)
+      if (!arg.includes('=') && !switches.has(arg) && args[i + 1] && !args[i + 1].startsWith('-'))
+        flags.push(args[++i])
+    }
+  }
+  const files = within(config.root, decl.cwd, changed, BIOME).filter(
+    (file) => !paths.length || paths.some((path) => path === '.' || matches(file, [path])),
+  )
+  return files.length
+    ? [
+        decl.argv[0],
+        'check',
+        ...flags,
+        '--no-errors-on-unmatched',
+        '--files-ignore-unknown=true',
+        '--',
+        ...files,
+      ]
+    : null
+}
 
 function legacySteps(
   config: Config,
@@ -604,14 +663,18 @@ export function plan(
   for (const tool of legacyTools(config, lane))
     out.push(...legacySteps(config, tool, lane, changed, listFiles))
   for (const decl of config.stages) {
+    const scoped =
+      changed && posix.basename(decl.argv[0]) === 'biome' && decl.argv[1] === 'check'
+        ? scopedBiome(config, decl, changed)
+        : decl.argv
     const native = (skip?: string): Planned =>
-      skip
-        ? { id: decl.id, skip }
+      skip || !scoped
+        ? { id: decl.id, skip: skip ?? 'no_relevant_changed_paths' }
         : {
             id: decl.id,
             step: {
               id: decl.id,
-              argv: decl.argv,
+              argv: scoped,
               cwd: decl.cwd,
               env: 'stage',
               timeoutS: decl.timeoutS,

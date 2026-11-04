@@ -177,8 +177,10 @@ function reuseKey(
       ? git(root, ['rev-parse', 'HEAD^{tree}'])
       : '-',
   )
-  const files = scope ?? changedFiles(root)
+  // Native stages and related tests can read dependencies beyond the named paths.
+  const files = [...new Set([...(scope ?? []), ...changedFiles(root)])].sort()
   hash.update(scope ? 'scope' : 'tree')
+  hash.update(JSON.stringify(scope))
   for (const [file, id] of blobIds(root, files)) hash.update(`${file}\0${id}\n`)
   return `${lane}-${hash.digest('hex').slice(0, 32)}`
 }

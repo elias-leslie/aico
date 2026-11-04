@@ -6,6 +6,7 @@ import { openTasksDb, Registry, runTasks, TaskStore } from '@aico/tasks'
 import { afterEach, describe, expect, it } from 'vitest'
 import { accept } from './accept'
 import { ownChanged, runCheck } from './check'
+import { runCli } from './cli'
 import { commit, refusals, selection, shortSubject } from './commit'
 import { doneWithReceipt } from './done'
 import type { Coordination } from './hook'
@@ -40,6 +41,7 @@ function repo(stages: string, extra = ''): string {
   write(root, 'src/a.ts', 'a\n')
   write(root, 'src/b.ts', 'b\n')
   write(root, 'docs/readme.md', 'r\n')
+  write(root, '.gitignore', '.dev-tools/\n')
   git(root, 'add', '-A')
   git(root, 'commit', '-q', '-m', 'init')
   return root
@@ -97,6 +99,20 @@ describe('stage selection', () => {
     expect(loadConfig(root)).toEqual({
       unsupported: 'no [native] section (the legacy default gate)',
     })
+  })
+
+  it('limits declared Biome stages to selected files in both lanes', () => {
+    const root = repo('')
+    write(
+      root,
+      '.st-check.toml',
+      `[native]\nlegacy_tools = []\n[[native.stages]]\nid = "biome"\nkind = "check"\ncoverage = "full"\nquick = true\nargv = ["node_modules/.bin/biome", "check", "."]\n`,
+    )
+    for (const lane of ['quick', 'full'] as const) {
+      const steps = plan(config(root), lane, ['src/a.ts'], () => [])
+      expect(steps.find((item) => item.id === 'biome')?.step?.argv.slice(2)).toContain('src/a.ts')
+      expect(steps.find((item) => item.id === 'biome')?.step?.argv).not.toContain('.')
+    }
   })
 })
 
@@ -282,12 +298,45 @@ describe('commit', () => {
     expect(git(root, 'rev-list', '--count', 'HEAD')).toBe('1')
   })
 
-  it('moves a long first line into the body', () => {
+  it('keeps a long subject and its trailers whole', () => {
     const long = `${'word '.repeat(30)}end`
-    const [subject, blank, rest] = shortSubject(long).split('\n')
-    expect(subject.length).toBeLessThanOrEqual(100)
-    expect(blank).toBe('')
-    expect(`${subject} ${rest}`).toBe(long)
+    expect(shortSubject(`${long}\n\nCo-Authored-By: Test <test@example.invalid>`)).toBe(
+      `${long}\n\nCo-Authored-By: Test <test@example.invalid>`,
+    )
+  })
+
+  it('refuses source changed while waiting for the commit lock', async () => {
+    const root = repo('')
+    write(root, 'src/a.ts', 'checked\n')
+    const lock = join(root, '.git/aico-checks/commit.lock')
+    mkdirSync(lock, { recursive: true })
+    writeFileSync(join(lock, 'pid'), String(process.pid))
+    const pending = commit(config(root), {
+      message: 'checked',
+      paths: ['src/a.ts'],
+      noCheck: true,
+      coordination: coordination(),
+    })
+    write(root, 'src/a.ts', 'never checked\n')
+    rmSync(lock, { recursive: true })
+    await expect(pending).rejects.toThrow('source changed')
+    expect(git(root, 'rev-list', '--count', 'HEAD')).toBe('1')
+  })
+
+  it('keeps spaces in an explicitly named CLI path', async () => {
+    const root = repo('')
+    write(root, 'src/with space.ts', 'new\n')
+    const lines: string[] = []
+    expect(
+      await runCli('commit', ['-m', 'Add file', '--paths', 'src/with space.ts'], {
+        cwd: root,
+        env: {},
+        coordination: coordination(),
+        out: (line) => lines.push(line),
+        err: (line) => lines.push(line),
+      }),
+    ).toBe(0)
+    expect(git(root, 'show', '--name-only', '--format=', 'HEAD')).toBe('src/with space.ts')
   })
 })
 
@@ -365,6 +414,16 @@ describe('receipts', () => {
     expect((await run())[0].reused).toBeUndefined()
     expect(readFileSync(log, 'utf8')).toBe('native\nnative\n')
   })
+
+  it('invalidates a scoped pass when another file read by a native stage changes', async () => {
+    const root = repo(stage('lint', 'quick = true'))
+    write(root, 'src/a.ts', 'selected\n')
+    const run = () => runCheck(config(root), { lane: 'quick', paths: ['src/a.ts'], env: {} })
+    expect((await run()).reused).toBeUndefined()
+    expect((await run()).reused).toBe(true)
+    write(root, 'src/b.ts', 'a changed dependency\n')
+    expect((await run()).reused).toBeUndefined()
+  })
 })
 
 describe('stage evidence', () => {
@@ -394,8 +453,47 @@ describe('stage evidence', () => {
       state: 'unavailable',
       reason: 'empty_or_skipped_required_tests',
     })
-    expect(judge('test', junit, '<testcase name="a"/><testcase name="b"></testcase>')).toEqual({
+    expect(
+      judge(
+        'test',
+        junit,
+        '<testsuite><testcase name="a"/><testcase name="b"></testcase></testsuite>',
+      ),
+    ).toEqual({
       state: 'pass',
     })
+  })
+
+  it('reads XML elements rather than markup in attributes, comments or CDATA', () => {
+    const junit = { format: 'junit', source: 'stdout' } as const
+    expect(
+      judge('test', junit, '<testsuite><!-- <testcase name="fake"/> --></testsuite>').state,
+    ).toBe('unavailable')
+    expect(
+      judge(
+        'test',
+        junit,
+        '<testsuite><testcase name="slash /> still an attribute"><failure/></testcase></testsuite>',
+      ).state,
+    ).toBe('fail')
+    expect(
+      judge(
+        'test',
+        junit,
+        '<testsuite><testcase name="ok"><system-out><![CDATA[<failure/>]]></system-out></testcase></testsuite>',
+      ).state,
+    ).toBe('pass')
+    expect(() => judge('test', junit, '<testsuite><testcase name="truncated"/>')).toThrow()
+  })
+
+  it('rejects JSON evidence without nonnegative integer counts', () => {
+    const json = { format: 'json', source: 'stdout' } as const
+    for (const content of [
+      '{"passed":-1,"failed":0,"skipped":0}',
+      '{"passed":1,"failed":"0","skipped":0}',
+      '{}',
+      'null',
+    ])
+      expect(() => judge('test', json, content)).toThrow()
   })
 })

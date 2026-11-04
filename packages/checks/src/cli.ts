@@ -153,10 +153,9 @@ export async function commitCli(argv: string[], io: CliIo): Promise<number> {
       )
     return 3
   }
-  const paths = args.paths.flatMap((path) => path.split(/\s+/)).filter(Boolean)
   const result = await commit(config, {
     message,
-    paths: repoPaths(root, io.cwd, paths),
+    paths: repoPaths(root, io.cwd, args.paths),
     coordination: io.coordination,
     withAck: args.values.get('--with-ack'),
     noCheck: args.flags.has('--skip-checks'),

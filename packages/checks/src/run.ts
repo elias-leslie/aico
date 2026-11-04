@@ -20,6 +20,7 @@ import {
 } from 'node:fs'
 import { homedir, setPriority, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
+import { SaxesParser } from 'saxes'
 import { blobIds, changedFiles, commonDir, git } from './git'
 import type { Config, Evidence, Lane, Planned, Step } from './plan'
 
@@ -131,15 +132,41 @@ export function judge(
     executed = content.match(pyRegExp(ev.executed_pattern ?? '$^'))?.length ?? 0
     failed = content.match(pyRegExp(ev.failure_pattern ?? '$^'))?.length ?? 0
   } else if (ev.format === 'json') {
-    const value = JSON.parse(content) as { passed: number; failed: number; skipped: number }
-    executed = value.passed + value.failed
-    failed = value.failed
-    skipped = value.skipped
+    const value: unknown = JSON.parse(content)
+    if (typeof value !== 'object' || value === null || Array.isArray(value))
+      throw new Error('JSON evidence must contain nonnegative integer passed/failed/skipped counts')
+    const counts = value as Record<string, unknown>
+    for (const key of ['passed', 'failed', 'skipped'])
+      if (typeof counts[key] !== 'number' || !Number.isInteger(counts[key]) || counts[key] < 0)
+        throw new Error(
+          'JSON evidence must contain nonnegative integer passed/failed/skipped counts',
+        )
+    executed = (counts.passed as number) + (counts.failed as number)
+    failed = counts.failed as number
+    skipped = counts.skipped as number
   } else if (ev.format === 'junit') {
-    const cases = content.match(/<testcase\b[\s\S]*?(?:\/>|<\/testcase>)/g) ?? []
-    skipped = cases.filter((c) => /<skipped\b/.test(c)).length
-    failed = cases.filter((c) => /<(failure|error)\b/.test(c)).length
-    executed = cases.length - skipped
+    const parser = new SaxesParser({ xmlns: true })
+    const stack: string[] = []
+    let current: { skipped: boolean; failed: boolean } | null = null
+    parser.on('opentag', (tag) => {
+      const parent = stack.at(-1)
+      stack.push(tag.local)
+      if (tag.local === 'testcase' && parent === 'testsuite')
+        current = { skipped: false, failed: false }
+      else if (current && parent === 'testcase') {
+        if (tag.local === 'skipped') current.skipped = true
+        if (tag.local === 'failure' || tag.local === 'error') current.failed = true
+      }
+    })
+    parser.on('closetag', () => {
+      if (stack.pop() === 'testcase' && current) {
+        if (current.skipped) skipped++
+        else executed++
+        if (current.failed) failed++
+        current = null
+      }
+    })
+    parser.write(content).close()
   } else {
     for (const line of content.split('\n')) {
       if (!line.trim().startsWith('{')) continue

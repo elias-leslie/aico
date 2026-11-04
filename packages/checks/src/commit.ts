@@ -33,14 +33,9 @@ export interface CommitResult {
   check: CheckReport | null
 }
 
-/** A first line over 100 characters moves its tail into the body (git log --oneline stays readable). */
+/** Preserve the caller's subject, body and trailers, regardless of subject length. */
 export function shortSubject(message: string): string {
-  const [first, ...rest] = message.trim().split('\n')
-  if (first.length <= 100) return message.trim()
-  const cut = first.lastIndexOf(' ', 100)
-  const at = cut > 40 ? cut : 100
-  const body = rest.join('\n').trim()
-  return `${first.slice(0, at).trimEnd()}\n\n${first.slice(at).trim()}${body ? `\n\n${body}` : ''}`
+  return message.trim()
 }
 
 /** The files a commit of these pathspecs takes, and the ones swept in by a directory or glob. */
@@ -142,6 +137,20 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
     throw new CommitError(`source changed during the check: ${moved.join(', ')}; rerun the commit`)
 
   const sha = await withRepoLock(root, () => {
+    // A different commit may have held the lock after the check finished.
+    const current = blobIds(root, files)
+    const moved = files.filter((file) => before.get(file) !== current.get(file))
+    if (moved.length)
+      throw new CommitError(
+        `source changed while waiting to commit: ${moved.join(', ')}; rerun the commit`,
+      )
+    const refused = refusals(files, swept, options.coordination.foreign(root, files))
+    if (refused.length)
+      throw new CommitError(
+        `commit refused: another agent's uncommitted work: ${refused.join('; ')}`,
+      )
+    const blocked = options.coordination.guard(root, 'commit', options.withAck)
+    if (blocked) throw new CommitError(blocked)
     git(root, ['add', '-A', '--', ...files.map((file) => `:(literal)${file}`)])
     git(
       root,
