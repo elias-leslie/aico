@@ -62,8 +62,10 @@ export interface WebConfig {
 export interface NotifyConfig {
   /** The FCM access token Nightshift's root timer mints (ns-20); read to send, never logged. */
   fcmTokenFile: string
-  /** The paired phones: FCM token and push keys per phone. */
+  /** The paired phones: FCM token, push keys and signing key per phone. Aico's own file (the phone app's API writes it). */
   devicesFile: string
+  /** Nightshift's phone file: copied to `devicesFile` once, when that does not exist yet, so the phone keeps its pairing. */
+  devicesSeedFile?: string
   /** How often the outbox looks for due sends and writes its Status row. */
   passMs: number
   ominull: {
@@ -199,9 +201,10 @@ const DEFAULT_EXPORT_FOLDER = 'SummitFlow-Notes'
 const DEFAULT_STATUS_HEARTBEAT_SECONDS = 5 * 60
 // A row that flaps pushes at most this often for the same change (notify's per-key cooldown).
 const DEFAULT_STATUS_ALERT_COOLDOWN_SECONDS = 6 * 60 * 60
-// Where Nightshift keeps the phone push files today (re-pairing into Aico comes with the tray and phone move).
+// Where Nightshift keeps the phone push files today. The FCM access token is still minted there; the paired
+// phones are copied once into Aico's data directory (phones.json), so the phone keeps its pairing.
 const DEFAULT_FCM_TOKEN_FILE = '/var/lib/nightshift/fcm/token.json'
-const DEFAULT_PHONE_DEVICES_FILE = '/var/lib/nightshift/web/app-devices.json'
+const DEFAULT_PHONE_DEVICES_SEED_FILE = '/var/lib/nightshift/web/app-devices.json'
 const DEFAULT_NOTIFY_PASS_SECONDS = 30
 const DEFAULT_OMINULL_SITE = '/etc/nightshift/site.json'
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
@@ -383,7 +386,8 @@ export function loadConfig(
     },
     notify: {
       fcmTokenFile: env.AICO_FCM_TOKEN_FILE?.trim() || DEFAULT_FCM_TOKEN_FILE,
-      devicesFile: env.AICO_PHONE_DEVICES_FILE?.trim() || DEFAULT_PHONE_DEVICES_FILE,
+      devicesFile: env.AICO_PHONE_DEVICES_FILE?.trim() || join(dataDirPath(env), 'phones.json'),
+      devicesSeedFile: env.AICO_PHONE_DEVICES_SEED?.trim() || DEFAULT_PHONE_DEVICES_SEED_FILE,
       passMs: positiveInt(env.AICO_NOTIFY_PASS_SECONDS, DEFAULT_NOTIFY_PASS_SECONDS) * 1000,
       ominull: {
         keysFile: resolve(

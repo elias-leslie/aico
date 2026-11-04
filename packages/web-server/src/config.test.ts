@@ -152,6 +152,22 @@ describe('loadConfig: uploads, shares and maintenance', () => {
     ).toBe(7 * 86400)
   })
 
+  it("keeps the paired phones in Aico's data directory, seeded once from Nightshift's file", () => {
+    const config = loadConfig({ AICO_DATA_DIR: '/data/aico' }, ID)
+    expect(config.notify.devicesFile).toBe('/data/aico/phones.json')
+    expect(config.notify.devicesSeedFile).toBe('/var/lib/nightshift/web/app-devices.json')
+    const set = loadConfig(
+      {
+        AICO_DATA_DIR: '/data/aico',
+        AICO_PHONE_DEVICES_FILE: '/x/phones.json',
+        AICO_PHONE_DEVICES_SEED: '/x/seed.json',
+      },
+      ID,
+    )
+    expect(set.notify.devicesFile).toBe('/x/phones.json')
+    expect(set.notify.devicesSeedFile).toBe('/x/seed.json')
+  })
+
   it("trusts agent shares only from the owner's default Tether", () => {
     const env = { HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/7' }
     expect(loadConfig(env, ID).trustShows).toBe(true)

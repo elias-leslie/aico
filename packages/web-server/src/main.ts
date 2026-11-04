@@ -10,6 +10,8 @@ import { realRunners } from '@aico/notes/vision-extract/runners'
 import { machineId, StatusStore, statusDbPath } from '@aico/status'
 import { TetherClient } from '@aico/tether-client'
 import { buildApi } from './api'
+import { AppApi } from './app-api'
+import { PhoneRegistry } from './app-phones'
 import { Asks } from './asks'
 import { Background } from './background'
 import { CaptureRouter } from './capture-router'
@@ -31,6 +33,7 @@ import { registerStatusRoutes, startSelfRows } from './status'
 import { registerStatusActions, StatusRuns, statusNotice } from './status-actions'
 import { registerSyncRoutes, startSync } from './sync/start'
 import { TerminalHub } from './terminal'
+import { registerTrayRoutes } from './tray'
 
 function serve(): void {
   const config = loadConfig()
@@ -44,6 +47,8 @@ function serve(): void {
   const machine = machineId()
 
   const tether = new TetherClient(config.tetherSocket)
+  // The paired phones (first start: copied from Nightshift's file): the sender and the app's API share it.
+  const phones = new PhoneRegistry(config.notify.devicesFile, config.notify.devicesSeedFile)
   const notify = new NotifyHub({
     config: config.notify,
     dataDir: config.dataDir,
@@ -136,6 +141,17 @@ function serve(): void {
     )
   })
   notify.register(api)
+  registerTrayRoutes(api, { status, notify: notify.store, asks, publicHost: config.publicHost })
+  const app = new AppApi({
+    phones,
+    status,
+    notify: notify.store,
+    asks,
+    machine,
+    publicHost: config.publicHost,
+    dataDir: config.dataDir,
+  })
+  app.register(api)
   registerExportRoutes(api, config, sync.loop)
   const server = createWebServer(
     config,
@@ -170,6 +186,7 @@ function serve(): void {
     background.stop()
     reader.stop()
     terminals.stop()
+    app.stop()
     notify.stop()
     sync.stop()
     server.close(() => {
