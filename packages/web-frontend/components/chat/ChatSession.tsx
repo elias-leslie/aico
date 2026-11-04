@@ -266,6 +266,11 @@ function ChatSessionBody({ id, onBack }: { id: string; onBack?: () => void }) {
   const latestDraft = useRef(draft)
   latestDraft.current = draft
   const persistDraft = (text: string, attachments: string[]) => {
+    client.setQueryData<ChatView>(['aico-chat', id], (current) =>
+      current
+        ? { ...current, draft: text, draftAttachments: attachments }
+        : current,
+    )
     savingDraft.current = savingDraft.current
       .then(() =>
         apiFetch(`/api/chat/${id}/draft`, {
@@ -776,7 +781,7 @@ function ChatSessionBody({ id, onBack }: { id: string; onBack?: () => void }) {
                   <textarea
                     aria-label="Message"
                     ref={input}
-                    rows={2}
+                    rows={1}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onFocus={() => {

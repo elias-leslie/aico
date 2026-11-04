@@ -109,17 +109,34 @@ function show(chat: ChatView) {
       }),
   )
   vi.stubGlobal('fetch', fetcher)
-  render(
+  const rendered = render(
     <QueryClientProvider client={client}>
       <ChatSession id={chat.id} />
     </QueryClientProvider>,
   )
-  return { client, fetcher }
+  return { client, fetcher, rendered }
 }
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 describe('desktop chat', () => {
+  it('keeps the latest draft when Back immediately reopens the cached chat', () => {
+    const chat = view({ id: 'cached-draft-test' })
+    const { client, rendered } = show(chat)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), {
+      target: { value: 'Keep this phone draft' },
+    })
+    fireEvent.blur(screen.getByRole('textbox', { name: 'Message' }))
+    rendered.unmount()
+    render(
+      <QueryClientProvider client={client}>
+        <ChatSession id={chat.id} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue(
+      'Keep this phone draft',
+    )
+  })
   it('restores the unsent text and file when a streamed attachment preparation fails', async () => {
     vi.mocked(fetchCapture).mockResolvedValue({
       id: '000000000003',
