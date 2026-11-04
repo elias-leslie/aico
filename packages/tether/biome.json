@@ -40,8 +40,6 @@
                     "group": [
                       "@aico/agent",
                       "@aico/agent/**",
-                      "@aico/context",
-                      "@aico/context/**",
                       "@aico/jobs",
                       "@aico/jobs/**",
                       "@aico/notes",
@@ -59,7 +57,7 @@
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],
-                    "message": "@aico/tether (layer 5): import only @aico/shared, @aico/fleet, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/tether (layer 5): import only @aico/shared, @aico/context, @aico/fleet, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
