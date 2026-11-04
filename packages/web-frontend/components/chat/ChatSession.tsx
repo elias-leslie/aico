@@ -946,9 +946,18 @@ function ChatSessionBody({ id, onBack }: { id: string; onBack?: () => void }) {
             </header>
             <div className="chat-fields">
               <p id="chat-branch-description">
-                A new chat starts with everything up to the end of turn{' '}
-                {branch?.turn} ({branch?.model}’s reply). This chat stays as it
-                is.
+                {branch?.stop_reason === 'aborted' ? (
+                  <>
+                    This reply is unfinished. The new chat keeps the text that
+                    arrived and sends your message from the last complete reply.
+                  </>
+                ) : (
+                  <>
+                    A new chat starts with everything up to the end of turn{' '}
+                    {branch?.turn} ({branch?.model}’s reply).
+                  </>
+                )}{' '}
+                This chat stays as it is.
               </p>
               <label>
                 Message for the new chat

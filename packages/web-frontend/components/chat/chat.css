@@ -712,25 +712,28 @@
   }
   .chat-composer-bar {
     gap: 6px;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     padding: 0 6px;
   }
   .chat-composer-bar label:first-child {
     min-width: 0;
-    flex: 1;
+    flex: 1 0 100%;
     font-size: 0;
   }
   .chat-composer-bar select {
     width: 100%;
-    max-width: 160px;
+    max-width: none;
     padding: 5px 0;
     border: 0;
     font-size: 11px;
     text-overflow: ellipsis;
   }
   .chat-composer-bar label:nth-child(2) {
-    max-width: 90px;
-    font-size: 0;
+    max-width: none;
+    font-size: 11px;
+  }
+  .chat-composer-bar label:nth-child(2) select {
+    width: auto;
   }
   .aico-chat[data-typing] .chat-composer-bar label:nth-child(2),
   .chat-desktop-hint {

@@ -609,7 +609,13 @@ function useAsker(ask: OwnerAsk): { name: string; sessionId: string | null } {
 export function answerRoute(
   ask: OwnerAsk,
   nameOf: (id: string) => string | null,
+  chat = false,
 ): { text: string; detail: string } | null {
+  if (chat && ask.session)
+    return {
+      text: 'Answer goes to this chat',
+      detail: 'The chat that asked gets it.',
+    }
   if (ask.answerTo === undefined) return null
   if (ask.answerTo === null)
     return {
@@ -693,7 +699,13 @@ export function AskCard({
 }) {
   const asker = useAsker(ask)
   const nameOf = useSessionName()
-  const route = answerRoute(ask, nameOf)
+  const { sessions } = useTerminalSessions({ includeDetached: true })
+  const chat =
+    !ask.host &&
+    sessions?.some(
+      (session) => session.id === ask.session && session.mode === 'aico-chat',
+    )
+  const route = answerRoute(ask, nameOf, chat)
   const reply = useAskReply()
   const [choice, setChoice] = useState<number | null>(null)
   const [note, setNote] = useState('')

@@ -86,7 +86,8 @@ export function NewChatDialog({ onClose }: { onClose: () => void }) {
           </header>
           <div className="chat-fields">
             <p id="chat-start-description">
-              Pick a role and a project folder, then say what you need.
+              Choose a project or type a folder’s full path, then pick a role
+              and say what you need.
             </p>
             <label>
               Project folder

@@ -281,7 +281,7 @@ export class ChatSessions {
       )
     else new Transcript(this.db, id, { role, cwd, task: input.message, chain: rules.chain })
     const title = input.branch
-      ? `${this.row(input.branch.id).title}, branch at turn ${input.branch.turn}`
+      ? `Branch at turn ${input.branch.turn} · ${this.row(input.branch.id).title}`
       : input.message.split('\n')[0]?.slice(0, 100) || 'New chat'
     this.db
       .prepare(

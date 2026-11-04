@@ -104,6 +104,7 @@ vi.mock('@/lib/hooks/use-terminal-sessions', () => ({
     sessions: [
       { id: '0123abcd', name: 'Disk merge' },
       { id: '89abcdef', name: 'Disk coordinator' },
+      { id: 'fedc1234', name: 'Test chat', mode: 'aico-chat' },
     ],
   }),
 }))
@@ -446,6 +447,10 @@ describe('NeedsYouDrawer', () => {
       text: 'No session will get the answer',
       title:
         'No session will get the answer. The agent reads it when it checks.',
+    })
+    expect(routeOf({ session: 'fedc1234', answerTo: null })).toEqual({
+      text: 'Answer goes to this chat',
+      title: 'Answer goes to this chat. The chat that asked gets it.',
     })
     expect(routeOf({})).toBeNull()
   })

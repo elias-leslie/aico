@@ -120,6 +120,20 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 describe('desktop chat', () => {
+  it('explains that an unfinished branch keeps received text and starts from the last complete reply', () => {
+    const chat = view()
+    chat.messages = chat.messages.map((message) =>
+      message.role === 'assistant'
+        ? { ...message, stop_reason: 'aborted' }
+        : message,
+    )
+    show(chat)
+    fireEvent.click(screen.getByRole('button', { name: 'Branch from here' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent(
+      'This reply is unfinished.',
+    )
+    expect(screen.getByRole('dialog')).toHaveTextContent('last complete reply')
+  })
   it('keeps the latest draft when Back immediately reopens the cached chat', () => {
     const chat = view({ id: 'cached-draft-test' })
     const { client, rendered } = show(chat)

@@ -295,6 +295,7 @@ describe('Aico chat routes', () => {
     expect(result.status).toBe(200)
     await chats.settled(result.body.id)
     expect(chats.get(result.body.id)).toMatchObject({ parent: id, branchTurn: 1, state: 'idle' })
+    expect(chats.get(result.body.id).title).toMatch(/^Branch at turn 1 · /)
     expect(JSON.stringify(chats.get(id).messages)).toBe(source)
     expect(
       (await call('POST', `/api/chat/${id}/branch`, { turn: 999, message: 'No such turn' })).status,
