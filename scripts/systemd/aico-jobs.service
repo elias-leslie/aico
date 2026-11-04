@@ -16,6 +16,7 @@ Environment=HOME=%h
 ExecStart=/usr/bin/env node --disable-warning=ExperimentalWarning __PROJECT_ROOT__/packages/jobs/dist/aico-jobs.mjs serve
 Restart=always
 RestartSec=5
+Nice=10
 KillSignal=SIGTERM
 TimeoutStopSec=15
 StandardOutput=journal

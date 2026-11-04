@@ -1,5 +1,7 @@
 // The job definitions (data/jobs.json) and their schedule. A job kind names
-// its home machine; the schedule is a local time of day.
+// its home machine, the only machine that runs it (leases live in each host's
+// own jobs.db until M11 carries them over the fleet link, so no other machine
+// can tell whether the home machine ran it); the schedule is a local time of day.
 
 import { readFileSync } from 'node:fs'
 
@@ -7,15 +9,13 @@ export interface JobDef {
   kind: string
   what: string
   project: string
-  /** The machine that runs it when due (machine id: lower-cased short host name). */
+  /** The one machine that runs it (machine id: lower-cased short host name). */
   home: string
   /** Local time of day, HH:MM, daily. */
   at: string
   run: { post: string } | { command: string[] }
   /** Lease length; the holder renews it every third of this while the job runs. */
   lease_s: number
-  /** How long past due another machine waits before taking the job over. */
-  takeover_after_s: number
 }
 
 const KIND = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -72,7 +72,6 @@ export function parseJobs(value: unknown): JobDef[] {
       at,
       run: action,
       lease_s: seconds(job, 'lease_s', where),
-      takeover_after_s: seconds(job, 'takeover_after_s', where),
     }
   })
 }

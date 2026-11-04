@@ -1,9 +1,11 @@
-// The runner: each tick, takes the lease of every job due here and runs it.
-// A job's home machine takes it when due; any other machine only once it is
-// takeover_after_s overdue and the holder's lease has expired (the holder
-// stopped renewing). The holder renews every third of the lease while the
-// work runs. Work is never stopped for taking long: a holder that lost its
-// lease lets the work finish, and its result is refused (StaleLease).
+// The runner: each tick, takes the lease of every job homed on this machine
+// that is due, and runs it. Jobs homed elsewhere are never run here: leases
+// live in each host's own jobs.db, so this machine cannot see whether the home
+// machine ran it (M11 carries leases over the fleet link). The holder renews
+// every third of the lease while the work runs. Work is never stopped for
+// taking long: a holder that lost its lease lets the work finish, and its
+// result is refused (StaleLease). A refused result does not undo the work it
+// stands for, so every job must be safe to run twice (idempotent).
 
 import type { StatusRow } from '@aico/status'
 import { type JobDef, nextAt } from './jobs'
@@ -45,23 +47,29 @@ export class Runner {
     return { holder: this.options.holder, machine: this.options.machine }
   }
 
-  /** Adds new kinds (first due at their next scheduled time) and queues the rows of jobs homed here. */
+  /** Adds the new kinds homed here (first due at their next scheduled time) and queues their rows. */
   start(): void {
     const { store, jobs, machine } = this.options
     for (const job of jobs) {
+      if (job.home !== machine) continue
       store.ensure(job.kind, nextAt(job.at, this.now()))
       const state = store.get(job.kind)
-      if (job.home === machine && state) this.queueRow(job, state)
+      if (state) this.queueRow(job, state)
     }
   }
 
-  /** Claims and starts what is due here, then sends the rows waiting to go out. */
+  /** Claims and starts what is due among the jobs homed here, then sends the rows waiting to go out. */
   async tick(): Promise<void> {
     const { store, jobs, machine } = this.options
     for (const job of jobs) {
-      if (this.running.has(job.kind)) continue
-      const delayMs = job.home === machine ? 0 : job.takeover_after_s * 1000
-      const lease = store.claim(job.kind, this.who, this.now(), job.lease_s * 1000, delayMs)
+      if (job.home !== machine || this.running.has(job.kind)) continue
+      let lease: Lease | null
+      try {
+        lease = store.claim(job.kind, this.who, this.now(), job.lease_s * 1000)
+      } catch (error) {
+        this.log(`${job.kind}: could not take the lease: ${(error as Error).message}`)
+        continue
+      }
       if (!lease) continue
       const work = this.run(job, lease).finally(() => this.running.delete(job.kind))
       this.running.set(job.kind, work)
@@ -78,13 +86,16 @@ export class Runner {
   private async run(job: JobDef, lease: Lease): Promise<void> {
     const { store } = this.options
     const ttlMs = job.lease_s * 1000
-    const takeover = job.home !== lease.machine
-    this.log(
-      `${job.kind}: started on ${lease.machine} (lease ${lease.fence}${takeover ? `, taken over from ${job.home}` : ''})`,
-    )
+    this.log(`${job.kind}: started on ${lease.machine} (lease ${lease.fence})`)
     let held = true
     const renewal = setInterval(() => {
-      if (store.renew(lease, this.now(), ttlMs)) return
+      try {
+        if (store.renew(lease, this.now(), ttlMs)) return
+      } catch (error) {
+        // A failed write is not a lost lease: try again at the next renewal.
+        this.log(`${job.kind}: could not renew lease ${lease.fence}: ${(error as Error).message}`)
+        return
+      }
       held = false
       clearInterval(renewal)
       this.log(
@@ -101,8 +112,6 @@ export class Runner {
     } finally {
       clearInterval(renewal)
     }
-    if (takeover)
-      result = { ...result, meaning: `Ran here instead of ${job.home}. ${result.meaning}` }
     const finishedAt = this.now()
     try {
       store.complete(
@@ -112,8 +121,13 @@ export class Runner {
         nextAt(job.at, finishedAt),
       )
     } catch (error) {
-      if (!(error instanceof StaleLease)) throw error
-      this.log(`${job.kind}: result refused: ${error.message}${held ? '' : ' (lease was lost)'}`)
+      // The work is done either way; a refused result does not undo it (jobs are idempotent).
+      if (error instanceof StaleLease)
+        this.log(`${job.kind}: result refused: ${error.message}${held ? '' : ' (lease was lost)'}`)
+      else
+        this.log(
+          `${job.kind}: could not record its result (${result.state}: ${result.meaning}): ${(error as Error).message}`,
+        )
       return
     }
     this.log(`${job.kind}: ${result.state}: ${result.meaning}`)

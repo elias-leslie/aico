@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Device, PhoneSender, SendResult } from './fcm'
 import { type AskPort, type AskRequest, NeedsYou, THAT_WAS_ME } from './needs-you'
 import { parseNotice } from './notice'
+import { Notifier } from './notifier'
 import { backoff, FIRST_BACKOFF_MS, GIVE_UP_MS, Outbox } from './outbox'
 import { NotifyStore } from './store'
 
@@ -107,6 +108,61 @@ describe('the outbox', () => {
     expect(row.next_run).toBe(new Date(at() + 60_000).toISOString())
   })
 
+  it('marks a send that may have gone out unsure and never sends it again', async () => {
+    const { store, outbox, sent, advance, at } = setup(['unsure'])
+    const { id } = store.accept(warning, 'local', ['dev1'], at())
+    await outbox.kick()
+    advance(GIVE_UP_MS / 2)
+    await outbox.kick()
+    expect(sent).toEqual([id])
+    expect(store.get(id)?.deliveries[0]).toMatchObject({ state: 'unsure', result: 'unsure' })
+  })
+
+  it('keeps alerts waiting while the phones file is unreadable, then sends them', async () => {
+    let devices: Device[] | null = null
+    let now = 1_000_000
+    const store = new NotifyStore(':memory:')
+    const sent: string[] = []
+    const sender: PhoneSender = {
+      devices: () => devices,
+      send: async (_device, plaintext) => {
+        sent.push(JSON.parse(plaintext.toString()).id)
+        return 'sent'
+      },
+    }
+    const outbox = new Outbox({ store, sender, publicHost: null, now: () => now })
+    const needsYou = new NeedsYou({ store, asks: new FakeAsks() })
+    const notifier = new Notifier({
+      store,
+      sender,
+      outbox,
+      needsYou,
+      now: () => now,
+      log: () => {},
+    })
+    const raw = { v: 1, source: 'aico', severity: 'warning', title: 'T', body: 'B', push: 'phone' }
+    const queued = notifier.receive(raw, 'local')
+    const early = notifier.receive({ ...raw, title: 'T2' }, 'local')
+    await outbox.kick()
+    expect(store.get(queued.id)?.deliveries).toEqual([
+      { device: '*', state: 'pending', attempts: 1, result: "can't read the paired phones" },
+    ])
+    // One unreadable read is not yet a problem; still unreadable a pass later warns.
+    expect(outbox.statusRow('host', 30_000).state).toBe('ok')
+    now += 11 * 60_000
+    const row = outbox.statusRow('host', 30_000)
+    expect(row).toMatchObject({ state: 'warn' })
+    expect(row.meaning).toContain("Can't read the paired phones, so alerts wait until it can.")
+    devices = [device, { ...device, id: 'dev2' }]
+    await outbox.kick()
+    expect(sent.sort()).toEqual([early.id, early.id, queued.id, queued.id].sort())
+    expect(store.get(queued.id)?.deliveries.map((d) => [d.device, d.state])).toEqual([
+      ['dev1', 'sent'],
+      ['dev2', 'sent'],
+    ])
+    expect(outbox.statusRow('host', 30_000).state).toBe('ok')
+  })
+
   it('is ok when everything went out, and warns with no paired phone', async () => {
     const ok = setup()
     ok.store.accept(warning, 'local', ['dev1'], ok.at())
@@ -195,7 +251,7 @@ describe('Needs you', () => {
     await needsYou.noticeAccepted(id, alert)
     expect(asks.created[0]).toMatchObject({
       requester: 'ominull',
-      question: 'Was this you? New outbound connection from codex',
+      question: `Was this you? New outbound connection from codex (#${id.slice(0, 6)})`,
       options: ['That was me', 'Not me'],
     })
     const answered = { id: 'ask1', state: 'answered', answer: THAT_WAS_ME }
@@ -208,6 +264,48 @@ describe('Needs you', () => {
       outcome: 'OmniNull confirmed 2 alerts benign.',
     })
     expect(asks.closed).toEqual([['ask1', 'done']])
+  })
+
+  it('gives two alerts with the same title their own asks, so "That was me" confirms only its own', async () => {
+    const store = new NotifyStore(':memory:')
+    // Like Tether: an open ask with the same requester and question is the same ask.
+    const byQuestion = new Map<string, string>()
+    const asks: AskPort = {
+      create: async (ask) => {
+        const key = `${ask.requester}\n${ask.question}`
+        if (!byQuestion.has(key)) byQuestion.set(key, `ask${byQuestion.size + 1}`)
+        return byQuestion.get(key) as string
+      },
+      close: async () => {},
+    }
+    const confirmed: string[][] = []
+    const needsYou = new NeedsYou({
+      store,
+      asks,
+      verdict: {
+        confirmBenign: async (ids) => {
+          confirmed.push(ids)
+          return 'confirmed'
+        },
+      },
+    })
+    const alert = (key: string) =>
+      parseNotice({
+        v: 1,
+        source: 'ominull',
+        title: 'New outbound connection',
+        body: 'B',
+        key,
+        actions: ['expected', 'not-expected'],
+      })
+    const a = store.accept(alert('alerts:a1'), 'ominull', [], 0)
+    await needsYou.noticeAccepted(a.id, alert('alerts:a1'))
+    const b = store.accept(alert('alerts:b1'), 'ominull', [], 1)
+    await needsYou.noticeAccepted(b.id, alert('alerts:b1'))
+    expect(store.get(a.id)?.askId).toBe('ask1')
+    expect(store.get(b.id)?.askId).toBe('ask2')
+    await needsYou.askChanged({ id: 'ask2', state: 'answered', answer: THAT_WAS_ME })
+    expect(confirmed).toEqual([['b1']])
   })
 
   it('leaves "Not me" open on the hub and files no ask for a plain alert', async () => {

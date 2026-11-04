@@ -195,7 +195,26 @@ export function itemPlaintext(
  * One send's outcome: sent (FCM took it); retry (unreachable, 429, 5xx, or no usable access
  * token yet); gone (the device's token is unregistered); rejected:<status> (FCM refused it).
  */
-export type SendResult = 'sent' | 'retry' | 'no-token' | 'gone' | `rejected:${number}`
+/** unsure: the request may have reached FCM (a timeout or reset once it was out), so it is never resent. */
+export type SendResult = 'sent' | 'retry' | 'unsure' | 'no-token' | 'gone' | `rejected:${number}`
+
+/** Failures before the request could have gone out (no connection made): safe to send again. */
+const NOT_SENT = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'ENETDOWN',
+  'UND_ERR_CONNECT_TIMEOUT',
+])
+
+/** retry when the request never left; unsure when FCM may have taken it (timeout, reset, unknown). */
+export function failedSend(error: unknown): 'retry' | 'unsure' {
+  const cause = (error as { cause?: { code?: unknown } } | null)?.cause
+  const code = typeof cause?.code === 'string' ? cause.code : null
+  return code !== null && NOT_SENT.has(code) ? 'retry' : 'unsure'
+}
 
 export interface PhoneSender {
   /** The paired phones; null when the device file cannot be read. */
@@ -239,8 +258,8 @@ export class FcmSender implements PhoneSender {
         body: JSON.stringify(message),
         signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       })
-    } catch {
-      return 'retry'
+    } catch (error) {
+      return failedSend(error)
     }
     if (response.ok) return 'sent'
     let error: { status?: string; details?: { errorCode?: string }[] } = {}
@@ -252,6 +271,9 @@ export class FcmSender implements PhoneSender {
     const codes = new Set((error.details ?? []).map((detail) => String(detail?.errorCode)))
     if (codes.has('UNREGISTERED') || (response.status === 404 && error.status === 'NOT_FOUND'))
       return 'gone'
+    // FCM documents retrying these. A 5xx resent after FCM did deliver shows on the phone as
+    // the same notification again (the app posts by the payload's tag, which replaces it), at
+    // worst one more ring.
     if (response.status === 429 || response.status >= 500) return 'retry'
     return `rejected:${response.status}`
   }

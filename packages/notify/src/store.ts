@@ -65,6 +65,9 @@ export interface StoredNotice {
 
 export type OutboxState = 'pending' | 'sending' | 'sent' | 'failed' | 'unsure'
 
+/** The outbox row of a notice for the phones, queued while the paired-phones file could not be read. */
+export const ANY_PHONE = '*'
+
 export interface OutboxRow {
   id: number
   noticeId: string
@@ -205,10 +208,34 @@ export class NotifyStore {
     })
   }
 
-  /** A claimed row's outcome: sent or failed for good, or pending again at `retryAt`. */
+  /**
+   * Replaces a claimed ANY_PHONE row by one pending row per phone now that the phones are known
+   * (none when no phone is paired).
+   */
+  expand(id: number, devices: readonly string[], now: number): void {
+    transaction(this.db, () => {
+      const row = this.db
+        .prepare("SELECT notice_id FROM outbox WHERE id = ? AND state = 'sending'")
+        .get(id) as { notice_id: string } | undefined
+      if (!row) return
+      this.db.prepare('DELETE FROM outbox WHERE id = ?').run(id)
+      const queue = this.db.prepare(
+        `INSERT OR IGNORE INTO outbox (notice_id, device, state, next_at, updated_at)
+         VALUES (?, ?, 'pending', ?, ?)`,
+      )
+      for (const device of new Set(devices)) queue.run(row.notice_id, device, now, now)
+    })
+  }
+
+  /**
+   * A claimed row's outcome: sent, failed for good, unsure (it may have gone out, so it is never
+   * sent again), or pending again at `retryAt`.
+   */
   finish(
     id: number,
-    outcome: { state: 'sent' | 'failed'; result: string } | { retryAt: number; result: string },
+    outcome:
+      | { state: 'sent' | 'failed' | 'unsure'; result: string }
+      | { retryAt: number; result: string },
     now: number,
   ): void {
     if ('retryAt' in outcome)

@@ -1,10 +1,14 @@
+import { mkdtempSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { StatusRow } from '@aico/status'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { answerResult, commandJob, postJob } from './act'
 import { type JobDef, nextAt, parseJobs, readJobs } from './jobs'
 import { JobStore, StaleLease } from './leases'
+import { main } from './main'
 import { jobRow, Runner } from './runner'
 
 const A = { holder: 'a:1', machine: 'a' }
@@ -16,16 +20,18 @@ describe('the lease', () => {
     const store = new JobStore(':memory:')
     store.ensure('export', 1000)
     const first = store.claim('export', A, 1000, TTL)
-    expect(first?.fence).toBe(1)
+    if (!first) throw new Error('no lease')
+    expect(first.fence).toBe(1)
     expect(store.claim('export', B, 1000 + TTL - 1, TTL)).toBeNull()
-    expect(store.renew(first!, 2000, TTL)).toBe(true)
+    expect(store.renew(first, 2000, TTL)).toBe(true)
     // A goes silent; its lease (renewed at 2000) runs out at 2000 + TTL.
     const second = store.claim('export', B, 2000 + TTL, TTL)
     expect(second).toMatchObject({ fence: 2, holder: 'b:2' })
-    expect(second?.leaseId).not.toBe(first?.leaseId)
-    expect(store.renew(first!, 2000 + TTL, TTL)).toBe(false)
-    expect(() => store.complete(first!, { state: 'ok', meaning: 'late' }, 0, 5)).toThrow(StaleLease)
-    store.complete(second!, { state: 'ok', meaning: 'done' }, 3000, 99_000)
+    if (!second) throw new Error('no lease')
+    expect(second.leaseId).not.toBe(first.leaseId)
+    expect(store.renew(first, 2000 + TTL, TTL)).toBe(false)
+    expect(() => store.complete(first, { state: 'ok', meaning: 'late' }, 0, 5)).toThrow(StaleLease)
+    store.complete(second, { state: 'ok', meaning: 'done' }, 3000, 99_000)
     expect(store.get('export')).toMatchObject({
       fence: 2,
       leaseId: null,
@@ -35,7 +41,7 @@ describe('the lease', () => {
     })
     // Even the same fence with a forged lease id is refused.
     expect(() =>
-      store.complete({ ...second!, leaseId: 'x' }, { state: 'ok', meaning: '' }, 0, 0),
+      store.complete({ ...second, leaseId: 'x' }, { state: 'ok', meaning: '' }, 0, 0),
     ).toThrow(StaleLease)
   })
 
@@ -77,7 +83,6 @@ const job: JobDef = {
   at: '03:30',
   run: { post: '/api/export/notes' },
   lease_s: 60,
-  takeover_after_s: 600,
 }
 
 function runnerFor(
@@ -85,12 +90,13 @@ function runnerFor(
   store: JobStore,
   clock: { now: number },
   act: () => Promise<{ state: 'ok' | 'failed'; meaning: string }>,
+  def: JobDef = job,
 ) {
   const posted: StatusRow[][] = []
   const logs: string[] = []
   const runner = new Runner({
     store,
-    jobs: [job],
+    jobs: [def],
     machine: who.machine,
     holder: who.holder,
     act,
@@ -137,27 +143,54 @@ describe('the runner', () => {
     expect(store.get('export')?.fence).toBe(1)
   })
 
-  it('hands the job to another machine once the holder stops renewing, and refuses the old result', async () => {
+  it('never runs a job homed on another machine, however overdue', async () => {
     const clock = { now: new Date(2026, 10, 3, 3, 29).getTime() }
     const store = new JobStore(':memory:')
-    let finishA: (value: { state: 'ok'; meaning: string }) => void = () => {}
-    const a = runnerFor(A, store, clock, () => new Promise((resolve) => (finishA = resolve)))
-    const b = runnerFor(B, store, clock, async () => ({ state: 'ok', meaning: 'Copied.' }))
-    a.runner.start()
-    b.runner.start()
+    let ran = 0
+    const other = runnerFor(B, store, clock, async () => {
+      ran += 1
+      return { state: 'ok', meaning: '' }
+    })
+    other.runner.start()
+    expect(store.get('export')).toBeNull()
+    store.ensure('export', clock.now)
+    clock.now += 24 * 3600_000
+    await other.runner.tick()
+    await other.runner.idle()
+    expect(ran).toBe(0)
+    expect(store.get('export')).toMatchObject({ fence: 0, leaseId: null })
+    expect(other.posted).toEqual([])
+  })
+
+  it('logs a failed renew or result write instead of throwing, and lets the work finish', async () => {
+    const clock = { now: new Date(2026, 10, 3, 3, 29).getTime() }
+    const store = new JobStore(':memory:')
+    let finish: (value: { state: 'ok'; meaning: string }) => void = () => {}
+    // A 30 ms lease: renewals every 10 ms of real time.
+    const quick = { ...job, lease_s: 0.03 }
+    const home = runnerFor(
+      A,
+      store,
+      clock,
+      () => new Promise((resolve) => (finish = resolve)),
+      quick,
+    )
+    home.runner.start()
     clock.now += 60_000
-    await a.runner.tick()
-    expect(store.get('export')?.holder).toBe('a:1')
-    // A is stuck (its renewals never reach the DB, as if killed); B waits for overdue and expiry.
-    clock.now += 600_000
-    await b.runner.tick()
-    await b.runner.idle()
-    expect(store.get('export')).toMatchObject({ fence: 2, lastMachine: 'b' })
-    expect(b.posted.at(-1)?.[0]?.meaning).toBe('Ran here instead of a. Copied.')
-    finishA({ state: 'ok', meaning: 'late' })
-    await a.runner.idle()
-    expect(a.logs.at(-1)).toContain('result refused')
-    expect(store.get('export')?.lastMeaning).toBe('Ran here instead of a. Copied.')
+    await home.runner.tick()
+    store.renew = () => {
+      throw new Error('disk I/O error')
+    }
+    store.complete = () => {
+      throw new Error('database is locked')
+    }
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(home.logs).toContain('export: could not renew lease 1: disk I/O error')
+    finish({ state: 'ok', meaning: 'Copied.' })
+    await home.runner.idle()
+    expect(home.logs.at(-1)).toBe(
+      'export: could not record its result (ok: Copied.): database is locked',
+    )
   })
 
   it('keeps a row it could not write and sends it on the next tick', async () => {
@@ -185,10 +218,36 @@ describe('the runner', () => {
     expect(sent.map((row) => row.id)).toEqual(['jobs/export'])
   })
 
+  it('refuses `run` for a job homed elsewhere and says where it runs', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-jobs-'))
+    const env = {
+      AICO_JOBS_DB: join(dir, 'jobs.db'),
+      AICO_WEB_URL: 'http://127.0.0.1:9',
+    }
+    const lines: string[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((line) => lines.push(String(line)))
+    const out = vi.spyOn(console, 'log').mockImplementation((line) => lines.push(String(line)))
+    try {
+      const code = await main(['run', 'notes-export', '--machine', 'gem'], env)
+      expect(code).toBe(1)
+      expect(lines).toEqual([
+        'aico jobs run: notes-export runs only on its home machine, davion-sidarli; this is gem. Run it there.',
+      ])
+      lines.length = 0
+      await main(['list', '--machine', 'gem'], env)
+      expect(lines).toEqual(['notes-export  home davion-sidarli  runs there, not on gem'])
+    } finally {
+      spy.mockRestore()
+      out.mockRestore()
+    }
+  })
+
   it('says a job has not run yet', () => {
     const store = new JobStore(':memory:')
     store.ensure('export', 0)
-    expect(jobRow(job, store.get('export')!).meaning).toBe('Not run yet. Runs daily at 03:30 on a.')
+    const state = store.get('export')
+    if (!state) throw new Error('no job')
+    expect(jobRow(job, state).meaning).toBe('Not run yet. Runs daily at 03:30 on a.')
   })
 })
 

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { StatusStore } from '@aico/status'
 import { TetherError } from '@aico/tether-client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { privateListen } from './config'
 import { Router } from './http'
 import { changedAsk, hubKeyAccepted, hubSource, NotifyHub, tetherAsks } from './notify'
@@ -167,7 +167,9 @@ describe('POST /api/ominull/push', () => {
         path: '/v1/asks',
         body: expect.objectContaining({
           requester: 'ominull',
-          question: 'Was this you? TEST: new outbound connection',
+          question: expect.stringMatching(
+            /^Was this you\? TEST: new outbound connection \(#[0-9a-f]{6}\)$/,
+          ),
           options: ['That was me', 'Not me'],
           blocking: false,
         }),
@@ -248,6 +250,41 @@ describe('the pieces', () => {
       }),
     )
     expect(hubSource(site)).toEqual({ base: 'https://10.0.0.5:9443', ca: '/etc/ca.crt' })
+  })
+
+  it('logs a LAN door that cannot open and keeps going', async () => {
+    const errors: string[] = []
+    const spy = vi.spyOn(console, 'error').mockImplementation((line) => errors.push(String(line)))
+    const door = new NotifyHub({
+      config: {
+        fcmTokenFile: join(dir, 'no-token.json'),
+        devicesFile: join(dir, 'no-devices.json'),
+        passMs: 30_000,
+        ominull: {
+          keysFile: join(dir, 'ominull-keys.json'),
+          // A private address this machine doesn't have: EADDRNOTAVAIL.
+          listen: { host: '10.255.255.254', port: 3012 },
+          siteFile: join(dir, 'site.json'),
+          relayKeyFile: join(dir, 'relay.key'),
+        },
+      },
+      dataDir: mkdtempSync(join(tmpdir(), 'aico-notify-door-')),
+      publicHost: null,
+      machine: 'here',
+      status,
+      tether: { request: (async () => ({ status: 201, body: { id: 'x' } })) as never },
+    })
+    try {
+      door.start()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(errors).toContain(
+        '[notify] OmniNull door on 10.255.255.254:3012 is closed: listen EADDRNOTAVAIL: address not available 10.255.255.254:3012',
+      )
+      expect((await call('GET', '/api/notices')).status).toBe(200)
+    } finally {
+      door.stop()
+      spy.mockRestore()
+    }
   })
 
   it('takes the LAN door only on a private address', () => {

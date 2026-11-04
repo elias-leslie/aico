@@ -48,7 +48,12 @@ const cut = (text: string, max: number) =>
   [...text].length <= max ? text : `${[...text].slice(0, max - 1).join('')}…`
 const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim()
 
-export function noticeAsk(notice: Notice): AskRequest {
+/**
+ * A notice's ask. The question ends with the notice's short id: Tether merges an open ask with
+ * the same requester and question into one, and each notice needs its own ask, so that "That was
+ * me" confirms that notice's alerts and no other's.
+ */
+export function noticeAsk(id: string, notice: Notice): AskRequest {
   const body = [
     notice.body,
     notice.detail ?? '',
@@ -60,7 +65,7 @@ export function noticeAsk(notice: Notice): AskRequest {
   const verdict = asksVerdict(notice)
   return {
     requester: notice.source,
-    question: cut(oneLine(verdict ? `Was this you? ${notice.title}` : notice.title), 200),
+    question: `${cut(oneLine(verdict ? `Was this you? ${notice.title}` : notice.title), 190)} (#${id.slice(0, 6)})`,
     options: verdict ? [THAT_WAS_ME, NOT_ME] : notice.kind === 'todo' ? [DONE] : [],
     body: cut(body, 4000),
     command: notice.command ?? null,
@@ -101,7 +106,7 @@ export class NeedsYou {
   /** A notice just accepted: files its ask when it asks the owner something. */
   async noticeAccepted(id: string, notice: Notice): Promise<void> {
     if (!asksOwner(notice)) return
-    const askId = await this.options.asks.create(noticeAsk(notice))
+    const askId = await this.options.asks.create(noticeAsk(id, notice))
     this.options.store.setAsk(id, askId)
   }
 

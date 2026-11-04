@@ -167,14 +167,32 @@ describe('FcmSender', () => {
     expect(await answer(503).send(device, Buffer.from('x'), 1)).toBe('retry')
     expect(await answer(429).send(device, Buffer.from('x'), 1)).toBe('retry')
     expect(await answer(400).send(device, Buffer.from('x'), 1)).toBe('rejected:400')
-    const offline = new FcmSender(
-      { tokenFile, devicesFile },
-      (async () => {
-        throw new TypeError('fetch failed')
-      }) as typeof fetch,
-      () => now,
+    const failing = (error: unknown) =>
+      new FcmSender(
+        { tokenFile, devicesFile },
+        (async () => {
+          throw error
+        }) as typeof fetch,
+        () => now,
+      )
+    const fetchFailed = (code: string) =>
+      Object.assign(new TypeError('fetch failed'), {
+        cause: Object.assign(new Error(code), { code }),
+      })
+    // No connection made: the request never left, so it goes again.
+    expect(await failing(fetchFailed('ECONNREFUSED')).send(device, Buffer.from('x'), 1)).toBe(
+      'retry',
     )
-    expect(await offline.send(device, Buffer.from('x'), 1)).toBe('retry')
+    expect(await failing(fetchFailed('EAI_AGAIN')).send(device, Buffer.from('x'), 1)).toBe('retry')
+    // It may have reached FCM: never sent twice.
+    expect(await failing(fetchFailed('ECONNRESET')).send(device, Buffer.from('x'), 1)).toBe(
+      'unsure',
+    )
+    expect(await failing(fetchFailed('UND_ERR_SOCKET')).send(device, Buffer.from('x'), 1)).toBe(
+      'unsure',
+    )
+    const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    expect(await failing(timeout).send(device, Buffer.from('x'), 1)).toBe('unsure')
     token(now - 1)
     expect(await answer(200).send(device, Buffer.from('x'), 1)).toBe('no-token')
   })

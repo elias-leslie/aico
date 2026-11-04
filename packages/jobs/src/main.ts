@@ -11,10 +11,10 @@ import { JobStore, jobsDbPath } from './leases'
 import { jobRow, Runner } from './runner'
 
 const USAGE = `Usage: aico jobs <command>
-  list           each job: its home machine, when it runs next, who holds it, how it last went
-  run KIND       make KIND due now; its home machine runs it within seconds
-  serve          run the scheduler (aico-jobs.service)
-    --machine M  act as machine M (a takeover drill on one host)
+  list           each job: its home machine (the only one that runs it), when it runs next, who holds it, how it last went
+  run KIND       on KIND's home machine: make it due now; aico-jobs there runs it within seconds
+  serve          run the scheduler (aico-jobs.service): the jobs homed on this machine
+  --machine M    act as machine M (tests and drills on one host)
 Settings: AICO_JOBS_FILE (job list, default data/jobs.json), AICO_JOBS_DB (default jobs.db in
 AICO_DATA_DIR or ~/.local/state/aico), AICO_WEB_URL (aico-web, for jobs and Status rows).`
 
@@ -54,8 +54,12 @@ async function postRows(webUrl: string, rows: StatusRow[]): Promise<void> {
 
 const time = (ms: number | null) => (ms === null ? '-' : new Date(ms).toLocaleString('sv-SE'))
 
-function list(store: JobStore, jobs: readonly JobDef[]): void {
+function list(store: JobStore, jobs: readonly JobDef[], machine: string): void {
   for (const job of jobs) {
+    if (job.home !== machine) {
+      console.log(`${job.kind}  home ${job.home}  runs there, not on ${machine}`)
+      continue
+    }
     const state = store.get(job.kind)
     if (!state) {
       console.log(`${job.kind}  home ${job.home}  not started by aico-jobs yet`)
@@ -76,11 +80,17 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     console.log(USAGE)
     return command ? 0 : 2
   }
+  const flag = rest.indexOf('--machine')
+  const machine = flag >= 0 ? (rest[flag + 1] ?? '').toLowerCase() : machineId()
+  if (!machine) {
+    console.error('aico jobs: --machine needs a name')
+    return 2
+  }
   const { jobsFile, dbPath, webUrl } = settings(env)
   const jobs = readJobs(jobsFile)
   const store = new JobStore(dbPath)
   if (command === 'list') {
-    list(store, jobs)
+    list(store, jobs, machine)
     return 0
   }
   if (command === 'run') {
@@ -91,21 +101,21 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       )
       return 2
     }
+    if (job.home !== machine) {
+      console.error(
+        `aico jobs run: ${job.kind} runs only on its home machine, ${job.home}; this is ${machine}. Run it there.`,
+      )
+      return 1
+    }
     if (!store.runNow(job.kind, Date.now())) {
       console.error(`aico jobs run: aico-jobs has not started ${job.kind} yet`)
       return 1
     }
-    console.log(`${job.kind} is due now; ${job.home} runs it within ${TICK_MS / 1000} s.`)
+    console.log(`${job.kind} is due now; aico-jobs here runs it within ${TICK_MS / 1000} s.`)
     return 0
   }
   if (command !== 'serve') {
     console.error(`aico jobs: unknown command '${command}'\n${USAGE}`)
-    return 2
-  }
-  const flag = rest.indexOf('--machine')
-  const machine = flag >= 0 ? (rest[flag + 1] ?? '').toLowerCase() : machineId()
-  if (!machine) {
-    console.error('aico jobs serve: --machine needs a name')
     return 2
   }
   const runner = new Runner({

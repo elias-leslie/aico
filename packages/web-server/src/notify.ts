@@ -261,6 +261,13 @@ export class NotifyHub {
           if (!handled) res.writeHead(404).end()
         })
       })
+      // A door that can't open (address gone, port taken) is logged; aico-web keeps running.
+      this.door.on('error', (error) => {
+        console.error(
+          `[notify] OmniNull door on ${listen.host}:${listen.port} is closed: ${error.message}`,
+        )
+        this.door = null
+      })
       this.door.listen(listen.port, listen.host, () =>
         console.log(`[notify] OmniNull door on ${listen.host}:${listen.port}`),
       )

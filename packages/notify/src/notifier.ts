@@ -6,7 +6,7 @@ import type { PhoneSender } from './fcm'
 import type { NeedsYou } from './needs-you'
 import { parseNotice } from './notice'
 import type { Outbox } from './outbox'
-import type { Accepted, NotifyStore, Via } from './store'
+import { type Accepted, ANY_PHONE, type NotifyStore, type Via } from './store'
 
 export interface NotifierOptions {
   store: NotifyStore
@@ -25,11 +25,13 @@ export class Notifier {
     const { store, sender, outbox, needsYou } = this.options
     const log = this.options.log ?? ((line: string) => console.log(`[notify] ${line}`))
     const notice = parseNotice(value)
+    // When the paired-phones file can't be read, one row waits for any phone; the outbox
+    // turns it into a row per phone once the file reads again.
     const devices =
-      notice.push === 'phone' ? (sender.devices() ?? []).map((device) => device.id) : []
+      notice.push === 'phone' ? (sender.devices()?.map((device) => device.id) ?? [ANY_PHONE]) : []
     const accepted = store.accept(notice, via, devices, (this.options.now ?? Date.now)())
     log(
-      `${accepted.repeat ? 'repeat of' : 'took'} ${accepted.id} from ${notice.source} via ${via} (${notice.severity}, ${notice.push}${devices.length ? `, ${devices.length} phone(s)` : ''})`,
+      `${accepted.repeat ? 'repeat of' : 'took'} ${accepted.id} from ${notice.source} via ${via} (${notice.severity}, ${notice.push}${devices[0] === ANY_PHONE ? ', phones unknown yet' : devices.length ? `, ${devices.length} phone(s)` : ''})`,
     )
     if (accepted.repeat) return accepted
     if (devices.length)
