@@ -22,7 +22,7 @@ const USAGE = `Usage:
               [--detach] [--sha REV] [--rollback] [--with-ack ID]
       put one commit live: HEAD when it starts (or --sha), accepted and built in its own release;
       only units whose package cone changed restart; a manual worker (tether@default) only when named
-  aico deploy result|wait JOB      a detached deploy's result (wait: until it ends)
+  aico deploy result|wait JOB [--timeout S]   a detached deploy's result (wait: until it ends)
   aico logs UNIT|PROJECT [-n N] [--since 2h] [-l ERROR|WARN|INFO|DEBUG] [-f]
   aico snapshots take [NAME] | list | restore ID|NAME|-N  [--root DIR] [--project ID]
       read-only Btrfs points of the project (the catalogue st snap keeps); restore only for a project
@@ -48,7 +48,11 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       const deps = defaultDeps(env)
       if (rest[0] === 'result' || rest[0] === 'wait') {
         if (!rest[1]) throw new Refusal(`aico deploy ${rest[0]} needs a job id`, 2)
-        return await jobResult(rest[1], rest[0] === 'wait', deps)
+        const at = rest.indexOf('--timeout')
+        const timeout = at > 0 ? Number(rest[at + 1]) : undefined
+        if (timeout !== undefined && !(timeout >= 0))
+          throw new Refusal('--timeout needs seconds', 2)
+        return await jobResult(rest[1], rest[0] === 'wait', deps, timeout)
       }
       const req = parseDeployArgs(rest)
       if ('notHandled' in req) {
