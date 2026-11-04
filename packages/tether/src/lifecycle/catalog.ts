@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import type { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync, StatementSync } from 'node:sqlite'
 import { MAX_UNIX_SOCKET_PATH_BYTES } from '../config'
 import { durableTmuxServerUnit, MANAGED_LIFECYCLE_VERSION } from './ownership'
 import type { RootLaunchOptions } from './root-control'
@@ -124,10 +124,14 @@ interface Raw {
 }
 
 let db: DatabaseSync
+let widgetById: StatementSync | undefined
+let rootRequests: StatementSync | undefined
 
 /** Bind the catalog to the daemon's database (src/store.ts owns the schema). */
 export function bindCatalog(database: DatabaseSync): void {
   db = database
+  widgetById = undefined
+  rootRequests = undefined
 }
 
 function toRow(r: Raw): WidgetRow {
@@ -590,7 +594,11 @@ export function listAgentHubSessions(): WidgetRow[] {
 }
 
 export function getWidget(id: string): WidgetRow | undefined {
-  const r = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Raw | undefined
+  // This is also the lifecycle's hot lookup. Re-preparing it for every read
+  // allocates native SQLite statements until GC, inflating the daemon and
+  // making its tmux/systemctl forks increasingly expensive.
+  widgetById ??= db.prepare('SELECT * FROM sessions WHERE id = ?')
+  const r = widgetById.get(id) as Raw | undefined
   return r ? toRow(r) : undefined
 }
 
@@ -712,10 +720,17 @@ export function rootRequestForWidget(widgetId: string): RootRequestRow | undefin
   return row ? rootRequestRow(row) : undefined
 }
 
-export function listRootRequests(): RootRequestRow[] {
-  return db
-    .prepare('SELECT * FROM root_requests ORDER BY created_at, request_id')
-    .all()
+export function listRootRequests(
+  options: { origin?: RootRequestRow['origin']; includeEnded?: boolean } = {},
+): RootRequestRow[] {
+  // Tombstones grow with every ended root. Filter them in SQLite instead of
+  // materializing the entire history and looking up a session for each row.
+  rootRequests ??= db.prepare(`SELECT r.* FROM root_requests r
+    WHERE (? IS NULL OR r.origin = ?)
+      AND (? OR EXISTS (SELECT 1 FROM sessions s WHERE s.id = r.widget_id))
+    ORDER BY r.created_at, r.request_id`)
+  return rootRequests
+    .all(options.origin ?? null, options.origin ?? null, options.includeEnded === false ? 0 : 1)
     .map(rootRequestRow)
 }
 

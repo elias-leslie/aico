@@ -1,7 +1,7 @@
 // Ported from Aico electron/main/store.test.ts. Aico's additive-migration
 // cases are replaced by seeding Tether's schema directly with the rows the
 // importer copies (a historical `.scope` generation and a v0 widget).
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Store } from '../store'
 import {
   activateTmuxServer,
@@ -31,6 +31,7 @@ import {
   relaunchLauncher,
   removeWidgetIfOwnership,
   setCoordinator,
+  setWidgetName,
   setWidgetOwnership,
   setWidgetPendingScope,
   type WidgetRow,
@@ -42,6 +43,35 @@ const migratedScopeServer = '00000000000000000000000000000000'
 
 beforeAll(() => bindCatalog(store.db))
 afterAll(() => store.close())
+
+it('reuses the session lookup statement without caching rows or crossing catalog bindings', () => {
+  const first = new Store(':memory:')
+  const second = new Store(':memory:')
+  try {
+    bindCatalog(first.db)
+    insertWidget('f0000001', 'codex')
+    bindCatalog(first.db)
+    const prepare = vi.spyOn(first.db, 'prepare')
+    for (let i = 0; i < 100; i++) {
+      expect(getWidget('f0000001')?.tool).toBe('codex')
+      expect(getWidget('f0000002')).toBeUndefined()
+    }
+    expect(
+      prepare.mock.calls.filter(([sql]) => sql === 'SELECT * FROM sessions WHERE id = ?'),
+    ).toHaveLength(1)
+    setWidgetName('f0000001', 'Changed')
+    expect(getWidget('f0000001')?.name).toBe('Changed')
+    prepare.mockRestore()
+    bindCatalog(second.db)
+    expect(getWidget('f0000001')).toBeUndefined()
+    insertWidget('f0000001', 'shell')
+    expect(getWidget('f0000001')?.tool).toBe('shell')
+  } finally {
+    bindCatalog(store.db)
+    first.close()
+    second.close()
+  }
+})
 
 function ownership(id: string) {
   const row = getWidget(id)

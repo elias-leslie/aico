@@ -11,6 +11,7 @@ import { listenPrivateSocket } from '../http'
 import { UUID_RE as UUID } from '../proc-fs'
 import {
   allocateWidgetId,
+  bindCatalog,
   getRootRequest,
   getWidget,
   insertWidget,
@@ -1686,5 +1687,82 @@ describe('private root workload control', () => {
       status: 'ended',
       launch: null,
     })
+  })
+})
+
+describe('root lists with a retained request history', () => {
+  it('reads only live sessions for ended=0 and keeps tombstones addressable', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-root-history-'))
+    const store = initStore(join(dir, 'catalog.db'))
+    const socketPath = join(dir, 'control.sock')
+    const status = vi.fn(async () => 'running' as const)
+    const handle = createRootHandler({
+      available: () => true,
+      validate: () => true,
+      ensure: async () => {},
+      mutate: async () => false,
+      status,
+    })
+    const server = createServer((req, res) => void handle(req, res))
+    const prepare = store.db.prepare.bind(store.db)
+    let sessionReads = 0
+    const seed = prepare(`INSERT INTO root_requests
+      (request_id, digest, widget_id, logical_session_id, role, created_at, origin)
+      VALUES (?, 'digest', ?, ?, 'test', ?, ?)`)
+    for (let i = 0; i < 1721; i++) {
+      const id = i.toString(16).padStart(8, '0')
+      seed.run(`history-${i}`, id, `logical-${i}`, i, i === 1720 ? 'a-term' : 'aico')
+      if (i >= 1719) insertWidget(id, i === 1720 ? 'agent-hub' : 'codex')
+    }
+    // Observe actual session reads at the socket handler, including reads
+    // through reused statements. Query count must not grow with tombstones.
+    bindCatalog(store.db)
+    const spy = vi.spyOn(store.db, 'prepare').mockImplementation((sql) => {
+      const statement = prepare(sql)
+      if (sql === 'SELECT * FROM sessions WHERE id = ?') {
+        const get = statement.get.bind(statement)
+        vi.spyOn(statement, 'get').mockImplementation((...params) => {
+          sessionReads += 1
+          return get(...params)
+        })
+      }
+      return statement
+    })
+    const call = (path: string): Promise<Record<string, unknown>> =>
+      new Promise((resolve, reject) => {
+        const req = request({ socketPath, path }, (res) => {
+          let text = ''
+          res.on('data', (part: Buffer) => {
+            text += part.toString('utf8')
+          })
+          res.on('end', () => resolve(JSON.parse(text)))
+        })
+        req.on('error', reject)
+        req.end()
+      })
+    try {
+      await listenPrivateSocket(server, socketPath)
+      expect((await call('/v1/roots?ended=0')).roots).toMatchObject([
+        { requestId: 'history-1719', status: 'running' },
+        { requestId: 'history-1720', status: 'running' },
+      ])
+      expect(sessionReads).toBe(2)
+      expect(status).toHaveBeenCalledTimes(2)
+      expect((await call('/v1/roots?ended=0&origin=a-term')).roots).toMatchObject([
+        { requestId: 'history-1720' },
+      ])
+      expect(await call('/v1/roots/history-0')).toMatchObject({
+        requestId: 'history-0',
+        generation: null,
+        status: 'ended',
+      })
+      expect((await call('/v1/roots')).roots).toHaveLength(1721)
+      expect((await call('/v1/roots?ended=1')).roots).toHaveLength(1721)
+    } finally {
+      spy.mockRestore()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+      store.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

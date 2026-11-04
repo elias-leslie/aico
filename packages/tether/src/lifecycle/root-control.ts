@@ -963,10 +963,9 @@ export function createRootHandler(
         }
         const [local, remote] = await Promise.all([
           Promise.all(
-            listRootRequests()
-              .filter((root) => origin === null || root.origin === origin)
-              .filter((root) => ended !== '0' || getWidget(root.widgetId) !== undefined)
-              .map(describe),
+            listRootRequests({ origin: origin ?? undefined, includeEnded: ended !== '0' }).map(
+              describe,
+            ),
           ),
           operations.remoteRoots?.(query.toString()) ?? [],
         ])
