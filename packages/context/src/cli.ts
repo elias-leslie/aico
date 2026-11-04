@@ -3,6 +3,7 @@
 // agents read it; `context import-agent-hub` copies Agent Hub's rows in (M6/M7).
 
 import { readFileSync } from 'node:fs'
+import { routeFacts } from '@aico/usage'
 import importData from '../data/agent-hub-import.json' with { type: 'json' }
 import { startedBy } from './ancestry'
 import { type Database, openContext } from './db'
@@ -41,7 +42,7 @@ import {
 } from './memory'
 import { Catalog } from './models'
 import { getPrompt, listPrompts } from './prompts'
-import { factsFromAgentHub, route, UnknownLaunchKey } from './route'
+import { route, UnknownLaunchKey } from './route'
 
 export const CONTEXT_COMMANDS = ['memory', 'prompt', 'models', 'context'] as const
 
@@ -56,12 +57,13 @@ export interface ContextCliIo {
   statusUrl: string | null
   fetch: typeof fetch
   now(): Date
-  /** Agent Hub, read-only: the import source for a checkout, and its launch answer with usage facts. */
+  /** Agent Hub, read-only: the import source for a checkout. */
   agentHub: {
     checkout: string
     source(checkout: string): AgentHubSource
-    route(role: string, project?: string): { payload: unknown } | { error: string }
   }
+  /** Aico's data directory: usage.db there holds the usage facts `models route` shows. */
+  dataDir?: string
   /** `context deliver`: the environment it reads (session, role, already-delivered
    * markers) and its two computed sources; absent, deliver has neither block. */
   delivery?: {
@@ -293,13 +295,12 @@ function models(db: Database, argv: string[], io: ContextCliIo): number {
   const tool = str(parsed, 'tool')
   const model = str(parsed, 'model')
   const project = str(parsed, 'project')
-  const answer = io.agentHub.route(role, project)
-  const factsError = usageFactsError(answer)
-  const facts =
-    factsError === null && 'payload' in answer
-      ? factsFromAgentHub(answer.payload as { rows?: unknown })
-      : null
   const now = io.now().toISOString()
+  const found = io.dataDir
+    ? routeFacts(io.dataDir, now)
+    : { error: 'Aico has no usage folder configured' }
+  const facts = 'facts' in found ? found.facts : null
+  const factsError = 'error' in found ? found.error : null
   let payload: ReturnType<typeof route>
   try {
     payload = route(
@@ -321,15 +322,6 @@ function models(db: Database, argv: string[], io: ContextCliIo): number {
   else if (tool) io.out(`${formatLaunch(payload)}\n`)
   else io.out(`${formatOptions(payload, role, project)}\n`)
   return 0
-}
-
-/** Why the usage facts are missing (the call failed, or Agent Hub had none), or null. */
-function usageFactsError(answer: { payload: unknown } | { error: string }): string | null {
-  if ('error' in answer) return answer.error
-  const payload = answer.payload as { facts_as_of?: unknown; facts_error?: unknown } | null
-  if (!payload || typeof payload !== 'object') return 'Agent Hub usage facts were not an object'
-  if (typeof payload.facts_error === 'string') return payload.facts_error
-  return payload.facts_as_of ? null : 'Agent Hub gave no usage facts'
 }
 
 function importLines(result: ImportResult): string {

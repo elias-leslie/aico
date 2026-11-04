@@ -1,0 +1,28 @@
+{
+  "name": "@aico/usage",
+  "version": "0.1.0",
+  "description": "usage.db: what each subscription has left and when it resets (readings with an as-of time), credit lots and plans, daily rows, refusals; the collector and the spend rows on Status.",
+  "private": true,
+  "license": "Apache-2.0",
+  "aico": {
+    "layer": 2,
+    "imports": [
+      "@aico/store",
+      "@aico/status"
+    ],
+    "db": [
+      "usage.db"
+    ]
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aico/status": "0.1.0",
+    "@aico/store": "0.1.0"
+  }
+}

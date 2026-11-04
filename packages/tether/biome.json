@@ -52,6 +52,8 @@
                       "@aico/store/**",
                       "@aico/ui-kit",
                       "@aico/ui-kit/**",
+                      "@aico/usage",
+                      "@aico/usage/**",
                       "@aico/web-frontend",
                       "@aico/web-frontend/**",
                       "@aico/web-server",

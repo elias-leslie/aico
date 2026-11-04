@@ -106,6 +106,8 @@
                       "@aico/tether/**",
                       "@aico/tether-client",
                       "@aico/tether-client/**",
+                      "@aico/usage",
+                      "@aico/usage/**",
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],

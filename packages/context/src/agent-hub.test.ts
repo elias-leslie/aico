@@ -6,7 +6,7 @@ import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { agentHubRoute, agentHubSource } from './agent-hub'
+import { agentHubSource } from './agent-hub'
 
 let dir: string
 let path: string | undefined
@@ -49,18 +49,5 @@ describe('agentHubSource', () => {
     expect(() => agentHubSource(dir).rows('SELECT 1')).toThrow(
       'st db query failed (exit 1): relation does not exist',
     )
-  })
-})
-
-describe('agentHubRoute', () => {
-  it('passes the answer through, or says why there is none', () => {
-    fakeSt('echo \'{"rows": [], "facts_as_of": "2026-11-03T12:00:00Z"}\'')
-    expect(agentHubRoute('implementation')).toEqual({
-      payload: { rows: [], facts_as_of: '2026-11-03T12:00:00Z' },
-    })
-    fakeSt('echo not json')
-    expect(agentHubRoute('implementation')).toEqual({
-      error: 'Agent Hub usage facts were not JSON',
-    })
   })
 })

@@ -29,6 +29,21 @@
         ]
       },
       "lease_s": 300
+    },
+    {
+      "kind": "usage-collect",
+      "what": "Usage collection",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "every_min": 5,
+      "run": {
+        "command": [
+          "/home/kasadis/.summitflow/services/projects/aico/current/source/packages/web-server/scripts/aico",
+          "usage",
+          "collect"
+        ]
+      },
+      "lease_s": 180
     }
   ]
 }

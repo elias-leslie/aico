@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": ".tsbuild"
+  },
+  "include": ["src/**/*.ts", "src/**/*.json", "data/*.json", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist", ".tsbuild"],
+  "references": [
+    {
+      "path": "../store"
+    },
+    {
+      "path": "../status"
+    }
+  ]
+}

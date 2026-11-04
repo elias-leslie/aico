@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { openUsage, putState, storeReading, usageDbPath } from '@aico/usage'
 import { describe, expect, it } from 'vitest'
 import { runContextCli } from './cli'
 import { openContext } from './db'
@@ -265,11 +266,8 @@ describe('aico context import-agent-hub', () => {
           return new Response('{}', { status: 200 })
         }) as typeof fetch,
         now: () => new Date(NOW),
-        agentHub: {
-          checkout: '/nowhere',
-          source: () => hub,
-          route: () => ({ error: 'not asked' }),
-        },
+        dataDir: '/nowhere',
+        agentHub: { checkout: '/nowhere', source: () => hub },
       },
     }
   }
@@ -301,17 +299,51 @@ describe('aico context import-agent-hub', () => {
     expect(run.posted).toEqual([expect.objectContaining({ state: 'failed' })])
   })
 
-  it('still answers models route when usage facts time out, and says so', async () => {
+  it('still answers models route before usage is collected, and says so', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aico-context-'))
     try {
       const run = io(new FakeHub())
       run.io.dbPath = join(dir, 'context.db')
-      run.io.agentHub.route = () => ({ error: 'Agent Hub usage facts did not answer within 20s' })
+      run.io.dataDir = dir
       expect(await runContextCli('context', ['import-agent-hub'], run.io)).toBe(0)
       expect(await runContextCli('models', ['route', '--role', 'implementation'], run.io)).toBe(0)
       expect(run.out.join('')).toContain(
-        'usage facts unavailable (Agent Hub usage facts did not answer within 20s); allowed and denied are still right',
+        'usage facts unavailable (Aico has not collected usage yet (run aico usage collect)); allowed and denied are still right',
       )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('shows the usage facts Aico collected', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-context-'))
+    try {
+      const run = io(new FakeHub())
+      run.io.dbPath = join(dir, 'context.db')
+      run.io.dataDir = dir
+      const usage = openUsage(usageDbPath(dir))
+      const at = new Date(NOW).getTime()
+      storeReading(
+        usage,
+        {
+          provider: 'claude',
+          window_minutes: 10080,
+          observedAt: at - 60_000,
+          used_percent: 93,
+          resetsAt: at + 2 * 86400_000,
+          source: 'claude_statusline',
+          plan_type: null,
+        },
+        0,
+      )
+      putState(usage, 'collected', { at: new Date(at).toISOString(), problems: {}, failed: [] })
+      usage.close()
+      expect(await runContextCli('context', ['import-agent-hub'], run.io)).toBe(0)
+      run.out.length = 0
+      expect(await runContextCli('models', ['route', '--role', 'implementation'], run.io)).toBe(0)
+      const text = run.out.join('')
+      expect(text).toContain('weekly 7% left')
+      expect(text).not.toContain('usage facts unavailable')
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

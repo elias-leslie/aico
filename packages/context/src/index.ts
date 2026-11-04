@@ -3,7 +3,7 @@
 // `models route`; deliver() builds each session's context; the Agent Hub import
 // fills it (cutlist 3.1).
 
-export { agentHubRoute, agentHubSource } from './agent-hub'
+export { agentHubSource } from './agent-hub'
 export { CONTEXT_COMMANDS, type ContextCliIo, runContextCli } from './cli'
 export { contextDbPath, type Database, openContext } from './db'
 export {
@@ -32,4 +32,4 @@ export {
 } from './memory'
 export { Catalog, MODELS, type Model } from './models'
 export { getPrompt, listPrompts, type Prompt } from './prompts'
-export { type Facts, factsFromAgentHub, type RoutePayload, route } from './route'
+export { type Facts, type RoutePayload, route } from './route'

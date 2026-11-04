@@ -1,0 +1,42 @@
+{
+  "about": "How Aico reads each subscription's usage. providers: the subscriptions it tracks, in the order the Status page lists them. lookback_days: readings older than this are dropped. reading_min_interval_s: a reading of the same window with no more use is kept only this often. late_after_min: a spend row goes late when no collection refreshed it for this long (the collect job runs every few minutes, see packages/jobs/data/jobs.json). Paths: statusline is under XDG_STATE_HOME, sessions under HOME, key_file under the Aico data directory.",
+  "providers": [
+    {
+      "id": "claude",
+      "name": "Claude"
+    },
+    {
+      "id": "codex",
+      "name": "Codex"
+    },
+    {
+      "id": "opencode-go",
+      "name": "OpenCode Go"
+    }
+  ],
+  "lookback_days": 8,
+  "late_after_min": 15,
+  "claude": {
+    "statusline": "claude-usage/rate-limits.json",
+    "windows": {
+      "five_hour": 300,
+      "seven_day": 10080
+    }
+  },
+  "codex": {
+    "sessions": ".codex/sessions",
+    "lot_min_credits": 1000,
+    "tail_bytes": 262144
+  },
+  "opencode_go": {
+    "url": "https://opencode.ai/zen/go/v1/usage",
+    "key_file": "secrets/opencode-go",
+    "timeout_s": 10,
+    "windows": {
+      "rolling": 300,
+      "weekly": 10080,
+      "monthly": 43200
+    }
+  },
+  "reading_min_interval_s": 900
+}

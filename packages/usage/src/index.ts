@@ -1,0 +1,35 @@
+// usage.db: what each subscription has left and when it resets (readings with an as-of
+// time), credit lots and plans, daily rows and refusals. collect() reads the providers,
+// loadFacts() feeds route() in @aico/context, spendRows() are the Status page's spend card,
+// importAgentHub() copies Agent Hub's accounting in (cutlist 3.1, M8-1).
+
+export { routeFacts, runUsageCli, USAGE_COMMANDS, type UsageCliIo } from './cli'
+export { type Collected, collect } from './collect'
+export { type Database, getState, openUsage, plansPath, putState, usageDbPath } from './db'
+export { latestReadings, loadFacts, recordRefusal } from './facts'
+export { type ImportResult, importAgentHub, type UsageSource } from './migrate'
+export {
+  creditFacts,
+  currentPlan,
+  drawDown,
+  type Lot,
+  loadPlans,
+  localDay,
+  type Plan,
+  type Plans,
+  pacePerDay,
+} from './plans'
+export { type ReadingEvent, storeReading } from './readings'
+export { type SpendInput, spendRow, spendRows, when } from './spend'
+export {
+  type Credit,
+  type Facts,
+  micros,
+  optionUsage,
+  type Reading,
+  type Refusal,
+  type Usage,
+  WINDOW_LABELS,
+  type Window,
+  windowFacts,
+} from './windows'

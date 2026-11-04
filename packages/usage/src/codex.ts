@@ -1,0 +1,353 @@
+// Codex: its session logs (~/.codex/sessions/YYYY/MM/DD/*.jsonl) carry, on every
+// token_count line, the account's rate limits (5h and weekly windows, plan, credit
+// balance). Read only what was appended since the last pass (a cursor per file, saved
+// in the same transaction as the rows it produced, so nothing counts twice) and keep:
+//   - window readings (the newest wins, see readings.ts);
+//   - the credits drawn: balance reports from concurrent sessions are stale, so a draw
+//     is the drop below a running minimum, and a rise of lot_min_credits or more that no
+//     lot explains is a new lot;
+//   - per local day, model, project and speed: requests and tokens, and the credits drawn.
+// A log file nobody has written to since the cutover day is read for its readings only
+// (its tail, once). Conversation text is never kept.
+
+import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { transaction } from '@aico/store'
+import config from '../data/usage.json' with { type: 'json' }
+import { type Database, getState, putState } from './db'
+import { localDay } from './plans'
+import { type ReadingEvent, storeReading } from './readings'
+
+export const CODEX_SOURCE = 'codex_session_log'
+
+const CHUNK = 8 * 1024 * 1024
+
+interface FileState {
+  cwd?: string
+  model?: string
+  speed?: string
+  histStart?: number
+  lastTotal?: number
+  id?: string
+}
+
+interface Balance {
+  at: number
+  balance: number
+  key: string
+}
+
+interface Rollup {
+  requests: number
+  input: number
+  cached: number
+  output: number
+  drawn: number
+}
+
+export interface CodexResult {
+  files: number
+  bytes: number
+  readings: number
+  /** Credits drawn found this pass. */
+  drawn: number
+  newLots: number
+}
+
+/** The project a working directory belongs to: the first folder under a workspaces root, else its name. */
+export function projectOf(cwd: string | undefined, homes: readonly string[]): string {
+  if (!cwd) return 'unknown'
+  const path = cwd.replace(/\/+$/, '')
+  for (const prefix of ['/srv/workspaces/projects/', '/srv/workspaces/', '/srv/scratch/', ...homes])
+    if (path.startsWith(prefix)) return path.slice(prefix.length).split('/', 1)[0] || 'unknown'
+  return path.split('/').pop() || 'unknown'
+}
+
+/** Complete lines appended after `offset` (up to `end`), with the offset after the last one. */
+function* newLines(path: string, offset: number, end: number): Generator<[string, number]> {
+  const fd = openSync(path, 'r')
+  try {
+    let pos = offset
+    let carry = Buffer.alloc(0)
+    while (pos < end) {
+      const buffer = Buffer.alloc(Math.min(CHUNK, end - pos))
+      const read = readSync(fd, buffer, 0, buffer.length, pos)
+      if (read <= 0) break
+      pos += read
+      let data = Buffer.concat([carry, buffer.subarray(0, read)])
+      const base = pos - data.length
+      let from = 0
+      for (;;) {
+        const nl = data.indexOf(10, from)
+        if (nl < 0) break
+        yield [data.toString('utf8', from, nl), base + nl + 1]
+        from = nl + 1
+      }
+      carry = Buffer.from(data.subarray(from))
+      data = Buffer.alloc(0)
+    }
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/** The JSONL files under the sessions root changed since `sinceMs`, newest day folders only. */
+function recentFiles(
+  root: string,
+  sinceMs: number,
+): { path: string; size: number; mtime: number }[] {
+  const out: { path: string; size: number; mtime: number }[] = []
+  const start = new Date(sinceMs - 86400_000)
+  const end = new Date(Date.now() + 86400_000)
+  for (let at = start.getTime(); at <= end.getTime(); at += 86400_000) {
+    const day = new Date(at)
+    const dir = join(
+      root,
+      String(day.getFullYear()),
+      String(day.getMonth() + 1).padStart(2, '0'),
+      String(day.getDate()).padStart(2, '0'),
+    )
+    if (!existsSync(dir)) continue
+    for (const name of readdirSync(dir)) {
+      if (!name.endsWith('.jsonl')) continue
+      const path = join(dir, name)
+      try {
+        const stat = statSync(path)
+        if (stat.mtimeMs >= sinceMs) out.push({ path, size: stat.size, mtime: stat.mtimeMs })
+      } catch {
+        // gone between listing and stat
+      }
+    }
+  }
+  return out.sort((a, b) => a.mtime - b.mtime)
+}
+
+const num = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : 0
+
+export interface CodexOptions {
+  /** The sessions root (HOME/.codex/sessions). */
+  root: string
+  /** Home folders whose names stand for the project (for a working directory under them). */
+  homes: readonly string[]
+  now: number
+  /** The first local day this package counts (YYYY-MM-DD): earlier days came from Agent Hub. */
+  cutoverDay: string
+  /** Lot start times already known (plans file and detected), epoch ms. */
+  lotTimes: number[]
+}
+
+export function collectCodex(db: Database, options: CodexOptions): CodexResult {
+  const { root, now, cutoverDay } = options
+  const cfg = config.codex
+  const result: CodexResult = { files: 0, bytes: 0, readings: 0, drawn: 0, newLots: 0 }
+  if (!existsSync(root)) return result
+  const [y, m, d] = cutoverDay.split('-').map(Number) as [number, number, number]
+  const cutoverMs = new Date(y, m - 1, d).getTime()
+  const lookbackMs = now - config.lookback_days * 86400_000
+  const files = recentFiles(root, Math.min(cutoverMs, lookbackMs))
+  const cursorOf = db.prepare('SELECT offset, state FROM cursors WHERE path = ?')
+  const events: ReadingEvent[] = []
+  const balances: Balance[] = []
+  const rollups = new Map<string, Rollup>()
+  const cursors = new Map<string, { offset: number; state: FileState }>()
+
+  for (const file of files) {
+    const saved = cursorOf.get(file.path) as { offset: number; state: string } | undefined
+    let offset = saved && saved.offset <= file.size ? saved.offset : 0
+    const state: FileState = saved && saved.offset <= file.size ? JSON.parse(saved.state) : {}
+    // Untouched since before the cutover and never read: its tail is all that can still matter.
+    const old = !saved && file.mtime < cutoverMs
+    if (old) {
+      if (file.mtime < lookbackMs) {
+        cursors.set(file.path, { offset: file.size, state })
+        continue
+      }
+      offset = Math.max(file.size - cfg.tail_bytes, 0)
+    }
+    if (offset >= file.size) continue
+    let first = old && offset > 0
+    let end = offset
+    for (const [line, after] of newLines(file.path, offset, file.size)) {
+      end = after
+      if (first) {
+        first = false // a tail read starts mid-line
+        continue
+      }
+      const head = line.slice(0, 400)
+      if (head.includes('"session_meta"')) {
+        const meta = safe(line)?.payload
+        if (meta && (!state.id || meta.id === state.id)) {
+          state.id = meta.id
+          state.cwd = meta.cwd ?? state.cwd
+          if (Number.isInteger(meta.subagent_history_start_ordinal))
+            state.histStart = meta.subagent_history_start_ordinal
+        }
+        continue
+      }
+      if (head.includes('"turn_context"')) {
+        const context = safe(line)?.payload
+        if (context) {
+          state.model = context.model ?? state.model
+          state.speed = ['standard', 'fast', 'flex', 'priority'].includes(context.service_tier)
+            ? context.service_tier
+            : 'standard'
+        }
+        continue
+      }
+      if (!head.includes('"token_count"')) continue
+      const record = safe(line)
+      const payload = record?.payload
+      const at = Date.parse(record?.timestamp ?? '')
+      if (payload?.type !== 'token_count' || Number.isNaN(at)) continue
+      const inherited =
+        state.histStart !== undefined &&
+        Number(/"ordinal":\s*(\d+)/.exec(head)?.[1] ?? Number.POSITIVE_INFINITY) < state.histStart
+      if (inherited) continue
+      const counts = !old && localDay(at) >= cutoverDay
+      const limits = payload.rate_limits
+      if (limits && typeof limits === 'object') {
+        const credits = limits.credits
+        let balance: number | null = null
+        if (credits && credits.balance != null && !credits.unlimited) {
+          const value = Number(credits.balance)
+          if (Number.isFinite(value)) balance = value
+        }
+        if (balance !== null && counts)
+          balances.push({
+            at,
+            balance,
+            key: [
+              localDay(at),
+              state.model ?? 'unknown',
+              projectOf(state.cwd, options.homes),
+              state.speed ?? 'standard',
+            ].join('\n'),
+          })
+        for (const name of ['primary', 'secondary']) {
+          const window = limits[name]
+          if (
+            window &&
+            Number.isInteger(window.window_minutes) &&
+            typeof window.used_percent === 'number'
+          )
+            events.push({
+              provider: 'codex',
+              window_minutes: window.window_minutes,
+              observedAt: at,
+              used_percent: window.used_percent,
+              resetsAt: num(window.resets_at) > 0 ? num(window.resets_at) * 1000 : null,
+              source: CODEX_SOURCE,
+              plan_type: typeof limits.plan_type === 'string' ? limits.plan_type : null,
+            })
+        }
+      }
+      if (!counts) continue
+      const last = payload.info?.last_token_usage ?? {}
+      const total = payload.info?.total_token_usage?.total_tokens
+      const positive =
+        num(last.input_tokens) + num(last.cached_input_tokens) + num(last.output_tokens) > 0
+      if (positive && total !== state.lastTotal) {
+        state.lastTotal = total
+        const key = [
+          localDay(at),
+          state.model ?? 'unknown',
+          projectOf(state.cwd, options.homes),
+          state.speed ?? 'standard',
+        ].join('\n')
+        const roll = rollups.get(key) ?? { requests: 0, input: 0, cached: 0, output: 0, drawn: 0 }
+        const cached = num(last.cached_input_tokens)
+        roll.requests += 1
+        roll.input += Math.max(num(last.input_tokens) - cached, 0)
+        roll.cached += cached
+        roll.output += num(last.output_tokens)
+        rollups.set(key, roll)
+      }
+    }
+    if (end !== offset) {
+      result.files += 1
+      result.bytes += end - offset
+    }
+    cursors.set(file.path, { offset: old ? file.size : end, state })
+  }
+
+  // Credit draws: against a running minimum, in time order.
+  let runmin = getState<number | null>(db, 'codex.runmin') ?? null
+  const newLots: { at: number; credits: number }[] = []
+  for (const event of balances.sort((a, b) => a.at - b.at)) {
+    if (runmin === null) {
+      runmin = event.balance
+      continue
+    }
+    if (event.balance >= runmin + cfg.lot_min_credits) {
+      if (!options.lotTimes.some((time) => Math.abs(time - event.at) < 3600_000)) {
+        newLots.push({ at: event.at, credits: event.balance - runmin })
+        options.lotTimes.push(event.at)
+      }
+      runmin = event.balance
+    } else if (event.balance < runmin) {
+      const roll = rollups.get(event.key) ?? {
+        requests: 0,
+        input: 0,
+        cached: 0,
+        output: 0,
+        drawn: 0,
+      }
+      roll.drawn += runmin - event.balance
+      result.drawn += runmin - event.balance
+      rollups.set(event.key, roll)
+      runmin = event.balance
+    }
+  }
+
+  const upsert = db.prepare(
+    `INSERT INTO daily (day, provider, model, project, speed, requests, input_tokens, cached_input_tokens, output_tokens, credits_drawn)
+     VALUES (?, 'codex', ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (day, provider, model, project, speed) DO UPDATE SET
+       requests = requests + excluded.requests,
+       input_tokens = input_tokens + excluded.input_tokens,
+       cached_input_tokens = cached_input_tokens + excluded.cached_input_tokens,
+       output_tokens = output_tokens + excluded.output_tokens,
+       credits_drawn = credits_drawn + excluded.credits_drawn`,
+  )
+  transaction(db, () => {
+    for (const [key, roll] of rollups) {
+      const [day, model, project, speed] = key.split('\n') as [string, string, string, string]
+      upsert.run(
+        day,
+        model.slice(0, 100),
+        project.slice(0, 200),
+        speed,
+        roll.requests,
+        roll.input,
+        roll.cached,
+        roll.output,
+        roll.drawn,
+      )
+    }
+    const lot = db.prepare(
+      'INSERT OR IGNORE INTO detected_lots (provider, at, credits) VALUES (?, ?, ?)',
+    )
+    for (const found of newLots) lot.run('codex', new Date(found.at).toISOString(), found.credits)
+    result.newLots = newLots.length
+    for (const event of events.sort((a, b) => a.observedAt - b.observedAt))
+      if (storeReading(db, event, config.reading_min_interval_s)) result.readings += 1
+    const save = db.prepare(
+      'INSERT INTO cursors (path, offset, state) VALUES (?, ?, ?) ON CONFLICT (path) DO UPDATE SET offset = excluded.offset, state = excluded.state',
+    )
+    for (const [path, cursor] of cursors)
+      save.run(path, cursor.offset, JSON.stringify(cursor.state))
+    putState(db, 'codex.runmin', runmin)
+  })
+  return result
+}
+
+/** A parsed JSON line, or undefined when it is not JSON. Codex's log shape is its own: every field is checked where used. */
+// biome-ignore lint/suspicious/noExplicitAny: provider log lines, read defensively field by field
+function safe(line: string): any {
+  try {
+    return JSON.parse(line)
+  } catch {
+    return undefined
+  }
+}

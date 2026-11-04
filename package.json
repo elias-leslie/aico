@@ -11,6 +11,9 @@
       ],
       "@aico/notify": [
         "@aico/status"
+      ],
+      "@aico/usage": [
+        "@aico/status"
       ]
     }
   },

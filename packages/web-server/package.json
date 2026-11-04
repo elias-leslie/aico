@@ -11,6 +11,7 @@
       "@aico/context",
       "@aico/notify",
       "@aico/status",
+      "@aico/usage",
       "@aico/fleet",
       "@aico/notes",
       "@aico/tether-client"
@@ -37,6 +38,7 @@
     "@aico/status": "0.1.0",
     "@aico/tether-client": "0.1.0",
     "@aico/ui-kit": "0.1.0",
+    "@aico/usage": "0.1.0",
     "ws": "8.22.0"
   },
   "devDependencies": {

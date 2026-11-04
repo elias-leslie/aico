@@ -20,7 +20,6 @@ import { homedir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  agentHubRoute,
   agentHubSource,
   CONTEXT_COMMANDS,
   contextDbPath,
@@ -29,6 +28,7 @@ import {
 } from '@aico/context'
 import { machineId } from '@aico/status'
 import { TetherClient, TetherError, TetherUnavailable, tetherSocketPath } from '@aico/tether-client'
+import { runUsageCli, USAGE_COMMANDS } from '@aico/usage'
 import { runAppCli } from './app-cli'
 import { type BrokerTarget, createBroker, normalizeWorkingDir } from './broker'
 import { dataDirPath, loadConfig, webDbPath } from './config'
@@ -46,6 +46,7 @@ export const CLI_COMMANDS = [
   'status',
   'app',
   ...CONTEXT_COMMANDS,
+  ...USAGE_COMMANDS,
 ]
 
 /** The tool each launcher opens. */
@@ -588,15 +589,34 @@ export async function runCli(command: string, argv: string[]): Promise<number> {
       statusUrl: `http://127.0.0.1:${port}/api/status/rows`,
       fetch,
       now: () => new Date(),
+      dataDir: dataDirPath(),
       agentHub: {
         checkout: process.env.AICO_AGENT_HUB_CHECKOUT || join(dirname(repoRoot), 'agent-hub'),
         source: agentHubSource,
-        route: agentHubRoute,
       },
       delivery: {
         env: process.env,
         toolUsage: () => readToolUsage(),
         activity: (project, except) => sessionActivity(project, except),
+      },
+    })
+  }
+  if ((USAGE_COMMANDS as readonly string[]).includes(command)) {
+    const { port } = loadConfig()
+    return runUsageCli(argv, {
+      out: (text) => process.stdout.write(text),
+      err: (text) => process.stderr.write(text),
+      dataDir: dataDirPath(),
+      home: homedir(),
+      env: process.env,
+      machine: machineId(),
+      statusUrl: `http://127.0.0.1:${port}/api/status/rows`,
+      fetch,
+      now: () => new Date(),
+      agentHub: {
+        checkout:
+          process.env.AICO_AGENT_HUB_CHECKOUT || join(dirname(terminalIo().repoRoot), 'agent-hub'),
+        source: agentHubSource,
       },
     })
   }

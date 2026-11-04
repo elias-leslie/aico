@@ -59,34 +59,3 @@ export function agentHubSource(checkout: string): AgentHubSource {
     },
   }
 }
-
-/**
- * Agent Hub's launch-defaults answer with usage facts for a role
- * (`st models route --role R [--project P] --json`), the usage source until Aico
- * collects it (M8), or why there is none.
- */
-export function agentHubRoute(
-  role: string,
-  project?: string,
-): { payload: unknown } | { error: string } {
-  const argv = [
-    'models',
-    'route',
-    '--role',
-    role,
-    ...(project ? ['--project', project] : []),
-    '--json',
-  ]
-  const child = spawnSync('st', argv, {
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-    timeout: TIMEOUTS.route * 1000,
-  })
-  const failed = failure(child, 'Agent Hub usage facts', TIMEOUTS.route)
-  if (failed) return { error: failed }
-  try {
-    return { payload: JSON.parse(child.stdout) }
-  } catch {
-    return { error: 'Agent Hub usage facts were not JSON' }
-  }
-}

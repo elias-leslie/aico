@@ -42,8 +42,10 @@
       "tether@default.service": [
         "packages/context",
         "packages/fleet",
+        "packages/status",
         "packages/store",
         "packages/tether-client",
+        "packages/usage",
         "vendor",
         "package-lock.json",
         "native/host-steward/aico-root-watch.py"

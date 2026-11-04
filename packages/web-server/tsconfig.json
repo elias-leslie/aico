@@ -26,6 +26,9 @@
     },
     {
       "path": "../notify"
+    },
+    {
+      "path": "../usage"
     }
   ]
 }

@@ -8,9 +8,71 @@ import { describe, expect, it } from 'vitest'
 import { formatLaunch, formatOptions } from './format'
 import type { LaunchPolicy } from './launch'
 import { Catalog } from './models'
-import { factsFromAgentHub, type RoutePayload, route, UnknownLaunchKey } from './route'
+import {
+  type Credit,
+  type Facts,
+  type Reading,
+  type Refusal,
+  type RoutePayload,
+  route,
+  UnknownLaunchKey,
+  type Usage,
+} from './route'
 
 process.env.TZ = 'America/New_York'
+
+const micros = (iso: string) => {
+  const match = /\.(\d+)/.exec(iso)
+  const fraction = match ? Number((match[1] as string).padEnd(6, '0').slice(0, 6)) : 0
+  return Date.parse(iso.replace(/\.\d+/, '')) * 1000 + fraction
+}
+
+/**
+ * Usage facts from an Agent Hub launch-defaults answer (`st models route --json`):
+ * how the fixtures (captured from Agent Hub) become facts. Window states are kept by
+ * giving passed readings a past reset; refusals keep each model's newest one and count.
+ */
+export function factsFromAgentHub(payload: { rows?: unknown }): Facts {
+  const readings = new Map<string, Reading>()
+  const credits: Record<string, Credit> = {}
+  const refusals = new Map<string, Refusal>()
+  const rows = Array.isArray(payload.rows) ? (payload.rows as Record<string, unknown>[]) : []
+  const addRefusal = (value: unknown) => {
+    if (!value || typeof value !== 'object') return
+    const refusal = value as Refusal
+    refusals.set(`${refusal.requested_model}\n${refusal.at}`, { ...refusal })
+  }
+  for (const row of rows) {
+    const usage = row.usage as Usage | undefined
+    if (usage?.provider) {
+      for (const window of usage.windows) {
+        const passed = window.state === 'unknown' || window.state === 'not_reported'
+        readings.set(`${usage.provider}\n${window.window_minutes}`, {
+          provider: usage.provider,
+          window_minutes: window.window_minutes,
+          observed_at: window.observed_at,
+          used_percent: window.used_percent ?? 0,
+          resets_at: passed ? window.observed_at : window.resets_at,
+          source: window.source,
+        })
+      }
+      if (usage.credits)
+        credits[usage.provider] = {
+          balance: usage.credits.balance,
+          pace_per_day_7d: usage.credits.pace_per_day_7d,
+          earliest_expiry: usage.credits.earliest_expiry,
+        }
+    }
+    addRefusal(row.last_refusal)
+    for (const alt of (row.alternates as Record<string, unknown>[] | undefined) ?? [])
+      addRefusal(alt.last_refusal)
+  }
+  return {
+    readings: [...readings.values()],
+    credits,
+    refusals: [...refusals.values()].sort((a, b) => micros(b.at) - micros(a.at)),
+  }
+}
 
 const DIR = join(import.meta.dirname, 'fixtures')
 const policy = JSON.parse(readFileSync(join(DIR, 'policy.json'), 'utf8')) as LaunchPolicy

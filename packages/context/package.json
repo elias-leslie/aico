@@ -7,7 +7,8 @@
   "aico": {
     "layer": 3,
     "imports": [
-      "@aico/store"
+      "@aico/store",
+      "@aico/usage"
     ],
     "db": [
       "context.db"
@@ -22,6 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@aico/store": "0.1.0"
+    "@aico/store": "0.1.0",
+    "@aico/usage": "0.1.0"
   }
 }

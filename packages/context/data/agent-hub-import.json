@@ -1,5 +1,5 @@
 {
-  "about": "Agent Hub agent rows kept as role names (with their prompt links): the five the 2026-11-03 agents review marked 'keep as a role name only'. Every other agent row, the Neri ones included, stays in Agent Hub's archive. Timeouts: how long one st db query of the import, and one st models route for usage facts, may take before it counts as failed.",
+  "about": "Agent Hub agent rows kept as role names (with their prompt links): the five the 2026-11-03 agents review marked 'keep as a role name only'. Every other agent row, the Neri ones included, stays in Agent Hub's archive. Timeouts: how long one st db query of the import may take before it counts as failed.",
   "agent_roles": ["chat", "coder", "explorer", "reviewer", "worker"],
-  "timeouts_seconds": { "query": 120, "route": 20 }
+  "timeouts_seconds": { "query": 120 }
 }

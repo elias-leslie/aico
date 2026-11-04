@@ -119,12 +119,12 @@ describe('aico context deliver', () => {
       statusUrl: null,
       fetch,
       now: () => new Date(DELIVERY_FIXTURE.now),
+      dataDir: '/nowhere',
       agentHub: {
         checkout: '/nowhere',
         source: () => {
           throw new Error('not asked')
         },
-        route: () => ({ error: 'not asked' }),
       },
       delivery: {
         env,
@@ -238,7 +238,7 @@ describe('aico context deliver', () => {
         statusUrl: null,
         fetch,
         now: () => new Date(DELIVERY_FIXTURE.now),
-        agentHub: { checkout: '', source: () => ({}) as never, route: () => ({ error: '' }) },
+        agentHub: { checkout: '', source: () => ({}) as never },
         delivery: { env: {}, toolUsage: async () => '', activity: async () => [] },
       },
     )
@@ -277,7 +277,7 @@ describe('aico context deliver', () => {
       statusUrl: null,
       fetch,
       now: () => new Date(),
-      agentHub: { checkout: '', source: () => ({}) as never, route: () => ({ error: '' }) },
+      agentHub: { checkout: '', source: () => ({}) as never },
     })
     expect(code).toBe(1)
     expect(err.join('')).toMatch(/^aico context deliver: .+\n$/)
@@ -295,7 +295,7 @@ describe('aico context deliver', () => {
       statusUrl: null,
       fetch,
       now: () => new Date(DELIVERY_FIXTURE.now),
-      agentHub: { checkout: '', source: () => ({}) as never, route: () => ({ error: '' }) },
+      agentHub: { checkout: '', source: () => ({}) as never },
       delivery: {
         env: {},
         toolUsage: async () => ({ error: 'st: not found' }),
@@ -393,7 +393,7 @@ describe('context delivery switch', () => {
         statusUrl: null,
         fetch,
         now: () => new Date(),
-        agentHub: { checkout: '', source: () => ({}) as never, route: () => ({ error: '' }) },
+        agentHub: { checkout: '', source: () => ({}) as never },
       }
       expect(await runContextCli('context', ['delivery', 'codex', 'on'], io)).toBe(0)
       expect(await runContextCli('context', ['delivery', 'codex', 'maybe'], io)).toBe(2)
