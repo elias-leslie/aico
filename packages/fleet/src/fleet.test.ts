@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
-import { createConnection, createServer, type Server } from 'node:net'
+import { createConnection, createServer, type Server, Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -364,4 +364,42 @@ it('pauses TLS for a full channel buffer and resumes without losing bytes', asyn
   const chunks: Buffer[] = []
   for await (const chunk of stream) chunks.push(chunk as Buffer)
   expect(Buffer.concat(chunks)).toEqual(payload)
+})
+
+it('flushes a final response before closing the local proxy socket', async () => {
+  const p = await pair()
+  const response = Buffer.from('m11a-buffered-response')
+  const server = createServer((socket) => socket.once('data', () => socket.end(response)))
+  cleanup.push(() => new Promise<void>((resolve) => server.close(() => resolve())))
+  await new Promise<void>((resolve) => server.listen(p.sb.controlSocket, resolve))
+  await p.fb.start()
+  await p.fa.start()
+  await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
+  const path = join(p.sa.peerRoot, 'peer-b/control.sock')
+  const original = Socket.prototype._write
+  const write = vi.spyOn(Socket.prototype, '_write').mockImplementation(function (
+    this: Socket,
+    chunk,
+    encoding,
+    callback,
+  ) {
+    const local = this as Socket & { server?: Server }
+    if (local.server?.address() === path && Buffer.from(chunk).equals(response)) {
+      // Keep one real net write pending, as a busy local reader does.
+      setTimeout(() => original.call(this, chunk, encoding, callback), 20)
+    } else original.call(this, chunk, encoding, callback)
+  })
+  try {
+    const received = await new Promise<Buffer>((resolve, reject) => {
+      const client = createConnection(path)
+      const chunks: Buffer[] = []
+      client.on('data', (chunk) => chunks.push(chunk))
+      client.on('error', reject)
+      client.once('end', () => resolve(Buffer.concat(chunks)))
+      client.once('connect', () => client.end('request'))
+    })
+    expect(received).toEqual(response)
+  } finally {
+    write.mockRestore()
+  }
 })

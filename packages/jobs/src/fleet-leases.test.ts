@@ -88,6 +88,8 @@ it('carries fenced claims, renewals and late result refusal over two real TLS pe
     await expect(
       remote.claim(job.kind, { holder: 'forged', machine: peer.name }, 0, 0),
     ).rejects.toThrow('pinned machine')
+    // Exercise repeated short responses over one authenticated link.
+    for (let i = 0; i < 1000; i++) expect(await remote.get(job.kind)).toMatchObject({ fence: 0 })
     const old = await remote.claim(job.kind, { holder: 'home-runner', machine: home.name }, 0, 0)
     expect(old?.fence).toBe(1)
     if (!old) throw new Error('No home lease')
