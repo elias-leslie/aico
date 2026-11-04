@@ -5,6 +5,9 @@ import { type Database, json } from './db'
 
 export const COST = config
 export const estimatedTokens = (bytes: number) => Math.ceil(bytes / config.bytesPerToken)
+/** The environment keeps Tether's legacy internal id; its API takes the widget id. */
+export const contextSessionId = (session: string | null) =>
+  session?.replace(/^aico-widget-/, '') ?? null
 export function bindContextSession(
   db: Database,
   tool: string,
@@ -12,11 +15,12 @@ export function bindContextSession(
   nativeId: string,
 ): void {
   db.prepare(`INSERT INTO context_observations (delivery_id, observed_at, complete, source)
-    SELECT id, at, 0, ? FROM deliveries WHERE tool = ? AND session = ? ORDER BY id DESC LIMIT 1
+    SELECT id, at, 0, ? FROM deliveries WHERE tool = ? AND session IN (?, ?) ORDER BY id DESC LIMIT 1
     ON CONFLICT(delivery_id) DO UPDATE SET source = excluded.source, complete = 0`).run(
     `${tool}:${nativeId}`,
     tool,
     session,
+    contextSessionId(session),
   )
 }
 export type ItemType = 'prompt' | 'memory' | 'skill' | 'rule' | 'file' | 'computed'
@@ -133,6 +137,7 @@ export function recentDeliveries(db: Database, now = new Date()): CostDelivery[]
     const complete = (observation.get(row.id) as { complete: number } | undefined)?.complete === 1
     return {
       ...row,
+      session: contextSessionId(row.session),
       tokens: estimatedTokens(row.bytes),
       budget: tokenBudget(db, row.tool, row.role),
       missing: json(row.missing, []),

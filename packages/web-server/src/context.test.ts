@@ -141,3 +141,29 @@ it('keeps a new delivery unknown when the conversation only answered before it',
     db.close()
   }
 })
+it('resolves Tether internal session ids through their public widget ids', async () => {
+  const db = openContext(':memory:')
+  const d = deps()
+  try {
+    recordDelivery(
+      db,
+      deliver(db, {
+        tool: 'codex',
+        session: 'aico-widget-1234abcd',
+        sources: [{ id: 'file:/project/guide.md', title: 'Guide', type: 'file', text: 'Guide.' }],
+      }),
+      'launch',
+      now,
+    )
+    let called = ''
+    d.options.tether.getSession = async (id) => {
+      called = id
+      return { projectId: null, resumeId: 'native-proof' } as never
+    }
+    await observeContext(db, d.options.tether, now)
+    expect(called).toBe('1234abcd')
+    expect(recentDeliveries(db, now)[0]!.observed).toBe(true)
+  } finally {
+    db.close()
+  }
+})

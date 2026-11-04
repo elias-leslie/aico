@@ -9,7 +9,7 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import config from '../data/delivery.json' with { type: 'json' }
-import { budgetHint, type ItemType } from './cost'
+import { budgetHint, contextSessionId, type ItemType } from './cost'
 import { type Database, getSetting, json, putSetting } from './db'
 
 export type DeliveryConfig = typeof config
@@ -607,7 +607,7 @@ export function recordDelivery(
       at.toISOString(),
       delivery.tool,
       delivery.project,
-      delivery.session,
+      contextSessionId(delivery.session),
       delivery.role,
       channel,
       delivery.hash,
