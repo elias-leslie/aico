@@ -141,9 +141,15 @@ function ChatDetails({
           <X size={18} />
         </button>
       </header>
+      <h3>Chat totals</h3>
+      <p className="chat-muted">
+        Input counts new tokens. Cache counts are separate.
+      </p>
       <dl>
         <dt>Started</dt>
         <dd>{clock(chat.startedAt)}</dd>
+        <dt>Project folder</dt>
+        <dd className="chat-folder">{chat.cwd}</dd>
         <dt>Tokens in</dt>
         <dd>{count(tokens.input)}</dd>
         <dt>From cache</dt>
@@ -478,7 +484,7 @@ function ChatSessionBody({ id, onBack }: { id: string; onBack?: () => void }) {
           {CHAT_STATE[chat.state] ?? chat.state}
         </span>
         <h1 title={chat.title}>{chat.title}</h1>
-        <span className="chat-facts">
+        <span className="chat-facts" title={chat.cwd}>
           {chat.role} · {chat.cwd.split('/').pop()} · since{' '}
           {clock(chat.startedAt)}
         </span>

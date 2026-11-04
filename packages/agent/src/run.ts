@@ -125,8 +125,10 @@ export function systemPrompt(
   harness: Harness,
   cwd: string,
   contextFiles: { path: string; content: string }[],
+  chat = false,
 ): string {
   const parts = [harness.prompt.join('\n').replaceAll('{cwd}', cwd)]
+  if (chat) parts.push(harness.chat.prompt.join('\n'))
   for (const { path, content } of contextFiles)
     parts.push(`<project_instructions path="${path}">\n${content}\n</project_instructions>`)
   return parts.join('\n\n')
@@ -340,7 +342,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
 
     const agent: Agent = new Agent({
       initialState: {
-        systemPrompt: systemPrompt(harness, cwd, contextFiles),
+        systemPrompt: systemPrompt(harness, cwd, contextFiles, Boolean(options.sessionId)),
         model: at().model,
         thinkingLevel: thinking(at().model, options.effort ?? at().entry.effort),
         tools: leanTools(

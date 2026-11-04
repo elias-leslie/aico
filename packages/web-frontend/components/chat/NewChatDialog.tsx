@@ -92,6 +92,7 @@ export function NewChatDialog({ onClose }: { onClose: () => void }) {
               Project folder
               <input
                 list="chat-projects"
+                placeholder="Choose a folder or type its full path"
                 value={folder}
                 onChange={(e) => setCwd(e.target.value)}
               />

@@ -348,6 +348,11 @@
 .chat-details dd {
   font-family: var(--font-mono);
 }
+.chat-details dd.chat-folder {
+  overflow-wrap: anywhere;
+  max-width: 170px;
+  font-size: 11px;
+}
 .chat-model-total {
   padding: 9px 0;
   border-bottom: 1px solid var(--frame-edge);

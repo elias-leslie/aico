@@ -82,6 +82,22 @@ function setup(guardHook: string | null = null, firstApi = 'faux-openai') {
 }
 
 const texts = (context: TranscriptContext) => JSON.stringify(context.messages)
+
+it('delivers the Needs you filing instruction to chat runs without adding it to ordinary runs', async () => {
+  const { first, run } = setup()
+  const prompts: string[] = []
+  first.setResponses(
+    [1, 2].map(() => (context: TranscriptContext) => {
+      prompts.push(JSON.stringify(context.messages.filter((message) => message.role === 'system')))
+      return fauxAssistantMessage('Ready')
+    }),
+  )
+  await run('Chat check', { sessionId: '0123abcd' })
+  await run('Ordinary run')
+  expect(prompts[0]).toContain('tether ask create')
+  expect(prompts[0]).toContain('Needs you')
+  expect(prompts[1]).not.toContain('tether ask create')
+})
 const refused = (code: string) =>
   fauxAssistantMessage('', { stopReason: 'error', errorMessage: `${code}: blocked` })
 

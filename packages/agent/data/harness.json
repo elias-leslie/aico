@@ -144,6 +144,9 @@
   },
   "chat": {
     "default_role": "implementation",
+    "prompt": [
+      "In this Aico chat, put a question that needs the owner’s answer in Needs you by running `tether ask create \"Question\" --option \"First\" --option \"Second\" --recommend 1` with bash; use the actual question and choices, omit choices for a free-text answer, then end your turn. The answer arrives as a new chat message."
+    ],
     "roles": {
       "implementation": "Build and fix code in this project.",
       "operations": "Run and repair the project\u2019s services.",
