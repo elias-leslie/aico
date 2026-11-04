@@ -561,7 +561,10 @@ func (r *Rules) searchDisable(text string) bool {
 
 // evaluatePublication rejects ordinary direct publication without redirecting
 // local or read commands. An accidental-bypass guard, not a security boundary.
-func (r *Rules) evaluatePublication(command string) decision {
+func (r *Rules) evaluatePublication(command string, depth int) decision {
+	if d, over := r.tooDeep(depth); over {
+		return d
+	}
 	command, shellBodies, dataBodies := r.splitHeredocs(command)
 	// Heredoc data for non-shell consumers is not parsed as commands, but
 	// hook-disable text in it stays refused.
@@ -571,7 +574,7 @@ func (r *Rules) evaluatePublication(command string) decision {
 		}
 	}
 	for _, nested := range append(shellBodies, r.substitutions(command)...) {
-		if d := r.evaluatePublication(nested); d.blocked {
+		if d := r.evaluatePublication(nested, depth+1); d.blocked {
 			return d
 		}
 	}
@@ -592,7 +595,7 @@ func (r *Rules) evaluatePublication(command string) decision {
 		}
 		if r.shellExecutables.has(executable) || executable == "eval" {
 			if nested, ok := nestedCommand(executable, args); ok {
-				if d := r.evaluatePublication(nested); d.blocked {
+				if d := r.evaluatePublication(nested, depth+1); d.blocked {
 					return d
 				}
 			}

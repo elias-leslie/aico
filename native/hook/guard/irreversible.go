@@ -11,7 +11,10 @@ import (
 
 // evaluateIrreversible walks the command the way the publication policy does,
 // tracking `cd` so later segments are judged in the directory they run in.
-func (r *Rules) evaluateIrreversible(command, cwd string) (decision, error) {
+func (r *Rules) evaluateIrreversible(command, cwd string, depth int) (decision, error) {
+	if d, over := r.tooDeep(depth); over {
+		return d, nil
+	}
 	var working string
 	if cwd != "" {
 		working = normPath(expandUser(cwd))
@@ -24,7 +27,7 @@ func (r *Rules) evaluateIrreversible(command, cwd string) (decision, error) {
 	}
 	command, shellBodies, _ := r.splitHeredocs(command)
 	for _, nested := range append(shellBodies, r.substitutions(command)...) {
-		d, err := r.evaluateIrreversible(nested, working)
+		d, err := r.evaluateIrreversible(nested, working, depth+1)
 		if err != nil || d.blocked {
 			return d, err
 		}
@@ -50,7 +53,7 @@ func (r *Rules) evaluateIrreversible(command, cwd string) (decision, error) {
 		}
 		if r.shellExecutables.has(executable) || executable == "eval" {
 			if nested, ok := nestedCommand(executable, args); ok {
-				d, err := r.evaluateIrreversible(nested, working)
+				d, err := r.evaluateIrreversible(nested, working, depth+1)
 				if err != nil || d.blocked {
 					return d, err
 				}
@@ -60,7 +63,7 @@ func (r *Rules) evaluateIrreversible(command, cwd string) (decision, error) {
 		if executable == "ssh" {
 			// Remote commands get the same policy; the remote cwd is unknown, assume root's home.
 			if remote, ok := sshRemoteCommand(r.sshValueLetters, args); ok && remote != "" {
-				d, err := r.evaluateIrreversible(remote, r.remoteCwd)
+				d, err := r.evaluateIrreversible(remote, r.remoteCwd, depth+1)
 				if err != nil || d.blocked {
 					return d, err
 				}

@@ -6,8 +6,23 @@
 //	aico-hook codex-trust       mark this config's Codex hooks trusted through Codex's own /hooks flow
 //
 // Output is the Claude Code hook JSON on stdout (Codex reads the same; the Pi extension maps it), exit 0.
-// Only a guard decision blocks. A crash or missing data never blocks: the agent is told plainly what
-// was not checked. Policy and wording that may change live in data/*.json next to the binary.
+// The guard fails closed: when guard.json cannot be loaded, or anything on the guard path panics or runs past
+// its deadline, shell and GitHub connector calls are refused with a plain reason (guard_failure.go). The rest
+// fails open with a note: a broken hook.json or a lease-hook crash never blocks and never disables the guard.
+// Policy and wording that may change live in data/*.json next to the binary.
+//
+// Why the guard must always answer in time, with exit 0 (checked 2026-11-04):
+//   - Claude Code 2.1.318 (code.claude.com/docs/en/hooks): a PreToolUse deny or exit 2 blocks; any other exit
+//     code, invalid JSON, a hook that does not start or one that times out is a non-blocking error and the tool
+//     runs, unless the hook entry sets "onFailure": "block" (2.1.295+), which claude-config's shell and connector
+//     entry does.
+//   - Codex 0.164 (codex-rs/hooks/src/events/pre_tool_use.rs): a deny, or exit 2 with a reason on stderr, blocks;
+//     a timeout or spawn error, any other exit code, exit 2 with empty stderr or JSON it cannot parse marks the
+//     hook failed and the tool runs. Codex has no onFailure setting.
+//   - Pi (pi/aico-hook.ts) and Aico's agent harness refuse a guarded call on any fault.
+//
+// So the guard's deadline (guard.json limits.deadline_ms, 2 s) sits well inside the shortest PreToolUse timeout
+// (10 s in every tool's config), and a Go runtime crash (exit 2, stack on stderr) blocks in both tools.
 package main
 
 import (
@@ -27,11 +42,11 @@ import (
 type Config struct {
 	Lease lease.Config `json:"lease"`
 	Tools struct {
-		Guard string `json:"guard"`
 		Shell string `json:"shell"`
 		Edit  string `json:"edit"`
 	} `json:"tools"`
-	GitHubPATHint string `json:"github_pat_hint"`
+	shell, edit   *regexp.Regexp // Tools, compiled by loadConfig
+	GitHubPATHint string         `json:"github_pat_hint"`
 	Context       struct {
 		Command        []string          `json:"command"`
 		TimeoutSeconds float64           `json:"timeout_seconds"`
@@ -75,6 +90,12 @@ func loadConfig(dir string) (*Config, error) {
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return nil, fmt.Errorf("hook.json: %w", err)
 	}
+	if c.shell, err = regexp.Compile(c.Tools.Shell); err != nil {
+		return nil, fmt.Errorf("hook.json tools.shell: %w", err)
+	}
+	if c.edit, err = regexp.Compile(c.Tools.Edit); err != nil {
+		return nil, fmt.Errorf("hook.json tools.edit: %w", err)
+	}
 	return &c, nil
 }
 
@@ -114,38 +135,51 @@ func main() {
 	if mode == "codex-trust" {
 		os.Exit(codexTrust(os.Args[2:]))
 	}
-	raw, _ := io.ReadAll(os.Stdin)
-	var payload map[string]any
-	event := "PreToolUse"
-	defer func() {
-		if r := recover(); r != nil {
-			// Never a silent allow: the agent reads what went unchecked. Never a block either: only a guard
-			// decision blocks.
-			fmt.Fprintf(os.Stderr, "aico-hook crashed: %v\n%s", r, debug.Stack())
-			fmt.Println(Out{Event: event, Context: []string{fmt.Sprintf(
-				"aico-hook crashed (%v): this %s call was not checked by the guard or the lease hook. Tell the owner.", r, event)}}.JSON())
-			os.Exit(0)
-		}
-	}()
-	if json.Unmarshal(raw, &payload) != nil || payload == nil {
-		payload = nil
-	}
-	if e := str(payload["hook_event_name"]); e != "" {
-		event = e
-	}
-	cfg, err := loadConfig(dataDir())
-	if err != nil {
-		panic(fmt.Sprintf("hook data unavailable: %v", err))
-	}
-	switch mode {
-	case "guard":
-		fmt.Println(runGuard(payload, raw).JSON())
-	case "claude", "codex", "pi":
-		fmt.Println(dispatch(cfg, mode, event, payload, raw).JSON())
-	default:
+	if mode != "guard" && mode != "claude" && mode != "codex" && mode != "pi" {
 		fmt.Fprintln(os.Stderr, "aico-hook: unknown mode "+mode)
 		os.Exit(2)
 	}
+	raw, _ := io.ReadAll(os.Stdin)
+	var payload map[string]any
+	if json.Unmarshal(raw, &payload) != nil {
+		payload = nil
+	}
+	event := "PreToolUse"
+	if e := str(payload["hook_event_name"]); e != "" {
+		event = e
+	}
+	fmt.Println(handle(mode, event, payload, raw).JSON())
+}
+
+// handle is one hook call. A panic before the guard has answered a PreToolUse call is a guard failure (refused);
+// a later one (leases, session start) is said plainly and blocks nothing.
+func handle(mode, event string, payload map[string]any, raw []byte) (out Out) {
+	guarded := event != "PreToolUse" && mode != "guard"
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "aico-hook crashed: %v\n%s", r, debug.Stack())
+			if !guarded {
+				out = guardFailed(payload, fmt.Sprintf("aico-hook crashed (%v)", r))
+				return
+			}
+			out = Out{Event: event, Context: []string{fmt.Sprintf(
+				"aico-hook crashed (%v): this %s call was not checked by the lease hook. Tell the owner.", r, event)}}
+		}
+	}()
+	if event == "PreToolUse" || mode == "guard" {
+		if out = runGuard(payload, raw, mode == "guard"); out.Deny != "" || mode == "guard" {
+			return out
+		}
+		guarded = true
+	}
+	cfg, err := loadConfig(dataDir())
+	if err != nil {
+		return Out{Event: event, Context: append(out.Context, fmt.Sprintf("aico-hook could not read hook.json (%v): "+
+			"file leases, overlap hints and session start were skipped; the guard still ran. Tell the owner.", err))}
+	}
+	more := dispatch(cfg, mode, event, payload, raw)
+	more.Context = append(out.Context, more.Context...)
+	return more
 }
 
 func str(v any) string {
@@ -153,22 +187,29 @@ func str(v any) string {
 	return s
 }
 
-var rules *guard.Rules
+// loadRules reads data/guard.json (a variable so a test can hand the guard path broken rules).
+var loadRules = func() (*guard.Rules, error) { return guard.Load(filepath.Join(dataDir(), "guard.json")) }
 
-// runGuard is the guard's answer. Malformed input is the guard's own decision (it denies); missing rules are
-// a crash (allowed, said plainly).
-func runGuard(payload map[string]any, raw []byte) Out {
-	if rules == nil {
-		r, err := guard.Load(filepath.Join(dataDir(), "guard.json"))
-		if err != nil {
-			panic(fmt.Sprintf("guard rules unavailable: %v", err))
+// runGuard is the guard's answer for a PreToolUse call; only guard.json is read. Every call is judged in guard
+// mode (Aico's agent harness sends only shell calls), else the tools guard.json names. Malformed input is the
+// guard's own decision (it denies); missing or broken rules and panics are guard failures (refused).
+func runGuard(payload map[string]any, raw []byte, every bool) (out Out) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "aico-hook guard crashed: %v\n%s", r, debug.Stack())
+			out = guardFailed(payload, fmt.Sprintf("aico-hook crashed while checking it (%v)", r))
 		}
-		rules = r
+	}()
+	r, err := loadRules()
+	if err != nil {
+		return guardFailed(payload, fmt.Sprintf("aico-hook could not load its guard rules (%v)", err))
 	}
 	if payload == nil {
 		_ = json.Unmarshal(raw, &payload) // a non-object payload: the guard decides on its shape
+	} else if !every && !r.Guards(str(payload["tool_name"])) {
+		return Out{Event: "PreToolUse"}
 	}
-	res := rules.Evaluate(payload)
+	res := r.Evaluate(payload)
 	if res.Deny {
 		return Out{Event: "PreToolUse", Deny: res.Reason}
 	}
@@ -179,33 +220,21 @@ func runGuard(payload map[string]any, raw []byte) Out {
 	return Out{Event: "PreToolUse"}
 }
 
-func match(pattern, name string) bool {
-	ok, err := regexp.MatchString(pattern, name)
-	return err == nil && ok
-}
-
-// dispatch answers one hook event for a tool.
+// dispatch answers the lease, overlap and session-start part of one hook event for a tool; the guard has
+// already allowed a PreToolUse call.
 func dispatch(cfg *Config, tool, event string, payload map[string]any, raw []byte) Out {
 	if payload == nil {
-		if event == "PreToolUse" {
-			return runGuard(payload, raw) // the guard denies malformed input
-		}
 		return Out{Event: event}
 	}
 	name := str(payload["tool_name"])
 	switch event {
 	case "PreToolUse":
 		out := Out{Event: event}
-		if match(cfg.Tools.Guard, name) {
-			if out = runGuard(payload, raw); out.Deny != "" {
-				return out
-			}
-		}
 		h := lease.New(cfg.Lease, payload)
-		if match(cfg.Tools.Shell, name) {
+		if cfg.shell.MatchString(name) {
 			h.BashPre(raw)
 		}
-		if match(cfg.Tools.Edit, name) {
+		if cfg.edit.MatchString(name) {
 			blocked, text := h.Edit()
 			if blocked {
 				return Out{Event: event, Deny: text}
@@ -217,7 +246,7 @@ func dispatch(cfg *Config, tool, event string, payload map[string]any, raw []byt
 		return out
 	case "PostToolUse", "PostToolUseFailure":
 		out := Out{Event: event}
-		if !match(cfg.Tools.Shell, name) {
+		if !cfg.shell.MatchString(name) {
 			return out
 		}
 		var hint string

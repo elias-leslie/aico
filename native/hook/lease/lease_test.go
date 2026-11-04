@@ -2,6 +2,7 @@ package lease
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -211,5 +212,33 @@ print(len(leases.writers("demo").get(sys.argv[2], [])))`
 	}
 	if got := strings.Fields(string(out)); len(got) != 3 || got[0] != "cc:444444" || got[1] != "cc:555555" || got[2] != "2" {
 		t.Errorf("SummitFlow sees %q", out)
+	}
+}
+
+// A missing or zero idle TTL falls back to 30 minutes: it used to make every lease stale, so the next save
+// deleted other agents' leases.
+func TestZeroIdleTTLKeepsOtherAgentsLeases(t *testing.T) {
+	a, b := "11111111-aaaa-4bbb-8ccc-000000000001", "22222222-aaaa-4bbb-8ccc-000000000002"
+	for _, ttl := range []int{0, -5} {
+		t.Run(fmt.Sprint(ttl), func(t *testing.T) {
+			file := filepath.Join(sandbox(t), "a.txt")
+			cfg := testConfig()
+			cfg.IdleTTLMinutes = ttl
+			New(cfg, edit(a, file)).Edit()
+			blocked, text := New(cfg, edit(b, file)).Edit()
+			if blocked || !strings.Contains(text, "WARNING: ") {
+				t.Errorf("b must see a's lease, got blocked=%v %q", blocked, text)
+			}
+			var leases []map[string]any
+			if err := json.Unmarshal(storeDoc(t, "demo")["leases"], &leases); err != nil {
+				t.Fatal(err)
+			}
+			if len(leases) != 2 {
+				t.Errorf("want a's and b's leases kept, got %d", len(leases))
+			}
+		})
+	}
+	if got := (Config{}).withDefaults(); got.IdleTTLMinutes != 30 || got.RegistryHours != 24 || got.NoteHours != 24 {
+		t.Fatalf("defaults %+v", got)
 	}
 }

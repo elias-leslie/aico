@@ -6,16 +6,23 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Rules is the guard policy: every word list, path, pattern and reason text
 // from data/guard.json, with the patterns compiled once. Logic lives in the
 // other files of this package; a Rules is read-only after Load.
 type Rules struct {
-	reasons struct{ publication, hookDisable, evaluationError string }
+	reasons struct{ publication, hookDisable, evaluationError, tooDeep, tooLarge, tooSlow string }
 
+	guarded            *regexp.Regexp // the tool names the guard judges
 	connectorMutations []string
 	shellTools         []string
+
+	// Bounds on one evaluation: nesting (eval, bash -c, $(...), heredocs, ssh), command size and wall time.
+	maxDepth int
+	maxBytes int
+	deadline time.Duration
 
 	shellExecutables  set
 	keywords          set
@@ -126,8 +133,17 @@ type file struct {
 		Publication     string `json:"publication"`
 		HookDisable     string `json:"hook_disable"`
 		EvaluationError string `json:"evaluation_error"`
+		TooDeep         string `json:"too_deep"`
+		TooLarge        string `json:"too_large"`
+		TooSlow         string `json:"too_slow"`
 	} `json:"reasons"`
+	Limits struct {
+		MaxNestingDepth int `json:"max_nesting_depth"`
+		MaxCommandBytes int `json:"max_command_bytes"`
+		DeadlineMS      int `json:"deadline_ms"`
+	} `json:"limits"`
 	Payload struct {
+		GuardedTools       string   `json:"guarded_tools"`
 		ConnectorMutations []string `json:"connector_mutations"`
 		ShellTools         []string `json:"shell_tools"`
 	} `json:"payload"`
@@ -261,6 +277,26 @@ func build(f *file) (*Rules, error) {
 	r.reasons.publication = f.Reasons.Publication
 	r.reasons.hookDisable = f.Reasons.HookDisable
 	r.reasons.evaluationError = f.Reasons.EvaluationError
+	r.reasons.tooDeep, r.reasons.tooLarge, r.reasons.tooSlow = f.Reasons.TooDeep, f.Reasons.TooLarge, f.Reasons.TooSlow
+	for name, text := range map[string]string{"publication": r.reasons.publication, "hook_disable": r.reasons.hookDisable,
+		"evaluation_error": r.reasons.evaluationError, "too_deep": r.reasons.tooDeep, "too_large": r.reasons.tooLarge,
+		"too_slow": r.reasons.tooSlow} {
+		if text == "" && err == nil {
+			err = fmt.Errorf("guard rules: missing reason %q", name)
+		}
+	}
+	r.maxDepth = orDefault(f.Limits.MaxNestingDepth, DefaultMaxDepth)
+	r.maxBytes = orDefault(f.Limits.MaxCommandBytes, DefaultMaxBytes)
+	deadlineMS := orDefault(f.Limits.DeadlineMS, DefaultDeadlineMS)
+	r.deadline = time.Duration(deadlineMS) * time.Millisecond
+	limit := func(text string, n int) string { return strings.ReplaceAll(text, "{limit}", fmt.Sprint(n)) }
+	r.reasons.tooDeep = limit(r.reasons.tooDeep, r.maxDepth)
+	r.reasons.tooLarge = limit(r.reasons.tooLarge, r.maxBytes)
+	r.reasons.tooSlow = limit(r.reasons.tooSlow, deadlineMS)
+	if f.Payload.GuardedTools == "" && err == nil {
+		err = fmt.Errorf("guard rules: missing payload.guarded_tools")
+	}
+	r.guarded = compile("guarded_tools", f.Payload.GuardedTools)
 	r.connectorMutations = f.Payload.ConnectorMutations
 	r.shellTools = f.Payload.ShellTools
 
@@ -374,6 +410,27 @@ func build(f *file) (*Rules, error) {
 	}
 	return r, nil
 }
+
+// Safe bounds when guard.json leaves limits out (or sets them to 0 or less). The deadline sits well inside the
+// shortest tool hook timeout (10 s: Claude Code, Codex and Pi PreToolUse, Aico's agent harness).
+const (
+	DefaultMaxDepth   = 64
+	DefaultMaxBytes   = 256 << 10
+	DefaultDeadlineMS = 2000
+)
+
+func orDefault(v, def int) int {
+	if v <= 0 {
+		return def
+	}
+	return v
+}
+
+// Guards reports whether the guard judges calls of this tool (payload.guarded_tools).
+func (r *Rules) Guards(tool string) bool { return r.guarded.MatchString(tool) }
+
+// Deadline is the wall-time bound of one evaluation.
+func (r *Rules) Deadline() time.Duration { return r.deadline }
 
 var requiredMessages = []string{
 	"git_force_push_main", "git_reset_hard", "git_clean", "git_checkout_all", "git_restore_all",

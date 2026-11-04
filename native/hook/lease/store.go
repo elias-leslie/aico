@@ -32,6 +32,21 @@ type Config struct {
 	RegistrySaveSec int    `json:"registry_save_sec"` // registry rows are rewritten at most this often
 }
 
+// withDefaults puts st's values in place of a missing, zero or negative window: with a zero idle TTL every lease
+// would count as stale and the next save would delete other agents' leases (likewise registry rows and notes).
+func (c Config) withDefaults() Config {
+	for _, f := range []struct {
+		v   *int
+		def int
+	}{{&c.IdleTTLMinutes, 30}, {&c.ActiveMinutes, 10}, {&c.RegistryHours, 24}, {&c.NoteHours, 24},
+		{&c.UnackedMinutes, 10}, {&c.SnapshotMaxMins, 120}, {&c.RegistrySaveSec, 60}} {
+		if *f.v <= 0 {
+			*f.v = f.def
+		}
+	}
+	return c
+}
+
 func (c Config) idleTTL() time.Duration { return time.Duration(c.IdleTTLMinutes) * time.Minute }
 
 // Dir is where the stores live.
@@ -184,7 +199,7 @@ func (c Config) store(project string) (*Store, error) {
 	if !projectID.MatchString(project) {
 		return nil, fmt.Errorf("invalid project id: %q", project)
 	}
-	return &Store{cfg: c, project: project}, nil
+	return &Store{cfg: c.withDefaults(), project: project}, nil
 }
 
 func (s *Store) path(suffix string) string { return filepath.Join(s.cfg.dir(), s.project+suffix) }

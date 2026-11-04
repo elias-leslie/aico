@@ -8,26 +8,44 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Result is the guard's answer for one PreToolUse payload.
 type Result struct {
 	Deny   bool
 	Reason string // deny reason shown to the agent
-	// Fault is set when the irreversible-command check broke and the command
-	// was allowed anyway (that check fails open); one line, for the caller to tell the agent.
+	// Fault is set when the irreversible-command check returned an error and the
+	// command was allowed anyway; one line, for the caller to tell the agent.
 	Fault string
 }
 
-// Evaluate judges one decoded PreToolUse payload. Malformed input and any
-// failure of the publication check are denials (fail closed); a failure of the
-// irreversible check allows the command and reports itself in Fault.
-func (r *Rules) Evaluate(payload map[string]any) (res Result) {
-	defer func() {
-		if recover() != nil {
-			res = Result{Deny: true, Reason: r.reasons.evaluationError}
-		}
+// Evaluate judges one decoded PreToolUse payload. Malformed input, any failure of the publication check, a panic
+// anywhere, a command over the size or nesting bounds and an evaluation past the deadline are denials (fail
+// closed). Only an error the irreversible check returns (it cannot read the working directory) allows the
+// command, reported in Fault, as SummitFlow's hook did: that error would otherwise block every shell.
+func (r *Rules) Evaluate(payload map[string]any) Result {
+	done := make(chan Result, 1)
+	go func() {
+		defer func() {
+			if recover() != nil {
+				done <- Result{Deny: true, Reason: r.reasons.evaluationError}
+			}
+		}()
+		done <- r.evaluate(payload)
 	}()
+	timer := time.NewTimer(r.deadline)
+	defer timer.Stop()
+	select {
+	case res := <-done:
+		return res
+	case <-timer.C:
+		// The evaluation goroutine is abandoned; aico-hook exits right after answering.
+		return Result{Deny: true, Reason: r.reasons.tooSlow}
+	}
+}
+
+func (r *Rules) evaluate(payload map[string]any) Result {
 	d, command, err := r.evaluatePayload(payload)
 	if err != nil {
 		return Result{Deny: true, Reason: r.reasons.evaluationError}
@@ -39,7 +57,14 @@ func (r *Rules) Evaluate(payload map[string]any) (res Result) {
 		return Result{}
 	}
 	cwd, _ := payload["cwd"].(string)
-	return r.irreversible(command, cwd)
+	d, err = r.evaluateIrreversible(command, cwd, 0)
+	if err != nil {
+		return Result{Fault: fmt.Sprintf("irreversible-command check failed (%v); command allowed unchecked", err)}
+	}
+	if d.blocked {
+		return Result{Deny: true, Reason: d.message}
+	}
+	return Result{}
 }
 
 // evaluatePayload is the publication check. It returns the shell command to
@@ -80,7 +105,18 @@ func (r *Rules) evaluatePayload(payload map[string]any) (decision, string, error
 	if !isStr || pyStrip(text) == "" {
 		return decision{}, "", errors.New("Invalid command")
 	}
-	return r.evaluatePublication(text), text, nil
+	if len(text) > r.maxBytes {
+		return decision{true, r.reasons.tooLarge}, "", nil
+	}
+	return r.evaluatePublication(text, 0), text, nil
+}
+
+// tooDeep is the denial for a nested command past the nesting bound.
+func (r *Rules) tooDeep(depth int) (decision, bool) {
+	if depth > r.maxDepth {
+		return decision{true, r.reasons.tooDeep}, true
+	}
+	return decision{}, false
 }
 
 func stringList(list []any) ([]string, bool) {
@@ -93,23 +129,6 @@ func stringList(list []any) ([]string, bool) {
 		words[i] = s
 	}
 	return words, true
-}
-
-// irreversible runs the fail-open check for a command that passed publication.
-func (r *Rules) irreversible(command, cwd string) (res Result) {
-	defer func() {
-		if p := recover(); p != nil {
-			res = Result{Fault: fmt.Sprintf("irreversible-command check failed (%v); command allowed unchecked", p)}
-		}
-	}()
-	d, err := r.evaluateIrreversible(command, cwd)
-	if err != nil {
-		return Result{Fault: fmt.Sprintf("irreversible-command check failed (%v); command allowed unchecked", err)}
-	}
-	if d.blocked {
-		return Result{Deny: true, Reason: d.message}
-	}
-	return Result{}
 }
 
 // pyStr is str(value) for the substring tests on tool_name: strings as they

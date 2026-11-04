@@ -6,10 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
-// Focused tests for what the recorded corpus cannot reach: the fail-open
-// fault paths, Load errors, and Python-compat helpers.
+// Focused tests for what the recorded corpus cannot reach: the fault and
+// failure paths, the bounds, Load errors, and Python-compat helpers.
 
 func TestFaultAllowsAndReports(t *testing.T) {
 	r := loadRules(t)
@@ -32,7 +33,8 @@ func TestFaultAllowsAndReports(t *testing.T) {
 	}
 }
 
-func TestPanicInIrreversibleCheckAllows(t *testing.T) {
+// A panic anywhere on the guard path denies, the irreversible check included.
+func TestPanicInIrreversibleCheckDenies(t *testing.T) {
 	c := *loadRules(t)
 	c.rcloneRemote = nil // only the irreversible rclone rule reads it
 	res := c.Evaluate(map[string]any{
@@ -40,8 +42,82 @@ func TestPanicInIrreversibleCheckAllows(t *testing.T) {
 		"tool_input": map[string]any{"command": "rclone delete b:c"},
 		"cwd":        "/tmp",
 	})
-	if res.Deny || !strings.Contains(res.Fault, "irreversible-command check failed") {
-		t.Fatalf("want allow with fault, got %+v", res)
+	if !res.Deny || res.Reason != c.reasons.evaluationError {
+		t.Fatalf("want a deny, got %+v", res)
+	}
+}
+
+func bash(command string) map[string]any {
+	return map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": command}, "cwd": "/tmp"}
+}
+
+// Nested eval used to cost quadratic time and memory with no bound (5000 levels > 10 s, 20000 levels 6.3 GiB).
+// Past the nesting bound the guard denies at once; run under a memory cap (GOMEMLIMIT, ulimit -v).
+func TestEvalBombIsDeniedFast(t *testing.T) {
+	r := loadRules(t)
+	for _, command := range []string{
+		strings.Repeat("eval ", 5000) + "git push",
+		strings.Repeat("eval ", 5000) + "ls",
+		strings.Repeat("ssh h ", 200) + "ls", // only the irreversible check follows ssh
+	} {
+		start := time.Now()
+		res := r.Evaluate(bash(command))
+		took := time.Since(start)
+		t.Logf("%.20q... (%d bytes): %v", command, len(command), took)
+		if took > time.Second {
+			t.Errorf("%.30q... took %v", command, took)
+		}
+		if !res.Deny || res.Reason != r.reasons.tooDeep {
+			t.Errorf("%.30q...: want the nesting deny, got %+v", command, res)
+		}
+	}
+	// Within the bound nothing changes: 64 levels still reach the publication rule.
+	if res := r.Evaluate(bash(strings.Repeat("eval ", 63) + "git push")); res.Reason != r.reasons.publication {
+		t.Errorf("63 evals: %+v", res)
+	}
+	if res := r.Evaluate(bash(strings.Repeat("eval ", 63) + "ls")); res.Deny {
+		t.Errorf("63 evals of ls: %+v", res)
+	}
+}
+
+func TestOversizedCommandIsDenied(t *testing.T) {
+	r := loadRules(t)
+	start := time.Now()
+	res := r.Evaluate(bash("echo " + strings.Repeat("a", 1<<20)))
+	if took := time.Since(start); took > time.Second || !res.Deny || res.Reason != r.reasons.tooLarge {
+		t.Fatalf("1 MB command: %+v after %v", res, took)
+	}
+	if res := r.Evaluate(bash("echo " + strings.Repeat("a", r.maxBytes-5))); res.Deny {
+		t.Fatalf("a command at the cap is judged as usual: %+v", res)
+	}
+	argv := map[string]any{"tool_name": "exec_command", "tool_input": map[string]any{
+		"cmd": []any{"echo", strings.Repeat("a", 1<<20)}}}
+	if res := r.Evaluate(argv); res.Reason != r.reasons.tooLarge {
+		t.Fatalf("1 MB argv: %+v", res)
+	}
+}
+
+func TestDeadlineDenies(t *testing.T) {
+	c := *loadRules(t)
+	c.deadline = time.Microsecond
+	res := c.Evaluate(bash(strings.Repeat("echo $(echo $(echo hi)); ", 2000)))
+	if !res.Deny || res.Reason != c.reasons.tooSlow {
+		t.Fatalf("past the deadline: %+v", res)
+	}
+}
+
+func TestLimitsDefaultWhenAbsent(t *testing.T) {
+	f := readFile(t)
+	f.Limits.MaxNestingDepth, f.Limits.MaxCommandBytes, f.Limits.DeadlineMS = 0, -1, 0
+	r, err := build(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.maxDepth != DefaultMaxDepth || r.maxBytes != DefaultMaxBytes || r.deadline != DefaultDeadlineMS*time.Millisecond {
+		t.Fatalf("defaults: depth %d bytes %d deadline %v", r.maxDepth, r.maxBytes, r.deadline)
+	}
+	if !strings.Contains(r.reasons.tooDeep, "64") {
+		t.Fatalf("the reason names the bound: %q", r.reasons.tooDeep)
 	}
 }
 
@@ -94,6 +170,21 @@ func TestBuildRejectsBadRules(t *testing.T) {
 	f.Publication.DisablePattern = "(unclosed"
 	if _, err := build(f); err == nil || !strings.Contains(err.Error(), "disable_pattern") {
 		t.Fatalf("bad regex must be named, got %v", err)
+	}
+	f = readFile(t)
+	f.Payload.GuardedTools = "^(Bash"
+	if _, err := build(f); err == nil || !strings.Contains(err.Error(), "guarded_tools") {
+		t.Fatalf("a bad tool pattern must fail the load, got %v", err)
+	}
+	f = readFile(t)
+	f.Payload.GuardedTools = ""
+	if _, err := build(f); err == nil {
+		t.Fatal("a missing tool pattern must fail the load")
+	}
+	f = readFile(t)
+	f.Reasons.TooSlow = ""
+	if _, err := build(f); err == nil || !strings.Contains(err.Error(), "too_slow") {
+		t.Fatalf("missing reason must be named, got %v", err)
 	}
 	f = readFile(t)
 	delete(f.Messages, "restic")

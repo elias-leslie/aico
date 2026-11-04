@@ -10,7 +10,6 @@
     "registry_save_sec": 60
   },
   "tools": {
-    "guard": "^(Bash|bash|exec_command|shell|mcp__.*(?:github|git).*)$",
     "shell": "^(Bash|bash|exec_command|shell)$",
     "edit": "^(Write|Edit|MultiEdit|NotebookEdit|apply_patch|edit|write)$"
   },

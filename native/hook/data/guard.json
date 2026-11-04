@@ -2,9 +2,18 @@
   "reasons": {
     "publication": "Use the canonical ST publication workflow.",
     "hook_disable": "Publication hooks must remain enabled.",
-    "evaluation_error": "Publication guard could not evaluate tool input; execution refused."
+    "evaluation_error": "Publication guard could not evaluate tool input; execution refused.",
+    "too_deep": "This command nests eval, bash -c, $(...), heredocs or ssh more than {limit} levels deep, too deep for the guard to check; execution refused. Write it with less nesting.",
+    "too_large": "This command is over {limit} bytes, too large for the guard to check; execution refused. Put long input in a file and pass the file.",
+    "too_slow": "The guard could not finish checking this command within {limit} ms; execution refused. Split it into smaller commands."
+  },
+  "limits": {
+    "max_nesting_depth": 64,
+    "max_command_bytes": 262144,
+    "deadline_ms": 2000
   },
   "payload": {
+    "guarded_tools": "^(Bash|bash|exec_command|shell|mcp__.*(?:github|git).*)$",
     "connector_mutations": [
       "merge_pull_request", "create_release", "update_release", "delete_release", "push_files",
       "create_or_update_file", "create_repository"

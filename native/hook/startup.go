@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -167,7 +169,7 @@ func claudeGuarded(settings, marker string) bool {
 		return false
 	}
 	for _, group := range s.Hooks["PreToolUse"] {
-		if !match("^(?:"+group.Matcher+")$", "Bash") && group.Matcher != "*" {
+		if ok, err := regexp.MatchString("^(?:"+group.Matcher+")$", "Bash"); (err != nil || !ok) && group.Matcher != "*" {
 			continue
 		}
 		for _, h := range group.Hooks {
@@ -298,8 +300,9 @@ func codexHooks(cwd string, timeout float64, source, marker string) ([]map[strin
 }
 
 // codexTrust marks every hook of the user hooks file (~/.codex/hooks.json) trusted at its current hash, the same
-// hooks/list + config/batchWrite flow as Codex's /hooks review. --check only lists them (exit 1 when any is
-// untrusted); --cwd DIR lists from another project.
+// hooks/list + config/batchWrite flow as Codex's /hooks review, and drops trust entries for slots of that file
+// that no longer exist (a removed hook's slot would otherwise trust whatever later lands there). --check only
+// lists them (exit 1 when any is untrusted); --cwd DIR lists from another project.
 func codexTrust(args []string) int {
 	cwd, _ := os.Getwd()
 	check := false
@@ -315,55 +318,106 @@ func codexTrust(args []string) int {
 			return 2
 		}
 	}
+	fail := func(err error) int { fmt.Fprintln(os.Stderr, "aico-hook:", err); return 1 }
 	cfg, err := loadConfig(dataDir())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "aico-hook: hook data unavailable:", err)
-		return 1
+		return fail(fmt.Errorf("hook data unavailable: %w", err))
 	}
 	ctx, cancel := withTimeout(30)
 	defer cancel()
 	r, err := startRPC(ctx)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "aico-hook: codex app-server:", err)
-		return 1
+		return fail(fmt.Errorf("codex app-server: %w", err))
 	}
 	defer r.close()
 	hooks, err := hookList(r, cwd)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "aico-hook:", err)
-		return 1
+		return fail(err)
 	}
 	source := expand(cfg.Publication.CodexHooks)
-	value := map[string]any{}
+	prefixes := map[string]bool{source + ":": true}
+	current, untrusted := map[string]bool{}, map[string]any{}
 	for _, h := range hooks {
-		if sameFile(str(h["sourcePath"]), source) && str(h["trustStatus"]) != "trusted" {
-			value[str(h["key"])] = map[string]any{"trusted_hash": h["currentHash"]}
+		if sameFile(str(h["sourcePath"]), source) {
+			prefixes[str(h["sourcePath"])+":"] = true
+			current[str(h["key"])] = true
+			if str(h["trustStatus"]) != "trusted" {
+				untrusted[str(h["key"])] = map[string]any{"trusted_hash": h["currentHash"]}
+			}
 		}
 	}
-	if len(value) > 0 && !check {
-		if _, err := r.call("config/batchWrite", map[string]any{"edits": []any{map[string]any{
-			"keyPath": "hooks.state", "value": value, "mergeStrategy": "upsert"}}, "reloadUserConfig": true}); err != nil {
-			fmt.Fprintln(os.Stderr, "aico-hook:", err)
-			return 1
+	state, version, err := userHookState(r)
+	if err != nil {
+		return fail(err)
+	}
+	var stale []string
+	for key := range state {
+		for prefix := range prefixes {
+			if strings.HasPrefix(key, prefix) && !current[key] {
+				stale = append(stale, key)
+				break
+			}
+		}
+	}
+	sort.Strings(stale)
+	for _, key := range stale {
+		fmt.Printf("%-16s %-9s %s\n", "-", map[bool]string{true: "stale", false: "dropped"}[check], key)
+	}
+	if (len(untrusted) > 0 || len(stale) > 0) && !check {
+		edit := map[string]any{"keyPath": "hooks.state", "value": untrusted, "mergeStrategy": "upsert"}
+		if len(stale) > 0 { // config/batchWrite cannot delete one key: replace the user layer's whole table
+			for _, key := range stale {
+				delete(state, key)
+			}
+			for key, v := range untrusted {
+				state[key] = v
+			}
+			edit = map[string]any{"keyPath": "hooks.state", "value": state, "mergeStrategy": "replace"}
+		}
+		if _, err := r.call("config/batchWrite", map[string]any{"edits": []any{edit}, "expectedVersion": version,
+			"reloadUserConfig": true}); err != nil {
+			return fail(err)
 		}
 		if hooks, err = hookList(r, cwd); err != nil {
-			fmt.Fprintln(os.Stderr, "aico-hook:", err)
-			return 1
+			return fail(err)
 		}
 	}
-	untrusted := 0
+	bad := 0
 	for _, h := range hooks {
 		if sameFile(str(h["sourcePath"]), source) {
 			if str(h["trustStatus"]) != "trusted" {
-				untrusted++
+				bad++
 			}
 			fmt.Printf("%-16s %-9s %s %s\n", str(h["eventName"]), str(h["trustStatus"]), str(h["key"]), str(h["currentHash"]))
 		}
 	}
-	if untrusted > 0 {
+	if bad > 0 {
 		return 1
 	}
 	return 0
+}
+
+// userHookState is hooks.state of Codex's user config layer (~/.codex/config.toml) and that layer's version.
+func userHookState(r *rpc) (map[string]any, string, error) {
+	res, err := r.call("config/read", map[string]any{"includeLayers": true})
+	if err != nil {
+		return nil, "", err
+	}
+	layers, _ := res["layers"].([]any)
+	for _, l := range layers {
+		layer, _ := l.(map[string]any)
+		if name, _ := layer["name"].(map[string]any); str(name["type"]) != "user" {
+			continue
+		}
+		config, _ := layer["config"].(map[string]any)
+		hooks, _ := config["hooks"].(map[string]any)
+		state, _ := hooks["state"].(map[string]any)
+		if state == nil {
+			state = map[string]any{}
+		}
+		return state, str(layer["version"]), nil
+	}
+	return nil, "", errors.New("codex config/read returned no user layer")
 }
 
 // ---------------------------------------------------------------- context delivery

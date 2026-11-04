@@ -17,7 +17,7 @@ type Hook struct {
 }
 
 func New(cfg Config, payload map[string]any) *Hook {
-	return &Hook{Cfg: cfg, Payload: payload, ID: Resolve(payload)}
+	return &Hook{Cfg: cfg.withDefaults(), Payload: payload, ID: Resolve(payload)}
 }
 
 func (h *Hook) lineage() Lineage {

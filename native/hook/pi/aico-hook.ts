@@ -7,7 +7,8 @@
  *   tool_call edit, write   -> PreToolUse  (auto-lease; a foreign-lease WARNING is added to the tool result;
  *                                           blocks only under a live acceptance or deploy)
  *   tool_result bash        -> PostToolUse (one line on a shell write that overlaps another agent)
- * Only a guard decision blocks. When aico-hook cannot run, the tool goes ahead and its result says it went unchecked.
+ * The guard fails closed: when aico-hook does not start, exits non-zero, is killed (timeout) or prints something
+ * unreadable, a bash or connector call is refused. An edit goes ahead and its result says it went unchecked.
  * The coordination inbox stays on SummitFlow's coord-inbox hook (turn pi) until the sessions rebuild (M10a).
  */
 
@@ -51,8 +52,9 @@ function run(argv: string[], payload: Record<string, unknown>, cmd = binary()): 
 		child.on("close", (code, signal) => {
 			clearTimeout(timer);
 			if (signal) return resolve({ fault: `aico-hook was killed by ${signal}` });
+			if (code !== 0) return resolve({ fault: `aico-hook exited ${code}` });
 			const text = Buffer.concat(out).toString("utf8").trim();
-			if (!text) return resolve(code ? { fault: `aico-hook exited ${code}` } : {});
+			if (!text) return resolve({});
 			try {
 				const spec = JSON.parse(text).hookSpecificOutput;
 				if (spec?.permissionDecision === "deny") return resolve({ deny: String(spec.permissionDecisionReason || "Blocked by aico-hook.") });
@@ -66,6 +68,7 @@ function run(argv: string[], payload: Record<string, unknown>, cmd = binary()): 
 }
 
 const unchecked = (fault: string) => `${fault}: this call was not checked by the guard or the lease hook. Tell the owner.`;
+const refused = (fault: string) => `aico-hook could not check this call (${fault}); execution refused. Tell the owner.`;
 
 export default function (pi: ExtensionAPI) {
 	let notice: string | undefined;
@@ -119,13 +122,15 @@ export default function (pi: ExtensionAPI) {
 	pi.on("tool_call", async (event, ctx) => {
 		const input = (event.input ?? {}) as Record<string, unknown>;
 		let payload: Record<string, unknown>;
-		if (event.toolName === "bash" || CONNECTOR.test(event.toolName)) {
+		const guarded = event.toolName === "bash" || CONNECTOR.test(event.toolName);
+		if (guarded) {
 			payload = { tool_name: event.toolName === "bash" ? "Bash" : event.toolName, tool_input: event.input };
 		} else if (event.toolName === "edit" || event.toolName === "write") {
 			payload = { tool_name: "Edit", tool_input: { file_path: input.path } };
 		} else return undefined;
 		const answer = await run(["pi"], { ...base(ctx), hook_event_name: "PreToolUse", tool_use_id: event.toolCallId, ...payload });
 		if (answer.deny) return { block: true, reason: answer.deny };
+		if (answer.fault && guarded) return { block: true, reason: refused(answer.fault) };
 		later(event.toolCallId, answer.context ?? (answer.fault && unchecked(answer.fault)));
 		return undefined;
 	});
