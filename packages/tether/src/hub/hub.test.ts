@@ -73,6 +73,8 @@ class FakePeer {
   /** Null: an older Tether with no asks or shares routes (404). */
   asks: Record<string, unknown>[] | null = []
   shares: Record<string, unknown>[] | null = []
+  /** Control the gap between asks being cached and the whole link-up finishing. */
+  sharesReady: Promise<void> | null = null
   runs: Record<string, unknown> = {
     status: 'ok',
     error: null,
@@ -131,7 +133,10 @@ class FakePeer {
     }
     if (url === '/v1/runs') return sendJson(res, 200, this.runs)
     if (url === '/v1/asks' && this.asks) return sendJson(res, 200, { items: this.asks })
-    if (url === '/v1/shares' && this.shares) return sendJson(res, 200, { items: this.shares })
+    if (url === '/v1/shares' && this.shares) {
+      await this.sharesReady
+      return sendJson(res, 200, { items: this.shares })
+    }
     const askRoute = /^\/v1\/asks\/([0-9a-f]{12})(\/(answer|done))?$/.exec(url)
     if (askRoute && this.asks) {
       const found = this.asks.find((item) => item.id === askRoute[1])
@@ -369,13 +374,29 @@ describe('hub', () => {
       await peer.start()
       hub.reload()
       for (const stream of peer.streams) stream.end()
-      await vi.waitFor(() => expect(hub.mergeAsks([], { states: [] }).length).toBeGreaterThan(0), {
-        timeout: 5_000,
-      })
+      await vi.waitFor(
+        () => {
+          expect(state()).toBe('connected')
+          expect(hub.mergeAsks([], { states: [] }).length).toBeGreaterThan(0)
+        },
+        {
+          timeout: 5_000,
+        },
+      )
     }
 
     it("merges the peer's asks tagged with their host and marks them when the link is down", async () => {
-      await relinked()
+      let releaseShares = () => {}
+      peer.sharesReady = new Promise<void>((resolve) => {
+        releaseShares = resolve
+      })
+      const linked = relinked()
+      await vi.waitFor(() => expect(hub.mergeAsks([], { states: [] }).length).toBeGreaterThan(0), {
+        timeout: 5000,
+      })
+      // Keep metadata incomplete across a readiness poll, as the full CI run did.
+      setTimeout(releaseShares, 150)
+      await linked
       const local = [{ id: 'cccccccccccc', state: 'open' }]
       const merged = hub.mergeAsks(local, { states: ['open'] })
       expect(merged.map((item) => [item.id, item.host, item.peer])).toEqual([
