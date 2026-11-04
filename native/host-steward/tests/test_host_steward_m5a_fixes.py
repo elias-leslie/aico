@@ -551,6 +551,7 @@ def test_every_run_action_is_a_sudo_start_the_sudoers_file_allows(tmp_path, monk
         core, "run_command", Fake((["smartctl"], Result(0, "")), (["pgrep"], Result(1)))
     )
     data = copy.deepcopy(DATA)
+    data["acting"].update(housekeeping=False, space_guard=False, scrub=False, nvme_tests=False)
     data["jobs"]["housekeeping"].update(
         spotify_cache=str(tmp_path / "s"), guestfs_dir=str(tmp_path / "g"), versioned=[]
     )
