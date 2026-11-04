@@ -107,7 +107,8 @@ describe('aico context deliver', () => {
   fixtureDb(dbPath).close()
   afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
-  function run(argv: string[], env: NodeJS.ProcessEnv = {}) {
+  /** `tree` maps a pid to its parent: the processes above the CLI (pid 100). */
+  function run(argv: string[], env: NodeJS.ProcessEnv = {}, tree: Record<number, number> = {}) {
     const out: string[] = []
     const err: string[] = []
     const io: ContextCliIo = {
@@ -127,6 +128,8 @@ describe('aico context deliver', () => {
       },
       delivery: {
         env,
+        pid: 100,
+        parentOf: (pid) => tree[pid] ?? null,
         toolUsage: async () => DELIVERY_FIXTURE.toolUsage,
         activity: async () =>
           DELIVERY_FIXTURE.activity.map((entry) => ({ ...entry, at: Date.parse(entry.at) })),
@@ -188,15 +191,60 @@ describe('aico context deliver', () => {
     expect(delivery).toMatchObject({ project: 'alpha', session: 'a1b2c3d4', text: first.text })
   })
 
-  it('says nothing in a session the launch already delivered to, unless forced', async () => {
+  it('says nothing in the agent the launch delivered to, unless forced', async () => {
     const args = ['--tool', 'codex', '--project', 'alpha', '--format', 'codex']
-    for (const env of [
-      { AICO_CONTEXT_DELIVERED: 'abc' },
-      { AGENT_HUB_CONTEXT_PREINJECTED_HASH: 'abc' },
-    ])
-      expect(await run(args, env)).toEqual({ code: 0, out: '', err: '' })
-    const forced = await run([...args, '--force'], { AICO_CONTEXT_DELIVERED: 'abc' })
-    expect(forced.out).toContain('additionalContext')
+    // hook (100) <- aico-hook (90) <- agent (80): the launched agent is two parents up.
+    const tree = { 100: 90, 90: 80, 80: 70 }
+    const marker = { AICO_CONTEXT_DELIVERED: 'abc', AICO_CONTEXT_PID: '80' }
+    expect(await run(args, marker, tree)).toEqual({ code: 0, out: '', err: '' })
+    expect(await run(args, { AGENT_HUB_CONTEXT_PREINJECTED_HASH: 'abc' })).toEqual({
+      code: 0,
+      out: '',
+      err: '',
+    })
+    expect((await run([...args, '--force'], marker, tree)).out).toContain('additionalContext')
+  })
+
+  it('delivers to a session the launched agent started in turn', async () => {
+    const args = ['--tool', 'codex', '--project', 'alpha', '--format', 'codex']
+    // `codex exec` from a Claude session: hook (100) <- aico-hook (90) <- codex (85) <-
+    // bash (82) <- claude (80), and the marker is Claude's.
+    const tree = { 100: 90, 90: 85, 85: 82, 82: 80 }
+    const marker = { AICO_CONTEXT_DELIVERED: 'abc', AICO_CONTEXT_PID: '80' }
+    expect((await run(args, marker, tree)).out).toContain('additionalContext')
+    // The marker alone is not enough, and neither is an unreadable tree.
+    expect((await run(args, { AICO_CONTEXT_DELIVERED: 'abc' }, tree)).out).toContain(
+      'additionalContext',
+    )
+    expect((await run(args, marker)).out).toContain('additionalContext')
+  })
+
+  it('still prints the context when the inventory cannot be written', async () => {
+    const locked = join(dir, 'locked.db')
+    fixtureDb(locked).close()
+    const db = openContext(locked)
+    db.exec('DROP TABLE delivery_items; DROP TABLE deliveries')
+    db.close()
+    const out: string[] = []
+    const err: string[] = []
+    const code = await runContextCli(
+      'context',
+      ['deliver', '--tool', 'codex', '--project', 'alpha', '--format', 'codex'],
+      {
+        out: (text) => out.push(text),
+        err: (text) => err.push(text),
+        dbPath: locked,
+        machine: 'test',
+        statusUrl: null,
+        fetch,
+        now: () => new Date(DELIVERY_FIXTURE.now),
+        agentHub: { checkout: '', source: () => ({}) as never, route: () => ({ error: '' }) },
+        delivery: { env: {}, toolUsage: async () => '', activity: async () => [] },
+      },
+    )
+    expect(code).toBe(0)
+    expect(out.join('')).toContain('## Safety Rules')
+    expect(err.join('')).toMatch(/^aico context deliver: delivery not recorded: /)
   })
 
   it("leaves Pi to Agent Hub's extension unless it stands down", async () => {
@@ -355,5 +403,132 @@ describe('context delivery switch', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('delivery edge cases', () => {
+  const [entry] = DELIVERY_FIXTURE.cases as [(typeof DELIVERY_FIXTURE.cases)[number]]
+  const { request } = fixtureRequest(entry)
+  const budgeted = (budgetBytes: number): typeof DELIVERY => ({
+    ...DELIVERY,
+    tools: Object.fromEntries(
+      Object.entries(DELIVERY.tools).map(([id, tool]) => [id, { ...tool, budgetBytes }]),
+    ) as typeof DELIVERY.tools,
+  })
+
+  it('puts a cut section back when the cuts freed room for it', () => {
+    const db = fixtureDb()
+    const big = { ...request, toolUsage: 'x'.repeat(800) }
+    const full = deliver(db, big, budgeted(100_000))
+    const activity = full.sections.find((section) => section.id === 'activity')
+    expect(activity).toBeDefined()
+    // Cutting the activity alone does not fit; cutting the tool-usage block too frees more than needed.
+    const tight = full.bytes - (activity?.bytes ?? 0) - 3
+    const fitted = deliver(db, big, budgeted(tight))
+    expect(fitted.cut.map((section) => section.id)).toEqual(['tool-usage'])
+    expect(fitted.sections.map((section) => section.id)).toContain('activity')
+    expect(fitted.bytes).toBeLessThanOrEqual(tight)
+    // Render order is kept: the re-added activity sits before the (cut) tool-usage slot.
+    const kinds = fitted.sections.map((section) => section.kind)
+    expect(kinds.indexOf('activity')).toBe(kinds.length - 1)
+  })
+
+  it('cuts a hook delivery to the tool hook budget, and not a launch one', () => {
+    const db = fixtureDb()
+    const big = { ...request, toolUsage: 'x'.repeat(4000) }
+    const settings = {
+      ...DELIVERY,
+      tools: { ...DELIVERY.tools, 'claude-code': { budgetBytes: 100_000, hookBudgetBytes: 1500 } },
+    }
+    const launch = deliver(db, { ...big, tool: 'claude-code' }, settings)
+    const hook = deliver(db, { ...big, tool: 'claude-code', hook: true }, settings)
+    expect(launch.sections.map((section) => section.id)).toContain('tool-usage')
+    expect(hook.cut.map((section) => section.id)).toContain('tool-usage')
+    expect(hook.budget).toBe(1500)
+    expect(launch.budget).toBe(100_000)
+    // A tool without a hook budget takes its whole budget in a hook.
+    expect(deliver(db, { ...big, tool: 'codex', hook: true }, settings).budget).toBe(
+      DELIVERY.tools.codex.budgetBytes,
+    )
+    expect(DELIVERY.tools['claude-code'].hookBudgetBytes).toBeLessThan(10_000)
+  })
+
+  it('skips a prompt or memory row whose JSON is unreadable and says so', () => {
+    const db = fixtureDb()
+    db.prepare(
+      `INSERT INTO prompts (slug, name, content, kind, is_global, context_policy, updated_at)
+       VALUES ('bad-null', 'Bad Null', 'x', 'rule', 1, 'null', ?), ('bad-text', 'Bad Text', 'x', 'rule', 1, '{oops', ?)`,
+    ).run(DELIVERY_FIXTURE.now, DELIVERY_FIXTURE.now)
+    db.prepare(
+      `INSERT INTO memories (id, scope, scope_id, tier, content, triggers, applicability, created_at, updated_at)
+       VALUES ('bad00000-0000-0000-0000-000000000000', 'global', '', 'mandate', 'broken', '[]', 'null', ?, ?)`,
+    ).run(DELIVERY_FIXTURE.now, DELIVERY_FIXTURE.now)
+    const delivery = deliver(db, request)
+    expect(delivery.missing.map((gap) => gap.id).sort()).toEqual([
+      'memory:bad00000-0000-0000-0000-000000000000',
+      'prompt:bad-null',
+      'prompt:bad-text',
+    ])
+    expect(delivery.text).toContain('## Safety Rules')
+    expect(delivery.text).not.toContain('broken')
+  })
+
+  it('prunes the inventory by age, items with it', () => {
+    const db = fixtureDb()
+    const delivery = deliver(db, request)
+    const now = new Date(DELIVERY_FIXTURE.now)
+    const old = new Date(now.getTime() - (DELIVERY.keepDays + 1) * 86_400_000)
+    recordDelivery(db, delivery, 'launch', old)
+    recordDelivery(db, delivery, 'launch', new Date(old.getTime() + 86_400_000))
+    expect(db.prepare('SELECT count(*) AS n FROM deliveries').get()).toEqual({ n: 2 })
+    recordDelivery(db, delivery, 'launch', now)
+    expect(db.prepare('SELECT count(*) AS n FROM deliveries').get()).toEqual({ n: 2 })
+    const orphans = db
+      .prepare(
+        'SELECT count(*) AS n FROM delivery_items WHERE delivery_id NOT IN (SELECT id FROM deliveries)',
+      )
+      .get()
+    expect(orphans).toEqual({ n: 0 })
+  })
+
+  it('gives a project outside the registry global context only', () => {
+    const db = fixtureDb()
+    const known = deliver(db, { ...request, project: 'alpha' })
+    const folder = deliver(db, { ...request, project: 'some-folder' })
+    expect(known.sections.map((s) => s.id)).toContain('prompt:alpha-policy')
+    expect(folder.project).toBeNull()
+    expect(folder.sections.map((s) => s.id)).not.toContain('prompt:alpha-policy')
+    expect(folder.missing).toEqual([
+      { id: 'project', reason: 'some-folder is not in the project registry; global context only' },
+    ])
+  })
+
+  it("matches tool and role names the way Agent Hub's applicability does", () => {
+    const db = fixtureDb()
+    const policy = (applicability: object) => JSON.stringify({ scope: 'global', applicability })
+    const add = (slug: string, applicability: object) =>
+      db
+        .prepare(
+          `INSERT INTO prompts (slug, name, content, kind, is_global, context_policy, updated_at)
+           VALUES (?, ?, 'body', 'rule', 1, ?, ?)`,
+        )
+        .run(slug, slug, policy(applicability), DELIVERY_FIXTURE.now)
+    add('only-codex-tui', { consumer_surfaces: ['codex_tui'] })
+    add('only-pi-mono', { consumer_surfaces: ['Pi_Mono'] })
+    add('claude-cli', { consumer_surfaces: ['claude_cli'] })
+    add('not-claude-tui', { exclude_consumer_surfaces: ['Claude TUI'] })
+    add('for-role', { agent_slugs: ['implementation_agent'] })
+    add('not-for-role', { exclude_agent_slugs: ['implementation_agent'] })
+    const ids = (tool: string, role: string | null) =>
+      deliver(db, { tool, role }).sections.map((section) => section.id)
+    expect(ids('codex', null)).toContain('prompt:only-codex-tui')
+    expect(ids('claude-code', null)).not.toContain('prompt:only-codex-tui')
+    expect(ids('pi', null)).toContain('prompt:only-pi-mono')
+    expect(ids('claude-code', null)).toContain('prompt:claude-cli')
+    expect(ids('codex', null)).not.toContain('prompt:claude-cli')
+    expect(ids('claude-code', null)).not.toContain('prompt:not-claude-tui')
+    expect(ids('codex', 'implementation-agent')).toContain('prompt:for-role')
+    expect(ids('codex', 'Implementation_Agent')).not.toContain('prompt:not-for-role')
+    expect(ids('codex', null)).not.toContain('prompt:for-role')
   })
 })

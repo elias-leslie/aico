@@ -1,11 +1,21 @@
 {
-  "about": "Context delivery (deliver.ts): each tool's byte budget, the order the budget cuts sections in, where the tool-usage block comes from, and how much recent activity to show. Guardrail and mandate sections are never cut.",
+  "about": "Context delivery (deliver.ts): each tool's byte budget, the order the budget cuts sections in, where the tool-usage block comes from, and how much recent activity to show. Guardrail and mandate sections are never cut. hookBudgetBytes: what the tool's hook carries in full (Claude Code keeps hook output over about 10,000 characters as a file plus a preview), so a hook delivery is cut to it; where absent the hook carries the whole budget. surfaceAliases: Agent Hub's names for a tool in applicability lists (normalized to snake case) and the adapter id they mean. keepDays: how long the delivery inventory (deliveries, delivery_items) is kept. markerHops: how many parents up from a hook the agent Tether launched may be for the launch's delivered marker to count.",
   "tools": {
-    "claude-code": { "budgetBytes": 32768 },
-    "codex": { "budgetBytes": 32768 },
-    "pi": { "budgetBytes": 32768 }
+    "claude-code": {
+      "budgetBytes": 32768,
+      "hookBudgetBytes": 9500
+    },
+    "codex": {
+      "budgetBytes": 32768
+    },
+    "pi": {
+      "budgetBytes": 32768
+    }
   },
-  "aliases": { "claude": "claude-code", "claude_code": "claude-code" },
+  "aliases": {
+    "claude": "claude-code",
+    "claude_code": "claude-code"
+  },
   "profile": "agent_startup",
   "cutOrder": ["activity", "tool-usage", "instruction", "role", "project"],
   "toolUsage": {
@@ -22,5 +32,25 @@
     ],
     "timeoutMs": 5000
   },
-  "activity": { "maxLines": 5, "maxAgeDays": 7 }
+  "activity": {
+    "maxLines": 5,
+    "maxAgeDays": 7
+  },
+  "surfaceAliases": {
+    "claude": "claude-code",
+    "claude_code": "claude-code",
+    "claude_cli": "claude-code",
+    "claude_code_cli": "claude-code",
+    "claude_gpt": "claude-code",
+    "claude_tui": "claude-code",
+    "codex": "codex",
+    "codex_cli": "codex",
+    "codex_tui": "codex",
+    "pi": "pi",
+    "pi_cli": "pi",
+    "pi_mono": "pi",
+    "pi_tui": "pi"
+  },
+  "keepDays": 7,
+  "markerHops": 3
 }

@@ -4,9 +4,11 @@
 
 import { readFileSync } from 'node:fs'
 import importData from '../data/agent-hub-import.json' with { type: 'json' }
+import { startedBy } from './ancestry'
 import { type Database, openContext } from './db'
 import {
   type Activity,
+  DELIVERY,
   deliver,
   deliveryTools,
   recordDelivery,
@@ -64,6 +66,10 @@ export interface ContextCliIo {
    * markers) and its two computed sources; absent, deliver has neither block. */
   delivery?: {
     env: NodeJS.ProcessEnv
+    /** The parent of a process (default: Linux /proc); tests give a fake tree. */
+    parentOf?(pid: number): number | null
+    /** This process's pid (default: process.pid). */
+    pid?: number
     toolUsage(): Promise<Source<string>>
     /** The other sessions in a project, from Tether. */
     activity(project: string, except: string | null): Promise<Source<Activity[]>>
@@ -79,7 +85,7 @@ const USAGE = `Usage: aico <memory|prompt|models|context> ...
   aico prompt list [--global|--no-global]
   aico prompt get SLUG
   aico models route --role R [--tool T] [--model M] [--project P] [--json]
-  aico context import-agent-hub [--checkout DIR] [--json]
+  aico context import-agent-hub [--checkout DIR] [--json] [--no-status]
   aico context deliver --tool T [--project P] [--session S] [--role R] [--coordinator]
                        [--event E] [--format text|json|claude|codex|pi] [--force]
   aico context delivery [TOOL on|off]
@@ -399,11 +405,22 @@ async function deliverCommand(db: () => Database, rest: string[], io: ContextCli
   }
   // A hook never adds a second copy of what the launch already delivered, nor of
   // what Agent Hub's Pi extension adds in process unless it was told to stand down.
+  // The launch's marker counts only for the agent it started (AICO_CONTEXT_PID is
+  // that agent's pid, a few parents up from a hook): a session that agent starts
+  // inherits the variables but not the pid, and gets its own delivery.
+  const launched = Number(env.AICO_CONTEXT_PID)
+  const marked =
+    Boolean(env.AICO_CONTEXT_DELIVERED) &&
+    Number.isInteger(launched) &&
+    launched > 0 &&
+    startedBy(launched, DELIVERY.markerHops, io.delivery?.pid, io.delivery?.parentOf)
   const delivered =
-    env.AICO_CONTEXT_DELIVERED ||
+    marked ||
     env.AGENT_HUB_CONTEXT_PREINJECTED_HASH ||
     (format === 'pi' && env.AGENT_HUB_CONTEXT_BYPASS !== '1')
   if (HOOK_FORMATS.includes(format) && delivered && !parsed.flags.has('--force')) return 0
+  // No --project: the pane's. Either way deliver() gives project scope only to a
+  // project in the registry, and a folder name the hook guessed gets global context.
   const project = str(parsed, 'project') ?? env.AICO_PROJECT_ID ?? ''
   const session = str(parsed, 'session') ?? env.AICO_SESSION_ID ?? null
   const [toolUsage, activity] = await Promise.all([
@@ -411,24 +428,32 @@ async function deliverCommand(db: () => Database, rest: string[], io: ContextCli
     project ? io.delivery?.activity(project, session) : undefined,
   ])
   let result: ReturnType<typeof deliver>
+  let opened: Database
   try {
-    const opened = db()
+    opened = db()
     result = deliver(opened, {
       tool,
       project,
       session,
       role: str(parsed, 'role') ?? env.ST_WORK_ROLE ?? null,
       coordinator: parsed.flags.has('--coordinator'),
+      hook: HOOK_FORMATS.includes(format),
       ...(toolUsage === undefined ? {} : { toolUsage }),
       ...(activity === undefined ? {} : { activity }),
       now: io.now(),
     })
-    if (HOOK_FORMATS.includes(format) && result.text)
-      recordDelivery(opened, result, `hook:${format}`, io.now())
   } catch (error) {
     io.err(`aico context deliver: ${(error as Error).message}\n`)
     return 1
   }
+  // The inventory is a record, not the delivery: a busy or broken file costs the
+  // record, never the context that was built.
+  if (HOOK_FORMATS.includes(format) && result.text)
+    try {
+      recordDelivery(opened, result, `hook:${format}`, io.now())
+    } catch (error) {
+      io.err(`aico context deliver: delivery not recorded: ${(error as Error).message}\n`)
+    }
   for (const gap of result.missing) io.err(`aico context deliver: no ${gap.id}: ${gap.reason}\n`)
   if (format === 'json') io.out(`${JSON.stringify(result, null, 2)}\n`)
   else if (format === 'claude' || format === 'codex') {
@@ -463,7 +488,7 @@ async function context(db: Database, argv: string[], io: ContextCliIo): Promise<
   const [sub, ...rest] = argv
   if (sub === 'delivery') return deliverySwitch(db, rest, io)
   if (sub !== 'import-agent-hub') throw new UsageError(`unknown context command ${sub ?? '(none)'}`)
-  const parsed = parse(rest, { '--checkout': 'checkout' }, ['--json'])
+  const parsed = parse(rest, { '--checkout': 'checkout' }, ['--json', '--no-status'])
   const checkout = str(parsed, 'checkout') ?? io.agentHub.checkout
   const at = io.now().toISOString()
   let result: ImportResult
@@ -474,11 +499,11 @@ async function context(db: Database, argv: string[], io: ContextCliIo): Promise<
     })
   } catch (error) {
     const message = (error as Error).message
-    await postStatus(io, at, null, message)
+    if (!parsed.flags.has('--no-status')) await postStatus(io, at, null, message)
     io.err(`Import failed: ${message}\n`)
     return 1
   }
-  await postStatus(io, at, result, null)
+  if (!parsed.flags.has('--no-status')) await postStatus(io, at, result, null)
   io.out(
     parsed.flags.has('--json')
       ? `${JSON.stringify(result, null, 2)}\n`

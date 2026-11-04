@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import type { StatusRow } from '@aico/status'
 import { describe, expect, it, vi } from 'vitest'
 import { answerResult, commandJob, postJob } from './act'
-import { type JobDef, nextAt, parseJobs, readJobs } from './jobs'
+import { type JobDef, nextAt, nextRun, parseJobs, readJobs } from './jobs'
 import { JobStore, StaleLease } from './leases'
 import { main } from './main'
 import { jobRow, Runner } from './runner'
@@ -62,6 +62,29 @@ describe('the schedule', () => {
     const at = new Date(2026, 10, 3, 3, 30).getTime()
     expect(nextAt('03:30', at - 1)).toBe(at)
     expect(nextAt('03:30', at)).toBe(new Date(2026, 10, 4, 3, 30).getTime())
+  })
+
+  it('repeats every_min minutes, and a job has one of at or every_min', () => {
+    const base = { kind: 'sync', what: 'Sync', project: 'aico', home: 'a', lease_s: 60 }
+    const run = { command: ['true'] }
+    const [job] = parseJobs({ jobs: [{ ...base, every_min: 10, run }] })
+    expect(job).toMatchObject({ every_min: 10 })
+    expect(job).not.toHaveProperty('at')
+    expect(nextRun(job as JobDef, 1_000)).toBe(1_000 + 600_000)
+    expect(() => parseJobs({ jobs: [{ ...base, run }] })).toThrow('exactly one of at')
+    expect(() => parseJobs({ jobs: [{ ...base, at: '03:30', every_min: 10, run }] })).toThrow(
+      'exactly one of at',
+    )
+    expect(() => parseJobs({ jobs: [{ ...base, every_min: 0, run }] })).toThrow('every_min')
+  })
+
+  it('ships the Agent Hub import every 10 minutes on davion-sidarli', () => {
+    const shipped = readJobs(new URL('../data/jobs.json', import.meta.url).pathname)
+    expect(shipped.find((job) => job.kind === 'context-import')).toMatchObject({
+      home: 'davion-sidarli',
+      every_min: 10,
+      run: { command: expect.arrayContaining(['import-agent-hub']) },
+    })
   })
 
   it('reads the shipped job list and refuses a bad one by field', () => {
@@ -235,7 +258,10 @@ describe('the runner', () => {
       ])
       lines.length = 0
       await main(['list', '--machine', 'gem'], env)
-      expect(lines).toEqual(['notes-export  home davion-sidarli  runs there, not on gem'])
+      expect(lines).toEqual([
+        'notes-export  home davion-sidarli  runs there, not on gem',
+        'context-import  home davion-sidarli  runs there, not on gem',
+      ])
     } finally {
       spy.mockRestore()
       out.mockRestore()
@@ -248,6 +274,48 @@ describe('the runner', () => {
     const state = store.get('export')
     if (!state) throw new Error('no job')
     expect(jobRow(job, state).meaning).toBe('Not run yet. Runs daily at 03:30 on a.')
+  })
+})
+
+describe('an every_min job', () => {
+  it('is first due at once, then every_min minutes after it finishes, and says so in its row', async () => {
+    const clock = { now: new Date(2026, 10, 3, 3, 0).getTime() }
+    const store = new JobStore(':memory:')
+    const { at: _at, ...daily } = job
+    const every: JobDef = { ...daily, kind: 'sync', every_min: 10 }
+    const posted: StatusRow[][] = []
+    const runner = new Runner({
+      store,
+      jobs: [every],
+      machine: 'a',
+      holder: 'a:1',
+      act: async () => ({ state: 'ok', meaning: 'Copied.' }),
+      postRows: async (rows) => {
+        posted.push(rows)
+      },
+      now: () => clock.now,
+      log: () => {},
+    })
+    runner.start()
+    expect(posted).toEqual([])
+    expect(jobRow(every, store.get('sync') as never).meaning).toBe(
+      'Not run yet. Runs every 10 minutes on a.',
+    )
+    await runner.tick()
+    await runner.idle()
+    expect(posted.at(-1)?.[0]).toMatchObject({
+      id: 'jobs/sync',
+      state: 'ok',
+      next_run: new Date(clock.now + 600_000).toISOString(),
+    })
+    clock.now += 599_000
+    await runner.tick()
+    await runner.idle()
+    expect(store.get('sync')?.fence).toBe(1)
+    clock.now += 2_000
+    await runner.tick()
+    await runner.idle()
+    expect(store.get('sync')?.fence).toBe(2)
   })
 })
 

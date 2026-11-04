@@ -8,7 +8,7 @@
 // stands for, so every job must be safe to run twice (idempotent).
 
 import type { StatusRow } from '@aico/status'
-import { type JobDef, nextAt } from './jobs'
+import { type JobDef, nextRun, schedule } from './jobs'
 import { type JobResult, type JobState, type JobStore, type Lease, StaleLease } from './leases'
 
 export type Act = (job: JobDef) => Promise<JobResult>
@@ -52,7 +52,7 @@ export class Runner {
     const { store, jobs, machine } = this.options
     for (const job of jobs) {
       if (job.home !== machine) continue
-      store.ensure(job.kind, nextAt(job.at, this.now()))
+      store.ensure(job.kind, job.every_min === undefined ? nextRun(job, this.now()) : this.now())
       const state = store.get(job.kind)
       if (state) this.queueRow(job, state)
     }
@@ -118,7 +118,7 @@ export class Runner {
         lease,
         { ...result, meaning: cut(result.meaning) },
         startedAt,
-        nextAt(job.at, finishedAt),
+        nextRun(job, finishedAt),
       )
     } catch (error) {
       // The work is done either way; a refused result does not undo it (jobs are idempotent).
@@ -166,7 +166,7 @@ export function jobRow(job: JobDef, state: JobState): StatusRow {
     state: (state.lastState as JobResult['state'] | null) ?? 'ok',
     meaning: ran
       ? cut(state.lastMeaning || 'Finished.')
-      : `Not run yet. Runs daily at ${job.at} on ${job.home}.`,
+      : `Not run yet. Runs ${schedule(job)} on ${job.home}.`,
     ...(ran ? { last_run: iso(state.lastRun as number) } : {}),
     next_run: iso(state.nextRun),
     actions: [

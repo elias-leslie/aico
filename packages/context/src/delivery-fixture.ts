@@ -30,6 +30,8 @@ export interface DeliveryCase {
 
 export interface DeliveryFixture {
   now: string
+  /** The project registry (project_permissions): only these get project scope. */
+  projects: string[]
   roles: { name: string; work_roles: string[]; context: string }[]
   prompts: {
     slug: string
@@ -58,6 +60,11 @@ export const DELIVERY_FIXTURE: DeliveryFixture = fixture
 export function fixtureDb(path = ':memory:'): Database {
   const db = openContext(path)
   const at = fixture.now
+  for (const project of fixture.projects)
+    db.prepare('INSERT INTO project_permissions (project_id, updated_at) VALUES (?, ?)').run(
+      project,
+      at,
+    )
   fixture.roles.forEach((role, position) => {
     db.prepare(
       'INSERT INTO roles (name, label, work_roles, context, position, updated_at) VALUES (?, ?, ?, ?, ?, ?)',

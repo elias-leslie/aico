@@ -11,8 +11,9 @@ export interface JobDef {
   project: string
   /** The one machine that runs it (machine id: lower-cased short host name). */
   home: string
-  /** Local time of day, HH:MM, daily. */
-  at: string
+  /** Local time of day, HH:MM, daily; or `every_min`, a repeat every that many minutes. One of the two. */
+  at?: string
+  every_min?: number
   run: { post: string } | { command: string[] }
   /** Lease length; the holder renews it every third of this while the job runs. */
   lease_s: number
@@ -52,8 +53,19 @@ export function parseJobs(value: unknown): JobDef[] {
     if (!KIND.test(kind)) fail(`${where}.kind`, 'lower-case letters, digits and dashes')
     if (seen.has(kind)) fail(`${where}.kind`, `${kind} is listed twice`)
     seen.add(kind)
-    const at = text(job, 'at', where, 5)
-    if (!AT.test(at)) fail(`${where}.at`, 'HH:MM')
+    if ((job.at === undefined) === (job.every_min === undefined))
+      fail(where, 'exactly one of at (HH:MM daily) or every_min (whole minutes)')
+    let when: Pick<JobDef, 'at' | 'every_min'>
+    if (job.at !== undefined) {
+      const at = text(job, 'at', where, 5)
+      if (!AT.test(at)) fail(`${where}.at`, 'HH:MM')
+      when = { at }
+    } else {
+      const every = job.every_min
+      if (!Number.isInteger(every) || (every as number) < 1 || (every as number) > 1440)
+        fail(`${where}.every_min`, 'whole minutes from 1 to 1440')
+      when = { every_min: every as number }
+    }
     const run = job.run as Record<string, unknown> | undefined
     let action: JobDef['run']
     if (typeof run?.post === 'string' && run.post.startsWith('/')) action = { post: run.post }
@@ -69,7 +81,7 @@ export function parseJobs(value: unknown): JobDef[] {
       what: text(job, 'what', where, 120),
       project: text(job, 'project', where, 64),
       home: text(job, 'home', where, 64).toLowerCase(),
-      at,
+      ...when,
       run: action,
       lease_s: seconds(job, 'lease_s', where),
     }
@@ -90,4 +102,18 @@ export function nextAt(at: string, after: number): number {
     next.setHours(hours, minutes, 0, 0)
   }
   return next.getTime()
+}
+
+/** The first run strictly after `after`: the next `at` time, or `every_min` minutes on. */
+export function nextRun(job: Pick<JobDef, 'at' | 'every_min'>, after: number): number {
+  return job.every_min !== undefined
+    ? after + job.every_min * 60_000
+    : nextAt(job.at as string, after)
+}
+
+/** When a job runs, in words for its Status row. */
+export function schedule(job: Pick<JobDef, 'at' | 'every_min'>): string {
+  return job.every_min !== undefined
+    ? `every ${job.every_min === 1 ? 'minute' : `${job.every_min} minutes`}`
+    : `daily at ${job.at}`
 }

@@ -1,6 +1,7 @@
 {
   "about": "Fixture contexts for context delivery: the context.db rows (roles, prompts, memories), the computed blocks, and the deliveries every caller must agree on. packages/context deliver.test.ts checks deliver() against `cases`; packages/tether's adapter conformance suite materializes each case for every tool that takes a delivery and checks the tool would read exactly `text`. Ids are made up; no real memory or project is named.",
   "now": "2026-11-03T12:00:00.000Z",
+  "projects": ["alpha", "beta"],
   "roles": [
     { "name": "implementation", "work_roles": ["implementation"], "context": "full" },
     { "name": "coordinator", "work_roles": ["coordinator"], "context": "full" },

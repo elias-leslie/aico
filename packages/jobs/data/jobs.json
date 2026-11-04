@@ -1,5 +1,5 @@
 {
-  "description": "Aico's jobs. Each kind runs on its home machine (machine id: the lower-cased short host name) when due, and only there: no other machine runs it until the fleet link (M11) shares leases between machines. at: local time, daily. run: post (a path on the local aico-web) or command (argv).",
+  "description": "Aico's jobs. Each kind runs on its home machine (machine id: the lower-cased short host name) when due, and only there: no other machine runs it until the fleet link (M11) shares leases between machines. at: local time, daily; or every_min: a repeat every that many minutes after it last finished. run: post (a path on the local aico-web) or command (argv).",
   "jobs": [
     {
       "kind": "notes-export",
@@ -7,8 +7,26 @@
       "project": "aico",
       "home": "davion-sidarli",
       "at": "03:30",
-      "run": { "post": "/api/export/notes" },
+      "run": {
+        "post": "/api/export/notes"
+      },
       "lease_s": 120
+    },
+    {
+      "kind": "context-import",
+      "what": "Agent Hub import into Aico",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "every_min": 10,
+      "run": {
+        "command": [
+          "/home/kasadis/.summitflow/services/projects/aico/current/source/packages/web-server/scripts/aico",
+          "context",
+          "import-agent-hub",
+          "--no-status"
+        ]
+      },
+      "lease_s": 300
     }
   ]
 }

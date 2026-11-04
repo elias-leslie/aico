@@ -7,9 +7,13 @@
 // Codex a developer_instructions override, Pi a system-prompt file. The content
 // never travels through tmux, only the paths.
 //
-// AGENT_HUB_CONTEXT_BYPASS=1 tells Agent Hub's launchers, hooks and Pi extension
-// to stand down, and AICO_CONTEXT_DELIVERED=<hash> tells aico-hook the launch
-// already delivered. When the switch is off, the tool takes no delivery, or
+// AICO_CONTEXT_DELIVERED=<hash> tells Agent Hub's launchers, hooks and Pi
+// extension and aico-hook to stand down, but only in the process the launch
+// started: launchLine also exports AICO_CONTEXT_PID, the agent's own pid, and
+// every check honours the marker only when that pid is the process itself (a
+// launcher, the Pi extension) or one of its few parents (a hook the agent runs).
+// A session the agent starts in turn (`codex exec` from a Claude session)
+// inherits the variables but not the pid, so it gets its own delivery. When the switch is off, the tool takes no delivery, or
 // anything fails, the launch stays as it was and Agent Hub's delivery runs.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
@@ -59,7 +63,7 @@ export function deliveryLaunch(
 ): { files: Record<string, string>; delivered: DeliveredContext } {
   const delivered = (words: string[], env: Record<string, string> = {}): DeliveredContext => ({
     arguments: words,
-    env: { AGENT_HUB_CONTEXT_BYPASS: '1', AICO_CONTEXT_DELIVERED: hash, ...env },
+    env: { AICO_CONTEXT_DELIVERED: hash, ...env },
     instructions,
     hash,
     bytes: Buffer.byteLength(text),

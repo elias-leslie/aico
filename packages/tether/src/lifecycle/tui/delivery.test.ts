@@ -32,12 +32,13 @@ afterAll(() => rmSync(root, { recursive: true, force: true }))
 const recorder = join(root, 'record.mjs')
 writeFileSync(
   recorder,
-  'process.stdout.write(JSON.stringify({ argv: process.argv.slice(2), env: process.env }))\n',
+  'process.stdout.write(JSON.stringify({ argv: process.argv.slice(2), env: process.env, pid: process.pid }))\n',
 )
 
 interface Started {
   argv: string[]
   env: Record<string, string>
+  pid: number
 }
 
 /** Run a launch line with the tool swapped for the recorder. */
@@ -98,8 +99,10 @@ describe.each(delivering.map((adapter) => [adapter.id, adapter] as const))('%s',
       const { files, delivered } = deliveryLaunch(how, dir, delivery.text, delivery.hash)
       for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body)
       const started = start({ ...spec, deliveredContext: delivered })
-      expect(started.env.AGENT_HUB_CONTEXT_BYPASS).toBe('1')
       expect(started.env.AICO_CONTEXT_DELIVERED).toBe(delivery.hash)
+      // The marker names the started agent itself, so a session it starts is not covered.
+      expect(started.env.AICO_CONTEXT_PID).toBe(String(started.pid))
+      expect(started.env.AGENT_HUB_CONTEXT_BYPASS).toBeUndefined()
       expect(read(how, started)).toEqual(delivery.text ? [delivery.text] : [])
     })
 
@@ -194,7 +197,7 @@ describe('withContextDelivery', () => {
     switched(true)
     const spec = await withContextDelivery(codex(), 'e0000001', deps)
     const delivered = spec.deliveredContext
-    expect(delivered?.env).toMatchObject({ AGENT_HUB_CONTEXT_BYPASS: '1' })
+    expect(delivered?.env).not.toHaveProperty('AGENT_HUB_CONTEXT_BYPASS')
     const started = start(spec)
     const [text] = read(spec.contextDelivery as NonNullable<TuiSpec['contextDelivery']>, started)
     expect(text).toContain('## Alpha Policy')

@@ -44,6 +44,8 @@ export interface DeliverRequest {
   /** An Aico role (roles table) or a work role id. */
   role?: string | null
   coordinator?: boolean
+  /** The text goes out through a hook, so the tool's hook budget (if it has one) applies. */
+  hook?: boolean
   /** The tool-usage manifest body (without the <tool-usage> wrapper); omitted: none asked for. */
   toolUsage?: Source<string>
   /** The project's other sessions; omitted: none asked for. */
@@ -83,6 +85,8 @@ interface Built extends Section {
   body: string
 }
 
+type Missing = { id: string; reason: string }[]
+
 const SEPARATOR = '\n\n'
 const bytesOf = (text: string) => Buffer.byteLength(text)
 
@@ -106,6 +110,15 @@ interface Consumer {
   blank: boolean
 }
 
+/** json(), or the fallback when the text is not JSON. */
+const safeJson = <T>(text: unknown, fallback: T): T => {
+  try {
+    return json(text, fallback)
+  } catch {
+    return fallback
+  }
+}
+
 const lower = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.filter((v): v is string => typeof v === 'string').map((v) => v.trim().toLowerCase())
@@ -114,11 +127,16 @@ const lower = (value: unknown): string[] =>
 /** Audience tags: `work-role:<id>` for the role's work roles, `aico-coordinator`
  * for a coordinator, and `work-role:unknown` when no known work role applies
  * (Agent Hub's rule, so a memory can target "coordinators and unknown roles"). */
-function consumerOf(db: Database, request: DeliverRequest, tool: string): Consumer {
+function consumerOf(
+  db: Database,
+  request: DeliverRequest,
+  tool: string,
+  missing: Missing,
+): Consumer {
   const role = request.role?.trim() || null
   const known = new Set<string>()
   for (const row of db.prepare('SELECT work_roles FROM roles').all() as { work_roles: string }[])
-    for (const work of lower(json(row.work_roles, []))) known.add(work)
+    for (const work of lower(safeJson(row.work_roles, []))) known.add(work)
   const tags = new Set<string>()
   const row = role
     ? (db.prepare('SELECT work_roles, context FROM roles WHERE name = ?').get(role) as
@@ -126,14 +144,44 @@ function consumerOf(db: Database, request: DeliverRequest, tool: string): Consum
         | undefined)
     : undefined
   if (role) {
-    const works = row ? lower(json(row.work_roles, [])) : [role.toLowerCase()]
+    const works = row ? lower(safeJson(row.work_roles, [])) : [role.toLowerCase()]
     for (const work of works) if (known.has(work)) tags.add(`work-role:${work}`)
   }
   if (!tags.size) tags.add('work-role:unknown')
   if (request.coordinator) tags.add('aico-coordinator')
-  const project = request.project?.trim() || null
+  // Only a project in the registry (project_permissions, imported from Agent Hub)
+  // gets project scope; a folder name or a stale id gets the global context alone.
+  let project = request.project?.trim() || null
+  if (
+    project &&
+    !db.prepare('SELECT 1 FROM project_permissions WHERE project_id = ? LIMIT 1').get(project)
+  ) {
+    missing.push({
+      id: 'project',
+      reason: `${project} is not in the project registry; global context only`,
+    })
+    project = null
+  }
   return { tool, project, role, tags, blank: row?.context === 'blank-slate' }
 }
+
+/** Agent Hub's identifier form: case, CamelCase, spaces and hyphens become snake case. */
+const identifier = (name: string): string =>
+  name
+    .trim()
+    .replace(/(?<=[a-z0-9])(?=[A-Z])/g, '_')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase()
+
+/** A surface name as the adapter id (claude_cli, codex_tui, pi_mono ... by `surfaceAliases`). */
+const surfaceOf = (name: string, settings: DeliveryConfig): string => {
+  const id = identifier(name)
+  return (settings.surfaceAliases as Record<string, string>)[id] ?? id.replace(/_/g, '-')
+}
+
+/** An agent slug in Agent Hub's canonical hyphen style. */
+const slugOf = (name: string): string => identifier(name).replace(/_/g, '-')
 
 /** Agent Hub's applicability check: surfaces (tools), profiles, agent slugs, audience tags. */
 function applies(
@@ -141,21 +189,29 @@ function applies(
   who: Consumer,
   settings: DeliveryConfig,
 ): boolean {
-  const aliases = settings.aliases as Record<string, string>
-  const tools = (key: string) => lower(applicability[key]).map((name) => aliases[name] ?? name)
-  const surfaces = tools('consumer_surfaces')
-  if (surfaces.length && !surfaces.includes(who.tool)) return false
-  if (tools('exclude_consumer_surfaces').includes(who.tool)) return false
+  const surfaces = (key: string) =>
+    lower(applicability[key]).map((name) => surfaceOf(name, settings))
+  const tools = surfaces('consumer_surfaces')
+  if (tools.length && !tools.includes(who.tool)) return false
+  if (surfaces('exclude_consumer_surfaces').includes(who.tool)) return false
   const profiles = lower(applicability.consumer_profiles)
   if (profiles.length && !profiles.includes(settings.profile)) return false
   if (lower(applicability.exclude_consumer_profiles).includes(settings.profile)) return false
-  const slug = who.role?.toLowerCase() ?? null
-  const slugs = lower(applicability.agent_slugs)
+  const slug = who.role ? slugOf(who.role) : null
+  const slugs = lower(applicability.agent_slugs).map(slugOf)
   if (slugs.length && !(slug && slugs.includes(slug))) return false
-  if (slug && lower(applicability.exclude_agent_slugs).includes(slug)) return false
+  if (slug && lower(applicability.exclude_agent_slugs).map(slugOf).includes(slug)) return false
   const audience = lower(applicability.audience_tags)
   if (audience.length && !audience.some((tag) => who.tags.has(tag))) return false
   return !lower(applicability.exclude_audience_tags).some((tag) => who.tags.has(tag))
+}
+
+/** A JSON object column, or why it is not one (the caller skips that row). */
+function objectColumn<T extends object>(text: unknown, fallback: T): T {
+  const value = json<unknown>(text, fallback)
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new Error('not a JSON object')
+  return value as T
 }
 
 // --- prompts ------------------------------------------------------------------
@@ -181,7 +237,12 @@ interface Policy {
   format?: string
 }
 
-function promptSections(db: Database, who: Consumer, settings: DeliveryConfig): Built[] {
+function promptSections(
+  db: Database,
+  who: Consumer,
+  settings: DeliveryConfig,
+  missing: Missing,
+): Built[] {
   const rows = db
     .prepare(
       'SELECT slug, name, description, content, kind, is_global, context_policy FROM prompts ORDER BY slug',
@@ -189,7 +250,16 @@ function promptSections(db: Database, who: Consumer, settings: DeliveryConfig): 
     .all() as unknown as PromptRow[]
   const sections: Built[] = []
   for (const row of rows) {
-    const policy = json<Policy>(row.context_policy, { scope: row.is_global ? 'global' : '' })
+    let policy: Policy
+    try {
+      policy = objectColumn<Policy>(row.context_policy, { scope: row.is_global ? 'global' : '' })
+    } catch (error) {
+      missing.push({
+        id: `prompt:${row.slug}`,
+        reason: `its context_policy is unreadable (${(error as Error).message}); skipped`,
+      })
+      continue
+    }
     const targets = policy.targets ?? []
     const scoped =
       policy.scope === 'global'
@@ -204,7 +274,11 @@ function promptSections(db: Database, who: Consumer, settings: DeliveryConfig): 
     const activation = policy.activation ?? 'always'
     if (activation === 'on_demand') continue
     if (activation === 'triggered' && (policy.task_types?.length || policy.phases?.length)) continue
-    if (!applies(policy.applicability ?? {}, who, settings)) continue
+    const applicability =
+      typeof policy.applicability === 'object' && policy.applicability !== null
+        ? policy.applicability
+        : {}
+    if (!applies(applicability, who, settings)) continue
     const kind: Kind =
       row.kind === 'global_guardrail'
         ? 'guardrail'
@@ -243,7 +317,12 @@ const SCOPE_ORDER: Record<string, number> = { project: 0, agent: 1, global: 2 }
 
 /** Guardrail and mandate memories for the session's scopes: project first, then
  * role, then global, newest first within each (Agent Hub's order). */
-function memorySections(db: Database, who: Consumer, settings: DeliveryConfig): Built[] {
+function memorySections(
+  db: Database,
+  who: Consumer,
+  settings: DeliveryConfig,
+  missing: Missing,
+): Built[] {
   const rows = db
     .prepare(
       `SELECT id, scope, scope_id, tier, content, triggers, applicability FROM memories
@@ -253,8 +332,19 @@ function memorySections(db: Database, who: Consumer, settings: DeliveryConfig): 
     )
     .all(who.project ?? '', who.role ?? '') as unknown as MemoryRow[]
   const chosen = rows
-    .filter((row) => !json<string[]>(row.triggers, []).length)
-    .filter((row) => applies(json(row.applicability, {}), who, settings))
+    .filter((row) => {
+      try {
+        const triggers = json<unknown>(row.triggers, [])
+        if (!Array.isArray(triggers)) throw new Error('triggers are not a list')
+        return !triggers.length && applies(objectColumn(row.applicability, {}), who, settings)
+      } catch (error) {
+        missing.push({
+          id: `memory:${row.id}`,
+          reason: `its triggers or applicability are unreadable (${(error as Error).message}); skipped`,
+        })
+        return false
+      }
+    })
     .sort((a, b) => (SCOPE_ORDER[a.scope] ?? 3) - (SCOPE_ORDER[b.scope] ?? 3))
   const sections: Built[] = []
   for (const tier of ['guardrail', 'mandate'] as const) {
@@ -328,11 +418,15 @@ const total = (sections: Built[]) =>
   sections.reduce((sum, section) => sum + section.bytes, 0) +
   Math.max(0, sections.length - 1) * SEPARATOR.length
 
-/** Cut sections in `cutOrder`, the last of a kind first, until the text fits. */
+/** Cut sections in `cutOrder`, the last of a kind first, until the text fits; then
+ * put cut sections back, highest priority first (the reverse of `cutOrder`, in
+ * render order within a kind), while they fit: one big cut can free more room than
+ * the overshoot needed, and a small section that fits is not worth losing. */
 function fit(sections: Built[], budget: number, settings: DeliveryConfig) {
-  const kept = [...sections]
-  const cut: Built[] = []
-  for (const kind of settings.cutOrder as Kind[]) {
+  const order = settings.cutOrder as Kind[]
+  let kept = [...sections]
+  let cut: Built[] = []
+  for (const kind of order) {
     if (NEVER_CUT.includes(kind)) continue
     for (let index = kept.length - 1; index >= 0 && total(kept) > budget; index--) {
       const section = kept[index] as Built
@@ -340,6 +434,16 @@ function fit(sections: Built[], budget: number, settings: DeliveryConfig) {
       kept.splice(index, 1)
       cut.push(section)
     }
+  }
+  const priority = (section: Built) => order.length - order.indexOf(section.kind)
+  const back = [...cut].sort(
+    (a, b) => priority(b) - priority(a) || sections.indexOf(a) - sections.indexOf(b),
+  )
+  for (const section of back) {
+    const candidate = [...kept, section].sort((a, b) => sections.indexOf(a) - sections.indexOf(b))
+    if (total(candidate) > budget) continue
+    kept = candidate
+    cut = cut.filter((entry) => entry !== section)
   }
   return { kept, cut, over: total(kept) > budget }
 }
@@ -351,9 +455,12 @@ function selected(
   who: Consumer,
   request: DeliverRequest,
   settings: DeliveryConfig,
-  missing: { id: string; reason: string }[],
+  missing: Missing,
 ): Built[] {
-  const sections = [...promptSections(db, who, settings), ...memorySections(db, who, settings)]
+  const sections = [
+    ...promptSections(db, who, settings, missing),
+    ...memorySections(db, who, settings, missing),
+  ]
   if (failed(request.activity)) missing.push({ id: 'activity', reason: request.activity.error })
   else if (request.activity && who.project) {
     const section = activitySection(request.activity, request.now ?? new Date(), settings)
@@ -374,14 +481,20 @@ export function deliver(
   settings: DeliveryConfig = DELIVERY,
 ): Delivery {
   const tool = toolId(request.tool, settings)
-  const who = consumerOf(db, request, tool)
-  const missing: { id: string; reason: string }[] = []
+  const missing: Missing = []
+  const who = consumerOf(db, request, tool, missing)
   // A Blank Slate role gets nothing added, computed blocks included.
   const sections = who.blank ? [] : selected(db, who, request, settings, missing)
   // Stable: within a kind, prompts keep slug order and memory groups their tier order.
   sections.sort((a, b) => KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind))
-  const budget = (settings.tools as Record<string, { budgetBytes: number }>)[tool]
-    ?.budgetBytes as number
+  const limits = (
+    settings.tools as Record<string, { budgetBytes: number; hookBudgetBytes?: number }>
+  )[tool] as { budgetBytes: number; hookBudgetBytes?: number }
+  // What the tool's hook carries in full (Claude Code keeps hook output over ~10k
+  // characters as a file plus a preview) can be less than the launch budget.
+  const budget = request.hook
+    ? Math.min(limits.budgetBytes, limits.hookBudgetBytes ?? limits.budgetBytes)
+    : limits.budgetBytes
   const { kept, cut, over } = fit(sections, budget, settings)
   const text = kept.map((section) => section.body).join(SEPARATOR)
   return {
@@ -400,8 +513,17 @@ export function deliver(
   }
 }
 
-/** Keep what a delivery loaded into a session (and what it cut), item by item. */
-export function recordDelivery(db: Database, delivery: Delivery, channel: string, at: Date): void {
+/** Keep what a delivery loaded into a session (and what it cut), item by item, and
+ * drop inventory older than `keepDays` (data/delivery.json). */
+export function recordDelivery(
+  db: Database,
+  delivery: Delivery,
+  channel: string,
+  at: Date,
+  settings: DeliveryConfig = DELIVERY,
+): void {
+  const oldest = new Date(at.getTime() - settings.keepDays * 86_400_000).toISOString()
+  db.prepare('DELETE FROM deliveries WHERE at < ?').run(oldest)
   const row = db
     .prepare(
       `INSERT INTO deliveries (at, tool, project, session, role, channel, hash, bytes, budget, over, missing)

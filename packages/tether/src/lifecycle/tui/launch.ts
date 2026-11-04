@@ -56,15 +56,26 @@ export function parseAgentExitMarker(text: string): AgentExitMarker | null {
 export function launchLine(spec: TuiSpec): string | null {
   if (spec.command.length === 0) return null
   const delivered = spec.deliveredContext
-  const env = { ...BASE_TUI_ENV, ...(spec.env ?? {}), ...(delivered?.env ?? {}) }
+  const env: Record<string, string> = {
+    ...BASE_TUI_ENV,
+    ...(spec.env ?? {}),
+    ...(delivered?.env ?? {}),
+  }
   const prefix = [
     '/usr/bin/env',
     '-u',
     'NO_COLOR',
     ...Object.entries(env).map(([k, v]) => `${k}=${shellQuote(v)}`),
   ]
+  // A delivered launch exports the agent's own pid beside the delivered marker: the
+  // shell becomes the agent (exec), so its $$ is the agent's pid, which is what lets
+  // Agent Hub's checks and the aico CLI tell this process from one it starts.
+  const command = env.AICO_CONTEXT_DELIVERED
+    ? ['sh', '-c', shellQuote('export AICO_CONTEXT_PID=$$; exec "$@"'), 'sh']
+    : []
   return [
     ...prefix,
+    ...command,
     ...spec.command.map(shellQuote),
     ...(delivered?.arguments ?? []),
     ...(delivered?.instructions ? [] : instructionArguments(spec)),
