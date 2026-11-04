@@ -19,7 +19,6 @@ import {
   downReason,
   isDescriptor,
   Peer,
-  type PeerDeps,
   type PeerIdentity,
   type PeerSnapshot,
   type PeerUpdate,
@@ -73,8 +72,6 @@ export interface HubDeps {
   random?(): number
   /** How a create wakes a host and checks it is ready (tests replace it). */
   gate?: Partial<GateRuntime>
-  /** A silent peer stream's health check timing (tests shorten it). */
-  stall?: PeerDeps['stall']
   /** How a host whose Tether is on an older API gets this release
    * (src/hub/update.ts; tests replace it), and how long it then has to come
    * back on the link. */
@@ -249,7 +246,6 @@ export class Hub {
           poweredOff: (host) => this.poweredOff(host),
           kick: (host) => this.gate.kick(host),
           checked: (peer) => this.checkRelease(peer),
-          ...(this.deps.stall ? { stall: this.deps.stall } : {}),
         },
         this.snapshots[entry.name] ?? null,
       )

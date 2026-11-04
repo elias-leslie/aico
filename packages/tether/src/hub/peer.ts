@@ -66,9 +66,6 @@ export interface PeerDeps {
   /** The peer answered its health on a link-up as the trusted machine
    * (`apiVersion` and `instance` are fresh). */
   checked?(peer: Peer): void
-  /** How long a silent event stream waits before asking the peer's health,
-   * and how long that ask may take (tests shorten them). */
-  stall?: { afterMs: number; probeMs: number }
 }
 
 export const HEALTH_TIMEOUT_MS = 3_000
@@ -85,14 +82,6 @@ export const POWER_PROBE_MS = 15_000
 /** After a power off from the Hosts panel, the host is taken as off without
  * asking for this long (its status can still say running while it shuts down). */
 export const POWER_OFF_GRACE_MS = 60_000
-/** The peer's event stream sends a heartbeat every 15 s: this much silence
- * asks its health once (a VM that stopped dead never closes the link, and ssh
- * notices only after its own keepalives fail). */
-export const STALL_MS = 20_000
-const STALL_CHECK_MS = 2_500
-/** The health check after a silence: generous, so a busy host is not dropped. */
-const STALL_PROBE_MS = 5_000
-
 const RELAYED = new Set<string>([
   'session.created',
   'session.updated',
@@ -173,8 +162,6 @@ export class Peer {
   private readonly duplicates = new Set<string>()
   /** When a power off from the Hosts panel was asked: the next drop is powered off. */
   private expectOff: number | null = null
-  /** Why the last connection was dropped for silence, if it was. */
-  private stalled: string | null = null
   private power: { at: number; off: boolean | null } | null = null
 
   constructor(
@@ -475,11 +462,10 @@ export class Peer {
         await this.connect(signal, () => {
           up.at = this.deps.now()
         })
-        why = this.stalled ?? 'the link closed'
+        why = 'the link closed'
       } catch (error) {
         if (!(error instanceof IdentityChanged)) why = (error as Error).message
       }
-      this.stalled = null
       if (signal.aborted) return
       if (why !== null) {
         const down = await this.downState()
@@ -572,34 +558,11 @@ export class Peer {
     signal.addEventListener('abort', stop, { once: true })
     let synced = false
     const early: Record<string, unknown>[] = []
-    const stall = this.deps.stall ?? { afterMs: STALL_MS, probeMs: STALL_PROBE_MS }
-    let heardAt = this.deps.now()
-    let probing = false
-    const watch = setInterval(
-      () => {
-        if (probing || this.deps.now() - heardAt < stall.afterMs) return
-        probing = true
-        void peerRequest(this.socket, 'GET', '/v1/health', undefined, stall.probeMs)
-          .then(() => {
-            heardAt = this.deps.now()
-          })
-          .catch((error: Error) => {
-            this.stalled = `${this.name} stopped answering (${error.message})`
-            connection.abort()
-          })
-          .finally(() => {
-            probing = false
-          })
-      },
-      Math.min(STALL_CHECK_MS, stall.afterMs / 4),
-    )
-    watch.unref?.()
     try {
       await peerStream(
         this.socket,
         '/v1/events',
         (line) => {
-          heardAt = this.deps.now()
           const event = record(line)
           if (!event || typeof event.type !== 'string') return
           if (event.type === 'hello') {
@@ -622,7 +585,6 @@ export class Peer {
         connection.signal,
       )
     } finally {
-      clearInterval(watch)
       connection.abort()
       signal.removeEventListener('abort', stop)
     }

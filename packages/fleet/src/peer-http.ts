@@ -53,15 +53,15 @@ export function peerRequest(
   })
 }
 
-/** Follow an NDJSON stream until it ends, fails, is aborted, or stays silent
- * for `idleMs` (three missed 15 s heartbeats by default). */
+/** Follow an NDJSON stream until it ends, fails, is aborted, or is explicitly given a silence bound.
+ * Fleet liveness belongs to the TLS connection, not an individual event stream. */
 export function peerStream(
   socketPath: string,
   path: string,
   onLine: (value: unknown) => void,
   signal: AbortSignal,
   headers: Record<string, string> = {},
-  idleMs = 45_000,
+  idleMs = 0,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
@@ -77,6 +77,7 @@ export function peerStream(
       }
       let buffer = ''
       const touch = () => {
+        if (idleMs <= 0) return
         if (idle) clearTimeout(idle)
         idle = setTimeout(() => req.destroy(new Error('peer stream went silent')), idleMs)
       }

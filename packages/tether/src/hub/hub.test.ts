@@ -729,21 +729,13 @@ describe('hub', () => {
     expect(kick).not.toHaveBeenCalled()
   })
 
-  it('goes offline soon after a host stops answering, not after three missed heartbeats', async () => {
-    hub.close()
-    hub = makeHub({ stall: { afterMs: 150, probeMs: 150 } })
-    hub.start()
-    await vi.waitFor(() => expect(state()).toBe('connected'))
-    // A quiet host that answers its health stays connected.
+  it('keeps a quiet event stream until the underlying link closes', async () => {
+    peer.hangHealth = true
     await new Promise((resolve) => setTimeout(resolve, 500))
     expect(state()).toBe('connected')
-    events = []
-    peer.hangHealth = true
-    await vi.waitFor(() => expect(state()).toBe('offline'), { timeout: 2_000 })
-    expect(hub.hosts()[0]?.error).toContain('vm stopped answering')
-    expect(events.some((event) => event.type === 'session.updated')).toBe(true)
     peer.hangHealth = false
-    await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
+    await peer.stop()
+    await vi.waitFor(() => expect(state()).toBe('offline'))
   })
 
   it('ends sessions that vanished while the host was away (a rollback), then resyncs', async () => {

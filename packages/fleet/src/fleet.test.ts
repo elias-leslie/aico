@@ -127,6 +127,34 @@ describe('pinned TLS fleet peers', () => {
     await p.replaceB().start()
     await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
   })
+  it('carries command stdin, literal argv, stdout, stderr and exit status', async () => {
+    const p = await pair()
+    await p.fb.start()
+    await p.fa.start()
+    await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
+    const packets = await new Promise<Buffer>((resolve, reject) => {
+      const socket = createConnection(join(p.sa.peerRoot, 'peer-b/exec.sock'))
+      const chunks: Buffer[] = []
+      socket.on('data', (chunk: Buffer) => chunks.push(chunk))
+      socket.on('error', reject)
+      socket.on('end', () => resolve(Buffer.concat(chunks)))
+      socket.once('connect', () =>
+        socket.end(
+          `${JSON.stringify([process.execPath, '-e', "process.stdin.on('data', d => process.stdout.write(d)); process.stdin.on('end', () => { process.stderr.write(process.argv[1]); process.exitCode = 7 })", '$3'])}\ninput`,
+        ),
+      )
+    })
+    const output = new Map<number, string>()
+    for (let at = 0; at < packets.length; ) {
+      const size = packets.readUInt32BE(at + 1)
+      const fd = packets[at] as number
+      output.set(fd, (output.get(fd) ?? '') + packets.subarray(at + 5, at + 5 + size).toString())
+      at += 5 + size
+    }
+    expect(output.get(1)).toBe('input')
+    expect(output.get(2)).toBe('$3')
+    expect(output.get(3)).toBe('7')
+  })
   it('refuses an unknown key before any application channel opens', async () => {
     const p = await pair()
     p.setPins([{ name: p.a.name, publicKey: p.a.publicKey }])
