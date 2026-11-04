@@ -351,6 +351,7 @@ Claude's weekly usage ran out on 2026-11-04, so this work was built or reviewed 
 | M8b-2a desktop chat (agent chats, web-server chat routes, chat UI; Agent Hub chat removed) | Codex xhigh (f38678b8, ddefecbd, 41ec7f1a) | Codex | fallback rule (owner answer 3), Needs-you from asks, stop/draft, branch totals |
 | M8b-2b phone chat and attachments (agent DB migration, capture provenance) | Codex xhigh (4eab2572 onward) | Codex | attachment recovery across stop/answer, chat captures skip routing, phone Stop |
 | M9-2a context cost view (`packages/context` inventory, /agents page, nightly unused check) | Codex xhigh (90170cc5..a656d5b9) | Codex | use markers (only 2/27 deliveries fully observed: does "No recorded use" ever fire?), page copy shows raw memory ids and "UTF-8 bytes ÷ 4" jargon |
+| M9-2b VM 180 apps on Aico (LAN service tokens, evidence endpoint, portfolio-ai/jobinator thin clients, owner_only Status asks) | Codex high (7657dcb2, 2b659ff5, 131182c8; portfolio 03263585; jobinator 7638c04, 4fbc45b) | Codex | token scope on the LAN API, Jenny/price status mapping, jobinator discovery via evidence, missing jobinator release script |
 | Coordinator fixes at medium effort | Opus medium (37d7a940 guard allows scratch subvolume deletes; ee8366b9 refused deploy is warn) | none | guard: only `/srv/scratch` is exempt; refused deploys never hide a broken service |
 
 ## 5. Choices the sources did not settle
