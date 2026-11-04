@@ -200,14 +200,28 @@ describe('the formatter scope', () => {
     write(root, '.gitignore', 'node_modules/\n')
     write(root, 'src/a.ts', 'mine\n')
     write(root, 'src/b.ts', 'theirs\n')
+    write(root, 'src/c.ts', 'unattributed\n')
+    const lines: string[] = []
     await runCheck(config(root), {
       lane: 'quick',
       fix: true,
-      coordination: coordination({ 'src/b.ts': ['cc:other'] }),
+      coordination: coordination({ 'src/b.ts': ['cc:other'], 'src/c.ts': ['unknown'] }),
       env: {},
+      out: (line) => lines.push(line),
     })
     expect(readFileSync(join(root, 'src/a.ts'), 'utf8')).toBe('mine\n// formatted\n')
     expect(readFileSync(join(root, 'src/b.ts'), 'utf8')).toBe('theirs\n')
+    // A write the store could not attribute is checked but never rewritten, unless named.
+    expect(readFileSync(join(root, 'src/c.ts'), 'utf8')).toBe('unattributed\n')
+    expect(lines.join('\n')).toContain('CHECK:FIX:left out 1 file(s)')
+    await runCheck(config(root), {
+      lane: 'quick',
+      fix: true,
+      paths: ['src/c.ts'],
+      coordination: coordination({ 'src/c.ts': ['unknown'] }),
+      env: {},
+    })
+    expect(readFileSync(join(root, 'src/c.ts'), 'utf8')).toBe('unattributed\n// formatted\n')
   })
 })
 

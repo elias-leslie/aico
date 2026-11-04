@@ -81,6 +81,35 @@ export function checkScope(root: string, options: CheckOptions): string[] | null
   return null
 }
 
+/**
+ * What --fix may rewrite. Named files (--paths, ST_CHECK_CHANGED_FILES) as given; from the caller's own
+ * cone, only files no other writer touched: a write the store could not attribute (`unknown`) may be
+ * another session's, and a formatter rewrite is not undone by leaving it out of a check.
+ */
+function fixable(
+  root: string,
+  scope: string[],
+  options: CheckOptions,
+  out: (line: string) => void,
+): string[] {
+  if (options.paths?.length || envFiles(options.env ?? process.env) || !options.coordination)
+    return scope
+  let foreign: Record<string, string[]>
+  try {
+    foreign = options.coordination.foreign(root, scope)
+  } catch (error) {
+    if (!(error instanceof CoordinationError)) throw error
+    out(`CHECK:FIX:skipped: ${error.message}`)
+    return []
+  }
+  const unsure = scope.filter((file) => foreign[file]?.length)
+  if (unsure.length)
+    out(
+      `CHECK:FIX:left out ${unsure.length} file(s) another session may have written (name yours with --paths to fix them): ${unsure.join(', ')}`,
+    )
+  return scope.filter((file) => !foreign[file]?.length)
+}
+
 const BIOME_FIX = [
   '.css',
   '.js',
@@ -160,7 +189,7 @@ export async function runCheck(config: Config, options: CheckOptions): Promise<C
   const started = performance.now()
   const scope = checkScope(root, options)
   if (options.fix && scope?.length) {
-    for (const { tool, files, argv } of fixScope(config, scope)) {
+    for (const { tool, files, argv } of fixScope(config, fixable(root, scope, options, out))) {
       const fixed = spawnSync(argv[0], argv.slice(1), { cwd: root, encoding: 'utf8' })
       out(`CHECK:FIX:${tool}:${files.length} file(s)|exit ${fixed.status}`)
     }
