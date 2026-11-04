@@ -8,11 +8,11 @@
           "prompts": ["risk-manager-system-prompt"]
         },
         "equity-analyst": {
-          "model": "gemini-3.1-flash-lite",
+          "model": "gemini-3.8-flash",
           "prompts": ["equity-analyst-system-prompt"]
         },
         "household-list-parser": {
-          "model": "gemini-3.5-flash-lite",
+          "model": "gemini-3.8-flash",
           "prompts": ["household-list-parser-system-prompt"]
         },
         "household-receipt-vision": {
@@ -24,7 +24,7 @@
           "prompts": ["credit-card-offer-reviewer-system-prompt"]
         },
         "chat": {
-          "model": "gemini-3.5-flash-lite",
+          "model": "gemini-3.8-flash",
           "prompts": ["chat-system-prompt", "workspace-search-discipline"]
         },
         "household-price-scout": {

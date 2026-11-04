@@ -4,14 +4,14 @@ import type { IncomingMessage, Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { ask } from '@aico/agent'
+import type { AskResult, ask } from '@aico/agent'
 import { secretsDir, writePrivate } from '@aico/fleet/secrets'
 import { NeedsYou, Notifier, NotifyStore, Outbox, parseNotice } from '@aico/notify'
 import { StatusStore } from '@aico/status'
 import type { TetherClient } from '@aico/tether-client'
 import { fetchPage, openCounter, type searchWeb, today } from '@aico/webtools'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { createServiceAppsServer, serviceTokenApp } from './service-apps'
+import { createServiceAppsServer, SERVICE_APPS, serviceTokenApp } from './service-apps'
 
 const token = 'p'.repeat(43)
 const otherToken = 'j'.repeat(43)
@@ -31,11 +31,13 @@ let server: Server
 let base: string
 let status: StatusStore
 let notices: NotifyStore
-const run = vi.fn(async (..._args: Parameters<typeof ask>) => ({
-  outcome: { kind: 'done' as const, model: 'codex/gpt-6.1-sol', text: 'OK' },
-  tokens: { input: 1, output: 1 },
-  wallMs: 1,
-}))
+const run = vi.fn(
+  async (..._args: Parameters<typeof ask>): Promise<AskResult> => ({
+    outcome: { kind: 'done' as const, model: 'codex/gpt-6.1-sol', text: 'OK' },
+    tokens: { input: 1, output: 1 },
+    wallMs: 1,
+  }),
+)
 const search = vi.fn(
   async (..._args: Parameters<typeof searchWeb>): Promise<Record<string, unknown>> => ({
     results: [],
@@ -380,4 +382,43 @@ it('refuses private and credential-bearing evidence URLs without a network fetch
   expect(await credentials.json()).toMatchObject({
     error: expect.stringContaining('credential-bearing'),
   })
+})
+
+it('routes migrated Portfolio defaults through models the subscription CLI serves', async () => {
+  // Captured provider contract: agy models lists Gemini 3.8 Flash; the old Hub
+  // API-only 3.1/3.5 Flash routes fail in that subscription CLI.
+  run.mockImplementation(async (request) => ({
+    outcome:
+      request.model.startsWith('gemini-') && request.model !== 'gemini-3.8-flash'
+        ? {
+            kind: 'error',
+            model: request.model,
+            detail: 'Model not served by the subscription CLI',
+          }
+        : { kind: 'done', model: request.model, text: '{}' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 0,
+  }))
+  server.closeAllConnections()
+  await new Promise<void>((done) => server.close(() => done()))
+  server = createServiceAppsServer({
+    status,
+    notify: { notifier: { receive } as never, store: notices, rowsWritten: vi.fn() },
+    tether: { request: tether } as Pick<TetherClient, 'request'>,
+    env,
+    apps: SERVICE_APPS,
+    ask: run,
+    prompt: () => 'Synthetic app instructions.',
+  })
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  for (const slug of ['chat', 'equity-analyst', 'household-list-parser'])
+    expect(
+      (
+        await call('POST', '/v1/ask', {
+          agent_slug: slug,
+          question: 'Synthetic model connection check.',
+        })
+      ).status,
+    ).toBe(200)
 })
