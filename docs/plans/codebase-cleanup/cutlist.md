@@ -350,6 +350,7 @@ Claude's weekly usage ran out on 2026-11-04, so this work was built or reviewed 
 | Tether root-list fix (federation loop, async probes) | Codex xhigh (230bed83, e612caae) | none beyond its own tests | visited-hop rules keep real CT190 and worker roots; nothing reflected |
 | M8b-2a desktop chat (agent chats, web-server chat routes, chat UI; Agent Hub chat removed) | Codex xhigh (f38678b8, ddefecbd, 41ec7f1a) | Codex | fallback rule (owner answer 3), Needs-you from asks, stop/draft, branch totals |
 | M8b-2b phone chat and attachments (agent DB migration, capture provenance) | Codex xhigh (4eab2572 onward) | Codex | attachment recovery across stop/answer, chat captures skip routing, phone Stop |
+| M9-2a context cost view (`packages/context` inventory, /agents page, nightly unused check) | Codex xhigh (90170cc5..a656d5b9) | Codex | use markers (only 2/27 deliveries fully observed: does "No recorded use" ever fire?), page copy shows raw memory ids and "UTF-8 bytes ÷ 4" jargon |
 | Coordinator fixes at medium effort | Opus medium (37d7a940 guard allows scratch subvolume deletes; ee8366b9 refused deploy is warn) | none | guard: only `/srv/scratch` is exempt; refused deploys never hide a broken service |
 
 ## 5. Choices the sources did not settle
