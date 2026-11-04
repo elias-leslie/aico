@@ -1,0 +1,426 @@
+{
+  "milestone": "M11b",
+  "state": "complete",
+  "completedAt": "2026-11-04T18:34:00.443574+00:00",
+  "briefs": [
+    "docs/plans/codebase-cleanup/briefs/M11b.md",
+    "docs/plans/codebase-cleanup/briefs/M11b-fixes.md"
+  ],
+  "sourceCommit": "813f05f9f68c45c10fdd9719f5428893b99b8ac5",
+  "implementationCommits": [
+    "c3df243565da23c1a871d2238669679b6e544da6",
+    "45293acb700bc16a679c0f6f5a39bd09cffb10c3",
+    "b109d65b0ca115e1cf5175d083652d4422e99623",
+    "ee7bec1cf5f100290092cd3dbaccd167f4c264df",
+    "813f05f9f68c45c10fdd9719f5428893b99b8ac5"
+  ],
+  "preflightCommit": "9e57bdafa59247e856443656102ec5c500a0ea9b",
+  "m11aRechecked": {
+    "report": "docs/plans/codebase-cleanup/evidence/M11a/result.json",
+    "code": [
+      "packages/fleet/src/trust.ts",
+      "packages/fleet/src/fleet.ts",
+      "packages/fleet/src/connection.ts",
+      "packages/tether/src/hub/host-admin.ts",
+      "packages/tether/src/hub/update.ts"
+    ],
+    "facts": [
+      "Root-owned pins carry full or worker roles. Full peers open exec/control/sync/jobs; workers open sync/jobs and accept full-peer exec/control.",
+      "Existing workstation and CT 190 were already enrolled as full. Production unsigned peer updates were disabled.",
+      "The old updater used SSH and host administration still used Agent Hub credential APIs; these paths are replaced."
+    ]
+  },
+  "scopeCorrections": {
+    "remoteHostRows": 14,
+    "revokedTestRows": 11,
+    "realWorkers": [
+      "agent-work",
+      "neri-hunters"
+    ],
+    "neriLocal": "Legacy active registration has no hostname or endpoint and does not resolve as a distinct machine. No duplicate workstation identity was created, per coordinator direction.",
+    "labLogins": 13,
+    "briefLabLogins": 12,
+    "staticOnly": "Coordinator settled delivery to Claude setup-token, OpenCode Go and ST agent token. Codex and Pi OAuth are never copied; Codex uses per-machine device sign-in when needed.",
+    "coordinatorDirectedAsks": true
+  },
+  "secrets": {
+    "source": "Agent Hub storage decrypt helper under the backend unit environment; values written directly to owner-only files; only names printed. Existing OpenCode Go file reused.",
+    "workstationFiles": 18,
+    "labFiles": 13,
+    "hostToolFiles": 3,
+    "privateSigner": "Created with owner approval 30fd5a451cd3 in the workstation secrets folder, mode 0600. Never printed, logged, committed or copied to peers.",
+    "directoryMode": "0700",
+    "fileMode": "0600",
+    "publicUpdatePins": "/etc/aico/update-pins.json; root-owned 0644; only public Ed25519 material",
+    "staticGrants": [
+      "claude-code/oauth-token",
+      "pi/opencode-go",
+      "st/summitflow-agent-token"
+    ],
+    "noSecretValuesInEvidence": true
+  },
+  "reviewFixes": {
+    "1": {
+      "done": true,
+      "change": "Fixed static catalog at sender and receiver; removed rotating-auth copy path.",
+      "tests": [
+        "secrets.test.ts: rotating entry and arbitrary auth file refused",
+        "secrets-delivery.test.ts: worker and unpinned sender refused"
+      ]
+    },
+    "2": {
+      "done": true,
+      "change": "Unsigned local install clears stale signature metadata; sender requires envelope to match bundle and complete installed release.",
+      "tests": [
+        "update.test.ts: stale signed envelope refused",
+        "update.test.ts: unsigned local install removes metadata"
+      ]
+    },
+    "3": {
+      "done": true,
+      "change": "API version, release hash and issue order are signed; older API/issue order refused; equal installed hash is a no-op.",
+      "tests": [
+        "update.test.ts: older same-API signed release refused",
+        "update.test.ts: equal hash no-op"
+      ],
+      "live": {
+        "older": {
+          "target": "agent-work",
+          "exit": 1,
+          "olderRefused": true,
+          "equalReleaseNoOp": false
+        },
+        "equal": {
+          "target": "aico",
+          "exit": 0,
+          "olderRefused": false,
+          "equalReleaseNoOp": true
+        }
+      }
+    },
+    "4": {
+      "done": true,
+      "change": "Only secrets directory requires mode 0700; existing 0755 tool folders accept 0600 files. Delivery map saved first so failures remain tracked for revoke.",
+      "tests": [
+        "secrets-delivery.test.ts: 0755 tool folder and tracked failed delivery"
+      ]
+    },
+    "5": {
+      "done": true,
+      "change": "Removed SSH test installer; tests run actual signed sender/receiver, role checks, approval checks and link-up delivery.",
+      "tests": [
+        "update.test.ts: actual pushRelease/receiveUpdate",
+        "secrets-delivery.test.ts: sender authorization",
+        "fleet.test.ts: link-up login push and complete 2 MiB input/result"
+      ]
+    },
+    "6": {
+      "done": true,
+      "change": "Transient install writes durable real result across restart; busy remains retryable before installation; post-install errors reach hub.",
+      "tests": [
+        "update.test.ts: busy then successful subsequent signed push",
+        "update.test.ts: failed health restores complete prior release and database"
+      ]
+    },
+    "7": {
+      "done": true,
+      "change": "push-update reads the remote socket and stateDir from its hosts entry.",
+      "tests": [
+        "fleet-cli.test.ts: remote uid/socket differs from local uid"
+      ]
+    },
+    "8": {
+      "done": true,
+      "change": "Worker installer verifies signature and every release file using trusted installer code before executing any candidate.",
+      "tests": [
+        "update.test.ts: malicious unsigned candidate cannot execute verifier code"
+      ]
+    },
+    "9": {
+      "done": true,
+      "change": "authFile is fixed by tool catalog; arbitrary dot-paths refused.",
+      "tests": [
+        "secrets.test.ts: arbitrary authFile refused"
+      ]
+    }
+  },
+  "acceptance": {
+    "before": {
+      "id": "e28837d0d7baa3c8cf0e43032de4b4c41ada7466ede10a5c3a816ca888c51057",
+      "state": "success",
+      "pythonPassed": 1151,
+      "typescriptPassed": 3100,
+      "typescriptSkipped": 6
+    },
+    "after": {
+      "id": "bc957b96b3562c327a492e60f1915a1cd4cf24dd7799949861f65d06f3765c91",
+      "sourceCommit": "813f05f9f68c45c10fdd9719f5428893b99b8ac5",
+      "sourceTree": "b41850159b0c760fcd023fb959a5c69d54dc6f98",
+      "state": "success",
+      "pythonPassed": 1151,
+      "typescriptPassed": 3150,
+      "typescriptSkipped": 6
+    },
+    "focused": "Signed release, static login, receiver, role, transport, rollback and installer checks passed through managed st check. Fleet/Tether types passed.",
+    "fixtureFix": "Full acceptance exposed an existing race: relinked hub test asserted metadata before connection completed. Reproduced with a gated peer response; fixture now waits for connected plus fresh cache.",
+    "copyLint": "0 findings; mechanical check only"
+  },
+  "deployment": {
+    "job": "fbf5d4315d604731812a2ad44ba63d6e",
+    "state": "succeeded",
+    "sourceCommit": "813f05f9f68c45c10fdd9719f5428893b99b8ac5",
+    "singleFinalPostReviewManagedDeploy": true,
+    "services": "aico-web, aico-jobs and tether@default active",
+    "hold": "Integration hold kept throughout deployment and live proof; released after this evidence checkpoint, with confirmation in completion report.",
+    "sessionsMayDisruptChecked": true,
+    "nightshiftDeclared": true,
+    "CT190Snapshot": "m11b-before-final",
+    "CT190Bootstrap": "Authenticated Proxmox infrastructure exec installed a release checked by a trusted verifier; the older daemon could not reliably return exec results during bootstrap. Final signed no-op and tamper checks passed over the fleet link.",
+    "workerBootstrap": "Infrastructure-only worker install; root pins installed after approved enrollment. The verified new receiver applied final updates over the fleet link.",
+    "workerIdleTimersRestored": {
+      "agent-work": "active",
+      "neri-hunters": "active"
+    },
+    "firewall": "Only the two worker addresses to workstation/CT190 TCP 7449 and CT190 to worker TCP 7449 were added to the lab rules. Workstation accepts the observed PVE SNAT address on its LAN listener. No public bind."
+  },
+  "enrollment": {
+    "asks": {
+      "agent-work": "e83fd24a9c7f",
+      "neri-hunters": "3b7310296feb"
+    },
+    "approvedAndClosed": true,
+    "roles": {
+      "davion-sidarli": "full",
+      "aico": "full",
+      "agent-work": "worker",
+      "neri-hunters": "worker"
+    },
+    "statusAtProof": {
+      "davion-sidarli": "healthy",
+      "aico": "linked",
+      "agent-work": "linked",
+      "neri-hunters": "linked"
+    },
+    "revokedRegistrationsLeftRevoked": [
+      "e2e-shim",
+      "neri-box-1",
+      "neri-box-2",
+      "neri-box-3",
+      "neri-box-9900001",
+      "neri-box-9900002",
+      "neri-p2a-helper-fixture",
+      "neri-p2a-helper-lab-fixture",
+      "neri-p2a-helper-live-fixture",
+      "neri-p2a-spike-20261031",
+      "p2a-registration-probe"
+    ],
+    "neriLocal": "No second identity: legacy alias is not a separate resolved machine.",
+    "oneStatusRowPerRealMachine": true,
+    "workerMode": "Tether only; no UI service or data copy."
+  },
+  "live": {
+    "hostMetadata": [
+      {
+        "target": "davion-sidarli",
+        "hostname": "davion-sidarli",
+        "releaseHash": "c0e1df8b4b0153fffeae8d261c50aa1dbca50000a0e0d06a26e8584db32ea993",
+        "signedReleaseMatches": true,
+        "bundleHash": "0836e4cae0847c247b63764f6061fcacf15cc64638fd437b1692f36e68b22cad",
+        "secretCount": 18,
+        "secretsDirMode": "0o700",
+        "allSecrets0600": true,
+        "privateSignerPresent": true,
+        "pins": [
+          {
+            "path": "/etc/aico/fleet-peers.json",
+            "uid": 0,
+            "mode": "0o644"
+          },
+          {
+            "path": "/etc/aico/update-pins.json",
+            "uid": 0,
+            "mode": "0o644"
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "target": "aico",
+        "metadataReadVia": "authenticated Proxmox infrastructure exec",
+        "hostname": "aico",
+        "releaseHash": "c0e1df8b4b0153fffeae8d261c50aa1dbca50000a0e0d06a26e8584db32ea993",
+        "signedReleaseMatches": true,
+        "bundleHash": "0836e4cae0847c247b63764f6061fcacf15cc64638fd437b1692f36e68b22cad",
+        "secretCount": 3,
+        "secretsDirMode": "0o700",
+        "allSecrets0600": true,
+        "privateSignerPresent": false,
+        "pins": [
+          {
+            "path": "/etc/aico/fleet-peers.json",
+            "uid": 0,
+            "mode": "0o644"
+          },
+          {
+            "path": "/etc/aico/update-pins.json",
+            "uid": 0,
+            "mode": "0o644"
+          }
+        ],
+        "jobs": []
+      },
+      {
+        "target": "agent-work",
+        "hostname": "agent-work",
+        "releaseHash": "c0e1df8b4b0153fffeae8d261c50aa1dbca50000a0e0d06a26e8584db32ea993",
+        "signedReleaseMatches": true,
+        "bundleHash": "0836e4cae0847c247b63764f6061fcacf15cc64638fd437b1692f36e68b22cad",
+        "secretCount": 3,
+        "secretsDirMode": "0o700",
+        "allSecrets0600": true,
+        "privateSignerPresent": false,
+        "pins": [
+          {
+            "path": "/etc/aico/fleet-peers.json",
+            "uid": 0,
+            "mode": "0o644"
+          },
+          {
+            "path": "/etc/aico/update-pins.json",
+            "uid": 0,
+            "mode": "0o644"
+          }
+        ],
+        "jobs": [
+          {
+            "id": "81db5ea8-201f-4ebe-a68d-9c0d5261e22b",
+            "code": 0,
+            "releaseHash": "c0e1df8b4b0153fffeae8d261c50aa1dbca50000a0e0d06a26e8584db32ea993"
+          }
+        ]
+      },
+      {
+        "target": "neri-hunters",
+        "hostname": "neri-hunters",
+        "releaseHash": "c0e1df8b4b0153fffeae8d261c50aa1dbca50000a0e0d06a26e8584db32ea993",
+        "signedReleaseMatches": true,
+        "bundleHash": "0836e4cae0847c247b63764f6061fcacf15cc64638fd437b1692f36e68b22cad",
+        "secretCount": 3,
+        "secretsDirMode": "0o700",
+        "allSecrets0600": true,
+        "privateSignerPresent": false,
+        "pins": [
+          {
+            "path": "/etc/aico/fleet-peers.json",
+            "uid": 0,
+            "mode": "0o644"
+          },
+          {
+            "path": "/etc/aico/update-pins.json",
+            "uid": 0,
+            "mode": "0o644"
+          }
+        ],
+        "jobs": [
+          {
+            "id": "35693708-4de3-465a-a7cd-595513e2cba4",
+            "code": 0,
+            "releaseHash": "c0e1df8b4b0153fffeae8d261c50aa1dbca50000a0e0d06a26e8584db32ea993"
+          }
+        ]
+      }
+    ],
+    "login": {
+      "target": "agent-work",
+      "provider": "opencode-go",
+      "model": "claude-haiku-5-5",
+      "exit": 0,
+      "expectedReply": true,
+      "invalidKeyRefused": true,
+      "noNeriSessionCreated": true
+    },
+    "tamper": {
+      "target": "aico",
+      "exit": 1,
+      "signatureRefused": true
+    },
+    "older": {
+      "target": "agent-work",
+      "exit": 1,
+      "olderRefused": true,
+      "equalReleaseNoOp": false
+    },
+    "equal": {
+      "target": "aico",
+      "exit": 0,
+      "olderRefused": false,
+      "equalReleaseNoOp": true
+    },
+    "apiCallers": {
+      "sourceMatches": 0,
+      "roots": [
+        "packages",
+        "native",
+        "scripts"
+      ],
+      "excluded": "Tests, virtualenvs and generated dist",
+      "logs": {
+        "since": "2026-11-04T17:00:00Z",
+        "httpRequests": 1278,
+        "retiredEndpointRequests": 0
+      }
+    }
+  },
+  "preservation": {
+    "NeriRepositoryOpened": false,
+    "NeriDataOpened": false,
+    "VM201SessionsOpened": false,
+    "VM201Scope": "Infra install/enrollment, static login delivery, signed update and infrastructure metadata only.",
+    "unrelatedWorkingTreePreserved": true,
+    "AgentHubAPIsStopped": false,
+    "AgentHubAPIStopIsSeparateScope": true,
+    "privateValuesPrintedLoggedCommitted": false
+  },
+  "acceptance_receipt": "/srv/workspaces/projects/aico/.git/st/acceptance/bc957b96b3562c327a492e60f1915a1cd4cf24dd7799949861f65d06f3765c91.json",
+  "live_validation": {
+    "source_commit": "813f05f9f68c45c10fdd9719f5428893b99b8ac5",
+    "checks": [
+      {
+        "id": "static-login",
+        "state": "pass",
+        "detail": "Agent-work ran Pi through the Aico auth wrapper using OpenCode Go; expected reply received; an invalid-key control was refused."
+      },
+      {
+        "id": "signed-push",
+        "state": "pass",
+        "detail": "Both workers received the accepted release through push-update; their durable job results are exit 0 and installed files match the signed release."
+      },
+      {
+        "id": "tampered-update",
+        "state": "pass",
+        "detail": "CT 190 receive-update refused a modified signed payload over authenticated fleet exec (exit 1)."
+      },
+      {
+        "id": "older-update",
+        "state": "pass",
+        "detail": "Agent-work push-update refused the older, correctly signed API-28 release (exit 1)."
+      },
+      {
+        "id": "equal-update",
+        "state": "pass",
+        "detail": "CT 190 push-update of the current release returned Already installed (exit 0)."
+      },
+      {
+        "id": "host-status",
+        "state": "pass",
+        "detail": "st status --kind machine --all reports the workstation, CT 190 and both workers healthy and connected."
+      },
+      {
+        "id": "legacy-callers",
+        "state": "pass",
+        "detail": "Repository search has no retired API or credential-push callers; backend HTTP access logs contain zero retired-endpoint requests in the recorded window."
+      }
+    ]
+  },
+  "remaining": []
+}
