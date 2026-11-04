@@ -113,6 +113,7 @@ export const MIGRATIONS = [
      effort TEXT
    ) STRICT;
    CREATE TABLE chat_answers (ask_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id)) STRICT;`,
+  `ALTER TABLE chats ADD COLUMN draft_attachments TEXT NOT NULL DEFAULT '[]';`,
 ]
 
 export function agentDbPath(dataDir: string): string {

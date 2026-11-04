@@ -16,6 +16,7 @@ import { PhoneRegistry } from './app-phones'
 import { Asks, validateAsk } from './asks'
 import { Background } from './background'
 import { CaptureRouter } from './capture-router'
+import { readChatAttachments } from './chat-attachments'
 import { CLI_COMMANDS, runCli } from './cli'
 import { HISTORY_LINES, loadConfig } from './config'
 import { WebStore } from './db'
@@ -101,6 +102,8 @@ function serve(): void {
   const chats = new ChatSessions(openAgentDb(agentDbPath(config.dataDir)), {
     dataDir: config.dataDir,
     push: tetherPush(process.env, (line) => console.warn('[aico-agent]', line)),
+    attachments: (ids) =>
+      readChatAttachments(ids, { store: notes, blobsDir, limits: config.captures }),
   })
   asks.onChange = () => chats.changed()
   const background = new Background({

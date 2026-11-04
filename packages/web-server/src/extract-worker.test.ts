@@ -105,6 +105,44 @@ describe('extract worker', () => {
     ])
   })
 
+  it('reads a chat attachment without planning a filing action in Notes or elsewhere', async () => {
+    const hash = await putOriginal(join(dir, 'blobs'), Buffer.from('chat photo'))
+    const row = store.insertCapture({
+      clientId: 'chat-upload-test',
+      groupId: 'chat-0123abcd-upload',
+      kind: 'image',
+      name: 'groceries.png',
+      mime: 'image/png',
+      size: 10,
+      hash,
+    }).capture
+    const planned: string[] = []
+    const w = new ExtractWorker({
+      store,
+      blobsDir: join(dir, 'blobs'),
+      previews,
+      extract: extractor,
+      concurrency: 1,
+      workDir: dir,
+      log: () => {},
+      router: {
+        plan: (type) => {
+          planned.push(type ?? '')
+          return { owner: 'notes', state: 'suggested', note: null }
+        },
+        afterReady: async () => {},
+      },
+    })
+    w.kick()
+    await w.idle()
+    expect(planned).toEqual([])
+    expect(store.getCapture(row.id)).toMatchObject({
+      status: 'ready',
+      owner: null,
+      route_state: null,
+    })
+  })
+
   it('plans the route in the same write that makes it ready, then tells the router', async () => {
     const row = await add('image', 'image/jpeg', 'receipt-bytes')
     const told: string[] = []

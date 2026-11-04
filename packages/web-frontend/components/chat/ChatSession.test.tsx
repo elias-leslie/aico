@@ -1,8 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fetchCapture, uploadCapture } from '@/lib/api/captures'
 import type { ChatView } from '@/lib/chat'
 import { ChatSession } from './ChatSession'
+
+vi.mock('@/lib/api/captures', async (original) => ({
+  ...(await original<typeof import('@/lib/api/captures')>()),
+  uploadCapture: vi.fn(),
+  fetchCapture: vi.fn(),
+}))
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 class Stream {
@@ -82,6 +89,11 @@ const view = (extra: Partial<ChatView> = {}): ChatView => ({
 })
 function show(chat: ChatView) {
   vi.stubGlobal('EventSource', Stream)
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }))
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
     value: vi.fn(),
     configurable: true,
@@ -108,6 +120,81 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 describe('desktop chat', () => {
+  it('restores the unsent text and file when a streamed attachment preparation fails', async () => {
+    vi.mocked(fetchCapture).mockResolvedValue({
+      id: '000000000003',
+      name: 'photo.heic',
+    } as Awaited<ReturnType<typeof fetchCapture>>)
+    const chat = view({ id: 'recovery-test', state: 'working' })
+    const { client } = show(chat)
+    act(() =>
+      client.setQueryData(['aico-chat', chat.id], {
+        ...chat,
+        state: 'failed',
+        updatedAt: 3000,
+        note: 'Files weren’t sent: This photo is still being prepared.',
+        draft: 'Read this photo',
+        draftAttachments: ['000000000003'],
+      }),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue(
+        'Read this photo',
+      ),
+    )
+    expect(
+      await screen.findByRole('link', { name: 'photo.heic' }),
+    ).toBeInTheDocument()
+  })
+  it('keeps a message unsent until its attachment is uploaded, then sends its capture ref', async () => {
+    const { fetcher } = show(view())
+    let finish: (value: Awaited<ReturnType<typeof uploadCapture>>) => void =
+      () => {}
+    vi.mocked(uploadCapture).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add photos or files' }))
+    const picker =
+      document.querySelector<HTMLInputElement>('input[type="file"]')
+    expect(picker).not.toBeNull()
+    fireEvent.change(picker as HTMLInputElement, {
+      target: {
+        files: [new File(['log'], 'sync-log.txt', { type: 'text/plain' })],
+      },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), {
+      target: { value: 'Read this log' },
+    })
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), {
+      key: 'Enter',
+    })
+    expect(
+      fetcher.mock.calls.some((args) => String(args[0]).endsWith('/send')),
+    ).toBe(false)
+    await act(async () =>
+      finish({ id: '000000000001', name: 'sync-log.txt' } as Awaited<
+        ReturnType<typeof uploadCapture>
+      >),
+    )
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() =>
+      expect(
+        fetcher.mock.calls.some((args) => String(args[0]).endsWith('/send')),
+      ).toBe(true),
+    )
+    const request = fetcher.mock.calls.find((args) =>
+      String(args[0]).endsWith('/send'),
+    )
+    expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+      message: 'Read this log',
+      attachments: ['000000000001'],
+    })
+  })
   it('shows models and turns, opens Details and a branch dialog without replacing this chat', () => {
     show(view())
     expect(screen.getByText('Turn 1 ·', { exact: false })).toBeInTheDocument()

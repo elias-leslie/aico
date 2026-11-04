@@ -1,7 +1,16 @@
 'use client'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, GitBranch, Info, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  Copy,
+  GitBranch,
+  Info,
+  Plus,
+  Send,
+  Square,
+  X,
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Component, type ReactNode, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
@@ -13,6 +22,12 @@ import {
   chatText,
 } from '@/lib/chat'
 import { TranscriptFold } from '../TranscriptFold'
+import {
+  ChatAttachmentRows,
+  ChatAttachmentSheet,
+  useChatAttachments,
+} from './ChatAttachments'
+import { MessageText } from './MessageText'
 import './chat.css'
 
 const clock = (value: number | string) =>
@@ -21,37 +36,6 @@ const clock = (value: number | string) =>
     minute: '2-digit',
   })
 const count = (value: number) => value.toLocaleString('en-US')
-function parts(text: string, pattern: RegExp) {
-  let offset = 0
-  return text.split(pattern).map((part) => {
-    const item = { part, offset }
-    offset += part.length
-    return item
-  })
-}
-function MessageText({ text }: { text: string }) {
-  return (
-    <div className="chat-text">
-      {parts(text, /(```[\s\S]*?```)/g).map(({ part, offset }) =>
-        part.startsWith('```') ? (
-          <pre key={offset}>
-            <code>{part.replace(/^```[^\n]*\n?/, '').replace(/```$/, '')}</code>
-          </pre>
-        ) : (
-          <span key={offset}>
-            {parts(part, /(`[^`\n]+`)/g).map(({ part: chunk, offset: at }) =>
-              chunk.startsWith('`') ? (
-                <code key={at}>{chunk.slice(1, -1)}</code>
-              ) : (
-                chunk
-              ),
-            )}
-          </span>
-        ),
-      )}
-    </div>
-  )
-}
 
 function Tools({
   message,
@@ -235,14 +219,20 @@ class ChatGuard extends Component<
     )
   }
 }
-export function ChatSession({ id }: { id: string }) {
+export function ChatSession({
+  id,
+  onBack,
+}: {
+  id: string
+  onBack?: () => void
+}) {
   return (
     <ChatGuard key={id}>
-      <ChatSessionBody id={id} />
+      <ChatSessionBody id={id} onBack={onBack} />
     </ChatGuard>
   )
 }
-function ChatSessionBody({ id }: { id: string }) {
+function ChatSessionBody({ id, onBack }: { id: string; onBack?: () => void }) {
   const client = useQueryClient()
   const router = useRouter()
   const opened = useQuery({
@@ -258,6 +248,8 @@ function ChatSessionBody({ id }: { id: string }) {
   const [model, setModel] = useState('')
   const [effort, setEffort] = useState<string | null>(null)
   const [details, setDetails] = useState(false)
+  const [attaching, setAttaching] = useState(false)
+  const [typing, setTyping] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [branch, setBranch] = useState<ChatMessage | null>(null)
@@ -271,6 +263,49 @@ function ChatSessionBody({ id }: { id: string }) {
   const savingDraft = useRef(Promise.resolve())
   const follow = useRef(true)
   const chat = opened.data
+  const latestDraft = useRef(draft)
+  latestDraft.current = draft
+  const persistDraft = (text: string, attachments: string[]) => {
+    savingDraft.current = savingDraft.current
+      .then(() =>
+        apiFetch(`/api/chat/${id}/draft`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draft: text, attachments }),
+        }),
+      )
+      .then(() => {})
+      .catch((e: Error) => setError(`Draft not saved: ${e.message}`))
+  }
+  const files = useChatAttachments(
+    id,
+    chat ? (chat.draftAttachments ?? []) : undefined,
+    (ids) => persistDraft(latestDraft.current, ids),
+  )
+  const restored = useRef('')
+  useEffect(() => {
+    if (
+      chat?.state !== 'failed' ||
+      !chat.note?.startsWith('Files weren’t sent: ') ||
+      !chat.draftAttachments?.length
+    )
+      return
+    const key = `${chat.updatedAt}:${chat.note}`
+    if (restored.current === key) return
+    restored.current = key
+    setDraft(chat.draft)
+    files.restore(chat.draftAttachments)
+  }, [chat, files.restore])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the scroll element mounts after the chat loads
+  useEffect(() => {
+    if (!body.current || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      if (follow.current)
+        body.current?.scrollTo({ top: body.current.scrollHeight })
+    })
+    observer.observe(body.current)
+    return () => observer.disconnect()
+  }, [chat?.id])
   useEffect(() => {
     if (chat && !initialized.current) {
       setDraft(chat.draft)
@@ -330,25 +365,32 @@ function ChatSessionBody({ id }: { id: string }) {
     }
   }
   const send = async () => {
-    if (!draft.trim() || busy) return
+    if (!draft.trim() || busy || files.blocked) return
     await savingDraft.current
     const question = chat?.questions?.[0]
     const value = question
-      ? await act('answer', { ask: question.id, message: draft })
+      ? await act('answer', {
+          ask: question.id,
+          message: draft,
+          ...(files.ids.length && { attachments: files.ids }),
+        })
       : await act('send', {
           message: draft,
+          ...(files.ids.length && { attachments: files.ids }),
           ...(!working && model && { model }),
           ...(!working && effort !== null && { effort: effort || null }),
         })
     if (value) {
       setDraft('')
+      files.clear()
       follow.current = true
     }
   }
   const stop = async () => {
     await savingDraft.current
     const value = await act('stop')
-    if (value)
+    if (value) {
+      files.restore(value.draftAttachments ?? [])
       setDraft((current) =>
         !current ||
         value.draft === current ||
@@ -356,20 +398,12 @@ function ChatSessionBody({ id }: { id: string }) {
           ? value.draft
           : [current, value.draft].filter(Boolean).join('\n\n'),
       )
+    }
   }
   const saveDraft = () => {
-    const value = draft
-    savingDraft.current = savingDraft.current
-      .then(() =>
-        apiFetch(`/api/chat/${id}/draft`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ draft: value }),
-        }),
-      )
-      .then(() => {})
-      .catch((e: Error) => setError(`Draft not saved: ${e.message}`))
+    persistDraft(draft, files.ids)
   }
+
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
@@ -425,8 +459,16 @@ function ChatSessionBody({ id }: { id: string }) {
     }
   }
   return (
-    <div className="aico-chat">
+    <div className="aico-chat" data-typing={typing || undefined}>
       <header className="chat-head">
+        <button
+          type="button"
+          className="lantern-icon-btn chat-back"
+          aria-label="Back to sessions"
+          onClick={() => (onBack ? onBack() : router.push('/'))}
+        >
+          <ArrowLeft size={20} />
+        </button>
         <span className={`chat-chip ${chat.state}`}>
           {CHAT_STATE[chat.state] ?? chat.state}
         </span>
@@ -438,7 +480,7 @@ function ChatSessionBody({ id }: { id: string }) {
         <span className="chat-grow" />
         {disconnected ? (
           <button
-            className="lantern-btn primary"
+            className="lantern-btn primary chat-head-action"
             type="button"
             onClick={() => setConnection((v) => v + 1)}
           >
@@ -446,7 +488,7 @@ function ChatSessionBody({ id }: { id: string }) {
           </button>
         ) : working ? (
           <button
-            className="lantern-btn"
+            className="lantern-btn chat-head-action"
             type="button"
             disabled={busy}
             onClick={() => void stop()}
@@ -455,7 +497,7 @@ function ChatSessionBody({ id }: { id: string }) {
           </button>
         ) : chat.state === 'needs-you' ? (
           <button
-            className="lantern-btn primary"
+            className="lantern-btn primary chat-head-action"
             type="button"
             onClick={() => input.current?.focus()}
           >
@@ -463,7 +505,7 @@ function ChatSessionBody({ id }: { id: string }) {
           </button>
         ) : ['stopped', 'failed', 'swapped'].includes(chat.state) ? (
           <button
-            className="lantern-btn primary"
+            className="lantern-btn primary chat-head-action"
             type="button"
             disabled={busy}
             onClick={() =>
@@ -477,7 +519,7 @@ function ChatSessionBody({ id }: { id: string }) {
           </button>
         ) : null}
         <button
-          className="lantern-icon-btn"
+          className="lantern-icon-btn chat-info"
           type="button"
           onClick={() => setDetails(!details)}
           aria-label="Details: tokens, models, run"
@@ -715,14 +757,37 @@ function ChatSessionBody({ id }: { id: string }) {
                   void send()
                 }}
               >
+                <ChatAttachmentRows queue={files} />
                 <div className="chat-compose-box">
+                  <button
+                    type="button"
+                    className="lantern-icon-btn chat-add"
+                    aria-label="Add photos or files"
+                    disabled={
+                      busy || disconnected || Boolean(chat.questions?.length)
+                    }
+                    onClick={() => {
+                      input.current?.blur()
+                      setAttaching(true)
+                    }}
+                  >
+                    <Plus size={20} />
+                  </button>
                   <textarea
                     aria-label="Message"
                     ref={input}
                     rows={2}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
-                    onBlur={saveDraft}
+                    onFocus={() => {
+                      setTyping(true)
+                      follow.current = true
+                      body.current?.scrollTo({ top: body.current.scrollHeight })
+                    }}
+                    onBlur={() => {
+                      setTyping(false)
+                      saveDraft()
+                    }}
                     onKeyDown={(e) => {
                       if (
                         e.key === 'Enter' &&
@@ -733,19 +798,31 @@ function ChatSessionBody({ id }: { id: string }) {
                         void send()
                       }
                     }}
-                    placeholder={
-                      chat.questions?.length
-                        ? 'Answer, or say something else'
-                        : 'Message'
-                    }
+                    placeholder={chat.questions?.length ? 'Answer' : 'Message'}
                   />
                   <button
                     type="submit"
-                    className="lantern-btn primary"
-                    disabled={!draft.trim() || busy || disconnected}
+                    className="lantern-btn primary chat-send"
+                    aria-label={working ? 'Queue message' : 'Send'}
+                    disabled={
+                      !draft.trim() || busy || disconnected || files.blocked
+                    }
                   >
-                    {working ? 'Queue message' : 'Send'}
+                    <Send className="chat-send-icon" size={18} />
+                    <span>{working ? 'Queue message' : 'Send'}</span>
                   </button>
+                  {working && (
+                    <button
+                      type="button"
+                      className="lantern-icon-btn chat-compose-stop"
+                      onPointerDown={(event) => event.preventDefault()}
+                      aria-label="Stop this reply"
+                      disabled={busy}
+                      onClick={() => void stop()}
+                    >
+                      <Square size={16} />
+                    </button>
+                  )}
                 </div>
                 <div className="chat-composer-bar">
                   <label>
@@ -789,9 +866,22 @@ function ChatSessionBody({ id }: { id: string }) {
                     </select>
                   </label>
                   <span>
-                    {working
-                      ? `${chat.queued.length ? `${chat.queued.length} queued · ` : ''}Sends after this reply`
-                      : 'Enter to send · Shift+Enter for a new line'}
+                    {files.blocked ? (
+                      files.uploading ? (
+                        'Sends when the upload is done'
+                      ) : (
+                        'Retry or remove the file'
+                      )
+                    ) : working ? (
+                      `${chat.queued.length ? `${chat.queued.length} queued · ` : ''}Sends after this reply`
+                    ) : (
+                      <>
+                        <span className="chat-desktop-hint">
+                          Enter to send · Shift+Enter for a new line
+                        </span>
+                        <span className="chat-phone-hint">Next turn</span>
+                      </>
+                    )}
                   </span>
                 </div>
               </form>
@@ -815,6 +905,13 @@ function ChatSessionBody({ id }: { id: string }) {
           />
         )}
       </div>
+      {attaching && (
+        <ChatAttachmentSheet
+          open={attaching}
+          onOpenChange={setAttaching}
+          onFiles={files.add}
+        />
+      )}
       <Dialog.Root
         open={branch !== null}
         onOpenChange={(open) => {

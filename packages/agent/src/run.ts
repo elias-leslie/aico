@@ -20,6 +20,7 @@ import {
   type AssistantMessage,
   clampThinkingLevel,
   createAssistantMessageEventStream,
+  type ImageContent,
   type Model,
   type Models,
 } from '@earendil-works/pi-ai'
@@ -74,6 +75,8 @@ export interface RunOptions {
   rules: RoleRules
   /** The prompt; null goes on from a resumed run whose last turn did not finish. */
   task: string | null
+  /** Images accompanying this prompt; the transcript keeps them for later turns. */
+  images?: ImageContent[]
   cwd: string
   db: Database
   /** The id of a new run (Tether picks one); default a fresh UUID. */
@@ -504,7 +507,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
       if (options.signal?.aborted) return finish({ kind: 'error', model: inUse, detail: 'aborted' })
       try {
         if (input === null) await agent.continue()
-        else await agent.prompt(input)
+        else await agent.prompt(input, options.images)
       } finally {
         // The loop may hand off and subscribe again only within this invocation.
         if (options.signal?.aborted) unsubscribe()

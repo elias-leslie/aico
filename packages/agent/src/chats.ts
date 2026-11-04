@@ -5,7 +5,7 @@ import { statSync } from 'node:fs'
 import { Catalog, contextDbPath } from '@aico/context'
 import type { Database } from '@aico/store'
 import type { AgentEvent } from '@earendil-works/pi-agent-core'
-import type { Models } from '@earendil-works/pi-ai'
+import type { ImageContent, Models } from '@earendil-works/pi-ai'
 import { HARNESS, loadRoleRules, type Refused, type RoleRules } from './rules'
 import { type RunOptions, runAgent } from './run'
 import type { PushRun } from './tether'
@@ -18,6 +18,7 @@ interface ChatRow {
   state: ChatState
   updated_at: number
   draft: string
+  draft_attachments: string
   queued: string
   partial: string | null
   note: string | null
@@ -49,6 +50,10 @@ export class ChatError extends Error {
 }
 const parse = <T>(value: string | null, fallback: T): T =>
   value === null ? fallback : (JSON.parse(value) as T)
+type QueuedMessage = string | { text: string; attachments: string[] }
+const promptText = (value: QueuedMessage) => (typeof value === 'string' ? value : value.text)
+const promptFiles = (value: QueuedMessage) => (typeof value === 'string' ? [] : value.attachments)
+const FILE_FAILURE = 'Files weren’t sent: '
 const assistantText = (content: unknown): string =>
   Array.isArray(content)
     ? content
@@ -68,6 +73,7 @@ export class ChatSessions {
       models?: Models
       rules?: (role: string, cwd: string) => RoleRules | Refused
       contextFiles?: RunOptions['contextFiles']
+      attachments?: (ids: string[]) => Promise<{ text: string; images: ImageContent[] }>
     },
   ) {
     const interrupted = db
@@ -195,13 +201,21 @@ export class ChatSessions {
     return {
       ...this.summary(id),
       draft: row.draft,
-      queued: parse<string[]>(row.queued, []),
+      draftAttachments: parse<string[]>(row.draft_attachments, []),
+      queued: parse<QueuedMessage[]>(row.queued, []).map(promptText),
       partial: parse<{ text: string; model: string; turn: number } | null>(row.partial, null),
       note: row.note,
       effort: row.effort,
       parent: run.parent_id,
       branchTurn: run.branch_turn,
-      messages,
+      messages: messages.map((message) => ({
+        ...message,
+        content: Array.isArray(message.content)
+          ? message.content.map((block) =>
+              block.type === 'image' ? { type: 'image', mimeType: block.mimeType } : block,
+            )
+          : message.content,
+      })),
       handoffs: this.db.prepare('SELECT * FROM handoffs WHERE run_id = ? ORDER BY seq').all(id),
       tools: this.db.prepare('SELECT * FROM tool_calls WHERE run_id = ? ORDER BY seq').all(id),
       totals: runReport(this.db, id),
@@ -229,6 +243,7 @@ export class ChatSessions {
     model?: string
     effort?: string | null
     branch?: { id: string; turn: number }
+    attachments?: string[]
   }) {
     let { role, cwd } = input
     if (input.branch) {
@@ -273,10 +288,16 @@ export class ChatSessions {
         "INSERT INTO chats (run_id, title, state, updated_at, model, effort) VALUES (?, ?, 'idle', ?, ?, ?)",
       )
       .run(id, title, Date.now(), input.model ?? null, input.effort ?? null)
-    this.launch(id, input.message, rules, Boolean(input.model), input.effort)
+    this.launch(id, input.message, rules, Boolean(input.model), input.effort, input.attachments)
     return this.get(id)
   }
-  send(id: string, message: string, model?: string, effort?: string | null) {
+  send(
+    id: string,
+    message: string,
+    model?: string,
+    effort?: string | null,
+    attachments: string[] = [],
+  ) {
     const row = this.row(id)
     if (row.state === 'ended')
       throw new ChatError(409, 'This chat ended. Branch from a reply to start a new one.')
@@ -288,13 +309,15 @@ export class ChatSessions {
           409,
           'Stop this reply before changing its model or effort. Your message is kept below.',
         )
-      const queued = parse<string[]>(row.queued, [])
-      queued.push(message)
+      const queued = parse<QueuedMessage[]>(row.queued, [])
+      queued.push(attachments.length ? { text: message, attachments } : message)
       this.db
-        .prepare("UPDATE chats SET queued = ?, draft = '' WHERE run_id = ?")
+        .prepare(
+          "UPDATE chats SET queued = ?, draft = '', draft_attachments = '[]' WHERE run_id = ?",
+        )
         .run(JSON.stringify(queued), id)
       this.changed(id)
-    } else this.launch(id, message, rules, Boolean(model), effort)
+    } else this.launch(id, message, rules, Boolean(model), effort, attachments)
     return this.get(id)
   }
   resume(id: string, selectedModel?: string, selectedEffort?: string | null) {
@@ -317,14 +340,29 @@ export class ChatSessions {
         `Resumed at ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. ${rules.chain[0]?.id} is finishing the stopped turn. Its unfinished text stays above as it was.`,
         id,
       )
-    this.launch(id, null, rules, true, selectedEffort === undefined ? row.effort : selectedEffort)
+    const files = row.note?.startsWith(FILE_FAILURE)
+      ? parse<string[]>(row.draft_attachments, [])
+      : []
+    this.launch(
+      id,
+      files.length ? row.draft : null,
+      rules,
+      true,
+      selectedEffort === undefined ? row.effort : selectedEffort,
+      files,
+    )
     return this.get(id)
   }
   async stop(id: string, end = false) {
     const row = this.row(id)
-    const queued = parse<string[]>(row.queued, [])
-    const draft = [row.draft, ...queued].filter(Boolean).join('\n\n')
-    this.db.prepare("UPDATE chats SET queued = '[]', draft = ? WHERE run_id = ?").run(draft, id)
+    const queued = parse<QueuedMessage[]>(row.queued, [])
+    const draft = [row.draft, ...queued.map(promptText)].filter(Boolean).join('\n\n')
+    const attachments = [
+      ...new Set([...parse<string[]>(row.draft_attachments, []), ...queued.flatMap(promptFiles)]),
+    ]
+    this.db
+      .prepare("UPDATE chats SET queued = '[]', draft = ?, draft_attachments = ? WHERE run_id = ?")
+      .run(draft, JSON.stringify(attachments), id)
     const active = this.active.get(id)
     active?.controller.abort()
     await active?.done
@@ -336,7 +374,7 @@ export class ChatSessions {
     await this.push(id)
     return this.get(id)
   }
-  answer(id: string, askId: string, question: string, answer: string) {
+  answer(id: string, askId: string, question: string, answer: string, attachments: string[] = []) {
     const row = this.row(id)
     if (row.state === 'ended') return
     const inserted = this.db
@@ -344,7 +382,13 @@ export class ChatSessions {
       .run(askId, id)
     if (!Number(inserted.changes)) return
     try {
-      this.send(id, `[Answer to your question: ${question}]\n${answer}`)
+      this.send(
+        id,
+        `[Answer to your question: ${question}]\n${answer}`,
+        undefined,
+        undefined,
+        attachments,
+      )
     } catch (error) {
       this.db.prepare('DELETE FROM chat_answers WHERE ask_id = ?').run(askId)
       throw error
@@ -356,9 +400,13 @@ export class ChatSessions {
       await this.push(id, waiting ? 'needs-you' : undefined)
     }
   }
-  draft(id: string, value: string) {
+  draft(id: string, value: string, attachments?: string[]) {
     this.row(id)
     this.db.prepare('UPDATE chats SET draft = ? WHERE run_id = ?').run(value, id)
+    if (attachments)
+      this.db
+        .prepare('UPDATE chats SET draft_attachments = ? WHERE run_id = ?')
+        .run(JSON.stringify(attachments), id)
   }
   rename(id: string, title: string) {
     this.row(id)
@@ -399,24 +447,31 @@ export class ChatSessions {
     rules: RoleRules,
     keepHead: boolean,
     effort?: string | null,
+    attachments: string[] = [],
   ) {
     if (this.active.has(id)) throw new ChatError(409, 'This chat is already working.')
     const controller = new AbortController()
     const configuredEffort = effort === undefined ? this.row(id).effort : effort
     this.db
       .prepare(
-        "UPDATE chats SET state = 'working', updated_at = ?, draft = CASE WHEN ? THEN '' ELSE draft END, effort = ? WHERE run_id = ?",
+        "UPDATE chats SET state = 'working', updated_at = ?, draft = CASE WHEN ? THEN '' ELSE draft END, draft_attachments = CASE WHEN ? THEN '[]' ELSE draft_attachments END, effort = ? WHERE run_id = ?",
       )
-      .run(Date.now(), task !== null ? 1 : 0, configuredEffort ?? null, id)
+      .run(Date.now(), task !== null ? 1 : 0, task !== null ? 1 : 0, configuredEffort ?? null, id)
     const done = Promise.resolve().then(async () => {
+      let prepared = false
       try {
         const run = findRun(this.db, id)
+        const files = attachments.length ? await this.options.attachments?.(attachments) : undefined
+        if (attachments.length && !files)
+          throw new ChatError(503, 'Attachments are unavailable. Your files are kept in the draft.')
+        prepared = true
         const result = await runAgent({
           db: this.db,
           onStart: () => this.push(id),
           rules,
           cwd: run.cwd,
-          task,
+          task: task === null ? null : [task, files?.text].filter(Boolean).join('\n\n'),
+          images: files?.images,
           resume: run,
           keepHead,
           effort: configuredEffort ?? undefined,
@@ -439,20 +494,25 @@ export class ChatSessions {
       } catch (error) {
         this.db
           .prepare("UPDATE chats SET state = 'failed', note = ?, updated_at = ? WHERE run_id = ?")
-          .run((error as Error).message, Date.now(), id)
+          .run(
+            `${!prepared && attachments.length ? FILE_FAILURE : ''}${(error as Error).message}`,
+            Date.now(),
+            id,
+          )
+        if (!prepared && attachments.length) this.draft(id, task ?? '', attachments)
       } finally {
         this.active.delete(id)
         this.changed(id)
         await this.push(id)
       }
       const row = this.row(id)
-      const queued = parse<string[]>(row.queued, [])
+      const queued = parse<QueuedMessage[]>(row.queued, [])
       if (!controller.signal.aborted && row.state === 'idle' && queued.length) {
-        const next = queued.shift() as string
+        const next = queued.shift() as QueuedMessage
         this.db
           .prepare('UPDATE chats SET queued = ? WHERE run_id = ?')
           .run(JSON.stringify(queued), id)
-        this.send(id, next)
+        this.send(id, promptText(next), undefined, undefined, promptFiles(next))
       }
     })
     this.active.set(id, { controller, done })

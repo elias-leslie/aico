@@ -33,6 +33,7 @@ interface TerminalFileSectionProps {
   onToggleCompose?: () => void
   /** The session list sits beside the session (desktop) */
   sideList?: boolean
+  onChatBack?: () => void
   fileInputRef: RefObject<HTMLInputElement | null>
   progress: number
   isUploading: boolean
@@ -63,6 +64,7 @@ export function TerminalFileSection({
   composeOpen,
   onToggleCompose,
   sideList,
+  onChatBack,
   fileInputRef,
   progress,
   isUploading,
@@ -129,6 +131,7 @@ export function TerminalFileSection({
           composeOpen={composeOpen}
           onToggleCompose={onToggleCompose}
           sideList={sideList}
+          onChatBack={onChatBack}
         />
       </FileUploadDropzone>
     </>

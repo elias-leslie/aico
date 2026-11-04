@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ChatSessions, openAgentDb, type RoleRules } from '@aico/agent'
+import { putOriginal } from '@aico/notes/blobs'
 import {
   createModels,
   fauxAssistantMessage,
@@ -13,7 +14,9 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildApi } from './api'
 import type { Ask, Asks } from './asks'
+import { readChatAttachments } from './chat-attachments'
 import { WebStore } from './db'
+import { NotesStore } from './notes-db'
 import { createWebServer } from './server'
 import { Shows } from './shows'
 import { TerminalHub } from './terminal'
@@ -41,6 +44,24 @@ let db: ReturnType<typeof openAgentDb>
 let asksStalled = false
 let questions: Ask[]
 let pushes: unknown[]
+let captures: {
+  store: NotesStore
+  blobsDir: string
+  limits: { maxBytes: number; maxFiles: number }
+}
+let attachmentFailure = false
+async function attachment() {
+  const bytes = Buffer.from('The attachment reached the model.')
+  const hash = await putOriginal(captures.blobsDir, bytes)
+  return captures.store.insertCapture({
+    clientId: 'chat-test-file',
+    name: 'sync-log.txt',
+    kind: 'text',
+    mime: 'text/plain',
+    size: bytes.length,
+    hash,
+  }).capture.id
+}
 const question = (session: string): Ask => ({
   id: '0123456789ab',
   session,
@@ -82,6 +103,12 @@ beforeEach(async () => {
   pushes = []
   questions = []
   asksStalled = false
+  attachmentFailure = false
+  captures = {
+    store: new NotesStore(':memory:', { hostName: 'test' }),
+    blobsDir: join(folder, 'blobs'),
+    limits: { maxBytes: 10000, maxFiles: 5 },
+  }
   chats = new ChatSessions(db, {
     dataDir: folder,
     push: async (report) => {
@@ -90,6 +117,10 @@ beforeEach(async () => {
     rules: () => rules,
     models,
     contextFiles: [],
+    attachments: async (ids) => {
+      if (attachmentFailure) throw new Error('The photo is still being prepared.')
+      return readChatAttachments(ids, captures)
+    },
   })
   const tether = new FakeTether()
   store = new WebStore(':memory:')
@@ -115,6 +146,7 @@ beforeEach(async () => {
     tether: tether.client,
     store,
     chats,
+    captures,
     asks,
     uploads: { dir: folder, remoteDir: folder, maxBytes: 1024, maxAgeMs: 1000 },
     shows: new Shows({ tether: tether.client, publicHost: null, run: async () => {} }),
@@ -133,6 +165,7 @@ afterEach(async () => {
   await new Promise((resolve) => server.close(resolve))
   db.close()
   store.close()
+  captures.store.close()
   rmSync(folder, { recursive: true, force: true })
 })
 const start = async () => {
@@ -147,6 +180,37 @@ const start = async () => {
   return res.body.id as string
 }
 describe('Aico chat routes', () => {
+  it('keeps a failed attachment visible and retries it with its original prompt', async () => {
+    const id = await start()
+    const file = await attachment()
+    attachmentFailure = true
+    await call('POST', `/api/chat/${id}/send`, { message: 'Read the photo', attachments: [file] })
+    await chats.settled(id)
+    expect(chats.get(id)).toMatchObject({
+      state: 'failed',
+      draft: 'Read the photo',
+      draftAttachments: [file],
+    })
+    attachmentFailure = false
+    first.setResponses([fauxAssistantMessage('Attachment received')])
+    await call('POST', `/api/chat/${id}/resume`)
+    await chats.settled(id)
+    expect(chats.get(id).state).toBe('idle')
+    expect(JSON.stringify(chats.get(id).messages)).toContain('The attachment reached the model.')
+  })
+  it('includes a prepared attachment when the next message answers an arriving question', async () => {
+    const id = await start()
+    const file = await attachment()
+    questions = [question(id)]
+    first.setResponses([fauxAssistantMessage('Attachment received with the answer')])
+    await call('POST', `/api/chat/${id}/answer`, {
+      ask: questions[0]?.id,
+      message: 'Use this file',
+      attachments: [file],
+    })
+    await chats.settled(id)
+    expect(JSON.stringify(chats.get(id).messages)).toContain('The attachment reached the model.')
+  })
   it('starts from role routing, stores two messages and pushes the session state and totals to Tether', async () => {
     const id = await start()
     first.setResponses([fauxAssistantMessage('Second answer')])
@@ -185,6 +249,7 @@ describe('Aico chat routes', () => {
   })
   it('returns queued messages as a draft on Stop and can finish the interrupted reply', async () => {
     const id = await start()
+    const file = await attachment()
     first.setResponses([
       fauxAssistantMessage(fauxToolCall('bash', { command: 'printf partial; sleep 20' })),
     ])
@@ -199,13 +264,14 @@ describe('Aico chat routes', () => {
     await started
     off()
     await call('PUT', `/api/chat/${id}/draft`, { draft: 'Queued one' })
-    await call('POST', `/api/chat/${id}/send`, { message: 'Queued one' })
+    await call('POST', `/api/chat/${id}/send`, { message: 'Queued one', attachments: [file] })
     await call('POST', `/api/chat/${id}/send`, { message: 'Queued two' })
     const stopped = (await call('POST', `/api/chat/${id}/stop`)).body
     expect(stopped).toMatchObject({
       state: 'stopped',
       draft: 'Queued one\n\nQueued two',
       queued: [],
+      draftAttachments: [file],
     })
     expect(stopped.totals.toolCalls).toBe(1)
     expect(JSON.stringify(stopped.messages)).toContain('printf partial')

@@ -2,6 +2,8 @@
 import { ChatError, type ChatSessions, HARNESS } from '@aico/agent'
 import type { TetherClient } from '@aico/tether-client'
 import type { Ask, Asks } from './asks'
+import type { CaptureDeps } from './captures'
+import { chatAttachmentIds } from './chat-attachments'
 import { API_CSP } from './guard'
 import { objectBody, optionalString, RAW, type Router, requiredString } from './http'
 import { HttpError } from './tether'
@@ -50,6 +52,7 @@ export function registerChatRoutes(
   chats: ChatSessions,
   asks: Asks,
   tether: TetherClient,
+  captures?: CaptureDeps,
 ) {
   let streams = 0
   const handle = async <T>(work: () => T | Promise<T>): Promise<T> => {
@@ -100,6 +103,7 @@ export function registerChatRoutes(
         role: requiredString(body, 'role', { max: 100 }),
         cwd: requiredString(body, 'cwd', { max: 4096 }),
         message: message(body),
+        attachments: chatAttachmentIds(body.attachments, captures),
         ...preferences(body),
       })
     }),
@@ -114,7 +118,13 @@ export function registerChatRoutes(
     handle(async () => {
       const body = objectBody(await ctx.body())
       const { model, effort } = preferences(body)
-      chats.send(ctx.params.id, message(body), model, effort)
+      chats.send(
+        ctx.params.id,
+        message(body),
+        model,
+        effort,
+        chatAttachmentIds(body.attachments, captures),
+      )
       return view(ctx.params.id)
     }),
   )
@@ -143,7 +153,11 @@ export function registerChatRoutes(
   router.on('PUT', '/api/chat/:id/draft', async (ctx) =>
     handle(async () => {
       const body = objectBody(await ctx.body())
-      chats.draft(ctx.params.id, requiredString(body, 'draft', { max: 100_000 }))
+      chats.draft(
+        ctx.params.id,
+        requiredString(body, 'draft', { max: 100_000 }),
+        body.attachments === undefined ? undefined : chatAttachmentIds(body.attachments, captures),
+      )
       return { saved: true }
     }),
   )
@@ -164,8 +178,9 @@ export function registerChatRoutes(
         const summary = full.replace(/\s+/g, ' ').slice(0, 100)
         reply = { text: summary, ...(full !== summary && { note: full.slice(0, 1000) }) }
       }
+      const attachments = chatAttachmentIds(body.attachments, captures)
       await asks.answer(question.id, reply)
-      chats.answer(ctx.params.id, question.id, question.question, full)
+      chats.answer(ctx.params.id, question.id, question.question, full, attachments)
       await asks.act(question.id, 'done')
       chats.changed(ctx.params.id)
       return view(ctx.params.id)

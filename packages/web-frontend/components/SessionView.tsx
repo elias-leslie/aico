@@ -71,6 +71,7 @@ export interface SessionViewProps {
   /** The session list sits beside the session (desktop browsers), so the
    * bar shows the title without a switcher and keeps search open. */
   sideList?: boolean
+  onChatBack?: () => void
 }
 
 /** The active session, or one of the user's own when none is chosen
@@ -112,6 +113,7 @@ export function SessionView({
   composeOpen,
   onToggleCompose,
   sideList = false,
+  onChatBack,
 }: SessionViewProps) {
   const [refreshVersion, setRefreshVersion] = useState(0)
   // Files is open, on what it was asked to show.
@@ -190,7 +192,7 @@ export function SessionView({
   }
 
   if (slot.chat && sessionId)
-    return <ChatSession key={sessionId} id={sessionId} />
+    return <ChatSession key={sessionId} id={sessionId} onBack={onChatBack} />
 
   const workingDir = getSlotWorkingDir(slot)
   // An Agent Hub session is a chat; it has no terminal to refit, search or type keys into.

@@ -1,10 +1,11 @@
 import { clsx } from 'clsx'
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { getSlotName, getSlotPanelId, getSlotSessionId } from '@/lib/utils/slot'
 import { AgentShows } from './AgentShowToast'
 import { SessionAsk } from './asks/SessionAsk'
+import { ChatSessionList } from './chat/ChatSessionList'
 import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
 import { SessionSidebar, SIDE_LIST_WIDTH } from './SessionSidebar'
 import { getShownSlot } from './SessionView'
@@ -79,6 +80,9 @@ function TerminalContentBody({
     SIDE_LIST_WIDTH.initial,
   )
   const shownSlot = getShownSlot(terminalSlots, activeSessionId)
+  const [phoneList, setPhoneList] = useState(false)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a deep link or new chat opens the chosen session
+  useEffect(() => setPhoneList(false), [activeSessionId])
   // A chat (an Agent Hub session, or a workflow step opened read-only) has no terminal to type keys into.
   const chatShown = shownSlot?.chat === true
   const sessionName = (session: string) => {
@@ -122,35 +126,47 @@ function TerminalContentBody({
       )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-visible">
         {/* The session, file upload input, and upload status toasts */}
-        <TerminalFileSection
-          terminalSlots={terminalSlots}
-          fontSize={fontSize}
-          setTerminalRef={setTerminalRef}
-          handleStatusChange={handleStatusChange}
-          terminalStatuses={terminalStatuses}
-          onSlotSwitch={onSlotSwitch}
-          onSlotReset={onSlotReset}
-          onSlotCloseSession={onSlotCloseSession}
-          setFontSize={setFontSize}
-          handleOpenTerminalManager={handleOpenTerminalManager}
-          handleUploadClick={handleUploadClick}
-          onModeSwitch={onModeSwitch}
-          isModeSwitching={isModeSwitching}
-          fileInputRef={fileInputRef}
-          progress={progress}
-          isUploading={isUploading}
-          uploadError={uploadError}
-          clearUploadError={clearUploadError}
-          uploadDone={uploadDone}
-          clearUploadDone={clearUploadDone}
-          handleFileInputChange={handleFileInputChange}
-          handleFileSelect={handleFileSelect}
-          activeSessionId={activeSessionId}
-          isMobile={isMobile}
-          sideList={wide}
-          composeOpen={composeOpen}
-          onToggleCompose={isMobile ? undefined : toggleCompose}
-        />
+        {phoneList && !wide ? (
+          <ChatSessionList
+            slots={terminalSlots}
+            onSelect={(slot) => {
+              setPhoneList(false)
+              onSlotSwitch(slot)
+            }}
+            onNewSession={handleOpenTerminalManager}
+          />
+        ) : (
+          <TerminalFileSection
+            terminalSlots={terminalSlots}
+            fontSize={fontSize}
+            setTerminalRef={setTerminalRef}
+            handleStatusChange={handleStatusChange}
+            terminalStatuses={terminalStatuses}
+            onSlotSwitch={onSlotSwitch}
+            onSlotReset={onSlotReset}
+            onSlotCloseSession={onSlotCloseSession}
+            setFontSize={setFontSize}
+            handleOpenTerminalManager={handleOpenTerminalManager}
+            handleUploadClick={handleUploadClick}
+            onModeSwitch={onModeSwitch}
+            isModeSwitching={isModeSwitching}
+            fileInputRef={fileInputRef}
+            progress={progress}
+            isUploading={isUploading}
+            uploadError={uploadError}
+            clearUploadError={clearUploadError}
+            uploadDone={uploadDone}
+            clearUploadDone={clearUploadDone}
+            handleFileInputChange={handleFileInputChange}
+            handleFileSelect={handleFileSelect}
+            activeSessionId={activeSessionId}
+            isMobile={isMobile}
+            sideList={wide}
+            onChatBack={wide ? undefined : () => setPhoneList(true)}
+            composeOpen={composeOpen}
+            onToggleCompose={isMobile ? undefined : toggleCompose}
+          />
+        )}
 
         {/* The open session's question for the owner, above where you type */}
         <SessionAsk
