@@ -254,11 +254,50 @@ function within(root: string, dir: string, files: string[], suffixes: string[]):
     .map((file) => (dir === '.' ? file : relative(dir, file)))
 }
 
-/** Test files for changed Python files: changed tests, tests named after the module, tests naming it. */
+interface PythonImports {
+  modules: Set<string>
+  from: Set<[string, string]>
+}
+
+/** `import a.b` and `from a import b` names in a Python file (what SummitFlow's ast walk reads). */
+export function pythonImports(path: string): PythonImports {
+  const found: PythonImports = { modules: new Set(), from: new Set() }
+  let text: string
+  try {
+    text = readFileSync(path, 'utf8')
+  } catch {
+    return found
+  }
+  for (const match of text.matchAll(/^[ \t]*import[ \t]+([^\n#]+)/gm))
+    for (const name of match[1].split(','))
+      if (name.trim())
+        found.modules.add(
+          name
+            .trim()
+            .split(/\s+as\s+/)[0]
+            .trim(),
+        )
+  for (const match of text.matchAll(
+    /^[ \t]*from[ \t]+\.*([\w.]+)[ \t]+import[ \t]+(\([^)]*\)|[^\n#]+)/gm,
+  ))
+    for (const name of match[2].replace(/[()\\]/g, ' ').split(','))
+      if (name.trim())
+        found.from.add([
+          match[1],
+          name
+            .trim()
+            .split(/\s+as\s+/)[0]
+            .trim(),
+        ])
+  return found
+}
+
+/** Test files for changed Python files: changed tests, tests named after the module, tests importing it. */
 export function focusedTests(root: string, dir: string, changed: string[]): string[] | null {
   const tests = new Set<string>()
   let unmapped = false
   let all: string[] | null = null
+  let imports: Map<string, PythonImports> | null = null
   const listTests = (): string[] => {
     const out: string[] = []
     const walk = (rel: string) => {
@@ -283,18 +322,29 @@ export function focusedTests(root: string, dir: string, changed: string[]): stri
       continue
     }
     all ??= listTests()
-    const leaf = base(file).replace(/\.pyi?$/, '')
-    const module = leaf.replace(/-/g, '_')
-    const named = new RegExp(
-      `(^|[^A-Za-z0-9_])(${module}|${leaf.replace(/[.-]/g, '\\$&')})([^A-Za-z0-9_]|$)`,
-    )
-    const hits = all.filter(
-      (test) =>
-        base(test) === `test_${module}.py` ||
-        base(test) === `${module}_test.py` ||
-        base(test).startsWith(`test_${module}_`) ||
-        named.test(readFileSync(join(root, test), 'utf8')),
-    )
+    // The dotted module, relative to the tool's directory (backend/app/x.py -> app.x).
+    const parts = (dir === '.' ? file : relative(dir, file)).replace(/\.pyi?$/, '').split('/')
+    if (parts.at(-1) === '__init__') parts.pop()
+    if (!parts.length) continue
+    const dotted = parts.join('.')
+    const leaf = parts[parts.length - 1]
+    const parent = parts.slice(0, -1).join('.')
+    imports ??= new Map(all.map((test) => [test, pythonImports(join(root, test))]))
+    const hits = all.filter((test) => {
+      const name = base(test)
+      if (
+        name === `test_${leaf}.py` ||
+        name === `${leaf}_test.py` ||
+        name.startsWith(`test_${leaf}_`)
+      )
+        return true
+      const found = imports?.get(test)
+      return (
+        !!found &&
+        ([...found.modules].some((m) => m === dotted || m.startsWith(`${dotted}.`)) ||
+          [...found.from].some(([from, n]) => from === dotted || (from === parent && n === leaf)))
+      )
+    })
     if (hits.length) for (const hit of hits) tests.add(hit)
     else unmapped = true
   }
@@ -497,6 +547,25 @@ function legacySteps(
 }
 
 /**
+ * The legacy tools a lane runs. The quick lane, like `st check --quick`, also runs pytest and Vitest
+ * on the changed files when the project has them installed, even where the full gate leaves its
+ * suites to native stages (`legacy_tools` without them).
+ */
+function legacyTools(config: Config, lane: Lane): string[] {
+  if (lane !== 'quick') return config.legacy
+  const installed = (tool: string, binary: string) => {
+    const dir = toolDir(config.root, tool)
+    const path = toolBinary(config, tool, binary, dir)
+    return path !== binary && existsSync(path)
+  }
+  const extra = [
+    ...(installed('pytest', 'pytest') ? ['pytest'] : []),
+    ...(installed('vitest', 'vitest') ? ['vitest'] : []),
+  ]
+  return [...new Set([...config.legacy, ...extra])]
+}
+
+/**
  * The steps of one run. `changed` is the changed-file scope (null for the whole tree). The quick lane
  * runs stages that opted in (`quick = true`, narrowed by `quick_paths`) and the legacy tools on the
  * changed files; the full gate runs every applicable stage except views of another (`covered_by`).
@@ -508,7 +577,8 @@ export function plan(
   listFiles: ListFiles,
 ): Planned[] {
   const out: Planned[] = []
-  for (const tool of config.legacy) out.push(...legacySteps(config, tool, lane, changed, listFiles))
+  for (const tool of legacyTools(config, lane))
+    out.push(...legacySteps(config, tool, lane, changed, listFiles))
   for (const decl of config.stages) {
     const native = (skip?: string): Planned =>
       skip

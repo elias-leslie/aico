@@ -8,7 +8,7 @@ import { existsSync } from 'node:fs'
 import { join, posix } from 'node:path'
 import { blobIds, changedFiles, git, gitOk } from './git'
 import { type Coordination, CoordinationError, othersClaim } from './hook'
-import { type Config, type Lane, plan, toolBinary } from './plan'
+import { type Config, type Lane, type Planned, plan, toolBinary } from './plan'
 import { passed, receiptStore, resultLine, runSteps, type StepResult } from './run'
 import type { CheckSummary } from './status'
 
@@ -133,8 +133,16 @@ export function fixScope(
   return commands
 }
 
-function reuseKey(root: string, config: Config, lane: Lane, scope: string[] | null): string {
+/** Lane, gate config, the planned commands, HEAD's tree and the scope's content. */
+function reuseKey(
+  root: string,
+  config: Config,
+  lane: Lane,
+  scope: string[] | null,
+  planned: Planned[],
+): string {
   const hash = createHash('sha256').update(`${config.digest}\0${lane}\0`)
+  hash.update(JSON.stringify(planned.map((p) => p.step?.argv ?? p.skip ?? p.id)))
   hash.update(
     gitOk(root, ['rev-parse', '-q', '--verify', 'HEAD'])
       ? git(root, ['rev-parse', 'HEAD^{tree}'])
@@ -159,7 +167,8 @@ export async function runCheck(config: Config, options: CheckOptions): Promise<C
   }
   const store = receiptStore(root)
   const reuse = options.reuse !== false
-  const key = reuse ? reuseKey(root, config, options.lane, scope) : null
+  const planned = plan(config, options.lane, scope, () => trackedFiles(root))
+  const key = reuse ? reuseKey(root, config, options.lane, scope, planned) : null
   const prior = key ? store.get<CheckReport & { at?: string }>(key) : null
   if (prior?.passed) {
     out(
@@ -168,7 +177,6 @@ export async function runCheck(config: Config, options: CheckOptions): Promise<C
     return { ...prior, reused: true, ms: performance.now() - started }
   }
   out(`CHECK:${options.lane}:${scope ? `${scope.length} changed file(s)` : 'whole tree'}`)
-  const planned = plan(config, options.lane, scope, () => trackedFiles(root))
   const results: StepResult[] = await runSteps(config, options.lane, planned, {
     jobs: options.jobs,
     out,

@@ -98,6 +98,26 @@ describe('stage selection', () => {
   })
 })
 
+describe('focused pytest', () => {
+  it('runs the tests that import a changed module, and pytest in the quick lane only when installed', () => {
+    const root = repo('')
+    write(root, 'backend/app/pricing.py', 'x = 1\n')
+    write(root, 'backend/tests/test_imports.py', 'from app.pricing import x\n')
+    write(root, 'backend/tests/test_from_parent.py', 'from app import (\n  pricing,\n)\n')
+    write(root, 'backend/tests/test_mentions.py', '# pricing is only a word here\n')
+    const steps = () =>
+      plan(config(root), 'quick', ['backend/app/pricing.py'], () => []).map(
+        (p) => p.step?.argv.slice(1).join(' ') ?? `${p.id}:${p.skip}`,
+      )
+    expect(steps()).toEqual([])
+    write(root, 'backend/.venv/bin/pytest', '')
+    expect(steps()).toEqual([
+      '-q --tb=short --no-cov tests/test_from_parent.py tests/test_imports.py',
+    ])
+    expect(plan(config(root), 'full', null, () => []).map((p) => p.id)).toEqual([])
+  })
+})
+
 describe('the changed-only cone', () => {
   it('is the changed files no other agent wrote or leases', () => {
     const root = repo(stage('lint', 'quick = true'))
