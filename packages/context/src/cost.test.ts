@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   budgetHint,
@@ -71,6 +74,26 @@ afterEach(() => {
 })
 
 describe('context inventory and use', () => {
+  it('upgrades a version-3 inventory opened before the role-context review fix', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-context-v3-'))
+    const path = join(dir, 'context.db')
+    try {
+      const old = openContext(path)
+      old.exec('DROP TABLE role_context_overrides; PRAGMA user_version = 3')
+      old.close()
+      const upgraded = openContext(path)
+      try {
+        expect(upgraded.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 4 })
+        expect(
+          upgraded.prepare('SELECT count(*) AS n FROM role_context_overrides').get(),
+        ).toMatchObject({ n: 0 })
+      } finally {
+        upgraded.close()
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
   it('edits named-role context without turning it into a launch job', () => {
     const db = seeded()
     putSetting(db, 'launch', { version: 5, about: '', usage_providers: [], work_roles: [] })

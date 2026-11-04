@@ -197,8 +197,10 @@ const MIGRATIONS = [
      kind TEXT NOT NULL,
      item TEXT NOT NULL,
      PRIMARY KEY(kind, item)
-   ) STRICT;
-   CREATE TABLE role_context_overrides (
+   ) STRICT;`,
+  // Version 3 may already have been opened by the source CLI before rollout.
+  // Keep this later review fix in a new migration for those live files too.
+  `CREATE TABLE IF NOT EXISTS role_context_overrides (
      role TEXT PRIMARY KEY REFERENCES roles(name) ON DELETE CASCADE,
      mode TEXT NOT NULL CHECK (mode IN ('default', 'blank-slate'))
    ) STRICT;`,
