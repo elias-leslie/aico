@@ -27,10 +27,12 @@ import {
   projectGap,
   type Refused,
   readPolicy,
+  roleEgress,
 } from './rules'
 import { thinking } from './run'
-import { jsonIn, schemaErrors, unsupportedKeywords } from './schema'
+import { compileSchema, jsonIn } from './schema'
 import { credentialMarkers } from './tools'
+import { type Egress, transportRefusal } from './transport'
 
 export const ASK_USAGE = `Usage: aico ask MODEL "question" [--schema FILE] [--files FILE...] [--role ROLE] [--effort LEVEL] [--json]
 Asks one model one question, with no tools. The answer goes to stdout.
@@ -355,6 +357,7 @@ async function viaPi(
   deps: AskDeps,
   harness: Harness,
   silenceMs: number,
+  egress: Egress,
 ): Promise<Answer> {
   const provider = (harness.providers as Record<string, string>)[entry.provider] as string
   const name = entry.id.startsWith(`${entry.provider}/`)
@@ -363,6 +366,8 @@ async function viaPi(
   const models = deps.models ?? allowedModels([provider])
   const model = models.getModel(provider, name)
   if (!model) return failed(entry.id, `provider ${provider} has no model ${name}`)
+  const denied = transportRefusal(egress, entry.id, model.baseUrl)
+  if (denied) return { outcome: denied, tokens: NO_TOKENS }
   if (model.api === CLAUDE_API)
     return {
       outcome: {
@@ -490,11 +495,8 @@ export async function ask(
   })
   const bad = (detail: string) => finish({ kind: 'bad_input', detail })
 
-  if (req.schema !== undefined) {
-    const unsupported = unsupportedKeywords(req.schema)
-    if (unsupported.length)
-      return bad(`the schema uses keywords aico ask does not check: ${unsupported.join(', ')}`)
-  }
+  const schema = req.schema === undefined ? undefined : compileSchema(req.schema)
+  if (schema && 'error' in schema) return bad(`invalid schema: ${schema.error}`)
   let files = ''
   if (req.files?.length) {
     const blocks = fileBlocks(req.files, req.cwd, harness)
@@ -509,6 +511,12 @@ export async function ask(
   const resolved = resolveModel(context, catalog, harness, role, project, req.model)
   if ('kind' in resolved) return finish(resolved)
   const { entry, run } = resolved
+  const egress = roleEgress(harness, role)
+  if ('kind' in egress) return finish(egress)
+  if (run === 'claude' || run === 'agy') {
+    const denied = transportRefusal(egress, entry.id)
+    if (denied) return finish(denied)
+  }
 
   const silenceMs = deps.silenceMs ?? harness.ask.wire_silence_seconds * 1000
   const system = [
@@ -528,7 +536,7 @@ export async function ask(
         ? await viaClaude(entry, `${system}\n\n${user}`, req, req.schema, deps, silenceMs, scratch)
         : run === 'agy'
           ? await viaAgy(entry, `${system}\n\n${user}`, req, req.schema, deps, silenceMs, scratch)
-          : await viaPi(entry, user, system, req, deps, harness, silenceMs)
+          : await viaPi(entry, user, system, req, deps, harness, silenceMs, egress)
   } finally {
     rmSync(scratch, { recursive: true, force: true })
   }
@@ -539,7 +547,7 @@ export async function ask(
     return finish({ kind: 'done', model: entry.id, text }, answer.tokens)
   // The CLIs return the parsed JSON separately; a plain model reply is parsed from its text.
   const found = data !== undefined ? { value: data } : jsonIn(text)
-  const errors = found ? schemaErrors(req.schema, found.value) : ['the answer is not JSON']
+  const errors = found ? (schema?.validate(found.value) ?? []) : ['the answer is not JSON']
   if (!found || errors.length)
     return finish({ kind: 'schema_invalid', model: entry.id, errors, text }, answer.tokens)
   return finish(

@@ -15,7 +15,6 @@ import {
   research,
   searchWeb,
 } from './fetch'
-import { pyJson } from './json'
 
 export const NOT_HANDLED = 3
 
@@ -112,6 +111,8 @@ async function run(
     io.out(USAGE)
     return 0
   }
+  if (verb !== 'batch' && positionals.length > 1)
+    throw new UsageError(`unexpected positional argument: '${positionals[1]}'`)
   if (
     values.selector !== undefined ||
     values['wait-script'] !== undefined ||
@@ -222,7 +223,7 @@ export async function runWebCli(argv: string[], io: WebIo): Promise<number> {
     return 2
   }
   if (typeof done === 'number') return done
-  io.out(`${pyJson(done.payload, done.compact ? null : 2)}\n`)
+  io.out(`${JSON.stringify(done.payload, null, done.compact ? undefined : 2)}\n`)
   await record(io, verb, done.payload)
   return 'error' in done.payload ? 1 : 0
 }

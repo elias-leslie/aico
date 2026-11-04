@@ -9,6 +9,7 @@ import { resolve, sep } from 'node:path'
 import { Catalog, type LaunchPolicy, loadPolicy, openContext, route } from '@aico/context'
 import harnessData from '../data/harness.json' with { type: 'json' }
 import type { Contain } from './tools'
+import type { Egress } from './transport'
 
 export type Harness = typeof harnessData
 export const HARNESS: Harness = harnessData
@@ -61,6 +62,20 @@ const refused = (reason: RefusalReason, detail: string): Refused => ({
   reason,
   detail,
 })
+
+/** The role's model egress policy, shared by runs and ask. */
+export function roleEgress(harness: Harness, role: string): Egress | Refused {
+  const config = (harness.roles as Record<string, { egress: string }>)[role]
+  if (!config)
+    return refused('unknown_role', `role '${role}' has no harness rules (data/harness.json)`)
+  const hosts = (harness.egress_profiles as Record<string, string[]>)[config.egress]
+  if (!hosts?.length)
+    return refused(
+      'unenforceable',
+      `role '${role}' needs egress profile '${config.egress}', which data/harness.json does not define`,
+    )
+  return { egress: config.egress, hosts: hosts.includes('*') ? null : hosts }
+}
 
 /** A registered project: its id and the folder it lives in. */
 export interface ProjectRoot {
@@ -262,13 +277,9 @@ export function roleRules(
   if (!chain.length)
     return refused('no_model', `role '${request.role}' has no model this harness may run`)
 
-  const hosts = (harness.egress_profiles as Record<string, string[]>)[roleData.egress]
-  if (!hosts?.length)
-    return refused(
-      'unenforceable',
-      `role '${request.role}' needs egress profile '${roleData.egress}', which data/harness.json does not define`,
-    )
-  const open = hosts.includes('*')
+  const egress = roleEgress(harness, request.role)
+  if ('kind' in egress) return egress
+  const open = egress.hosts === null
   if (!open && !contains(harness.contain_command))
     return refused(
       'unenforceable',
@@ -291,8 +302,7 @@ export function roleRules(
     level: roleData.level,
     tools,
     guardHook: roleData.guard ? harness.guard_hook : null,
-    egress: roleData.egress,
-    hosts: open ? null : hosts,
+    ...egress,
     contain: open
       ? null
       : {

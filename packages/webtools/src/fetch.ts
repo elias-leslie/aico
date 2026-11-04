@@ -3,6 +3,7 @@
 // and the full extraction kept for refocus. Output shapes match Agent Hub's `st web`.
 
 import { isIP } from 'node:net'
+import ipaddr from 'ipaddr.js'
 import { loadArtifact, saveArtifact } from './artifacts'
 import { extractHtml, type Page } from './extract'
 import { type FocusMeta, normalizeWhitespace, selectFocused } from './focus'
@@ -108,28 +109,7 @@ export function publicFallbackAllowed(url: string): boolean {
 }
 
 function isGlobalIp(ip: string): boolean {
-  if (isIP(ip) === 4) {
-    const [a, b] = ip.split('.').map(Number) as [number, number]
-    return !(
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      a >= 224 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 192 && b === 0)
-    )
-  }
-  const v6 = ip.toLowerCase()
-  return !(
-    v6 === '::' ||
-    v6 === '::1' ||
-    /^f[cd]/.test(v6) ||
-    /^fe[89ab]/.test(v6) ||
-    v6.startsWith('::ffff:')
-  )
+  return ipaddr.parse(ip).range() === 'unicast'
 }
 
 function sparse(contentType: string, raw: string, content: string): boolean {

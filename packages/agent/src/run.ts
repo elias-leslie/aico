@@ -39,6 +39,7 @@ import { allowedModels, sessionHeaders } from './providers'
 import { type ChainModel, HARNESS, type Harness, type Refused, type RoleRules } from './rules'
 import { credentialMarkers, guardBash, leanTools, touchesCredentials } from './tools'
 import { type StoredRun, type Tokens, Transcript } from './transcript'
+import { transportHost, transportRefusal } from './transport'
 
 export type Outcome =
   | { kind: 'done'; model: string; text: string }
@@ -108,15 +109,6 @@ export interface RunOptions {
 }
 
 /** Where --test-unreachable sends a model: the discard port, which refuses connections. */
-/** A base URL's host name, or the URL itself when it does not parse (never inside a profile). */
-function hostOf(baseUrl: string): string {
-  try {
-    return new URL(baseUrl).hostname
-  } catch {
-    return baseUrl
-  }
-}
-
 const UNREACHABLE = 'http://127.0.0.1:9/v1'
 
 const LEVELS: readonly ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
@@ -264,12 +256,12 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
     const outside: string[] = []
     for (const entry of rules.chain) {
       const model = models.getModel(entry.piProvider, entry.piModel)
-      const host = model && hostOf(model.baseUrl)
+      const host = model && transportHost(model.baseUrl)
       if (!model)
         log(`skip ${entry.id}: provider ${entry.piProvider} has no model ${entry.piModel}`)
       else if (model.api === CLAUDE_API)
         log(`skip ${entry.id}: it speaks ${CLAUDE_API}; Claude runs only through claude -p`)
-      else if (rules.hosts && !rules.hosts.includes(host as string)) {
+      else if (transportRefusal(rules, entry.id, model.baseUrl)) {
         outside.push(`${entry.id} at ${host}`)
         log(`skip ${entry.id}: ${host} is outside egress profile '${rules.egress}'`)
       } else chain.push({ entry, model })

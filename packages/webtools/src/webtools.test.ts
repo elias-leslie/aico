@@ -7,7 +7,6 @@ import { count, counterRow, openCounter, today } from './counter'
 import { extractHtml } from './extract'
 import { publicFallbackAllowed } from './fetch'
 import { selectFocused } from './focus'
-import { pyJson } from './json'
 import { parseLite, parseRss } from './search'
 
 const PAGE = `<html><head><title>Plain title</title><meta property="og:site_name" content="Site">
@@ -81,10 +80,6 @@ describe('focus', () => {
 })
 
 describe('output shape', () => {
-  it('prints sorted keys with Python separators and ASCII escapes', () => {
-    expect(pyJson({ b: 1, a: ['é'] }, null)).toBe('{"a": ["\\u00e9"], "b": 1}')
-    expect(pyJson({ b: [], a: {} })).toBe('{\n  "a": {},\n  "b": []\n}')
-  })
   it('parses DuckDuckGo lite and Bing RSS results', () => {
     const lite = `<a rel="nofollow" href="https://a.example/x?a=1&amp;b=2" class='result-link'>A <b>title</b></a>
       <td class='result-snippet'>some <b>snippet</b></td>
@@ -178,10 +173,35 @@ describe('aico web', () => {
       'https://example.com/?api_key=1',
       'https://example.com/#frag',
       'https://nas.local/x',
+      'http://198.18.0.1/private-path',
+      'http://198.19.255.254/private-path',
+      'http://[ff02::1]/private-path',
+      'http://[2001:db8::1]/private-path',
+      'http://203.0.113.1/private-path',
     ])
       expect(publicFallbackAllowed(url)).toBe(false)
     expect(publicFallbackAllowed('https://example.com/a?page=2')).toBe(true)
+    expect(publicFallbackAllowed('https://8.8.8.8/')).toBe(true)
+    expect(publicFallbackAllowed('https://[2606:4700:4700::1111]/')).toBe(true)
   })
+
+  it('does not send a non-global URL to Jina after a direct failure', async () => {
+    const h = harness({ 'http://198.18.0.1/': () => html('', 503) })
+    expect(await runWebCli(['fetch', 'http://198.18.0.1/private-path', '--raw'], h.io)).toBe(1)
+    expect(h.calls).toEqual(['http://198.18.0.1/private-path'])
+    expect(JSON.parse(h.out.join('')).error).toContain('public reader rejects')
+  })
+
+  it.each(['search', 'research', 'fetch', 'refocus'])(
+    'rejects surplus %s positionals before I/O',
+    async (verb) => {
+      const h = harness({})
+      expect(await runWebCli([verb, 'first', 'ignored', '--raw'], h.io)).toBe(2)
+      expect(h.calls).toEqual([])
+      expect(h.out).toEqual([])
+      expect(h.err.join('')).toContain('unexpected positional')
+    },
+  )
 
   it('batch reports failed fetches and exits 1', async () => {
     const h = harness({

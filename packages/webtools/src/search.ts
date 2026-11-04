@@ -1,5 +1,6 @@
 // Keyless public web search. SearXNG when WEB_SEARCH_SEARXNG_URL names one; otherwise
-// DuckDuckGo's lite page for text and Bing's RSS for news, each the other's fallback.
+// DuckDuckGo's lite page for text and Bing's RSS for news. Fallbacks must retain
+// the requested scope and recency; unsupported provider filters fail closed.
 
 import { plainText } from './extract'
 import { normalizeWhitespace } from './focus'
@@ -146,6 +147,10 @@ export function parseRss(xml: string): Raw[] {
 }
 
 async function bing(fetcher: Fetch, req: SearchRequest): Promise<Raw[]> {
+  if (req.timelimit && (req.type === 'text' || req.timelimit === 'y'))
+    throw new Error(
+      `Bing RSS cannot preserve the requested ${req.type} recency filter (${req.timelimit})`,
+    )
   const params = new URLSearchParams({ q: req.query, format: 'rss' })
   const interval = req.timelimit && BING_INTERVAL[req.timelimit]
   if (interval && req.type === 'news') params.set('qft', `interval="${interval}"`)
@@ -165,10 +170,7 @@ export async function search(
       ? ([['searxng', () => searxng(fetcher, base, req)]] as [string, () => Promise<Raw[]>][])
       : []),
     ...(req.type === 'news'
-      ? ([
-          ['bing', () => bing(fetcher, req)],
-          ['duckduckgo', () => duckduckgo(fetcher, req)],
-        ] as [string, () => Promise<Raw[]>][])
+      ? ([['bing', () => bing(fetcher, req)]] as [string, () => Promise<Raw[]>][])
       : ([
           ['duckduckgo', () => duckduckgo(fetcher, req)],
           ['bing', () => bing(fetcher, req)],

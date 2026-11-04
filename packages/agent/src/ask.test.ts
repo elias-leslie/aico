@@ -2,7 +2,7 @@
 // key), the schema check, the files refusal, wire silence, and the typed failures, with fake
 // claude and agy commands and pi-ai's faux provider. Nothing here calls a real model.
 
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Catalog, type LaunchPolicy } from '@aico/context'
@@ -18,7 +18,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { ask, askMain, fileBlocks } from './ask'
 import policyData from './fixtures/policy.json' with { type: 'json' }
 import { HARNESS } from './rules'
-import { jsonIn, schemaErrors, unsupportedKeywords } from './schema'
+import { jsonIn } from './schema'
 
 const policy = policyData as unknown as LaunchPolicy
 const context = { policy, projects: [] }
@@ -71,32 +71,32 @@ const request = (model: string, extra = {}) => ({
 })
 const kind = (result: Awaited<ReturnType<typeof ask>>) => result.outcome.kind
 
-describe('schema check', () => {
-  it('is strict: no coercion, required fields, extra fields, nested items', () => {
-    expect(schemaErrors(SCHEMA, { answer: 42 })).toEqual([])
-    expect(schemaErrors(SCHEMA, { answer: '42' })).toEqual([
-      '$.answer: expected integer, got string',
-    ])
-    expect(schemaErrors(SCHEMA, {})).toEqual(["$: missing 'answer'"])
-    expect(schemaErrors(SCHEMA, { answer: 1, more: 2 })).toEqual(["$: unexpected 'more'"])
-    const list = { type: 'array', items: { enum: ['a', 'b'] }, minItems: 1 }
-    expect(schemaErrors(list, ['a', 'c'])).toEqual(['$[1]: not one of ["a","b"]'])
-    expect(schemaErrors(list, [])).toEqual(['$: fewer than 1 items'])
-    expect(schemaErrors({ anyOf: [{ type: 'string' }, { type: 'null' }] }, 3)).toHaveLength(1)
-  })
-
-  it('refuses keywords it does not check and finds JSON in a fenced reply', () => {
-    expect(unsupportedKeywords({ type: 'object', properties: { a: { $ref: '#/x' } } })).toEqual([
-      '#/properties/a/$ref',
-    ])
-    expect(unsupportedKeywords(SCHEMA)).toEqual([])
-    expect(jsonIn('Sure:\n```json\n{"answer": 42}\n```')).toEqual({ value: { answer: 42 } })
-    expect(jsonIn('the answer is 42')).toBeNull()
-  })
+it('reads JSON in a fenced reply', () => {
+  expect(jsonIn('Sure:\n```json\n{"answer": 42}\n```')).toEqual({ value: { answer: 42 } })
+  expect(jsonIn('the answer is 42')).toBeNull()
 })
 
 describe('rules', () => {
   const bins = { claude: fakeBin('claude-rules', echoing(claudeResult({}))) }
+
+  it.each(['recon', 'hunting'])(
+    'refuses an unverifiable native CLI transport for %s before starting it',
+    async (role) => {
+      const agy = fakeBin(`agy-egress-${role}`, echoing(agyResult({})))
+      const result = await ask(request('gemini-3.8-flash', { role }), { context, bins: { agy } })
+      expect(result.outcome).toMatchObject({ kind: 'refused', reason: 'egress_denied' })
+      expect(existsSync(`${agy}.args`)).toBe(false)
+    },
+  )
+
+  it('refuses a role whose egress profile is undefined', async () => {
+    const harness = structuredClone(HARNESS)
+    harness.roles.lookup.egress = 'missing-profile'
+    expect((await ask(request('haiku'), { context, bins, harness })).outcome).toMatchObject({
+      kind: 'refused',
+      reason: 'unenforceable',
+    })
+  })
 
   it('refuses an unknown model, an unknown role and a model the role denies, before anything runs', async () => {
     expect((await ask(request('no-such-model'), { context, bins })).outcome).toMatchObject({
@@ -143,6 +143,19 @@ describe('rules', () => {
 })
 
 describe('claude -p', () => {
+  it.each([
+    { type: 'string', pattern: '[' },
+    { type: 'array', minItems: 'x' },
+    { type: 'string', unknownKeyword: true },
+  ])('returns typed bad_input for invalid schemas without starting a model', async (schema) => {
+    const claude = fakeBin('claude-schema-preflight', echoing(claudeResult({ result: 'text' })))
+    const result = await ask(request('haiku', { schema }), { context, bins: { claude } })
+    expect(result.outcome).toMatchObject({
+      kind: 'bad_input',
+      detail: expect.stringContaining('invalid schema'),
+    })
+    expect(existsSync(`${claude}.args`)).toBe(false)
+  })
   it('runs with tools off, no API key in its environment, the prompt on stdin, and returns the answer', async () => {
     const claude = fakeBin('claude-ok', echoing(claudeResult({ result: '42' })))
     const saved = process.env.ANTHROPIC_API_KEY
@@ -189,7 +202,7 @@ describe('claude -p', () => {
     })
     expect(bad.outcome).toMatchObject({
       kind: 'schema_invalid',
-      errors: ['$.answer: expected integer, got string'],
+      errors: [expect.stringContaining('must be integer')],
     })
   })
 
@@ -300,6 +313,26 @@ describe('pi-ai models', () => {
     expect(headers?.['User-Agent']).toBe('aico-agent/0.1.0')
     stream.mockRestore()
   })
+
+  it.each([
+    ['https://outside.example/v1', 'refused', 0],
+    ['https://api.openai.com/v1', 'done', 1],
+  ] as const)(
+    'checks the resolved endpoint %s against recon egress',
+    async (baseUrl, expected, calls) => {
+      const { provider, models } = faux()
+      provider.setResponses([fauxAssistantMessage('inside')])
+      const getModel = models.getModel.bind(models)
+      vi.spyOn(models, 'getModel').mockImplementation((p, id) => {
+        const model = getModel(p, id)
+        return model ? { ...model, baseUrl } : model
+      })
+      const result = await ask(request('codex', { role: 'recon' }), { context, models })
+      expect(result.outcome.kind).toBe(expected)
+      if (expected === 'refused') expect(result.outcome).toMatchObject({ reason: 'egress_denied' })
+      expect(provider.state.callCount).toBe(calls)
+    },
+  )
 
   it('answers with the schema instruction in the system prompt and reads fenced JSON', async () => {
     const { provider, models } = faux()
