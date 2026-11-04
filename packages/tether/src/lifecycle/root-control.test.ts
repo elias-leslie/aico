@@ -1693,7 +1693,9 @@ describe('private root workload control', () => {
 describe('root lists with a retained request history', () => {
   it('reads only live sessions for ended=0 and keeps tombstones addressable', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-root-history-'))
-    const store = initStore(join(dir, 'catalog.db'))
+    // Exercise the real catalog and socket without a durable commit per
+    // tombstone: persistence is covered separately, not by this read test.
+    const store = initStore(':memory:')
     const socketPath = join(dir, 'control.sock')
     const status = vi.fn(async () => 'running' as const)
     const handle = createRootHandler({
