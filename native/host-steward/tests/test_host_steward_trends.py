@@ -153,7 +153,8 @@ def test_thin_trend_check_is_failed_on_the_pve_host_because_it_holds_data(store,
         [round(65.26 - 0.99 * i, 2) for i in range(21, -1, -1)],
         "pve/data",
     )
-    ctx = ctx_for("trends", cache={"history": store})
+    # No seed from the live Nightshift history: its pve/data readings would change the slope.
+    ctx = ctx_for("trends", cfg={**DATA["checks"]["trends"], "seed": {}}, cache={"history": store})
     sig = next(s for s in trends.run(ctx) if s.code == "pve.thin.trend")
     assert sig.state == "failed"
     assert "pve/data data reaches 92.0% in ~27 days" in core.meaning(
