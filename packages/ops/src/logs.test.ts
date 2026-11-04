@@ -47,6 +47,24 @@ describe('aico logs', () => {
     expect(level('CRITICAL')).toBe('emerg..crit')
   })
 
+  it('reads retained journals after a transient or removed unit is gone', () => {
+    const target = 'aico-deploy-aico-0123456789ab.service'
+    const req = parseLogsArgs([target])
+    if (typeof req === 'string') throw new Error(req)
+    const history =
+      (user: boolean): Runner =>
+      (cmd, args) => ({
+        code: cmd === 'journalctl' ? 0 : 1,
+        out:
+          cmd === 'journalctl' && args.includes('--user') === user
+            ? '{"MESSAGE":"retained deploy output"}\n'
+            : '',
+        err: '',
+      })
+    expect(journalArgs(req, project, history(true))?.slice(0, 3)).toEqual(['--user', '-u', target])
+    expect(journalArgs(req, project, history(false))?.slice(0, 2)).toEqual(['-u', target])
+  })
+
   it('answers null for a unit neither manager has, and refuses bad options', () => {
     const req = parseLogsArgs(['summitflow']) as Exclude<ReturnType<typeof parseLogsArgs>, string>
     expect(journalArgs(req, project, units([]))).toBeNull()

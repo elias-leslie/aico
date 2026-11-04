@@ -61,7 +61,25 @@ export function journalArgs(req: LogsRequest, project: Project, run: Runner): st
   let user = units.length > 1
   if (!user) {
     user = run('systemctl', ['--user', 'cat', units[0] as string]).code === 0
-    if (!user && run('systemctl', ['cat', units[0] as string]).code !== 0) return null
+    if (!user && run('systemctl', ['cat', units[0] as string]).code !== 0) {
+      // Collected transient units (deploy jobs) and removed services can still have a journal.
+      const retained = (userJournal: boolean) => {
+        const result = run('journalctl', [
+          ...(userJournal ? ['--user'] : []),
+          '--quiet',
+          '--no-pager',
+          '-n',
+          '1',
+          '-o',
+          'json',
+          '-u',
+          units[0] as string,
+        ])
+        return result.code === 0 && result.out.trim().length > 0
+      }
+      user = retained(true)
+      if (!user && !retained(false)) return null
+    }
   }
   const args = [
     ...(user ? ['--user'] : []),
