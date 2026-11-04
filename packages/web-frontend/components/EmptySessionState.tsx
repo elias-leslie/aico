@@ -8,6 +8,7 @@ import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouLauncher } from './asks/NeedsYou'
 import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostsLauncher } from './HostsButton'
+import { HistoryLauncher } from './history/HistoryLauncher'
 import { NotesLauncher } from './notes/NotesLauncher'
 import { SessionList } from './SessionList'
 import { StatusLauncher } from './status/StatusLauncher'
@@ -47,6 +48,7 @@ export function EmptySessionState({
           <CaptureLauncher variant="row" />
           <NotesLauncher variant="row" />
           <StatusLauncher variant="row" />
+          <HistoryLauncher variant="row" />
           <HostsLauncher />
         </header>
       )}

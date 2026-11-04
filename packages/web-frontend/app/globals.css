@@ -2171,3 +2171,145 @@ div.xterm .xterm-viewport {
     display: none;
   }
 }
+
+/* ---------- Recent sessions (/history): the list reuses the Status rows ---------- */
+.history-row {
+  grid-template-columns: 112px minmax(0, 1fr) 150px minmax(0, 360px);
+  color: inherit;
+  text-decoration: none;
+}
+
+.history-row .what {
+  overflow-wrap: anywhere;
+}
+
+.history-row .sec {
+  display: block;
+}
+
+.history-cap {
+  margin: 8px 2px 0;
+  font-size: 12.5px;
+}
+
+.history-facts {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 10px;
+  background: rgb(var(--ink-rgb) / 0.35);
+  font-size: 13px;
+}
+
+.history-facts > div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.history-facts dt {
+  color: var(--mist);
+}
+
+.history-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.history-facts ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  color: var(--term-text-dim);
+}
+
+.history-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 900px;
+}
+
+.history-older {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.history-event {
+  padding: 8px 12px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 8px;
+  background: rgb(var(--ink-rgb) / 0.35);
+  font-size: 13px;
+}
+
+.history-event.user {
+  border-color: rgb(var(--lantern-rgb) / 0.3);
+}
+
+.history-event .head,
+.history-event summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  color: var(--mist);
+  font-size: 12px;
+  cursor: default;
+}
+
+.history-event summary {
+  cursor: pointer;
+  transition: color 0.15s var(--ease-arrival);
+}
+
+.history-event summary:hover {
+  color: var(--bone);
+}
+
+.history-event .who {
+  color: var(--bone);
+  font-weight: 600;
+}
+
+.history-event .peek {
+  min-width: 0;
+  flex: 1 1 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--term-text-dim);
+}
+
+.history-event pre {
+  margin: 6px 0 0;
+  max-height: 420px;
+  overflow: auto;
+  color: var(--bone);
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.history-event.tool_call code {
+  display: block;
+  margin-top: 4px;
+  color: var(--term-text-dim);
+  font: 12px / 1.4 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .history-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .history-facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+}

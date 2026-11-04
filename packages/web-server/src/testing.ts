@@ -268,6 +268,26 @@ export class FakeTether {
     return this.runsAnswer
   }
 
+  /** What the session history answers (`history()`, `historySession()`, `historyEvents()`). */
+  historyItems: unknown[] = []
+
+  async history(options: unknown = {}) {
+    this.record('history', options)
+    return { items: this.historyItems }
+  }
+
+  async historySession(id: string) {
+    this.record('historySession', id)
+    if (id === 'missing') throw new TetherError(404, 'unknown_session', {})
+    return { id }
+  }
+
+  async historyEvents(id: string, options: unknown = {}) {
+    this.record('historyEvents', id, options)
+    if (id === 'gone') throw new TetherError(410, 'transcript_gone', {})
+    return { items: [], older: null, newer: null, size: 0 }
+  }
+
   async version() {
     return { name: 'tether', version: '0.0.0-test', apiVersion: 3, minApiVersion: 1 }
   }

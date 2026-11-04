@@ -10,6 +10,9 @@ import { request } from 'node:http'
 import { join } from 'node:path'
 import {
   type AttachAnswer,
+  type HistoryDetail,
+  type HistoryEventPage,
+  type HistorySession,
   type HostInfo,
   parseAttachAnswer,
   type ResizeClaimAnswer,
@@ -154,6 +157,35 @@ export class TetherClient {
       `/v1/sessions/${encodeURIComponent(id)}/end`,
       options.keepWakes ? { generation, keepWakes: true } : { generation },
       { timeoutMs: 30_000 },
+    )
+  }
+
+  /** Recent sessions of Claude Code, Codex and Pi (docs/api-v1.md "Session history"). */
+  async history(
+    options: { limit?: number; tool?: string; project?: string } = {},
+  ): Promise<{ items: HistorySession[] }> {
+    const query = new URLSearchParams()
+    if (options.limit) query.set('limit', String(options.limit))
+    if (options.tool) query.set('tool', options.tool)
+    if (options.project) query.set('project', options.project)
+    return this.json('GET', `/v1/history${query.size ? `?${query}` : ''}`)
+  }
+
+  historySession(id: string): Promise<HistoryDetail> {
+    return this.json('GET', `/v1/history/${encodeURIComponent(id)}`)
+  }
+
+  historyEvents(
+    id: string,
+    options: { limit?: number; before?: number; from?: number } = {},
+  ): Promise<HistoryEventPage> {
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(options)) {
+      if (value !== undefined) query.set(key, String(value))
+    }
+    return this.json(
+      'GET',
+      `/v1/history/${encodeURIComponent(id)}/events${query.size ? `?${query}` : ''}`,
     )
   }
 

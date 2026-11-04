@@ -12,6 +12,7 @@ import {
 } from './asks/NeedsYou'
 import { CaptureLauncher } from './capture/CaptureLauncher'
 import { HostsLauncher } from './HostsButton'
+import { HistoryLauncher } from './history/HistoryLauncher'
 import { NotesLauncher } from './notes/NotesLauncher'
 import { SessionList, SessionRail, sessionsHeading } from './SessionList'
 import { StatusLauncher } from './status/StatusLauncher'
@@ -129,6 +130,7 @@ export function SessionSidebar({
         <NotesLauncher variant="icon" />
         <HostsLauncher icon />
         <StatusLauncher variant="icon" />
+        <HistoryLauncher variant="icon" />
         <nav
           aria-label="Sessions"
           data-testid="session-list"
@@ -182,6 +184,7 @@ export function SessionSidebar({
         <CaptureLauncher variant="row" />
         <NotesLauncher variant="row" />
         <StatusLauncher variant="row" />
+        <HistoryLauncher variant="row" />
         <HostsLauncher />
       </div>
       <nav

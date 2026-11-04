@@ -11,6 +11,7 @@ import { registerCheckInRoutes } from './check-ins'
 import type { UploadConfig } from './config'
 import type { WebStore } from './db'
 import { registerFileLocationRoutes } from './file-locations'
+import { registerHistoryRoutes } from './history'
 import { registerHostRoutes } from './hosts'
 import {
   objectBody,
@@ -404,6 +405,7 @@ export function buildApi(deps: ApiDeps): Router {
   registerAskRoutes(router, deps.asks)
   registerCheckInRoutes(router, life, tether)
   registerRunRoutes(router, tether)
+  registerHistoryRoutes(router, tether)
   registerChatRoutes(router, tether)
 
   // -- Agent Hub, auth, health ------------------------------------------------------

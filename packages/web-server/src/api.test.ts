@@ -268,6 +268,29 @@ describe('workflow runs', () => {
   })
 })
 
+describe('session history', () => {
+  it('passes the list, one session and its events through', async () => {
+    tether.historyItems = [{ id: 'codex:a' }]
+    expect(await call('GET', '/api/history?limit=5&tool=codex')).toMatchObject({
+      status: 200,
+      body: { items: [{ id: 'codex:a' }] },
+    })
+    expect(tether.callsOf('history')[0]).toEqual([{ limit: 5, tool: 'codex', project: undefined }])
+    expect((await call('GET', '/api/history/codex%3Aa')).body).toEqual({ id: 'codex:a' })
+    await call('GET', '/api/history/codex%3Aa/events?before=40&limit=20')
+    expect(tether.callsOf('historyEvents')[0]).toEqual([
+      'codex:a',
+      { limit: 20, before: 40, from: undefined },
+    ])
+  })
+
+  it('answers a missing session and a removed transcript in words', async () => {
+    expect((await call('GET', '/api/history/missing')).status).toBe(404)
+    expect(await call('GET', '/api/history/gone/events')).toMatchObject({ status: 410 })
+    expect((await call('GET', '/api/history?limit=x')).status).toBe(400)
+  })
+})
+
 describe('sessions', () => {
   it('lists every Tether session, linked ones with their tab', async () => {
     const pane = store.createPane({ projectId: null, name: 'Shell', activeMode: 'shell' })

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # `aico memory | prompt | models | context`: context.db (memories, prompts, roles, launch options).
+# `aico usage`: usage.db (what each subscription has left; packages/usage).
 # `aico jobs`: the scheduler's jobs (packages/jobs, jobs.db).
+# `aico sessions`: the session history, from the running Tether (`tether history`).
 # `aico agent run`: Aico's own agent harness (packages/agent, agent.db).
 # Only those commands: anything else (or nothing) prints the usage and exits 2, so this
 # never starts the web server.
@@ -9,7 +11,7 @@ set -euo pipefail
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/aico-web.sh"
 
 case "${1:-}" in
-  memory | prompt | models | context) exec_aico_web "$@" ;;
+  memory | prompt | models | context | usage) exec_aico_web "$@" ;;
   jobs)
     shift
     jobs_dir="$AICO_REPO_ROOT/packages/jobs"
@@ -33,10 +35,14 @@ case "${1:-}" in
     fi
     exec "$node" --disable-warning=ExperimentalWarning "$agent_bundle" "$@"
     ;;
+  sessions)
+    shift
+    exec tether history "$@"
+    ;;
   help | -h | --help) exec_aico_web memory --help ;;
   *)
     [ $# -gt 0 ] && echo "aico: unknown command '$1'" >&2
-    echo "Usage: aico <memory|prompt|models|context|jobs|agent> ...  (aico help lists every command)" >&2
+    echo "Usage: aico <memory|prompt|models|context|usage|jobs|agent|sessions> ...  (aico help lists every command)" >&2
     exit 2
     ;;
 esac

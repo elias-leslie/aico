@@ -118,6 +118,9 @@ const DETAILS: Record<string, [number, string]> = {
   agent_hub_refused: [409, 'Agent Hub did not accept it'],
   host_unavailable: [409, 'That host is not reachable'],
   unknown_host: [400, 'Tether does not know that host'],
+  unknown_session: [404, 'No session with that id'],
+  ambiguous_session: [409, 'More than one session starts with that'],
+  transcript_gone: [410, "The tool's transcript is gone, so its events cannot be read"],
 }
 
 export const UNAVAILABLE_DETAIL =

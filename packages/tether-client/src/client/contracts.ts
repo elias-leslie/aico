@@ -395,3 +395,56 @@ export function parseAttachAnswer(body: unknown): AttachAnswer {
     ...(value.ssh !== undefined ? { ssh: value.ssh } : {}),
   }
 }
+
+// --- session history (docs/api-v1.md "Session history") ---------------------------
+
+export type HistoryOutcome = 'completed' | 'aborted' | 'error'
+
+export interface HistoryTokens {
+  /** The part of the input not served from the cache. */
+  input: number
+  cacheRead: number
+  cacheWrite: number
+  output: number
+}
+
+export interface HistorySession {
+  id: string
+  tool: 'claude-code' | 'codex' | 'pi'
+  parentId: string | null
+  project: string | null
+  cwd: string | null
+  model: string | null
+  startedAt: number | null
+  endedAt: number | null
+  /** null: no final answer yet (a turn is running, or the tool stopped without one). */
+  outcome: HistoryOutcome | null
+  tokens: HistoryTokens
+  toolCalls: number
+  filesWritten: number
+}
+
+export interface HistoryDetail extends HistorySession {
+  path: string
+  files: { path: string; writes: number }[]
+  subagents: { count: number; tokens: HistoryTokens; toolCalls: number }
+}
+
+export interface HistoryEvent {
+  offset: number
+  at: number | null
+  role: 'user' | 'assistant' | 'tool' | 'system'
+  kind: 'text' | 'thinking' | 'tool_call' | 'tool_result' | 'note'
+  text: string
+  tool?: string
+  model?: string
+}
+
+export interface HistoryEventPage {
+  items: HistoryEvent[]
+  /** Pass as `before` for older events; null: this is the start. */
+  older: number | null
+  /** Pass as `from` for newer events; null: this is the end. */
+  newer: number | null
+  size: number
+}
