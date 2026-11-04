@@ -1,0 +1,177 @@
+// What the Status page's row actions do, and the phone alert a Status batch sends.
+//
+//   POST /api/status/run  {id}                     runs the row's run ref on this machine. Answers when
+//                                                  it ends, or after RUN_WAIT_MS while it keeps going.
+//   GET  /api/status/log?id=                       the last lines the row's log ref prints.
+//   POST /api/status/look {id, message, project}   starts a session in that project with the default
+//                                                  agent tool and `message` as its first message
+//                                                  (a Tether root, as `st aico create` starts one).
+//
+// Refs run only for rows of this machine, and never for the OmniNull hub's rows (ids `ominull...`),
+// which arrive over the LAN: a ref is a command a program on this machine wrote.
+
+import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import type { ActionKind, AlertBatch, StatusRow, StatusStore } from '@aico/status'
+import { alertText } from '@aico/status'
+import type { TetherClient } from '@aico/tether-client'
+import { objectBody, type Router, requiredString } from './http'
+import { tetherCall } from './lifecycle'
+import { HttpError, listTools } from './tether'
+
+/** How long a run is waited on before the page hears "still running". */
+const RUN_WAIT_MS = 4_000
+/** A log ref that keeps printing (`-f`) is cut off here. */
+const LOG_WAIT_MS = 10_000
+const LOG_LINES = 200
+/** Tether's cap on a fresh session's first message. */
+const MAX_MESSAGE_BYTES = 2_000
+const PROJECT = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+/** Who a session started from a row is, for Tether's root records. */
+const LOOK_ROLE = 'status-look'
+const LOOK_WORK_ROLE = 'operations'
+
+export interface StatusActionDeps {
+  status: Pick<StatusStore, 'rows'>
+  machine: string
+  tether: Pick<TetherClient, 'request' | 'projects'>
+}
+
+interface Ran {
+  /** running: still going after RUN_WAIT_MS; done or failed: it ended, with its exit code. */
+  state: 'running' | 'done' | 'failed'
+  code: number | null
+  lines: string[]
+}
+
+/** Runs `ref` with sh; resolves after `waitMs` or when it ends, with the last lines it printed. */
+export function runRef(
+  ref: string,
+  waitMs: number,
+  options: { keep?: number; killAfterWait?: boolean } = {},
+): Promise<Ran> {
+  const keep = options.keep ?? 20
+  return new Promise((resolve) => {
+    const child = spawn('sh', ['-c', ref], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: !options.killAfterWait,
+    })
+    let tail: string[] = []
+    let partial = ''
+    const take = (chunk: Buffer) => {
+      const parts = (partial + chunk.toString('utf8')).split('\n')
+      partial = parts.pop() ?? ''
+      tail = [...tail, ...parts].slice(-keep)
+    }
+    const lines = () => (partial ? [...tail, partial] : tail).slice(-keep)
+    child.stdout.on('data', take)
+    child.stderr.on('data', take)
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      if (options.killAfterWait) child.kill('SIGTERM')
+      else child.unref()
+      resolve({ state: 'running', code: null, lines: lines() })
+    }, waitMs)
+    child.on('error', (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve({ state: 'failed', code: null, lines: [...lines(), error.message] })
+    })
+    child.on('close', (code) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve({ state: code === 0 ? 'done' : 'failed', code, lines: lines() })
+    })
+  })
+}
+
+/** The row and its ref for `kind`, if this page may act on it here. */
+function actionable(
+  deps: StatusActionDeps,
+  id: string,
+  kind: ActionKind,
+): { row: StatusRow; ref: string } {
+  const stored = deps.status.rows().find((item) => item.row.id === id)
+  if (!stored) throw new HttpError(404, 'No such row')
+  const { row } = stored
+  const ref = row.actions?.find((action) => action.kind === kind)?.ref
+  if (!ref) throw new HttpError(422, `${row.what} has no ${kind} command`)
+  if (row.machine !== deps.machine || row.id.startsWith('ominull'))
+    throw new HttpError(422, `${row.what} runs on ${row.machine}; run it there`)
+  return { row, ref }
+}
+
+export function registerStatusActions(router: Router, deps: StatusActionDeps): void {
+  router.on('POST', '/api/status/run', async (ctx) => {
+    const id = requiredString(objectBody(await ctx.body()), 'id', { max: 200 })
+    const { ref } = actionable(deps, id, 'run')
+    return runRef(ref, RUN_WAIT_MS)
+  })
+
+  router.on('GET', '/api/status/log', async (ctx) => {
+    const id = ctx.query.get('id')
+    if (!id) throw new HttpError(422, 'id is required')
+    const { ref } = actionable(deps, id, 'log')
+    const ran = await runRef(ref, LOG_WAIT_MS, { keep: LOG_LINES, killAfterWait: true })
+    return { ref, machine: deps.machine, ok: ran.state !== 'failed', lines: ran.lines }
+  })
+
+  router.on('POST', '/api/status/look', async (ctx) => {
+    const body = objectBody(await ctx.body())
+    const id = requiredString(body, 'id', { max: 200 })
+    const message = requiredString(body, 'message').trim()
+    const projectId = requiredString(body, 'project', { pattern: PROJECT })
+    if (!message) throw new HttpError(422, 'Write a first message')
+    if (Buffer.byteLength(message) > MAX_MESSAGE_BYTES)
+      throw new HttpError(422, `The first message is longer than ${MAX_MESSAGE_BYTES} bytes`)
+    if (!deps.status.rows().some((item) => item.row.id === id))
+      throw new HttpError(404, 'No such row')
+    const [projects, tools] = await Promise.all([
+      tetherCall(() => deps.tether.projects()),
+      tetherCall(() => listTools(deps.tether as TetherClient)),
+    ])
+    const project = projects.find((item) => item.id === projectId)
+    if (!project?.root) throw new HttpError(422, `No project ${projectId} on this machine`)
+    const tool = tools.defaultSlug
+    if (!tool) throw new HttpError(503, 'No default agent tool is set')
+    const { body: root } = await tetherCall(() =>
+      deps.tether.request<{ hostIdentity?: unknown }>('POST', '/v1/roots', {
+        requestId: `status-look-${randomUUID()}`,
+        tool,
+        projectId,
+        projectRoot: project.root,
+        initialPrompt: message,
+        role: LOOK_ROLE,
+        workRole: LOOK_WORK_ROLE,
+      }),
+    )
+    return {
+      session: typeof root?.hostIdentity === 'string' ? root.hostIdentity : null,
+      tool,
+      project: projectId,
+    }
+  })
+}
+
+/** The owner notice for a Status alert batch (contracts/notice.schema.json): to the phone. */
+export function statusNotice(
+  batch: AlertBatch,
+  publicHost: string | null,
+): Record<string, unknown> {
+  const { title, body } = alertText(batch)
+  const failed = batch.changes.some((change) => change.to === 'failed')
+  return {
+    v: 1,
+    source: 'aico',
+    kind: 'alert',
+    severity: failed ? 'critical' : 'warning',
+    title: title.slice(0, 200),
+    body: body.slice(0, 1000),
+    push: 'phone',
+    ...(publicHost ? { open: `https://${publicHost}/status` } : {}),
+  }
+}

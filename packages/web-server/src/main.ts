@@ -30,6 +30,7 @@ import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
 import { registerStatusRoutes, startSelfRows } from './status'
+import { registerStatusActions, statusNotice } from './status-actions'
 import { registerSyncRoutes, startSync } from './sync/start'
 import { TerminalHub } from './terminal'
 
@@ -126,6 +127,12 @@ function serve(): void {
   const sync = startSync({ config, store, notes, blobsDir })
   registerSyncRoutes(api, sync.loop)
   registerStatusRoutes(api, status, notify)
+  registerStatusActions(api, { status, machine, tether })
+  // The phone alert rule: checked on every write of rows. aico-web's own heartbeat writes every
+  // few minutes, so a backup or machine row that goes late is seen then too.
+  status.onAlert((batch) =>
+    notify.notifier.receive(statusNotice(batch, config.publicHost), 'local'),
+  )
   notify.register(api)
   registerExportRoutes(api, config, sync.loop)
   const nightshift = new NightshiftRelay(config)
