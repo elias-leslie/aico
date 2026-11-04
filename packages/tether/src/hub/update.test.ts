@@ -236,11 +236,13 @@ it('removes stale update metadata when an unsigned local release is installed', 
 it('worker installation stops at failed signature verification before replacing code', () => {
   const before = readFileSync(join(lib, 'dist/tether.mjs'), 'utf8')
   put(join(dir, 'bin/sudo'), '#!/bin/sh\nexit 0\n', 0o755)
+  put(join(dir, 'bin/node'), `#!/bin/sh\nexec ${process.execPath} "$@"\n`, 0o755)
+  const marker = join(dir, 'candidate-executed')
   put(
-    join(dir, 'bin/node'),
-    '#!/bin/sh\n[ "$1" = "-e" ] && exit 0\necho verification-refused >&2\nexit 1\n',
-    0o755,
+    join(release, 'dist/tether.mjs'),
+    `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(marker)},'executed');process.exit(0)`,
   )
+  put(join(release, SIGNED_RELEASE), '{}')
   put(join(dir, 'commands.json'), '[]')
   const script = join(import.meta.dirname, '../../../../scripts/install-worker.sh')
   expect(() =>
@@ -258,6 +260,7 @@ it('worker installation stops at failed signature verification before replacing 
     ),
   ).toThrow()
   expect(readFileSync(join(lib, 'dist/tether.mjs'), 'utf8')).toBe(before)
+  expect(existsSync(marker)).toBe(false)
 })
 
 it('reports a failed health check and restores the prior release and database', () => {

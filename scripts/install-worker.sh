@@ -22,7 +22,35 @@ chmod 0600 "$config_dir/worker-hosts.json"
 sudo install -d -m 0755 /etc/aico
 sudo install -o root -g root -m 0644 "$peers" /etc/aico/fleet-peers.json
 sudo install -o root -g root -m 0644 "$updates" /etc/aico/update-pins.json
-node "$release/dist/tether.mjs" fleet verify-update "$release/signed-update.json" /etc/aico/update-pins.json
+# Verify with this trusted installer, before executing any candidate code.
+node --input-type=module - "$release" /etc/aico/update-pins.json <<'JS'
+import {createHash, createPublicKey, verify} from 'node:crypto'
+import {lstatSync, readFileSync} from 'node:fs'
+import {join} from 'node:path'
+try {
+  const [release, pins] = process.argv.slice(2)
+  const stat = lstatSync(pins)
+  if (!stat.isFile() || stat.uid !== 0 || stat.mode & 0o022) throw Error()
+  const keys = JSON.parse(readFileSync(pins, 'utf8')).keys
+  if (!Array.isArray(keys) || keys.length < 1 || keys.length > 4 || new Set(keys).size !== keys.length) throw Error()
+  const envelope = JSON.parse(readFileSync(join(release, 'signed-update.json'), 'utf8'))
+  const valid = keys.some(value => {
+    const key = createPublicKey({key:Buffer.from(value,'base64'),type:'spki',format:'der'})
+    return key.asymmetricKeyType === 'ed25519' && verify(null,Buffer.from('aico-signed-update-v1\n'+envelope.payload),key,Buffer.from(envelope.signature,'base64'))
+  })
+  if (!valid) throw Error()
+  const payload = JSON.parse(envelope.payload)
+  const paths = ['dist/tether.mjs','bin/tether','scripts/install-release.sh','scripts/install-shims.sh','scripts/aico-root-watch.py','scripts/aico-blank-slate','shims/tether-shim','shims/shims.list']
+  if (payload.format !== 'aico-update-v1' || !Number.isSafeInteger(payload.apiVersion) || payload.apiVersion < 1 || !Number.isSafeInteger(payload.issuedAt) || payload.issuedAt < 1 || !Array.isArray(payload.files) || payload.files.length !== paths.length) throw Error()
+  if (payload.files.some((file,i) => file.path !== paths[i] || file.body !== readFileSync(join(release,paths[i])).toString('base64'))) throw Error()
+  const hash = value => createHash('sha256').update(value).digest('hex')
+  if (hash(JSON.stringify(payload.files)) !== payload.releaseHash || hash(readFileSync(join(release,'dist/tether.mjs'))) !== payload.bundleHash) throw Error()
+  console.log('Signed release verified')
+} catch {
+  console.error('Signed release verification failed; nothing installed')
+  process.exit(1)
+}
+JS
 if [ ! -d "$release/scripts/shims" ]; then
   mkdir -p "$release/scripts/shims"
   cp "$release/shims/tether-shim" "$release/shims/shims.list" "$release/scripts/shims/"
