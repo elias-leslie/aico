@@ -66,10 +66,10 @@ function guardVerdict(answer: unknown): string | null {
 }
 
 /**
- * The shared publication guard's answer for one bash command (the Claude-style PreToolUse
- * payload). Only `{}` or an explicit allow lets the call run: a deny, an ask, any other
- * answer, a hook that fails, times out or prints something unreadable refuses it. The hook
- * runs in its own process group so a timeout kills its children (the Python guard) too.
+ * The shared guard's answer for one bash command: `<hook> guard` (aico-hook) reads the
+ * Claude-style PreToolUse payload. Only `{}` or an explicit allow lets the call run: a deny,
+ * an ask, any other answer, a hook that fails, times out or prints something unreadable
+ * refuses it. The hook runs in its own process group so a timeout kills its children too.
  */
 export function guardBash(
   hook: string,
@@ -88,7 +88,7 @@ export function guardBash(
     }
     const failed = (why: string) =>
       settle(`Publication guard unavailable (${why}); execution refused.`)
-    const child = spawn('bash', [hook], { stdio: ['pipe', 'pipe', 'ignore'], detached: true })
+    const child = spawn(hook, ['guard'], { stdio: ['pipe', 'pipe', 'ignore'], detached: true })
     const out: Buffer[] = []
     const timer = setTimeout(() => {
       try {

@@ -340,15 +340,20 @@ describe('transcript', () => {
   })
 })
 
+/** A guard stand-in: run directly, as aico-hook is. */
+function script(dir: string, name: string, body: string): string {
+  const path = join(dir, name)
+  writeFileSync(path, `#!/bin/sh\n${body}\n`)
+  chmodSync(path, 0o755)
+  return path
+}
+
 describe('guardBash', () => {
   it('fails closed when the hook fails or prints something unreadable', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aico-agent-guard-'))
-    const failing = join(dir, 'failing')
-    writeFileSync(failing, 'exit 3\n')
-    const garbled = join(dir, 'garbled')
-    writeFileSync(garbled, 'cat >/dev/null; echo not-json\n')
-    const allow = join(dir, 'allow')
-    writeFileSync(allow, 'cat >/dev/null; echo "{}"\n')
+    const failing = script(dir, 'failing', 'exit 3')
+    const garbled = script(dir, 'garbled', 'cat >/dev/null; echo not-json')
+    const allow = script(dir, 'allow', 'cat >/dev/null; echo "{}"')
     expect(await guardBash(failing, 'ls', dir, 'c1')).toMatch(/hook exited 3/)
     expect(await guardBash(garbled, 'ls', dir, 'c2')).toMatch(/unreadable/)
     expect(await guardBash(join(dir, 'missing'), 'ls', dir, 'c3')).toMatch(/refused/)
@@ -357,11 +362,8 @@ describe('guardBash', () => {
 
   it('allows only {} or an explicit allow: ask, unknown answers and the legacy block refuse', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aico-agent-guard-'))
-    const answer = (name: string, json: string) => {
-      const path = join(dir, name)
-      writeFileSync(path, `cat >/dev/null; echo '${json}'\n`)
-      return path
-    }
+    const answer = (name: string, json: string) =>
+      script(dir, name, `cat >/dev/null; echo '${json}'`)
     const said = (decision: string) =>
       `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"${decision}"}}`
     expect(await guardBash(answer('allow', said('allow')), 'ls', dir, 'c1')).toBeNull()
@@ -376,9 +378,8 @@ describe('guardBash', () => {
   it('kills the whole hook process group on timeout, grandchildren included', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aico-agent-guard-'))
     const pidFile = join(dir, 'pid')
-    const hook = join(dir, 'slow')
-    // The grandchild keeps stdout open, as the Python command-guard does.
-    writeFileSync(hook, `cat >/dev/null; sh -c 'echo $$ > ${pidFile}; exec sleep 30'\n`)
+    // The grandchild keeps stdout open.
+    const hook = script(dir, 'slow', `cat >/dev/null; sh -c 'echo $$ > ${pidFile}; exec sleep 30'`)
     const started = Date.now()
     expect(await guardBash(hook, 'ls', dir, 'c1', 300)).toMatch(/timeout/)
     expect(Date.now() - started).toBeLessThan(5_000)
@@ -388,7 +389,7 @@ describe('guardBash', () => {
   })
 
   it.skipIf(!existsSync(HARNESS.guard_hook))(
-    'agrees with the installed publication guard',
+    'agrees with the installed guard (aico-hook)',
     async () => {
       const dir = mkdtempSync(join(tmpdir(), 'aico-agent-guard-'))
       expect(await guardBash(HARNESS.guard_hook, 'ls -la', dir, 'c1')).toBeNull()

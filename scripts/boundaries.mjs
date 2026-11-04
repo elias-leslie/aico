@@ -22,7 +22,7 @@ const problems = []
 const fail = (message) => problems.push(message)
 
 const exact = /^(\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?|file:.+)$/
-const isTest = (file) => /\.(test|spec)\.[cm]?[jt]sx?$|\/tests?\/|test-stubs/.test(file)
+const isTest = (file) => /\.(test|spec)\.[cm]?[jt]sx?$|_test\.go$|\/tests?\/|test-stubs/.test(file)
 const fields = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']
 
 const rootJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))

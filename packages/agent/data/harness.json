@@ -32,7 +32,7 @@
     "~/.netrc",
     "~/.aws"
   ],
-  "guard_hook": "/srv/workspaces/projects/summitflow/scripts/lib/publication-pretool-hook",
+  "guard_hook": "/home/kasadis/.local/bin/aico-hook",
   "refusal_codes": {
     "cyberpolicy": "cyber",
     "biopolicy": "bio",

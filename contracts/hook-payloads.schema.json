@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aico/hook-payloads.schema.json",
+  "title": "aico-hook payloads",
+  "description": "What each tool hands aico-hook (native/hook) on stdin and what it prints back. Claude Code and Codex run `aico-hook claude` / `aico-hook codex` as a command hook; the Pi extension (native/hook/pi/aico-hook.ts) builds the same Claude-style payload from Pi's events and runs `aico-hook pi`; Aico's agent harness (packages/agent) runs `aico-hook guard` before each shell command. stdin is one JSON object (`input`); stdout is one JSON object (`output`); the exit code is always 0. Only a guard decision denies. A crash or missing data answers a `context` output that says plainly what went unchecked, never a silent allow and never a block. Fields beyond those listed may be present and are ignored. `examples` are replayed by native/hook/main_test.go: `{repo}` is a fresh git checkout, `output` names the $defs output the answer must match.",
+  "x-invocations": {
+    "claude": {
+      "argv": ["aico-hook", "claude"],
+      "events": {
+        "PreToolUse": "matcher Bash|mcp__.*(?:github|git).*|Write|Edit|MultiEdit|NotebookEdit: the guard, then the shell snapshot or the edit lease",
+        "PostToolUse": "matcher Bash: shell-write overlap and the GitHub PAT hint",
+        "PostToolUseFailure": "matcher Bash: as PostToolUse",
+        "SessionStart": "the identity registry, SummitFlow's startup brief, publication enforcement status, context delivery",
+        "SubagentStart": "publication enforcement status, context delivery"
+      }
+    },
+    "codex": {
+      "argv": ["aico-hook", "codex"],
+      "events": {
+        "PreToolUse": "matcher Bash|mcp__.*(?:github|git).*|Write|Edit|MultiEdit|apply_patch",
+        "PostToolUse": "matcher Bash",
+        "SessionStart": "as claude",
+        "SubagentStart": "as claude; agent_id is the worker's identity"
+      },
+      "trust": "Codex runs a hook only once trusted: `aico-hook codex-trust` marks the hooks of ~/.codex/hooks.json trusted through Codex's own hooks/list + config/batchWrite"
+    },
+    "pi": {
+      "argv": ["aico-hook", "pi"],
+      "events": {
+        "PreToolUse": "tool_call for bash, edit, write and GitHub connector tools; a deny blocks the call, context is appended to the tool result",
+        "PostToolUse": "tool_result for bash",
+        "SessionStart": "session_start; context goes into the system prompt"
+      }
+    },
+    "aico-agent": {
+      "argv": ["aico-hook", "guard"],
+      "events": {
+        "PreToolUse": "the guard only; anything but {} or a deny is treated as a deny by packages/agent"
+      }
+    },
+    "context-delivery": "SessionStart and SubagentStart run the command in native/hook/data/hook.json context.command (empty = the stub that delivers nothing) as `<command> --tool <claude-code|codex|pi> --session S --format <claude|codex|pi> --event E [--project P]`, contracts/context-delivery.schema.json, and fold its text into additionalContext"
+  },
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["hook_event_name"],
+      "properties": {
+        "hook_event_name": { "type": "string" },
+        "session_id": {
+          "type": "string",
+          "description": "the tool's session id (Pi: PI_SESSION_ID); the lease identity"
+        },
+        "transcript_path": { "type": "string" },
+        "cwd": { "type": "string" },
+        "permission_mode": { "type": "string" },
+        "model": { "type": "string" },
+        "turn_id": { "type": "string", "description": "Codex" }
+      }
+    },
+    "PreToolUse": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "required": ["hook_event_name", "tool_name"],
+      "properties": {
+        "hook_event_name": { "const": "PreToolUse" },
+        "tool_name": {
+          "type": "string",
+          "description": "Bash, exec_command, bash (Pi), Write, Edit, MultiEdit, NotebookEdit, apply_patch, edit, write (Pi), mcp__* connectors"
+        },
+        "tool_input": {
+          "description": "an object for every known tool: command (Bash), cmd (exec_command), file_path / notebook_path / path (edits), command or input holding the patch (apply_patch)"
+        },
+        "tool_use_id": {
+          "type": "string",
+          "description": "keys the shell snapshot between PreToolUse and PostToolUse"
+        },
+        "toolCallId": { "type": "string", "description": "Pi's tool_use_id" },
+        "agent_id": { "type": "string", "description": "Codex worker thread" }
+      }
+    },
+    "PostToolUse": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "required": ["hook_event_name", "tool_name"],
+      "properties": {
+        "hook_event_name": { "enum": ["PostToolUse", "PostToolUseFailure"] },
+        "tool_name": { "type": "string" },
+        "tool_input": {},
+        "tool_response": { "description": "the tool's result (read for the GitHub PAT 403)" },
+        "error": { "description": "PostToolUseFailure's error" },
+        "tool_use_id": { "type": "string" },
+        "toolCallId": { "type": "string" }
+      }
+    },
+    "SessionStart": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "properties": {
+        "hook_event_name": { "enum": ["SessionStart", "SubagentStart"] },
+        "source": {
+          "type": "string",
+          "description": "startup, resume, clear or compact; clear and compact keep the identity, startup resets its continuing line"
+        },
+        "agent_id": { "type": "string", "description": "SubagentStart: the subagent's id" },
+        "agent_type": { "type": "string" }
+      }
+    },
+    "UserPromptSubmit": {
+      "allOf": [{ "$ref": "#/$defs/base" }],
+      "properties": {
+        "hook_event_name": { "const": "UserPromptSubmit" },
+        "prompt": { "type": "string" }
+      },
+      "description": "not routed to aico-hook yet: the coordination inbox stays on SummitFlow's coord-inbox hook until the sessions/handshake rebuild (M10a); aico-hook answers {}"
+    },
+    "allow": { "type": "object", "additionalProperties": false, "description": "nothing to say" },
+    "deny": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hookSpecificOutput"],
+      "properties": {
+        "hookSpecificOutput": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hookEventName", "permissionDecision", "permissionDecisionReason"],
+          "properties": {
+            "hookEventName": { "const": "PreToolUse" },
+            "permissionDecision": { "const": "deny" },
+            "permissionDecisionReason": { "type": "string" }
+          }
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hookSpecificOutput"],
+      "properties": {
+        "hookSpecificOutput": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hookEventName", "additionalContext"],
+          "properties": {
+            "hookEventName": {
+              "enum": [
+                "PreToolUse",
+                "PostToolUse",
+                "PostToolUseFailure",
+                "SessionStart",
+                "SubagentStart"
+              ]
+            },
+            "additionalContext": {
+              "type": "string",
+              "description": "lines the agent reads: lease warnings, overlap, notices, crash notes, delivered context"
+            }
+          }
+        }
+      }
+    },
+    "output": {
+      "oneOf": [
+        { "$ref": "#/$defs/allow" },
+        { "$ref": "#/$defs/deny" },
+        { "$ref": "#/$defs/context" }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "argv": ["claude"],
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "0f0e0d0c-0000-4000-8000-000000000001",
+        "cwd": "{repo}",
+        "tool_name": "Bash",
+        "tool_use_id": "t1",
+        "tool_input": { "command": "ls -la" }
+      },
+      "output": "allow"
+    },
+    {
+      "argv": ["claude"],
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "0f0e0d0c-0000-4000-8000-000000000001",
+        "cwd": "{repo}",
+        "tool_name": "mcp__github__merge_pull_request",
+        "tool_input": { "owner": "o", "repo": "r" }
+      },
+      "output": "deny"
+    },
+    {
+      "argv": ["claude"],
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "0f0e0d0c-0000-4000-8000-000000000001",
+        "cwd": "{repo}",
+        "tool_name": "Edit",
+        "tool_input": { "file_path": "{repo}/a.txt", "old_string": "a", "new_string": "b" }
+      },
+      "output": "allow"
+    },
+    {
+      "argv": ["codex"],
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "0f0e0d0c-0000-4000-8000-000000000002",
+        "turn_id": "u1",
+        "cwd": "{repo}",
+        "tool_name": "apply_patch",
+        "tool_input": {
+          "command": "*** Begin Patch\n*** Update File: {repo}/a.txt\n@@\n-a\n+b\n*** End Patch\n"
+        }
+      },
+      "output": "context"
+    },
+    {
+      "argv": ["pi"],
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "session_id": "0f0e0d0c-0000-4000-8000-000000000003",
+        "cwd": "{repo}",
+        "tool_name": "bash",
+        "toolCallId": "c1",
+        "tool_input": { "command": "git status" }
+      },
+      "output": "allow"
+    },
+    {
+      "argv": ["claude"],
+      "input": {
+        "hook_event_name": "PostToolUse",
+        "session_id": "0f0e0d0c-0000-4000-8000-000000000001",
+        "cwd": "{repo}",
+        "tool_name": "Bash",
+        "tool_use_id": "t1",
+        "tool_input": { "command": "ls -la" },
+        "tool_response": { "stdout": "" }
+      },
+      "output": "allow"
+    },
+    {
+      "argv": ["claude"],
+      "input": {
+        "hook_event_name": "UserPromptSubmit",
+        "session_id": "0f0e0d0c-0000-4000-8000-000000000001",
+        "cwd": "{repo}",
+        "prompt": "hi"
+      },
+      "output": "allow"
+    },
+    {
+      "argv": ["guard"],
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "echo ok" }
+      },
+      "output": "allow"
+    },
+    {
+      "argv": ["guard"],
+      "input": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": { "command": "gh pr merge 12" }
+      },
+      "output": "deny"
+    }
+  ]
+}

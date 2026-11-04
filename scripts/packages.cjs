@@ -64,7 +64,7 @@ const ROOT_FILES = [
 ]
 
 const SKIP_DIRS = new Set(['node_modules', '.next', 'out', 'dist', '.tsbuild', '.venv', '__pycache__'])
-const SOURCE = /\.(ts|tsx|mjs|cjs|css|py|sh)$/
+const SOURCE = /\.(ts|tsx|mjs|cjs|css|py|sh|go)$/
 
 function* walk(dir) {
   if (!fs.existsSync(dir)) return

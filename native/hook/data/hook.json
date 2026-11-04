@@ -1,0 +1,36 @@
+{
+  "lease": {
+    "dir": "~/.summitflow/leases",
+    "idle_ttl_minutes": 30,
+    "active_minutes": 10,
+    "registry_hours": 24,
+    "note_hours": 24,
+    "unacked_minutes": 10,
+    "snapshot_max_mins": 120,
+    "registry_save_sec": 60
+  },
+  "tools": {
+    "guard": "^(Bash|bash|exec_command|shell|mcp__.*(?:github|git).*)$",
+    "shell": "^(Bash|bash|exec_command|shell)$",
+    "edit": "^(Write|Edit|MultiEdit|NotebookEdit|apply_patch|edit|write)$"
+  },
+  "github_pat_hint": "GitHub 403 (gh PAT lacks admin scope): get a 30-min grant (the owner taps once) with nightshift elevate request github-admin --reason '<what, in owner words>' --wait, then nightshift elevate run github-admin -- gh ...; never print the credential.",
+  "context": {
+    "command": [],
+    "timeout_seconds": 8,
+    "tool": { "claude": "claude-code", "codex": "codex", "pi": "pi" }
+  },
+  "startup_brief": {
+    "release": "~/.summitflow/services/projects/summitflow/current/source",
+    "checkout": "/srv/workspaces/projects/summitflow",
+    "timeout_seconds": 3
+  },
+  "publication": {
+    "timeout_seconds": 10,
+    "pre_push_hook": "~/.config/git/hooks/pre-push",
+    "pre_push_marker": "scripts/lib/publication-pre-push",
+    "claude_settings": "~/.claude/settings.json",
+    "codex_hooks": "~/.codex/hooks.json",
+    "hook_marker": "aico-hook"
+  }
+}
