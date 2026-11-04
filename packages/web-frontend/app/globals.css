@@ -2303,6 +2303,14 @@ div.xterm .xterm-viewport {
 }
 
 @media (max-width: 767px) {
+  .history-row .when {
+    white-space: nowrap;
+  }
+
+  .history-row .when .sec {
+    display: none;
+  }
+
   .history-facts > div {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
