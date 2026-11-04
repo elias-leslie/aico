@@ -338,6 +338,20 @@ Result rule (owner 2026-11-03): the cheaper model is used only where it gives th
 
 Usage rule: keep coordinator turns short and put file reading and building in subagents. One builder per milestone (split an L milestone into two briefs up front), ended once verified.
 
+### 4.2 Deeper look after Claude's weekly reset (owner 2026-11-04)
+
+Claude's weekly usage ran out on 2026-11-04, so this work was built or reviewed below the plan's Opus standard. Once usage resets (11-06), an Opus 5.5 review (medium effort) checks each item for correctness and missed scope. It goes before M13, and every finding is validated live.
+
+| Item | Built by | Reviewed by | Look at |
+| --- | --- | --- | --- |
+| M9-1 web tools and ask (`packages/webtools`, `aico ask`, SF `st web` delegation) | Sonnet, then Codex fixes (f06bc5ad, 4bba6cb7, SF 014256418) | Codex high (10 findings fixed) | egress/transport check shared with the agent path; Ajv preflight; search fallbacks; the IP guard |
+| M10b-1 review fixes (`packages/checks`, hook lease attribution) | Codex xhigh (748affdf, 7decb2eb, bd31c59c) | Codex (its own review lane) | writer-scope rules, stage pass reuse, heavy-work admission via `st tools run` |
+| M10c-1 review fixes (`packages/ops`) | Codex xhigh (c2642ae7, 4f9d61a1) | the original Opus review's items only; the fixes themselves unreviewed | VM API token path, deploy swap journal and lock, rollback preview |
+| Tether root-list fix (federation loop, async probes) | Codex xhigh (230bed83, e612caae) | none beyond its own tests | visited-hop rules keep real CT190 and worker roots; nothing reflected |
+| M8b-2a desktop chat (agent chats, web-server chat routes, chat UI; Agent Hub chat removed) | Codex xhigh (f38678b8, ddefecbd, 41ec7f1a) | Codex | fallback rule (owner answer 3), Needs-you from asks, stop/draft, branch totals |
+| M8b-2b phone chat and attachments (agent DB migration, capture provenance) | Codex xhigh (4eab2572 onward) | Codex | attachment recovery across stop/answer, chat captures skip routing, phone Stop |
+| Coordinator fixes at medium effort | Opus medium (37d7a940 guard allows scratch subvolume deletes; ee8366b9 refused deploy is warn) | none | guard: only `/srv/scratch` is exempt; refused deploys never hide a broken service |
+
 ## 5. Choices the sources did not settle
 - Package set, names and the `packages/` + `native/` + `contracts/` split; dependency-cruiser as the gate; one SQLite file per owning package; Status writers outside TypeScript post to loopback HTTP.
 - `chat-ui` (ah-13): dropped, although page 1 said agree. The gateway and chat page are gone, so nothing feeds it; only a message-renderer subset is kept if the transcript view needs it.
