@@ -30,7 +30,7 @@ func expand(p string) string {
 	return p
 }
 
-// sessionStart: the identity registry (and its reset line), SummitFlow's startup brief, the publication
+// sessionStart: the identity registry (and its reset line), the startup brief, the publication
 // enforcement status and Aico's context delivery, gathered in parallel and printed in that order.
 func sessionStart(cfg *Config, tool, event string, payload map[string]any) Out {
 	parts := make([][]string, 4)
@@ -80,28 +80,21 @@ func lines(b []byte) []string {
 	return out
 }
 
-// ---------------------------------------------------------------- SummitFlow startup brief
+// ---------------------------------------------------------------- startup brief
 
-const briefCode = `import json, sys
-sys.path.insert(0, sys.argv[1])
-from cli.lib.startup_brief import hook_lines
-print("\n".join(hook_lines(json.loads(sys.stdin.read() or "{}"))))`
-
-// startupBrief is SummitFlow's "what is already broken" brief (cli/lib/startup_brief.py, the accepted
-// release unless ST_DEV_CHECKOUT=1). It stays SummitFlow's until st pulse moves (M10a); silent on failure.
+// startupBrief is the "what is already broken" brief: `aico pulse --start` with the hook payload on stdin
+// (Status problems by role, held back for the re-show window). Silent on any failure.
 func startupBrief(cfg *Config, payload map[string]any) []string {
-	root := expand(cfg.StartupBrief.Release)
-	if os.Getenv("ST_DEV_CHECKOUT") == "1" || !exists(filepath.Join(root, "backend")) {
-		root = cfg.StartupBrief.Checkout
-	}
-	py := filepath.Join(root, "backend/.venv/bin/python")
-	if !exists(py) {
+	argv := append([]string{}, cfg.StartupBrief.Command...)
+	if len(argv) == 0 {
 		return nil
+	}
+	for i := range argv {
+		argv[i] = expand(argv[i])
 	}
 	ctx, cancel := withTimeout(cfg.StartupBrief.TimeoutSeconds)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, py, "-I", "-c", briefCode, filepath.Join(root, "backend"))
-	cmd.Env = append(os.Environ(), "PYTHONPATH="+filepath.Join(root, "backend"))
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	in, _ := json.Marshal(payload)
 	cmd.Stdin = bytes.NewReader(in)
 	out, err := cmd.Output()

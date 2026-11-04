@@ -519,8 +519,6 @@
                       "@aico/notify/**",
                       "@aico/shared",
                       "@aico/shared/**",
-                      "@aico/status",
-                      "@aico/status/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/ui-kit",
@@ -532,7 +530,7 @@
                       "@aico/web-server",
                       "@aico/web-server/**"
                     ],
-                    "message": "@aico/tasks (layer 4): import only @aico/store, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/tasks (layer 4): import only @aico/status, @aico/store, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

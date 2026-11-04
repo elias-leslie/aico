@@ -58,9 +58,8 @@ type Config struct {
 		Tool           map[string]string `json:"tool"`
 	} `json:"context"`
 	StartupBrief struct {
-		Release        string  `json:"release"`
-		Checkout       string  `json:"checkout"`
-		TimeoutSeconds float64 `json:"timeout_seconds"`
+		Command        []string `json:"command"`
+		TimeoutSeconds float64  `json:"timeout_seconds"`
 	} `json:"startup_brief"`
 	Publication struct {
 		TimeoutSeconds float64 `json:"timeout_seconds"`

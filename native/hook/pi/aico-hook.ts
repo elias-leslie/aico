@@ -9,7 +9,8 @@
  *   tool_result bash        -> PostToolUse (one line on a shell write that overlaps another agent)
  * The guard fails closed: when aico-hook does not start, exits non-zero, is killed (timeout) or prints something
  * unreadable, a bash or connector call is refused. An edit goes ahead and its result says it went unchecked.
- * The coordination inbox stays on SummitFlow's coord-inbox hook (turn pi) until the sessions rebuild (M10a).
+ * The coordination inbox is `aico-hook inbox turn pi` (the handshake requests and acks in Tether's coordination
+ * store), checked after each tool result and every 15 s while idle.
  */
 
 import { spawn } from "node:child_process";
@@ -21,7 +22,6 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 const TIMEOUT_MS = 10_000;
 const CONNECTOR = /^mcp__.*(?:github|git).*/;
-const INBOX = `${process.env.HOME}/.claude/hooks/coord-inbox.sh`;
 
 type Answer = { deny?: string; context?: string; fault?: string };
 
@@ -86,7 +86,7 @@ export default function (pi: ExtensionAPI) {
 		if (inboxBusy || !ctx.isIdle() || gen !== generation) return;
 		inboxBusy = true;
 		try {
-			const { context } = await run([INBOX, "turn", "pi"], { ...base(ctx), hook_event_name: "PiIdle" }, "bash");
+			const { context } = await run(["inbox", "turn", "pi"], { ...base(ctx), hook_event_name: "PiIdle" });
 			if (context && gen === generation) pi.sendUserMessage(context, { deliverAs: "followUp" });
 		} catch {
 			// A coordination check never interrupts the current turn.
@@ -147,7 +147,7 @@ export default function (pi: ExtensionAPI) {
 			});
 			later(event.toolCallId, answer.context);
 		}
-		const inbox = await run([INBOX, "turn", "pi"], { ...base(ctx), hook_event_name: "PostToolUse" }, "bash");
+		const inbox = await run(["inbox", "turn", "pi"], { ...base(ctx), hook_event_name: "PostToolUse" });
 		later(event.toolCallId, inbox.context);
 		const lines = pending.get(event.toolCallId);
 		pending.delete(event.toolCallId);

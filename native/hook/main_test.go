@@ -357,19 +357,24 @@ func TestSessionStartGathersEachPart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.StartupBrief.Release, cfg.StartupBrief.Checkout = "/nonexistent", "/nonexistent"
 	cfg.Publication.ClaudeSettings = filepath.Join(repo, "none.json")
 	stub := filepath.Join(repo, "deliver.sh")
 	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"SessionStart\\\",\\\"additionalContext\\\":\\\"CTX $*\\\"}}\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cfg.Context.Command = []string{stub}
+	briefStub := filepath.Join(repo, "pulse.sh")
+	if err := os.WriteFile(briefStub, []byte("#!/bin/sh\necho \"System brief: $* $(cat | grep -o session_id)\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg.StartupBrief.Command = []string{briefStub, "pulse", "--start"}
 	t.Setenv("PATH", "/usr/bin:/bin") // no codex: its trust is reported unverified
 	out := sessionStart(cfg, "claude", "SessionStart", map[string]any{"hook_event_name": "SessionStart",
 		"session_id": "0f0e0d0c-0000-4000-8000-000000000009", "cwd": repo, "source": "startup"})
 	text := strings.Join(out.Context, "\n")
 	for _, want := range []string{
 		"Claude publication adapter: unavailable",
+		"System brief: pulse --start session_id",
 		"CTX --tool claude-code --session 0f0e0d0c-0000-4000-8000-000000000009 --format claude --event SessionStart --project demo",
 	} {
 		if !strings.Contains(text, want) {

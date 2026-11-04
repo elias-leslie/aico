@@ -3,6 +3,7 @@
 import { TetherClient, tetherSocketPath } from '@aico/tether-client'
 import { type Deps, runProjects, runTasks } from './cli'
 import { openTasksDb, tasksDbPathFromEnv } from './db'
+import { runPulse } from './pulse-cli'
 
 /** A linked session in a few words from the session history; null when Tether does not know it. */
 function sessionDescriber(env: NodeJS.ProcessEnv): Deps['describeSession'] {
@@ -25,11 +26,11 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     out: (line: string) => console.log(line),
     err: (line: string) => console.error(line),
   }
-  if (area !== 'tasks' && area !== 'projects') {
-    io.err('Usage: aico-tasks <tasks|projects> ...')
+  if (area !== 'tasks' && area !== 'projects' && area !== 'pulse') {
+    io.err('Usage: aico-tasks <tasks|projects|pulse> ...')
     return 2
   }
-  if (rest.length === 0 || rest[0] === '--help' || rest[0] === 'help') {
+  if (area !== 'pulse' && (rest.length === 0 || rest[0] === '--help' || rest[0] === 'help')) {
     return area === 'tasks'
       ? runTasks(rest, { cwd: process.cwd(), env } as Deps, io)
       : runProjects(rest, { cwd: process.cwd(), env } as Deps, io)
@@ -37,6 +38,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
   const db = openTasksDb(tasksDbPathFromEnv(env))
   try {
     const deps: Deps = { db, cwd: process.cwd(), env, describeSession: sessionDescriber(env) }
+    if (area === 'pulse') return await runPulse(rest, { db, cwd: deps.cwd, env }, io)
     return await (area === 'tasks' ? runTasks(rest, deps, io) : runProjects(rest, deps, io))
   } finally {
     db.close()

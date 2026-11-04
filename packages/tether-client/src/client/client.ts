@@ -230,6 +230,24 @@ export class TetherClient {
     )
   }
 
+  /** The coordination documents' names (project ids and the `_` registry), API 28. */
+  async coordinationDocs(): Promise<string[]> {
+    const answer = await this.json<{ items: Array<{ name: string }> }>(
+      'GET',
+      '/v1/coordination/docs',
+    )
+    return answer.items.map((item) => item.name)
+  }
+
+  /** One coordination document (leases of a project, or `_coord`); `{}` when unwritten. */
+  async coordinationDoc(name: string): Promise<Record<string, unknown>> {
+    const answer = await this.json<{ doc: Record<string, unknown> }>(
+      'GET',
+      `/v1/coordination/docs/${encodeURIComponent(name)}`,
+    )
+    return answer.doc ?? {}
+  }
+
   /** The owner has these sessions open now: Tether's waiting notice treats them as seen. */
   async markSeen(ids: readonly string[]): Promise<void> {
     try {

@@ -23,8 +23,7 @@
     "timeout_seconds": 5
   },
   "startup_brief": {
-    "release": "~/.summitflow/services/projects/summitflow/current/source",
-    "checkout": "/srv/workspaces/projects/summitflow",
+    "command": ["~/bin/aico", "pulse", "--start"],
     "timeout_seconds": 3
   },
   "publication": {
