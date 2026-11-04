@@ -65,14 +65,17 @@ export function ActionButtons({
     <>
       {buttons.map((button) => {
         const Icon = ICONS[button.kind]
-        const label = ACTION_LABEL[button.kind]
+        const going = button.kind === 'run' && running
+        const label = going ? 'Running…' : ACTION_LABEL[button.kind]
         const title =
           button.disabled ??
-          (button.kind === 'hosts'
-            ? `Open ${row.machine} in Hosts`
-            : button.kind === 'look'
-              ? 'Start a session to look into it'
-              : button.ref)
+          (going
+            ? 'It’s running; the row updates when it reports'
+            : button.kind === 'hosts'
+              ? `Open ${row.machine} in Hosts`
+              : button.kind === 'look'
+                ? 'Start a session to look into it'
+                : button.ref)
         return (
           <button
             key={button.kind}
@@ -80,7 +83,7 @@ export function ActionButtons({
             className={`lantern-btn${big ? '' : ' small'}${button.kind === primary ? ' primary' : big ? '' : ' ghost'}`}
             title={title}
             aria-label={label}
-            disabled={!!button.disabled || (button.kind === 'run' && running)}
+            disabled={!!button.disabled || going}
             onClick={(event: MouseEvent) => {
               event.stopPropagation()
               onAction(button.kind, row)

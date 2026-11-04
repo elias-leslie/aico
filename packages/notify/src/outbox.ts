@@ -164,7 +164,9 @@ export class Outbox {
       meaning: parts.join(' ').slice(0, 300),
       last_run: new Date(now).toISOString(),
       next_run: new Date(now + 2 * passMs).toISOString(),
-      actions: [{ kind: 'log', ref: 'journalctl --user -u aico-web.service -g notify' }],
+      actions: [
+        { kind: 'log', ref: 'journalctl --user -u aico-web.service -g notify -n 200 --no-pager' },
+      ],
     }
   }
 }

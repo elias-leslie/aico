@@ -12,7 +12,7 @@ import {
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { HostsSheet } from '@/components/HostsSheet'
-import { apiFetch } from '@/lib/api-fetch'
+import { ApiError, apiFetch } from '@/lib/api-fetch'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useHosts } from '@/lib/hooks/use-hosts'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
@@ -112,7 +112,8 @@ export function StatusPage({ project = '' }: { project?: string }) {
   const [filter, setFilter] = useState<StatusFilter>({ ...NO_FILTER, project })
   const [healthyOpen, setHealthyOpen] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
-  const [running, setRunning] = useState<ReadonlySet<string>>(new Set())
+  // Runs this page started and is waiting on; the server's list covers the rest.
+  const [starting, setStarting] = useState<ReadonlySet<string>>(new Set())
   const [sheet, setSheet] = useState<Sheet>(null)
   const [searching, setSearching] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
@@ -124,6 +125,7 @@ export function StatusPage({ project = '' }: { project?: string }) {
   useEffect(() => () => clearTimeout(toastTimer.current), [])
 
   const all = view?.rows ?? []
+  const running = new Set([...starting, ...(view?.running ?? [])])
   const mode: Mode = loading
     ? 'loading'
     : failed
@@ -165,7 +167,7 @@ export function StatusPage({ project = '' }: { project?: string }) {
     })
 
   const run = async (row: StatusRow) => {
-    setRunning((current) => new Set(current).add(row.id))
+    setStarting((current) => new Set(current).add(row.id))
     try {
       const ran = await apiFetch<{ state: string; lines: string[] }>(
         '/api/status/run',
@@ -183,14 +185,20 @@ export function StatusPage({ project = '' }: { project?: string }) {
       else
         say({ text: `Started “${row.what}”. The row updates when it reports.` })
     } catch (error) {
-      say({ text: `“${row.what}” didn’t run: ${(error as Error).message}` })
+      say({
+        text:
+          error instanceof ApiError && error.status === 409
+            ? `“${row.what}” is still running. The row updates when it reports.`
+            : `“${row.what}” didn’t run: ${(error as Error).message}`,
+      })
     } finally {
-      setRunning((current) => {
+      // Read the rows again first: the server's running list takes over without a flicker.
+      await queryClient.invalidateQueries({ queryKey: STATUS_QUERY_KEY })
+      setStarting((current) => {
         const next = new Set(current)
         next.delete(row.id)
         return next
       })
-      void queryClient.invalidateQueries({ queryKey: STATUS_QUERY_KEY })
     }
   }
   const act = (kind: ButtonKind, row: StatusRow) => {
@@ -213,6 +221,16 @@ export function StatusPage({ project = '' }: { project?: string }) {
     (filter.machine ? 1 : 0) +
     (filter.project && !project ? 1 : 0)
   const filtered = active > 0 || !!filter.search.trim()
+  // The project in view: the project page's, or one picked in the filters.
+  const inProject = filter.project
+    ? all.filter((row) => row.project === filter.project)
+    : all
+  const narrowed =
+    filter.states.length > 0 ||
+    !!filter.kind ||
+    !!filter.machine ||
+    !!filter.search.trim()
+  const showAll = () => setFilter({ ...NO_FILTER, sort: filter.sort })
 
   const sub =
     mode === 'loading'
@@ -223,7 +241,9 @@ export function StatusPage({ project = '' }: { project?: string }) {
           ? 'No rows yet'
           : stale
             ? `As of ${at(readAt, now)} · couldn’t refresh`
-            : `${plural(all.length, 'row')} from ${plural(machines.length, 'machine')} · updated ${at(readAt, now)}`
+            : narrowed
+              ? `${shown.length} of ${plural(inProject.length, 'row')} · updated ${at(readAt, now)}`
+              : `${plural(inProject.length, 'row')} from ${plural(new Set(inProject.map((row) => row.machine)).size, 'machine')} · updated ${at(readAt, now)}`
 
   const rollupChips =
     mode === 'live' ? (
@@ -705,20 +725,47 @@ export function StatusPage({ project = '' }: { project?: string }) {
     <main className="status-page">
       <div className="status">
         <header className="status-head">
-          <Link
-            href={project ? '/status' : '/'}
-            className="lantern-icon-btn"
-            aria-label={project ? 'Back to Status' : 'Back to sessions'}
-            title={project ? 'Back to Status' : 'Back to sessions'}
-          >
-            <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
-          </Link>
           {project ? (
+            <Link
+              href="/status"
+              className="lantern-icon-btn"
+              aria-label="Back to Status"
+              title="Back to Status"
+              onClick={showAll}
+            >
+              <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
+            </Link>
+          ) : filter.project || filtered ? (
+            <button
+              type="button"
+              className="lantern-icon-btn"
+              aria-label={
+                filter.project ? 'Back to Status' : 'Back to all rows'
+              }
+              title={filter.project ? 'Back to Status' : 'Back to all rows'}
+              onClick={showAll}
+            >
+              <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
+            </button>
+          ) : (
+            <Link
+              href="/"
+              className="lantern-icon-btn"
+              aria-label="Back to sessions"
+              title="Back to sessions"
+            >
+              <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
+            </Link>
+          )}
+          {filter.project ? (
             <>
               <span className="crumb">
-                <Link href="/status">Status</Link> /
+                <Link href="/status" onClick={showAll}>
+                  Status
+                </Link>{' '}
+                /
               </span>
-              <h1>{project}</h1>
+              <h1>{filter.project}</h1>
             </>
           ) : (
             <h1>Status</h1>

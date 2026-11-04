@@ -3,16 +3,20 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api-fetch'
 import type { StatusView } from '../status'
+import { useClock } from './use-clock'
 
 /** Rows report every few minutes; the page and the badge read them this often. */
 export const STATUS_POLL_MS = 30_000
 export const STATUS_QUERY_KEY = ['status']
+/** A view read longer ago than this is old, whatever the reason (a sleeping tab, say). */
+export const STATUS_OLD_MS = 3 * STATUS_POLL_MS
 
 /**
  * GET /api/status, shared by the Status page and the sidebar badge. `stale` is a view kept from
  * an earlier read while the latest one failed; `failed` is no view at all.
  */
 export function useStatus() {
+  const now = useClock(STATUS_POLL_MS)
   const query = useQuery({
     queryKey: STATUS_QUERY_KEY,
     queryFn: () =>
@@ -27,6 +31,11 @@ export function useStatus() {
     loading: query.isPending,
     failed: !view && query.isError,
     stale: !!view && query.isError,
+    /** Read longer ago than STATUS_OLD_MS: the badge shows its count muted. */
+    old:
+      !!view &&
+      !!query.dataUpdatedAt &&
+      now - query.dataUpdatedAt > STATUS_OLD_MS,
     /** When the shown view was read (ms). */
     readAt: query.dataUpdatedAt || null,
     failedAt: query.errorUpdatedAt || null,

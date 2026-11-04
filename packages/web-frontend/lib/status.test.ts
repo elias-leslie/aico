@@ -59,6 +59,27 @@ describe('rowButtons', () => {
     )
   })
 
+  it('lets a row waiting on its machine’s return run, and says why it waits', () => {
+    const waiting = row({
+      machine: 'davion-gem',
+      shown: 'unknown',
+      unknown_why: 'back',
+    })
+    const buttons = rowButtons(waiting, {
+      here: 'davion-gem',
+      hosts: here.hosts,
+    })
+    expect(buttons.buttons.map((b) => [b.kind, b.disabled])).toEqual([
+      ['look', null],
+      ['run', null],
+      ['log', null],
+    ])
+    expect(buttons.primary).toBe('run')
+    expect(lookMessage(waiting)).toContain(
+      'davion-gem is back; this hasn’t reported since.',
+    )
+  })
+
   it('hides detail with no page behind it and the hub’s run refs', () => {
     const hub = row({
       id: 'ominull-push',

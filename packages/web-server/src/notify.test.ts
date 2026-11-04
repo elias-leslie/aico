@@ -62,7 +62,7 @@ beforeEach(async () => {
     },
   })
   const router = new Router()
-  registerStatusRoutes(router, status, hub)
+  registerStatusRoutes(router, status, { changed: hub })
   hub.register(router)
   server = createWebServer(guard, router, {} as TerminalHub)
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))

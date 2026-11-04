@@ -1,7 +1,8 @@
 // Status rows over HTTP, and the rows aico-web writes about itself.
 //
 //   GET    /api/status          the rows as a reader sees them (late and unknown applied), problems
-//                               first, plus the rollup, the badge summary and this machine's id.
+//                               first, plus the rollup, the badge summary, this machine's id and
+//                               the rows whose run ref is going now (`running`).
 //                               Filters: state, kind, machine, project (comma lists), q (text),
 //                               sort (problems, what, updated, next).
 //   POST   /api/status/rows     one row or a list (contracts/status-row.schema.json), all or none.
@@ -86,14 +87,24 @@ export interface RowsChanged {
   rowRemoved(id: string): void
 }
 
-/** `machine`: this server's machine, sent with the rows so the page knows which refs run here. */
+export interface StatusRouteOptions {
+  changed?: RowsChanged
+  /** This server's machine, sent with the rows so the page knows which refs run here. */
+  machine?: string
+  /** The rows whose run ref is going now (status-actions.ts StatusRuns). */
+  running?: () => readonly string[]
+}
+
 export function registerStatusRoutes(
   router: Router,
   status: StatusStore,
-  changed?: RowsChanged,
-  machine?: string,
+  { changed, machine, running }: StatusRouteOptions = {},
 ): void {
-  router.on('GET', '/api/status', (ctx) => ({ ...status.read(filterFrom(ctx.query)), machine }))
+  router.on('GET', '/api/status', (ctx) => ({
+    ...status.read(filterFrom(ctx.query)),
+    machine,
+    running: running?.() ?? [],
+  }))
   router.on('POST', '/api/status/rows', async (ctx) => {
     requireThisMachine(ctx.req)
     const rows = parseRows(await ctx.body())
@@ -155,7 +166,8 @@ function heartbeatRows(options: SelfRowOptions, now: number): StatusRow[] {
       next_run,
       actions: [
         { kind: 'run', ref: `systemctl --user restart ${WEB_UNIT}` },
-        { kind: 'log', ref: `journalctl --user -u ${WEB_UNIT}` },
+        // The last lines, then end: printed from the oldest, a whole journal is cut off at 10 s.
+        { kind: 'log', ref: `journalctl --user -u ${WEB_UNIT} -n 200 --no-pager` },
       ],
     },
   ]

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
-import { openDatabase, transaction } from './index'
+import { type Migration, openDatabase, transaction } from './index'
 
 const dirs: string[] = []
 function tempDir(): string {
@@ -40,6 +40,29 @@ describe('openDatabase', () => {
     expect(second.prepare('SELECT id, n FROM t').all()).toEqual([{ id: 'a', n: 0 }])
     second.close()
     openDatabase(path, [V1, V2]).close()
+  })
+
+  it('runs a function migration over the data it reads, in the same transaction', () => {
+    const path = join(tempDir(), 'x.db')
+    const first = openDatabase(path, [V1])
+    first.prepare('INSERT INTO t (id) VALUES (?)').run('a')
+    first.close()
+    const fill = (db: Parameters<Exclude<Migration, string>>[0]) => {
+      db.exec(V2)
+      for (const { id } of db.prepare('SELECT id FROM t').all() as { id: string }[])
+        db.prepare('UPDATE t SET n = ? WHERE id = ?').run(id.length + 6, id)
+    }
+    const db = openDatabase(path, [V1, fill])
+    expect(db.prepare('SELECT id, n FROM t').all()).toEqual([{ id: 'a', n: 7 }])
+    db.close()
+    expect(() =>
+      openDatabase(join(tempDir(), 'y.db'), [
+        V1,
+        () => {
+          throw new Error('no')
+        },
+      ]),
+    ).toThrow('no')
   })
 
   it('refuses a file newer than the code', () => {

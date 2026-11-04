@@ -58,7 +58,7 @@
       "format": "date-time"
     },
     "actions": {
-      "description": "What a person or agent can do about it, as data; the screen and CLI decide how to offer each. run: the command that runs it now. log: the command or path that shows its log. detail: an Aico app path with more. look: where a session looking into it should start (a path, project or hint).",
+      "description": "What a person or agent can do about it, as data; the screen and CLI decide how to offer each. run: the command that runs it now. log: the command or path that shows its log; a command should print its last lines and end (for journalctl, -n 200 --no-pager), since Aico stops it after 10 seconds and shows what it printed by then as cut off. detail: an Aico app path with more. look: where a session looking into it should start (a path, project or hint).",
       "type": "array",
       "maxItems": 4,
       "items": {

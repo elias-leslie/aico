@@ -1,13 +1,17 @@
 // The only code that touches node:sqlite (cutlist 1.1, layer 1). A package that
 // owns a DB file opens it here: created 0600 in a 0700 directory, WAL, a busy
-// timeout, and its migrations applied in order. A migration is one SQL script;
-// the file's PRAGMA user_version counts how many have run.
+// timeout, and its migrations applied in order. A migration is one SQL script, or
+// a function for one that has to read the data it changes; the file's PRAGMA
+// user_version counts how many have run.
 
 import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 export type Database = DatabaseSync
+
+/** One schema step: SQL, or a function given the open file (inside the migration transaction). */
+export type Migration = string | ((db: Database) => void)
 
 function userVersion(db: Database): number {
   return Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)
@@ -42,7 +46,7 @@ function useWal(db: Database): void {
  * `migrations[i]` takes the file from version i to i + 1; the pending ones run in one transaction.
  * A file newer than the code (more versions than `migrations`) is refused.
  */
-export function openDatabase(path: string, migrations: readonly string[]): Database {
+export function openDatabase(path: string, migrations: readonly Migration[]): Database {
   const memory = path === ':memory:'
   const fresh = !memory && !existsSync(path)
   if (!memory) mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
@@ -64,7 +68,9 @@ export function openDatabase(path: string, migrations: readonly string[]): Datab
       // have migrated it since. All pending migrations land together, or none.
       transaction(db, () => {
         for (let from = check(); from < migrations.length; from += 1) {
-          db.exec(migrations[from] as string)
+          const migration = migrations[from] as Migration
+          if (typeof migration === 'string') db.exec(migration)
+          else migration(db)
           db.exec(`PRAGMA user_version = ${from + 1}`)
         }
       })

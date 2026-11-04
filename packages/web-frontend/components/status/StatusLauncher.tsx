@@ -3,7 +3,7 @@
 import { Activity } from 'lucide-react'
 import Link from 'next/link'
 import { useStatus } from '@/lib/hooks/use-status'
-import { type Shown, summaryLine } from '@/lib/status'
+import { at, type Shown, summaryLine } from '@/lib/status'
 
 /** The badge colour: the worst counted problem's. Unknown stays neutral; amber is the action colour. */
 const TONE: Partial<Record<Shown, string>> = {
@@ -14,29 +14,35 @@ const TONE: Partial<Record<Shown, string>> = {
 }
 
 /** The way into Status: the problem count in the worst state's colour (rows on a machine turned
- * off on purpose don't count). `icon` for the rail, `row` labelled for the session list and the
- * phone's switcher; both open the full page. */
+ * off on purpose don't count). When the read failed it shows "?"; when the count is old (the
+ * last read failed, or was long ago) it shows muted, "?" for an old zero. `icon` for the rail,
+ * `row` labelled for the session list and the phone's switcher; both open the full page. */
 export function StatusLauncher({
   variant = 'icon',
 }: {
   variant?: 'icon' | 'row'
 }) {
-  const { view, failed } = useStatus()
+  const { view, failed, stale, old, readAt } = useStatus()
   const summary = view?.summary
   const count = summary?.problems ?? 0
-  const color = summary?.worst ? TONE[summary.worst] : undefined
-  const title = summary
-    ? `Status: ${summaryLine(summary)}`
-    : failed
-      ? 'Status: couldn’t load'
+  const dated = !!summary && (stale || old)
+  const color = summary?.worst && !dated ? TONE[summary.worst] : undefined
+  const title = failed
+    ? 'Status: couldn’t load'
+    : summary
+      ? dated
+        ? `Status as of ${at(readAt, Date.now())}, couldn’t refresh: ${summaryLine(summary)}`
+        : `Status: ${summaryLine(summary)}`
       : 'Status'
-  const badge = count > 0 && (
+  const text = failed || (dated && count === 0) ? '?' : count > 0 ? count : null
+  const badge = text !== null && (
     <span
       aria-hidden="true"
       className={variant === 'icon' ? 'lantern-rail-count' : 'status-count'}
-      data-worst={summary?.worst ?? undefined}
+      data-worst={dated || failed ? undefined : (summary?.worst ?? undefined)}
+      data-dated={dated || failed ? '' : undefined}
     >
-      {count}
+      {text}
     </span>
   )
   return variant === 'icon' ? (

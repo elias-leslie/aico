@@ -141,12 +141,15 @@ describe('loadConfig: uploads, shares and maintenance', () => {
     expect(loadConfig({ AICO_WEB_DB: '/tmp/x/web.db' }, ID).dataDir).toBe('/tmp/x')
   })
 
-  it('reads Nightshift on its own loopback address unless told otherwise', () => {
-    expect(loadConfig({}, ID).nightshiftUrl).toBe('http://127.0.0.1:3020')
-    expect(loadConfig({ AICO_NIGHTSHIFT_URL: 'http://127.0.0.1:4000' }, ID).nightshiftUrl).toBe(
-      'http://127.0.0.1:4000',
-    )
-    expect(loadConfig({ AICO_NIGHTSHIFT_URL: 'off' }, ID).nightshiftUrl).toBeNull()
+  it('keeps a repeated Status alert off the phone for six hours unless told otherwise', () => {
+    expect(loadConfig({}, ID).status.alertCooldownS).toBe(6 * 3600)
+    expect(
+      loadConfig({ AICO_STATUS_ALERT_COOLDOWN_SECONDS: '600' }, ID).status.alertCooldownS,
+    ).toBe(600)
+    // No longer than notify takes (a week).
+    expect(
+      loadConfig({ AICO_STATUS_ALERT_COOLDOWN_SECONDS: '9999999' }, ID).status.alertCooldownS,
+    ).toBe(7 * 86400)
   })
 
   it("trusts agent shares only from the owner's default Tether", () => {

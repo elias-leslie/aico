@@ -36,11 +36,13 @@ const MACHINE: StatusRow = {
 let server: Server
 let status: StatusStore
 let port: number
+let running: string[] = []
 
 beforeEach(async () => {
   status = new StatusStore(':memory:', () => NOW)
+  running = []
   const router = new Router()
-  registerStatusRoutes(router, status)
+  registerStatusRoutes(router, status, { machine: 'here', running: () => running })
   server = createWebServer(guard, router, {} as TerminalHub)
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   port = (server.address() as AddressInfo).port
@@ -101,6 +103,12 @@ describe('status routes', () => {
       shown_since: '2026-11-03T11:00:00.000Z',
       updated_at: '2026-11-03T12:00:00.000Z',
     })
+  })
+
+  it('names this machine and the rows whose run is going now', async () => {
+    running = ['here/backup']
+    const { body } = await call('GET', '/api/status')
+    expect(body).toMatchObject({ machine: 'here', running: ['here/backup'] })
   })
 
   it.each([
@@ -186,6 +194,10 @@ describe("aico-web's own rows", () => {
       ['here/aico-web', 'service', 'ok', '2026-11-03T12:10:00.000Z'],
       ['here/machine', 'machine', 'ok', '2026-11-03T12:10:00.000Z'],
     ])
+    // Its log prints the last lines and ends, so the page never shows the journal's oldest.
+    expect(store.read().rows[0]?.actions?.find((action) => action.kind === 'log')?.ref).toBe(
+      'journalctl --user -u aico-web.service -n 200 --no-pager',
+    )
     rows.stop('SIGTERM')
     const web = store.read({ kind: ['service'] }).rows[0]
     expect(web).toMatchObject({ state: 'off', meaning: 'Stopped (SIGTERM).' })

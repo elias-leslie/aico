@@ -1972,6 +1972,13 @@ div.xterm .xterm-viewport {
   color: var(--bone);
 }
 
+/* The count couldn't be read, or is old: as neutral as unknown, never in a state's colour. */
+.lantern-rail-count[data-dated],
+.status-count[data-dated] {
+  background: var(--paper-veil);
+  color: var(--bone);
+}
+
 .status-count {
   min-width: 16px;
   height: 16px;
@@ -2083,12 +2090,13 @@ div.xterm .xterm-viewport {
     display: none;
   }
 
+  /* Every state stays in sight at 390px: the chips wrap to a second line. */
   .status-rollup {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    margin: 0 -14px 12px;
-    padding: 2px 14px 4px;
-    scrollbar-width: none;
+    gap: 6px 5px;
+  }
+
+  .status-rollup button.status-chip {
+    padding: 0 9px;
   }
 
   .status-row {
@@ -2127,6 +2135,11 @@ div.xterm .xterm-viewport {
     overflow: hidden;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+  }
+
+  /* A problem's meaning gets a third line: the part that says what to do often comes last. */
+  .status-row:not(.healthy) .meaning {
+    -webkit-line-clamp: 3;
   }
 
   .status-row .meta-m {

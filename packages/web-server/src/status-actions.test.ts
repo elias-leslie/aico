@@ -1,11 +1,17 @@
 import { request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { parseNotice } from '@aico/notify'
-import { type AlertBatch, type StatusRow, StatusStore } from '@aico/status'
+import { NotifyStore, parseNotice } from '@aico/notify'
+import { type AlertBatch, type ShownRow, type StatusRow, StatusStore } from '@aico/status'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Router } from './http'
 import { createWebServer } from './server'
-import { registerStatusActions, runRef, statusNotice } from './status-actions'
+import {
+  registerStatusActions,
+  runRef,
+  StatusRuns,
+  statusKey,
+  statusNotice,
+} from './status-actions'
 import type { TerminalHub } from './terminal'
 
 const guard = {
@@ -25,6 +31,7 @@ const row = (fields: Partial<StatusRow>): StatusRow => ({
 let server: Server
 let status: StatusStore
 let port: number
+let runs: StatusRuns
 const roots: Record<string, unknown>[] = []
 
 beforeEach(async () => {
@@ -38,7 +45,15 @@ beforeEach(async () => {
     }),
     row({ id: 'there/job', machine: 'there', actions: [{ kind: 'run', ref: 'true' }] }),
     row({ id: 'ominull/hub', actions: [{ kind: 'run', ref: 'true' }] }),
+    row({
+      id: 'here/slow',
+      actions: [
+        { kind: 'run', ref: 'sleep 0.6' },
+        { kind: 'log', ref: 'echo first; echo second; sleep 30' },
+      ],
+    }),
   ])
+  runs = new StatusRuns()
   roots.length = 0
   const tether = {
     projects: async () => [{ id: 'aico', name: 'aico', root: '/srv/workspaces/projects/aico' }],
@@ -53,8 +68,14 @@ beforeEach(async () => {
     },
   }
   const router = new Router()
-  // biome-ignore lint/suspicious/noExplicitAny: a stand-in for the Tether client
-  registerStatusActions(router, { status, machine: 'here', tether: tether as any })
+  registerStatusActions(router, {
+    status,
+    machine: 'here',
+    // biome-ignore lint/suspicious/noExplicitAny: a stand-in for the Tether client
+    tether: tether as any,
+    runs,
+    waitMs: { run: 200, log: 300 },
+  })
   server = createWebServer(guard, router, {} as TerminalHub)
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   port = (server.address() as AddressInfo).port
@@ -70,7 +91,12 @@ afterEach(async () => {
 // biome-ignore lint/suspicious/noExplicitAny: test JSON answers
 type Answer = { status: number; body: Record<string, any> }
 
-function call(method: string, path: string, body?: unknown): Promise<Answer> {
+function call(
+  method: string,
+  path: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<Answer> {
   return new Promise((resolve, reject) => {
     const payload = body === undefined ? undefined : JSON.stringify(body)
     const req = request(
@@ -82,6 +108,7 @@ function call(method: string, path: string, body?: unknown): Promise<Answer> {
         headers: {
           host: `127.0.0.1:${port}`,
           ...(payload ? { 'content-type': 'application/json' } : {}),
+          ...headers,
         },
       },
       (res) => {
@@ -89,7 +116,9 @@ function call(method: string, path: string, body?: unknown): Promise<Answer> {
         res.on('data', (chunk) => {
           text += chunk
         })
-        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: JSON.parse(text) }))
+        res.on('end', () =>
+          resolve({ status: res.statusCode ?? 0, body: text ? JSON.parse(text) : {} }),
+        )
       },
     )
     req.on('error', reject)
@@ -113,11 +142,48 @@ describe('status row actions', () => {
   })
 
   it('shows the last lines of the log ref', async () => {
-    const { body } = await call('GET', '/api/status/log?id=here%2Fjob')
+    const { body } = await call('POST', '/api/status/log', { id: 'here/job' })
     expect(body.ok).toBe(true)
+    expect(body.truncated).toBe(false)
     expect(body.ref).toBe('seq 1 300')
     expect(body.lines).toHaveLength(200)
     expect(body.lines.at(-1)).toBe('300')
+  })
+
+  it('reads the log only by POST, and refuses a page on another site', async () => {
+    expect((await call('GET', '/api/status/log?id=here%2Fjob')).status).not.toBe(200)
+    const foreign = await call(
+      'POST',
+      '/api/status/log',
+      { id: 'here/job' },
+      { origin: 'https://elsewhere.example' },
+    )
+    expect(foreign.status).toBe(403)
+    const own = await call(
+      'POST',
+      '/api/status/log',
+      { id: 'here/job' },
+      { origin: 'http://127.0.0.1:3002' },
+    )
+    expect(own.status).toBe(200)
+  })
+
+  it('says when a log was still printing at the cut-off', async () => {
+    const { body } = await call('POST', '/api/status/log', { id: 'here/slow' })
+    expect(body).toMatchObject({ ok: true, truncated: true, lines: ['first', 'second'] })
+  })
+
+  it('runs one run of a row at a time and answers 409 while it goes', async () => {
+    const first = await call('POST', '/api/status/run', { id: 'here/slow' })
+    expect(first.body.state).toBe('running')
+    expect(runs.ids()).toEqual(['here/slow'])
+    const second = await call('POST', '/api/status/run', { id: 'here/slow' })
+    expect(second.status).toBe(409)
+    expect(second.body.detail).toBe('Job is still running')
+    // Another row runs meanwhile.
+    expect((await call('POST', '/api/status/run', { id: 'here/job' })).status).toBe(200)
+    await until(() => runs.ids().length === 0)
+    expect((await call('POST', '/api/status/run', { id: 'here/slow' })).status).toBe(200)
   })
 
   it('starts a session with the first message in the project, with the default tool', async () => {
@@ -145,31 +211,82 @@ describe('status row actions', () => {
   it('a run that keeps going is left running', async () => {
     expect((await runRef('sleep 1; echo late', 50)).state).toBe('running')
   })
+
+  it('a cut-off log takes everything it started with it', async () => {
+    const ran = await runRef('sleep 30 & echo $!; wait', 150, { killAfterWait: true })
+    expect(ran.state).toBe('running')
+    const pid = Number(ran.lines[0])
+    expect(pid).toBeGreaterThan(1)
+    await until(() => !alive(pid))
+    expect(alive(pid)).toBe(false)
+  })
 })
 
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function until(done: () => boolean, ms = 3_000): Promise<void> {
+  const deadline = Date.now() + ms
+  while (!done() && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20))
+}
+
 describe('statusNotice', () => {
+  const shown = (fields: Partial<StatusRow> = {}): ShownRow => ({
+    ...row(fields),
+    updated_at: '',
+    shown: 'failed',
+    shown_since: null,
+  })
+  const batchOf = (...rows: ShownRow[]): AlertBatch => ({
+    generated_at: '2026-11-03T12:00:00.000Z',
+    changes: rows.map((item) => ({ row: item, from: 'ok', to: 'failed' })),
+    summary: {
+      problems: rows.length,
+      worst: 'failed',
+      counts: { failed: rows.length, late: 0, unknown: 0, warn: 0 },
+      quiet: 0,
+      healthy: 4,
+      top: rows,
+    },
+  })
+
   it('is a phone alert the notice contract takes', () => {
-    const shown = { ...row({}), updated_at: '', shown: 'failed' as const, shown_since: null }
-    const batch: AlertBatch = {
-      generated_at: '2026-11-03T12:00:00.000Z',
-      changes: [{ row: shown, from: 'ok', to: 'failed' }],
-      summary: {
-        problems: 1,
-        worst: 'failed',
-        counts: { failed: 1, late: 0, unknown: 0, warn: 0 },
-        quiet: 0,
-        healthy: 4,
-        top: [shown],
-      },
-    }
-    const notice = parseNotice(statusNotice(batch, 'aico.example.dev'))
+    const notice = parseNotice(statusNotice(batchOf(shown()), 'aico.example.dev', 6 * 3600))
     expect(notice).toMatchObject({
       source: 'aico',
       severity: 'critical',
       push: 'phone',
       title: '1 failed: Job',
       body: 'Broke. 4 healthy.',
+      key: 'status:here/job=failed',
+      cooldown: 6 * 3600,
       open: 'https://aico.example.dev/status',
     })
+  })
+
+  it('keys a batch by what changed, hashed when the list is long', () => {
+    const two = statusKey(batchOf(shown({ id: 'b/two' }), shown({ id: 'a/one' })))
+    expect(two).toBe('status:a/one=failed,b/two=failed')
+    const many = Array.from({ length: 20 }, (_, i) => shown({ id: `here/row-number-${i}` }))
+    const key = statusKey(batchOf(...many))
+    expect(key).toMatch(/^status:[0-9a-f]{32}$/)
+    expect(parseNotice(statusNotice(batchOf(...many), null, 60)).key).toBe(key)
+  })
+
+  it('a row that flaps reaches the phone once per cooldown', () => {
+    const notify = new NotifyStore(':memory:')
+    const send = (at: number) =>
+      notify.accept(parseNotice(statusNotice(batchOf(shown()), null, 3600)), 'local', ['p'], at)
+    const t0 = Date.parse('2026-11-03T12:00:00Z')
+    expect(send(t0).repeat).toBe(false)
+    expect(send(t0 + 25 * 60_000).repeat).toBe(true)
+    expect(send(t0 + 61 * 60_000).repeat).toBe(false)
+    notify.close()
   })
 })

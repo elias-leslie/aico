@@ -6,9 +6,14 @@
 // Unknown: every other row of a machine whose own machine row is late or off
 // shows "unknown" since then, and of a machine with no machine row at all
 // (shown_since null). Unknown is a problem; it is never counted as ok.
+// Back: when a machine reports again after being off or late, a row that fell
+// due while it was away and hasn't reported since shows unknown (why 'back',
+// since the machine's return) instead of late, for at most one of its own
+// intervals (next_run - last_run); a report ends that, and so does the interval.
 //
 // The badge (owner rule, 2026-11-03): rows that show unknown only because their machine row says
 // off (turned off on purpose) stay on the screen as unknown but out of the badge count and alerts.
+// Rows waiting after their machine's return are left out the same way: nothing is known wrong yet.
 
 import type { Kind, StatusRow } from './row'
 
@@ -17,6 +22,8 @@ export interface StoredRow {
   row: StatusRow
   /** Epoch ms. */
   updatedAt: number
+  /** Machine rows: when the machine reported again after being off or late (epoch ms). */
+  backAt?: number
 }
 
 /** What a reader sees: the writer's state, or late / unknown. */
@@ -27,8 +34,11 @@ export type Shown = (typeof SHOWN)[number]
 export const PROBLEMS: readonly Shown[] = ['failed', 'late', 'unknown', 'warn']
 export type Problem = 'failed' | 'late' | 'unknown' | 'warn'
 
-/** Why a row shows unknown: its machine row says off, went late, or there is none. */
-export type UnknownWhy = 'off' | 'late' | 'missing'
+/**
+ * Why a row shows unknown: its machine row says off, went late, or there is none; or its machine
+ * is back and the row, due while it was away, hasn't reported since.
+ */
+export type UnknownWhy = 'off' | 'late' | 'missing' | 'back'
 
 export interface ShownRow extends StatusRow {
   updated_at: string
@@ -61,13 +71,13 @@ export interface Rollup {
 
 /** What the tray badge and the phone read: all rows, whatever the filter. */
 export interface Summary {
-  /** Problems that count: unknown rows of a machine turned off on purpose are left out. */
+  /** Problems that count: quiet unknown rows (machine off on purpose, or just back) are left out. */
   problems: number
   /** The worst shown state among the counted problems, or null. */
   worst: Shown | null
   /** Counted problems by state. */
   counts: Record<Problem, number>
-  /** Rows on a machine turned off on purpose: shown unknown, not counted. */
+  /** Rows shown unknown but not counted: on a machine turned off on purpose, or waiting after its return. */
   quiet: number
   healthy: number
   /** The first three counted problems, worst first. */
@@ -85,24 +95,36 @@ export interface StatusView {
 
 const iso = (ms: number) => new Date(ms).toISOString()
 
-/** Since when a row is overdue, or null. */
-function lateSince(stored: StoredRow, now: number): number | null {
+/** When a row is due to report again, or null (off rows and rows without next_run never are). */
+function dueAt(stored: StoredRow): number | null {
   const { state, next_run } = stored.row
-  if (state === 'off' || next_run === undefined) return null
-  const due = Date.parse(next_run)
-  return now > due ? due : null
+  return state === 'off' || next_run === undefined ? null : Date.parse(next_run)
 }
 
-/** Applies the late and unknown rules at `now`. */
+/** Since when a row is overdue, or null. */
+function lateSince(stored: StoredRow, now: number): number | null {
+  const due = dueAt(stored)
+  return due !== null && now > due ? due : null
+}
+
+/** A row's own interval: from its last run (else its last report) to its next. */
+function interval(stored: StoredRow, due: number): number {
+  const last = stored.row.last_run ? Date.parse(stored.row.last_run) : stored.updatedAt
+  return Math.max(0, due - last)
+}
+
+/** Applies the late, unknown and back rules at `now`. */
 export function show(rows: readonly StoredRow[], now: number): ShownRow[] {
   // Per machine with a machine row: since when it says the machine is not reporting (late or
-  // off), else null.
+  // off), else null; and when it last came back.
   const silent = new Map<string, { since: number; why: UnknownWhy } | null>()
+  const back = new Map<string, number>()
   for (const stored of rows) {
     if (stored.row.kind !== 'machine') continue
     const off = stored.row.state === 'off'
     const since = off ? stored.updatedAt : lateSince(stored, now)
     silent.set(stored.row.machine, since === null ? null : { since, why: off ? 'off' : 'late' })
+    if (stored.backAt !== undefined) back.set(stored.row.machine, stored.backAt)
   }
   return rows.map((stored) => {
     const base = { ...stored.row, updated_at: iso(stored.updatedAt) }
@@ -118,9 +140,22 @@ export function show(rows: readonly StoredRow[], now: number): ShownRow[] {
           unknown_why: machine.why,
         }
     }
-    const late = lateSince(stored, now)
-    if (late !== null) return { ...base, shown: 'late', shown_since: iso(late) }
-    return { ...base, shown: stored.row.state, shown_since: null }
+    const due = lateSince(stored, now)
+    if (due === null) return { ...base, shown: stored.row.state, shown_since: null }
+    // Due while its machine was away and silent since it came back: unknown until it reports,
+    // for at most one of its own intervals from the machine's return; late after that.
+    const backAt = back.get(stored.row.machine)
+    if (
+      stored.row.kind !== 'machine' &&
+      backAt !== undefined &&
+      due <= backAt &&
+      stored.updatedAt < backAt
+    ) {
+      const graceEnd = backAt + interval(stored, due)
+      if (now > graceEnd) return { ...base, shown: 'late', shown_since: iso(graceEnd) }
+      return { ...base, shown: 'unknown', shown_since: iso(backAt), unknown_why: 'back' }
+    }
+    return { ...base, shown: 'late', shown_since: iso(due) }
   })
 }
 
@@ -162,16 +197,21 @@ export function rollup(rows: readonly ShownRow[]): Rollup {
   return { problems, healthy: rows.length - problems, counts }
 }
 
-/** Whether a row counts toward the badge and alerts: a problem not on a machine turned off on purpose. */
+/** Unknown rows the badge leaves out: their machine is off on purpose, or just came back. */
+const QUIET: readonly (UnknownWhy | undefined)[] = ['off', 'back']
+
+/** Whether a row counts toward the badge and alerts: a problem not left out as quiet. */
 export function counted(row: ShownRow): boolean {
-  return PROBLEMS.includes(row.shown) && row.unknown_why !== 'off'
+  return PROBLEMS.includes(row.shown) && !QUIET.includes(row.unknown_why)
 }
 
 export function summary(rows: readonly ShownRow[]): Summary {
   const problems = select(rows.filter(counted))
   const counts = Object.fromEntries(PROBLEMS.map((state) => [state, 0])) as Summary['counts']
   for (const row of problems) counts[row.shown as Problem] += 1
-  const quiet = rows.filter((row) => row.unknown_why === 'off').length
+  const quiet = rows.filter(
+    (row) => row.shown === 'unknown' && QUIET.includes(row.unknown_why),
+  ).length
   return {
     problems: problems.length,
     worst: problems[0]?.shown ?? null,

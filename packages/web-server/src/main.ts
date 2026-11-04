@@ -17,8 +17,6 @@ import { CLI_COMMANDS, runCli } from './cli'
 import { HISTORY_LINES, loadConfig } from './config'
 import { WebStore } from './db'
 import { ExtractWorker } from './extract-worker'
-import { registerNightshiftRoutes } from './nightshift'
-import { NightshiftRelay, registerNightshiftStream } from './nightshift-stream'
 import { NotesStore } from './notes-db'
 import { registerExportRoutes } from './notes-export'
 import { NotifyHub } from './notify'
@@ -30,10 +28,9 @@ import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
 import { registerStatusRoutes, startSelfRows } from './status'
-import { registerStatusActions, statusNotice } from './status-actions'
+import { registerStatusActions, StatusRuns, statusNotice } from './status-actions'
 import { registerSyncRoutes, startSync } from './sync/start'
 import { TerminalHub } from './terminal'
-import { registerTrayRoutes } from './tray'
 
 function serve(): void {
   const config = loadConfig()
@@ -124,21 +121,22 @@ function serve(): void {
       router,
     },
   })
-  registerNightshiftRoutes(api, config)
   const sync = startSync({ config, store, notes, blobsDir })
   registerSyncRoutes(api, sync.loop)
-  registerStatusRoutes(api, status, notify, machine)
-  registerStatusActions(api, { status, machine, tether })
+  const runs = new StatusRuns()
+  registerStatusRoutes(api, status, { changed: notify, machine, running: () => runs.ids() })
+  registerStatusActions(api, { status, machine, tether, runs })
   // The phone alert rule: checked on every write of rows. aico-web's own heartbeat writes every
-  // few minutes, so a backup or machine row that goes late is seen then too.
-  status.onAlert((batch) =>
-    notify.notifier.receive(statusNotice(batch, config.publicHost), 'local'),
-  )
+  // few minutes, so a backup or machine row that goes late is seen then too. A notice notify
+  // refuses throws, and the batch is offered again on the next pass.
+  status.onAlert((batch) => {
+    notify.notifier.receive(
+      statusNotice(batch, config.publicHost, config.status.alertCooldownS),
+      'local',
+    )
+  })
   notify.register(api)
-  registerTrayRoutes(api, { status, notify: notify.store, asks, publicHost: config.publicHost })
   registerExportRoutes(api, config, sync.loop)
-  const nightshift = new NightshiftRelay(config)
-  registerNightshiftStream(api, nightshift)
   const server = createWebServer(
     config,
     api,
@@ -172,7 +170,6 @@ function serve(): void {
     background.stop()
     reader.stop()
     terminals.stop()
-    nightshift.stop()
     notify.stop()
     sync.stop()
     server.close(() => {

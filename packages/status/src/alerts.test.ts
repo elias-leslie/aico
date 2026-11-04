@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { openDatabase } from '@aico/store'
 import { afterEach, describe, expect, it } from 'vitest'
 import { type AlertBatch, alertText } from './alerts'
 import { parseRow, type StatusRow } from './row'
@@ -8,6 +9,8 @@ import { StatusStore } from './store'
 
 const T0 = Date.parse('2026-11-03T12:00:00Z')
 const HOUR = 3_600_000
+const DAY = 24 * HOUR
+const iso = (ms: number) => new Date(ms).toISOString()
 
 const row = (fields: Record<string, unknown>): StatusRow =>
   parseRow({ kind: 'job', machine: 'a', state: 'ok', meaning: 'Fine.', ...fields })
@@ -102,6 +105,129 @@ describe('alerts', () => {
     const second = watched(path)
     expect(second.store.checkAlerts()).toBeNull()
     second.store.close()
+  })
+
+  it('does not alert again for a failed row whose machine went late and came back', () => {
+    const { store, batches, clock } = watched()
+    store.upsert([machine('a'), row({ id: 'a/one', what: 'One', state: 'failed', meaning: 'x' })])
+    expect(batches).toHaveLength(1)
+    // The machine stops reporting: its row shows unknown (and the machine row alerts as late).
+    clock.now = T0 + 2 * HOUR
+    store.checkAlerts()
+    expect(batches.at(-1)?.changes.map((change) => change.row.id)).toEqual(['a/machine'])
+    const before = batches.length
+    // It comes back and the row is still failed: nothing new.
+    store.upsert([machine('a', 'ok', clock.now + HOUR)])
+    store.upsert([row({ id: 'a/one', what: 'One', state: 'failed', meaning: 'x' })])
+    expect(store.checkAlerts()).toBeNull()
+    expect(batches).toHaveLength(before)
+    store.close()
+  })
+
+  it('gives a backup due while its machine was off one interval to run before it is late', () => {
+    const { store, batches, clock } = watched()
+    const backup = (at: number, state = 'ok') =>
+      row({
+        id: 'a/backup',
+        what: 'Backup',
+        kind: 'backup',
+        state,
+        last_run: iso(at),
+        next_run: iso(at + DAY),
+      })
+    store.upsert([machine('a', 'ok', T0 + HOUR), backup(T0)])
+    // Off for the weekend, on purpose.
+    store.upsert([machine('a', 'off')])
+    clock.now = T0 + 3 * DAY
+    expect(store.checkAlerts()).toBeNull()
+    // Back on Monday: the backup fell due on Saturday but hasn't had a chance to run.
+    store.upsert([machine('a', 'ok', clock.now + HOUR)])
+    const waiting = store.read().rows.find((item) => item.id === 'a/backup')
+    expect([waiting?.shown, waiting?.unknown_why]).toEqual(['unknown', 'back'])
+    expect(store.read().summary.problems).toBe(0)
+    expect(batches).toEqual([])
+    // It runs within its interval: never late.
+    clock.now += 2 * HOUR
+    store.upsert([machine('a', 'ok', clock.now + HOUR), backup(clock.now)])
+    expect(store.read().rows.find((item) => item.id === 'a/backup')?.shown).toBe('ok')
+    expect(batches).toEqual([])
+    store.close()
+  })
+
+  it('alerts once when a backup still hasn’t run a full interval after its machine came back', () => {
+    const { store, batches, clock } = watched()
+    store.upsert([
+      machine('a', 'ok', T0 + HOUR),
+      row({
+        id: 'a/backup',
+        what: 'Backup',
+        kind: 'backup',
+        last_run: iso(T0),
+        next_run: iso(T0 + DAY),
+      }),
+    ])
+    store.upsert([machine('a', 'off')])
+    clock.now = T0 + 3 * DAY
+    store.upsert([machine('a', 'ok', clock.now + DAY + HOUR)])
+    const back = clock.now
+    clock.now = back + DAY - 60_000
+    expect(store.checkAlerts()).toBeNull()
+    clock.now = back + DAY + 60_000
+    const batch = store.checkAlerts()
+    expect(batch?.changes.map((change) => [change.row.id, change.from, change.to])).toEqual([
+      ['a/backup', 'ok', 'late'],
+    ])
+    expect(batch?.changes[0]?.row.shown_since).toBe(iso(back + DAY))
+    expect(store.checkAlerts()).toBeNull()
+    expect(batches).toHaveLength(1)
+    store.close()
+  })
+
+  it('records a change only once the hook took it, so a throwing hook hears it again', () => {
+    const store = new StatusStore(':memory:', () => T0)
+    let fail = true
+    const told: AlertBatch[] = []
+    store.onAlert((batch) => {
+      told.push(batch)
+      if (fail) throw new Error('notify is down')
+    })
+    store.upsert([machine('a'), row({ id: 'a/one', what: 'One' })])
+    store.upsert([row({ id: 'a/one', what: 'One', state: 'failed', meaning: 'x' })])
+    expect(told).toHaveLength(1)
+    fail = false
+    store.checkAlerts()
+    expect(told).toHaveLength(2)
+    expect(told[1]?.changes.map((change) => [change.row.id, change.from])).toEqual([
+      ['a/one', 'ok'],
+    ])
+    expect(store.checkAlerts()).toBeNull()
+    store.close()
+  })
+
+  it('starts from the rows already there: an upgrade alerts on nothing already showing', () => {
+    dir = mkdtempSync(join(tmpdir(), 'status-alerts-'))
+    const path = join(dir, 'status.db')
+    // status.db as the first M2 build left it: rows, and seen states that kept unknown.
+    const old = openDatabase(path, [
+      'CREATE TABLE status_rows (id TEXT PRIMARY KEY, doc TEXT NOT NULL, updated_at INTEGER NOT NULL) STRICT',
+      'CREATE TABLE status_seen (id TEXT PRIMARY KEY, shown TEXT NOT NULL) STRICT',
+    ])
+    const put = old.prepare('INSERT INTO status_rows (id, doc, updated_at) VALUES (?, ?, ?)')
+    for (const item of [
+      machine('a', 'ok', T0 + HOUR),
+      row({ id: 'a/one', what: 'One', state: 'failed', meaning: 'x' }),
+      row({ id: 'a/backup', what: 'Backup', kind: 'backup', next_run: iso(T0 - HOUR) }),
+      row({ id: 'b/two', what: 'Two', machine: 'b', state: 'failed', meaning: 'y' }),
+    ])
+      put.run(item.id, JSON.stringify(item), T0 - 2 * HOUR)
+    old.prepare("INSERT INTO status_seen (id, shown) VALUES ('a/one', 'unknown')").run()
+    old.close()
+    const upgraded = watched(path)
+    expect(upgraded.store.checkAlerts()).toBeNull()
+    // b has no machine row, so b/two shows unknown; once b reports, its old failure is no news.
+    upgraded.store.upsert([machine('b', 'ok', T0 + HOUR)])
+    expect(upgraded.batches).toEqual([])
+    upgraded.store.close()
   })
 
   it('words the alert: what failed leads, then the rest of the rollup', () => {

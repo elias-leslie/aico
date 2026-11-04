@@ -62,6 +62,8 @@ interface LogAnswer {
   ref: string
   machine: string
   ok: boolean
+  /** Still printing when the server stopped it (10 s): the lines are what it printed by then. */
+  truncated?: boolean
   lines: string[]
 }
 
@@ -81,8 +83,12 @@ export function LogSheet({
     queryKey: ['status-log', row.id],
     queryFn: () =>
       apiFetch<LogAnswer>(
-        `/api/status/log?id=${encodeURIComponent(row.id)}`,
-        undefined,
+        '/api/status/log',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: row.id }),
+        },
         'Couldn’t read the log',
       ),
     staleTime: 0,
@@ -119,13 +125,25 @@ export function LogSheet({
           Couldn’t read the log: {(log.error as Error).message}
         </p>
       ) : log.data.lines.length === 0 ? (
-        <p className="status-sheet-note">The command printed nothing.</p>
+        <p className="status-sheet-note">
+          {log.data.truncated
+            ? 'The command printed nothing in 10 seconds, so it was stopped.'
+            : 'The command printed nothing.'}
+        </p>
       ) : (
         <>
-          {!log.data.ok && (
+          {log.data.truncated ? (
             <p className="status-sheet-note" role="alert">
-              The command ended with an error; its last lines:
+              Cut off: the command was still printing after 10 seconds. These
+              are the last lines it printed by then, which may not be the
+              newest.
             </p>
+          ) : (
+            !log.data.ok && (
+              <p className="status-sheet-note" role="alert">
+                The command ended with an error; its last lines:
+              </p>
+            )
           )}
           <pre>{log.data.lines.join('\n')}</pre>
         </>

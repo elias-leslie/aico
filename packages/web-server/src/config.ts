@@ -35,8 +35,11 @@ export interface WebConfig {
   notes: NotesConfig
   /** The nightly Drive copy of the notes (`AICO_EXPORT_*`). */
   export: ExportConfig
-  /** How often aico-web reports its own Status rows (`AICO_STATUS_HEARTBEAT_SECONDS`). */
-  status: { heartbeatMs: number }
+  /**
+   * How often aico-web reports its own Status rows (`AICO_STATUS_HEARTBEAT_SECONDS`), and how long
+   * the same rows turning the same way again stay off the phone (`AICO_STATUS_ALERT_COOLDOWN_SECONDS`).
+   */
+  status: { heartbeatMs: number; alertCooldownS: number }
   /** Owner notices (notify.ts): the phone push files, the outbox pace, the OmniNull hub's door. */
   notify: NotifyConfig
   sync: SyncConfig
@@ -52,8 +55,6 @@ export interface WebConfig {
   agentHubClientId: string | null
   /** Agent Hub's port on the page's host: the browser's voice socket without a configured URL. */
   agentHubPort: number
-  /** Nightshift's web server on loopback, read for the Health panel; null: no panel data. */
-  nightshiftUrl: string | null
   uploads: UploadConfig
   maintenance: MaintenanceConfig
 }
@@ -196,6 +197,8 @@ const DEFAULT_BLOB_GRACE_DAYS = 7
 const DEFAULT_EXPORT_REMOTE = 'aico-notes-drive'
 const DEFAULT_EXPORT_FOLDER = 'SummitFlow-Notes'
 const DEFAULT_STATUS_HEARTBEAT_SECONDS = 5 * 60
+// A row that flaps pushes at most this often for the same change (notify's per-key cooldown).
+const DEFAULT_STATUS_ALERT_COOLDOWN_SECONDS = 6 * 60 * 60
 // Where Nightshift keeps the phone push files today (re-pairing into Aico comes with the tray and phone move).
 const DEFAULT_FCM_TOKEN_FILE = '/var/lib/nightshift/fcm/token.json'
 const DEFAULT_PHONE_DEVICES_FILE = '/var/lib/nightshift/web/app-devices.json'
@@ -218,8 +221,6 @@ const DEFAULT_VISION_CONCURRENCY = 2
 // The workstation's socket-activated forwarder to portfolio-ai on VM 180
 // (portfolio-prod-api.socket); AICO_PORTFOLIO_URL=off turns hand-off off.
 const DEFAULT_PORTFOLIO_URL = 'http://127.0.0.1:18000'
-// Nightshift's own loopback address (its project.identity.json hosts.local_frontend).
-const DEFAULT_NIGHTSHIFT_URL = 'http://127.0.0.1:3020'
 
 /** The nearest project.identity.json above `from` (the repo root's). */
 export function findIdentityFile(from: string): string | null {
@@ -288,13 +289,6 @@ function agyPath(env: NodeJS.ProcessEnv, home: string): string {
   if (set) return expandHome(set, home)
   const installed = join(home, '.local', 'bin', 'agy')
   return existsSync(installed) ? installed : 'agy'
-}
-
-/** AICO_NIGHTSHIFT_URL, `off` for none; Nightshift's own address otherwise. */
-function nightshiftUrl(value: string | undefined): string | null {
-  const text = value?.trim()
-  if (!text) return DEFAULT_NIGHTSHIFT_URL
-  return text.toLowerCase() === 'off' ? null : text
 }
 
 /** A setting that is a URL or `off`. */
@@ -382,6 +376,10 @@ export function loadConfig(
     status: {
       heartbeatMs:
         positiveInt(env.AICO_STATUS_HEARTBEAT_SECONDS, DEFAULT_STATUS_HEARTBEAT_SECONDS) * 1000,
+      alertCooldownS: Math.min(
+        positiveInt(env.AICO_STATUS_ALERT_COOLDOWN_SECONDS, DEFAULT_STATUS_ALERT_COOLDOWN_SECONDS),
+        7 * 24 * 60 * 60,
+      ),
     },
     notify: {
       fcmTokenFile: env.AICO_FCM_TOKEN_FILE?.trim() || DEFAULT_FCM_TOKEN_FILE,
@@ -436,7 +434,6 @@ export function loadConfig(
     agentHubUrl: env.AGENT_HUB_URL?.trim() || env.NEXT_PUBLIC_AGENT_HUB_URL?.trim() || null,
     agentHubClientId: env.AGENT_HUB_CLIENT_ID?.trim() || null,
     agentHubPort: DEFAULT_AGENT_HUB_PORT,
-    nightshiftUrl: nightshiftUrl(env.AICO_NIGHTSHIFT_URL),
     uploads: {
       dir: resolve(expandHome(env.UPLOAD_DIR?.trim() || join(home, uploadDirName), home)),
       remoteDir: env.AICO_REMOTE_UPLOAD_DIR?.trim() || DEFAULT_REMOTE_UPLOAD_DIR,

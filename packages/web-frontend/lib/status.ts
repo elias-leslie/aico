@@ -38,7 +38,8 @@ export interface StatusRow {
   updated_at: string
   shown: Shown
   shown_since: string | null
-  unknown_why?: 'off' | 'late' | 'missing'
+  /** Its machine is off, went late, has no machine row, or is back and this hasn't reported since. */
+  unknown_why?: 'off' | 'late' | 'missing' | 'back'
 }
 
 export interface StatusSummary {
@@ -56,6 +57,8 @@ export interface StatusView {
   rows: StatusRow[]
   /** The machine aico-web runs on: run and log refs work only for its rows. */
   machine?: string
+  /** Rows whose run ref is going now (one run per row). */
+  running?: string[]
 }
 
 export const WORD: Record<Shown | 'running', string> = {
@@ -177,6 +180,8 @@ export function reason(row: StatusRow): string {
   if (row.unknown_why === 'off')
     return `${row.machine} is off, so this can’t report.`
   if (row.unknown_why === 'late') return `${row.machine} stopped reporting.`
+  if (row.unknown_why === 'back')
+    return `${row.machine} is back; this hasn’t reported since.`
   return `Aico hasn’t heard from ${row.machine} itself.`
 }
 
@@ -308,6 +313,8 @@ export function rowButtons(
   context: ActionContext,
 ): { buttons: RowButton[]; primary: ButtonKind | null } {
   const local = row.machine === context.here && !row.id.startsWith('ominull')
+  // Unknown because its machine isn't reporting (not just back and waiting on this row).
+  const silent = row.shown === 'unknown' && row.unknown_why !== 'back'
   const buttons: RowButton[] = []
   for (const action of row.actions ?? []) {
     if ((action.kind === 'run' || action.kind === 'log') && !local) continue
@@ -317,7 +324,7 @@ export function rowButtons(
       kind: action.kind,
       ref: action.ref,
       disabled:
-        action.kind === 'run' && row.shown === 'unknown'
+        action.kind === 'run' && silent
           ? `${row.machine} isn’t reporting, so it can’t run now`
           : null,
     })
@@ -329,7 +336,7 @@ export function rowButtons(
       ref: row.actions?.find((action) => action.kind === 'look')?.ref ?? '',
       disabled: null,
     })
-  if (row.shown === 'unknown' && context.hosts.has(row.machine))
+  if (silent && context.hosts.has(row.machine))
     buttons.push({ kind: 'hosts', ref: row.machine, disabled: null })
   buttons.sort(
     (a, b) => ACTION_ORDER.indexOf(a.kind) - ACTION_ORDER.indexOf(b.kind),
@@ -340,7 +347,9 @@ export function rowButtons(
     row.shown === 'unknown'
       ? has('hosts')
         ? 'hosts'
-        : null
+        : !silent && has('run')
+          ? 'run'
+          : null
       : row.shown === 'late'
         ? has('run')
           ? 'run'
