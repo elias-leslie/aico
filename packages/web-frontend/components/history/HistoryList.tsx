@@ -173,12 +173,12 @@ export function HistoryList() {
                 href={sessionHref(session.id)}
                 className="status-row history-row"
               >
-                <div>
+                <div className="chipcell">
                   <span className={`status-chip ${STANDING_CHIP[state]}`}>
                     {STANDING_TEXT[state]}
                   </span>
                 </div>
-                <div>
+                <div className="main-cell">
                   <div className="what">
                     {session.project ??
                       (shortFolder(session.cwd) || 'Unknown project')}
@@ -192,6 +192,10 @@ export function HistoryList() {
                         · {shortFolder(session.cwd)}
                       </span>
                     )}
+                  </div>
+                  <div className="meta-m">
+                    {plural(session.toolCalls, 'tool call')} ·{' '}
+                    {tokenLine(session.tokens)}
                   </div>
                 </div>
                 <div className="when">

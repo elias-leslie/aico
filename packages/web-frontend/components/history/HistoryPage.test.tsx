@@ -96,7 +96,7 @@ describe('recent sessions list', () => {
     await screen.findByText('demo')
     expect(screen.getByText('Finished')).toBeTruthy()
     expect(screen.getByText('Failed')).toBeTruthy()
-    expect(screen.getAllByText(/200 in · 12k cached · 20 out/)).toHaveLength(2)
+    expect(screen.getAllByText(/200 in · 12k cached · 20 out/)).toHaveLength(4)
     const link = screen
       .getAllByRole('link')
       .find((a) => a.getAttribute('href')?.includes('codex%3Aabc'))
