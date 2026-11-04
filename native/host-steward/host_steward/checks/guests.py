@@ -435,7 +435,12 @@ def run_state(text: str) -> list[Signal]:
 
 
 def agents_and_disks(
-    vm_text: str, agent_text: str, cfg: dict[str, Any], cache: dict[str, Any], asset_for: Any
+    vm_text: str,
+    agent_text: str,
+    cfg: dict[str, Any],
+    cache: dict[str, Any],
+    asset_for: Any,
+    now: float | None = None,
 ) -> list[Signal]:
     down = sorted(k for k, v in parse_agents(agent_text).items() if v == "down")
     out = [
@@ -450,7 +455,7 @@ def agents_and_disks(
         worst = max(filesystems, key=lambda x: x["used"] / x["total"])
         pct = round(worst["used"] * 100 / worst["total"], 1)
         free = round((worst["total"] - worst["used"]) / (1 << 30), 1)
-        history.record(cache, "guest.disk_used_pct", "pve", pct, vmid, agg="max")
+        history.record(cache, "guest.disk_used_pct", "pve", pct, vmid, now, agg="max")
         state = (
             "failed"
             if pct >= cfg["guest_disk_crit_pct"]
@@ -491,7 +496,7 @@ def run(ctx: Ctx) -> list[Signal]:
     out = [
         discard_signal(parse_vms(text), ctx.cfg["pool_storage"]),
         *run_state(text),
-        *agents_and_disks(text, sections.get("agents", ""), ctx.cfg, ctx.cache, tiered),
+        *agents_and_disks(text, sections.get("agents", ""), ctx.cfg, ctx.cache, tiered, ctx.now),
         *segments(sections.get("netiso", ""), ctx.site.get("segment_guards", [])),
     ]
     return out

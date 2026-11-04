@@ -31,7 +31,11 @@ class Fake:
 # usage
 
 
-def test_lastcomm_keeps_the_latest_time_per_command_and_user():
+def test_lastcomm_keeps_the_latest_time_per_command_and_user(monkeypatch):
+    import time
+
+    monkeypatch.setenv("TZ", "UTC")  # lastcomm prints local times
+    time.tzset()
     lines = [
         f"{'bash':<16}{'kasadis':<8} __ 0.00 secs Mon Nov  2 10:00",
         f"{'bash':<16}{'kasadis':<8} __ 0.00 secs Tue Nov  3 09:30",
@@ -40,6 +44,8 @@ def test_lastcomm_keeps_the_latest_time_per_command_and_user():
     got = usage.parse_lastcomm_lines(lines, datetime(2026, 11, 3, 12, 0, tzinfo=UTC))
     assert list(got) == [("bash", "kasadis")]
     assert got[("bash", "kasadis")] > datetime(2026, 11, 3, 0, 0, tzinfo=UTC).isoformat()
+    monkeypatch.undo()
+    time.tzset()
 
 
 def test_exec_upsert_moves_last_seen_forward_only(tmp_path):

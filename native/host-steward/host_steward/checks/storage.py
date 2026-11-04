@@ -308,7 +308,7 @@ def disk(ctx: Ctx, entry: dict[str, Any]) -> list[Signal]:
     free = usage.free / GIB
     pct = round(usage.used * 100 / (usage.used + usage.free), 1) if usage.used + usage.free else 0.0
     state = reserve_state(free, cfg) if entry.get("balance") else plain_state(pct, free, cfg)
-    history.record(ctx.cache, "disk.used_pct", "workstation", pct, path)
+    history.record(ctx.cache, "disk.used_pct", "workstation", pct, path, ctx.now)
     out = [
         Signal(
             "storage.disk.space", state, {"name": name, "free": f"{free:.0f}", "pct": f"{pct:.0f}"}
@@ -380,6 +380,7 @@ def smart(ctx: Ctx) -> list[Signal]:
                     "workstation",
                     float(counters[key]),
                     str(counters.get("serial") or dev),
+                    ctx.now,
                     agg="max",
                     kind=kind,
                 )

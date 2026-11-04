@@ -232,10 +232,14 @@ def smart_readings(sections: dict[str, str]) -> list[tuple[str, float, str, str]
 def record_readings(ctx: Ctx, sections: dict[str, str]) -> None:
     """The pool, metadata and disk readings into the trend history (the trends check evaluates them)."""
     for pool in parse_pools(sections.get("lvs", "")):
-        history.record(ctx.cache, "pool.data_pct", "pve", pool["data"], pool["name"], agg="max")
-        history.record(ctx.cache, "pool.meta_pct", "pve", pool["metadata"], pool["name"], agg="max")
+        history.record(
+            ctx.cache, "pool.data_pct", "pve", pool["data"], pool["name"], ctx.now, agg="max"
+        )
+        history.record(
+            ctx.cache, "pool.meta_pct", "pve", pool["metadata"], pool["name"], ctx.now, agg="max"
+        )
     for metric, value, serial, kind in smart_readings(sections):
-        history.record(ctx.cache, metric, "pve", value, serial, agg="max", kind=kind)
+        history.record(ctx.cache, metric, "pve", value, serial, ctx.now, agg="max", kind=kind)
 
 
 def run(ctx: Ctx) -> list[Signal]:
