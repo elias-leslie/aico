@@ -2,11 +2,11 @@
 // shapes. Tether owns every session; this server keeps only which tab (pane)
 // shows each one, and each project's tab settings.
 
+import type { ChatSessions } from '@aico/agent'
 import { compatibleVersion, type TetherClient } from '@aico/tether-client'
-import { AGENT_HUB_PATHS, type AgentHubConfig, proxyAgentHub } from './agent-hub'
 import { type Asks, registerAskRoutes } from './asks'
 import { type CaptureDeps, registerCaptureRoutes } from './captures'
-import { registerChatRoutes } from './chat'
+import { chatSession, registerChatRoutes } from './chat'
 import { registerCheckInRoutes } from './check-ins'
 import type { UploadConfig } from './config'
 import type { WebStore } from './db'
@@ -34,7 +34,7 @@ import { registerUploadRoutes, uploadTargets } from './uploads'
 export interface ApiDeps {
   tether: TetherClient
   store: WebStore
-  config: AgentHubConfig
+  chats?: ChatSessions
   uploads: UploadConfig
   shows: Shows
   asks: Asks
@@ -205,11 +205,25 @@ export function buildApi(deps: ApiDeps): Router {
 
   router.on('GET', '/api/sessions', async () => {
     // Tabs are never detached any more, so include_detached changes nothing.
-    const items = await listSessions()
+    const items = [
+      ...(await listSessions()),
+      ...(deps.chats ? deps.chats.list().map((chat) => chatSession(chat, [])) : []),
+    ]
+    if (deps.chats) {
+      const asks = await deps.asks.list()
+      for (let i = 0; i < items.length; i++) {
+        if (deps.chats.has(items[i].id))
+          items[i] = chatSession(deps.chats.summary(items[i].id), asks) as (typeof items)[number]
+      }
+    }
     return { items, total: items.length }
   })
 
-  router.on('GET', '/api/sessions/:sessionId', (ctx) => getSession(ctx.params.sessionId))
+  router.on('GET', '/api/sessions/:sessionId', async (ctx) =>
+    deps.chats?.has(ctx.params.sessionId)
+      ? chatSession(deps.chats.summary(ctx.params.sessionId), await deps.asks.list())
+      : getSession(ctx.params.sessionId),
+  )
 
   // The owner has these sessions open now: every device's list stops calling
   // their finished turns new.
@@ -236,6 +250,10 @@ export function buildApi(deps: ApiDeps): Router {
     const body = objectBody(await ctx.body())
     const name = optionalString(body, 'name', { max: MAX_SESSION_NAME })
     const displayOrder = optionalInt(body, 'display_order')
+    if (deps.chats?.has(id)) {
+      if (name !== undefined) deps.chats.rename(id, name)
+      return chatSession(deps.chats.summary(id), await deps.asks.list())
+    }
     const session = await getSession(id)
     if (displayOrder !== undefined && session.pane_id) store.updateLink(id, { displayOrder })
     if (name !== undefined)
@@ -257,6 +275,12 @@ export function buildApi(deps: ApiDeps): Router {
       is_external: false,
       ...fields,
     })
+    if (deps.chats?.has(id)) {
+      await deps.chats.stop(id, true)
+      for (const ask of await deps.asks.list())
+        if (ask.session === id && ask.state === 'open') await deps.asks.act(ask.id, 'withdraw')
+      return result()
+    }
     const link = store.getLink(id)
     // "End, keep check-in": its check-ins outlive the session (Tether starts a new one then).
     const keepWakes = ctx.query.get('keepWakes') === 'true'
@@ -370,7 +394,7 @@ export function buildApi(deps: ApiDeps): Router {
     const iso = (ms: unknown) =>
       typeof ms === 'number' && ms > 0 ? new Date(ms).toISOString() : null
     return items
-      .filter((tool) => typeof tool.slug === 'string')
+      .filter((tool) => typeof tool.slug === 'string' && tool.slug !== 'agent-hub')
       .map((tool) => ({
         id: tool.id ?? tool.slug,
         slug: tool.slug,
@@ -402,20 +426,21 @@ export function buildApi(deps: ApiDeps): Router {
   registerPaneFileRoutes(router, life, tether)
   registerFileLocationRoutes(router)
   registerShowRoutes(router, deps.shows)
-  registerAskRoutes(router, deps.asks)
+  registerAskRoutes(router, deps.asks, (ask) => {
+    if (ask.session && deps.chats?.has(ask.session))
+      deps.chats.answer(
+        ask.session,
+        ask.id,
+        ask.question,
+        [ask.answer, ask.note].filter(Boolean).join('\n'),
+      )
+  })
   registerCheckInRoutes(router, life, tether)
   registerRunRoutes(router, tether)
   registerHistoryRoutes(router, tether)
-  registerChatRoutes(router, tether)
+  if (deps.chats) registerChatRoutes(router, deps.chats, deps.asks, tether)
 
   // -- Agent Hub, auth, health ------------------------------------------------------
-
-  router.on('GET', '/api/agent-hub/:path', async (ctx) => {
-    const upstream = AGENT_HUB_PATHS[ctx.params.path]
-    if (!upstream) throw new HttpError(404, 'Not found')
-    await proxyAgentHub(deps.config, upstream, ctx.res)
-    return RAW
-  })
 
   // The app has no login of its own (Cloudflare Access gates the public host);
   // Nightshift's public-gate probe still reads this path.

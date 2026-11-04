@@ -1,7 +1,7 @@
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { TetherError, wakeChoices } from '@aico/tether-client'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildApi } from './api'
 import { Asks } from './asks'
 import { WebStore } from './db'
@@ -45,7 +45,6 @@ beforeEach(async () => {
   const api = buildApi({
     tether: tether.client,
     store,
-    config: { agentHubUrl: null, agentHubClientId: null },
     uploads: {
       dir: '/nonexistent/uploads',
       remoteDir: '~/uploads',
@@ -476,31 +475,17 @@ describe('panes', () => {
     expect((await call('GET', '/api/panes/detached')).body).toMatchObject({ total: 0 })
   })
 
-  it('opens an Agent Hub chat as a tab of its own, with no shell, and keeps the project mode', async () => {
-    const { status, body } = await call('POST', '/api/panes', {
-      pane_type: 'project',
-      pane_name: 'Aico',
-      project_id: 'aico',
-      working_dir: '/srv/workspaces/projects/aico',
-      agent_tool_slug: 'agent-hub',
-    })
-    expect(status).toBe(200)
-    expect(body).toMatchObject({ active_mode: 'agent-hub' })
-    expect(body.sessions.map((s: { mode: string }) => s.mode)).toEqual(['agent-hub'])
-    const creates = tether
-      .callsOf('request')
-      .filter(([method, path]) => method === 'POST' && path === '/v1/sessions')
-      .map(([, , input]) => input)
-    expect(creates).toEqual([
-      expect.objectContaining({
-        tool: 'agent-hub',
-        projectId: 'aico',
-        projectRoot: '/srv/workspaces/projects/aico',
-      }),
-    ])
-    // The project's remembered mode stays a terminal mode.
-    expect(store.allProjectSettings().get('aico')).toMatchObject({ enabled: true })
-    expect(store.allProjectSettings().get('aico')?.active_mode).not.toBe('agent-hub')
+  it('directs the retired Agent Hub chat launcher to New chat', async () => {
+    expect(
+      (
+        await call('POST', '/api/panes', {
+          pane_type: 'project',
+          pane_name: 'Aico',
+          project_id: 'aico',
+          agent_tool_slug: 'agent-hub',
+        })
+      ).status,
+    ).toBe(410)
   })
 
   it('ends what it created and drops the tab when Tether refuses a session', async () => {
@@ -749,12 +734,7 @@ describe('projects, tools, Agent Hub, health', () => {
 
   it('lists agent tools in the old shape', async () => {
     const all = (await call('GET', '/api/agent-tools')).body
-    expect(all.map((t: { slug: string }) => t.slug)).toEqual([
-      'shell',
-      'claude',
-      'codex',
-      'agent-hub',
-    ])
+    expect(all.map((t: { slug: string }) => t.slug)).toEqual(['shell', 'claude', 'codex'])
     expect(all[1]).toMatchObject({
       id: 'claude',
       name: 'Claude',
@@ -762,15 +742,7 @@ describe('projects, tools, Agent Hub, health', () => {
       aliases: ['cc'],
     })
     const enabled = (await call('GET', '/api/agent-tools?enabled_only=true')).body
-    expect(enabled.map((t: { slug: string }) => t.slug)).toEqual(['shell', 'claude', 'agent-hub'])
-  })
-
-  it('answers 503 when Agent Hub is not configured', async () => {
-    expect(await call('GET', '/api/agent-hub/models')).toMatchObject({
-      status: 503,
-      body: { detail: 'Agent Hub is not configured' },
-    })
-    expect((await call('GET', '/api/agent-hub/other')).status).toBe(404)
+    expect(enabled.map((t: { slug: string }) => t.slug)).toEqual(['shell', 'claude'])
   })
 
   it('reports health from Tether', async () => {
@@ -785,45 +757,5 @@ describe('projects, tools, Agent Hub, health', () => {
       status: 503,
       body: { status: 'unhealthy' },
     })
-  })
-})
-
-describe('Agent Hub proxy', () => {
-  it('forwards with the client id and hides upstream error bodies', async () => {
-    const { proxyAgentHub } = await import('./agent-hub')
-    const fetchImpl = vi.fn(async () => new Response('{"items":[]}', { status: 200 }))
-    const res = { statusCode: 0, headers: {} as Record<string, unknown>, body: '' }
-    const fake = {
-      ...res,
-      setHeader(name: string, value: unknown) {
-        this.headers[name.toLowerCase()] = value
-      },
-      end(body: string) {
-        this.body = body
-      },
-    }
-    await proxyAgentHub(
-      { agentHubUrl: 'http://hub.local/', agentHubClientId: 'client-1' },
-      '/api/models',
-      fake as never,
-      fetchImpl as never,
-    )
-    expect(fetchImpl).toHaveBeenCalledWith(
-      'http://hub.local/api/models',
-      expect.objectContaining({
-        headers: { 'X-Request-Source': 'a-term', 'X-Client-Id': 'client-1' },
-      }),
-    )
-    expect(fake.body).toBe('{"items":[]}')
-
-    fetchImpl.mockResolvedValueOnce(new Response('secret detail', { status: 500 }))
-    await proxyAgentHub(
-      { agentHubUrl: 'http://hub.local', agentHubClientId: null },
-      '/api/models',
-      fake as never,
-      fetchImpl as never,
-    )
-    expect(fake.statusCode).toBe(500)
-    expect(JSON.parse(fake.body)).toEqual({ detail: 'Agent Hub is temporarily unavailable' })
   })
 })

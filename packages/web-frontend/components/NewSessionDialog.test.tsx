@@ -213,18 +213,6 @@ describe('NewSessionDialog', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
-  it('hides the host choice for an Agent Hub chat, which runs here', () => {
-    hostState.hosts = [{ name: 'agent-work', state: 'connected' }]
-    const { onStart } = renderDialog('neri')
-    fireEvent.click(screen.getByRole('button', { name: 'agent-work' }))
-    fireEvent.click(screen.getByRole('button', { name: /Agent Hub/ }))
-    expect(screen.queryByRole('group', { name: 'Runs on' })).toBeNull()
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Start Agent Hub in Neri' }),
-    )
-    expect(onStart).toHaveBeenCalledWith('neri', '/srv/neri', 'agent-hub')
-  })
-
   it("starts the default agent in the open session's project", () => {
     const { onStart, onClose } = renderDialog('neri')
 
@@ -270,17 +258,15 @@ describe('NewSessionDialog', () => {
     expect(onStart).toHaveBeenCalledWith('aico', '/srv/aico', 'shell')
   })
 
-  it('lists Agent Hub with its note and starts it as the chosen agent', () => {
-    const { onStart } = renderDialog('neri')
-
-    fireEvent.click(screen.getByRole('button', { name: /Agent Hub/ }))
-    expect(screen.getByTestId('new-session-tool-note')).toHaveTextContent(
-      'Any model',
-    )
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Start Agent Hub in Neri' }),
-    )
-    expect(onStart).toHaveBeenCalledWith('neri', '/srv/neri', 'agent-hub')
+  it('opens New chat and leaves the old Agent Hub tool out of the picker', () => {
+    const open = vi.fn()
+    window.addEventListener('aico:new-chat', open)
+    const { onStart } = renderDialog()
+    expect(screen.queryByRole('button', { name: /Agent Hub/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New chat' }))
+    expect(open).toHaveBeenCalledOnce()
+    expect(onStart).not.toHaveBeenCalled()
+    window.removeEventListener('aico:new-chat', open)
   })
 
   it('filters projects by name or path', () => {

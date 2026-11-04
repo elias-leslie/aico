@@ -1,430 +1,310 @@
-import { request, type Server } from 'node:http'
+// The real web routes on a faux provider: no model, token or gateway is contacted.
+import { mkdtempSync, rmSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
-import { TetherError } from '@aico/tether-client'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { ChatSessions, openAgentDb, type RoleRules } from '@aico/agent'
+import {
+  createModels,
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxToolCall,
+} from '@earendil-works/pi-ai'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildApi } from './api'
-import { Asks } from './asks'
-import { MAX_CHAT_STREAMS } from './chat'
+import type { Ask, Asks } from './asks'
 import { WebStore } from './db'
 import { createWebServer } from './server'
 import { Shows } from './shows'
 import { TerminalHub } from './terminal'
 import { FakeTether } from './testing'
 
-const SECRET = 'owner-token-0123456789abcdef'
-
-/** A fake Tether that also answers the chat routes and holds each stream open until told. */
-class ChatTether extends FakeTether {
-  requests: { method: string; path: string; body: unknown }[] = []
-  streams: {
-    path: string
-    signal: AbortSignal
-    feed: (line: unknown) => void
-    finish: (error?: Error) => void
-  }[] = []
-  failNext: Error | null = null
-
-  async request(method: string, path: string, body?: unknown) {
-    const ok = (answer: unknown) => ({ status: 200, body: answer }) as never
-    this.requests.push({ method, path, body })
-    if (this.failNext) {
-      const error = this.failNext
-      this.failNext = null
-      throw error
-    }
-    if (path === '/v1/chat/models') return ok({ items: [{ id: 'm1' }] })
-    if (/^\/v1\/sessions\/[^/]+\/chat\?messages=false$/.test(path))
-      return ok({ session: {}, queued: ['later'] })
-    if (/^\/v1\/sessions\/[^/]+\/chat$/.test(path))
-      return ok({ session: { id: 'hub-1', messages: [] }, queued: [] })
-    if (/\/inject$/.test(path)) return ok({ queued: true })
-    if (/\/chat\/cancel$/.test(path)) return ok({ cancelled: true, restored: ['queued one'] })
-    if (path === '/v1/runs/run1/steps/build/chat/info')
-      return ok({ sessionId: 'att-2', agentSlug: 'pi', requestedModel: null, attempt: 2 })
-    if (/^\/v1\/runs\/run1\/steps\/build\/chat\?session=/.test(path))
-      return ok({ session: { id: 'att-2' }, queued: [] })
-    return super.request(method, path, body)
-  }
-
-  stream(
-    path: string,
-    _headers: Record<string, string>,
-    onLine: (line: unknown) => void,
-    signal: AbortSignal,
-  ) {
-    return new Promise<void>((resolve, reject) => {
-      this.streams.push({
-        path,
-        signal,
-        feed: onLine,
-        finish: (error) => (error ? reject(error) : resolve()),
-      })
-      signal.addEventListener('abort', () => resolve())
-    })
-  }
+const first = fauxProvider({ provider: 'openai', api: 'faux-chat', models: [{ id: 'first' }] })
+const models = createModels()
+models.setProvider(first.provider)
+const rules: RoleRules = {
+  role: 'implementation',
+  chain: [{ id: 'codex/first', piProvider: 'openai', piModel: 'first', effort: null }],
+  level: 'lean',
+  tools: ['bash', 'read', 'write'],
+  guardHook: null,
+  egress: 'host',
+  hosts: null,
+  contain: null,
 }
-
-let tether: ChatTether
-let store: WebStore
-let server: Server
+let folder: string
 let base: string
-let chatId: string
-
-const guard = {
-  allowedHostnames: ['localhost', '127.0.0.1'],
-  allowedOrigins: ['http://127.0.0.1:3002'],
-}
-
-beforeEach(async () => {
-  tether = new ChatTether()
-  chatId = tether.add({
-    tool: 'agent-hub',
-    backend: 'agent-hub',
-    agentHub: {
-      sessionId: 'hub-1',
-      agentSlug: 'coder',
-      requestedModel: 'deepseek',
-      model: 'deepseek',
-      turnState: 'idle',
-      turnPhase: null,
-      queued: 0,
-      reachable: true,
-      created: true,
-      promptSent: true,
+let chats: ChatSessions
+let store: WebStore
+let server: ReturnType<typeof createWebServer>
+let db: ReturnType<typeof openAgentDb>
+let questions: Ask[]
+let pushes: unknown[]
+const question = (session: string): Ask => ({
+  id: '0123456789ab',
+  session,
+  requester: null,
+  question: 'Keep the first copy?',
+  options: ['Keep it', 'Replace it'],
+  recommended: 0,
+  body: null,
+  command: null,
+  share: null,
+  wantsFiles: null,
+  files: [],
+  blocking: false,
+  state: 'open',
+  answer: null,
+  note: null,
+  delivery: null,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  answeredAt: null,
+})
+const call = async (method: string, path: string, body?: unknown) => {
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    ...(body !== undefined && { body: JSON.stringify(body) }),
+  })
+  return {
+    status: res.status,
+    body: (await res.json()) as ReturnType<ChatSessions['get']> & {
+      items: { id: string; asks: unknown[] }[]
+      questions: { recommended: number }[]
     },
-  }).id
+  }
+}
+beforeEach(async () => {
+  folder = mkdtempSync(join(tmpdir(), 'aico-chat-routes-'))
+  db = openAgentDb(':memory:')
+  pushes = []
+  questions = []
+  chats = new ChatSessions(db, {
+    dataDir: folder,
+    push: async (report) => {
+      pushes.push(report)
+    },
+    rules: () => rules,
+    models,
+    contextFiles: [],
+  })
+  const tether = new FakeTether()
   store = new WebStore(':memory:')
+  const asks = {
+    list: async () => questions,
+    answer: async (id: string, reply: { option?: number; text?: string; note?: string }) => {
+      if (reply.text && (reply.text.length > 100 || /[\r\n]/.test(reply.text)))
+        throw new Error('Tether requires one-line answer text of at most 100 characters')
+      if (reply.note && reply.note.length > 1000) throw new Error('Tether note is too long')
+      const ask = questions.find((q) => q.id === id) as Ask
+      ask.answer =
+        reply.option !== undefined ? (ask.options[reply.option] ?? null) : (reply.text ?? null)
+      ask.state = 'answered'
+      return ask
+    },
+    act: async () => {
+      questions = []
+      return null
+    },
+  } as unknown as Asks
   const api = buildApi({
     tether: tether.client,
     store,
-    config: { agentHubUrl: null, agentHubClientId: null },
-    uploads: {
-      dir: '/nonexistent/uploads',
-      remoteDir: '~/uploads',
-      maxBytes: 1024,
-      maxAgeMs: 1000,
-    },
+    chats,
+    asks,
+    uploads: { dir: folder, remoteDir: folder, maxBytes: 1024, maxAgeMs: 1000 },
     shows: new Shows({ tether: tether.client, publicHost: null, run: async () => {} }),
-    asks: new Asks({ tether: tether.client, publicHost: null, run: async () => '' }),
   })
-  const hub = new TerminalHub({ tether: tether.client, historyLines: 100, touched: () => {} })
-  server = createWebServer(guard, api, hub)
+  server = createWebServer(
+    { allowedHostnames: ['127.0.0.1'], allowedOrigins: [] },
+    api,
+    new TerminalHub({ tether: tether.client, historyLines: 10, touched: () => {} }),
+  )
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 })
-
 afterEach(async () => {
+  await chats.shutdown()
   server.closeAllConnections()
   await new Promise((resolve) => server.close(resolve))
+  db.close()
   store.close()
+  rmSync(folder, { recursive: true, force: true })
 })
-
-/** A request with the Host header of the caller's choosing (fetch will not send one). */
-function withHost(method: string, path: string, host: string, body?: unknown) {
-  return new Promise<number>((resolve, reject) => {
-    const { port } = new URL(base)
-    const req = request(
-      {
-        host: '127.0.0.1',
-        port,
-        method,
-        path,
-        headers: { Host: host, 'Content-Type': 'application/json' },
-      },
-      (res) => {
-        res.resume()
-        resolve(res.statusCode ?? 0)
-      },
+const start = async () => {
+  first.setResponses([fauxAssistantMessage('First answer')])
+  const res = await call('POST', '/api/chat', {
+    role: 'implementation',
+    cwd: folder,
+    message: 'First question',
+  })
+  expect(res.status).toBe(200)
+  await chats.settled(res.body.id)
+  return res.body.id as string
+}
+describe('Aico chat routes', () => {
+  it('starts from role routing, stores two messages and pushes the session state and totals to Tether', async () => {
+    const id = await start()
+    first.setResponses([fauxAssistantMessage('Second answer')])
+    expect(
+      (await call('POST', `/api/chat/${id}/send`, { message: 'Second question' })).status,
+    ).toBe(200)
+    await chats.settled(id)
+    const view = (await call('GET', `/api/chat/${id}`)).body
+    expect(view.messages.map((m: { role: string }) => m.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+    ])
+    expect(view.state).toBe('idle')
+    expect(view.nextModel).toBe('codex/first')
+    expect(pushes.at(-1)).toMatchObject({
+      id,
+      chat: { state: 'idle', title: 'First question' },
+      turns: [{ turn: 1 }, { turn: 2 }],
+    })
+    expect(
+      pushes.find((push) => (push as { chat?: { state: string } }).chat?.state === 'working'),
+    ).toMatchObject({ endedAt: null, outcome: null })
+    const sessions = (await call('GET', '/api/sessions')).body.items
+    expect(sessions.find((s: { id: string }) => s.id === id)).toMatchObject({
+      backend: 'aico-agent',
+      activity: 'idle',
+      asks: [],
+    })
+    expect(
+      (await call('POST', `/api/chat/${id}/send`, { message: ' ', model: 'outside-role' })).status,
+    ).toBe(422)
+    expect((await call('GET', '/api/chat/missing')).status).toBe(404)
+    expect((await call('GET', '/api/agent-hub/models')).status).toBe(404)
+  })
+  it('returns queued messages as a draft on Stop and can finish the interrupted reply', async () => {
+    const id = await start()
+    first.setResponses([
+      fauxAssistantMessage(fauxToolCall('bash', { command: 'printf partial; sleep 20' })),
+    ])
+    let arrived: () => void = () => {}
+    const started = new Promise<void>((resolve) => {
+      arrived = resolve
+    })
+    const off = chats.subscribe(id, () => {
+      if (db.prepare('SELECT 1 FROM tool_calls WHERE run_id = ?').get(id)) arrived()
+    })
+    await call('POST', `/api/chat/${id}/send`, { message: 'Run a command' })
+    await started
+    off()
+    await call('POST', `/api/chat/${id}/send`, { message: 'Queued one' })
+    await call('POST', `/api/chat/${id}/send`, { message: 'Queued two' })
+    const stopped = (await call('POST', `/api/chat/${id}/stop`)).body
+    expect(stopped).toMatchObject({
+      state: 'stopped',
+      draft: 'Queued one\n\nQueued two',
+      queued: [],
+    })
+    expect(stopped.totals.toolCalls).toBe(1)
+    expect(JSON.stringify(stopped.messages)).toContain('printf partial')
+    first.setResponses([fauxAssistantMessage('Finished the interrupted reply')])
+    await call('POST', `/api/chat/${id}/resume`)
+    await chats.settled(id)
+    expect(chats.get(id)).toMatchObject({
+      state: 'idle',
+      note: expect.stringContaining('Resumed at'),
+    })
+  })
+  it('branches from a turn without changing its source or copying later messages', async () => {
+    const id = await start()
+    const source = JSON.stringify(chats.get(id).messages)
+    first.setResponses([fauxAssistantMessage('Branch answer')])
+    const result = await call('POST', `/api/chat/${id}/branch`, {
+      turn: 1,
+      message: 'Try a different approach',
+      model: 'codex/first',
+    })
+    expect(result.status).toBe(200)
+    await chats.settled(result.body.id)
+    expect(chats.get(result.body.id)).toMatchObject({ parent: id, branchTurn: 1, state: 'idle' })
+    expect(JSON.stringify(chats.get(id).messages)).toBe(source)
+    expect(
+      (await call('POST', `/api/chat/${id}/branch`, { turn: 999, message: 'No such turn' })).status,
+    ).toBe(422)
+  })
+  it('only enters Needs you for a direct ask and delivers the selected answer into the chat', async () => {
+    const id = await start()
+    questions = [question(id)]
+    const view = (await call('GET', `/api/chat/${id}`)).body
+    expect(view.state).toBe('needs-you')
+    expect(view.questions[0].recommended).toBe(0)
+    expect((await call('GET', '/api/sessions')).body.items[0].asks).toHaveLength(1)
+    first.setResponses([fauxAssistantMessage('Keeping the first copy')])
+    expect(
+      (await call('POST', `/api/chat/${id}/answer`, { ask: questions[0]?.id, option: 0 })).status,
+    ).toBe(200)
+    await chats.settled(id)
+    expect((await call('GET', `/api/chat/${id}`)).body).toMatchObject({
+      state: 'idle',
+      questions: [],
+    })
+    expect(JSON.stringify(chats.get(id).messages)).toContain('Keep it')
+  })
+  it('answers a multiline explanation while preserving the full chat message', async () => {
+    const id = await start()
+    questions = [question(id)]
+    const message = 'Keep the original copy.\n' + 'This is the reason. '.repeat(80)
+    first.setResponses([fauxAssistantMessage('Understood')])
+    expect(
+      (await call('POST', `/api/chat/${id}/answer`, { ask: questions[0]?.id, message })).status,
+    ).toBe(200)
+    await chats.settled(id)
+    expect(JSON.stringify(chats.get(id).messages)).toContain(
+      JSON.stringify(message.trim()).slice(1, -1),
     )
-    req.on('error', reject)
-    req.end(body === undefined ? undefined : JSON.stringify(body))
   })
-}
-
-interface Answer {
-  ok?: boolean
-  value?: unknown
-  error?: { code: string; message: string; status?: number } | string
-}
-
-/** The failure code of an `{ok: false, error}` answer. */
-const codeOf = (answer: Answer): string => (answer.error as { code: string }).code
-
-async function post(path: string, body: unknown, headers: Record<string, string> = {}) {
-  const response = await fetch(`${base}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  })
-  return { status: response.status, body: (await response.json()) as Answer }
-}
-
-const callChat = (method: string, args: Record<string, unknown> = {}, session = chatId) =>
-  post('/api/chat/call', { session, method, args: { sessionId: 'hub-1', ...args } })
-
-/** Read a stream's `data:` items until `count` have arrived. */
-async function readItems(response: Response, count: number): Promise<unknown[]> {
-  const reader = response.body?.getReader()
-  if (!reader) throw new Error('no body')
-  const decoder = new TextDecoder()
-  const items: unknown[] = []
-  let buffer = ''
-  while (items.length < count) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    let at = buffer.indexOf('\n\n')
-    while (at >= 0) {
-      const frame = buffer.slice(0, at)
-      buffer = buffer.slice(at + 2)
-      if (frame.startsWith('data: ')) items.push(JSON.parse(frame.slice(6)))
-      at = buffer.indexOf('\n\n')
-    }
-  }
-  reader.releaseLock()
-  return items
-}
-
-describe('chat info', () => {
-  it('names the Agent Hub session, agent and model of a Tether session', async () => {
-    const answer = await post('/api/chat/info', { session: chatId })
-    expect(answer).toEqual({
-      status: 200,
-      body: {
-        ok: true,
-        value: {
-          sessionId: 'hub-1',
-          agentSlug: 'coder',
-          requestedModel: 'deepseek',
-          answeredModel: 'deepseek',
-        },
-      },
-    })
-  })
-
-  it('refuses a session that is not an Agent Hub chat, one that is gone and a bad name', async () => {
-    const shell = tether.add({ tool: 'shell' }).id
-    expect((await post('/api/chat/info', { session: shell })).body).toMatchObject({
-      ok: false,
-      error: { code: 'not_a_chat' },
-    })
-    const gone = await post('/api/chat/info', { session: 'zzzzzzzz' })
-    expect(gone.status).toBe(404)
-    expect(codeOf(gone.body)).toBe('not_found')
-    expect((await post('/api/chat/info', { session: '../x' })).status).toBe(400)
-    expect((await post('/api/chat/info', {})).status).toBe(400)
-    expect(
-      (await post('/api/chat/info', { session: chatId, run: 'r', step: 'build' })).status,
-    ).toBe(400)
-  })
-
-  it('opens a step on its latest attempt, read only', async () => {
-    const answer = await post('/api/chat/info', { run: 'run1', step: 'build' })
-    expect(answer.body).toEqual({
-      ok: true,
-      value: { sessionId: 'att-2', agentSlug: 'pi', requestedModel: null, readOnly: true },
-    })
-  })
-})
-
-describe('chat calls', () => {
-  it('reads the chat, the queue and the model list for the named session', async () => {
-    expect((await callChat('session')).body).toEqual({
-      ok: true,
-      value: { id: 'hub-1', messages: [] },
-    })
-    expect((await callChat('queue')).body).toEqual({ ok: true, value: ['later'] })
-    expect((await callChat('models')).body).toEqual({ ok: true, value: [{ id: 'm1' }] })
-  })
-
-  it('sends with the current generation and the chosen model, and cancels', async () => {
-    const sent = await callChat('send', { text: 'hello', model: 'm1' })
-    expect(sent.body).toEqual({ ok: true, value: { queued: true } })
-    expect(tether.requests.at(-1)).toEqual({
-      method: 'POST',
-      path: `/v1/sessions/${chatId}/inject`,
-      body: { generation: 'g1', text: 'hello', mode: 'paste', submit: true, model: 'm1' },
-    })
-    expect((await callChat('cancel')).body).toEqual({
-      ok: true,
-      value: { cancelled: true, restored: ['queued one'] },
-    })
-    expect(tether.requests.at(-1)).toMatchObject({
-      path: `/v1/sessions/${chatId}/chat/cancel`,
-      body: { generation: 'g1' },
-    })
-  })
-
-  it('refuses an unknown request, empty text, another session’s id and a bad model', async () => {
-    expect(codeOf((await callChat('delete')).body)).toBe('unknown_method')
-    expect(codeOf((await callChat('send', { text: '  ' })).body)).toBe('invalid_text')
-    expect(codeOf((await callChat('send', { text: 'x', model: 5 })).body)).toBe('invalid_model')
-    const other = await post('/api/chat/call', {
-      session: chatId,
-      method: 'session',
-      args: { sessionId: 'hub-other' },
-    })
-    expect(other.status).toBe(409)
-    expect(codeOf(other.body)).toBe('session_mismatch')
-  })
-
-  it('reads a step and never writes to it', async () => {
-    const step = { run: 'run1', step: 'build', attempt: 'att-2' }
-    const read = await post('/api/chat/call', {
-      ...step,
-      method: 'session',
-      args: { sessionId: 'att-2' },
-    })
-    expect(read.body).toEqual({ ok: true, value: { id: 'att-2' } })
-    expect(tether.requests.at(-1)?.path).toBe('/v1/runs/run1/steps/build/chat?session=att-2')
-    for (const method of ['send', 'cancel']) {
-      const refused = await post('/api/chat/call', {
-        ...step,
-        method,
-        args: { sessionId: 'att-2', text: 'hi' },
-      })
-      expect(refused.status).toBe(403)
-      expect(codeOf(refused.body)).toBe('read_only')
-    }
-    const queue = await post('/api/chat/call', {
-      ...step,
-      method: 'queue',
-      args: { sessionId: 'att-2' },
-    })
-    expect(queue.body).toEqual({ ok: true, value: [] })
-    expect(tether.requests.some((r) => r.method === 'POST')).toBe(false)
-  })
-
-  it('words Tether’s failures and never lets a token or address through', async () => {
-    tether.failNext = new TetherError(503, 'agent_hub_unavailable', {})
-    const down = await callChat('session')
-    expect(down.status).toBe(503)
-    expect(down.body).toEqual({
-      ok: false,
-      error: { code: 'agent_hub_unavailable', status: 503, message: 'Agent Hub is not reachable.' },
-    })
-    tether.failNext = new Error(`boom ${SECRET}`)
-    const odd = await callChat('session')
-    expect(odd.status).toBe(502)
-    expect(JSON.stringify(odd.body)).not.toContain(SECRET)
-    expect(codeOf(odd.body)).toBe('chat_failed')
-  })
-})
-
-describe('chat guard', () => {
-  it('refuses a foreign host or origin before any Tether request', async () => {
-    const before = tether.calls.length
-    expect(
-      await withHost('POST', '/api/chat/call', 'evil.example', {
-        session: chatId,
-        method: 'models',
-        args: {},
+  it('uses the chosen model and effort to finish after a model swap', async () => {
+    const id = await start()
+    first.setResponses([
+      () => ({
+        ...fauxAssistantMessage('Unapproved substituted reply'),
+        responseModel: 'different-model',
       }),
-    ).toBe(403)
-    const origin = await post(
-      '/api/chat/call',
-      { session: chatId, method: 'send', args: { sessionId: 'hub-1', text: 'hi' } },
-      { Origin: 'https://evil.example' },
-    )
-    expect(origin.status).toBe(403)
-    expect(origin.body).toEqual({ error: 'origin_not_allowed' })
-    expect(await withHost('GET', `/api/chat/stream?session=${chatId}`, 'evil.example')).toBe(403)
-    expect(tether.calls.length).toBe(before)
-    expect(tether.requests).toEqual([])
-    expect(tether.streams).toEqual([])
-  })
-})
-
-describe('chat stream', () => {
-  it('forwards events as server-sent items, drops heartbeats and ends with the turn', async () => {
-    const response = await fetch(`${base}/api/chat/stream?session=${chatId}&afterSeq=4`)
-    expect(response.status).toBe(200)
-    expect(response.headers.get('content-type')).toContain('text/event-stream')
-    expect(response.headers.get('cache-control')).toContain('no-store')
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(tether.streams).toHaveLength(1)
-    expect(tether.streams[0].path).toBe(`/v1/sessions/${chatId}/chat/stream?afterSeq=4`)
-    const items = readItems(response, 3)
-    const [stream] = tether.streams
-    stream.feed({ type: 'content', seq: 5, content: 'hi' })
-    stream.feed({ type: 'heartbeat' })
-    stream.feed({ type: 'done', seq: 6 })
-    stream.finish()
-    expect(await items).toEqual([
-      { kind: 'event', event: { type: 'content', seq: 5, content: 'hi' } },
-      { kind: 'event', event: { type: 'done', seq: 6 } },
-      { kind: 'end' },
     ])
-  })
-
-  it('tells the browser when the stream broke, in plain words', async () => {
-    const response = await fetch(`${base}/api/chat/stream?session=${chatId}`)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    const items = readItems(response, 1)
-    tether.streams[0].feed({ type: 'stream_error', code: 'stream_interrupted', message: 'x' })
-    tether.streams[0].finish()
-    expect(await items).toEqual([
-      {
-        kind: 'error',
-        error: {
-          code: 'stream_interrupted',
-          message: 'The connection to the running turn was lost.',
-        },
-      },
-    ])
-  })
-
-  it('closes the Tether stream when the browser goes away', async () => {
-    const controller = new AbortController()
-    const response = await fetch(`${base}/api/chat/stream?session=${chatId}`, {
-      signal: controller.signal,
+    await call('POST', `/api/chat/${id}/send`, { message: 'Continue' })
+    await chats.settled(id)
+    expect(chats.get(id).state).toBe('swapped')
+    first.setResponses([fauxAssistantMessage('Resumed on the chosen model')])
+    await call('POST', `/api/chat/${id}/resume`, { model: 'codex/first', effort: 'low' })
+    await chats.settled(id)
+    expect(chats.get(id)).toMatchObject({ state: 'idle', effort: 'low' })
+    expect(chats.get(id).messages.find((m) => m.seq === 3)).toMatchObject({
+      stop_reason: 'aborted',
     })
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(tether.streams[0].signal.aborted).toBe(false)
+  })
+  it('ends with an open question in Finished rather than Needs you', async () => {
+    const id = await start()
+    questions = [question(id)]
+    await call('DELETE', `/api/sessions/${id}`)
+    expect((await call('GET', '/api/sessions')).body.items.find((s) => s.id === id)).toMatchObject({
+      chat: { state: 'ended' },
+      asks: [],
+    })
+    expect(questions).toEqual([])
+  })
+  it('streams completed and partial chat snapshots, and closes a subscriber independently of the run', async () => {
+    const id = await start()
+    const controller = new AbortController()
+    const res = await fetch(`${base}/api/chat/${id}/stream`, { signal: controller.signal })
+    expect(res.headers.get('content-type')).toContain('text/event-stream')
+    const reader = res.body?.getReader()
+    const chunk = await reader?.read()
+    expect(new TextDecoder().decode(chunk?.value)).toContain(': open')
     controller.abort()
-    await response.body?.cancel().catch(() => undefined)
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(tether.streams[0].signal.aborted).toBe(true)
+    expect(chats.get(id).state).toBe('idle')
   })
-
-  it('reads a step’s stream on its pinned attempt', async () => {
-    const response = await fetch(`${base}/api/chat/stream?run=run1&step=build&attempt=att-2`)
-    expect(response.status).toBe(200)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(tether.streams[0].path).toBe(
-      '/v1/runs/run1/steps/build/chat/stream?session=att-2&afterSeq=0',
-    )
-    response.body?.cancel().catch(() => undefined)
-  })
-
-  it('answers a refusal as JSON before any stream opens', async () => {
-    const shell = tether.add({ tool: 'shell' }).id
-    const notChat = await fetch(`${base}/api/chat/stream?session=${shell}`)
-    expect(notChat.status).toBe(409)
-    expect(codeOf((await notChat.json()) as Answer)).toBe('not_a_chat')
-    const badSeq = await fetch(`${base}/api/chat/stream?session=${chatId}&afterSeq=-1`)
-    expect(badSeq.status).toBe(400)
-    expect(tether.streams).toEqual([])
-  })
-
-  it('caps the streams open at once and frees a slot when one closes', async () => {
-    const open: AbortController[] = []
-    for (let i = 0; i < MAX_CHAT_STREAMS; i++) {
-      const controller = new AbortController()
-      open.push(controller)
-      const response = await fetch(`${base}/api/chat/stream?session=${chatId}`, {
-        signal: controller.signal,
-      })
-      expect(response.status).toBe(200)
-    }
-    const over = await fetch(`${base}/api/chat/stream?session=${chatId}`)
-    expect(over.status).toBe(429)
-    expect(codeOf((await over.json()) as Answer)).toBe('too_many_streams')
-    open[0].abort()
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    const again = await fetch(`${base}/api/chat/stream?session=${chatId}`)
-    expect(again.status).toBe(200)
-    again.body?.cancel().catch(() => undefined)
-    for (const controller of open) controller.abort()
+  it('keeps a stopped chat as an ended session after End', async () => {
+    const id = await start()
+    expect((await call('DELETE', `/api/sessions/${id}`)).status).toBe(200)
+    expect(chats.get(id).state).toBe('ended')
+    expect((await call('POST', `/api/chat/${id}/send`, { message: 'too late' })).status).toBe(409)
   })
 })

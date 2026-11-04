@@ -1,11 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AgentHubChat } from '@/components/AgentHubChat'
+import { ChatSession } from '@/components/chat/ChatSession'
 import { EmptySessionState } from '@/components/EmptySessionState'
 import { FilesDialog } from '@/components/files/FilesDialog'
 import type { TerminalMode } from '@/components/ModeToggle'
-import { StepView, useStepViewer } from '@/components/StepViewer'
 import { TerminalComponent, type TerminalHandle } from '@/components/Terminal'
 import {
   ConnectionNotice,
@@ -114,7 +113,6 @@ export function SessionView({
   onToggleCompose,
   sideList = false,
 }: SessionViewProps) {
-  const stepViewer = useStepViewer()
   const [refreshVersion, setRefreshVersion] = useState(0)
   // Files is open, on what it was asked to show.
   const [files, setFiles] = useState<{ request: FilesRequest | null } | null>(
@@ -180,11 +178,6 @@ export function SessionView({
     }
   }, [])
 
-  // A workflow step opened from the list replaces the session until it is closed.
-  if (stepViewer.step) {
-    return <StepView step={stepViewer.step} onBack={stepViewer.close} />
-  }
-
   if (!slot) {
     return (
       <EmptySessionState
@@ -195,6 +188,9 @@ export function SessionView({
       />
     )
   }
+
+  if (slot.chat && sessionId)
+    return <ChatSession key={sessionId} id={sessionId} />
 
   const workingDir = getSlotWorkingDir(slot)
   // An Agent Hub session is a chat; it has no terminal to refit, search or type keys into.
@@ -300,9 +296,7 @@ export function SessionView({
             boxShadow: 'inset 0 0 0 1px var(--frame-edge)',
           }}
         >
-          {sessionId && chat && (
-            <AgentHubChat key={sessionId} source={{ session: sessionId }} />
-          )}
+          {sessionId && chat && <ChatSession key={sessionId} id={sessionId} />}
           {sessionId && !chat && (
             <TerminalComponent
               key={`${sessionId}:${refreshVersion}`}

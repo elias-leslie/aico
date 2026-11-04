@@ -8,6 +8,7 @@
 // against the schema (src/schema.ts) and a mismatch is a failure, not an answer.
 
 import { type ChildProcess, spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join, resolve, sep } from 'node:path'
@@ -17,7 +18,7 @@ import type { AssistantMessage, Models } from '@earendil-works/pi-ai'
 import { getAgentDir } from '@earendil-works/pi-coding-agent'
 import { dataDir } from './cli'
 import { type ModelRefusal, type ModelSwap, refusalOf, swapOf } from './outcomes'
-import { allowedModels } from './providers'
+import { allowedModels, sessionHeaders } from './providers'
 import {
   type ContextRules,
   HARNESS,
@@ -390,7 +391,11 @@ async function viaPi(
         systemPrompt: system,
         messages: [{ role: 'user', content: prompt, timestamp: Date.now() }],
       },
-      { signal: controller.signal, ...(level !== 'off' && { reasoning: level }) },
+      {
+        signal: controller.signal,
+        headers: sessionHeaders(provider, randomUUID()),
+        ...(level !== 'off' && { reasoning: level }),
+      },
     )
     for await (const _event of stream) arm()
     const message = await stream.result()

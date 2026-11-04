@@ -1,7 +1,7 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { timesLabel } from '@/lib/hooks/use-check-ins'
 import { useSignInWatch } from '@/lib/hooks/use-host-admin'
@@ -18,6 +18,7 @@ import {
   type TerminalSlot,
 } from '@/lib/utils/slot'
 import { ConfirmationDialog } from './ConfirmationDialog'
+import { NewChatDialog } from './chat/NewChatDialog'
 import { NewSessionDialog } from './NewSessionDialog'
 import { sessionWhoWhere } from './SessionList'
 import { TerminalContent } from './TerminalContent'
@@ -35,6 +36,12 @@ export function TerminalTabs({
   className,
 }: TerminalTabsProps) {
   useVisualViewportHeight()
+  const [showChat, setShowChat] = useState(false)
+  useEffect(() => {
+    const open = () => setShowChat(true)
+    window.addEventListener('aico:new-chat', open)
+    return () => window.removeEventListener('aico:new-chat', open)
+  }, [])
   const [sessionToEnd, setSessionToEnd] = useState<
     TerminalSlot | PaneSlot | null
   >(null)
@@ -200,6 +207,7 @@ export function TerminalTabs({
         }}
       />
 
+      {showChat && <NewChatDialog onClose={() => setShowChat(false)} />}
       <NewSessionDialog
         isOpen={showTerminalManager}
         onClose={handleCloseTerminalManager}

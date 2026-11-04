@@ -23,7 +23,17 @@ export function parsePushedRun(runId: string, body: Record<string, unknown>): Pu
     throw new HttpError(400, 'invalid_body', { field })
   }
   if (!RUN_ID.test(runId)) bad('run')
-  const known = ['cwd', 'role', 'startedAt', 'endedAt', 'outcome', 'tokens', 'toolCalls', 'turns']
+  const known = [
+    'cwd',
+    'role',
+    'startedAt',
+    'endedAt',
+    'outcome',
+    'tokens',
+    'toolCalls',
+    'turns',
+    'chat',
+  ]
   const extra = Object.keys(body).filter((key) => !known.includes(key))
   if (extra.length) throw new HttpError(400, 'invalid_body', { fields: extra })
   const n = (value: unknown, field: string): number =>
@@ -36,7 +46,24 @@ export function parsePushedRun(runId: string, body: Record<string, unknown>): Pu
   if (!tokens || typeof tokens !== 'object') bad('tokens')
   const t = tokens as Record<string, unknown>
   if (!Array.isArray(turns) || turns.length > MAX_TURNS) bad('turns')
+  let chat: PushedRun['chat']
+  if (body.chat !== undefined) {
+    if (!body.chat || typeof body.chat !== 'object' || Array.isArray(body.chat)) bad('chat')
+    const c = body.chat as Record<string, unknown>
+    if (
+      !['working', 'idle', 'stopped', 'failed', 'ended', 'swapped', 'needs-you'].includes(
+        String(c.state),
+      )
+    )
+      bad('chat.state')
+    chat = {
+      title: text(c.title, 'chat.title', 200),
+      state: String(c.state),
+      updatedAt: n(c.updatedAt, 'chat.updatedAt'),
+    }
+  }
   return {
+    ...(chat && { chat }),
     runId,
     cwd: cwd as string,
     role: role === null || role === undefined ? null : text(role, 'role', 100),

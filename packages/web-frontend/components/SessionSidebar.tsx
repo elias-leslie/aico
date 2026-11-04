@@ -2,6 +2,7 @@
 
 import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { newChat } from '@/lib/chat'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import {
@@ -180,6 +181,13 @@ export function SessionSidebar({
       </header>
       {/* Labelled, under the heading, so the heading keeps its width. */}
       <div className="flex flex-none flex-wrap items-center gap-1 px-1.5 pb-1.5">
+        <button
+          className="lantern-btn ghost small"
+          type="button"
+          onClick={newChat}
+        >
+          New chat
+        </button>
         <NeedsYouLauncher variant="tool" />
         <CaptureLauncher variant="row" />
         <NotesLauncher variant="row" />

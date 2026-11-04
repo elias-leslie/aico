@@ -61,16 +61,12 @@ describe('loadConfig', () => {
         XDG_STATE_HOME: '/state',
         AICO_WEB_PORT: '5555',
         AICO_WEB_ALLOWED_ORIGINS: 'http://127.0.0.1:6000, https://x.example',
-        NEXT_PUBLIC_AGENT_HUB_URL: 'http://hub.local',
-        AGENT_HUB_CLIENT_ID: ' client ',
       },
       ID,
     )
     expect(config.port).toBe(5555)
     expect(config.allowedOrigins).toEqual(['http://127.0.0.1:6000', 'https://x.example'])
     expect(config.dbPath).toBe('/state/aico/web.db')
-    expect(config.agentHubUrl).toBe('http://hub.local')
-    expect(config.agentHubClientId).toBe('client')
   })
 
   it('refuses a non-loopback bind and a missing port', () => {

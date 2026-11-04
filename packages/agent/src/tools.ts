@@ -141,9 +141,18 @@ function contained(cwd: string): (path: string) => void {
 }
 
 /** A contained role's version of a tool, or the plain one. */
-function toolFor(name: string, cwd: string, contain: Contain | null): AgentTool {
+function toolFor(
+  name: string,
+  cwd: string,
+  contain: Contain | null,
+  sessionId?: string,
+): AgentTool {
   const factory = FACTORIES[name]
   if (!factory) throw new Error(`no tool '${name}'`)
+  if (!contain && name === 'bash' && sessionId)
+    return createBashTool(cwd, {
+      spawnHook: (context) => ({ ...context, env: { ...context.env, AICO_WIDGET_ID: sessionId } }),
+    }) as AgentTool
   if (!contain) return factory(cwd)
   const check = contained(cwd)
   if (name === 'bash')
@@ -190,11 +199,12 @@ export function leanTools(
   names: readonly string[],
   descriptions: Record<string, string>,
   contain: Contain | null = null,
+  sessionId?: string,
 ): AgentTool[] {
   return names.map((name) => {
     const description = descriptions[name]
     if (!description) throw new Error(`no tool '${name}'`)
-    const tool = toolFor(name, cwd, contain)
+    const tool = toolFor(name, cwd, contain, sessionId)
     return { ...tool, description, parameters: bare(tool.parameters) as AgentTool['parameters'] }
   })
 }

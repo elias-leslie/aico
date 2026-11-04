@@ -8,7 +8,6 @@ import { SessionAsk } from './asks/SessionAsk'
 import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
 import { SessionSidebar, SIDE_LIST_WIDTH } from './SessionSidebar'
 import { getShownSlot } from './SessionView'
-import { StepViewerProvider, useStepViewer } from './StepViewer'
 import { TerminalFileSection } from './terminal-content/TerminalFileSection'
 import { TerminalMobileSection } from './terminal-content/TerminalMobileSection'
 import type { TerminalContentProps } from './terminal-content/types'
@@ -31,11 +30,7 @@ const SIDE_LIST_WIDTH_KEY = 'aico-side-list-width'
  * Extracted from TerminalTabs to reduce component size
  */
 export function TerminalContent(props: TerminalContentProps) {
-  return (
-    <StepViewerProvider>
-      <TerminalContentBody {...props} />
-    </StepViewerProvider>
-  )
+  return <TerminalContentBody {...props} />
 }
 
 function TerminalContentBody({
@@ -85,7 +80,7 @@ function TerminalContentBody({
   )
   const shownSlot = getShownSlot(terminalSlots, activeSessionId)
   // A chat (an Agent Hub session, or a workflow step opened read-only) has no terminal to type keys into.
-  const chatShown = useStepViewer().step !== null || shownSlot?.chat === true
+  const chatShown = shownSlot?.chat === true
   const sessionName = (session: string) => {
     const slot = terminalSlots.find((candidate) =>
       getSlotSessionId(candidate)?.startsWith(session),
@@ -159,7 +154,9 @@ function TerminalContentBody({
 
         {/* The open session's question for the owner, above where you type */}
         <SessionAsk
-          sessionId={shownSlot ? getSlotSessionId(shownSlot) : null}
+          sessionId={
+            !chatShown && shownSlot ? getSlotSessionId(shownSlot) : null
+          }
           className="order-3 flex-none"
         />
 

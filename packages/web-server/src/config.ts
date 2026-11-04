@@ -53,10 +53,6 @@ export interface WebConfig {
   tetherSocket: string
   /** Agent shares are taken only from this user's tether@default (the owner's own socket). */
   trustShows: boolean
-  agentHubUrl: string | null
-  agentHubClientId: string | null
-  /** Agent Hub's port on the page's host: the browser's voice socket without a configured URL. */
-  agentHubPort: number
   uploads: UploadConfig
   maintenance: MaintenanceConfig
 }
@@ -216,8 +212,6 @@ const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
 const DEFAULT_MAINTENANCE_INTERVAL_SECONDS = 15 * 60
 const DEFAULT_EMPTY_PANE_DAYS = 7
-// The browser's own fallback (packages/web-frontend lib/api-config.ts PORTS.agentHub).
-const DEFAULT_AGENT_HUB_PORT = 8003
 // vision-extract (bake-off 2026-11-02): agy with a Gemini Flash model first, a
 // local ollama vision model as the fallback.
 const DEFAULT_VISION_ROUTES: RouteName[] = ['agy', 'ollama']
@@ -440,9 +434,6 @@ export function loadConfig(
     },
     tetherSocket,
     trustShows: tetherSocket === defaultTetherSocketPath(env, uid),
-    agentHubUrl: env.AGENT_HUB_URL?.trim() || env.NEXT_PUBLIC_AGENT_HUB_URL?.trim() || null,
-    agentHubClientId: env.AGENT_HUB_CLIENT_ID?.trim() || null,
-    agentHubPort: DEFAULT_AGENT_HUB_PORT,
     uploads: {
       dir: resolve(expandHome(env.UPLOAD_DIR?.trim() || join(home, uploadDirName), home)),
       remoteDir: env.AICO_REMOTE_UPLOAD_DIR?.trim() || DEFAULT_REMOTE_UPLOAD_DIR,

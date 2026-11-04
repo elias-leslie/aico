@@ -756,31 +756,45 @@ describe('resume and branch', () => {
     })
   })
 
-  it('goes on with the model that last answered, not the head of the chain', async () => {
-    const { first, second, db, run, rules, cwd } = setup()
-    first.setResponses([
-      fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'HTTP 503' }),
-    ])
-    second.setResponses([fauxAssistantMessage('second answered'), fauxAssistantMessage('again')])
-    const one = await run('task')
-    expect(one.outcome).toMatchObject({ kind: 'done', model: 'opencode-go/deepseek-v4.1-flash' })
-    const lines: string[] = []
-    const two = await runAgent({
-      rules,
-      task: 'more',
-      cwd,
-      db,
-      models: one.models,
-      contextFiles: [],
-      resume: findRun(db, one.runId),
-      log: (line) => lines.push(line),
-    })
-    expect(two.outcome).toMatchObject({ kind: 'done', model: 'opencode-go/deepseek-v4.1-flash' })
-    expect(first.state.callCount).toBe(1)
-    expect(lines).toContain(
-      'goes on with opencode-go/deepseek-v4.1-flash, the model that last answered in this run',
-    )
-  })
+  it.each(['provider_error', 'refusal'])(
+    'the next message resets after %s only for an outage',
+    async (reason) => {
+      const { first, second, db, run, rules, cwd } = setup()
+      first.setResponses([
+        reason === 'refusal'
+          ? refused('cyber_policy')
+          : fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'HTTP 503' }),
+        fauxAssistantMessage('first is back'),
+      ])
+      second.setResponses([fauxAssistantMessage('second answered'), fauxAssistantMessage('again')])
+      const headers: unknown[] = []
+      const stream = vi.spyOn(second.provider, 'streamSimple')
+      const one = await run('task')
+      expect(one.outcome).toMatchObject({ kind: 'done', model: 'opencode-go/deepseek-v4.1-flash' })
+      const two = await runAgent({
+        rules,
+        task: 'more',
+        cwd,
+        db,
+        models: one.models,
+        contextFiles: [],
+        resume: findRun(db, one.runId),
+      })
+      expect(two.outcome).toMatchObject({
+        kind: 'done',
+        model: reason === 'refusal' ? 'opencode-go/deepseek-v4.1-flash' : 'codex/gpt-6.1-sol',
+      })
+      expect(first.state.callCount).toBe(reason === 'refusal' ? 1 : 2)
+      for (const call of stream.mock.calls) headers.push(call[2]?.headers)
+      expect(headers.length).toBeGreaterThan(0)
+      expect(
+        headers.every(
+          (value) => (value as Record<string, string>)?.['x-opencode-session'] === one.runId,
+        ),
+      ).toBe(true)
+      stream.mockRestore()
+    },
+  )
 
   it('branches at a turn: the new run has the conversation up to that turn and nothing after', async () => {
     const { first, db, run, rules, cwd } = setup()

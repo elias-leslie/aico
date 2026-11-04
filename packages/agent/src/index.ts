@@ -1,4 +1,5 @@
 export { type AskOutcome, type AskResult, ask, askMain } from './ask'
+export { ChatError, type ChatMessage, ChatSessions, type ChatState } from './chats'
 export { dataDir, main, USAGE } from './cli'
 export { type ModelRefusal, type ModelSwap, refusalOf, swapOf } from './outcomes'
 export { allowedModels, PiAuthStore } from './providers'
@@ -21,5 +22,14 @@ export {
   runAgent,
   systemPrompt,
 } from './run'
+export { tetherPush } from './tether'
 export { guardBash, leanTools } from './tools'
-export { agentDbPath, openAgentDb, Transcript } from './transcript'
+export {
+  agentDbPath,
+  findRun,
+  openAgentDb,
+  type RunReport,
+  runReport,
+  type StoredRun,
+  Transcript,
+} from './transcript'

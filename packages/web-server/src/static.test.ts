@@ -35,7 +35,7 @@ beforeEach(async () => {
     { allowedHostnames: ['127.0.0.1'], allowedOrigins: [], hostName: 'gem' },
     router,
     new TerminalHub({ tether: tether.client, historyLines: 10, touched: () => {} }),
-    createStaticSite(root, { agentHubUrl: null, agentHubPort: 8003 }),
+    createStaticSite(root),
   )
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
@@ -71,7 +71,7 @@ describe('static site', () => {
     expect(csp).toContain("script-src 'self' 'sha256-abc='")
     expect(csp).not.toContain('unsafe-inline\'"')
     expect(csp).not.toContain("'unsafe-eval'")
-    expect(csp).toContain("connect-src 'self' ws://127.0.0.1:8003")
+    expect(csp).toContain("connect-src 'self'")
   })
 
   it('falls back to the page for app routes but not for missing assets', async () => {
@@ -131,15 +131,10 @@ describe('static site', () => {
 })
 
 describe('pageCsp', () => {
-  it('lets the voice socket reach Agent Hub on the page host or its configured URL', () => {
-    const csp = pageCsp(
-      { scriptHashes: [], agentHubUrl: 'https://hub.example', agentHubPort: 8003 },
-      'aico.example:443',
-      true,
-    )
-    expect(csp).toContain(
-      "connect-src 'self' wss://aico.example:8003 https://hub.example wss://hub.example",
-    )
+  it('connects only to the same origin after the Agent Hub chat is removed', () => {
+    const csp = pageCsp({ scriptHashes: [] })
+    expect(csp).toContain("connect-src 'self'")
+    expect(csp).not.toContain('hub.example')
     expect(csp).toContain("frame-ancestors 'none'")
   })
 })

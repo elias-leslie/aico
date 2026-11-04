@@ -3,6 +3,7 @@
 import { ArrowLeft, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { TranscriptFold } from '@/components/TranscriptFold'
 import { ApiError } from '@/lib/api-fetch'
 import {
   clock,
@@ -52,15 +53,19 @@ function EventItem({ event }: { event: HistoryEvent }) {
   // Results and thinking are long and rarely the point: folded until opened.
   if (event.kind === 'tool_result' || event.kind === 'thinking')
     return (
-      <details className={`history-event ${event.role}`}>
-        <summary>
-          {head}
-          <span className="peek">
-            {event.text.slice(0, 90).replace(/\s+/g, ' ')}
-          </span>
-        </summary>
-        <pre>{event.text}</pre>
-      </details>
+      <TranscriptFold
+        className={event.role}
+        summary={
+          <>
+            {head}
+            <span className="peek">
+              {event.text.slice(0, 90).replace(/\s+/g, ' ')}
+            </span>
+          </>
+        }
+      >
+        {event.text}
+      </TranscriptFold>
     )
   return (
     <div className={`history-event ${event.role} ${event.kind}`}>

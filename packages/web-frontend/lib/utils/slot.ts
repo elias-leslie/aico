@@ -51,6 +51,7 @@ interface SlotSessionFields {
   can: SlotCapabilities
   /** An Agent Hub chat: the view shows its transcript, not a terminal. */
   chat?: boolean
+  chatSummary?: import('../chat').ChatSummary
   /** The remote host the session runs on; absent on this computer. */
   host?: string
   /** Why that host cannot be reached right now (`offline`, ...); absent when live. */
@@ -254,7 +255,9 @@ function slotFields(
     coordinatorId: session.coordinator_id ?? null,
     parentId: session.parent_id ?? null,
     createdAt: session.created_at,
-    ...(session.backend === 'agent-hub' ? { chat: true } : {}),
+    ...(session.backend === 'aico-agent'
+      ? { chat: true, chatSummary: session.chat }
+      : {}),
     ...(session.host ? { host: session.host } : {}),
     ...(session.host && session.peer?.state
       ? { hostState: session.peer.state }

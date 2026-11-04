@@ -81,6 +81,22 @@ function PiIcon({ size, color }: MarkProps) {
   )
 }
 
+function ChatIcon({ size, color }: MarkProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="1.6"
+      aria-hidden="true"
+    >
+      <path d="M4 5h16v11H10l-6 4V5Z" />
+    </svg>
+  )
+}
+
 /** Shell — filled terminal tile with a >_ prompt */
 function ShellIcon({ size, color }: MarkProps) {
   return (
@@ -255,6 +271,7 @@ function GenericAgentIcon({ size, color }: { size: number; color: string }) {
 const ICON_MAP: Record<string, (props: MarkProps) => JSX.Element> = {
   agy: AntigravityIcon,
   'agent-hub': AgentHubIcon,
+  'aico-chat': ChatIcon,
   'claude-code': ClaudeIcon,
   codex: CodexIcon,
   gemini: GeminiIcon,

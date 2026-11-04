@@ -14,7 +14,7 @@ import {
   type Models,
 } from '@earendil-works/pi-ai'
 import { getAgentDir } from '@earendil-works/pi-coding-agent'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ask, askMain, fileBlocks } from './ask'
 import policyData from './fixtures/policy.json' with { type: 'json' }
 import { HARNESS } from './rules'
@@ -281,6 +281,25 @@ describe('pi-ai models', () => {
     models.setProvider(provider.provider)
     return { provider, models }
   }
+
+  it('identifies each OpenCode Go question with a session header', async () => {
+    const provider = fauxProvider({
+      provider: 'opencode-go',
+      api: 'faux-go',
+      models: [{ id: 'deepseek-v4.1-flash', reasoning: true }],
+    })
+    const models = createModels()
+    models.setProvider(provider.provider)
+    const stream = vi.spyOn(provider.provider, 'streamSimple')
+    provider.setResponses([fauxAssistantMessage('ok')])
+    expect(kind(await ask(request('opencode-go/deepseek-v4.1-flash'), { context, models }))).toBe(
+      'done',
+    )
+    const headers = stream.mock.calls[0]?.[2]?.headers
+    expect(headers?.['x-opencode-session']).toMatch(/^[a-f0-9-]{36}$/)
+    expect(headers?.['User-Agent']).toBe('aico-agent/0.1.0')
+    stream.mockRestore()
+  })
 
   it('answers with the schema instruction in the system prompt and reads fenced JSON', async () => {
     const { provider, models } = faux()

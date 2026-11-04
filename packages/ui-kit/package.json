@@ -1,7 +1,7 @@
 {
   "name": "@aico/ui-kit",
   "version": "0.1.0",
-  "description": "Aico's look and the browser pieces shared by the web app and the web server: Lantern tokens, fonts, palette, mouse shim, terminal history and the chat bridge.",
+  "description": "Aico's look and the browser pieces shared by the web app and the web server: Lantern tokens, fonts, palette, mouse shim, terminal history.",
   "private": true,
   "license": "Apache-2.0",
   "aico": {
@@ -13,12 +13,6 @@
   "exports": {
     "./tokens.css": "./src/tokens.css",
     "./fonts.css": "./fonts/fonts.css",
-    "./chat/chat.css": "./src/chat/chat.css",
-    "./chat/chat-view": "./src/chat/chat-view.tsx",
-    "./chat/draft": "./src/chat/draft.ts",
-    "./chat/forward": "./src/chat/forward.ts",
-    "./chat/live": "./src/chat/live.ts",
-    "./chat/types": "./src/chat/types.ts",
     "./font-settings": "./src/font-settings.ts",
     "./host-notice": "./src/host-notice.ts",
     "./mouse-shim": "./src/mouse-shim.ts",
@@ -29,16 +23,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agent-hub/chat-ui": "file:vendor/agent-hub-chat-ui-0.4.7.tgz",
-    "@agent-hub/sdk": "file:../../vendor/agent-hub-sdk-0.1.4.tgz",
-    "@aico/tether-client": "0.1.0",
-    "@tanstack/react-query": "5.102.8",
-    "@xterm/xterm": "6.0.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
-  },
-  "devDependencies": {
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0"
+    "@xterm/xterm": "6.0.0"
   }
 }

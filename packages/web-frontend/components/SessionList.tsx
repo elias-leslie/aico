@@ -12,6 +12,7 @@ import { clsx } from 'clsx'
 import { ChevronRight } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import type { Attention } from '@/lib/attention'
+import { CHAT_STATE } from '@/lib/chat'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import type { SessionAttention } from '@/lib/hooks/use-session-attention'
@@ -27,7 +28,6 @@ import { CheckInBadge } from './CheckInBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
 import { HostBadge } from './HostBadge'
 import { KeptCheckIns } from './KeptCheckIns'
-import { useStepViewer } from './StepViewer'
 
 function getSlotMode(slot: TerminalSlot | PaneSlot): string {
   if (slot.type === 'project') {
@@ -127,7 +127,19 @@ export function foldSessionEntries(
     entry: null,
     step,
   }))
-  return foldTeams([...sessions, ...steps])
+  const teams = foldTeams([...sessions, ...steps])
+  if (!entries.some((entry) => entry.slot.chat)) return teams
+  const order = {
+    'needs-you': 0,
+    working: 1,
+    idle: 2,
+    'no-status': 2,
+    finished: 3,
+  }
+  return teams.sort(
+    (a, b) =>
+      order[a.group] - order[b.group] || (b.item.at ?? 0) - (a.item.at ?? 0),
+  )
 }
 
 /** What a row shows, whether it is a session or a workflow step: the step's
@@ -190,13 +202,11 @@ function useRowOpener(
   onSelect: (slot: TerminalSlot | PaneSlot) => void,
   onOpenStep: ((step: RunMember) => void) | undefined,
 ) {
-  const viewer = useStepViewer()
   return (slot: TerminalSlot | PaneSlot | null, step: RunMember | null) => {
     if (slot) {
-      viewer.close()
       onSelect(slot)
     } else if (step) {
-      ;(onOpenStep ?? viewer.open)(step)
+      onOpenStep?.(step)
     }
   }
 }
@@ -255,8 +265,9 @@ export function SessionList({
   const folds = useTeamFolds(phone)
   const agentName = (mode: string) => toolName(agentTools, mode)
   // Headings only while something needs you: Needs you, then the rest.
+  const hasChats = slots.some((slot) => slot.chat)
   const waiting = teams.filter((row) => row.group === 'needs-you').length
-  const headings = waiting > 0 && waiting < teams.length
+  const headings = hasChats || (waiting > 0 && waiting < teams.length)
 
   const renderRow = (
     row: TeamRow<TeamEntry>,
@@ -280,15 +291,18 @@ export function SessionList({
             (member) => member.entry?.slot.checkIns ?? [],
           )
         : slot?.checkIns
-    const meta = [
-      // A team row: the coordinator's own state, then its team summary.
-      isTeam
-        ? `${rowMeta(agentName(mode), state)} · ${row.summary}`
-        : rowMeta(agentName(mode), state),
-      row.orphaned ? 'coordinator ended' : null,
-    ]
-      .filter(Boolean)
-      .join(' · ')
+    const chat = slot?.chatSummary
+    const meta = chat
+      ? `${chat.role} · ${chat.model ?? '—'} · ${CHAT_STATE[chat.state] ?? chat.state} · ${chat.cwd.split('/').pop()}`
+      : [
+          // A team row: the coordinator's own state, then its team summary.
+          isTeam
+            ? `${rowMeta(agentName(mode), state)} · ${row.summary}`
+            : rowMeta(agentName(mode), state),
+          row.orphaned ? 'coordinator ended' : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
     return (
       <div key={id} className={clsx(isTeam && 'lantern-team')}>
         <button
@@ -302,7 +316,9 @@ export function SessionList({
             size={16}
             color={getAgentColor(mode, tool?.color)}
           />
-          <span className="name">{name}</span>
+          <span className="name" title={chat?.last}>
+            {name}
+          </span>
           <span className="when">{state?.age ?? ''}</span>
           <span className="meta">
             {(needs || group === 'finished') && (
@@ -364,13 +380,25 @@ export function SessionList({
         </p>
       )}
       {teams.map((row, index) => {
-        const header = !headings
-          ? null
-          : index === 0
-            ? 'Needs you'
-            : index === waiting
-              ? 'Other sessions'
-              : null
+        const labels = {
+          'needs-you': 'Needs you',
+          working: 'Working',
+          idle: 'Idle',
+          finished: 'Finished',
+          'no-status': 'Idle',
+        }
+        const header = hasChats
+          ? index === 0 || teams[index - 1]?.group !== row.group
+            ? labels[row.group]
+            : null
+          : !headings
+            ? null
+            : index === 0
+              ? 'Needs you'
+              : index === waiting
+                ? 'Other sessions'
+                : null
+
         return (
           <div key={row.item.id}>
             {header && (
@@ -380,7 +408,11 @@ export function SessionList({
               >
                 {header}
                 <span className="n">
-                  {index === 0 ? waiting : teams.length - waiting}
+                  {hasChats
+                    ? teams.filter((item) => item.group === row.group).length
+                    : index === 0
+                      ? waiting
+                      : teams.length - waiting}
                 </span>
               </h3>
             )}

@@ -14,7 +14,8 @@
       "@aico/usage",
       "@aico/fleet",
       "@aico/notes",
-      "@aico/tether-client"
+      "@aico/tether-client",
+      "@aico/agent"
     ],
     "db": [
       "web.db",
@@ -26,7 +27,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/aico-web.mjs --banner:js=\"// Aico web server bundle. Built by npm run build; do not edit.\nimport { createRequire as __aicoRequire } from 'node:module'; const require = __aicoRequire(import.meta.url);\"",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --external:@earendil-works/* --outfile=dist/aico-web.mjs --banner:js=\"// Aico web server bundle. Built by npm run build; do not edit.\nimport { createRequire as __aicoRequire } from 'node:module'; const require = __aicoRequire(import.meta.url);\"",
     "start": "node dist/aico-web.mjs",
     "test": "vitest run"
   },
@@ -40,7 +41,8 @@
     "@aico/ui-kit": "0.1.0",
     "@aico/usage": "0.1.0",
     "ws": "8.22.0",
-    "@aico/fleet": "0.1.0"
+    "@aico/fleet": "0.1.0",
+    "@aico/agent": "0.1.0"
   },
   "devDependencies": {
     "@types/ws": "8.18.2",

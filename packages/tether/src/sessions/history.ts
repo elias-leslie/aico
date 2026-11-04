@@ -83,6 +83,7 @@ export interface RunTurn {
 
 /** What `aico agent run` pushes at its start and end (`PUT /v1/history/aico-agent/:run`). */
 export interface PushedRun {
+  chat?: { title: string; state: string; updatedAt: number }
   runId: string
   cwd: string
   role: string | null
@@ -478,7 +479,7 @@ export class History {
         run.tokens.output,
         run.toolCalls,
         this.now(),
-        JSON.stringify({ role: run.role, turns: run.turns }),
+        JSON.stringify({ role: run.role, turns: run.turns, ...(run.chat && { chat: run.chat }) }),
       )
     return true
   }

@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
 import { Search, X } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
+import { newChat } from '@/lib/chat'
 import { CHAT_TOOL_SLUG, useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HOST_STATE_LABELS,
@@ -72,7 +73,9 @@ export function NewSessionDialog({
 
   const tool =
     kind === 'agent'
-      ? (enabledTools.find((t) => t.slug === pickedToolSlug) ?? defaultTool)
+      ? (enabledTools.find(
+          (t) => t.slug === pickedToolSlug && t.slug !== 'agent-hub',
+        ) ?? defaultTool)
       : undefined
   // Agent Hub chats run here; everything else may run on a linked host.
   const hostable = tool?.slug !== CHAT_TOOL_SLUG
@@ -192,6 +195,16 @@ export function NewSessionDialog({
           <div className="flex-none pb-1">
             <SectionTitle>Start</SectionTitle>
             <div className="px-[18px]">
+              <button
+                className="lantern-btn"
+                type="button"
+                onClick={() => {
+                  close()
+                  newChat()
+                }}
+              >
+                New chat
+              </button>
               {enabledTools.length > 0 && (
                 <fieldset aria-label="Session kind" className="lantern-seg">
                   {(['agent', 'shell'] as const).map((value) => (
@@ -208,21 +221,23 @@ export function NewSessionDialog({
               )}
               {kind === 'agent' && enabledTools.length > 0 && (
                 <fieldset aria-label="Agent" className="lantern-tools mt-2.5">
-                  {enabledTools.map((t) => (
-                    <button
-                      key={t.slug}
-                      type="button"
-                      aria-pressed={t.slug === tool?.slug}
-                      onClick={() => setPickedToolSlug(t.slug)}
-                      className="lantern-tool"
-                    >
-                      <AgentIcon
-                        slug={t.slug}
-                        color={getAgentColor(t.slug, t.color)}
-                      />
-                      <span className="truncate">{t.name}</span>
-                    </button>
-                  ))}
+                  {enabledTools
+                    .filter((t) => t.slug !== 'agent-hub')
+                    .map((t) => (
+                      <button
+                        key={t.slug}
+                        type="button"
+                        aria-pressed={t.slug === tool?.slug}
+                        onClick={() => setPickedToolSlug(t.slug)}
+                        className="lantern-tool"
+                      >
+                        <AgentIcon
+                          slug={t.slug}
+                          color={getAgentColor(t.slug, t.color)}
+                        />
+                        <span className="truncate">{t.name}</span>
+                      </button>
+                    ))}
                 </fieldset>
               )}
               {tool?.slug === CHAT_TOOL_SLUG && tool.description && (

@@ -12,15 +12,51 @@
     "lean": ["read", "bash", "edit", "write"]
   },
   "roles": {
-    "implementation": { "level": "lean", "guard": true, "egress": "host" },
-    "operations": { "level": "lean", "guard": true, "egress": "host" },
-    "design": { "level": "lean", "guard": true, "egress": "host" },
-    "research": { "level": "lean", "guard": true, "egress": "host" },
-    "mapping": { "level": "lean", "guard": true, "egress": "host" },
-    "review": { "level": "read", "guard": true, "egress": "host" },
-    "lookup": { "level": "read", "guard": true, "egress": "host" },
-    "hunting": { "level": "lean", "guard": true, "egress": "contained" },
-    "recon": { "level": "lean", "guard": true, "egress": "contained" }
+    "implementation": {
+      "level": "lean",
+      "guard": true,
+      "egress": "host"
+    },
+    "operations": {
+      "level": "lean",
+      "guard": true,
+      "egress": "host"
+    },
+    "design": {
+      "level": "lean",
+      "guard": true,
+      "egress": "host"
+    },
+    "research": {
+      "level": "lean",
+      "guard": true,
+      "egress": "host"
+    },
+    "mapping": {
+      "level": "lean",
+      "guard": true,
+      "egress": "host"
+    },
+    "review": {
+      "level": "read",
+      "guard": true,
+      "egress": "host"
+    },
+    "lookup": {
+      "level": "read",
+      "guard": true,
+      "egress": "host"
+    },
+    "hunting": {
+      "level": "lean",
+      "guard": true,
+      "egress": "contained"
+    },
+    "recon": {
+      "level": "lean",
+      "guard": true,
+      "egress": "contained"
+    }
   },
   "egress_about": "Which hosts a role's run may reach. [\"*\"] is the host's own network. Any other list: models only at those hosts (a chain model elsewhere is skipped, and with none left the run is refused), and the role's tools are contained: bash runs under contain_command (no network but loopback, its own processes, a read-only system with only the working folder writable and its .git read-only, a private /tmp and /run, the contain_hide folders and every listening socket outside them masked, the contain_unset_env variables cleared), and write and edit refuse paths outside the working folder or inside a .git folder. If contain_command fails here, the role is refused. Tools reaching listed hunt targets needs a filtering proxy; until then a contained role's tools reach no host.",
   "egress_profiles": {
@@ -105,5 +141,25 @@
       }
     },
     "prompt": "Answer from your own knowledge and the text given here only. You have no tools and must not call any."
+  },
+  "chat": {
+    "default_role": "implementation",
+    "roles": {
+      "implementation": "Build and fix code in this project.",
+      "operations": "Run and repair the project\u2019s services.",
+      "design": "Shape the interface and its behavior.",
+      "research": "Read sources and compare the evidence.",
+      "mapping": "Map how the product and code fit together.",
+      "review": "Read code and report supported findings.",
+      "lookup": "Answer a focused question from the project.",
+      "hunting": "Work within the hunting role\u2019s containment rules.",
+      "recon": "Gather evidence within the recon role\u2019s containment rules."
+    }
+  },
+  "provider_headers": {
+    "opencode-go": {
+      "x-opencode-session": "{session}",
+      "User-Agent": "aico-agent/0.1.0"
+    }
   }
 }

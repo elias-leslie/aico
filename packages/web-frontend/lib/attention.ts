@@ -36,7 +36,7 @@ type ActivitySession = Pick<
   TerminalSession,
   'activity' | 'activity_previous' | 'activity_at'
 > &
-  Partial<Pick<TerminalSession, 'asks'>>
+  Partial<Pick<TerminalSession, 'asks' | 'backend' | 'chat'>>
 
 /** Compact age: `<1m`, `3m`, `2h`, `4d`. */
 export function formatAge(ms: number): string {
@@ -53,6 +53,34 @@ export function attentionOf(
   seenAt: number,
   now: number,
 ): Attention {
+  if (session.backend === 'aico-agent') {
+    const chat = session.chat
+    const group = session.asks?.length
+      ? 'needs-you'
+      : chat?.state === 'ended'
+        ? 'finished'
+        : chat?.state === 'working'
+          ? 'working'
+          : 'idle'
+    return {
+      group,
+      activity: group === 'working' ? 'working' : 'idle',
+      at: chat?.updatedAt ?? null,
+      detail:
+        group === 'needs-you'
+          ? 'Needs you'
+          : chat?.state === 'stopped'
+            ? 'Stopped mid-reply'
+            : chat?.state === 'failed'
+              ? 'No model answered'
+              : group === 'finished'
+                ? 'Ended'
+                : group === 'working'
+                  ? 'Working'
+                  : 'Idle',
+      age: chat ? formatAge(now - chat.updatedAt) : null,
+    }
+  }
   const activity = (session.activity ?? 'unknown') as Activity
   // An open blocking ask needs the owner until it is answered, whatever the
   // agent reports and whether or not the session was opened since.

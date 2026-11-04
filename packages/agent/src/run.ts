@@ -10,6 +10,7 @@ import { homedir } from 'node:os'
 import type { Database } from '@aico/store'
 import {
   Agent,
+  type AgentEvent,
   type AgentMessage,
   type AgentTool,
   type ThinkingLevel,
@@ -34,7 +35,7 @@ import {
 } from '@earendil-works/pi-coding-agent'
 import { type CompactionSettings, contextMessages, piCompaction } from './compaction'
 import { type ModelRefusal, type ModelSwap, refusalOf, swapOf } from './outcomes'
-import { allowedModels } from './providers'
+import { allowedModels, sessionHeaders } from './providers'
 import { type ChainModel, HARNESS, type Harness, type Refused, type RoleRules } from './rules'
 import { credentialMarkers, guardBash, leanTools, touchesCredentials } from './tools'
 import { type StoredRun, type Tokens, Transcript } from './transcript'
@@ -86,6 +87,12 @@ export interface RunOptions {
   compaction?: CompactionSettings
   /** Called once the run is stored, before its first request (the CLI tells Tether). */
   onStart?: (runId: string) => Promise<void> | void
+  /** Stop this invocation without discarding partial text or queued chat messages. */
+  signal?: AbortSignal
+  /** Live events stay inside the owning package; browser projections exclude private tool output. */
+  onEvent?: (event: AgentEvent, model: string, turn: number) => void
+  /** Chat tools identify their own session, never the web server's process. */
+  sessionId?: string
   /** Thinking level for every model; else each chain row's effort; else high. */
   effort?: string
   /** Test hook: the Nth provider request on the first model returns a synthetic refusal. */
@@ -239,6 +246,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
   let compactions = 0
   let toolCalls = 0
   let inUse = rules.chain[0]?.id ?? ''
+  let detachAbort = () => {}
   const finish = (outcome: Outcome): RunResult => {
     const wallMs = Date.now() - started
     const detail = outcome.kind === 'done' ? { model: outcome.model } : outcome
@@ -289,7 +297,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
     /** Responses the provider's own stream ended in error: only these fall back down the chain. */
     const fromProvider = new WeakSet<AssistantMessage>()
     // A resumed or branched run goes on with the model that last answered in it.
-    const answered = options.keepHead ? null : transcript.lastModel
+    const answered = options.keepHead ? null : transcript.nextModel
     const resumeAt = answered ? chain.findIndex(({ entry }) => entry.id === answered) : -1
     let current = Math.max(0, resumeAt)
     if (resumeAt > 0) log(`goes on with ${answered}, the model that last answered in this run`)
@@ -311,7 +319,10 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
                 ? { ...model, baseUrl: UNREACHABLE }
                 : model,
               context,
-              streamOptions,
+              {
+                ...streamOptions,
+                headers: { ...streamOptions?.headers, ...sessionHeaders(model.provider, runId) },
+              },
             )
       stream.result().then(
         (message) => {
@@ -337,7 +348,13 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
         systemPrompt: systemPrompt(harness, cwd, contextFiles),
         model: at().model,
         thinkingLevel: thinking(at().model, options.effort ?? at().entry.effort),
-        tools: leanTools(cwd, rules.tools, harness.tool_descriptions, rules.contain) as AgentTool[],
+        tools: leanTools(
+          cwd,
+          rules.tools,
+          harness.tool_descriptions,
+          rules.contain,
+          options.sessionId,
+        ) as AgentTool[],
         messages: history,
       },
       sessionId: runId,
@@ -421,7 +438,16 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
       agent.state.thinkingLevel = thinking(at().model, options.effort ?? at().entry.effort)
     }
 
-    agent.subscribe((event) => {
+    const abort = () => agent.abort()
+    options.signal?.addEventListener('abort', abort, { once: true })
+    detachAbort = () => options.signal?.removeEventListener('abort', abort)
+    const unsubscribe = agent.subscribe((event) => {
+      // Observers project deltas only; stored rows remain the transcript's authority.
+      options.onEvent?.(
+        event,
+        at().entry.id,
+        transcript.turn + (event.type === 'message_end' ? 0 : 1),
+      )
       if (event.type === 'tool_execution_start') {
         toolCalls++
         if (touchesCredentials(event.args, cwd, markers)) withheld.add(event.toolCallId)
@@ -453,12 +479,15 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
         add(usage)
         const requested = at().entry
         const outcome = refusalOf(message, harness) ?? swapOf(message, requested.piModel)
+        // A substituted response stays visible but must never enter a later model's context.
+        const storedMessage =
+          outcome?.kind === 'model_swap' ? { ...message, stopReason: 'aborted' as const } : message
         transcript.message({
           role: 'assistant',
-          message,
+          message: storedMessage,
           model: requested.id,
           served_model: message.responseModel ?? null,
-          stop_reason: message.stopReason,
+          stop_reason: storedMessage.stopReason,
           outcome:
             outcome ??
             (message.errorMessage ? { kind: 'error', detail: message.errorMessage } : null),
@@ -480,8 +509,14 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
     for (;;) {
       // Pi checks the context before it sends a prompt.
       if (overThreshold()) await compactNow('threshold')
-      if (input === null) await agent.continue()
-      else await agent.prompt(input)
+      if (options.signal?.aborted) return finish({ kind: 'error', model: inUse, detail: 'aborted' })
+      try {
+        if (input === null) await agent.continue()
+        else await agent.prompt(input)
+      } finally {
+        // The loop may hand off and subscribe again only within this invocation.
+        if (options.signal?.aborted) unsubscribe()
+      }
       input = null
       if (swap) return finish(swap)
       const last = lastAssistant(agent.state.messages)
@@ -543,5 +578,7 @@ export async function runAgent(options: RunOptions): Promise<RunResult> {
     const detail = (error as Error)?.message ?? String(error)
     log(`error: ${detail}`)
     return finish({ kind: 'error', model: inUse, detail })
+  } finally {
+    detachAbort()
   }
 }

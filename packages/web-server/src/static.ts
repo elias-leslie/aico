@@ -47,30 +47,10 @@ export interface StaticSite {
 
 export interface PageCspOptions {
   scriptHashes: readonly string[]
-  /** Agent Hub's base URL, when configured: the voice WebSocket connects there. */
-  agentHubUrl: string | null
-  /** Agent Hub's port on the page's own host, the voice fallback without a URL. */
-  agentHubPort: number
 }
 
-/** The page's CSP for a request to `host` over `secure` (the voice socket's origin depends on it). */
-export function pageCsp(
-  options: PageCspOptions,
-  host: string | undefined,
-  secure: boolean,
-): string {
-  const connect = new Set(["'self'"])
-  const hostname = (host ?? '').replace(/:[0-9]+$/, '')
-  if (hostname) connect.add(`${secure ? 'wss' : 'ws'}://${hostname}:${options.agentHubPort}`)
-  if (options.agentHubUrl) {
-    try {
-      const hub = new URL(options.agentHubUrl)
-      connect.add(hub.origin)
-      connect.add(`${hub.protocol === 'https:' ? 'wss' : 'ws'}://${hub.host}`)
-    } catch {
-      // Not a URL: the fallback above stays.
-    }
-  }
+/** All chat traffic and streams use the page's own origin. */
+export function pageCsp(options: PageCspOptions): string {
   const scripts = ["'self'", ...options.scriptHashes.map((hash) => `'${hash}'`)]
   return [
     "default-src 'self'",
@@ -78,7 +58,7 @@ export function pageCsp(
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "img-src 'self' data: blob:",
-    `connect-src ${[...connect].join(' ')}`,
+    "connect-src 'self'",
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
     "object-src 'none'",
@@ -112,16 +92,13 @@ function fileAt(path: string): { path: string; size: number; mtimeMs: number } |
   }
 }
 
-export function createStaticSite(
-  root: string,
-  csp: Omit<PageCspOptions, 'scriptHashes'>,
-): StaticSite {
+export function createStaticSite(root: string): StaticSite {
   const base = resolve(root)
   if (!existsSync(join(base, 'index.html')))
     console.warn(
       `[aico-web] no web app at ${base} (build packages/web-frontend); only the API answers`,
     )
-  const options: PageCspOptions = { ...csp, scriptHashes: readScriptHashes(base) }
+  const options: PageCspOptions = { scriptHashes: readScriptHashes(base) }
 
   /** The export's file for a URL path, the SPA fallback, or null. */
   function resolveFile(pathname: string): string | null {
@@ -163,8 +140,7 @@ export function createStaticSite(
       )
       res.setHeader('ETag', etag)
       if (ext === '.html') {
-        const secure = req.headers['x-forwarded-proto'] === 'https'
-        res.setHeader('Content-Security-Policy', pageCsp(options, req.headers.host, secure))
+        res.setHeader('Content-Security-Policy', pageCsp(options))
       }
       if (req.headers['if-none-match'] === etag) {
         res.statusCode = 304

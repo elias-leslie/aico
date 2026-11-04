@@ -18,6 +18,7 @@ import { createModels } from '@earendil-works/pi-ai'
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai'
 import { opencodeGoProvider } from '@earendil-works/pi-ai/providers/opencode-go'
 import { readStoredCredential } from '@earendil-works/pi-coding-agent'
+import harnessData from '../data/harness.json' with { type: 'json' }
 
 const FACTORIES: Readonly<Record<string, () => Provider>> = {
   openai: openaiProvider,
@@ -78,4 +79,13 @@ export function allowedModels(
   const models = createModels({ credentials: credentials ?? new PiAuthStore(ids) })
   for (const id of ids) models.setProvider((FACTORIES[id] as () => Provider)())
   return models
+}
+
+/** Conversation headers required by a provider, from the harness's provider configuration. */
+export function sessionHeaders(provider: string, session: string): Record<string, string> {
+  const configured =
+    (harnessData.provider_headers as Record<string, Record<string, string>>)[provider] ?? {}
+  return Object.fromEntries(
+    Object.entries(configured).map(([key, value]) => [key, value.replaceAll('{session}', session)]),
+  )
 }

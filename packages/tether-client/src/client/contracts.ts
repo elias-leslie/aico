@@ -433,6 +433,7 @@ export interface HistoryTurn {
 
 /** What the Aico agent pushes at a run's start and end (`PUT /v1/history/aico-agent/:run`). */
 export interface AgentRunPush {
+  chat?: { title: string; state: string; updatedAt: number }
   cwd: string
   role: string | null
   startedAt: number

@@ -2,7 +2,6 @@ import { clsx } from 'clsx'
 import type { RefObject } from 'react'
 import { FileUploadDropzone } from '@/components/FileUploadDropzone'
 import { getShownSlot, SessionView } from '@/components/SessionView'
-import { useStepViewer } from '@/components/StepViewer'
 import type {
   ConnectionStatus,
   TerminalHandle,
@@ -77,9 +76,7 @@ export function TerminalFileSection({
   isMobile,
 }: TerminalFileSectionProps) {
   // A chat takes typed messages, not dropped files.
-  const chatShown =
-    useStepViewer().step !== null ||
-    getShownSlot(terminalSlots, activeSessionId)?.chat === true
+  const chatShown = getShownSlot(terminalSlots, activeSessionId)?.chat === true
   return (
     <>
       {/* Hidden file input for upload button */}

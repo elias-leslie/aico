@@ -3,6 +3,7 @@
 // (`tsession`, `tclaude`, `tcodex`) the same bundle is the terminal CLI.
 
 import { join } from 'node:path'
+import { agentDbPath, ChatSessions, openAgentDb, tetherPush } from '@aico/agent'
 import { loadCaptureTypes } from '@aico/notes/capture-types'
 import { execRunner, PreviewJobs } from '@aico/notes/heic'
 import { extract } from '@aico/notes/vision-extract'
@@ -12,7 +13,7 @@ import { TetherClient } from '@aico/tether-client'
 import { buildApi } from './api'
 import { AppApi } from './app-api'
 import { PhoneRegistry } from './app-phones'
-import { Asks } from './asks'
+import { Asks, validateAsk } from './asks'
 import { Background } from './background'
 import { CaptureRouter } from './capture-router'
 import { CLI_COMMANDS, runCli } from './cli'
@@ -97,6 +98,10 @@ function serve(): void {
     concurrency: config.vision.concurrency,
     extract: (request) => extract(request, config.vision, realRunners),
   })
+  const chats = new ChatSessions(openAgentDb(agentDbPath(config.dataDir)), {
+    dataDir: config.dataDir,
+    push: tetherPush(process.env, (line) => console.warn('[aico-agent]', line)),
+  })
   const background = new Background({
     tether,
     store,
@@ -106,16 +111,21 @@ function serve(): void {
     uploads: config.uploads,
     maintenance: config.maintenance,
     forward: (event) => terminals.event(event),
-    askChanged: (data) => notify.askChanged(data),
+    askChanged: async (data) => {
+      await notify.askChanged(data)
+      const ask = validateAsk((data as { ask?: unknown })?.ask)
+      if (ask?.session) await chats.question(ask.session, ask.state === 'open')
+      chats.changed()
+    },
     tick: () => router.tick(),
   })
   const api = buildApi({
     tether,
     store,
-    config,
     uploads: config.uploads,
     shows,
     asks,
+    chats,
     captures: {
       store: notes,
       blobsDir,
@@ -153,15 +163,7 @@ function serve(): void {
   })
   app.register(api)
   registerExportRoutes(api, config, sync.loop)
-  const server = createWebServer(
-    config,
-    api,
-    terminals,
-    createStaticSite(config.staticDir, {
-      agentHubUrl: config.agentHubUrl,
-      agentHubPort: config.agentHubPort,
-    }),
-  )
+  const server = createWebServer(config, api, terminals, createStaticSite(config.staticDir))
 
   background.start()
   notify.start()
@@ -182,6 +184,7 @@ function serve(): void {
     if (stopping) return
     stopping = true
     console.log(`[aico-web] ${signal}: stopping`)
+    void chats.shutdown()
     ;(selfRows as ReturnType<typeof startSelfRows> | null)?.stop(signal)
     background.stop()
     reader.stop()

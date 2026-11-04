@@ -2,6 +2,7 @@
 
 import { Plus, RotateCcw } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
+import { newChat } from '@/lib/chat'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
@@ -86,6 +87,9 @@ export function EmptySessionState({
             >
               <Plus className="h-4 w-4" strokeWidth={1.7} />
               New session
+            </button>
+            <button type="button" className="lantern-btn" onClick={newChat}>
+              New chat
             </button>
           </>
         )}

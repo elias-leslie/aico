@@ -358,7 +358,11 @@ export class Asks {
     return body.items.map(validateAsk).filter((ask): ask is Ask => ask !== null)
   }
 
-  async act(id: string, action: 'answer' | 'done', body?: Record<string, unknown>): Promise<Ask> {
+  async act(
+    id: string,
+    action: 'answer' | 'done' | 'withdraw',
+    body?: Record<string, unknown>,
+  ): Promise<Ask> {
     if (!ID.test(id)) throw new HttpError(404, 'That question is gone')
     const { body: result } = await tetherCall(
       () => this.options.tether.request<unknown>('POST', `/v1/asks/${id}/${action}`, body),
@@ -460,7 +464,7 @@ export class Asks {
   }
 }
 
-export function registerAskRoutes(router: Router, asks: Asks): void {
+export function registerAskRoutes(router: Router, asks: Asks, answered?: (ask: Ask) => void): void {
   router.on('GET', '/api/asks', async () => ({ asks: await asks.list() }))
 
   router.on('POST', '/api/asks/:askId/answer', async (ctx) => {
@@ -488,7 +492,9 @@ export function registerAskRoutes(router: Router, asks: Asks): void {
     if (body.skippedFiles === true) reply.skippedFiles = true
     if (!Object.keys(reply).length)
       throw new HttpError(400, 'Pick a choice, write a note or add files')
-    return { ask: await asks.answer(ctx.params.askId, reply) }
+    const ask = await asks.answer(ctx.params.askId, reply)
+    answered?.(ask)
+    return { ask }
   })
 
   router.on('POST', '/api/asks/:askId/done', async (ctx) => ({

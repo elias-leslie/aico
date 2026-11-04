@@ -19,6 +19,7 @@ export function tetherPush(env: NodeJS.ProcessEnv, log: (line: string) => void):
       tokens: report.tokens,
       toolCalls: report.toolCalls,
       turns: report.turns,
+      ...(report.chat && { chat: report.chat }),
     }
     try {
       await client.pushAgentRun(report.id, run)

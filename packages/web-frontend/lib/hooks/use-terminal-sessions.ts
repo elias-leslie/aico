@@ -101,7 +101,8 @@ export interface TerminalSession extends CoordinatorFields {
   /** The session can be ended from the web app. */
   can_end: boolean
   /** `agent-hub`: a chat on an Agent Hub agent, shown as a chat, not a terminal. */
-  backend?: 'agent-hub' | null
+  backend?: 'agent-hub' | 'aico-agent' | null
+  chat?: import('../chat').ChatSummary
   /** The remote host the session runs on; null on this computer. */
   host?: string | null
   /** Set while that host cannot be reached (`offline`, `connecting`, ...). */

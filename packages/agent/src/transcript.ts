@@ -100,6 +100,19 @@ export const MIGRATIONS = [
    ALTER TABLE messages ADD COLUMN meta TEXT;`,
   // The process that holds a run (pid:start time): one process at a time goes on in it.
   `ALTER TABLE runs ADD COLUMN owner TEXT;`,
+  `CREATE TABLE chats (
+     run_id TEXT PRIMARY KEY REFERENCES runs(id),
+     title TEXT NOT NULL,
+     state TEXT NOT NULL,
+     updated_at INTEGER NOT NULL,
+     draft TEXT NOT NULL DEFAULT '',
+     queued TEXT NOT NULL DEFAULT '[]',
+     partial TEXT,
+     note TEXT,
+     model TEXT,
+     effort TEXT
+   ) STRICT;
+   CREATE TABLE chat_answers (ask_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id)) STRICT;`,
 ]
 
 export function agentDbPath(dataDir: string): string {
@@ -244,6 +257,14 @@ export class Transcript {
   turn = 0
   /** The model that gave the last answer (not a failed response), for a run read back. */
   lastModel: string | null = null
+  /** Outages reset the next message to the role's head; refusals keep the takeover model. */
+  get nextModel(): string | null {
+    const last = this.db
+      .prepare('SELECT reason FROM handoffs WHERE run_id = ? ORDER BY seq DESC LIMIT 1')
+      .get(this.runId) as { reason: string } | undefined
+    return last?.reason === 'provider_error' ? null : this.lastModel
+  }
+
   /** The newest tool_calls row for each call id. */
   private readonly toolRows = new Map<string, number>()
   /** The run's Pi session entries, oldest first (messages as the model saw them). */
@@ -522,6 +543,7 @@ export class Transcript {
 
 /** A run's totals and the model of each turn, as Tether's session history keeps them. */
 export interface RunReport {
+  chat?: { title: string; state: string; updatedAt: number }
   id: string
   role: string
   cwd: string
