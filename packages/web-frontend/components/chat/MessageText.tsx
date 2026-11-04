@@ -2,11 +2,14 @@ import type { ReactNode } from 'react'
 
 function parts(text: string, pattern: RegExp) {
   let offset = 0
-  return text.split(pattern).map((part) => {
-    const item = { part, offset }
-    offset += part.length
-    return item
-  })
+  return text
+    .split(pattern)
+    .map((part) => {
+      const item = { part, offset }
+      offset += part.length
+      return item
+    })
+    .filter(({ part }) => part.length > 0)
 }
 function inline(text: string): ReactNode[] {
   return parts(text, /(`[^`\n]+`|\*\*[^*]+\*\*|\*[^*\n]+\*)/g).map(
@@ -29,8 +32,8 @@ function inline(text: string): ReactNode[] {
 export function MessageText({ text }: { text: string }) {
   return (
     <div className="chat-text">
-      {parts(text, /(```[\s\S]*?```)/g).map(({ part, offset }) =>
-        part.startsWith('```') && part.endsWith('```') && part.length >= 6 ? (
+      {parts(text, /(```[\s\S]*?(?:```|$))/g).map(({ part, offset }) =>
+        part.startsWith('```') ? (
           <pre key={offset}>
             <code>{part.replace(/^```[^\n]*\n?/, '').replace(/```$/, '')}</code>
           </pre>
