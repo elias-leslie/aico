@@ -180,6 +180,14 @@
       "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'."
     },
     { "command": "btrfs subvolume delete /srv/scratch/testvol", "expect": "allow" },
+    {
+      "command": "btrfs subvolume delete /srv/scratch/proof/.snapshots/p/20261104T194704Z-before",
+      "expect": "allow"
+    },
+    {
+      "command": "cd /srv/scratch && sudo btrfs subvolume delete proof/.snapshots/x",
+      "expect": "allow"
+    },
     { "command": "btrfs subvolume list /", "expect": "allow" },
     { "command": "btrfs subvolume snapshot / /x", "expect": "allow" },
     { "command": "capture", "expect": "allow" },

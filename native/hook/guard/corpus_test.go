@@ -12,7 +12,7 @@ import (
 // The replay: every case of contracts/guard-corpus/*.json goes through
 // Rules.Evaluate and must give the answer SummitFlow's hook recorded. A case
 // may carry an "exception" (owner rule plus the Go answer) for a difference
-// that is kept on purpose; there are none today.
+// that is kept on purpose.
 const (
 	corpusDir = "../../../contracts/guard-corpus" // contracts/guard-corpus
 	rulesPath = "../data/guard.json"

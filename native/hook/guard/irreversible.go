@@ -510,6 +510,9 @@ func (r *Rules) snapshotTarget(raw, cwd string) bool {
 		text = target
 	}
 	parts := strings.Split(pyLower(text), "/")
+	if ok && target != "" && r.underDisposable(target) {
+		return false // scratch is never backup history
+	}
 	if ok && (under(target, r.snapshotStore) || r.protectedDeletionRoot(target)) {
 		return true
 	}
@@ -704,4 +707,14 @@ func (r *Rules) systemDecision(tokens []string, cwd string) (decision, bool) {
 		return d, true
 	}
 	return r.proxmoxDecision(name, tokens)
+}
+
+// underDisposable reports whether path lies under a scratch root nothing backs up.
+func (r *Rules) underDisposable(path string) bool {
+	for _, root := range r.disposableRoots {
+		if under(path, root) {
+			return true
+		}
+	}
+	return false
 }

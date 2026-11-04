@@ -2665,22 +2665,38 @@
     {
       "command": "btrfs subvolume delete /srv/scratch/snap1",
       "cwd": "/srv/workspaces/projects/summitflow",
-      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'."
+      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'.",
+      "exception": {
+        "rule": "Owner 2026-10-20: verified scratch may be cleaned; /srv/scratch holds no backup snapshots",
+        "got": "allow"
+      }
     },
     {
       "command": "btrfs subvolume delete /srv/scratch/snap1",
       "cwd": "/tmp",
-      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'."
+      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'.",
+      "exception": {
+        "rule": "Owner 2026-10-20: verified scratch may be cleaned; /srv/scratch holds no backup snapshots",
+        "got": "allow"
+      }
     },
     {
       "command": "btrfs subvolume delete /srv/scratch/btrbk-x",
       "cwd": "/srv/workspaces/projects/summitflow",
-      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'."
+      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'.",
+      "exception": {
+        "rule": "Owner 2026-10-20: verified scratch may be cleaned; /srv/scratch holds no backup snapshots",
+        "got": "allow"
+      }
     },
     {
       "command": "btrfs subvolume delete /srv/scratch/btrbk-x",
       "cwd": "/tmp",
-      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'."
+      "expect": "BLOCKED:btrfs subvolume delete:Deleting btrbk/snapper snapshots or subvolumes on protected storage destroys backup history; snapshot retention belongs to btrbk/snapper. Inspect with 'btrfs subvolume list'.",
+      "exception": {
+        "rule": "Owner 2026-10-20: verified scratch may be cleaned; /srv/scratch holds no backup snapshots",
+        "got": "allow"
+      }
     },
     {
       "command": "btrfs subvolume delete /tmp/x",
