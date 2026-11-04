@@ -180,6 +180,26 @@ function chainModel(
   }
 }
 
+/** The refusal when the role has deny rows for projects and no project is known (the working folder is in no registered one). */
+export function projectGap(policy: LaunchPolicy, role: string): Refused | null {
+  const job =
+    policy.jobs.find((entry) => entry.name === role) ??
+    policy.jobs.find((entry) => entry.workRoles.includes(role))
+  const workRole = policy.workRoles.includes(role) ? role : null
+  const scoped = policy.deny.find(
+    (row) =>
+      row.projects?.length &&
+      (!row.jobs || (job !== undefined && row.jobs.includes(job.name))) &&
+      (!row.work_roles || (workRole !== null && row.work_roles.includes(workRole))),
+  )
+  return scoped
+    ? refused(
+        'project_unknown',
+        `role '${role}' has deny rules for projects (${scoped.projects?.join(', ')}), and the working folder is in no registered project`,
+      )
+    : null
+}
+
 /**
  * The rules for one run: the model chain (`--model` first when given, then the role's
  * launch rows for the harness's tools and their alternates, each checked against the
@@ -208,21 +228,8 @@ export function roleRules(
       `the launch policy has no '${harness.claude_provider}' provider entry, so Claude models cannot be told apart`,
     )
   if (!request.project) {
-    const job =
-      policy.jobs.find((entry) => entry.name === request.role) ??
-      policy.jobs.find((entry) => entry.workRoles.includes(request.role))
-    const workRole = policy.workRoles.includes(request.role) ? request.role : null
-    const scoped = policy.deny.find(
-      (row) =>
-        row.projects?.length &&
-        (!row.jobs || (job !== undefined && row.jobs.includes(job.name))) &&
-        (!row.work_roles || (workRole !== null && row.work_roles.includes(workRole))),
-    )
-    if (scoped)
-      return refused(
-        'project_unknown',
-        `role '${request.role}' has deny rules for projects (${scoped.projects?.join(', ')}), and the working folder is in no registered project`,
-      )
+    const gap = projectGap(policy, request.role)
+    if (gap) return gap
   }
 
   const wanted: { model: string; effort: string | null }[] = []

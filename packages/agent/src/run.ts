@@ -112,7 +112,7 @@ const UNREACHABLE = 'http://127.0.0.1:9/v1'
 
 const LEVELS: readonly ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
-function thinking(model: Model<Api>, effort: string | null | undefined): ThinkingLevel {
+export function thinking(model: Model<Api>, effort: string | null | undefined): ThinkingLevel {
   const wanted = LEVELS.includes(effort as ThinkingLevel) ? (effort as ThinkingLevel) : 'high'
   return clampThinkingLevel(model, wanted) as ThinkingLevel
 }

@@ -57,5 +57,26 @@
     "bash": "Run a bash command in the working directory. Returns stdout and stderr, cut to the last 2000 lines or 50KB. timeout is in seconds.",
     "edit": "Edit one file by exact replacement. Each edits[].oldText must match exactly once in the original file; edits must not overlap.",
     "write": "Create or overwrite a file; parent directories are created."
+  },
+  "ask": {
+    "about": "What `aico ask` may do: one question to one model, no tools. `via` says how each provider's models run (claude and agy through their own CLIs with tools off, the rest through pi-ai with the harness's providers) and which launch-policy tool the deny rows are checked as. Anthropic's API is never called: Claude runs only as `claude -p`.",
+    "default_role": "lookup",
+    "wire_silence_seconds": 300,
+    "max_file_bytes": 400000,
+    "via": {
+      "claude": {
+        "run": "claude"
+      },
+      "codex": {
+        "run": "pi-ai"
+      },
+      "opencode-go": {
+        "run": "pi-ai"
+      },
+      "gemini": {
+        "run": "agy"
+      }
+    },
+    "prompt": "Answer from your own knowledge and the text given here only. You have no tools and must not call any."
   }
 }

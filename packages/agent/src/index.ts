@@ -1,3 +1,4 @@
+export { type AskOutcome, type AskResult, ask, askMain } from './ask'
 export { dataDir, main, USAGE } from './cli'
 export { type ModelRefusal, type ModelSwap, refusalOf, swapOf } from './outcomes'
 export { allowedModels, PiAuthStore } from './providers'
