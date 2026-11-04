@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseRow, RowError } from './row'
-import { StatusStore } from './store'
+import { machineId, StatusStore } from './store'
 
 const row = (fields: Record<string, unknown> = {}) =>
   parseRow({
@@ -37,5 +37,12 @@ describe('StatusStore', () => {
     expect(store.remove('a/web')).toBe(true)
     expect(store.remove('a/web')).toBe(false)
     store.close()
+  })
+})
+
+describe('machineId', () => {
+  it('is the short host name in lower case', () => {
+    expect(machineId('Davion-Sidarli.lan')).toBe('davion-sidarli')
+    expect(machineId('gem')).toBe('gem')
   })
 })

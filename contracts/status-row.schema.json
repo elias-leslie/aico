@@ -2,10 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "aico/status-row",
   "title": "Status row (as a writer posts it)",
-  "description": "One row per check, job, backup, service, VM, machine, link, grant or repo (plan.md 'Status: one screen for the whole fleet'). Writers POST rows to aico-web on loopback (POST /api/status/rows, one row or an array). The server stamps updated_at and works out the shown state: a row past next_run is 'late' (since next_run); rows of a machine whose own kind=machine row is late or off are 'unknown'. Readers (GET /api/status) get each row back with updated_at, shown and shown_since. Every validator (packages/status, native/host-steward/aico_status.py) tests against this file and contracts/status-row-fixtures.json.",
+  "description": "One row per check, job, backup, service, VM, machine, link, grant or repo (plan.md 'Status: one screen for the whole fleet'). Writers POST rows to aico-web on loopback (POST /api/status/rows, one row or an array). The server stamps updated_at and works out the shown state: a row past next_run is 'late' (since next_run); rows of a machine whose own kind=machine row is late or off, or that has no kind=machine row, are 'unknown'. Readers (GET /api/status) get each row back with updated_at, shown and shown_since. Every validator (packages/status, native/host-steward/aico_status.py) tests against this file and contracts/status-row-fixtures.json.",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "what", "kind", "machine", "state", "meaning"],
+  "if": { "properties": { "kind": { "const": "machine" } }, "required": ["kind"] },
+  "then": { "required": ["next_run"] },
   "properties": {
     "id": {
       "description": "Stable key the writer chooses, unique across the fleet: start it with the machine, e.g. 'davion-sidarli/notes-export'. Posting the same id again replaces the row.",
@@ -20,13 +22,13 @@
       "maxLength": 120
     },
     "kind": {
-      "description": "machine is the host's own row: the unknown rule reads it.",
+      "description": "machine is the host's own row (next_run required): the unknown rule reads it.",
       "enum": ["check", "job", "backup", "service", "vm", "machine", "link", "grant", "repo"]
     },
     "machine": {
-      "description": "The host it runs on or is about (its host name).",
+      "description": "The host it runs on or is about: its short host name, lower case ('davion-sidarli'), the same id on every row from that host.",
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
       "maxLength": 100
     },
     "project": {
@@ -51,7 +53,7 @@
       "format": "date-time"
     },
     "next_run": {
-      "description": "When the next report is due (RFC 3339), slack included. Past it the row shows 'late since' this time. Leave it out for rows with no schedule.",
+      "description": "When the next report is due (RFC 3339), slack included. Past it the row shows 'late since' this time. Leave it out for rows with no schedule; a kind=machine row must have it. Writers stamp it from their own clock: every host runs NTP and the slack covers what skew is left.",
       "type": "string",
       "format": "date-time"
     },

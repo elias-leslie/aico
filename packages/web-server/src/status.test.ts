@@ -22,6 +22,16 @@ const ROW: StatusRow = {
   meaning: 'Copied.',
   next_run: '2026-11-03T11:00:00Z',
 }
+/** Without a machine row, a machine's rows show unknown. */
+const MACHINE: StatusRow = {
+  id: 'here/machine',
+  what: 'here',
+  kind: 'machine',
+  machine: 'here',
+  state: 'ok',
+  meaning: 'Up.',
+  next_run: '2026-11-03T13:00:00Z',
+}
 
 let server: Server
 let status: StatusStore
@@ -78,12 +88,12 @@ function call(
 
 describe('status routes', () => {
   it('takes a row from this machine and serves it late once its next run has passed', async () => {
-    expect(await call('POST', '/api/status/rows', { body: ROW })).toEqual({
+    expect(await call('POST', '/api/status/rows', { body: [ROW, MACHINE] })).toEqual({
       status: 200,
-      body: { written: 1 },
+      body: { written: 2 },
     })
     const { body } = await call('GET', '/api/status')
-    expect(body.rollup).toMatchObject({ problems: 1, healthy: 0 })
+    expect(body.rollup).toMatchObject({ problems: 1, healthy: 1 })
     expect(body.rows[0]).toMatchObject({
       id: 'here/backup',
       state: 'ok',
@@ -104,6 +114,15 @@ describe('status routes', () => {
     const remove = await call('DELETE', '/api/status/rows?id=here%2Fbackup', { headers })
     expect(remove.status).toBe(403)
     expect(status.rows()).toEqual([])
+  })
+
+  it('refuses a machine row without next_run, and shows rows of a machine without one unknown', async () => {
+    const { next_run: _due, ...silent } = MACHINE
+    const refused = await call('POST', '/api/status/rows', { body: silent })
+    expect(refused).toEqual({ status: 422, body: { detail: expect.stringMatching(/^next_run: /) } })
+    await call('POST', '/api/status/rows', { body: ROW })
+    const { body } = await call('GET', '/api/status')
+    expect(body.rows[0]).toMatchObject({ id: 'here/backup', shown: 'unknown', shown_since: null })
   })
 
   it('lets the public host read', async () => {
@@ -129,7 +148,11 @@ describe('status routes', () => {
 
   it('filters, sorts and refuses unknown filter values', async () => {
     await call('POST', '/api/status/rows', {
-      body: [ROW, { ...ROW, id: 'here/web', what: 'Web', kind: 'service', next_run: undefined }],
+      body: [
+        ROW,
+        MACHINE,
+        { ...ROW, id: 'here/web', what: 'Web', kind: 'service', next_run: undefined },
+      ],
     })
     const late = await call('GET', '/api/status?state=late')
     expect(late.body.rows.map((row: { id: string }) => row.id)).toEqual(['here/backup'])
@@ -216,6 +239,7 @@ describe('st status', () => {
     const store = new StatusStore(':memory:', () => NOW)
     store.upsert([
       ROW,
+      MACHINE,
       { ...ROW, id: 'here/web', what: 'Web', kind: 'service', next_run: undefined },
       {
         ...ROW,
@@ -230,15 +254,24 @@ describe('st status', () => {
     ])
     const view = store.read()
     const text = formatStatus(view, false, NOW)
-    expect(text).toContain('2 problems, 1 healthy.')
+    expect(text).toContain('2 problems, 2 healthy.')
     expect(text).toContain('Failed   Export (job, here)')
     expect(text).toContain('Run now: systemctl --user start x.service')
     expect(text).toContain(
       `Late     Backup (backup, here), late since ${when('2026-11-03T11:00:00Z', NOW)}`,
     )
-    expect(text).toContain('1 healthy (1 ok) not listed; --all lists them.')
+    expect(text).toContain('2 healthy (2 ok) not listed; --all lists them.')
     expect(text).not.toContain('Web (service')
     expect(formatStatus(view, true, NOW)).toContain('OK       Web (service, here)')
+    store.close()
+  })
+
+  it('says a machine with no machine row has not been heard from', () => {
+    const store = new StatusStore(':memory:', () => NOW)
+    store.upsert([{ ...ROW, machine: 'there', id: 'there/backup' }])
+    expect(formatStatus(store.read(), false, NOW)).toContain(
+      'Unknown  Backup (backup, there), no word from there\n',
+    )
     store.close()
   })
 

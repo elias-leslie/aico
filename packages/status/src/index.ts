@@ -27,4 +27,4 @@ export {
   type StoredRow,
   view,
 } from './show'
-export { StatusStore, statusDbPath } from './store'
+export { machineId, StatusStore, statusDbPath } from './store'

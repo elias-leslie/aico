@@ -1,6 +1,7 @@
 // status.db: one row per id, the posted row as JSON plus when the server took
 // it. This package owns the file (package.json aico.db); others ask aico-web.
 
+import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { type Database, openDatabase, transaction } from '@aico/store'
 import { parseRow, type StatusRow } from './row'
@@ -13,6 +14,11 @@ const MIGRATIONS = [
      updated_at INTEGER NOT NULL
    ) STRICT`,
 ]
+
+/** This host's id on its rows: the short host name in lower case ('davion-sidarli'). */
+export function machineId(name: string = hostname()): string {
+  return (name.split('.')[0] as string).toLowerCase()
+}
 
 /** The status DB file in a data directory. */
 export function statusDbPath(dataDir: string): string {

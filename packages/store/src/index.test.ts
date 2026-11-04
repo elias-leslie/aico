@@ -1,6 +1,9 @@
+import { execFile } from 'node:child_process'
 import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openDatabase, transaction } from './index'
 
@@ -53,6 +56,46 @@ describe('openDatabase', () => {
     expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 })
     db.close()
   })
+})
+
+// The first migration is slow, so the others read the version while it runs; neither migration
+// can run twice ("table t already exists").
+const SLOW = [
+  'CREATE TABLE t (i INTEGER); WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 200000) INSERT INTO t SELECT i FROM n',
+  'CREATE TABLE u (id TEXT)',
+]
+
+/** Opens `path` in another process at `startAt` (epoch ms) and prints its user_version. */
+const OPENER = `
+const [store, startAt, path, migrations] = process.argv.slice(1)
+const { openDatabase } = await import(store)
+while (Date.now() < Number(startAt)) {}
+const db = openDatabase(path, JSON.parse(migrations))
+console.log(db.prepare('PRAGMA user_version').get().user_version)
+db.close()
+`
+
+describe('openDatabase from several processes at once', () => {
+  it('migrates a fresh file exactly once', async () => {
+    const path = join(tempDir(), 'x.db')
+    const store = fileURLToPath(new URL('./index.ts', import.meta.url))
+    const startAt = String(Date.now() + 1500)
+    const run = promisify(execFile)
+    const outputs = await Promise.all(
+      [1, 2, 3, 4].map(() =>
+        run(process.execPath, [
+          '--input-type=module',
+          '-e',
+          OPENER,
+          store,
+          startAt,
+          path,
+          JSON.stringify(SLOW),
+        ]),
+      ),
+    )
+    expect(outputs.map(({ stdout }) => stdout.trim())).toEqual(['2', '2', '2', '2'])
+  }, 20_000)
 })
 
 describe('transaction', () => {

@@ -9,12 +9,37 @@ import { DatabaseSync } from 'node:sqlite'
 
 export type Database = DatabaseSync
 
+function userVersion(db: Database): number {
+  return Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)
+}
+
 /** Wait this long for another writer's lock before failing. */
 const BUSY_TIMEOUT_MS = 10_000
 
+const SQLITE_BUSY = 5
+
+/**
+ * Switches to WAL. Another process opening the same fresh file can hold the lock this needs, and
+ * SQLite then answers busy at once rather than through the busy timeout, so retry until it passes.
+ */
+function useWal(db: Database): void {
+  const deadline = Date.now() + BUSY_TIMEOUT_MS
+  const pause = new Int32Array(new SharedArrayBuffer(4))
+  for (;;) {
+    try {
+      db.exec('PRAGMA journal_mode = WAL')
+      return
+    } catch (error) {
+      if ((error as { errcode?: number }).errcode !== SQLITE_BUSY || Date.now() > deadline)
+        throw error
+      Atomics.wait(pause, 0, 0, 10)
+    }
+  }
+}
+
 /**
  * Opens (creating when missing) and migrates `path`; `':memory:'` for tests.
- * `migrations[i]` takes the file from version i to i + 1, inside one transaction.
+ * `migrations[i]` takes the file from version i to i + 1; the pending ones run in one transaction.
  * A file newer than the code (more versions than `migrations`) is refused.
  */
 export function openDatabase(path: string, migrations: readonly string[]): Database {
@@ -24,20 +49,25 @@ export function openDatabase(path: string, migrations: readonly string[]): Datab
   const db = new DatabaseSync(path)
   try {
     if (fresh) chmodSync(path, 0o600)
-    db.exec(`PRAGMA journal_mode = WAL; PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS};`)
-    const version = Number(
-      (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version,
-    )
-    if (version > migrations.length)
-      throw new Error(
-        `${path} is at schema version ${version}, newer than this Aico (${migrations.length})`,
-      )
-    for (let from = version; from < migrations.length; from += 1) {
-      transaction(db, () => {
-        db.exec(migrations[from] as string)
-        db.exec(`PRAGMA user_version = ${from + 1}`)
-      })
+    db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`)
+    useWal(db)
+    const check = () => {
+      const version = userVersion(db)
+      if (version > migrations.length)
+        throw new Error(
+          `${path} is at schema version ${version}, newer than this Aico (${migrations.length})`,
+        )
+      return version
     }
+    if (check() < migrations.length)
+      // Read the version again under the write lock: another process opening the same file may
+      // have migrated it since. All pending migrations land together, or none.
+      transaction(db, () => {
+        for (let from = check(); from < migrations.length; from += 1) {
+          db.exec(migrations[from] as string)
+          db.exec(`PRAGMA user_version = ${from + 1}`)
+        }
+      })
     return db
   } catch (error) {
     db.close()

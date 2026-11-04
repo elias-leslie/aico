@@ -6,9 +6,7 @@
   "license": "Apache-2.0",
   "aico": {
     "layer": 1,
-    "imports": [
-      "@aico/shared"
-    ]
+    "imports": []
   },
   "type": "module",
   "exports": {

@@ -1,5 +1,5 @@
 {
-  "description": "Replay fixtures for contracts/status-row.schema.json. valid: rows every validator accepts. invalid: rows every validator refuses, naming `field`. replay: rows as stored (row plus the updated_at the server stamped), read at `now`; `expect` is each row's shown state and shown_since (null when none), in the default order (problems first: failed, late, unknown, warn; then ok and off; ties by what (compared by code unit, so capitals first), then id), and `rollup` the problem and healthy counts.",
+  "description": "Replay fixtures for contracts/status-row.schema.json. valid: rows every validator accepts. invalid: rows every validator refuses, naming `field`. Lengths are counted in code points (a character outside the BMP counts once) and patterns match the whole value (a trailing newline does not pass). replay: rows as stored (row plus the updated_at the server stamped), read at `now`; `expect` is each row's shown state and shown_since (null when none), in the default order (problems first: failed, late, unknown, warn; then ok and off; ties by what (compared by code unit, so capitals first), then id), and `rollup` the problem and healthy counts.",
   "version": 1,
   "valid": [
     {
@@ -26,10 +26,22 @@
         "last_run": "2026-11-03T08:30:00Z",
         "next_run": "2026-11-04T09:30:00.000+00:00",
         "actions": [
-          { "kind": "run", "ref": "systemctl --user start aico-notes-export.service" },
-          { "kind": "log", "ref": "journalctl --user -u aico-web.service" },
-          { "kind": "detail", "ref": "/notes" },
-          { "kind": "look", "ref": "aico" }
+          {
+            "kind": "run",
+            "ref": "systemctl --user start aico-notes-export.service"
+          },
+          {
+            "kind": "log",
+            "ref": "journalctl --user -u aico-web.service"
+          },
+          {
+            "kind": "detail",
+            "ref": "/notes"
+          },
+          {
+            "kind": "look",
+            "ref": "aico"
+          }
         ]
       }
     },
@@ -45,13 +57,46 @@
         "last_run": "2026-11-02T22:30:00-05:00",
         "actions": []
       }
+    },
+    {
+      "name": "machine row",
+      "row": {
+        "id": "davion-sidarli/machine",
+        "what": "davion-sidarli",
+        "kind": "machine",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Up and reporting to Aico.",
+        "next_run": "2026-11-03T12:10:00Z"
+      }
+    },
+    {
+      "name": "what of 120 code points outside the BMP",
+      "row": {
+        "id": "m/x",
+        "what": "🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine."
+      }
     }
   ],
   "invalid": [
-    { "name": "not an object", "row": ["davion-sidarli/x"], "field": "row" },
+    {
+      "name": "not an object",
+      "row": ["davion-sidarli/x"],
+      "field": "row"
+    },
     {
       "name": "missing id",
-      "row": { "what": "X", "kind": "job", "machine": "m", "state": "ok", "meaning": "Fine." },
+      "row": {
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine."
+      },
       "field": "id"
     },
     {
@@ -162,7 +207,12 @@
         "machine": "m",
         "state": "ok",
         "meaning": "Fine.",
-        "actions": [{ "kind": "click", "ref": "x" }]
+        "actions": [
+          {
+            "kind": "click",
+            "ref": "x"
+          }
+        ]
       },
       "field": "actions"
     },
@@ -176,11 +226,26 @@
         "state": "ok",
         "meaning": "Fine.",
         "actions": [
-          { "kind": "run", "ref": "a" },
-          { "kind": "run", "ref": "b" },
-          { "kind": "run", "ref": "c" },
-          { "kind": "run", "ref": "d" },
-          { "kind": "run", "ref": "e" }
+          {
+            "kind": "run",
+            "ref": "a"
+          },
+          {
+            "kind": "run",
+            "ref": "b"
+          },
+          {
+            "kind": "run",
+            "ref": "c"
+          },
+          {
+            "kind": "run",
+            "ref": "d"
+          },
+          {
+            "kind": "run",
+            "ref": "e"
+          }
         ]
       },
       "field": "actions"
@@ -197,6 +262,67 @@
         "updated_at": "2026-11-03T00:00:00Z"
       },
       "field": "updated_at"
+    },
+    {
+      "name": "machine row without next_run",
+      "row": {
+        "id": "m/machine",
+        "what": "m",
+        "kind": "machine",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine."
+      },
+      "field": "next_run"
+    },
+    {
+      "name": "machine with capitals",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "job",
+        "machine": "Davion-Sidarli",
+        "state": "ok",
+        "meaning": "Fine."
+      },
+      "field": "machine"
+    },
+    {
+      "name": "id ending in a newline",
+      "row": {
+        "id": "m/x\n",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine."
+      },
+      "field": "id"
+    },
+    {
+      "name": "next_run ending in a newline",
+      "row": {
+        "id": "m/x",
+        "what": "X",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine.",
+        "next_run": "2026-11-03T03:30:00Z\n"
+      },
+      "field": "next_run"
+    },
+    {
+      "name": "what of 121 code points outside the BMP",
+      "row": {
+        "id": "m/x",
+        "what": "🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄🗄",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Fine."
+      },
+      "field": "what"
     }
   ],
   "replay": [
@@ -315,28 +441,71 @@
         {
           "updated_at": "2026-11-03T08:00:00Z",
           "row": {
-            "id": "c/link",
+            "id": "a/link",
             "what": "Link to c",
             "kind": "link",
-            "machine": "c",
+            "machine": "a",
             "state": "ok",
             "meaning": "Up."
           }
         }
       ],
       "expect": [
-        { "id": "a/export", "shown": "failed", "shown_since": null },
-        { "id": "a/backup", "shown": "late", "shown_since": "2026-11-03T11:30:00.000Z" },
-        { "id": "b/machine", "shown": "late", "shown_since": "2026-11-03T09:10:00.000Z" },
-        { "id": "b/failed", "shown": "unknown", "shown_since": "2026-11-03T09:10:00.000Z" },
-        { "id": "b/job", "shown": "unknown", "shown_since": "2026-11-03T09:10:00.000Z" },
-        { "id": "a/check", "shown": "warn", "shown_since": null },
-        { "id": "c/link", "shown": "ok", "shown_since": null },
-        { "id": "a/web", "shown": "ok", "shown_since": null },
-        { "id": "a/machine", "shown": "ok", "shown_since": null },
-        { "id": "a/vm", "shown": "off", "shown_since": null }
+        {
+          "id": "a/export",
+          "shown": "failed",
+          "shown_since": null
+        },
+        {
+          "id": "a/backup",
+          "shown": "late",
+          "shown_since": "2026-11-03T11:30:00.000Z"
+        },
+        {
+          "id": "b/machine",
+          "shown": "late",
+          "shown_since": "2026-11-03T09:10:00.000Z"
+        },
+        {
+          "id": "b/failed",
+          "shown": "unknown",
+          "shown_since": "2026-11-03T09:10:00.000Z"
+        },
+        {
+          "id": "b/job",
+          "shown": "unknown",
+          "shown_since": "2026-11-03T09:10:00.000Z"
+        },
+        {
+          "id": "a/check",
+          "shown": "warn",
+          "shown_since": null
+        },
+        {
+          "id": "a/link",
+          "shown": "ok",
+          "shown_since": null
+        },
+        {
+          "id": "a/web",
+          "shown": "ok",
+          "shown_since": null
+        },
+        {
+          "id": "a/machine",
+          "shown": "ok",
+          "shown_since": null
+        },
+        {
+          "id": "a/vm",
+          "shown": "off",
+          "shown_since": null
+        }
       ],
-      "rollup": { "problems": 6, "healthy": 4 }
+      "rollup": {
+        "problems": 6,
+        "healthy": 4
+      }
     },
     {
       "name": "a machine switched off makes its rows unknown",
@@ -350,7 +519,8 @@
             "kind": "machine",
             "machine": "d",
             "state": "off",
-            "meaning": "Shut down."
+            "meaning": "Shut down.",
+            "next_run": "2026-11-03T10:10:00Z"
           }
         },
         {
@@ -367,10 +537,99 @@
         }
       ],
       "expect": [
-        { "id": "d/backup", "shown": "unknown", "shown_since": "2026-11-03T10:00:00.000Z" },
-        { "id": "d/machine", "shown": "off", "shown_since": null }
+        {
+          "id": "d/backup",
+          "shown": "unknown",
+          "shown_since": "2026-11-03T10:00:00.000Z"
+        },
+        {
+          "id": "d/machine",
+          "shown": "off",
+          "shown_since": null
+        }
       ],
-      "rollup": { "problems": 1, "healthy": 1 }
+      "rollup": {
+        "problems": 1,
+        "healthy": 1
+      }
+    },
+    {
+      "name": "rows of a machine with no machine row show unknown",
+      "now": "2026-11-03T12:00:00Z",
+      "rows": [
+        {
+          "updated_at": "2026-11-03T11:00:00Z",
+          "row": {
+            "id": "e/check",
+            "what": "Check on e",
+            "kind": "check",
+            "machine": "e",
+            "state": "ok",
+            "meaning": "Fine.",
+            "next_run": "2026-11-03T13:00:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-03T11:00:00Z",
+          "row": {
+            "id": "e/web",
+            "what": "Web on e",
+            "kind": "service",
+            "machine": "e",
+            "state": "failed",
+            "meaning": "Down."
+          }
+        },
+        {
+          "updated_at": "2026-11-03T11:58:00Z",
+          "row": {
+            "id": "f/machine",
+            "what": "f",
+            "kind": "machine",
+            "machine": "f",
+            "state": "ok",
+            "meaning": "Reporting.",
+            "next_run": "2026-11-03T12:08:00Z"
+          }
+        },
+        {
+          "updated_at": "2026-11-03T11:00:00Z",
+          "row": {
+            "id": "f/job",
+            "what": "Job on f",
+            "kind": "job",
+            "machine": "f",
+            "state": "ok",
+            "meaning": "Done."
+          }
+        }
+      ],
+      "expect": [
+        {
+          "id": "e/check",
+          "shown": "unknown",
+          "shown_since": null
+        },
+        {
+          "id": "e/web",
+          "shown": "unknown",
+          "shown_since": null
+        },
+        {
+          "id": "f/job",
+          "shown": "ok",
+          "shown_since": null
+        },
+        {
+          "id": "f/machine",
+          "shown": "ok",
+          "shown_since": null
+        }
+      ],
+      "rollup": {
+        "problems": 2,
+        "healthy": 2
+      }
     }
   ]
 }

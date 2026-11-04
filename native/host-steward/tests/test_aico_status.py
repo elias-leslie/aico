@@ -16,12 +16,19 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-SPEC = importlib.util.spec_from_file_location(
-    "aico_status", Path(__file__).resolve().parents[1] / "aico_status.py"
-)
-assert SPEC and SPEC.loader
-aico_status = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(aico_status)
+MODULE = Path(__file__).resolve().parents[1] / "aico_status.py"
+
+
+def load():
+    """A fresh copy of the module (it reads the environment's proxies when it loads)."""
+    spec = importlib.util.spec_from_file_location("aico_status", MODULE)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+aico_status = load()
 
 SCHEMA = json.loads((ROOT / "contracts/status-row.schema.json").read_text())
 FIXTURES = json.loads((ROOT / "contracts/status-row-fixtures.json").read_text())
@@ -31,6 +38,8 @@ ROW = FIXTURES["valid"][0]["row"]
 def test_lists_and_limits_match_the_schema():
     props = SCHEMA["properties"]
     assert tuple(SCHEMA["required"]) == aico_status.REQUIRED
+    assert SCHEMA["if"] == {"properties": {"kind": {"const": "machine"}}, "required": ["kind"]}
+    assert SCHEMA["then"] == {"required": ["next_run"]}
     assert frozenset(props) == aico_status.FIELDS
     assert tuple(props["kind"]["enum"]) == aico_status.KINDS
     assert tuple(props["state"]["enum"]) == aico_status.STATES
@@ -145,3 +154,34 @@ def test_fails_soft_with_a_logged_reason(caplog):
 def test_now_is_written_in_utc():
     now = datetime.now(UTC)
     assert aico_status.check_row({**ROW, "last_run": now})["last_run"].endswith("Z")
+
+
+@pytest.mark.parametrize(
+    ("rows", "url"),
+    [
+        (None, None),
+        (ROW, "127.0.0.1:3002/api/status/rows"),
+        (ROW, "http://127.0.0.1:99999/api/status/rows"),
+    ],
+    ids=["no rows", "url without a scheme", "bad port"],
+)
+def test_never_raises(rows, url, caplog):
+    caplog.set_level(logging.ERROR, logger="aico.status")
+    assert aico_status.report(rows, url=url, timeout=1) is False
+    assert "status row not sent" in caplog.text
+
+
+def test_fills_in_this_machine_and_skips_any_proxy(monkeypatch):
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:9/")
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9/")
+    monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    fresh = load()
+    row = {key: value for key, value in ROW.items() if key != "machine"}
+    with fake_aico(200, {"written": 1}) as (url, seen):
+        assert fresh.report(row, url=url) is True
+    assert seen[0]["body"]["machine"] == aico_status.machine_id()
+
+
+def test_machine_id_is_the_short_host_name_in_lower_case():
+    assert aico_status.machine_id("Davion-Sidarli.lan") == "davion-sidarli"

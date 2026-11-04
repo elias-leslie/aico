@@ -7,7 +7,6 @@
   "aico": {
     "layer": 2,
     "imports": [
-      "@aico/shared",
       "@aico/store"
     ],
     "db": [

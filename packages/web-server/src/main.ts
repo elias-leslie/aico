@@ -7,7 +7,7 @@ import { loadCaptureTypes } from '@aico/notes/capture-types'
 import { execRunner, PreviewJobs } from '@aico/notes/heic'
 import { extract } from '@aico/notes/vision-extract'
 import { realRunners } from '@aico/notes/vision-extract/runners'
-import { StatusStore, statusDbPath } from '@aico/status'
+import { machineId, StatusStore, statusDbPath } from '@aico/status'
 import { TetherClient } from '@aico/tether-client'
 import { buildApi } from './api'
 import { Asks } from './asks'
@@ -40,6 +40,8 @@ function serve(): void {
     revisionWindowMs: config.notes.revisionWindowMs,
   })
   const status = new StatusStore(statusDbPath(config.dataDir))
+  // Status rows name the machine by its short host name, as every other writer does.
+  const machine = machineId()
 
   const tether = new TetherClient(config.tetherSocket)
   const terminals = new TerminalHub({
@@ -116,7 +118,7 @@ function serve(): void {
   registerStatusRoutes(api, status)
   registerExportRoutes(api, config, sync.loop, (result) => {
     try {
-      status.upsert([exportRow(config.hostName, result, Date.now(), config.export.dueMs)])
+      status.upsert([exportRow(machine, result, Date.now(), config.export.dueMs)])
     } catch (error) {
       console.error('[aico-web] notes export status row failed:', error)
     }
@@ -140,7 +142,7 @@ function serve(): void {
     console.log(`[aico-web] listening on http://${config.host}:${config.port}`)
     selfRows = startSelfRows({
       status,
-      hostName: config.hostName,
+      hostName: machine,
       address: `${config.host}:${config.port}`,
       heartbeatMs: config.status.heartbeatMs,
     })

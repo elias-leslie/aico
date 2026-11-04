@@ -21,28 +21,43 @@ const ROWS = [
   stored({ id: 'b/four', what: 'Four', machine: 'b', state: 'off', meaning: 'Paused.' }),
 ]
 
+/** Machine rows for a and b, reporting: without one a machine's rows show unknown. */
+const machine = (name: string) =>
+  stored({
+    id: `${name}/machine`,
+    what: name,
+    kind: 'machine',
+    machine: name,
+    next_run: '2026-11-03T13:00:00Z',
+  })
+const ALL = [...ROWS, machine('a'), machine('b')]
+
 const ids = (filter: Parameters<typeof view>[2]) =>
-  view(ROWS, NOW, filter).rows.map((row) => row.id)
+  view(ALL, NOW, filter)
+    .rows.filter((row) => row.kind !== 'machine')
+    .map((row) => row.id)
 
 describe('view', () => {
   it('puts problems first and folds the rest into a healthy count', () => {
-    const result = view(ROWS, NOW)
+    const result = view(ALL, NOW)
     expect(result.rows.map((row) => [row.id, row.shown])).toEqual([
       ['a/two', 'failed'],
       ['b/three', 'late'],
       ['a/one', 'ok'],
+      ['a/machine', 'ok'],
+      ['b/machine', 'ok'],
       ['b/four', 'off'],
     ])
     expect(result.rollup).toEqual({
       problems: 2,
-      healthy: 2,
-      counts: { failed: 1, late: 1, unknown: 0, warn: 0, ok: 1, off: 1 },
+      healthy: 4,
+      counts: { failed: 1, late: 1, unknown: 0, warn: 0, ok: 3, off: 1 },
     })
     expect(result.generated_at).toBe('2026-11-03T12:00:00.000Z')
   })
 
   it('a row is late only after its next run has passed', () => {
-    const due = [stored({ id: 'a/x', what: 'X', next_run: '2026-11-03T12:00:00Z' })]
+    const due = [stored({ id: 'a/x', what: 'X', next_run: '2026-11-03T12:00:00Z' }), machine('a')]
     expect(view(due, NOW).rows[0]?.shown).toBe('ok')
     expect(view(due, NOW + 1).rows[0]).toMatchObject({
       shown: 'late',
@@ -56,7 +71,14 @@ describe('view', () => {
     expect(ids({ machine: ['b'] })).toEqual(['b/three', 'b/four'])
     expect(ids({ project: ['aico'] })).toEqual(['a/one'])
     expect(ids({ search: 'DISK' })).toEqual(['a/two'])
-    expect(view(ROWS, NOW, { machine: ['b'] }).rollup).toMatchObject({ problems: 1, healthy: 1 })
+    expect(view(ALL, NOW, { machine: ['b'] }).rollup).toMatchObject({ problems: 1, healthy: 2 })
+  })
+
+  it('shows the rows of a machine with no machine row as unknown', () => {
+    expect(view([stored({ id: 'c/x', what: 'X', machine: 'c' })], NOW).rows[0]).toMatchObject({
+      shown: 'unknown',
+      shown_since: null,
+    })
   })
 
   it('sorts by what, newest update or soonest next run', () => {

@@ -31,13 +31,14 @@ export interface StatusRow {
   id: string
   what: string
   kind: Kind
+  /** The host's short name in lower case (`machineId()`), the same on every row from it. */
   machine: string
   project?: string
   state: State
   meaning: string
   /** RFC 3339, normalized to UTC (`toISOString`). */
   last_run?: string
-  /** When the next report is due, normalized like last_run. */
+  /** When the next report is due, normalized like last_run; required for kind machine. */
   next_run?: string
   actions?: Action[]
 }
@@ -45,7 +46,7 @@ export interface StatusRow {
 export const LIMITS = {
   id: { pattern: /^[A-Za-z0-9][A-Za-z0-9._:/@-]*$/, max: 200 },
   what: { max: 120 },
-  machine: { pattern: /^[A-Za-z0-9][A-Za-z0-9._-]*$/, max: 100 },
+  machine: { pattern: /^[a-z0-9][a-z0-9._-]*$/, max: 100 },
   project: { pattern: /^[a-z0-9][a-z0-9_-]*$/, max: 100 },
   meaning: { max: 300 },
   actions: { max: 4, ref: 500 },
@@ -74,6 +75,9 @@ export class RowError extends Error {
   }
 }
 
+/** Length in code points, as the schema's maxLength and Python's len count it. */
+const length = (value: string) => [...value].length
+
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$/
 
 /** An RFC 3339 date-time with a zone, as epoch ms; null when it is not one or names an impossible date. */
@@ -101,7 +105,7 @@ function text(
   }
   if (typeof value !== 'string' || value.length === 0)
     throw new RowError(field, `${field} must be a non-empty string`)
-  if (value.length > check.max)
+  if (length(value) > check.max)
     throw new RowError(field, `${field} is longer than ${check.max} characters`)
   if (check.pattern && !check.pattern.test(value))
     throw new RowError(field, `${field} has characters it may not have`)
@@ -147,7 +151,7 @@ function actions(value: unknown): Action[] | undefined {
     )
       throw new RowError('actions', `an action's kind must be one of ${ACTION_KINDS.join(', ')}`)
     const ref = action.ref
-    if (typeof ref !== 'string' || ref.length === 0 || ref.length > LIMITS.actions.ref)
+    if (typeof ref !== 'string' || ref.length === 0 || length(ref) > LIMITS.actions.ref)
       throw new RowError('actions', `an action's ref is 1 to ${LIMITS.actions.ref} characters`)
     return { kind: action.kind as ActionKind, ref }
   })
@@ -174,6 +178,8 @@ export function parseRow(value: unknown): StatusRow {
   if (lastRun !== undefined) row.last_run = lastRun
   const nextRun = time(body, 'next_run')
   if (nextRun !== undefined) row.next_run = nextRun
+  else if (row.kind === 'machine')
+    throw new RowError('next_run', 'a machine row needs next_run: the unknown rule reads it')
   const list = actions(body.actions)
   if (list !== undefined) row.actions = list
   return row

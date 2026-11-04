@@ -4,7 +4,8 @@
 // Late: a row past its next_run shows "late since next_run" (whatever it last
 // reported, except off: stopped on purpose is never late).
 // Unknown: every other row of a machine whose own machine row is late or off
-// shows "unknown" since then. Unknown is a problem; it is never counted as ok.
+// shows "unknown" since then, and of a machine with no machine row at all
+// (shown_since null). Unknown is a problem; it is never counted as ok.
 
 import type { Kind, StatusRow } from './row'
 
@@ -68,18 +69,21 @@ function lateSince(stored: StoredRow, now: number): number | null {
 
 /** Applies the late and unknown rules at `now`. */
 export function show(rows: readonly StoredRow[], now: number): ShownRow[] {
-  // Since when each machine's own row says it is not reporting (late or off).
-  const silent = new Map<string, number>()
+  // Per machine with a machine row: since when it says the machine is not reporting (late or
+  // off), else null.
+  const silent = new Map<string, number | null>()
   for (const stored of rows) {
     if (stored.row.kind !== 'machine') continue
     const since = stored.row.state === 'off' ? stored.updatedAt : lateSince(stored, now)
-    if (since !== null) silent.set(stored.row.machine, since)
+    silent.set(stored.row.machine, since)
   }
   return rows.map((stored) => {
     const base = { ...stored.row, updated_at: iso(stored.updatedAt) }
-    const machineSilent = silent.get(stored.row.machine)
-    if (stored.row.kind !== 'machine' && machineSilent !== undefined)
-      return { ...base, shown: 'unknown', shown_since: iso(machineSilent) }
+    if (stored.row.kind !== 'machine') {
+      const machine = silent.get(stored.row.machine)
+      if (machine === undefined) return { ...base, shown: 'unknown', shown_since: null }
+      if (machine !== null) return { ...base, shown: 'unknown', shown_since: iso(machine) }
+    }
     const late = lateSince(stored, now)
     if (late !== null) return { ...base, shown: 'late', shown_since: iso(late) }
     return { ...base, shown: stored.row.state, shown_since: null }

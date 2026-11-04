@@ -36,6 +36,8 @@ describe('row.ts matches the schema', () => {
       expect(props[field].pattern).toBe(LIMITS[field].pattern.source)
       expect(props[field].maxLength).toBe(LIMITS[field].max)
     }
+    expect(schema.if).toEqual({ properties: { kind: { const: 'machine' } }, required: ['kind'] })
+    expect(schema.then).toEqual({ required: ['next_run'] })
     expect(props.what.maxLength).toBe(LIMITS.what.max)
     expect(props.meaning.maxLength).toBe(LIMITS.meaning.max)
   })

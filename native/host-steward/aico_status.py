@@ -7,13 +7,15 @@
         "last_run": datetime.now(UTC), "next_run": datetime.now(UTC) + timedelta(hours=1),
     })
 
-`report` posts one row or a list to aico-web's loopback API (POST /api/status/rows) and never
-raises: a refused row, a server that is down or an error answer is logged on the "aico.status"
-logger and returns False, so a check never fails because its row could not be written.
+`report` posts one row or a list to aico-web's loopback API (POST /api/status/rows), never
+through a proxy, and never raises: a refused row, a server that is down, an error answer or a bad
+URL is logged on the "aico.status" logger and returns False, so a check never fails because its
+row could not be written. A row without `machine` gets this host's id (machine_id()).
 
 The row is contracts/status-row.schema.json; check_row holds the same lists and limits, and
 tests/test_aico_status.py keeps them equal to the schema and replays the contract fixtures.
-Times may be RFC 3339 strings or timezone-aware datetimes; both are sent in UTC.
+Times may be RFC 3339 strings or timezone-aware datetimes; both are sent in UTC. Lengths count
+code points and patterns match the whole value, as the schema does.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import json
 import logging
 import os
 import re
+import socket
 import urllib.error
 import urllib.request
 from collections.abc import Mapping, Sequence
@@ -34,7 +37,7 @@ ACTION_KINDS = ("run", "log", "detail", "look")
 TEXT_LIMITS: dict[str, tuple[int, re.Pattern[str] | None]] = {
     "id": (200, re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$")),
     "what": (120, None),
-    "machine": (100, re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")),
+    "machine": (100, re.compile(r"^[a-z0-9][a-z0-9._-]*$")),
     "project": (100, re.compile(r"^[a-z0-9][a-z0-9_-]*$")),
     "meaning": (300, None),
 }
@@ -49,7 +52,15 @@ TIMEOUT_SECONDS = 5.0
 
 log = logging.getLogger("aico.status")
 
+# Straight to loopback: an http_proxy in the environment must not carry the row elsewhere.
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 _RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
+
+
+def machine_id(name: str | None = None) -> str:
+    """This host's id on its rows: the short host name in lower case ('davion-sidarli')."""
+    return (name or socket.gethostname()).split(".")[0].lower()
 
 
 class RowError(ValueError):
@@ -74,7 +85,7 @@ def _time(row: Mapping[str, Any], field: str) -> str | None:
         if value.tzinfo is None:
             raise RowError(field, "a datetime needs a timezone")
         return utc_text(value)
-    if isinstance(value, str) and _RFC3339.match(value):
+    if isinstance(value, str) and _RFC3339.fullmatch(value):
         try:
             return utc_text(datetime.fromisoformat(value))
         except ValueError:
@@ -93,7 +104,7 @@ def _text(row: Mapping[str, Any], field: str, required: bool) -> str | None:
         raise RowError(field, "must be a non-empty string")
     if len(value) > limit:
         raise RowError(field, f"is longer than {limit} characters")
-    if pattern is not None and not pattern.match(value):
+    if pattern is not None and not pattern.fullmatch(value):
         raise RowError(field, "has characters it may not have")
     return value
 
@@ -144,6 +155,8 @@ def check_row(row: Any) -> dict[str, Any]:
         "next_run": _time(row, "next_run"),
         "actions": _actions(row.get("actions")),
     }
+    if checked["kind"] == "machine" and optional["next_run"] is None:
+        raise RowError("next_run", "a machine row needs next_run: the unknown rule reads it")
     checked.update({key: value for key, value in optional.items() if value is not None})
     return checked
 
@@ -157,8 +170,21 @@ def report(
     """Posts one row or a list (all or none); True when aico-web took them. Never raises."""
     target = url or os.environ.get("AICO_STATUS_URL") or DEFAULT_URL
     try:
+        return _post(rows, target, timeout)
+    except Exception:
+        log.exception("status row not sent to %s", target)
+        return False
+
+
+def _post(rows: Mapping[str, Any] | Sequence[Mapping[str, Any]], target: str, timeout: float) -> bool:
+    def with_machine(row: Any) -> Any:
+        return {"machine": machine_id(), **row} if isinstance(row, Mapping) else row
+
+    try:
         payload: Any = (
-            check_row(rows) if isinstance(rows, Mapping) else [check_row(row) for row in rows]
+            check_row(with_machine(rows))
+            if isinstance(rows, Mapping)
+            else [check_row(with_machine(row)) for row in rows]
         )
     except RowError as error:
         log.error("status row not sent: %s", error)
@@ -170,7 +196,7 @@ def report(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _OPENER.open(request, timeout=timeout) as response:
             response.read()
         return True
     except urllib.error.HTTPError as error:

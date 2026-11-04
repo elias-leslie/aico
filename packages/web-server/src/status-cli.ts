@@ -73,8 +73,10 @@ function rowLines(row: ShownRow, now: number): string[] {
   const where = [row.kind, row.machine, row.project].filter(Boolean).join(', ')
   let head = `${LABELS[row.shown].padEnd(8)} ${row.what} (${where})`
   if (row.shown === 'late' && row.shown_since) head += `, late since ${when(row.shown_since, now)}`
-  if (row.shown === 'unknown' && row.shown_since)
-    head += `, no word from ${row.machine} since ${when(row.shown_since, now)}`
+  if (row.shown === 'unknown')
+    head += row.shown_since
+      ? `, no word from ${row.machine} since ${when(row.shown_since, now)}`
+      : `, no word from ${row.machine}`
   const indent = ' '.repeat(9)
   const lines = [head]
   const said =
