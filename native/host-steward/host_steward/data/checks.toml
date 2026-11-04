@@ -1,0 +1,179 @@
+# Host checks: settings, schedules and site values. Nothing here is code. The wording is in meanings.toml.
+# every_min is how often a check is due; slack_min is added to it for the row's next_run (a row past
+# next_run shows "late"). The timer fires every 15 minutes, so a check due less often waits for a later tick.
+# The SSH keys and known-hosts files below are Nightshift's, reused until its checks stop (M5a-2).
+
+[site.owner]
+user = "kasadis"
+
+[site.pve]
+addr = "192.168.86.39"
+check_key = "/etc/nightshift/pve-check.key"
+known_hosts = "/etc/nightshift/pve-known_hosts"
+ssh_timeout = 120
+backup_receipt = "/home/kasadis/.local/state/summitflow/backup-freshness/proxmox.json"
+backup_required_targets = ["pve-cluster-config", "pve-host-files", "pve-vm-100-browser-state"]
+backup_alert_age_h = 6.0
+
+# Signals the owner decided are record-only: they stay in the row's text but never past this state.
+# First matching pattern wins. GEM10 logs corrected memory errors without DRAM ECC (owner 2026-10-30).
+[caps]
+"ecc.corrected" = "ok"
+"ecc.spike" = "ok"
+
+[checks.workstation]
+what = "Workstation health"
+every_min = 15
+slack_min = 10
+owner_uid = 1000
+transient_units = '''run-[urp][A-Za-z0-9_.-]{1,90}\.(service|scope)|app-[A-Za-z0-9](?:[A-Za-z0-9_.-]|\\x[0-9a-f]{2}){0,90}\.scope'''
+reboot_flag = "/run/reboot-required"
+swap_conf = "/etc/sysctl.d/60-nightshift-vm.swappiness.conf"
+proc_sys = "/proc/sys"
+zswap_dir = "/sys/module/zswap/parameters"
+zswap_expect = { enabled = "Y", compressor = "zstd", max_pool_percent = "25" }
+journald_expect = { SystemMaxUse = "2G", MaxRetentionSec = "30day" }
+psi_memory = "/proc/pressure/memory"
+pressure_warn_full_pct = 2.0
+pressure_warn_some_pct = 10.0
+internet_probes = ["https://cloudflare.com/cdn-cgi/trace", "https://1.1.1.1/cdn-cgi/trace"]
+tunnel_ready_url = "http://127.0.0.1:20241/ready"
+core_containers = ["summitflow-stack-postgres-1", "summitflow-stack-redis-1", "summitflow-stack-hatchet-1"]
+cert_endpoints = ["nightshift.summitflow.dev", "approve.summitflow.dev", "nightshift.summitflow.dev@localhost:443"]
+cert_warn_days = 21
+cert_crit_days = 7
+
+[checks.storage]
+what = "Workstation storage"
+every_min = 15
+slack_min = 10
+# SummitFlow stops backups below this much free space; the line the system disk is rated against.
+reserve_gib = 25
+warn_margin_gib = 15
+capture_peak_gib = 5
+critical_floor_gib = 10
+alloc_trigger_gib = 8
+alloc_target_gib = 12
+alloc_free_warn_gib = 25
+disk_crit_pct = 95.0
+disk_crit_free_gib = 5.0
+disk_crit_tight_pct = 92.0
+disk_crit_tight_free_gib = 10.0
+disk_warn_free_gib = 15.0
+disk_warn_tight_pct = 85.0
+disk_warn_tight_free_gib = 30.0
+# missing: the state when the disk is not mounted (default failed). balance: rate against the reserve.
+disks = [
+  { name = "System disk", path = "/", btrfs = true, balance = true },
+  { name = "Backup drive (T7)", path = "/media/kasadis/Backups" },
+  { name = "Host backup target", path = "/mnt/summitflow-native", btrfs = true, missing = "warn" },
+]
+
+[checks.perf]
+what = "Workstation performance"
+every_min = 15
+slack_min = 10
+owner_uid = 1000
+meminfo = "/proc/meminfo"
+crash_restarts_per_hour = 6
+swap_used_pct = 80.0
+swap_mem_available_gib = 8.0
+
+[checks.pve]
+what = "PVE host health"
+every_min = 15
+slack_min = 10
+thin_warn = 85.0
+thin_crit = 92.0
+vg_free_warn_gib = 10.0
+reboot_pending_warn_days = 7
+
+[checks.ecc]
+what = "PVE memory errors"
+every_min = 15
+slack_min = 10
+spike_factor = 3.0
+spike_min = 50
+event_gap_s = 2.0
+region_shift = 21
+
+[checks.thermal]
+what = "Temperatures"
+every_min = 15
+slack_min = 10
+hwmon_root = "/sys/class/hwmon"
+cpu_labels = ["Tctl", "Tdie", "Package id 0"]
+gpu_warn = 90.0
+gpu_crit = 96.0
+crit_only_margin = 5.0
+[checks.thermal.chips]
+k10temp = { kind = "CPU", warn = 88.0, crit = 95.0 }
+coretemp = { kind = "CPU", warn = 90.0, crit = 98.0 }
+zenpower = { kind = "CPU", warn = 88.0, crit = 95.0 }
+nvme = { kind = "NVMe", warn = 70.0, crit = 80.0 }
+amdgpu = { kind = "AMD GPU", warn = 90.0, crit = 100.0 }
+
+[checks.backups]
+what = "Backups"
+every_min = 15
+slack_min = 10
+# Under the owner's ~/.local/state/summitflow. A name here that is missing is a warning.
+expected = ["backup-safety/status.json", "backup-restore-test/monthly.json"]
+status_globs = [
+  "backup-circuit-breaker*.json", "backup-circuit-breaker/*.json", "backup-breaker/*.json",
+  "backup-health/*.json", "backup-health*.json", "backup-weekly*/*.json", "backup-restore-test/*.json",
+  "backup-status/*.json", "backup-safety/*.json",
+]
+max_files = 40
+# Hours before a status file counts as stale; first matching name wins.
+stale_hours = { "*monthly*" = 852, "*weekly*" = 192, "*health*" = 192, "*" = 192 }
+receipt_stale_hours = 6.0
+source_fail_factor = 2.0
+refused_failed_hours = 2.0
+native_config = "/etc/btrbk/summitflow.conf"
+native_warn_hours = 36
+native_failed_hours = 60
+autosnap_state = ".local/share/st/snaps/autosnap-state.json"
+autosnap_stale_hours = 2.0
+autosnap_stopped_factor = 2.0
+autosnap_failed_hours = 24.0
+sources_receipt = "backup-freshness/sources.json"
+
+[checks.journal]
+what = "System journal"
+every_min = 15
+slack_min = 10
+corrupt_keep_days = 7
+
+[checks.gates]
+what = "Public login gates"
+every_min = 60
+slack_min = 20
+# The router's resolver: asking it (not this host, not a public DNS service) gives the address the internet sees.
+dns_server = "192.168.86.1"
+apps = [{ app = "Aico", host = "aico.summitflow.dev", path = "/api/auth/session" }]
+
+[checks.ominull-lock]
+what = "OmniNull lock"
+every_min = 15
+slack_min = 10
+ceiling_file = "/etc/ominull/capability.ceiling"
+authority_file = "/etc/ominull/host_authority.json"
+allow_file = "/etc/ominull/host_auto_allow.json"
+expected_ceiling = "engagement"
+
+[checks.router-drift]
+what = "Router drift"
+every_min = 360
+slack_min = 60
+addr = "192.168.86.1"
+key = "/etc/nightshift/router-status.key"
+known_hosts = "/etc/nightshift/router-known_hosts"
+connect_timeout = 10
+timeout = 30
+hold_hours = 24.0
+denied_retry_hours = 6
+keys = ["firmware", "keys", "dropbear", "forwards", "upnp", "services", "parental"]
+# State a held change makes: failed for SSH keys and server settings, ok (noted) for firmware.
+severity = { firmware = "ok", keys = "failed", dropbear = "failed", forwards = "warn", upnp = "warn", services = "warn", parental = "warn" }
+labels = { firmware = "firmware", keys = "SSH login keys", dropbear = "SSH server settings", forwards = "port forwards", upnp = "UPnP settings", services = "enabled services", parental = "parental-control setup" }

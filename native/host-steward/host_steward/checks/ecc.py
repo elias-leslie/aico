@@ -1,0 +1,144 @@
+"""PVE memory errors: uncorrected events, corrected-event spikes and new regions, from the kernel journal and rasdaemon.
+
+Port of ns/checks/ecc.py and the ECC rules in ns/checks/pve.py, without the metric history database and its
+multi-week trend rules (trends: a later job). The window is the 8 days the PVE snippet reads. Memory-controller
+records only: one machine check is logged by up to four banks within the same second, so records are grouped into
+events first. The data file caps corrected-error signals (this PVE host reports them without DRAM ECC: record
+only); uncorrected errors and a new region still fail.
+"""
+
+from __future__ import annotations
+
+import re
+import statistics
+from datetime import datetime
+from typing import Any
+
+from host_steward.checks.pve import collect
+from host_steward.core import Ctx, Signal
+
+ID = "ecc"
+RAS_LINE = re.compile(r"^\d+ (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d [+-]\d{4}) error: ([^,]*),")
+DAY = 86400
+
+
+def _hex(text: str | None) -> int | None:
+    if not text or text == "-":
+        return None
+    try:
+        return int(text, 16) or None
+    except ValueError:
+        return None
+
+
+def parse_journal(text: str) -> tuple[float | None, list[dict[str, Any]]]:
+    first: float | None = None
+    out: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        p = line.split()
+        if len(p) < 2:
+            continue
+        try:
+            ts = float(p[1])
+        except ValueError:
+            continue
+        if p[0] == "FIRST":
+            first = ts
+        elif p[0] in ("CE", "UE"):
+            out.append(
+                {
+                    "src": "j",
+                    "ts": ts,
+                    "kind": p[0],
+                    "addr": _hex(p[4]) if len(p) > 4 else None,
+                    "umc": p[5] == "1" if len(p) > 5 else True,
+                }
+            )
+    return first, out
+
+
+def parse_rasdaemon(text: str) -> list[dict[str, Any]]:
+    out = []
+    for line in text.splitlines():
+        m = RAS_LINE.match(line.strip())
+        if not m:
+            continue
+        try:
+            ts = datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S %z").timestamp()
+        except ValueError:
+            continue
+        kind = "UE" if re.search(r"[Uu]ncorrected|[Dd]eferred|[Ff]atal", m.group(2)) else "CE" if "orrected" in m.group(2) else ""
+        if kind:
+            addr = re.search(r"\baddr=(0x[0-9a-fA-F]+)", line)
+            out.append(
+                {
+                    "src": "r",
+                    "ts": ts,
+                    "kind": kind,
+                    "addr": _hex(addr.group(1)) if addr else None,
+                    "umc": "Unified Memory Controller" in line,
+                }
+            )
+    return out
+
+
+def group_events(records: list[dict[str, Any]], gap_s: float, region_shift: int) -> list[dict[str, Any]]:
+    """One event per machine check and source; its region is the 2 MiB region at least two banks agree on."""
+    events: list[dict[str, Any]] = []
+    open_event: dict[tuple[str, str], dict[str, Any]] = {}
+    addrs: dict[int, list[int]] = {}
+    for r in sorted(records, key=lambda e: (e["src"], e["kind"], e["ts"])):
+        ev = open_event.get((r["src"], r["kind"]))
+        if ev is None or r["ts"] - ev["ts"] > gap_s:
+            ev = {"src": r["src"], "kind": r["kind"], "ts": r["ts"], "region": None}
+            open_event[(r["src"], r["kind"])] = ev
+            events.append(ev)
+        if r["addr"] is not None:
+            addrs.setdefault(id(ev), []).append(r["addr"] >> region_shift)
+    for ev in events:
+        regions = addrs.get(id(ev))
+        if regions:
+            top = max(set(regions), key=lambda g: (regions.count(g), -g))
+            ev["region"] = top if regions.count(top) >= 2 else None
+    return events
+
+
+def evaluate(sections: dict[str, str], cfg: dict[str, Any], now: float) -> list[Signal]:
+    first, journal = parse_journal(sections.get("ecc", ""))
+    records = [r for r in journal + parse_rasdaemon(sections.get("rasmce", "")) if r["umc"]]
+    events = group_events(records, float(cfg["event_gap_s"]), int(cfg["region_shift"]))
+
+    def count(kind: str, lo: float, hi: float) -> int:  # either source can miss records: the larger count
+        return max((sum(1 for e in events if e["src"] == s and e["kind"] == kind and lo < e["ts"] <= hi) for s in "jr"), default=0)
+
+    out: list[Signal] = []
+    uncorrected = count("UE", now - DAY, now)
+    out.append(Signal("ecc.uncorrected", "failed" if uncorrected else "ok", {"n": uncorrected}))
+    last = count("CE", now - DAY, now)
+    windows = []
+    for i in range(1, 8):
+        start, end = now - (i + 1) * DAY, now - i * DAY
+        if first is None or start < first:
+            break
+        windows.append(count("CE", start, end))
+    baseline = statistics.median(windows) if windows else None
+    spike = baseline is not None and last >= max(cfg["spike_min"], cfg["spike_factor"] * baseline)
+    if spike:
+        out.append(Signal("ecc.spike", "warn", {"n": last, "base": f"{baseline:g}"}, note=True))
+    elif last:
+        out.append(Signal("ecc.corrected", "warn", {"n": last}, note=True))
+    else:
+        out.append(Signal("ecc.corrected", "ok", {"n": 0}))
+    recent = {e["region"] for e in events if e["kind"] == "CE" and e["region"] is not None and e["ts"] > now - DAY}
+    earlier = {e["region"] for e in events if e["kind"] == "CE" and e["region"] is not None and e["ts"] <= now - DAY}
+    new = recent - earlier if earlier else set()
+    if new:
+        out.append(Signal("ecc.new_region", "failed", {"n": len(new)}))
+    return out
+
+
+def run(ctx: Ctx) -> list[Signal]:
+    sections, why = collect(ctx)
+    if sections is None:
+        return [Signal("pve.unreachable", "warn", {"why": why})]
+    return evaluate(sections, ctx.cfg, ctx.now)

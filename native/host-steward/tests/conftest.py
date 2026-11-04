@@ -1,7 +1,13 @@
 """Shared autouse fixtures for the st aico CLI tests."""
 
+import sys
+from pathlib import Path
+
 import pytest
 from aico_cli_fixtures import admin
+
+# host_steward (the check package) and aico_status sit one folder above the tests.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 @pytest.fixture(autouse=True)

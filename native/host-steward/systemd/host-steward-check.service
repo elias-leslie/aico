@@ -1,0 +1,11 @@
+[Unit]
+Description=Host steward: run the due host checks and post their Status rows
+Documentation=file:///usr/local/lib/host-steward/host_steward/data/checks.toml
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/host-steward/host-steward check
+StateDirectory=host-steward
+Nice=10
+TimeoutStartSec=10min

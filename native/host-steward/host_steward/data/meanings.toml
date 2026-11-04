@@ -1,0 +1,336 @@
+# What each finding means in plain words (the explain table). A problem entry is signal."code"; an ok signal
+# worth reading in the row (note) is signal."code:ok". Optional keys: impact, next. {name} fills from the signal's
+# fields; a missing field reads "?". The row shows the worst problem in full and the others in a short line.
+
+# The line a row says when every signal is fine.
+[ok]
+workstation = "The workstation looks healthy."
+storage = "Disks have room, Btrfs is healthy and SMART is clean."
+perf = "No units are crash-looping and swap is calm."
+pve = "The PVE host has room, no failed units and clean disks."
+ecc = "No uncorrected memory errors on the PVE host."
+thermal = "Everything is running cool."
+backups = "Backups are fresh."
+journal = "The system journal is readable."
+gates = "Every public app asks for a login."
+ominull-lock = "The OmniNull lock matches the site file."
+router-drift = "The router's setup has not changed."
+
+[signal."check.crashed"]
+what = "The {check} check broke ({why}) before it could look"
+impact = "Nothing was checked this round"
+next = "Run host-steward check --only {check} and read the log"
+
+[signal."check.empty"]
+what = "The {check} check returned nothing"
+next = "Run it once by hand and read the log"
+
+[signal."check.probe"]
+what = "One probe in this check ({probe}) broke: {why}"
+next = "The other probes still ran; read the host-steward log"
+
+# workstation
+[signal."ws.units.failed"]
+what = "{n} units have failed: {units}"
+impact = "Whatever they run is not running"
+next = "Look at the unit's log, then restart it"
+
+[signal."ws.units.unreadable"]
+what = "Could not list failed units ({why})"
+next = "Try systemctl --failed by hand"
+
+[signal."ws.reboot.required"]
+what = "A package update wants a reboot"
+next = "Reboot when the work in flight is done"
+
+[signal."ws.apt.unreadable"]
+what = "Could not read pending updates ({why})"
+
+[signal."ws.apt.pending"]
+what = "{security} security updates are waiting ({held} held back)"
+impact = "Known holes stay open until they are installed"
+next = "Install them and reboot if asked"
+
+[signal."ws.apt.pending:ok"]
+what = "{pending} package updates are waiting, none for security"
+
+[signal."ws.swap.drift"]
+what = "{n} swap or zswap settings are not what they should be ({keys})"
+impact = "The machine may swap harder than planned"
+next = "Re-apply the sysctl and zswap settings"
+
+[signal."ws.ufw.active"]
+what = "The firewall is not active ({why})"
+impact = "Nothing filters inbound traffic"
+next = "Run ufw enable"
+
+[signal."ws.journald.retention"]
+what = "Journal size or retention drifted ({keys})"
+next = "Restore the journald drop-in"
+
+[signal."ws.memory.pressure"]
+what = "Memory pressure is high: {kind} stall at {pct}%"
+impact = "Things will feel slow and something may be killed"
+next = "See what is using memory"
+
+[signal."ws.net.internet"]
+what = "The internet is not reachable: {how}"
+next = "Check the router and the uplink"
+
+[signal."ws.tunnel.cloudflared"]
+what = "The public tunnel is not ready ({status})"
+impact = "Outside access to the apps is down"
+next = "Restart cloudflared"
+
+[signal."ws.infra.containers"]
+what = "Core containers are down: {names}"
+impact = "The services that need them are failing"
+next = "Start the stack again"
+
+[signal."ws.cert.expiry"]
+what = "The certificate for {worst} expires in {days} days"
+impact = "Browsers will refuse the site once it does"
+next = "Renew it now"
+
+# storage
+[signal."storage.disk.missing"]
+what = "{name} is not mounted"
+next = "Plug it in or mount it"
+
+[signal."storage.disk.space"]
+what = "{name} has {free} GiB free ({pct}% used)"
+impact = "Backups and builds stop when it runs out"
+next = "Free some space"
+
+[signal."storage.btrfs.missing"]
+what = "The btrfs tool is missing, so {name} was not checked"
+
+[signal."storage.alloc.unreadable"]
+what = "Could not read how {name} is allocated"
+
+[signal."storage.alloc"]
+what = "{name} has only {unallocated} GiB unallocated"
+impact = "Btrfs can fail writes even with free space showing"
+next = "Run a balance"
+
+[signal."storage.btrfs.errors"]
+what = "{name} has Btrfs device errors ({errors})"
+impact = "Data may be damaged"
+next = "Run a scrub and check the drive"
+
+[signal."storage.smart.missing"]
+what = "SMART cannot be read here (smartctl is missing)"
+
+[signal."storage.smart"]
+what = "The drive {dev} reports trouble: {why}"
+impact = "It may fail soon"
+next = "Make sure its backups are fresh and plan a replacement"
+
+# perf
+[signal."perf.crash_loop"]
+what = "{n} units keep restarting: {units}"
+impact = "They burn CPU and never stay up"
+next = "Read their logs and fix or stop them"
+
+[signal."perf.crash_loop.unreadable"]
+what = "Could not read restart history ({why})"
+
+[signal."perf.swap"]
+what = "Swap is {pct}% full while {avail} GiB of memory is free"
+impact = "Things run slower than they need to"
+next = "Check what pinned pages into swap"
+
+[signal."perf.swap.unreadable"]
+what = "Could not read memory use"
+
+# pve
+[signal."pve.unreachable"]
+what = "The PVE host did not answer ({why})"
+impact = "Its checks did not run"
+next = "Check the cable, power and the hop key"
+
+[signal."pve.thin.data"]
+what = "The thin pool {pool} is {pct}% full"
+impact = "Guests freeze when it reaches 100%"
+next = "Free space or grow the pool"
+
+[signal."pve.thin.metadata"]
+what = "The thin pool {pool} metadata is {pct}% full"
+impact = "Guests freeze when it fills"
+next = "Grow the metadata"
+
+[signal."pve.thin.unreadable"]
+what = "Could not read the PVE thin pools"
+
+[signal."pve.vg.free"]
+what = "Volume group {vg} has only {gib} GiB free"
+impact = "The pool cannot grow"
+next = "Free space in the group"
+
+[signal."pve.units.failed"]
+what = "{n} units failed on the PVE host: {units}"
+next = "Look at their logs"
+
+[signal."pve.smart"]
+what = "A PVE disk {dev} reports trouble: {why}"
+impact = "It may fail soon"
+next = "Check backups and plan a replacement"
+
+[signal."pve.reboot.required"]
+what = "The PVE host has waited {days} days for a reboot"
+impact = "It runs an old kernel"
+next = "Reboot it in a quiet window"
+
+[signal."pve.reboot.required:ok"]
+what = "The PVE host has waited {days} days for a reboot"
+
+[signal."pve.rasdaemon"]
+what = "rasdaemon is not running on the PVE host"
+impact = "Memory errors are not recorded"
+next = "Start it"
+
+# ecc
+[signal."ecc.uncorrected"]
+what = "The PVE host logged {n} uncorrected memory errors"
+impact = "Memory is failing and data can be corrupt"
+next = "Run a memory test and replace the module"
+
+[signal."ecc.new_region"]
+what = "Corrected memory errors appeared in {n} new places"
+impact = "A memory module may be starting to fail"
+next = "Watch it and test the memory"
+
+[signal."ecc.spike:ok"]
+what = "Corrected memory errors spiked to {n} in a day (usual {base}); recorded only"
+
+[signal."ecc.corrected:ok"]
+what = "{n} corrected memory errors in a day; recorded only"
+
+# thermal
+[signal."thermal.hot"]
+what = "{host} is hot: {sensors}"
+impact = "It will slow down or shut off"
+next = "Check fans and airflow"
+
+[signal."thermal.unavailable"]
+what = "{host} temperatures could not be read"
+
+# backups
+[signal."backups.owner"]
+what = "The backup owner account {owner} does not exist here"
+
+[signal."backups.file.missing"]
+what = "The backup status file {file} is missing"
+impact = "A backup job may have stopped"
+next = "Run it or look at its timer"
+
+[signal."backups.file.unreadable"]
+what = "The backup status file {file} cannot be read"
+
+[signal."backups.file.failed"]
+what = "A backup job is failing: {file} ({what})"
+impact = "There may be no fresh copy"
+next = "Read its log and re-run it"
+
+[signal."backups.file.stale"]
+what = "The backup status {file} is {days} days old"
+impact = "A scheduled run has not happened"
+next = "Check its timer"
+
+[signal."backups.sources.unreadable"]
+what = "Could not read the backup freshness receipt"
+
+[signal."backups.sources.stale"]
+what = "The backup freshness receipt is {hours} h old"
+impact = "Nothing is writing it, so freshness is unknown"
+next = "Check the SummitFlow backup timer"
+
+[signal."backups.capture.refused"]
+what = "Backups are being refused for {hours} h ({sources})"
+impact = "No new copies are being made"
+next = "Free disk space, then re-run"
+
+[signal."backups.sources.failing"]
+what = "{n} backup sources are failing: {sources}"
+impact = "Their data has no fresh copy"
+next = "Read each source's log"
+
+[signal."backups.native"]
+what = "The host backup is not healthy: {why}"
+impact = "Recovery points may be missing"
+next = "Re-run the host capture"
+
+[signal."backups.autosnap"]
+what = "Project snapshots are not healthy: {why}"
+next = "Check the autosnap timer"
+
+[signal."backups.autosnap:ok"]
+what = "{why}"
+
+[signal."backups.pve"]
+what = "The PVE backups are not healthy: {why}"
+impact = "PVE data may lack a verified offsite copy"
+next = "Check the PVE backup receipt"
+
+# journal
+[signal."journal.unreadable"]
+what = "Could not read the journal ({why})"
+
+[signal."journal.corrupt"]
+what = "{n} journal files are corrupt; {old} for over {days} days"
+impact = "Old logs are lost"
+next = "Delete the broken files"
+
+[signal."journal.corrupt:ok"]
+what = "{n} journal files were skipped as corrupt, recently"
+
+# gates
+[signal."gates.app"]
+what = "{app} may be open to the internet: {how}"
+impact = "Anyone can reach it without logging in"
+next = "Put the login gate back"
+
+# ominull-lock
+[signal."ominull.lock.differs"]
+what = "The OmniNull lock is {ceiling}, but the site file wants {want}"
+impact = "The agent has the wrong capability ceiling"
+next = "Re-run the root install for this host"
+
+[signal."ominull.lock:ok"]
+what = "OmniNull lock {ceiling}; {scripts}"
+
+# router-drift
+[signal."router.drift"]
+what = "The router's {what} changed ({n} times)"
+impact = "Someone or something changed the router"
+next = "Open the router and check it was you"
+
+[signal."router.drift:ok"]
+what = "The router's {what} changed; recorded"
+
+[signal."router.parental.off"]
+what = "Parental controls are not enabled on the router"
+
+[signal."router.bad_output"]
+what = "The router answered with something unreadable"
+
+[signal."router.unreachable"]
+what = "The router has not answered for {minutes} minutes"
+next = "Check the router and the SSH key"
+
+[signal."router.source_rejected"]
+what = "The router {how}"
+next = "Allow this address in the status script"
+
+[signal."router.host_key_changed"]
+what = "The router {how}"
+impact = "Its SSH identity changed, usually after a firmware upgrade"
+next = "Confirm the upgrade, then re-pin the key"
+
+[signal."router.key_missing"]
+what = "The router {how}"
+next = "Re-install the status key"
+
+[signal."router.script_missing"]
+what = "The router {how}"
+next = "Re-install the status script"
