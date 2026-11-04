@@ -110,6 +110,12 @@ export class NeedsYou {
     this.options.store.setAsk(id, askId)
   }
 
+  /** The sender resolved this notice; its owner question no longer applies. */
+  async noticeResolved(id: string): Promise<void> {
+    const stored = this.options.store.get(id)
+    if (stored?.askId) await this.options.asks.close(stored.askId, 'withdraw')
+  }
+
   /** Rows just written: a failed row raises its one ask; a row that recovered withdraws it. */
   async rowsWritten(rows: readonly StatusRow[]): Promise<void> {
     const { store, asks } = this.options

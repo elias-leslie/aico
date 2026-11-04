@@ -43,6 +43,7 @@ export interface WebConfig {
    */
   status: { heartbeatMs: number; alertCooldownS: number }
   /** Owner notices (notify.ts): the phone push files, the outbox pace, the OmniNull hub's door. */
+  serviceApps: { listen: { host: string; port: number } | null }
   notify: NotifyConfig
   sync: SyncConfig
   vision: VisionSettings
@@ -383,6 +384,7 @@ export function loadConfig(
         7 * 24 * 60 * 60,
       ),
     },
+    serviceApps: { listen: privateListen(env.AICO_SERVICE_APPS_LISTEN) },
     notify: {
       fcmTokenFile: env.AICO_FCM_TOKEN_FILE?.trim() || DEFAULT_FCM_TOKEN_FILE,
       devicesFile: env.AICO_PHONE_DEVICES_FILE?.trim() || join(dataDirPath(env), 'phones.json'),

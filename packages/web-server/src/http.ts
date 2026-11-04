@@ -37,13 +37,13 @@ export function sendJson(res: ServerResponse, status: number, payload: unknown):
   res.end(body)
 }
 
-function readBody(req: IncomingMessage): Promise<unknown> {
+function readBody(req: IncomingMessage, maxBytes: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const parts: Buffer[] = []
     let size = 0
     req.on('data', (chunk: Buffer) => {
       size += chunk.length
-      if (size > MAX_BODY_BYTES) {
+      if (size > maxBytes) {
         reject(new HttpError(413, 'Request body too large'))
         req.destroy()
         return
@@ -65,6 +65,8 @@ function readBody(req: IncomingMessage): Promise<unknown> {
 
 export class Router {
   private readonly routes: Route[] = []
+
+  constructor(private readonly maxBodyBytes = MAX_BODY_BYTES) {}
 
   on(method: string, path: string, handler: Handler): this {
     const names: string[] = []
@@ -101,7 +103,7 @@ export class Router {
           params,
           query: url.searchParams,
           body: () => {
-            body ??= readBody(req)
+            body ??= readBody(req, this.maxBodyBytes)
             return body
           },
         })

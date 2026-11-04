@@ -15,7 +15,8 @@
       "@aico/fleet",
       "@aico/notes",
       "@aico/tether-client",
-      "@aico/agent"
+      "@aico/agent",
+      "@aico/webtools"
     ],
     "db": [
       "web.db",
@@ -42,7 +43,8 @@
     "@aico/usage": "0.1.0",
     "ws": "8.22.0",
     "@aico/fleet": "0.1.0",
-    "@aico/agent": "0.1.0"
+    "@aico/agent": "0.1.0",
+    "@aico/webtools": "0.1.0"
   },
   "devDependencies": {
     "@types/ws": "8.18.2",

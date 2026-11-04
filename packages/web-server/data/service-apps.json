@@ -1,0 +1,136 @@
+{
+  "max_body_bytes": 8388608,
+  "apps": {
+    "portfolio-ai": {
+      "agents": {
+        "risk-manager": {
+          "model": "codex/gpt-6.1-sol",
+          "prompts": ["risk-manager-system-prompt"]
+        },
+        "equity-analyst": {
+          "model": "gemini-3.1-flash-lite",
+          "prompts": ["equity-analyst-system-prompt"]
+        },
+        "household-list-parser": {
+          "model": "gemini-3.5-flash-lite",
+          "prompts": ["household-list-parser-system-prompt"]
+        },
+        "household-receipt-vision": {
+          "model": "local/qwen3-vl:8b-instruct",
+          "prompts": ["household-receipt-vision-system-prompt"]
+        },
+        "credit-card-offer-reviewer": {
+          "model": "codex/gpt-6.1-sol",
+          "prompts": ["credit-card-offer-reviewer-system-prompt"]
+        },
+        "chat": {
+          "model": "gemini-3.5-flash-lite",
+          "prompts": ["chat-system-prompt", "workspace-search-discipline"]
+        },
+        "household-price-scout": {
+          "model": "gemini-3.8-flash",
+          "prompts": ["household-price-scout-system-prompt"]
+        },
+        "financial-document-reviewer": {
+          "model": "codex/gpt-6.1-sol",
+          "prompts": [
+            "financial-document-reviewer-system-prompt",
+            "financial-document-reviewer-money-rules",
+            "financial-document-reviewer-json-contract"
+          ]
+        },
+        "credit-card-researcher": {
+          "model": "codex/gpt-6.1-sol",
+          "prompts": ["credit-card-researcher-system-prompt"]
+        }
+      },
+      "prompts": [
+        "chat-system-prompt",
+        "credit-card-offer-reviewer-system-prompt",
+        "credit-card-researcher-system-prompt",
+        "equity-analyst-system-prompt",
+        "financial-document-reviewer-json-contract",
+        "financial-document-reviewer-money-rules",
+        "financial-document-reviewer-system-prompt",
+        "household-list-parser-system-prompt",
+        "household-price-scout-system-prompt",
+        "household-receipt-vision-system-prompt",
+        "household-transaction-audit-json-contract",
+        "household-transaction-audit-system-prompt",
+        "portfolio-thesis-generation-system",
+        "portfolio-thesis-generation-template",
+        "portfolio-thesis-validation-system",
+        "portfolio-thesis-validation-template",
+        "risk-manager-system-prompt",
+        "workspace-search-discipline"
+      ],
+      "machine": "apps"
+    },
+    "jobinator-4000": {
+      "agents": {
+        "jobs-prep": {
+          "model": "codex/gpt-6-luna",
+          "prompts": ["jobs-prep-system-prompt"]
+        },
+        "jobs-evaluator": {
+          "model": "gemini-3.8-flash",
+          "prompts": ["jobs-evaluator-system-prompt"]
+        },
+        "jobs-tailor": {
+          "model": "codex/gpt-6-luna",
+          "prompts": ["jobs-tailor-system-prompt"]
+        },
+        "jobs-cover-codex": {
+          "model": "codex/gpt-6.1-sol",
+          "prompts": ["jobs-cover-codex-system-prompt"]
+        },
+        "jobs-company": {
+          "model": "codex/gpt-6.1-sol",
+          "prompts": ["jobs-company-system-prompt"]
+        },
+        "jobs-screener": {
+          "model": "gemini-3.8-flash",
+          "prompts": ["jobs-screener-system-prompt"]
+        },
+        "jobs-critic-gemini": {
+          "model": "gemini-3.8-flash",
+          "prompts": ["jobs-critic-gemini-system-prompt"]
+        },
+        "jobs-tailor-gemini": {
+          "model": "gemini-3.8-flash",
+          "prompts": ["jobs-tailor-gemini-system-prompt"]
+        },
+        "jobs-cover": {
+          "model": "gemini-3.8-flash",
+          "prompts": ["jobs-cover-system-prompt"]
+        },
+        "jobs-evaluator-codex": {
+          "model": "codex/gpt-6.1-sol",
+          "prompts": ["jobs-evaluator-codex-system-prompt"]
+        },
+        "jobs-critic-codex": {
+          "model": "codex/gpt-6.1-sol",
+          "prompts": ["jobs-critic-codex-system-prompt"]
+        }
+      },
+      "prompts": [
+        "jobs-company-system-prompt",
+        "jobs-cover-codex-system-prompt",
+        "jobs-cover-system-prompt",
+        "jobs-critic-codex-system-prompt",
+        "jobs-critic-gemini-system-prompt",
+        "jobs-evaluator-codex-system-prompt",
+        "jobs-evaluator-system-prompt",
+        "jobs-prep-system-prompt",
+        "jobs-screener-system-prompt",
+        "jobs-tailor-gemini-system-prompt",
+        "jobs-tailor-system-prompt"
+      ],
+      "machine": "apps"
+    }
+  },
+  "evidence": {
+    "max_results": 5,
+    "max_chars": 12000
+  }
+}

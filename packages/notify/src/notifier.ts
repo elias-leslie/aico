@@ -18,6 +18,8 @@ export interface NotifierOptions {
 }
 
 export class Notifier {
+  private readonly pendingAsks = new Map<string, Promise<void>>()
+
   constructor(private readonly options: NotifierOptions) {}
 
   /** Takes a notice (NoticeError when it breaks the contract); the outbox and the ask follow on their own. */
@@ -36,11 +38,40 @@ export class Notifier {
     if (accepted.repeat) return accepted
     if (devices.length)
       void outbox.kick().catch((error) => log(`outbox pass failed: ${(error as Error).message}`))
-    void needsYou
+    const pending = needsYou
       .noticeAccepted(accepted.id, notice)
       .catch((error) =>
         log(`could not file the ask for ${accepted.id}: ${(error as Error).message}`),
       )
+    this.pendingAsks.set(accepted.id, pending)
+    void pending.finally(() => this.pendingAsks.delete(accepted.id))
     return accepted
+  }
+
+  /** Resolve after pending creation, so an in-flight ask cannot reopen the condition. */
+  async resolve(
+    source: string,
+    key: string,
+    text: string,
+  ): Promise<Accepted & { resolved: number }> {
+    const notices = this.options.store.forKey(source, key)
+    for (const stored of notices) {
+      await this.pendingAsks.get(stored.id)
+      await this.options.needsYou.noticeResolved(stored.id)
+    }
+    const accepted = this.receive(
+      {
+        v: 1,
+        source,
+        key,
+        kind: 'info',
+        severity: 'ok',
+        title: text.slice(0, 200),
+        body: text,
+        cooldown: 0,
+      },
+      'local',
+    )
+    return { ...accepted, resolved: notices.length }
   }
 }

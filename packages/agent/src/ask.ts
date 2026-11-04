@@ -70,6 +70,7 @@ export interface AskRequest {
   question: string
   schema?: unknown
   files?: string[]
+  images?: { data: string; mimeType: string }[]
   role?: string
   effort?: string
   cwd: string
@@ -346,6 +347,88 @@ async function viaAgy(
   return { outcome: { text: response, data: result.structured_output }, tokens }
 }
 
+/** Ollama's streaming chat API, with inline images and no tools. */
+async function viaOllama(
+  model: string,
+  prompt: string,
+  system: string,
+  req: AskRequest,
+  harness: Harness,
+  silenceMs: number,
+  egress: Egress,
+  env: NodeJS.ProcessEnv,
+): Promise<Answer> {
+  const base = env.AICO_OLLAMA_URL || harness.ask.ollama_url
+  const denied = transportRefusal(egress, model, base)
+  if (denied) return { outcome: denied, tokens: NO_TOKENS }
+  const controller = new AbortController()
+  let silent = false
+  let timer: NodeJS.Timeout | undefined
+  const arm = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      silent = true
+      controller.abort()
+    }, silenceMs)
+  }
+  arm()
+  try {
+    const res = await fetch(new URL('/api/chat', base), {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: model.replace(/^local\//, ''),
+        stream: true,
+        messages: [
+          { role: 'system', content: system },
+          {
+            role: 'user',
+            content: prompt,
+            ...(req.images?.length && { images: req.images.map((image) => image.data) }),
+          },
+        ],
+        ...(req.schema !== undefined && { format: req.schema }),
+      }),
+    })
+    if (!res.ok || !res.body) return failed(model, `Ollama HTTP ${res.status}`)
+    let buffer = '',
+      text = ''
+    const decoder = new TextDecoder()
+    let last: Record<string, unknown> | undefined
+    for await (const chunk of res.body) {
+      arm()
+      buffer += decoder.decode(chunk, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.trim()) continue
+        const part = JSON.parse(line) as Record<string, unknown>
+        if (part.error) return failed(model, String(part.error))
+        text += String((part.message as { content?: string } | undefined)?.content ?? '')
+        if (part.done) last = part
+      }
+    }
+    if (buffer.trim()) {
+      const part = JSON.parse(buffer) as Record<string, unknown>
+      if (part.error) return failed(model, String(part.error))
+      text += String((part.message as { content?: string } | undefined)?.content ?? '')
+      if (part.done) last = part
+    }
+    if (!last) return failed(model, 'Ollama ended without a final result')
+    if (last.model !== model.replace(/^local\//, ''))
+      return failed(model, 'Ollama returned a different model')
+    return {
+      outcome: { text },
+      tokens: { input: num(last.prompt_eval_count), output: num(last.eval_count) },
+    }
+  } catch (error) {
+    return silent ? silentOutcome(model, silenceMs) : failed(model, (error as Error).message)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const CLAUDE_API = 'anthropic-messages'
 
 /** pi-ai: a stream with no event for `silenceMs` is aborted. */
@@ -394,7 +477,18 @@ async function viaPi(
       model,
       {
         systemPrompt: system,
-        messages: [{ role: 'user', content: prompt, timestamp: Date.now() }],
+        messages: [
+          {
+            role: 'user',
+            content: req.images?.length
+              ? [
+                  { type: 'text', text: prompt },
+                  ...req.images.map((image) => ({ type: 'image' as const, ...image })),
+                ]
+              : prompt,
+            timestamp: Date.now(),
+          },
+        ],
       },
       {
         signal: controller.signal,
@@ -495,6 +589,24 @@ export async function ask(
   })
   const bad = (detail: string) => finish({ kind: 'bad_input', detail })
 
+  if (req.images !== undefined) {
+    if (!Array.isArray(req.images) || req.images.length > 4)
+      return bad('Send at most four inline images')
+    let bytes = 0
+    for (const image of req.images) {
+      if (
+        !image ||
+        typeof image.data !== 'string' ||
+        !/^(image\/(png|jpeg|webp|gif))$/.test(image.mimeType) ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(image.data) ||
+        !image.data.length
+      )
+        return bad('Invalid inline image')
+      bytes += Buffer.from(image.data, 'base64').length
+    }
+    if (bytes > harness.ask.max_image_bytes)
+      return bad(`Images exceed ${harness.ask.max_image_bytes} bytes`)
+  }
   const schema = req.schema === undefined ? undefined : compileSchema(req.schema)
   if (schema && 'error' in schema) return bad(`invalid schema: ${schema.error}`)
   let files = ''
@@ -518,6 +630,8 @@ export async function ask(
     if (denied) return finish(denied)
   }
 
+  if (req.images?.length && run !== 'pi-ai' && run !== 'ollama')
+    return bad('Inline images need a Codex or local model')
   const silenceMs = deps.silenceMs ?? harness.ask.wire_silence_seconds * 1000
   const system = [
     harness.ask.prompt,
@@ -536,7 +650,9 @@ export async function ask(
         ? await viaClaude(entry, `${system}\n\n${user}`, req, req.schema, deps, silenceMs, scratch)
         : run === 'agy'
           ? await viaAgy(entry, `${system}\n\n${user}`, req, req.schema, deps, silenceMs, scratch)
-          : await viaPi(entry, user, system, req, deps, harness, silenceMs, egress)
+          : run === 'ollama'
+            ? await viaOllama(entry.id, user, system, req, harness, silenceMs, egress, env)
+            : await viaPi(entry, user, system, req, deps, harness, silenceMs, egress)
   } finally {
     rmSync(scratch, { recursive: true, force: true })
   }

@@ -19,6 +19,8 @@ Environment=HOME=%h
 # backend's, read unchanged. Shares are accepted only from tether@default's
 # socket, so TETHER_SOCKET is deliberately not set here.
 EnvironmentFile=-%h/.config/credstore/a-term/env
+# LAN app listener address only; service-token hashes live in Aico secrets.
+EnvironmentFile=-%h/.config/aico/service-apps.env
 # Without the flag node:sqlite logs an ExperimentalWarning at every start.
 ExecStart=/usr/bin/env node --disable-warning=ExperimentalWarning __PROJECT_ROOT__/packages/web-server/dist/aico-web.mjs
 Restart=always

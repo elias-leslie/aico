@@ -295,6 +295,21 @@ describe('pi-ai models', () => {
     return { provider, models }
   }
 
+  it('sends inline document images to the model instead of dropping them', async () => {
+    const { provider, models } = faux()
+    const stream = vi.spyOn(provider.provider, 'streamSimple')
+    provider.setResponses([fauxAssistantMessage('read')])
+    const image = { data: 'eA==', mimeType: 'image/png' }
+    expect(kind(await ask(request('codex', { images: [image] }), { context, models }))).toBe('done')
+    expect(
+      stream.mock.calls[0]?.[1]?.messages.find((message) => message.role === 'user')?.content,
+    ).toContainEqual({
+      type: 'image',
+      ...image,
+    })
+    stream.mockRestore()
+  })
+
   it('identifies each OpenCode Go question with a session header', async () => {
     const provider = fauxProvider({
       provider: 'opencode-go',
@@ -378,6 +393,72 @@ describe('pi-ai models', () => {
     const result = await ask(request('codex'), { context, models, silenceMs: 300 })
     expect(result.outcome).toMatchObject({ kind: 'silent', model: 'codex/gpt-6.1-sol' })
     expect(Date.now() - started).toBeLessThan(3000)
+  })
+})
+
+describe('local receipt images', () => {
+  it('keeps the image on the local Ollama route and checks the structured answer', async () => {
+    const fetcher = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(
+          `${JSON.stringify({ message: { content: '{"answer":42}' } })}\n${JSON.stringify({ done: true, model: 'qwen3-vl:8b-instruct', prompt_eval_count: 7, eval_count: 3 })}\n`,
+        ),
+      )
+    try {
+      const result = await ask(
+        request('local/qwen-vl', {
+          schema: SCHEMA,
+          images: [{ data: 'eA==', mimeType: 'image/jpeg' }],
+        }),
+        { context },
+        { AICO_OLLAMA_URL: 'http://127.0.0.1:11434' },
+      )
+      expect(result.outcome).toMatchObject({
+        kind: 'done',
+        model: 'local/qwen3-vl:8b-instruct',
+        data: { answer: 42 },
+      })
+      expect(result.tokens).toEqual({ input: 7, output: 3 })
+      expect(String(fetcher.mock.calls[0]?.[0])).toBe('http://127.0.0.1:11434/api/chat')
+      expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toMatchObject({
+        model: 'qwen3-vl:8b-instruct',
+        format: SCHEMA,
+        messages: [{ role: 'system' }, { role: 'user', images: ['eA=='] }],
+      })
+    } finally {
+      fetcher.mockRestore()
+    }
+  })
+
+  it('refuses a local endpoint outside a contained role before making the request', async () => {
+    const fetcher = vi.spyOn(globalThis, 'fetch')
+    try {
+      const result = await ask(request('local/qwen-vl', { role: 'recon' }), { context })
+      expect(result.outcome).toMatchObject({ kind: 'refused', reason: 'egress_denied' })
+      expect(fetcher).not.toHaveBeenCalled()
+    } finally {
+      fetcher.mockRestore()
+    }
+  })
+
+  it('rejects malformed and oversized images before touching a provider', async () => {
+    for (const images of [
+      null,
+      [{ data: 'not base64', mimeType: 'image/png' }],
+      [{ data: 'eA==', mimeType: 'text/html' }],
+    ])
+      expect(kind(await ask(request('codex', { images }), { context }))).toBe('bad_input')
+    const harness = structuredClone(HARNESS)
+    harness.ask.max_image_bytes = 1
+    expect(
+      kind(
+        await ask(request('codex', { images: [{ data: 'eHg=', mimeType: 'image/png' }] }), {
+          context,
+          harness,
+        }),
+      ),
+    ).toBe('bad_input')
   })
 })
 

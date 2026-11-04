@@ -170,6 +170,14 @@ export class NotifyStore {
     return rows.map((row) => this.present(row))
   }
 
+  /** Notices for one sender's standing condition, newest first. */
+  forKey(source: string, key: string): StoredNotice[] {
+    const rows = this.db
+      .prepare('SELECT * FROM notices WHERE source = ? AND key = ? ORDER BY received_at DESC, id')
+      .all(source, key) as unknown as NoticeRow[]
+    return rows.map((row) => this.present(row))
+  }
+
   private present(row: NoticeRow): StoredNotice {
     const deliveries = this.db
       .prepare(

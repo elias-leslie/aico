@@ -138,14 +138,19 @@
       },
       "gemini": {
         "run": "agy"
+      },
+      "local": {
+        "run": "ollama"
       }
     },
-    "prompt": "Answer from your own knowledge and the text given here only. You have no tools and must not call any."
+    "prompt": "Answer from your own knowledge and the text given here only. You have no tools and must not call any.",
+    "max_image_bytes": 4000000,
+    "ollama_url": "http://localhost:11434"
   },
   "chat": {
     "default_role": "implementation",
     "prompt": [
-      "In this Aico chat, put a question that needs the owner’s answer in Needs you by running `tether ask create \"Question\" --option \"First\" --option \"Second\" --recommend 1` with bash; use the actual question and choices, omit choices for a free-text answer, then end your turn. The answer arrives as a new chat message."
+      "In this Aico chat, put a question that needs the owner\u2019s answer in Needs you by running `tether ask create \"Question\" --option \"First\" --option \"Second\" --recommend 1` with bash; use the actual question and choices, omit choices for a free-text answer, then end your turn. The answer arrives as a new chat message."
     ],
     "roles": {
       "implementation": "Build and fix code in this project.",

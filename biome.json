@@ -924,11 +924,9 @@
                       "@aico/ui-kit",
                       "@aico/ui-kit/**",
                       "@aico/web-frontend",
-                      "@aico/web-frontend/**",
-                      "@aico/webtools",
-                      "@aico/webtools/**"
+                      "@aico/web-frontend/**"
                     ],
-                    "message": "@aico/web-server (layer 5): import only @aico/shared, @aico/context, @aico/notify, @aico/status, @aico/usage, @aico/fleet, @aico/notes, @aico/tether-client, @aico/agent (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/web-server (layer 5): import only @aico/shared, @aico/context, @aico/notify, @aico/status, @aico/usage, @aico/fleet, @aico/notes, @aico/tether-client, @aico/agent, @aico/webtools (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
