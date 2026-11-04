@@ -180,6 +180,23 @@ const start = async () => {
   return res.body.id as string
 }
 describe('Aico chat routes', () => {
+  it.each(['chat', 'asks'])(
+    'keeps an unrelated composer draft when an option is answered through %s',
+    async (surface) => {
+      const id = await start()
+      const file = await attachment()
+      chats.draft(id, 'My next message', [file])
+      questions = [question(id)]
+      first.setResponses([fauxAssistantMessage('First selected')])
+      const path =
+        surface === 'chat' ? `/api/chat/${id}/answer` : `/api/asks/${questions[0]?.id}/answer`
+      const response = await call('POST', path, { ask: questions[0]?.id, option: 0 })
+      expect(response.status).toBe(200)
+      await chats.settled(id)
+      expect(chats.get(id)).toMatchObject({ draft: 'My next message', draftAttachments: [file] })
+    },
+  )
+
   it('keeps a failed attachment visible and retries it with its original prompt', async () => {
     const id = await start()
     const file = await attachment()
@@ -323,6 +340,7 @@ describe('Aico chat routes', () => {
     const id = await start()
     questions = [question(id)]
     const message = 'Keep the original copy.\n' + 'This is the reason. '.repeat(80)
+    chats.draft(id, message)
     first.setResponses([fauxAssistantMessage('Understood')])
     expect(
       (await call('POST', `/api/chat/${id}/answer`, { ask: questions[0]?.id, message })).status,
@@ -331,6 +349,7 @@ describe('Aico chat routes', () => {
     expect(JSON.stringify(chats.get(id).messages)).toContain(
       JSON.stringify(message.trim()).slice(1, -1),
     )
+    expect(chats.get(id).draft).toBe('')
   })
   it('uses the chosen model and effort to finish after a model swap', async () => {
     const id = await start()

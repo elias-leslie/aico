@@ -180,7 +180,14 @@ export function registerChatRoutes(
       }
       const attachments = chatAttachmentIds(body.attachments, captures)
       await asks.answer(question.id, reply)
-      chats.answer(ctx.params.id, question.id, question.question, full, attachments)
+      chats.answer(
+        ctx.params.id,
+        question.id,
+        question.question,
+        full,
+        attachments,
+        typeof body.option !== 'number',
+      )
       await asks.act(question.id, 'done')
       chats.changed(ctx.params.id)
       return view(ctx.params.id)

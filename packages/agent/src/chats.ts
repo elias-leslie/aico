@@ -374,7 +374,14 @@ export class ChatSessions {
     await this.push(id)
     return this.get(id)
   }
-  answer(id: string, askId: string, question: string, answer: string, attachments: string[] = []) {
+  answer(
+    id: string,
+    askId: string,
+    question: string,
+    answer: string,
+    attachments: string[] = [],
+    consumesDraft = false,
+  ) {
     const row = this.row(id)
     if (row.state === 'ended') return
     const inserted = this.db
@@ -389,6 +396,10 @@ export class ChatSessions {
         undefined,
         attachments,
       )
+      if (!consumesDraft) {
+        this.draft(id, row.draft, parse<string[]>(row.draft_attachments, []))
+        this.changed(id)
+      }
     } catch (error) {
       this.db.prepare('DELETE FROM chat_answers WHERE ask_id = ?').run(askId)
       throw error
