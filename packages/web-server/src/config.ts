@@ -37,6 +37,8 @@ export interface WebConfig {
   export: ExportConfig
   /** How often aico-web reports its own Status rows (`AICO_STATUS_HEARTBEAT_SECONDS`). */
   status: { heartbeatMs: number }
+  /** Owner notices (notify.ts): the phone push files, the outbox pace, the OmniNull hub's door. */
+  notify: NotifyConfig
   sync: SyncConfig
   vision: VisionSettings
   /** The capture type table's override file (the default table ships with Aico). */
@@ -54,6 +56,35 @@ export interface WebConfig {
   nightshiftUrl: string | null
   uploads: UploadConfig
   maintenance: MaintenanceConfig
+}
+
+export interface NotifyConfig {
+  /** The FCM access token Nightshift's root timer mints (ns-20); read to send, never logged. */
+  fcmTokenFile: string
+  /** The paired phones: FCM token and push keys per phone. */
+  devicesFile: string
+  /** How often the outbox looks for due sends and writes its Status row. */
+  passMs: number
+  ominull: {
+    /** The keys the hub may send as X-API-Key, as sha256 hashes: `{"keys": [{"name", "sha256"}]}`. */
+    keysFile: string
+    /** A private LAN address (`host:port`) where the hub's pushes are also taken; null: loopback only. */
+    listen: { host: string; port: number } | null
+    /** The Nightshift site file whose `ominull` ingest source names the hub's URL and CA. */
+    siteFile: string
+    /** The key the hub's verdict route takes (0600, yours); read to send, never logged. */
+    relayKeyFile: string
+  }
+}
+
+const PRIVATE_V4 = /^(10\.\d{1,3}|192\.168|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}$/
+
+/** `host:port` on a private IPv4 address, else null (the hub's door is never on a public address). */
+export function privateListen(value: string | undefined): { host: string; port: number } | null {
+  const match = /^([\d.]+):(\d{1,5})$/.exec(value?.trim() ?? '')
+  if (!match || !PRIVATE_V4.test(match[1] as string)) return null
+  const port = Number(match[2])
+  return port > 0 && port < 65536 ? { host: match[1] as string, port } : null
 }
 
 export interface UploadConfig {
@@ -164,9 +195,12 @@ const DEFAULT_BLOB_GRACE_DAYS = 7
 // The nightly export: the remote and folder names scripts/authorize-notes-drive.sh and the Drive copy agree on.
 const DEFAULT_EXPORT_REMOTE = 'aico-notes-drive'
 const DEFAULT_EXPORT_FOLDER = 'SummitFlow-Notes'
-// The export timer runs daily; its Status row is late an hour after the next run was due.
-const DEFAULT_EXPORT_DUE_HOURS = 25
 const DEFAULT_STATUS_HEARTBEAT_SECONDS = 5 * 60
+// Where Nightshift keeps the phone push files today (re-pairing into Aico comes with the tray and phone move).
+const DEFAULT_FCM_TOKEN_FILE = '/var/lib/nightshift/fcm/token.json'
+const DEFAULT_PHONE_DEVICES_FILE = '/var/lib/nightshift/web/app-devices.json'
+const DEFAULT_NOTIFY_PASS_SECONDS = 30
+const DEFAULT_OMINULL_SITE = '/etc/nightshift/site.json'
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
 const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
@@ -344,11 +378,28 @@ export function loadConfig(
       remote: env.AICO_EXPORT_REMOTE?.trim() || DEFAULT_EXPORT_REMOTE,
       folder: env.AICO_EXPORT_FOLDER?.trim() || DEFAULT_EXPORT_FOLDER,
       deferTo: env.AICO_EXPORT_DEFER_TO?.trim() || null,
-      dueMs: positiveInt(env.AICO_EXPORT_DUE_HOURS, DEFAULT_EXPORT_DUE_HOURS) * 3_600_000,
     },
     status: {
       heartbeatMs:
         positiveInt(env.AICO_STATUS_HEARTBEAT_SECONDS, DEFAULT_STATUS_HEARTBEAT_SECONDS) * 1000,
+    },
+    notify: {
+      fcmTokenFile: env.AICO_FCM_TOKEN_FILE?.trim() || DEFAULT_FCM_TOKEN_FILE,
+      devicesFile: env.AICO_PHONE_DEVICES_FILE?.trim() || DEFAULT_PHONE_DEVICES_FILE,
+      passMs: positiveInt(env.AICO_NOTIFY_PASS_SECONDS, DEFAULT_NOTIFY_PASS_SECONDS) * 1000,
+      ominull: {
+        keysFile: resolve(
+          expandHome(env.AICO_OMINULL_KEYS?.trim() || '~/.config/aico/ominull-keys.json', home),
+        ),
+        listen: privateListen(env.AICO_OMINULL_LISTEN),
+        siteFile: env.AICO_OMINULL_SITE?.trim() || DEFAULT_OMINULL_SITE,
+        relayKeyFile: resolve(
+          expandHome(
+            env.AICO_OMINULL_RELAY_KEY?.trim() || '~/.config/nightshift/ominull-relay.key',
+            home,
+          ),
+        ),
+      },
     },
     sync: {
       tombstoneMs: positiveInt(env.AICO_SYNC_TOMBSTONE_DAYS, DEFAULT_TOMBSTONE_DAYS) * 86_400_000,

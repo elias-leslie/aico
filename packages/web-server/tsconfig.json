@@ -23,6 +23,9 @@
     },
     {
       "path": "../context"
+    },
+    {
+      "path": "../notify"
     }
   ]
 }

@@ -4,7 +4,7 @@ import { type StatusRow, StatusStore } from '@aico/status'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Router } from './http'
 import { createWebServer } from './server'
-import { exportRow, registerStatusRoutes, startSelfRows } from './status'
+import { registerStatusRoutes, startSelfRows } from './status'
 import { formatStatus, runStatusCli, type StatusCliIo, when } from './status-cli'
 import type { TerminalHub } from './terminal'
 
@@ -191,23 +191,6 @@ describe("aico-web's own rows", () => {
     expect(web).toMatchObject({ state: 'off', meaning: 'Stopped (SIGTERM).' })
     expect(web?.next_run).toBeUndefined()
     store.close()
-  })
-
-  it('turns an export result into its row', () => {
-    const due = 25 * 3_600_000
-    expect(
-      exportRow('here', { status: 'uploaded', message: 'Copied 3 notes.' }, NOW, due),
-    ).toMatchObject({
-      id: 'here/notes-export',
-      kind: 'job',
-      state: 'ok',
-      meaning: 'Copied 3 notes.',
-      last_run: '2026-11-03T12:00:00.000Z',
-      next_run: '2026-11-04T13:00:00.000Z',
-    })
-    expect(
-      exportRow('here', { status: 'no-login', message: 'No Drive login.' }, NOW, due).state,
-    ).toBe('failed')
   })
 })
 

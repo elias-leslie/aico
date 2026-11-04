@@ -1,0 +1,28 @@
+{
+  "name": "@aico/notify",
+  "version": "0.1.0",
+  "description": "Owner notices (contracts/notice.schema.json): the notice log and the outbox in notify.db, the FCM phone sender, and Needs you through Tether asks.",
+  "private": true,
+  "license": "Apache-2.0",
+  "aico": {
+    "layer": 2,
+    "imports": [
+      "@aico/store",
+      "@aico/status"
+    ],
+    "db": [
+      "notify.db"
+    ]
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aico/status": "0.1.0",
+    "@aico/store": "0.1.0"
+  }
+}

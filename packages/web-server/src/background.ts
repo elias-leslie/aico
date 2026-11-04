@@ -86,6 +86,8 @@ export interface BackgroundDeps {
   maintenance: MaintenanceConfig
   /** The open terminals, which follow the same stream. */
   forward?(event: TetherEvent): void
+  /** Told of each ask change from the owner's Tether (Needs you acts on answers to its asks). */
+  askChanged?(data: unknown): Promise<void>
   /** Runs on each maintenance pass (startup and interval): retries hand-offs that are waiting. */
   tick?(): Promise<void>
 }
@@ -154,7 +156,12 @@ export class Background {
     if (event.type === 'show.requested') {
       if (pushDoor) await this.deps.shows.receive(data)
     } else if (event.type === 'asks.changed') {
-      if (pushDoor) await this.deps.asks?.receive(data)
+      if (pushDoor) {
+        await this.deps.askChanged?.(data).catch((error: unknown) => {
+          console.error('[aico-web] Needs you on an ask change failed:', (error as Error).message)
+        })
+        await this.deps.asks?.receive(data)
+      }
     } else if (event.type === 'session.ended') {
       if (id && store.unlink(id))
         console.log(`[aico-web] view link dropped session=${id} reason=session.ended`)

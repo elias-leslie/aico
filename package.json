@@ -8,6 +8,9 @@
     "sameLayerImports": {
       "@aico/web-frontend": [
         "@aico/ui-kit"
+      ],
+      "@aico/notify": [
+        "@aico/status"
       ]
     }
   },

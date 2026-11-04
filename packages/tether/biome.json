@@ -40,8 +40,12 @@
                     "group": [
                       "@aico/context",
                       "@aico/context/**",
+                      "@aico/jobs",
+                      "@aico/jobs/**",
                       "@aico/notes",
                       "@aico/notes/**",
+                      "@aico/notify",
+                      "@aico/notify/**",
                       "@aico/status",
                       "@aico/status/**",
                       "@aico/store",

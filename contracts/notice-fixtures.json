@@ -1,0 +1,291 @@
+{
+  "description": "Replay fixtures for contracts/notice.schema.json. valid: notices every validator accepts, with `expect` the notice as read (defaults filled in: kind alert, severity info, push phone for warning and critical else tray, cooldown 3600, fields and actions empty lists, primary empty; a todo below warning is raised to warning). invalid: notices every validator refuses, naming `field` (`notice` for the whole value). The hub fixture is the shape the OmniNull hub sends (alert ids in the key).",
+  "version": 1,
+  "valid": [
+    {
+      "name": "smallest notice",
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "title": "Backup finished",
+        "body": "All 65 sources copied."
+      },
+      "expect": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "info",
+        "title": "Backup finished",
+        "body": "All 65 sources copied.",
+        "fields": [],
+        "actions": [],
+        "primary": "",
+        "push": "tray",
+        "cooldown": 3600
+      }
+    },
+    {
+      "name": "OmniNull hub alert",
+      "notice": {
+        "v": 1,
+        "source": "ominull",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "New outbound connection from codex on davion-sidarli",
+        "body": "codex reached 203.0.113.9:443, a place it has not talked to before.",
+        "detail": "Seen 2026-11-03 20:15 UTC. The hub found no rule that explains it.",
+        "key": "alerts:7c1d2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f",
+        "fields": [
+          { "label": "Host", "value": "davion-sidarli" },
+          { "label": "Program", "value": "codex" }
+        ],
+        "actions": ["expected", "not-expected"],
+        "primary": "not-expected"
+      },
+      "expect": {
+        "v": 1,
+        "source": "ominull",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "New outbound connection from codex on davion-sidarli",
+        "body": "codex reached 203.0.113.9:443, a place it has not talked to before.",
+        "detail": "Seen 2026-11-03 20:15 UTC. The hub found no rule that explains it.",
+        "key": "alerts:7c1d2e3f-0a4b-4c5d-8e6f-1a2b3c4d5e6f",
+        "fields": [
+          { "label": "Host", "value": "davion-sidarli" },
+          { "label": "Program", "value": "codex" }
+        ],
+        "actions": ["expected", "not-expected"],
+        "primary": "not-expected",
+        "push": "phone",
+        "cooldown": 3600
+      }
+    },
+    {
+      "name": "every field; an info todo is raised to warning and stays on the desktop",
+      "notice": {
+        "v": 1,
+        "source": "portfolio-ai",
+        "kind": "todo",
+        "severity": "info",
+        "title": "Approve the new budget",
+        "body": "November's budget is ready.",
+        "detail": "Three lines changed since October.",
+        "key": "budget:2026-11",
+        "open": "https://port.summitflow.dev/budget",
+        "command": "st portfolio budget show",
+        "fields": [{ "label": "Month", "value": "November" }],
+        "actions": ["done", "open"],
+        "primary": "done",
+        "push": "tray",
+        "cooldown": 0,
+        "expires": 86400,
+        "if_ignored": "  the old budget stays in force  "
+      },
+      "expect": {
+        "v": 1,
+        "source": "portfolio-ai",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "Approve the new budget",
+        "body": "November's budget is ready.",
+        "detail": "Three lines changed since October.",
+        "key": "budget:2026-11",
+        "open": "https://port.summitflow.dev/budget",
+        "command": "st portfolio budget show",
+        "fields": [{ "label": "Month", "value": "November" }],
+        "actions": ["done", "open"],
+        "primary": "done",
+        "push": "tray",
+        "cooldown": 0,
+        "expires": 86400,
+        "if_ignored": "the old budget stays in force"
+      }
+    },
+    {
+      "name": "a question answered in Aico",
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "question",
+        "severity": "warning",
+        "title": "An agent is waiting on you",
+        "body": "A session has a question for you.",
+        "key": "ask:0123456789ab",
+        "open": "https://aico.summitflow.dev/?ask=0123456789ab",
+        "actions": ["answer"]
+      },
+      "expect": {
+        "v": 1,
+        "source": "aico",
+        "kind": "question",
+        "severity": "warning",
+        "title": "An agent is waiting on you",
+        "body": "A session has a question for you.",
+        "key": "ask:0123456789ab",
+        "open": "https://aico.summitflow.dev/?ask=0123456789ab",
+        "fields": [],
+        "actions": ["answer"],
+        "primary": "",
+        "push": "phone",
+        "cooldown": 3600
+      }
+    }
+  ],
+  "invalid": [
+    { "name": "not an object", "notice": ["v", 1], "field": "notice" },
+    {
+      "name": "unknown field",
+      "notice": { "v": 1, "source": "aico", "title": "T", "body": "B", "colour": "red" },
+      "field": "colour"
+    },
+    {
+      "name": "wrong version",
+      "notice": { "v": 2, "source": "aico", "title": "T", "body": "B" },
+      "field": "v"
+    },
+    {
+      "name": "version as text",
+      "notice": { "v": "1", "source": "aico", "title": "T", "body": "B" },
+      "field": "v"
+    },
+    { "name": "no source", "notice": { "v": 1, "title": "T", "body": "B" }, "field": "source" },
+    {
+      "name": "source with capitals",
+      "notice": { "v": 1, "source": "Aico", "title": "T", "body": "B" },
+      "field": "source"
+    },
+    {
+      "name": "empty title",
+      "notice": { "v": 1, "source": "aico", "title": "", "body": "B" },
+      "field": "title"
+    },
+    { "name": "no body", "notice": { "v": 1, "source": "aico", "title": "T" }, "field": "body" },
+    {
+      "name": "unfilled template field",
+      "notice": { "v": 1, "source": "aico", "title": "Old kernel {running}", "body": "B" },
+      "field": "title"
+    },
+    {
+      "name": "unknown kind",
+      "notice": { "v": 1, "source": "aico", "title": "T", "body": "B", "kind": "news" },
+      "field": "kind"
+    },
+    {
+      "name": "unknown severity",
+      "notice": { "v": 1, "source": "aico", "title": "T", "body": "B", "severity": "high" },
+      "field": "severity"
+    },
+    {
+      "name": "key with a space",
+      "notice": { "v": 1, "source": "aico", "title": "T", "body": "B", "key": "a b" },
+      "field": "key"
+    },
+    {
+      "name": "open over http",
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "title": "T",
+        "body": "B",
+        "open": "http://aico.local/"
+      },
+      "field": "open"
+    },
+    {
+      "name": "command on two lines",
+      "notice": { "v": 1, "source": "aico", "title": "T", "body": "B", "command": "ls\nrm" },
+      "field": "command"
+    },
+    {
+      "name": "too many fields",
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "title": "T",
+        "body": "B",
+        "fields": [
+          { "label": "1", "value": "a" },
+          { "label": "2", "value": "a" },
+          { "label": "3", "value": "a" },
+          { "label": "4", "value": "a" },
+          { "label": "5", "value": "a" },
+          { "label": "6", "value": "a" },
+          { "label": "7", "value": "a" },
+          { "label": "8", "value": "a" },
+          { "label": "9", "value": "a" }
+        ]
+      },
+      "field": "fields"
+    },
+    {
+      "name": "unknown action",
+      "notice": { "v": 1, "source": "aico", "title": "T", "body": "B", "actions": ["approve"] },
+      "field": "actions"
+    },
+    {
+      "name": "expected without a key",
+      "notice": { "v": 1, "source": "aico", "title": "T", "body": "B", "actions": ["expected"] },
+      "field": "actions"
+    },
+    {
+      "name": "expected on a todo",
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "todo",
+        "title": "T",
+        "body": "B",
+        "key": "k",
+        "actions": ["expected"]
+      },
+      "field": "actions"
+    },
+    {
+      "name": "answer without an Aico ask link",
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "question",
+        "title": "T",
+        "body": "B",
+        "actions": ["answer"]
+      },
+      "field": "actions"
+    },
+    {
+      "name": "primary not among the actions",
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "title": "T",
+        "body": "B",
+        "actions": ["open"],
+        "primary": "done"
+      },
+      "field": "primary"
+    },
+    {
+      "name": "info to the phone",
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "title": "T",
+        "body": "B",
+        "severity": "info",
+        "push": "phone"
+      },
+      "field": "push"
+    },
+    {
+      "name": "cooldown past a week",
+      "notice": { "v": 1, "source": "aico", "title": "T", "body": "B", "cooldown": 604801 },
+      "field": "cooldown"
+    },
+    {
+      "name": "expires under a minute",
+      "notice": { "v": 1, "source": "aico", "title": "T", "body": "B", "expires": 30 },
+      "field": "expires"
+    }
+  ]
+}

@@ -21,6 +21,7 @@ import { registerNightshiftRoutes } from './nightshift'
 import { NightshiftRelay, registerNightshiftStream } from './nightshift-stream'
 import { NotesStore } from './notes-db'
 import { registerExportRoutes } from './notes-export'
+import { NotifyHub } from './notify'
 import { NotesOwner } from './owners/notes'
 import { PortfolioAiOwner } from './owners/portfolio-ai'
 import type { OwnerAdapter } from './owners/types'
@@ -28,7 +29,7 @@ import { VehiclesOwner } from './owners/vehicles'
 import { createWebServer } from './server'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
-import { exportRow, registerStatusRoutes, startSelfRows } from './status'
+import { registerStatusRoutes, startSelfRows } from './status'
 import { registerSyncRoutes, startSync } from './sync/start'
 import { TerminalHub } from './terminal'
 
@@ -44,6 +45,14 @@ function serve(): void {
   const machine = machineId()
 
   const tether = new TetherClient(config.tetherSocket)
+  const notify = new NotifyHub({
+    config: config.notify,
+    dataDir: config.dataDir,
+    publicHost: config.publicHost,
+    machine,
+    status,
+    tether,
+  })
   const terminals = new TerminalHub({
     tether,
     historyLines: HISTORY_LINES,
@@ -93,6 +102,7 @@ function serve(): void {
     uploads: config.uploads,
     maintenance: config.maintenance,
     forward: (event) => terminals.event(event),
+    askChanged: (data) => notify.askChanged(data),
     tick: () => router.tick(),
   })
   const api = buildApi({
@@ -115,14 +125,9 @@ function serve(): void {
   registerNightshiftRoutes(api, config)
   const sync = startSync({ config, store, notes, blobsDir })
   registerSyncRoutes(api, sync.loop)
-  registerStatusRoutes(api, status)
-  registerExportRoutes(api, config, sync.loop, (result) => {
-    try {
-      status.upsert([exportRow(machine, result, Date.now(), config.export.dueMs)])
-    } catch (error) {
-      console.error('[aico-web] notes export status row failed:', error)
-    }
-  })
+  registerStatusRoutes(api, status, notify)
+  notify.register(api)
+  registerExportRoutes(api, config, sync.loop)
   const nightshift = new NightshiftRelay(config)
   registerNightshiftStream(api, nightshift)
   const server = createWebServer(
@@ -136,6 +141,7 @@ function serve(): void {
   )
 
   background.start()
+  notify.start()
   reader.start()
   let selfRows: ReturnType<typeof startSelfRows> | null = null
   server.listen(config.port, config.host, () => {
@@ -158,6 +164,7 @@ function serve(): void {
     reader.stop()
     terminals.stop()
     nightshift.stop()
+    notify.stop()
     sync.stop()
     server.close(() => {
       store.close()

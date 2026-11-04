@@ -24,7 +24,6 @@ import {
 } from '@aico/status'
 import { fromThisMachine } from './guard'
 import type { Router } from './http'
-import type { ExportResult } from './notes-export'
 import { HttpError } from './tether'
 
 /** Most rows one POST may carry. */
@@ -80,19 +79,32 @@ function requireThisMachine(req: Parameters<typeof fromThisMachine>[0]): void {
     throw new HttpError(403, 'Status rows are written only by programs on this machine (loopback)')
 }
 
-export function registerStatusRoutes(router: Router, status: StatusStore): void {
+/** Told of each write (Needs you raises or withdraws a row's ask). */
+export interface RowsChanged {
+  rowsWritten(rows: readonly StatusRow[]): void
+  rowRemoved(id: string): void
+}
+
+export function registerStatusRoutes(
+  router: Router,
+  status: StatusStore,
+  changed?: RowsChanged,
+): void {
   router.on('GET', '/api/status', (ctx) => status.read(filterFrom(ctx.query)))
   router.on('POST', '/api/status/rows', async (ctx) => {
     requireThisMachine(ctx.req)
     const rows = parseRows(await ctx.body())
     status.upsert(rows)
+    changed?.rowsWritten(rows)
     return { written: rows.length }
   })
   router.on('DELETE', '/api/status/rows', (ctx) => {
     requireThisMachine(ctx.req)
     const id = ctx.query.get('id')
     if (!id) throw new HttpError(422, 'id is required')
-    return { removed: status.remove(id) }
+    const removed = status.remove(id)
+    if (removed) changed?.rowRemoved(id)
+    return { removed }
   })
 }
 
@@ -100,7 +112,6 @@ export function registerStatusRoutes(router: Router, status: StatusStore): void 
 
 const PROJECT = 'aico'
 const WEB_UNIT = 'aico-web.service'
-const EXPORT_UNIT = 'aico-notes-export.service'
 
 export interface SelfRowOptions {
   status: Pick<StatusStore, 'upsert'>
@@ -171,29 +182,5 @@ export function startSelfRows(options: SelfRowOptions): { stop(reason: string): 
         console.error('[aico-web] status stop row failed:', error)
       }
     },
-  }
-}
-
-/** The notes export's row after a run: failed when it could not copy, else ok. */
-export function exportRow(
-  hostName: string,
-  result: ExportResult,
-  now: number,
-  dueMs: number,
-): StatusRow {
-  return {
-    id: `${hostName}/notes-export`,
-    what: 'Notes export to Drive',
-    kind: 'job',
-    machine: hostName,
-    project: PROJECT,
-    state: result.status === 'uploaded' || result.status === 'skipped' ? 'ok' : 'failed',
-    meaning: result.message.slice(0, 300) || 'Finished.',
-    last_run: new Date(now).toISOString(),
-    next_run: new Date(now + dueMs).toISOString(),
-    actions: [
-      { kind: 'run', ref: `systemctl --user start ${EXPORT_UNIT}` },
-      { kind: 'log', ref: `journalctl --user -u ${EXPORT_UNIT} -u ${WEB_UNIT}` },
-    ],
   }
 }

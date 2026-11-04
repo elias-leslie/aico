@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aico/notice",
+  "title": "Notice v1 (an owner notification)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "source", "title", "body"],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+      "description": "the sending project (its ST project name)"
+    },
+    "kind": {
+      "enum": ["alert", "todo", "question", "info"],
+      "default": "alert",
+      "description": "alert: something happened; todo: the owner should do something; question: an agent asks (answered in Aico, needs open with ?ask=); info: for the record"
+    },
+    "severity": {
+      "enum": ["critical", "warning", "info", "ok"],
+      "default": "info"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "detail": {
+      "type": "string",
+      "maxLength": 4000,
+      "description": "longer text for the item's page and card"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/@+=,-]{0,199}$",
+      "description": "what this is about: a repeat of an open notice's key from the same source stays quiet for cooldown"
+    },
+    "open": {
+      "type": "string",
+      "pattern": "^https://",
+      "maxLength": 300,
+      "description": "the item's own place; Open goes there"
+    },
+    "command": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "one command the owner may run (Copy)"
+    },
+    "fields": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "value"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "expected",
+          "not-expected",
+          "mute",
+          "look-into",
+          "answer",
+          "open",
+          "done",
+          "mark-read"
+        ]
+      }
+    },
+    "primary": {
+      "enum": [
+        "expected",
+        "not-expected",
+        "mute",
+        "look-into",
+        "answer",
+        "open",
+        "done",
+        "mark-read"
+      ]
+    },
+    "push": {
+      "enum": ["phone", "tray"],
+      "description": "phone: the phone too; tray: the desktop only. Default: phone for warning and critical, tray for info and ok"
+    },
+    "cooldown": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 604800,
+      "description": "seconds a repeat of the key stays quiet (default 3600)"
+    },
+    "expires": {
+      "type": "number",
+      "minimum": 60,
+      "maximum": 604800,
+      "description": "seconds after sending when it ends by itself (a time-bound announcement): it leaves the tray and its page says it ended"
+    },
+    "if_ignored": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "description": "one line: what happens if the owner does nothing (shown with the item)"
+    }
+  },
+  "description": "What a sender gives Aico to tell the owner something: the same object as Nightshift's notice contract v1 (`nightshift push --json`), so senders and the OmniNull hub keep their JSON. Local programs POST one to aico-web on loopback (POST /api/notices); the OmniNull hub POSTs notices and its own Status rows to POST /api/ominull/push with its key. packages/notify checks it (notice.ts) and replays contracts/notice-fixtures.json. A notice that asks the owner something (kind question or todo, or an alert offering expected/not-expected) shows in Needs you as a Tether ask. An OmniNull alert names the hub's alert ids in its key ('alerts:<id>[,<id>...]'); the owner's 'That was me' sends those ids to the hub's verdict route."
+}

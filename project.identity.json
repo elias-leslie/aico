@@ -31,7 +31,9 @@
   },
   "services": {
     "backend": "aico-web.service",
-    "default_workers": [],
+    "default_workers": [
+      "aico-jobs.service"
+    ],
     "optional_workers": [],
     "manual_workers": [
       "tether@default.service"

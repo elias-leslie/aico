@@ -52,7 +52,7 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 PI_COORD_SOURCE="${ST_PI_COORD_EXTENSION:-$HOME/.summitflow/services/projects/summitflow/current/source/scripts/lib/pi-coord-extension.ts}"
 PI_COORD_LINK="$HOME/.pi/agent/extensions/st-coord.ts"
 # Started by --start.
-START_UNITS=(tether@default.service aico-web.service aico-state-snapshot.timer aico-notes-export.timer)
+START_UNITS=(tether@default.service aico-web.service aico-jobs.service aico-state-snapshot.timer)
 
 fail() {
   echo "install: $*" >&2

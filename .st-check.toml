@@ -137,6 +137,36 @@ quick_paths = ["packages/fleet/**", "packages/tether-client/**", "package.json",
 argv = ["node_modules/.bin/depcruise", "packages/fleet", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
 
 [[native.stages]]
+id = "biome-jobs"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "biome"
+quick = true
+quick_paths = ["packages/jobs/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+argv = ["node_modules/.bin/biome", "check", "packages/jobs"]
+
+[[native.stages]]
+id = "tsc-jobs"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "tsc"
+quick = true
+quick_paths = ["packages/jobs/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+argv = ["node_modules/.bin/tsc", "-b", "packages/jobs"]
+
+[[native.stages]]
+id = "depcruise-jobs"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "depcruise"
+quick = true
+quick_paths = ["packages/jobs/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
+argv = ["node_modules/.bin/depcruise", "packages/jobs", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
+
+[[native.stages]]
 id = "biome-notes"
 kind = "check"
 coverage = "focused"
@@ -165,6 +195,36 @@ covered_by = "depcruise"
 quick = true
 quick_paths = ["packages/notes/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
 argv = ["node_modules/.bin/depcruise", "packages/notes", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
+
+[[native.stages]]
+id = "biome-notify"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "biome"
+quick = true
+quick_paths = ["packages/notify/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
+argv = ["node_modules/.bin/biome", "check", "packages/notify"]
+
+[[native.stages]]
+id = "tsc-notify"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "tsc"
+quick = true
+quick_paths = ["packages/notify/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
+argv = ["node_modules/.bin/tsc", "-b", "packages/notify"]
+
+[[native.stages]]
+id = "depcruise-notify"
+kind = "check"
+coverage = "focused"
+required = false
+covered_by = "depcruise"
+quick = true
+quick_paths = ["packages/notify/**", "packages/status/**", "packages/store/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
+argv = ["node_modules/.bin/depcruise", "packages/notify", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
 
 [[native.stages]]
 id = "biome-shared"
@@ -383,7 +443,7 @@ coverage = "focused"
 required = false
 covered_by = "biome"
 quick = true
-quick_paths = ["packages/context/**", "packages/notes/**", "packages/shared/**", "packages/status/**", "packages/store/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-server/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
+quick_paths = ["packages/context/**", "packages/notes/**", "packages/notify/**", "packages/shared/**", "packages/status/**", "packages/store/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-server/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
 argv = ["node_modules/.bin/biome", "check", "packages/web-server"]
 
 [[native.stages]]
@@ -393,7 +453,7 @@ coverage = "focused"
 required = false
 covered_by = "tsc"
 quick = true
-quick_paths = ["packages/context/**", "packages/notes/**", "packages/shared/**", "packages/status/**", "packages/store/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-server/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
+quick_paths = ["packages/context/**", "packages/notes/**", "packages/notify/**", "packages/shared/**", "packages/status/**", "packages/store/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-server/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**"]
 argv = ["node_modules/.bin/tsc", "-b", "packages/web-server"]
 
 [[native.stages]]
@@ -403,7 +463,7 @@ coverage = "focused"
 required = false
 covered_by = "depcruise"
 quick = true
-quick_paths = ["packages/context/**", "packages/notes/**", "packages/shared/**", "packages/status/**", "packages/store/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-server/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
+quick_paths = ["packages/context/**", "packages/notes/**", "packages/notify/**", "packages/shared/**", "packages/status/**", "packages/store/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-server/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", "contracts/**", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
 argv = ["node_modules/.bin/depcruise", "packages/web-server", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
 
 [[native.stages]]
@@ -423,7 +483,7 @@ coverage = "focused"
 required = false
 quick = true
 quick_paths = ["native/host-steward/**", "contracts/**"]
-argv = ["native/host-steward/.venv/bin/pytest", "-q", "native/host-steward/tests/test_aico_status.py", "native/host-steward/tests/test_view_mutation_contract.py"]
+argv = ["native/host-steward/.venv/bin/pytest", "-q", "native/host-steward/tests/test_aico_status.py", "native/host-steward/tests/test_host_steward_core.py", "native/host-steward/tests/test_view_mutation_contract.py"]
 # END generated
 
 # Nightly deep lane (st check --deep): Tether's live containment proof against a

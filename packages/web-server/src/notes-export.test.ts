@@ -48,7 +48,6 @@ describe('notes export', () => {
       remote: 'aico-notes-drive',
       folder: 'SummitFlow-Notes',
       deferTo: null,
-      dueMs: 25 * 3_600_000,
     }
   })
   afterEach(() => {

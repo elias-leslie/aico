@@ -1,0 +1,15 @@
+{
+  "description": "Aico's jobs. Each kind runs on its home machine (machine id: the lower-cased short host name) when due; another machine running aico-jobs takes it over once it is takeover_after_s overdue and the holder's lease has expired. at: local time, daily. run: post (a path on the local aico-web) or command (argv).",
+  "jobs": [
+    {
+      "kind": "notes-export",
+      "what": "Notes export to Drive",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "at": "03:30",
+      "run": { "post": "/api/export/notes" },
+      "lease_s": 120,
+      "takeover_after_s": 900
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+# TEMPLATE — `__PROJECT_ROOT__` is a placeholder; scripts/install.sh and `st service rebuild aico`
+# render it (see aico-web.service).
+# Aico's scheduler: runs the jobs in packages/jobs/data/jobs.json on their home machine under a
+# fenced lease in jobs.db, and writes one Status row per job to aico-web. A job is never stopped
+# for taking long.
+[Unit]
+Description=Aico jobs (scheduler: notes export and other run-once jobs)
+Wants=aico-web.service
+After=network.target aico-web.service
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_ROOT__/packages/jobs
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=%h
+ExecStart=/usr/bin/env node --disable-warning=ExperimentalWarning __PROJECT_ROOT__/packages/jobs/dist/aico-jobs.mjs serve
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=15
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aico-jobs
+
+[Install]
+WantedBy=default.target

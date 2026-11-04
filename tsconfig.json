@@ -11,7 +11,13 @@
       "path": "packages/status"
     },
     {
+      "path": "packages/notify"
+    },
+    {
       "path": "packages/context"
+    },
+    {
+      "path": "packages/agent"
     },
     {
       "path": "packages/tether-client"
@@ -27,6 +33,9 @@
     },
     {
       "path": "packages/tether"
+    },
+    {
+      "path": "packages/jobs"
     },
     {
       "path": "packages/web-server"

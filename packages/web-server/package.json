@@ -9,6 +9,7 @@
     "imports": [
       "@aico/shared",
       "@aico/context",
+      "@aico/notify",
       "@aico/status",
       "@aico/fleet",
       "@aico/notes",
@@ -31,6 +32,7 @@
   "dependencies": {
     "@aico/context": "0.1.0",
     "@aico/notes": "0.1.0",
+    "@aico/notify": "0.1.0",
     "@aico/shared": "0.1.0",
     "@aico/status": "0.1.0",
     "@aico/tether-client": "0.1.0",
