@@ -356,7 +356,7 @@ async function postStatus(
     ? `Agent Hub rows copied into Aico: ${result.memories} memories, ${result.prompts} prompts, ${result.jobs + result.namedRoles} roles, ${result.budgets} context budgets, ${result.projectRows} project rows${result.projectHash.match ? ' (hashes match)' : ' (project rows do not match: run it again)'}.`
     : `Copying Agent Hub's rows into Aico failed: ${error}`
   const row = {
-    id: `${io.machine}/context-import`,
+    id: 'jobs/context-import',
     what: 'Agent Hub import into Aico',
     kind: 'job',
     machine: io.machine,

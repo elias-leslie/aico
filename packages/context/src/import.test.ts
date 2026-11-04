@@ -283,7 +283,7 @@ describe('aico context import-agent-hub', () => {
     expect(text).not.toContain('alpha')
     expect(run.posted).toEqual([
       expect.objectContaining({
-        id: 'davion-sidarli/context-import',
+        id: 'jobs/context-import',
         kind: 'job',
         machine: 'davion-sidarli',
         state: 'ok',
