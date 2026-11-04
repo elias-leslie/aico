@@ -352,6 +352,29 @@ export function focusedTests(root: string, dir: string, changed: string[]): stri
   return [...tests].sort().map((test) => (dir === '.' ? test : relative(dir, test)))
 }
 
+/**
+ * Load the Vitest config through Vite's module runner and skip the results cache when the installed
+ * Vitest offers both (as `st check` does): the default bundler writes node_modules/.vite-temp, which a
+ * read-only checkout (an isolated acceptance) refuses.
+ */
+function vitestFlags(root: string, dir: string): string[] {
+  for (const base of [join(root, dir), root]) {
+    const chunks = join(base, 'node_modules/vitest/dist/chunks')
+    let names: string[]
+    try {
+      names = readdirSync(chunks).filter((name) => /^cac.*\.js$/.test(name))
+    } catch {
+      continue
+    }
+    const offered = names.some((name) => {
+      const text = readFileSync(join(chunks, name), 'utf8')
+      return /\bconfigLoader:\s*\{[^}]*\brunner\b/.test(text) && /\bcache:\s*\{/.test(text)
+    })
+    return offered ? ['--configLoader', 'runner', '--cache=false'] : []
+  }
+  return []
+}
+
 function tsconfigArgs(root: string, dir: string): string[] {
   try {
     const text = readFileSync(join(root, dir, 'tsconfig.json'), 'utf8')
@@ -428,9 +451,10 @@ function legacySteps(
         : [{ id: tool, skip: 'no_relevant_changed_paths' }]
     }
     case 'vitest': {
-      if (!changed) return [step(tool, 'vitest', ['run'])]
+      const flags = vitestFlags(root, dir)
+      if (!changed) return [step(tool, 'vitest', ['run', ...flags])]
       const files = within(root, dir, changed, VITEST)
-      if (files.length) return [step(tool, 'vitest', ['related', '--run', ...files])]
+      if (files.length) return [step(tool, 'vitest', ['related', '--run', ...flags, ...files])]
       return [
         {
           id: tool,

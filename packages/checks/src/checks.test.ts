@@ -120,6 +120,26 @@ describe('focused pytest', () => {
   })
 })
 
+describe('vitest in a read-only checkout', () => {
+  it('loads the config through the module runner without the cache when Vitest offers both', () => {
+    const root = repo('')
+    write(root, '.st-check.toml', `[native]\nlegacy_tools = ["vitest"]\n`)
+    write(root, 'node_modules/.bin/vitest', '')
+    write(root, 'src/c.test.ts', 'c\n')
+    const argv = () =>
+      plan(config(root), 'quick', ['src/c.test.ts'], () => [])[0]
+        .step?.argv.slice(1)
+        .join(' ')
+    expect(argv()).toBe('related --run src/c.test.ts')
+    write(
+      root,
+      'node_modules/vitest/dist/chunks/cac.x.js',
+      'configLoader: { description: "runner" }, cache: { description: "Enable cache" }',
+    )
+    expect(argv()).toBe('related --run --configLoader runner --cache=false src/c.test.ts')
+  })
+})
+
 describe('the changed-only cone', () => {
   it('is the changed files no other agent wrote or leases', () => {
     const root = repo(stage('lint', 'quick = true'))
