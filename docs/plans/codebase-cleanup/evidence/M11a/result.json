@@ -6,7 +6,12 @@
     "39fc4a72b08745dae32bc1c4c0f728814c542b79",
     "aa34c56fbfaff94ab5c0cb72f0acde73761ce224",
     "885df33545b39ae0c1fff27032af34a4de50d67e",
-    "30440d01d33401f0ad7c9a38ad1f5d85a9ff0759"
+    "30440d01d33401f0ad7c9a38ad1f5d85a9ff0759",
+    "940ed75a6cb66d3118daa5a98e64f52a8b6e402f",
+    "f9487d94e6a89f0fda0a5b423e758ebe342cfab1",
+    "bc6e02de234b55b29eb789f20610dd5e0c9c8c52",
+    "525125289e6f62a237d788402bb823ebc899a8fb",
+    "929d99329a38b1faa36a367fda0acfd79e84d97b"
   ],
   "machines": {
     "workstation": "davion-sidarli",
@@ -68,6 +73,482 @@
     "home": "davion-sidarli",
     "authority": "aico",
     "winner": "aico",
+    "fenceBefore": 3,
+    "fenceAfter": 4,
+    "lateResultStatus": 409,
+    "lateRenewStatus": 409,
+    "meaning": "M11a job completed on aico",
+    "spoofedClaimStatus": 400,
+    "verifiedAt": "2026-11-04T15:01:13.671Z"
+  },
+  "job_cleanup": {
+    "normal_definitions_restored": true,
+    "normal_jobs_per_runner": 3,
+    "proof_job_retired": true,
+    "proof_status": "off",
+    "proof_status_retired_on": [
+      "davion-sidarli",
+      "aico"
+    ]
+  },
+  "liveness": {
+    "wire": {
+      "from": "aico",
+      "to": "davion-sidarli",
+      "deadMs": 300000,
+      "elapsedMs": 300107,
+      "outputFramesDuringSilence": 19,
+      "outputBytesDuringSilence": 380,
+      "closed": true,
+      "verifiedAt": "2026-11-04T15:16:17.623Z"
+    },
+    "before": {
+      "id": "fleet/davion-sidarli/aico",
+      "state": "ok",
+      "shown": "ok",
+      "last_run": "2026-11-04T15:11:14.862Z",
+      "next_run": "2026-11-04T15:16:14.862Z",
+      "meaning": "Connected to aico."
+    },
+    "late": {
+      "id": "fleet/davion-sidarli/aico",
+      "state": "warn",
+      "shown": "late",
+      "last_run": "2026-11-04T15:11:17.514Z",
+      "next_run": "2026-11-04T15:16:17.514Z",
+      "meaning": "Disconnected from aico. Reconnecting."
+    },
+    "reconnected": {
+      "id": "fleet/davion-sidarli/aico",
+      "state": "ok",
+      "shown": "ok",
+      "last_run": "2026-11-04T15:16:17.924Z",
+      "next_run": "2026-11-04T15:21:17.924Z",
+      "meaning": "Connected to aico."
+    },
+    "remoteHostnameAfterReconnect": "aico",
+    "verifiedAt": "2026-11-04T15:16:18.821Z"
+  },
+  "checks": {
+    "before": {
+      "source": "e8606e82c80c6e947b66bd08b3fbc15fc5efa046",
+      "python_passed": 1151,
+      "typescript_passed": 3024,
+      "typescript_skipped": 6
+    },
+    "after": {
+      "source": "929d99329a38b1faa36a367fda0acfd79e84d97b",
+      "receipt": "55b04fbd8694c6d72c066e42fe1483481ed7d10ac9daec164996c0b9120a48ed",
+      "python_passed": 1151,
+      "typescript_passed": 3100,
+      "typescript_skipped": 6
+    },
+    "deployed_help_checkpoint": "30440d01d33401f0ad7c9a38ad1f5d85a9ff0759",
+    "fleet_edit_quick_seconds": 47.61,
+    "cross_cutting_quick_seconds": 104.5,
+    "mechanical_copy_lint_violations": 0,
+    "original_after": {
+      "source": "885df33545b39ae0c1fff27032af34a4de50d67e",
+      "python_passed": 1151,
+      "typescript_passed": 3045,
+      "typescript_skipped": 6,
+      "receipt": "ef0ed4d87fe3235893dfc1840ecbca7fae5fe0dc15000c6bbdcd6e0f21b4b326"
+    }
+  },
+  "preservation": {
+    "CT190_snapshot": "m11a-before-link",
+    "previous_CT190_source_retained": true,
+    "M11b_started": false
+  },
+  "remaining": [],
+  "completedAt": "2026-11-04T15:19:05.724135+00:00",
+  "choices": [
+    "Only the lower short hostname dials; either peer opens channels.",
+    "IPv4 LAN listeners use literal local addresses; no public bind or CA.",
+    "Job definitions name one lease holder and explicit eligible workers; no local lease fallback during a partition.",
+    "Production unsigned automatic peer updates stay disabled for M11b.",
+    "Other hosts remain for M11b, per the coordinator cancellation; neither worker VM was accessed."
+  ],
+  "source_diff": {
+    "base": "e8606e82c80c6e947b66bd08b3fbc15fc5efa046",
+    "through": "30440d01d33401f0ad7c9a38ad1f5d85a9ff0759",
+    "files": 68,
+    "added_lines": 2404,
+    "removed_lines": 697
+  },
+  "verification_note": "Final reviewed fleet source passed full acceptance. Both machines run the same installed Tether bundle. Clean-window takeover and received-only silence checks passed; normal job definitions and all services were restored. Other builders\u2019 source and evidence were left out of this lane\u2019s commits.",
+  "originalCompletedAt": "2026-11-04T13:04:57.094638+00:00",
+  "review_fixes": {
+    "status": "complete",
+    "brief": "docs/plans/codebase-cleanup/briefs/M11a-fixes.md",
+    "commits": [
+      "940ed75a6cb66d3118daa5a98e64f52a8b6e402f",
+      "f9487d94e6a89f0fda0a5b423e758ebe342cfab1",
+      "bc6e02de234b55b29eb789f20610dd5e0c9c8c52",
+      "525125289e6f62a237d788402bb823ebc899a8fb",
+      "929d99329a38b1faa36a367fda0acfd79e84d97b"
+    ],
+    "file_changes": {
+      "files": {
+        "packages/fleet/src/connection.ts": {
+          "added": 44,
+          "removed": 17
+        },
+        "packages/fleet/src/fleet.test.ts": {
+          "added": 264,
+          "removed": 6
+        },
+        "packages/fleet/src/fleet.ts": {
+          "added": 74,
+          "removed": 17
+        },
+        "packages/fleet/src/settings.ts": {
+          "added": 8,
+          "removed": 0
+        },
+        "packages/fleet/src/trust.test.ts": {
+          "added": 46,
+          "removed": 0
+        },
+        "packages/fleet/src/trust.ts": {
+          "added": 74,
+          "removed": 18
+        },
+        "packages/jobs/src/fleet-leases.test.ts": {
+          "added": 14,
+          "removed": 2
+        },
+        "packages/jobs/src/fleet-leases.ts": {
+          "added": 60,
+          "removed": 8
+        },
+        "packages/tether/src/cli.ts": {
+          "added": 2,
+          "removed": 2
+        },
+        "packages/tether/src/fleet-cli.test.ts": {
+          "added": 17,
+          "removed": 4
+        },
+        "packages/tether/src/fleet-cli.ts": {
+          "added": 24,
+          "removed": 9
+        },
+        "packages/fleet/package.json": {
+          "added": 2,
+          "removed": 1
+        },
+        "packages/fleet/src/service.ts": {
+          "added": 108,
+          "removed": 0
+        },
+        "packages/tether/src/daemon-fleet.test.ts": {
+          "added": 68,
+          "removed": 0
+        },
+        "packages/tether/src/daemon.ts": {
+          "added": 4,
+          "removed": 5
+        },
+        "packages/tether/src/hub/hub.test.ts": {
+          "added": 25,
+          "removed": 0
+        },
+        "packages/tether/src/hub/hub.ts": {
+          "added": 20,
+          "removed": 1
+        },
+        "native/host-steward/aico-root-watch.py": {
+          "added": 9,
+          "removed": 16
+        },
+        "native/host-steward/tests/test_aico_remote_host.py": {
+          "added": 8,
+          "removed": 8
+        },
+        "native/host-steward/tests/test_aico_root_watch.py": {
+          "added": 1,
+          "removed": 1
+        },
+        "packages/fleet/src/hosts.ts": {
+          "added": 3,
+          "removed": 19
+        },
+        "packages/tether/src/hub/host-admin.test.ts": {
+          "added": 0,
+          "removed": 1
+        },
+        "packages/tether/src/hub/hosts.test.ts": {
+          "added": 7,
+          "removed": 4
+        },
+        "packages/tether/src/hub/placement.test.ts": {
+          "added": 0,
+          "removed": 1
+        },
+        "packages/tether/src/hub/update.test.ts": {
+          "added": 0,
+          "removed": 1
+        }
+      },
+      "total_files": 25,
+      "added": 882,
+      "removed": 141
+    },
+    "items": {
+      "1_roles_and_jobs_caller": {
+        "implemented": true,
+        "existing_pins": {
+          "davion-sidarli": "full",
+          "aico": "full"
+        },
+        "worker_can_open": [
+          "sync",
+          "jobs"
+        ],
+        "full_can_open": [
+          "exec",
+          "control",
+          "sync",
+          "jobs"
+        ],
+        "claims_renewals_completions_bind_to_pinned_name": true,
+        "enrollment_states_role": true
+      },
+      "2_reconnect": {
+        "fresh_authenticated_connection_replaces_old": true,
+        "backoff_reset_after_stable_ms_default": 30000,
+        "stable_ms_configurable": true
+      },
+      "3_received_byte_silence": {
+        "implemented": true,
+        "bound_ms": 300000,
+        "outgoing_writes_do_not_reset_last_seen": true,
+        "live_final_check": {
+          "wire": {
+            "from": "aico",
+            "to": "davion-sidarli",
+            "deadMs": 300000,
+            "elapsedMs": 300107,
+            "outputFramesDuringSilence": 19,
+            "outputBytesDuringSilence": 380,
+            "closed": true,
+            "verifiedAt": "2026-11-04T15:16:17.623Z"
+          },
+          "before": {
+            "id": "fleet/davion-sidarli/aico",
+            "state": "ok",
+            "shown": "ok",
+            "last_run": "2026-11-04T15:11:14.862Z",
+            "next_run": "2026-11-04T15:16:14.862Z",
+            "meaning": "Connected to aico."
+          },
+          "late": {
+            "id": "fleet/davion-sidarli/aico",
+            "state": "warn",
+            "shown": "late",
+            "last_run": "2026-11-04T15:11:17.514Z",
+            "next_run": "2026-11-04T15:16:17.514Z",
+            "meaning": "Disconnected from aico. Reconnecting."
+          },
+          "reconnected": {
+            "id": "fleet/davion-sidarli/aico",
+            "state": "ok",
+            "shown": "ok",
+            "last_run": "2026-11-04T15:16:17.924Z",
+            "next_run": "2026-11-04T15:21:17.924Z",
+            "meaning": "Connected to aico."
+          },
+          "remoteHostnameAfterReconnect": "aico",
+          "verifiedAt": "2026-11-04T15:16:18.821Z"
+        }
+      },
+      "4_host_steward": {
+        "transport": "tether fleet exec SOCKET -- literal argv",
+        "live_hostname": "aico",
+        "socket": "/run/user/1000/aico/fleet/aico/exec.sock"
+      },
+      "5_fault_recovery": {
+        "startup_and_hub_reload_caught": true,
+        "failed_status_and_retry": true,
+        "local_health_during_live_faults": 200,
+        "live_faults": [
+          "malformed fleet configuration",
+          "missing allowlist during start"
+        ]
+      },
+      "6_approval_replay": {
+        "allowlist_format": "{pins: [{name, publicKey, role}], usedAskIds: [...]}",
+        "used_approval_ids_recorded_on_both": true,
+        "used_approval_ids_survive_revocation": true,
+        "question_contains_full_sha256_fingerprint": true,
+        "full_public_key_body_checked": true,
+        "old_live_ask_refused": true
+      },
+      "7_bounds_and_registry": {
+        "forwards": "Removed unused reverse-forward parsing; legacy fields are ignored with a registry warning.",
+        "pin_cache": "Frames read memory; refresh checks file changes and invalid files revoke cached trust.",
+        "default_max_channels_per_peer": 128,
+        "default_channel_buffer_bytes": 262144,
+        "limits_configurable": true,
+        "tls_pauses_for_full_channel_buffers": true
+      }
+    },
+    "completed_live_checks_before_final_drain_deployment": {
+      "role": {
+        "workerControlDenied": true,
+        "workerExecDenied": true,
+        "workerSyncStatus": 200,
+        "workerJobsStatus": 200,
+        "verifiedAt": "2026-11-04T14:14:09.233Z"
+      },
+      "reconnect": {
+        "staleReplaced": true,
+        "freshConnected": true,
+        "from": "aico",
+        "to": "davion-sidarli",
+        "verifiedAt": "2026-11-04T14:10:30.028Z"
+      },
+      "channel": {
+        "attemptedChannels": 140,
+        "refusedChannels": 12,
+        "peerStillConnected": true,
+        "from": "aico",
+        "to": "davion-sidarli",
+        "verifiedAt": "2026-11-04T14:12:12.755Z"
+      },
+      "host": {
+        "hostStewardFleetExec": "aico",
+        "socket": "/run/user/1000/aico/fleet/aico/exec.sock",
+        "verifiedAt": "2026-11-04T14:10:49Z"
+      },
+      "stream": {
+        "from": "aico",
+        "to": "davion-sidarli",
+        "bytes": 8388608,
+        "sha256": "ad97f87076920684e2ca66fc44e5d322797dc9d64706b174e51b5d0828937043",
+        "exitCode": 0,
+        "readerPausedMs": 500,
+        "verifiedAt": "2026-11-04T14:14:14.733Z"
+      },
+      "fault": {
+        "reloadFault": "Link failed: Unexpected end of JSON input",
+        "startFault": "Link failed: ENOENT: no such file or directory, lstat '/run/user/1000/aico/m11a-no-allowlist.json'",
+        "localHealthDuringBoth": 200,
+        "recovered": "Connected to aico.",
+        "verifiedAt": "2026-11-04T14:14:24.244Z"
+      },
+      "notes": {
+        "workstation": "5ff01aa4a39c",
+        "container": "73cd9d13e554",
+        "workstationToContainer": true,
+        "containerToWorkstation": true,
+        "verifiedAt": "2026-11-04T14:15:15.212Z"
+      }
+    },
+    "response_drain": {
+      "observed_before": "One reset in 200 read-only lease requests. The pending-write regression deterministically lost its response.",
+      "fix": "Flush queued local writes, then close the socket.",
+      "regressions_passed": [
+        "pending final response",
+        "release upstream socket after peer channel close",
+        "1000 short lease reads over two TLS peers"
+      ],
+      "final_live_traffic": {
+        "remoteRequests": 1000,
+        "failures": 0,
+        "from": "davion-sidarli",
+        "to": "aico",
+        "verifiedAt": "2026-11-04T14:54:37.303Z"
+      }
+    },
+    "checks": {
+      "first_review_acceptance": {
+        "source": "54f34e529af82a41288486f46ae8ca027e50adc1",
+        "receipt": "bafe814eaf190601a381ec894ded34e4429c0f88f44a69af92c4f0d1a94cdd7f",
+        "python_passed": 1151,
+        "typescript_passed": 3096,
+        "typescript_skipped": 6
+      },
+      "drain_checkpoint_acceptance": {
+        "source": "525125289e6f62a237d788402bb823ebc899a8fb",
+        "receipt": "2aa8ce885f5b78ca3a6d027588934fc31865a59a6f98a868ed9aaf1ff5cbaf71",
+        "state": "success"
+      },
+      "final_focused_tests": 15,
+      "final_acceptance": {
+        "source": "929d99329a38b1faa36a367fda0acfd79e84d97b",
+        "receipt": "55b04fbd8694c6d72c066e42fe1483481ed7d10ac9daec164996c0b9120a48ed",
+        "python_passed": 1151,
+        "typescript_passed": 3100,
+        "typescript_skipped": 6
+      },
+      "source_copy_lint": {
+        "violations": 0,
+        "unverified": 0,
+        "scope": "mechanical only; not copy approval"
+      }
+    },
+    "deployment": {
+      "workstation_source_before_final_drain": "89c8b50c2314630dcfa1cf53fb68abb5588b890d",
+      "CT190_source_before_final_drain": "54f34e529af82a41288486f46ae8ca027e50adc1",
+      "final_source": "929d99329a38b1faa36a367fda0acfd79e84d97b",
+      "workstation_daemon_job": "a54a4072c9594e989c51afc3a7322d76",
+      "workstation_full_job": "d98326f603e944fcb844895687fd50d4",
+      "CT190_release": "/srv/workspaces/releases/aico/929d99329a38b1faa36a367fda0acfd79e84d97b",
+      "CT190_method": "Copied the accepted managed-build artifacts; CT 190 has no ST installation. Rendered existing units and used its user systemd manager.",
+      "workstation_web_jobs_source": "a394de3cc59f376019d1f0884643f344addcbf42",
+      "workstation_cleanup_deployment_id": "3bca163ea09e6e50843780c05da6e0c2b1f34dbd94e8610169a8b1917f4dcce4",
+      "M11a_source_unchanged_in_newer_web_jobs_release": true,
+      "same_installed_tether_bundle_on_both": "32bc2e6886c993156fb67eb001a66411b970e7c532e9898c7d621eb0c10eb394",
+      "all_three_services_active_on_both_after_check": true,
+      "listeners_remain_LAN_only": true
+    },
+    "preservation": {
+      "keys_unchanged_during_review": true,
+      "key_modes_both_machines": "0600",
+      "allowlists_both_machines": "root:0644",
+      "M11b_started": false,
+      "other_builders_files_excluded": true
+    },
+    "first_takeover": {
+      "home": "davion-sidarli",
+      "authority": "aico",
+      "winner": "aico",
+      "fenceBefore": 1,
+      "fenceAfter": 2,
+      "lateResultStatus": 409,
+      "lateRenewStatus": 409,
+      "meaning": "M11a job completed on aico",
+      "spoofedClaimStatus": 400,
+      "completedAt": "2026-11-04T14:54:53.055Z",
+      "verifiedAt": "2026-11-04T14:59:15.014Z",
+      "watcherNote": "The first watcher lost one connection after stopping the home runner; the durable winner and stale result/renewal checks were verified separately."
+    },
+    "repeat_takeover": {
+      "home": "davion-sidarli",
+      "authority": "aico",
+      "winner": "aico",
+      "fenceBefore": 3,
+      "fenceAfter": 4,
+      "lateResultStatus": 409,
+      "lateRenewStatus": 409,
+      "meaning": "M11a job completed on aico",
+      "spoofedClaimStatus": 400,
+      "verifiedAt": "2026-11-04T15:01:13.671Z"
+    },
+    "concurrent_verification_note": "The coordinator confirmed another builder stopped Tether for 11 seconds and rebuilt Aico during the first observation window. A quiet-window repeat then completed with fences 3 to 4 and both stale writes refused.",
+    "own_committed_diff_before_final_evidence": {
+      "files": 75,
+      "added_lines": 3472,
+      "removed_lines": 866,
+      "method": "Sum of this milestone lane\u2019s commits; excludes other builders\u2019 commits."
+    }
+  },
+  "original_two_machine_job_takeover": {
+    "home": "davion-sidarli",
+    "authority": "aico",
+    "winner": "aico",
     "fenceBefore": 1,
     "fenceAfter": 2,
     "lateResultStatus": 409,
@@ -75,13 +556,7 @@
     "meaning": "M11a job completed on aico",
     "verifiedAt": "2026-11-04T12:49:11.769Z"
   },
-  "job_cleanup": {
-    "normal_definitions_restored": true,
-    "normal_jobs_per_runner": 3,
-    "proof_job_retired": true,
-    "proof_status": "off"
-  },
-  "liveness": {
+  "original_liveness": {
     "before": {
       "id": "fleet/davion-sidarli/aico",
       "machine": "aico",
@@ -113,46 +588,5 @@
     },
     "remote_command_after_reconnect": "aico",
     "wait_notification": "The wait notification reported failure; the command recorded the late row, and a separate live Status read confirmed it."
-  },
-  "checks": {
-    "before": {
-      "source": "e8606e82c80c6e947b66bd08b3fbc15fc5efa046",
-      "python_passed": 1151,
-      "typescript_passed": 3024,
-      "typescript_skipped": 6
-    },
-    "after": {
-      "source": "885df33545b39ae0c1fff27032af34a4de50d67e",
-      "python_passed": 1151,
-      "typescript_passed": 3045,
-      "typescript_skipped": 6,
-      "receipt": "ef0ed4d87fe3235893dfc1840ecbca7fae5fe0dc15000c6bbdcd6e0f21b4b326"
-    },
-    "deployed_help_checkpoint": "30440d01d33401f0ad7c9a38ad1f5d85a9ff0759",
-    "fleet_edit_quick_seconds": 47.61,
-    "cross_cutting_quick_seconds": 104.5,
-    "mechanical_copy_lint_violations": 0
-  },
-  "preservation": {
-    "CT190_snapshot": "m11a-before-link",
-    "previous_CT190_source_retained": true,
-    "M11b_started": false
-  },
-  "remaining": [],
-  "completedAt": "2026-11-04T13:04:57.094638+00:00",
-  "choices": [
-    "Only the lower short hostname dials; either peer opens channels.",
-    "IPv4 LAN listeners use literal local addresses; no public bind or CA.",
-    "Job definitions name one lease holder and explicit eligible workers; no local lease fallback during a partition.",
-    "Production unsigned automatic peer updates stay disabled for M11b.",
-    "Other hosts remain for M11b, per the coordinator cancellation; neither worker VM was accessed."
-  ],
-  "source_diff": {
-    "base": "e8606e82c80c6e947b66bd08b3fbc15fc5efa046",
-    "through": "30440d01d33401f0ad7c9a38ad1f5d85a9ff0759",
-    "files": 68,
-    "added_lines": 2404,
-    "removed_lines": 697
-  },
-  "verification_note": "A later cleanup rebuild was blocked by the parallel builder\u2019s prepared dependency/configuration inputs. The normal jobs configuration was restored through systemd against the already accepted release; no parallel source was edited."
+  }
 }
