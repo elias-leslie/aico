@@ -75,6 +75,18 @@ coverage = "full"
 argv = ["python3", "/srv/workspaces/projects/uilint/bin/uilint", "check-source", "--spec", "ui-spec.json"]
 timeout_seconds = 120
 
+# The phone app's unit tests (native/android, Kotlin). Gradle runs offline from the cached wrapper
+# and dependencies, at low priority; the SDK is the one in ~/Android/Sdk unless ANDROID_HOME says
+# otherwise. Release signing is not touched (no keystore needed to test).
+[[native.stages]]
+id = "gradle-android"
+kind = "check"
+coverage = "full"
+quick = true
+quick_paths = ["native/android/**"]
+argv = ["bash", "-c", "export ANDROID_HOME=\"${ANDROID_HOME:-$HOME/Android/Sdk}\"; export PATH=/usr/bin:/bin:$PATH; cd native/android && nice -n 19 ./gradlew test --offline --console=plain"]
+timeout_seconds = 600
+
 # The tray's Rust tests and lints (native/tray, cargo). The compiler is the one rust-toolchain.toml pins (rustup under
 # CARGO_HOME/RUSTUP_HOME, the owner's by default: the stage's own HOME is the repo); builds go to a cache dir shared
 # with native/tray/install.sh, at low priority.
@@ -536,6 +548,12 @@ argv = ["native/host-steward/.venv/bin/pytest", "-q", "native/host-steward/tests
 id = "tether-live-containment"
 argv = ["bash", "-c", "set -e; started=; if ! systemctl --user is-active -q tether@dev.service; then systemctl --user --no-ask-password start tether@dev.service; started=1; fi; trap '[ -n \"$started\" ] && systemctl --user --no-ask-password stop tether@dev.service' EXIT; for i in $(seq 50); do [ -S \"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tether/dev/control.sock\" ] && break; sleep 0.2; done; bash scripts/live/tether-lifecycle-harness.sh dev; bash scripts/live/tether-real-session-smoke.sh dev codex"]
 timeout_seconds = 600
+
+# The phone app's tests again, from clean (the quick lane reuses Gradle's caches).
+[[deep.stages]]
+id = "gradle-android"
+argv = ["bash", "-c", "export ANDROID_HOME=\"${ANDROID_HOME:-$HOME/Android/Sdk}\"; export PATH=/usr/bin:/bin:$PATH; cd native/android && nice -n 19 ./gradlew clean test --offline --console=plain"]
+timeout_seconds = 900
 
 # Nightly whole-repo build: `tsc -b --force` ignores the incremental cache and the
 # workspace builds produce the tether and aico-web bundles and the static web
