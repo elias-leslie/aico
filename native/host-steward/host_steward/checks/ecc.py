@@ -61,6 +61,14 @@ def parse_journal(text: str) -> tuple[float | None, list[dict[str, Any]]]:
     return first, out
 
 
+def journal_error(text: str) -> str:
+    """Why the PVE kernel journal gave nothing: the first ERR line the snippet passed on (journalctl's own message)."""
+    for line in text.splitlines():
+        if line.startswith("ERR "):
+            return line[4:].strip()[:120]
+    return "it returned no lines"
+
+
 def parse_rasdaemon(text: str) -> list[dict[str, Any]]:
     out = []
     for line in text.splitlines():
@@ -133,18 +141,25 @@ def remember_regions(
 
 
 def daily_counts(events: list[dict[str, Any]], now: float) -> dict[str, dict[str, int]]:
-    """Events per local day for the last 8 days: {day: {ce, ce_overflow, ue}} (the days the journal window covers)."""
-    out: dict[str, dict[str, int]] = {}
+    """Events per local day for the last 8 days: {day: {ce, ce_overflow, ue}}. Either source can miss records, so a
+    day's count is the larger of the journal's and rasdaemon's, as Nightshift's history takes it."""
+    per_source: dict[tuple[str, str], dict[str, int]] = {}
     for e in events:
-        if e["src"] != "j" or now - e["ts"] > 8 * DAY:
+        if now - e["ts"] > 8 * DAY:
             continue
-        day = history.day_of(e["ts"])
-        row = out.setdefault(day, {"ce": 0, "ce_overflow": 0, "ue": 0})
+        row = per_source.setdefault(
+            (history.day_of(e["ts"]), e["src"]), {"ce": 0, "ce_overflow": 0, "ue": 0}
+        )
         if e["kind"] == "UE":
             row["ue"] += 1
         else:
             row["ce"] += 1
             row["ce_overflow"] += bool(e.get("over"))
+    out: dict[str, dict[str, int]] = {}
+    for (day, _src), row in per_source.items():
+        best = out.setdefault(day, dict(row))
+        for key, n in row.items():
+            best[key] = max(best[key], n)
     return out
 
 
@@ -152,7 +167,8 @@ def record_history(
     cache: dict[str, Any], events: list[dict[str, Any]], first: float | None, now: float
 ) -> None:
     """Whole days of the journal window into the trend history: a count per day, zero for a quiet day the journal
-    covers (so a quiet stretch counts as quiet, not as missing). Recording a day again replaces its count."""
+    covers (so a quiet stretch counts as quiet, not as missing). A day's count is recorded with "max", so it never goes
+    down when the journal window moves on or a source misses records."""
     counts = daily_counts(events, now)
     for offset in range(8):  # the oldest day of the 8 day window is only partly covered
         ts = now - offset * DAY
@@ -161,7 +177,7 @@ def record_history(
             continue
         row = counts.get(day, {"ce": 0, "ce_overflow": 0, "ue": 0})
         for metric, key in (("mem.ce", "ce"), ("mem.ce_overflow", "ce_overflow"), ("mem.ue", "ue")):
-            history.record(cache, metric, "pve", float(row[key]), "", ts, "last", "events")
+            history.record(cache, metric, "pve", float(row[key]), "", ts, "max", "events")
 
 
 def evaluate(
@@ -190,7 +206,12 @@ def evaluate(
 
     out: list[Signal] = []
     uncorrected = count("UE", now - DAY, now)
-    out.append(Signal("ecc.uncorrected", "failed" if uncorrected else "ok", {"n": uncorrected}))
+    if uncorrected:
+        out.append(Signal("ecc.uncorrected", "failed", {"n": uncorrected}))
+    elif first is None:  # no FIRST line: the journal was not read, so "none" would be a guess
+        out.append(Signal("ecc.unreadable", "warn", {"why": journal_error(sections.get("ecc", ""))}))
+    else:
+        out.append(Signal("ecc.uncorrected", "ok", {"n": 0}))
     last = count("CE", now - DAY, now)
     windows = []
     for i in range(1, 8):

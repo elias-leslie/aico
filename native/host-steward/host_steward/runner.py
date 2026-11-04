@@ -56,6 +56,7 @@ def run_checks(
             run=run,
             state=state.setdefault("checks", {}).setdefault(check, {}),
             cache=cache,
+            acting=data.get("acting", {}),
         )
         try:
             signals = module.run(ctx)

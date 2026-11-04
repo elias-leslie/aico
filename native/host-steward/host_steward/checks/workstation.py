@@ -145,7 +145,7 @@ def journald(ctx: Ctx) -> Signal:
 def pressure(ctx: Ctx) -> Signal:
     text = ctx.read(ctx.cfg["psi_memory"])
     if text is None:
-        return Signal("ws.memory.pressure", "ok", {"detail": "Memory pressure is not readable here."}, note=True)
+        return Signal("ws.memory.pressure.unreadable", "warn")
     avg = {}
     for line in text.splitlines():
         parts = line.split()

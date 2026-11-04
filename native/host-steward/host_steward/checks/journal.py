@@ -14,7 +14,6 @@ the initial window.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import re
@@ -65,16 +64,10 @@ def _read_json(path: Path) -> dict[str, Any] | None:
 
 def _write_private(path: Path, data: Any) -> None:
     """Journal-derived files hold raw message examples: readable by root and adm (like the journal)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, sort_keys=True))
     if os.geteuid() == 0:
-        with contextlib.suppress(KeyError, OSError):
-            import grp
-
-            os.chown(tmp, 0, grp.getgrnam("adm").gr_gid)
-        os.chmod(tmp, 0o640)
-    tmp.replace(path)
+        core.write_json(path, data, mode=0o640, group="adm")
+    else:
+        core.write_json(path, data)
 
 
 def read_journal(ctx: Ctx, cursor: str | None) -> tuple[list[str], str | None] | None:

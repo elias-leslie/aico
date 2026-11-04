@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shutil
 import time
 from pathlib import Path
@@ -45,13 +44,6 @@ def disabled_snap_revisions(text: str) -> list[tuple[str, str]]:
     return out
 
 
-def command_absent(result: core.Result) -> bool:
-    text = f"{result.out}\n{result.err}"
-    return bool(
-        result.rc == 127 or (result.rc == 2 and re.search(r"No such (command|option)", text))
-    )
-
-
 def daily_commands(cfg: dict[str, Any], owner: str, actor: acts.Actor, notes: list[str]) -> bool:
     """SummitFlow's own retention commands as the owner. True when one failed or is missing."""
     failed = False
@@ -65,7 +57,7 @@ def daily_commands(cfg: dict[str, Any], owner: str, actor: acts.Actor, notes: li
         if result is None:
             continue
         name = " ".join(cmd[:3])
-        if command_absent(result):
+        if core.command_absent(result):
             notes.append(f"{name} is missing from this SummitFlow")
             failed = True
         elif result.rc:
@@ -196,11 +188,39 @@ def row_text(result: dict[str, Any], live: bool) -> tuple[str, str]:
     ), f"Dry run: would {text}. Nightshift still does this until cutover."
 
 
+def job_actions() -> list[dict[str, str]]:
+    return [
+        {"kind": "run", "ref": f"sudo -n systemctl start host-steward-{NAME}.service"},
+        {"kind": "log", "ref": f"journalctl -u host-steward-{NAME}.service"},
+    ]
+
+
+def refuse(args: argparse.Namespace, cfg: dict[str, Any], why: str, now: float, post: Any) -> int:
+    """Switched on but Nightshift's housekeeping timer still runs: change nothing, say so on the Status board."""
+    row = core.job_row(
+        NAME,
+        cfg["what"],
+        "warn",
+        why,
+        aico_status.machine_id(),
+        now,
+        cfg["every_min"],
+        cfg["slack_min"],
+        actions=job_actions(),
+    )
+    if not args.no_post:
+        post(row)
+    print(json.dumps({"live": False, "refused": why}, sort_keys=True))
+    return 0
+
+
 def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status.report) -> int:
     cfg = data["jobs"][NAME]
     live = core.acting(data, NAME)
     owner = data["site"]["owner"]["user"]
     now = time.time()
+    if live and (why := core.refusal(data, NAME, core.run_command)):
+        return refuse(args, cfg, why, now, post)
     with acts.single_run(NAME) as got:
         if not got:
             print("host-steward housekeeping: another run is still going")
@@ -219,10 +239,7 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
         now,
         cfg["every_min"],
         cfg["slack_min"],
-        actions=[
-            {"kind": "run", "ref": "host-steward housekeeping"},
-            {"kind": "log", "ref": "journalctl -u host-steward-housekeeping.service"},
-        ],
+        actions=job_actions(),
     )
     if not args.no_post:
         post(row)

@@ -33,7 +33,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from host_steward import attribution
+from host_steward import attribution, core
 
 KINDS = ("listeners", "units", "vm", "firewall", "packages", "keys", "config", "any")
 HOST_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
@@ -90,12 +90,7 @@ def _read_raw(path: str | Path, cfg: dict[str, Any], owner_uid: int | None) -> d
 
 
 def _write(path: str | Path, data: dict[str, Any]) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(data, sort_keys=True))
-    os.chmod(tmp, 0o644)
-    tmp.replace(target)
+    core.write_json(path, data, mode=0o644)
 
 
 def _who() -> str:

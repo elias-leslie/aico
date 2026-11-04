@@ -809,11 +809,11 @@ def test_stall_delta_baselines_then_rates_the_share_of_wall_time(tmp_path):
     assert memory.stall(h.ctx(state, NOW + 2700)).fields.get("baseline") is True
 
 
-def test_stall_not_readable_is_a_note_not_a_problem(tmp_path):
+def test_stall_not_readable_warns(tmp_path):
     h = CheckHost(tmp_path)
     h.cfg["psi_memory"] = str(tmp_path / "missing")
     sig = memory.stall(h.ctx({}))
-    assert (sig.code, sig.state, sig.note) == ("memory.stall.unreadable", "ok", True)
+    assert (sig.code, sig.state) == ("memory.stall.unreadable", "warn")
 
 
 def test_controllers_report_or_go_stale(tmp_path):

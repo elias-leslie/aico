@@ -84,6 +84,11 @@ what = "Memory pressure is high: {kind} stall at {pct}%"
 impact = "Things will feel slow and something may be killed"
 next = "See what is using memory"
 
+[signal."ws.memory.pressure.unreadable"]
+what = "Could not read memory pressure (/proc/pressure/memory)"
+impact = "Memory pressure would go unseen"
+next = "Check that the kernel exposes pressure stall information"
+
 [signal."ws.net.internet"]
 what = "The internet is not reachable: {how}"
 next = "Check the router and the uplink"
@@ -205,6 +210,11 @@ next = "Start it"
 what = "The PVE host logged {n} uncorrected memory errors"
 impact = "Memory is failing and data can be corrupt"
 next = "Run a memory test and replace the module"
+
+[signal."ecc.unreadable"]
+what = "Could not read the PVE kernel journal ({why})"
+impact = "Uncorrected memory errors would go unseen"
+next = "Run journalctl _TRANSPORT=kernel on the PVE host and read the error"
 
 [signal."ecc.new_region"]
 what = "Corrected memory errors appeared in {n} new places"
@@ -352,6 +362,11 @@ what = "Next boot would have no GPU driver: kernel {kernels} has no NVIDIA {bran
 impact = "The graphics driver would not load after a reboot"
 next = "Install {package} before rebooting"
 
+[signal."probes.nvidia.unreadable"]
+what = "Could not list the installed NVIDIA packages ({why})"
+impact = "A missing GPU driver module would go unseen"
+next = "Run dpkg-query -W 'nvidia-driver-*' by hand and read the error"
+
 [signal."probes.nvidia.fallback:ok"]
 what = "An old fallback kernel ({kernels}) has no NVIDIA {branch} module; it is not the default or running kernel"
 
@@ -414,6 +429,11 @@ next = "Run host-steward collect-usage and read the log"
 what = "Memory stalled tasks for {full}% of the last {min} minutes (some tasks {some}%); {avail} GiB available. Most stalled: {top}"
 impact = "Sessions and builds slow down while this lasts"
 next = "memctl and the kernel act on their own; look at what is using the memory if it keeps up"
+
+[signal."memory.stall.unreadable"]
+what = "Could not read memory stalls (/proc/pressure/memory or /proc/meminfo)"
+impact = "Memory pressure would go unseen"
+next = "Check that the kernel exposes pressure stall information"
 
 [signal."memory.stall:ok"]
 what = "Memory stalls {full}% over the last {min} minutes; {avail} GiB available"

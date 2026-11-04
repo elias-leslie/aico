@@ -8,9 +8,12 @@ state, plus the plain-words meaning from data/meanings.toml (the explain table).
 
 from __future__ import annotations
 
+import contextlib
 import fnmatch
+import grp
 import json
 import os
+import re
 import subprocess
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
@@ -68,9 +71,18 @@ def run_command(argv: Sequence[str], timeout: float = 60, input_text: str | None
     return Result(done.returncode, done.stdout, done.stderr)
 
 
+def command_absent(result: Result) -> bool:
+    """The command, or the subcommand or option asked for, does not exist (not that it ran and failed)."""
+    text = f"{result.out}\n{result.err}"
+    return bool(
+        result.rc == 127 or (result.rc == 2 and re.search(r"No such (command|option)", text))
+    )
+
+
 @dataclass
 class Ctx:
-    """What a check gets: its settings, the clock, the command runner and its own saved state."""
+    """What a check gets: its settings, the clock, the command runner and its own saved state. `acting` is the
+    data file's [acting] table (which controllers act), for the few checks that read what a controller wrote."""
 
     cfg: dict[str, Any]
     site: dict[str, Any]
@@ -78,6 +90,7 @@ class Ctx:
     run: Runner = run_command
     state: dict[str, Any] = field(default_factory=dict)
     cache: dict[str, Any] = field(default_factory=dict)
+    acting: Mapping[str, bool] = field(default_factory=dict)
 
     def read(self, path: str) -> str | None:
         try:
@@ -104,12 +117,62 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def write_json(
+    path: Path | str,
+    data: Any,
+    *,
+    mode: int | None = None,
+    dir_mode: int | None = None,
+    group: str | None = None,
+    compact: bool = False,
+) -> None:
+    """Writes `data` as JSON through a temp file beside it and a rename, so a reader never sees half a file. `mode` is
+    the file's permission (the umask's when None), `dir_mode` the mode of a directory this makes, `group` a group
+    name to hand the file to (root only; ignored when the group or the right is missing)."""
+    target = Path(path)
+    if dir_mode is None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        target.parent.mkdir(mode=dir_mode, parents=True, exist_ok=True)
+    tmp = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    try:
+        text = (
+            json.dumps(data, sort_keys=True, separators=(",", ":"))
+            if compact
+            else json.dumps(data, sort_keys=True, indent=1)
+        )
+        tmp.write_text(text)
+        if group:
+            with contextlib.suppress(KeyError, OSError):
+                os.chown(tmp, -1, grp.getgrnam(group).gr_gid)
+        if mode is not None:
+            os.chmod(tmp, mode)
+        tmp.replace(target)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def save_state(state: Mapping[str, Any], path: Path | None = None) -> None:
-    target = path or STATE_PATH
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(target.name + ".tmp")
-    tmp.write_text(json.dumps(state, sort_keys=True, indent=1))
-    tmp.replace(target)
+    write_json(path or STATE_PATH, state)
+
+
+def timestamp(value: Any) -> float:
+    """Epoch seconds from either form a job file keeps its time in: a number, or an ISO 8601 time (naive means UTC).
+    0.0 when it is neither, so a missing or odd time reads as very old."""
+    if isinstance(value, bool):
+        return 0.0
+    if isinstance(value, int | float):
+        return float(value)
+    try:
+        at = datetime.fromisoformat(str(value))
+    except ValueError:
+        return 0.0
+    return (at if at.tzinfo else at.replace(tzinfo=UTC)).timestamp()
+
+
+def iso_time(epoch: float) -> str:
+    return datetime.fromtimestamp(epoch, UTC).isoformat()
 
 
 def cap_state(code: str, state: str, caps: Mapping[str, str]) -> str:
@@ -199,7 +262,8 @@ def make_row(
         "last_run": at,
         "next_run": at + timedelta(minutes=every),
         "actions": [
-            {"kind": "run", "ref": f"host-steward check --only {check}"},
+            # sudoers allows starting the unit, which runs every check that is due (no unit takes --only)
+            {"kind": "run", "ref": "sudo -n systemctl start host-steward-check.service"},
             {"kind": "log", "ref": "journalctl -u host-steward-check.service"},
         ],
     }
@@ -209,6 +273,40 @@ def acting(data: Mapping[str, Any], name: str) -> bool:
     """Whether a controller that changes the host is switched on. [acting] in checks.toml; every piece starts off
     (dry run) so only one controller, Nightshift's or this one, acts at a time. Cutover turns them on together."""
     return bool(data.get("acting", {}).get(name, False))
+
+
+def counterparts_running(
+    data: Mapping[str, Any], name: str, run: Runner = run_command
+) -> list[str]:
+    """Nightshift's units that do the same work as the job `name`, listed in [counterparts.NAME] (system = [...],
+    user = [...] for the owner's user manager), that are enabled or active now: "unit (enabled, active)"."""
+    table = data.get("counterparts", {}).get(name) or {}
+    owner = data["site"]["owner"]["user"]
+    user_scope = ["--user", *(["-M", f"{owner}@"] if os.geteuid() == 0 else [])]
+    found = []
+    for scope, flags in (("system", []), ("user", user_scope)):
+        for unit in table.get(scope) or []:
+            on = [
+                word.removeprefix("is-")
+                for word in ("is-enabled", "is-active")
+                if run(["systemctl", "--no-ask-password", *flags, word, unit], timeout=30).rc == 0
+            ]
+            if on:
+                found.append(f"{unit} ({', '.join(on)})")
+    return found
+
+
+def refusal(data: Mapping[str, Any], name: str, run: Runner = run_command) -> str | None:
+    """Why the controller `name` must not act right now (plain words for its Status row), else None. Two controllers
+    acting on the same host would fight, so one that is switched on still stands down while Nightshift's counterpart
+    is enabled or active."""
+    running = counterparts_running(data, name, run)
+    if not running:
+        return None
+    return (
+        f"Set to act, but Nightshift's {', '.join(running)} is still on, so it did nothing. "
+        "Turn Nightshift's off first; the cutover does both together."
+    )
 
 
 def job_row(

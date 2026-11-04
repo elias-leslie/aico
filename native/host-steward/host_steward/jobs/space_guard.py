@@ -371,13 +371,6 @@ def reclaim_commands(cfg: dict[str, Any], path: str, target_gib: float) -> list[
     return out
 
 
-def command_absent(result: core.Result) -> bool:
-    text = f"{result.out}\n{result.err}"
-    return bool(
-        result.rc == 127 or (result.rc == 2 and re.search(r"No such (command|option)", text))
-    )
-
-
 def summitflow_reclaim(
     env: Env, disk: dict[str, Any], ctx: dict[str, Any], pressured: Callable[[], bool]
 ) -> str | None:
@@ -398,7 +391,7 @@ def summitflow_reclaim(
         )
         if res is None:
             continue
-        if command_absent(res):
+        if core.command_absent(res):
             ctx.setdefault("reclaim_absent", []).append(" ".join(cmd))
             continue
         fs_sync(env, disk["path"])
@@ -666,16 +659,17 @@ def row_text(result: dict[str, Any], live: bool) -> tuple[str, str]:
     would = result["would"]
     under = [r["path"] for r in reports if r.get("pressured")]
     lead = f"{', '.join(under)} is under the free-space line; " if under else ""
-    if result["failed"] and not would:
+    if result["failed"]:
         problem = next(
             (
-                r.get("error") or r.get("warning")
+                r.get("error") or r.get("warning") or r.get("ballast_error")
                 for r in reports
-                if r.get("error") or r.get("warning")
+                if r.get("error") or r.get("warning") or r.get("ballast_error")
             ),
-            "a check failed",
+            "a tier failed",
         )
-        return "warn", f"Dry run: could not decide ({problem}). {where}."
+        also = f"; it would {acts.say_would(would)}" if would else ""
+        return "warn", f"Dry run: hit a problem ({problem}){also}. {where}."
     if would:
         return (
             "ok",
@@ -684,16 +678,40 @@ def row_text(result: dict[str, Any], live: bool) -> tuple[str, str]:
     return "ok", f"Dry run: {lead}nothing to do ({where})."
 
 
-def load_previous(cfg: dict[str, Any]) -> dict[str, Any]:
-    """This job's own record, else Nightshift's (read-only) so a first dry run knows the ballast that exists."""
+def load_previous(cfg: dict[str, Any], live: bool) -> dict[str, Any]:
+    """The ballast record to start from. Acting: this job's own, else Nightshift's (read-only) for the first run.
+    Dry run: Nightshift's, which is the guard that acts and so keeps it current, else this job's own."""
     own = acts.read_json(acts.job_dir() / "space-guard.json")
-    return own or acts.read_json(Path(cfg["inherit_state"]))
+    theirs = acts.read_json(Path(cfg["inherit_state"]))
+    return (own or theirs) if live else (theirs or own)
+
+
+def status_row(cfg: dict[str, Any], state: str, meaning: str, now: float) -> dict[str, Any]:
+    return core.job_row(
+        NAME,
+        cfg["what"],
+        state,
+        meaning,
+        aico_status.machine_id(),
+        now,
+        cfg["every_min"],
+        cfg["slack_min"],
+        actions=[
+            {"kind": "run", "ref": "sudo -n systemctl start host-steward-space-guard.service"},
+            {"kind": "log", "ref": "journalctl -u host-steward-space-guard.service"},
+        ],
+    )
 
 
 def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status.report) -> int:
     cfg = data["jobs"][NAME]
     live = core.acting(data, "space_guard")
     now = time.time()
+    if live and (why := core.refusal(data, "space_guard", core.run_command)):
+        if not args.no_post:
+            post(status_row(cfg, "warn", why, now))
+        print(json.dumps({"live": False, "refused": why}, sort_keys=True))
+        return 0
     with acts.single_run(NAME) as got:
         if not got:
             print("host-steward space-guard: another run is still going")
@@ -705,9 +723,9 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
             data["site"]["owner"]["user"],
             now,
         )
-        prev = load_previous(cfg)
+        prev = load_previous(cfg, live)
         result = space_guard(env, prev)
-        saved = {"at": now, "live": live, **result}
+        saved = {"at": core.iso_time(now), "live": live, **result}
         if not live:  # a dry run keeps the ballast record it inherited
             saved["ballast"], saved["ballast_checked"] = (
                 prev.get("ballast", {}),
@@ -715,21 +733,7 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
             )
         acts.write_json(acts.job_dir() / "space-guard.json", saved)
     state, meaning = row_text(result, live)
-    row = core.job_row(
-        NAME,
-        cfg["what"],
-        state,
-        meaning,
-        aico_status.machine_id(),
-        now,
-        cfg["every_min"],
-        cfg["slack_min"],
-        actions=[
-            {"kind": "run", "ref": "host-steward space-guard"},
-            {"kind": "log", "ref": "journalctl -u host-steward-space-guard.service"},
-        ],
-    )
     if not args.no_post:
-        post(row)
+        post(status_row(cfg, state, meaning, now))
     print(json.dumps({"live": live, **result}, sort_keys=True, default=str))
     return 1 if result["failed"] else 0

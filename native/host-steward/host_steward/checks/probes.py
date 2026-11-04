@@ -59,6 +59,14 @@ def nvidia_module_gaps(dpkg_out: str, running: str, has_module) -> tuple[str, li
     return branch, gaps
 
 
+def dpkg_failed(res: core.Result) -> bool:
+    """dpkg-query could not answer. Exit 1 with only "no packages found matching" lines is an answer (none installed)."""
+    if res.rc == 0:
+        return False
+    lines = [line for line in res.err.splitlines() if line.strip()]
+    return res.rc != 1 or any("no packages found matching" not in line for line in lines)
+
+
 def nvidia(ctx: Ctx) -> Signal:
     cfg = ctx.cfg
     dpkg = ctx.run(
@@ -72,6 +80,8 @@ def nvidia(ctx: Ctx) -> Signal:
             "linux-modules-nvidia-*",
         ]
     )
+    if dpkg_failed(dpkg):
+        return Signal("probes.nvidia.unreadable", "warn", {"why": (dpkg.err.strip() or f"exit {dpkg.rc}")[-120:]})
     running = ctx.run(["uname", "-r"]).out.strip()
     root = Path(cfg["modules_root"])
 

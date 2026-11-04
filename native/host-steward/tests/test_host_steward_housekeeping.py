@@ -425,7 +425,7 @@ def test_space_guard_job_posts_a_dry_run_row_and_keeps_the_ballast_record(tmp_pa
     monkeypatch.setattr(
         space_guard,
         "load_previous",
-        lambda cfg: {"ballast": {"/": 6 * GIB}, "ballast_checked": {"/": NOW}},
+        lambda cfg, live: {"ballast": {"/": 6 * GIB}, "ballast_checked": {"/": NOW}},
     )
     fake = Fake(*BTRFS_OK, (["btrfs", "filesystem", "usage"], Result(0, usage())))
     monkeypatch.setattr(core, "run_command", fake)

@@ -50,9 +50,14 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
     device = cfg["device"]
     actor = acts.Actor(core.acting(data, "nvme_tests"), run=core.run_command)
     argv = [cfg["smartctl"], "-t", args.kind, device]
+    refused = core.refusal(data, "nvme_tests", core.run_command) if actor.live else None
+    if refused:
+        actor.live = False  # stands down: starts nothing, just the warning
     result = actor.do(argv, label=f"run: {' '.join(argv)}", timeout=60)
     summary = last_result(actor, device)
-    if result is None:
+    if refused:
+        state, meaning = "warn", refused
+    elif result is None:
         state, meaning = (
             "ok",
             f"Dry run: would start a {args.kind} self-test on {device}; {summary}. Nightshift's timer still runs it.",
@@ -75,7 +80,6 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
         kind["every_min"],
         kind["slack_min"],
         actions=[
-            {"kind": "run", "ref": f"host-steward nvme-test {args.kind}"},
             {"kind": "log", "ref": f"journalctl -u host-steward-{name}.service"},
         ],
     )

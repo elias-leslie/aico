@@ -76,7 +76,11 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
         return 2
     target, now = targets[args.target], time.time()
     actor = acts.Actor(core.acting(data, "scrub"), run=core.run_command)
-    state, meaning, detail = run_scrub(cfg, target, actor)
+    if actor.live and (why := core.refusal(data, "scrub", core.run_command)):
+        actor.live = False  # stands down: no scrub, no look at the disk, just the warning
+        state, meaning, detail = "warn", why, {"refused": True}
+    else:
+        state, meaning, detail = run_scrub(cfg, target, actor)
     name = f"scrub-{args.target}"
     row = core.job_row(
         name,
@@ -88,7 +92,6 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
         target["every_min"],
         target["slack_min"],
         actions=[
-            {"kind": "run", "ref": f"host-steward scrub --target {args.target}"},
             {"kind": "log", "ref": f"journalctl -u host-steward-{name}.service"},
         ],
     )

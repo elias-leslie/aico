@@ -64,12 +64,7 @@ def stall(ctx: Ctx) -> Signal:
     cfg = ctx.cfg
     psi, meminfo = ctx.read(cfg["psi_memory"]), ctx.read(cfg["meminfo"])
     if psi is None or meminfo is None:
-        return Signal(
-            "memory.stall.unreadable",
-            "ok",
-            {"detail": "Memory stalls are not readable here."},
-            note=True,
-        )
+        return Signal("memory.stall.unreadable", "warn")
     uid = int(cfg["owner_uid"])
     user = cfg["cgroup_user"].format(uid=uid)
     cgroups = cgroup_stalls([f"{user}/app.slice", f"{user}/session.slice", cfg["cgroup_system"]])

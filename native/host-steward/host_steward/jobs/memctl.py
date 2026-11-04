@@ -136,10 +136,7 @@ def guard_candidate(guard: Path, now: float, fresh_s: float) -> bool:
 
 
 def write_atomic(path: Path, doc: dict) -> None:
-    path.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(json.dumps(doc, separators=(",", ":")))
-    os.replace(tmp, path)
+    core.write_json(path, doc, dir_mode=0o755, compact=True)
 
 
 class Controller:
@@ -860,6 +857,13 @@ def read_offload(state_file: Path, min_bytes: float) -> str | None:
     return None
 
 
+def ballast_file(data: dict[str, Any]) -> Path:
+    """The space guard's record that says what ballast it holds. [acting] space_guard is the cutover flag: host-steward's
+    own file once its guard acts, Nightshift's while Nightshift's guard does."""
+    paths = data["memctl"]["paths"]
+    return Path(paths["ballast_state_own" if core.acting(data, "space_guard") else "ballast_state"])
+
+
 def build(data: dict[str, Any], acting: bool, uid: int, home: str, runtime: str) -> Controller:
     cfg = data["memctl"]
     paths = cfg["paths"]
@@ -871,7 +875,7 @@ def build(data: dict[str, Any], acting: bool, uid: int, home: str, runtime: str)
         for d in storage_cfg["disks"]
         if d.get("balance") and str(d.get("path", "")).startswith("/")
     ]
-    ballast_path = Path(paths["ballast_state"])
+    ballast_path = ballast_file(data)
     state_file = Path(paths["state_file"])
     ln = memstate.lines(storage_cfg)
 
@@ -898,11 +902,19 @@ def build(data: dict[str, Any], acting: bool, uid: int, home: str, runtime: str)
 
 
 def status_row(
-    ctl: Controller, doc: dict[str, Any], acting: bool, machine: str, now: float
+    ctl: Controller,
+    doc: dict[str, Any],
+    acting: bool,
+    machine: str,
+    now: float,
+    refused: str | None = None,
 ) -> dict[str, Any]:
     disk = doc["disk"]["state"] if doc.get("disk") else "not guarded"
     facts = f"memory {ctl.state}, disk {disk}"
-    if acting:
+    state = "ok"
+    if refused:
+        state, text = "warn", f"{refused} Meanwhile a dry run: {facts}."
+    elif acting:
         text = f"Running: {facts}. Publishing admission and kill records."
     else:
         text = (
@@ -914,7 +926,7 @@ def status_row(
     return core.job_row(
         "memctl",
         "Memory controller",
-        "ok",
+        state,
         text,
         machine,
         now,
@@ -965,7 +977,9 @@ def add_args(parser: argparse.ArgumentParser) -> None:
 def main(
     args: argparse.Namespace, data: dict[str, Any], post: Callable[..., bool] = aico_status.report
 ) -> int:
-    acting = core.acting(data, "memctl")
+    wanted = core.acting(data, "memctl")
+    refused = core.refusal(data, "memctl", core.run_command) if wanted else None
+    acting = wanted and not refused  # stands down (dry run, warn row) while Nightshift's memctl runs
     uid = os.getuid()
     home = str(Path.home())
     runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{uid}"
@@ -976,14 +990,19 @@ def main(
     machine = aico_status.machine_id()
     last_state, last_row = None, float("-inf")
     print(f"memctl: {'acting' if acting else 'dry run'}; writing {ctl.out}", flush=True)
+    if refused:
+        print(f"memctl: {refused}", flush=True)
     while True:
         now = time.time()
         doc = ctl.tick(now)
         if doc["state"] != last_state:
             print(f"memctl: {doc['state']}: {doc['reason']}", flush=True)
         if doc["state"] != last_state or now - last_row >= ctl.tune.row_every_s:
-            post(status_row(ctl, doc, acting, machine, now))
+            post(status_row(ctl, doc, acting, machine, now, refused))
             last_row = now
+            if wanted and bool(core.refusal(data, "memctl", core.run_command)) != bool(refused):
+                print("memctl: Nightshift's memctl changed; restarting to follow it", flush=True)
+                return 0  # the unit restarts it with the right mode
         last_state = doc["state"]
         if args.once:
             return 0

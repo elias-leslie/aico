@@ -15,11 +15,10 @@ from __future__ import annotations
 import re
 import shutil
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from host_steward import acts, history
+from host_steward import acts, core, history
 from host_steward.core import Ctx, Signal
 from host_steward.trend import slope
 
@@ -110,10 +109,7 @@ def newest_state(paths: list[str]) -> dict[str, Any]:
     best, best_at = {}, -1.0
     for raw in paths:
         data = acts.read_json(Path(raw))
-        try:
-            at = datetime.fromisoformat(str(data.get("at", ""))).timestamp()
-        except ValueError:
-            at = 0.0
+        at = core.timestamp(data.get("at"))
         if data and at > best_at:
             best, best_at = data, at
     return best
@@ -121,6 +117,14 @@ def newest_state(paths: list[str]) -> dict[str, Any]:
 
 def guard_paths(cfg: dict[str, Any], name: str, inherit: str) -> list[str]:
     return [str(acts.job_dir() / name), *[str(x) for x in cfg.get(inherit, [])]]
+
+
+def guard_state(cfg: dict[str, Any], space_guard_acting: bool) -> dict[str, Any]:
+    """The space guard's record. [acting] space_guard is the cutover flag: while it is off, Nightshift's guard is the one
+    acting and its file is the truth (host-steward's dry run only describes itself); once on, host-steward's own."""
+    if space_guard_acting:
+        return acts.read_json(acts.job_dir() / "space-guard.json")
+    return newest_state([str(x) for x in cfg.get("guard_inherit", [])])
 
 
 def snapshot_points(mount: str) -> int:
@@ -170,10 +174,7 @@ def reclaim_signal(
 ) -> Signal:
     """The space guard's last reclaim on this disk: failed when every tier ran and free space is still under the
     reserve (what it could do is used up)."""
-    try:
-        at = datetime.fromisoformat(str(guard.get("at", ""))).timestamp()
-    except ValueError:
-        at = 0.0
+    at = core.timestamp(guard.get("at"))
     rep = next(
         (
             r
@@ -184,7 +185,7 @@ def reclaim_signal(
     )
     lad = rep.get("ladder") or {}
     name = entry["name"]
-    if not lad or now - at > fresh_s:
+    if not lad or guard.get("live") is False or now - at > fresh_s:  # a dry run only says what it would do
         return Signal("storage.reclaim.idle", "ok", {"name": name})
     tiers = ", ".join(lad.get("tiers") or []) or "none"
     if lad.get("exhausted"):
@@ -261,7 +262,7 @@ def fill(ctx: Ctx, entry: dict[str, Any], free_bytes: int, free: float, level: s
             if isinstance(v, list)
         }
     samples = add_sample(ctx.state, path, free_bytes, now, 3600 * float(cfg["sample_keep_hours"]))
-    guard = newest_state(guard_paths(cfg, "space-guard.json", "guard_inherit"))
+    guard = guard_state(cfg, bool(ctx.acting.get("space_guard")))
     ballast = int((guard.get("ballast") or {}).get(path) or 0)
     recent_s = 3600 * float(cfg["fill_recent_hours"])
     short = fill_rate(samples, now, 3600 * float(cfg["fill_short_hours"]))

@@ -160,14 +160,6 @@ def load_state(path: Path | None = None) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def save_state(state: Mapping[str, Any], path: Path | None = None) -> None:
-    target = path or STATE_PATH
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(target.name + ".tmp")
-    tmp.write_text(json.dumps(state, sort_keys=True, indent=1))
-    tmp.replace(target)
-
-
 def _slug(name: str, vmid: int) -> str:
     slug = re.sub(r"[^a-z0-9_-]+", "-", name.lower()).strip("-")[:40]
     return slug if slug and ID_RE.fullmatch(slug) else f"guest-{vmid}"

@@ -29,9 +29,10 @@ echo "===NS kernel"; echo "RUN $(uname -r)"; echo "UP $(cut -d. -f1 /proc/uptime
 for k in /boot/vmlinuz-*; do [ -f "$k" ] && echo "K $(stat -c %Y "$k") ${k#/boot/vmlinuz-}"; done
 [ -r /etc/kernel/proxmox-boot-pin ] && echo "PIN $(head -c 80 /etc/kernel/proxmox-boot-pin)"
 [ -e /run/reboot-required ] && echo "REQ $(stat -c %Y /run/reboot-required)"
-echo "===NS ecc"; journalctl _TRANSPORT=kernel --since -8d -o short-unix --no-pager 2>/dev/null | awk '
+echo "===NS ecc"; journalctl _TRANSPORT=kernel --since -8d -o short-unix --no-pager 2>&1 | awk '
 function out() { if (k != "") print k, t, (b == "" ? "-" : b), o, (a == "" ? "-" : a), u; k = "" }
-NR==1 { print "FIRST", $1 }
+$1 !~ /^[0-9.]+$/ { print "ERR", $0; next }
+!seen { print "FIRST", $1; seen = 1 }
 !/\[Hardware Error\]|Fatal machine check/ { next }
 /Uncorrected|Deferred error|Fatal machine check/ { out(); k = "UE"; t = $1; b = ""; o = 0; a = ""; u = 0; next }
 /Corrected error/ { out(); k = "CE"; t = $1; b = ""; o = 0; a = ""; u = 0; next }

@@ -25,6 +25,20 @@ space_guard = false
 scrub = false
 nvme_tests = false
 
+# Nightshift's units that do the same work as each controller above. A controller switched on above still stands down
+# (does nothing, posts a warn row saying why) while any of its counterparts is enabled or active, so two never act at
+# once. system = [...] are system units, user = [...] units of the owner's user manager.
+[counterparts.housekeeping]
+system = ["nightshift-housekeeping.timer"]
+[counterparts.space_guard]
+system = ["nightshift-space-guard.timer"]
+[counterparts.scrub]
+system = ["nightshift-btrfs-scrub-native.timer", "nightshift-btrfs-scrub-root.timer"]
+[counterparts.nvme_tests]
+system = ["nightshift-nvme-short-test.timer", "nightshift-nvme-long-test.timer"]
+[counterparts.memctl]
+user = ["nightshift-memctl.service"]
+
 # Signals the owner decided are record-only: they stay in the row's text but never past this state.
 # First matching pattern wins. GEM10 logs corrected memory errors without DRAM ECC (owner 2026-10-30).
 [caps]
@@ -441,8 +455,9 @@ agent_bins = ["claude", "codex", "codex-real"]
 
 # {runtime} is the owner's runtime dir ($XDG_RUNTIME_DIR), {home} the owner's home. live_* are the files Tether and
 # SummitFlow read (the Nightshift names stay: those readers expect them); dry_* are written while [acting] memctl is
-# false. shared_dir gets a second copy of the verdict and the records, live only. ballast_state is the space guard's
-# state file (the ballast it holds counts as free for amber); state_file carries the pve check's offload note.
+# false. shared_dir gets a second copy of the verdict and the records, live only. ballast_state is Nightshift's space
+# guard file and ballast_state_own host-steward's (the ballast it holds counts as free for amber); [acting] space_guard
+# picks which one is read, so cutover is that one flag; state_file carries the pve check's offload note.
 [memctl.paths]
 live_admission = "{runtime}/nightshift/admission.json"
 live_heartbeat = "{runtime}/nightshift/memctl.json"
@@ -454,6 +469,7 @@ shared_dir = "/run/nightshift"
 tether_state = "{home}/.local/state/tether/default"
 tether_runtime = "{runtime}/tether/default"
 ballast_state = "/var/lib/nightshift/housekeeping/space-guard.json"
+ballast_state_own = "/var/lib/host-steward/jobs/space-guard.json"
 state_file = "/var/lib/host-steward/state.json"
 
 [checks.memory]
@@ -669,7 +685,7 @@ notes_max = 3
 initial_since = "-14d"
 # The sudo binaries whose journal lines count (the journal's _EXE of the line). This host runs sudo-rs; a filter on
 # /usr/bin/sudo alone saw no calls at all (Nightshift reads 0 a day since 2026-10-25).
-sudo_exes = ["/usr/bin/sudo", "/usr/lib/cargo/bin/sudo"]
+sudo_exes = ["/usr/bin/sudo", "/usr/bin/sudo.ws", "/usr/lib/cargo/bin/sudo"]
 # Baseline: the 24h total is judged against the median of earlier 24h windows once learn_days are stored (seed until then).
 learn_days = 3
 seed_daily_total = 620

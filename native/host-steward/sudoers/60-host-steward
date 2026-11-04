@@ -1,3 +1,8 @@
-# host-steward: let the owner start the two root services on demand (replaces the Nightshift executor's unit.start,
-# which the runner used for the space guard 165 times and agents for the check pass). Nothing else.
-kasadis ALL=(root) NOPASSWD: /usr/bin/systemctl start host-steward-space-guard.service, /usr/bin/systemctl start host-steward-check.service
+# host-steward: let the owner start the root services the Status board's Run buttons name, on demand (replaces the
+# Nightshift executor's unit.start, which the runner used for the space guard 165 times and agents for the check
+# pass). Exactly these units, nothing else.
+Cmnd_Alias HOST_STEWARD_START = /usr/bin/systemctl start host-steward-space-guard.service, \
+    /usr/bin/systemctl start host-steward-check.service, \
+    /usr/bin/systemctl start host-steward-housekeeping.service, \
+    /usr/bin/systemctl start host-steward-collect-usage.service
+kasadis ALL=(root) NOPASSWD: HOST_STEWARD_START

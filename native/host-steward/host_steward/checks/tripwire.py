@@ -351,11 +351,7 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def save_json(path: Path, data: dict[str, Any], mode: int = 0o644) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(data, sort_keys=True))
-    os.chmod(tmp, mode)
-    tmp.replace(path)
+    core.write_json(path, data, mode=mode)
 
 
 # ---------------------------------------------------------------- the event engine
