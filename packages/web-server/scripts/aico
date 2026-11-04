@@ -7,6 +7,7 @@
 # `aico pulse`: live sessions, claims, leases, open handshakes and Status problems; --brief is the startup brief.
 # `aico tasks | projects`: tasks.db (light tasks, claims, the projects registry; packages/tasks).
 # `aico agent run`: Aico's own agent harness (packages/agent, agent.db).
+# `aico check | commit`, `aico tasks done`: the repo gate, path-scoped commits and closeout (packages/checks).
 # Only those commands: anything else (or nothing) prints the usage and exits 2, so this
 # never starts the web server.
 set -euo pipefail
@@ -16,8 +17,24 @@ aico_hook_bin() { command -v aico-hook || echo "$HOME/.local/bin/aico-hook"; }
 
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/aico-web.sh"
 
+# The checks bundle; rebuilt when its sources (or the packages it bundles) are newer.
+aico_checks() {
+  local checks_dir="$AICO_REPO_ROOT/packages/checks" node
+  local checks_bundle="$checks_dir/dist/aico-checks.mjs"
+  node="$(aico_web_node)"
+  if [ ! -r "$checks_bundle" ] || [ -n "$(find "$checks_dir/src" "$AICO_REPO_ROOT/packages/tasks/src" "$AICO_REPO_ROOT/packages/tasks/data" \
+    "$AICO_REPO_ROOT/packages/tether-client/src" "$AICO_REPO_ROOT/packages/status/src" "$AICO_REPO_ROOT/packages/store/src" \
+    \( -name '*.ts' -o -name '*.json' \) -newer "$checks_bundle" -print -quit 2>/dev/null)" ]; then
+    PATH="$(dirname "$node"):$PATH" npm --prefix "$checks_dir" run --silent build >&2
+  fi
+  exec "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
+}
+
+[ "${1:-}" = tasks ] && [ "${2:-}" = done ] && aico_checks "$@"
+
 case "${1:-}" in
   memory | prompt | models | context | usage) exec_aico_web "$@" ;;
+  check | commit) aico_checks "$@" ;;
   jobs)
     shift
     jobs_dir="$AICO_REPO_ROOT/packages/jobs"
@@ -44,7 +61,7 @@ case "${1:-}" in
     agent_dir="$AICO_REPO_ROOT/packages/agent"
     agent_bundle="$agent_dir/dist/aico-agent.mjs"
     node="$(aico_web_node)"
-    if [ ! -r "$agent_bundle" ] || [ -n "$(find "$agent_dir/src" "$agent_dir/data" "$AICO_REPO_ROOT/packages/context/src" \
+    if [ ! -r "$agent_bundle" ] || [ -n "$(find "$agent_dir/src" "$agent_dir/data" "$AICO_REPO_ROOT/packages/context/src" "$AICO_REPO_ROOT/packages/tether-client/src" \
       "$AICO_REPO_ROOT/packages/context/data" "$AICO_REPO_ROOT/packages/store/src" \( -name '*.ts' -o -name '*.json' \) \
       -newer "$agent_bundle" -print -quit 2>/dev/null)" ]; then
       PATH="$(dirname "$node"):$PATH" npm --prefix "$agent_dir" run --silent build >&2
@@ -65,7 +82,7 @@ case "${1:-}" in
   help | -h | --help) exec_aico_web memory --help ;;
   *)
     [ $# -gt 0 ] && echo "aico: unknown command '$1'" >&2
-    echo "Usage: aico <memory|prompt|models|context|usage|jobs|tasks|projects|pulse|lease|agent|sessions> ...  (aico help lists every command)" >&2
+    echo "Usage: aico <memory|prompt|models|context|usage|jobs|tasks|projects|pulse|lease|agent|sessions|check|commit> ...  (aico help lists every command)" >&2
     exit 2
     ;;
 esac
