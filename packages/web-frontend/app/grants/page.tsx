@@ -90,7 +90,9 @@ export default function GrantsPage() {
                   <small>{r.agent || 'An agent'}</small>
                 </div>
                 <div>
-                  <span className="lantern-chip">
+                  <span
+                    className={`status-chip ${r.state === 'approved' ? 'ok' : r.state === 'pending' ? 'warn' : 'off'}`}
+                  >
                     {r.state === 'approved'
                       ? 'Open'
                       : r.state === 'pending'
