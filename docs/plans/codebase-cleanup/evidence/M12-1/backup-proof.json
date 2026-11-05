@@ -25,6 +25,43 @@
     "verification.json"
   ],
   "readbackMatches": true,
-  "smallFileRestore": "pending; Drive holds the shared backup lock",
-  "drive": "running"
+  "smallFileRestore": {
+    "engine": "aico backups restore",
+    "target": "native",
+    "source": "srv-workspaces",
+    "snapshot": "workspaces.20261105T025423-0500",
+    "path": "/srv/workspaces/archive/pre-aico/nightshift/pve-anchor.json",
+    "destination": "/srv/scratch/aico-m12-archive-restore-check/srv/workspaces/archive/pre-aico/nightshift/pve-anchor.json",
+    "bytes": 404,
+    "sha256": "9d348b15b742376ae72d0e9ba53937b418bd93888139a28f596253357dcd97fe",
+    "matchesSealedArchive": true
+  },
+  "drive": "passed",
+  "driveRun": {
+    "started": "2026-11-05T07:56:11.340Z",
+    "finished": "2026-11-05T08:01:54.930Z",
+    "ok": true
+  },
+  "driveWorkspaceCopy": {
+    "source": "workspaces",
+    "target": "drive",
+    "dataAt": "2026-11-05T07:54:22.209Z",
+    "snapshot": "945e11b5ef6e0aa18a4bc4456dd6b9dfd50120eaeec84a6cda196e6c954878be",
+    "copiedAt": "2026-11-05T07:57:38.733Z",
+    "observed": "ok",
+    "path": "/srv/workspaces",
+    "attemptedAt": "2026-11-05T07:56:15.783Z"
+  },
+  "driveOminullCopy": {
+    "source": "ominull-production-state",
+    "target": "drive",
+    "dataAt": "2026-11-05T08:00:35.091Z",
+    "snapshot": "90016fdeb4ab87916a084409aaa4d68861d8a78cc6d1c51abb296f5cea7060d3",
+    "copiedAt": "2026-11-05T08:01:02.347Z",
+    "observed": "ok",
+    "path": "/media/kasadis/Backups/ominull-production-state/current",
+    "attemptedAt": "2026-11-05T07:59:33.701Z"
+  },
+  "throwawayContainerRemoved": true,
+  "completedAt": 1793865811.6771772
 }
