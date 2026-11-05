@@ -153,7 +153,7 @@ timeout_seconds = 300
 [[native.stages]]
 id = "python-st-sdk"
 kind = "check"
-coverage = "focused"
+coverage = "full"
 quick = true
 quick_paths = ["native/st-sdk/**", "contracts/**"]
 inputs = ["native/st-sdk", "contracts"]
@@ -163,7 +163,7 @@ argv = ["bash", "native/st-sdk/check.sh"]
 [[native.stages]]
 id = "python-service-tools"
 kind = "check"
-coverage = "focused"
+coverage = "full"
 quick = true
 quick_paths = ["native/service-tools/**"]
 inputs = ["native/service-tools"]
