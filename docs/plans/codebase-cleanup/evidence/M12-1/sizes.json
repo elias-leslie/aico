@@ -1,0 +1,78 @@
+{
+  "agent-hub-files": {
+    "files": 23977,
+    "bytes": 522727102
+  },
+  "agent_hub-session_events.dump": {
+    "files": 1,
+    "bytes": 1319824442
+  },
+  "agent_hub-session_events.dump.list": {
+    "files": 1,
+    "bytes": 433
+  },
+  "agent_hub.dump": {
+    "files": 1,
+    "bytes": 77744670
+  },
+  "agent_hub.dump.list": {
+    "files": 1,
+    "bytes": 37975
+  },
+  "agent_versions.jsonl": {
+    "files": 1,
+    "bytes": 3129330
+  },
+  "agents.jsonl": {
+    "files": 1,
+    "bytes": 222509
+  },
+  "capture.json": {
+    "files": 1,
+    "bytes": 5027
+  },
+  "design-studio": {
+    "files": 1394,
+    "bytes": 436011205
+  },
+  "file-copy-verification.json": {
+    "files": 1,
+    "bytes": 774
+  },
+  "monitor.sqlite3": {
+    "files": 1,
+    "bytes": 277412352
+  },
+  "monitor.sqlite3-shm": {
+    "files": 1,
+    "bytes": 32768
+  },
+  "monitor.sqlite3-wal": {
+    "files": 1,
+    "bytes": 0
+  },
+  "nightshift": {
+    "files": 2183,
+    "bytes": 26449142
+  },
+  "remote-hosts-metadata.jsonl": {
+    "files": 1,
+    "bytes": 2693
+  },
+  "retention-verification.json": {
+    "files": 1,
+    "bytes": 497
+  },
+  "summitflow.dump": {
+    "files": 1,
+    "bytes": 138178600
+  },
+  "summitflow.dump.list": {
+    "files": 1,
+    "bytes": 32716
+  },
+  "verification.json": {
+    "files": 1,
+    "bytes": 5056
+  }
+}

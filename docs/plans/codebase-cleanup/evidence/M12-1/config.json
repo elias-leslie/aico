@@ -1,0 +1,38 @@
+{
+  "destination": "/srv/workspaces/archive/pre-aico",
+  "sourceContainer": "summitflow-stack-postgres-1",
+  "restoreContainer": "aico-m12-archive-restore",
+  "image": "pgvector/pgvector:pg16",
+  "maximumDiskFraction": 0.85,
+  "databases": {
+    "agent_hub": {"omitData": ["api_keys", "credentials", "remote_hosts"], "separateData": ["session_events"]},
+    "summitflow": {"omitData": [], "separateData": []}
+  },
+  "sqlite": {
+    "monitor.sqlite3": "/var/lib/summitflow/monitor/monitor.sqlite3",
+    "nightshift/history.sqlite3": "/var/lib/nightshift/history.sqlite3",
+    "nightshift/decide.sqlite3": "/var/lib/nightshift/decide/decide.sqlite3",
+    "nightshift/items.sqlite3": "/var/lib/nightshift/items/items.sqlite3"
+  },
+  "trees": {
+    "design-studio": "/srv/workspaces/projects/summitflow/data/design-studio",
+    "nightshift/exec-receipts": "/var/lib/nightshift/exec/receipts",
+    "nightshift/owner-approvals": "/var/lib/nightshift/exec/owner-approvals",
+    "agent-hub-files/context-deliveries": "/home/kasadis/.local/state/agent-hub/context-deliveries"
+  },
+  "files": {
+    "nightshift/chain.jsonl": "/var/lib/nightshift/ledger/chain.jsonl",
+    "nightshift/pve-anchor.json": "/var/lib/nightshift/ledger/pve-anchor.json",
+    "nightshift/exec-ledger.jsonl": "/var/lib/nightshift/exec/ledger.jsonl"
+  },
+  "agentHubRoot": "/srv/workspaces/projects/agent-hub",
+  "anchorHost": "proxmox-gem",
+  "anchorCommandPrefix": ["sudo", "-u", "kasadis"],
+  "anchorPath": "/var/lib/nightshift/ledger-anchor/heads",
+  "notes": [
+    "Opaque sealed backup may contain Neri session content; never inspect it. Counts and checksums only, per coordinator approval bab270.",
+    "No credential values or key hashes: api_keys, credentials and remote_hosts data omitted. remote_hosts metadata exported without token_hash. Schemas retained, per coordinator approval a32506.",
+    "OmniNull evidence replica stays on disk, covered by its existing source and CT150 normal backup.",
+    "Not archived: .git/st receipts, graph cache, isolated observations, old release builds (regenerable)."
+  ]
+}

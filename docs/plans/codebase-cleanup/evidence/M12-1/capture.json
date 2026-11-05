@@ -1,0 +1,152 @@
+{
+  "startedAt": 1793864823.4389827,
+  "space": {
+    "total": 676053647360,
+    "used": 372468264960,
+    "extraEstimate": 18983921802,
+    "projectedFraction": 0.57902533074206
+  },
+  "databases": {
+    "agent_hub": {
+      "counts": {
+        "agent_performance_logs": 138,
+        "agent_prompts": 124,
+        "agent_versions": 1351,
+        "agents": 97,
+        "alembic_version": 1,
+        "api_keys": 127,
+        "automation_definitions": 11,
+        "automation_profile_revisions": 30,
+        "automation_profiles": 13,
+        "automation_project_policies": 8,
+        "automation_runs": 6707,
+        "clients": 18,
+        "context_budgets": 4,
+        "context_change_reviews": 2,
+        "context_deliveries": 4219,
+        "context_judgments": 60,
+        "context_knobs": 1,
+        "context_maintenance_attention": 2,
+        "context_maintenance_items": 102,
+        "context_records": 328,
+        "cost_logs": 43686,
+        "credentials": 28,
+        "credit_lots": 2,
+        "memories": 485,
+        "memory_injection_metrics": 3497,
+        "memory_revisions": 15757,
+        "memory_settings": 1,
+        "model_aliases": 68,
+        "model_catalog_sync_state": 1,
+        "model_enrichments": 127,
+        "models": 63,
+        "native_command_entities": 7,
+        "native_continuation_turns": 119,
+        "native_observation_issues": 14,
+        "native_observation_receipts": 445,
+        "native_observation_sources": 16,
+        "native_projection_states": 1,
+        "native_protocol_profiles": 1,
+        "native_user_identities": 17,
+        "project_permissions": 20,
+        "prompt_revisions": 817,
+        "prompts": 160,
+        "remote_hosts": 14,
+        "remote_tool_credentials": 7,
+        "request_logs": 672139,
+        "runtime_context_overrides": 65,
+        "runtime_context_profile_policies": 7,
+        "session_bindings": 1614,
+        "session_close_settings": 1,
+        "session_event_archives": 105,
+        "session_events": 3104308,
+        "session_summary_segments": 32056,
+        "sessions": 44366,
+        "subscription_plans": 8,
+        "subscription_usage_cursors": 8116,
+        "subscription_usage_daily": 826,
+        "subscription_usage_snapshots": 12163,
+        "task_narration_tags": 2388,
+        "truncation_events": 1130,
+        "usage_calls": 543264,
+        "usage_sessions": 9253,
+        "usage_stats": 3333,
+        "user_preferences": 0,
+        "workflow_schedule_controls": 0,
+        "workflow_steps": 151
+      },
+      "omittedData": [
+        "api_keys",
+        "credentials",
+        "remote_hosts"
+      ],
+      "snapshot": "00000018-00050ACE-1"
+    },
+    "summitflow": {
+      "counts": {
+        "alembic_version": 1,
+        "automation_dispatch_receipts": 5,
+        "backup_sources": 65,
+        "backups": 3019,
+        "design_asset_comments": 0,
+        "design_asset_exports": 4,
+        "design_asset_ratings": 24,
+        "design_asset_votes": 3,
+        "design_assets": 522,
+        "events": 17381,
+        "external_backup_sources": 2,
+        "maintenance_runs": 5704,
+        "mockup_comments": 0,
+        "mockup_ratings": 0,
+        "mockup_votes": 3,
+        "mockups": 137,
+        "note_format_proposals": 6,
+        "note_versions": 56,
+        "notes": 36,
+        "notifications": 741,
+        "project_lifecycle_events": 22,
+        "project_retirement_decisions": 13,
+        "projects": 36,
+        "quality_check_results": 1,
+        "refactor_sessions": 0,
+        "runtime_metric_samples": 9900,
+        "share_grants": 1,
+        "share_users": 3,
+        "storage_backends": 2,
+        "subtask_citations": 173,
+        "subtask_dependencies": 43,
+        "subtask_summaries": 1,
+        "task_deletions": 15279,
+        "task_dependencies": 14,
+        "task_external_requests": 27,
+        "task_spirit": 37,
+        "task_subtask_steps": 0,
+        "task_subtasks": 113,
+        "tasks": 108
+      },
+      "omittedData": [],
+      "snapshot": "00000018-00050AD0-1"
+    }
+  },
+  "sqlite": {
+    "monitor.sqlite3": {
+      "source": "/var/lib/summitflow/monitor/monitor.sqlite3"
+    },
+    "nightshift/history.sqlite3": {
+      "source": "/var/lib/nightshift/history.sqlite3"
+    },
+    "nightshift/decide.sqlite3": {
+      "source": "/var/lib/nightshift/decide/decide.sqlite3"
+    },
+    "nightshift/items.sqlite3": {
+      "source": "/var/lib/nightshift/items/items.sqlite3"
+    }
+  },
+  "notes": [
+    "Opaque sealed backup may contain Neri session content; never inspect it. Counts and checksums only, per coordinator approval bab270.",
+    "No credential values or key hashes: api_keys, credentials and remote_hosts data omitted. remote_hosts metadata exported without token_hash. Schemas retained, per coordinator approval a32506.",
+    "OmniNull evidence replica stays on disk, covered by its existing source and CT150 normal backup.",
+    "Not archived: .git/st receipts, graph cache, isolated observations, old release builds (regenerable)."
+  ],
+  "finishedAt": 1793864982.0225856
+}

@@ -1,0 +1,30 @@
+{
+  "coverage": {
+    "native": "/srv/workspaces (existing whole-volume source)",
+    "drive": "source:workspaces (existing whole-volume source)",
+    "excludedByDriveRules": false,
+    "sourceAdded": false,
+    "policyChanged": false
+  },
+  "nativeRun": {
+    "started": "2026-11-05T07:54:22.090Z",
+    "finished": "2026-11-05T07:55:34.456Z",
+    "ok": true
+  },
+  "workspacePoint": {
+    "source": "/srv/workspaces",
+    "snapshot": "/srv/workspaces/.btrbk/workspaces.20261105T025423-0500",
+    "target": "/mnt/summitflow-native/native/workspaces.20261105T025423-0500",
+    "dataAt": "2026-11-05T07:54:22.209Z",
+    "source_uuid": "ce7ee140-b032-a745-97c7-a344a89363e0",
+    "received_uuid": "ce7ee140-b032-a745-97c7-a344a89363e0"
+  },
+  "nativeReadback": [
+    "manifest.json",
+    "nightshift/pve-anchor.json",
+    "verification.json"
+  ],
+  "readbackMatches": true,
+  "smallFileRestore": "pending; Drive holds the shared backup lock",
+  "drive": "running"
+}

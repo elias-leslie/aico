@@ -1,0 +1,20 @@
+{
+  "before": {
+    "profileEnabled": true,
+    "clockOwner": "central",
+    "legacyControlRowPresent": false,
+    "activeRuns": 0
+  },
+  "during": {
+    "profileEnabled": false,
+    "activeRuns": 0
+  },
+  "after": {
+    "profileEnabled": true,
+    "clockOwner": "central",
+    "legacyControlRowPresent": false
+  },
+  "verifiedBeforeRestoring": true,
+  "restoredAt": 1793865166.8775773,
+  "note": "Only the local_history automation profile enabled flag was changed. Agent Hub remained running."
+}

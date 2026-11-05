@@ -1,0 +1,11 @@
+{
+  "archive": "/srv/workspaces/archive/pre-aico",
+  "files": 27571,
+  "bytes": 2809132716,
+  "sha256Readback": "all matched",
+  "manifestSha256": "1659a39235bd5c5d9c1a0c1c4370098a9a44be23b654f3e72b717e5292ec611c",
+  "filesImmutable": true,
+  "directoriesImmutable": true,
+  "writeBitsAbsent": true,
+  "checkedAt": 1793865200.4974585
+}

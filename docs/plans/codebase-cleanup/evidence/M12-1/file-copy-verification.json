@@ -1,0 +1,37 @@
+{
+  "design-studio": {
+    "files": 1394,
+    "bytes": 436011205,
+    "sourceChecksumsMatch": true
+  },
+  "nightshift/exec-receipts": {
+    "files": 2095,
+    "bytes": 10214374,
+    "sourceChecksumsMatch": true
+  },
+  "nightshift/owner-approvals": {
+    "files": 79,
+    "bytes": 24375,
+    "sourceChecksumsMatch": true
+  },
+  "agent-hub-files/context-deliveries": {
+    "files": 23969,
+    "bytes": 522679622,
+    "sourceChecksumsMatch": true
+  },
+  "nightshift/chain.jsonl": {
+    "files": 1,
+    "bytes": 2903876,
+    "sourceChecksumsMatch": true
+  },
+  "nightshift/pve-anchor.json": {
+    "files": 1,
+    "bytes": 404,
+    "sourceChecksumsMatch": true
+  },
+  "nightshift/exec-ledger.jsonl": {
+    "files": 1,
+    "bytes": 1165081,
+    "sourceChecksumsMatch": true
+  }
+}
