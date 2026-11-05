@@ -53,8 +53,9 @@ func (h *Hook) disruption(target string, requests []string, run func([]string) (
 		reply := str(r["intent"])
 		state := str(r["state"])
 		asked[str(r["to"])], asked[str(r["acked_by"])] = true, true
-		item := copyRow(r)
-		item["reply"] = reply
+		item := map[string]any{"id": r["id"], "to": r["to"], "from": r["from"], "state": state,
+			"reply": reply, "acked_by": r["acked_by"], "note": r["note"], "eta_min": r["eta_min"],
+			"created": r["created"], "acked_at": r["acked_at"]}
 		replies = append(replies, item)
 		if reply == "yes" {
 			ready[str(r["to"])], ready[str(r["acked_by"])] = true, true

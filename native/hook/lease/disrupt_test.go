@@ -27,4 +27,9 @@ func TestResolvedRefusalDoesNotBlockDisruption(t *testing.T) {
 	if len(after["blocking"].([]string)) != 0 {
 		t.Fatalf("resolved refusal still blocking: %v", after)
 	}
+	for _, row := range after["handshakes"].([]map[string]any) {
+		if _, found := row["text"]; found {
+			t.Fatal("preflight copied private request text instead of reply metadata")
+		}
+	}
 }
