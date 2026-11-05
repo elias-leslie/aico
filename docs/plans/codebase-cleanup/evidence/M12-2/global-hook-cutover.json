@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-05T10:06:15.184740+00:00",
+  "prior_bytes": 534,
+  "prior_sha256": "afe51b12ad697c0427810432308502f43111cccd9d72fed268a15e3676696966",
+  "backup": "/home/kasadis/.config/git/hooks/pre-push.before-m12-20261105",
+  "hook": "/home/kasadis/.config/git/hooks/pre-push",
+  "target": "/srv/workspaces/projects/summitflow/scripts/lib/publication-pre-push",
+  "verified_source": "9b31f0ca7b155f8630a736ea9a6aeac9d55694df",
+  "authority": "coordinator27a1c4; retained old file; no bypass or service restart",
+  "form": "Existing executable hook wrapper retargeted; target script itself is not executable",
+  "executable": true
+}

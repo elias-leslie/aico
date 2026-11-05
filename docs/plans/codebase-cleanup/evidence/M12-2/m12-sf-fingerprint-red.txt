@@ -1,0 +1,2 @@
+CHECK:FAIL:pytest|1.3s|details:.dev-tools/pytest-717668-details.txt|hint:E   app.services.git.outgoing.OutgoingVerificationError: Outgoing secret scan refused history or failed (details redacted).
+CHECK:FAIL focused (1 stage(s))

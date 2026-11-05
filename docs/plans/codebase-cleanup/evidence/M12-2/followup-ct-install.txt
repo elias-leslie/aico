@@ -1,0 +1,27 @@
+Prerequisites: node v24.14.1, systemd 257, cgroup v2, tmux 3.5a
+
+==> Using prebuilt Aico artifacts
+
+==> Aico command
+linked /home/kasadis/.local/bin/aico
+linked /home/kasadis/.local/bin/st
+linked /home/kasadis/.local/lib/aico/ops
+
+==> Tether
+
+==> Pi model rules
+linked /home/kasadis/.pi/agent/extensions/model-guard.ts
+
+==> User units
+installed /home/kasadis/.config/systemd/user/aico-jobs.service
+installed /home/kasadis/.config/systemd/user/aico-state-snapshot.service
+installed /home/kasadis/.config/systemd/user/aico-web.service
+installed /home/kasadis/.config/systemd/user/tether@default.service
+
+==> Starting
+Started: tether@default.service aico-web.service aico-jobs.service aico-state-snapshot.timer
+
+Aico is installed.
+  Start Tether and the web app: scripts/install.sh --start
+    (or systemctl --user enable --now tether@default.service aico-web.service aico-jobs.service aico-state-snapshot.timer)
+  Web app:                      http://localhost:3002

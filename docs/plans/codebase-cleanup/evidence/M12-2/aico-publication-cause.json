@@ -1,0 +1,9 @@
+{
+  "exit": 1,
+  "reason": "outgoing_verification_failed",
+  "publication_complete": false,
+  "security_state": "blocked",
+  "security_reason": "Outgoing secret scan refused history or failed (details redacted).",
+  "stdout_bytes": 1063,
+  "stderr_bytes": 0
+}

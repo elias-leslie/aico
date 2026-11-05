@@ -1,0 +1,5 @@
+{
+  "source": "51583e9e4d1df1989b1e6683a829f99ba07d68df",
+  "sign_receipt": "Signed root update written to /srv/scratch/m12-2-followup-host",
+  "private_key_contents_logged": false
+}

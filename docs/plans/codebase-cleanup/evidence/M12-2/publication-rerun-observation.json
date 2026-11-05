@@ -1,0 +1,149 @@
+{
+  "at": "2026-11-05T09:50:24.339413+00:00",
+  "rows": [
+    {
+      "id": "jobs/github-publish",
+      "state": "failed",
+      "meaning": "Exited 1: Publication: 0 pushed; 12 failed.",
+      "last_run": "2026-11-05T08:05:00.448Z"
+    },
+    {
+      "id": "publish:aico",
+      "state": "failed",
+      "meaning": "Publication failed at 51583e9e4d: outgoing verification failed. Owning agent: inspect the publish log.",
+      "last_run": "2026-11-05T09:50:08.056Z"
+    },
+    {
+      "id": "publish:blackbox",
+      "state": "failed",
+      "meaning": "Local check failed at 519ce38b82: browser-e2e, go-tests, osv, webcrypto. Owning agent: fix it and check again.",
+      "last_run": "2026-11-05T09:50:08.071Z"
+    },
+    {
+      "id": "publish:ominull",
+      "state": "failed",
+      "meaning": "Main has no local check at cfbbecee35. Owning agent: run st check --acceptance.",
+      "last_run": "2026-11-05T09:50:21.704Z"
+    },
+    {
+      "id": "publish:portfolio-ai",
+      "state": "failed",
+      "meaning": "Publication failed at d9b98aa893: transport result unavailable. Owning agent: inspect the publish log.",
+      "last_run": "2026-11-05T08:05:00.991Z"
+    },
+    {
+      "id": "publish:summitflow",
+      "state": "failed",
+      "meaning": "Publication failed at 57a18615ae: transport result unavailable. Owning agent: inspect the publish log.",
+      "last_run": "2026-11-05T08:05:01.055Z"
+    },
+    {
+      "id": "publish:vault-tools",
+      "state": "failed",
+      "meaning": "Publication failed at 03bf78e9c7: transport result unavailable. Owning agent: inspect the publish log.",
+      "last_run": "2026-11-05T08:05:01.121Z"
+    },
+    {
+      "id": "publish:agent-hub",
+      "state": "ok",
+      "meaning": "Published main at 90cb5a28f1.",
+      "last_run": "2026-11-05T09:50:01.729Z"
+    },
+    {
+      "id": "publish:agent-skills",
+      "state": "ok",
+      "meaning": "Main is on GitHub at d6d2e78360.",
+      "last_run": "2026-11-05T09:50:03.143Z"
+    },
+    {
+      "id": "publish:browser-automation",
+      "state": "ok",
+      "meaning": "Published main at d27200a649.",
+      "last_run": "2026-11-05T09:50:11.634Z"
+    },
+    {
+      "id": "publish:bugout",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "last_run": "2026-11-05T09:50:11.640Z"
+    },
+    {
+      "id": "publish:cinderwake",
+      "state": "ok",
+      "meaning": "Publication skipped: main unavailable.",
+      "last_run": "2026-11-05T09:50:11.646Z"
+    },
+    {
+      "id": "publish:claude-config",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "last_run": "2026-11-05T09:50:11.649Z"
+    },
+    {
+      "id": "publish:code-intelligence",
+      "state": "ok",
+      "meaning": "Published main at 663a18a07b.",
+      "last_run": "2026-11-05T09:50:15.110Z"
+    },
+    {
+      "id": "publish:codex-config",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "last_run": "2026-11-05T09:50:15.117Z"
+    },
+    {
+      "id": "publish:desktop-automation",
+      "state": "ok",
+      "meaning": "Published main at 6c75408279.",
+      "last_run": "2026-11-05T09:50:18.227Z"
+    },
+    {
+      "id": "publish:jobinator-4000",
+      "state": "ok",
+      "meaning": "Published main at 9508f82784.",
+      "last_run": "2026-11-05T09:50:21.682Z"
+    },
+    {
+      "id": "publish:neri",
+      "state": "ok",
+      "meaning": "Publication skipped: excluded project.",
+      "last_run": "2026-11-05T09:50:21.688Z"
+    },
+    {
+      "id": "publish:neri-hunters",
+      "state": "ok",
+      "meaning": "Publication skipped: excluded project.",
+      "last_run": "2026-11-05T09:50:21.691Z"
+    },
+    {
+      "id": "publish:nightshift",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "last_run": "2026-11-05T09:50:21.695Z"
+    },
+    {
+      "id": "publish:portfolio",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "last_run": "2026-11-05T09:50:21.707Z"
+    },
+    {
+      "id": "publish:security-research",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "last_run": "2026-11-05T08:05:01.004Z"
+    },
+    {
+      "id": "publish:uilint",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "last_run": "2026-11-05T08:05:01.067Z"
+    },
+    {
+      "id": "publish:vault",
+      "state": "ok",
+      "meaning": "Publication skipped: main unavailable.",
+      "last_run": "2026-11-05T08:05:01.074Z"
+    }
+  ]
+}

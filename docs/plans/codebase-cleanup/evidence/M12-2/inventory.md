@@ -114,6 +114,7 @@ Gem's replacement `aico-pve-sender.timer` and `aico-pve-trim.timer` are enabled.
 | Old Hatchet setup/migration containers | Already exited; no live caller. Kept as-is, no image/volume/container prune. |
 | `local-searxng` | Running; Aico's live web-search caller still needs it. Keep. |
 | Workstation / CT190 / gem cron | Matching `/etc/cron.*` scans found no active legacy line. Root/kasadis crontabs have zero active entries on these hosts; CT190 user manager separately checked. |
+| Retained SummitFlow CLI-only Git transport | Aico nightly publication still calls the committed, checked SF `vcs deliver` leaf through a versioned checkout extension. The M10d alias had removed that route; coordinator followup restored it with a failing-first CLI test. Keep the SF CLI checkout/runtime and outgoing verifier; no SF API, DB or worker is used. Coordinator assigned final verifier placement to M13. |
 | Signing tmpfs mount and backup filesystem mounts | Live signing/backup infrastructure. Keep; no key contents read. |
 | `nightshift-tray@summitflow.dev` GNOME extension | Enabled, current Aico top-bar integration. Keep its source and supported extension install. |
 | Retired AH context-delivery files | Final import completed, Aico launch deliveries verified. Existing AH files archived/retained and no longer used by new native sessions. |

@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-05T09:36:13.414768+00:00",
+  "at": "2026-11-05T10:10:07.120224+00:00",
   "ct190": {
     "health": {
       "service": "aico-web",
@@ -10,62 +10,62 @@
         "version": "0.1.0"
       }
     },
-    "ops": "/home/kasadis/.local/lib/aico/releases/ee4f4a24918fbb2211c6aa262b50a64b27f06ad2",
-    "cli": "/home/kasadis/.local/lib/aico/releases/ee4f4a24918fbb2211c6aa262b50a64b27f06ad2/packages/cli/scripts/aico"
+    "ops": "/home/kasadis/.local/lib/aico/releases/223da83002c2c2e512058714fae605d7bec4da18",
+    "cli": "/home/kasadis/.local/lib/aico/releases/223da83002c2c2e512058714fae605d7bec4da18/packages/cli/scripts/aico"
   },
   "status": [
     {
       "id": "jobs/backups-append",
       "state": "ok",
-      "last_run": "2026-11-05T09:02:02.372Z"
+      "last_run": "2026-11-05T10:02:10.317Z"
     },
     {
       "id": "davion-sidarli/backup/append/aico-davion-sidarli",
       "state": "ok",
-      "last_run": "2026-11-05T09:02:02.511Z"
+      "last_run": "2026-11-05T10:02:10.461Z"
     },
     {
       "id": "davion-sidarli/pve-heartbeat",
       "state": "ok",
-      "last_run": "2026-11-05T09:35:15.186Z"
+      "last_run": "2026-11-05T10:05:42.303Z"
     },
     {
       "id": "davion-gem/heartbeat/workstation",
       "state": "ok",
-      "last_run": "2026-11-05T09:30:37.190Z"
+      "last_run": "2026-11-05T10:00:40.863Z"
     },
     {
       "id": "davion-gem/heartbeat/ct190",
       "state": "ok",
-      "last_run": "2026-11-05T09:30:37.190Z"
+      "last_run": "2026-11-05T10:00:40.863Z"
     }
   ],
   "ct_status": [
     {
       "id": "jobs/backups-append-aico",
       "state": "ok",
-      "last_run": "2026-11-05T09:05:14.062Z"
+      "last_run": "2026-11-05T10:05:21.336Z"
     },
     {
       "id": "aico/backup/append/aico-aico",
       "state": "ok",
-      "last_run": "2026-11-05T09:05:14.414Z"
+      "last_run": "2026-11-05T10:05:21.619Z"
     },
     {
       "id": "davion-gem/heartbeat/workstation",
       "state": "ok",
-      "last_run": "2026-11-05T09:35:37.225Z"
+      "last_run": "2026-11-05T10:05:41.483Z"
     },
     {
       "id": "davion-gem/heartbeat/ct190",
       "state": "ok",
-      "last_run": "2026-11-05T09:35:37.225Z"
+      "last_run": "2026-11-05T10:05:41.483Z"
     },
     {
       "id": "aico/pve-heartbeat",
       "state": "ok",
-      "last_run": "2026-11-05T09:33:24.053Z"
+      "last_run": "2026-11-05T10:09:34.068Z"
     }
   ],
-  "ct_jobs": "backups-drill  home davion-sidarli  next 2026-11-05 11:00:00\n  last 2026-11-05 02:50:44 on davion-sidarli: ok: This month's restore drill passed. The next drill runs next month.\ngithub-publish  home davion-sidarli  next 2026-11-06 08:05:00\n  last 2026-11-05 08:05:00 on davion-sidarli: failed: Exited 1: Publication: 0 pushed; 12 failed.\nnotes-export  home davion-sidarli  next 2026-11-06 08:30:00\n  last 2026-11-05 08:30:04 on davion-sidarli: ok: Not exporting tonight: aico is linked and does the nightly export.\ncontext-unused  home davion-sidarli  next 2026-11-06 09:10:00\n  last 2026-11-05 09:10:03 on davion-sidarli: warn: 0 items have no recorded use across at least 3 observed sessions. 4/46 deliveries fully observed; 41 sessions unavailable.\nusage-collect  home davion-sidarli  next 2026-11-05 09:36:49\n  last 2026-11-05 09:31:48 on davion-sidarli: ok: Usage read: Claude 1% weekly left; Codex on credits; OpenCode Go 55% monthly left.\nbackups-native  home davion-sidarli  next 2026-11-05 13:16:04\n  last 2026-11-05 09:15:19 on davion-sidarli: ok: Backup finished.\nbackups-drive  home davion-sidarli  next 2026-11-06 07:30:00\n  last 2026-11-05 07:30:02 on davion-sidarli: ok: Backup finished.\nbackups-append  home davion-sidarli  next 2026-11-05 10:02:06\n  last 2026-11-05 09:02:02 on davion-sidarli: ok: Backup finished.\nbackups-snapshots  home davion-sidarli  next 2026-11-05 09:56:48\n  last 2026-11-05 09:26:47 on davion-sidarli: ok: Backup finished.\nbackups-guard  home davion-sidarli  next 2026-11-05 09:37:58\n  last 2026-11-05 09:32:58 on davion-sidarli: ok: Backup finished.\nbackups-append-aico  home aico  next 2026-11-05 10:05:16\n  last 2026-11-05 09:05:14 on aico: ok: Backup finished.\nbackups-verify  home davion-sidarli  next 2026-11-05 10:00:00\n  last - on -: ok: Not run yet. Runs daily at 05:00 on davion-sidarli.\n"
+  "ct_jobs": "backups-drill  home davion-sidarli  next 2026-11-05 11:00:00\n  last 2026-11-05 02:50:44 on davion-sidarli: ok: This month's restore drill passed. The next drill runs next month.\ngithub-publish  home davion-sidarli  next 2026-11-06 08:05:00\n  last 2026-11-05 10:06:16 on davion-sidarli: failed: Exited 1: Publication: 2 pushed; 2 failed.\nnotes-export  home davion-sidarli  next 2026-11-06 08:30:00\n  last 2026-11-05 08:30:04 on davion-sidarli: ok: Not exporting tonight: aico is linked and does the nightly export.\ncontext-unused  home davion-sidarli  next 2026-11-06 09:10:00\n  last 2026-11-05 09:10:03 on davion-sidarli: warn: 0 items have no recorded use across at least 3 observed sessions. 4/46 deliveries fully observed; 41 sessions unavailable.\nusage-collect  home davion-sidarli  next 2026-11-05 10:11:57\n  last 2026-11-05 10:06:56 on davion-sidarli: ok: Usage read: Claude 1% weekly left; Codex on credits; OpenCode Go 55% monthly left.\nbackups-native  home davion-sidarli  next 2026-11-05 13:16:04\n  last 2026-11-05 09:15:19 on davion-sidarli: ok: Backup finished.\nbackups-drive  home davion-sidarli  next 2026-11-06 07:30:00\n  last 2026-11-05 07:30:02 on davion-sidarli: ok: Backup finished.\nbackups-append  home davion-sidarli  next 2026-11-05 11:02:14\n  last 2026-11-05 10:02:10 on davion-sidarli: ok: Backup finished.\nbackups-snapshots  home davion-sidarli  next 2026-11-05 10:26:50\n  last 2026-11-05 09:56:49 on davion-sidarli: ok: Backup finished.\nbackups-guard  home davion-sidarli  next 2026-11-05 10:13:07\n  last 2026-11-05 10:08:07 on davion-sidarli: ok: Backup finished.\nbackups-append-aico  home aico  next 2026-11-05 11:05:23\n  last 2026-11-05 10:05:21 on aico: ok: Backup finished.\nbackups-verify  home davion-sidarli  next 2026-11-06 10:00:00\n  last 2026-11-05 10:00:04 on davion-sidarli: ok: Backup finished.\n"
 }

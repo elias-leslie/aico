@@ -1,0 +1,9 @@
+{
+  "head": "223da83002c2c2e512058714fae605d7bec4da18",
+  "base": "16dabd107899f00eadb800ab18ffc1a95f7af75a",
+  "exit": 0,
+  "stdout_bytes": 0,
+  "stderr_bytes": 0,
+  "trusted_exact_fingerprints": 1,
+  "policy_sha256": "221fac1f976ba65b4ec0743f983bdcd320c9c1c9f88ac2dea6e9b275806db274"
+}

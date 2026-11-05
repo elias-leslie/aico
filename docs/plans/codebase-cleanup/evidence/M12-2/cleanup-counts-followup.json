@@ -1,0 +1,35 @@
+{
+  "head": "223da83002c2c2e512058714fae605d7bec4da18",
+  "loc": {
+    "source": {
+      "added": 661,
+      "removed": 7067,
+      "files": 201,
+      "net_removed": 6406
+    },
+    "tests": {
+      "added": 293,
+      "removed": 3807,
+      "files": 34,
+      "net_removed": 3514
+    },
+    "config": {
+      "added": 173,
+      "removed": 2075,
+      "files": 17,
+      "net_removed": 1902
+    },
+    "evidence": {
+      "added": 15322,
+      "removed": 0,
+      "files": 118,
+      "net_removed": -15322
+    },
+    "lockfiles": {
+      "added": 1,
+      "removed": 7,
+      "files": 1,
+      "net_removed": 6
+    }
+  }
+}

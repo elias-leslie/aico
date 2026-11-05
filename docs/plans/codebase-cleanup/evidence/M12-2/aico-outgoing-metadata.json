@@ -1,0 +1,16 @@
+{
+  "exit": 1,
+  "base": "16dabd107899f00eadb800ab18ffc1a95f7af75a",
+  "head": "51583e9e4d1df1989b1e6683a829f99ba07d68df",
+  "findings": [
+    {
+      "RuleID": "generic-api-key",
+      "File": "packages/tether/src/model-guard.test.ts",
+      "StartLine": 20,
+      "Commit": "a9d4efb38e50dc8d7ff3732443541431ab15369b",
+      "Fingerprint": "a9d4efb38e50dc8d7ff3732443541431ab15369b:packages/tether/src/model-guard.test.ts:generic-api-key:20"
+    }
+  ],
+  "stderr_bytes": 0,
+  "stderr_categories": []
+}

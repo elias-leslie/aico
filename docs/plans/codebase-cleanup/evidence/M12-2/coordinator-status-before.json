@@ -1,0 +1,326 @@
+[
+  {
+    "id": "davion-sidarli/check-backups",
+    "state": "warn",
+    "meaning": "Project snapshots are not healthy: no sweep has run lately. Check the autosnap timer.",
+    "last_run": "2026-11-05T09:30:28.702Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "sudo -n systemctl start host-steward-check.service"
+      },
+      {
+        "kind": "log",
+        "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+      }
+    ]
+  },
+  {
+    "id": "davion-sidarli/check-sudo",
+    "state": "warn",
+    "meaning": "15 new sudo commands: 8, bin/tether, docker update and 12 more. Expected if declared (host-steward or nightshift declare) or run by a known agent; they count as normal after a day. Don't know one? journalctl -t sudo --since -1d -g NAME shows who ran it. Also: Sudo command spikes: docker exec 154 vs\u2026",
+    "last_run": "2026-11-05T09:30:28.702Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "sudo -n systemctl start host-steward-check.service"
+      },
+      {
+        "kind": "log",
+        "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+      }
+    ]
+  },
+  {
+    "id": "publish:agent-skills",
+    "state": "failed",
+    "meaning": "Publication failed at d6d2e78360: transport result unavailable. Owning agent: inspect the publish log.",
+    "last_run": "2026-11-05T08:05:00.618Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source agent-skills"
+      }
+    ]
+  },
+  {
+    "id": "jobs/github-publish",
+    "state": "failed",
+    "meaning": "Exited 1: Publication: 0 pushed; 12 failed.",
+    "last_run": "2026-11-05T08:05:00.448Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico jobs run github-publish"
+      },
+      {
+        "kind": "log",
+        "ref": "journalctl --user -u aico-jobs.service -g github-publish -n 200 --no-pager"
+      }
+    ]
+  },
+  {
+    "id": "publish:aico",
+    "state": "failed",
+    "meaning": "Main has no local check at 3c4bc895ee. Owning agent: run st check --acceptance.",
+    "last_run": "2026-11-05T08:05:00.637Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source aico"
+      }
+    ]
+  },
+  {
+    "id": "publish:agent-hub",
+    "state": "failed",
+    "meaning": "Publication failed at 90cb5a28f1: transport result unavailable. Owning agent: inspect the publish log.",
+    "last_run": "2026-11-05T08:05:00.541Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source agent-hub"
+      }
+    ]
+  },
+  {
+    "id": "publish:blackbox",
+    "state": "failed",
+    "meaning": "Local check failed at 519ce38b82: browser-e2e, go-tests, osv, webcrypto. Owning agent: fix it and check again.",
+    "last_run": "2026-11-05T08:05:00.659Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source blackbox"
+      }
+    ]
+  },
+  {
+    "id": "publish:browser-automation",
+    "state": "failed",
+    "meaning": "Publication failed at d27200a649: transport result unavailable. Owning agent: inspect the publish log.",
+    "last_run": "2026-11-05T08:05:00.707Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source browser-automation"
+      }
+    ]
+  },
+  {
+    "id": "publish:bugout",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "last_run": "2026-11-05T08:05:00.720Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source bugout"
+      }
+    ]
+  },
+  {
+    "id": "publish:cinderwake",
+    "state": "ok",
+    "meaning": "Publication skipped: main unavailable.",
+    "last_run": "2026-11-05T08:05:00.728Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source cinderwake"
+      }
+    ]
+  },
+  {
+    "id": "publish:claude-config",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "last_run": "2026-11-05T08:05:00.734Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source claude-config"
+      }
+    ]
+  },
+  {
+    "id": "publish:code-intelligence",
+    "state": "failed",
+    "meaning": "Publication failed at 663a18a07b: transport result unavailable. Owning agent: inspect the publish log.",
+    "last_run": "2026-11-05T08:05:00.784Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source code-intelligence"
+      }
+    ]
+  },
+  {
+    "id": "publish:codex-config",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "last_run": "2026-11-05T08:05:00.797Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source codex-config"
+      }
+    ]
+  },
+  {
+    "id": "publish:desktop-automation",
+    "state": "failed",
+    "meaning": "Publication failed at 6c75408279: transport result unavailable. Owning agent: inspect the publish log.",
+    "last_run": "2026-11-05T08:05:00.844Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source desktop-automation"
+      }
+    ]
+  },
+  {
+    "id": "publish:jobinator-4000",
+    "state": "failed",
+    "meaning": "Publication failed at 9508f82784: transport result unavailable. Owning agent: inspect the publish log.",
+    "last_run": "2026-11-05T08:05:00.900Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source jobinator-4000"
+      }
+    ]
+  },
+  {
+    "id": "publish:neri",
+    "state": "ok",
+    "meaning": "Publication skipped: excluded project.",
+    "last_run": "2026-11-05T08:05:00.915Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source neri"
+      }
+    ]
+  },
+  {
+    "id": "publish:neri-hunters",
+    "state": "ok",
+    "meaning": "Publication skipped: excluded project.",
+    "last_run": "2026-11-05T08:05:00.920Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source neri-hunters"
+      }
+    ]
+  },
+  {
+    "id": "publish:nightshift",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "last_run": "2026-11-05T08:05:00.926Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source nightshift"
+      }
+    ]
+  },
+  {
+    "id": "publish:ominull",
+    "state": "failed",
+    "meaning": "Main has no local check at cfbbecee35. Owning agent: run st check --acceptance.",
+    "last_run": "2026-11-05T08:05:00.937Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source ominull"
+      }
+    ]
+  },
+  {
+    "id": "publish:portfolio",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "last_run": "2026-11-05T08:05:00.942Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source portfolio"
+      }
+    ]
+  },
+  {
+    "id": "publish:portfolio-ai",
+    "state": "failed",
+    "meaning": "Publication failed at d9b98aa893: transport result unavailable. Owning agent: inspect the publish log.",
+    "last_run": "2026-11-05T08:05:00.991Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source portfolio-ai"
+      }
+    ]
+  },
+  {
+    "id": "publish:security-research",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "last_run": "2026-11-05T08:05:01.004Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source security-research"
+      }
+    ]
+  },
+  {
+    "id": "publish:summitflow",
+    "state": "failed",
+    "meaning": "Publication failed at 57a18615ae: transport result unavailable. Owning agent: inspect the publish log.",
+    "last_run": "2026-11-05T08:05:01.055Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source summitflow"
+      }
+    ]
+  },
+  {
+    "id": "publish:uilint",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "last_run": "2026-11-05T08:05:01.067Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source uilint"
+      }
+    ]
+  },
+  {
+    "id": "publish:vault",
+    "state": "ok",
+    "meaning": "Publication skipped: main unavailable.",
+    "last_run": "2026-11-05T08:05:01.074Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source vault"
+      }
+    ]
+  },
+  {
+    "id": "publish:vault-tools",
+    "state": "failed",
+    "meaning": "Publication failed at 03bf78e9c7: transport result unavailable. Owning agent: inspect the publish log.",
+    "last_run": "2026-11-05T08:05:01.121Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source vault-tools"
+      }
+    ]
+  }
+]

@@ -1,0 +1,2 @@
+[deploy] queued aico-31981e0ace2e for 51583e9e4d1d
+[deploy] result: aico deploy result aico-31981e0ace2e   wait: aico deploy wait aico-31981e0ace2e   log: aico logs aico-deploy-aico-31981e0ace2e

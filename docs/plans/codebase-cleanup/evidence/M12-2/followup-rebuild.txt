@@ -1,0 +1,2 @@
+[deploy] queued aico-9c007a46f3ac for 51583e9e4d1d
+[deploy] result: aico deploy result aico-9c007a46f3ac   wait: aico deploy wait aico-9c007a46f3ac   log: aico logs aico-deploy-aico-9c007a46f3ac

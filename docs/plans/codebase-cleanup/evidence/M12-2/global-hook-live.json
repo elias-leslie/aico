@@ -1,0 +1,10 @@
+{
+  "exit": 0,
+  "head": "223da83002c2c2e512058714fae605d7bec4da18",
+  "base": "16dabd107899f00eadb800ab18ffc1a95f7af75a",
+  "stdout_bytes": 0,
+  "stderr_bytes": 0,
+  "pushed": false,
+  "full_outgoing_range": true,
+  "hook_executable": true
+}

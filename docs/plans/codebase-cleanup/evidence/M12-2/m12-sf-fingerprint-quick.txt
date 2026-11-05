@@ -1,0 +1,11 @@
+CHECK:quick:3 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: biome, tsc, vitest
+CHECK:SKIP:Live Agent Hub, memory, deployed API and browser E2E tests require separately authorized services and credentials; pytest excludes e2e and slow markers, frontend excludes tests/e2e.: live-integrations
+CHECK:SKIP:Explicit ST_BROWSER_LIVE_FIXTURE and ST_RUN_SERVICE_SYSTEMD_TESTS owner fixtures are not authorized by local acceptance; their named tests are deselected.: live-browser-systemd
+CHECK:SKIP:An operator-installed global Git hook is outside clean native fixture scope; only the tracked hook adapter regression runs.: operator-global-hook
+CHECK:SKIP:ST_SNAPSHOT_TEST_ROOT requires an owner-assigned isolated Btrfs subvolume and bounded restore/delete privilege; local hermetic acceptance exactly deselects test_native_btrfs_shared_capture_readonly_recovery_and_isolated_restore and test_native_nested_saved_source_is_refused_and_disposable_tracked_fixture_preserved. Separate physical qualification and invocation are documented in docs/native-host-recovery.md.: owner-btrfs-snapshots
+CHECK:OK:ruff|0.0s|details:.dev-tools/ruff-743534-details.txt|hint:All checks passed!
+CHECK:OK:types|0.1s|details:.dev-tools/types-743534-details.txt|hint:All checks passed!
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-743534-details.txt|hint:[]
+CHECK:OK:pytest|18.4s|details:.dev-tools/pytest-743534-details.txt|hint:=============================================================== 210 passed, 1 warning in 18.01s ================================================================
+CHECK:PASS quick 18.5s (4 ran, 7 skipped)

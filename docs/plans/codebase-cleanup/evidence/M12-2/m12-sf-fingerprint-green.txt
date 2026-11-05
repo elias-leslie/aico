@@ -1,0 +1,2 @@
+CHECK:OK:pytest|11.0s|details:.dev-tools/pytest-718528-details.txt|hint:=============================================================== 151 passed, 1 warning in 10.64s ================================================================
+CHECK:PASS focused (1 stage(s))

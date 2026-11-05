@@ -1,0 +1,14 @@
+CHECK:SCOPE:left out 1 changed file(s) other agents wrote or lease
+CHECK:quick:11 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: gradle-android, cargo-tray, go-hook, python-st-sdk, python-service-tools, biome-agent, tsc-agent, depcruise-agent, biome-checks, tsc-checks, depcruise-checks, biome-context, tsc-context, depcruise-context, biome-fleet, tsc-fleet, depcruise-fleet, biome-jobs, tsc-jobs, depcruise-jobs, biome-notes, tsc-notes, depcruise-notes, biome-notify, tsc-notify, depcruise-notify, biome-ops, tsc-ops, depcruise-ops, biome-shared, tsc-shared, depcruise-shared, biome-status, tsc-status, depcruise-status, biome-store, tsc-store, depcruise-store, biome-tasks, tsc-tasks, depcruise-tasks, biome-tether, tsc-tether, depcruise-tether, biome-tether-client, tsc-tether-client, depcruise-tether-client, biome-ui-kit, tsc-ui-kit, depcruise-ui-kit, biome-usage, tsc-usage, depcruise-usage, biome-web-frontend, tsc-web-frontend, depcruise-web-frontend, biome-web-server, tsc-web-server, depcruise-web-server, biome-webtools, tsc-webtools, depcruise-webtools, biome-root
+CHECK:OK:python-host-ruff|0.0s|details:.dev-tools/python-host-ruff-673055-details.txt|hint:All checks passed!
+CHECK:OK:python-host-types|0.2s|details:.dev-tools/python-host-types-673055-details.txt|hint:All checks passed!
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-673055-details.txt|hint:[]
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-673055-details.txt|hint:boundaries: ok (20 packages, 12 contract fixtures)
+CHECK:OK:biome-cli|0.1s|details:.dev-tools/biome-cli-673055-details.txt|hint:Checked 4 files in 17ms. No fixes applied.
+CHECK:OK:tsc-cli|0.7s|details:.dev-tools/tsc-cli-673055-details.txt|hint:-
+CHECK:OK:depcruise-cli|0.4s|details:.dev-tools/depcruise-cli-673055-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:vitest|2.4s|details:.dev-tools/vitest-673055-details.txt|hint:Tests  79 passed (79)
+CHECK:OK:contracts-host-steward|3.6s|details:.dev-tools/contracts-host-steward-673055-details.txt|hint:168 passed in 3.13s
+CHECK:OK:python-host-tests|8.0s|details:.dev-tools/python-host-tests-673055-details.txt|hint:1187 passed in 7.48s
+CHECK:PASS quick 8.3s (10 ran, 63 skipped)

@@ -1,0 +1,129 @@
+{
+  "at": "2026-11-05T09:46:10.679096+00:00",
+  "current_sudo_event_count": 6,
+  "unacknowledged_events": 0,
+  "usage_total_last24": 2656,
+  "top_families": [
+    [
+      "docker inspect",
+      726
+    ],
+    [
+      "stat",
+      448
+    ],
+    [
+      "btrfs subvolume",
+      232
+    ],
+    [
+      "docker exec",
+      155
+    ],
+    [
+      "summitflow-native-capture",
+      153
+    ],
+    [
+      "summitflow-backup-window",
+      127
+    ],
+    [
+      "realpath",
+      112
+    ],
+    [
+      "rsync",
+      103
+    ],
+    [
+      "btrfs property",
+      60
+    ],
+    [
+      "chown",
+      56
+    ],
+    [
+      "test",
+      53
+    ],
+    [
+      "python3",
+      45
+    ]
+  ],
+  "m12_declarations": [
+    {
+      "host": "workstation",
+      "what": "config",
+      "at": 1793864641.1283123,
+      "until": 1793879041.1283123,
+      "reason": "M12-1 one-time sealed archive: pause and restore Agent Hub transcript pruning, throwaway local Postgres restore container, read-only archive and backup verifica",
+      "by": "Agent in Aico window 7afaaaad",
+      "actor": {
+        "kind": "agent",
+        "label": "Agent in Aico window 7afaaaad",
+        "tool": "Codex",
+        "widget": "7afaaaad"
+      }
+    },
+    {
+      "host": "davion-gem",
+      "what": "vm",
+      "at": 1793866919.8585587,
+      "until": 1793870519.8585587,
+      "reason": "Start stopped browser VM 100 for M12 Aico rendered checks, restore stopped state afterward",
+      "by": "Agent in Aico window d7e42f14",
+      "actor": {
+        "kind": "agent",
+        "label": "Agent in Aico window d7e42f14",
+        "tool": "Codex",
+        "widget": "d7e42f14"
+      }
+    },
+    {
+      "host": "davion-sidarli",
+      "what": "listeners",
+      "at": 1793867392.9729037,
+      "until": 1793870992.9729037,
+      "reason": "Temporary Aico render-check relay on 192.168.86.128:3002, restricted to browser VM 192.168.86.234; removed after checks",
+      "by": "Agent in Aico window d7e42f14",
+      "actor": {
+        "kind": "agent",
+        "label": "Agent in Aico window d7e42f14",
+        "tool": "Codex",
+        "widget": "d7e42f14"
+      }
+    },
+    {
+      "host": "davion-gem",
+      "what": "units",
+      "at": 1793868066.7902133,
+      "until": 1793878866.7902133,
+      "reason": "M12 approved CT190 standalone Aico prebuilt cutover; existing peer data and prior releases retained",
+      "by": "Agent in Aico window d7e42f14",
+      "actor": {
+        "kind": "agent",
+        "label": "Agent in Aico window d7e42f14",
+        "tool": "Codex",
+        "widget": "d7e42f14"
+      }
+    },
+    {
+      "host": "davion-sidarli",
+      "what": "config",
+      "at": 1793872030.6151826,
+      "until": 1793879230.6151826,
+      "reason": "M12 coordinator followup: signed host snapshot-check cutover to Aico job; publication CLI-only transport repair and live verification",
+      "by": "Agent in Aico window d7e42f14",
+      "actor": {
+        "kind": "agent",
+        "label": "Agent in Aico window d7e42f14",
+        "tool": "Codex",
+        "widget": "d7e42f14"
+      }
+    }
+  ],
+  "interpretation": "Lane-declared archive, unit/container retirement, signed installs and metadata verification explain the sudo activity. Six retained sensitive events already acknowledged; the remaining warning is statistical new-family/spike history, not an unacknowledged sensitive event. Coordinator 708450 accepted an evidence note; no new mechanism or suppressed state."
+}

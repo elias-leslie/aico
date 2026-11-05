@@ -1,17 +1,18 @@
-M12-2 complete; accepted source ee4f4a249 is deployed on workstation and CT190.
-Stopped/disabled: SF monitor, stack prune trigger, old backup guard, AH frontend/workers and usage/Codex sync/close timers.
-Redis and Hatchet are stopped with restart=no; volumes, copies, unit files and prior releases kept.
-Agent Hub backend and Postgres stay: Neri lab logins, old sessions, and the zzupdate manual completion caller; agents/skills CLI retained.
-Display/input, boot/postboot, zswap, DNS and gem CPU EPP stay for live callers; final ports belong to M13.
-Aico runtime: retired AH chat/workflow/routes/SDK, monitor code and Redis consumers removed; new native hooks deliver context.
-Net LOC removed: 6,405 production source, 3,554 tests, 1,945 configuration; 306 internal exports narrowed.
-Fallow: 578→246 findings, zero unused dependency/import/boundary findings; graph baseline83→49; retained hits reviewed.
-Reentries: roles/models,4budgets,8plans/2lots,36notes,Logins/phone and host state present; permission20rows hash-match.
-Not reentered: about13tasks, optional9mockups,1item/20docs; full14host carry and exact asset/sudo equivalence unproved. Coordinator assigned these audit differences to M13.
-Also M13: per-root measured context tokens now unknown; no AH fallback. See reentries.md and inventory.md.
-Checks: source gates green; fresh Claude/Codex/Pi context/pulse/check commands work (their quick runs selected0tests); native reviewer passed.
-Live: both peers healthy; bidirectional Logins create/change/remove passed, scratch gone; CT backup and heartbeat OK after install.
-Quiet journals09:04:43–09:35:58UTC:31m15s, zero alerts on all3hosts and zero shared-container errors.
-Rendered check unverified after browser EAGAIN/page_wedged; coordinator accepted the limitation; source uilint clean.
-Rollback: inventory.md and docs/deployment.md; archive manifest release acknowledged before data containers stopped; no data/backup deletion.
-Evidence: docs/plans/codebase-cleanup/evidence/M12-2/{inventory,reentries,verification,review}.md. Remaining: None within the agreed scope.
+M12-2 complete: Aico 223da83002 deployed on workstation/CT190; signed host snapshot fix 51583e9e; SF verifier 9b31f0ca.
+Stopped/disabled: SF monitor/prune/old backup guard; AH frontend, workers, usage/Codex sync/close timers; Redis/Hatchet restart=no.
+Volumes, unit files, stores, backups, old releases and verified archive retained; no durable deletion or prune.
+Keep AH backend and Postgres for Neri, old sessions, zzupdate completion; agents/skills CLI and live host helpers listed.
+Keep checked SF CLI verifier and pre-push transport for publication; all SF services off; final verifier placement belongs to M13.
+Net removed: 6,406 production source LOC, 3,514 tests, 1,902 config; 306 internal exports narrowed; remaining Fallow hits reviewed.
+Snapshot Status defect fixed with a failing test first, then signed and installed: Aico job fresh OK and host backups row green.
+Publication alias fixed; approved one exact historical public-model-ID fingerprint, no pattern/path or credential bypass.
+Rerun pushed Aico+SF; Aico publication OK. Only Blackbox failed checks (browser-e2e, go-tests, osv, webcrypto) and Ominull unchecked remain.
+Sudo: all six sensitive events already acked; declared-lane evidence accepted. Statistical family/volume WARN remains honestly visible.
+Reentries present: roles/models, four budgets, eight plans/two lots, 36 notes, Logins/phone, host state; 20 permission rows hash-match.
+M13 differences: about 13 tasks, optional nine mockups, one item/20 docs, 14-host carry and exact asset/sudo equivalence unproved; root context tokens unknown.
+Checks: original 64-stage gate plus followup 79 CLI/1,187 host/168 contracts, 151 focused and 210 SF quick tests; required Codex source/runtime reviews.
+Fresh Claude/Codex/Pi delivery, pulse/check commands passed; their zero-test quick runs are not source test evidence.
+Both peers healthy; Logins bidirectional create/change/remove passed, scratch gone; CT backup/heartbeat OK after install.
+Retirement journals 09:04:43–09:35:58UTC (31m15s): zero alerts on three hosts and zero container errors. Followup live checks recorded separately.
+Rendered check unverified (browser failure, coordinator accepted); source uilint clean. Rollback: inventory.md, deployment.md, coordinator-followup.md.
+Full evidence: docs/plans/codebase-cleanup/evidence/M12-2. Remaining: None within agreed scope; per-repo publication blockers are recorded above.

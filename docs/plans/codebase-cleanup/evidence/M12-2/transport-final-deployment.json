@@ -1,0 +1,17 @@
+{
+  "source": "223da83002c2c2e512058714fae605d7bec4da18",
+  "sf_verifier": "9b31f0ca7b155f8630a736ea9a6aeac9d55694df",
+  "signed_host": "51583e9e4d1df1989b1e6683a829f99ba07d68df",
+  "checksums": [
+    {
+      "file": "source.tar",
+      "sha256": "a4ba3fc94c6fc37cb662cea8c25c072b4c8d1e92bdcca3188e40207db5c8374a",
+      "remote_matches": true
+    },
+    {
+      "file": "artifacts.tar.gz",
+      "sha256": "6ec640fb08995b322b04b218c203da616607b1ec3c5b4df2be8d6fb9041f912d",
+      "remote_matches": true
+    }
+  ]
+}
