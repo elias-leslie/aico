@@ -383,21 +383,6 @@ def write(path, data):
     return path
 
 
-def test_backups_native_host_capture(tmp_path):
-    root = tmp_path / ".local/state/summitflow/host-recovery"
-    conf = tmp_path / "btrbk.conf"
-    conf.write_text("x")
-    good = {"status": "completed", "capture_complete": True, "artifacts_complete": True, "points": [1], "finished_at": NOW - 10 * 3600}
-    write(root / "latest.json", {"status": "completed"})
-    write(root / "last-good.json", good)
-    here = {"native_config": str(conf)}
-    uid = tmp_path.stat().st_uid
-    assert states(backups.native_host(ctx("backups", **here), str(tmp_path), uid)) == {"backups.native": "ok"}
-    write(root / "last-good.json", {**good, "finished_at": NOW - 70 * 3600})
-    assert states(backups.native_host(ctx("backups", **here), str(tmp_path), uid)) == {"backups.native": "failed"}
-    assert backups.native_host(ctx("backups", native_config=str(tmp_path / "absent")), str(tmp_path), uid) == []
-
-
 @pytest.mark.parametrize(
     ("row", "verdict"),
     [
@@ -437,8 +422,11 @@ def aico_backup_health():
     return {
         "entries": [{"id": "drive/" + source, "source": source, "target": "drive",
                      "state": "ok", "dataAt": NOW - 3600, "snapshot": "restorable-copy"}
-                    for source in DATA["site"]["pve"]["backup_required_targets"]],
-        "runs": {"drive": {"ok": True, "finished": NOW - 3600}},
+                    for source in DATA["site"]["pve"]["backup_required_targets"]] + [
+                         {"id": "native/" + source, "source": source, "target": "native", "state": "ok",
+                          "dataAt": NOW - 3600, "snapshot": "local-point", "path": "/backup/point"}
+                         for source in ["root-volume", "home", "srv-workspaces", "var-lib-docker", "srv-models", "var-log"]],
+        "runs": {"drive": {"ok": True, "finished": NOW - 3600}, "native": {"ok": True, "finished": NOW - 3600}},
     }
 
 
@@ -471,7 +459,7 @@ def test_backups_follow_aico_after_retired_receipt_writers_stop(tmp_path, monkey
     (lambda d: d["entries"][0].update(dataAt=NOW + 3600), "warn", "warn"),
     (lambda d: d["entries"][0].update(snapshot=None), "ok", "failed"),
     (lambda d: d["entries"][0].update(target="native"), "ok", "failed"),
-    (lambda d: d["entries"].pop(), "ok", "failed"),
+    (lambda d: d["entries"].pop(0), "ok", "failed"),
     (lambda d: d["runs"]["drive"].update(ok=False), "ok", "failed"),
     (lambda d: d["runs"]["drive"].update(finished=NOW - 37 * 3600), "ok", "warn"),
     (lambda d: d["runs"]["drive"].update(finished=NOW + 3600), "ok", "warn"),
@@ -496,6 +484,54 @@ def test_backups_offline_unchanged_age_is_computed_by_owning_live_api(tmp_path):
     data["entries"][0]["dataAt"] = NOW - 10 * 86400
     out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
     assert set(out.values()) == {"ok"}
+
+
+def test_backups_native_follows_aico_not_unwritten_host_receipts(tmp_path, monkeypatch):
+    monkeypatch.setattr(backups.pwd, "getpwnam", lambda owner: type("Owner", (), {"pw_dir": str(tmp_path), "pw_uid": tmp_path.stat().st_uid}))
+    root = tmp_path / ".local/state/summitflow/host-recovery"
+    write(root / "latest.json", {"status": "completed"})
+    write(root / "last-good.json", {"status": "completed", "capture_complete": True, "artifacts_complete": True,
+                                  "points": [{}], "finished_at": NOW - 70 * 3600})
+    config = tmp_path / "btrbk.conf"
+    config.touch()
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(aico_backup_health()), native_config=str(config))))
+    assert out["backups.native"] == "ok"
+
+
+def test_backups_running_drive_uses_last_verified_copies(tmp_path):
+    data = aico_backup_health()
+    data["runs"]["drive"] = {"ok": False, "started": NOW - 60}
+    for entry in data["entries"]:
+        if entry["target"] == "drive":
+            entry["running"] = True
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
+    assert out["backups.pve"] == "ok"
+
+
+@pytest.mark.parametrize("override,expected", [
+    ({"dataAt": NOW - 40 * 3600}, "warn"),
+    ({"dataAt": NOW - 70 * 3600}, "failed"),
+    ({"dataAt": None}, "warn"),
+    ({"state": "failed"}, "failed"),
+    ({"snapshot": None}, "failed"),
+    ({"path": None}, "failed"),
+])
+def test_backups_native_keeps_received_point_and_age_requirements(override, expected, tmp_path):
+    data = aico_backup_health()
+    next(e for e in data["entries"] if e["target"] == "native").update(override)
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data))))
+    assert out["backups.native"] == expected
+
+
+def test_backups_native_requires_all_volumes_and_successful_run():
+    data = aico_backup_health()
+    data["entries"] = [e for e in data["entries"] if e["source"] != "srv-workspaces"]
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data))))
+    assert out["backups.native"] == "failed"
+    data = aico_backup_health()
+    data["runs"]["native"]["ok"] = False
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data))))
+    assert out["backups.native"] == "failed"
 
 
 @pytest.mark.parametrize("result", [Result(1), Result(0, "not-json"), Result(0, '{"rows": []}'),

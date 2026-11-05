@@ -171,7 +171,7 @@ drill_status_command = ["curl", "--fail", "--silent", "--show-error", "--noproxy
 drill_job_id = "jobs/backups-drill"
 # Preserve the previous monthly freshness window; the owning job checks the actual drill before reporting OK.
 drill_stale_hours = 852.0
-native_config = "/etc/btrbk/summitflow.conf"
+native_required_sources = ["root-volume", "home", "srv-workspaces", "var-lib-docker", "srv-models", "var-log"]
 native_warn_hours = 36
 native_failed_hours = 60
 snapshot_status_command = ["curl", "--fail", "--silent", "--show-error", "--noproxy", "*", "http://127.0.0.1:3002/api/status?q=backups-snapshots"]
