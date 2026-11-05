@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import type { TuiSpec } from './spec'
 
 /** Under Linux's 128 KiB limit for one argv string, with room to spare. */
-export const MAX_INSTRUCTIONS_BYTES = 64 * 1024
+const MAX_INSTRUCTIONS_BYTES = 64 * 1024
 
 export interface InstructionsSnapshot {
   /** Agent Hub prompt slug. */

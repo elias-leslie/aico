@@ -303,9 +303,8 @@ describe('root create with entry', () => {
     ).toEqual({
       status: 400,
       body: {
-        error: 'invalid_body',
-        field: 'entry',
-        reason: 'entry runs claude-code, codex and pi sessions only',
+        error: 'unsupported_tool',
+        supported: ['aico-agent', 'claude-code', 'codex', 'pi'],
       },
     })
     expect(
@@ -585,7 +584,6 @@ describe('root create with entry', () => {
       'sample-app',
       fixture,
       null,
-      null,
       { name: 'neri-hunt', arg: 'case-9' },
     )
     expect(getWidget(widgetId)).toBeDefined()
@@ -616,7 +614,6 @@ describe('root create with entry', () => {
         tool,
         'sample-app',
         fixture,
-        null,
         null,
         { name: 'neri-hunt', arg: 'case-8' },
       )

@@ -426,10 +426,7 @@ async function deliverCommand(db: () => Database, rest: string[], io: ContextCli
     Number.isInteger(launched) &&
     launched > 0 &&
     startedBy(launched, DELIVERY.markerHops, io.delivery?.pid, io.delivery?.parentOf)
-  const delivered =
-    marked ||
-    env.AGENT_HUB_CONTEXT_PREINJECTED_HASH ||
-    (format === 'pi' && env.AGENT_HUB_CONTEXT_BYPASS !== '1')
+  const delivered = marked || env.AGENT_HUB_CONTEXT_PREINJECTED_HASH
   if (HOOK_FORMATS.includes(format) && delivered && !parsed.flags.has('--force')) {
     // Startup knows both ids while the agent is alive. Keep the link so the
     // nightly pass can observe this exact conversation after its session ends.

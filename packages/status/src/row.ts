@@ -83,7 +83,7 @@ const length = (value: string) => [...value].length
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})$/
 
 /** An RFC 3339 date-time with a zone, as epoch ms; null when it is not one or names an impossible date. */
-export function parseTime(value: string): number | null {
+function parseTime(value: string): number | null {
   const match = RFC3339.exec(value)
   if (!match) return null
   const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number) as number[]

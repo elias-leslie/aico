@@ -21,9 +21,9 @@ const MAX_MOUSE_WHEEL_TICKS_PER_EVENT = 12
 /** WheelEvent.deltaMode values. */
 const WHEEL_DELTA_MODE_LINE = 1
 const WHEEL_DELTA_MODE_PAGE = 2
-export const MOBILE_TOUCH_SCROLL_SENSITIVITY = 2
-export const DESKTOP_WHEEL_LINE_HEIGHT_PX = 14
-export const SCROLL_SPEED_MULTIPLIER = 2
+const MOBILE_TOUCH_SCROLL_SENSITIVITY = 2
+const DESKTOP_WHEEL_LINE_HEIGHT_PX = 14
+const SCROLL_SPEED_MULTIPLIER = 2
 
 // ---------------------------------------------------------------------------
 // Terminal state queries
@@ -33,7 +33,7 @@ export function isAlternateScreen(terminal: XtermTerminal): boolean {
   return terminal.buffer.active.type === 'alternate'
 }
 
-export function isMouseTrackingActive(terminal: XtermTerminal): boolean {
+function isMouseTrackingActive(terminal: XtermTerminal): boolean {
   return terminal.modes.mouseTrackingMode !== 'none'
 }
 

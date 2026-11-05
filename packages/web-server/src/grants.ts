@@ -13,7 +13,7 @@ export interface GrantRequest {
   created: number
   expires: number
 }
-export interface GrantView {
+interface GrantView {
   public_url: string
   requests: GrantRequest[]
   grants: { id: string; kind: string; expires: number }[]
@@ -21,7 +21,7 @@ export interface GrantView {
   labels: Record<string, string>
 }
 export type GrantCall = (msg: Record<string, unknown>) => Promise<unknown>
-export const grantCall: GrantCall = (msg) =>
+const grantCall: GrantCall = (msg) =>
   new Promise((resolve, reject) => {
     const socket = createConnection(
       process.env.AICO_GRANTS_SOCKET || '/run/host-steward/grants.sock',

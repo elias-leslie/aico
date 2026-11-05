@@ -11,7 +11,6 @@ import { linkPaths } from '@aico/fleet/link'
 import { type PeerAnswer, PeerUnavailable, peerRequest } from '@aico/fleet/peer-http'
 import { pushToolLogins, setToolGrant } from '@aico/fleet/secrets'
 import { readSettings } from '@aico/fleet/settings'
-import type { AgentHubConfig } from '../agent-hub/config'
 import { HttpError, type Router, readJsonObject, sendJson } from '../http'
 import type { ToolLogin } from '../lifecycle/tui/adapters/contract'
 import { ADAPTERS } from '../lifecycle/tui/registry'
@@ -78,7 +77,7 @@ export const DEFAULT_LOGINS: Record<string, ToolLogin> = Object.fromEntries(
   ADAPTERS.map((adapter) => [adapter.id, adapter.login]),
 )
 
-export const STATUS_LINE = '"$HOME/.local/lib/tether/bin/tether" fleet login-status'
+const STATUS_LINE = '"$HOME/.local/lib/tether/bin/tether" fleet login-status'
 const STATUS_TIMEOUT_MS = 20_000
 const COMMAND_TIMEOUT_MS = 30_000
 const SLEEP_TIMEOUT_MS = 120_000
@@ -100,7 +99,6 @@ export interface HubView {
 
 export interface HostAdminDeps {
   hub: HubView
-  agentHub: AgentHubConfig
   env: NodeJS.ProcessEnv
   run?: Runner
   peer?: (socket: string, method: string, path: string, body: unknown) => Promise<PeerAnswer>

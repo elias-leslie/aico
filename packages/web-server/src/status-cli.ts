@@ -3,7 +3,7 @@
 
 import type { ShownRow, StatusView } from '@aico/status'
 
-export const STATUS_USAGE = `Usage: st status [options]
+const STATUS_USAGE = `Usage: st status [options]
 
 Shows every check, job, backup, service, VM and machine that reports to Aico on this
 machine: problems first (failed, late, unknown, warn), healthy rows folded into a count.

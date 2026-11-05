@@ -95,14 +95,14 @@ export function blobIds(root: string, files: string[]): Map<string, string> {
 }
 
 /** `<mode> <oid>\t<path>` lines of the committed tree under the given paths (sorted, stable). */
-export function treeEntries(root: string, rev: string, paths: string[]): string {
+function treeEntries(root: string, rev: string, paths: string[]): string {
   return git(root, ['ls-tree', '-r', '--full-tree', rev, '--', ...paths])
 }
 
 const globCache = new Map<string, RegExp>()
 
 /** One .st-check.toml glob as a regular expression. */
-export function globRegExp(pattern: string): RegExp {
+function globRegExp(pattern: string): RegExp {
   const cached = globCache.get(pattern)
   if (cached) return cached
   const trimmed = pattern.replace(/\/+$/, '')

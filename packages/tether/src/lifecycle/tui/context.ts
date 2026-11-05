@@ -59,13 +59,3 @@ async function probeHook(spec: TuiSpec, context: ContextHook): Promise<ContextSt
     ? adapter.context.check(spec)
     : { state: 'unsupported', detail: `No adapter checks the ${context.kind} context hook.` }
 }
-
-/** Run only after Tether has retired the exact owned workload. */
-export function finalizeContext(
-  spec: TuiSpec | undefined,
-  ownershipId: string,
-): Promise<boolean | null> {
-  const kind = spec?.context?.kind
-  const retire = kind ? adapterForContext(kind)?.context.retire : undefined
-  return retire ? retire(ownershipId) : Promise.resolve(null)
-}

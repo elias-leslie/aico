@@ -16,7 +16,7 @@ export interface PortfolioAiOptions {
 }
 
 /** Aico's namespace for the UUIDv5 ids it gives owners (random once, fixed forever). */
-export const CAPTURE_NAMESPACE = '6f0c2b1e-3a54-4d8e-9a77-5b1d2c9e84a3'
+const CAPTURE_NAMESPACE = '6f0c2b1e-3a54-4d8e-9a77-5b1d2c9e84a3'
 
 /** portfolio-ai's contract: what it sniffs and its size limit (backend/app/api/captures.py). */
 export const ACCEPTED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])

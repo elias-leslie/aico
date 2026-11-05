@@ -47,7 +47,7 @@ function list<T extends string>(
   return values as T[]
 }
 
-export function filterFrom(query: URLSearchParams): Filter {
+function filterFrom(query: URLSearchParams): Filter {
   const sort = query.get('sort') || undefined
   if (sort && !(SORTS as readonly string[]).includes(sort))
     throw new HttpError(422, `sort must be one of ${SORTS.join(', ')}`)

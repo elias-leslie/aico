@@ -81,7 +81,7 @@ function ownRow(value: unknown, app: string, machine: string) {
   }
 }
 
-export function serviceAppsRouter(deps: ServiceAppsDeps): Router {
+function serviceAppsRouter(deps: ServiceAppsDeps): Router {
   const env = deps.env ?? process.env
   const apps = deps.apps ?? SERVICE_APPS
   const router = new Router(settings.max_body_bytes)

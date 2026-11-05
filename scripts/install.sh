@@ -13,7 +13,7 @@
 #   ~/.local/lib/tether (Tether's bundle, CLI and shims), ~/.local/bin/tether
 #   user units from scripts/systemd/ plus packages/tether/deploy/tether@.service and
 #   tether-link@.service
-#   ~/.pi/agent/extensions/st-coord.ts, only when SummitFlow is installed
+#   ~/.pi/agent/extensions/model-guard.ts (Aico launch rules)
 #
 # TETHER_LIB_DIR and TETHER_BIN_DIR move the Tether install; XDG_CONFIG_HOME
 # moves the units.
@@ -49,8 +49,6 @@ fi
 LIB_DIR="${TETHER_LIB_DIR:-$HOME/.local/lib/tether}"
 BIN_DIR="${TETHER_BIN_DIR:-$HOME/.local/bin}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-PI_COORD_SOURCE="${ST_PI_COORD_EXTENSION:-$HOME/.summitflow/services/projects/summitflow/current/source/scripts/lib/pi-coord-extension.ts}"
-PI_COORD_LINK="$HOME/.pi/agent/extensions/st-coord.ts"
 # Started by --start.
 START_UNITS=(tether@default.service aico-web.service aico-jobs.service aico-state-snapshot.timer)
 
@@ -190,10 +188,8 @@ step "Tether"
 run env TETHER_LIB_DIR="$LIB_DIR" packages/tether/scripts/install-release.sh
 install_link "$LIB_DIR/bin/tether" "$BIN_DIR/tether"
 
-if [ -e "$PI_COORD_SOURCE" ]; then
-  step "Pi coordination extension"
-  install_link "$PI_COORD_SOURCE" "$PI_COORD_LINK"
-fi
+step "Pi model rules"
+install_link "$REPO/packages/tether/integrations/pi/model-guard.ts" "$HOME/.pi/agent/extensions/model-guard.ts"
 
 if [ "$SKIP_SYSTEMD" = 0 ]; then
   step "User units"

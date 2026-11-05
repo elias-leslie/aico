@@ -52,7 +52,7 @@ export interface NoteItemRow extends Sync {
   hint: string | null
 }
 
-export interface NoteLabelRow extends Sync {
+interface NoteLabelRow extends Sync {
   id: string
   note_id: string
   label: string

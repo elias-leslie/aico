@@ -52,7 +52,7 @@ export interface ModelNoticeSession {
 }
 
 /** The notice for a switch in a session nobody launched. */
-export function modelNotice(
+function modelNotice(
   session: ModelNoticeSession,
   change: ModelSwitch,
   origin: string,

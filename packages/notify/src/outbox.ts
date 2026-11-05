@@ -12,7 +12,7 @@ import { ANY_PHONE, type NotifyStore } from './store'
 
 /** First retry after this; each later one waits twice as long, up to MAX_BACKOFF_MS. */
 export const FIRST_BACKOFF_MS = 15_000
-export const MAX_BACKOFF_MS = 15 * 60_000
+const MAX_BACKOFF_MS = 15 * 60_000
 /** A notice still not delivered this long after it arrived is given up. */
 export const GIVE_UP_MS = 24 * 3600_000
 /** Waiting longer than this makes the Status row a problem. */

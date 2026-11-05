@@ -59,7 +59,7 @@ function statusFindings(env: NodeJS.ProcessEnv, now: () => number): Finding[] | 
   }
 }
 
-export function liveSources(db: Database, env: NodeJS.ProcessEnv, now = Date.now): PulseSources {
+function liveSources(db: Database, env: NodeJS.ProcessEnv, now = Date.now): PulseSources {
   const client = new TetherClient(tetherSocketPath(env, process.getuid?.()), 2_000)
   const orNull = async <T>(work: () => Promise<T>): Promise<T | null> => {
     try {

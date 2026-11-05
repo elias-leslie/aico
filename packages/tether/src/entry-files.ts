@@ -44,7 +44,7 @@ function outside(path: string): Error {
 
 /** The home's host path with its parent resolved, when the home itself is a
  * directory and not a symlink; null otherwise (nothing is read then). */
-export function entryHomeBoundary(home: string): string | null {
+function entryHomeBoundary(home: string): string | null {
   if (!isAbsolute(home)) return null
   try {
     const path = join(realpathSync(dirname(home)), basename(home))
@@ -56,7 +56,7 @@ export function entryHomeBoundary(home: string): string | null {
 
 /** Open `path` read-only and keep the descriptor only if it is a regular file
  * (or a directory) inside `boundary`. */
-export function openInside(boundary: string, path: string, directory = false): number {
+function openInside(boundary: string, path: string, directory = false): number {
   const fd = openSync(path, directory ? DIR_FLAGS : FILE_FLAGS)
   try {
     const where = readlinkSync(`/proc/self/fd/${fd}`)

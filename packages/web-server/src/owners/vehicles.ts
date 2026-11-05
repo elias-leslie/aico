@@ -74,7 +74,7 @@ export function eventId(self: CaptureRow): string {
  * member's text stands in as one service line. Same input, same event, so a
  * resend is a repeat and never a conflict.
  */
-export function buildEvent(self: CaptureRow, group: readonly GroupMember[]): VehicleEvent {
+function buildEvent(self: CaptureRow, group: readonly GroupMember[]): VehicleEvent {
   const readings = group.map((member) => read(member.capture))
 
   let odometer: VehicleEvent['odometer'] = null

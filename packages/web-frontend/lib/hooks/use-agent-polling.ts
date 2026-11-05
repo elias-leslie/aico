@@ -5,10 +5,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAgentState } from '../utils/agent-state'
 
 /** Poll interval for agent state check (500ms) */
-export const AGENT_POLL_INTERVAL_MS = 500
+const AGENT_POLL_INTERVAL_MS = 500
 
 /** Max time to poll before giving up (15 seconds - slightly longer than backend verify) */
-export const AGENT_POLL_TIMEOUT_MS = 15000
+const AGENT_POLL_TIMEOUT_MS = 15000
 
 interface UseAgentPollingReturn {
   /** Start an agent in a session and poll for confirmation */

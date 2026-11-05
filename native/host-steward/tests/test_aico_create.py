@@ -464,43 +464,27 @@ def usage_server(windows, seen):
     return server
 
 
-@pytest.fixture
-def agent_hub(monkeypatch, tmp_path):
-    def start(windows):
-        seen: list = []
-        server = usage_server(windows, seen)
-        (tmp_path / ".env.local").write_text('SUMMITFLOW_CLIENT_ID="client-fixture"\n')
-        monkeypatch.setattr(admin.Path, "home", lambda: tmp_path)
-        monkeypatch.setenv("ST_EXTENSION_CONTEXT", json.dumps({"agent_hub_url": f"http://127.0.0.1:{server.server_address[1]}"}))
-        return server, seen
-    return start
-
-
-def test_pi_launch_waits_out_a_rate_limited_opencode_go_window(monkeypatch, agent_hub, capsys):
-    server, seen = agent_hub([{"key": "rolling", "label": "5 hours", "status": "rate-limited", "percent": 100,
-                               "resets_at": "2026-10-26T22:19:40+00:00"}])
-    monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: pytest.fail("owner contacted"))
+def test_pi_launch_waits_out_a_rate_limited_opencode_go_window(monkeypatch, capsys):
+    monkeypatch.setattr(admin, "aico_read", lambda *_a, **_k: (200, {"facts": {"readings": [
+        {"provider": "opencode-go", "used_percent": 100, "resets_at": "2099-01-01T00:00:00+00:00", "window_minutes": 300}
+    ]}}))
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_a, **_k: pytest.fail("owner contacted"))
     with pytest.raises(SystemExit):
         admin.main(PI)
-    server.shutdown()
-    error = capsys.readouterr().err
-    assert "opencode-go quota is used up (5 hours window resets 2026-10-26T22:19:40+00:00)" in error
-    assert "client-fixture" not in error
-    assert seen == [("/api/analytics/subscriptions/opencode-go/usage", "client-fixture")]
+    assert "opencode-go quota is used up" in capsys.readouterr().err
 
 
-def test_pi_launch_goes_ahead_with_quota_left_or_without_agent_hub(monkeypatch, agent_hub):
+def test_pi_launch_goes_ahead_with_quota_left_or_without_aico(monkeypatch):
     calls = []
-    monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: (calls.append(1) or (409, {"error": "request_conflict"})))
-    monkeypatch.setattr(admin, "emit_json", lambda *_: None)
-    server, _ = agent_hub([{"key": "weekly", "label": "Week", "status": "ok", "percent": 85}])
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_a, **_k: (calls.append(1) or (409, {"error": "request_conflict"})))
+    monkeypatch.setattr(admin, "emit_json", lambda *_a: None)
+    monkeypatch.setattr(admin, "aico_read", lambda *_a, **_k: (200, {"facts": {"readings": [
+        {"provider": "opencode-go", "used_percent": 85, "resets_at": "2099-01-01T00:00:00+00:00"}
+    ]}}))
     assert admin.main(PI) == 1
-    server.shutdown()
-    server.server_close()
-    assert admin.main(PI) == 1  # Agent Hub unreachable: launch as before
-    monkeypatch.delenv("ST_EXTENSION_CONTEXT")
+    monkeypatch.setattr(admin, "aico_read", lambda *_a, **_k: None)
     assert admin.main(PI) == 1
-    assert calls == [1, 1, 1]
+    assert calls == [1, 1]
 
 
 def test_quota_is_only_checked_for_opencode_go_models(monkeypatch):
@@ -794,20 +778,18 @@ def launch_server(answers, seen):
 
 @pytest.fixture
 def launch_api(monkeypatch):
-    """The real launch_row against a fake Agent Hub serving one launch-defaults answer."""
-    servers = []
-
+    """The real launch_row against the Aico command's JSON contract."""
     def start(status, body):
-        seen: list = []
-        server = launch_server({"/api/models/launch-defaults": (status, body)}, seen)
-        servers.append(server)
-        monkeypatch.setenv("ST_EXTENSION_CONTEXT", json.dumps({"agent_hub_url": f"http://127.0.0.1:{server.server_address[1]}"}))
+        seen = []
+        def read(args, timeout=10):
+            flags = [arg for arg in args[2:] if arg != "--json"]
+            params = {key.removeprefix("--"): value for key, value in zip(flags[::2], flags[1::2])}
+            seen.append(("/api/models/launch-defaults", params))
+            return status, body
+        monkeypatch.setattr(admin, "aico_read", read)
         monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
         return seen
-    yield start
-    for server in servers:
-        server.shutdown()
-        server.server_close()
+    return start
 
 
 def launch_answer(row, **top):
@@ -834,7 +816,7 @@ def test_launch_row_takes_allowed_and_deny_reason_beside_the_row(launch_api):
 def test_launch_row_refuses_unknown_roles_and_jobs_that_are_not_work_roles(launch_api):
     message = "Unknown work role or job 'tester'. Work roles: review, verification."
     launch_api(422, {"error": "http_error", "message": message, "details": []})
-    with pytest.raises(ValueError, match=r"tester is not a work role Agent Hub knows\. Unknown work role or job 'tester'\. Work roles: review"):
+    with pytest.raises(ValueError, match=r"tester is not a work role Aico knows\. Unknown work role or job 'tester'\. Work roles: review"):
         REAL_LAUNCH_ROW("tester", "claude-code")
     launch_api(200, launch_answer(table_row()))
     with pytest.raises(ValueError, match="testing is a job, not a work role: use --work-role verification"):
@@ -891,12 +873,6 @@ def test_a_denied_hunting_launch_is_refused_with_agent_hubs_reason(launch_api, m
                           **({"model": model} if model else {})}
 
 
-def test_a_denied_agent_hub_chat_is_refused(monkeypatch, capsys):
-    row = table_row(job="hunting", work_roles=["hunting"], model=None, allowed=False, deny_reason=DENY)
-    monkeypatch.setattr(admin, "launch_row", lambda *_args: row)
-    error = refused_create(monkeypatch, capsys, ["create", "hub-9", "Hunt.", "--tool", "agent-hub", "--agent", "chat",
-                                                 "--work-role", "hunting", "--model", "claude-opus-5-5", "--blank-slate"])
-    assert DENY in error
 
 
 def test_an_allowed_launch_goes_ahead(launch_api, monkeypatch):

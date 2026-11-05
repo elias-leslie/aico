@@ -31,7 +31,6 @@ import {
   type Wake,
   type WakeList,
 } from './contracts'
-import type { RunsAnswer } from './run-text'
 
 const DEFAULT_TIMEOUT_MS = 5_000
 /** Tether sends a heartbeat every 15 s; three missed ones mean a half-open stream. */
@@ -200,17 +199,6 @@ export class TetherClient {
       'GET',
       `/v1/history/${encodeURIComponent(id)}/events${query.size ? `?${query}` : ''}`,
     )
-  }
-
-  /** The workflow runs the sessions launched, as team members (docs/api-v1.md
-   * "Workflow runs"). An older Tether has none: an empty, healthy answer. */
-  async runs(): Promise<RunsAnswer> {
-    try {
-      return await this.json<RunsAnswer>('GET', '/v1/runs')
-    } catch (error) {
-      if (isMissing(error)) return { status: 'ok', error: null, updatedAt: null, items: [] }
-      throw error
-    }
   }
 
   /** Every wake, kept ones included, with Tether's wake policy. */

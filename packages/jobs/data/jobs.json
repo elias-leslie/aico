@@ -35,24 +35,6 @@
       "lease_s": 120
     },
     {
-      "kind": "context-import",
-      "what": "Agent Hub import into Aico",
-      "project": "aico",
-      "home": "davion-sidarli",
-      "every_min": 10,
-      "run": {
-        "command": [
-          "../../web-server/scripts/aico",
-          "context",
-          "import-agent-hub",
-          "--no-status",
-          "--checkout",
-          "/srv/workspaces/projects/agent-hub"
-        ]
-      },
-      "lease_s": 300
-    },
-    {
       "kind": "context-unused",
       "what": "Loaded context use",
       "project": "aico",

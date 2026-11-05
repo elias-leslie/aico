@@ -1,0 +1,2 @@
+CHECK:FAIL:python-service-tools|1.9s|details:.dev-tools/python-service-tools-411438-details.txt|hint:E       AssertionError: assert ('postgres', 'hatchet') == ()
+CHECK:FAIL focused (1 stage(s))

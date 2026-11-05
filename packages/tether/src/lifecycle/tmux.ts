@@ -535,7 +535,7 @@ export function newDetachedTargetArgs(
 }
 
 /** Launch-only pane variables the session environment must not keep. */
-export const TRANSIENT_SESSION_ENV = ['AICO_ROOT_INITIAL_PROMPT'] as const
+const TRANSIENT_SESSION_ENV = ['AICO_ROOT_INITIAL_PROMPT'] as const
 
 /**
  * `tmux` argv that respawns the session's pane in `cwd`, killing whatever is
@@ -606,7 +606,7 @@ export function sendTextTargetArgs(target: TmuxTarget, text: string): string[] {
 
 /** Keys Tether itself presses in a pane: stopping a turn (Escape) and the
  * rewind menu's steps (docs/api-v1.md "Model switches"). */
-export const PANE_KEYS = ['Escape', 'Up', 'Down', 'Enter', 'C-u'] as const
+const PANE_KEYS = ['Escape', 'Up', 'Down', 'Enter', 'C-u'] as const
 export type PaneKey = (typeof PANE_KEYS)[number]
 
 /** One named key into the exact pane (never text). */
@@ -722,7 +722,7 @@ export function sessionIdTargetArgs(target: TmuxTarget): string[] {
 }
 
 /** Resolve the pane currently active in a session before an external insert. */
-export function activePaneIdTargetArgs(target: TmuxTarget): string[] {
+function activePaneIdTargetArgs(target: TmuxTarget): string[] {
   return targetArgs(target, ['display-message', '-p', '-t', target.session, '#{pane_id}'])
 }
 

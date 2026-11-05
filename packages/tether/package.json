@@ -29,13 +29,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agent-hub/sdk": "file:../../vendor/agent-hub-sdk-0.1.4.tgz",
     "@aico/context": "0.1.0",
     "@aico/fleet": "0.1.0",
     "@aico/tasks": "0.1.0",
     "@aico/tether-client": "0.1.0"
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "@earendil-works/pi-coding-agent": "1.4.0"
   }
 }

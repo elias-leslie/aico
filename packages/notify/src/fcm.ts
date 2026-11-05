@@ -210,7 +210,7 @@ const NOT_SENT = new Set([
 ])
 
 /** retry when the request never left; unsure when FCM may have taken it (timeout, reset, unknown). */
-export function failedSend(error: unknown): 'retry' | 'unsure' {
+function failedSend(error: unknown): 'retry' | 'unsure' {
   const cause = (error as { cause?: { code?: unknown } } | null)?.cause
   const code = typeof cause?.code === 'string' ? cause.code : null
   return code !== null && NOT_SENT.has(code) ? 'retry' : 'unsure'

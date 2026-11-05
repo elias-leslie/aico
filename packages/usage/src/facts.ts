@@ -9,7 +9,7 @@ import { type Credit, type Facts, micros, type Reading, type Refusal } from './w
 
 const REFUSAL_ROWS = 1000
 
-export const LOOKBACK_DAYS = config.lookback_days
+const LOOKBACK_DAYS = config.lookback_days
 
 interface ReadingRow {
   provider: string
@@ -48,7 +48,7 @@ export function latestReadings(db: Database, now: string): Reading[] {
 }
 
 /** Per provider with credit lots (the plans file's, plus balance jumps the collector found). */
-export function creditsOf(db: Database, plans: Plans, now: string): Record<string, Credit> {
+function creditsOf(db: Database, plans: Plans, now: string): Record<string, Credit> {
   const detected = (
     db.prepare('SELECT provider, at, credits FROM detected_lots').all() as unknown as {
       provider: string
@@ -86,7 +86,7 @@ export function creditsOf(db: Database, plans: Plans, now: string): Record<strin
 }
 
 /** Newest first; one row per refusal (each counts once). */
-export function recentRefusals(db: Database): Refusal[] {
+function recentRefusals(db: Database): Refusal[] {
   const rows = db.prepare('SELECT * FROM refusals').all() as unknown as Omit<Refusal, 'count'>[]
   return rows
     .map((row) => ({

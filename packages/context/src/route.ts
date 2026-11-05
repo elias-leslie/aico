@@ -34,7 +34,7 @@ export class UnknownLaunchKey extends Error {}
 // -- the table -------------------------------------------------------------------------------
 
 /** A job name, or the job a registered work role launches as. */
-export function jobOf(policy: LaunchPolicy, role: string): Job | undefined {
+function jobOf(policy: LaunchPolicy, role: string): Job | undefined {
   return (
     policy.jobs.find((job) => job.name === role) ??
     policy.jobs.find((job) => job.workRoles.includes(role))
@@ -42,7 +42,7 @@ export function jobOf(policy: LaunchPolicy, role: string): Job | undefined {
 }
 
 /** Whether launching `model` through `tool` counts as this provider. */
-export function countsAs(
+function countsAs(
   provider: Provider,
   catalog: Catalog,
   tool: string | null,
@@ -71,7 +71,7 @@ function denyRows(
 }
 
 /** Why this launch is refused, or null when no deny row covers it. */
-export function denyReason(
+function denyReason(
   policy: LaunchPolicy,
   catalog: Catalog,
   where: { job: string | null; workRole: string | null; project: string | null },
@@ -275,11 +275,7 @@ function bare(model: string): string {
 }
 
 /** The newest refusal of this model and how many are recorded; never changes `allowed`. */
-export function lastRefusal(
-  catalog: Catalog,
-  model: string | null,
-  refusals: Refusal[],
-): Refusal | null {
+function lastRefusal(catalog: Catalog, model: string | null, refusals: Refusal[]): Refusal | null {
   if (!model) return null
   const names = new Set([bare(model), bare(catalog.resolve(model))])
   const mine = refusals.filter((refusal) => names.has(bare(refusal.requested_model)))

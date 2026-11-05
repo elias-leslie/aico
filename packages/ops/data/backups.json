@@ -51,20 +51,8 @@
         "admin"
       ],
       "required": true
-    },
-    {
-      "id": "redis",
-      "name": "Redis database",
-      "filename": "redis-dump.rdb",
-      "command": ["aico", "backups", "stream", "redis"],
-      "required": false
     }
   ],
-  "redisCapture": {
-    "passwordFile": "~/.config/credstore/summitflow/compose.env",
-    "passwordVariable": "REDIS_PASSWORD",
-    "command": ["redis-cli", "-h", "127.0.0.1", "-p", "6379"]
-  },
   "retention": {
     "drive": {
       "daily": 7,

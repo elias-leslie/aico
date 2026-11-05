@@ -1,0 +1,6 @@
+agent_hub||4
+hatchet|server|11
+hatchet|server:ddl|1
+hatchet|server:pubsub|4
+neri||1
+postgres|psql|1

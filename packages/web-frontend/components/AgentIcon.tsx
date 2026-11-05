@@ -282,7 +282,7 @@ const ICON_MAP: Record<string, (props: MarkProps) => JSX.Element> = {
 
 /** Default brand-suggestive colors per agent slug.
  *  Spectrally distinct on a dark terminal canvas. */
-export const AGENT_DEFAULT_COLORS: Record<string, string> = {
+const AGENT_DEFAULT_COLORS: Record<string, string> = {
   agy: '#3186FF', // Antigravity blue
   'agent-hub': '#7C83F6', // Agent Hub blue-violet
   'claude-code': '#D97757', // Claude terracotta

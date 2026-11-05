@@ -1,12 +1,24 @@
 {
   "native_owner_project": "aico",
   "probe_ipv4": "127.0.0.1",
-  "detached": {"memory_high": "8G", "memory_max": "12G"},
-  "host_monitor": {"cpu_critical_pct": 90.0, "disk_critical_pct": 90.0, "disk_critical_free_bytes": 10737418240},
+  "detached": {
+    "memory_high": "8G",
+    "memory_max": "12G"
+  },
   "status_projects": {
     "neri": {
-      "services": {"backend": "neri-backend.service", "frontend": "", "default_workers": [], "optional_workers": []},
-      "runtime": {"infra": []}
+      "services": {
+        "backend": "neri-backend.service",
+        "frontend": "",
+        "default_workers": [],
+        "optional_workers": []
+      },
+      "runtime": {
+        "infra": []
+      }
     }
-  }
+  },
+  "retired_units": [
+    "summitflow-host-monitor.service"
+  ]
 }

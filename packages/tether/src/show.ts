@@ -8,9 +8,9 @@ import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import type { Hub } from './hub/hub'
 
 /** The most files and folders one share may name. */
-export const MAX_SHARE_PATHS = 20
+const MAX_SHARE_PATHS = 20
 /** The most shares listed at once (newest kept). */
-export const MAX_LISTED_SHARES = 200
+const MAX_LISTED_SHARES = 200
 
 /** An agent's share: links to files or folders where they already are, or a web link. */
 export type Share = {

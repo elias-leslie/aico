@@ -135,7 +135,7 @@ export interface FollowerState {
   seq: number
 }
 
-export const EMPTY_FOLLOWER: Readonly<FollowerState> = Object.freeze({
+const EMPTY_FOLLOWER: Readonly<FollowerState> = Object.freeze({
   baseline: null,
   current: null,
   requested: null,

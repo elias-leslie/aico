@@ -13,7 +13,7 @@ export interface Peer extends PeerTransport {
   nudge(): Promise<void>
 }
 
-export class PeerError extends Error {}
+class PeerError extends Error {}
 
 /** `idleMs` is how long an open request may stay silent before it is dropped (a hung forward). */
 export function unixPeer(socketPath: string, options: { idleMs: number }): Peer {

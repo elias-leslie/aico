@@ -82,7 +82,7 @@ export const defaultGateRuntime: GateRuntime = {
 }
 
 /** The argv that fetches one health URL on the host, through the link's ControlMaster. */
-export function healthArgv(peer: Peer, url: string): string[] {
+function healthArgv(peer: Peer, url: string): string[] {
   return execArgv(peer.control, ['curl', '-fsS', '-m', '3', '-o', '/dev/null', url])
 }
 

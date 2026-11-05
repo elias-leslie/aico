@@ -10,7 +10,7 @@
 import { drillUntil, setDrill } from './app-api'
 import { currentRelease, publishApk } from './app-release'
 
-export const APP_USAGE = `Usage: aico app <command>
+const APP_USAGE = `Usage: aico app <command>
 
   publish-apk APK          Serve a built APK so the phone's updater offers it.
   drill start [--minutes N] Make the app's health check fail for N minutes (default 5, at most 120).

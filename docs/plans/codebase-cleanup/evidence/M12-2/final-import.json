@@ -1,0 +1,21 @@
+{
+  "memories": 150,
+  "memorySettings": 1,
+  "prompts": 143,
+  "jobs": 12,
+  "namedRoles": 5,
+  "rolePrompts": 12,
+  "budgets": 4,
+  "projectRows": 20,
+  "removed": {
+    "memories": 0,
+    "prompts": 0
+  },
+  "projectHash": {
+    "source": "9639baef8c4147b817f499437d889248c5b7ef98260114c678569c609923dc86",
+    "received": "9639baef8c4147b817f499437d889248c5b7ef98260114c678569c609923dc86",
+    "stored": "9639baef8c4147b817f499437d889248c5b7ef98260114c678569c609923dc86",
+    "match": true
+  },
+  "missingRoles": []
+}

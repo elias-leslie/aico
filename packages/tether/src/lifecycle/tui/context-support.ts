@@ -78,6 +78,6 @@ export async function resolveLauncher(
 }
 
 /** "<shim> execs " when a credential shim stands in front of the launcher. */
-export function viaShim(shim: string | null): string {
+function viaShim(shim: string | null): string {
   return shim ? `${shim} (Agent Hub credential shim) execs ` : ''
 }

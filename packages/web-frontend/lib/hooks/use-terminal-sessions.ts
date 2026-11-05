@@ -158,7 +158,7 @@ const updateSession = (sessionId: string, req: UpdateSessionRequest) =>
     body: JSON.stringify(req),
   })
 
-export interface EndSessionRequest {
+interface EndSessionRequest {
   sessionId: string
   /** "End, keep check-ins/waits": its check-ins and armed waits outlive the session. */
   keepCheckIns?: boolean

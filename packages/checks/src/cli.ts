@@ -23,7 +23,7 @@ export interface CliIo {
   report?(root: string, summary: CheckSummary): Promise<string | null>
 }
 
-export const CHECK_USAGE = `aico check: the repo's gate (.st-check.toml).
+const CHECK_USAGE = `aico check: the repo's gate (.st-check.toml).
   aico check --quick [--changed-only]     the fast lane on your own changed files (commit runs it)
   aico check [--changed-only]             the full gate on the working tree
   aico check --fix [--paths P...]         Biome and ruff fixes on your own changed files only
@@ -34,7 +34,7 @@ export const CHECK_USAGE = `aico check: the repo's gate (.st-check.toml).
   content; --jobs N  stages at once (default 3); --with-ack ID  a holder's yes for acceptance
 Your own changed files: the dirty files no other session wrote or leases.`
 
-export const COMMIT_USAGE = `aico commit -m MSG --paths P... [--with-ack ID] [--skip-checks]
+const COMMIT_USAGE = `aico commit -m MSG --paths P... [--with-ack ID] [--skip-checks]
   Runs the quick check on the changed files under P, commits only them, and releases your leases on them.`
 
 interface Parsed {
@@ -74,7 +74,7 @@ function load(io: CliIo): { root: string; config: ReturnType<typeof loadConfig> 
   return { root, config: loadConfig(root) }
 }
 
-export async function checkCli(argv: string[], io: CliIo): Promise<number> {
+async function checkCli(argv: string[], io: CliIo): Promise<number> {
   const tool = argv[0]
   const native = argv.includes('--native') || argv.includes('--stage')
   if (native || (LEGACY as readonly string[]).includes(tool)) {
@@ -221,7 +221,7 @@ export async function checkCli(argv: string[], io: CliIo): Promise<number> {
   return summary.passed ? 0 : 1
 }
 
-export async function commitCli(argv: string[], io: CliIo): Promise<number> {
+async function commitCli(argv: string[], io: CliIo): Promise<number> {
   const args = parse(argv, ['-m', '--message', '--msg', '--with-ack', '--task', '--jobs'])
   if (args.flags.has('--help') || args.flags.has('-h')) {
     io.out(COMMIT_USAGE)

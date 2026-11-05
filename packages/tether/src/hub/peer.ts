@@ -38,13 +38,6 @@ export interface PeerSnapshot {
   shares?: Descriptor[]
 }
 
-export interface RunsLike {
-  status: 'ok' | 'stale' | 'unavailable'
-  error: string | null
-  updatedAt: number | null
-  items: Record<string, unknown>[]
-}
-
 export interface PeerDeps {
   publish(type: EventType, data: Record<string, unknown>): void
   /** A session id this hub runs itself: the local copy wins over a peer's. */
@@ -68,20 +61,20 @@ export interface PeerDeps {
   checked?(peer: Peer): void
 }
 
-export const HEALTH_TIMEOUT_MS = 3_000
-export const SYNC_TIMEOUT_MS = 5_000
-export const RETRY_MIN_MS = 1_000
-export const RETRY_MAX_MS = 30_000
+const HEALTH_TIMEOUT_MS = 3_000
+const SYNC_TIMEOUT_MS = 5_000
+const RETRY_MIN_MS = 1_000
+const RETRY_MAX_MS = 30_000
 /** A connection up this long resets the retry backoff. */
-export const STABLE_MS = 60_000
+const STABLE_MS = 60_000
 /** Consecutive failed list reads that open the circuit, and for how long. */
-export const BREAKER_FAILURES = 3
-export const BREAKER_OPEN_MS = 30_000
+const BREAKER_FAILURES = 3
+const BREAKER_OPEN_MS = 30_000
 /** A down host's power status is asked again after this long. */
-export const POWER_PROBE_MS = 15_000
+const POWER_PROBE_MS = 15_000
 /** After a power off from the Hosts panel, the host is taken as off without
  * asking for this long (its status can still say running while it shuts down). */
-export const POWER_OFF_GRACE_MS = 60_000
+const POWER_OFF_GRACE_MS = 60_000
 const RELAYED = new Set<string>([
   'session.created',
   'session.updated',
@@ -91,7 +84,6 @@ const RELAYED = new Set<string>([
   'tools.changed',
   'projects.changed',
   'wakes.changed',
-  'runs.changed',
   'asks.changed',
   'show.requested',
 ])
@@ -149,7 +141,6 @@ export class Peer {
   private readonly roots = new Set<string>()
   /** The last root list per query, kept for while the link is down. */
   private readonly rootLists = new Map<string, Record<string, unknown>[]>()
-  private runsAnswer: RunsLike | null = null
   /** The peer's asks and shares (`GET /v1/asks`, `/v1/shares`, then its events), kept
    * while the link is down; null: never read (an older Tether has neither). */
   private readonly askItems = new Map<string, Descriptor>()
@@ -240,10 +231,6 @@ export class Peer {
     return false
   }
 
-  ownsRun(runId: string): boolean {
-    return (this.runsAnswer?.items ?? []).some((item) => item.runId === runId)
-  }
-
   ownsAsk(id: string): boolean {
     return this.askItems.has(id)
   }
@@ -271,10 +258,6 @@ export class Peer {
 
   session(id: string): Descriptor | null {
     return this.sessions.get(id) ?? null
-  }
-
-  runs(): RunsLike | null {
-    return this.runsAnswer
   }
 
   /** A descriptor the peer answered with (create, PATCH, GET). */
@@ -599,7 +582,6 @@ export class Peer {
     this.replace(answer.body)
     this.failures = 0
     this.openUntil = 0
-    await this.refreshRuns()
     await this.refreshAsks()
     this.setState('connected')
     // Ended while the link was down (or the host was rolled back): the host's
@@ -608,18 +590,6 @@ export class Peer {
       if (!this.sessions.has(id)) this.deps.publish('session.ended', { id, host: this.name })
     for (const item of this.descriptors()) this.publishSession(item)
     this.deps.publish('peer.resync', { host: this.name })
-  }
-
-  private async refreshRuns(): Promise<void> {
-    try {
-      const answer = await peerRequest(this.socket, 'GET', '/v1/runs', undefined, SYNC_TIMEOUT_MS)
-      const body = record(answer.body)
-      if (answer.status === 200 && body && Array.isArray(body.items))
-        this.runsAnswer = body as unknown as RunsLike
-      else if (answer.status === 404) this.runsAnswer = null
-    } catch {
-      // Keep the last runs; the merged answer reports them stale.
-    }
   }
 
   /** The peer's asks and shares, whole: a link-up fixes what the stream missed. */
@@ -690,10 +660,6 @@ export class Peer {
       data.session = this.deps.present(this, session)
     }
     if (typeof data.requestId === 'string') this.roots.add(data.requestId)
-    if (type === 'runs.changed') {
-      void this.refreshRuns().then(() => this.deps.publish(type, { ...data, host: this.name }))
-      return
-    }
     this.deps.publish(type, { ...data, host: this.name })
   }
 }

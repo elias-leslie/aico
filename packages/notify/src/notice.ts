@@ -54,7 +54,7 @@ export interface Notice {
   if_ignored?: string
 }
 
-export const DEFAULT_COOLDOWN_S = 3600
+const DEFAULT_COOLDOWN_S = 3600
 const WEEK_S = 7 * 86400
 
 export const LIMITS = {

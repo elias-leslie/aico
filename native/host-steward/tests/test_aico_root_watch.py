@@ -463,121 +463,13 @@ def test_roots_fail_only_for_failed_observation(monkeypatch, reason, code):
     assert output == [{"owner": "aico", "roots": [{**record, "context": "unknown"}]}]
 
 
-def roots_with_ids(monkeypatch, answer):
-    """`st aico roots` over two ids-bearing rows with Agent Hub's batched read stubbed to `answer`."""
-    rows = [{"requestId": "a", "logicalSessionId": "aico-root-a", "sessionId": "aico-widget-aaaaaaaa",
-             "observation": "available", "identity": "pinned", "terminal": "turn_finished"},
-            {"requestId": "b", "logicalSessionId": "aico-root-b", "sessionId": "aico-widget-bbbbbbbb",
-             "observation": "available", "identity": "pinned", "terminal": "turn_finished"}]
-    asked, output = [], []
-
-    def fake_get(path, params=None, timeout=3):
-        asked.append((path, params))
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
-
+def test_roots_report_unknown_context_without_legacy_service_calls(monkeypatch):
+    rows = [{"requestId": "a", "observation": "available", "identity": "pinned"}]
+    output = []
     monkeypatch.setattr(watcher.Collector, "discover", lambda self, request_id: ([], rows))
-    monkeypatch.setattr(watcher, "agent_hub_get", fake_get)
-    monkeypatch.setattr(watcher, "emit_json", lambda _, row: output.append(row))
-    code = watcher.roots_main(["--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"])
-    return code, asked, output[0]["roots"]
-
-
-def test_roots_show_each_roots_measured_context_from_one_batched_read(monkeypatch):
-    code, asked, roots = roots_with_ids(monkeypatch, (200, {"roots": {
-        "aico-root-a": {"session_id": "s1", "context_tokens": 211_961, "at": "2026-11-01T20:00:00Z"},
-        "aico-widget-bbbbbbbb": {"session_id": "s2", "context_tokens": 850, "at": "2026-11-01T20:00:00Z"}}}))
-    assert code == 0
-    assert [row["context"] for row in roots] == ["212K", "850"]
-    assert asked == [("/api/context-observability/aico-roots",
-                      {"keys": "aico-root-a,aico-widget-aaaaaaaa,aico-root-b,aico-widget-bbbbbbbb"})]
-
-
-NATIVE_A = "f5863e95-a57e-4804-bd32-97b330236c36"
-
-
-def roots_with_native_ids(monkeypatch, answer, resume):
-    """One running root with a widget id; Tether's session descriptor answers `resume` as its native id."""
-    rows = [{"requestId": "a", "widgetId": "aaaaaaaa", "logicalSessionId": "aico-root-a", "sessionId": "aico-widget-aaaaaaaa",
-             "observation": "available", "identity": "pinned", "terminal": "turn_finished"}]
-    asked, output = [], []
-
-    def fake_get(path, params=None, timeout=3):
-        asked.append(params)
-        return 200, {"roots": answer}
-
-    monkeypatch.setattr(watcher.Collector, "discover", lambda self, request_id: ([], rows))
-    monkeypatch.setattr(watcher.Collector, "receipt", lambda self, path, route, **_: (200, {"id": "aaaaaaaa", **resume}))
-    monkeypatch.setattr(watcher, "agent_hub_get", fake_get)
     monkeypatch.setattr(watcher, "emit_json", lambda _, row: output.append(row))
     assert watcher.roots_main(["--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"]) == 0
-    return asked, output[0]["roots"][0]
-
-
-def test_roots_prefer_the_roots_own_native_session_over_same_source_children(monkeypatch):
-    # The source key resolves to a `claude -p` child at 29K; the root's own conversation is at 218K.
-    asked, root = roots_with_native_ids(monkeypatch, {
-        "aico-root-a": {"session_id": "child", "context_tokens": 29_000, "at": "2026-11-01T20:05:00Z"},
-        NATIVE_A: {"session_id": NATIVE_A, "context_tokens": 218_000, "at": "2026-11-01T20:00:00Z"}}, {"resumeId": NATIVE_A})
-    assert root["context"] == "218K"
-    assert "resumeId" not in root
-    assert asked == [{"keys": f"aico-root-a,aico-widget-aaaaaaaa,{NATIVE_A}"}]
-
-
-@pytest.mark.parametrize("resume", [{}, {"resumeId": None}, {"resumeId": "not a session id!"}])
-def test_roots_without_a_native_session_id_fall_back_to_their_links(monkeypatch, resume):
-    asked, root = roots_with_native_ids(monkeypatch, {
-        "aico-root-a": {"session_id": "s1", "context_tokens": 211_000, "at": "2026-11-01T20:00:00Z"}}, resume)
-    assert root["context"] == "211K"
-    assert asked == [{"keys": "aico-root-a,aico-widget-aaaaaaaa"}]
-
-
-def test_roots_native_session_with_no_usage_falls_back_to_their_links(monkeypatch):
-    _, root = roots_with_native_ids(monkeypatch, {
-        "aico-root-a": {"session_id": "s1", "context_tokens": 5_000, "at": "2026-11-01T20:00:00Z"}}, {"resumeId": NATIVE_A})
-    assert root["context"] == "5K"
-
-
-@pytest.mark.parametrize("answer", [
-    (200, {"roots": {}}), (200, {"roots": {"aico-root-a": {"context_tokens": 0}, "aico-root-b": {}}}),
-    (200, {"roots": {"aico-root-a": {"context_tokens": "212K"}}}), (500, {"detail": "boom"}),
-    (200, ["not", "an", "object"]), None])
-def test_roots_context_is_unknown_never_zero_when_unmatched_unmeasured_or_agent_hub_is_down(monkeypatch, answer):
-    code, _, roots = roots_with_ids(monkeypatch, answer)
-    assert code == 0
-    assert [row["context"] for row in roots] == ["unknown", "unknown"]
-
-
-def test_a_slow_tether_costs_the_resume_ids_but_never_the_roots_output(monkeypatch, capfd):
-    # Every session read takes the full second Tether is given and fails; twelve roots would run past the 10 s deadline.
-    rows = [{"requestId": f"r{i}", "widgetId": f"{i:08x}", "logicalSessionId": f"aico-root-{i}", "sessionId": f"aico-widget-{i:08x}",
-             "observation": "available", "identity": "pinned", "terminal": "turn_finished"} for i in range(12)]
-    clock = [0.0]
-    start = time.monotonic()
-    reads = []
-
-    def slow_receipt(self, path, route, *args, **kwargs):
-        left = self.remaining()
-        reads.append(route)
-        clock[0] += min(1.0, left)  # like the real read: a second at most, and never past the collector's deadline
-        raise watcher.Unavailable("owner_unavailable")
-
-    monkeypatch.setattr(watcher.time, "monotonic", lambda: start + clock[0])
-    monkeypatch.setattr(watcher.Collector, "discover", lambda self, request_id: ([], rows))
-    monkeypatch.setattr(watcher.Collector, "receipt", slow_receipt)
-    monkeypatch.setattr(watcher, "agent_hub_get", lambda *args, **kwargs: None)
-
-    assert watcher.roots_main(["--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"]) == 0
-
-    printed = json.loads(capfd.readouterr().out)
-    assert [row["context"] for row in printed["roots"]] == ["unknown"] * 12
-    assert 0 < len(reads) < 12
-
-
-def test_context_label_rounds_to_thousands_and_keeps_small_counts_exact():
-    assert [watcher.context_label(n) for n in (1, 999, 1000, 1499, 1500, 211_961)] == ["1", "999", "1K", "1K", "2K", "212K"]
-    assert [watcher.context_label(v) for v in (0, -5, None, True, 12.5, "9")] == ["unknown"] * 6
+    assert output[0]["roots"][0]["context"] == "unknown"
 
 
 def test_discovery_claude_owner_tool_mismatch_fails_closed(monkeypatch):

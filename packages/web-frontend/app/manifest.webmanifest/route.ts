@@ -11,7 +11,7 @@ import {
 // fetches without the Cloudflare Access cookie. layout.tsx links this one.
 export const dynamic = 'force-static'
 
-export const MANIFEST: MetadataRoute.Manifest = {
+const MANIFEST: MetadataRoute.Manifest = {
   id: '/',
   name: PRODUCT_NAME,
   short_name: PRODUCT_SHORT_NAME,

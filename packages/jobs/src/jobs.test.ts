@@ -78,18 +78,9 @@ describe('the schedule', () => {
     expect(() => parseJobs({ jobs: [{ ...base, every_min: 0, run }] })).toThrow('every_min')
   })
 
-  it('ships the Agent Hub import every 10 minutes on davion-sidarli', () => {
+  it('does not schedule the retired Agent Hub copy import', () => {
     const shipped = readJobs(new URL('../data/jobs.json', import.meta.url).pathname)
-    expect(shipped.find((job) => job.kind === 'context-import')).toMatchObject({
-      home: 'davion-sidarli',
-      every_min: 10,
-      run: { command: expect.arrayContaining(['import-agent-hub']) },
-    })
-    const command = shipped.find((job) => job.kind === 'context-import')!.run
-    expect('command' in command && command.command[0]).toBe(
-      new URL('../../web-server/scripts/aico', new URL('../data/jobs.json', import.meta.url))
-        .pathname,
-    )
+    expect(shipped.some((job) => job.kind === 'context-import')).toBe(false)
   })
 
   it('reads the shipped job list and refuses a bad one by field', () => {

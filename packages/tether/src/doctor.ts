@@ -13,8 +13,8 @@ export interface Check {
   detail: string
 }
 
-export const MIN_SYSTEMD = 254
-export const MIN_NODE: [number, number] = [22, 13]
+const MIN_SYSTEMD = 254
+const MIN_NODE: [number, number] = [22, 13]
 
 export function checkLinger(value: string | null): Check {
   if (value === 'yes') return { name: 'linger', status: 'ok', detail: 'Linger=yes' }

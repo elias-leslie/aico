@@ -62,11 +62,11 @@ export function unifiedCgroupPath(text: string): string | null {
   return null
 }
 
-export function userManagerPrefix(uid: number): string {
+function userManagerPrefix(uid: number): string {
   return `/user.slice/user-${uid}.slice/user@${uid}.service/`
 }
 
-export function verifyContainerBoundary(probe: ContainerBoundaryProbe): BoundaryVerdict {
+function verifyContainerBoundary(probe: ContainerBoundaryProbe): BoundaryVerdict {
   const systemdContainer = probe.systemdContainer()?.trim()
   if (!probe.containerEnvFile() && !systemdContainer) {
     return { durable: false, reason: 'not running in a container' }

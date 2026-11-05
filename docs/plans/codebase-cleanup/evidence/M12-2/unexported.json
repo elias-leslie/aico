@@ -1,0 +1,1226 @@
+[
+  {
+    "path": "packages/agent/src/tools.ts",
+    "name": "listeningSockets"
+  },
+  {
+    "path": "packages/agent/src/tools.ts",
+    "name": "sandboxArgs"
+  },
+  {
+    "path": "packages/agent/src/tools.ts",
+    "name": "clearedEnv"
+  },
+  {
+    "path": "packages/checks/src/cli.ts",
+    "name": "CHECK_USAGE"
+  },
+  {
+    "path": "packages/checks/src/cli.ts",
+    "name": "COMMIT_USAGE"
+  },
+  {
+    "path": "packages/checks/src/cli.ts",
+    "name": "checkCli"
+  },
+  {
+    "path": "packages/checks/src/cli.ts",
+    "name": "commitCli"
+  },
+  {
+    "path": "packages/checks/src/git.ts",
+    "name": "treeEntries"
+  },
+  {
+    "path": "packages/checks/src/git.ts",
+    "name": "globRegExp"
+  },
+  {
+    "path": "packages/checks/src/plan.ts",
+    "name": "pythonImports"
+  },
+  {
+    "path": "packages/checks/src/plan.ts",
+    "name": "focusedTests"
+  },
+  {
+    "path": "packages/checks/src/publish.ts",
+    "name": "postPublicationRow"
+  },
+  {
+    "path": "packages/checks/src/publish.ts",
+    "name": "PUBLISH_USAGE"
+  },
+  {
+    "path": "packages/checks/src/run.ts",
+    "name": "stageEnv"
+  },
+  {
+    "path": "packages/checks/src/run.ts",
+    "name": "inputsKey"
+  },
+  {
+    "path": "packages/checks/src/toml.ts",
+    "name": "TomlError"
+  },
+  {
+    "path": "packages/cli/src/extensions.ts",
+    "name": "parseManifest"
+  },
+  {
+    "path": "packages/context/src/cost.ts",
+    "name": "itemType"
+  },
+  {
+    "path": "packages/context/src/memory.ts",
+    "name": "ftsQuery"
+  },
+  {
+    "path": "packages/context/src/memory.ts",
+    "name": "memoryCounts"
+  },
+  {
+    "path": "packages/context/src/route.ts",
+    "name": "jobOf"
+  },
+  {
+    "path": "packages/context/src/route.ts",
+    "name": "countsAs"
+  },
+  {
+    "path": "packages/context/src/route.ts",
+    "name": "denyReason"
+  },
+  {
+    "path": "packages/context/src/route.ts",
+    "name": "lastRefusal"
+  },
+  {
+    "path": "packages/notify/src/fcm.ts",
+    "name": "failedSend"
+  },
+  {
+    "path": "packages/notify/src/needs-you.ts",
+    "name": "noticeAsk"
+  },
+  {
+    "path": "packages/notify/src/notice.ts",
+    "name": "DEFAULT_COOLDOWN_S"
+  },
+  {
+    "path": "packages/notify/src/outbox.ts",
+    "name": "MAX_BACKOFF_MS"
+  },
+  {
+    "path": "packages/ops/src/backup-drive.ts",
+    "name": "proxmoxJob"
+  },
+  {
+    "path": "packages/ops/src/backup-drive.ts",
+    "name": "previousQualification"
+  },
+  {
+    "path": "packages/ops/src/backup-native.ts",
+    "name": "rawRows"
+  },
+  {
+    "path": "packages/ops/src/backup-retention.ts",
+    "name": "physicalKey"
+  },
+  {
+    "path": "packages/ops/src/backup-retention.ts",
+    "name": "driveRetentionArgs"
+  },
+  {
+    "path": "packages/ops/src/backup-retention.ts",
+    "name": "legacyRetentionIds"
+  },
+  {
+    "path": "packages/ops/src/backup-runtime.ts",
+    "name": "targetTitle"
+  },
+  {
+    "path": "packages/status/src/row.ts",
+    "name": "parseTime"
+  },
+  {
+    "path": "packages/tasks/src/pulse-cli.ts",
+    "name": "liveSources"
+  },
+  {
+    "path": "packages/tasks/src/pulse.ts",
+    "name": "processAlive"
+  },
+  {
+    "path": "packages/tasks/src/pulse.ts",
+    "name": "renderBrief"
+  },
+  {
+    "path": "packages/tether/src/agent-state.ts",
+    "name": "BLOCKING_NOTIFICATIONS"
+  },
+  {
+    "path": "packages/tether/src/asks.ts",
+    "name": "MAX_ASK_OPTIONS"
+  },
+  {
+    "path": "packages/tether/src/asks.ts",
+    "name": "MAX_ASK_FILES"
+  },
+  {
+    "path": "packages/tether/src/asks.ts",
+    "name": "MAX_LISTED_ASKS"
+  },
+  {
+    "path": "packages/tether/src/asks.ts",
+    "name": "parseAsk"
+  },
+  {
+    "path": "packages/tether/src/asks.ts",
+    "name": "FEED_HEARTBEAT_MS"
+  },
+  {
+    "path": "packages/tether/src/asks.ts",
+    "name": "needsYouFeed"
+  },
+  {
+    "path": "packages/tether/src/asks.ts",
+    "name": "answerTarget"
+  },
+  {
+    "path": "packages/tether/src/asks.ts",
+    "name": "askFiledLine"
+  },
+  {
+    "path": "packages/tether/src/asks.ts",
+    "name": "askHandOffLine"
+  },
+  {
+    "path": "packages/tether/src/capture-cli.ts",
+    "name": "formatResult"
+  },
+  {
+    "path": "packages/tether/src/coordination/docs.ts",
+    "name": "DOC_NAME"
+  },
+  {
+    "path": "packages/tether/src/coordination/docs.ts",
+    "name": "MAX_DOC_BYTES"
+  },
+  {
+    "path": "packages/tether/src/daemon.ts",
+    "name": "hubEnabled"
+  },
+  {
+    "path": "packages/tether/src/daemon.ts",
+    "name": "reconcileEnabled"
+  },
+  {
+    "path": "packages/tether/src/dead-shells.ts",
+    "name": "isShellSession"
+  },
+  {
+    "path": "packages/tether/src/deliveries.ts",
+    "name": "DUE_POLL_MAX_SECONDS"
+  },
+  {
+    "path": "packages/tether/src/doctor.ts",
+    "name": "MIN_SYSTEMD"
+  },
+  {
+    "path": "packages/tether/src/doctor.ts",
+    "name": "MIN_NODE"
+  },
+  {
+    "path": "packages/tether/src/entry-files.ts",
+    "name": "entryHomeBoundary"
+  },
+  {
+    "path": "packages/tether/src/entry-files.ts",
+    "name": "openInside"
+  },
+  {
+    "path": "packages/tether/src/env.ts",
+    "name": "SERVER_ENV_ALLOWLIST"
+  },
+  {
+    "path": "packages/tether/src/env.ts",
+    "name": "GRAPHICAL_ENV_VARS"
+  },
+  {
+    "path": "packages/tether/src/env.ts",
+    "name": "SERVER_ENV_ALLOWED_PREFIXES"
+  },
+  {
+    "path": "packages/tether/src/generation.ts",
+    "name": "SESSION_ID_RE"
+  },
+  {
+    "path": "packages/tether/src/hub/host-admin.ts",
+    "name": "STATUS_LINE"
+  },
+  {
+    "path": "packages/tether/src/hub/hub.ts",
+    "name": "QUERY_TIMEOUT_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/hub.ts",
+    "name": "UPDATE_RECONNECT_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/hub.ts",
+    "name": "ENDED_BY_HEADER"
+  },
+  {
+    "path": "packages/tether/src/hub/peer.ts",
+    "name": "HEALTH_TIMEOUT_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/peer.ts",
+    "name": "SYNC_TIMEOUT_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/peer.ts",
+    "name": "RETRY_MIN_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/peer.ts",
+    "name": "RETRY_MAX_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/peer.ts",
+    "name": "STABLE_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/peer.ts",
+    "name": "BREAKER_FAILURES"
+  },
+  {
+    "path": "packages/tether/src/hub/peer.ts",
+    "name": "BREAKER_OPEN_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/peer.ts",
+    "name": "POWER_PROBE_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/peer.ts",
+    "name": "POWER_OFF_GRACE_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/placement.ts",
+    "name": "DEFAULT_POOL"
+  },
+  {
+    "path": "packages/tether/src/hub/placement.ts",
+    "name": "DEFAULT_LOCAL"
+  },
+  {
+    "path": "packages/tether/src/hub/placement.ts",
+    "name": "DEFAULT_REMOTE"
+  },
+  {
+    "path": "packages/tether/src/hub/placement.ts",
+    "name": "DEFAULT_ROOM_LOCAL"
+  },
+  {
+    "path": "packages/tether/src/hub/placement.ts",
+    "name": "DEFAULT_CAPABILITIES"
+  },
+  {
+    "path": "packages/tether/src/hub/placement.ts",
+    "name": "placementFilePath"
+  },
+  {
+    "path": "packages/tether/src/hub/placement.ts",
+    "name": "loadPlacement"
+  },
+  {
+    "path": "packages/tether/src/hub/placement.ts",
+    "name": "proxmoxLine"
+  },
+  {
+    "path": "packages/tether/src/hub/placement.ts",
+    "name": "parseProxmox"
+  },
+  {
+    "path": "packages/tether/src/hub/update.ts",
+    "name": "UPDATE_RUN_MS"
+  },
+  {
+    "path": "packages/tether/src/hub/update.ts",
+    "name": "UPDATE_ANSWER_SEC"
+  },
+  {
+    "path": "packages/tether/src/hub/update.ts",
+    "name": "updateLine"
+  },
+  {
+    "path": "packages/tether/src/hub/wake.ts",
+    "name": "healthArgv"
+  },
+  {
+    "path": "packages/tether/src/importer.ts",
+    "name": "openAicoReadOnly"
+  },
+  {
+    "path": "packages/tether/src/importer.ts",
+    "name": "planImport"
+  },
+  {
+    "path": "packages/tether/src/lane-reports.ts",
+    "name": "LANE_OUTCOMES"
+  },
+  {
+    "path": "packages/tether/src/lane-reports.ts",
+    "name": "modelLine"
+  },
+  {
+    "path": "packages/tether/src/lane-reports.ts",
+    "name": "repeatQuietMs"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/agent-admission.ts",
+    "name": "ADMISSION_OVERRIDE_VALUE"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/catalog.ts",
+    "name": "hasWidget"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/display.ts",
+    "name": "PERSONAL_WORKSPACE_NAME"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/engine.ts",
+    "name": "cwdForWidget"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/engine.ts",
+    "name": "hasSessionArgsFor"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "AGENT_ADJ"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "TOOL_ADJ"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "protectedPids"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "agentBytes"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "jobBytes"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "jobTop"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "fastestPane"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "anonBytes"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "readStat"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "readProc"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "killIfSame"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "appendMemoryEvent"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/job-guard.ts",
+    "name": "systemdPaneCapHost"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/lifetime-boundary.ts",
+    "name": "userManagerPrefix"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/lifetime-boundary.ts",
+    "name": "verifyContainerBoundary"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/pane-caps.ts",
+    "name": "paneCapDropInText"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/pane-memory.ts",
+    "name": "FOREGROUND_MEMORY_LOW"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/root-control.ts",
+    "name": "promptOverLimit"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/root-control.ts",
+    "name": "rootLaunchOptions"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/root-control.ts",
+    "name": "DEFERRED_LAUNCH_RETRY_MS"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/root-control.ts",
+    "name": "missingProviderModel"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/root-control.ts",
+    "name": "entryBodyProblem"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/scrollback-page.ts",
+    "name": "EMPTY_SCROLLBACK_PAGE"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/testing.ts",
+    "name": "claudeCodeTui"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/testing.ts",
+    "name": "shellTui"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tmux.ts",
+    "name": "TRANSIENT_SESSION_ENV"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tmux.ts",
+    "name": "PANE_KEYS"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tmux.ts",
+    "name": "activePaneIdTargetArgs"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/adapters/agy.ts",
+    "name": "protoFields"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+    "name": "AICO_AGENT_PROCESS"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+    "name": "agentRunSignal"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/adapters/aico-agent.ts",
+    "name": "findAgentRun"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/adapters/pi.ts",
+    "name": "piSessionFile"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/blank-slate.ts",
+    "name": "HUB_BLANK_SLATE_BASE"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/blank-slate.ts",
+    "name": "isHubBlankSlateRoot"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/blank-slate.ts",
+    "name": "blankSlateLauncher"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/context-support.ts",
+    "name": "viaShim"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/delivery.ts",
+    "name": "aicoDataDir"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/instructions.ts",
+    "name": "MAX_INSTRUCTIONS_BYTES"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/launch.ts",
+    "name": "AGENT_OOM_SCORE_ADJ"
+  },
+  {
+    "path": "packages/tether/src/lifecycle/tui/registry.ts",
+    "name": "canonicalToolSlug"
+  },
+  {
+    "path": "packages/tether/src/lifecycle-api.ts",
+    "name": "needsFromQuery"
+  },
+  {
+    "path": "packages/tether/src/lifecycle-api.ts",
+    "name": "sessionModelSwitch"
+  },
+  {
+    "path": "packages/tether/src/lifecycle-api.ts",
+    "name": "contextHookOf"
+  },
+  {
+    "path": "packages/tether/src/lifecycle-api.ts",
+    "name": "ATTACH_ENV"
+  },
+  {
+    "path": "packages/tether/src/lifecycle-api.ts",
+    "name": "ATTACH_UNSET"
+  },
+  {
+    "path": "packages/tether/src/lifecycle-api.ts",
+    "name": "applyViewMutation"
+  },
+  {
+    "path": "packages/tether/src/memory-guard.ts",
+    "name": "MEMORY_POLICY_KEY"
+  },
+  {
+    "path": "packages/tether/src/memory-guard.ts",
+    "name": "memoryGuardEnabled"
+  },
+  {
+    "path": "packages/tether/src/model-notices.ts",
+    "name": "modelNotice"
+  },
+  {
+    "path": "packages/tether/src/model-switch.ts",
+    "name": "EMPTY_FOLLOWER"
+  },
+  {
+    "path": "packages/tether/src/projects.ts",
+    "name": "defaultActiveProjectFile"
+  },
+  {
+    "path": "packages/tether/src/projects.ts",
+    "name": "readActiveProjectId"
+  },
+  {
+    "path": "packages/tether/src/projects.ts",
+    "name": "DEFAULT_SUMMITFLOW_PROJECTS_URL"
+  },
+  {
+    "path": "packages/tether/src/reboot.ts",
+    "name": "waitForDesktop"
+  },
+  {
+    "path": "packages/tether/src/recovery.ts",
+    "name": "MAX_AUTO_RECOVERIES"
+  },
+  {
+    "path": "packages/tether/src/recovery.ts",
+    "name": "ADMIT_SETTLE_MS"
+  },
+  {
+    "path": "packages/tether/src/rewind.ts",
+    "name": "screenText"
+  },
+  {
+    "path": "packages/tether/src/server.ts",
+    "name": "machineIdentity"
+  },
+  {
+    "path": "packages/tether/src/server.ts",
+    "name": "buildRouter"
+  },
+  {
+    "path": "packages/tether/src/sessions/api.ts",
+    "name": "parsePushedRun"
+  },
+  {
+    "path": "packages/tether/src/sessions/cli.ts",
+    "name": "formatTokens"
+  },
+  {
+    "path": "packages/tether/src/sessions/history.ts",
+    "name": "PUSHED_TOOL"
+  },
+  {
+    "path": "packages/tether/src/sessions/history.ts",
+    "name": "projectOfRoots"
+  },
+  {
+    "path": "packages/tether/src/sessions/lines.ts",
+    "name": "MAX_LINE"
+  },
+  {
+    "path": "packages/tether/src/sessions/types.ts",
+    "name": "EVENT_TEXT_MAX"
+  },
+  {
+    "path": "packages/tether/src/show.ts",
+    "name": "MAX_SHARE_PATHS"
+  },
+  {
+    "path": "packages/tether/src/show.ts",
+    "name": "MAX_LISTED_SHARES"
+  },
+  {
+    "path": "packages/tether/src/wait-kinds.ts",
+    "name": "tapWord"
+  },
+  {
+    "path": "packages/tether/src/waits.ts",
+    "name": "WAIT_KINDS"
+  },
+  {
+    "path": "packages/tether/src/waits.ts",
+    "name": "SESSION_UNTILS"
+  },
+  {
+    "path": "packages/tether/src/waits.ts",
+    "name": "waitJson"
+  },
+  {
+    "path": "packages/tether/src/waits.ts",
+    "name": "pullWaitLine"
+  },
+  {
+    "path": "packages/tether/src/wakes.ts",
+    "name": "WAKE_POLICY_BOUNDS"
+  },
+  {
+    "path": "packages/tether/src/wakes.ts",
+    "name": "isWakeClass"
+  },
+  {
+    "path": "packages/tether/src/wakes.ts",
+    "name": "ridesAlong"
+  },
+  {
+    "path": "packages/tether/src/wakes.ts",
+    "name": "DELIVERY_BUDGET_BYTES"
+  },
+  {
+    "path": "packages/tether/src/wakes.ts",
+    "name": "cutToBytes"
+  },
+  {
+    "path": "packages/tether/src/wakes.ts",
+    "name": "WAKE_RECHECK_MS"
+  },
+  {
+    "path": "packages/usage/src/claude.ts",
+    "name": "CLAUDE_SOURCE"
+  },
+  {
+    "path": "packages/usage/src/claude.ts",
+    "name": "statuslinePath"
+  },
+  {
+    "path": "packages/usage/src/codex.ts",
+    "name": "CODEX_SOURCE"
+  },
+  {
+    "path": "packages/usage/src/facts.ts",
+    "name": "LOOKBACK_DAYS"
+  },
+  {
+    "path": "packages/usage/src/facts.ts",
+    "name": "creditsOf"
+  },
+  {
+    "path": "packages/usage/src/facts.ts",
+    "name": "recentRefusals"
+  },
+  {
+    "path": "packages/usage/src/opencode.ts",
+    "name": "OPENCODE_SOURCE"
+  },
+  {
+    "path": "packages/usage/src/opencode.ts",
+    "name": "OPENCODE_PROVIDER"
+  },
+  {
+    "path": "packages/usage/src/opencode.ts",
+    "name": "parseUsage"
+  },
+  {
+    "path": "packages/web-frontend/app/manifest.webmanifest/route.ts",
+    "name": "MANIFEST"
+  },
+  {
+    "path": "packages/web-frontend/components/AgentIcon.tsx",
+    "name": "AGENT_DEFAULT_COLORS"
+  },
+  {
+    "path": "packages/web-frontend/components/AgentShowToast.tsx",
+    "name": "shareSummary"
+  },
+  {
+    "path": "packages/web-frontend/components/HostsSheet.tsx",
+    "name": "hostStatus"
+  },
+  {
+    "path": "packages/web-frontend/components/HostsSheet.tsx",
+    "name": "partialSignIn"
+  },
+  {
+    "path": "packages/web-frontend/components/HostsSheet.tsx",
+    "name": "loginText"
+  },
+  {
+    "path": "packages/web-frontend/components/HostsSheet.tsx",
+    "name": "needsSignIn"
+  },
+  {
+    "path": "packages/web-frontend/components/ScrollToBottomPill.tsx",
+    "name": "readViewport"
+  },
+  {
+    "path": "packages/web-frontend/components/SessionList.tsx",
+    "name": "sortSessionEntries"
+  },
+  {
+    "path": "packages/web-frontend/components/SessionList.tsx",
+    "name": "foldSessionEntries"
+  },
+  {
+    "path": "packages/web-frontend/components/SessionSidebar.tsx",
+    "name": "clampWidth"
+  },
+  {
+    "path": "packages/web-frontend/components/asks/AskFiles.tsx",
+    "name": "countText"
+  },
+  {
+    "path": "packages/web-frontend/components/asks/NeedsYou.tsx",
+    "name": "answerRoute"
+  },
+  {
+    "path": "packages/web-frontend/components/asks/NeedsYou.tsx",
+    "name": "deliveryText"
+  },
+  {
+    "path": "packages/web-frontend/components/files/FileBrowser.tsx",
+    "name": "formatSize"
+  },
+  {
+    "path": "packages/web-frontend/components/files/FileBrowser.tsx",
+    "name": "joinPath"
+  },
+  {
+    "path": "packages/web-frontend/components/files/SharedFiles.tsx",
+    "name": "sharedWhen"
+  },
+  {
+    "path": "packages/web-frontend/lib/api/captures.ts",
+    "name": "isCapture"
+  },
+  {
+    "path": "packages/web-frontend/lib/api/captures.ts",
+    "name": "parseCapture"
+  },
+  {
+    "path": "packages/web-frontend/lib/api/captures.ts",
+    "name": "parseCapturePage"
+  },
+  {
+    "path": "packages/web-frontend/lib/api/notes.ts",
+    "name": "parseNoteList"
+  },
+  {
+    "path": "packages/web-frontend/lib/api/notes.ts",
+    "name": "parseNote"
+  },
+  {
+    "path": "packages/web-frontend/lib/capture-thumb.ts",
+    "name": "THUMB_EDGE"
+  },
+  {
+    "path": "packages/web-frontend/lib/constants/terminal.ts",
+    "name": "COPY_MODE_TIMEOUT_MS"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/terminal-handler-utils.ts",
+    "name": "TMUX_INIT_DELAY_MS"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/terminal-handler-utils.ts",
+    "name": "generatePaneName"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/terminal-handler-utils.ts",
+    "name": "shouldStartAgent"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/terminal-scrolling-utils.ts",
+    "name": "MOBILE_TOUCH_SCROLL_SENSITIVITY"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/terminal-scrolling-utils.ts",
+    "name": "DESKTOP_WHEEL_LINE_HEIGHT_PX"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/terminal-scrolling-utils.ts",
+    "name": "SCROLL_SPEED_MULTIPLIER"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/terminal-scrolling-utils.ts",
+    "name": "isMouseTrackingActive"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-agent-polling.ts",
+    "name": "AGENT_POLL_INTERVAL_MS"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-agent-polling.ts",
+    "name": "AGENT_POLL_TIMEOUT_MS"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-agent-shows.ts",
+    "name": "parseShows"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-agent-tools.ts",
+    "name": "SHELL_TOOL_SLUG"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-agent-tools.ts",
+    "name": "isAgentTool"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-asks.ts",
+    "name": "ANSWERED_KEPT_MS"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-asks.ts",
+    "name": "parseAsks"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-captures.ts",
+    "name": "CAPTURES_KEY"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-history.ts",
+    "name": "HISTORY_POLL_MS"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-host-admin.ts",
+    "name": "hostPost"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-hosts.ts",
+    "name": "HOSTS_STARTING_POLL_MS"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-session-attention.ts",
+    "name": "slotSessions"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-session-attention.ts",
+    "name": "attentionTitle"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-session-shortcuts.ts",
+    "name": "SESSION_SHORTCUTS"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-status.ts",
+    "name": "STATUS_POLL_MS"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-status.ts",
+    "name": "STATUS_OLD_MS"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-sync-status.ts",
+    "name": "SKEW_WARN_MS"
+  },
+  {
+    "path": "packages/web-frontend/lib/offline.ts",
+    "name": "formatSavedTime"
+  },
+  {
+    "path": "packages/web-frontend/lib/status.ts",
+    "name": "atShort"
+  },
+  {
+    "path": "packages/web-frontend/lib/utils/mobile-terminal-touch.ts",
+    "name": "MOBILE_TERMINAL_TOUCH_SURFACE_SELECTORS"
+  },
+  {
+    "path": "packages/web-server/src/app-cli.ts",
+    "name": "APP_USAGE"
+  },
+  {
+    "path": "packages/web-server/src/app-phones.ts",
+    "name": "cleanState"
+  },
+  {
+    "path": "packages/web-server/src/app-release.ts",
+    "name": "APK_NAME"
+  },
+  {
+    "path": "packages/web-server/src/asks.ts",
+    "name": "askKey"
+  },
+  {
+    "path": "packages/web-server/src/backups.ts",
+    "name": "backupCommand"
+  },
+  {
+    "path": "packages/web-server/src/chat.ts",
+    "name": "MAX_CHAT_STREAMS"
+  },
+  {
+    "path": "packages/web-server/src/chat.ts",
+    "name": "chatQuestions"
+  },
+  {
+    "path": "packages/web-server/src/cli.ts",
+    "name": "parseTsession"
+  },
+  {
+    "path": "packages/web-server/src/config.ts",
+    "name": "buildIdFrom"
+  },
+  {
+    "path": "packages/web-server/src/config.ts",
+    "name": "DEFAULT_TOMBSTONE_DAYS"
+  },
+  {
+    "path": "packages/web-server/src/config.ts",
+    "name": "DEFAULT_SYNC_INTERVAL_SECONDS"
+  },
+  {
+    "path": "packages/web-server/src/config.ts",
+    "name": "findIdentityFile"
+  },
+  {
+    "path": "packages/web-server/src/file-locations.ts",
+    "name": "MAX_RAW_BYTES"
+  },
+  {
+    "path": "packages/web-server/src/file-locations.ts",
+    "name": "imageType"
+  },
+  {
+    "path": "packages/web-server/src/file-locations.ts",
+    "name": "statLocation"
+  },
+  {
+    "path": "packages/web-server/src/grants.ts",
+    "name": "grantCall"
+  },
+  {
+    "path": "packages/web-server/src/guard.ts",
+    "name": "SECURITY_HEADERS"
+  },
+  {
+    "path": "packages/web-server/src/notes-db.ts",
+    "name": "ROUTE_STATES"
+  },
+  {
+    "path": "packages/web-server/src/notes-export.ts",
+    "name": "readSnapshot"
+  },
+  {
+    "path": "packages/web-server/src/notes-export.ts",
+    "name": "renderNote"
+  },
+  {
+    "path": "packages/web-server/src/notes-export.ts",
+    "name": "renderCaptures"
+  },
+  {
+    "path": "packages/web-server/src/notes-export.ts",
+    "name": "rcloneRunner"
+  },
+  {
+    "path": "packages/web-server/src/notes-import-cli.ts",
+    "name": "readSummitflowRows"
+  },
+  {
+    "path": "packages/web-server/src/notes-import-cli.ts",
+    "name": "parseSummitflow"
+  },
+  {
+    "path": "packages/web-server/src/notes-import.ts",
+    "name": "fileKey"
+  },
+  {
+    "path": "packages/web-server/src/notes-import.ts",
+    "name": "applyNote"
+  },
+  {
+    "path": "packages/web-server/src/notes-import.ts",
+    "name": "findKeepDir"
+  },
+  {
+    "path": "packages/web-server/src/notes-import.ts",
+    "name": "PRIORITY_TOPICS"
+  },
+  {
+    "path": "packages/web-server/src/notes-import.ts",
+    "name": "topicsOf"
+  },
+  {
+    "path": "packages/web-server/src/notes-import.ts",
+    "name": "textTopicsOf"
+  },
+  {
+    "path": "packages/web-server/src/notes.ts",
+    "name": "itemJson"
+  },
+  {
+    "path": "packages/web-server/src/notes.ts",
+    "name": "summaryJson"
+  },
+  {
+    "path": "packages/web-server/src/notes.ts",
+    "name": "detailJson"
+  },
+  {
+    "path": "packages/web-server/src/notice.ts",
+    "name": "PUSH_TIMEOUT_MS"
+  },
+  {
+    "path": "packages/web-server/src/notify.ts",
+    "name": "hubVerdict"
+  },
+  {
+    "path": "packages/web-server/src/owners/portfolio-ai.ts",
+    "name": "CAPTURE_NAMESPACE"
+  },
+  {
+    "path": "packages/web-server/src/owners/vehicles.ts",
+    "name": "buildEvent"
+  },
+  {
+    "path": "packages/web-server/src/service-apps.ts",
+    "name": "serviceAppsRouter"
+  },
+  {
+    "path": "packages/web-server/src/static.ts",
+    "name": "CSP_HASHES_FILE"
+  },
+  {
+    "path": "packages/web-server/src/static.ts",
+    "name": "readScriptHashes"
+  },
+  {
+    "path": "packages/web-server/src/status-cli.ts",
+    "name": "STATUS_USAGE"
+  },
+  {
+    "path": "packages/web-server/src/status.ts",
+    "name": "filterFrom"
+  },
+  {
+    "path": "packages/web-server/src/sync/engine.ts",
+    "name": "DEFAULT_PAGE_LIMIT"
+  },
+  {
+    "path": "packages/web-server/src/sync/peer.ts",
+    "name": "PeerError"
+  },
+  {
+    "path": "packages/web-server/src/terminal.ts",
+    "name": "isAutomatedViewer"
+  },
+  {
+    "path": "packages/web-server/src/terminal.ts",
+    "name": "viewerIdOf"
+  },
+  {
+    "path": "packages/web-server/src/testing.ts",
+    "name": "attachAnswer"
+  },
+  {
+    "path": "packages/web-server/src/testing.ts",
+    "name": "remoteAttachAnswer"
+  },
+  {
+    "path": "packages/web-server/src/tether.ts",
+    "name": "UNAVAILABLE_DETAIL"
+  },
+  {
+    "path": "packages/web-server/src/tray.ts",
+    "name": "healthLine"
+  },
+  {
+    "path": "packages/web-server/src/tray.ts",
+    "name": "noticeCard"
+  },
+  {
+    "path": "packages/web-server/src/uploads.ts",
+    "name": "validateMimeType"
+  },
+  {
+    "path": "packages/web-server/src/uploads.ts",
+    "name": "readUpload"
+  },
+  {
+    "path": "packages/webtools/src/artifacts.ts",
+    "name": "cacheDir"
+  },
+  {
+    "path": "packages/agent/src/compaction.ts",
+    "name": "Preparation"
+  },
+  {
+    "path": "packages/tether/src/deliveries.ts",
+    "name": "DeliveryState"
+  },
+  {
+    "path": "packages/tether/src/sessions/history.ts",
+    "name": "TranscriptRow"
+  },
+  {
+    "path": "packages/tether/src/waits.ts",
+    "name": "SessionUntil"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-check-ins.ts",
+    "name": "CheckInMenu"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-check-ins.ts",
+    "name": "KeptCheckIn"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-terminal-sessions.ts",
+    "name": "EndSessionRequest"
+  },
+  {
+    "path": "packages/web-frontend/lib/hooks/use-terminal-write-queue.ts",
+    "name": "TerminalReseedSource"
+  },
+  {
+    "path": "packages/web-frontend/lib/utils/slot.ts",
+    "name": "SessionPlace"
+  },
+  {
+    "path": "packages/web-server/src/grants.ts",
+    "name": "GrantView"
+  },
+  {
+    "path": "packages/web-server/src/lifecycle.ts",
+    "name": "StartAgentResult"
+  },
+  {
+    "path": "packages/web-server/src/notes-data.ts",
+    "name": "NoteLabelRow"
+  },
+  {
+    "path": "packages/web-server/src/notes.ts",
+    "name": "RevisionJson"
+  }
+]

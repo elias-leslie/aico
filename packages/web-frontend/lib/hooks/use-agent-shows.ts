@@ -54,7 +54,7 @@ function isShow(value: unknown): value is AgentShow {
   )
 }
 
-export function parseShows(value: unknown): AgentShow[] {
+function parseShows(value: unknown): AgentShow[] {
   if (
     !isRecord(value) ||
     !Array.isArray(value.shows) ||

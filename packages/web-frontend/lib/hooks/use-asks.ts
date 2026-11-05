@@ -75,7 +75,7 @@ const APPROVALS_KEY = ['owner-approvals'] as const
 /** As often as the session list, so a new ask and its session's mark arrive together. */
 const POLL_MS = SESSION_REFRESH_MS
 /** Answered and closed asks stay in the Answered tab this long. */
-export const ANSWERED_KEPT_MS = 24 * 60 * 60 * 1000
+const ANSWERED_KEPT_MS = 24 * 60 * 60 * 1000
 
 function isAsk(value: unknown): value is OwnerAsk {
   if (!value || typeof value !== 'object') return false
@@ -92,7 +92,7 @@ function isAsk(value: unknown): value is OwnerAsk {
   )
 }
 
-export function parseAsks(value: unknown): OwnerAsk[] {
+function parseAsks(value: unknown): OwnerAsk[] {
   const items = (value as { asks?: unknown } | null)?.asks
   if (!Array.isArray(items)) throw new Error('Invalid asks')
   return items.filter(isAsk)

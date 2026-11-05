@@ -3,7 +3,7 @@ export interface MobileTerminalTouchStyles {
   touchAction: 'none'
 }
 
-export const MOBILE_TERMINAL_TOUCH_SURFACE_SELECTORS = [
+const MOBILE_TERMINAL_TOUCH_SURFACE_SELECTORS = [
   '.xterm-screen',
   '.xterm-viewport',
 ] as const

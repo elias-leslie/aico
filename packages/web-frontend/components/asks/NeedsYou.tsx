@@ -606,7 +606,7 @@ function useAsker(ask: OwnerAsk): { name: string; sessionId: string | null } {
 /** Which session gets the owner's answer, in the owner's words (`text` short
  * for the phone, `detail` for the tooltip); null on an older Tether that does
  * not say (`answerTo` absent). */
-export function answerRoute(
+function answerRoute(
   ask: OwnerAsk,
   nameOf: (id: string) => string | null,
   chat = false,
@@ -957,7 +957,7 @@ function CommandBox({ command }: { command: string }) {
 }
 
 /** How the answer travels, in the owner's words. */
-export function deliveryText(ask: OwnerAsk): string {
+function deliveryText(ask: OwnerAsk): string {
   if (ask.state === 'done') return 'Done: the agent acted on it.'
   if (ask.state === 'withdrawn') return 'The agent withdrew it.'
   if (ask.delivery === 'wake')

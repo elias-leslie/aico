@@ -105,12 +105,6 @@ function readers(): PullReaders {
       tapDirs: [join(dir, 'out'), join(dir, 'agent')],
       cmdDir: join(dir, 'cmd'),
     },
-    run: (id) =>
-      id === 'run-1'
-        ? { state: 'needs_owner', launcherId: 'aaaa0001' }
-        : id === 'run-2'
-          ? { state: null, launcherId: null }
-          : undefined,
     ask: (id) =>
       id === 'c'.repeat(12) ? { state: 'answered', question: 'Rebuild aico now?' } : undefined,
     agentTitle: (anchor) => (anchor === '4242:99' ? 'SummitFlow — One wake per message' : null),
@@ -270,7 +264,7 @@ describe('PullReaders', () => {
 
   it('reads runs, asks and hosts from Tether', () => {
     const r = readers()
-    expect(r.read('run', 'run-1')?.state).toBe('needs_owner')
+    expect(r.read('run', 'run-1')).toBeNull()
     expect(r.read('run', 'run-2')).toBeNull()
     expect(r.pullRef('run', 'run-3')).toBeNull()
     expect(r.read('ask', 'c'.repeat(12))?.state).toBe('answered')

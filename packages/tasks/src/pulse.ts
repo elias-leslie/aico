@@ -39,7 +39,7 @@ export interface PulseSources {
 }
 
 /** The kernel start tick of pid (/proc/<pid>/stat field 22), as aico-hook stamps op leases with it. */
-export function processAlive(pid: number, start: string | null): boolean {
+function processAlive(pid: number, start: string | null): boolean {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
@@ -312,7 +312,7 @@ function fit<T>(chosen: T[], cfg: Policy): T[] {
   return chosen.length <= room ? chosen : chosen.slice(0, room - 1)
 }
 
-export function renderBrief(chosen: Array<[string, BriefItem]>, cfg: Policy): string[] {
+function renderBrief(chosen: Array<[string, BriefItem]>, cfg: Policy): string[] {
   if (chosen.length === 0) return []
   const shown = fit(chosen, cfg)
   const lines = ['System brief (new since this window; `aico pulse --brief` repeats it):']

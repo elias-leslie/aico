@@ -9,7 +9,7 @@ const MAX_COALESCE_CHARS = 16_384
 const FULL_RESET = '\x1bc'
 
 /** The server's way to repaint the terminal from the pane (control mode). */
-export interface TerminalReseedSource {
+interface TerminalReseedSource {
   /** Whether a repaint can be asked for now (control-mode stream). */
   available: () => boolean
   request: () => void

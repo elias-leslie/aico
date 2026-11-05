@@ -34,7 +34,6 @@ import {
   retentionSelection,
 } from './backup-retention'
 import { copyRootAuth, type Runtime, readState, restic, saveState } from './backup-runtime'
-import { captureRedis } from './backup-streams'
 import {
   cutover,
   cutoverReady,
@@ -739,26 +738,6 @@ it('browses and restores a root-owned T7 tree without requiring caller traversal
     run.mock.calls.every(([argv]) => argv.slice(0, 4).join(' ') === 'sudo -n realpath -e'),
   ).toBe(true)
 })
-it('Redis capture uses the configured credential source only through the child environment', async () => {
-  const bin = temp(),
-    c = cfg()
-  writeFileSync(
-    join(bin, 'redis-cli'),
-    '#!/bin/sh\n[ "$REDISCLI_AUTH" = fixture-value ] || exit 42\nprintf redis-backup-fixture > "$2"\n',
-    { mode: 0o700 },
-  )
-  c.redisCapture.command = [join(bin, 'redis-cli')]
-  c.redisCapture.passwordFile = join(bin, 'fixture.env')
-  writeFileSync(
-    c.redisCapture.passwordFile,
-    'REDIS_PASSWORD="fixture-value"\nUNRELATED=not-forwarded\n',
-  )
-  const file = await captureRedis(c, { PATH: `${bin}:/usr/bin:/bin` })
-  expect(readFileSync(file, 'utf8')).toBe('redis-backup-fixture')
-  expect(c.streams.find((s) => s.id === 'redis')?.command).toEqual([
-    'aico',
-    'backups',
-    'stream',
-    'redis',
-  ])
+it('does not schedule a live Redis capture after its frozen archive is verified', () => {
+  expect(cfg().streams.some((stream) => stream.id === 'redis')).toBe(false)
 })

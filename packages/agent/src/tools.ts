@@ -56,7 +56,7 @@ const within = (path: string, dirs: readonly string[]) =>
   dirs.some((dir) => path === dir || path.startsWith(dir === sep ? dir : `${dir}${sep}`))
 
 /** The real paths of the sockets listening on this host (/proc/net/unix), existing ones only. */
-export function listeningSockets(table = '/proc/net/unix'): string[] {
+function listeningSockets(table = '/proc/net/unix'): string[] {
   let text: string
   try {
     text = readFileSync(table, 'utf8')
@@ -76,7 +76,7 @@ export function listeningSockets(table = '/proc/net/unix'): string[] {
 }
 
 /** The full sandbox command for one bash call in `cwd`, up to the program it runs. */
-export function sandboxArgs(contain: Contain, cwd: string, home = homedir()): string[] {
+function sandboxArgs(contain: Contain, cwd: string, home = homedir()): string[] {
   const root = realpathSync(cwd)
   const args = [...contain.command]
   const masked = args.flatMap((arg, i) => (arg === '--tmpfs' ? [args[i + 1] as string] : []))
@@ -100,7 +100,7 @@ export function sandboxArgs(contain: Contain, cwd: string, home = homedir()): st
 }
 
 /** `env` without the variables `unset` names (a trailing `*` matches a prefix). */
-export function clearedEnv(env: NodeJS.ProcessEnv, unset: readonly string[]): NodeJS.ProcessEnv {
+function clearedEnv(env: NodeJS.ProcessEnv, unset: readonly string[]): NodeJS.ProcessEnv {
   const gone = (key: string) =>
     unset.some((name) => (name.endsWith('*') ? key.startsWith(name.slice(0, -1)) : key === name))
   return Object.fromEntries(Object.entries(env).filter(([key]) => !gone(key)))

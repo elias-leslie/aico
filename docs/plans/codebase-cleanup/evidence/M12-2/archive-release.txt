@@ -1,0 +1,1 @@
+Archive release handshake 7ac498 acknowledged. Manifest /srv/workspaces/archive/pre-aico/manifest.json, 7,315,425 bytes, top-level files+notes. Archive lane checkpoint 3c4bc895: both PG restores/counts, four SQLite checks, ledger/PVE anchors, T7, Drive and small-file restore passed. Volumes/unit files remain; no archive data changed.

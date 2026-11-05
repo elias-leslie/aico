@@ -5,7 +5,7 @@
 
 import { execFile } from 'node:child_process'
 
-export const PUSH_TIMEOUT_MS = 10_000
+const PUSH_TIMEOUT_MS = 10_000
 
 export type NoticeAction = 'answer' | 'done' | 'open'
 

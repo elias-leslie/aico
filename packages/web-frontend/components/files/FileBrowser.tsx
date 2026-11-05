@@ -63,7 +63,7 @@ const TEXT_EXTENSIONS = new Set([
   '.env',
 ])
 
-export function formatSize(bytes: number): string {
+function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
@@ -175,7 +175,7 @@ function TreeNode({
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
 
 /** A path inside a folder, as one absolute path. */
-export function joinPath(root: string, path: string): string {
+function joinPath(root: string, path: string): string {
   if (!path) return root
   return `${root.replace(/\/+$/, '')}/${path}`
 }

@@ -10,7 +10,7 @@ import {
 } from './backup-plan'
 import { checked, type Runtime } from './backup-runtime'
 
-export function rawRows(output: string): Record<string, string>[] {
+function rawRows(output: string): Record<string, string>[] {
   return output
     .split('\n')
     .filter((l) => l.startsWith('format='))

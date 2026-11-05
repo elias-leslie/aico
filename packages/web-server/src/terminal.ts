@@ -132,12 +132,12 @@ export function sizeOf(message: Record<string, unknown>): Size | null {
 }
 
 /** An agent's headless Chrome: it may watch a session but never takes its size. */
-export function isAutomatedViewer(userAgent: string | undefined): boolean {
+function isAutomatedViewer(userAgent: string | undefined): boolean {
   return /HeadlessChrome\//.test(userAgent ?? '')
 }
 
 /** The page's browser id from its first control message, or null. */
-export function viewerIdOf(message: Record<string, unknown>): string | null {
+function viewerIdOf(message: Record<string, unknown>): string | null {
   const id = message.viewer_id
   return typeof id === 'string' && VIEWER_ID.test(id) ? id : null
 }

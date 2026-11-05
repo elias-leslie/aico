@@ -36,5 +36,5 @@ function seeded(slug: string): TuiSpec {
 }
 
 export const codexTui = seeded('codex')
-export const claudeCodeTui = seeded('claude-code')
-export const shellTui = seeded('shell')
+const claudeCodeTui = seeded('claude-code')
+const shellTui = seeded('shell')

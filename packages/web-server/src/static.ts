@@ -13,7 +13,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
 
 /** The build step's file in `out/`: `{ "scriptHashes": ["sha256-…", …] }`. */
-export const CSP_HASHES_FILE = 'csp-hashes.json'
+const CSP_HASHES_FILE = 'csp-hashes.json'
 
 const IMMUTABLE_PREFIX = '/_next/static/'
 
@@ -69,7 +69,7 @@ export function pageCsp(options: PageCspOptions): string {
 }
 
 /** The inline-script hashes the build wrote, or none (then inline scripts are refused). */
-export function readScriptHashes(root: string): string[] {
+function readScriptHashes(root: string): string[] {
   try {
     const parsed = JSON.parse(readFileSync(join(root, CSP_HASHES_FILE), 'utf8')) as {
       scriptHashes?: unknown

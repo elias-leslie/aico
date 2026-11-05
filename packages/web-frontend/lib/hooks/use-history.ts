@@ -8,7 +8,7 @@ import type {
   HistorySession,
 } from '../history'
 
-export const HISTORY_POLL_MS = 30_000
+const HISTORY_POLL_MS = 30_000
 /** Ask once more after a failure, unless the answer was a refusal that asking again won't change. */
 const retryOnce = (count: number, error: unknown) =>
   count < 1 && !isPermanentRefusal(error)

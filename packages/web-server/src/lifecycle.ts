@@ -35,7 +35,7 @@ export interface PaneView extends Pane {
   sessions: WebSession[]
 }
 
-export interface StartAgentResult {
+interface StartAgentResult {
   started: boolean
   message: string
   state: AgentState

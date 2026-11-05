@@ -56,4 +56,4 @@ export function sessionGeneration(row: SessionIdentity): string {
 }
 
 export const GENERATION_RE = /^[0-9a-f]{64}$/
-export const SESSION_ID_RE = /^[0-9a-f]{8}$/
+const SESSION_ID_RE = /^[0-9a-f]{8}$/

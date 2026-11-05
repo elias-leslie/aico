@@ -170,7 +170,7 @@ import {
   type TmuxServerUnitEvidence,
 } from './tmux-server-state'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './tui/blank-slate'
-import { ensureContext, finalizeContext } from './tui/context'
+import { ensureContext } from './tui/context'
 import { forgetDelivery, withContextDelivery, withLastDelivery } from './tui/delivery'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
 import { type AgentExitMarker, paneCommand, paneGatePath, parseAgentExitMarker } from './tui/launch'
@@ -2009,7 +2009,7 @@ export async function sessionDiagnostics(widgetId: string): Promise<Record<strin
 // create/respawn path). A vanished root falls back to $HOME so a stale binding
 // never strands the pane. (Aico's unbound fallback was the global `st` active
 // project; Tether has no global active project.)
-export function cwdForWidget(widgetId: string): string {
+function cwdForWidget(widgetId: string): string {
   const row = getWidget(widgetId)
   const root = row?.projectRoot
   if (root && isBlankSlateRoot(root)) ensureBlankSlateWorkspace(root)
@@ -2700,7 +2700,6 @@ const retireRequests = new Map<
  * for the lifecycle token and otherwise gets `busy` with nothing applied.
  */
 export function endSession(widgetId: string, generation?: string): Promise<EndResult> {
-  if (getWidget(widgetId)?.backend === 'agent-hub') return endAgentHubSession(widgetId, generation)
   if (retireRequests.has(widgetId)) return Promise.resolve({ status: 'busy' })
   return new Promise<EndResult>((resolve) => {
     const request = {
@@ -2720,20 +2719,6 @@ export function endSession(widgetId: string, generation?: string): Promise<EndRe
     widgetRetireIntents.request(widgetId)
     drainWidgetRetire(widgetId)
   })
-}
-
-async function endAgentHubSession(
-  widgetId: string,
-  generation: string | undefined,
-): Promise<EndResult> {
-  if (!hubBackend) return { status: 'blocked', reason: 'Agent Hub is not available' }
-  const result = await hubBackend.end(widgetId, generation)
-  if (result.status === 'ended') {
-    statusCache.delete(widgetId)
-    publishSession(widgetId, { ended: true })
-    await publishPromotedLanes(widgetId)
-  }
-  return result
 }
 
 /** Coordinators whose End keeps wakes or waits that relaunch it: the relaunch rejoins the
@@ -2833,14 +2818,6 @@ async function discardWidgetOwned(
       ensureFailures.delete(id)
       publishSession(id, { ended: true })
       await publishPromotedLanes(id)
-      const finalized = await finalizeContext(getTui(row.tool), row.sessionId)
-      if (finalized !== null) {
-        if (!finalized)
-          console.error(
-            `[tether:lifecycle] ${row.tool} accounting finalization unavailable session=${row.sessionId}`,
-          )
-        return { status: 'ended', contextFinalization: finalized ? 'completed' : 'unavailable' }
-      }
     } else if (result.status === 'blocked') {
       console.error(`[tether:lifecycle] retaining ${row.sessionId}: ${result.reason}`)
     } else if (result.status === 'stale') {
@@ -3163,26 +3140,10 @@ export function setGenerationFunction(fn: (row: WidgetRow) => string): void {
   generationOf = fn
 }
 
-/** What the engine asks of the Agent Hub kind (src/agent-hub/): a session with
- * no pane is verified and ended there, never through tmux. */
-export interface HubBackend {
-  verify(row: WidgetRow): Promise<SessionStatus>
-  end(widgetId: string, generation: string | undefined): Promise<EndResult>
-}
-
-let hubBackend: HubBackend | null = null
-
-export function setHubBackend(backend: HubBackend | null): void {
-  hubBackend = backend
-}
-
 export async function verifySessionStatus(row: WidgetRow): Promise<SessionStatus> {
   let status: SessionStatus
-  if (row.backend === 'agent-hub') {
-    status = hubBackend
-      ? await hubBackend.verify(row).catch(() => 'uncertain' as const)
-      : 'uncertain'
-  } else if (isNeverAllocatedWidget(row)) status = 'pending'
+  if (row.backend === 'agent-hub') status = 'uncertain'
+  else if (isNeverAllocatedWidget(row)) status = 'pending'
   else if (
     row.lifecycleVersion >= MANAGED_LIFECYCLE_VERSION &&
     row.launchState === 'dispatched' &&
@@ -3382,6 +3343,6 @@ export function stopLifecycle(): void {
 }
 
 /** Test/diagnostic: has-session through the exact bound target. */
-export function hasSessionArgsFor(widgetId: string): string[] {
+function hasSessionArgsFor(widgetId: string): string[] {
   return hasTargetArgs(tmuxTargetForWidget(widgetId))
 }

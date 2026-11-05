@@ -61,7 +61,7 @@ interface ItemRow {
   kind: string
   content_hash: string | null
 }
-export const itemType = (id: string, kind: string): ItemType =>
+const itemType = (id: string, kind: string): ItemType =>
   id.startsWith('prompt:')
     ? 'prompt'
     : id.startsWith('memory:')

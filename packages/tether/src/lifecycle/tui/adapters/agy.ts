@@ -108,7 +108,7 @@ function varint(bytes: Uint8Array, start: number): [number, number] | null {
 
 /** The top-level fields of a protobuf message: varints as numbers,
  * length-delimited fields as bytes. Fixed-width fields are skipped. */
-export function protoFields(bytes: Uint8Array): Map<number, number | Uint8Array> {
+function protoFields(bytes: Uint8Array): Map<number, number | Uint8Array> {
   const out = new Map<number, number | Uint8Array>()
   let index = 0
   while (index < bytes.length) {

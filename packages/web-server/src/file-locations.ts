@@ -14,7 +14,7 @@ import { translate } from './pane-files'
 import { HttpError } from './tether'
 
 /** The largest file the viewer streams. */
-export const MAX_RAW_BYTES = 25 * 1024 * 1024
+const MAX_RAW_BYTES = 25 * 1024 * 1024
 const CHUNK_BYTES = 64 * 1024
 const SNIFF_BYTES = 8192
 
@@ -34,7 +34,7 @@ function locationRoot(ctx: RequestContext): string {
   return root
 }
 
-export function imageType(header: Buffer): string | null {
+function imageType(header: Buffer): string | null {
   if (header.subarray(0, 8).equals(Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'))) return 'image/png'
   if (header.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return 'image/jpeg'
   const start = header.subarray(0, 6).toString('latin1')
@@ -99,7 +99,7 @@ async function streamFile(ctx: RequestContext, target: string): Promise<typeof R
 }
 
 /** What a path names (a clicked path may start with `~`): its real location and kind. */
-export function statLocation(raw: string): { path: string; kind: 'file' | 'folder' } {
+function statLocation(raw: string): { path: string; kind: 'file' | 'folder' } {
   const expanded =
     raw === '~' ? homedir() : raw.startsWith('~/') ? join(homedir(), raw.slice(2)) : raw
   if (!isAbsolute(expanded) || expanded.includes('\0'))

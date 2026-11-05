@@ -19,7 +19,7 @@ import { agentProcessNames } from './lifecycle/tui/registry'
 import { applyMemoryPolicyPatch, type MemoryPolicy, parseStoredMemoryPolicy } from './memory-policy'
 import type { Store } from './store'
 
-export const MEMORY_POLICY_KEY = 'memory_policy'
+const MEMORY_POLICY_KEY = 'memory_policy'
 
 export interface MemoryGuardStatus {
   running: boolean
@@ -96,7 +96,7 @@ export class MemoryPolicyService {
 }
 
 /** The guard runs on the default instance only, unless TETHER_MEMORY_GUARD=off. */
-export function memoryGuardEnabled(paths: TetherPaths, env: NodeJS.ProcessEnv): boolean {
+function memoryGuardEnabled(paths: TetherPaths, env: NodeJS.ProcessEnv): boolean {
   return paths.legacy && env.TETHER_MEMORY_GUARD !== 'off' && env.TETHER_RECONCILE !== 'off'
 }
 

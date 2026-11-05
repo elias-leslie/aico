@@ -30,7 +30,7 @@ export const FILTERED_ENV_VARS: ReadonlySet<string> = new Set([
 ])
 
 /** Exact names a tmux server may inherit from the user manager. */
-export const SERVER_ENV_ALLOWLIST: ReadonlySet<string> = new Set([
+const SERVER_ENV_ALLOWLIST: ReadonlySet<string> = new Set([
   'HOME',
   'USER',
   'LOGNAME',
@@ -53,7 +53,7 @@ export const SERVER_ENV_ALLOWLIST: ReadonlySet<string> = new Set([
 /** The desktop session's variables. The daemon can start before the graphical
  * session imports them into the user manager (e.g. right after a reboot), so
  * they are read from the user manager at spawn time, not from the daemon. */
-export const GRAPHICAL_ENV_VARS: readonly string[] = [
+const GRAPHICAL_ENV_VARS: readonly string[] = [
   'DISPLAY',
   'XAUTHORITY',
   'WAYLAND_DISPLAY',
@@ -76,7 +76,7 @@ export function parseGraphicalEnvironment(text: string): Record<string, string> 
 }
 
 /** Prefixes a tmux server may inherit (locale and XDG base directories). */
-export const SERVER_ENV_ALLOWED_PREFIXES: readonly string[] = ['LC_', 'XDG_']
+const SERVER_ENV_ALLOWED_PREFIXES: readonly string[] = ['LC_', 'XDG_']
 
 /** Terminal nesting markers that would make tmux target the wrong server. */
 const ALWAYS_DROPPED: ReadonlySet<string> = new Set([

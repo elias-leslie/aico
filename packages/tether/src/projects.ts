@@ -28,12 +28,12 @@ export interface ServedProjectList extends Omit<ProjectList, 'projects'> {
 }
 
 /** SummitFlow's active-project pointer, written by `st projects use`. */
-export function defaultActiveProjectFile(home: string): string {
+function defaultActiveProjectFile(home: string): string {
   return join(home, '.local', 'share', 'st', 'active-project.json')
 }
 
 /** The pointer's project id, or null when absent, unreadable or malformed. */
-export function readActiveProjectId(path: string | null): string | null {
+function readActiveProjectId(path: string | null): string | null {
   if (!path) return null
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as { project_id?: unknown } | null
@@ -61,7 +61,7 @@ export function withActiveProject(list: ProjectList, activeFile: string | null):
 
 export type FetchJson = (url: string, timeoutMs: number) => Promise<unknown>
 
-export const DEFAULT_SUMMITFLOW_PROJECTS_URL = 'http://127.0.0.1:8001/api/projects'
+const DEFAULT_SUMMITFLOW_PROJECTS_URL = 'http://127.0.0.1:8001/api/projects'
 const PROJECT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
 /**

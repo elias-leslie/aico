@@ -14,7 +14,7 @@ interface Shortcut {
 }
 
 /** Session switching: Ctrl+Tab, Ctrl+Shift+Tab and Ctrl+1-9. */
-export const SESSION_SHORTCUTS: readonly Shortcut[] = [
+const SESSION_SHORTCUTS: readonly Shortcut[] = [
   {
     matches: (e) => e.ctrlKey && e.key === 'Tab' && !e.shiftKey,
     target: (_e, current, count) => (current + 1) % count,

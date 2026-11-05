@@ -277,9 +277,9 @@ describe('aico context deliver', () => {
     expect(err.join('')).toMatch(/^aico context deliver: delivery not recorded: /)
   })
 
-  it("leaves Pi to Agent Hub's extension unless it stands down", async () => {
+  it('delivers Pi context through Aico without the retired Agent Hub extension', async () => {
     const args = ['--tool', 'pi', '--project', 'alpha', '--format', 'pi']
-    expect(await run(args)).toEqual({ code: 0, out: '', err: '' })
+    expect((await run(args)).out).toContain('## Alpha Policy')
     expect((await run(args, { AGENT_HUB_CONTEXT_BYPASS: '1' })).out).toContain('## Alpha Policy')
   })
 

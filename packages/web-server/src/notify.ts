@@ -109,7 +109,7 @@ function readRelayKey(path: string): string {
 }
 
 /** "That was me" to the hub: Confirm benign on the alerts; never throws, says what happened. */
-export function hubVerdict(config: NotifyConfig['ominull']): VerdictPort {
+function hubVerdict(config: NotifyConfig['ominull']): VerdictPort {
   const fallback = 'choose Confirm benign in its console'
   return {
     async confirmBenign(ids) {

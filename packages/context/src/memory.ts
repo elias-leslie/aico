@@ -234,7 +234,7 @@ export function listMemories(
 }
 
 /** The words of a search as an FTS5 query: any word may match; bm25 ranks by how many and where. */
-export function ftsQuery(text: string): string | null {
+function ftsQuery(text: string): string | null {
   const words = text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []
   const unique = [...new Set(words)]
   return unique.length ? unique.map((word) => `"${word}"`).join(' OR ') : null
@@ -276,7 +276,7 @@ export function searchMemories(
 }
 
 /** Memories per scope and tier. */
-export function memoryCounts(db: Database): { scope: string; tier: string; count: number }[] {
+function memoryCounts(db: Database): { scope: string; tier: string; count: number }[] {
   return db
     .prepare(
       `SELECT CASE scope WHEN 'global' THEN 'global' ELSE scope || ':' || scope_id END AS scope,

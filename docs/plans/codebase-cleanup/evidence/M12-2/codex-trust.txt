@@ -1,0 +1,9 @@
+-                dropped   /home/kasadis/.codex/hooks.json:session_start:1:0
+-                dropped   /home/kasadis/.codex/hooks.json:subagent_start:1:0
+preToolUse       trusted   /home/kasadis/.codex/hooks.json:pre_tool_use:0:0 sha256:6ee9ecc96abe56b77b44f1b9413e15f3480267b43507b811d458853a05cdaa05
+postToolUse      trusted   /home/kasadis/.codex/hooks.json:post_tool_use:0:0 sha256:1a5d0b8b78e46390f1a9cadbf963d9831e6de164a25deee0d10e6454ae621fe9
+postToolUse      trusted   /home/kasadis/.codex/hooks.json:post_tool_use:1:0 sha256:d7a2e9631cf09d8c368cbd1ba5b82ffe54d87959c5477da2e26f579ec5b1adb3
+sessionStart     trusted   /home/kasadis/.codex/hooks.json:session_start:0:0 sha256:a29a2323a9dbb09029ab4fa3a3f7fcc88b5121742435333187d0308077bfa293
+userPromptSubmit trusted   /home/kasadis/.codex/hooks.json:user_prompt_submit:0:0 sha256:801b706e13744af0e790f519d1a9f046f856ce74fca6fea609f3765675ba18cf
+subagentStart    trusted   /home/kasadis/.codex/hooks.json:subagent_start:0:0 sha256:d61ccf74ffe95fb7d1ecede6c6b54f25df8790eb1ed9745ac0b4ed2e0a9ce7dc
+stop             trusted   /home/kasadis/.codex/hooks.json:stop:0:0 sha256:d73179db041decb6bf991f1f9c1d7a83badcfc36bbc1f49caca4cfbe16e55e57

@@ -8,8 +8,8 @@ import { API_CSP } from './guard'
 import { objectBody, optionalString, RAW, type Router, requiredString } from './http'
 import { HttpError } from './tether'
 
-export const MAX_CHAT_STREAMS = 24
-export function chatQuestions(asks: readonly Ask[], id: string) {
+const MAX_CHAT_STREAMS = 24
+function chatQuestions(asks: readonly Ask[], id: string) {
   return asks.filter((ask) => !ask.host && ask.session === id && ask.state === 'open')
 }
 export function chatSession(chat: ReturnType<ChatSessions['summary']>, asks: Ask[], seenAt = 0) {

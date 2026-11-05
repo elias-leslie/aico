@@ -1,0 +1,2 @@
+CHECK:FAIL:vitest|0.7s|details:.dev-tools/vitest-358146-details.txt|hint:× keeps a retired Agent Hub tool row as history without admitting it as a session tool 13ms
+CHECK:FAIL focused (1 stage(s))

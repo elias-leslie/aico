@@ -51,17 +51,9 @@ export function isRootTool(slug: unknown): slug is string {
   return adapterOf(slug)?.capabilities.root ?? false
 }
 
-/** The Agent Hub session kind: a root with no pane, held in Agent Hub (src/agent-hub/).
- * Not an `agent_tools` row and not resumable through a native adapter, so it
- * is a root tool of its own rather than one of `ROOT_TOOLS`. */
-export const AGENT_HUB_TOOL = 'agent-hub'
-
-/** Every tool `POST /v1/roots` accepts: the resumable tmux tools and Agent Hub. */
-export const ROOT_CREATE_TOOLS: readonly string[] = [...ROOT_TOOLS, AGENT_HUB_TOOL].sort()
-
-export function isRootCreateTool(slug: unknown): slug is string {
-  return isRootTool(slug) || slug === AGENT_HUB_TOOL
-}
+/** Every root uses a resumable adapter. */
+export const ROOT_CREATE_TOOLS = ROOT_TOOLS
+export const isRootCreateTool = isRootTool
 
 /** Pane tools Tether delivers event lines to (lane reports, waits, deliveries)
  * by its gated paste. */
@@ -117,7 +109,7 @@ export function getTui(slug: string): TuiSpec | undefined {
 }
 
 /** Canonical slug for a slug or alias, or undefined. */
-export function canonicalToolSlug(slug: string): string | undefined {
+function canonicalToolSlug(slug: string): string | undefined {
   return source?.resolveTool(slug)?.slug
 }
 

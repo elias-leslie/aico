@@ -96,10 +96,10 @@ import {
 
 const execFileAsync = promisify(execFile)
 
-export const MAX_AUTO_RECOVERIES = 2
+const MAX_AUTO_RECOVERIES = 2
 export const RECOVERY_WINDOW_MS = 6 * 3600_000
 export const LOOP_WINDOW_MS = 10 * 60_000
-export const ADMIT_SETTLE_MS = 60_000
+const ADMIT_SETTLE_MS = 60_000
 const TICK_MS = 5_000
 const RETRY_MS = 30_000
 const GIVE_UP_MS = 15 * 60_000

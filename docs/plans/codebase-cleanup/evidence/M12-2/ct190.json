@@ -1,0 +1,14 @@
+{
+  "host": "aico",
+  "units": [],
+  "cron": [
+    {
+      "account": "root",
+      "active_lines": 0
+    },
+    {
+      "account": "kasadis",
+      "active_lines": 0
+    }
+  ]
+}

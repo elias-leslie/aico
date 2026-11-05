@@ -25,7 +25,6 @@ import {
 } from './tui/instructions'
 import { isResumeSessionId } from './tui/launch'
 import {
-  AGENT_HUB_TOOL,
   adapterOf,
   getTui,
   isRootCreateTool,
@@ -49,7 +48,7 @@ export const MAX_FRESH_PROMPT_BYTES = 14 * 1024
 const MAX_RESUME_PROMPT_BYTES = 2000
 
 /** The byte limit a create body's prompt exceeds, if it is a string that does. */
-export function promptOverLimit(value: unknown): number | null {
+function promptOverLimit(value: unknown): number | null {
   if (!object(value) || typeof value.initialPrompt !== 'string') return null
   const limit = value.resumeSessionId ? MAX_RESUME_PROMPT_BYTES : MAX_FRESH_PROMPT_BYTES
   return Buffer.byteLength(value.initialPrompt) > limit ? limit : null
@@ -63,7 +62,7 @@ export interface RootLaunchOptions {
 }
 
 /** The explicit launch options a create asked for, or null for none. */
-export function rootLaunchOptions(input: RootCreateRequest): RootLaunchOptions | null {
+function rootLaunchOptions(input: RootCreateRequest): RootLaunchOptions | null {
   if (
     !input.model &&
     !input.reasoningEffort &&
@@ -214,7 +213,7 @@ export type RootPlacement =
   | { kind: 'refused'; status: number; body: Record<string, unknown> }
 
 /** How often a launch host admission deferred is tried again. */
-export const DEFERRED_LAUNCH_RETRY_MS = 30_000
+const DEFERRED_LAUNCH_RETRY_MS = 30_000
 
 interface DeferredLaunch {
   reason: string
@@ -322,7 +321,7 @@ export function isProjectRootPath(value: unknown): value is string {
 /** Why a create for a tool that picks its provider from the model id (Pi) has no
  * usable model: there is no default to fall back on, so the caller must say
  * which one. Null when the model is fine or the tool takes no provider/model. */
-export function missingProviderModel(value: unknown): string | null {
+function missingProviderModel(value: unknown): string | null {
   if (!object(value) || typeof value.tool !== 'string') return null
   if (getTui(value.tool)?.modelSelection?.modelProvider === undefined) return null
   const model = value.model
@@ -403,7 +402,6 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
   const lineage = parseLineage(value.lineage)
   const entry = parseEntry(value.entry)
   const instructions = rawInstructions === null ? null : parseInstructions(rawInstructions)
-  const hub = tool === AGENT_HUB_TOOL
   const daybreakSelection = getTui(tool as string)?.modelSelection?.daybreak
   const daybreakModel =
     daybreakSelection && 'environment' in daybreakSelection ? daybreakSelection.model : undefined
@@ -425,17 +423,8 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     typeof requestId !== 'string' ||
     !KEY.test(requestId) ||
     !isRootCreateTool(tool) ||
-    // An Agent Hub root names its agent and may override the model; it has no
-    // native conversation to resume and no reasoning or daybreak switches.
-    (hub
-      ? typeof agentSlug !== 'string' ||
-        !AGENT_SLUG.test(agentSlug) ||
-        resumeSessionId != null ||
-        reasoningEffort !== null ||
-        daybreak !== null
-      : agentSlug !== null) ||
-    (!hub &&
-      (model !== null || reasoningEffort !== null || daybreak !== null) &&
+    agentSlug !== null ||
+    ((model !== null || reasoningEffort !== null || daybreak !== null) &&
       !getTui(tool)?.modelSelection) ||
     (daybreak !== null && typeof daybreak !== 'boolean') ||
     (daybreak !== null && !getTui(tool)?.modelSelection?.daybreak) ||
@@ -461,8 +450,7 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     !KEY.test(projectId) ||
     !isProjectRootPath(projectRoot) ||
     typeof initialPrompt !== 'string' ||
-    // An Agent Hub chat may start with no first message; every other root needs one.
-    (!hub && !initialPrompt.trim()) ||
+    !initialPrompt.trim() ||
     initialPrompt.includes('\0') ||
     Buffer.byteLength(initialPrompt) > MAX_FRESH_PROMPT_BYTES ||
     (resumeSessionId !== undefined &&
@@ -505,7 +493,6 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     reasoningEffort: reasoningEffort as string | null,
     daybreak: daybreak as boolean | null,
     agentHubContext: agentHubContext as boolean | null,
-    ...(hub ? { agentSlug: agentSlug as string } : {}),
     instructions,
     origin,
     aTermSessionId: (aTermSessionId as string | null) ?? null,
@@ -531,7 +518,7 @@ function entryField(widgetId: string): { entry?: SessionEntry } {
 }
 
 /** Why a create body's `entry` is refused, or null. */
-export function entryBodyProblem(value: unknown): string | null {
+function entryBodyProblem(value: unknown): string | null {
   if (!object(value) || value.entry === undefined || value.entry === null) return null
   return entryProblem(value.entry) ?? entryRefusal(value.tool, value.instructions ?? null)
 }
@@ -823,15 +810,8 @@ export function createRootHandler(
           input.projectId,
           input.projectRoot,
           input.aTermSessionId,
-          input.tool === AGENT_HUB_TOOL && input.agentSlug
-            ? {
-                hubSessionId: randomUUID(),
-                agentSlug: input.agentSlug,
-                model: input.model ?? null,
-              }
-            : null,
           input.entry ?? null,
-          input.tool === AGENT_HUB_TOOL ? null : rootLaunchOptions(input),
+          rootLaunchOptions(input),
         )
         if (root.digest !== digest) {
           json(response, 409, { error: 'request_conflict' })

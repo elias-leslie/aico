@@ -25,7 +25,7 @@ export const SIDE_LIST_WIDTH = { initial: 320, min: 240, max: 560, step: 16 }
 /** Dragged narrower than this, the list folds into the rail. */
 const FOLD_BELOW = 180
 
-export const clampWidth = (width: number) =>
+const clampWidth = (width: number) =>
   Math.round(
     Math.min(SIDE_LIST_WIDTH.max, Math.max(SIDE_LIST_WIDTH.min, width)),
   )

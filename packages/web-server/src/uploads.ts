@@ -71,7 +71,7 @@ export function detectMimeType(content: Uint8Array, claimed: string): string | n
   return null
 }
 
-export function validateMimeType(content: Uint8Array, claimed: string): string {
+function validateMimeType(content: Uint8Array, claimed: string): string {
   if (!ALLOWED_MIME_TYPES.includes(claimed))
     throw new HttpError(
       400,
@@ -132,7 +132,7 @@ export async function readUploadForm(
 }
 
 /** The request's `file` part, read with the body capped near the limit. */
-export async function readUpload(req: IncomingMessage, config: UploadConfig): Promise<File> {
+async function readUpload(req: IncomingMessage, config: UploadConfig): Promise<File> {
   return (await readUploadForm(req, config.maxBytes, () => tooLarge(config))).file
 }
 

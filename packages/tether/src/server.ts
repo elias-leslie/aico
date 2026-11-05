@@ -3,8 +3,6 @@ import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
 import { isPeerRequest } from '@aico/fleet/peer-http'
-import { resolveAgentHubConfig } from './agent-hub/config'
-import type { RunTracker } from './agent-hub/runs'
 import { type AskDelivery, type NeedsYouFeed, registerAskRoutes } from './asks'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import { CoordinationDocs, registerCoordinationRoutes } from './coordination/docs'
@@ -31,7 +29,6 @@ import {
   registerLocalProject,
   withActiveProject,
 } from './projects'
-import { registerRunRoutes, type StepChatSource } from './runs-api'
 import { registerHistoryRoutes } from './sessions/api'
 import type { History } from './sessions/history'
 import { registerShowRoute } from './show'
@@ -67,11 +64,6 @@ export interface ServerContext {
     nameOf(sessionId: string): string | null
     origin?: string | null
   }
-  /** Workflow runs launched by sessions (`/v1/runs`); absent in scratch instances. */
-  runs?: RunTracker
-  /** Reads a step's attempt session for the read-only chat view. */
-  stepChats?: StepChatSource
-  /** The remote hosts this Tether federates (docs/api-v1.md "Remote hosts"). */
   hub?: Hub
   /** The session history (`/v1/history`); absent: the routes answer 404. */
   history?: History
@@ -80,7 +72,7 @@ export interface ServerContext {
 /** Which machine answers on this socket: a hub compares it on every link-up,
  * so a cloned VM or a reused alias is not mistaken for the host it knew. */
 let machine: { name: string; machineId: string | null } | null = null
-export function machineIdentity(): { name: string; machineId: string | null } {
+function machineIdentity(): { name: string; machineId: string | null } {
   if (machine) return machine
   let machineId: string | null = null
   try {
@@ -244,7 +236,7 @@ function memoryPolicyJson(service: MemoryPolicyService): Record<string, unknown>
   }
 }
 
-export function buildRouter(context: ServerContext): Router {
+function buildRouter(context: ServerContext): Router {
   const { store, events, projects, paths } = context
   const now = context.now ?? Date.now
   const router = new Router()
@@ -425,14 +417,12 @@ export function buildRouter(context: ServerContext): Router {
     const hub = requireHub(context)
     hostAdmin ??= new HostAdmin({
       hub,
-      agentHub: resolveAgentHubConfig(process.env),
       env: process.env,
     })
     return hostAdmin
   })
   registerLifecycleRoutes(router, context)
   if (context.history) registerHistoryRoutes(router, context.history)
-  if (context.runs) registerRunRoutes(router, context.runs, context.stepChats, context.hub)
   const show = context.show ?? resolveShowConfig({})
   registerShowRoute(router, events, context.store, show, context.hub)
   registerAskRoutes(router, {

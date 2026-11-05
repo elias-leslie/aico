@@ -98,7 +98,7 @@ function problemTitle(row: ShownRow): string {
 }
 
 /** One line for the tray's header and the panel: what is wrong, or that nothing is. */
-export function healthLine(view: StatusView, problems: ShownRow[]): string {
+function healthLine(view: StatusView, problems: ShownRow[]): string {
   if (view.rows.length === 0) return 'Status has no rows yet'
   if (problems.length === 0) return `Everything is fine · ${view.summary.healthy} healthy`
   const names = problems.slice(0, 3).map(problemTitle).join(', ')
@@ -157,7 +157,7 @@ const markRead = (id: string): Action => ({
 // -- Cards ----------------------------------------------------------------------------
 
 /** A notice as the tray's card shows it (notice.rs): what happened, the details, what to run. */
-export function noticeCard(stored: StoredNotice): Record<string, unknown> {
+function noticeCard(stored: StoredNotice): Record<string, unknown> {
   const { notice } = stored
   const details = [
     ...(notice.detail ? [notice.detail] : []),

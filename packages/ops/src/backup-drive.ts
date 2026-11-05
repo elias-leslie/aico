@@ -101,7 +101,7 @@ async function pveSsh(rt: Runtime, key: string): Promise<string[]> {
     `${fields.user || 'root'}@${fields.hostname}`,
   ]
 }
-export async function proxmoxJob(
+async function proxmoxJob(
   rt: Runtime,
   state: BackupState,
   source: { id: string; path: string },
@@ -391,7 +391,7 @@ export async function driveBackup(
   )
 }
 
-export function previousQualification(
+function previousQualification(
   job: BackupJob,
   state: BackupState | undefined,
 ): { backup_id: string; sha256: string; snapshot_id: string; repository_id: string } | null {

@@ -551,7 +551,7 @@ export class Store {
     const rows = this.db
       .prepare(`SELECT * FROM agent_tools ${where} ORDER BY display_order, name`)
       .all() as unknown as RawTool[]
-    return rows.map(toTool)
+    return rows.map(toTool).filter((tool) => tool.slug !== 'agent-hub')
   }
 
   getTool(idOrSlug: string): AgentTool | undefined {
@@ -563,10 +563,10 @@ export class Store {
 
   /** Resolve a slug or alias (the web app's `claude`) to its tool. */
   resolveTool(slugOrAlias: string): AgentTool | undefined {
-    return (
+    const tool =
       this.getTool(slugOrAlias) ??
       this.listTools().find((tool) => tool.aliases.includes(slugOrAlias))
-    )
+    return tool?.slug === 'agent-hub' ? undefined : tool
   }
 
   /** The default enabled tool, else the first enabled tool by order. */

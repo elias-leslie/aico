@@ -14,10 +14,10 @@ import {
 } from '../../../proc-facts'
 import type { AgentProbe, AgentRunLookup, TuiAdapter } from './contract'
 
-export const AICO_AGENT_PROCESS = 'aico-agent'
+const AICO_AGENT_PROCESS = 'aico-agent'
 
 /** The run's state: no row yet is the agent at its first prompt, an open row a prompt running. */
-export function agentRunSignal(row: ReturnType<AgentRunLookup>, runId: string): AgentSignal {
+function agentRunSignal(row: ReturnType<AgentRunLookup>, runId: string): AgentSignal {
   const base = { source: 'agent-push', detail: null, agentSessionId: runId }
   if (!row) return { ...base, state: 'idle', at: null }
   if (row.endedAt === null) return { ...base, state: 'working', at: row.startedAt }
@@ -25,7 +25,7 @@ export function agentRunSignal(row: ReturnType<AgentRunLookup>, runId: string): 
 }
 
 /** The aico-agent process among `pids` and the run id Tether chose for it. */
-export function findAgentRun(fs: ProcFs, pids: number[]): AgentObservation | null {
+function findAgentRun(fs: ProcFs, pids: number[]): AgentObservation | null {
   for (const pid of pids) {
     let comm: string
     try {

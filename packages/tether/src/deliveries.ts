@@ -49,12 +49,12 @@ const ONE_LINE_BAD = /[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/u
 /** Most sessions one wake line may name as its senders. */
 const MAX_FROM = 8
 /** The longest a native puller's `GET …/due?wait=` holds. */
-export const DUE_POLL_MAX_SECONDS = 55
+const DUE_POLL_MAX_SECONDS = 55
 /** Delivery records older than this go. */
 const KEEP_MS = 7 * 24 * 3600_000
 
 export type DeliveryVia = 'paste' | 'turn' | 'native'
-export type DeliveryState = 'queued' | 'delivered' | 'dropped'
+type DeliveryState = 'queued' | 'delivered' | 'dropped'
 
 export interface Delivery {
   id: string

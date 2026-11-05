@@ -30,15 +30,6 @@ vi.mock('@/lib/hooks/use-terminal-sessions', () => ({
   useTerminalSessions: () => ({ update: updateSession }),
 }))
 
-vi.mock('@/lib/hooks/use-workflow-runs', () => ({
-  useWorkflowRuns: () => ({
-    items: [],
-    state: 'ok',
-    notice: null,
-    needsYouCount: 0,
-    act: async () => {},
-  }),
-}))
 vi.mock('../ModeToggle', () => ({
   ModeToggle: () => null,
 }))

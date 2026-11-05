@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatCommand, parseCommand, ToolValidationError } from './tools'
+import { DEFAULT_TOOLS, formatCommand, parseCommand, ToolValidationError } from './tools'
 
 describe('parseCommand', () => {
   it("splits the web app's plain command strings", () => {
@@ -22,4 +22,10 @@ describe('formatCommand', () => {
     expect(formatCommand(['codex', '--yolo'])).toBe('codex --yolo')
     expect(formatCommand(['x', "it's here"])).toBe("x 'it'\\''s here'")
   })
+})
+
+it('retires the Agent Hub tool and root backend', async () => {
+  const { isRootCreateTool } = await import('./lifecycle/tui/registry')
+  expect(DEFAULT_TOOLS.some((tool) => tool.slug === 'agent-hub')).toBe(false)
+  expect(isRootCreateTool('agent-hub')).toBe(false)
 })

@@ -240,7 +240,6 @@ describe('Store schema', () => {
       'codex',
       'agy',
       'pi',
-      'agent-hub',
       'aico-agent',
       'shell',
     ])
@@ -345,7 +344,6 @@ describe('agent tools', () => {
       'codex',
       'agy',
       'pi',
-      'agent-hub',
       'aico-agent',
       'shell',
     ])
@@ -406,4 +404,17 @@ describe('settings', () => {
     expect(() => store.putSetting('bad', 'not json', 3)).toThrow()
     store.close()
   })
+})
+
+it('keeps a retired Agent Hub tool row as history without admitting it as a session tool', () => {
+  const store = open()
+  store.db
+    .prepare(`INSERT INTO agent_tools
+    (id, slug, name, argv, process_name, display_order, is_default, enabled, aliases, created_at, updated_at)
+    VALUES ('old-chat', 'agent-hub', 'Agent Hub', '[]', '', 4, 0, 1, '[]', 1, 1)`)
+    .run()
+  expect(store.getTool('old-chat')).toBeDefined()
+  expect(store.listTools().some((tool) => tool.slug === 'agent-hub')).toBe(false)
+  expect(store.resolveTool('agent-hub')).toBeUndefined()
+  expect(store.resolveTool('old-chat')).toBeUndefined()
 })

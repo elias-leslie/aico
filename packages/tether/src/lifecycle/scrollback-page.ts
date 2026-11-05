@@ -21,7 +21,7 @@ const SCROLLBACK_PAGE_MAX_LINES = 5000
 /** Runs one tmux argv and resolves its stdout. */
 export type TmuxStdout = (args: string[], maxBuffer: number) => Promise<string>
 
-export const EMPTY_SCROLLBACK_PAGE: Readonly<ScrollbackPage> = Object.freeze({
+const EMPTY_SCROLLBACK_PAGE: Readonly<ScrollbackPage> = Object.freeze({
   fromLine: 0,
   totalLines: 0,
   historySize: 0,

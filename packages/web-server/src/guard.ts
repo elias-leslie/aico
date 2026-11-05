@@ -101,7 +101,7 @@ export function checkUpgrade(headers: IncomingHttpHeaders, config: GuardConfig):
 }
 
 /** Headers every response carries (proxy.ts, next.config.ts and the Python app's, merged). */
-export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
+const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'X-XSS-Protection': '1; mode=block',

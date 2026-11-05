@@ -25,7 +25,6 @@ import {
 import { createLifecycle, type PaneView, tetherCall } from './lifecycle'
 import { registerNoteRoutes } from './notes'
 import { registerPaneFileRoutes } from './pane-files'
-import { registerRunRoutes } from './runs'
 import { byText, SHELL_MODE } from './sessions'
 import { registerShowRoutes, type Shows } from './shows'
 import { HttpError, listTools } from './tether'
@@ -454,7 +453,6 @@ export function buildApi(deps: ApiDeps): Router {
       )
   })
   registerCheckInRoutes(router, life, tether)
-  registerRunRoutes(router, tether)
   registerHistoryRoutes(router, tether, deps.chats)
   if (deps.chats) registerChatRoutes(router, deps.chats, deps.asks, tether, deps.captures)
 

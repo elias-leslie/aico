@@ -2,7 +2,7 @@
 // sent after the file. A file the browser cannot decode (a HEIC outside
 // Safari) gets none here; the server's preview stands in for it.
 
-export const THUMB_EDGE = 480
+const THUMB_EDGE = 480
 export const THUMB_MAX_BYTES = 256 * 1024
 const QUALITIES = [0.82, 0.7, 0.55, 0.4]
 

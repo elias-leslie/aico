@@ -1,7 +1,6 @@
 // Aico owns the schedule, run receipts, coverage and scratch-only restore boundary.
-import { createReadStream, existsSync, mkdirSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
-import { pipeline } from 'node:stream/promises'
 import { machineId } from '@aico/status'
 import { backupJob, driveBackup, stageSqlite } from './backup-drive'
 import { observeExternal } from './backup-external'
@@ -31,7 +30,6 @@ import {
   saveRun,
   saveState,
 } from './backup-runtime'
-import { captureRedis } from './backup-streams'
 import { recovery } from './recovery'
 
 export interface Snapshot {
@@ -310,16 +308,6 @@ export async function backups(argv: string[], env = process.env): Promise<number
         message: 'Backup is due now. Its last good data age updates when it finishes.',
       }),
     )
-    return 0
-  }
-  if (verb === 'stream' && args[0] === 'redis') {
-    // Called inside restic's stdin command, which already owns the data-operation lock.
-    const file = await captureRedis(cfg, env)
-    try {
-      await pipeline(createReadStream(file), process.stdout)
-    } finally {
-      rmSync(dirname(file), { recursive: true, force: true })
-    }
     return 0
   }
   if (verb === 'run' && env.AICO_BACKUPS_UNIT !== '1') {

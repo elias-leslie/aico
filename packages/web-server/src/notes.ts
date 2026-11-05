@@ -102,7 +102,7 @@ export interface NoteDetailJson extends NoteJson {
   attachments: AttachmentJson[]
 }
 
-export interface RevisionJson {
+interface RevisionJson {
   id: string
   field: string
   text: string
@@ -110,7 +110,7 @@ export interface RevisionJson {
   reason: string
 }
 
-export function itemJson(row: NoteItemRow): ItemJson {
+function itemJson(row: NoteItemRow): ItemJson {
   return {
     id: row.id,
     noteId: row.note_id,
@@ -139,7 +139,7 @@ function noteJson(row: NoteRow, labels: string[]): NoteJson {
   }
 }
 
-export function summaryJson(row: NoteSummary): NoteSummaryJson {
+function summaryJson(row: NoteSummary): NoteSummaryJson {
   return {
     ...noteJson(row, row.labels),
     snippet: row.body.replace(/\s+/g, ' ').trim().slice(0, SNIPPET),
@@ -151,7 +151,7 @@ export function summaryJson(row: NoteSummary): NoteSummaryJson {
   }
 }
 
-export function detailJson(detail: NoteDetail, blobsDir: string): NoteDetailJson {
+function detailJson(detail: NoteDetail, blobsDir: string): NoteDetailJson {
   return {
     ...noteJson(detail.note, detail.labels),
     body: detail.note.body,

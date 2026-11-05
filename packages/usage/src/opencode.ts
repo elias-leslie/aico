@@ -11,8 +11,8 @@ import config from '../data/usage.json' with { type: 'json' }
 import type { Database } from './db'
 import { storeReading } from './readings'
 
-export const OPENCODE_SOURCE = 'opencode_go_usage'
-export const OPENCODE_PROVIDER = 'opencode-go'
+const OPENCODE_SOURCE = 'opencode_go_usage'
+const OPENCODE_PROVIDER = 'opencode-go'
 
 const FAILURES: Record<number, string> = {
   401: 'OpenCode rejected the key',
@@ -26,7 +26,7 @@ export interface OpenCodeWindow {
 }
 
 /** The three windows, or null when the payload is not the shape OpenCode has been sending. */
-export function parseUsage(payload: unknown): OpenCodeWindow[] | null {
+function parseUsage(payload: unknown): OpenCodeWindow[] | null {
   const usage = (payload as { usage?: unknown } | null)?.usage
   if (!usage || typeof usage !== 'object') return null
   const out: OpenCodeWindow[] = []

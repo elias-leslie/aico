@@ -239,7 +239,7 @@ export function askNotice(ask: Ask, who: string | null, publicHost: string | nul
   return notice
 }
 
-export const askKey = (id: string) => `ask:${id}`
+const askKey = (id: string) => `ask:${id}`
 
 /** A Nightshift tap waiting for the owner, as a link. */
 export interface Approval {

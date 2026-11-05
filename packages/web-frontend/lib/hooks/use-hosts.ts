@@ -33,7 +33,7 @@ export interface HostWake {
 }
 
 /** How often the list refreshes while a host is starting. */
-export const HOSTS_STARTING_POLL_MS = 2_000
+const HOSTS_STARTING_POLL_MS = 2_000
 
 export const isStarting = (host: HostChoice) => host.wake?.state === 'starting'
 

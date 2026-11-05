@@ -15,7 +15,7 @@ import {
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 
-export const APK_NAME = 'aico.apk'
+const APK_NAME = 'aico.apk'
 
 export interface Release {
   version_code: number

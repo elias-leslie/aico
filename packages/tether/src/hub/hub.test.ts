@@ -218,7 +218,6 @@ describe('hub', () => {
       isLocalSession: (id) => local.has(id),
       isLocalRoot: (id, logical) =>
         localRoots.has(id) && (logical === undefined || localRoots.get(id) === logical),
-      isLocalRun: () => false,
       isLocalAsk: (id) => id === 'cccccccccccc',
       leadName: (id) => (id === 'eeee0005' ? 'Aico — Remote hosts' : null),
       claimLocal: (id) =>
@@ -726,9 +725,6 @@ describe('hub', () => {
       state: 'powered_off',
       reason: 'vm is powered off',
     })
-    expect(hub.mergeRuns({ status: 'ok', error: null, updatedAt: 2, items: [] }).error).toBe(
-      'vm is powered off',
-    )
     await peer.start()
     await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
 
@@ -1058,29 +1054,6 @@ describe('hub', () => {
     await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
     expect(JSON.parse(settings.get('peer_identities') ?? '{}')).toEqual({
       vm: { hostname: 'clone', machineId: 'bbbb' },
-    })
-  })
-
-  it('merges runs and routes a run to its host', async () => {
-    const merged = hub.mergeRuns({ status: 'ok', error: null, updatedAt: 2, items: [] })
-    expect(merged.items).toEqual([{ runId: 'run-1', host: 'vm' }])
-    expect((await call('POST', '/v1/runs/run-1/cancel')).body).toMatchObject({ host: 'vm' })
-  })
-
-  it('leaves the runs alone for a host that lists none (no Agent Hub client id there)', async () => {
-    hub.close()
-    peer.runs = {
-      status: 'unavailable',
-      error: 'Agent Hub client id is not set',
-      updatedAt: 1,
-      items: [],
-    }
-    hub = makeHub()
-    hub.start()
-    await vi.waitFor(() => expect(state()).toBe('connected'))
-    expect(hub.mergeRuns({ status: 'ok', error: null, updatedAt: 2, items: [] })).toMatchObject({
-      status: 'ok',
-      error: null,
     })
   })
 

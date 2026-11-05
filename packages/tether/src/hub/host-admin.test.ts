@@ -62,12 +62,6 @@ function setup(
       sessions,
       markPoweredOff,
     },
-    agentHub: {
-      baseUrl: 'http://127.0.0.1:8003',
-      clientId: 'client-1',
-      requestSource: 'aico-tether',
-      ownerTokenFile: '/tokens/owner',
-    },
     env: { HOME: '/home/u', XDG_CONFIG_HOME: '/cfg' },
     run: async (argv) => {
       runs.push(argv)

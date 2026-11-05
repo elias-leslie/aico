@@ -4,7 +4,6 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { homedir } from 'node:os'
 import {
-  type RunsAnswer,
   type SessionDescriptor,
   type TetherClient,
   TetherError,
@@ -44,7 +43,7 @@ export function descriptor(fields: Partial<SessionDescriptor> = {}): SessionDesc
 }
 
 /** An attach answer `ownAttachTarget` accepts (a socket path of this user's own Tether). */
-export function attachAnswer(generation = 'g1') {
+function attachAnswer(generation = 'g1') {
   const state = process.env.XDG_STATE_HOME || `${process.env.HOME || homedir()}/.local/state`
   return {
     generation,
@@ -62,7 +61,7 @@ export function attachAnswer(generation = 'g1') {
 
 /** The hub's attach answer for a session on `host`: the peer's own answer
  * plus that host's ssh link. */
-export function remoteAttachAnswer(host: string, generation = 'g1') {
+function remoteAttachAnswer(host: string, generation = 'g1') {
   const runtime = process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`
   return {
     generation,
@@ -258,14 +257,6 @@ export class FakeTether {
     const list = this.hostProjects[host]
     if (!list) throw new TetherError(400, 'unknown_host', {})
     return list
-  }
-
-  /** What `runs()` answers. */
-  runsAnswer: RunsAnswer = { status: 'ok', error: null, updatedAt: null, items: [] }
-
-  async runs() {
-    this.record('runs')
-    return this.runsAnswer
   }
 
   /** What the session history answers (`history()`, `historySession()`, `historyEvents()`). */

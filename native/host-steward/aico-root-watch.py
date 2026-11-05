@@ -39,7 +39,7 @@ import tomllib
 import typing
 from collections.abc import Callable
 from pathlib import Path
-from urllib.parse import quote, urlencode, urlsplit
+from urllib.parse import quote, urlencode
 
 CAPTURE_LIMIT = 32 * 1024
 RECEIPT_LIMIT = 16 * 1024
@@ -144,7 +144,7 @@ class Refused(Unavailable):
 
 
 def reason_detail(text: object) -> str | None:
-    """Agent Hub's own words for why a chat turn did not run (one printable line, bounded)."""
+    """Aico's own words for why a chat turn did not run (one printable line, bounded)."""
     if not isinstance(text, str):
         return None
     line = " ".join(re.sub(r"[\x00-\x1f\x7f]", " ", text).split())[:300]
@@ -319,14 +319,6 @@ class Pin:
         return cls(**data)
 
 
-@dataclasses.dataclass(frozen=True)
-class HubPin:
-    """An Agent Hub chat root: pinned by its Tether session, with no pane to read."""
-    requestId: str
-    widgetId: str
-    logicalSessionId: str
-    generation: str
-    sessionId: str
 
 
 def socket_path(value: str) -> str:
@@ -342,30 +334,17 @@ def socket_path(value: str) -> str:
 PROC = Path("/proc")
 
 
-def agent_hub_get(path: str, params: dict | None = None, timeout: float = 3) -> tuple[int, typing.Any] | None:
-    """(status, JSON body) of a GET to the Agent Hub the ST context names, or None when it can't be
-    asked or answers something unreadable. Sends the approved client id (~/.env.local
-    SUMMITFLOW_CLIENT_ID) when there is one; Agent Hub's model reads need none."""
+def aico_read(args: list[str], timeout: float = 10) -> tuple[int, typing.Any] | None:
+    """Read Aico's local command contract; never load legacy service credentials."""
     try:
-        base = urlsplit(json.loads(os.environ.get("ST_EXTENSION_CONTEXT") or "{}").get("agent_hub_url") or "")
-        if base.scheme != "http" or not base.hostname:
+        result = subprocess.run([os.environ.get("AICO_CLI", "aico"), *args], capture_output=True,
+                                text=True, timeout=timeout, check=False)
+        if result.returncode == 2:
+            return 422, {"message": "Unknown work role or model"}
+        if result.returncode != 0:
             return None
-        try:
-            client = next((line.partition("=")[2].strip().strip("\"'")
-                           for line in (Path.home() / ".env.local").read_text().splitlines()
-                           if line.startswith("SUMMITFLOW_CLIENT_ID=")), "")
-        except OSError:
-            client = ""
-        query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
-        connection = http.client.HTTPConnection(base.hostname, base.port or 80, timeout=timeout)
-        try:
-            connection.request("GET", path + (f"?{query}" if query else ""),
-                               headers={"X-Request-Source": "cli", **({"X-Client-Id": client} if client else {})})
-            response = connection.getresponse()
-            return response.status, json.loads(response.read(CATALOG_LIMIT))
-        finally:
-            connection.close()
-    except (OSError, ValueError, AttributeError, http.client.HTTPException):
+        return 200, json.loads(result.stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
 
 
@@ -376,11 +355,14 @@ def opencode_go_quota_block(model: str | None) -> str | None:
     """
     if not model or not model.startswith("opencode-go/"):
         return None
-    answer = agent_hub_get("/api/analytics/subscriptions/opencode-go/usage")
+    answer = aico_read(["usage", "show", "--json"])
     data = answer[1] if answer is not None and answer[0] == 200 else {}
-    for window in (data.get("windows") if isinstance(data, dict) else None) or []:
-        if isinstance(window, dict) and window.get("status") == "rate-limited":
-            return f"{window.get('label') or window.get('key')} window resets {window.get('resets_at') or 'later'}"
+    facts = data.get("facts", {}) if isinstance(data, dict) else {}
+    for window in facts.get("readings", []):
+        if (isinstance(window, dict) and window.get("provider") == "opencode-go"
+                and isinstance(window.get("used_percent"), (float, int)) and window["used_percent"] >= 100
+                and isinstance(window.get("resets_at"), str) and window["resets_at"] > datetime.datetime.now(datetime.UTC).isoformat()):
+            return f"{str(window.get('window_minutes', 'unknown')) + ' minutes'} window resets {window.get('resets_at') or 'later'}"
     return None
 
 
@@ -468,12 +450,12 @@ PI_MODEL_REASON = "pi needs --model provider/model"
 
 
 def credential_shims() -> Path:
-    """Agent Hub's credential shims, installed on agent hosts only (the workstation runs Agent Hub)."""
+    """Aico's credential shims, installed on agent hosts only (the workstation runs Agent Hub)."""
     return Path.home() / ".local/lib/agent-hub/cred-bin"
 
 
 def through_credential_shim(command: str) -> bool:
-    """Whether this host launches the command through Agent Hub's credential shim, which
+    """Whether this host launches the command through Aico's credential shim, which
     fetches the tool's credential as it starts, so this host's own logins say nothing.
     st runs this script with its own PATH and env, so look at the install, not PATH."""
     return os.access(credential_shims() / command, os.X_OK)
@@ -850,24 +832,8 @@ class Collector:
         if any(owner.get(k) != v for k, v in expected.items()):
             raise IdentityChanged()
 
-    def hub_pin(self, root: dict) -> tuple[HubPin, Collector]:
-        """Pin one agent-hub root to its Tether session (identity, no pane)."""
-        widget = root.get("hostIdentity")
-        if not isinstance(widget, str) or not re.fullmatch(WIDGET, widget):
-            raise Unavailable("receipt_invalid")
-        status, session = self.receipt(self.owner_socket, f"/v1/sessions/{widget}", timeout=1)
-        if status != 200 or session.get("backend") != "agent-hub":
-            raise Unavailable("session_unavailable")
-        if session.get("generation") != root.get("generation"):
-            raise IdentityChanged()
-        pin = HubPin(root.get("requestId"), widget, root.get("logicalSessionId"),  # type: ignore[arg-type]
-                     root.get("generation"), session.get("ownershipId"))  # type: ignore[arg-type]
-        if any(not isinstance(v, str) for v in dataclasses.astuple(pin)) \
-                or not re.fullmatch(GENERATION, pin.generation) or not re.fullmatch(KEY, pin.sessionId):
-            raise ValueError("invalid root identity")
-        return pin, HubCollector(self.root_socket, self.owner_socket, self.deadline, self.cancel)
 
-    def discover(self, request_id: str | None) -> tuple[list[tuple[Pin | HubPin, Collector]], list[dict]]:
+    def discover(self, request_id: str | None) -> tuple[list[tuple[Pin, Collector]], list[dict]]:
         if request_id:
             # Exact selection reads one root, so a retained tombstone still
             # reports its ended identity without listing every tombstone.
@@ -915,16 +881,6 @@ class Collector:
                 continue
             if root.get("status") != "running":
                 unavailable.append({**record, "reason": "root_not_running"})
-                continue
-            if root.get("tool") == "agent-hub":
-                try:
-                    resolved.append(self.hub_pin(root))
-                except IdentityChanged:
-                    unavailable.append({**record, "identity": "changed"})
-                except (ValueError, TypeError):
-                    unavailable.append({**record, "reason": "receipt_invalid"})
-                except Unavailable as error:
-                    unavailable.append({**record, "reason": str(error)})
                 continue
             # Observation is per status profile (classify), unlike create, which
             # sends any tool and lets Tether refuse it.
@@ -1057,7 +1013,7 @@ class Collector:
             raise IdentityChanged()
         return (fields[5].strip() if len(fields) > 5 else ""), int(fields[4])
 
-    def sample(self, pin: Pin | HubPin) -> dict:
+    def sample(self, pin: Pin) -> dict:
         assert isinstance(pin, Pin)
         try:
             self.owners(pin)
@@ -1079,53 +1035,12 @@ class Collector:
             return {"observation": "unavailable", "identity": "pinned", "reason": str(error)}
 
 
-class HubCollector(Collector):
-    """Observes an Agent Hub chat root through Tether: its turn state, not a screen."""
-
-    def __init__(self, root_socket: str, owner_socket: str, deadline: float, cancel: threading.Event):
-        super().__init__(root_socket, owner_socket, "", deadline, cancel, discovered=True)
-
-    def sample(self, pin: Pin | HubPin) -> dict:
-        assert isinstance(pin, HubPin)
-        try:
-            status, root = self.receipt(self.root_socket, f"/v1/roots/{quote(pin.requestId)}")
-            if status != 200:
-                raise Unavailable("root_unavailable")
-            if any(root.get(k) != v for k, v in (
-                    ("requestId", pin.requestId), ("hostIdentity", pin.widgetId),
-                    ("logicalSessionId", pin.logicalSessionId))):
-                raise IdentityChanged()
-            if root.get("status") == "ended" and root.get("generation") is None:
-                raise Ended()
-            if root.get("generation") != pin.generation:
-                raise IdentityChanged()
-            if root.get("status") != "running":
-                raise Unavailable("root_not_running")
-            status, session = self.receipt(self.owner_socket, f"/v1/sessions/{pin.widgetId}", timeout=1)
-            if status != 200:
-                raise Unavailable("session_unavailable")
-            if (session.get("id") != pin.widgetId or session.get("generation") != pin.generation
-                    or session.get("ownershipId") != pin.sessionId):
-                raise IdentityChanged()
-            self.remaining()
-            # Turn state from Agent Hub: a running turn is busy, an idle session
-            # has finished its turn, anything else (Agent Hub down) is unknown.
-            terminal = {"working": "busy", "idle": "turn_finished"}.get(session.get("state"), "ambiguous")
-            return {"observation": "available", "identity": "pinned", "backend": "agent-hub",
-                    "terminal": terminal, "draft_present": False, "low_context": False,
-                    "banners": [], "markers": [] if terminal != "ambiguous" else ["agent_hub_state_unknown"]}
-        except IdentityChanged:
-            return {"observation": "unavailable", "identity": "changed"}
-        except Ended:
-            return {"observation": "unavailable", "identity": "ended"}
-        except Unavailable as error:
-            return {"observation": "unavailable", "identity": "pinned", "reason": str(error)}
 
 
-def watch(collector: Collector, pins: list[Pin | HubPin], interval: float, failures: int,
+def watch(collector: Collector, pins: list[Pin], interval: float, failures: int,
           emit: Callable[[dict], None]) -> str:
-    previous: dict[Pin | HubPin, dict] = {}
-    pending: dict[Pin | HubPin, tuple[dict, int]] = {}
+    previous: dict[Pin, dict] = {}
+    pending: dict[Pin, tuple[dict, int]] = {}
     failed = {pin: 0 for pin in pins}
     identities = {pin: dataclasses.asdict(pin) if collector.discovered else {
         "requestId": pin.requestId, "widgetId": pin.widgetId, "generation": pin.generation,
@@ -1220,12 +1135,12 @@ def emit_unless_stopped(collector: Collector, record: dict) -> None:
 class ResolvedCollector(Collector):
     """Dispatch only to immutable, already verified per-root server locators."""
 
-    def __init__(self, discovery: Collector, resolved: list[tuple[Pin | HubPin, Collector]]):
+    def __init__(self, discovery: Collector, resolved: list[tuple[Pin, Collector]]):
         super().__init__(discovery.root_socket, discovery.owner_socket, "",
                          discovery.deadline, discovery.cancel, discovered=True)
         self.resolved = dict(resolved)
 
-    def sample(self, pin: Pin | HubPin) -> dict:
+    def sample(self, pin: Pin) -> dict:
         return self.resolved[pin].sample(pin)
 
 
@@ -1333,7 +1248,6 @@ def tool_slug(value: str) -> str:
     return value
 
 
-HUB_BLANK_SLATE_BASE = "/tmp/aico-blank-slate"
 
 
 def blank_slate_workspace(request_id: str) -> str:
@@ -1342,17 +1256,13 @@ def blank_slate_workspace(request_id: str) -> str:
     return str(Path.home() / ".local" / "share" / "aico" / "blank-slate" / request_id)
 
 
-def hub_blank_slate_workspace(request_id: str) -> str:
-    """The empty workspace of a Blank Slate Agent Hub chat: under the system temp directory,
-    the scratch Agent Hub accepts as a working directory (packages/tether/src/lifecycle/tui/blank-slate.ts)."""
-    return f"{HUB_BLANK_SLATE_BASE}/{request_id}"
 
 
 INSTRUCTIONS_BYTES = 64 * 1024  # Tether's limit (packages/tether/src/lifecycle/tui/instructions.ts)
 
 
 def st_prompt(*args: str) -> typing.Any:
-    """`st prompt ...` as JSON: Agent Hub's prompt store through ST's own client."""
+    """`st prompt ...` as JSON: Aico's prompt store through ST's own client."""
     try:
         result = subprocess.run(["st", "--no-compact", "prompt", *args], capture_output=True, text=True,
                                 timeout=30, check=False)
@@ -1360,7 +1270,7 @@ def st_prompt(*args: str) -> typing.Any:
             return json.loads(result.stdout)
     except (OSError, ValueError, subprocess.TimeoutExpired):
         pass
-    raise ValueError(f"st prompt {' '.join(args)} failed; check the prompt slug and that Agent Hub is up")
+    raise ValueError(f"st prompt {' '.join(args)} failed; check the prompt slug and that Aico is up")
 
 
 def resolve_instructions(selection: str) -> dict:
@@ -1396,39 +1306,43 @@ def resolve_instructions(selection: str) -> dict:
             "content": content}
 
 
-# Tools whose model, effort and Daybreak create fills from Agent Hub's launch table.
+# Tools whose model, effort and Daybreak create fills from Aico's launch table.
 LAUNCH_TOOLS = ("claude-code", "codex", "pi")
 EFFORTS = ("none", "off", "minimal", "low", "medium", "high", "xhigh", "max")
 
 
-# The safety floor that holds when Agent Hub's launch rules can't be read (model-choice build plan,
+# The safety floor that holds when Aico's launch rules can't be read (model-choice build plan,
 # owner 2026-11-01): a Claude launch is refused for hunting and recon work in any project and for
-# verification work in project neri-hunters, no wider than Agent Hub's deny rows; every other launch
+# verification work in project neri-hunters, no wider than Aico's deny rows; every other launch
 # goes ahead. With the rules readable, Agent Hub alone answers allowed or denied.
 CLAUDE_FLOOR_ROLES = ("hunting", "recon")
 CLAUDE_FLOOR_PROJECT_ROLES = {"verification": "neri-hunters"}
 CLAUDE_TOOL = "claude-code"  # always Claude
-CLAUDE_MODEL_TOKENS = ("claude", "opus", "sonnet", "haiku")  # Agent Hub's launch_policy name tokens for Claude
+CLAUDE_MODEL_TOKENS = ("claude", "opus", "sonnet", "haiku")  # Aico's launch_policy name tokens for Claude
 
 
 def launch_row(role: str, tool: str, model: str | None = None, project: str | None = None) -> dict | None:
-    """Agent Hub's launch-table row for this work role and tool (GET /api/models/launch-defaults,
+    """Aico's launch-table row for this work role and tool (GET /api/models/launch-defaults,
     what `st models route --role ROLE --tool TOOL` shows), judged for the explicit model and the
-    project: the row carries Agent Hub's `allowed` and `deny_reason`. None when the table can't be
+    project: the row carries Aico's `allowed` and `deny_reason`. None when the table can't be
     read. Raises ValueError when Agent Hub has no such work role, so a typo such as `tester` fails
     here instead of launching as an unknown role with the full delivery."""
-    answer = agent_hub_get("/api/models/launch-defaults",
-                           {"role": role, "tool": tool, "model": model, "project": project}, timeout=10)
+    args = ["models", "route", "--role", role, "--tool", tool, "--json"]
+    if model:
+        args += ["--model", model]
+    if project:
+        args += ["--project", project]
+    answer = aico_read(args)
     if answer is None:
         return None
     status, data = answer
     if status == 422:
-        # Agent Hub's error envelope ({"error", "message"}), or FastAPI's own ({"detail"}).
+        # Aico's error envelope ({"error", "message"}), or FastAPI's own ({"detail"}).
         detail = (data.get("message") or data.get("detail")) if isinstance(data, dict) else None
         if not isinstance(detail, str) or "Unknown work role" not in detail:
             return None  # e.g. an unknown tool: Tether answers with its supportedTools
         detail = re.sub(r"[^\x20-\x7e]", "", detail)[:600]
-        raise ValueError(f"--work-role {role} is not a work role Agent Hub knows. {detail}".strip())
+        raise ValueError(f"--work-role {role} is not a work role Aico knows. {detail}".strip())
     try:
         rows, registered = data["rows"], data["work_roles"]
     except (KeyError, TypeError):
@@ -1450,18 +1364,18 @@ def launch_row(role: str, tool: str, model: str | None = None, project: str | No
 
 def launch_refusal(role: str, tool: str, model: str | None, row: dict | None,
                    project: str | None = None) -> str | None:
-    """Why this launch is refused under Agent Hub's launch rules, else None. Without a readable
+    """Why this launch is refused under Aico's launch rules, else None. Without a readable
     answer (no row, or a row that does not say allowed) only the safety floor applies."""
     if row is None or not isinstance(row.get("allowed"), bool):
         is_claude = tool == CLAUDE_TOOL or any(token in (model or "").lower() for token in CLAUDE_MODEL_TOKENS)
         if is_claude and (role in CLAUDE_FLOOR_ROLES or (
                 role in CLAUDE_FLOOR_PROJECT_ROLES and project == CLAUDE_FLOOR_PROJECT_ROLES[role])):
-            return (f"Agent Hub's launch rules could not be read, and Claude is never launched for {role} "
-                    "work without them; use codex or pi, or retry once Agent Hub answers")
+            return (f"Aico's launch rules could not be read, and Claude is never launched for {role} "
+                    "work without them; use codex or pi, or retry once Aico answers")
         return None
     if row["allowed"]:
         return None
-    reason = re.sub(r"[\x00-\x1f\x7f]", " ", str(row.get("deny_reason") or "Agent Hub's launch rules deny it"))[:300]
+    reason = re.sub(r"[\x00-\x1f\x7f]", " ", str(row.get("deny_reason") or "Aico's launch rules deny it"))[:300]
     return (f"{tool}{f' --model {model}' if model else ''} is not allowed for {role} work: {reason}. "
             f"See the options: st models route --role {role}")
 
@@ -1517,28 +1431,6 @@ def prompt_error(prompt: object) -> str | None:
     return None
 
 
-def hub_view(collector: Collector, control: str, widget: str) -> dict:
-    """What an Agent Hub chat root's session says about its turn: the state Agent Hub reported
-    (running, idle or unknown when it cannot be reached), the follow-ups waiting, and the last
-    failure to start or finish a turn. Empty when the session cannot be read."""
-    try:
-        status, session = collector.receipt(control, f"/v1/sessions/{widget}", timeout=2)
-    except (Unavailable, Stopped):
-        return {}
-    hub = session.get("agentHub") if status == 200 else None
-    if not isinstance(hub, dict):
-        return {}
-    turn = hub.get("turnState") if hub.get("reachable") is not False else None
-    view: dict = {"backend": "agent-hub", "turnState": turn if turn in ("running", "idle") else "unknown",
-                  "queued": hub.get("queued") if type(hub.get("queued")) is int else 0,
-                  "promptSent": hub.get("promptSent") is True}
-    if isinstance(hub.get("turnPhase"), str) and re.fullmatch(r"[a-z_]{1,40}", hub["turnPhase"]):
-        view["turnPhase"] = hub["turnPhase"]
-    error = hub.get("error")
-    if isinstance(error, dict):
-        view["error"] = {"code": error.get("code") if isinstance(error.get("code"), str) else "agent_hub_refused",
-                         "message": reason_detail(error.get("message"))}
-    return view
 
 
 def host_tool_unavailable(collector: Collector, endpoint: str, host: str, tool: str) -> str | None:
@@ -1579,18 +1471,16 @@ def create_main(argv: list[str]) -> int:
     # Tether decides which tools can start a root (`rootCapable` in /v1/tools)
     # and its refusal names them.
     parser.add_argument("--tool", type=tool_slug, required=True, help=(
-        "required. Agent tool slug: claude-code, codex or pi; agent-hub starts an Agent Hub chat session instead of a terminal (needs --agent)."))
-    parser.add_argument("--agent", metavar="SLUG", help=(
-        "Agent Hub agent slug; required with --tool agent-hub, refused with any other tool"))
+        "required. Agent tool slug: claude-code, codex or pi; aico-agent runs Aico's own harness."))
     parser.add_argument("--role", default="portfolio-root", help="opaque orchestration metadata")
     parser.add_argument("--work-role",
-                        help="required for a new root: a work role Agent Hub knows (coordinator, implementation, design, research, review, recon, hunting, operations, selection, verification, reporting, mapping or other; st models route lists them); fixed including resume. It also picks the launch defaults")
+                        help="required for a new root: a work role Aico knows (coordinator, implementation, design, research, review, recon, hunting, operations, selection, verification, reporting, mapping or other; st models route lists them); fixed including resume. It also picks the launch defaults")
     parser.add_argument("--work-role-name", help="optional display name (1-128 characters)")
     parser.add_argument("--lead-root")
     parser.add_argument("--facet")
     parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID; owner adapter validates format/support")
     parser.add_argument("--model", help="per-launch model; Pi requires provider/model, Codex a bare name from its catalog (gpt-6.1-sol), Claude Code an alias or full name (claude-haiku-5-5). "
-                        "Default: Agent Hub's launch table for the work role and tool (st models route --role ROLE --tool TOOL), with its effort and Daybreak. "
+                        "Default: Aico's launch table for the work role and tool (st models route --role ROLE --tool TOOL), with its effort and Daybreak. "
                         "Create prints what it filled in (launchDefault.applied, retryWith): on a retry pass those values explicitly so the request digest stays the same")
     parser.add_argument("--reasoning-effort", choices=EFFORTS)
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; leaves shared defaults alone. Codex: only models its catalog lists with "
@@ -1633,16 +1523,7 @@ def create_main(argv: list[str]) -> int:
             or len(args.work_role_name) > 128 or re.search(r"[\x00-\x1f\x7f]", args.work_role_name)):
         refuse("work role name must be 1-128 characters of single-line text")
     if args.tool == "agent-hub":
-        if args.agent is None:
-            refuse("--tool agent-hub needs --agent SLUG")
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}", args.agent):
-            refuse("invalid agent slug")
-        if (args.resume_session is not None or args.reasoning_effort is not None
-                or args.daybreak is not None or args.agent_hub_context is not None):
-            refuse("--tool agent-hub is a chat session: drop --resume-session, "
-                         "--reasoning-effort, --daybreak and --agent-hub-context")
-    elif args.agent is not None:
-        refuse("--agent only goes with --tool agent-hub")
+        refuse("Agent Hub sessions are retired; start an Aico chat or a native agent session")
     launch, applied = None, {}
     if args.work_role is not None:
         try:
@@ -1662,15 +1543,14 @@ def create_main(argv: list[str]) -> int:
                          "--resume-session and --agent-hub-context")
         if args.project is None:
             # Agent Hub only knows registered projects; a chat's blank slate is its empty workspace.
-            args.project = "agent-hub" if args.tool == "agent-hub" else "blank-slate"
+            args.project = "blank-slate"
     elif args.project is None or args.project_root is None:
         refuse("--project and --project-root are required unless --blank-slate")
     if any(not re.fullmatch(KEY, value) for value in
            (args.request_id, args.project, args.role, *(v for v in (args.lead_root, args.facet) if v is not None))):
         refuse("invalid root metadata")
     if args.blank_slate:
-        args.project_root = (hub_blank_slate_workspace(args.request_id) if args.tool == "agent-hub"
-                             else blank_slate_workspace(args.request_id))
+        args.project_root = blank_slate_workspace(args.request_id)
     if (not os.path.isabs(args.project_root) or os.path.normpath(args.project_root) != args.project_root
             or "\0" in args.project_root):
         refuse("project root must be an exact normalized absolute path")
@@ -1724,7 +1604,7 @@ def create_main(argv: list[str]) -> int:
         if launch.get("use", True) is not True:
             output["launchDefault"]["note"] = str(launch.get("why") or "")[:300]
     elif args.work_role is not None and args.resume_session is None and args.tool in LAUNCH_TOOLS:
-        output["launchDefault"] = {"applied": {}, "note": "Agent Hub's launch table could not be read; the tool's own settings apply"}
+        output["launchDefault"] = {"applied": {}, "note": "Aico's launch table could not be read; the tool's own settings apply"}
     try:
         prompt = admin_stdin(collector) if args.stdin else args.prompt
         if prompt is None and args.resume_session:
@@ -1794,9 +1674,6 @@ def create_main(argv: list[str]) -> int:
             payload["instructions"] = instructions
             fields.append({"instructions": instructions["revision"]})
             output["instructions"] = {key: instructions[key] for key in ("prompt", "name", "revision")}
-        if args.agent:
-            payload["agentSlug"] = args.agent
-            fields.append({"agentSlug": args.agent})
         if args.entry is not None:
             payload["entry"] = args.entry
             fields.append({"entry": [args.entry["name"], args.entry["arg"]]})
@@ -1867,20 +1744,6 @@ def create_main(argv: list[str]) -> int:
         output.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
         if "launchedBy" in payload:
             output["launchedBy"] = payload["launchedBy"]
-        if args.tool == "agent-hub":
-            # Tether posts the first prompt before it answers: a chat whose turn did not start is a
-            # failed create, not a running root. The same request ID tries the prompt again.
-            hub = hub_view(Collector(endpoint, "", "", time.monotonic() + 3, threading.Event()),
-                           socket_path(tether_socket()), host)
-            if hub:
-                output.update(turnState=hub["turnState"], queued=hub["queued"])
-            if hub.get("error") or (hub and not hub["promptSent"] and state == "running"):
-                error = hub.get("error") or {}
-                output.update(status="uncertain", reason="turn_not_started", promptSent=False)
-                if error.get("message"):
-                    output["detail"] = error["message"]
-                emit_json(collector, output)
-                return 1
         emit_json(collector, output)
         return 0
     except (ValueError, UnicodeError):
@@ -2148,9 +2011,7 @@ def root_main(argv: list[str]) -> int:
         pinned = root_descriptor(data, args.request_id)
         output.update(pinned)
         if args.operation == "status":
-            if data.get("tool") == "agent-hub" and pinned["status"] != "ended":
-                output.update(hub_view(collector, control, pinned["hostIdentity"]))
-            elif data.get("tool") in ("codex", "claude-code", "pi") and pinned["status"] == "running":
+            if data.get("tool") in ("codex", "claude-code", "pi") and pinned["status"] == "running":
                 output.update(agent_view(collector, args.request_id, data["tool"], data.get("agentExit")))
             emit_json(collector, output)
             return 0
@@ -2383,14 +2244,8 @@ def failed(row: dict) -> bool:
     return row["observation"] == "unavailable" and row.get("reason") != "unsupported_profile"
 
 
-CONTEXT_ROOTS_PATH = "/api/context-observability/aico-roots"
 
 
-def context_label(tokens: object) -> str:
-    """The measured context size as text (212K); anything that is not a positive count is unknown, never 0."""
-    if isinstance(tokens, bool) or not isinstance(tokens, int) or tokens <= 0:
-        return "unknown"
-    return f"{round(tokens / 1000)}K" if tokens >= 1000 else str(tokens)
 
 
 NATIVE_ID = r"[0-9A-Za-z][0-9A-Za-z-]{7,99}"
@@ -2400,50 +2255,8 @@ RESUME_BUDGET = 2.0  # seconds for all the resume-id reads together
 OUTPUT_RESERVE = 3.0  # seconds the collector keeps for the Agent Hub context read (2 s) and printing
 
 
-def root_resume_ids(collector: Collector, owner_socket: str, records: list[dict],
-                    budget: float = RESUME_BUDGET) -> list[str | None]:
-    """Each running root's native conversation id (Claude Code session, Codex thread) from Tether's
-    session descriptor, which Agent Hub keys that harness's session by. None for a root Tether has none
-    for, an older Tether, or a read that fails: the context then falls back to the root's links.
-    The reads share their own budget and never run into the time the collector keeps for printing, so a slow
-    Tether leaves the later roots without an id instead of costing the whole roots output."""
-    lookups = Collector(collector.root_socket, owner_socket, "",
-                        min(time.monotonic() + budget, collector.deadline - OUTPUT_RESERVE), collector.cancel)
-    found: list[str | None] = []
-    for record in records:
-        widget, resume = record.get("widgetId"), None
-        if isinstance(widget, str) and re.fullmatch(WIDGET, widget):
-            try:
-                status, data = lookups.receipt(owner_socket, f"/v1/sessions/{widget}", timeout=1)
-                value = data.get("resumeId") if status == 200 else None
-                resume = value if isinstance(value, str) and re.fullmatch(NATIVE_ID, value) else None
-            except (Unavailable, Stopped):
-                resume = None
-        found.append(resume)
-    return found
 
 
-def root_contexts(records: list[dict], resume_ids: list[str | None] | None = None) -> list[str]:
-    """One context label per root, in order: the context the model was sent on its latest response, from
-    Agent Hub's usage data in one batched read. The root's own harness session (its native conversation id)
-    is preferred; its links (work-role source, Aico session id) are the fallback, and those can also match
-    the `claude -p` / `codex exec` processes the root started. Unmatched roots, roots without usage and an
-    Agent Hub that can't be reached all read unknown; the roots listing never fails on it."""
-    natives = list(resume_ids or []) + [None] * (len(records) - len(resume_ids or []))
-    keys = [k for record, native in zip(records, natives)
-            for k in (record.get("logicalSessionId"), record.get("sessionId"), native) if isinstance(k, str)]
-    answer = agent_hub_get(CONTEXT_ROOTS_PATH, {"keys": ",".join(dict.fromkeys(keys))}, timeout=2) if keys else None
-    found = answer[1].get("roots") if answer is not None and answer[0] == 200 and isinstance(answer[1], dict) else None
-    if not isinstance(found, dict):
-        found = {}
-    labels = []
-    for record, native in zip(records, natives):
-        own = found.get(native) if isinstance(native, str) else None
-        hits = [found[k] for k in (record.get("logicalSessionId"), record.get("sessionId"))
-                if isinstance(k, str) and isinstance(found.get(k), dict)]
-        newest = own if isinstance(own, dict) else max(hits, key=lambda hit: str(hit.get("at")), default={})
-        labels.append(context_label(newest.get("context_tokens")))
-    return labels
 
 
 def roots_main(argv: list[str]) -> int:
@@ -2470,9 +2283,8 @@ def roots_main(argv: list[str]) -> int:
             records = [{**dataclasses.asdict(pin), **({"host": child.remote[0]} if child.remote else {}),
                         **collector.sample(pin)} for pin, child in resolved]
             rows = records + unavailable
-            resumes = root_resume_ids(discovery, args.owner_socket, rows)
-            emit_json(collector, {"owner": "aico", "roots": [{**row, "context": label}
-                                                             for row, label in zip(rows, root_contexts(rows, resumes))]})
+            emit_json(collector, {"owner": "aico", "roots": [{**row, "context": "unknown"}
+                                                             for row in rows]})
             return int(any(failed(row) for row in records + unavailable))
         for record in unavailable:
             emit_json(collector, {"event": "baseline", **record})

@@ -15,9 +15,9 @@
 import { HttpError, type Router, readJsonObject, sendJson } from '../http'
 import type { Store } from '../store'
 
-export const DOC_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/
+const DOC_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/
 /** A document may be larger than other API bodies: a busy project's writer sets. */
-export const MAX_DOC_BYTES = 2 * 1024 * 1024
+const MAX_DOC_BYTES = 2 * 1024 * 1024
 
 export interface CoordDoc {
   name: string

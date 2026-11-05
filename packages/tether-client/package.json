@@ -17,7 +17,6 @@
     "./teams": "./src/client/teams.ts",
     "./term": "./src/term/index.ts",
     "./client/contracts": "./src/client/contracts.ts",
-    "./client/run-text": "./src/client/run-text.ts",
     "./client/sync-peers": "./src/client/sync-peers.ts",
     "./term/remote": "./src/term/remote.ts",
     "./own-session": "./src/own-session.ts"

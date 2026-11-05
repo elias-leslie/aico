@@ -66,7 +66,7 @@ import { AGENT_STATES, type AgentState } from './agent-state'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { type ModelSwitch, modelSwitchOf, modelSwitchText } from './model-switch'
 
-export const LANE_OUTCOMES = ['finished', 'blocked', 'ended'] as const
+const LANE_OUTCOMES = ['finished', 'blocked', 'ended'] as const
 export type LaneOutcome = (typeof LANE_OUTCOMES)[number]
 
 /** Blocked details that report `blocked`. `dialog open` (the owner opening
@@ -192,7 +192,7 @@ export function laneLine(
 }
 
 /** The one line a model switch gets (src/model-switch.ts). */
-export function modelLine(lane: LaneSnapshot, change: ModelSwitch, tool: string | null): string {
+function modelLine(lane: LaneSnapshot, change: ModelSwitch, tool: string | null): string {
   const { name } = lineNames(lane)
   const request = lane.requestId && REQUEST_ID.test(lane.requestId) ? lane.requestId : null
   const { tag, what, tail } = modelSwitchText(change, tool, request)
@@ -598,7 +598,7 @@ function laneWhere(lane: { id: string; host: string | null }): string {
 /** How long a went-idle line must hold idle after `streak` lines with no
  * act from the receiver: none extra for the first, then the quiet doubling
  * per repeat up to its cap. */
-export function repeatQuietMs(
+function repeatQuietMs(
   policy: Pick<LaneReportPolicy, 'laneRepeatQuietSeconds' | 'laneRepeatQuietMaxSeconds'>,
   streak: number,
 ): number {

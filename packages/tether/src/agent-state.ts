@@ -64,7 +64,7 @@ export interface HookReport {
 /** Claude Notification types that mean the agent is waiting on the user.
  * `idle_prompt` (sent after a finished turn sits idle) is not: a finished
  * turn is idle, and Aico tells the owner about it separately. */
-export const BLOCKING_NOTIFICATIONS: Record<string, string> = {
+const BLOCKING_NOTIFICATIONS: Record<string, string> = {
   permission_prompt: 'permission prompt',
   elicitation_dialog: 'input needed',
 }

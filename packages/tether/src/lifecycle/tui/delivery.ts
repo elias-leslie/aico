@@ -38,7 +38,7 @@ type ContextDelivery = NonNullable<TuiSpec['contextDelivery']>
 type DeliveredContext = NonNullable<TuiSpec['deliveredContext']>
 
 /** Where aico-web keeps context.db: AICO_DATA_DIR, else the folder web.db is in. */
-export function aicoDataDir(env: NodeJS.ProcessEnv = process.env): string {
+function aicoDataDir(env: NodeJS.ProcessEnv = process.env): string {
   const state = env.XDG_STATE_HOME || join(env.HOME || homedir(), '.local', 'state')
   return resolve(
     env.AICO_DATA_DIR?.trim() || (env.AICO_WEB_DB ? dirname(env.AICO_WEB_DB) : join(state, 'aico')),

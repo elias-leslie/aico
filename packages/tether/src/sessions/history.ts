@@ -72,7 +72,7 @@ export interface SessionDetail extends SessionSummary {
 }
 
 /** The tool that pushes its runs instead of keeping a transcript Tether reads. */
-export const PUSHED_TOOL = 'aico-agent'
+const PUSHED_TOOL = 'aico-agent'
 
 export interface RunTurn {
   turn: number
@@ -156,7 +156,7 @@ function yieldLoop(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve))
 }
 
-export type TranscriptRow = Row
+type TranscriptRow = Row
 
 /** The part of the store's SQLite handle the history uses (only the store package imports node:sqlite). */
 type SqlValue = string | number | bigint | null
@@ -756,7 +756,7 @@ function setUsage(row: Row, usage: Usage): void {
 }
 
 /** The longest project root that contains `cwd`. */
-export function projectOfRoots(roots: ReadonlyMap<string, string>): (cwd: string) => string | null {
+function projectOfRoots(roots: ReadonlyMap<string, string>): (cwd: string) => string | null {
   return (cwd) => {
     let best: { id: string; length: number } | null = null
     for (const [id, root] of roots) {

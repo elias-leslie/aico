@@ -109,7 +109,7 @@ function word(value: string | null | undefined, fallback: string): string {
 }
 
 /** The tap outcome words Nightshift writes, as the waiter reads them. */
-export function tapWord(outcome: string): string {
+function tapWord(outcome: string): string {
   if (outcome === 'applied' || outcome === 'approved' || outcome === 'ready') return 'approved'
   if (outcome === 'refused') return 'refused'
   return word(outcome, 'decided')

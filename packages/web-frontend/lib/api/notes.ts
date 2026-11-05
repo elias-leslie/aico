@@ -110,7 +110,7 @@ function isNoteSummary(value: unknown): value is NoteSummary {
   )
 }
 
-export function parseNoteList(value: unknown): {
+function parseNoteList(value: unknown): {
   notes: NoteSummary[]
   total: number
 } {
@@ -120,7 +120,7 @@ export function parseNoteList(value: unknown): {
   return { notes: page.notes.filter(isNoteSummary), total: page.total }
 }
 
-export function parseNote(value: unknown): NoteDetail {
+function parseNote(value: unknown): NoteDetail {
   const note = value as Record<string, unknown> | null
   if (
     !note ||

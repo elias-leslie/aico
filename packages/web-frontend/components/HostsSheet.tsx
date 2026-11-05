@@ -58,7 +58,7 @@ const plural = (count: number, one: string) =>
   `${count} ${one}${count === 1 ? '' : 's'}`
 
 /** The host's state, led by what the owner needs to know. */
-export function hostStatus(host: HostChoice): { text: string; tone: Tone } {
+function hostStatus(host: HostChoice): { text: string; tone: Tone } {
   const wake = host.wake
   if (wake?.state === 'starting') {
     const step = wake.step ? WAKE_STEP_LABELS[wake.step] : null
@@ -127,7 +127,7 @@ function sourceLabel(source: string): { label: string } {
 
 /** How many of a tool's credentials are signed in, when that is some but not
  * all of them (Pi with one provider of three); null otherwise. */
-export function partialSignIn(
+function partialSignIn(
   tool: ToolLogin,
 ): { ready: number; total: number } | null {
   const total = tool.credentials.length
@@ -141,7 +141,7 @@ export function partialSignIn(
 
 /** A tool's sign-in line: `Signed in · Agent Hub`, `1 of 3 signed in`, with
  * Unknown saying why. */
-export function loginText(
+function loginText(
   tool: ToolLogin,
   agentHub: string,
 ): { text: string; tone: Tone } {
@@ -167,7 +167,7 @@ export function loginText(
 }
 
 /** Whether the row offers Sign in up front: something there needs it. */
-export function needsSignIn(tool: ToolLogin): boolean {
+function needsSignIn(tool: ToolLogin): boolean {
   return (
     tool.state === 'needs_sign_in' ||
     tool.state === 'expired' ||

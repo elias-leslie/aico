@@ -1,0 +1,16 @@
+✔ native Aico hooks own context and session metadata (18.230937ms)
+✔ administrative commands bypass context delivery unchanged (36.717387ms)
+✔ resume and fork make no false fresh-delivery claim (123.675761ms)
+✔ installer links tracked config and canonical launcher without repeated backups (155.997139ms)
+✔ installer preserves an unrelated personal agents directory (30.072693ms)
+✔ agent installer links portable tracked settings and leaves local authentication alone (68.180763ms)
+✔ agent DISPLAY follows the current desktop grant and owner DISPLAY stays unchanged (54.302452ms)
+✔ launcher bypass runs native Codex with untouched argv and no context client (35.108022ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 563.60471

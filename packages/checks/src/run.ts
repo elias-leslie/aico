@@ -56,7 +56,7 @@ export interface RunOptions {
 const MAX_OUTPUT = 4 * 1024 * 1024
 
 /** The clean environment a declared stage runs in (what `st check` gives native stages). */
-export function stageEnv(config: Config, aliases: string, scratch: string): NodeJS.ProcessEnv {
+function stageEnv(config: Config, aliases: string, scratch: string): NodeJS.ProcessEnv {
   const { root } = config
   const local = (path: string) => (isAbsolute(path) ? path : join(root, path))
   const env: NodeJS.ProcessEnv = {
@@ -191,7 +191,7 @@ export function judge(
 }
 
 /** The reuse key of a stage with inputs: its declaration plus the content of its inputs. */
-export function inputsKey(config: Config, step: Step): string | null {
+function inputsKey(config: Config, step: Step): string | null {
   const decl = step.decl
   if (!decl?.inputs.length) return null
   const { root } = config

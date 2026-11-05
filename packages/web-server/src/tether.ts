@@ -123,7 +123,7 @@ const DETAILS: Record<string, [number, string]> = {
   transcript_gone: [410, "The tool's transcript is gone, so its events cannot be read"],
 }
 
-export const UNAVAILABLE_DETAIL =
+const UNAVAILABLE_DETAIL =
   'Tether is not reachable; sessions keep running, but control is unavailable'
 
 /** A Tether failure as the API answers it (anything else is rethrown). */

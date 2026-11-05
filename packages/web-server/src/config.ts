@@ -113,7 +113,7 @@ export function hostNameFrom(env: NodeJS.ProcessEnv): string {
 }
 
 /** Names the running build: AICO_BUILD_ID, else the first 12 hex of the SHA-256 of this server bundle. */
-export function buildIdFrom(env: NodeJS.ProcessEnv): string {
+function buildIdFrom(env: NodeJS.ProcessEnv): string {
   const set = env.AICO_BUILD_ID?.trim()
   if (set) return set
   try {
@@ -192,9 +192,9 @@ const DEFAULT_CAPTURE_MAX_MB = 25
 const DEFAULT_CAPTURE_MAX_FILES = 20
 /** Least time between two kept revisions of one note field while it is being edited. */
 export const DEFAULT_NOTE_REVISION_MINUTES = 5
-export const DEFAULT_TOMBSTONE_DAYS = 180
+const DEFAULT_TOMBSTONE_DAYS = 180
 export const DEFAULT_MAX_AHEAD_HOURS = 24
-export const DEFAULT_SYNC_INTERVAL_SECONDS = 60
+const DEFAULT_SYNC_INTERVAL_SECONDS = 60
 const DEFAULT_SYNC_IDLE_SECONDS = 30
 const DEFAULT_SYNC_WATCH_MS = 1000
 const DEFAULT_BLOB_GRACE_DAYS = 7
@@ -227,7 +227,7 @@ const DEFAULT_VISION_CONCURRENCY = 2
 const DEFAULT_PORTFOLIO_URL = 'http://127.0.0.1:18000'
 
 /** The nearest project.identity.json above `from` (the repo root's). */
-export function findIdentityFile(from: string): string | null {
+function findIdentityFile(from: string): string | null {
   let dir = resolve(from)
   for (;;) {
     const candidate = join(dir, 'project.identity.json')

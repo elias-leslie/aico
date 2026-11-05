@@ -73,7 +73,7 @@ export interface TranscriptFile {
 }
 
 /** The longest text one event carries. */
-export const EVENT_TEXT_MAX = 4000
+const EVENT_TEXT_MAX = 4000
 
 export function clip(text: string, max = EVENT_TEXT_MAX): string {
   return text.length > max ? `${text.slice(0, max)}…` : text

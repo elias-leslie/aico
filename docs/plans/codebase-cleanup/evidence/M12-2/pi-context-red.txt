@@ -1,0 +1,2 @@
+CHECK:FAIL:vitest|0.6s|details:.dev-tools/vitest-345576-details.txt|hint:× delivers Pi context through Aico without the retired Agent Hub extension 3ms
+CHECK:FAIL focused (1 stage(s))

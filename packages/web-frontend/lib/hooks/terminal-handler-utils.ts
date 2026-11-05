@@ -3,15 +3,12 @@ import type { TerminalSession } from '@/lib/hooks/use-terminal-sessions'
 import { getAgentState } from '@/lib/utils/agent-state'
 
 // Init delay for tmux session
-export const TMUX_INIT_DELAY_MS = 300
+const TMUX_INIT_DELAY_MS = 300
 
 /**
  * Generate a pane name with badge number if multiple panes exist
  */
-export function generatePaneName(
-  baseName: string,
-  existingCount: number,
-): string {
+function generatePaneName(baseName: string, existingCount: number): string {
   return existingCount === 0 ? baseName : `${baseName} [${existingCount + 1}]`
 }
 
@@ -42,7 +39,7 @@ export function findSessionByMode(
 /**
  * Check if agent should be started for a session
  */
-export function shouldStartAgent(
+function shouldStartAgent(
   pane: TerminalPane,
   targetSession: PaneSession,
   sessions: TerminalSession[],

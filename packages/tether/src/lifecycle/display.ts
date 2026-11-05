@@ -8,7 +8,7 @@ import type { Project } from '../projects'
 import { getWidget, rootRequestForWidget, type WidgetRow } from './catalog'
 import { instructionsLabel, sessionInstructions } from './tui/instructions'
 
-export const PERSONAL_WORKSPACE_NAME = 'Personal Workspace'
+const PERSONAL_WORKSPACE_NAME = 'Personal Workspace'
 /** A coordinator or lane from before colours were recorded. */
 export const FALLBACK_BADGE_COLOR = '#6fa8ff'
 

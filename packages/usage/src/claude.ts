@@ -8,12 +8,12 @@ import config from '../data/usage.json' with { type: 'json' }
 import type { Database } from './db'
 import { storeReading } from './readings'
 
-export const CLAUDE_SOURCE = 'claude_statusline'
+const CLAUDE_SOURCE = 'claude_statusline'
 
 const seconds = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? value * 1000 : null
 
-export function statuslinePath(env: NodeJS.ProcessEnv, home: string): string {
+function statuslinePath(env: NodeJS.ProcessEnv, home: string): string {
   const state = env.XDG_STATE_HOME || join(home, '.local', 'state')
   return join(state, config.claude.statusline)
 }

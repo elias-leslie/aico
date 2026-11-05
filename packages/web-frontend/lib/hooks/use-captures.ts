@@ -22,7 +22,7 @@ import {
 import { ApiError, isPermanentRefusal } from '../api-fetch'
 import { setCaptureLimits } from '../capture-queue'
 
-export const CAPTURES_KEY = ['captures'] as const
+const CAPTURES_KEY = ['captures'] as const
 const LIMITS_KEY = ['capture-limits'] as const
 const PAGE_SIZE = 30
 /** As often as the session list, so a capture sent from another device shows up. */

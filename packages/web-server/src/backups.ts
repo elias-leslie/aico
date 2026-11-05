@@ -4,7 +4,7 @@ import { objectBody, type Router, requiredString } from './http'
 import { HttpError } from './tether'
 
 export type BackupCommand = (args: string[]) => Promise<unknown>
-export const backupCommand: BackupCommand = (args) =>
+const backupCommand: BackupCommand = (args) =>
   new Promise((resolve, reject) => {
     const child = spawn('aico', ['backups', ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
     let out = '',

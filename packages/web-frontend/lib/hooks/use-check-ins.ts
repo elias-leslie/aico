@@ -5,14 +5,14 @@ import { apiFetch } from '../api-fetch'
 
 /** What the session menu's "Check in later" shows. `unsupported`: Aico cannot
  * tell when this session is idle (a shell, say), so it cannot check in. */
-export interface CheckInMenu {
+interface CheckInMenu {
   status: 'ready' | 'unsupported'
   choices: { label: string; time: string; dueAt: number }[]
   pending: { id: string; time: string; dueAt: number }[]
 }
 
 /** A check-in kept past its session's End; it starts a new session when due. */
-export interface KeptCheckIn {
+interface KeptCheckIn {
   id: string
   dueAt: number
   time: string

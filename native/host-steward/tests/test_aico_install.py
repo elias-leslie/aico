@@ -95,11 +95,10 @@ def test_dry_run_lists_every_unit(env: dict[str, str], home: Path) -> None:
 def test_pi_extension_links_only_when_summitflow_has_it(
     env: dict[str, str], home: Path, tmp_path: Path
 ) -> None:
-    source = tmp_path / "pi-coord-extension.ts"
-    source.write_text("// fixture\n")
-    result = install({**env, "ST_PI_COORD_EXTENSION": str(source)}, "--dry-run", "--skip-systemd")
+    result = install(env, "--dry-run", "--skip-systemd")
     assert result.returncode == 0, result.stderr
-    assert f"would run: ln -sfn {source} {home}/.pi/agent/extensions/st-coord.ts" in result.stdout
+    assert f"{home}/.pi/agent/extensions/model-guard.ts" in result.stdout
+    assert "st-coord.ts" not in result.stdout
 
 
 def test_an_existing_file_is_never_replaced_by_a_link(env: dict[str, str], home: Path) -> None:

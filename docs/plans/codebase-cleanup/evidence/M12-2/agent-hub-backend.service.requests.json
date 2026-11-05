@@ -1,0 +1,19 @@
+{
+  "unit": "agent-hub-backend.service",
+  "matching_requests": {
+    "GET /api/workflow-runs": 7312,
+    "POST /api/session-ingestion/sessions/upsert": 696,
+    "POST /api/session-ingestion/sessions/:id/transcript-events": 1766,
+    "POST /api/session-ingestion/sessions/:id/finalize": 611,
+    "POST /api/session-ingestion/sessions/:id/heartbeat": 2061,
+    "GET /api/admin/workflow-schedules": 2,
+    "POST /api/runtime-context/manage/inventory": 1,
+    "GET /api/prompts/platform-context": 1,
+    "GET /api/prompts": 5,
+    "GET /api/lab-credentials": 1,
+    "GET /api/prompts/coding-golden-rule": 1,
+    "GET /api/prompts/coordinator-rules": 1,
+    "GET /api/prompts/agent-hub-development-policy": 1,
+    "GET /api/context-export/prompts": 6
+  }
+}

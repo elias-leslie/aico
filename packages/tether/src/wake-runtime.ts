@@ -46,7 +46,7 @@ import { captureVisibleTargetArgs, clientActivityTargetArgs } from './lifecycle/
 import { MAIN_TURN_OVER } from './lifecycle/tui/adapters/contract'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './lifecycle/tui/blank-slate'
 import { isResumeSessionId } from './lifecycle/tui/launch'
-import { AGENT_HUB_TOOL, getTui, isDeliveryTool } from './lifecycle/tui/registry'
+import { getTui, isDeliveryTool } from './lifecycle/tui/registry'
 import { agentStateOf, type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
 import { nodeProcFs } from './proc-fs'
 import {
@@ -423,7 +423,7 @@ export class WakeService {
     await whenReady()
     // A kept wake has no Agent Hub conversation to start again: the session
     // was closed with its End.
-    if (ended.tool === AGENT_HUB_TOOL)
+    if (ended.tool === 'agent-hub')
       return { status: 'failed', reason: 'an ended Agent Hub session cannot be started again' }
     // Never on this host: its agent ran through an entry that ended with it.
     if (ended.entry)

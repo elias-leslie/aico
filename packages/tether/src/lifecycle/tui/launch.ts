@@ -25,7 +25,7 @@ export function shellQuote(value: string): string {
  * is itself far larger. The pane supervisor sets it on itself before starting
  * the agent and restores it for the fallback shell; a failed write is
  * ignored, so the agent still starts at the inherited value. */
-export const AGENT_OOM_SCORE_ADJ = 100
+const AGENT_OOM_SCORE_ADJ = 100
 
 /** Set in the pane's fallback shell to the agent's exit status. */
 export const AGENT_EXIT_ENV = 'TETHER_AGENT_EXIT'

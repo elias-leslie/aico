@@ -290,7 +290,7 @@ export function excludesPath(cfg: BackupConfig): string {
   copyFileSync(fileURLToPath(new URL('../data/backup.excludes', import.meta.url)), dest)
   return dest
 }
-export const targetTitle = (target: BackupTarget) =>
+const targetTitle = (target: BackupTarget) =>
   target === 'drive' ? 'Google Drive' : target === 'native' ? 'T7' : 'CT 160'
 
 export function copyRootAuth(source: string, destination: string): void {

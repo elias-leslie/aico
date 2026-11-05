@@ -3,7 +3,7 @@
 // (~/.claude/projects/<dir>/<sessionId>.jsonl). Both formats are undocumented
 // (docs/agent-state.md), so everything that reads them is in this module.
 
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentSignal } from '../../../agent-state'
@@ -19,7 +19,6 @@ import {
 } from '../../../model-record'
 import type { AgentObservation, FileTail, ProcFs } from '../../../proc-fs'
 import { nodeFileTail, UUID_RE } from '../../../proc-fs'
-import { agentHubRepo, resolveLauncher, unknownCheckout, viaShim } from '../context-support'
 import type { ContextStatus, TuiSpec } from '../spec'
 import { type AgentProbe, MAIN_TURN_OVER, type TuiAdapter } from './contract'
 
@@ -362,64 +361,28 @@ export function claudePromptAt(
 
 // --- context ---------------------------------------------------------------------
 
-/** Claude Code: the source-linked launcher exposes exact canonical context as
- * one immutable additional-directory CLAUDE.md without replacing Claude's
- * native prompt. Claude preloads it for parent and spawned agents. Native
- * SessionStart/SubagentStart hooks bind that artifact to real IDs and warn on
- * degraded delivery; they do not block native launch or inject a second copy. */
-async function claudeSessionStart(spec: TuiSpec): Promise<ContextStatus> {
+/** Native Claude hooks deliver Aico context, including spawned agents. */
+async function claudeSessionStart(_spec: TuiSpec): Promise<ContextStatus> {
   const settings = join(homedir(), '.claude', 'settings.json')
-  const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
-  const repo = agentHubRepo()
-  if (!repo) return unknownCheckout('AGENT_HUB_REPO', 'agent-hub')
-  const expectedLauncher = join(repo, 'integrations', 'context-delivery', 'claude', 'launcher')
-  if (!existsSync(settings) || !existsSync(client)) {
-    return {
-      state: 'missing',
-      detail: `${settings} or ${client} absent — canonical context installation is incomplete`,
-    }
-  }
-  const command = spec.command[0]
-  const resolvedLauncher = command ? await resolveLauncher(command, spec) : null
-  if (!resolvedLauncher) {
-    return {
-      state: 'missing',
-      detail: `${command || 'Claude command'} not on the managed pane PATH — canonical context launcher unavailable; native Claude continues`,
-    }
-  }
-  const { path: launcher, shim } = resolvedLauncher
   try {
-    const parsed = JSON.parse(readFileSync(settings, 'utf8')) as {
+    const config = JSON.parse(readFileSync(settings, 'utf8')) as {
       hooks?: Record<string, Array<{ hooks?: Array<{ command?: string }> }>>
     }
-    // The shared settings.json spells the client home-relative so every user's sessions bind.
-    const expectedCommands = [
-      `${client} bind --surface claude_code`,
-      '"$HOME"/.local/bin/agent-hub-context-client bind --surface claude_code',
-    ]
-    const hasHook = (event: string): boolean =>
-      parsed.hooks?.[event]?.some((group) =>
-        group.hooks?.some((hook) => expectedCommands.includes(hook.command ?? '')),
-      ) ?? false
-    const resolved = realpathSync(launcher)
-    const canonicalLauncher = resolved === expectedLauncher
-    const launcherBody = readFileSync(launcher, 'utf8')
-    const additive =
-      launcherBody.includes('CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD') &&
-      launcherBody.includes('"--add-dir"') &&
-      launcherBody.includes('CLAUDE.md')
-    if (canonicalLauncher && additive && hasHook('SessionStart') && hasHook('SubagentStart')) {
+    const hasHook = (event: string) =>
+      config.hooks?.[event]?.some((group) =>
+        group.hooks?.some((hook) => /(?:^|\/)aico-hook claude$/.test(hook.command ?? '')),
+      )
+    if (hasHook('SessionStart') && hasHook('SubagentStart'))
       return {
         state: 'available',
-        detail: `${viaShim(shim)}${launcher} reaches the canonical additive Claude launcher with native session binding hooks installed; model receipt is unverified`,
+        detail: 'Aico native context hooks are installed; model receipt is unverified.',
       }
-    }
   } catch {
-    // Fall through to the single degraded result below.
+    // Report missing rather than treating an unreadable config as available.
   }
   return {
     state: 'missing',
-    detail: `${viaShim(shim)}${launcher} or Claude native hooks are drifted from canonical Agent Hub sources`,
+    detail: 'Aico SessionStart or SubagentStart hook is missing from Claude settings.',
   }
 }
 
@@ -650,7 +613,7 @@ export const claudeCode: TuiAdapter = {
     installs: [
       { what: 'coord-inbox hooks (ride-along lines)', path: '~/.claude/settings.json' },
       { what: 'agent-state hook (state reports)', path: '~/.claude/hooks/agent-state.sh' },
-      { what: 'Agent Hub context binding', path: '~/.local/bin/agent-hub-context-client' },
+      { what: 'Aico context delivery', path: '~/.local/bin/aico-hook' },
     ],
   },
   login: {

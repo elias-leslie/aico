@@ -156,7 +156,7 @@ const str = (value: unknown): string => (typeof value === 'string' ? value : '')
 const num = (value: unknown): number => (typeof value === 'number' ? value : 0)
 
 /** Everything that is exported, read in one pass with the database opened read-only. */
-export function readSnapshot(notesDb: string): Snapshot {
+function readSnapshot(notesDb: string): Snapshot {
   const db = new DatabaseSync(notesDb, { readOnly: true })
   try {
     db.exec('PRAGMA busy_timeout = 10000')
@@ -279,7 +279,7 @@ function stagedFile(
 
 const linkText = (name: string): string => name.replace(/[[\]]/g, '') || 'file'
 
-export function renderNote(
+function renderNote(
   note: NoteRecord,
   files: (hash: string, mime: string, name: string) => string | null,
   prefix = '../../',
@@ -323,7 +323,7 @@ export function renderNote(
   return `${lines.join('\n')}\n`
 }
 
-export function renderCaptures(
+function renderCaptures(
   captures: readonly CaptureRecord[],
   files: (hash: string, mime: string, name: string) => string | null,
   noteLink: (id: string) => { title: string; path: string } | null,
@@ -523,7 +523,7 @@ export async function runExport(deps: ExportDeps): Promise<ExportResult> {
 // -- Wiring -----------------------------------------------------------------------
 
 /** rclone as a child process, with no RCLONE_* settings from the environment so only the dedicated config applies. */
-export function rcloneRunner(path: string): (args: string[]) => Promise<RcloneRun> {
+function rcloneRunner(path: string): (args: string[]) => Promise<RcloneRun> {
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith('RCLONE_')),
   )

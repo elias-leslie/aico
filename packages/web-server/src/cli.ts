@@ -199,7 +199,7 @@ function usageError(command: string, message: string): UsageError {
   return new UsageError(`${USAGE[command]}\n${prog}: error: ${message}`)
 }
 
-export function parseTsession(argv: string[]): TsessionArgs {
+function parseTsession(argv: string[]): TsessionArgs {
   const [command, ...rest] = argv
   if (command === '-h' || command === '--help') throw new HelpShown(HELP[''])
   if (command === undefined) throw usageError('', 'the following arguments are required: command')

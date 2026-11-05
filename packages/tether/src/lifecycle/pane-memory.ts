@@ -13,7 +13,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import { isOwnedPaneScope } from './ownership'
 
-export const FOREGROUND_MEMORY_LOW = '2G'
+const FOREGROUND_MEMORY_LOW = '2G'
 
 export interface PaneMemoryHost {
   setMemoryLow(unit: string, value: string): Promise<void>

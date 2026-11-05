@@ -60,7 +60,7 @@ export interface PrepareResult {
 }
 
 /** Wait up to five minutes for the desktop session's variables, unless no desktop will come. */
-export async function waitForDesktop(options: {
+async function waitForDesktop(options: {
   headless: boolean
   desktopReady: () => boolean
   now: () => number

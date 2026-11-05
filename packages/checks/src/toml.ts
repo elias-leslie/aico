@@ -4,7 +4,7 @@
 
 export type TomlTable = { [key: string]: unknown }
 
-export class TomlError extends Error {}
+class TomlError extends Error {}
 
 export function parseToml(text: string): TomlTable {
   const root: TomlTable = {}

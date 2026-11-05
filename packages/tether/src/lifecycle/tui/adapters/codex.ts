@@ -4,7 +4,7 @@
 // format is undocumented (docs/agent-state.md), so every reader is in this module.
 
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentSignal } from '../../../agent-state'
@@ -17,7 +17,7 @@ import {
   type ProcFs,
   UUID_RE,
 } from '../../../proc-fs'
-import { checkout, resolveLauncher, unknownCheckout, viaShim } from '../context-support'
+import { resolveLauncher } from '../context-support'
 import type { ContextStatus, TuiSpec } from '../spec'
 import type { AgentProbe, TuiAdapter } from './contract'
 
@@ -380,8 +380,6 @@ export function codexModelEvents(line: string): ModelEvent[] {
  * no fresh delivery or binding claim because Codex restores saved thread
  * context. Ask Codex's app-server for the effective hook registry too. */
 async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
-  const codexConfigRepo = checkout('CODEX_CONFIG_REPO', 'codex-config')
-  if (!codexConfigRepo) return unknownCheckout('CODEX_CONFIG_REPO', 'codex-config')
   const resolvedLauncher = await resolveLauncher('codex', spec)
   if (!resolvedLauncher) {
     return {
@@ -390,39 +388,7 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
         'codex not on the managed pane PATH — canonical context launcher unavailable; native Codex continues',
     }
   }
-  const { path: launcher, shim } = resolvedLauncher
-
-  const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
-  if (!existsSync(client)) {
-    return {
-      state: 'missing',
-      detail: `${client} absent — canonical context installation is incomplete`,
-    }
-  }
-
-  const expectedLauncher = join(codexConfigRepo, 'bin', 'codex')
-  try {
-    const body = readFileSync(launcher, 'utf8')
-    const executableBody = body
-      .split('\n')
-      .filter((line) => !line.trimStart().startsWith('#'))
-      .join('\n')
-    const canonicalLauncher = realpathSync(launcher) === expectedLauncher
-    const additive =
-      executableBody.includes('CODEX_REAL') &&
-      executableBody.includes('developer_instructions=') &&
-      executableBody.includes('AGENT_HUB_CONTEXT_CLIENT') &&
-      !executableBody.includes('model_instructions_file') &&
-      !executableBody.includes('runtime-context-startup')
-    if (!canonicalLauncher || !additive) {
-      return {
-        state: 'missing',
-        detail: `${viaShim(shim)}${launcher} is not the canonical lossless additive Codex launcher`,
-      }
-    }
-  } catch {
-    return { state: 'missing', detail: `${launcher} is unreadable — cannot verify Codex launcher` }
-  }
+  const { path: launcher } = resolvedLauncher
 
   return new Promise((resolve) => {
     const child = spawn(launcher, ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'] })
@@ -455,9 +421,9 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
         if (response.id !== 1) continue
         const hooks = response.result?.data?.[0]?.hooks ?? []
         const expectedCommands = [
-          `${client} bind --surface codex`,
-          '$HOME/.local/bin/agent-hub-context-client bind --surface codex',
-          '"$HOME"/.local/bin/agent-hub-context-client bind --surface codex',
+          `${join(homedir(), '.local', 'bin', 'aico-hook')} codex`,
+          '$HOME/.local/bin/aico-hook codex',
+          '"$HOME"/.local/bin/aico-hook codex',
         ]
         const unhealthy = ['sessionStart', 'subagentStart'].filter(
           (eventName) =>
@@ -473,11 +439,11 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
           unhealthy.length === 0
             ? {
                 state: 'available',
-                detail: `${launcher} has the canonical lossless context launcher and trusted native session binding hooks installed; model receipt is unverified`,
+                detail: `${launcher} has the trusted Aico native context hooks installed; model receipt is unverified`,
               }
             : {
                 state: 'missing',
-                detail: `Codex canonical hooks missing/untrusted: ${unhealthy.join(', ')}`,
+                detail: `Codex Aico hooks missing/untrusted: ${unhealthy.join(', ')}`,
               },
         )
         return
@@ -621,7 +587,7 @@ export const codex: TuiAdapter = {
     stateReports: ['Notification', 'UserPromptSubmit', 'PermissionRequest', 'Stop'],
     installs: [
       { what: 'coord-inbox and agent-state hooks', path: '~/.codex/hooks.json' },
-      { what: 'Agent Hub context binding', path: '~/.local/bin/agent-hub-context-client' },
+      { what: 'Aico context delivery', path: '~/.local/bin/aico-hook' },
     ],
   },
   login: {

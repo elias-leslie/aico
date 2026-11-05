@@ -68,7 +68,7 @@ function parse(argv: string[], flags: string[], valued: string[] = []) {
 const SQL = "SELECT coalesce(json_agg(row_to_json(n)), '[]'::json) FROM notes n"
 
 /** SummitFlow's notes through `st db query`; a long result comes back as a details file. */
-export function readSummitflowRows(io: NotesCliIo): SummitflowRow[] {
+function readSummitflowRows(io: NotesCliIo): SummitflowRow[] {
   const cwd = io.env.AICO_SUMMITFLOW_DIR || join(dirname(io.repoRoot), 'summitflow')
   const run = spawnSync('st', ['db', '-P', 'summitflow', 'query', '-t', SQL], {
     cwd,
@@ -83,7 +83,7 @@ export function readSummitflowRows(io: NotesCliIo): SummitflowRow[] {
   return parseSummitflow(text)
 }
 
-export function parseSummitflow(text: string): SummitflowRow[] {
+function parseSummitflow(text: string): SummitflowRow[] {
   const rows: unknown = JSON.parse(text)
   if (!Array.isArray(rows)) throw new Error('SummitFlow notes did not come back as a list')
   return rows as SummitflowRow[]

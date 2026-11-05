@@ -137,31 +137,6 @@ describe('waiting notices', () => {
     expect(third.resolved).toEqual(['aico-waiting:abcd1234'])
   })
 
-  it('a workflow run waiting for an answer gets its own notice, resolved when it leaves the list', () => {
-    const h = harness()
-    const run = {
-      id: 'run:r1',
-      kind: 'run',
-      group: 'needs-you',
-      at: h.now(),
-      title: 'Nightly lint',
-      headline: 'lint-fix needs a decision',
-      url: 'https://hub.example.dev/runs/r1',
-    }
-    h.waiting.runs({ status: 'ok', items: [run] })
-    h.advance(WAIT_NOTICE_MS)
-    expect(h.sent[0]).toMatchObject({
-      key: 'aico-run:run:r1',
-      title: 'Workflow waiting: Nightly lint',
-      body: 'lint-fix needs a decision',
-    })
-    expect(h.sent[0].open).toBeUndefined()
-    h.waiting.runs({ status: 'unavailable', items: [] })
-    expect(h.resolved).toHaveLength(0)
-    h.waiting.runs({ status: 'ok', items: [] })
-    expect(h.resolved).toEqual(['aico-run:run:r1'])
-  })
-
   it('names the agent the state came from', () => {
     const notice = noticeFor(
       { session: blocked(1, { tool: 'shell', stateSource: 'codex-status', displayTitle: '' }) },
@@ -186,24 +161,6 @@ describe('notice contract v1', () => {
   const AICO = 'https://aico.summitflow.dev'
   const notices: [string, WaitingNotice][] = [
     ['session', noticeFor({ session: blocked(1) }, TOOLS, AICO)],
-    [
-      'run',
-      noticeFor(
-        {
-          run: {
-            id: 'run:r1',
-            kind: 'run',
-            group: 'needs-you',
-            at: 1,
-            title: 'Nightly lint',
-            headline: null,
-            url: `${AICO}/runs/r1`,
-          },
-        },
-        TOOLS,
-        AICO,
-      ),
-    ],
   ]
   it.skipIf(!hasNightshift).each(notices)('Nightshift accepts the %s notice', (_name, notice) => {
     const out = execFileSync('nightshift', ['push', '--json', '--dry-run'], {

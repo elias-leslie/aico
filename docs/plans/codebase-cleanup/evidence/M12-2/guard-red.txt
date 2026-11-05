@@ -1,0 +1,2 @@
+CHECK:FAIL:vitest|0.4s|details:.dev-tools/vitest-369325-details.txt|hint:× refuses Claude when Aico does not know the work role 2ms
+CHECK:FAIL focused (1 stage(s))

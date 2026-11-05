@@ -17,7 +17,7 @@ export function baseName(path: string): string {
 }
 
 /** What a share holds, in a few words: its first file's name, and how many more. */
-export function shareSummary(show: AgentShow): string {
+function shareSummary(show: AgentShow): string {
   if (show.kind === 'url') return show.url
   const [first, ...rest] = show.paths
   return rest.length

@@ -5,15 +5,6 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { FleetService } from '@aico/fleet/service'
 import { registryProjects } from '@aico/tasks/registry'
-import { createHubApi } from './agent-hub/client'
-import {
-  type AgentHubConfig,
-  resolveAgentHubConfig,
-  resolveRunsConfig,
-  resolveSettleMs,
-} from './agent-hub/config'
-import { RunTracker, readOverRuns, sessionLaunchers, type ToldPause } from './agent-hub/runs'
-import { AgentHubRuntime, type HubApi } from './agent-hub/runtime'
 import { AgentStatePoller, AgentStateTracker } from './agent-state'
 import { type AskDelivery, AskStore, aicoOrigin, handOffAsks, type NeedsYouFeed } from './asks'
 import {
@@ -36,7 +27,6 @@ import { nightshiftAdmissionPath, nightshiftAdmissionRed } from './lifecycle/age
 import {
   bindCatalog,
   claimLauncher,
-  getAgentHubSession,
   getRootRequest,
   getWidget,
   isRetiredSessionId,
@@ -53,7 +43,6 @@ import {
   notifySessionChanged,
   onAbandonedScope,
   setGenerationFunction,
-  setHubBackend,
   setLaunchGuard,
   setSessionSnapshotFunction,
   startLifecycle,
@@ -63,9 +52,8 @@ import {
 } from './lifecycle/engine'
 import { setLifecycleInstance } from './lifecycle/ownership'
 import { configureTmuxPaths } from './lifecycle/tmux'
-import { AGENT_HUB_TOOL, adapterOf, bindToolSource, isDeliveryTool } from './lifecycle/tui/registry'
+import { adapterOf, bindToolSource, isDeliveryTool } from './lifecycle/tui/registry'
 import {
-  bindAgentHub,
   bindAgentStates,
   bindModelWatch,
   foregroundPaneScope,
@@ -81,7 +69,6 @@ import { nodeFileTail, nodeProcFs } from './proc-fs'
 import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
 import { Continuity } from './reboot'
 import { Recovery, runCommand } from './recovery'
-import type { StepChatSource } from './runs-api'
 import { createTetherServer } from './server'
 import { type History, historyFromEnv, startHistoryScan } from './sessions/history'
 import { persistSizeHolders } from './size-holder'
@@ -92,14 +79,11 @@ import { anchorWidget, PullReaders, systemdCmdUnits, systemdProbe } from './wait
 import { readWaitingState, WAIT_NOTICE_MS, WaitingNotices } from './waiting'
 import { WaitService, WaitStore } from './waits'
 import { bindWaitingOn, bindWakeStore, WakeService } from './wake-runtime'
-import { cleanNote } from './wakes'
 
 export interface RunningDaemon {
   server: Server
   store: Store
   events: EventBus
-  /** The Agent Hub session kind's runtime (polls only where Tether observes sessions). */
-  agentHub: AgentHubRuntime
   /** The hub over the remote hosts this instance federates; null when off. */
   hosts: Hub | null
   /** Resolves when startup reconciliation has finished (or was skipped). */
@@ -109,26 +93,17 @@ export interface RunningDaemon {
 
 /** The hub federates hosts.json's remote Tethers wherever Tether observes
  * sessions, or where a test names its own registry (`TETHER_HOSTS_FILE`). */
-export function hubEnabled(env: NodeJS.ProcessEnv): boolean {
+function hubEnabled(env: NodeJS.ProcessEnv): boolean {
   return reconcileEnabled(env) || Boolean(env.TETHER_HOSTS_FILE)
 }
 
 /** `TETHER_RECONCILE=off` keeps a scratch/test instance from observing,
  * adopting or stopping any tmux server or scope at startup. */
-export function reconcileEnabled(env: NodeJS.ProcessEnv): boolean {
+function reconcileEnabled(env: NodeJS.ProcessEnv): boolean {
   return env.TETHER_RECONCILE !== 'off'
 }
 
 const PROJECT_NAMES_MS = 300_000
-
-/** The dismissed workflow runs, kept as one JSON setting (run id to when). */
-const DISMISSED_RUNS_KEY = 'dismissed_runs'
-/** Runs no longer followed and how they ended, for the waits on them. */
-const OVER_RUNS_KEY = 'over_runs'
-
-/** The run pauses already told to their launching session (run id to the
- * pause's key and when), so a restart does not tell one again. */
-const TOLD_PAUSES_KEY = 'told_run_pauses'
 
 /** Which client holds each session's window size, so a restart keeps it. */
 const SIZE_HOLDERS_KEY = 'size_holders'
@@ -161,37 +136,6 @@ function nightshift(args: string[], what: string, input?: string): void {
     }
   } catch (error) {
     console.warn(`[tether] nightshift ${args[0]} failed to start: ${(error as Error).message}`)
-  }
-}
-
-function readTold(raw: string | null): Record<string, ToldPause> {
-  try {
-    const value = JSON.parse(raw ?? '{}') as Record<string, unknown>
-    return Object.fromEntries(
-      Object.entries(value).filter(([, entry]) => {
-        const e = entry as { key?: unknown; at?: unknown; to?: unknown; note?: unknown } | null
-        return (
-          typeof e?.key === 'string' &&
-          typeof e.at === 'number' &&
-          Number.isFinite(e.at) &&
-          (e.to === undefined || typeof e.to === 'string') &&
-          (e.note === undefined || typeof e.note === 'string')
-        )
-      }),
-    ) as Record<string, ToldPause>
-  } catch {
-    return {}
-  }
-}
-
-function readDismissedRuns(raw: string | null): Record<string, number> {
-  try {
-    const value = JSON.parse(raw ?? '{}') as Record<string, unknown>
-    return Object.fromEntries(
-      Object.entries(value).filter(([, at]) => typeof at === 'number' && Number.isFinite(at)),
-    ) as Record<string, number>
-  } catch {
-    return {}
   }
 }
 
@@ -287,9 +231,7 @@ export async function startDaemon(
       },
       origin: aicoOrigin(env.TETHER_AICO_URL),
     },
-    runs: undefined as RunTracker | undefined,
     waiting: undefined as WaitingNotices | undefined,
-    stepChats: undefined as StepChatSource | undefined,
     hub: undefined as Hub | undefined,
     placement: undefined as Placement | undefined,
     lanes: undefined as LaneReporter | undefined,
@@ -386,76 +328,6 @@ export async function startDaemon(
       if (getWidget(sessionId)) notifySessionChanged(sessionId, { force: true })
     },
   }
-  // One Agent Hub client for the session kind and for the workflow runs.
-  let hubApi: HubApi | null = null
-  let hubConfig: AgentHubConfig | null = null
-  const hub = (): HubApi => {
-    hubConfig ??= resolveAgentHubConfig(env)
-    hubApi ??= createHubApi(hubConfig)
-    return hubApi
-  }
-  const runs = new RunTracker({
-    api: () => hub().workflowRuns,
-    // Agent Hub refuses every call without a client id (a host whose Tether
-    // reaches the workstation's Agent Hub through a forward, for one).
-    unusable: () => {
-      hubConfig ??= resolveAgentHubConfig(env)
-      return hubConfig.clientId ? null : 'Agent Hub client id is not set'
-    },
-    launchers: () => sessionLaunchers(listSessions(), (id) => getAgentHubSession(id)?.hubSessionId),
-    config: resolveRunsConfig(env),
-    dismissed: {
-      read: () => readDismissedRuns(store.getSetting(DISMISSED_RUNS_KEY)),
-      write: (dismissed) =>
-        store.putSetting(DISMISSED_RUNS_KEY, JSON.stringify(dismissed), Date.now()),
-    },
-    over: {
-      read: () => readOverRuns(store.getSetting(OVER_RUNS_KEY)),
-      write: (over) => store.putSetting(OVER_RUNS_KEY, JSON.stringify(over), Date.now()),
-    },
-    watched: () =>
-      (
-        store.db
-          .prepare("SELECT DISTINCT ref FROM waits WHERE kind = 'run' AND state = 'armed'")
-          .all() as { ref: string }[]
-      ).map((row) => row.ref),
-    // A run that waits for the owner is told to the session that launched it
-    // as a check-in that is due now, delivered when the agent is idle.
-    pauses: {
-      store: {
-        read: () => readTold(store.getSetting(TOLD_PAUSES_KEY)),
-        write: (told) => store.putSetting(TOLD_PAUSES_KEY, JSON.stringify(told), Date.now()),
-      },
-      maxChars: () => wakes.policy().noteMaxChars,
-      tell: (launcherId, notice, runId) => {
-        const row = getWidget(launcherId)
-        if (!row || !wakes.supports(row)) return false
-        const note = cleanNote(notice.text, wakes.policy().noteMaxChars)
-        if (note === null) return false
-        const now = Date.now()
-        // An event line (not a check-in): a `run` wait on the same pause by
-        // the same session fires without a second line (WaitOperations.told).
-        const wake = wakes.store.addEvent({
-          sessionId: row.id,
-          source: `run:${runId}:needs-you`,
-          note,
-          now,
-        })
-        wakes.changed(row.id)
-        return wake.id
-      },
-      withdraw: (_launcherId, noteId) => {
-        const wake = wakes.store.get(noteId)
-        if (wake && wakes.store.remove(noteId)) wakes.changed(wake.sessionId)
-      },
-    },
-    notify: () => events.publish('runs.changed', {}),
-  })
-  context.runs = runs
-  context.stepChats = {
-    session: (id) => hub().sessions.get(id, { includeMessages: true }),
-    attach: (id, afterSeq, signal) => hub().turns.attach(id, { afterSeq, signal }),
-  }
   const fleet = new FleetService(env, paths.socket)
   const hosts = hubEnabled(env)
     ? new Hub({
@@ -475,7 +347,6 @@ export async function startDaemon(
             (logicalSessionId === undefined || root.logicalSessionId === logicalSessionId)
           )
         },
-        isLocalRun: (runId) => runs.snapshot().items.some((item) => item.runId === runId),
         isLocalAsk: (id) => askStore.get(id) !== undefined,
         endedBy: (host, id, by) => context.lanes?.remoteEnd(host, id, by),
         leadName,
@@ -539,9 +410,6 @@ export async function startDaemon(
         if (session && typeof session.id === 'string') waiting.session(session as { id: string })
       } else if (event.type === 'session.ended' && typeof event.data.id === 'string') {
         waiting.removed(event.data.id)
-      } else if (event.type === 'runs.changed') {
-        const local = runs.snapshot()
-        waiting.runs(hosts ? hosts.mergeRuns(local) : local)
       }
     })
   }
@@ -618,8 +486,7 @@ export async function startDaemon(
           const remote = hosts?.remoteSession(id)
           if (!remote || remote.session.id !== id) return null
           const { tool, state } = remote.session
-          const agent =
-            typeof tool === 'string' && (tool === AGENT_HUB_TOOL || isDeliveryTool(tool))
+          const agent = typeof tool === 'string' && isDeliveryTool(tool)
           return agent && state !== 'unknown' ? remote.host : null
         },
         heardFrom: (lane, host, receivers, event) =>
@@ -680,7 +547,6 @@ export async function startDaemon(
     },
     cmdUnits: systemdCmdUnits(env),
     ledgerDoc: () => coordDocs.get('_coord'),
-    run: (runId) => runs.runState(runId),
     ask: (id) => askStore.get(id),
     agentTitle: (anchor) => {
       const widget = anchorWidget(nodeProcFs, anchor)
@@ -728,11 +594,6 @@ export async function startDaemon(
           if (wait.kind === 'ask') {
             const ask = askStore.get(wait.ref)
             return Boolean(ask && ask.delivery === 'wake' && ask.answerTo === wait.waiter)
-          }
-          if (wait.kind === 'run' && wait.until === 'needs-you') {
-            // Only once the pause's note is queued to the waiter, not
-            // between a look seeing the pause and the note going out.
-            return Boolean(wait.waiter && runs.toldTo(wait.ref) === wait.waiter)
           }
           return false
         },
@@ -784,7 +645,6 @@ export async function startDaemon(
     events.subscribe((event) => {
       if (event.type.startsWith('session.') && typeof event.data.id === 'string')
         waits.poke(event.data.id)
-      else if (event.type === 'runs.changed') waits.pokeKind('run')
       else if (event.type === 'peer.state') waits.pokeKind('host')
       else if (event.type === 'asks.changed') {
         const ask = event.data.ask as { id?: unknown } | undefined
@@ -818,7 +678,6 @@ export async function startDaemon(
   const agentStates = new AgentStateTracker((id) => {
     notifySessionChanged(id, { force: true })
     wakes.scheduler.nudge()
-    runs.poke()
   })
   bindAgentStates(agentStates)
   // Model switches: each agent's own record, read on the agent poll; a switch
@@ -854,24 +713,6 @@ export async function startDaemon(
       if (event.type === 'session.ended' && typeof event.data.host !== 'string')
         models.retain(listWidgets().map((row) => row.id))
     })
-  // Agent Hub sessions have no pane: their own state tracker, runtime and
-  // poll, none of which the tmux machinery above ever sees.
-  const hubRuntime = new AgentHubRuntime({
-    api: hub,
-    states: new AgentStateTracker((id) => {
-      notifySessionChanged(id, { force: true })
-      wakes.scheduler.nudge()
-      runs.poke()
-    }),
-    notify: (id) => notifySessionChanged(id, { force: true }),
-    verifyStatus: verifySessionStatus,
-    ...(resolveSettleMs(env) !== null ? { settleMs: resolveSettleMs(env) as number } : {}),
-  })
-  bindAgentHub(hubRuntime)
-  setHubBackend({
-    verify: (row) => hubRuntime.verify(row),
-    end: (id, generation) => hubRuntime.end(id, generation),
-  })
   const agentPoller = new AgentStatePoller(
     agentStates,
     {
@@ -893,8 +734,6 @@ export async function startDaemon(
     },
   )
   if (reconcileEnabled(env)) void ready.then(() => agentPoller.start()).catch(() => {})
-  if (reconcileEnabled(env)) void ready.then(() => hubRuntime.start()).catch(() => {})
-  if (reconcileEnabled(env)) void ready.then(() => runs.start()).catch(() => {})
   // Wakes paste into sessions, so only where Tether observes tmux.
   if (reconcileEnabled(env)) void ready.then(() => wakes.scheduler.start()).catch(() => {})
   if (waits) void ready.then(() => waits.start()).catch(() => {})
@@ -949,7 +788,6 @@ export async function startDaemon(
     server,
     store,
     events,
-    agentHub: hubRuntime,
     hosts,
     ready,
     close: async () => {
@@ -959,10 +797,6 @@ export async function startDaemon(
       context.memoryPolicy.stop()
       clearInterval(projectNames)
       agentPoller.stop()
-      hubRuntime.stop()
-      runs.stop()
-      bindAgentHub(null)
-      setHubBackend(null)
       wakes.scheduler.stop()
       lanes?.stop()
       waits?.stop()

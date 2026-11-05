@@ -52,7 +52,7 @@ export function useOffline(): OfflineState {
 }
 
 /** "10:42", or "Mon 10:42" when it was not today. */
-export function formatSavedTime(at: number, now = Date.now()): string {
+function formatSavedTime(at: number, now = Date.now()): string {
   const date = new Date(at)
   const time = date.toLocaleTimeString([], {
     hour: 'numeric',

@@ -3,8 +3,7 @@
 // (~/.pi/agent/sessions/--<cwd>--/<time>_<id>.jsonl) is found by that id. State
 // is the last message in it; the model watch reads the same file.
 
-import { execFile } from 'node:child_process'
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentSignal } from '../../../agent-state'
@@ -17,7 +16,6 @@ import {
   type ProcFs,
   UUID_RE,
 } from '../../../proc-fs'
-import { agentHubRepo, unknownCheckout } from '../context-support'
 import type { ContextStatus } from '../spec'
 import type { AgentProbe, TuiAdapter } from './contract'
 
@@ -129,7 +127,7 @@ export class PiSession {
  * suffix (Pi names the file after the id `--session-id` gave it). null until
  * Pi writes it (after its first prompt). At most `limit` cwd directories are
  * looked in. */
-export function piSessionFile(
+function piSessionFile(
   fs: ProcFs,
   home: string,
   id: string,
@@ -200,71 +198,24 @@ export function piModelEvents(line: string): ModelEvent[] {
 
 /** SummitFlow's deployed Pi coordination extension: `$ST_PI_COORD_EXTENSION`,
  * else the current SummitFlow release under ~/.summitflow. */
-function stCoordSource(): string {
-  return (
-    process.env.ST_PI_COORD_EXTENSION ||
-    join(
-      homedir(),
-      '.summitflow/services/projects/summitflow/current/source/scripts/lib/pi-coord-extension.ts',
-    )
-  )
-}
-
-/** Null when ~/.pi/agent/extensions/st-coord.ts resolves to SummitFlow's
- * current extension, else what drifted. Installing it is SummitFlow's job. */
-function stCoordDrift(): string | null {
-  const link = join(homedir(), '.pi', 'agent', 'extensions', 'st-coord.ts')
-  try {
-    return realpathSync(link) === realpathSync(stCoordSource())
-      ? null
-      : `${link} does not resolve to SummitFlow's current ${stCoordSource()}`
-  } catch {
-    return `${link} or ${stCoordSource()} is missing`
-  }
-}
-
-/** Pi loads source-controlled extensions from ~/.pi/agent/extensions. Verify
- * that the active entry resolves to Agent Hub's canonical adapter source and
- * that the adapter preserves Pi's native system prompt before appending the
- * delivered contract, and that SummitFlow's coordination extension has not
- * drifted from its current release. */
+/** Pi's Aico extension delivers context and coordinates this native session. */
 function piExtension(): ContextStatus {
-  const extension = join(homedir(), '.pi', 'agent', 'extensions', 'agent-hub.ts')
-  const repo = agentHubRepo()
-  if (!repo) return unknownCheckout('AGENT_HUB_REPO', 'agent-hub')
-  const expected = join(repo, 'integrations', 'context-delivery', 'pi', 'agent-hub.ts')
-  if (!existsSync(extension)) {
-    return {
-      state: 'missing',
-      detail: `${extension} absent — canonical context installation is incomplete`,
-    }
-  }
+  const extension = join(homedir(), '.pi', 'agent', 'extensions', 'aico-hook.ts')
   try {
     const body = readFileSync(extension, 'utf8')
-    const canonical = realpathSync(extension) === expected
-    const additive =
-      body.includes('pi.on("input"') &&
-      body.includes('action: "continue"') &&
+    if (
       body.includes('before_agent_start') &&
       body.includes('event.systemPrompt') &&
-      body.includes('contract.rendered') &&
-      body.includes('AH: DEGRADED')
-    if (!canonical || !additive) {
+      body.includes('aico-hook')
+    )
       return {
-        state: 'missing',
-        detail: `${extension} is drifted or does not preserve Pi's native system prompt`,
+        state: 'available',
+        detail: 'Aico Pi context hook is installed; model receipt is unverified.',
       }
-    }
-    const drift = stCoordDrift()
-    return drift
-      ? { state: 'missing', detail: `${drift}; native Pi continues` }
-      : {
-          state: 'available',
-          detail: `${extension}: canonical additive Agent Hub extension installed and st-coord.ts current; model receipt is unverified`,
-        }
   } catch {
-    return { state: 'missing', detail: `${extension} is unreadable — cannot verify context` }
+    // An absent or unreadable extension cannot deliver context.
   }
+  return { state: 'missing', detail: 'Aico Pi context hook is missing.' }
 }
 
 // --- the adapter -----------------------------------------------------------------
@@ -379,15 +330,6 @@ export const pi: TuiAdapter = {
   context: {
     kind: { kind: 'pi-extension' },
     check: async () => piExtension(),
-    retire: (ownershipId) =>
-      new Promise((resolve) => {
-        execFile(
-          join(homedir(), '.local', 'bin', 'agent-hub-context-client'),
-          ['retire-pi', '--surface', 'pi', '--aico-session', ownershipId],
-          { timeout: 20000 },
-          (error) => resolve(!error),
-        )
-      }),
   },
   hooks: {
     provider: 'pi',
@@ -395,8 +337,7 @@ export const pi: TuiAdapter = {
     stateReports: [],
     installs: [
       { what: 'aico-due extension (ride-along lines)', path: 'integrations/pi/aico-due.ts' },
-      { what: 'Agent Hub context extension', path: '~/.pi/agent/extensions/agent-hub.ts' },
-      { what: 'SummitFlow coordination extension', path: '~/.pi/agent/extensions/st-coord.ts' },
+      { what: 'Aico context and coordination', path: '~/.pi/agent/extensions/aico-hook.ts' },
     ],
   },
   login: {

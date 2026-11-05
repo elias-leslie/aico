@@ -170,8 +170,6 @@ export interface TuiAdapter {
   context: {
     kind: ContextHook
     check(spec: TuiSpec): Promise<ContextStatus>
-    /** Run after the exact owned workload is retired; null: nothing to retire. */
-    retire?(ownershipId: string): Promise<boolean>
   }
   hooks: HookFacts
   login: ToolLogin

@@ -100,7 +100,7 @@ function differences(a: Row, b: Row, columns: readonly string[]): string[] {
 }
 
 /** Open aico.db strictly read-only (no WAL checkpoint, no writes). */
-export function openAicoReadOnly(path: string): DatabaseSync {
+function openAicoReadOnly(path: string): DatabaseSync {
   if (!existsSync(path)) throw new Error(`Aico database not found: ${path}`)
   return new DatabaseSync(path, { readOnly: true })
 }
@@ -128,7 +128,7 @@ function isExternal(widget: Row): boolean {
  * Compare aico.db with the target catalog. `target` may be null when the
  * instance has no database yet (dry-run never creates one).
  */
-export function planImport(sourcePath: string, target: DatabaseSync | null): ImportPlan {
+function planImport(sourcePath: string, target: DatabaseSync | null): ImportPlan {
   const source = openAicoReadOnly(sourcePath)
   let data: ReturnType<typeof readSource>
   try {

@@ -65,7 +65,7 @@ const hostUrl = (host: string, rest = '') =>
   `/api/hosts/${encodeURIComponent(host)}${rest}`
 
 /** POST a host action; a failure keeps the server's plain-words detail. */
-export async function hostPost(
+async function hostPost(
   path: string,
   body: Record<string, unknown> | undefined,
   fallback: string,

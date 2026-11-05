@@ -116,7 +116,7 @@ function readPhones(path: string): Phone[] | null {
   }
 }
 
-export function cleanState(raw: Record<string, unknown>): PhoneState {
+function cleanState(raw: Record<string, unknown>): PhoneState {
   const int = (value: unknown): value is number =>
     typeof value === 'number' && Number.isInteger(value)
   const channels = (raw.channels ?? {}) as Record<string, unknown>

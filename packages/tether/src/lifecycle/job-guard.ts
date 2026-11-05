@@ -44,8 +44,8 @@ export const TICK_MS = 5_000
 const GROWTH_WINDOW = 12 // ticks (60 s) used to rank pane growth
 const MIN_GROWTH = 256 * 2 ** 20
 const NOTE_GAP_MS = 1_800_000
-export const AGENT_ADJ = 100
-export const TOOL_ADJ = 200
+const AGENT_ADJ = 100
+const TOOL_ADJ = 200
 /** codex-config's `codex` launcher runs the real binary under this name. */
 const WRAPPED_AGENT_BINS = new Set(['codex-real'])
 const CMDLINE_HEAD = 200
@@ -85,24 +85,24 @@ export interface Job {
   members: Proc[]
 }
 
-export function protectedPids(pane: Pane): Set<number> {
+function protectedPids(pane: Pane): Set<number> {
   const out = new Set(pane.agents)
   if (pane.root !== null) out.add(pane.root)
   return out
 }
 
-export function agentBytes(pane: Pane): number {
+function agentBytes(pane: Pane): number {
   let total = 0
   for (const pid of pane.agents) total += pane.procs.get(pid)?.bytes ?? 0
   return total
 }
 
-export function jobBytes(job: Job): number {
+function jobBytes(job: Job): number {
   return job.members.reduce((sum, p) => sum + p.bytes, 0)
 }
 
 /** The biggest member: the process a record names. */
-export function jobTop(job: Job): Proc {
+function jobTop(job: Job): Proc {
   return job.members.reduce((best, p) =>
     p.bytes > best.bytes || (p.bytes === best.bytes && p.pid < best.pid) ? p : best,
   )
@@ -250,7 +250,7 @@ export function chooseVictim(
 }
 
 /** Pane whose anon memory grew most over the window, if it grew enough. */
-export function fastestPane(history: Map<string, number[]>, minGrowth = MIN_GROWTH): string | null {
+function fastestPane(history: Map<string, number[]>, minGrowth = MIN_GROWTH): string | null {
   let best: string | null = null
   let grown = minGrowth - 1
   for (const [name, xs] of history) {
@@ -282,7 +282,7 @@ export function parseHostState(text: string, nowMs: number): HostState | null {
   }
 }
 
-export function anonBytes(memoryStat: string): number {
+function anonBytes(memoryStat: string): number {
   for (const line of memoryStat.split('\n')) {
     const [key, value] = line.split(' ')
     if (key === 'anon') return Number(value) || 0
@@ -296,7 +296,7 @@ function gib(n: number): string {
 
 // --- /proc and cgroup readers ----------------------------------------------
 
-export function readStat(
+function readStat(
   procRoot: string,
   pid: number,
 ): { comm: string; ppid: number; pgid: number; sid: number; starttime: number } | null {
@@ -319,7 +319,7 @@ export function readStat(
   }
 }
 
-export function readProc(procRoot: string, pid: number, unit: string): Proc | null {
+function readProc(procRoot: string, pid: number, unit: string): Proc | null {
   const st = readStat(procRoot, pid)
   if (!st) return null
   let kb = 0
@@ -396,7 +396,7 @@ function readNumber(path: string): number | null {
 /** SIGKILL pid only if it is still the process that started at starttime.
  * Node has no pidfd API, so the window between check and signal is a few
  * microseconds; a pid reused inside it is practically impossible (pid_max). */
-export function killIfSame(procRoot: string, pid: number, starttime: number): boolean {
+function killIfSame(procRoot: string, pid: number, starttime: number): boolean {
   const st = readStat(procRoot, pid)
   if (!st || st.starttime !== starttime) return false
   try {
@@ -446,7 +446,7 @@ const EVENT_FIELDS = [
   'host_state',
 ] as const
 
-export function appendMemoryEvent(
+function appendMemoryEvent(
   path: string,
   record: Record<string, unknown>,
   maxBytes = EVENTS_MAX_BYTES,
@@ -479,7 +479,7 @@ export interface PaneCapHost {
 
 const exec = promisify(execFile)
 
-export const systemdPaneCapHost: PaneCapHost = {
+const systemdPaneCapHost: PaneCapHost = {
   async setCap(scope, memoryMax, swapMax) {
     await exec(
       'systemctl',

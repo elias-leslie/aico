@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Store } from '../../store'
 import type { AgentTool } from '../../tools'
-import { ensureContext, finalizeContext } from './context'
+import { ensureContext } from './context'
 import {
   effectiveTuiPath,
   isResumeSessionId,
@@ -79,10 +79,10 @@ function mockCodexHooks(
     process.kill = vi.fn()
     process.stdin = {
       write: () => {
-        const client = join(homedir(), '.local', 'bin', 'agent-hub-context-client')
+        const client = join(homedir(), '.local', 'bin', 'aico-hook')
         const hooks = events.map(({ eventName, trusted = true, command }) => ({
           eventName,
-          command: command ?? `${client} bind --surface codex`,
+          command: command ?? `${client} codex`,
           enabled: true,
           trustStatus: trusted ? 'trusted' : 'untrusted',
         }))
@@ -166,7 +166,6 @@ describe('registry', () => {
       'codex',
       'agy',
       'pi',
-      'agent-hub',
       'aico-agent',
       'shell',
     ])
@@ -310,374 +309,46 @@ describe('ensureContext', () => {
     expect(execFile).not.toHaveBeenCalled()
   })
 
-  it('reports ok when Claude launcher and lifecycle hooks are canonical', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    mockPaneResolve('/home/demo/.claude/bin/claude')
-    vi.mocked(realpathSync).mockReturnValue(
-      '/opt/projects/agent-hub/integrations/context-delivery/claude/launcher',
-    )
-    vi.mocked(readFileSync).mockImplementation(((path: string) => {
-      if (path.endsWith('settings.json')) {
-        const command = `${join(homedir(), '.local', 'bin', 'agent-hub-context-client')} bind --surface claude_code`
-        return JSON.stringify({
-          hooks: {
-            SessionStart: [{ hooks: [{ command }] }],
-            SubagentStart: [{ hooks: [{ command }] }],
-          },
-        })
-      }
-      return 'CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 exec "$REAL_CLAUDE" "--add-dir" "$CONTEXT_DIR" # CLAUDE.md\n'
-    }) as never)
-    const s = await ensureContext(
-      spec({
-        command: ['claude', '--dangerously-skip-permissions'],
-        context: { kind: 'claude-session-start' },
-        env: { PATH: '/canonical/managed-pane-path' },
+  it('checks Aico Claude hooks for parent and spawned sessions', async () => {
+    const command = '$HOME/.local/bin/aico-hook claude'
+    vi.mocked(readFileSync).mockReturnValue(
+      JSON.stringify({
+        hooks: {
+          SessionStart: [{ hooks: [{ command }] }],
+          SubagentStart: [{ hooks: [{ command }] }],
+        },
       }),
     )
-    expect(s.state).toBe('available')
-    expect(s.detail).toContain('canonical additive Claude launcher')
-    expect(s.detail).toContain('model receipt is unverified')
-    expect(execFile).toHaveBeenCalledWith(
-      '/bin/sh',
-      ['-c', 'command -v -- "$1"', 'aico-resolve-launcher', 'claude'],
-      expect.objectContaining({
-        env: expect.objectContaining({ PATH: '/canonical/managed-pane-path' }),
-      }),
-      expect.any(Function),
+    expect((await ensureContext(spec({ context: { kind: 'claude-session-start' } }))).state).toBe(
+      'available',
     )
-  })
-
-  it('accepts the home-relative hook command the shared settings use', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    mockPaneResolve('/home/demo/.claude/bin/claude')
-    vi.mocked(realpathSync).mockReturnValue(
-      '/opt/projects/agent-hub/integrations/context-delivery/claude/launcher',
-    )
-    vi.mocked(readFileSync).mockImplementation(((path: string) => {
-      if (path.endsWith('settings.json')) {
-        const command = '"$HOME"/.local/bin/agent-hub-context-client bind --surface claude_code'
-        return JSON.stringify({
-          hooks: {
-            SessionStart: [{ hooks: [{ command }] }],
-            SubagentStart: [{ hooks: [{ command }] }],
-          },
-        })
-      }
-      return 'CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 exec "$REAL_CLAUDE" "--add-dir" "$CONTEXT_DIR" # CLAUDE.md\n'
-    }) as never)
-    const s = await ensureContext(
-      spec({
-        command: ['claude', '--dangerously-skip-permissions'],
-        context: { kind: 'claude-session-start' },
-        env: { PATH: '/canonical/managed-pane-path' },
-      }),
-    )
-    expect(s.state).toBe('available')
-    expect(s.detail).toContain('canonical additive Claude launcher')
-    expect(s.detail).toContain('model receipt is unverified')
-    expect(execFile).toHaveBeenCalledWith(
-      '/bin/sh',
-      ['-c', 'command -v -- "$1"', 'aico-resolve-launcher', 'claude'],
-      expect.objectContaining({
-        env: expect.objectContaining({ PATH: '/canonical/managed-pane-path' }),
-      }),
-      expect.any(Function),
-    )
-  })
-
-  it('looks through the Agent Hub credential shim first on a host PATH', async () => {
-    const shimDir = join(homedir(), '.local', 'lib', 'agent-hub', 'cred-bin')
-    vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(execFile).mockImplementation(((
-      _cmd: string,
-      _args: string[],
-      opts: { env: { PATH: string } },
-      cb: unknown,
-    ) => {
-      const first = opts.env.PATH.split(':')[0]
-      ;(cb as (e: Error | null, out: string, err: string) => void)(null, `${first}/claude\n`, '')
-      return undefined as never
-    }) as never)
-    vi.mocked(realpathSync).mockReturnValue(
-      '/opt/projects/agent-hub/integrations/context-delivery/claude/launcher',
-    )
-    vi.mocked(readFileSync).mockImplementation(((path: string) => {
-      if (path.endsWith('settings.json')) {
-        const command = '"$HOME"/.local/bin/agent-hub-context-client bind --surface claude_code'
-        return JSON.stringify({
-          hooks: {
-            SessionStart: [{ hooks: [{ command }] }],
-            SubagentStart: [{ hooks: [{ command }] }],
-          },
-        })
-      }
-      return 'CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 exec "$REAL_CLAUDE" "--add-dir" "$CONTEXT_DIR" # CLAUDE.md\n'
-    }) as never)
-    const s = await ensureContext(
-      spec({
-        command: ['claude'],
-        context: { kind: 'claude-session-start' },
-        env: { PATH: `${shimDir}/:/home/demo/.claude/bin:/usr/bin` },
-      }),
-    )
-    expect(s.state).toBe('available')
-    expect(s.detail).toBe(
-      `${shimDir}/claude (Agent Hub credential shim) execs /home/demo/.claude/bin/claude reaches the canonical additive Claude launcher with native session binding hooks installed; model receipt is unverified`,
-    )
-    expect(execFile).toHaveBeenLastCalledWith(
-      '/bin/sh',
-      expect.anything(),
-      expect.objectContaining({
-        env: expect.objectContaining({ PATH: '/home/demo/.claude/bin:/usr/bin' }),
-      }),
-      expect.any(Function),
-    )
-  })
-
-  it('reports missing when the managed pane resolves the stock upstream Claude binary', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    mockPaneResolve('/home/demo/.local/bin/claude') // a claude resolves, but not the wrapper
-    vi.mocked(realpathSync).mockReturnValue('/home/demo/.local/bin/claude')
-    vi.mocked(readFileSync).mockReturnValue('\x7fELF stock claude binary bytes\n')
+    vi.mocked(readFileSync).mockReturnValue('{}')
     expect((await ensureContext(spec({ context: { kind: 'claude-session-start' } }))).state).toBe(
       'missing',
     )
   })
 
-  it('reports missing when claude is not on the managed pane PATH', async () => {
-    vi.mocked(existsSync).mockReturnValue(true) // hook present
-    mockPaneResolve(null) // managed pane PATH finds no claude
-    expect((await ensureContext(spec({ context: { kind: 'claude-session-start' } }))).state).toBe(
-      'missing',
-    )
-  })
-
-  it('reports missing when Claude settings or client is absent', async () => {
-    vi.mocked(existsSync).mockReturnValue(false)
-    expect((await ensureContext(spec({ context: { kind: 'claude-session-start' } }))).state).toBe(
-      'missing',
-    )
-  })
-
-  it('reports ok for lossless Codex launcher and trusted native bindings', async () => {
+  it('checks trusted Aico native Codex hooks', async () => {
     vi.mocked(existsSync).mockReturnValue(true)
-    mockCodexHooks('/home/demo/.local/bin/codex', [
-      { eventName: 'sessionStart' },
+    mockCodexHooks('/native/codex', [{ eventName: 'sessionStart' }, { eventName: 'subagentStart' }])
+    expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe(
+      'available',
+    )
+    mockCodexHooks('/native/codex', [
+      { eventName: 'sessionStart', trusted: false },
       { eventName: 'subagentStart' },
     ])
-    vi.mocked(realpathSync).mockReturnValue('/opt/projects/codex-config/bin/codex')
-    vi.mocked(readFileSync).mockReturnValue(
-      'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
-    )
-    const s = await ensureContext(spec({ context: { kind: 'codex-hooks' } }))
-    expect(s.state).toBe('available')
-    expect(s.detail).toContain('lossless context')
-  })
-
-  it.each(['$HOME', '"$HOME"'])(
-    'accepts trusted canonical Codex hooks relative to %s',
-    async (home) => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      const command = `${home}/.local/bin/agent-hub-context-client bind --surface codex`
-      mockCodexHooks('/home/demo/.local/bin/codex', [
-        { eventName: 'sessionStart', command },
-        { eventName: 'subagentStart', command },
-      ])
-      vi.mocked(realpathSync).mockReturnValue('/opt/projects/codex-config/bin/codex')
-      vi.mocked(readFileSync).mockReturnValue(
-        'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
-      )
-      expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe(
-        'available',
-      )
-    },
-  )
-
-  it('reports missing when a required native Codex hook is untrusted', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    mockCodexHooks('/home/demo/.local/bin/codex', [
-      { eventName: 'sessionStart' },
-      { eventName: 'subagentStart', trusted: false },
-    ])
-    vi.mocked(realpathSync).mockReturnValue('/opt/projects/codex-config/bin/codex')
-    vi.mocked(readFileSync).mockReturnValue(
-      'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
-    )
     expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe('missing')
   })
 
-  it('reports missing when the native Codex subagent hook is absent', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    mockCodexHooks('/home/demo/.local/bin/codex', [{ eventName: 'sessionStart' }])
-    vi.mocked(realpathSync).mockReturnValue('/opt/projects/codex-config/bin/codex')
-    vi.mocked(readFileSync).mockReturnValue(
-      'CODEX_REAL AGENT_HUB_CONTEXT_CLIENT developer_instructions=\n',
-    )
-    expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe('missing')
-  })
-
-  it('reports missing when Codex resolves to a legacy context-replacing wrapper', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    mockCodexHooks('/home/demo/.codex/bin/codex', [
-      { eventName: 'sessionStart' },
-      { eventName: 'subagentStart' },
-    ])
-    vi.mocked(realpathSync).mockReturnValue('/home/demo/.codex/bin/codex')
-    vi.mocked(readFileSync).mockReturnValue(
-      'exec "$CODEX_REAL" -c model_instructions_file="$CONTEXT_FILE" "$@"\n',
-    )
-    const status = await ensureContext(spec({ context: { kind: 'codex-hooks' } }))
-    expect(status.state).toBe('missing')
-    expect(status.detail).toContain('canonical lossless additive Codex launcher')
-  })
-
-  it('reports missing when codex is not on the managed pane PATH', async () => {
-    mockPaneResolve(null)
-    expect((await ensureContext(spec({ context: { kind: 'codex-hooks' } }))).state).toBe('missing')
-  })
-
-  it('reports ok when Pi uses the source-linked additive Agent Hub extension', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(realpathSync).mockReturnValue(
-      '/opt/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts',
-    )
-    vi.mocked(readFileSync).mockReturnValue(
-      'pi.on("input", () => ({ action: "continue" })); pi.on("before_agent_start", () => event.systemPrompt + contract.rendered); "AH: DEGRADED"',
-    )
-    const s = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
-    expect(s.state).toBe('available')
-    expect(s.detail).toContain('canonical additive')
-  })
-
-  it('reports missing when the Pi extension is copied or drifted', async () => {
-    vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(realpathSync).mockReturnValue('/home/demo/.pi/agent/extensions/agent-hub.ts')
-    vi.mocked(readFileSync).mockReturnValue('pi.on("before_agent_start", () => {})')
-    expect((await ensureContext(spec({ context: { kind: 'pi-extension' } }))).state).toBe('missing')
-  })
-
-  it.each([true, false])(
-    'reports retrieval installation availability %s without delivery',
-    async (passed) => {
-      vi.mocked(execFile).mockImplementation(((
-        _cmd: string,
-        args: string[],
-        _opts: unknown,
-        cb: unknown,
-      ) => {
-        expect(args).toEqual([
-          '/opt/projects/agent-hub/integrations/context-delivery/install.py',
-          '--surface',
-          'antigravity',
-          '--check',
-        ])
-        ;(cb as (error: Error | null, stdout: string) => void)(null, JSON.stringify({ passed }))
-        return undefined as never
-      }) as never)
-      const status = await ensureContext(
-        spec({ context: { kind: 'canonical-retrieval', surface: 'antigravity' } }),
-      )
-      expect(status.state).toBe(passed ? 'available' : 'missing')
-      expect(execFile).toHaveBeenCalledTimes(1)
-    },
-  )
-
-  it('says where checkouts are looked for instead of guessing ~/projects', async () => {
-    vi.stubEnv('TETHER_PROJECTS_DIR', '')
-    vi.mocked(existsSync).mockReturnValue(true)
-    for (const context of [
-      { kind: 'pi-extension' as const },
-      { kind: 'claude-session-start' as const },
-      { kind: 'codex-hooks' as const },
-      { kind: 'canonical-retrieval' as const, surface: 'antigravity' as const },
-    ]) {
-      const status = await ensureContext(spec({ command: ['agent'], context }))
-      expect(status.state).toBe('missing')
-      expect(status.detail).toContain('TETHER_PROJECTS_DIR is not set')
-      expect(status.detail).not.toContain('/projects/')
-    }
-  })
-
-  it('uses a checkout named directly even without TETHER_PROJECTS_DIR', async () => {
-    vi.stubEnv('TETHER_PROJECTS_DIR', '')
-    vi.stubEnv('AGENT_HUB_REPO', '/opt/projects/agent-hub')
-    vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(realpathSync).mockReturnValue(
-      '/opt/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts',
-    )
-    vi.mocked(readFileSync).mockReturnValue(
-      'pi.on("input", () => ({ action: "continue" })); pi.on("before_agent_start", () => event.systemPrompt + contract.rendered); "AH: DEGRADED"',
-    )
-    const status = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
-    expect(status.state).toBe('available')
-  })
-
-  it("reports Pi's st-coord.ts drifting from SummitFlow's current extension", async () => {
-    vi.stubEnv('AGENT_HUB_REPO', '/opt/projects/agent-hub')
-    vi.stubEnv('ST_PI_COORD_EXTENSION', '/opt/summitflow/current/pi-coord-extension.ts')
-    vi.mocked(existsSync).mockReturnValue(true)
-    vi.mocked(readFileSync).mockReturnValue(
-      'pi.on("input", () => ({ action: "continue" })); pi.on("before_agent_start", () => event.systemPrompt + contract.rendered); "AH: DEGRADED"',
-    )
-    const resolve = (coord: string) =>
-      vi
-        .mocked(realpathSync)
-        .mockImplementation(((path: string) =>
-          path.endsWith('agent-hub.ts')
-            ? '/opt/projects/agent-hub/integrations/context-delivery/pi/agent-hub.ts'
-            : path.endsWith('st-coord.ts')
-              ? coord
-              : '/opt/summitflow/releases/b/pi-coord-extension.ts') as never)
-    resolve('/opt/summitflow/releases/b/pi-coord-extension.ts')
+  it('checks the Aico Pi context extension', async () => {
+    vi.mocked(readFileSync).mockReturnValue('aico-hook before_agent_start event.systemPrompt')
     expect((await ensureContext(spec({ context: { kind: 'pi-extension' } }))).state).toBe(
       'available',
     )
-    resolve('/opt/summitflow/releases/a/pi-coord-extension.ts')
-    const drifted = await ensureContext(spec({ context: { kind: 'pi-extension' } }))
-    expect(drifted.state).toBe('missing')
-    expect(drifted.detail).toContain('st-coord.ts does not resolve')
+    vi.mocked(readFileSync).mockImplementation(() => {
+      throw new Error('absent')
+    })
+    expect((await ensureContext(spec({ context: { kind: 'pi-extension' } }))).state).toBe('missing')
   })
-})
-
-describe('Native retirement context', () => {
-  it.each([['pi-extension', 'pi']] as const)(
-    'finalizes only the exact ownership ID after %s retirement',
-    async (kind, surface) => {
-      vi.mocked(execFile).mockImplementation(((
-        _file: string,
-        _args: string[],
-        _options: unknown,
-        callback: unknown,
-      ) => {
-        ;(callback as (error: Error | null) => void)(null)
-        return undefined as never
-      }) as never)
-      expect(await finalizeContext(spec({ context: { kind } }), 'aico-widget-12345678')).toBe(true)
-      expect(execFile).toHaveBeenCalledWith(
-        join(homedir(), '.local', 'bin', 'agent-hub-context-client'),
-        [`retire-${surface}`, '--surface', surface, '--aico-session', 'aico-widget-12345678'],
-        { timeout: 20000 },
-        expect.any(Function),
-      )
-      vi.mocked(execFile).mockClear()
-      expect(await finalizeContext(spec(), 'aico-widget-12345678')).toBeNull()
-      expect(execFile).not.toHaveBeenCalled()
-    },
-  )
-  it.each(['pi-extension'] as const)(
-    'reports unavailable %s accounting without claiming completion',
-    async (kind) => {
-      vi.mocked(execFile).mockImplementation(((
-        _file: string,
-        _args: string[],
-        _options: unknown,
-        callback: unknown,
-      ) => {
-        ;(callback as (error: Error | null) => void)(new Error('offline'))
-        return undefined as never
-      }) as never)
-      expect(await finalizeContext(spec({ context: { kind } }), 'aico-widget-12345678')).toBe(false)
-    },
-  )
 })

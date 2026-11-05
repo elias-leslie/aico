@@ -26,17 +26,7 @@ from st_sdk.details import display_path, emit_result_or_details, summary_hint, w
 
 from . import registry, runtime_deployment
 from .paths import get_repo_root
-from . import host_monitor_deploy, migration_env, service_release
-from .monitor_store_migration import (
-    MigrationResult,
-    MonitorMigrationDeferred,
-    MonitorMigrationFailed,
-    migrate_stopped_store,
-    retain_restart_interlock,
-    update_restart_receipt,
-)
-
-HOST_MONITOR_HELPER = Path("/usr/local/sbin/summitflow-host-monitor-deploy")
+from . import migration_env, service_release
 RUNTIME_USERS = frozenset({"", "svc", "broker", "agent"})
 # Shared infrastructure a deploy checks first; runtime.infra in project.identity.json narrows it.
 INFRA = ("postgres", "hatchet")
@@ -70,7 +60,7 @@ class ProjectServices:
     durable_data_root: Path | None = None
     release_install: str = ""
     runtime_user: str = ""
-    infra: tuple[str, ...] = INFRA
+    infra: tuple[str, ...] = ()
     source_repo: Path | None = None
     source_sha: str = ""
     deployment: runtime_deployment.ProxmoxDeployment | None = None
@@ -208,10 +198,13 @@ def _project_from_identity(identity: Mapping[str, Any], project_id: str, root: P
     runtime_user = runtime.get("runtime_user") or ""
     if runtime_user not in RUNTIME_USERS:
         raise ServiceError("runtime.runtime_user must be svc, broker or agent")
-    infra = runtime.get("infra", list(INFRA))
+    infra = runtime.get("infra", [])
     if not isinstance(infra, list) or any(item not in INFRA for item in infra):
         raise ServiceError(f"runtime.infra must list only {', '.join(INFRA)}")
     canonical_id = str(project.get("id") or project_id)
+    retired_units = set(json.loads(Path(__file__).with_name("service-policy.json").read_text())["retired_units"])
+    services = {**services, **{key: [unit for unit in services.get(key, []) if canonical_unit(unit) not in retired_units]
+                            for key in ("default_workers", "optional_workers", "manual_workers")}}
     backend_dir, frontend_dir = runtime_source_dirs(runtime, root)
     manual_workers = _as_str_list(services.get("manual_workers"))
     managed = {canonical_unit(unit) for unit in (
@@ -407,13 +400,11 @@ def system_systemctl(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _manager(service: str):
-    return system_systemctl if canonical_unit(service) == host_monitor_deploy.UNIT else systemctl
+    return systemctl
 
 
 def _service_command(service: str, *args: str) -> list[str]:
     service = canonical_unit(service)
-    if service == host_monitor_deploy.UNIT:
-        return ["sudo", "-n", "/usr/bin/systemctl", "--no-ask-password", *args, service]
     return ["systemctl", "--no-ask-password", "--user", *args, service]
 
 
@@ -709,8 +700,6 @@ def sync_systemd_units(project: ProjectServices, *, manual: Sequence[str] = ()) 
                 manual or (project.backend_service, project.frontend_service, *project.default_workers)}
     boot: list[str] = []
     for service in units:
-        if service == host_monitor_deploy.UNIT:
-            continue
         template = project.root / "scripts" / "systemd" / service
         if not template.exists():
             continue
@@ -1169,12 +1158,12 @@ def stop_transient_unit(project: ProjectServices, unit: str) -> tuple[int, str]:
     return (0, "stopped") if systemctl("stop", "--", unit).returncode == 0 else (1, "stop_failed")
 
 
-INFRA_RESTART_HINT = "run: sudo systemctl restart summitflow-stack.service"
+INFRA_RESTART_HINT = "check the explicitly declared infrastructure service"
 
 
 def ensure_infra(project: ProjectServices | None = None) -> int:
     """Check readiness, verifying inconclusive connections from the backend's context."""
-    needs = INFRA if project is None else project.infra
+    needs = () if project is None else project.infra
     pg_code = capture(["pg_isready", "-h", "localhost", "-p", "5432", "-U", "admin"]).returncode if "postgres" in needs else 0
     pg = pg_code == 0
     down = ["postgres"] if pg_code == 1 else []  # 1 = answering but rejecting; 2 = no response.
@@ -1263,10 +1252,6 @@ def sync_backend(project: ProjectServices) -> int:
     return release_install(command, "uv", project.root, cwd=project.backend_dir)
 
 
-def _cargo() -> str:
-    """Prefer the rustup toolchain; a caller PATH may resolve an older distro cargo."""
-    rustup_cargo = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")) / "bin" / "cargo"
-    return str(rustup_cargo) if os.access(rustup_cargo, os.X_OK) else "cargo"
 
 
 def _seed_from_live_release(project: ProjectServices, relative: Path) -> bool:
@@ -1291,210 +1276,22 @@ def _seed_from_live_release(project: ProjectServices, relative: Path) -> bool:
     return True
 
 
-def build_host_monitor(project: ProjectServices) -> int:
-    """Build the independent host collector in the accepted SummitFlow release."""
-    if project.project_id != "summitflow" or "summitflow-host-monitor.service" not in project.default_workers:
-        return 0
-    source = project.root / "host-monitor"
-    if not (source / "Cargo.toml").is_file() or not (source / "Cargo.lock").is_file():
-        print("[service] host monitor requires Cargo.toml and Cargo.lock in accepted source")
-        return 1
-    if _seed_from_live_release(project, Path("host-monitor/target")):
-        # Release files carry commit mtimes, so a rollback could look fresh against a newer
-        # binary: reuse only the dependency crates and always recompile the collector itself.
-        package = tomllib.loads((source / "Cargo.toml").read_text())["package"]["name"]
-        if run([_cargo(), "clean", "--release", "-p", package], cwd=source, quiet_success=True) != 0:
-            return 1
-    print("[service] building locked host monitor")
-    code = run([_cargo(), "build", "--locked", "--release"], cwd=source, quiet_success=True, _heavy=True)
-    if code == 0:
-        host_monitor_deploy.build_helper(project.root)
-    return code
 
 
-def sync_host_monitor_policy(project: ProjectServices) -> int:
-    """Snapshot canonical runtime pressure thresholds for the standalone collector."""
-    if project.project_id != "summitflow" or "summitflow-host-monitor.service" not in project.default_workers:
-        return 0
-    from st_sdk.admission import NIGHTSHIFT_ADMISSION
-
-    policy_config = json.loads(Path(__file__).with_name("service-policy.json").read_text())["host_monitor"]
-    state_dir = project.root / "host-monitor/target/release"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    policy = {
-        "schema": 1,
-        "cpu_critical_pct": policy_config["cpu_critical_pct"],
-        "memory_status_path": str(NIGHTSHIFT_ADMISSION),  # memory pressure is Nightshift's state, not a threshold here
-        "disk_critical_pct": policy_config["disk_critical_pct"],
-        "disk_critical_free_bytes": policy_config["disk_critical_free_bytes"],
-        "source": "aico_service/service-policy.json",
-    }
-    with tempfile.NamedTemporaryFile("w", dir=state_dir, prefix=".policy-", delete=False) as file:
-        temporary = Path(file.name)
-        try:
-            os.fchmod(file.fileno(), 0o600)
-            json.dump(policy, file, separators=(",", ":"), sort_keys=True)
-            file.flush()
-            os.fsync(file.fileno())
-        except Exception:
-            temporary.unlink(missing_ok=True)
-            raise
-    os.replace(temporary, state_dir / "policy.json")
-    return 0
 
 
-def enable_host_monitor(project: ProjectServices) -> int:
-    """Enable the installed collector in the system boot target."""
-    service = "summitflow-host-monitor.service"
-    if project.project_id != "summitflow" or service not in project.default_workers:
-        return 0
-    return run(_service_command(service, "enable"))
 
 
-def has_host_monitor(project: ProjectServices) -> bool:
-    return project.project_id == "summitflow" and host_monitor_deploy.UNIT in project.default_workers
 
 
-def preflight_host_monitor(project: ProjectServices) -> int:
-    if not has_host_monitor(project):
-        return 0
-    if os.getuid() == 0:
-        print("[service] run rebuild as the owner; only collector installation uses sudo")
-        return 1
-    result = run(["sudo", "-n", "/usr/bin/true"], quiet_success=True)
-    if result:
-        print("[service] root collector installation requires available noninteractive sudo; no services changed")
-        return result
-    # Root runs only the installed, root-owned copy; it must match this release's installer.
-    try:
-        installed = HOST_MONITOR_HELPER.read_bytes()
-    except OSError:
-        installed = b""
-    if installed != (project.root / "backend/cli/lib/host_monitor_deploy.py").read_bytes():
-        print(f"[service] {HOST_MONITOR_HELPER} is missing or differs from this release; "
-              "install it with scripts/install-host-infra.sh; no services changed")
-        return 1
-    return 0
 
 
-def host_monitor_deployment(project: ProjectServices, transaction: str, action: str) -> int:
-    if not has_host_monitor(project):
-        return 0
-    return run(["sudo", "-n", str(HOST_MONITOR_HELPER), action,
-                "--source", str(project.root), "--uid", str(os.getuid()),
-                "--gid", str(os.getgid()), "--transaction", transaction], quiet_success=True)
 
 
-def verify_host_monitor(project: ProjectServices) -> int:
-    if not has_host_monitor(project):
-        return 0
-    from ..monitor_control import control_request
-    from ..monitor_reader import MonitorReader
-
-    for _ in range(15):
-        try:
-            status = control_request("status", state_dir=host_monitor_deploy.STATE)
-            latest = status.get("latest") or {}
-            if (status.get("ok") and not status.get("writer_failure")
-                    and latest.get("sampled_at_ns", 0) > time.time_ns() - 30_000_000_000):
-                MonitorReader(host_monitor_deploy.STATE).status(max_bytes=4096)
-                return 0
-        except (OSError, ValueError, RuntimeError):
-            pass
-        time.sleep(1)
-    print("[service] collector control, freshness, or owner history access failed")
-    return 1
 
 
-def migrate_host_monitor_store(project: ProjectServices) -> MigrationResult:
-    """Stop the sole writer for an explicitly requested, guarded page conversion."""
-    service = "summitflow-host-monitor.service"
-    if project.project_id != "summitflow" or service not in project.default_workers:
-        raise ServiceError("monitor store migration requires the SummitFlow host monitor")
-    if system_systemctl("cat", service).returncode == 0:
-        raise ServiceError("page-size conversion is a legacy user-store operation; system store is already managed")
-    try:
-        live_source = service_release.current_source_root("summitflow")
-    except service_release.ReleaseError as exc:
-        raise ServiceError("cannot verify the live monitor reader lock release") from exc
-    if live_source is None:
-        raise ServiceError("deploy the monitor reader lock release before migrating the store")
-    try:
-        reader_file = live_source / "backend/monitor_reader/reader.py"
-        reader_ready = reader_file.is_file() and (
-            "MONITOR_MAINTENANCE_LOCK_VERSION = 2" in reader_file.read_text()
-        )
-    except OSError as exc:
-        raise ServiceError("cannot verify the live monitor reader lock release") from exc
-    if not reader_ready:
-        raise ServiceError("deploy the monitor reader lock release before migrating the store")
-    backend_root = _backend_process_release_root(_service_main_pid(project.backend_service))
-    if backend_root != live_source.resolve(strict=True):
-        raise ServiceError("running backend has not loaded the monitor reader lock release")
-    state_dir = Path.home() / ".local/state/summitflow/monitor"
-    if (state_dir / "migration.interlock").exists() or (state_dir / "migration.interlock").is_symlink():
-        raise ServiceError("existing monitor migration interlock requires manual recovery")
-    db = state_dir / "monitor.sqlite3"
-    if not db.exists():
-        return MigrationResult("absent")
-    if systemctl("cat", service).returncode != 0:
-        raise ServiceError("host monitor service is not installed")
-    if run(["systemctl", "--user", "stop", service]) != 0 or not _wait_service_inactive(service, manager=systemctl):
-        raise ServiceError("host monitor did not stop cleanly; conversion refused")
-    try:
-        result = migrate_stopped_store(state_dir)
-    except MonitorMigrationDeferred as exc:
-        if run(["systemctl", "--user", "start", service]) != 0 or not _wait_service_active(service, manager=systemctl):
-            raise ServiceError(f"monitor migration deferred and collector restart failed: {exc}") from exc
-        print(f"[service] monitor store migration deferred: {exc}")
-        return MigrationResult("deferred")
-    except MonitorMigrationFailed as exc:
-        raise ServiceError(str(exc)) from exc
-    if run(["systemctl", "--user", "start", service]) != 0 or not _wait_service_active(service, manager=systemctl):
-        if result.status == "converted_restart_pending" and result.receipt is not None:
-            try:
-                retain_restart_interlock(state_dir, result.receipt)
-                update_restart_receipt(result.receipt, status="collector_restart_failed")
-            except (OSError, ValueError) as exc:
-                run(["systemctl", "--user", "stop", service])
-                raise ServiceError(f"collector restart failed; recovery interlock/receipt failed: {exc}") from exc
-        run(["systemctl", "--user", "stop", service])
-        raise ServiceError("collector did not become active after monitor store migration")
-    if result.status == "converted_restart_pending" and result.receipt is not None:
-        try:
-            update_restart_receipt(result.receipt, status="succeeded")
-        except (OSError, ValueError) as exc:
-            raise ServiceError(f"collector active but migration restart receipt remains pending: {exc}") from exc
-        return MigrationResult("migrated", result.receipt)
-    return result
 
 
-def install_st_monitor_launcher(project: ProjectServices) -> int:
-    """Atomically adopt the narrow st launcher after a verified SummitFlow release."""
-    if project.project_id != "summitflow" or "summitflow-host-monitor.service" not in project.default_workers:
-        return 0
-    source = project.root / "scripts" / "st"
-    legacy = project.root / "backend" / ".venv" / "bin" / "st"
-    target = Path.home() / "bin" / "st"
-    if not source.is_file() or not os.access(source, os.X_OK):
-        print("[service] st monitor launcher is missing or not executable")
-        return 1
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.is_symlink():
-        if target.resolve(strict=False) not in {source.resolve(), legacy.resolve(strict=False)}:
-            print("[service] existing st symlink has a custom target; launcher install refused")
-            return 1
-    elif target.exists():
-        print("[service] existing st executable is not a symlink; launcher install refused")
-        return 1
-    temporary = target.with_name(".st-monitor-next")
-    if temporary.exists() or temporary.is_symlink():
-        print("[service] stale st launcher staging link; launcher install refused")
-        return 1
-    temporary.symlink_to(source)
-    os.replace(temporary, target)
-    print(f"[service] linked st -> {source}")
-    return 0
 
 
 @dataclass(frozen=True)
@@ -1830,7 +1627,6 @@ def queue_detached(
     scope: str = "full",
     workers: tuple[str, ...] = (),
     accepted_source: Mapping[str, Any] | None = None,
-    migrate_monitor_store: bool = False,
     with_ack: str | None = None,
     rollback: bool = False,
 ) -> int:
@@ -1841,8 +1637,6 @@ def queue_detached(
     command = ["st", "service", "rebuild"]
     if include_all_workers:
         command.append("--include-all-workers")
-    if migrate_monitor_store:
-        command.append("--migrate-monitor-store")
     if scope != "full":
         command.extend(["--scope", scope])
     for worker in workers:

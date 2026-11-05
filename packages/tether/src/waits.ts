@@ -39,10 +39,10 @@ import {
 } from './wait-kinds'
 import type { EndedSession, WakePolicy } from './wakes'
 
-export const WAIT_KINDS = ['session', ...PULL_KINDS] as const
+const WAIT_KINDS = ['session', ...PULL_KINDS] as const
 export type WaitKind = (typeof WAIT_KINDS)[number]
-export const SESSION_UNTILS = ['finished', 'idle', 'blocked', 'ended'] as const
-export type SessionUntil = (typeof SESSION_UNTILS)[number]
+const SESSION_UNTILS = ['finished', 'idle', 'blocked', 'ended'] as const
+type SessionUntil = (typeof SESSION_UNTILS)[number]
 export type WaitState = 'armed' | 'fired' | 'timed_out' | 'cancelled'
 export type WaitOutcome = 'until' | 'timeout' | 'gone'
 
@@ -155,7 +155,7 @@ function toWait(raw: RawWait): Wait {
 }
 
 /** The public shape. A kept wait does not show the conversation ID. */
-export function waitJson(wait: Wait): Record<string, unknown> {
+function waitJson(wait: Wait): Record<string, unknown> {
   return {
     id: wait.id,
     waiter: wait.waiter,
@@ -539,7 +539,7 @@ export function waitLine(
 
 /** A pull wait's line: the reading as fired, or the last one seen when the
  * thing is gone or the wait timed out without a reading. */
-export function pullWaitLine(
+function pullWaitLine(
   wait: Pick<Wait, 'kind' | 'ref' | 'until' | 'note' | 'armedAt' | 'cursor'>,
   outcome: WaitOutcome,
   reading: PullRead,

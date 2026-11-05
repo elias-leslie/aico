@@ -1,0 +1,79 @@
+{
+  "host": "davion-gem",
+  "units": [
+    {
+      "scope": "system",
+      "unit": "nightshift-boot-mark.service",
+      "install_state": "enabled",
+      "MainPID": "0",
+      "Requires": "sysinit.target system.slice",
+      "WantedBy": "multi-user.target",
+      "Triggers": "",
+      "TriggeredBy": "",
+      "ActiveState": "active",
+      "SubState": "exited",
+      "FragmentPath": "/etc/systemd/system/nightshift-boot-mark.service"
+    },
+    {
+      "scope": "system",
+      "unit": "nightshift-nightwatch-web.service",
+      "install_state": "disabled",
+      "MainPID": "0",
+      "Requires": "sysinit.target system.slice",
+      "WantedBy": "",
+      "Triggers": "",
+      "TriggeredBy": "",
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "FragmentPath": "/etc/systemd/system/nightshift-nightwatch-web.service"
+    },
+    {
+      "scope": "system",
+      "unit": "nightshift-nightwatch.service",
+      "install_state": "static",
+      "MainPID": "0",
+      "Requires": "sysinit.target system.slice",
+      "WantedBy": "",
+      "Triggers": "",
+      "TriggeredBy": "",
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "FragmentPath": "/etc/systemd/system/nightshift-nightwatch.service"
+    },
+    {
+      "scope": "system",
+      "unit": "summitflow-cpu-epp.service",
+      "install_state": "enabled",
+      "MainPID": "0",
+      "Requires": "sysinit.target system.slice",
+      "WantedBy": "multi-user.target",
+      "Triggers": "",
+      "TriggeredBy": "",
+      "ActiveState": "active",
+      "SubState": "exited",
+      "FragmentPath": "/etc/systemd/system/summitflow-cpu-epp.service"
+    },
+    {
+      "scope": "system",
+      "unit": "nightshift-nightwatch.timer",
+      "install_state": "disabled",
+      "Requires": "sysinit.target -.mount",
+      "WantedBy": "",
+      "Triggers": "nightshift-nightwatch.service",
+      "TriggeredBy": "",
+      "ActiveState": "inactive",
+      "SubState": "dead",
+      "FragmentPath": "/etc/systemd/system/nightshift-nightwatch.timer"
+    }
+  ],
+  "cron": [
+    {
+      "account": "root",
+      "active_lines": 0
+    },
+    {
+      "account": "kasadis",
+      "active_lines": 0
+    }
+  ]
+}

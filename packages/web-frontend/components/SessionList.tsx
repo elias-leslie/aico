@@ -1,8 +1,6 @@
 'use client'
 
-import type { RunMember } from '@aico/tether-client/teams'
 import {
-  childAgents,
   foldTeams,
   laneTitle,
   type TeamRow,
@@ -46,7 +44,7 @@ interface SessionListEntry {
 
 /** Sessions oldest first, so a state change never moves one (foldSessionEntries
  * lifts Needs you to the top); the same name with the same agent is numbered. */
-export function sortSessionEntries(
+function sortSessionEntries(
   slots: Array<TerminalSlot | PaneSlot>,
   attention?: SessionAttention,
 ): SessionListEntry[] {
@@ -83,8 +81,7 @@ interface TeamEntry {
   parentId: string | null
   group: Attention['group']
   at: number | null
-  entry: SessionListEntry | null
-  step: RunMember | null
+  entry: SessionListEntry
 }
 
 /** Fold entries into coordinator teams. A lane names its coordinator and
@@ -92,9 +89,8 @@ interface TeamEntry {
  * while it is listed; rows are keyed by slot. A workflow step that is running
  * or waiting for the owner folds under the session that launched its run,
  * like any other child agent. */
-export function foldSessionEntries(
+function foldSessionEntries(
   entries: readonly SessionListEntry[],
-  runs: readonly RunMember[] = [],
 ): TeamRow<TeamEntry>[] {
   const rowOf = new Map<string, string>()
   for (const entry of entries) {
@@ -114,20 +110,9 @@ export function foldSessionEntries(
       group: entry.state?.group ?? 'no-status',
       at: entry.state?.at ?? null,
       entry,
-      step: null,
     }
   })
-  const steps: TeamEntry[] = childAgents(runs).map((step) => ({
-    id: step.id,
-    coordinator: false,
-    coordinatorId: rowOf.get(step.coordinatorId) ?? step.coordinatorId,
-    parentId: null,
-    group: step.group,
-    at: step.at,
-    entry: null,
-    step,
-  }))
-  const teams = foldTeams([...sessions, ...steps])
+  const teams = foldTeams(sessions)
   if (!entries.some((entry) => entry.slot.chat)) return teams
   const order = {
     'needs-you': 0,
@@ -142,23 +127,12 @@ export function foldSessionEntries(
   )
 }
 
-/** What a row shows, whether it is a session or a workflow step: the step's
- * tool is its executor's, its state the one Tether reports. */
-function rowFacts(item: TeamEntry, attention: SessionAttention | undefined) {
-  const { entry, step } = item
-  if (entry)
-    return {
-      label: entry.label,
-      mode: entry.mode,
-      state: entry.state,
-      slot: entry.slot,
-    }
-  const member = step as RunMember
+function rowFacts(item: TeamEntry) {
   return {
-    label: member.title,
-    mode: member.tool ?? 'agent-hub',
-    state: attention?.forStep?.(member) ?? null,
-    slot: null,
+    label: item.entry.label,
+    mode: item.entry.mode,
+    state: item.entry.state,
+    slot: item.entry.slot,
   }
 }
 
@@ -195,22 +169,6 @@ function rowMeta(agent: string, state: Attention | null): string {
   return agent
 }
 
-/** What clicking a row does: a session opens as the main view (closing any step
- * open there), a running step opens read-only through `onOpenStep` or else the
- * main view's step viewer. */
-function useRowOpener(
-  onSelect: (slot: TerminalSlot | PaneSlot) => void,
-  onOpenStep: ((step: RunMember) => void) | undefined,
-) {
-  return (slot: TerminalSlot | PaneSlot | null, step: RunMember | null) => {
-    if (slot) {
-      onSelect(slot)
-    } else if (step) {
-      onOpenStep?.(step)
-    }
-  }
-}
-
 const TEAMS_OPEN_KEY = 'aico:teams-open'
 
 /** Which teams show their lanes. A desktop remembers each coordinator in
@@ -239,8 +197,6 @@ interface SessionListProps {
   currentId?: string
   attention?: SessionAttention
   onSelect: (slot: TerminalSlot | PaneSlot) => void
-  /** Open a running workflow step's current attempt, read-only. */
-  onOpenStep?: (step: RunMember) => void
   /** Phone: teams start folded and are not remembered. */
   phone?: boolean
 }
@@ -252,15 +208,12 @@ export function SessionList({
   currentId,
   attention,
   onSelect,
-  onOpenStep,
   phone = false,
 }: SessionListProps) {
   const { agentTools } = useAgentTools()
-  const open = useRowOpener(onSelect, onOpenStep)
-  const runs = attention?.runs
   const teams = useMemo(
-    () => foldSessionEntries(sortSessionEntries(slots, attention), runs?.items),
-    [slots, attention, runs?.items],
+    () => foldSessionEntries(sortSessionEntries(slots, attention)),
+    [slots, attention],
   )
   const folds = useTeamFolds(phone)
   const agentName = (mode: string) => toolName(agentTools, mode)
@@ -274,7 +227,7 @@ export function SessionList({
     lead: SessionListEntry | null,
   ): React.ReactNode => {
     const { id } = row.item
-    const { label, mode, state, slot } = rowFacts(row.item, attention)
+    const { label, mode, state, slot } = rowFacts(row.item)
     const isTeam = row.children.length > 0
     const sessionKey = slot ? (getSlotSessionId(slot) ?? id) : id
     const teamOpen = isTeam && folds.isOpen(sessionKey)
@@ -307,7 +260,7 @@ export function SessionList({
       <div key={id} className={clsx(isTeam && 'lantern-team')}>
         <button
           type="button"
-          onClick={() => open(slot, row.item.step)}
+          onClick={() => onSelect(slot)}
           aria-current={id === currentId ? 'true' : undefined}
           className={clsx('lantern-row', needs && 'needs', isTeam && 'lead')}
         >
@@ -374,11 +327,6 @@ export function SessionList({
 
   return (
     <>
-      {runs?.notice && (
-        <p role="status" className="lantern-run-notice">
-          {runs.notice}
-        </p>
-      )}
       {teams.map((row, index) => {
         const labels = {
           'needs-you': 'Needs you',
@@ -433,20 +381,17 @@ export function SessionRail({
   currentId,
   attention,
   onSelect,
-  onOpenStep,
 }: Omit<SessionListProps, 'phone'>) {
   const { agentTools } = useAgentTools()
-  const open = useRowOpener(onSelect, onOpenStep)
-  const runs = attention?.runs
   const teams = useMemo(
-    () => foldSessionEntries(sortSessionEntries(slots, attention), runs?.items),
-    [slots, attention, runs?.items],
+    () => foldSessionEntries(sortSessionEntries(slots, attention)),
+    [slots, attention],
   )
   return (
     <>
       {teams.map((row) => {
         const { id } = row.item
-        const { label, mode, state, slot } = rowFacts(row.item, attention)
+        const { label, mode, state, slot } = rowFacts(row.item)
         const tool = agentTools.find((t) => t.slug === mode)
         const agent = toolName(agentTools, mode)
         const needs = row.group === 'needs-you'
@@ -458,7 +403,7 @@ export function SessionRail({
           <button
             key={id}
             type="button"
-            onClick={() => open(slot, row.item.step)}
+            onClick={() => onSelect(slot)}
             aria-current={current ? 'true' : undefined}
             aria-label={name}
             title={name}

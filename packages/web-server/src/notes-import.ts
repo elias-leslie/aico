@@ -61,14 +61,14 @@ const sameSet = (a: string[], b: string[]) => {
 }
 
 /** The attachment id key for a file: its content, so a rerun is the same row. */
-export const fileKey = (hash: string) => `file-${hash.slice(0, 16)}`
+const fileKey = (hash: string) => `file-${hash.slice(0, 16)}`
 
 /**
  * Creates the note, or updates the one with this `source` when something
  * differs. With `dryRun` it only reports what would happen. A note the owner
  * deleted in Aico stays deleted. Blobs are written before the rows that name them.
  */
-export async function applyNote(
+async function applyNote(
   notes: NoteStore,
   blobsDir: string,
   note: ImportNote,
@@ -299,7 +299,7 @@ export interface KeepFolder {
 }
 
 /** Takeout/Keep inside the folder the owner extracted, or the folder itself. */
-export function findKeepDir(dir: string): string {
+function findKeepDir(dir: string): string {
   for (const candidate of [dir, join(dir, 'Keep'), join(dir, 'Takeout', 'Keep')]) {
     if (existsSync(candidate) && statSync(candidate).isDirectory()) {
       if (readdirSync(candidate).some((name) => name.toLowerCase().endsWith('.json')))
@@ -489,7 +489,7 @@ function keepNote(
  * in a title or label (`name`) and the looser words that only flag a note
  * whose text mentions them (`text`, listed apart for a second look).
  */
-export const PRIORITY_TOPICS: Record<string, { name: RegExp; text: RegExp }> = {
+const PRIORITY_TOPICS: Record<string, { name: RegExp; text: RegExp }> = {
   recipe: {
     name: /recipe|cookbook|cooking|baking/i,
     text: /recipe|ingredient|tablespoon|teaspoon|\bbake at\b|simmer/i,
@@ -501,7 +501,7 @@ export const PRIORITY_TOPICS: Record<string, { name: RegExp; text: RegExp }> = {
 }
 
 /** Topics a note's title (an untitled note's first line) or a label names. */
-export function topicsOf(note: ImportNote): string[] {
+function topicsOf(note: ImportNote): string[] {
   const title = note.title || note.body.split('\n', 1)[0]
   return Object.entries(PRIORITY_TOPICS)
     .filter(([, { name }]) => name.test(title) || note.labels.some((label) => name.test(label)))
@@ -509,7 +509,7 @@ export function topicsOf(note: ImportNote): string[] {
 }
 
 /** Topics whose words appear only in the text of the note. */
-export function textTopicsOf(note: ImportNote): string[] {
+function textTopicsOf(note: ImportNote): string[] {
   const text = `${note.body}\n${note.items.map((item) => item.text).join('\n')}`
   const named = topicsOf(note)
   return Object.entries(PRIORITY_TOPICS)

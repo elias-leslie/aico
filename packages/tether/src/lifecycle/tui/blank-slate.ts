@@ -38,9 +38,9 @@ export function isBlankSlateRoot(
  * its own run directory or the system temp directory (scratch) as a working
  * directory, so these live under /tmp, not beside the terminal workspaces.
  * `st aico create --tool agent-hub --blank-slate` uses the same path. */
-export const HUB_BLANK_SLATE_BASE = '/tmp/aico-blank-slate'
+const HUB_BLANK_SLATE_BASE = '/tmp/aico-blank-slate'
 
-export function isHubBlankSlateRoot(root: string | null | undefined): boolean {
+function isHubBlankSlateRoot(root: string | null | undefined): boolean {
   return Boolean(root) && dirname(root as string) === HUB_BLANK_SLATE_BASE
 }
 
@@ -61,7 +61,7 @@ export function ensureBlankSlateWorkspace(root: string): void {
 }
 
 /** Installed beside Tether's other scripts (scripts/install-release.sh). */
-export function blankSlateLauncher(env: NodeJS.ProcessEnv = process.env): string {
+function blankSlateLauncher(env: NodeJS.ProcessEnv = process.env): string {
   const lib = env.TETHER_LIB_DIR || join(env.HOME || homedir(), '.local', 'lib', 'tether')
   return join(lib, 'scripts', 'aico-blank-slate')
 }

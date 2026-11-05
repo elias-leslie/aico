@@ -107,3 +107,18 @@ def test_source_repo_rejects_identity_outside_the_admitted_request(project, tmp_
     repo, sha = _source_repo(tmp_path, identity)
     with pytest.raises(service_ops.ServiceError, match="identity"):
         service_ops.use_source_repo(project, repo, sha)
+
+
+def test_retired_monitor_is_not_carried_into_service_rebuild_workers(tmp_path):
+    identity = {"project": {"id": "summitflow"}, "runtime": {}, "services": {
+        "backend": "summitflow-backend.service", "default_workers": ["summitflow-host-monitor.service", "kept.service"]}}
+    project = service_ops._project_from_identity(identity, "summitflow", tmp_path)
+    assert project.default_workers == ("kept.service",)
+
+
+def test_unset_infrastructure_does_not_require_the_retired_shared_stack(tmp_path, monkeypatch):
+    project = service_ops._project_from_identity({"project": {"id": "example"}}, "example", tmp_path)
+    assert project.infra == ()
+    monkeypatch.setattr(service_ops, "capture", lambda *_a, **_k: pytest.fail("undeclared infrastructure probe"))
+    monkeypatch.setattr(service_ops.httpx, "get", lambda *_a, **_k: pytest.fail("undeclared Hatchet probe"))
+    assert service_ops.ensure_infra(project) == 0

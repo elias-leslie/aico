@@ -20,7 +20,7 @@ function cacheHome(env: NodeJS.ProcessEnv): string {
   return resolve(env.XDG_CACHE_HOME?.trim() || join(homedir(), '.cache'))
 }
 
-export const cacheDir = (env: NodeJS.ProcessEnv = process.env) =>
+const cacheDir = (env: NodeJS.ProcessEnv = process.env) =>
   env.AICO_WEB_CACHE_DIR?.trim()
     ? resolve(env.AICO_WEB_CACHE_DIR.trim())
     : join(cacheHome(env), 'aico', 'web')

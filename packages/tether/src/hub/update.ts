@@ -30,10 +30,10 @@ export { RELEASE_FILES } from '@aico/fleet/releases'
 
 /** How long the copy, install, restart and rollback may take in all: two
  * answer waits, two stops and the copies. */
-export const UPDATE_RUN_MS = 300_000
+const UPDATE_RUN_MS = 300_000
 /** How long the host's restarted Tether has to answer before rollback, and
  * the rolled-back one after it. */
-export const UPDATE_ANSWER_SEC = 90
+const UPDATE_ANSWER_SEC = 90
 /** The host script's exit when another update holds the host's lock. */
 export const UPDATE_BUSY_EXIT = 75
 /** The line the host script prints just before it installs anything. */
@@ -80,7 +80,7 @@ export function releaseId(release: string | null): string {
 }
 
 /** The shell line the host runs with the release's tar on stdin. */
-export function updateLine(
+function updateLine(
   instance: string,
   socket: string,
   answerSec: number = UPDATE_ANSWER_SEC,

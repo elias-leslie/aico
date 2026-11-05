@@ -14,13 +14,13 @@ import type { EventBus } from './events'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import type { Hub } from './hub/hub'
 
-export const MAX_ASK_OPTIONS = 5
+const MAX_ASK_OPTIONS = 5
 /** The most files one ask can want or be answered with. */
-export const MAX_ASK_FILES = 20
+const MAX_ASK_FILES = 20
 /** Ids named in the wake line; the rest are in `tether ask get`. */
 const FILES_IN_NOTE = 5
 /** The most asks listed at once (newest kept). */
-export const MAX_LISTED_ASKS = 200
+const MAX_LISTED_ASKS = 200
 
 const ID = /^[0-9a-f]{12}$/
 const SESSION = /^[0-9a-f]{8}$/
@@ -224,7 +224,7 @@ function only(body: Record<string, unknown>, allowed: readonly string[]): void {
   if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
 }
 
-export function parseAsk(body: Record<string, unknown>): AskRequest {
+function parseAsk(body: Record<string, unknown>): AskRequest {
   only(body, [
     'session',
     'requester',
@@ -604,7 +604,7 @@ export function sessionAsks(sessionId: string): Record<string, unknown>[] {
 // --- the tray feed --------------------------------------------------------------
 
 /** How often the feed is rewritten unchanged, so a reader can tell Tether is up. */
-export const FEED_HEARTBEAT_MS = 60_000
+const FEED_HEARTBEAT_MS = 60_000
 
 /** The Nightshift tray's view of the asks (handoffs TRAY-FEED-CONTRACT.md):
  * counts and the newest open ask's id and asker, never the question. */
@@ -634,7 +634,7 @@ export function aicoOrigin(raw: string | undefined): string | null {
   }
 }
 
-export function needsYouFeed(
+function needsYouFeed(
   summary: ReturnType<AskStore['openSummary']>,
   nameOf: (sessionId: string) => string | null,
   now: number,
@@ -695,7 +695,7 @@ const STATES: readonly AskState[] = ['open', 'answered', 'done', 'withdrawn']
 /** Where an ask's answer goes now: the asker while it is there, else the
  * session that launched it, else its coordinator, else nobody (read it with
  * `tether ask get`). */
-export function answerTarget(ask: Ask, delivery: AskDelivery | undefined): string | null {
+function answerTarget(ask: Ask, delivery: AskDelivery | undefined): string | null {
   if (!ask.session || !delivery) return null
   if (!delivery.receiver) return ask.session
   for (const id of [ask.session, ask.launcher, ask.coordinator])
@@ -717,7 +717,7 @@ function clipLine(text: string, max: number): string {
 
 /** The line a lane's launcher gets when the lane files an ask: relay it or
  * close it, never ask the owner again. */
-export function askFiledLine(ask: Ask, name: string, max: number): string {
+function askFiledLine(ask: Ask, name: string, max: number): string {
   const tail = ` · relay or close it, don't ask again: tether ask get ${ask.id}`
   const head = `[Ask] session ${name} asked the owner (${ask.id}): `
   const room = Math.max(10, max - chars(head) - chars(tail) - 2)
@@ -725,7 +725,7 @@ export function askFiledLine(ask: Ask, name: string, max: number): string {
 }
 
 /** The one line a launcher gets when a session ends with open asks. */
-export function askHandOffLine(asks: readonly Ask[], name: string): string {
+function askHandOffLine(asks: readonly Ask[], name: string): string {
   const ids = asks.slice(0, 5).map((ask) => ask.id)
   const more = asks.length > ids.length ? ` and ${asks.length - ids.length} more` : ''
   const which = asks.length === 1 ? 'an open ask' : `${asks.length} open asks`

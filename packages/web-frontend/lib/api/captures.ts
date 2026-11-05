@@ -110,7 +110,7 @@ const STATUSES: readonly string[] = [
 ]
 const PREVIEWS: readonly string[] = ['ready', 'pending', 'unavailable']
 
-export function isCapture(value: unknown): value is Capture {
+function isCapture(value: unknown): value is Capture {
   if (!value || typeof value !== 'object') return false
   const item = value as Record<string, unknown>
   return (
@@ -128,12 +128,12 @@ export function isCapture(value: unknown): value is Capture {
   )
 }
 
-export function parseCapture(value: unknown): Capture {
+function parseCapture(value: unknown): Capture {
   if (!isCapture(value)) throw new Error('Invalid capture')
   return value
 }
 
-export function parseCapturePage(value: unknown): CapturePage {
+function parseCapturePage(value: unknown): CapturePage {
   const page = value as { captures?: unknown; total?: unknown } | null
   if (!page || !Array.isArray(page.captures) || typeof page.total !== 'number')
     throw new Error('Invalid captures')

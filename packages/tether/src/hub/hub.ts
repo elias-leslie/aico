@@ -22,30 +22,29 @@ import {
   type PeerIdentity,
   type PeerSnapshot,
   type PeerUpdate,
-  type RunsLike,
 } from './peer'
 import type { PeerView } from './placement'
 import { installStarted, pushRelease, releaseId, runningRelease, type Updater } from './update'
 import { defaultGateRuntime, type GateRuntime, readyHost } from './wake'
 
 export const LIST_TIMEOUT_MS = 1_500
-export const QUERY_TIMEOUT_MS = 10_000
+const QUERY_TIMEOUT_MS = 10_000
 /** Create waits for the peer's own launch (agent admission can be slow). */
 export const CREATE_TIMEOUT_MS = 120_000
 const RELOAD_MS = 5_000
 const PERSIST_DEBOUNCE_MS = 2_000
 const IDENTITIES_KEY = 'peer_identities'
 /** How long an updated host's Tether has to come back on the link. */
-export const UPDATE_RECONNECT_MS = 60_000
+const UPDATE_RECONNECT_MS = 60_000
 const UPDATE_POLL_MS = 500
 /** Failed updates by host, with the hub release that tried them. */
 const UPDATE_FAILURES_KEY = 'peer_update_failures'
 const SNAPSHOTS_KEY = 'peer_sessions'
 
 const SESSION_ID = /^[0-9a-f]{8}$/
-const ROUTE = /^\/v1\/(sessions|widgets|roots|wakes|runs|asks)\/([^/?]+)(\/[^?]*)?$/
+const ROUTE = /^\/v1\/(sessions|widgets|roots|wakes|asks)\/([^/?]+)(\/[^?]*)?$/
 /** The session asking for a forwarded End (API 23; lowercase, as Node keeps it). */
-export const ENDED_BY_HEADER = 'tether-ended-by'
+const ENDED_BY_HEADER = 'tether-ended-by'
 
 export interface HubDeps {
   env: NodeJS.ProcessEnv
@@ -58,7 +57,6 @@ export interface HubDeps {
   isLocalSession(id: string): boolean
   /** With an identity, match only that exact root, not a same-named remote root. */
   isLocalRoot(requestId: string, logicalSessionId?: string): boolean
-  isLocalRun(runId: string): boolean
   isLocalAsk?(id: string): boolean
   /** The badge name of a local coordinator (`↳ <name>` on a remote lane), or null. */
   leadName(id: string): string | null
@@ -463,26 +461,6 @@ export class Hub {
     return lists.flat()
   }
 
-  /** Local runs plus each peer's, tagged; a peer that is down makes the answer stale. */
-  mergeRuns<T extends { status: RunsLike['status']; error: string | null; items: object[] }>(
-    local: T,
-  ): T {
-    const merged: T = { ...local, items: [...local.items] }
-    for (const peer of this.peers.values()) {
-      const runs = peer.runs()
-      if (!runs) continue
-      merged.items.push(...runs.items.map((item) => ({ ...item, host: peer.name })))
-      // Only rows can be out of date: a host that lists none (one with no
-      // Agent Hub client id never asks) leaves this computer's runs alone.
-      const stale = runs.items.length > 0 && (!peer.live || runs.status !== 'ok')
-      if (stale && merged.status === 'ok') {
-        merged.status = 'stale'
-        merged.error ??= peer.live ? runs.error : downReason(peer.name, peer.state)
-      }
-    }
-    return merged
-  }
-
   /** Local asks plus each peer's (tagged with `host`; `peer` says why they are not
    * live while the link is down), filtered as `GET /v1/asks` filters. */
   mergeAsks(
@@ -627,8 +605,6 @@ export class Hub {
         if (!this.deps.isLocalRoot(id) && peer.ownsRoot(id)) return peer
       } else if (kind === 'wakes') {
         if (peer.ownsWake(id)) return peer
-      } else if (kind === 'runs') {
-        if (!this.deps.isLocalRun(id) && peer.ownsRun(id)) return peer
       } else if (kind === 'asks') {
         if (!this.deps.isLocalAsk?.(id) && peer.ownsAsk(id)) return peer
       }

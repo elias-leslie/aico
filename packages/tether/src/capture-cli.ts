@@ -162,7 +162,7 @@ export function formatCapture(item: CaptureJson): string {
 }
 
 /** The reading of one capture as plain text, for an agent in a terminal. */
-export function formatResult(item: CaptureJson): string {
+function formatResult(item: CaptureJson): string {
   const read = item.extract ?? {}
   const lines = [`${item.id}  ${item.type ?? 'unknown type'}${read.title ? `  ${read.title}` : ''}`]
   if (item.needsCheck) lines.push('  note: read by the fallback reader, so check it')

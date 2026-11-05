@@ -7,9 +7,6 @@ import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
 import { promisify } from 'node:util'
-import { registerChatRoutes } from './agent-hub/chat-api'
-import { resolveDefaultChatAgent } from './agent-hub/config'
-import { type AgentHubRuntime, HubError } from './agent-hub/runtime'
 import type { AgentStateTracker, HookReport } from './agent-state'
 import { sessionAsks } from './asks'
 import type { TetherPaths } from './config'
@@ -33,7 +30,6 @@ import {
   clearLaunched,
   getTmuxServer,
   getWidget,
-  insertAgentHubChat,
   insertWidget,
   joinCoordinator,
   listSessions,
@@ -108,7 +104,6 @@ import {
   createBlankSlateWorkspace,
   ensureBlankSlateWorkspace,
   isBlankSlateRoot,
-  isHubBlankSlateRoot,
   supportsBlankSlate,
 } from './lifecycle/tui/blank-slate'
 import { staticContextStatus } from './lifecycle/tui/context'
@@ -118,13 +113,7 @@ import {
   sessionInstructions,
 } from './lifecycle/tui/instructions'
 import { listsModel } from './lifecycle/tui/models'
-import {
-  ADAPTERS,
-  AGENT_HUB_TOOL,
-  adapterOf,
-  getTui,
-  supportsInstructions,
-} from './lifecycle/tui/registry'
+import { ADAPTERS, adapterOf, getTui, supportsInstructions } from './lifecycle/tui/registry'
 import { extractSignInLink, signInToolOf } from './lifecycle/tui/sign-in-link'
 import type { ModelSwitch, ModelWatch } from './model-switch'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
@@ -206,7 +195,7 @@ function atCapacityLine(verdict: HostVerdict): { host: string; reason: string } 
 }
 
 /** `GET /v1/placement?mem=<bytes>&cpu=<n>&cap=<name>`: needs from a query, or null. */
-export function needsFromQuery(query: URLSearchParams): Needs | null {
+function needsFromQuery(query: URLSearchParams): Needs | null {
   const mem = query.get('mem')
   const cpu = query.get('cpu')
   if (
@@ -238,28 +227,20 @@ export function bindModelWatch(watch: ModelWatch | null): void {
 }
 
 /** The session's standing model switch (docs/api-v1.md "Model switches"). */
-export function sessionModelSwitch(id: string): ModelSwitch | null {
+function sessionModelSwitch(id: string): ModelSwitch | null {
   return modelWatch?.switchOf(id) ?? null
-}
-
-/** The Agent Hub session kind's runtime (src/agent-hub/); unbound in route-only tests. */
-let agentHub: AgentHubRuntime | null = null
-
-export function bindAgentHub(runtime: AgentHubRuntime | null): void {
-  agentHub = runtime
 }
 
 /** The session's agent state fields (docs/api-v1.md "Agent state"). */
 export function agentStateOf(id: string): Record<string, unknown> {
-  const record = agentHub?.stateOf(id) ??
-    agentStates?.get(id) ?? {
-      state: 'unknown',
-      stateSource: 'none',
-      stateAt: 0,
-      stateDetail: null,
-      statePrevious: 'unknown',
-      stateAgentAt: 0,
-    }
+  const record = agentStates?.get(id) ?? {
+    state: 'unknown',
+    stateSource: 'none',
+    stateAt: 0,
+    stateDetail: null,
+    statePrevious: 'unknown',
+    stateAgentAt: 0,
+  }
   return { ...record, stateAt: record.stateAt || null, stateAgentAt: record.stateAgentAt || null }
 }
 
@@ -273,7 +254,7 @@ export function generationOf(row: WidgetRow): string {
  * probes the hook after each launch and after its own restart; `unknown` means
  * no probe for the session's current tool has finished yet.
  */
-export function contextHookOf(row: WidgetRow): Record<string, unknown> {
+function contextHookOf(row: WidgetRow): Record<string, unknown> {
   if (row.backend === 'agent-hub')
     return {
       state: 'unknown',
@@ -347,7 +328,6 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
     createdAt: row.createdAt,
     // An Agent Hub session has no pane (its `tmux` fields stay null) and says
     // which Agent Hub session it is; a tmux session carries neither field.
-    ...(hub ? { backend: row.backend, agentHub: agentHub?.describe(row.id) ?? null } : {}),
     // This computer's own session; the hub tags a remote host's with its name.
     host: null,
   }
@@ -464,8 +444,8 @@ async function runTmux(args: string[], maxBuffer = 1024 * 1024): Promise<string>
 }
 
 /** Client environment for `tmux attach` (docs/api-v1.md Terminal I/O). */
-export const ATTACH_ENV = { TERM: 'xterm-256color', COLORTERM: 'truecolor', CLICOLOR: '1' }
-export const ATTACH_UNSET = ['TMUX', 'TMUX_PANE', 'TMUX_TMPDIR', 'NO_COLOR']
+const ATTACH_ENV = { TERM: 'xterm-256color', COLORTERM: 'truecolor', CLICOLOR: '1' }
+const ATTACH_UNSET = ['TMUX', 'TMUX_PANE', 'TMUX_TMPDIR', 'NO_COLOR']
 
 function attachArgv(target: TmuxTarget): string[] {
   if (!target.socket) throw new HttpError(409, 'workload_unavailable')
@@ -500,11 +480,6 @@ async function withRunningSession<T>(
 export async function pasteIntoRunningSession(widgetId: string, text: string): Promise<boolean> {
   const row = getWidget(widgetId)
   if (!row || !isBoundedTerminalText(text)) return false
-  if (row.backend === 'agent-hub')
-    return deliverToAgentHub(row, generationOf(row), text).then(
-      () => true,
-      () => false,
-    )
   const delivered = await withRunningSession(row.id, generationOf(row), async (current) => {
     await runTmux(bracketedPasteTargetArgs(tmuxPaneTargetForWidget(current.id), text, true))
     return true
@@ -532,30 +507,6 @@ export async function pressKeysInRunningSession(
     },
   )
   return pressed === true
-}
-
-/** Post `text` to an Agent Hub session as a turn (queued while one runs),
- * only if it is the exact running generation. */
-async function deliverToAgentHub(
-  row: WidgetRow,
-  generation: string,
-  text: string,
-  model?: string | null,
-  thinkingLevel: string | null = null,
-): Promise<{ queued: boolean }> {
-  if (!agentHub) throw new HttpError(503, 'agent_hub_unavailable')
-  const current = getWidget(row.id)
-  if (!current || generationOf(current) !== generation) throw new HttpError(409, 'stale_generation')
-  if ((await verifySessionStatus(current)) !== 'running')
-    throw new HttpError(409, 'workload_unavailable')
-  try {
-    return await agentHub.send(row.id, text, model, thinkingLevel)
-  } catch (error) {
-    if (!(error instanceof HubError)) throw error
-    if (error.code === 'agent_hub_unavailable') throw new HttpError(503, 'agent_hub_unavailable')
-    if (error.code === 'unknown_model') throw new HttpError(409, 'unknown_model')
-    throw new HttpError(409, 'workload_unavailable', { reason: error.message })
-  }
 }
 
 /** A route that needs a terminal answers an Agent Hub session with this. */
@@ -588,22 +539,12 @@ function applyCoordinator(id: string, coordinator: boolean | string): void {
 
 /** Title and coordinator mutations apply to the catalog on the exact running
  * generation. Aico has no desktop windows, so there is no view to forward to. */
-export function applyViewMutation(): (
+function applyViewMutation(): (
   widgetId: string,
   generation: string,
   mutation: WidgetMutation,
 ) => Promise<boolean | MutationRejection> {
   return async (widgetId, generation, mutation) => {
-    const hubRow = getWidget(widgetId)
-    if (hubRow?.backend === 'agent-hub') {
-      if (generationOf(hubRow) !== generation || (await verifySessionStatus(hubRow)) !== 'running')
-        return false
-      if (mutation.kind === 'title') {
-        setWidgetName(hubRow.id, mutation.label)
-        notifySessionChanged(hubRow.id, { force: true })
-      } else applyCoordinator(hubRow.id, mutation.coordinator)
-      return true
-    }
     // The title is the session name and the coordinator mark is session
     // metadata. Change the exact running generation under the lifecycle lock.
     return withRunningSession(widgetId, generation, async (row) => {
@@ -712,36 +653,19 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
     },
     remoteRoots: (search) => context.hub?.roots(search) ?? Promise.resolve([]),
     validate: (request) => {
-      if (request.tool === AGENT_HUB_TOOL) {
-        if (isHubBlankSlateRoot(request.projectRoot)) ensureBlankSlateWorkspace(request.projectRoot)
-        return isDir(request.projectRoot)
-      }
       if (isBlankSlateRoot(request.projectRoot)) ensureBlankSlateWorkspace(request.projectRoot)
       return Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot))
     },
     refuse: async (request) => {
-      if (request.tool !== AGENT_HUB_TOOL) {
-        const spec = getTui(request.tool)
-        // An entry's agent runs elsewhere: this host's model list says nothing about it.
-        if (!spec || !request.model || request.entry) return null
-        if ((await listsModel(spec, request.model)) !== false) return null
-        return {
-          status: 422,
-          error: 'unknown_model',
-          reason: `${request.tool} on ${hostname()} has no model ${request.model} (${[spec.command[0], ...(spec.modelSelection?.listModels ?? [])].join(' ')})`,
-        }
+      const spec = getTui(request.tool)
+      // An entry's agent runs elsewhere: this host's model list says nothing about it.
+      if (!spec || !request.model || request.entry) return null
+      if ((await listsModel(spec, request.model)) !== false) return null
+      return {
+        status: 422,
+        error: 'unknown_model',
+        reason: `${request.tool} on ${hostname()} has no model ${request.model} (${[spec.command[0], ...(spec.modelSelection?.listModels ?? [])].join(' ')})`,
       }
-      if (!request.agentSlug) return null
-      if (!agentHub) return { status: 503, error: 'agent_hub_unavailable' }
-      try {
-        await agentHub.check(request.agentSlug, request.model ?? null)
-      } catch (error) {
-        if (!(error instanceof HubError)) throw error
-        if (error.code === 'unknown_agent' || error.code === 'unknown_model')
-          return { status: 422, error: error.code }
-        return { status: 503, error: 'agent_hub_unavailable' }
-      }
-      return null
     },
     resumeOwner: (resumeSessionId) => context.recovery?.resumeOwner(resumeSessionId) ?? null,
     agentExit: (row) => {
@@ -757,13 +681,6 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
     ensure: async (widgetId, prompt, resumeSessionId, options) => {
       await whenReady()
       const row = getWidget(widgetId)
-      if (row?.backend === 'agent-hub') {
-        await agentHub?.ensure(widgetId, prompt)
-        const latest = getWidget(widgetId)
-        if (latest) await verifySessionStatus(latest).catch(() => undefined)
-        context.events.publish('root.updated', { id: widgetId })
-        return
-      }
       // Root cwd is exact. Never inherit another project or fall back to a
       // default directory after the requested one disappears.
       if (!row?.projectRoot || !isDir(row.projectRoot)) return
@@ -832,65 +749,6 @@ export function learnProjects(
 const AGENT_SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
 
-/**
- * A chat on an Agent Hub agent, started from a menu: no terminal and no first
- * message. The agent is the caller's `agentSlug`, else the configured default;
- * the model is the agent's own unless the caller names one. Agent Hub is asked
- * first, so an unknown agent or model, or Agent Hub being down, is refused
- * before anything exists. A project root Agent Hub will not accept shows up
- * with the first message (the chat reports Agent Hub's reason).
- */
-async function createAgentHubChat(
-  res: ServerResponse,
-  body: Record<string, unknown>,
-  input: {
-    origin: SessionOrigin
-    aTermSessionId: string | null
-    name: string | null
-    projectId: string | null
-    projectRoot: string | null
-    hasInstructions: boolean
-  },
-): Promise<void> {
-  const { projectId, projectRoot } = input
-  if (body.blankSlate !== undefined && body.blankSlate !== false)
-    throw new HttpError(400, 'blank_slate_unsupported')
-  if (input.hasInstructions) throw new HttpError(400, 'instructions_unsupported')
-  if (!projectId || !projectRoot) throw new HttpError(400, 'invalid_body', { field: 'projectId' })
-  const agentSlug = body.agentSlug === undefined ? resolveDefaultChatAgent() : body.agentSlug
-  if (typeof agentSlug !== 'string' || !AGENT_SLUG.test(agentSlug))
-    throw new HttpError(400, 'invalid_body', { field: 'agentSlug' })
-  const model = body.model ?? null
-  if (model !== null && (typeof model !== 'string' || !MODEL_ID.test(model)))
-    throw new HttpError(400, 'invalid_body', { field: 'model' })
-  if (!agentHub) throw new HttpError(503, 'agent_hub_unavailable')
-  try {
-    await agentHub.check(agentSlug, model)
-  } catch (error) {
-    if (!(error instanceof HubError)) throw error
-    if (error.code === 'unknown_agent' || error.code === 'unknown_model')
-      throw new HttpError(422, error.code, { reason: error.message })
-    throw new HttpError(503, 'agent_hub_unavailable', { reason: error.message })
-  }
-  await whenReady()
-  const id = allocateWidgetId()
-  insertAgentHubChat(id, {
-    origin: input.origin,
-    aTermSessionId: input.aTermSessionId,
-    projectId,
-    projectRoot,
-    hub: { hubSessionId: randomUUID(), agentSlug, model },
-  })
-  if (input.name) setWidgetName(id, input.name)
-  await agentHub.ensure(id, '')
-  const row = getWidget(id)
-  if (!row) throw new HttpError(404, 'not_found')
-  const status = await verifySessionStatus(row).catch(() => cachedSessionStatus(row))
-  const latest = getWidget(id) ?? row
-  notifySessionChanged(id, { force: true })
-  sendJson(res, status === 'running' ? 201 : 202, descriptor(latest, status))
-}
-
 export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
   if (context.continuity) registerRebootRoutes(router, context.continuity)
   if (context.recovery) registerRecoveryRoutes(router, context.recovery)
@@ -905,14 +763,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     () => context.waits ?? null,
     (id) => getWidget(id) !== undefined,
   )
-  registerChatRoutes(router, {
-    runtime: () => agentHub,
-    requireSession,
-    fence,
-    requireGeneration,
-    only,
-    whenReady,
-  })
   const { store, events } = context
   const rootHandler = createRootHandler(rootOperations(context))
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
@@ -1041,17 +891,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         throw new HttpError(400, 'invalid_body', { field: 'instructions' })
       if (instructions && !supportsInstructions(tool.slug))
         throw new HttpError(400, 'instructions_unsupported')
-      if (tool.slug === AGENT_HUB_TOOL) {
-        await createAgentHubChat(res, body, {
-          origin: origin as SessionOrigin,
-          aTermSessionId,
-          name,
-          projectId,
-          projectRoot,
-          hasInstructions: instructions !== null,
-        })
-        return
-      }
       if (body.agentSlug !== undefined || body.model !== undefined)
         throw new HttpError(400, 'invalid_body', { field: 'agentSlug' })
       await whenReady()
@@ -1191,7 +1030,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const spec = tool?.enabled ? getTui(tool.slug) : undefined
       if (!spec) throw new HttpError(400, 'unknown_tool')
       // A chat has no terminal to put in a pane.
-      if (tool?.slug === AGENT_HUB_TOOL) throw new HttpError(400, 'unsupported_tool')
       const row = requireSession(params.id)
       requireTmuxBackend(row)
       fence(row, generation)
@@ -1244,16 +1082,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('GET', '/v1/sessions/:id/diagnostics', async (_req, res, params) => {
       const row = requireSession(params.id)
-      if (row.backend === 'agent-hub') {
-        // No containment to report: Agent Hub's own view of the session.
-        sendJson(res, 200, {
-          id: row.id,
-          backend: row.backend,
-          agentHub: agentHub?.describe(row.id) ?? null,
-          agent: agentStateOf(row.id),
-        })
-        return
-      }
       sendJson(res, 200, { ...(await sessionDiagnostics(row.id)), agent: agentStateOf(row.id) })
     })
     // Agent hooks inside the pane (Claude Code Notification/UserPromptSubmit)
@@ -1383,47 +1211,12 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         throw new HttpError(400, 'invalid_body', { field: 'submit' })
       if (body.mode === 'type' && body.submit)
         throw new HttpError(400, 'invalid_body', { field: 'submit' })
-      // The catalog model for this turn of an Agent Hub session; null asks for the agent's own routing.
-      const model = body.model
-      if (
-        model !== undefined &&
-        model !== null &&
-        (typeof model !== 'string' || model.length < 1 || model.length > 128)
-      )
-        throw new HttpError(400, 'invalid_body', { field: 'model' })
-      // The thinking level (effort) for this turn; null or left out is the model's own default.
-      // Agent Hub holds the list of levels a model takes and refuses any other.
-      const thinkingLevel = body.thinkingLevel
-      if (
-        thinkingLevel !== undefined &&
-        thinkingLevel !== null &&
-        (typeof thinkingLevel !== 'string' || !/^[a-z]{1,16}$/.test(thinkingLevel))
-      )
-        throw new HttpError(400, 'invalid_body', { field: 'thinkingLevel' })
       const row = requireSession(params.id)
       fence(row, generation)
       await whenReady()
-      if (model !== undefined && row.backend !== 'agent-hub')
-        throw new HttpError(400, 'invalid_body', { field: 'model' })
-      if (thinkingLevel !== undefined && row.backend !== 'agent-hub')
+      if (body.model !== undefined) throw new HttpError(400, 'invalid_body', { field: 'model' })
+      if (body.thinkingLevel !== undefined)
         throw new HttpError(400, 'invalid_body', { field: 'thinkingLevel' })
-      if (row.backend === 'agent-hub') {
-        // A follow-up is a turn; typing keystrokes has no meaning here.
-        if (body.mode !== 'paste' || body.submit !== true)
-          throw new HttpError(400, 'invalid_body', { field: 'mode' })
-        const { queued } = await deliverToAgentHub(
-          row,
-          generation,
-          text,
-          model,
-          thinkingLevel ?? null,
-        )
-        if (from && from !== row.id) context.waits?.store.recordSend(from, row.id, sentAt)
-        // A follow-up reached the lane: its next went-idle line wakes.
-        if (from !== row.id) context.lanes?.reached(row.id, 'a send reached it')
-        sendJson(res, 200, { generation, delivered: true, queued })
-        return
-      }
       const mode = body.mode
       const submit = body.submit === true
       const delivered = await withRunningSession(row.id, generation, async (current) => {

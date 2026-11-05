@@ -50,7 +50,7 @@ export const PTY_RESIZE_DEBOUNCE_MS = 120
 export const SCROLL_THRESHOLD = 50
 
 /** Copy-mode timeout in milliseconds (auto-exit after inactivity) */
-export const COPY_MODE_TIMEOUT_MS = 10000
+const COPY_MODE_TIMEOUT_MS = 10000
 
 /** Terminal font: the vendored JetBrains Mono (packages/ui-kit/fonts). */
 export const TERMINAL_FONT_FAMILY = LANTERN_MONO_FAMILY

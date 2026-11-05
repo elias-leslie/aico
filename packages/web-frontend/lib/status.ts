@@ -210,7 +210,7 @@ export function at(ms: number | null, now: number): string {
 }
 
 /** The phone's short form: "4:30 AM", "Mon 4:51 PM", "Oct 28". */
-export function atShort(ms: number | null, now: number): string {
+function atShort(ms: number | null, now: number): string {
   if (ms === null || Number.isNaN(ms)) return '—'
   if (dayKey(ms) === dayKey(now)) return clock(ms)
   return Math.abs(now - ms) < 6 * DAY

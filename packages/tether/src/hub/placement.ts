@@ -44,7 +44,7 @@ export const AUTO_HOST = 'auto'
 /** This computer in placement config and answers. */
 export const LOCAL_HOST = 'local'
 /** The pool a create without `pool` uses: `order`, plus hosts no pool lists. */
-export const DEFAULT_POOL = 'default'
+const DEFAULT_POOL = 'default'
 const SETTINGS_KEY = 'placement_reservations'
 const READ_MS = 10_000
 const ROOT_QUERY_MS = 5_000
@@ -125,14 +125,14 @@ export interface PlacementConfig {
 }
 
 /** Overridable defaults; the owner's values live in placement.json. */
-export const DEFAULT_LOCAL: HostPlacement = {
+const DEFAULT_LOCAL: HostPlacement = {
   reserveBytes: 6 * GIB,
   reserveCpu: 2,
   proxmox: null,
   room: null,
   capabilitiesOn: null,
 }
-export const DEFAULT_REMOTE: HostPlacement = {
+const DEFAULT_REMOTE: HostPlacement = {
   reserveBytes: 2 * GIB,
   reserveCpu: 1,
   proxmox: null,
@@ -140,16 +140,16 @@ export const DEFAULT_REMOTE: HostPlacement = {
   capabilitiesOn: null,
 }
 /** A `room: "local"` host's own reserve, taken on top of this computer's. */
-export const DEFAULT_ROOM_LOCAL = { reserveBytes: 0, reserveCpu: 0 }
+const DEFAULT_ROOM_LOCAL = { reserveBytes: 0, reserveCpu: 0 }
 const DEFAULT_PVE_RESERVE = 2 * GIB
 const DEFAULT_MIN_STORAGE = 20 * GIB
 /** Neri's live-ready marker (plan contract 4). */
-export const DEFAULT_CAPABILITIES: Record<string, CapabilityProbe> = {
+const DEFAULT_CAPABILITIES: Record<string, CapabilityProbe> = {
   'live-ready': { marker: '.local/state/neri-proxy/live-ready.json', fingerprint: null },
 }
 
 /** `$TETHER_PLACEMENT_FILE`, else `$XDG_CONFIG_HOME/tether/placement.json`. */
-export function placementFilePath(env: NodeJS.ProcessEnv): string {
+function placementFilePath(env: NodeJS.ProcessEnv): string {
   if (env.TETHER_PLACEMENT_FILE) return env.TETHER_PLACEMENT_FILE
   const configRoot = env.XDG_CONFIG_HOME || join(env.HOME ?? homedir(), '.config')
   return join(configRoot, 'tether', 'placement.json')
@@ -327,7 +327,7 @@ export function parsePlacement(text: string | null, hostNames: string[]): Placem
   return { order, pools, hosts, capabilities, errors }
 }
 
-export function loadPlacement(path: string, hostNames: string[]): PlacementConfig {
+function loadPlacement(path: string, hostNames: string[]): PlacementConfig {
   let text: string | null = null
   try {
     text = readFileSync(path, 'utf8')
@@ -410,7 +410,7 @@ export interface ProxmoxReading {
   storageAvailBytes: number | null
 }
 
-export function proxmoxLine(ref: ProxmoxRef): string {
+function proxmoxLine(ref: ProxmoxRef): string {
   const get = (path: string) => `pvesh get ${path} --output-format json`
   const parts = [
     get(`/nodes/${ref.node}/status`),
@@ -424,7 +424,7 @@ function bytes(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
-export function parseProxmox(stdout: string, ref: ProxmoxRef): ProxmoxReading {
+function parseProxmox(stdout: string, ref: ProxmoxRef): ProxmoxReading {
   const parts = stdout.split(`${SEPARATOR}\n`)
   if (parts.length !== (ref.storage ? 3 : 2)) throw new Error('the reading is incomplete')
   const docs = parts.map((part) => record(JSON.parse(part)))

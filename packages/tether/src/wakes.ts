@@ -70,7 +70,7 @@ export const DEFAULT_WAKE_POLICY: Readonly<WakePolicy> = Object.freeze({
   waitKeepDays: 7,
 })
 
-export const WAKE_POLICY_BOUNDS: Readonly<Record<keyof WakePolicy, { min: number; max: number }>> =
+const WAKE_POLICY_BOUNDS: Readonly<Record<keyof WakePolicy, { min: number; max: number }>> =
   Object.freeze({
     laterMinutes: { min: 5, max: 1440 },
     tonightHour: { min: 0, max: 23 },
@@ -221,7 +221,7 @@ function replyFromOf(raw: string | null | undefined): string[] {
 }
 
 /** Whether this row alone justifies waking the session (anything but a ride-along line). */
-export function isWakeClass(wake: Pick<Wake, 'kind' | 'ride'>): boolean {
+function isWakeClass(wake: Pick<Wake, 'kind' | 'ride'>): boolean {
   return wake.kind !== 'event' || !wake.ride
 }
 
@@ -235,7 +235,7 @@ const ANSWER_SOURCE = /^ask:[0-9a-f]{12}$/
  * Code with its own turn over and only background agents running), but a
  * session whose agent stays busy must still get it with its next turn, never
  * wait for an idle that may not come. */
-export function ridesAlong(wake: Pick<Wake, 'kind' | 'ride' | 'source'>): boolean {
+function ridesAlong(wake: Pick<Wake, 'kind' | 'ride' | 'source'>): boolean {
   return wake.kind === 'event' && (wake.ride || ANSWER_SOURCE.test(wake.source ?? ''))
 }
 
@@ -569,7 +569,7 @@ export function clockLabel(at: number, now: number): string {
 /** One paste stays under this many bytes (the terminal paste cap is 2000,
  * lifecycle/tmux.ts `isBoundedTerminalText`); what does not fit waits for the
  * next delivery. */
-export const DELIVERY_BUDGET_BYTES = 1800
+const DELIVERY_BUDGET_BYTES = 1800
 const SEPARATOR = ' / '
 const ELLIPSIS = '…'
 
@@ -578,7 +578,7 @@ function bytes(text: string): number {
 }
 
 /** `text` cut to at most `max` bytes, ending in an ellipsis when cut. */
-export function cutToBytes(text: string, max: number): string {
+function cutToBytes(text: string, max: number): string {
   if (bytes(text) <= max) return text
   const room = max - bytes(ELLIPSIS)
   let out = ''
@@ -775,7 +775,7 @@ export interface WakeOperations {
 }
 
 /** Re-check due wakes this often while any waits on its gates. */
-export const WAKE_RECHECK_MS = 3_000
+const WAKE_RECHECK_MS = 3_000
 /** A native puller (Claude's asyncRewake hook, Pi's extension) that took a
  * delivery or whose long poll ended re-attaches within this long: the gated
  * paste holds for it meanwhile, so a line is never pasted under it. */

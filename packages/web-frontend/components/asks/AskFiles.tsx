@@ -66,7 +66,7 @@ export function useAskFiles(ask: OwnerAsk): AskFilesState {
 }
 
 /** "0 of 1-3 files", and "3 of 3 files" at the most. */
-export function countText(held: number, wants: WantsFiles): string {
+function countText(held: number, wants: WantsFiles): string {
   const range =
     held >= wants.max || wants.min === wants.max
       ? `${wants.max}`

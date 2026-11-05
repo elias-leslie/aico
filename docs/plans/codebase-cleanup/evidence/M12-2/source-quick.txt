@@ -1,0 +1,68 @@
+CHECK:SCOPE:left out 1 changed file(s) other agents wrote or lease
+CHECK:quick:252 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: gradle-android, go-hook, python-st-sdk, biome-fleet, biome-notes, biome-shared, biome-store, biome-ui-kit, biome-root
+CHECK:OK:python-host-ruff|0.0s|details:.dev-tools/python-host-ruff-412859-details.txt|hint:All checks passed!
+CHECK:OK:python-host-types|0.2s|details:.dev-tools/python-host-types-412859-details.txt|hint:All checks passed!
+CHECK:OK:gitleaks|0.4s|details:.dev-tools/gitleaks-412859-details.txt|hint:[]
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-412859-details.txt|hint:boundaries: ok (20 packages, 12 contract fixtures)
+CHECK:OK:cargo-tray|0.2s|details:.dev-tools/cargo-tray-412859-details.txt|hint:test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+CHECK:OK:python-service-tools|1.9s|details:.dev-tools/python-service-tools-412859-details.txt|hint:111 passed in 1.24s
+CHECK:OK:biome-agent|0.1s|details:.dev-tools/biome-agent-412859-details.txt|hint:Checked 2 files in 9ms. No fixes applied.
+CHECK:OK:tsc-agent|0.1s|details:.dev-tools/tsc-agent-412859-details.txt|hint:-
+CHECK:OK:depcruise-agent|0.5s|details:.dev-tools/depcruise-agent-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-checks|0.1s|details:.dev-tools/biome-checks-412859-details.txt|hint:Checked 6 files in 19ms. No fixes applied.
+CHECK:OK:tsc-checks|0.1s|details:.dev-tools/tsc-checks-412859-details.txt|hint:-
+CHECK:OK:depcruise-checks|0.5s|details:.dev-tools/depcruise-checks-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-cli|0.1s|details:.dev-tools/biome-cli-412859-details.txt|hint:Checked 1 file in 8ms. No fixes applied.
+CHECK:OK:tsc-cli|0.1s|details:.dev-tools/tsc-cli-412859-details.txt|hint:-
+CHECK:OK:depcruise-cli|0.4s|details:.dev-tools/depcruise-cli-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-context|0.1s|details:.dev-tools/biome-context-412859-details.txt|hint:Checked 5 files in 19ms. No fixes applied.
+CHECK:OK:tsc-context|0.1s|details:.dev-tools/tsc-context-412859-details.txt|hint:-
+CHECK:OK:depcruise-context|0.5s|details:.dev-tools/depcruise-context-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-fleet|0.1s|details:.dev-tools/tsc-fleet-412859-details.txt|hint:-
+CHECK:OK:depcruise-fleet|0.5s|details:.dev-tools/depcruise-fleet-412859-details.txt|hint:‼ 82 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-jobs|0.1s|details:.dev-tools/biome-jobs-412859-details.txt|hint:Checked 2 files in 15ms. No fixes applied.
+CHECK:OK:tsc-jobs|0.1s|details:.dev-tools/tsc-jobs-412859-details.txt|hint:-
+CHECK:OK:depcruise-jobs|0.5s|details:.dev-tools/depcruise-jobs-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-notes|0.1s|details:.dev-tools/tsc-notes-412859-details.txt|hint:-
+CHECK:OK:depcruise-notes|0.4s|details:.dev-tools/depcruise-notes-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-notify|0.1s|details:.dev-tools/biome-notify-412859-details.txt|hint:Checked 4 files in 9ms. No fixes applied.
+CHECK:OK:tsc-notify|0.1s|details:.dev-tools/tsc-notify-412859-details.txt|hint:-
+CHECK:OK:depcruise-notify|0.4s|details:.dev-tools/depcruise-notify-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-ops|0.1s|details:.dev-tools/biome-ops-412859-details.txt|hint:Checked 7 files in 27ms. No fixes applied.
+CHECK:OK:tsc-ops|0.1s|details:.dev-tools/tsc-ops-412859-details.txt|hint:-
+CHECK:OK:depcruise-ops|0.5s|details:.dev-tools/depcruise-ops-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-shared|0.1s|details:.dev-tools/tsc-shared-412859-details.txt|hint:-
+CHECK:OK:python-host-tests|9.0s|details:.dev-tools/python-host-tests-412859-details.txt|hint:1174 passed in 8.49s
+CHECK:OK:biome-status|0.1s|details:.dev-tools/biome-status-412859-details.txt|hint:Checked 1 file in 7ms. No fixes applied.
+CHECK:OK:tsc-status|0.1s|details:.dev-tools/tsc-status-412859-details.txt|hint:-
+CHECK:OK:depcruise-shared|0.4s|details:.dev-tools/depcruise-shared-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-store|0.1s|details:.dev-tools/tsc-store-412859-details.txt|hint:-
+CHECK:OK:depcruise-status|0.4s|details:.dev-tools/depcruise-status-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-tasks|0.1s|details:.dev-tools/biome-tasks-412859-details.txt|hint:Checked 2 files in 12ms. No fixes applied.
+CHECK:OK:tsc-tasks|0.1s|details:.dev-tools/tsc-tasks-412859-details.txt|hint:-
+CHECK:OK:depcruise-store|0.4s|details:.dev-tools/depcruise-store-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-tether|0.2s|details:.dev-tools/biome-tether-412859-details.txt|hint:Checked 80 files in 103ms. No fixes applied.
+CHECK:OK:tsc-tether|0.1s|details:.dev-tools/tsc-tether-412859-details.txt|hint:-
+CHECK:OK:depcruise-tasks|0.5s|details:.dev-tools/depcruise-tasks-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-tether-client|0.1s|details:.dev-tools/biome-tether-client-412859-details.txt|hint:Checked 3 files in 11ms. No fixes applied.
+CHECK:OK:tsc-tether-client|0.1s|details:.dev-tools/tsc-tether-client-412859-details.txt|hint:-
+CHECK:OK:depcruise-tether-client|0.5s|details:.dev-tools/depcruise-tether-client-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-tether|0.8s|details:.dev-tools/depcruise-tether-412859-details.txt|hint:‼ 51 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-ui-kit|0.1s|details:.dev-tools/tsc-ui-kit-412859-details.txt|hint:-
+CHECK:OK:biome-usage|0.1s|details:.dev-tools/biome-usage-412859-details.txt|hint:Checked 4 files in 13ms. No fixes applied.
+CHECK:OK:tsc-usage|0.1s|details:.dev-tools/tsc-usage-412859-details.txt|hint:-
+CHECK:OK:depcruise-ui-kit|0.4s|details:.dev-tools/depcruise-ui-kit-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-web-frontend|0.1s|details:.dev-tools/biome-web-frontend-412859-details.txt|hint:Checked 40 files in 27ms. No fixes applied.
+CHECK:OK:depcruise-usage|0.5s|details:.dev-tools/depcruise-usage-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-web-frontend|0.9s|details:.dev-tools/depcruise-web-frontend-412859-details.txt|hint:‼ 80 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-web-server|0.2s|details:.dev-tools/biome-web-server-412859-details.txt|hint:Checked 35 files in 42ms. No fixes applied.
+CHECK:OK:tsc-web-server|0.1s|details:.dev-tools/tsc-web-server-412859-details.txt|hint:-
+CHECK:OK:depcruise-web-server|0.8s|details:.dev-tools/depcruise-web-server-412859-details.txt|hint:‼ 70 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-webtools|0.1s|details:.dev-tools/biome-webtools-412859-details.txt|hint:Checked 1 file in 7ms. No fixes applied.
+CHECK:OK:tsc-webtools|0.1s|details:.dev-tools/tsc-webtools-412859-details.txt|hint:-
+CHECK:OK:depcruise-webtools|0.4s|details:.dev-tools/depcruise-webtools-412859-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-web-frontend|4.1s|details:.dev-tools/tsc-web-frontend-412859-details.txt|hint:-
+CHECK:OK:contracts-host-steward|3.1s|details:.dev-tools/contracts-host-steward-412859-details.txt|hint:168 passed in 2.61s
+CHECK:OK:vitest|70.9s|details:.dev-tools/vitest-412859-details.txt|hint:Tests  2819 passed (2819)
+CHECK:PASS quick 72.2s (64 ran, 9 skipped)

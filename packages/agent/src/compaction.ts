@@ -15,7 +15,7 @@ import {
 
 /** Pi's compaction settings (when, and how much recent context it keeps). */
 export type CompactionSettings = typeof DEFAULT_COMPACTION_SETTINGS
-export type Preparation = Parameters<typeof compact>[0]
+type Preparation = Parameters<typeof compact>[0]
 
 interface PiCompactionModule {
   prepareCompaction(entries: SessionEntry[], settings: CompactionSettings): Preparation | undefined

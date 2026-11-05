@@ -31,7 +31,7 @@ function paneless(row: WidgetRow): boolean {
 }
 
 /** A plain shell: a terminal session with no agent command to resume. */
-export function isShellSession(row: WidgetRow): boolean {
+function isShellSession(row: WidgetRow): boolean {
   return row.backend !== 'agent-hub' && (getTui(row.tool)?.command.length ?? 0) === 0
 }
 

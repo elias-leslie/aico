@@ -1,6 +1,5 @@
 'use client'
 
-import type { RunMember } from '@aico/tether-client/teams'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import {
   type Attention,
@@ -10,7 +9,6 @@ import {
   seenAtOf,
   seenSnapshot,
   shareSeen,
-  stepAttention,
   subscribeSeen,
 } from '../attention'
 import type { PaneSlot, TerminalSlot } from '../utils/slot'
@@ -20,7 +18,6 @@ import {
   useTerminalSessions,
 } from './use-terminal-sessions'
 import { isAutomatedBrowser } from './use-websocket-connection'
-import { useWorkflowRuns, type WorkflowRuns } from './use-workflow-runs'
 
 const EMPTY_SEEN: Record<string, number> = {}
 const AGE_TICK_MS = 30_000
@@ -35,7 +32,7 @@ function useNow(intervalMs: number): number {
 }
 
 /** Sessions that belong to a slot: every session of its pane, else its own. */
-export function slotSessions(
+function slotSessions(
   slot: TerminalSlot | PaneSlot,
   sessions: readonly TerminalSession[],
 ): TerminalSession[] {
@@ -50,12 +47,7 @@ export function slotSessions(
 export interface SessionAttention {
   /** A slot's most urgent session state, or null when unknown. */
   forSlot(slot: TerminalSlot | PaneSlot): Attention | null
-  /** A running workflow step's state, shown as a child agent. */
-  forStep?(step: RunMember): Attention
-  /** Sessions, and workflow runs, that need the owner now. */
   needsYouCount: number
-  /** The workflow runs sessions launched, whose running steps show under them. */
-  runs?: WorkflowRuns
 }
 
 const NO_SESSIONS: TerminalSession[] = []
@@ -69,7 +61,6 @@ export function useSessionAttention(): SessionAttention {
     () => EMPTY_SEEN,
   )
   const now = useNow(AGE_TICK_MS)
-  const runs = useWorkflowRuns()
   return useMemo(() => {
     const byId = new Map(
       sessions.map(
@@ -84,13 +75,10 @@ export function useSessionAttention(): SessionAttention {
             return item ? [item] : []
           }),
         ),
-      forStep: (step) => stepAttention(step, now),
-      needsYouCount:
-        [...byId.values()].filter((a) => a.group === 'needs-you').length +
-        runs.needsYouCount,
-      runs,
+      needsYouCount: [...byId.values()].filter((a) => a.group === 'needs-you')
+        .length,
     }
-  }, [sessions, seen, now, runs])
+  }, [sessions, seen, now])
 }
 
 /**
@@ -132,7 +120,7 @@ export function useMarkActiveSeen(activeSessionId: string | null): void {
 
 /** The tab/app title says when anything waits on the owner: `Aico · 1 needs
  * you`, else `Aico`. */
-export function attentionTitle(base: string, count: number): string {
+function attentionTitle(base: string, count: number): string {
   const plain = base.replace(/ · \d+ needs? you$/, '')
   return count > 0
     ? `${plain} · ${count} need${count === 1 ? 's' : ''} you`

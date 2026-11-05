@@ -19,7 +19,7 @@ export interface PeerSync {
 }
 
 /** A clock gap past this is worth a warning. */
-export const SKEW_WARN_MS = 5_000
+const SKEW_WARN_MS = 5_000
 
 /** Read-only sync state per peer. A failed read just hides the line. */
 export function useSyncStatus(enabled = true) {

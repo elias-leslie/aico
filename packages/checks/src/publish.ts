@@ -183,7 +183,7 @@ export async function publishRepos(
   return rows
 }
 
-export async function postPublicationRow(row: StatusRow, env = process.env): Promise<void> {
+async function postPublicationRow(row: StatusRow, env = process.env): Promise<void> {
   const base = webUrl(env)
   if (!base) throw new Error('Publication Status address is unavailable')
   const response = await fetch(new URL('/api/status/rows', base), {
@@ -195,7 +195,7 @@ export async function postPublicationRow(row: StatusRow, env = process.env): Pro
   if (!response.ok) throw new Error(`Publication Status answered ${response.status}`)
 }
 
-export const PUBLISH_USAGE = `aico publish [--source ID] [--sha REV] [--dry-run] [--json]
+const PUBLISH_USAGE = `aico publish [--source ID] [--sha REV] [--dry-run] [--json]
   Publish this project's checked main to GitHub. --all runs the nightly pass over registered
   projects. Failed and unchecked commits write Status for the owning agent; no owner ask.
   --authorize-workflow PATH grants an explicitly requested workflow effect; repeat as needed.`

@@ -1,0 +1,3 @@
+[st] Waiting for shared heavy-work lane: aico check class=heavy wait_age=0.0s holder=aico check project=aico pid=373637 active_age=37.8s
+CHECK:FAIL:vitest|0.5s|details:.dev-tools/vitest-378986-details.txt|hint:× does not schedule a live Redis capture after its frozen archive is verified 4ms
+CHECK:FAIL focused (1 stage(s))

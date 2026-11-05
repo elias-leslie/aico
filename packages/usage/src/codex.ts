@@ -24,7 +24,7 @@ import { type Database, getState, putState } from './db'
 import { localDay } from './plans'
 import { type ReadingEvent, storeReading } from './readings'
 
-export const CODEX_SOURCE = 'codex_session_log'
+const CODEX_SOURCE = 'codex_session_log'
 
 const CHUNK = 8 * 1024 * 1024
 

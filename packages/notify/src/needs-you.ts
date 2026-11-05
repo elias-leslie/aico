@@ -53,7 +53,7 @@ const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim()
  * the same requester and question into one, and each notice needs its own ask, so that "That was
  * me" confirms that notice's alerts and no other's.
  */
-export function noticeAsk(id: string, notice: Notice): AskRequest {
+function noticeAsk(id: string, notice: Notice): AskRequest {
   const body = [
     notice.body,
     notice.detail ?? '',

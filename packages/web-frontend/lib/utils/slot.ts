@@ -182,7 +182,7 @@ export type PaneSlot = PaneBasedSlot | AdHocPaneSlot
 
 /** Where a session is shown: in a web app pane, as a free-standing View, or
  * linked to a pane that is not loaded in this window. */
-export type SessionPlace = 'pane' | 'free' | 'unloaded'
+type SessionPlace = 'pane' | 'free' | 'unloaded'
 
 export type SessionTitleOptions =
   | { place: 'pane'; paneName: string }

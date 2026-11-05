@@ -6,10 +6,10 @@ import type { StatusView } from '../status'
 import { useClock } from './use-clock'
 
 /** Rows report every few minutes; the page and the badge read them this often. */
-export const STATUS_POLL_MS = 30_000
+const STATUS_POLL_MS = 30_000
 export const STATUS_QUERY_KEY = ['status']
 /** A view read longer ago than this is old, whatever the reason (a sleeping tab, say). */
-export const STATUS_OLD_MS = 3 * STATUS_POLL_MS
+const STATUS_OLD_MS = 3 * STATUS_POLL_MS
 
 /**
  * GET /api/status, shared by the Status page and the sidebar badge. `stale` is a view kept from

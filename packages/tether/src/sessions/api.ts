@@ -18,7 +18,7 @@ const OUTCOMES: readonly (Outcome | null)[] = ['completed', 'aborted', 'error', 
 const MAX_TURNS = 1000
 
 /** Validate a pushed run (`PUT /v1/history/aico-agent/:run`). */
-export function parsePushedRun(runId: string, body: Record<string, unknown>): PushedRun {
+function parsePushedRun(runId: string, body: Record<string, unknown>): PushedRun {
   const bad = (field: string): never => {
     throw new HttpError(400, 'invalid_body', { field })
   }

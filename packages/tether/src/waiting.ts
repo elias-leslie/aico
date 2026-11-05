@@ -64,17 +64,6 @@ export interface WaitingSession {
   stateSource?: string
 }
 
-/** The part of a listed workflow run the notice reads. */
-export interface WaitingRun {
-  id: string
-  kind: string
-  group: string
-  at: number | null
-  title: string
-  headline: string | null
-  url: string
-}
-
 export interface WaitingTool {
   slug: string
   name: string
@@ -97,19 +86,10 @@ export function agentName(session: WaitingSession, tools: readonly WaitingTool[]
 
 /** The notice for a waiting session, or a run (`run:` ids). */
 export function noticeFor(
-  item: { session: WaitingSession } | { run: WaitingRun },
+  item: { session: WaitingSession },
   tools: readonly WaitingTool[],
   origin: string,
 ): WaitingNotice {
-  if ('run' in item) {
-    const { run } = item
-    return waitingNotice({
-      key: `aico-run:${run.id}`,
-      title: `Workflow waiting: ${run.title.slice(0, 80)}`,
-      body: run.headline ?? 'The run is waiting for your answer.',
-      open: run.url.startsWith(`${origin}/`) ? run.url : undefined,
-    })
-  }
   const { session } = item
   const name = session.displayTitle?.trim() || session.label || `Session ${session.id}`
   return waitingNotice({
@@ -160,7 +140,7 @@ export interface WaitingDeps {
 
 interface Entry {
   since: number
-  item: { session: WaitingSession } | { run: WaitingRun }
+  item: { session: WaitingSession }
   timer: unknown
 }
 
@@ -170,7 +150,6 @@ export class WaitingNotices {
   private readonly now: () => number
   private readonly setTimer: (fn: () => void, ms: number) => unknown
   private readonly clearTimer: (handle: unknown) => void
-  private runIds = new Set<string>()
 
   constructor(private readonly deps: WaitingDeps) {
     this.state = deps.state.read()
@@ -189,20 +168,6 @@ export class WaitingNotices {
   session(session: WaitingSession): void {
     if (session.state === 'blocked') this.wait(session.id, session.stateAt ?? null, { session })
     else this.over(session.id)
-  }
-
-  /** Tether's list of workflow runs (a list that could not look at Agent Hub is skipped). */
-  runs(answer: { status: string; items: readonly WaitingRun[] }): void {
-    if (answer.status === 'unavailable') return
-    const listed = new Set<string>()
-    for (const run of answer.items) {
-      if (run.kind !== 'run') continue
-      listed.add(run.id)
-      if (run.group === 'needs-you') this.wait(run.id, run.at, { run })
-      else this.over(run.id)
-    }
-    for (const id of this.runIds) if (!listed.has(id)) this.over(id)
-    this.runIds = listed
   }
 
   /** The session ended or left the list. */

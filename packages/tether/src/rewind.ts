@@ -44,7 +44,7 @@ const MAX_UP = 200
 const CLEAR_MAX = 40
 
 /** Text as compared: whitespace collapsed, a trailing ellipsis dropped. */
-export function screenText(text: string): string {
+function screenText(text: string): string {
   return text.replace(/\s+/g, ' ').trim().replace(/…$/, '').trim()
 }
 

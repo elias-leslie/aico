@@ -24,7 +24,7 @@ export interface RetentionView extends Point {
   pin_until?: string | null
   recovery_copies?: { deleted_at?: string }[]
 }
-export const physicalKey = (path: string) => (existsSync(path) ? realpathSync(path) : resolve(path))
+const physicalKey = (path: string) => (existsSync(path) ? realpathSync(path) : resolve(path))
 export function retentionSelection(
   entries: RetentionView[],
   policy: BackupConfig['retention']['snapshot'],
@@ -154,7 +154,7 @@ export async function snapshotSweep(rt: Runtime, scheduled: boolean): Promise<vo
     }
   }
 }
-export function driveRetentionArgs(cfg: BackupConfig): string[] {
+function driveRetentionArgs(cfg: BackupConfig): string[] {
   const p = cfg.retention.drive
   return [
     'forget',
@@ -380,7 +380,7 @@ function qualifyWorkProject(
 }
 
 /** Legacy windows only; a newest copy for every enabled source is held regardless of age. */
-export function legacyRetentionIds(
+function legacyRetentionIds(
   snapshots: { id: string; time: string; tags?: string[] }[],
   enabled: string[],
   days: number,

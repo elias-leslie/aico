@@ -37,7 +37,7 @@ function count(n: number): string {
   return n >= 10_000 ? `${(n / 1000).toFixed(n >= 1e6 ? 0 : 1)}k` : String(n)
 }
 
-export function formatTokens(tokens: Tokens): string {
+function formatTokens(tokens: Tokens): string {
   return `in ${count(tokens.input)}, cache read ${count(tokens.cacheRead)}, cache write ${count(tokens.cacheWrite)}, out ${count(tokens.output)}`
 }
 

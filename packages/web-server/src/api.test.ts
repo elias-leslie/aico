@@ -252,21 +252,6 @@ describe('check-ins', () => {
   })
 })
 
-describe('workflow runs', () => {
-  it('lists the runs Tether follows', async () => {
-    tether.runsAnswer = {
-      status: 'stale',
-      error: 'Agent Hub is not reachable',
-      updatedAt: 5,
-      items: [],
-    }
-    expect(await call('GET', '/api/runs')).toMatchObject({
-      status: 200,
-      body: { status: 'stale', error: 'Agent Hub is not reachable', items: [] },
-    })
-  })
-})
-
 describe('session history', () => {
   it('passes the list, one session and its events through', async () => {
     tether.historyItems = [{ id: 'codex:a' }]

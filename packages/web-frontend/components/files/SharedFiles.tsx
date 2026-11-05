@@ -6,7 +6,7 @@ import { baseName } from '@/components/AgentShowToast'
 import { type AgentShow, fetchShows } from '@/lib/hooks/use-agent-shows'
 
 /** When it was shared: the time today, else the day. */
-export function sharedWhen(createdAt: string, now = new Date()): string {
+function sharedWhen(createdAt: string, now = new Date()): string {
   const at = new Date(createdAt)
   return at.toDateString() === now.toDateString()
     ? at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

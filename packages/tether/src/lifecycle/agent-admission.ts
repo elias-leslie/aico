@@ -37,7 +37,7 @@ export const DEFAULT_AGENT_ADMISSION_LIMITS: AgentAdmissionLimits = {
 }
 
 /** Exact value that enables the operator override. Any other non-empty value is malformed. */
-export const ADMISSION_OVERRIDE_VALUE = '1'
+const ADMISSION_OVERRIDE_VALUE = '1'
 
 /** How long a committed launch keeps its slot while the agent process appears in its scope. */
 export const LAUNCH_SETTLE_MS = 30_000

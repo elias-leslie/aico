@@ -28,7 +28,7 @@ const AT_BOTTOM: ReadingState = { scrolledUp: false, newOutput: false }
  * view when they last moved it; output that arrives while they stay put
  * pushes the bottom further away, which is what "new output" means.
  */
-export function readViewport(
+function readViewport(
   term: Pick<XtermTerminal, 'buffer'>,
   tracker: { current: Tracker | null },
 ): ReadingState {

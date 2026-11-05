@@ -585,13 +585,6 @@ export function listSessions(): WidgetRow[] {
 }
 
 /** Every Agent Hub session, oldest first. */
-export function listAgentHubSessions(): WidgetRow[] {
-  return (
-    db
-      .prepare("SELECT * FROM sessions WHERE backend = 'agent-hub' ORDER BY created_at ASC")
-      .all() as unknown[]
-  ).map((r) => toRow(r as Raw))
-}
 
 export function getWidget(id: string): WidgetRow | undefined {
   // This is also the lifecycle's hot lookup. Re-preparing it for every read
@@ -628,7 +621,7 @@ export function isRetiredSessionId(id: string): boolean {
   return db.prepare('SELECT 1 FROM retired_session_ids WHERE id = ?').get(id) !== undefined
 }
 
-export function hasWidget(id: string): boolean {
+function hasWidget(id: string): boolean {
   return db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(id) !== undefined
 }
 
@@ -741,7 +734,6 @@ export function reserveRootRequest(
   projectId: string,
   projectRoot: string,
   aTermSessionId: string | null = null,
-  agentHub: NewAgentHubSession | null = null,
   entry: SessionEntry | null = null,
   launch: RootLaunchOptions | null = null,
 ): RootRequestRow {
@@ -755,9 +747,7 @@ export function reserveRootRequest(
     insertWidget(request.widgetId, tool, request.createdAt, {
       origin: request.origin === 'a-term' ? 'a-term' : 'root',
       aTermSessionId: request.origin === 'a-term' ? aTermSessionId : null,
-      ...(agentHub ? { backend: 'agent-hub' as const } : {}),
     })
-    if (agentHub) insertAgentHubSession(request.widgetId, agentHub)
     if (entry)
       db.prepare('INSERT INTO session_entries (session_id, name, arg) VALUES (?, ?, ?)').run(
         request.widgetId,
@@ -841,35 +831,6 @@ export function getLaunchOptions(sessionId: string): RootLaunchOptions | null {
     reasoningEffort: row.reasoning_effort,
     ...(row.daybreak === null ? {} : { daybreak: row.daybreak === 1 }),
     ...(row.agent_hub_context === null ? {} : { agentHubContext: row.agent_hub_context === 1 }),
-  }
-}
-
-/** A chat started from a menu rather than a root request: the widget row, its
- * Agent Hub session and its project, in one step. */
-export function insertAgentHubChat(
-  id: string,
-  input: {
-    origin: SessionOrigin
-    aTermSessionId: string | null
-    projectId: string
-    projectRoot: string
-    hub: NewAgentHubSession
-  },
-  createdAt = Date.now(),
-): void {
-  db.exec('BEGIN IMMEDIATE')
-  try {
-    insertWidget(id, 'agent-hub', createdAt, {
-      origin: input.origin,
-      aTermSessionId: input.aTermSessionId,
-      backend: 'agent-hub',
-    })
-    insertAgentHubSession(id, input.hub)
-    setWidgetProject(id, input.projectId, input.projectRoot)
-    db.exec('COMMIT')
-  } catch (error) {
-    db.exec('ROLLBACK')
-    throw error
   }
 }
 
@@ -1330,170 +1291,4 @@ export function removeWidgetIfOwnership(id: string, expected: WidgetOwnershipGen
 
 export function removeWidget(id: string): void {
   db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
-}
-
-// --- Agent Hub sessions (src/agent-hub/) -------------------------------------
-
-export interface NewAgentHubSession {
-  /** The Agent Hub session id, chosen here before Agent Hub creates it so a
-   * restart can always find the session again. */
-  hubSessionId: string
-  agentSlug: string
-  /** A catalog model that overrides the agent's own routing, if asked for. */
-  model: string | null
-}
-
-export interface AgentHubSessionRow extends NewAgentHubSession {
-  sessionId: string
-  /** Agent Hub has the session (creation is idempotent, so a retry is safe). */
-  created: boolean
-  /** The first prompt was accepted as a turn. */
-  promptSent: boolean
-}
-
-interface RawAgentHubSession {
-  session_id: string
-  hub_session_id: string
-  agent_slug: string
-  model: string | null
-  created: number
-  prompt_sent: number
-}
-
-function agentHubRow(r: RawAgentHubSession): AgentHubSessionRow {
-  return {
-    sessionId: r.session_id,
-    hubSessionId: r.hub_session_id,
-    agentSlug: r.agent_slug,
-    model: r.model ?? null,
-    created: r.created === 1,
-    promptSent: r.prompt_sent === 1,
-  }
-}
-
-export function insertAgentHubSession(sessionId: string, input: NewAgentHubSession): void {
-  db.prepare(
-    'INSERT INTO agent_hub_sessions (session_id, hub_session_id, agent_slug, model) VALUES (?, ?, ?, ?)',
-  ).run(sessionId, input.hubSessionId, input.agentSlug, input.model)
-}
-
-export function getAgentHubSession(sessionId: string): AgentHubSessionRow | undefined {
-  const r = db.prepare('SELECT * FROM agent_hub_sessions WHERE session_id = ?').get(sessionId) as
-    | RawAgentHubSession
-    | undefined
-  return r ? agentHubRow(r) : undefined
-}
-
-export function markAgentHubCreated(sessionId: string): void {
-  db.prepare('UPDATE agent_hub_sessions SET created = 1 WHERE session_id = ?').run(sessionId)
-}
-
-export function markAgentHubPromptSent(sessionId: string): void {
-  db.prepare('UPDATE agent_hub_sessions SET prompt_sent = 1 WHERE session_id = ?').run(sessionId)
-}
-
-export interface AgentHubQueued {
-  id: number
-  text: string
-  /** The model the follow-up was sent with: a catalog model id, null for the
-   * agent's own routing, undefined for a row queued before models were kept
-   * (it takes the session's model). */
-  model: string | null | undefined
-  /** The thinking level the follow-up was sent with; null for the model's own default. */
-  thinkingLevel: string | null
-}
-
-/** Queue a follow-up with the model it was sent with (null: the agent's own routing). */
-export function enqueueAgentHubText(
-  sessionId: string,
-  text: string,
-  now = Date.now(),
-  model: string | null = null,
-  thinkingLevel: string | null = null,
-): void {
-  db.prepare(
-    'INSERT INTO agent_hub_queue (session_id, text, created_at, model, thinking_level) VALUES (?, ?, ?, ?, ?)',
-  ).run(sessionId, text, now, model ?? '', thinkingLevel ?? '')
-}
-
-/** The oldest queued follow-up, if any. */
-export function peekAgentHubQueue(sessionId: string): AgentHubQueued | undefined {
-  const row = db
-    .prepare(
-      'SELECT id, text, model, thinking_level FROM agent_hub_queue WHERE session_id = ? ORDER BY id LIMIT 1',
-    )
-    .get(sessionId) as
-    | { id: number; text: string; model: string | null; thinking_level: string | null }
-    | undefined
-  if (!row) return undefined
-  return {
-    id: row.id,
-    text: row.text,
-    model: row.model === null ? undefined : row.model === '' ? null : row.model,
-    thinkingLevel: row.thinking_level || null,
-  }
-}
-
-/** Take every queued follow-up out of the queue, oldest first, and return them. */
-export function takeAgentHubQueue(sessionId: string): AgentHubQueued[] {
-  const rows = db
-    .prepare(
-      'SELECT id, text, model, thinking_level FROM agent_hub_queue WHERE session_id = ? ORDER BY id',
-    )
-    .all(sessionId) as {
-    id: number
-    text: string
-    model: string | null
-    thinking_level: string | null
-  }[]
-  db.prepare('DELETE FROM agent_hub_queue WHERE session_id = ?').run(sessionId)
-  return rows.map((row) => ({
-    id: row.id,
-    text: row.text,
-    model: row.model === null ? undefined : row.model === '' ? null : row.model,
-    thinkingLevel: row.thinking_level || null,
-  }))
-}
-
-/** Put follow-ups taken out with `takeAgentHubQueue` back, in their order, with what they were sent with. */
-export function returnAgentHubQueue(
-  sessionId: string,
-  items: readonly AgentHubQueued[],
-  now = Date.now(),
-): void {
-  const insert = db.prepare(
-    'INSERT INTO agent_hub_queue (session_id, text, created_at, model, thinking_level) VALUES (?, ?, ?, ?, ?)',
-  )
-  for (const item of items)
-    insert.run(
-      sessionId,
-      item.text,
-      now,
-      item.model === undefined ? null : (item.model ?? ''),
-      item.thinkingLevel ?? '',
-    )
-}
-
-/** Remember the model the owner last chose for the session (null: the agent's own routing). */
-export function setAgentHubModel(sessionId: string, model: string | null): void {
-  db.prepare('UPDATE agent_hub_sessions SET model = ? WHERE session_id = ?').run(model, sessionId)
-}
-
-/** Every queued follow-up text, oldest first. */
-export function listAgentHubQueue(sessionId: string): string[] {
-  const rows = db
-    .prepare('SELECT text FROM agent_hub_queue WHERE session_id = ? ORDER BY id')
-    .all(sessionId) as { text: string }[]
-  return rows.map((row) => row.text)
-}
-
-export function removeAgentHubQueued(id: number): void {
-  db.prepare('DELETE FROM agent_hub_queue WHERE id = ?').run(id)
-}
-
-export function agentHubQueueLength(sessionId: string): number {
-  const r = db
-    .prepare('SELECT COUNT(*) AS n FROM agent_hub_queue WHERE session_id = ?')
-    .get(sessionId) as { n: number }
-  return r.n
 }

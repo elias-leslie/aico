@@ -19,7 +19,7 @@ export const PANE_CAP_DROPIN = 'tmux-spawn-.scope.d/40-tether-pane.conf'
 /** Nightshift's fallback when the manager default is not continue. */
 const OOM_FALLBACK = 'tmux-spawn-.scope.d/45-nightshift-oom.conf'
 
-export function paneCapDropInText(policy: MemoryPolicy): string {
+function paneCapDropInText(policy: MemoryPolicy): string {
   return [
     '# Tether pane cap (Tether memory policy, edited in web app settings). Written by Tether; do not edit.',
     '# A pane past it loses its biggest process to the kernel and keeps running (OOMPolicy=continue).',

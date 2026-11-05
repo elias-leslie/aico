@@ -168,14 +168,7 @@ export type CaptureStatus = (typeof CAPTURE_STATUSES)[number]
  * unreachable), `failed` (the owner refused it), `filed` (handed off) or `kept`
  * (the owner chose to keep it here). Null: nothing was suggested.
  */
-export const ROUTE_STATES = [
-  'suggested',
-  'confirmed',
-  'filed',
-  'waiting',
-  'failed',
-  'kept',
-] as const
+const ROUTE_STATES = ['suggested', 'confirmed', 'filed', 'waiting', 'failed', 'kept'] as const
 export type RouteState = (typeof ROUTE_STATES)[number]
 
 /** What the router decided for a capture that was just read. */

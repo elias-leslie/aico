@@ -446,7 +446,7 @@ interface PythonImports {
 }
 
 /** `import a.b` and `from a import b` names in a Python file (what SummitFlow's ast walk reads). */
-export function pythonImports(path: string): PythonImports {
+function pythonImports(path: string): PythonImports {
   const found: PythonImports = { modules: new Set(), from: new Set() }
   let text: string
   try {
@@ -479,7 +479,7 @@ export function pythonImports(path: string): PythonImports {
 }
 
 /** Test files for changed Python files: changed tests, tests named after the module, tests importing it. */
-export function focusedTests(root: string, dir: string, changed: string[]): string[] | null {
+function focusedTests(root: string, dir: string, changed: string[]): string[] | null {
   const tests = new Set<string>()
   let unmapped = false
   let all: string[] | null = null

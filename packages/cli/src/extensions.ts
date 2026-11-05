@@ -99,7 +99,7 @@ export function parseBinding(value: unknown): Binding {
   }
   return value as unknown as Binding
 }
-export function parseManifest(value: unknown, binding: Binding): Manifest {
+function parseManifest(value: unknown, binding: Binding): Manifest {
   if (
     !object(value) ||
     value.id !== binding.id ||

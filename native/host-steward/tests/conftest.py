@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 def no_launch_table(monkeypatch):
     """Agent Hub's launch table is unreadable unless a test serves a row: create never runs `st`."""
     monkeypatch.setattr(admin, "launch_row", lambda *_args: None)
+    monkeypatch.setattr(admin, "aico_read", lambda *_args, **_kwargs: None)
 
 
 @pytest.fixture(autouse=True)

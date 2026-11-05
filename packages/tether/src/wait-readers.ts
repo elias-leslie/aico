@@ -101,8 +101,6 @@ export interface PullReaderDeps {
   paths: PullReaderPaths
   /** The coordination ledger document (`_coord`, src/coordination/docs.ts): its version and body. */
   ledgerDoc(): { version: number; doc: Record<string, unknown> }
-  /** A run Tether follows (RunTracker.runState). */
-  run(runId: string): { state: string | null; launcherId: string | null } | undefined
   /** An ask (AskStore.get). */
   ask(id: string): { state: string; question?: string } | undefined
   /** The window title of the agent a coordination identity's anchor (`pid:start`)
@@ -314,7 +312,7 @@ export class PullReaders {
       case 'reply':
         return this.ledger()?.has(ref) ? ref : null
       case 'run':
-        return this.deps.run(ref) ? ref : null
+        return null
       case 'ask':
         return this.deps.ask(ref) ? ref : null
       case 'host':
@@ -333,9 +331,7 @@ export class PullReaders {
       case 'reply':
         return this.readReply(ref)
       case 'run': {
-        const run = this.deps.run(ref)
-        if (run === undefined) return undefined
-        return run.state === null ? null : { state: run.state, detail: null, title: null }
+        return null
       }
       case 'ask': {
         const ask = this.deps.ask(ref)
