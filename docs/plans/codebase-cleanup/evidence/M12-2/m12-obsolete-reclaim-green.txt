@@ -1,0 +1,10 @@
+CHECK:SCOPE:left out 1 changed file(s) other agents wrote or lease
+CHECK:quick:2 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: vitest, gradle-android, cargo-tray, go-hook, python-st-sdk, python-service-tools, biome-agent, tsc-agent, depcruise-agent, biome-checks, tsc-checks, depcruise-checks, biome-cli, tsc-cli, depcruise-cli, biome-context, tsc-context, depcruise-context, biome-fleet, tsc-fleet, depcruise-fleet, biome-jobs, tsc-jobs, depcruise-jobs, biome-notes, tsc-notes, depcruise-notes, biome-notify, tsc-notify, depcruise-notify, biome-ops, tsc-ops, depcruise-ops, biome-shared, tsc-shared, depcruise-shared, biome-status, tsc-status, depcruise-status, biome-store, tsc-store, depcruise-store, biome-tasks, tsc-tasks, depcruise-tasks, biome-tether, tsc-tether, depcruise-tether, biome-tether-client, tsc-tether-client, depcruise-tether-client, biome-ui-kit, tsc-ui-kit, depcruise-ui-kit, biome-usage, tsc-usage, depcruise-usage, biome-web-frontend, tsc-web-frontend, depcruise-web-frontend, biome-web-server, tsc-web-server, depcruise-web-server, biome-webtools, tsc-webtools, depcruise-webtools, biome-root
+CHECK:OK:python-host-ruff|0.0s|details:.dev-tools/python-host-ruff-828041-details.txt|hint:All checks passed!
+CHECK:OK:python-host-types|0.2s|details:.dev-tools/python-host-types-828041-details.txt|hint:All checks passed!
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-828041-details.txt|hint:[]
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-828041-details.txt|hint:boundaries: ok (20 packages, 12 contract fixtures)
+CHECK:OK:contracts-host-steward|4.1s|details:.dev-tools/contracts-host-steward-828041-details.txt|hint:168 passed in 3.62s
+CHECK:OK:python-host-tests|7.4s|details:.dev-tools/python-host-tests-828041-details.txt|hint:1188 passed in 6.86s
+CHECK:PASS quick 7.5s (6 ran, 67 skipped)
