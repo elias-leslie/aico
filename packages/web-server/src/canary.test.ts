@@ -27,3 +27,40 @@ it('handles honeypot messages and ignores startup events', () => {
     )?.title,
   ).toBe('Honeypot tripped: lab')
 })
+
+it('the on-demand drill emits a valid test notice without asking the phone to buzz for info', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { serveRoutes } = await import('./testing')
+  const { registerCanaryRoutes } = await import('./canary')
+  const folder = mkdtempSync(join(tmpdir(), 'canary-drill-'))
+  writeFileSync(join(folder, 'registry.json'), JSON.stringify({ tokens: [] }))
+  const notices: unknown[] = []
+  const server = await serveRoutes((router) =>
+    registerCanaryRoutes(
+      router,
+      {
+        receive: (notice) => {
+          notices.push(notice)
+          return {} as never
+        },
+      },
+      folder,
+    ),
+  )
+  try {
+    const response = await fetch(`${server.base}/api/canary/drill`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    expect(response.status).toBe(200)
+    expect(notices).toEqual([
+      expect.objectContaining({ title: 'TEST: canary hook drill', severity: 'info', push: 'tray' }),
+    ])
+  } finally {
+    await server.close()
+    rmSync(folder, { recursive: true, force: true })
+  }
+})

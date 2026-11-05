@@ -21,7 +21,7 @@ export function describeCanary(
   const short = (v: unknown) =>
     String(v ?? '')
       .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
-      .slice(0, 200)
+      .slice(0, 160)
   if (typeof payload.token === 'string') {
     const entry = entries.find((e) => e.token === payload.token)
     if (!entry) throw new HttpError(422, 'Canary token is not registered.')
@@ -96,7 +96,7 @@ export function registerCanaryRoutes(
         severity: test ? 'info' : 'critical',
         ...event,
         key: test ? `canary-drill:${Date.now()}` : `canary:${Date.now()}`,
-        push: 'phone',
+        push: test ? 'tray' : 'phone',
         cooldown: 0,
       }),
       'local',
