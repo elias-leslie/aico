@@ -799,6 +799,26 @@ export class Recovery {
       // The agent is running again (the owner restarted it by hand): a crash
       // record that never launched anything has nothing left to do.
       const record = this.records.get(row.id)
+      if (
+        record?.launchedAt &&
+        (record.state === 'held' || record.state === 'waiting') &&
+        panePid !== null
+      ) {
+        const live = await this.engine.agentIn(panePid, row.tool, row.id)
+        if (live?.pid === agentPid && live.resumeId === record.resumeId) {
+          const reservation = await restoreSessionReservation(this.context, row.id)
+          if (this.records.get(row.id) !== record) return
+          if (reservation)
+            this.update(record, {
+              state: 'waiting',
+              readiness: true,
+              notBefore: this.now() + RETRY_MS,
+              reason: reservation,
+            })
+          else this.finish(record, row)
+          return
+        }
+      }
       if (record && (record.state === 'held' || (record.state === 'waiting' && !record.launchedAt)))
         this.drop(record, 'its agent is running again', row.scopeInvocationId)
       return

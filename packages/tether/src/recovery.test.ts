@@ -349,6 +349,17 @@ describe('crash recovery', () => {
     expect(h.recovery.resumeOwner(RESUME)).toBeNull()
   })
 
+  it('confirms a launched resume when its live identity becomes available after the confirmation window', async () => {
+    await agentKilled(h)
+    await runDue(h)
+    expect(sessions(h)).toMatchObject([{ state: 'held' }])
+    const launches = h.respawn.mock.calls.length
+    h.agent = { pid: 9, resumeId: RESUME }
+    await h.recovery.inspect(row(h), 'running', PANE_PID, 9)
+    expect(sessions(h)).toMatchObject([{ state: 'recovered' }])
+    expect(h.respawn).toHaveBeenCalledTimes(launches)
+  })
+
   it('does not resume a conversation another session is already running', async () => {
     await agentKilled(h)
     h.running = [{ id: 'f0000001', resumeId: RESUME }]
