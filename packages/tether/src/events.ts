@@ -77,8 +77,4 @@ export class EventBus {
       this.listeners.delete(listener)
     }
   }
-
-  get subscriberCount(): number {
-    return this.listeners.size
-  }
 }
