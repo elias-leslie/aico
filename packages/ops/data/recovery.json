@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "scratchRoot": "/srv/scratch",
+  "receipt": "~/.local/state/aico/backups/drill.json",
+  "backupConfig": "backups.json",
+  "importConfig": "backups-import.json",
+  "backupState": "~/.local/state/aico/backups/state.json",
+  "workstation": "davion-sidarli",
+  "runtime": {
+    "node": "/usr/local/bin/node",
+    "readySeconds": 60,
+    "port": 3002
+  },
+  "exclude": [
+    ".snapshots",
+    ".btrbk",
+    "node_modules",
+    ".venv",
+    ".tsbuild",
+    "__pycache__",
+    ".next",
+    "tmux",
+    "*.sock"
+  ],
+  "forbiddenPaths": ["/srv/workspaces/projects/neri"],
+  "machines": {
+    "workstation": {
+      "kind": "native",
+      "items": [
+        {
+          "path": "/home/kasadis/.local/state/aico",
+          "into": "data"
+        },
+        {
+          "path": "/home/kasadis/.local/state/tether/default/tether.db",
+          "into": "tether/tether.db"
+        },
+        {
+          "path": "/home/kasadis/.local/state/tether/default/tether.db-wal",
+          "into": "tether/tether.db-wal",
+          "optional": true
+        },
+        {
+          "path": "/home/kasadis/.config/systemd/user",
+          "into": "units/user"
+        },
+        {
+          "path": "/home/kasadis/.config/aico",
+          "into": "config/aico"
+        },
+        {
+          "path": "/etc/systemd/system",
+          "into": "units/system"
+        },
+        {
+          "path": "/srv/workspaces/projects/aico",
+          "into": "repo"
+        }
+      ]
+    },
+    "gem": {
+      "kind": "append",
+      "machine": "aico",
+      "source": "aico-aico",
+      "passwordFile": "~/.local/state/aico/secrets/backup-append.password",
+      "key": "~/.local/state/aico/secrets/backup-append.ed25519",
+      "items": [
+        {
+          "path": "/home/kasadis/.local/state/aico-snapshot",
+          "into": "data"
+        },
+        {
+          "path": "/home/kasadis/.local/state/aico/secrets",
+          "into": "data/secrets"
+        },
+        {
+          "path": "/home/kasadis/.local/state/aico/blobs",
+          "into": "data/blobs",
+          "optional": true
+        },
+        {
+          "path": "/home/kasadis/.config/systemd/user",
+          "into": "units/user"
+        },
+        {
+          "path": "/home/kasadis/.config/aico",
+          "into": "config/aico"
+        }
+      ],
+      "tetherDatabase": "default-tether.db",
+      "projectFrom": "workstation"
+    }
+  },
+  "loginPolicy": "../../fleet/data/logins-policy.json"
+}

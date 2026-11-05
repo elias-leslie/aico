@@ -131,7 +131,8 @@
     "dataDir": "~/.local/state/aico",
     "otherDirs": ["~/.local/state/tether/default"],
     "stagingDir": "~/.local/state/aico-snapshot",
-    "machines": ["davion-sidarli", "aico"]
+    "machines": ["davion-sidarli", "aico"],
+    "recoveryPaths": ["~/.config/systemd/user", "~/.config/aico"]
   },
   "prepare": {
     "ominull-production-state": {
@@ -149,7 +150,11 @@
     "lockWait": "5m"
   },
   "webUrl": "http://127.0.0.1:3002",
-  "statusPublish": { "attempts": 6, "waitMs": 5000, "timeoutMs": 10000 },
+  "statusPublish": {
+    "attempts": 6,
+    "waitMs": 5000,
+    "timeoutMs": 10000
+  },
   "restoreRoot": "/srv/scratch",
   "remoteSqlite": {
     "machine": "aico",

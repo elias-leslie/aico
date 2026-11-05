@@ -32,6 +32,7 @@ import {
   saveState,
 } from './backup-runtime'
 import { captureRedis } from './backup-streams'
+import { recovery } from './recovery'
 
 export interface Snapshot {
   id: string
@@ -269,6 +270,9 @@ export async function runBackup(
   return ok
 }
 const USAGE = `Usage: aico backups list | request native|drive|append
+  recover bootstrap --machine workstation|gem --to /srv/scratch/NEW_FOLDER [--plan]
+  recover check|snapshots|restore|repair --repository REPO --password-file FILE [--to NEW_FOLDER] [--snapshot ID]
+  drill [--plan] [--scheduled]                         monthly scratch restore and live Aico counts
   run native|drive|append|snapshots|guard|verify
   snapshots SOURCE [--target native|drive|append]       copies available to restore
   browse SOURCE SNAPSHOT PATH [--target native|drive|append]
@@ -286,6 +290,7 @@ export async function backups(argv: string[], env = process.env): Promise<number
     console.log(USAGE)
     return verb ? 0 : 2
   }
+  if (verb === 'recover' || verb === 'drill') return recovery([verb, ...args], cfg, env)
   if (verb === 'rollback') {
     for (const [scope, unit] of Object.values(cfg.legacyTimers))
       console.log(

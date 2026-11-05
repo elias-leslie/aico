@@ -323,8 +323,15 @@ export function stageSqlite(cfg: BackupConfig, now: Date): { paths: string[]; da
     { mode: 0o600 },
   )
   const blobs = join(dirs[0] as string, 'blobs')
+  const secrets = join(dirs[0] as string, 'secrets')
   return {
-    paths: [...copied, join(staging, 'manifest.json'), ...(existsSync(blobs) ? [blobs] : [])],
+    paths: [
+      ...copied,
+      join(staging, 'manifest.json'),
+      ...(existsSync(blobs) ? [blobs] : []),
+      ...(existsSync(secrets) ? [secrets] : []),
+      ...cfg.sqlite.recoveryPaths.map(homePath).filter(existsSync),
+    ],
     dataAt: now.toISOString(),
   }
 }
