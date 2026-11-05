@@ -1,14 +1,18 @@
 import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { request } from 'node:http'
+import { request, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { peerRequest, peerStream } from '@aico/fleet/peer-http'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
 import type { TetherEvent } from './events'
+import type { Hub } from './hub/hub'
 import { insertWidget } from './lifecycle/catalog'
 import { flushSessionEvents } from './lifecycle/engine'
+import { ProjectProvider } from './projects'
+import { createTetherServer } from './server'
 
 let dir: string
 let paths: TetherPaths
@@ -44,6 +48,79 @@ afterEach(async () => {
 
 const call = (method: string, path: string, body?: unknown) =>
   callSocket(paths.socket, method, path, body)
+
+it('keeps two full Tethers from recursively federating peer session lists', async () => {
+  const sockets = [join(dir, 'full-a.sock'), join(dir, 'full-b.sock')]
+  const calls = [0, 0]
+  const servers: Server[] = []
+  try {
+    for (let i = 0; i < 2; i++) {
+      const hub = {
+        forward: () => false,
+        sessions: async () => {
+          calls[i]++
+          if (calls[i] > 4) throw new Error('Synthetic federation recursion')
+          const answer = await peerRequest(sockets[1 - i], 'GET', '/v1/sessions', undefined, 1000)
+          if (answer.status !== 200) throw new Error('Synthetic peer list failed')
+          return (answer.body as { items: [] }).items
+        },
+      } as unknown as Hub
+      const server = createTetherServer({
+        paths,
+        store: daemon.store,
+        events: daemon.events,
+        projects: new ProjectProvider({
+          summitflowUrl: null,
+          localFile: join(dir, 'projects.json'),
+        }),
+        projectRoots: new Map(),
+        startedAt: 0,
+        hub,
+      })
+      servers.push(server)
+      await new Promise<void>((resolve) => server.listen(sockets[i], resolve))
+    }
+    expect(await callSocket(sockets[0], 'GET', '/v1/sessions')).toMatchObject({
+      status: 200,
+      body: { items: [] },
+    })
+    expect(await callSocket(sockets[1], 'GET', '/v1/sessions')).toMatchObject({
+      status: 200,
+      body: { items: [] },
+    })
+    expect(calls).toEqual([1, 1])
+  } finally {
+    for (const server of servers)
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve())
+        server.closeAllConnections()
+      })
+  }
+})
+
+it('sends peers only local replayed and live events', async () => {
+  daemon.events.publish('session.updated', { id: 'remote-replay', host: 'other-full' })
+  daemon.events.publish('session.updated', { id: 'local-replay' })
+  const controller = new AbortController(),
+    ids: unknown[] = []
+  await peerStream(
+    paths.socket,
+    '/v1/events?since=0',
+    (value) => {
+      const event = value as TetherEvent
+      if (event.type === 'hello') {
+        daemon.events.publish('session.updated', { id: 'remote-live', host: 'other-full' })
+        daemon.events.publish('session.updated', { id: 'local-live' })
+      }
+      if (event.type === 'session.updated') {
+        ids.push(event.data.id)
+        if (event.data.id === 'local-live') controller.abort()
+      }
+    },
+    controller.signal,
+  )
+  expect(ids).toEqual(['local-replay', 'local-live'])
+})
 
 describe('control socket', () => {
   it('is a 0600 socket in a 0700 directory and refuses a second daemon', async () => {

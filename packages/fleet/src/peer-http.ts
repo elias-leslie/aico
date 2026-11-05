@@ -4,6 +4,10 @@
 
 import { type IncomingMessage, request, type ServerResponse } from 'node:http'
 
+/** Peer hops ask the destination itself; they never ask it to federate again. */
+export const PEER_LOCAL_HEADER = 'tether-peer-local'
+export const isPeerRequest = (req: IncomingMessage) => req.headers[PEER_LOCAL_HEADER] === '1'
+
 export class PeerUnavailable extends Error {}
 
 export interface PeerAnswer {
@@ -28,9 +32,12 @@ export function peerRequest(
         method,
         path,
         timeout: timeoutMs,
-        headers: payload
-          ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) }
-          : {},
+        headers: {
+          [PEER_LOCAL_HEADER]: '1',
+          ...(payload
+            ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) }
+            : {}),
+        },
       },
       (res) => {
         const parts: Buffer[] = []
@@ -69,40 +76,43 @@ export function peerStream(
       return
     }
     let idle: NodeJS.Timeout | null = null
-    const req = request({ socketPath, method: 'GET', path, headers }, (res) => {
-      if (res.statusCode !== 200) {
-        res.resume()
-        reject(new PeerUnavailable(`peer answered ${res.statusCode} on ${path}`))
-        return
-      }
-      let buffer = ''
-      const touch = () => {
-        if (idleMs <= 0) return
-        if (idle) clearTimeout(idle)
-        idle = setTimeout(() => req.destroy(new Error('peer stream went silent')), idleMs)
-      }
-      touch()
-      res.setEncoding('utf8')
-      res.on('data', (chunk: string) => {
-        touch()
-        buffer += chunk
-        let newline = buffer.indexOf('\n')
-        while (newline >= 0) {
-          const line = buffer.slice(0, newline).trim()
-          buffer = buffer.slice(newline + 1)
-          if (line) {
-            try {
-              onLine(JSON.parse(line))
-            } catch {
-              // A malformed line is skipped; the stream itself is still good.
-            }
-          }
-          newline = buffer.indexOf('\n')
+    const req = request(
+      { socketPath, method: 'GET', path, headers: { ...headers, [PEER_LOCAL_HEADER]: '1' } },
+      (res) => {
+        if (res.statusCode !== 200) {
+          res.resume()
+          reject(new PeerUnavailable(`peer answered ${res.statusCode} on ${path}`))
+          return
         }
-      })
-      res.on('end', () => resolve())
-      res.on('error', (error) => reject(new PeerUnavailable(error.message)))
-    })
+        let buffer = ''
+        const touch = () => {
+          if (idleMs <= 0) return
+          if (idle) clearTimeout(idle)
+          idle = setTimeout(() => req.destroy(new Error('peer stream went silent')), idleMs)
+        }
+        touch()
+        res.setEncoding('utf8')
+        res.on('data', (chunk: string) => {
+          touch()
+          buffer += chunk
+          let newline = buffer.indexOf('\n')
+          while (newline >= 0) {
+            const line = buffer.slice(0, newline).trim()
+            buffer = buffer.slice(newline + 1)
+            if (line) {
+              try {
+                onLine(JSON.parse(line))
+              } catch {
+                // A malformed line is skipped; the stream itself is still good.
+              }
+            }
+            newline = buffer.indexOf('\n')
+          }
+        })
+        res.on('end', () => resolve())
+        res.on('error', (error) => reject(new PeerUnavailable(error.message)))
+      },
+    )
     const abort = () => req.destroy()
     signal.addEventListener('abort', abort, { once: true })
     req.on('error', (error) =>
@@ -138,6 +148,7 @@ export function forwardRequest(
     const headers = Object.fromEntries(
       Object.entries(req.headers).filter(([key]) => !HOP_HEADERS.has(key)),
     )
+    headers[PEER_LOCAL_HEADER] = '1'
     const upstream = request(
       { socketPath, method: req.method, path: req.url, headers },
       (answer) => {

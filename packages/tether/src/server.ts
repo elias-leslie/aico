@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
+import { isPeerRequest } from '@aico/fleet/peer-http'
 import { resolveAgentHubConfig } from './agent-hub/config'
 import type { RunTracker } from './agent-hub/runs'
 import { type AskDelivery, type NeedsYouFeed, registerAskRoutes } from './asks'
@@ -205,7 +206,10 @@ function streamEvents(
     'content-type': 'application/x-ndjson; charset=utf-8',
     'cache-control': 'no-store',
   })
-  const write = (event: TetherEvent) => response.write(`${JSON.stringify(event)}\n`)
+  const write = (event: TetherEvent) => {
+    if (isPeerRequest(request) && event.data.host !== undefined && event.data.host !== null) return
+    response.write(`${JSON.stringify(event)}\n`)
+  }
   write(events.control('hello', { apiVersion: API_VERSION, instance: context.paths.instance }))
   if (since !== null) {
     const replay = sameBoot ? events.replay(since) : null
@@ -459,14 +463,18 @@ const RETIRED_DESKTOP_ROUTES = /^\/v1\/gui(?:\/|$)/
 
 export function createTetherServer(context: ServerContext): Server {
   const router = buildRouter(context)
+  // All peer lists and per-object requests stop here, including roots, runs and asks.
+  const localRouter = context.hub ? buildRouter({ ...context, hub: undefined }) : router
   return createServer((request, response) => {
     if (RETIRED_DESKTOP_ROUTES.test(request.url?.split('?')[0] ?? '')) {
       sendError(response, new HttpError(410, 'windows_retired'))
       return
     }
     // A session, root, wake or run a remote host owns goes there verbatim.
-    if (context.hub?.forward(request, response)) return
-    router.dispatch(request, response).catch((error: unknown) => {
+    const peer = isPeerRequest(request)
+    if (!peer && context.hub?.forward(request, response)) return
+    const destination = peer ? localRouter : router
+    destination.dispatch(request, response).catch((error: unknown) => {
       if (response.headersSent) {
         response.destroy()
         return
