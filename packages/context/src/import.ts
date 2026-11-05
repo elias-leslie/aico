@@ -16,10 +16,19 @@ import { policyFromAgentHub, savePolicy } from './launch'
 import { type Memory, putMemory, type Scope, TIERS } from './memory'
 import { putPrompt } from './prompts'
 
-/** Read-only access to Agent Hub: its database and its checkout. */
+export type AgentHubDataset =
+  | 'memories'
+  | 'memory_settings'
+  | 'prompts'
+  | 'agents'
+  | 'budgets'
+  | 'project_rows'
+  | 'project_hash'
+
+/** Read-only access to Agent Hub: its bounded export and checkout files. */
 export interface AgentHubSource {
-  /** One SELECT whose single column is a JSON value per row; those values' text, in order. */
-  rows(sql: string): string[]
+  /** Opaque JSON text in source order; agent roles are explicitly curated by Aico. */
+  rows(dataset: AgentHubDataset, agentRoles?: readonly string[]): string[]
   /** A file of the Agent Hub checkout, as text. */
   file(path: string): string
 }
@@ -56,8 +65,11 @@ export interface ImportResult {
   missingRoles: string[]
 }
 
-const rowsOf = <T>(source: AgentHubSource, sql: string): T[] =>
-  source.rows(sql).map((text) => JSON.parse(text) as T)
+const rowsOf = <T>(
+  source: AgentHubSource,
+  dataset: AgentHubDataset,
+  agentRoles?: readonly string[],
+): T[] => source.rows(dataset, agentRoles).map((text) => JSON.parse(text) as T)
 
 const sha256 = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex')
 
@@ -125,30 +137,6 @@ function memoryOf(row: SourceMemory): Memory {
   }
 }
 
-const SQL = {
-  memories: `SELECT row_to_json(t)::text FROM (SELECT id, group_id, scope, scope_id, summary, content,
-      tags, tier, pinned, render_mode, trigger_task_types, applicability, loaded_count, helpful_count,
-      harmful_count, version, created_at, updated_at FROM memories WHERE status = 'active' ORDER BY id) t`,
-  memorySettings: `SELECT row_to_json(t)::text FROM (SELECT enabled, total_budget, budget_enabled,
-      max_mandates, max_guardrails, reference_index_enabled, continuity_enabled,
-      continuity_max_sessions, active_variant FROM memory_settings ORDER BY id) t`,
-  prompts: `SELECT row_to_json(t)::text FROM (SELECT id, slug, name, description, content,
-      prompt_type, is_global, boot_eligible, context_policy, updated_at FROM prompts
-      WHERE enabled ORDER BY id) t`,
-  agents: (slugs: readonly string[]) => `SELECT row_to_json(t)::text FROM (SELECT a.slug, a.name,
-      a.description, a.updated_at, (SELECT jsonb_agg(ap.prompt_id ORDER BY ap.priority, ap.prompt_id)
-        FROM agent_prompts ap JOIN prompts p ON p.id = ap.prompt_id AND p.enabled
-        WHERE ap.agent_id = a.id) AS prompt_ids
-      FROM agents a WHERE a.slug IN (${slugs.map((slug) => `'${slug.replace(/'/g, "''")}'`).join(', ')})
-      ORDER BY a.slug) t`,
-  budgets: `SELECT row_to_json(t)::text FROM (SELECT harness, role, warn_tokens, jump_pct, note,
-      updated_at FROM context_budgets ORDER BY harness, role) t`,
-  projectRows: `SELECT row_to_json(p)::text FROM project_permissions p ORDER BY id`,
-  projectHash: `SELECT to_json(encode(sha256(convert_to(coalesce(
-      string_agg(row_to_json(p)::text, E'\\n' ORDER BY id), ''), 'UTF8')), 'hex'))::text
-      FROM project_permissions p`,
-}
-
 /** The project rows as stored here, in Agent Hub's row_to_json text, one per line. */
 export function storedProjectText(db: Database): string {
   const rows = db
@@ -171,8 +159,8 @@ export function importAgentHub(
   options: { agentRoles: readonly string[]; now: string },
 ): ImportResult {
   const reason = 'imported from Agent Hub'
-  const memories = rowsOf<SourceMemory>(source, SQL.memories).map(memoryOf)
-  const settings = rowsOf<Record<string, unknown>>(source, SQL.memorySettings)
+  const memories = rowsOf<SourceMemory>(source, 'memories').map(memoryOf)
+  const settings = rowsOf<Record<string, unknown>>(source, 'memory_settings')
   const prompts = rowsOf<{
     id: number
     slug: string
@@ -184,14 +172,14 @@ export function importAgentHub(
     boot_eligible: boolean | null
     context_policy: unknown
     updated_at: string
-  }>(source, SQL.prompts)
+  }>(source, 'prompts')
   const agents = rowsOf<{
     slug: string
     name: string
     description: string | null
     updated_at: string
     prompt_ids: number[] | null
-  }>(source, SQL.agents(options.agentRoles))
+  }>(source, 'agents', options.agentRoles)
   const budgets = rowsOf<{
     harness: string
     role: string
@@ -199,9 +187,9 @@ export function importAgentHub(
     jump_pct: number | null
     note: string | null
     updated_at: string
-  }>(source, SQL.budgets)
-  const projectLines = source.rows(SQL.projectRows)
-  const [sourceHash] = rowsOf<string>(source, SQL.projectHash)
+  }>(source, 'budgets')
+  const projectLines = source.rows('project_rows')
+  const [sourceHash] = rowsOf<string>(source, 'project_hash')
   const policy = policyFromAgentHub(
     JSON.parse(source.file(POLICY_FILE)),
     JSON.parse(source.file(WORK_ROLES_FILE)),

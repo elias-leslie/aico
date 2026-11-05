@@ -1,57 +1,62 @@
-// Read-only access to Agent Hub for the import: its Postgres through
-// `st db query` (run in its checkout, which holds the connection) and files of
-// the checkout. Large answers arrive in a details file, read and then removed
-// (also when the query failed); nothing from a row is ever printed.
-
+// Agent Hub owns the bounded export and authentication. Rows stay opaque here and never enter logs.
 import { spawnSync } from 'node:child_process'
-import { readFileSync, rmSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import settings from '../data/agent-hub-import.json' with { type: 'json' }
 import type { AgentHubSource } from './import'
 
-const TIMEOUTS = settings.timeouts_seconds
-
-/** Why a finished `st` child did not succeed, or null when it did. */
-function failure(
-  child: ReturnType<typeof spawnSync>,
-  what: string,
-  seconds: number,
-): string | null {
-  const error = child.error as NodeJS.ErrnoException | undefined
-  if (error?.code === 'ETIMEDOUT' || child.signal === 'SIGTERM')
-    return `${what} did not answer within ${seconds}s`
-  if (error) return `${what} could not run: ${error.message}`
-  if (child.status !== 0)
-    return `${what} failed (exit ${child.status}): ${String(child.stderr).split('\n')[0] ?? ''}`
-  return null
-}
-
 export function agentHubSource(checkout: string): AgentHubSource {
   return {
-    rows(sql) {
-      const child = spawnSync('st', ['db', 'query', '--plain', sql.replace(/\s+/g, ' ')], {
-        cwd: checkout,
-        encoding: 'utf8',
-        maxBuffer: 512 * 1024 * 1024,
-        timeout: TIMEOUTS.query * 1000,
-      })
-      const out = child.stdout ?? ''
-      const head = out.startsWith('DB:') ? (out.split('\n')[0] as string) : null
-      const details = head ? /\|details:([^|]+)/.exec(head)?.[1]?.trim() : undefined
-      const path = details ? resolve(checkout, details) : null
-      try {
-        const failed = failure(child, 'st db query', TIMEOUTS.query)
-        if (failed) throw new Error(failed)
-        if (head === null) return out.split('\n').filter((line) => line.length > 0)
-        // A summary line instead of rows: never show its hint, which quotes row text.
-        if (!head.startsWith('DB:OK'))
-          throw new Error(`st db query: ${head.split('|hint:')[0] ?? 'failed'}`)
-        if (!path) return []
-        return readFileSync(path, 'utf8')
-          .split('\n')
-          .filter((line) => line.length > 0)
-      } finally {
-        if (path) rmSync(path, { force: true })
+    rows(dataset, agentRoles = []) {
+      const rows: string[] = []
+      let offset = 0
+      for (;;) {
+        const child = spawnSync(
+          'st',
+          [
+            'agents',
+            'context-export',
+            dataset,
+            '--offset',
+            String(offset),
+            '--limit',
+            String(settings.page_rows),
+            ...agentRoles.flatMap((role) => ['--agent-role', role]),
+          ],
+          {
+            cwd: checkout,
+            encoding: 'utf8',
+            maxBuffer: 512 * 1024 * 1024,
+            timeout: settings.timeouts_seconds.query * 1000,
+          },
+        )
+        if (
+          (child.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' ||
+          child.signal === 'SIGTERM'
+        )
+          throw new Error(
+            `Agent Hub context export did not answer within ${settings.timeouts_seconds.query}s`,
+          )
+        if (child.error) throw new Error('Agent Hub context export could not run')
+        if (child.status !== 0)
+          throw new Error(`Agent Hub context export failed (exit ${child.status})`)
+        let page: { rows: string[]; next_offset: number | null }
+        try {
+          page = JSON.parse(child.stdout)
+          if (
+            !page ||
+            !Array.isArray(page.rows) ||
+            page.rows.some((row) => typeof row !== 'string') ||
+            (page.next_offset !== null &&
+              (!Number.isSafeInteger(page.next_offset) || page.next_offset <= offset))
+          )
+            throw new Error('invalid page')
+        } catch {
+          throw new Error('Invalid Agent Hub context export response')
+        }
+        rows.push(...page.rows)
+        if (page.next_offset === null) return rows
+        offset = page.next_offset
       }
     },
     file(path) {

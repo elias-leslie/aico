@@ -190,7 +190,7 @@ describe('CLI cutover', () => {
       session: '1234abcd',
       project: 'aico',
     })
-    expect(JSON.parse(output[0]).pageUrl).toBe('http://127.0.0.1:3002/mockups?project=aico')
+    expect(JSON.parse(output[0]).pageUrl).toBe('https://aico.summitflow.dev/mockups?project=aico')
   })
 })
 describe('versioned extensions', () => {

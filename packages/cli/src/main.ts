@@ -374,7 +374,12 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       const body = (await response.json()) as { detail?: string; pageUrl?: string }
       if (!response.ok)
         throw new Error(body.detail || `Mockup was not saved: HTTP ${response.status}`)
-      if (body.pageUrl) body.pageUrl = new URL(body.pageUrl, apiBase(root, env)).href
+      if (body.pageUrl) {
+        const identity = JSON.parse(readFileSync(join(root, 'project.identity.json'), 'utf8'))
+        const host = identity.hosts?.browser_frontend
+        const browserBase = env.AICO_WEB_URL || (host ? `https://${host}` : apiBase(root, env))
+        body.pageUrl = new URL(body.pageUrl, browserBase).href
+      }
       out(json(body))
       return 0
     }

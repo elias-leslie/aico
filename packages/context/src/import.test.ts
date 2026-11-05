@@ -98,11 +98,11 @@ class FakeHub implements AgentHubSource {
   ]
   projectLines = PROJECT_LINES
   projectHash = sha256(PROJECT_LINES.join('\n'))
-  rows(sql: string): string[] {
+  rows(dataset: string): string[] {
     const lines = (values: unknown[]) => values.map((value) => JSON.stringify(value))
-    if (sql.includes('encode(sha256')) return lines([this.projectHash])
-    if (sql.includes('project_permissions')) return this.projectLines
-    if (sql.includes('context_budgets'))
+    if (dataset === 'project_hash') return lines([this.projectHash])
+    if (dataset === 'project_rows') return this.projectLines
+    if (dataset === 'budgets')
       return lines([
         {
           harness: 'claude_code',
@@ -113,7 +113,7 @@ class FakeHub implements AgentHubSource {
           updated_at: NOW,
         },
       ])
-    if (sql.includes('FROM agents'))
+    if (dataset === 'agents')
       return lines([
         {
           slug: 'coder',
@@ -123,10 +123,10 @@ class FakeHub implements AgentHubSource {
           prompt_ids: [1, 99],
         },
       ])
-    if (sql.includes('FROM prompts')) return lines(this.prompts)
-    if (sql.includes('memory_settings')) return lines([{ enabled: true, total_budget: 4000 }])
-    if (sql.includes('FROM memories')) return lines(this.memories)
-    throw new Error(`unexpected query: ${sql}`)
+    if (dataset === 'prompts') return lines(this.prompts)
+    if (dataset === 'memory_settings') return lines([{ enabled: true, total_budget: 4000 }])
+    if (dataset === 'memories') return lines(this.memories)
+    throw new Error(`unexpected dataset: ${dataset}`)
   }
   file(path: string): string {
     if (path === POLICY_FILE) return JSON.stringify(POLICY)
