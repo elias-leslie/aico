@@ -1,0 +1,7 @@
+
+baseline  : 49 violations
+
+  new     : 0
+  same    : 49
+  stale   : 34 (running in 'shrink-only' mode => removed from the baseline)
+

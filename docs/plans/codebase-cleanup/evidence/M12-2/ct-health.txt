@@ -1,0 +1,7 @@
+2026-11-05T08:43:20Z
+{"service":"aico-web","status":"healthy","tether":{"status":"healthy","apiVersion":28,"version":"0.1.0"}}active
+active
+active
+active
+/home/kasadis/.local/lib/aico/releases/2834f08c3ec845754d22cb046dc308bfc17d6466
+backups-append-aico is due now; its workers run it within 5 s.

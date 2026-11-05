@@ -1,0 +1,2 @@
+[deploy] queued aico-13da1f47317e for 89f520472e10
+[deploy] result: aico deploy result aico-13da1f47317e   wait: aico deploy wait aico-13da1f47317e   log: aico logs aico-deploy-aico-13da1f47317e

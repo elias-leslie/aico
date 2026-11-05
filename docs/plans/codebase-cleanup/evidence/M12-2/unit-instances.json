@@ -1,0 +1,16 @@
+{
+  "system": [
+    "nightshift-boot-mark.service loaded active exited",
+    "nightshift-check.service loaded inactive dead",
+    "nightshift-input-watch.service loaded active running",
+    "nightshift-zswap.service loaded active exited",
+    "summitflow-dnsmasq.service loaded active running",
+    "summitflow-stack.service loaded active exited"
+  ],
+  "user": [
+    "agent-hub-backend.service loaded active running",
+    "nightshift-display-guard.service loaded active running",
+    "nightshift-postboot.service loaded inactive dead",
+    "nightshift-postboot.timer loaded active waiting"
+  ]
+}

@@ -1,0 +1,139 @@
+# Runtime retirement inventory
+
+Captured before and after on 2026-11-05. `workstation.json`, `units-before.json`, `workstation-final-user.json`, `workstation-final-system.json`, `gem.json`, `ct190.json`, connection metadata and the final journal receipts are the evidence. Templates have no active instances; static services remain manually invocable, with their timer/path triggers disabled. Unit files and every data volume are kept. No environment file or credential was opened.
+
+The archive lane acknowledged release before data-holding containers stopped: `archive-release.txt`, immutable `/srv/workspaces/archive/pre-aico/manifest.json`, archive checkpoint `3c4bc895`. Verified restores/counts, SQLite checks, ledger/PVE anchors, T7/Drive and small-file restore were supplied by that lane.
+
+## Workstation units
+
+| Scope / unit | Final state | Replacement, remaining caller and decision |
+| --- | --- | --- |
+| system `nightshift-agent-requests.path` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-approvals.path` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-outbox.path` | inactive/disabled | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-runner-critical.path` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-agent-requests.service` | inactive/static | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-approvals.service` | inactive/static | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-approve.service` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-boot-mark.service` | active/enabled | boot/shutdown marker; current postboot/check readers. Keep; host-steward owner for M13 port. |
+| system `nightshift-btrfs-scrub-native.service` | inactive/static | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-btrfs-scrub-root.service` | inactive/static | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-check.service` | inactive/static | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-collect-usage.service` | inactive/static | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-coord@.service` | no instance/static | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-exec@.service` | no instance/static | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-fcm-token.service` | inactive/static | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-grant.service` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-housekeeping.service` | inactive/static | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-input-watch.service` | active/enabled | physical input/idle state used by the display guard. Keep; host-steward/display owner for M13 port. |
+| system `nightshift-nvme-long-test.service` | inactive/static | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-nvme-short-test.service` | inactive/static | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-outbox.service` | inactive/static | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-runner@.service` | no instance/static | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-space-guard.service` | inactive/static | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-zswap.service` | active/enabled | boot-time zswap setup; no replacement installed. Keep; host-steward owner for M13 port. |
+| system `summitflow-backup-window-guard.service` | inactive/disabled | Aico backups-guard scheduled job; No active process or enabled legacy trigger in unit/connection inventory. Stopped/disabled in M12-2; retain unit for rollback. |
+| system `summitflow-dnsmasq.service` | active/enabled | split DNS for live infrastructure. Keep; infrastructure, not the retired application. |
+| system `summitflow-host-monitor.service` | inactive/disabled | Aico Status, /proc live views and checks; monitor rebuild/read code retired; No active process or enabled legacy trigger in unit/connection inventory. Stopped/disabled in M12-2; retain unit for rollback. |
+| system `summitflow-stack-prune.service` | inactive/static | No replacement prune requested; data/volumes retained; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `summitflow-stack.service` | active/disabled | old compose bootstrap; active/exited, no process or ExecStop. Disable boot trigger; keep existing Postgres container running. |
+| system `nightshift-agent-requests.timer` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-approvals.timer` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-btrfs-scrub-native.timer` | inactive/disabled | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-btrfs-scrub-root.timer` | inactive/disabled | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-check.timer` | inactive/disabled | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-collect-usage.timer` | inactive/disabled | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-fcm-token.timer` | inactive/disabled | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-housekeeping.timer` | inactive/disabled | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-nvme-long-test.timer` | inactive/disabled | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-nvme-short-test.timer` | inactive/disabled | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-outbox.timer` | inactive/disabled | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-runner-critical.timer` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-runner-monthly.timer` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-runner-nightly.timer` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-runner-weekly.timer` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `nightshift-space-guard.timer` | inactive/disabled | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `summitflow-backup-window-guard.timer` | inactive/disabled | Aico backups-guard scheduled job; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| system `summitflow-stack-prune.timer` | inactive/disabled | No replacement prune requested; data/volumes retained; No active process or enabled legacy trigger in unit/connection inventory. Stopped/disabled in M12-2; retain unit for rollback. |
+| user `nightshift-notify-critical.path` | inactive/disabled | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `agent-hub-backend.service` | active/enabled | Neri old lab-login path, previously launched sessions, retained `zzupdate` manual completion call, agents/skills CLI; four PG connections. Keep until Neri coordinator confirms its switch; Postgres required. |
+| user `agent-hub-frontend.service` | inactive/disabled | Aico prompts/memory editors, native context hooks, session readers and usage job; No active process or enabled legacy trigger in unit/connection inventory. Stopped/disabled in M12-2; retain unit for rollback. |
+| user `agent-hub-hatchet-agent-worker.service` | inactive/disabled | Aico prompts/memory editors, native context hooks, session readers and usage job; No active process or enabled legacy trigger in unit/connection inventory. Stopped/disabled in M12-2; retain unit for rollback. |
+| user `agent-hub-hatchet-ops-worker.service` | inactive/disabled | Aico prompts/memory editors, native context hooks, session readers and usage job; No active process or enabled legacy trigger in unit/connection inventory. Stopped/disabled in M12-2; retain unit for rollback. |
+| user `agent-hub-usage-collect.service` | inactive/static | Aico prompts/memory editors, native context hooks, session readers and usage job; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `codex-session-close-inactive.service` | inactive/static | Aico prompts/memory editors, native context hooks, session readers and usage job; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `codex-session-sync.service` | inactive/static | Aico prompts/memory editors, native context hooks, session readers and usage job; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-app-adb.service` | inactive/static | Aico Android signed update flow; no legacy trigger; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-couriers.service` | inactive/static | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-daily-pass.service` | inactive/static | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-decide.service` | inactive/static | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-desktop-approve.service` | inactive/disabled | Aico grants, root rules and jobs; old planner/runner disabled; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-digest.service` | inactive/static | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-display-guard.service` | active/enabled | physical-idle display shutoff; live desktop caller. Keep; Aico/display owner for M13 port. |
+| user `nightshift-drill.service` | inactive/static | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-memctl.service` | inactive/disabled | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-notify-critical.service` | inactive/static | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-postboot.service` | inactive/static | retained postboot timer calls it. Keep; host-steward owner for M13 port. |
+| user `nightshift-web.service` | inactive/disabled | Aico web and phone pairing port; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `summitflow-backend.service` | inactive/disabled | Aico web, CLI, jobs and native harnesses; old SF application retired in M10d; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `summitflow-frontend.service` | inactive/disabled | Aico web, CLI, jobs and native harnesses; old SF application retired in M10d; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `summitflow-hatchet-worker.service` | inactive/disabled | Aico web, CLI, jobs and native harnesses; old SF application retired in M10d; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `summitflow-host-backup.service` | inactive/static | Aico backups engine and jobs; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `summitflow-host-verify.service` | inactive/static | Aico backups engine and jobs; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `agent-hub-usage-collect.timer` | inactive/disabled | Aico prompts/memory editors, native context hooks, session readers and usage job; No active process or enabled legacy trigger in unit/connection inventory. Stopped/disabled in M12-2; retain unit for rollback. |
+| user `codex-session-close-inactive.timer` | inactive/disabled | Aico prompts/memory editors, native context hooks, session readers and usage job; No active process or enabled legacy trigger in unit/connection inventory. Stopped/disabled in M12-2; retain unit for rollback. |
+| user `codex-session-sync.timer` | inactive/disabled | Aico prompts/memory editors, native context hooks, session readers and usage job; No active process or enabled legacy trigger in unit/connection inventory. Stopped/disabled in M12-2; retain unit for rollback. |
+| user `nightshift-couriers.timer` | inactive/disabled | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-daily-pass.timer` | inactive/disabled | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-digest.timer` | inactive/disabled | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-drill.timer` | inactive/disabled | Aico host-steward checks/jobs and Status; legacy trigger retired in M5a/M5b; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-notify-critical.timer` | inactive/disabled | Aico notify/Needs you/Status and host token job; old AI planner/digests dropped; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `nightshift-postboot.timer` | active/enabled | postboot checks still scheduled by this timer. Keep; host-steward owner for M13 port. |
+| user `summitflow-host-backup.timer` | inactive/disabled | Aico backups engine and jobs; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| user `summitflow-host-verify.timer` | inactive/disabled | Aico backups engine and jobs; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+
+## Gem units
+
+| Unit | State | Replacement, remaining caller and decision |
+| --- | --- | --- |
+| `nightshift-boot-mark.service` | active/enabled | boot/shutdown marker; current postboot/check readers. Keep; host-steward owner for M13 port. |
+| `nightshift-nightwatch-web.service` | inactive/disabled | Aico PVE sender/trim timers and independent heartbeat readers; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| `nightshift-nightwatch.service` | inactive/static | Aico PVE sender/trim timers and independent heartbeat readers; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+| `summitflow-cpu-epp.service` | active/enabled | boot-time CPU governor/EPP configuration. Keep; host-steward owner for M13 port. |
+| `nightshift-nightwatch.timer` | inactive/disabled | Aico PVE sender/trim timers and independent heartbeat readers; No active process or enabled legacy trigger in unit/connection inventory. Remain inactive; retain unit for rollback. |
+
+Gem's replacement `aico-pve-sender.timer` and `aico-pve-trim.timer` are enabled. CT190 has no matching legacy system or kasadis-user unit; the reviewer separately checked its user manager. CT190 now runs the accepted Aico full-peer release through its canonical prebuilt installer, with the existing configuration and stores retained.
+
+## Containers, cron and supporting files
+
+| Item | Caller / replacement / decision |
+| --- | --- |
+| `summitflow-stack-postgres-1` | Running, restart unless-stopped. Metadata shows four Agent Hub and one Neri connection, no Hatchet connection. Keep until the Neri switch and old-session consumers end. No Neri row contents opened. |
+| `summitflow-stack-redis-1` | Client-free before stop. Old Redis backup stream and host health expectation moved off it after archive release. Stopped, restart=no; volume and past copies kept. |
+| `summitflow-stack-hatchet-1` | Only AH workers/server connections before cutover. AH workers stopped, Aico jobs replace scheduling. Stopped, restart=no; volume kept. |
+| Old Hatchet setup/migration containers | Already exited; no live caller. Kept as-is, no image/volume/container prune. |
+| `local-searxng` | Running; Aico's live web-search caller still needs it. Keep. |
+| Workstation / CT190 / gem cron | Matching `/etc/cron.*` scans found no active legacy line. Root/kasadis crontabs have zero active entries on these hosts; CT190 user manager separately checked. |
+| Signing tmpfs mount and backup filesystem mounts | Live signing/backup infrastructure. Keep; no key contents read. |
+| `nightshift-tray@summitflow.dev` GNOME extension | Enabled, current Aico top-bar integration. Keep its source and supported extension install. |
+| Retired AH context-delivery files | Final import completed, Aico launch deliveries verified. Existing AH files archived/retained and no longer used by new native sessions. |
+| Claude/Codex/Pi local integrations | Native launchers and Aico hooks only for new sessions; own Pi model guard calls Aico. Companion config commits retain rollback. No third-party binary or dependency changed. |
+
+## Remaining consumers
+
+Agent Hub's frontend, usage timer, Codex sync/close timers and Hatchet workers are off. Its prompt/memory writers use Aico's editors or CLI, and the scheduled copy-import job is removed after the final matching import. Old live sessions may still use their original AH route. `agent-skills/commands/zzupdate.md` also still invokes `st complete --agent dependency-manager`, so its direct completion extension remains as a live manual caller. Local `st skills` tooling remains, and `st agents credentials` remains for Neri. Five obsolete CLI extensions (workflow, automations, ctx, native-sessions, note) and their help manifests are retired after a registered-repo/hook/skill/timer/prompt/memory caller scan. The backend therefore remains. The Neri coordinator has not confirmed the M11c lab-login switch; that backend and Postgres are deliberately retained. There is no grace-period promise or automatic deletion.
+
+The coordinator approved retaining display/input, boot-mark/postboot, zswap and CPU EPP until M13 assigns their final port. These helpers have specific live consumers; disabled application/planner units have none. Per-root measured context tokens have no Aico equivalent: root metadata reports unknown instead of querying AH. M13 must record this explicit gap.
+
+## Rollback
+
+Restore only the component needed. Declare the host change first. Retained unit files, container volumes, stores and previous releases are the rollback source; no database restore, dump replacement or deletion is required.
+
+- Root monitor: `sudo systemctl --no-ask-password enable --now summitflow-host-monitor.service` (retained old installed code/state), only if reverting to the legacy monitor is intended. Aico no longer auto-builds it.
+- Old backup triggers: `sudo systemctl --no-ask-password enable --now summitflow-backup-window-guard.service` restores the old guard. The prune timer stays disabled; restoring deletion/prune behavior requires the owner’s explicit authority.
+- Container dependency rollback: `sudo docker update --restart=unless-stopped summitflow-stack-redis-1 summitflow-stack-hatchet-1`, then `sudo docker start summitflow-stack-redis-1 summitflow-stack-hatchet-1`. Reenable `summitflow-stack.service` only when the whole compose bootstrap is deliberately restored. Postgres needs no change.
+- AH application rollback: `systemctl --user enable --now agent-hub-frontend.service agent-hub-hatchet-agent-worker.service agent-hub-hatchet-ops-worker.service agent-hub-usage-collect.timer codex-session-sync.timer codex-session-close-inactive.timer`. Reenable the old Aico copy-import job only if AH is deliberately the writer again; it is absent from current job data.
+- Config integration rollback: revert the scoped companion commits in claude-config/codex-config and reinstall those supported hooks; relink the retained Pi extension source if needed. Never reset other work or modify harness binaries.
+- Aico/CT190 source rollback: use the retained earlier release's installer and bundles; see `docs/deployment.md`. The CT prior source was `39913f44db68330972f9e8fbe659405cb30794ba`, prior ops target `81c420942578911be67b57ee16d3f7fc5d85022f`. Keep current data when reverting code.
+
+None of these commands has been run as a rollback. No archive, credential, durable data, dump, backup, snapshot, old release or volume was deleted or pruned by M12-2.

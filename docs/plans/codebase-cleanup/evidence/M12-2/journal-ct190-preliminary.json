@@ -1,0 +1,27 @@
+{
+  "since": "2026-11-05T09:04:43Z",
+  "until": "2026-11-05T09:06:57Z",
+  "scopes": [
+    {
+      "scope": "user",
+      "units": [
+        "aico-web.service",
+        "aico-jobs.service",
+        "tether@default.service",
+        "aico-state-snapshot.service"
+      ],
+      "events": {
+        "aico-jobs.service": 2
+      },
+      "alerts": []
+    },
+    {
+      "scope": "system",
+      "units": [
+        "host-steward-heartbeat.service"
+      ],
+      "events": {},
+      "alerts": []
+    }
+  ]
+}

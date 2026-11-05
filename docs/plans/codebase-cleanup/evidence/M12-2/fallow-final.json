@@ -1,0 +1,400 @@
+{
+  "version": "2.57.0",
+  "summary": {
+    "total_issues": 246,
+    "unused_files": 15,
+    "unused_exports": 74,
+    "unused_types": 16,
+    "private_type_leaks": 0,
+    "unused_dependencies": 0,
+    "unused_enum_members": 0,
+    "unused_class_members": 130,
+    "unresolved_imports": 0,
+    "unlisted_dependencies": 0,
+    "duplicate_exports": 9,
+    "type_only_dependencies": 0,
+    "test_only_dependencies": 0,
+    "circular_dependencies": 2,
+    "boundary_violations": 0,
+    "stale_suppressions": 0
+  },
+  "unused_files": [
+    "docs/mockups/chat/chat.css",
+    "docs/mockups/chat/chat.js",
+    "docs/mockups/chat/data.js",
+    "docs/mockups/status/mockup.css",
+    "docs/mockups/status/rows.js",
+    "docs/mockups/status/status.js",
+    "native/hook/pi/aico-hook.ts",
+    "native/tray/shell-extension/nightshift-tray@summitflow.dev/extension.js",
+    "native/tray/shell-extension/nightshift-tray@summitflow.dev/logic.js",
+    "native/tray/shell-extension/nightshift-tray@summitflow.dev/stylesheet.css",
+    "packages/tether/integrations/pi/aico-due.ts",
+    "packages/web-frontend/public/sw.js",
+    "packages/web-frontend/test-stubs/xterm-style.ts",
+    "packages/web-frontend/test-stubs/xterm.css",
+    "scripts/snapshot-state.mjs"
+  ],
+  "exports": [
+    {
+      "path": "native/tray/shell-extension/nightshift-tray@summitflow.dev/logic.js",
+      "name": "spot"
+    },
+    {
+      "path": "packages/agent/src/ask.ts",
+      "name": "ASK_USAGE"
+    },
+    {
+      "path": "packages/checks/src/check.ts",
+      "name": "resultLine"
+    },
+    {
+      "path": "packages/checks/src/cli.ts",
+      "name": "parse"
+    },
+    {
+      "path": "packages/checks/src/cli.ts",
+      "name": "postCheckRow"
+    },
+    {
+      "path": "packages/checks/src/publish.ts",
+      "name": "deliver"
+    },
+    {
+      "path": "packages/checks/src/run.ts",
+      "name": "hint"
+    },
+    {
+      "path": "packages/checks/src/status.ts",
+      "name": "projectId"
+    },
+    {
+      "path": "packages/cli/src/extensions.ts",
+      "name": "inside"
+    },
+    {
+      "path": "packages/context/src/deliver.ts",
+      "name": "KINDS"
+    },
+    {
+      "path": "packages/context/src/format.ts",
+      "name": "when"
+    },
+    {
+      "path": "packages/context/src/format.ts",
+      "name": "span"
+    },
+    {
+      "path": "packages/context/src/route.ts",
+      "name": "usageProvider"
+    },
+    {
+      "path": "packages/notify/src/fcm.ts",
+      "name": "FCM_URL"
+    },
+    {
+      "path": "packages/notify/src/needs-you.ts",
+      "name": "DONE"
+    },
+    {
+      "path": "packages/notify/src/needs-you.ts",
+      "name": "rowAsk"
+    },
+    {
+      "path": "packages/ops/src/backup-retention.ts",
+      "name": "manifests"
+    },
+    {
+      "path": "packages/status/src/show.ts",
+      "name": "select"
+    },
+    {
+      "path": "packages/status/src/show.ts",
+      "name": "rollup"
+    },
+    {
+      "path": "packages/tasks/src/cli.ts",
+      "name": "openTasksDb"
+    },
+    {
+      "path": "packages/tasks/src/format.ts",
+      "name": "truncate"
+    },
+    {
+      "path": "packages/tasks/src/pulse.ts",
+      "name": "items"
+    },
+    {
+      "path": "packages/tasks/src/pulse.ts",
+      "name": "select"
+    },
+    {
+      "path": "packages/tether/src/config.ts",
+      "name": "assertSocketPath"
+    },
+    {
+      "path": "packages/tether/src/continuity.ts",
+      "name": "observeEntryAgent"
+    },
+    {
+      "path": "packages/tether/src/generation.ts",
+      "name": "GENERATION_RE"
+    },
+    {
+      "path": "packages/tether/src/http.ts",
+      "name": "MAX_BODY_BYTES"
+    },
+    {
+      "path": "packages/tether/src/hub/hub.ts",
+      "name": "LIST_TIMEOUT_MS"
+    },
+    {
+      "path": "packages/tether/src/hub/hub.ts",
+      "name": "CREATE_TIMEOUT_MS"
+    },
+    {
+      "path": "packages/tether/src/hub/peer.ts",
+      "name": "retryDelay"
+    },
+    {
+      "path": "packages/tether/src/hub/update.ts",
+      "name": "RELEASE_FILES"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/display.ts",
+      "name": "projectName"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/entries.ts",
+      "name": "ENTRY_HOME_ENV"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/entries.ts",
+      "name": "ENTRY_TOOLS"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/entries.ts",
+      "name": "ENTRY_TOOL_ENV"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/entries.ts",
+      "name": "ENTRY_NAME"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/entries.ts",
+      "name": "ENTRY_ARG"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/job-guard.ts",
+      "name": "TICK_MS"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/job-guard.ts",
+      "name": "makePane"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/tui/adapters/claude-code.ts",
+      "name": "claudeSessions"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/tui/adapters/codex.ts",
+      "name": "codexUserRollouts"
+    },
+    {
+      "path": "packages/tether/src/lifecycle/tui/context-support.ts",
+      "name": "checkout"
+    },
+    {
+      "path": "packages/tether/src/lifecycle-api.ts",
+      "name": "descriptor"
+    },
+    {
+      "path": "packages/tether/src/markers.ts",
+      "name": "MANAGED_LIFECYCLE_VERSION"
+    },
+    {
+      "path": "packages/tether/src/model-switch.ts",
+      "name": "SWITCH_KINDS"
+    },
+    {
+      "path": "packages/tether/src/recovery-facts.ts",
+      "name": "duration"
+    },
+    {
+      "path": "packages/tether/src/recovery-facts.ts",
+      "name": "size"
+    },
+    {
+      "path": "packages/tether/src/rewind.ts",
+      "name": "promptLine"
+    },
+    {
+      "path": "packages/tether/src/sessions/lines.ts",
+      "name": "CHUNK"
+    },
+    {
+      "path": "packages/tether/src/waiting.ts",
+      "name": "agentName"
+    },
+    {
+      "path": "packages/usage/src/codex.ts",
+      "name": "projectOf"
+    },
+    {
+      "path": "packages/usage/src/collect.ts",
+      "name": "cutoverDay"
+    },
+    {
+      "path": "packages/usage/src/spend.ts",
+      "name": "ago"
+    },
+    {
+      "path": "packages/web-frontend/components/notes/NoteList.tsx",
+      "name": "counts"
+    },
+    {
+      "path": "packages/web-frontend/lib/capture-thumb.ts",
+      "name": "THUMB_MAX_BYTES"
+    },
+    {
+      "path": "packages/web-frontend/lib/generated/project-branding.generated.ts",
+      "name": "PRODUCT_ID"
+    },
+    {
+      "path": "packages/web-frontend/lib/generated/project-branding.generated.ts",
+      "name": "PRODUCT_PUBLIC_HOST"
+    },
+    {
+      "path": "packages/web-frontend/lib/project-branding.ts",
+      "name": "PRODUCT_ID"
+    },
+    {
+      "path": "packages/web-frontend/lib/project-branding.ts",
+      "name": "PRODUCT_PUBLIC_HOST"
+    },
+    {
+      "path": "packages/web-frontend/lib/status.ts",
+      "name": "SHOWN"
+    },
+    {
+      "path": "packages/web-server/src/cli.ts",
+      "name": "workspacesRoot"
+    },
+    {
+      "path": "packages/web-server/src/notes-data.ts",
+      "name": "GROCERIES_SOURCE"
+    },
+    {
+      "path": "packages/web-server/src/notes-import.ts",
+      "name": "unreferenced"
+    },
+    {
+      "path": "packages/web-server/src/owners/vehicles.ts",
+      "name": "eventId"
+    },
+    {
+      "path": "packages/web-server/src/sessions.ts",
+      "name": "modelSwitchOf"
+    },
+    {
+      "path": "packages/web-server/src/sync/engine.ts",
+      "name": "MAX_AHEAD_MS"
+    },
+    {
+      "path": "packages/webtools/src/counter.ts",
+      "name": "localDay"
+    },
+    {
+      "path": "packages/webtools/src/focus.ts",
+      "name": "bm25"
+    },
+    {
+      "path": "packages/webtools/src/search.ts",
+      "name": "USER_AGENT"
+    },
+    {
+      "path": "scripts/packages.cjs",
+      "name": "ROOT_FILES"
+    },
+    {
+      "path": "scripts/packages.cjs",
+      "name": "cone"
+    },
+    {
+      "path": "scripts/packages.cjs",
+      "name": "contractReaders"
+    },
+    {
+      "path": "scripts/packages.cjs",
+      "name": "sameLayerImports"
+    },
+    {
+      "path": "scripts/packages.cjs",
+      "name": "walk"
+    },
+    {
+      "path": "packages/context/src/editor.ts",
+      "name": "ContextRole"
+    },
+    {
+      "path": "packages/tether/src/hub/placement.ts",
+      "name": "ProxmoxReading"
+    },
+    {
+      "path": "packages/tether/src/markers.ts",
+      "name": "SessionOrigin"
+    },
+    {
+      "path": "packages/usage/src/opencode.ts",
+      "name": "OpenCodeWindow"
+    },
+    {
+      "path": "packages/web-frontend/components/Terminal.tsx",
+      "name": "TerminalProps"
+    },
+    {
+      "path": "packages/web-frontend/lib/hooks/use-file-upload.ts",
+      "name": "UploadError"
+    },
+    {
+      "path": "packages/web-frontend/lib/hooks/use-host-admin.ts",
+      "name": "HostActionAnswer"
+    },
+    {
+      "path": "packages/web-frontend/lib/hooks/use-terminal-panes.ts",
+      "name": "CreatePaneRequest"
+    },
+    {
+      "path": "packages/web-frontend/lib/hooks/use-terminal-panes.ts",
+      "name": "PanePlacementOptions"
+    },
+    {
+      "path": "packages/web-frontend/lib/hooks/use-terminal-panes.ts",
+      "name": "UpdatePaneRequest"
+    },
+    {
+      "path": "packages/web-server/src/cli.ts",
+      "name": "TsessionArgs"
+    },
+    {
+      "path": "packages/web-server/src/grants.ts",
+      "name": "GrantRequest"
+    },
+    {
+      "path": "packages/web-server/src/notes.ts",
+      "name": "NoteSummaryJson"
+    },
+    {
+      "path": "packages/web-server/src/notes.ts",
+      "name": "NoteDetailJson"
+    },
+    {
+      "path": "packages/web-server/src/owners/vehicles.ts",
+      "name": "VehicleEvent"
+    },
+    {
+      "path": "packages/webtools/src/fetch.ts",
+      "name": "Backend"
+    }
+  ]
+}

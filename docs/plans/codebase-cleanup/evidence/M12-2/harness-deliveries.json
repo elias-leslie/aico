@@ -1,0 +1,55 @@
+{
+  "at": "2026-11-05T08:49:08.263856+00:00",
+  "deliveries": [
+    {
+      "tool": "claude-code",
+      "session": "159b5c74",
+      "channel": "launch",
+      "bytes": "25283",
+      "budget": "32768",
+      "over": "0",
+      "missing": "[]",
+      "at": "2026-11-05T08:06:38.776Z"
+    },
+    {
+      "tool": "codex",
+      "session": "ad4a245b",
+      "channel": "launch",
+      "bytes": "25283",
+      "budget": "32768",
+      "over": "0",
+      "missing": "[]",
+      "at": "2026-11-05T08:13:08.628Z"
+    },
+    {
+      "tool": "codex",
+      "session": "1da27bcb",
+      "channel": "launch",
+      "bytes": "25283",
+      "budget": "32768",
+      "over": "0",
+      "missing": "[]",
+      "at": "2026-11-05T08:15:59.473Z"
+    },
+    {
+      "tool": "pi",
+      "session": "6f0d5afb",
+      "channel": "launch",
+      "bytes": "25283",
+      "budget": "32768",
+      "over": "0",
+      "missing": "[]",
+      "at": "2026-11-05T08:18:05.260Z"
+    },
+    {
+      "tool": "pi",
+      "session": "ec76252d",
+      "channel": "launch",
+      "bytes": "25283",
+      "budget": "32768",
+      "over": "0",
+      "missing": "[]",
+      "at": "2026-11-05T08:20:00.730Z"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "source": "ee4f4a24918fbb2211c6aa262b50a64b27f06ad2",
+  "artifacts": [
+    {
+      "file": "source.tar",
+      "bytes": 37611520,
+      "sha256": "a23634e87bbe6367eccaa00d3e782dc493f53f03b83fedd6c4d00c8a5c428512",
+      "remote_matches": true
+    },
+    {
+      "file": "artifacts.tar.gz",
+      "bytes": 184196166,
+      "sha256": "ae2e7d4006d5d573b5b7593500fc7d3d4c78e5a2802a52b248694fe5c7663b4e",
+      "remote_matches": true
+    }
+  ],
+  "builds": [
+    "aico-2a49a3c8a004",
+    "aico-fa85c59bc709",
+    "aico-20e417562a48"
+  ],
+  "ct_install": "ct-accepted-install.txt",
+  "prior_ct_source": "39913f44db68330972f9e8fbe659405cb30794ba",
+  "prior_ct_ops": "81c420942578911be67b57ee16d3f7fc5d85022f",
+  "source_overlay_paths": [
+    "node_modules",
+    "packages/checks/dist",
+    "packages/cli/dist",
+    "packages/jobs/dist",
+    "packages/ops/dist",
+    "packages/tether/dist",
+    "packages/web-server/dist",
+    "packages/web-frontend/out"
+  ]
+}

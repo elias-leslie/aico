@@ -1,0 +1,39 @@
+CHECK:SCOPE:left out 1 changed file(s) other agents wrote or lease
+CHECK:quick:30 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: python-host-ruff, python-host-types, python-host-tests, gradle-android, cargo-tray, go-hook, python-st-sdk, python-service-tools, biome-agent, biome-cli, tsc-cli, biome-fleet, tsc-fleet, biome-jobs, tsc-jobs, biome-notes, tsc-notes, biome-notify, tsc-notify, biome-ops, tsc-ops, biome-shared, tsc-shared, biome-status, tsc-status, biome-store, tsc-store, biome-tasks, tsc-tasks, biome-tether-client, tsc-tether-client, biome-ui-kit, biome-usage, tsc-usage, biome-web-server, biome-webtools, tsc-webtools, contracts-host-steward
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-506837-details.txt|hint:boundaries: ok (20 packages, 12 contract fixtures)
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-506837-details.txt|hint:[]
+CHECK:OK:depcruise-agent|0.6s|details:.dev-tools/depcruise-agent-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-checks|0.1s|details:.dev-tools/biome-checks-506837-details.txt|hint:Checked 1 file in 7ms. No fixes applied.
+CHECK:OK:tsc-agent|0.9s|details:.dev-tools/tsc-agent-506837-details.txt|hint:-
+CHECK:OK:depcruise-checks|0.5s|details:.dev-tools/depcruise-checks-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-checks|0.9s|details:.dev-tools/tsc-checks-506837-details.txt|hint:-
+CHECK:OK:biome-context|0.1s|details:.dev-tools/biome-context-506837-details.txt|hint:Checked 1 file in 8ms. No fixes applied.
+CHECK:OK:tsc-context|0.1s|details:.dev-tools/tsc-context-506837-details.txt|hint:-
+CHECK:OK:depcruise-cli|0.5s|details:.dev-tools/depcruise-cli-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-context|0.5s|details:.dev-tools/depcruise-context-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-fleet|0.5s|details:.dev-tools/depcruise-fleet-506837-details.txt|hint:‼ 48 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-jobs|0.5s|details:.dev-tools/depcruise-jobs-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-notes|0.4s|details:.dev-tools/depcruise-notes-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-notify|0.5s|details:.dev-tools/depcruise-notify-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-ops|0.5s|details:.dev-tools/depcruise-ops-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-shared|0.4s|details:.dev-tools/depcruise-shared-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-status|0.4s|details:.dev-tools/depcruise-status-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-store|0.4s|details:.dev-tools/depcruise-store-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-tasks|0.5s|details:.dev-tools/depcruise-tasks-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-tether|0.2s|details:.dev-tools/biome-tether-506837-details.txt|hint:Checked 7 files in 51ms. No fixes applied.
+CHECK:OK:depcruise-tether|0.9s|details:.dev-tools/depcruise-tether-506837-details.txt|hint:‼ 17 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-tether-client|0.5s|details:.dev-tools/depcruise-tether-client-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-ui-kit|0.6s|details:.dev-tools/tsc-ui-kit-506837-details.txt|hint:-
+CHECK:OK:depcruise-ui-kit|0.4s|details:.dev-tools/depcruise-ui-kit-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-usage|0.5s|details:.dev-tools/depcruise-usage-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-web-frontend|0.1s|details:.dev-tools/biome-web-frontend-506837-details.txt|hint:Checked 2 files in 10ms. No fixes applied.
+CHECK:OK:tsc-tether|3.3s|details:.dev-tools/tsc-tether-506837-details.txt|hint:-
+CHECK:OK:depcruise-web-frontend|0.9s|details:.dev-tools/depcruise-web-frontend-506837-details.txt|hint:‼ 46 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-web-server|0.1s|details:.dev-tools/tsc-web-server-506837-details.txt|hint:-
+CHECK:OK:depcruise-web-server|0.8s|details:.dev-tools/depcruise-web-server-506837-details.txt|hint:‼ 36 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-webtools|0.5s|details:.dev-tools/depcruise-webtools-506837-details.txt|hint:‼ 49 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-root|0.1s|details:.dev-tools/biome-root-506837-details.txt|hint:Checked 0 files in 1166µs. No fixes applied.
+CHECK:OK:tsc-web-frontend|3.9s|details:.dev-tools/tsc-web-frontend-506837-details.txt|hint:-
+CHECK:OK:vitest|45.3s|details:.dev-tools/vitest-506837-details.txt|hint:Tests  1408 passed (1408)
+CHECK:PASS quick 45.6s (35 ran, 38 skipped)

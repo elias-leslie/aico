@@ -1,0 +1,97 @@
+[
+  {
+    "id": "pi:01193a7c-57c3-4e6d-a0bf-036c254a5905",
+    "tool": "pi",
+    "parentId": null,
+    "project": "aico",
+    "cwd": "/srv/workspaces/projects/aico",
+    "model": "deepseek-v4.1-flash",
+    "startedAt": 1793866801155,
+    "endedAt": 1793866870515,
+    "outcome": "completed",
+    "tokens": {
+      "input": 9345,
+      "cacheRead": 222976,
+      "cacheWrite": 0,
+      "output": 8004
+    },
+    "toolCalls": 24,
+    "filesWritten": 1
+  },
+  {
+    "id": "pi:cb0b450e-48f2-469f-b4de-2aff79cbf20d",
+    "tool": "pi",
+    "parentId": null,
+    "project": "aico",
+    "cwd": "/srv/workspaces/projects/aico",
+    "model": "deepseek-v4.1-flash",
+    "startedAt": 1793866685695,
+    "endedAt": 1793866765279,
+    "outcome": "completed",
+    "tokens": {
+      "input": 23858,
+      "cacheRead": 473472,
+      "cacheWrite": 0,
+      "output": 9852
+    },
+    "toolCalls": 38,
+    "filesWritten": 1
+  },
+  {
+    "id": "codex:01a1aac4-d940-7dc3-80be-3bbf394d0d7a",
+    "tool": "codex",
+    "parentId": null,
+    "project": "aico",
+    "cwd": "/srv/workspaces/projects/aico",
+    "model": "gpt-6.1-sol",
+    "startedAt": 1793866390039,
+    "endedAt": 1793866670468,
+    "outcome": "completed",
+    "tokens": {
+      "input": 29728,
+      "cacheRead": 397952,
+      "cacheWrite": 0,
+      "output": 7496
+    },
+    "toolCalls": 12,
+    "filesWritten": 0
+  },
+  {
+    "id": "codex:01a1aac7-7504-7b01-a136-64f402487803",
+    "tool": "codex",
+    "parentId": null,
+    "project": "aico",
+    "cwd": "/srv/workspaces/projects/aico",
+    "model": "gpt-6.1-sol",
+    "startedAt": 1793866560890,
+    "endedAt": 1793866618129,
+    "outcome": "completed",
+    "tokens": {
+      "input": 17693,
+      "cacheRead": 78720,
+      "cacheWrite": 0,
+      "output": 1668
+    },
+    "toolCalls": 3,
+    "filesWritten": 0
+  },
+  {
+    "id": "claude-code:a26d42cc-6256-4539-91de-43bc7362f4da",
+    "tool": "claude-code",
+    "parentId": null,
+    "project": "aico",
+    "cwd": "/srv/workspaces/projects/aico",
+    "model": "claude-haiku-5-5",
+    "startedAt": 1793866000256,
+    "endedAt": 1793866022453,
+    "outcome": "completed",
+    "tokens": {
+      "input": 6,
+      "cacheRead": 52815,
+      "cacheWrite": 30876,
+      "output": 4169
+    },
+    "toolCalls": 4,
+    "filesWritten": 1
+  }
+]

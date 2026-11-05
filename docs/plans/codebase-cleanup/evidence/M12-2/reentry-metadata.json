@@ -1,0 +1,89 @@
+{
+  "at": "2026-11-05T08:44:58.500228+00:00",
+  "context": {
+    "memories": "150",
+    "prompts": "143",
+    "roles": "17",
+    "context_budgets": "4",
+    "project_permissions": "20",
+    "role_prompts": "12"
+  },
+  "usage": [
+    {
+      "n": "817",
+      "first": "2026-08-31",
+      "last": "2026-11-05"
+    }
+  ],
+  "usage_plans": {
+    "plans": 8,
+    "lots": 2
+  },
+  "tasks": [
+    {
+      "project_id": "aico",
+      "status": "completed",
+      "n": "1",
+      "imported": "0"
+    }
+  ],
+  "notes": [
+    {
+      "source_group": "keep",
+      "n": "22",
+      "live": "22"
+    },
+    {
+      "source_group": "other",
+      "n": "31",
+      "live": "5"
+    },
+    {
+      "source_group": "summitflow",
+      "n": "36",
+      "live": "36"
+    }
+  ],
+  "host_status": [
+    {
+      "id": "davion-sidarli/check-sudo",
+      "state": "warn",
+      "last_run": null
+    },
+    {
+      "id": "davion-sidarli/check-tripwire",
+      "state": "ok",
+      "last_run": null
+    },
+    {
+      "id": "davion-sidarli/check-assets",
+      "state": "warn",
+      "last_run": null
+    },
+    {
+      "id": "jobs/backups-append",
+      "state": "ok",
+      "last_run": null
+    },
+    {
+      "id": "davion-sidarli/backup/append/aico-davion-sidarli",
+      "state": "ok",
+      "last_run": null
+    },
+    {
+      "id": "davion-sidarli/pve-heartbeat",
+      "state": "ok",
+      "last_run": null
+    },
+    {
+      "id": "davion-gem/heartbeat/workstation",
+      "state": "ok",
+      "last_run": null
+    },
+    {
+      "id": "davion-gem/heartbeat/ct190",
+      "state": "ok",
+      "last_run": null
+    }
+  ]
+}

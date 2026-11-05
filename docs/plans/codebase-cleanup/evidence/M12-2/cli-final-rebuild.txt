@@ -1,0 +1,2 @@
+[deploy] queued aico-2a49a3c8a004 for ee4f4a24918f
+[deploy] result: aico deploy result aico-2a49a3c8a004   wait: aico deploy wait aico-2a49a3c8a004   log: aico logs aico-deploy-aico-2a49a3c8a004

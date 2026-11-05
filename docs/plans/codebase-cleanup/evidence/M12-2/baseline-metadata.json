@@ -1,0 +1,29 @@
+{
+  "assets.json": {
+    "old_present": true,
+    "new_present": true,
+    "schema_keys_match": true
+  },
+  "sudo-baseline.json": {
+    "old_present": true,
+    "new_present": true,
+    "schema_keys_match": true
+  },
+  "tripwire/davion-gem.json": {
+    "old_present": true,
+    "new_present": true,
+    "schema_keys_match": true,
+    "old_baseline_count": 33,
+    "new_baseline_count": 33,
+    "baselined_at_preserved": true
+  },
+  "tripwire/davion-sidarli.json": {
+    "old_present": true,
+    "new_present": true,
+    "schema_keys_match": true,
+    "old_baseline_count": 60,
+    "new_baseline_count": 58,
+    "baselined_at_preserved": true
+  },
+  "site_config_installed": true
+}

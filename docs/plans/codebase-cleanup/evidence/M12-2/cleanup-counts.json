@@ -1,0 +1,54 @@
+{
+  "base": "3c4bc895ee",
+  "head": "ee4f4a24918fbb2211c6aa262b50a64b27f06ad2",
+  "loc": {
+    "source": {
+      "added": 643,
+      "removed": 7048,
+      "files": 199,
+      "net_removed": 6405
+    },
+    "tests": {
+      "added": 244,
+      "removed": 3798,
+      "files": 33,
+      "net_removed": 3554
+    },
+    "config": {
+      "added": 125,
+      "removed": 2070,
+      "files": 15,
+      "net_removed": 1945
+    },
+    "evidence": {
+      "added": 3788,
+      "removed": 0,
+      "files": 26,
+      "net_removed": -3788
+    },
+    "lockfiles": {
+      "added": 1,
+      "removed": 7,
+      "files": 1,
+      "net_removed": 6
+    }
+  },
+  "fallow_summary": {
+    "total_issues": 246,
+    "unused_files": 15,
+    "unused_exports": 74,
+    "unused_types": 16,
+    "private_type_leaks": 0,
+    "unused_dependencies": 0,
+    "unused_enum_members": 0,
+    "unused_class_members": 130,
+    "unresolved_imports": 0,
+    "unlisted_dependencies": 0,
+    "duplicate_exports": 9,
+    "type_only_dependencies": 0,
+    "test_only_dependencies": 0,
+    "circular_dependencies": 2,
+    "boundary_violations": 0,
+    "stale_suppressions": 0
+  }
+}

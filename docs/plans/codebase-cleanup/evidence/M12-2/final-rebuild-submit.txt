@@ -1,0 +1,2 @@
+[deploy] queued aico-1a6bc1683d54 for 2834f08c3ec8
+[deploy] result: aico deploy result aico-1a6bc1683d54   wait: aico deploy wait aico-1a6bc1683d54   log: aico logs aico-deploy-aico-1a6bc1683d54

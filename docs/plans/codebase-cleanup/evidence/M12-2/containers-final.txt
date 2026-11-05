@@ -1,0 +1,4 @@
+/summitflow-stack-postgres-1 running restart=unless-stopped
+/summitflow-stack-redis-1 exited restart=no
+/summitflow-stack-hatchet-1 exited restart=no
+/local-searxng running restart=unless-stopped

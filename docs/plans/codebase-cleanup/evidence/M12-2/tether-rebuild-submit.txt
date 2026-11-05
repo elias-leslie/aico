@@ -1,0 +1,2 @@
+[deploy] queued aico-0c1586a61f59 for a9d4efb38e50
+[deploy] result: aico deploy result aico-0c1586a61f59   wait: aico deploy wait aico-0c1586a61f59   log: aico logs aico-deploy-aico-0c1586a61f59

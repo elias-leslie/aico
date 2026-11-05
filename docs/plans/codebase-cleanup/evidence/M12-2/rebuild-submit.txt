@@ -1,0 +1,2 @@
+[deploy] queued aico-6ccdc5660f4b for a9d4efb38e50
+[deploy] result: aico deploy result aico-6ccdc5660f4b   wait: aico deploy wait aico-6ccdc5660f4b   log: aico logs aico-deploy-aico-6ccdc5660f4b

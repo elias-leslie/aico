@@ -1,0 +1,56 @@
+{
+  "at": "2026-11-05T09:04:50.745178+00:00",
+  "proof": [
+    {
+      "created_at": "workstation",
+      "changed_at": "ct190",
+      "removed_at": "workstation",
+      "create_synced": true,
+      "change_synced": true,
+      "removal_synced": true,
+      "scratch_removed": true
+    },
+    {
+      "created_at": "ct190",
+      "changed_at": "workstation",
+      "removed_at": "ct190",
+      "create_synced": true,
+      "change_synced": true,
+      "removal_synced": true,
+      "scratch_removed": true
+    }
+  ],
+  "offline_worker_warnings": [
+    {
+      "operation": "create",
+      "peer": "workstation",
+      "warning": "Saved here. An offline machine will sync when it reconnects."
+    },
+    {
+      "operation": "change",
+      "peer": "ct190",
+      "warning": "Saved here. An offline machine will sync when it reconnects."
+    },
+    {
+      "operation": "remove",
+      "peer": "workstation",
+      "warning": "Saved here. An offline machine will sync when it reconnects."
+    },
+    {
+      "operation": "create",
+      "peer": "ct190",
+      "warning": "Saved here. An offline machine will sync when it reconnects."
+    },
+    {
+      "operation": "change",
+      "peer": "workstation",
+      "warning": "Saved here. An offline machine will sync when it reconnects."
+    },
+    {
+      "operation": "remove",
+      "peer": "ct190",
+      "warning": "Saved here. An offline machine will sync when it reconnects."
+    }
+  ],
+  "values_read_or_printed": false
+}

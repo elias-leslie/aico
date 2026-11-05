@@ -1,0 +1,21 @@
+{
+  "since": "2026-11-05T09:04:43Z",
+  "until": "2026-11-05T09:06:57Z",
+  "scopes": [
+    {
+      "scope": "system",
+      "units": [
+        "aico-pve-sender.service",
+        "aico-pve-trim.service",
+        "nightshift-boot-mark.service",
+        "summitflow-cpu-epp.service",
+        "nightshift-nightwatch.service",
+        "nightshift-nightwatch-web.service"
+      ],
+      "events": {
+        "aico-pve-sender.service": 5
+      },
+      "alerts": []
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# Cut-list hand entries
+
+This is an audit, not another migration. The coordinator asked M12-2 to record missing evidence for M13 instead of recreating questionable data. Original stores and the verified M12-1 archive remain. Counts are metadata only; no Neri records, credentials or note bodies were opened.
+
+| Cut-list entry | Result and evidence |
+| --- | --- |
+| About 15 curated roles | Done differently on purpose: 17 current Aico roles (12 job policies and five named imported roles), with 12 prompt links. The estimate was not a requirement to keep every obsolete agent. Final import counts agree; `reentry-metadata.json`, `final-import.json`, curated-role commit `0d8aa755`. |
+| Models used by roles/routing | Done: Aico's owning model/routing data is live. Fresh Claude, Codex and Pi launches used it; the hunting/Claude combination is refused without a provider request. Native Pi guard now calls Aico. |
+| Four context budgets | Done: four rows in the final import and current metadata. |
+| Eight subscription plans and two credit lots | Done: current Aico usage configuration contains 8/2; M8 migration checkpoint `fb4b3f44` records matched history hashes. There are now 817 daily rows, first 2026-08-31 and last 2026-11-05. Section 3's fresh-history wording differs from the earlier carry-history row; the implemented carry preserves useful history. |
+| About 13 live SummitFlow tasks | Not demonstrated: Aico has only one completed, non-imported task. No legacy task was reentered by M12-2. Originals are archived. Coordinator explicitly assigned the unresolved carry decision to M13. |
+| Last nine mockups, optional | Not demonstrated as a set: Aico's mockup directory exists with five top-level files. Those do not prove the specified nine were carried. Originals are archived; no optional copy was made. M13 records the difference. |
+| Tripwire and sudo baselines, assets, site configuration | Installed and active in host-steward. Both tripwire files preserve their original baseline timestamps and schemas; gem still has 33 baseline entries, workstation 58 versus old 60 after later declared changes. Old and new asset/sudo stores exist with matching schema keys, but ongoing state differs. `/etc/host-steward/site.json` exists. Exact original asset/sudo equality was not re-proved. Status currently has tripwire OK, sudo/assets WARN; these predate this retirement and are not a clean-host claim. |
+| Canary registry | Done by M5b-2: private 6,383-byte registry migrated and hook/drill verified. `legacy-M5b-2-report.md` (retained copy of the original receipt); values were not reopened. The public Cloudflare callback owner item remains outside M12-2. |
+| Passkey enrollment | Done by M5b-2: retained FIDO material and live grants/tray proof, same report. No enrollment material opened or changed. |
+| One open Nightshift item and 20 docs | Not demonstrated: current notes contain no Nightshift source-tag group; no source-linked migration receipt was found. Other untagged notes cannot establish identity. No content was guessed or reentered. Originals archived; M13 owns the unresolved carry decision. |
+| Phone re-pair | Done by M10d-2's pairing port and signed phone receipt. No new pairing needed for this retirement. |
+| 36 SummitFlow notes | Done: 36 source-tagged live notes remain in Aico. |
+| Secrets: provider, tool and lab logins | Superseded by coordinator-authorized M11c Logins migration: 38 entries then, including 22 live Agent Hub rows; six expired rows deliberately skipped, originals retained. See `../M11c/report.md`. M12-2 read no values. Both full peers now pass bidirectional synthetic create/change/remove sync and all scratch entries are gone. |
+| Re-enroll 14 hosts | Current fleet has four pinned machines (two full peers and two workers) and three configured peer links. M11c proves full-peer sync; M12-2 reconfirms the workstation and CT190. There is no receipt that all 14 old hosts were re-enrolled, so the difference remains explicit for M13; no obsolete enrollment was recreated. |
+
+The script-carried rows were also checked: 150 memories, 143 prompts and one setting are reported by the final import; the 20 permission rows alone have matching source/received/stored hashes. The final import does not report content hashes for the other groups. Neri permission contents were not opened. Backup configuration and key locations were retained; Redis's retired stream was removed from the live schedule after archive release, without deleting copies.

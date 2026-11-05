@@ -1,0 +1,2 @@
+[deploy] queued aico-c192be218351 for 89f520472e10
+[deploy] result: aico deploy result aico-c192be218351   wait: aico deploy wait aico-c192be218351   log: aico logs aico-deploy-aico-c192be218351

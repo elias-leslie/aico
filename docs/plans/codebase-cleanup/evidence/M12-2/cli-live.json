@@ -1,0 +1,58 @@
+[
+  {
+    "namespace": "workflow",
+    "exit": 2,
+    "dropped": true,
+    "output_present": false,
+    "stderr_lines": 1
+  },
+  {
+    "namespace": "automations",
+    "exit": 2,
+    "dropped": true,
+    "output_present": false,
+    "stderr_lines": 1
+  },
+  {
+    "namespace": "ctx",
+    "exit": 2,
+    "dropped": true,
+    "output_present": false,
+    "stderr_lines": 1
+  },
+  {
+    "namespace": "native-sessions",
+    "exit": 2,
+    "dropped": true,
+    "output_present": false,
+    "stderr_lines": 1
+  },
+  {
+    "namespace": "note",
+    "exit": 2,
+    "dropped": true,
+    "output_present": false,
+    "stderr_lines": 1
+  },
+  {
+    "namespace": "complete",
+    "exit": 0,
+    "dropped": false,
+    "output_present": true,
+    "stderr_lines": 0
+  },
+  {
+    "namespace": "agents",
+    "exit": 0,
+    "dropped": false,
+    "output_present": true,
+    "stderr_lines": 0
+  },
+  {
+    "namespace": "skills",
+    "exit": 0,
+    "dropped": false,
+    "output_present": true,
+    "stderr_lines": 0
+  }
+]

@@ -1,0 +1,60 @@
+{
+  "since": "2026-11-05T08:15:58Z",
+  "until": null,
+  "journals": [
+    {
+      "scope": "user",
+      "units": [
+        "aico-web.service",
+        "aico-jobs.service",
+        "aico-tray.service",
+        "tether@default.service",
+        "tether-link@agent-work.service",
+        "agent-hub-backend.service",
+        "agent-hub-frontend.service",
+        "agent-hub-hatchet-agent-worker.service",
+        "agent-hub-hatchet-ops-worker.service",
+        "agent-hub-usage-collect.service",
+        "summitflow-backend.service",
+        "summitflow-frontend.service",
+        "summitflow-hatchet-worker.service"
+      ],
+      "events": {
+        "tether@default.service": 20,
+        "aico-jobs.service": 8,
+        "tether-link@agent-work.service": 2,
+        "agent-hub-backend.service": 1
+      },
+      "alerts": []
+    },
+    {
+      "scope": "system",
+      "units": [
+        "summitflow-host-monitor.service",
+        "host-steward-check.service",
+        "host-steward-rules.service"
+      ],
+      "events": {
+        "host-steward-rules.service": 28
+      },
+      "alerts": []
+    }
+  ],
+  "containers": [
+    {
+      "container": "summitflow-stack-postgres-1",
+      "error_categories": {},
+      "error_digests": {}
+    },
+    {
+      "container": "summitflow-stack-redis-1",
+      "error_categories": {},
+      "error_digests": {}
+    },
+    {
+      "container": "summitflow-stack-hatchet-1",
+      "error_categories": {},
+      "error_digests": {}
+    }
+  ]
+}

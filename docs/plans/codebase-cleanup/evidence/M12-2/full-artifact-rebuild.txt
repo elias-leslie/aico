@@ -1,0 +1,2 @@
+[deploy] queued aico-fa85c59bc709 for ee4f4a24918f
+[deploy] result: aico deploy result aico-fa85c59bc709   wait: aico deploy wait aico-fa85c59bc709   log: aico logs aico-deploy-aico-fa85c59bc709
