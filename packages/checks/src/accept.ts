@@ -123,6 +123,8 @@ export async function accept(config: Config, options: AcceptOptions): Promise<Ac
   const key = `accept-fixtures-v1-${tree}`
   const prior = store.get<AcceptReport & { at?: string }>(key)
   if (options.reuse !== false && prior?.passed) {
+    // This stable artifact is the service release contract; the reuse key is internal.
+    store.put(`accept-${tree}`, { ...prior, sha })
     out(
       `CHECK:PASS acceptance reused: tree ${tree.slice(0, 12)} passed at ${prior.at ?? 'an earlier run'}`,
     )
@@ -175,7 +177,11 @@ export async function accept(config: Config, options: AcceptOptions): Promise<Ac
     out(
       `CHECK:${report.passed ? 'PASS' : 'FAIL'} acceptance ${(report.ms / 1000).toFixed(1)}s at ${sha.slice(0, 12)}${failed.length ? `: ${failed.map((r) => r.id).join(', ')}` : ''}`,
     )
-    if (report.passed) store.put(key, { ...report, at: new Date().toISOString() })
+    if (report.passed) {
+      const retained = { ...report, at: new Date().toISOString() }
+      store.put(key, retained)
+      store.put(`accept-${tree}`, retained)
+    }
     noteLocalCheck(main, sha, { ...report, lane: 'acceptance' }, out)
     return report
   } finally {

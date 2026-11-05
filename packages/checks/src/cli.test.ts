@@ -22,6 +22,30 @@ function fixture() {
   return root
 }
 const coordination = { foreign: () => ({}), guard: () => null, committed: () => '' }
+
+it('retains the service acceptance artifact independently of the reuse cache', async () => {
+  const { accept } = await import('./accept')
+  const root = fixture()
+  writeFileSync(join(root, '.st-check.toml'), '[native]\nlegacy_tools=[]\n')
+  execFileSync('git', ['add', '-A'], { cwd: root })
+  execFileSync(
+    'git',
+    ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'Source'],
+    { cwd: root },
+  )
+  const config = loadConfig(root)
+  if ('unsupported' in config) throw new Error(config.unsupported)
+  const first = await accept(config, { coordination })
+  const path = join(root, '.git/aico-checks/receipts', `accept-${first.tree}.json`)
+  expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
+    passed: true,
+    tree: first.tree,
+    scope: null,
+  })
+  rmSync(path)
+  expect((await accept(config, { coordination })).passed).toBe(true)
+  expect(JSON.parse(readFileSync(path, 'utf8')).tree).toBe(first.tree)
+})
 it('runs a selected declared native stage through Aico', async () => {
   const root = fixture()
   writeFileSync(
