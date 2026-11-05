@@ -523,3 +523,15 @@ it('deploys from the registered source checkout when commands run from an instal
   ).toBe(0)
   expect(childEnv.AICO_DEPLOY_ROOT).toBe(root)
 })
+it('keeps backup status as the Aico backup health view', async () => {
+  const h = harness()
+  expect(await h.go(['backup', 'status', '--json'])).toBe(0)
+  expect(h.calls[0]?.argv.slice(1)).toEqual(['backups', 'list', '--json'])
+})
+it('advertises the native model and backup syntax', async () => {
+  const h = harness()
+  await h.go(['tools', 'manifest', '--surface', 'st.models.route', '--format', 'json'])
+  expect(h.output.pop()).not.toContain('--task')
+  await h.go(['tools', 'manifest', '--surface', 'st.backup.restore', '--format', 'json'])
+  expect(h.output.pop()).toContain('SOURCE SNAPSHOT PATH')
+})

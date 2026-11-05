@@ -85,3 +85,40 @@ it('formats scoped Python when a native stage owns Ruff', async () => {
   if ('unsupported' in config) throw new Error(config.unsupported)
   expect(fixScope(config, ['source.py']).map((item) => item.files)).toEqual([['source.py']])
 })
+
+it.each([
+  { extra: 'paths=[".venv/bin"]\n', argv: '.venv/bin/python' },
+  { extra: '[native.tools]\npython=".venv/bin/python"\n', argv: 'python' },
+  { extra: '', argv: '.venv/bin/python' },
+])(
+  'links declared native Python environments into isolated acceptance (%j)',
+  async ({ extra, argv }) => {
+    const { accept } = await import('./accept')
+    const root = fixture()
+    mkdirSync(join(root, '.venv/bin'), { recursive: true })
+    writeFileSync(join(root, '.venv/bin/python'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+    writeFileSync(join(root, '.gitignore'), '.venv/\n.dev-tools/\n')
+    writeFileSync(
+      join(root, '.st-check.toml'),
+      `[native]\nlegacy_tools=[]\n${extra}\n[[native.stages]]\nid="python-check"\nkind="check"\ncoverage="full"\nargv=[${JSON.stringify(argv)}]\n`,
+    )
+    execFileSync('git', ['add', '-A'], { cwd: root })
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=Test',
+        '-c',
+        'user.email=test@example.invalid',
+        'commit',
+        '-qm',
+        'Native gate',
+      ],
+      { cwd: root },
+    )
+    const config = loadConfig(root)
+    if ('unsupported' in config) throw new Error(config.unsupported)
+    expect(config.environmentInputs).toContain('.venv')
+    expect((await accept(config, { coordination, reuse: false })).passed).toBe(true)
+  },
+)

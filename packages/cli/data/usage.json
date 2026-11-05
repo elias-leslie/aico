@@ -14,8 +14,8 @@
   {
     "surface": "st.models.route",
     "tier": "reference",
-    "cmd": "st models route [--role JOB [--tool TOOL [--model M]] [--project P] | --task TASK] [--json]",
-    "when": "pick a model for a job: --role JOB [--project P] lists each tool's model and effort, whether it is allowed, what usage it has left until when, Codex credits and its last refusal, so you choose; --tool adds one row's detail; st aico create applies the table's model by default. --task: completion-route advice; no options lists both",
+    "cmd": "st models route [--role JOB] [--project P] [--json]",
+    "when": "pick a model for a job: --role JOB [--project P] lists each tool's model and effort; st aico create applies the route by default",
     "task_types": ["model-admin", "model-review"],
     "on_demand": "model administration"
   },
@@ -126,28 +126,21 @@
     "surface": "st.backup.status",
     "tier": "reference",
     "cmd": "st backup status",
-    "when": "check that backups are current, or see what the T7 and Google Drive hold and when they last worked",
-    "precautions": [
-      "the first line says 'All backups current.' or lists the real problems",
-      "btrbk keeps 7 days on the T7; the daily Google Drive job is the offsite copy"
-    ],
+    "when": "list backup targets, snapshots and their current state",
+    "precautions": ["inspect the reported errors before requesting a backup"],
     "examples": ["st backup status", "st backup status --json"],
     "task_types": ["devops", "backup"]
   },
   {
     "surface": "st.backup.restore",
     "tier": "reference",
-    "cmd": "st backup restore SELECTOR --to DIR",
-    "when": "get a project, postgres or redis dump, or a path back from the Google Drive backup",
+    "cmd": "st backup restore SOURCE SNAPSHOT PATH --to /srv/scratch/NEW_FOLDER [--target native|drive|append]",
+    "when": "restore a path from a recorded backup snapshot into a new directory",
     "precautions": [
       "restores only into a new or empty directory, never over the live path",
-      "start with --dry-run to see which snapshot would be used",
-      "the restore is read back and verified before it reports success"
+      "browse the source and snapshot before restoring"
     ],
-    "examples": [
-      "st backup restore aico --to /srv/scratch/aico-back --dry-run",
-      "st backup restore postgres --to /srv/scratch/pg --at 2026-10-25"
-    ],
+    "examples": ["st backup restore SOURCE SNAPSHOT PATH --to /srv/scratch/restored-files"],
     "task_types": ["devops", "backup", "restore"]
   },
   {
@@ -162,7 +155,7 @@
       "required and active optional workers restart automatically; --include-all-workers also starts inactive optional workers"
     ],
     "examples": [
-      "st service rebuild summitflow",
+      "st service rebuild aico --detach",
       "st service rebuild agent-hub --detach",
       "st -P agent-hub service rebuild agent-hub"
     ],
@@ -204,5 +197,11 @@
     "tier": "reference",
     "cmd": "st monitor status|system-info|connections|processes|mounts",
     "when": "read local /proc diagnostics; logs use st logs UNIT"
+  },
+  {
+    "surface": "st.tools.extensions",
+    "tier": "reference",
+    "cmd": "st tools extensions [--format text|json]",
+    "when": "list versioned standalone tool extensions and their availability"
   }
 ]

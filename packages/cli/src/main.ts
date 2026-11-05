@@ -434,6 +434,8 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       return delegate(
         ['projects', ...(rest.length ? rest : ['list'])].filter((x) => x !== '--json'),
       )
+    if (verb === 'backup' && rest[0] === 'status')
+      return delegate(['backups', 'list', ...rest.slice(1)])
     if (ALIASES[verb])
       return delegate([
         ...ALIASES[verb],

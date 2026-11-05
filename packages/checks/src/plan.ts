@@ -156,15 +156,22 @@ export function loadConfig(root: string): Config | { unsupported: string } {
   }
   const pytest = data.pytest as TomlTable | undefined
   const toolPaths = record(data.paths, 'paths')
-  const venvs = Object.values(toolPaths)
+  const nativePaths = strings(native.paths, 'native.paths')
+  const tools = record(native.tools, 'native.tools')
+  const nativeExecutables = [
+    ...nativePaths,
+    ...Object.values(tools),
+    ...stages.map((s) => s.argv[0]),
+  ].filter((path) => !posix.isAbsolute(path) && !path.startsWith('~/'))
+  const venvs = [...Object.values(toolPaths), ...nativeExecutables]
     .map((dir) => /^(.*?\.venv)(?:\/|$)/.exec(dir)?.[1])
     .filter((dir): dir is string => !!dir)
   return {
     root,
     stages,
     legacy,
-    paths: strings(native.paths, 'native.paths'),
-    tools: record(native.tools, 'native.tools'),
+    paths: nativePaths,
+    tools,
     environment: record(native.environment, 'native.environment'),
     toolPaths,
     pytestWorkers: typeof pytest?.workers === 'number' ? pytest.workers : undefined,
