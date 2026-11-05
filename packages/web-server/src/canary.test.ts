@@ -1,3 +1,4 @@
+import { parseNotice } from '@aico/notify'
 import { expect, it } from 'vitest'
 import { describeCanary } from './canary'
 
@@ -42,6 +43,7 @@ it('the on-demand drill emits a valid test notice without asking the phone to bu
       router,
       {
         receive: (notice) => {
+          parseNotice(notice)
           notices.push(notice)
           return {} as never
         },

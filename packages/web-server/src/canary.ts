@@ -89,7 +89,7 @@ export function registerCanaryRoutes(
       : describeCanary(payload, entries)
     if (!event) return { ok: true, ignored: 'honeypot startup event' }
     const result = await notifier.receive(
-      parseNotice({
+      {
         v: 1,
         source: 'aico',
         kind: 'alert',
@@ -98,7 +98,7 @@ export function registerCanaryRoutes(
         key: test ? `canary-drill:${Date.now()}` : `canary:${Date.now()}`,
         push: test ? 'tray' : 'phone',
         cooldown: 0,
-      }),
+      },
       'local',
     )
     return { ok: true, test, notice: result }
