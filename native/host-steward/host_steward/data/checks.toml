@@ -336,12 +336,9 @@ ballast_subvol = "@nightshift-ballast"
 ballast_file = "ballast"
 top_mounts = "/run/host-steward-ballast"
 ballast_recheck_h = 24
-# SummitFlow's reclaim commands, run in order as the owner while a disk is under the line. {path} is the disk,
-# {target_gib} the free space to restore; a {cmd, paths} entry only applies to those disks.
-reclaim_commands = [
-  ["st", "cleanup", "reclaim", "--filesystem", "{path}", "--target-free-gib", "{target_gib}"],
-  { cmd = ["st", "autosnap", "prune", "--pressure"], paths = ["/srv/workspaces"] },
-]
+# The old SF cleanup/autosnap namespaces are retired. Local ballast, journal and
+# balance tiers remain; no automatic snapshot-prune replacement is configured.
+reclaim_commands = []
 reclaim_timeout_s = 900
 # The journal tier runs only on the disk that holds this path.
 journal_path = "/var/log"

@@ -264,12 +264,19 @@ def test_lines_from_the_storage_table():
     assert lines.pressured(29.9) and lines.pressured(10.0) and not lines.pressured(30.0)
 
 
-def test_reclaim_commands_filter_by_disk():
+def test_retired_reclaim_commands_are_not_scheduled():
     cfg = DATA["jobs"]["space-guard"]
     root = space_guard.reclaim_commands(cfg, "/", 30)
-    assert root == [["st", "cleanup", "reclaim", "--filesystem", "/", "--target-free-gib", "30"]]
+    assert root == []
     work = space_guard.reclaim_commands(cfg, "/srv/workspaces", 30)
-    assert work[-1] == ["st", "autosnap", "prune", "--pressure"]
+    assert work == []
+
+
+def test_explicit_reclaim_commands_filter_by_disk():
+    cfg = {"reclaim_commands": [["fixture-cleanup", "{path}", "{target_gib}"],
+                                {"cmd": ["fixture-cache"], "paths": ["/srv/workspaces"]}]}
+    assert space_guard.reclaim_commands(cfg, "/", 30) == [["fixture-cleanup", "/", "30"]]
+    assert space_guard.reclaim_commands(cfg, "/srv/workspaces", 30)[-1] == ["fixture-cache"]
 
 
 def run_guard(tmp_path, fake, live=False, prev=None, **kw):
@@ -299,12 +306,12 @@ def test_space_guard_dry_run_under_pressure_lists_the_ladder_and_changes_nothing
     assert fake.changes() == []  # no mount, no sync, no balance, no runuser, no vacuum
     would = result["would"]
     assert would[0].startswith("release the 6.0 GiB ballast")
-    assert any("st cleanup reclaim --filesystem / --target-free-gib 30" in w for w in would)
+    assert not any("st cleanup" in w or "st autosnap" in w for w in would)
     assert "vacuum the journal to 1G" in would
     assert any(w.startswith("balance data chunks on / (usage 0%") for w in would)
     assert result["filesystems"][0]["pressured"] and result["filesystems"][0]["ladder"][
         "tiers"
-    ] == ["ballast", "summitflow", "journal"]
+    ] == ["ballast", "journal"]
     state, text = space_guard.row_text(result, False)
     assert state == "ok"
     assert (
@@ -315,7 +322,7 @@ def test_space_guard_dry_run_under_pressure_lists_the_ladder_and_changes_nothing
     )
 
 
-def test_space_guard_live_runs_reclaim_balance_and_journal(tmp_path):
+def test_space_guard_live_runs_balance_and_journal_without_retired_commands(tmp_path):
     fake = Fake(
         *BTRFS_OK,
         (["btrfs", "filesystem", "usage"], Result(0, usage(unallocated_gib=3, free_gib=20))),
@@ -328,7 +335,7 @@ def test_space_guard_live_runs_reclaim_balance_and_journal(tmp_path):
     env.cfg["ballast_gib"] = 0
     result = space_guard.space_guard(env, {})
     calls = fake.calls
-    assert any(c[0] == "runuser" and "reclaim" in c for c in calls)
+    assert not any(c[0] == "runuser" for c in calls)
     assert any(c[:3] == ["btrfs", "balance", "start"] and "-dusage=0,limit=16" in c for c in calls)
     assert any(c[0] == "journalctl" for c in calls)
     assert result["would"] == []
