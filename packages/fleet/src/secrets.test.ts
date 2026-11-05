@@ -33,7 +33,8 @@ const entry = {
 }
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'aico-secrets-'))
-  env = { HOME: home }
+  // This fixture owns its caller; do not inherit the harness's verification or hunting role.
+  env = { HOME: home, AICO_WIDGET_ID: 'fixture-session', ST_WORK_ROLE: 'agent' }
 })
 afterEach(() => rmSync(home, { recursive: true, force: true }))
 it('stores pushed logins privately and supplies them to the tool environment without changing the parent', () => {

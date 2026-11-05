@@ -163,6 +163,22 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     output.human = output.human && !output.compact && !output.progress_only
     output.compact = output.compact || output.progress_only
     if (projectId) selectedEnv = { ...env, AICO_PROJECT_ID: projectId, ST_PROJECT_ID: projectId }
+    const commandContext = (projects = registryProjects(env)) => {
+      const project = projectId
+        ? projects.find((p) => p.id === projectId)
+        : projects
+            .filter((p) => cwd === p.root || cwd.startsWith(`${p.root}/`))
+            .sort((a, b) => b.root.length - a.root.length)[0]
+      return {
+        contract_version: 1,
+        project_id: project?.id ?? projectId,
+        project_root: project?.root ?? null,
+        cwd,
+        api_base: apiBase(root, env),
+        agent_hub_url: env.AGENT_HUB_URL || config.agentHubUrl,
+        output,
+      }
+    }
     const [verb, ...rest] = args
     if (!verb || ['help', '--help', '-h'].includes(verb)) {
       help()
@@ -358,6 +374,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       const body = (await response.json()) as { detail?: string; pageUrl?: string }
       if (!response.ok)
         throw new Error(body.detail || `Mockup was not saved: HTTP ${response.status}`)
+      if (body.pageUrl) body.pageUrl = new URL(body.pageUrl, apiBase(root, env)).href
       out(json(body))
       return 0
     }
@@ -388,7 +405,11 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
         )
       return 0
     }
-    if (verb === 'aico') return execute(['python3', join(root, config.rootHelper), ...rest], env)
+    if (verb === 'aico')
+      return execute(['python3', join(root, config.rootHelper), ...rest], {
+        ...selectedEnv,
+        ST_EXTENSION_CONTEXT: json(commandContext()),
+      })
     if (verb === 'sessions') {
       if (['send', 'ack', 'confirm', 'inbox', 'may-disrupt'].includes(rest[0]))
         return execute(['aico-hook', 'sessions', ...rest], env)
@@ -460,21 +481,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       if (extension.status !== 'unverified')
         throw new Error(`Extension ${verb}: ${extension.status}`)
       const projects = registryProjects(env)
-      const project = projectId
-        ? projects.find((p) => p.id === projectId)
-        : projects
-            .filter((p) => cwd === p.root || cwd.startsWith(`${p.root}/`))
-            .sort((a, b) => b.root.length - a.root.length)[0]
-      const context = {
-        contract_version: 1,
-        project_id: project?.id ?? projectId,
-        project_root: project?.root ?? null,
-        cwd,
-        api_base: apiBase(root, env),
-        agent_hub_url: env.AGENT_HUB_URL || config.agentHubUrl,
-        output,
-      }
-      const childEnv = extensionEnvironment(extension.binding, env, context)
+      const childEnv = extensionEnvironment(extension.binding, env, commandContext(projects))
       const session =
         env.CODEX_THREAD_ID ||
         env.CODEX_SESSION_ID ||

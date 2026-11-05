@@ -190,6 +190,7 @@ describe('CLI cutover', () => {
       session: '1234abcd',
       project: 'aico',
     })
+    expect(JSON.parse(output[0]).pageUrl).toBe('http://127.0.0.1:3002/mockups?project=aico')
   })
 })
 describe('versioned extensions', () => {
@@ -534,4 +535,15 @@ it('advertises the native model and backup syntax', async () => {
   expect(h.output.pop()).not.toContain('--task')
   await h.go(['tools', 'manifest', '--surface', 'st.backup.restore', '--format', 'json'])
   expect(h.output.pop()).toContain('SOURCE SNAPSHOT PATH')
+})
+
+it('passes the versioned Agent Hub context to the Aico session helper', async () => {
+  const h = harness({ AGENT_HUB_URL: 'http://hub.test:8003' })
+  expect(await h.go(['-P', 'aico', 'aico', 'create', 'proof'])).toBe(0)
+  expect(JSON.parse(h.calls[0]?.env.ST_EXTENSION_CONTEXT || '{}')).toMatchObject({
+    contract_version: 1,
+    project_id: 'aico',
+    cwd: root,
+    agent_hub_url: 'http://hub.test:8003',
+  })
 })
