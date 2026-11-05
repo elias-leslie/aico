@@ -15,6 +15,7 @@ import { AppApi } from './app-api'
 import { PhoneRegistry } from './app-phones'
 import { Asks, validateAsk } from './asks'
 import { Background } from './background'
+import { registerBackupRoutes } from './backups'
 import { CaptureRouter } from './capture-router'
 import { readChatAttachments } from './chat-attachments'
 import { CLI_COMMANDS, runCli } from './cli'
@@ -155,6 +156,7 @@ function serve(): void {
   const runs = new StatusRuns()
   registerStatusRoutes(api, status, { changed: notify, machine, running: () => runs.ids() })
   registerStatusActions(api, { status, machine, tether, runs })
+  registerBackupRoutes(api)
   // The phone alert rule: checked on every write of rows. aico-web's own heartbeat writes every
   // few minutes, so a backup or machine row that goes late is seen then too. A notice notify
   // refuses throws, and the batch is offered again on the next pass.

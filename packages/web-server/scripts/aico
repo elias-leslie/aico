@@ -46,11 +46,19 @@ aico_checks() {
 aico_ops() {
   local node sha installed ops_bundle bootstrap
   node="$(aico_web_node)"
-  sha="$(git -C "$AICO_REPO_ROOT" rev-parse HEAD)"
+  sha="$(git -C "$AICO_REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  if [ -n "$sha" ]; then
   installed="${AICO_OPS_INSTALLED:-$(git -C "$AICO_REPO_ROOT" show "$sha:packages/ops/data/ops.json" | \
     "$node" -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>console.log(JSON.parse(s).deploy.installedOps.replace(/^~(?=\/)/,process.env.HOME)))')}"
+  else
+    installed="${AICO_OPS_INSTALLED:-}"
+    if [ -z "$installed" ]; then
+      installed="$("$node" -e 'const fs=require("node:fs");console.log(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).deploy.installedOps.replace(/^~(?=\/)/,process.env.HOME))' "$AICO_REPO_ROOT/packages/ops/data/ops.json")"
+    fi
+  fi
   ops_bundle="$installed/packages/ops/dist/aico-ops.mjs"
   if [ ! -r "$ops_bundle" ]; then
+    [ -n "$sha" ] || { echo 'aico ops: no installed release; install a committed release before running host operations' >&2; exit 1; }
     bootstrap="$installed.bootstrap"
     mkdir -p "$bootstrap"
     (
@@ -88,7 +96,7 @@ aico_webtools() {
 case "${1:-}" in
   memory | prompt | models | context | usage) exec_aico_web "$@" ;;
   check | commit | publish) aico_checks "$@" ;;
-  deploy | logs | snapshots | vm) aico_ops "$@" ;;
+  deploy | logs | snapshots | vm | backups) aico_ops "$@" ;;
   web) shift; aico_webtools "$@" ;;
   jobs)
     shift
@@ -137,7 +145,7 @@ case "${1:-}" in
   help | -h | --help) exec_aico_web memory --help ;;
   *)
     [ $# -gt 0 ] && echo "aico: unknown command '$1'" >&2
-    echo "Usage: aico <memory|prompt|models|context|usage|jobs|tasks|projects|pulse|lease|agent|sessions|check|commit|deploy|logs|snapshots|vm|web|ask> ...  (aico help lists every command)" >&2
+    echo "Usage: aico <memory|prompt|models|context|usage|jobs|tasks|projects|pulse|lease|agent|sessions|check|commit|deploy|logs|snapshots|vm|backups|web|ask> ...  (aico help lists every command)" >&2
     exit 2
     ;;
 esac

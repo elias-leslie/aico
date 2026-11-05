@@ -1,6 +1,7 @@
 'use client'
 
 import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react'
+import Link from 'next/link'
 import { useRef, useState } from 'react'
 import { newChat } from '@/lib/chat'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
@@ -196,6 +197,9 @@ export function SessionSidebar({
         <StatusLauncher variant="row" />
         <HistoryLauncher variant="row" />
         <ContextLauncher variant="row" />
+        <Link href="/backups" className="lantern-btn ghost small">
+          Backups
+        </Link>
         <HostsLauncher />
       </div>
       <nav

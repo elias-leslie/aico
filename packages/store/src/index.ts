@@ -4,7 +4,7 @@
 // a function for one that has to read the data it changes; the file's PRAGMA
 // user_version counts how many have run.
 
-import { chmodSync, existsSync, mkdirSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -92,4 +92,26 @@ export function transaction<T>(db: Database, work: () => T): T {
     if (db.isTransaction) db.exec('ROLLBACK')
     throw error
   }
+}
+
+export function snapshotDatabase(source: string, destination: string): void {
+  const temporary = `${destination}.${process.pid}.tmp`
+  rmSync(temporary, { force: true })
+  const db = new DatabaseSync(source, { readOnly: true })
+  try {
+    db.exec('PRAGMA busy_timeout=10000')
+    db.exec(`VACUUM INTO '${temporary.replaceAll("'", "''")}'`)
+  } finally {
+    db.close()
+  }
+  const check = new DatabaseSync(temporary, { readOnly: true })
+  try {
+    const rows = check.prepare('PRAGMA integrity_check').all()
+    if (rows.length !== 1 || Object.values(rows[0] ?? {})[0] !== 'ok')
+      throw new Error('The database backup did not pass its integrity check.')
+  } finally {
+    check.close()
+  }
+  chmodSync(temporary, 0o600)
+  renameSync(temporary, destination)
 }

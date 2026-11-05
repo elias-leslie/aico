@@ -108,7 +108,17 @@ export async function main(argv: string[], env = process.env): Promise<number> {
           join(peerDir(env, process.getuid?.(), job.lease_host ?? job.home), 'jobs.sock'),
         )
   if (command === 'list') {
-    await list(jobs, authority)
+    if (rest.includes('--json')) {
+      const result = []
+      for (const job of jobs) {
+        try {
+          result.push({ kind: job.kind, home: job.home, state: await authority(job).get(job.kind) })
+        } catch {
+          result.push({ kind: job.kind, home: job.home, state: null })
+        }
+      }
+      console.log(JSON.stringify(result))
+    } else await list(jobs, authority)
     store.close()
     return 0
   }

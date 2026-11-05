@@ -79,3 +79,32 @@ it('the launcher exports committed ops on first use and pins the installed bundl
   symlinkSync(exported, installed)
   expect(launch().out).toBe(first.out)
 })
+
+it('a standalone installed host runs committed ops without a Git checkout', () => {
+  top = mkdtempSync(join(tmpdir(), 'aico-standalone-ops-'))
+  const root = join(top, 'source'),
+    installed = join(top, 'installed')
+  const put = (path: string, content: string) => {
+    mkdirSync(join(path, '..'), { recursive: true })
+    writeFileSync(path, content)
+  }
+  const actualRoot = new URL('../../..', import.meta.url).pathname
+  for (const file of ['aico', 'lib/aico-web.sh'])
+    put(
+      join(root, 'packages/web-server/scripts', file),
+      readFileSync(join(actualRoot, 'packages/web-server/scripts', file), 'utf8'),
+    )
+  put(
+    join(root, 'packages/ops/data/ops.json'),
+    JSON.stringify({ deploy: { installedOps: installed } }),
+  )
+  put(
+    join(installed, 'packages/ops/dist/aico-ops.mjs'),
+    'console.log(JSON.stringify({args:process.argv.slice(2)}))',
+  )
+  const result = run('bash', [join(root, 'packages/web-server/scripts/aico'), 'backups', 'list'], {
+    env: { ...process.env, AICO_NODE: process.execPath, AICO_OPS_INSTALLED: installed },
+  })
+  expect(result.code, result.err).toBe(0)
+  expect(JSON.parse(result.out)).toEqual({ args: ['backups', 'list'] })
+})

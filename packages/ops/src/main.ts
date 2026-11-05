@@ -2,6 +2,7 @@
 
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { backups } from './backups'
 import {
   canonical,
   defaultDeps,
@@ -44,6 +45,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
   const [verb, ...rest] = argv
   const err = (line: string) => console.error(line)
   try {
+    if (verb === 'backups') return await backups(rest, env)
     if (verb === 'deploy') {
       const deps = defaultDeps(env)
       if (rest[0] === 'result' || rest[0] === 'wait') {

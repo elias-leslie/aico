@@ -8,6 +8,9 @@
   "references": [
     {
       "path": "../status"
+    },
+    {
+      "path": "../store"
     }
   ]
 }

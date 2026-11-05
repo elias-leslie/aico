@@ -265,9 +265,14 @@ describe('the runner', () => {
       expect(lines).toHaveLength(
         readJobs(new URL('../data/jobs.json', import.meta.url).pathname).length,
       )
-      expect(lines.every((line) => line.includes('lease holder davion-sidarli unavailable'))).toBe(
-        true,
-      )
+      const configured = readJobs(new URL('../data/jobs.json', import.meta.url).pathname)
+      expect(
+        lines.every((line, index) =>
+          line.includes(
+            `lease holder ${configured[index]?.lease_host ?? configured[index]?.home} unavailable`,
+          ),
+        ),
+      ).toBe(true)
     } finally {
       spy.mockRestore()
       out.mockRestore()

@@ -1,3 +1,5 @@
+export * from './backup-plan'
+export * from './backups'
 export * from './deploy'
 export * from './logs'
 export * from './snapshots'

@@ -1,0 +1,251 @@
+{
+  "version": 1,
+  "workstation": "davion-sidarli",
+  "stateDir": "~/.local/state/aico/backups",
+  "scratchRoot": "/srv/scratch/aico-backups",
+  "sharedLock": "~/.local/state/summitflow/host-recovery/run.lock",
+  "legacyHostState": "~/.local/state/summitflow/host-recovery",
+  "legacyDriveState": "~/.local/state/summitflow/offsite",
+  "btrbkConfig": "/etc/btrbk/summitflow.conf",
+  "nativeHelper": "/usr/local/sbin/summitflow-native-capture",
+  "windowHelper": "/usr/local/sbin/summitflow-backup-window",
+  "nativeTarget": "/mnt/summitflow-native/native",
+  "nativeSources": ["/", "/home", "/srv/workspaces", "/var/lib/docker", "/srv/models", "/var/log"],
+  "subvolumes": {
+    "workspaces": {
+      "mount": "/srv/workspaces",
+      "paths": ["/srv/workspaces"]
+    },
+    "home": {
+      "mount": "/home",
+      "paths": ["/home"]
+    },
+    "root": {
+      "mount": "/",
+      "paths": [
+        "/etc",
+        "/root",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+        "/usr/local/libexec",
+        "/usr/local/share",
+        "/opt/ominull",
+        "/var/spool"
+      ]
+    }
+  },
+  "streams": [
+    {
+      "id": "postgres",
+      "name": "PostgreSQL databases",
+      "filename": "postgres-dumpall.sql",
+      "command": [
+        "sudo",
+        "-n",
+        "docker",
+        "exec",
+        "summitflow-stack-postgres-1",
+        "pg_dumpall",
+        "-U",
+        "admin"
+      ],
+      "required": true
+    },
+    {
+      "id": "redis",
+      "name": "Redis database",
+      "filename": "redis-dump.rdb",
+      "command": [
+        "sudo",
+        "-n",
+        "docker",
+        "exec",
+        "summitflow-stack-redis-1",
+        "sh",
+        "-c",
+        "f=$(mktemp) || exit 1; redis-cli --rdb \"$f\" >&2 && cat \"$f\"; rc=$?; rm -f \"$f\"; exit $rc"
+      ],
+      "required": false
+    }
+  ],
+  "retention": {
+    "drive": {
+      "daily": 7,
+      "weekly": 4,
+      "monthly": 3,
+      "legacyDays": 30
+    },
+    "snapshot": {
+      "recentHours": 6,
+      "hourlyHours": 24,
+      "dailyDays": 3,
+      "archivedDays": 3,
+      "unfinishedDays": 1,
+      "pressureKeep": 3,
+      "manualPerScope": 20,
+      "maxDeletes": 15,
+      "intervalMinutes": 15
+    },
+    "btrbk": [
+      "snapshot_preserve_min latest",
+      "snapshot_preserve no",
+      "target_preserve_min latest",
+      "target_preserve 7d",
+      "snapshot_create ondemand"
+    ]
+  },
+  "schedule": {
+    "localMinutes": 240,
+    "driveAt": "02:30",
+    "appendMinutes": 60,
+    "snapshotMinutes": 30,
+    "guardMinutes": 5,
+    "freshLocalHours": 8,
+    "freshDriveHours": 36,
+    "freshAppendHours": 2
+  },
+  "legacyTimers": {
+    "host": ["--user", "summitflow-host-backup.timer"],
+    "snapshots": ["--user", "btrfs-autosnapshot.timer"],
+    "guard": ["summitflow-backup-window-guard.timer"],
+    "verify": ["--user", "summitflow-host-verify.timer"]
+  },
+  "pve": {
+    "alias": "proxmox-gem",
+    "backupKey": "~/.local/state/summitflow/backup-keys/pve-backup.ed25519",
+    "appendKey": "~/.local/state/summitflow/backup-keys/pve-append.ed25519",
+    "knownHosts": "~/.ssh/known_hosts",
+    "thinPoolMaximumPercent": 98,
+    "address": "192.168.86.39",
+    "user": "root",
+    "port": "22"
+  },
+  "append": {
+    "repository": "rclone:aico-append:repo",
+    "passwordFile": "~/.local/state/summitflow/backup-keys/restic-local.password"
+  },
+  "sqlite": {
+    "dataDir": "~/.local/state/aico",
+    "otherDirs": ["~/.local/state/tether/default"],
+    "stagingDir": "~/.local/state/aico-snapshot",
+    "machines": ["davion-sidarli", "aico"]
+  },
+  "prepare": {
+    "ominull-production-state": {
+      "project": "ominull",
+      "extension": "ominull.backup",
+      "root": "/srv/workspaces/projects/ominull",
+      "command": ["/srv/workspaces/projects/ominull/scripts/st-ominull-backup"]
+    }
+  },
+  "limits": {
+    "cacheBytes": 1073741824,
+    "maxOutputBytes": 268435456,
+    "gomaxprocs": "4",
+    "gomemlimit": "2GiB",
+    "lockWait": "5m"
+  },
+  "webUrl": "http://127.0.0.1:3002",
+  "restoreRoot": "/srv/scratch",
+  "remoteSqlite": {
+    "machine": "aico",
+    "source": "pve-ct-190-aico-data",
+    "snapshotCommand": [
+      "ssh",
+      "-o",
+      "BatchMode=yes",
+      "proxmox-gem",
+      "pct",
+      "exec",
+      "190",
+      "--",
+      "systemctl",
+      "--user",
+      "--machine=kasadis@.host",
+      "start",
+      "aico-state-snapshot.service"
+    ],
+    "timeCommand": [
+      "ssh",
+      "-o",
+      "BatchMode=yes",
+      "proxmox-gem",
+      "pct",
+      "exec",
+      "190",
+      "--",
+      "stat",
+      "-c",
+      "%Y",
+      "/home/kasadis/.local/state/aico-snapshot/notes.db"
+    ]
+  },
+  "displayNames": {
+    "a-term": "Aico previous app",
+    "aico-web-state": "Aico saved web state"
+  },
+  "appendClients": {
+    "aico": {
+      "repository": "rclone:aico-ct190:repo",
+      "passwordFile": "~/.local/state/aico/secrets/backup-append.password",
+      "key": "~/.local/state/aico/secrets/backup-append.ed25519"
+    }
+  },
+  "externalProbes": {
+    "blackbox-archive": {
+      "path": "/media/kasadis/Backups/blackbox"
+    },
+    "portfolio-ai-complete": {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "proxmox-gem",
+        "qm",
+        "guest",
+        "exec",
+        "180",
+        "--",
+        "/usr/bin/find",
+        "/var/lib/app-backups",
+        "-maxdepth",
+        "2",
+        "-type",
+        "f",
+        "-printf",
+        "%T@\\n"
+      ],
+      "jsonGuest": true
+    }
+  },
+  "packageStatusPath": "/var/lib/dpkg/status",
+  "bootPaths": ["/", "/boot", "/boot/efi"],
+  "runProperties": [
+    "Nice=19",
+    "IOSchedulingClass=idle",
+    "CPUWeight=10",
+    "MemoryHigh=3G",
+    "MemoryMax=6G",
+    "KillSignal=SIGINT",
+    "TimeoutStopSec=90"
+  ],
+  "verify": {
+    "day": 0,
+    "at": "05:00",
+    "sample": "500M",
+    "maxUnused": "10%",
+    "maxRepack": "2G"
+  },
+  "workSnapshotDisposable": [
+    "node_modules",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".next",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".mypy_cache",
+    ".dev-tools",
+    ".turbo"
+  ]
+}

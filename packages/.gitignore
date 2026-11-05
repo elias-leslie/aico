@@ -70,3 +70,7 @@ playwright-cli.json
 
 # tsc -b output (declarations and build info per package)
 .tsbuild/
+
+# The Backups page is source, not generated backup data.
+!web-frontend/app/backups/
+!web-frontend/app/backups/**

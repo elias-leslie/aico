@@ -175,6 +175,15 @@ step "Node dependencies and builds"
 run npm ci --no-audit --no-fund
 run npm run build
 
+step "Aico command"
+install_link "$REPO/packages/web-server/scripts/aico" "$BIN_DIR/aico"
+if [ -n "${AICO_INSTALL_SOURCE_SHA:-}" ]; then
+  [[ "$AICO_INSTALL_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || fail "AICO_INSTALL_SOURCE_SHA must name the exported commit"
+  [ "$(basename "$REPO")" = "$AICO_INSTALL_SOURCE_SHA" ] || fail "a committed standalone install belongs in its commit-named release folder"
+  [ "$DRY_RUN" = 1 ] || [ -r "$REPO/packages/ops/dist/aico-ops.mjs" ] || fail "the committed ops bundle is missing"
+  install_link "$REPO" "$HOME/.local/lib/aico/ops"
+fi
+
 step "Tether"
 [ "$DRY_RUN" = 1 ] || [ -f packages/tether/dist/tether.mjs ] || fail "packages/tether/dist/tether.mjs is missing after the build"
 run env TETHER_LIB_DIR="$LIB_DIR" packages/tether/scripts/install-release.sh
