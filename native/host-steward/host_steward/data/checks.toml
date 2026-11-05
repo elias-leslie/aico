@@ -12,9 +12,7 @@ addr = "192.168.86.39"
 check_key = "/etc/nightshift/pve-check.key"
 known_hosts = "/etc/nightshift/pve-known_hosts"
 ssh_timeout = 120
-backup_receipt = "/home/kasadis/.local/state/summitflow/backup-freshness/proxmox.json"
 backup_required_targets = ["pve-cluster-config", "pve-host-files", "pve-vm-100-browser-state"]
-backup_alert_age_h = 6.0
 
 # Controllers that change the host (kill processes, delete scratch data, start scrubs and self-tests). Each is a
 # dry run until its switch here is true: it reports what it would do and does nothing. Cut over from Nightshift's
@@ -164,27 +162,21 @@ amdgpu = { kind = "AMD GPU", warn = 90.0, crit = 100.0 }
 what = "Backups"
 every_min = 15
 slack_min = 10
-# Under the owner's ~/.local/state/summitflow. A name here that is missing is a warning.
-expected = ["backup-safety/status.json", "backup-restore-test/monthly.json"]
-status_globs = [
-  "backup-circuit-breaker*.json", "backup-circuit-breaker/*.json", "backup-breaker/*.json",
-  "backup-health/*.json", "backup-health*.json", "backup-weekly*/*.json", "backup-restore-test/*.json",
-  "backup-status/*.json", "backup-safety/*.json",
-]
-max_files = 40
-# Hours before a status file counts as stale; first matching name wins.
-stale_hours = { "*monthly*" = 852, "*weekly*" = 192, "*health*" = 192, "*" = 192 }
-receipt_stale_hours = 6.0
-source_fail_factor = 2.0
-refused_failed_hours = 2.0
+# The owning live API computes per-source data age, failures and offline-unchanged coverage.
+aico_status_command = ["curl", "--fail", "--silent", "--show-error", "--noproxy", "*", "http://127.0.0.1:3002/api/backups"]
+status_timeout_s = 5.0
+drive_stale_hours = 36.0
+future_skew_s = 600.0
+drill_status_command = ["curl", "--fail", "--silent", "--show-error", "--noproxy", "*", "http://127.0.0.1:3002/api/status?q=backups-drill"]
+drill_job_id = "jobs/backups-drill"
+# Preserve the previous monthly freshness window; the owning job checks the actual drill before reporting OK.
+drill_stale_hours = 852.0
 native_config = "/etc/btrbk/summitflow.conf"
 native_warn_hours = 36
 native_failed_hours = 60
 snapshot_status_command = ["curl", "--fail", "--silent", "--show-error", "--noproxy", "*", "http://127.0.0.1:3002/api/status?q=backups-snapshots"]
-snapshot_status_timeout_s = 5.0
 snapshot_job_id = "jobs/backups-snapshots"
 snapshot_stale_hours = 2.0
-sources_receipt = "backup-freshness/sources.json"
 
 [checks.journal]
 what = "System journal"

@@ -245,41 +245,14 @@ what = "{host} temperatures could not be read"
 [signal."backups.owner"]
 what = "The backup owner account {owner} does not exist here"
 
-[signal."backups.file.missing"]
-what = "The backup status file {file} is missing"
-impact = "A backup job may have stopped"
-next = "Run it or look at its timer"
+[signal."backups.sources"]
+what = "Backup sources need attention: {why}"
+impact = "Some data may lack a fresh copy"
+next = "Check Aico's Backups page"
 
-[signal."backups.file.unreadable"]
-what = "The backup status file {file} cannot be read"
-
-[signal."backups.file.failed"]
-what = "A backup job is failing: {file} ({what})"
-impact = "There may be no fresh copy"
-next = "Read its log and re-run it"
-
-[signal."backups.file.stale"]
-what = "The backup status {file} is {days} days old"
-impact = "A scheduled run has not happened"
-next = "Check its timer"
-
-[signal."backups.sources.unreadable"]
-what = "Could not read the backup freshness receipt"
-
-[signal."backups.sources.stale"]
-what = "The backup freshness receipt is {hours} h old"
-impact = "Nothing is writing it, so freshness is unknown"
-next = "Check the SummitFlow backup timer"
-
-[signal."backups.capture.refused"]
-what = "Backups are being refused for {hours} h ({sources})"
-impact = "No new copies are being made"
-next = "Free disk space, then re-run"
-
-[signal."backups.sources.failing"]
-what = "{n} backup sources are failing: {sources}"
-impact = "Their data has no fresh copy"
-next = "Read each source's log"
+[signal."backups.drill"]
+what = "The restore drill needs attention: {why}"
+next = "Check Aico's restore drill job"
 
 [signal."backups.native"]
 what = "The host backup is not healthy: {why}"
@@ -296,7 +269,7 @@ what = "{why}"
 [signal."backups.pve"]
 what = "The PVE backups are not healthy: {why}"
 impact = "PVE data may lack a verified offsite copy"
-next = "Check the PVE backup receipt"
+next = "Check the PVE sources on Aico's Backups page"
 
 # journal
 [signal."journal.unreadable"]

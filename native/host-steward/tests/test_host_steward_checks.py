@@ -383,42 +383,6 @@ def write(path, data):
     return path
 
 
-def backup_ctx(tmp_path, **over):
-    return ctx("backups", expected=[], status_globs=["backup-health/*.json"], **over)
-
-
-def test_backups_status_files_ok_stale_failed_and_missing(tmp_path):
-    base = tmp_path / ".local/state/summitflow"
-    write(base / "backup-health/fresh.json", {"ok": True, "generated_at": NOW - 3600})
-    write(base / "backup-health/old.json", {"ok": True, "generated_at": NOW - 20 * 86400})
-    write(base / "backup-health/bad.json", {"status": "failed", "generated_at": NOW})
-    out = backups.status_files(backup_ctx(tmp_path), str(tmp_path))
-    by = {s.code: s for s in out}
-    assert {c: s.state for c, s in by.items()} == {"backups.file": "ok", "backups.file.stale": "warn", "backups.file.failed": "failed"}
-    assert by["backups.file.failed"].fields["file"] == "backup-health.bad"
-    missing = backups.status_files(ctx("backups", expected=["backup-safety/status.json"], status_globs=[]), str(tmp_path))
-    assert states(missing) == {"backups.file.missing": "warn"}
-
-
-def test_backups_source_receipt_refusal_and_failing_sources(tmp_path):
-    base = tmp_path / ".local/state/summitflow/backup-freshness"
-    write(
-        base / "sources.json",
-        {
-            "generated_at": NOW - 60,
-            "capture_refused_since": NOW - 3 * 3600,
-            "sources": {
-                "infra": {"ok": False, "last_error": "not enough free space", "last_success_at": NOW - 9 * 86400, "frequency": "daily"},
-                "notes": {"ok": False, "last_error": "auth", "last_success_at": NOW - 9 * 86400, "frequency": "daily"},
-                "fine": {"ok": True},
-            },
-        },
-    )
-    out = {s.code: s for s in backups.freshness(backup_ctx(tmp_path), str(tmp_path))}
-    assert out["backups.capture.refused"].state == "failed" and out["backups.capture.refused"].fields["sources"] == "infra"
-    assert out["backups.sources.failing"].state == "failed" and out["backups.sources.failing"].fields["sources"] == "notes"
-
-
 def test_backups_native_host_capture(tmp_path):
     root = tmp_path / ".local/state/summitflow/host-recovery"
     conf = tmp_path / "btrbk.conf"
@@ -464,28 +428,83 @@ def test_backups_snapshots_follow_aico_job_not_retired_sweep(tmp_path):
     assert states(backups.autosnap(ctx("backups", run=run), str(tmp_path))) == {"backups.autosnap": "ok"}
 
 
-def test_backups_pve_receipt(tmp_path):
-    site = {**DATA["site"], "pve": {**DATA["site"]["pve"], "backup_receipt": str(tmp_path / "proxmox.json")}}
-    uid = tmp_path.stat().st_uid
-    target = {"fresh": True, "status": "fresh", "verified_at": NOW, "offsite": "verified", "age_hours": 2}
-    receipt = {
-        "schema_version": 1, "ok": True, "generated_at": NOW - 600, "max_age_hours": 36,
-        "targets": [{"target": name, **target} for name in DATA["site"]["pve"]["backup_required_targets"]],
-    }  # fmt: skip
-    write(tmp_path / "proxmox.json", receipt)
-    assert backups.pve_receipt(ctx("backups", site=site), uid).state == "ok"
-    receipt["targets"][0]["offsite"] = "pending"
-    write(tmp_path / "proxmox.json", receipt)
-    bad = backups.pve_receipt(ctx("backups", site=site), uid)
-    assert bad.state == "failed" and "offsite pending" in bad.fields["why"]
-    write(tmp_path / "proxmox.json", {**receipt, "generated_at": NOW - 9 * 3600})
-    assert "stopped 9 h ago" in backups.pve_receipt(ctx("backups", site=site), uid).fields["why"]
-    assert backups.pve_receipt(ctx("backups", site={**site, "pve": {**site["pve"], "backup_receipt": "/none"}}), uid).state == "warn"
-
-
 def test_backups_unknown_owner_is_one_warning():
     site = {**DATA["site"], "owner": {"user": "no-such-user-xyz"}}
     assert states(backups.run(ctx("backups", site=site))) == {"backups.owner": "warn"}
+
+
+def aico_backup_health():
+    return {
+        "entries": [{"id": "drive/" + source, "source": source, "target": "drive",
+                     "state": "ok", "dataAt": NOW - 3600, "snapshot": "restorable-copy"}
+                    for source in DATA["site"]["pve"]["backup_required_targets"]],
+        "runs": {"drive": {"ok": True, "finished": NOW - 3600}},
+    }
+
+
+def aico_backup_runner(data):
+    return Fake(
+        (["http://127.0.0.1:3002/api/backups"], Result(0, json.dumps(data))),
+        (["http://127.0.0.1:3002/api/status?q=backups-drill"], Result(0, json.dumps({"rows": [
+            {"id": "jobs/backups-drill", "state": "ok", "last_run": NOW - 600}]}))),
+        (["http://127.0.0.1:3002/api/status?q=backups-snapshots"], Result(0, json.dumps({"rows": [
+            {"id": "jobs/backups-snapshots", "state": "ok", "last_run": NOW - 600}]}))),
+    )
+
+
+def test_backups_follow_aico_after_retired_receipt_writers_stop(tmp_path, monkeypatch):
+    monkeypatch.setattr(backups.pwd, "getpwnam", lambda owner: type("Owner", (), {"pw_dir": str(tmp_path), "pw_uid": tmp_path.stat().st_uid}))
+    old = tmp_path / ".local/state/summitflow"
+    write(old / "backup-freshness/sources.json", {"generated_at": NOW - 9 * 3600})
+    write(old / "backup-freshness/proxmox.json", {"schema_version": 1, "generated_at": NOW - 9 * 3600})
+    write(old / "backup-health/old.json", {"ok": False})
+    site = {**DATA["site"], "pve": {**DATA["site"]["pve"], "backup_receipt": str(old / "backup-freshness/proxmox.json")}}
+    out = backups.run(ctx("backups", run=aico_backup_runner(aico_backup_health()), site=site, native_config=str(tmp_path / "absent")))
+    assert out and set(states(out).values()) == {"ok"}
+
+
+@pytest.mark.parametrize("change,source_state,pve_state", [
+    (lambda d: d["entries"][0].update(state="failed"), "failed", "failed"),
+    (lambda d: d["entries"][0].update(state="warn"), "warn", "warn"),
+    (lambda d: d["entries"][0].update(state="unknown"), "warn", "warn"),
+    (lambda d: d["entries"][0].update(dataAt=None), "warn", "warn"),
+    (lambda d: d["entries"][0].update(dataAt=NOW + 3600), "warn", "warn"),
+    (lambda d: d["entries"][0].update(snapshot=None), "ok", "failed"),
+    (lambda d: d["entries"][0].update(target="native"), "ok", "failed"),
+    (lambda d: d["entries"].pop(), "ok", "failed"),
+    (lambda d: d["runs"]["drive"].update(ok=False), "ok", "failed"),
+    (lambda d: d["runs"]["drive"].update(finished=NOW - 37 * 3600), "ok", "warn"),
+    (lambda d: d["runs"]["drive"].update(finished=NOW + 3600), "ok", "warn"),
+    (lambda d: d["runs"].pop("drive"), "ok", "warn"),
+])
+def test_backups_live_entries_keep_failures_unknown_age_and_offsite_checks(change, source_state, pve_state, tmp_path):
+    data = aico_backup_health()
+    change(data)
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
+    assert out["backups.sources"] == source_state and out["backups.pve"] == pve_state
+
+
+@pytest.mark.parametrize("data", [{}, {"entries": []}, {"entries": [None]}, {"entries": "unknown"}])
+def test_backups_missing_live_health_is_unknown_not_zero(data, tmp_path):
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
+    assert out["backups.sources"] == out["backups.pve"] == "warn"
+
+
+def test_backups_offline_unchanged_age_is_computed_by_owning_live_api(tmp_path):
+    data = aico_backup_health()
+    # Aico's owning view computed OK from the recorded offlineSince state, not a refreshed artifact time.
+    data["entries"][0]["dataAt"] = NOW - 10 * 86400
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
+    assert set(out.values()) == {"ok"}
+
+
+@pytest.mark.parametrize("result", [Result(1), Result(0, "not-json"), Result(0, '{"rows": []}'),
+                                      Result(0, json.dumps({"rows": [{"id": "jobs/backups-drill", "state": "failed", "last_run": NOW}]}))])
+def test_backups_restore_drill_cannot_be_hidden_by_healthy_copies(result, tmp_path):
+    run = aico_backup_runner(aico_backup_health())
+    run.rules = ((["http://127.0.0.1:3002/api/status?q=backups-drill"], result), *run.rules)
+    out = states(backups.run(ctx("backups", run=run, native_config=str(tmp_path / "absent"))))
+    assert out["backups.drill"] == ("failed" if '"failed"' in result.out else "warn")
 
 
 # journal
