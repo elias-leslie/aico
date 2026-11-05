@@ -1,0 +1,26 @@
+{
+  "retired_workstation_row": {
+    "removed": true
+  },
+  "remaining_ecc": [
+    {
+      "id": "davion-gem/check-ecc",
+      "what": "PVE memory errors",
+      "kind": "check",
+      "machine": "davion-gem",
+      "state": "failed",
+      "meaning": "Corrected memory errors appeared in 1 new places. A memory module may be starting to fail. Watch it and test the memory.",
+      "last_run": "2026-11-05T05:35:27.851Z",
+      "next_run": "2026-11-05T06:00:27.851Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u aico-pve-sender.service"
+        }
+      ],
+      "updated_at": "2026-11-05T05:37:59.200Z",
+      "shown": "failed",
+      "shown_since": null
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+CHECK:FAIL:pytest|0.2s|details:.dev-tools/pytest-4126621-details.txt|hint:E   AssertionError: assert ([{'id': 'dav.....}], ['ecc']) == ([], [])
+CHECK:FAIL focused (1 stage(s))

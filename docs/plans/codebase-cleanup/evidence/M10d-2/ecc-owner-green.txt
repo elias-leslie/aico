@@ -1,0 +1,2 @@
+CHECK:OK:pytest|2.1s|details:.dev-tools/pytest-4127157-details.txt|hint:............                                                             [100%]
+CHECK:PASS focused (1 stage(s))

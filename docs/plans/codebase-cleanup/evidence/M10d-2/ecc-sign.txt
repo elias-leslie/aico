@@ -1,0 +1,1 @@
+Signing result: Signed root update written to /srv/scratch/aico-m10d2-ecc-signed
