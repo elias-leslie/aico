@@ -1,9 +1,10 @@
 The old Nightshift files and units are retained. No keys, phone pairing data, baselines, or history were deleted.
 
-Workstation rollback (coordinate with the grants lane before restoring its runner):
+Workstation rollback (coordinate with the grants lane before restoring its runner). M5b-2 moved the retired runner entrypoints and code to a read-only archive; restore that code before enabling the retained units. The archive member paths were checked: they are under usr/local and include nightshift-runner, with no credential paths.
 
 ```sh
 sudo systemctl --no-ask-password disable --now host-steward-heartbeat.timer host-steward-fcm-token.timer host-steward-rules.timer
+sudo tar -xzf /var/lib/host-steward/archive/nightshift-root-code.tar.gz -C /
 sudo systemctl --no-ask-password enable --now nightshift-check.timer nightshift-fcm-token.timer nightshift-runner-critical.timer nightshift-runner-nightly.timer nightshift-runner-weekly.timer nightshift-runner-monthly.timer nightshift-runner-critical.path
 systemctl --user --no-ask-password enable --now nightshift-notify-critical.timer nightshift-notify-critical.path
 ```
