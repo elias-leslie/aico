@@ -361,6 +361,8 @@ Claude's weekly usage ran out on 2026-11-04, so this work was built or reviewed 
 | M5b-2 grants, rules runner, signed installer, drill, canary hook, Nightshift root retirement | Codex xhigh (484939e9..ae73d84b; browser ca8f2e31; SF 57a18615; Nightshift 9cbadd63) | Codex | grant socket auth and FIDO, rules routing, installer signature check, canary secret handling |
 | M10d-1 CLI cutover, service/VM tool port, SF app stop, AH context export, legacy project checks, SDK pins | Codex xhigh (272a45e9..13b9da20, 72b5d9d3; AH 90cb5a28; 6 repo SDK pin commits) | Codex | PVE token use, launcher rollback, listener ownership check, legacy check path skipping gates |
 | M10d-2 friction fixes, storage trend, CT trim timer, phone pairing port, old Nightshift web stop, ECC row | Codex high (d1f0ecfb..c6eec390, 8e148b72; claude-config 04c8b33) | Codex | pairing/re-pair auth, commit stage-input lock, native subagent ledger |
+| M12-1 sealed pre-Aico archive (pg dumps, file copies, ledger), restore verification | Codex high (54ccde69, 3c4bc895) | Codex | secret exclusion, restore counts, immutability |
+| M12-2 retirement of SF/AH/NS leftovers, hook swaps, ~6.4k LOC dead code, CT190 prebuilt deploy, housekeeping/backup-health/publication follow-ups | Codex high (a9d4efb..d30513bc; root f89c2bb0; SF 9b31f0ca) | Codex | hook context delivery, fingerprint allow, backup health reader, prebuilt install |
 | Coordinator fixes at medium effort | Opus medium (37d7a940 guard allows scratch subvolume deletes; ee8366b9 refused deploy is warn) | none | guard: only `/srv/scratch` is exempt; refused deploys never hide a broken service |
 
 ## 5. Choices the sources did not settle
