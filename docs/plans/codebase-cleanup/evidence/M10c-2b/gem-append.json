@@ -1,0 +1,10 @@
+{
+  "source": "aico-aico",
+  "target": "append",
+  "dataAt": "2026-11-05T02:39:25.033Z",
+  "snapshot": "d98bc93399b2efe481d42ffadac10046c0f42e929b6f96f9dec96068f033d9e9",
+  "copiedAt": "2026-11-05T02:39:26.660Z",
+  "observed": "ok",
+  "path": "/home/kasadis/.local/state/aico-snapshot/agent.db",
+  "attemptedAt": "2026-11-05T02:39:25.138Z"
+}

@@ -1,0 +1,19 @@
+{
+  "acceptedSource": "9b01f05235d4210b551939e2abe63e46f74ef9e7",
+  "workstationOps": "/home/kasadis/.local/lib/aico/releases/9b01f05235d4210b551939e2abe63e46f74ef9e7",
+  "healthStatus": 200,
+  "deployJob": "aico-4931be4ba94f",
+  "deployRestarted": [
+    "aico-jobs.service"
+  ],
+  "workstationWebAndTetherPreserved": true,
+  "gemWebJobsTetherPreserved": true,
+  "gemOps": "/home/kasadis/.local/lib/aico/releases/9b01f05235d4210b551939e2abe63e46f74ef9e7",
+  "finalAcceptedSource": "81c420942578911be67b57ee16d3f7fc5d85022f",
+  "finalOpsOnBothMachines": "81c420942578911be67b57ee16d3f7fc5d85022f",
+  "opsBundlesMatch": true,
+  "opsBundleSha256": "a1588004fb657bb8d6a24ba32988680898fce430779fc228e493f482d0da01c2",
+  "finalDeployJob": "aico-a63824de642f",
+  "finalDeployRestarted": [],
+  "preservedWebJobsTether": "39913f44db68330972f9e8fbe659405cb30794ba"
+}

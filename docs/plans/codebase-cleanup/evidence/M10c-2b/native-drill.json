@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "started": "2026-11-05T02:27:10.160259+00:00",
+  "machines": [
+    {
+      "machine": "workstation",
+      "snapshot": null,
+      "nativePoints": [
+        {
+          "root": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+          "dataAt": "2026-11-05T01:13:01.385Z"
+        },
+        {
+          "root": "/mnt/summitflow-native/native/root.20261104T201302-0500",
+          "dataAt": "2026-11-05T01:13:01.385Z"
+        },
+        {
+          "root": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+          "dataAt": "2026-11-05T01:13:01.385Z"
+        }
+      ],
+      "expected": {
+        "sessions": 4,
+        "notes": 63,
+        "logins": 37
+      },
+      "served": {
+        "sessions": 4,
+        "notes": 63,
+        "logins": 37
+      },
+      "after": {
+        "sessions": 4,
+        "notes": 63,
+        "logins": 37
+      },
+      "durationSeconds": 5.703
+    }
+  ],
+  "manual": [],
+  "scratchDestroyed": true,
+  "projectRepo": {
+    "restored": true,
+    "fsck": true
+  },
+  "durationSeconds": 7.546,
+  "finished": "2026-11-05T02:27:17.706410+00:00"
+}

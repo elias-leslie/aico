@@ -1,0 +1,1 @@
+{"scratchOnly": true, "machines": ["workstation", "gem"], "runtime": "Aico web + Tether; no network or live sockets", "activatesUnits": false}

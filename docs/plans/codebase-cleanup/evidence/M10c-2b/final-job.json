@@ -1,0 +1,17 @@
+{
+  "kind": "backups-drill",
+  "home": "davion-sidarli",
+  "state": {
+    "kind": "backups-drill",
+    "nextRun": 1793876400000,
+    "fence": 2,
+    "leaseId": null,
+    "holder": null,
+    "holderMachine": null,
+    "leaseExpires": null,
+    "lastRun": 1793847044004,
+    "lastState": "ok",
+    "lastMeaning": "This month's restore drill passed. The next drill runs next month.",
+    "lastMachine": "davion-sidarli"
+  }
+}

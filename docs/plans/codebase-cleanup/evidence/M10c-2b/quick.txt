@@ -1,0 +1,16 @@
+CHECK:SCOPE:left out 19 changed file(s) other agents wrote or lease
+CHECK:quick:14 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: gradle-android, cargo-tray, go-hook, biome-agent, tsc-agent, depcruise-agent, biome-checks, tsc-checks, depcruise-checks, biome-context, tsc-context, depcruise-context, biome-fleet, tsc-fleet, depcruise-fleet, biome-notes, tsc-notes, depcruise-notes, biome-notify, tsc-notify, depcruise-notify, biome-shared, tsc-shared, depcruise-shared, biome-status, tsc-status, depcruise-status, biome-store, tsc-store, depcruise-store, biome-tasks, tsc-tasks, depcruise-tasks, biome-tether, tsc-tether, depcruise-tether, biome-tether-client, tsc-tether-client, depcruise-tether-client, biome-ui-kit, tsc-ui-kit, depcruise-ui-kit, biome-usage, tsc-usage, depcruise-usage, biome-web-frontend, tsc-web-frontend, depcruise-web-frontend, biome-web-server, tsc-web-server, depcruise-web-server, biome-webtools, tsc-webtools, depcruise-webtools, biome-root, contracts-host-steward
+CHECK:OK:ruff|0.0s|details:.dev-tools/ruff-2799848-details.txt|hint:All checks passed!
+CHECK:OK:types|0.1s|details:.dev-tools/types-2799848-details.txt|hint:All checks passed!
+CHECK:OK:pytest|0.2s|details:.dev-tools/pytest-2799848-details.txt|hint:13 passed, 5 subtests passed in 0.06s
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-2799848-details.txt|hint:boundaries: ok (19 packages, 12 contract fixtures)
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-2799848-details.txt|hint:[]
+CHECK:OK:biome-jobs|0.1s|details:.dev-tools/biome-jobs-2799848-details.txt|hint:Checked 1 file in 3ms. No fixes applied.
+CHECK:OK:tsc-jobs|0.1s|details:.dev-tools/tsc-jobs-2799848-details.txt|hint:-
+CHECK:OK:biome-ops|0.1s|details:.dev-tools/biome-ops-2799848-details.txt|hint:Checked 7 files in 18ms. No fixes applied.
+CHECK:OK:tsc-ops|0.1s|details:.dev-tools/tsc-ops-2799848-details.txt|hint:-
+CHECK:OK:depcruise-jobs|0.5s|details:.dev-tools/depcruise-jobs-2799848-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-ops|0.5s|details:.dev-tools/depcruise-ops-2799848-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:vitest|2.3s|details:.dev-tools/vitest-2799848-details.txt|hint:Tests  43 passed (43)
+CHECK:PASS quick 2.4s (12 ran, 56 skipped)

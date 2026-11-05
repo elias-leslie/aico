@@ -1,0 +1,12 @@
+Usage: aico backups list | request native|drive|append
+  recover bootstrap --machine workstation|gem --to /srv/scratch/NEW_FOLDER [--plan]
+  recover check|snapshots|restore|repair --repository REPO --password-file FILE [--to NEW_FOLDER] [--snapshot ID]
+  drill [--plan] [--scheduled]                         monthly scratch restore and live Aico counts
+  run native|drive|append|snapshots|guard|verify
+  snapshots SOURCE [--target native|drive|append]       copies available to restore
+  browse SOURCE SNAPSHOT PATH [--target native|drive|append]
+  restore SOURCE SNAPSHOT PATH --to /srv/scratch/NEW_FOLDER [--target native|drive|append]
+  cutover host|snapshots|guard|verify                    disable the old timer after clean Aico runs
+  rollback                                     print how to restore the old schedules
+Run commands hold the existing backup lock. Restores only create a new scratch folder.
+No key setup, prune or forget commands. Settings: AICO_BACKUPS_CONFIG.

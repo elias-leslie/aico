@@ -1,0 +1,10 @@
+{
+  "source": "aico-davion-sidarli",
+  "target": "append",
+  "dataAt": "2026-11-05T02:39:24.326Z",
+  "snapshot": "80a20abf91256cfa5df9f0c5f78732acaca687612a014845caed68bdb8bcba59",
+  "copiedAt": "2026-11-05T02:39:27.278Z",
+  "observed": "ok",
+  "path": "/home/kasadis/.local/state/aico-snapshot/agent.db",
+  "attemptedAt": "2026-11-05T02:39:24.479Z"
+}

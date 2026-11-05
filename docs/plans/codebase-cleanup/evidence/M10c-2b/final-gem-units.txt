@@ -1,0 +1,8 @@
+WorkingDirectory=/home/kasadis/.local/lib/aico/releases/39913f44db68330972f9e8fbe659405cb30794ba/packages/jobs
+ActiveState=active
+
+WorkingDirectory=/home/kasadis/.local/lib/aico/releases/39913f44db68330972f9e8fbe659405cb30794ba/packages/web-server
+ActiveState=active
+
+WorkingDirectory=/home/kasadis/.local/lib/aico/releases/39913f44db68330972f9e8fbe659405cb30794ba/packages/tether
+ActiveState=active

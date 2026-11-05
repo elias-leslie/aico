@@ -1,0 +1,21 @@
+CHECK:SCOPE:left out 1 changed file(s) other agents wrote or lease
+CHECK:FIX:biome:16 file(s)|exit 0
+CHECK:FIX:ruff:2 file(s)|exit 0
+CHECK:full:34 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: vitest
+CHECK:SKIP:no_candidate_lockfiles: osv
+CHECK:SKIP:no_local_rules: semgrep
+CHECK:OK:ruff|0.0s|details:.dev-tools/ruff-2909953-details.txt|hint:All checks passed!
+CHECK:OK:types|0.1s|details:.dev-tools/types-2909953-details.txt|hint:All checks passed!
+CHECK:OK:pytest|0.2s|details:.dev-tools/pytest-2909953-details.txt|hint:15 passed, 5 subtests passed in 0.06s
+CHECK:OK:biome|0.1s|details:.dev-tools/biome-2909953-details.txt|hint:Checked 1 file in 7ms. No fixes applied.
+CHECK:OK:gitleaks|0.4s|details:.dev-tools/gitleaks-2909953-details.txt|hint:[]
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-2909953-details.txt|hint:boundaries: ok (19 packages, 12 contract fixtures)
+CHECK:OK:tsc|1.0s|details:.dev-tools/tsc-2909953-details.txt|hint:-
+CHECK:OK:gradle-android|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:cargo-tray|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:go-hook|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:ui-spec|0.6s|details:.dev-tools/ui-spec-2909953-details.txt|hint:UILINT:ok|violations=0|checks=5|files=187|items=3990|unverified=0|scope=mechanical-only|not-a-copy-review
+CHECK:OK:depcruise|1.6s|details:.dev-tools/depcruise-2909953-details.txt|hint:‼ 30 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:contracts-host-steward|3.4s|optional|details:.dev-tools/contracts-host-steward-2909953-details.txt|hint:124 passed in 2.88s
+CHECK:PASS full 4.7s (13 ran, 3 skipped)
