@@ -177,8 +177,8 @@ export function systemdCmdUnits(env: NodeJS.ProcessEnv): CmdUnits {
       new Promise((resolve) => {
         if (!CMD_REF.test(ref) || !PLAIN_PATH.test(resultPath)) return resolve('failed')
         const temp = `${resultPath}.tmp`
-        // systemd turns $$ into $; sh then reads the variables systemd sets for ExecStopPost.
-        const record = `ExecStopPost=/bin/sh -c 'echo "$$SERVICE_RESULT $$EXIT_CODE $$EXIT_STATUS" > ${temp} && mv ${temp} ${resultPath}'`
+        // Read the named variables directly: --expand-environment=no preserves $$ for the shell.
+        const record = `ExecStopPost=/bin/sh -c 'printenv SERVICE_RESULT EXIT_CODE EXIT_STATUS > ${temp}; mv ${temp} ${resultPath}'`
         execFile(
           'systemd-run',
           [

@@ -78,6 +78,9 @@ export const LEGACY = [
   'gitleaks',
   'osv',
   'semgrep',
+  'govulncheck',
+  'shellcheck',
+  'actionlint',
 ] as const
 
 const DEFAULT_GATE = ['ruff', 'types', 'pytest', 'biome', 'tsc', 'vitest', 'security']
@@ -553,7 +556,18 @@ function vitestFlags(root: string, dir: string): string[] {
       const text = readFileSync(join(chunks, name), 'utf8')
       return /\bconfigLoader:\s*\{[^}]*\brunner\b/.test(text) && /\bcache:\s*\{/.test(text)
     })
-    return offered ? ['--configLoader', 'runner', '--cache=false'] : []
+    if (!offered) return []
+    const commonJs = [
+      'vitest.config.ts',
+      'vitest.config.js',
+      'vitest.config.cts',
+      'vite.config.ts',
+      'vite.config.js',
+    ].some((name) => {
+      const file = join(root, dir, name)
+      return existsSync(file) && /\b__(?:dirname|filename)\b/.test(readFileSync(file, 'utf8'))
+    })
+    return [...(commonJs ? [] : ['--configLoader', 'runner']), '--cache=false']
   }
   return []
 }
@@ -643,6 +657,51 @@ function legacySteps(
   })
   const configChanged = (names: string[]) => !!changed?.some((file) => names.includes(base(file)))
   switch (tool) {
+    case 'govulncheck':
+    case 'shellcheck':
+    case 'actionlint': {
+      const excluded = new Set([
+        '.git',
+        '.snapshots',
+        '.venv',
+        'node_modules',
+        'vendor',
+        'vendored',
+        'generated',
+        'build',
+        'dist',
+      ])
+      const files = (changed ?? listFiles()).filter(
+        (file) => !file.split('/').some((part) => excluded.has(part)),
+      )
+      if (tool === 'govulncheck') {
+        const modules = new Set<string>()
+        for (const file of files) {
+          if (!file.endsWith('.go') && !['go.mod', 'go.sum'].includes(base(file))) continue
+          let directory = posix.dirname(file)
+          for (;;) {
+            if (existsSync(join(root, directory, 'go.mod'))) {
+              modules.add(directory)
+              break
+            }
+            if (directory === '.') break
+            directory = posix.dirname(directory)
+          }
+        }
+        return modules.size
+          ? [...modules].sort().map((cwd) => step(`govulncheck:${cwd}`, tool, ['./...'], { cwd }))
+          : [{ id: tool, skip: 'no_relevant_paths' }]
+      }
+      const selected = files.filter((file) =>
+        tool === 'actionlint'
+          ? posix.dirname(file) === '.github/workflows' && ['.yml', '.yaml'].includes(ext(file))
+          : file.endsWith('.sh') &&
+            (file.startsWith('scripts/') || file.startsWith('docker/scripts/')),
+      )
+      return selected.length
+        ? [step(tool, tool, selected.sort())]
+        : [{ id: tool, skip: 'no_relevant_paths' }]
+    }
     case 'ruff':
     case 'types': {
       const args =

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -15,6 +15,46 @@ import {
 
 const JOB = '0123456789abcdef0123456789abcdef'
 const TAP = 'fedcba9876543210fedcba9876543210'
+
+it.each([
+  ['success', '0', 'succeeded'],
+  ['exit-code', '3', 'failed'],
+])(
+  'records the watcher outcome through the actual stop shell (%s)',
+  async (result, status, state) => {
+    const bin = join(dir, 'bin')
+    mkdirSync(bin)
+    writeFileSync(
+      join(bin, 'systemd-run'),
+      `#!/bin/sh
+for arg do
+  case "$arg" in ExecStopPost=*) /bin/sh -c "\${arg#ExecStopPost=}";; esac
+done
+`,
+      { mode: 0o755 },
+    )
+    const units = systemdCmdUnits({
+      PATH: `${bin}:/usr/bin:/bin`,
+      SERVICE_RESULT: result,
+      EXIT_CODE: 'exited',
+      EXIT_STATUS: status,
+    })
+    const path = join(dir, 'result')
+    expect(
+      await units.start(
+        '111111111111',
+        {
+          argv: ['/bin/true'],
+          cwd: dir,
+          deadline: Date.now() + 10_000,
+        },
+        path,
+        10,
+      ),
+    ).toBe('started')
+    expect(cmdResult(readFileSync(path, 'utf8'))).toEqual({ state, detail: `exit-${status}` })
+  },
+)
 
 it('finds the user bus for a wait launched without desktop environment', async () => {
   const bin = join(dir, 'bin')

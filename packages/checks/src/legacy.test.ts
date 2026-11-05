@@ -28,6 +28,50 @@ function config(root: string) {
 }
 const coordination = { foreign: () => ({}), guard: () => null, committed: () => '' }
 
+it('keeps the bundler for configs that use CommonJS path globals', () => {
+  const root = repo()
+  write(root, 'package.json', '{"scripts":{"test":"vitest run"}}')
+  write(root, 'vitest.config.ts', 'export default { root: __dirname }')
+  write(root, 'node_modules/.bin/vitest', '')
+  write(
+    root,
+    'node_modules/vitest/dist/chunks/cac.x.js',
+    'configLoader: { description: "runner" }, cache: { description: "Enable cache" }',
+  )
+  const argv = plan(config(root), 'full', null, () => []).find((item) => item.id === 'vitest')?.step
+    ?.argv
+  expect(argv).not.toContain('--configLoader')
+  expect(argv).toContain('--cache=false')
+})
+
+it('retains the scoped Go, shell and workflow scanners', () => {
+  const root = repo()
+  write(
+    root,
+    '.st-check.toml',
+    '[native]\nlegacy_tools=["govulncheck","shellcheck","actionlint"]\n',
+  )
+  write(root, 'hub/go.mod', 'module fixture\n')
+  write(root, 'hub/main.go', 'package main\n')
+  write(root, 'scripts/run.sh', '#!/bin/sh\n')
+  write(root, '.github/workflows/check.yml', 'jobs: {}\n')
+  const files = ['hub/main.go', 'scripts/run.sh', '.github/workflows/check.yml']
+  const steps = plan(config(root), 'quick', files, () => files)
+  expect(steps.find((item) => item.id === 'govulncheck:hub')?.step).toMatchObject({
+    cwd: 'hub',
+    argv: ['govulncheck', './...'],
+  })
+  expect(steps.find((item) => item.id === 'shellcheck')?.step?.argv).toEqual([
+    'shellcheck',
+    'scripts/run.sh',
+  ])
+  expect(steps.find((item) => item.id === 'actionlint')?.step?.argv).toEqual([
+    'actionlint',
+    '.github/workflows/check.yml',
+  ])
+  expect(plan(config(root), 'quick', [], () => files).every((item) => !item.step)).toBe(true)
+})
+
 it('keeps docs-only repos applicable only to security checks', () => {
   const root = repo()
   write(root, 'README.md', 'Documentation\n')
