@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   cone,
   type DeployDeps,
+  defaultDeps,
   deploy,
   installedOpsSha,
   jobResult,
@@ -37,6 +38,18 @@ import { run } from './sh'
 
 const repo = new URL('../../..', import.meta.url).pathname.replace(/\/$/, '')
 const gitAt = (root: string) => (args: string[]) => run('git', ['-C', root, ...args]).out.trim()
+
+it('discovers the user bus for every deploy command, preserving explicit settings', () => {
+  const runtime = `/run/user/${process.getuid?.() ?? 0}`
+  const env = defaultDeps({}).env
+  expect(env.XDG_RUNTIME_DIR).toBe(runtime)
+  expect(env.DBUS_SESSION_BUS_ADDRESS).toBe(`unix:path=${runtime}/bus`)
+  const explicit = {
+    XDG_RUNTIME_DIR: '/run/test-user',
+    DBUS_SESSION_BUS_ADDRESS: 'unix:path=/test-bus',
+  }
+  expect(defaultDeps(explicit).env).toMatchObject(explicit)
+})
 
 describe('unit selection from package cones', () => {
   const sha = gitAt(repo)(['rev-parse', 'HEAD'])

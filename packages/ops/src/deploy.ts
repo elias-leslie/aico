@@ -326,7 +326,17 @@ export interface DeployDeps {
   opsLink: string
 }
 
+function userBusEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const runtime = env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`
+  return {
+    ...env,
+    XDG_RUNTIME_DIR: runtime,
+    DBUS_SESSION_BUS_ADDRESS: env.DBUS_SESSION_BUS_ADDRESS || `unix:path=${runtime}/bus`,
+  }
+}
+
 export function defaultDeps(env: NodeJS.ProcessEnv = process.env): DeployDeps {
+  env = userBusEnv(env)
   return {
     run: realRun,
     out: (line) => console.log(line),
@@ -1118,13 +1128,8 @@ export async function jobResult(
     let job = readJob(deps, id)
     if (!job) throw new Refusal(`No deploy job ${id}`)
     if (job.state === 'queued' || job.state === 'running') {
-      const runtime = deps.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`
       const answer = deps.run('systemctl', ['--user', 'is-active', `aico-deploy-${id}.service`], {
-        env: {
-          ...deps.env,
-          XDG_RUNTIME_DIR: runtime,
-          DBUS_SESSION_BUS_ADDRESS: deps.env.DBUS_SESSION_BUS_ADDRESS || `unix:path=${runtime}/bus`,
-        },
+        env: userBusEnv(deps.env),
       })
       const unit = answer.out.trim()
       if (
