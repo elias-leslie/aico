@@ -12,11 +12,13 @@ export const MAX_CHAT_STREAMS = 24
 export function chatQuestions(asks: readonly Ask[], id: string) {
   return asks.filter((ask) => !ask.host && ask.session === id && ask.state === 'open')
 }
-export function chatSession(chat: ReturnType<ChatSessions['summary']>, asks: Ask[]) {
+export function chatSession(chat: ReturnType<ChatSessions['summary']>, asks: Ask[], seenAt = 0) {
   const questions = chat.state === 'ended' ? [] : chatQuestions(asks, chat.id)
   const ended = chat.state === 'ended'
   return {
     id: chat.id,
+    seen_at: seenAt,
+
     name: chat.title,
     task: chat.title,
     user_id: null,
@@ -86,6 +88,14 @@ export function registerChatRoutes(
     if (!value) throw new HttpError(422, 'Write a message first.')
     return value
   }
+  const provenance = (body: Record<string, unknown>) => {
+    if (body.testing !== undefined && typeof body.testing !== 'boolean')
+      throw new HttpError(422, 'testing must be true or false.')
+    return {
+      startedBy: optionalString(body, 'startedBy', { max: 200 }),
+      testing: body.testing as boolean | undefined,
+    }
+  }
   router.on('GET', '/api/chat/options', async (ctx) =>
     handle(async () => {
       const cwd = ctx.query.get('cwd') || ''
@@ -105,6 +115,7 @@ export function registerChatRoutes(
         message: message(body),
         attachments: chatAttachmentIds(body.attachments, captures),
         ...preferences(body),
+        ...provenance(body),
       })
     }),
   )
@@ -146,6 +157,7 @@ export function registerChatRoutes(
         cwd: from.cwd,
         message: message(body),
         ...preferences(body),
+        ...provenance(body),
         branch: { id: from.id, turn: Number(body.turn) },
       })
     }),

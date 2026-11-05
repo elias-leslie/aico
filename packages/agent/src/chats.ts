@@ -24,6 +24,8 @@ interface ChatRow {
   note: string | null
   model: string | null
   effort: string | null
+  started_by: string | null
+  testing: number
 }
 export interface ChatMessage {
   seq: number
@@ -163,6 +165,16 @@ export class ChatSessions {
     return {
       id,
       title: row.title,
+      startedBy: row.started_by,
+      testing: Boolean(row.testing),
+      lastReplyAt: (() => {
+        const reply = this.db
+          .prepare(
+            "SELECT at FROM messages WHERE run_id = ? AND role = 'assistant' ORDER BY seq DESC LIMIT 1",
+          )
+          .get(id) as { at: string } | undefined
+        return reply ? Date.parse(reply.at) : null
+      })(),
       role: run.role,
       cwd: run.cwd,
       state: row.state,
@@ -244,7 +256,11 @@ export class ChatSessions {
     effort?: string | null
     branch?: { id: string; turn: number }
     attachments?: string[]
+    startedBy?: string
+    testing?: boolean
   }) {
+    if (input.testing && (!input.startedBy || input.startedBy === 'owner'))
+      throw new ChatError(422, 'A test chat must name the agent session that started it.')
     let { role, cwd } = input
     if (input.branch) {
       const from = findRun(this.db, this.row(input.branch.id).run_id)
@@ -285,9 +301,17 @@ export class ChatSessions {
       : input.message.split('\n')[0]?.slice(0, 100) || 'New chat'
     this.db
       .prepare(
-        "INSERT INTO chats (run_id, title, state, updated_at, model, effort) VALUES (?, ?, 'idle', ?, ?, ?)",
+        "INSERT INTO chats (run_id, title, state, updated_at, model, effort, started_by, testing) VALUES (?, ?, 'idle', ?, ?, ?, ?, ?)",
       )
-      .run(id, title, Date.now(), input.model ?? null, input.effort ?? null)
+      .run(
+        id,
+        title,
+        Date.now(),
+        input.model ?? null,
+        input.effort ?? null,
+        input.startedBy ?? 'owner',
+        input.testing ? 1 : 0,
+      )
     this.launch(id, input.message, rules, Boolean(input.model), input.effort, input.attachments)
     return this.get(id)
   }

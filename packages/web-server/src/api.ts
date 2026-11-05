@@ -205,15 +205,25 @@ export function buildApi(deps: ApiDeps): Router {
 
   router.on('GET', '/api/sessions', async () => {
     // Tabs are never detached any more, so include_detached changes nothing.
+    const seen = store.seenAt()
     const items = [
       ...(await listSessions()),
-      ...(deps.chats ? deps.chats.list().map((chat) => chatSession(chat, [])) : []),
+      ...(deps.chats
+        ? deps.chats
+            .list()
+            .filter((chat) => chat.state !== 'ended')
+            .map((chat) => chatSession(chat, [], seen.get(chat.id) ?? 0))
+        : []),
     ]
     if (deps.chats) {
       const asks = await deps.asks.list()
       for (let i = 0; i < items.length; i++) {
         if (deps.chats.has(items[i].id))
-          items[i] = chatSession(deps.chats.summary(items[i].id), asks) as (typeof items)[number]
+          items[i] = chatSession(
+            deps.chats.summary(items[i].id),
+            asks,
+            seen.get(items[i].id) ?? 0,
+          ) as (typeof items)[number]
       }
     }
     return { items, total: items.length }
@@ -221,7 +231,11 @@ export function buildApi(deps: ApiDeps): Router {
 
   router.on('GET', '/api/sessions/:sessionId', async (ctx) =>
     deps.chats?.has(ctx.params.sessionId)
-      ? chatSession(deps.chats.summary(ctx.params.sessionId), await deps.asks.list())
+      ? chatSession(
+          deps.chats.summary(ctx.params.sessionId),
+          await deps.asks.list(),
+          store.seenAt().get(ctx.params.sessionId) ?? 0,
+        )
       : getSession(ctx.params.sessionId),
   )
 
@@ -252,7 +266,11 @@ export function buildApi(deps: ApiDeps): Router {
     const displayOrder = optionalInt(body, 'display_order')
     if (deps.chats?.has(id)) {
       if (name !== undefined) deps.chats.rename(id, name)
-      return chatSession(deps.chats.summary(id), await deps.asks.list())
+      return chatSession(
+        deps.chats.summary(id),
+        await deps.asks.list(),
+        store.seenAt().get(id) ?? 0,
+      )
     }
     const session = await getSession(id)
     if (displayOrder !== undefined && session.pane_id) store.updateLink(id, { displayOrder })

@@ -76,6 +76,25 @@ describe('attentionOf', () => {
     expect(attentionOf(found, 0, NOW).group).toBe('idle')
   })
 
+  it('marks only an unseen completed turn of a live chat as Finished', () => {
+    const chat = {
+      backend: 'aico-agent' as const,
+      activity: 'idle' as const,
+      activity_previous: 'working' as const,
+      activity_at: at(1),
+      chat: {
+        state: 'idle',
+        updatedAt: at(1),
+        lastReplyAt: at(1),
+      } as import('./chat').ChatSummary,
+    }
+    expect(attentionOf(chat, at(5), NOW).group).toBe('finished')
+    expect(attentionOf(chat, NOW, NOW).group).toBe('idle')
+    expect(
+      attentionOf({ ...chat, chat: { ...chat.chat, state: 'ended' } }, 0, NOW)
+        .group,
+    ).toBe('idle')
+  })
   it('handles working, unknown and missing fields', () => {
     expect(
       attentionOf({ activity: 'working', activity_at: at(120) }, 0, NOW),

@@ -114,6 +114,9 @@ export const MIGRATIONS = [
    ) STRICT;
    CREATE TABLE chat_answers (ask_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id)) STRICT;`,
   `ALTER TABLE chats ADD COLUMN draft_attachments TEXT NOT NULL DEFAULT '[]';`,
+  // Existing chats have unknown provenance; new starts record the caller.
+  `ALTER TABLE chats ADD COLUMN started_by TEXT;
+   ALTER TABLE chats ADD COLUMN testing INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 export function agentDbPath(dataDir: string): string {

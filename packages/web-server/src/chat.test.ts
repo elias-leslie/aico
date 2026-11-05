@@ -380,15 +380,63 @@ describe('Aico chat routes', () => {
     await chats.settled(id)
     expect(chats.get(id).effort).toBeNull()
   })
-  it('ends with an open question in Finished rather than Needs you', async () => {
+  it('removes an ended chat from Sessions but keeps its history and transcript', async () => {
     const id = await start()
     questions = [question(id)]
     await call('DELETE', `/api/sessions/${id}`)
-    expect((await call('GET', '/api/sessions')).body.items.find((s) => s.id === id)).toMatchObject({
-      chat: { state: 'ended' },
-      asks: [],
-    })
+    expect((await call('GET', '/api/sessions')).body.items.find((s) => s.id === id)).toBeUndefined()
+    expect(chats.list().find((chat) => chat.id === id)?.state).toBe('ended')
+    const ended = (await call('GET', `/api/chat/${id}`)).body
+    expect(ended.state).toBe('ended')
+    expect(ended.startedBy).toBe('owner')
+    expect(ended.testing).toBe(false)
+    expect(ended.lastReplyAt).toBeGreaterThan(0)
+    expect(ended.messages.length).toBeGreaterThan(0)
     expect(questions).toEqual([])
+  })
+  it('shares when a live chat was opened across devices', async () => {
+    const id = await start()
+    expect((await call('POST', '/api/sessions/seen', { ids: [id] })).status).toBe(200)
+    const seen = store.seenAt().get(id)
+    expect(seen).toBeGreaterThan(0)
+    expect((await call('GET', '/api/sessions')).body.items.find((s) => s.id === id)).toMatchObject({
+      seen_at: seen,
+    })
+    expect((await call('GET', `/api/sessions/${id}`)).body).toMatchObject({ seen_at: seen })
+  })
+  it('records agent test chat provenance and keeps it after End', async () => {
+    first.setResponses([fauxAssistantMessage('Test reply')])
+    const { body, status } = await call('POST', '/api/chat', {
+      role: 'implementation',
+      cwd: folder,
+      message: 'Test only',
+      startedBy: 'codex:test-session',
+      testing: true,
+    })
+    expect(status).toBe(200)
+    await chats.settled(body.id)
+    expect(chats.summary(body.id)).toMatchObject({ startedBy: 'codex:test-session', testing: true })
+    await call('DELETE', `/api/sessions/${body.id}`)
+    expect(chats.summary(body.id)).toMatchObject({
+      startedBy: 'codex:test-session',
+      testing: true,
+      state: 'ended',
+    })
+    expect(
+      (await call('GET', '/api/sessions')).body.items.find((s) => s.id === body.id),
+    ).toBeUndefined()
+  })
+  it('requires an agent session when marking a chat as a test', async () => {
+    expect(
+      (
+        await call('POST', '/api/chat', {
+          role: 'implementation',
+          cwd: folder,
+          message: 'Test only',
+          testing: true,
+        })
+      ).status,
+    ).toBe(422)
   })
   it('keeps the chat readable when Tether’s question listing stalls', async () => {
     const id = await start()

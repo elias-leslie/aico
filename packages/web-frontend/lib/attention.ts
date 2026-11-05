@@ -55,26 +55,31 @@ export function attentionOf(
 ): Attention {
   if (session.backend === 'aico-agent') {
     const chat = session.chat
-    const group = session.asks?.length
-      ? 'needs-you'
-      : chat?.state === 'ended'
-        ? 'finished'
-        : chat?.state === 'working'
-          ? 'working'
-          : 'idle'
+    const ended = chat?.state === 'ended'
+    const finished = chat?.state === 'idle' && (chat.lastReplyAt ?? 0) > seenAt
+    const group = ended
+      ? 'idle'
+      : session.asks?.length
+        ? 'needs-you'
+        : finished
+          ? 'finished'
+          : chat?.state === 'working'
+            ? 'working'
+            : 'idle'
     return {
       group,
       activity: group === 'working' ? 'working' : 'idle',
       at: chat?.updatedAt ?? null,
-      detail:
-        group === 'needs-you'
+      detail: ended
+        ? 'Ended'
+        : group === 'needs-you'
           ? 'Needs you'
           : chat?.state === 'stopped'
             ? 'Stopped mid-reply'
             : chat?.state === 'failed'
               ? 'No model answered'
               : group === 'finished'
-                ? 'Ended'
+                ? 'Reply finished'
                 : group === 'working'
                   ? 'Working'
                   : 'Idle',

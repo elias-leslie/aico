@@ -29,7 +29,10 @@ async function port(): Promise<number> {
   await new Promise<void>((r) => server.close(() => r()))
   return p
 }
-async function pair() {
+async function pair(reporting?: {
+  postRows: NonNullable<import('./fleet').FleetOptions['postRows']>
+  peerPower: NonNullable<import('./fleet').FleetOptions['peerPower']>
+}) {
   const root = mkdtempSync(join(tmpdir(), 'fleet-'))
   cleanup.push(() => rmSync(root, { recursive: true }))
   const a = loadIdentity(join(root, 'a'), 'peer-a')
@@ -70,6 +73,7 @@ async function pair() {
       pins: () => pins,
       postRows: async () => {},
       log: () => {},
+      ...reporting,
     })
   const makeB = () =>
     new Fleet({
@@ -586,4 +590,29 @@ it('forwards a full-peer merge to an already-connected downstream worker', async
   ).toEqual(['through-b'])
   await pushLoginGrants(p.sa, p.b.name, env)
   expect(new LoginStore({ HOME: join(p.root, 'home-c') }).list()).toHaveLength(1)
+})
+
+it('reports actual stopped guests as off and restores warning when the power reading fails', async () => {
+  let power: string | null = 'stopped'
+  let latest: import('@aico/status').StatusRow[] = []
+  const p = await pair({
+    postRows: async (rows) => {
+      latest = rows
+    },
+    peerPower: async () => {
+      if (power === null) throw new Error('Proxmox unavailable')
+      return new Map([['peer-b', power]])
+    },
+  })
+  await p.fa.start()
+  expect(latest[0]).toMatchObject({ state: 'off' })
+  expect(latest[0]?.next_run).toBeDefined()
+  power = 'running'
+  await vi.waitFor(() => expect(latest[0]?.state).toBe('warn'))
+  power = 'stopped'
+  await vi.waitFor(() => expect(latest[0]?.state).toBe('off'))
+  power = null
+  await vi.waitFor(() => expect(latest[0]?.state).toBe('warn'))
+  await p.fb.start()
+  await vi.waitFor(() => expect(latest[0]?.state).toBe('ok'))
 })

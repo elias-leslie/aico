@@ -103,3 +103,14 @@ reconnect, enrollment answer binding, and fenced takeover through two TLS
 peers. The cross-machine drill is separate: stop the home runner mid-job,
 observe the second machine complete under the next fence, then submit the old
 result and observe refusal. Local TLS tests do not establish that live drill.
+
+### Powered-off peers
+
+On a full machine with read access to its Proxmox authority, set `proxmoxSsh` in
+`fleet.json` to the existing SSH host alias. Fleet reads `/cluster/resources`
+through `pvesh` at its normal Status interval when peers are disconnected. Guest
+names must match fleet machine names. An approved peer whose guest is reported
+`stopped` is `off` and does not count as a late connection. A running guest with no link
+still warns; a failed, missing or ambiguous power reading also keeps the warning.
+A connected link takes precedence over a racing power reading. Worker machines
+need no Proxmox setting.

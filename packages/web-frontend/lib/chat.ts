@@ -6,6 +6,9 @@ export interface ChatSummary {
   cwd: string
   state: string
   updatedAt: number
+  startedBy?: string | null
+  testing?: boolean
+  lastReplyAt?: number | null
   startedAt: number
   model: string | null
   nextModel: string | null

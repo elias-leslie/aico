@@ -14,6 +14,7 @@ import { serveExec } from './exec'
 import { type Identity, loadIdentity, validName } from './identity'
 import { loginPeerRpc } from './logins-client'
 import { serveLoginWire } from './logins-wire'
+import { guestPower, peerStatusRow } from './power'
 import { pushToolLogins } from './secrets'
 import { type FleetSettings, localAddress, readSettings } from './settings'
 import { type Pin, PinCache } from './trust'
@@ -26,6 +27,7 @@ export interface FleetOptions {
   postRows?: (rows: StatusRow[]) => Promise<void>
   log?: (message: string) => void
   failed?: (error: Error) => void
+  peerPower?: () => Promise<ReadonlyMap<string, string>>
 }
 
 /** One connection per unordered machine pair; the lower name is the dialer.
@@ -48,6 +50,7 @@ export class Fleet {
   private server: Server | null = null
   private timer: NodeJS.Timeout | null = null
   private stopping = false
+  private reporting = false
   private readonly startedAt = Date.now()
 
   constructor(private readonly options: FleetOptions) {
@@ -395,29 +398,35 @@ export class Fleet {
   }
 
   private async report(): Promise<void> {
-    if (this.stopping) return
+    if (this.stopping || this.reporting) return
+    this.reporting = true
     const s = this.options.settings
-    const rows: StatusRow[] = this.status().map((peer) => ({
-      id: `fleet/${s.machine}/${peer.name}`,
-      what: `Link to ${peer.name}`,
-      kind: 'machine',
-      machine: peer.name,
-      state: peer.connected ? 'ok' : 'warn',
-      meaning: !this.pins().some((pin) => pin.name === peer.name)
-        ? `Not on the allowlist. Connection refused.`
-        : peer.connected
-          ? `Approved ${this.pins().find((pin) => pin.name === peer.name)?.role}. Connected to ${peer.name}.`
-          : peer.lastSeen
-            ? `Disconnected from ${peer.name}. Reconnecting.`
-            : `Waiting for ${peer.name} to connect.`,
-      ...(peer.lastSeen ? { last_run: new Date(peer.lastSeen).toISOString() } : {}),
-      next_run: new Date((peer.lastSeen ?? this.startedAt) + s.deadMs).toISOString(),
-      actions: [{ kind: 'detail', ref: 'tether hosts' }],
-    }))
     try {
+      let power: ReadonlyMap<string, string> = new Map()
+      if (this.status().some((peer) => !peer.connected)) {
+        try {
+          power = await (this.options.peerPower?.() ??
+            (s.proxmoxSsh ? guestPower(s.proxmoxSsh, s.deadMs) : Promise.resolve(power)))
+        } catch (error) {
+          this.log(`Could not read guest power: ${(error as Error).message}`)
+        }
+      }
+      if (this.stopping) return
+      const pins = this.pins()
+      const rows = this.status().map((peer) =>
+        peerStatusRow(
+          s,
+          peer,
+          pins.find((pin) => pin.name === peer.name)?.role,
+          power.get(peer.name),
+          this.startedAt,
+        ),
+      )
       if (rows.length) await this.postRows(rows)
     } catch (error) {
       this.log(`Could not write link Status: ${(error as Error).message}`)
+    } finally {
+      this.reporting = false
     }
   }
 

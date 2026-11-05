@@ -14,6 +14,8 @@ export interface FleetSettings {
   allowlist: string
   listen: Endpoint
   peers: { name: string; endpoint: Endpoint; tools?: string[] }[]
+  /** SSH host alias of the Proxmox authority; guest names match fleet names. */
+  proxmoxSsh?: string
   mode?: 'full' | 'worker'
   updatePins?: string
   controlSocket: string
@@ -73,6 +75,8 @@ export function readSettings(env: NodeJS.ProcessEnv, controlSocket: string): Fle
     throw new Error(
       'Fleet endpoints must be literal LAN addresses; listener must belong to this machine',
     )
+  if (value.proxmoxSsh !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value.proxmoxSsh))
+    throw new Error('Proxmox SSH host must be a host alias')
   const peerRoot = join(
     env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`,
     'aico',
