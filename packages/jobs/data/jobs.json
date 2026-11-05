@@ -2,6 +2,17 @@
   "description": "Aico jobs. home prefers a machine; lease_host (default home) is the single durable lease authority; workers (default home only) lists machines that may take over after lease_s. at is a daily local time, every_min repeats after completion. run is a local POST or command argv. Relative command executables resolve from this file's directory, so they stay in the scheduler's deployed release.",
   "jobs": [
     {
+      "kind": "github-publish",
+      "what": "Nightly GitHub publication",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "at": "03:05",
+      "run": {
+        "command": ["../../web-server/scripts/aico", "publish", "--all"]
+      },
+      "lease_s": 300
+    },
+    {
       "kind": "notes-export",
       "what": "Notes export to Drive",
       "project": "aico",

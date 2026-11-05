@@ -1,0 +1,5 @@
+{
+  "description": "Nightly GitHub publication uses the existing CLI-only authenticated fast-forward transport and outgoing-history secret verifier. No SummitFlow service or database is used. Excluded projects are never opened.",
+  "transport": ["st", "vcs", "deliver"],
+  "excludedProjects": ["neri", "neri-hunters"]
+}

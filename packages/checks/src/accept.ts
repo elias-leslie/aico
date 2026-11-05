@@ -21,6 +21,7 @@ import type { CheckReport } from './check'
 import { trackedFiles } from './check'
 import { git, gitOk } from './git'
 import type { Coordination } from './hook'
+import { noteLocalCheck } from './local-check'
 import { type Config, ConfigError, loadConfig, plan } from './plan'
 import { passed, receiptStore, runSteps } from './run'
 
@@ -122,6 +123,7 @@ export async function accept(config: Config, options: AcceptOptions): Promise<Ac
     out(
       `CHECK:PASS acceptance reused: tree ${tree.slice(0, 12)} passed at ${prior.at ?? 'an earlier run'}`,
     )
+    noteLocalCheck(main, sha, { ...prior, lane: 'acceptance' }, out)
     return { ...prior, sha, reused: true }
   }
   const started = performance.now()
@@ -161,6 +163,7 @@ export async function accept(config: Config, options: AcceptOptions): Promise<Ac
       `CHECK:${report.passed ? 'PASS' : 'FAIL'} acceptance ${(report.ms / 1000).toFixed(1)}s at ${sha.slice(0, 12)}${failed.length ? `: ${failed.map((r) => r.id).join(', ')}` : ''}`,
     )
     if (report.passed) store.put(key, { ...report, at: new Date().toISOString() })
+    noteLocalCheck(main, sha, { ...report, lane: 'acceptance' }, out)
     return report
   } finally {
     // The links go first so removing the worktree never walks into the main checkout's modules.

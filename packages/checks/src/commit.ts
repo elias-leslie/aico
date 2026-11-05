@@ -7,8 +7,9 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type CheckReport, runCheck } from './check'
-import { blobIds, changedFiles, commonDir, git } from './git'
+import { blobIds, changedFiles, commonDir, git, gitOk } from './git'
 import type { Coordination } from './hook'
+import { noteLocalCheck } from './local-check'
 import type { Config } from './plan'
 
 export class CommitError extends Error {}
@@ -116,6 +117,10 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
   if (blocked) throw new CommitError(blocked)
 
   const before = blobIds(root, files)
+  const head = () =>
+    gitOk(root, ['rev-parse', '--verify', 'HEAD']) ? git(root, ['rev-parse', 'HEAD']).trim() : null
+  const checkedBase = head()
+  let checkedCandidate = changedFiles(root).every((file) => files.includes(file))
   let report: CheckReport | null = null
   if (!options.noCheck) {
     report = await runCheck(config, {
@@ -151,6 +156,8 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
       )
     const blocked = options.coordination.guard(root, 'commit', options.withAck)
     if (blocked) throw new CommitError(blocked)
+    checkedCandidate &&=
+      head() === checkedBase && changedFiles(root).every((file) => files.includes(file))
     git(root, ['add', '-A', '--', ...files.map((file) => `:(literal)${file}`)])
     git(
       root,
@@ -160,6 +167,8 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
     return git(root, ['rev-parse', 'HEAD']).trim()
   })
   const tree = git(root, ['rev-parse', `${sha}^{tree}`]).trim()
+  if (report && checkedCandidate && !changedFiles(root).length)
+    noteLocalCheck(root, sha, report, out)
   out(`COMMIT[1]:status=SUCCESS pushed=false detail=${sha}`)
   out(options.coordination.committed(root, files))
   return { sha, tree, files, check: report }

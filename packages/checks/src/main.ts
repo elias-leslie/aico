@@ -4,10 +4,12 @@ import { openTasksDb, tasksDbPathFromEnv } from '@aico/tasks'
 import { runCli } from './cli'
 import { doneWithReceipt } from './done'
 import { hookCoordination } from './hook'
+import { publishCli } from './publish'
 import { postCheckRow } from './status'
 
 export async function main(argv: string[], env = process.env): Promise<number> {
   const [verb, ...rest] = argv
+  if (verb === 'publish') return publishCli(rest, env)
   const coordination = hookCoordination(env)
   const out = (line: string) => console.log(line)
   const err = (line: string) => console.error(line)

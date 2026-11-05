@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs'
 import { join, posix } from 'node:path'
 import { blobIds, changedFiles, git, gitOk } from './git'
 import { type Coordination, CoordinationError, othersClaim } from './hook'
+import { noteLocalCheck } from './local-check'
 import { type Config, type Lane, type Planned, plan, toolBinary } from './plan'
 import { passed, receiptStore, resultLine, runSteps, type StepResult } from './run'
 import type { CheckSummary } from './status'
@@ -188,6 +189,22 @@ function reuseKey(
 
 export async function runCheck(config: Config, options: CheckOptions): Promise<CheckReport> {
   const { root } = config
+  // A working-tree check is evidence for HEAD only when it starts and finishes clean.
+  const checkedSha =
+    !changedFiles(root).length && gitOk(root, ['rev-parse', '--verify', 'HEAD'])
+      ? git(root, ['rev-parse', 'HEAD']).trim()
+      : null
+  const record = (report: CheckReport) => {
+    // An empty quick invocation checked no candidate. A commit's scoped quick
+    // gate records its own proof after committing; a full clean-tree check can too.
+    if (report.scope?.length === 0) return
+    if (
+      checkedSha &&
+      !changedFiles(root).length &&
+      git(root, ['rev-parse', 'HEAD']).trim() === checkedSha
+    )
+      noteLocalCheck(root, checkedSha, report, out)
+  }
   const out = options.out ?? (() => {})
   const started = performance.now()
   const scope = checkScope(root, options)
@@ -206,6 +223,7 @@ export async function runCheck(config: Config, options: CheckOptions): Promise<C
     out(
       `CHECK:PASS ${options.lane} reused: the same content passed at ${prior.at ?? 'an earlier run'}`,
     )
+    record(prior)
     return { ...prior, reused: true, ms: performance.now() - started }
   }
   out(`CHECK:${options.lane}:${scope ? `${scope.length} changed file(s)` : 'whole tree'}`)
@@ -229,6 +247,7 @@ export async function runCheck(config: Config, options: CheckOptions): Promise<C
     `CHECK:${report.passed ? 'PASS' : 'FAIL'} ${options.lane} ${(report.ms / 1000).toFixed(1)}s (${ran} ran, ${results.length - ran} skipped)${failed.length ? `: ${failed.map((r) => r.id).join(', ')}` : ''}`,
   )
   if (key && report.passed) store.put(key, { ...report, at: new Date().toISOString() })
+  record(report)
   return report
 }
 

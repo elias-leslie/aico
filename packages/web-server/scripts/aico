@@ -25,7 +25,7 @@ aico_checks() {
   local checks_dir="$AICO_REPO_ROOT/packages/checks" node
   local checks_bundle="$checks_dir/dist/aico-checks.mjs"
   node="$(aico_web_node)"
-  if [ ! -r "$checks_bundle" ] || [ -n "$(find "$checks_dir/src" "$AICO_REPO_ROOT/packages/tasks/src" "$AICO_REPO_ROOT/packages/tasks/data" \
+  if [ ! -r "$checks_bundle" ] || [ -n "$(find "$checks_dir/src" "$checks_dir/data" "$AICO_REPO_ROOT/packages/tasks/src" "$AICO_REPO_ROOT/packages/tasks/data" \
     "$AICO_REPO_ROOT/packages/tether-client/src" "$AICO_REPO_ROOT/packages/status/src" "$AICO_REPO_ROOT/packages/store/src" \
     \( -name '*.ts' -o -name '*.json' \) -newer "$checks_bundle" -print -quit 2>/dev/null)" ]; then
     PATH="$(dirname "$node"):$PATH" npm --prefix "$checks_dir" run --silent build >&2
@@ -34,6 +34,9 @@ aico_checks() {
     'check --help' | 'check -h' | 'commit --help' | 'commit -h' | 'tasks done --help')
       exec "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@" ;;
   esac
+  # Publication selection and Status are light. The retained outgoing verifier
+  # takes shared admission only while it scans, not while GitHub is answering.
+  [ "${1:-}" != publish ] || exec "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
   exec st tools run --label "aico ${1:-checks}" -- "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
 }
 
@@ -84,7 +87,7 @@ aico_webtools() {
 
 case "${1:-}" in
   memory | prompt | models | context | usage) exec_aico_web "$@" ;;
-  check | commit) aico_checks "$@" ;;
+  check | commit | publish) aico_checks "$@" ;;
   deploy | logs | snapshots | vm) aico_ops "$@" ;;
   web) shift; aico_webtools "$@" ;;
   jobs)

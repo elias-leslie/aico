@@ -35,6 +35,11 @@ export interface ProjectEvent {
   recorded_at: number
 }
 
+export interface PublicationPolicy {
+  mode: 'nightly' | 'manual'
+  hold: { through: string | null; reason: string; set_at: string } | null
+}
+
 export class ProjectError extends Error {}
 
 const PROJECT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
@@ -79,6 +84,31 @@ export class Registry {
   get(id: string): Project | null {
     const row = this.db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Row | undefined
     return row ? toProject(row) : null
+  }
+
+  /** Publication policy lives with the registered repo, alongside its imported settings. */
+  publication(id: string, update?: Partial<PublicationPolicy>): PublicationPolicy {
+    const project = this.get(id)
+    if (!project || project.retired_at !== null) throw new ProjectError(`no open project ${id}`)
+    if (update) {
+      if (update.mode !== undefined && !['nightly', 'manual'].includes(update.mode))
+        throw new ProjectError('publication mode must be nightly or manual')
+      const patch = {
+        ...(update.mode !== undefined ? { publication_mode: update.mode } : {}),
+        ...(update.hold !== undefined ? { publication_hold: update.hold } : {}),
+      }
+      this.db
+        .prepare('UPDATE projects SET agent_configs = json_patch(agent_configs, ?) WHERE id = ?')
+        .run(JSON.stringify(patch), id)
+    }
+    const config = (this.get(id) as Project).agent_configs
+    return {
+      mode: config.publication_mode === 'manual' ? 'manual' : 'nightly',
+      hold:
+        typeof config.publication_hold === 'object' && config.publication_hold !== null
+          ? (config.publication_hold as PublicationPolicy['hold'])
+          : null,
+    }
   }
 
   /** Project whose root holds `cwd`. */
