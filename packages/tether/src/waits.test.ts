@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { LaneView } from './lane-reports'
-import { bindCatalog, insertWidget, removeWidget } from './lifecycle/catalog'
+import { LaneReporter, LaneReportStore, type LaneView } from './lane-reports'
+import { adoptLineage, bindCatalog, insertWidget, removeWidget } from './lifecycle/catalog'
 import { Store } from './store'
 import type { PullRead } from './wait-kinds'
 import {
@@ -14,7 +14,7 @@ import {
   WaitStore,
   waitLine,
 } from './waits'
-import { DEFAULT_WAKE_POLICY, type EndedSession } from './wakes'
+import { DEFAULT_WAKE_POLICY, type EndedSession, WakeScheduler, WakeStore } from './wakes'
 
 const WAITER = 'aaaa0001'
 const LANE = 'bbbb0001'
@@ -24,7 +24,9 @@ const T0 = 1_000_000
 
 const stores: Store[] = []
 const services: WaitService[] = []
+const reporters: LaneReporter[] = []
 afterEach(() => {
+  for (const reporter of reporters.splice(0)) reporter.stop()
   for (const service of services.splice(0)) service.stop()
   for (const store of stores.splice(0)) store.close()
   vi.useRealTimers()
@@ -57,7 +59,7 @@ function view(overrides: Partial<LaneView> = {}): LaneView {
   }
 }
 
-function harness() {
+function harness(operations: Partial<WaitOperations> = {}) {
   const store = new Store(':memory:', () => T0)
   stores.push(store)
   bindCatalog(store.db)
@@ -105,9 +107,11 @@ function harness() {
     receiver: (id) => id === WAITER || id === OTHER,
     notMainAgent: async (waiter, thread) => notMain.get(`${waiter}/${thread}`) ?? null,
     deliver: (to, source, line) => delivered.push({ to, source, line }),
+    withdraw: () => ({ withdrawn: 0, sending: false }),
     relaunch: (ended, line) => relaunched.push({ ended, line }),
     changed: (waiter) => changed.push(waiter),
     log: () => {},
+    ...operations,
   }
   const waits = new WaitService(new WaitStore(store.db), ops)
   services.push(waits)
@@ -155,6 +159,131 @@ function harness() {
     arm,
   }
 }
+
+describe('handled session delivery', () => {
+  function deliveryHarness() {
+    const sent: { to: string; text: string }[] = []
+    let busy = true
+    let queue: WakeStore
+    let scheduler: WakeScheduler
+    const h = harness({
+      deliver: (to, source, line) =>
+        queue.addEvent({ sessionId: to, source, note: line, now: Date.now() }),
+      withdraw: (to, source) => {
+        const result = scheduler.withdraw(to, source)
+        return { withdrawn: result.withdrawn.length, sending: result.sending }
+      },
+    })
+    queue = new WakeStore(h.store.db)
+    insertWidget(OTHER, 'claude-code', T0)
+    adoptLineage(LANE, { coordinatorId: WAITER, coordinatorColor: null, parentId: WAITER })
+    scheduler = new WakeScheduler(queue, {
+      now: Date.now,
+      policy: () => DEFAULT_WAKE_POLICY,
+      busy: async () => (busy ? 'the agent is working' : null),
+      inputEmpty: async () => true,
+      lastKeyAt: async () => null,
+      deliver: async (to, text) => {
+        sent.push({ to, text })
+        return true
+      },
+      conversationHolder: async () => null,
+      relaunch: async () => ({ status: 'failed', reason: 'not used' }),
+      changed: () => {},
+      log: () => {},
+    })
+    const reporter = new LaneReporter(new LaneReportStore(h.store.db), {
+      now: Date.now,
+      policy: () => DEFAULT_WAKE_POLICY,
+      receiver: (id) => id === WAITER || id === OTHER,
+      sessions: () => [],
+      deliver: (to, source, line) =>
+        queue.addEvent({ sessionId: to, source, note: line, now: Date.now() }),
+      withdraw: (to, source) => scheduler.withdraw(to, source).withdrawn.length,
+      handled: (lane, host, receivers) => h.waits.sessionHandled(lane, host, receivers),
+      acted: () => false,
+      agentGone: () => false,
+      elsewhere: () => null,
+      heardFrom: () => new Set(),
+      log: () => {},
+    })
+    reporters.push(reporter)
+    const end = () => {
+      reporter.store.markEnd(LANE, WAITER, Date.now())
+      removeWidget(LANE)
+      h.views.delete(LANE)
+      reporter.drainOutbox()
+      h.waits.check()
+    }
+    const resume = async () => {
+      busy = false
+      await scheduler.tick()
+    }
+    return { ...h, queue, scheduler, sent, end, resume }
+  }
+
+  it('withdraws a late Ready when its receiver handled and ended the session', async () => {
+    const h = deliveryHarness()
+    const { wait } = await h.arm({ until: 'idle' })
+    h.set({ state: 'idle' })
+    vi.advanceTimersByTime(SETTLE + 100)
+    expect(h.queue.forSession(WAITER)).toMatchObject([{ source: `wait:${wait.id}` }])
+    await h.scheduler.tick()
+    expect(h.sent).toEqual([])
+
+    h.end()
+    await h.resume()
+    expect(h.sent).toEqual([])
+    expect(h.queue.forSession(WAITER)).toEqual([])
+    // Firing is history: withdrawing delivery does not rewrite that receipt.
+    expect(h.waits.store.get(wait.id)?.state).toBe('fired')
+  })
+
+  it("cancels only the ender's armed waits and delivers new Ready, Ask and coordination lines", async () => {
+    const h = deliveryHarness()
+    const own = await h.arm({ until: 'ended' })
+    const watcher = await h.arm({ waiter: OTHER, until: 'ended' })
+    const next = 'dddd0001'
+    insertWidget(next, 'claude-code', T0)
+    h.views.set(next, view({ id: next, title: 'New actionable work', requestId: null }))
+    const fresh = await h.arm({ ref: next, until: 'idle' })
+    h.queue.addEvent({
+      sessionId: WAITER,
+      source: 'ask:synthetic',
+      note: 'Owner answered a new ask',
+      now: T0,
+    })
+    h.queue.addEvent({
+      sessionId: WAITER,
+      source: 'coord:synthetic',
+      note: '[Message] New coordination request',
+      now: T0,
+    })
+
+    h.end()
+    expect(h.waits.store.get(own.wait.id)?.state).toBe('cancelled')
+    h.views.set(
+      next,
+      view({ id: next, state: 'idle', title: 'New actionable work', requestId: null }),
+    )
+    vi.advanceTimersByTime(SETTLE + 100)
+    h.waits.check()
+    await h.resume()
+    expect(h.sent.filter((line) => line.to === WAITER)).toEqual([
+      {
+        to: WAITER,
+        text: expect.stringContaining('[Ready] session "New actionable work" is idle'),
+      },
+    ])
+    expect(h.sent.find((line) => line.to === WAITER)?.text).toContain('Owner answered a new ask')
+    expect(h.sent.find((line) => line.to === WAITER)?.text).toContain(
+      '[Message] New coordination request',
+    )
+    expect(h.sent.find((line) => line.to === OTHER)?.text).toContain('ended')
+    expect(h.waits.store.get(watcher.wait.id)?.state).toBe('fired')
+    expect(h.waits.store.get(fresh.wait.id)?.state).toBe('fired')
+  })
+})
 
 describe('sessionVerdict', () => {
   const policy = DEFAULT_WAKE_POLICY

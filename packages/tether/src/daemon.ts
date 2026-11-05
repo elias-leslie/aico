@@ -479,6 +479,7 @@ export async function startDaemon(
         told: (lane, receiver, since) => wakes.toldSince(lane, receiver, since),
         promoteReplies: (lane, receivers) => wakes.promoteReplies(lane, receivers),
         withdraw: (receiver, source) => wakes.withdrawEvents(receiver, source).withdrawn,
+        handled: (lane, host, receivers) => context.waits?.sessionHandled(lane, host, receivers),
         acted: (lane, host, by, since) =>
           context.waits?.store.actedOn(lane, host ?? '', by, since) ?? false,
         elsewhere: (id) => {
@@ -630,6 +631,7 @@ export async function startDaemon(
         deliver: (waiter, source, line) => {
           wakes.store.addEvent({ sessionId: waiter, source, note: line, now: Date.now() })
         },
+        withdraw: (waiter, source) => wakes.withdrawEvents(waiter, source),
         relaunch: (ended, line) => {
           wakes.store.addKept({ ended, note: line, now: Date.now() })
         },

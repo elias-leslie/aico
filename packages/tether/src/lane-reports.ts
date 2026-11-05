@@ -46,6 +46,8 @@
 //   Those spared sessions also lose the lane's lines still queued for them
 //   (went idle, blocked, an exit's ended): they ended it, so the lines are
 //   stale. A line already delivered (or going out now) stays.
+//   The same receivers also cancel their armed session waits on the lane
+//   and withdraw its queued wait lines; those report the same handled work.
 //
 // - A went-idle line the receiver does not need is dropped: the lane told
 //   that receiver with a request (`st sessions send`; never an ack, which may
@@ -527,6 +529,8 @@ export interface LaneReportOperations {
   /** Take back the receiver's still-queued line from this source (the queue's
    * withdraw: a row going out right now is not stopped). Returns rows taken. */
   withdraw(receiver: string, source: string): number
+  /** An End's informed receivers no longer need waits on this session. */
+  handled(lane: string, host: string | null, receivers: readonly string[]): void
   /** Whether one of `by` sent to this lane (`inject` with `from`) or armed a
    * wait on it after `since`: it acted on the lane, so its next went-idle line
    * is no repeat. */
@@ -1191,6 +1195,7 @@ export class LaneReporter {
    * queued for them: they ended it themselves (or their lane did). */
   private withdrawStale(lane: LaneSnapshot, endedBy: string | null): void {
     const { skip } = this.endSkip(lane, endedBy)
+    this.ops.handled(lane.id, lane.host, [...skip])
     const where = laneWhere(lane)
     const taken: string[] = []
     for (const receiver of skip)

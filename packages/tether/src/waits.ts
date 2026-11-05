@@ -11,6 +11,8 @@
 // `GET /v1/waits/:id?wait=55`, which keeps answering with the line after it
 // fired. A wait kept past End (keepWakes) that becomes ready queues a kept
 // check-in, which relaunches the conversation like a kept wake.
+// An End's informed receivers cancel their armed waits on that session and
+// withdraw its still-queued wait lines, just as they do its lane reports.
 //
 // Kind `session`: another session (here or relayed from a host) finished a
 // turn since `since`, is idle, is blocked on a prompt, or ended. The pull
@@ -242,6 +244,18 @@ export class WaitStore {
         .all(waiter, recentSince, RECENT_MAX) as unknown as RawWait[]
     ).map(toWait)
     return [...armed, ...over]
+  }
+
+  /** A receiver's waits on exactly this session, including fired receipts
+   * whose delivery may still be queued. No age or recent-list limit. */
+  onSession(ref: string, host: string | null, waiter: string): Wait[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT * FROM waits WHERE kind = 'session' AND ref = ? AND host = ? AND waiter = ? AND kept = 0",
+        )
+        .all(ref, host ?? '', waiter) as unknown as RawWait[]
+    ).map(toWait)
   }
 
   insert(
@@ -635,6 +649,9 @@ export interface WaitOperations {
   /** Queue one line on the waiter's delivery queue. Runs inside the firing
    * transaction: it must only write the row. */
   deliver(waiter: string, source: string, line: string): void
+  /** Withdraw a source's queued line; an in-flight paste cannot be stopped,
+   * but must not restore the line on failure. */
+  withdraw(waiter: string, source: string): { withdrawn: number; sending: boolean }
   /** A kept wait is ready: queue a kept check-in that relaunches the ended
    * session's conversation. Runs inside the firing transaction. */
   relaunch(ended: EndedSession, line: string): void
@@ -904,6 +921,22 @@ export class WaitService {
     if (isPullKind(wait.kind)) return this.ops.pullRef(wait.kind, ref) === wait.ref
     const target = this.ops.resolve(ref)
     return target !== null && target.id === wait.ref && target.host === wait.host
+  }
+
+  /** These receivers already know the session ended (the End's requester
+   * and the root it informs). Other watchers and non-session waits stay. */
+  sessionHandled(ref: string, host: string | null, receivers: readonly string[]): void {
+    this.store.transaction(() => {
+      for (const receiver of receivers)
+        for (const wait of this.store.onSession(ref, host, receiver)) {
+          if (wait.state === 'armed') this.cancel(wait.id)
+          const { withdrawn, sending } = this.ops.withdraw(receiver, `wait:${wait.id}`)
+          if (withdrawn || sending)
+            this.ops.log(
+              `wait=${wait.id} on ${where(wait)} handled by ${receiver}: withdrew ${withdrawn} line(s)${sending ? '; delivery in flight' : ''}`,
+            )
+        }
+    })
   }
 
   /** Cancel an armed wait: quiet, no line. False when it was not armed. */

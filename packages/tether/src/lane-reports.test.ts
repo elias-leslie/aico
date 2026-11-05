@@ -110,6 +110,7 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
       withdrawn.push(`${to}|${source}`)
       return 1
     },
+    handled: () => {},
     acted: (lane, host, by, since) => waits.actedOn(lane, host ?? '', by, since),
     agentGone: (id) => gone.has(id),
     elsewhere: (id) => remote.get(id) ?? null,
