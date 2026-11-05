@@ -34,6 +34,14 @@ const (
 	sessB = "22222222-aaaa-4bbb-8ccc-000000000002"
 )
 
+func TestSessionSendHelpDoesNotSendARequest(t *testing.T) {
+	t.Chdir(sandbox(t))
+	code, out, errOut := capture(t, func() int { return coordMain("sessions", []string{"send", "--help"}) })
+	if code != 0 || !strings.Contains(out, "sessions send TO TEXT") || errOut != "" {
+		t.Fatalf("help: %d %q %q", code, out, errOut)
+	}
+}
+
 func TestLeaseVerbsAndHandshakeFromTheCommandLine(t *testing.T) {
 	repo := sandbox(t)
 	t.Chdir(repo)

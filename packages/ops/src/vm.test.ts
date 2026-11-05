@@ -76,6 +76,8 @@ describe('direct scoped PVE operations', () => {
   it.each([
     ['start', '100', '/qemu/100/status/start'],
     ['stop', '150', '/lxc/150/status/stop'],
+    ['shutdown', '100', '/qemu/100/status/shutdown'],
+    ['shutdown', '150', '/lxc/150/status/shutdown'],
     ['snapshot', '100', '/qemu/100/snapshot'],
   ])('routes %s to PVE and checks task completion', async (verb, id, path) => {
     const h = fixture()

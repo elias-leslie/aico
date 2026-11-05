@@ -547,3 +547,9 @@ it('passes the versioned Agent Hub context to the Aico session helper', async ()
     agent_hub_url: 'http://hub.test:8003',
   })
 })
+
+it('keeps the verbose project registry read used by Agent Hub', async () => {
+  const h = harness()
+  expect(await h.go(['projects', 'list', '-v'])).toBe(0)
+  expect(h.calls[0]?.argv.slice(1)).toEqual(['projects', 'list'])
+})

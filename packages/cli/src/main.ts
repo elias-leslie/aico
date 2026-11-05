@@ -453,7 +453,9 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       return delegate([verb, ...rest])
     if (verb === 'projects')
       return delegate(
-        ['projects', ...(rest.length ? rest : ['list'])].filter((x) => x !== '--json'),
+        ['projects', ...(rest.length ? rest : ['list'])].filter(
+          (x) => !['--json', '-v', '--verbose'].includes(x),
+        ),
       )
     if (verb === 'backup' && rest[0] === 'status')
       return delegate(['backups', 'list', ...rest.slice(1)])

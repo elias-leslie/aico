@@ -367,6 +367,10 @@ func requestTarget(h *lease.Hook, id string) string {
 }
 
 func send(h *lease.Hook, pos []string, flags map[string]string) int {
+	if len(pos) == 1 && (pos[0] == "--help" || pos[0] == "-h") {
+		fmt.Println("Usage: sessions send TO TEXT [--fyi] [--source-key K]")
+		return 0
+	}
 	if len(pos) != 2 {
 		return fail("usage: sessions send TO TEXT [--fyi] [--source-key K]")
 	}

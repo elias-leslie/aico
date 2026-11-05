@@ -124,7 +124,8 @@ export function routeOp(
         name: guest.name,
       }
     let task: unknown
-    if (op === 'start' || op === 'stop') task = await call('POST', `${base}/status/${op}`)
+    if (op === 'start' || op === 'stop' || op === 'shutdown')
+      task = await call('POST', `${base}/status/${op}`)
     else if (op === 'snapshot')
       task = await call('POST', `${base}/snapshot`, {
         snapname: args.name,
@@ -240,6 +241,7 @@ export async function vm(
       return 0
     }
     case 'start':
+    case 'shutdown':
     case 'stop': {
       const vmid = vmId(rawId)
       await call(verb, vmid)
@@ -282,7 +284,7 @@ export async function vm(
     }
     default:
       err(
-        'Usage: aico vm list | status ID | start ID [--hours H --reason R] | stop ID | snapshot ID [NAME]',
+        'Usage: aico vm list | status ID | start ID [--hours H --reason R] | shutdown ID | stop ID | snapshot ID [NAME]',
       )
       return 2
   }
