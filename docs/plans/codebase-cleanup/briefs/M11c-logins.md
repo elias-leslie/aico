@@ -28,3 +28,9 @@ Rules:
 - Copy and design: Aico standard (Lantern tokens, amber accent, one dark theme, short labels on phone).
 
 Report (≤18 lines) to cc:a4e559 as a handshake request: commits, LOC, what the store holds (names only), CLI and page, live checks, uilint, tests, anything undone.
+
+## Addendum (owner 2026-11-04): Neri capabilities and full login migration
+- "There were some neri specific capabilities as well... bring over from agent hub what makes sense. migrate the logins as well."
+- Read Agent Hub's `lab_credentials.py`, its routes, CLI and tests (Agent Hub repo only; never the neri repo or Neri data). List each lab capability (per-lab accounts and roles, revocation accounts, checkout/lease to a hunt, rotation, audit, whatever exists), find from Agent Hub's own logs/route hits which are used, and port the used ones into Aico's logins (same store, CLI verbs, page section "Lab logins").
+- Migrate every live login in Agent Hub's credentials store (PG `credentials`, lab and provider/tool rows) into Aico's store, value to file without printing; skip rows that are revoked, test or empty and list them. The plan's "owner re-enters" is superseded.
+- Hunters' fetch path: give Aico an endpoint/CLI with the same contract Neri uses today, and write the switch-over note (`evidence/M11c/neri-switch.md`: old call, new call). Don't change Neri code; the coordinator relays it to the Neri coordinator. Agent Hub's copy stays until that switch is confirmed.
