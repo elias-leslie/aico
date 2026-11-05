@@ -249,37 +249,6 @@ export interface Approval {
   expiresInS: number
 }
 
-export function parsePending(stdout: string): Approval[] | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(stdout)
-  } catch {
-    return null
-  }
-  const taps = (parsed as { taps?: unknown } | null)?.taps
-  if (!Array.isArray(taps)) return null
-  return taps.flatMap((tap) => {
-    const t = tap as Record<string, unknown>
-    if (!line(t.id, 100) || !line(t.title, 200) || typeof t.url !== 'string') return []
-    let url: URL
-    try {
-      url = new URL(t.url)
-    } catch {
-      return []
-    }
-    if (url.protocol !== 'https:') return []
-    const left = Number(t.expires_in_s)
-    return [
-      {
-        id: t.id,
-        title: t.title,
-        url: url.href,
-        expiresInS: Number.isFinite(left) ? Math.max(0, Math.round(left)) : 0,
-      },
-    ]
-  })
-}
-
 /** What Asks needs of Tether. */
 type AskSource = Pick<TetherClient, 'request'> & Partial<Pick<TetherClient, 'getSession'>>
 
@@ -333,6 +302,7 @@ export class Asks {
     private readonly options: {
       tether: AskSource
       publicHost: string | null
+      pendingGrants?: () => Promise<Approval[] | null>
       run?: RunCommand
       files?: AskFileSource
     },
@@ -502,7 +472,7 @@ export class Asks {
 
   /** Nightshift's pending taps, or null when it cannot be read. */
   async approvals(): Promise<Approval[] | null> {
-    return pendingGrants()
+    return (this.options.pendingGrants ?? pendingGrants)()
   }
 }
 

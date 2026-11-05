@@ -3,7 +3,7 @@
 // through, and Nightshift's pending taps as links.
 
 import { describe, expect, it } from 'vitest'
-import { type Ask, Asks, askNotice, parsePending, validateAsk } from './asks'
+import { type Ask, Asks, askNotice, validateAsk } from './asks'
 import { NotesStore } from './notes-db'
 
 const ASK: Ask = {
@@ -423,42 +423,12 @@ describe('an ask with a minimum is not answered below it', () => {
   })
 })
 
-describe('Nightshift approvals', () => {
-  it('keeps https taps as links', () => {
-    expect(
-      parsePending(
-        JSON.stringify({
-          taps: [
-            {
-              id: 'n1',
-              title: 'GitHub admin for 15 min',
-              url: 'https://ns.example/n/n1',
-              expires_in_s: 840.4,
-            },
-            { id: 'n2', title: 'Bad link', url: 'javascript:alert(1)', expires_in_s: 10 },
-          ],
-        }),
-      ),
-    ).toEqual([
-      {
-        id: 'n1',
-        title: 'GitHub admin for 15 min',
-        url: 'https://ns.example/n/n1',
-        expiresInS: 840,
-      },
-    ])
-    expect(parsePending('{"taps": []}')).toEqual([])
-    expect(parsePending('not json')).toBeNull()
-  })
-
-  it('reads as unavailable when nightshift fails', async () => {
-    const asks = new Asks({
-      tether: fakeTether().client as never,
-      publicHost: null,
-      run: async () => {
-        throw new Error('not found')
-      },
-    })
-    expect(await asks.approvals()).toBeNull()
+describe('Aico grant taps', () => {
+  it('keeps empty and unavailable grant feeds distinct without touching the real socket', async () => {
+    const options = { tether: fakeTether().client as never, publicHost: null }
+    const empty = new Asks({ ...options, pendingGrants: async () => [] })
+    const unavailable = new Asks({ ...options, pendingGrants: async () => null })
+    expect(await empty.approvals()).toEqual([])
+    expect(await unavailable.approvals()).toBeNull()
   })
 })
