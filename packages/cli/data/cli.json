@@ -39,7 +39,12 @@
     "dep": "dropped",
     "test": "dropped",
     "subtask": "dropped; use st context ID, st claim 1.2 --task ID, or st done 1.2 --task ID",
-    "recover": "dropped; use st snapshots restore for an isolated project"
+    "recover": "dropped; use st snapshots restore for an isolated project",
+    "workflow": "dropped",
+    "automations": "dropped; use aico jobs",
+    "ctx": "dropped; use aico context",
+    "native-sessions": "dropped; use st sessions",
+    "note": "dropped; use Notes in Aico"
   },
   "rootHelper": "native/host-steward/aico-root-watch.py"
 }

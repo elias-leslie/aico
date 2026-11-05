@@ -24,41 +24,6 @@
       "owner_manifest": "st-extensions/agents.json"
     },
     {
-      "id": "agent-hub.workflow",
-      "owner": "agent-hub",
-      "namespace": "workflow",
-      "manifest": "extensions/workflow.json",
-      "executable": "backend/.venv/bin/agent-hub-st",
-      "arguments": ["workflow"],
-      "grant": {
-        "enabled": true,
-        "effects": ["network", "read-remote", "write-remote", "read-local", "credentials"]
-      },
-      "environment": [
-        "AICO_SESSION_ID",
-        "AICO_AGENT_SLUG",
-        "AGENT_HUB_FRONTEND_URL",
-        "AGENT_HUB_FRONTEND_PORT"
-      ],
-      "execution_source": "accepted_runtime",
-      "owner_manifest": "st-extensions/workflow.json"
-    },
-    {
-      "id": "agent-hub.ctx",
-      "owner": "agent-hub",
-      "namespace": "ctx",
-      "manifest": "extensions/ctx.json",
-      "executable": "backend/.venv/bin/agent-hub-st",
-      "arguments": ["ctx"],
-      "grant": {
-        "enabled": true,
-        "effects": ["network", "read-remote", "write-remote", "read-local", "credentials"]
-      },
-      "environment": ["AICO_SESSION_ID", "AGENT_HUB_CONTEXT_PREINJECTED_HASH"],
-      "execution_source": "accepted_runtime",
-      "owner_manifest": "st-extensions/ctx.json"
-    },
-    {
       "id": "agent-hub.complete",
       "owner": "agent-hub",
       "namespace": "complete",
@@ -77,60 +42,6 @@
         ]
       },
       "environment": []
-    },
-    {
-      "id": "agent-hub.automations",
-      "owner": "agent-hub",
-      "namespace": "automations",
-      "manifest": "extensions/automations.json",
-      "executable": "backend/.venv/bin/agent-hub-st",
-      "arguments": ["automations"],
-      "grant": {
-        "enabled": true,
-        "effects": ["network", "read-remote", "write-remote", "read-local", "credentials"]
-      },
-      "environment": []
-    },
-    {
-      "id": "agent-hub.native-sessions",
-      "owner": "agent-hub",
-      "namespace": "native-sessions",
-      "manifest": "extensions/native-sessions.json",
-      "executable": "backend/.venv/bin/agent-hub-st",
-      "execution_source": "accepted_runtime",
-      "arguments": ["native-sessions"],
-      "grant": {
-        "enabled": true,
-        "effects": [
-          "network",
-          "read-remote",
-          "write-remote",
-          "read-local",
-          "credentials",
-          "process"
-        ]
-      },
-      "environment": []
-    },
-    {
-      "id": "agent-hub.note",
-      "owner": "agent-hub",
-      "namespace": "note",
-      "manifest": "extensions/note.json",
-      "executable": "backend/.venv/bin/agent-hub-st",
-      "arguments": ["note"],
-      "grant": {
-        "enabled": true,
-        "effects": [
-          "network",
-          "read-remote",
-          "write-remote",
-          "read-local",
-          "write-local",
-          "credentials"
-        ]
-      },
-      "environment": ["AICO_SESSION_ID", "AGENT_HUB_CONTEXT_PREINJECTED_HASH"]
     },
     {
       "id": "agent-hub.skills",

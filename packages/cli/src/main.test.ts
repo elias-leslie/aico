@@ -41,6 +41,20 @@ function harness(env: NodeJS.ProcessEnv = {}) {
   }
 }
 describe('CLI cutover', () => {
+  it.each(['workflow', 'automations', 'ctx', 'native-sessions', 'note'])(
+    'retires %s without executing Agent Hub',
+    async (verb) => {
+      const h = harness()
+      expect(await h.go([verb, '--help'])).toBe(2)
+      expect(h.calls).toEqual([])
+      expect(h.errors.join(' ')).toContain('dropped')
+      expect(
+        catalog(join(root, 'packages/cli/data'), '/missing', new Set()).some(
+          (entry) => entry.binding.namespace === verb,
+        ),
+      ).toBe(false)
+    },
+  )
   it.each([
     ['create', 'tasks', 'create'],
     ['list', 'tasks', 'list'],
