@@ -180,10 +180,10 @@ refused_failed_hours = 2.0
 native_config = "/etc/btrbk/summitflow.conf"
 native_warn_hours = 36
 native_failed_hours = 60
-autosnap_state = ".local/share/st/snaps/autosnap-state.json"
-autosnap_stale_hours = 2.0
-autosnap_stopped_factor = 2.0
-autosnap_failed_hours = 24.0
+snapshot_status_command = ["curl", "--fail", "--silent", "--show-error", "--noproxy", "*", "http://127.0.0.1:3002/api/status?q=backups-snapshots"]
+snapshot_status_timeout_s = 5.0
+snapshot_job_id = "jobs/backups-snapshots"
+snapshot_stale_hours = 2.0
 sources_receipt = "backup-freshness/sources.json"
 
 [checks.journal]

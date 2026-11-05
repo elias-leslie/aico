@@ -434,14 +434,34 @@ def test_backups_native_host_capture(tmp_path):
     assert backups.native_host(ctx("backups", native_config=str(tmp_path / "absent")), str(tmp_path), uid) == []
 
 
-def test_backups_autosnap_sweeps(tmp_path):
-    path = tmp_path / ".local/share/st/snaps/autosnap-state.json"
-    write(path, {"last_sweep_at": NOW - 600, "newest_point_at": NOW - 600, "last_sweep_result": "ok"})
-    assert states(backups.autosnap(ctx("backups"), str(tmp_path))) == {"backups.autosnap": "ok"}
-    write(path, {"last_sweep_at": NOW - 99 * 3600, "newest_point_at": NOW - 99 * 3600, "last_sweep_result": "ok"})
-    assert states(backups.autosnap(ctx("backups"), str(tmp_path))) == {"backups.autosnap": "warn"}
-    write(path, {"last_sweep_at": NOW - 600, "newest_point_at": NOW - 30 * 3600, "last_sweep_result": "error"})
-    assert states(backups.autosnap(ctx("backups"), str(tmp_path))) == {"backups.autosnap": "failed"}
+@pytest.mark.parametrize(
+    ("row", "verdict"),
+    [
+        ({"state": "ok", "last_run": NOW - 600}, "ok"),
+        ({"state": "failed", "last_run": NOW - 600}, "failed"),
+        ({"state": "ok", "last_run": NOW - 3 * 3600}, "warn"),
+        ({"state": "ok"}, "warn"),
+        ({"state": "off", "last_run": NOW - 600}, "warn"),
+        ({"state": "ok", "shown": "unknown", "last_run": NOW - 600}, "warn"),
+    ],
+)
+def test_backups_snapshot_job_health(row, verdict, tmp_path):
+    row = {"id": "jobs/backups-snapshots", **row}
+    run = Fake((["curl"], Result(0, json.dumps({"rows": [row]}))))
+    assert states(backups.autosnap(ctx("backups", run=run), str(tmp_path))) == {"backups.autosnap": verdict}
+
+
+@pytest.mark.parametrize("result", [Result(1), Result(0, "not-json"), Result(0, '{"rows": []}'), Result(0, '{"rows": [{"id":"other", "state":"ok"}]}')])
+def test_backups_snapshot_job_missing_is_unknown_not_healthy(result, tmp_path):
+    run = Fake((["curl"], result))
+    assert states(backups.autosnap(ctx("backups", run=run), str(tmp_path))) == {"backups.autosnap": "warn"}
+
+
+def test_backups_snapshots_follow_aico_job_not_retired_sweep(tmp_path):
+    write(tmp_path / ".local/share/st/snaps/autosnap-state.json", {"last_sweep_at": NOW - 99 * 3600})
+    row = {"id": "jobs/backups-snapshots", "state": "ok", "shown": "ok", "last_run": NOW - 600}
+    run = Fake((["curl"], Result(0, json.dumps({"rows": [row]}))))
+    assert states(backups.autosnap(ctx("backups", run=run), str(tmp_path))) == {"backups.autosnap": "ok"}
 
 
 def test_backups_pve_receipt(tmp_path):

@@ -212,26 +212,24 @@ def native_host(ctx: Ctx, home: str, uid: int) -> list[Signal]:
 
 
 def autosnap(ctx: Ctx, home: str) -> list[Signal]:
-    path = f"{home}/{ctx.cfg['autosnap_state']}"
-    if not os.path.lexists(path):
-        return []
+    """The Aico scheduler owns project snapshots; old sweep receipts are historical only."""
+    result = ctx.run(ctx.cfg["snapshot_status_command"], timeout=ctx.cfg["snapshot_status_timeout_s"])
     try:
-        _, data = read_json(path)
-    except (OSError, ValueError):
-        return [Signal("backups.autosnap", "warn", {"why": "the snapshot state is unreadable"})]
-    data = data if isinstance(data, dict) else {}
-    hours = data.get("stale_after_hours")
-    stale_s = 3600 * (float(hours) if isinstance(hours, int | float) and not isinstance(hours, bool) and hours > 0 else ctx.cfg["autosnap_stale_hours"])
-    swept, newest = to_ts(data.get("last_sweep_at")), to_ts(data.get("newest_point_at"))
-    result = " ".join(str(data.get("last_sweep_result") or "").split())[:120]
-    old = newest is None or ctx.now - newest > stale_s
-    if swept is None or ctx.now - swept > ctx.cfg["autosnap_stopped_factor"] * stale_s:
-        return [Signal("backups.autosnap", "warn", {"why": "no sweep has run lately"})]
-    if result != "ok" and old:
-        failed = newest is None or ctx.now - newest > ctx.cfg["autosnap_failed_hours"] * 3600
-        return [Signal("backups.autosnap", "failed" if failed else "warn", {"why": f"sweeps are failing: {result}"})]
-    if result != "ok":
-        return [Signal("backups.autosnap", "ok", {"why": f"some projects failed the last sweep: {result}"}, note=True)]
+        data = json.loads(result.out) if result.rc == 0 else None
+        rows = data.get("rows", []) if isinstance(data, dict) else []
+        row = next((r for r in rows if isinstance(r, dict) and r.get("id") == ctx.cfg["snapshot_job_id"]), None)
+    except (ValueError, TypeError):
+        row = None
+    if row is None:
+        return [Signal("backups.autosnap", "warn", {"why": "Aico's snapshot job status is unavailable"})]
+    state = row.get("state")
+    if state == "failed":
+        return [Signal("backups.autosnap", "failed", {"why": "Aico's snapshot job failed"})]
+    when = to_ts(row.get("last_run"))
+    if when is None or ctx.now - when > ctx.cfg["snapshot_stale_hours"] * 3600:
+        return [Signal("backups.autosnap", "warn", {"why": "Aico's snapshot job has not run lately"})]
+    if state != "ok" or row.get("shown") in {"late", "unknown"}:
+        return [Signal("backups.autosnap", "warn", {"why": "Aico's snapshot job is not healthy"})]
     return [Signal("backups.autosnap", "ok")]
 
 

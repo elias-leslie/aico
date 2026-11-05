@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { openTasksDb } from '@aico/tasks'
@@ -41,6 +41,21 @@ function harness(env: NodeJS.ProcessEnv = {}) {
   }
 }
 describe('CLI cutover', () => {
+  it('keeps checked-main delivery on the accepted CLI-only transport', async () => {
+    const dir = temp(),
+      state = join(dir, 'services'),
+      owner = join(state, 'projects/summitflow'),
+      accepted = join(owner, 'releases/accepted/source'),
+      leaf = join(accepted, 'backend/.venv/bin/st')
+    mkdirSync(join(accepted, 'backend/.venv/bin'), { recursive: true })
+    writeFileSync(leaf, 'fixture', { mode: 0o755 })
+    symlinkSync(join(owner, 'releases/accepted'), join(owner, 'current'))
+    const h = harness({ HOME: dir, SUMMITFLOW_SERVICE_STATE_ROOT: state })
+    const args = ['--root', root, '--sha', 'a'.repeat(40)]
+    expect(await h.go(['vcs', 'deliver', ...args])).toBe(0)
+    expect(h.calls[0]?.argv).toEqual([leaf, 'vcs', 'deliver', ...args])
+    expect(h.calls).toHaveLength(1)
+  })
   it.each(['workflow', 'automations', 'ctx', 'native-sessions', 'note'])(
     'retires %s without executing Agent Hub',
     async (verb) => {

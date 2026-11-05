@@ -436,6 +436,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       ])
     if (verb === 'vcs') {
       if (rest[0] === 'publish') return delegate(['publish', ...rest.slice(1)])
+      if (rest[0] === 'deliver') return main(['github-delivery', ...rest.slice(1)], options)
       throw new Error('st vcs: use st publish for publication or git for local inspection')
     }
     if (verb === 'git') return execute(['git', ...rest], env)

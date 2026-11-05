@@ -288,7 +288,7 @@ next = "Re-run the host capture"
 
 [signal."backups.autosnap"]
 what = "Project snapshots are not healthy: {why}"
-next = "Check the autosnap timer"
+next = "Check Aico's snapshots job"
 
 [signal."backups.autosnap:ok"]
 what = "{why}"

@@ -313,6 +313,28 @@
           "process"
         ]
       }
+    },
+    {
+      "id": "summitflow.github-delivery",
+      "owner": "summitflow",
+      "namespace": "github-delivery",
+      "manifest": "extensions/github-delivery.json",
+      "executable": "backend/.venv/bin/st",
+      "execution_source": "accepted_runtime",
+      "arguments": ["vcs", "deliver"],
+      "grant": {
+        "enabled": true,
+        "effects": [
+          "network",
+          "read-local",
+          "write-local",
+          "read-remote",
+          "write-remote",
+          "credentials",
+          "process"
+        ]
+      },
+      "environment": ["GH_TOKEN", "GITHUB_TOKEN", "GH_CONFIG_DIR", "GIT_SSH_COMMAND"]
     }
   ]
 }
