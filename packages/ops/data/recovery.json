@@ -8,6 +8,7 @@
   "workstation": "davion-sidarli",
   "runtime": {
     "node": "/usr/local/bin/node",
+    "tetherBundle": "~/.local/lib/tether/dist/tether.mjs",
     "readySeconds": 60,
     "port": 3002
   },

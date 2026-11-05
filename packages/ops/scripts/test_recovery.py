@@ -105,6 +105,15 @@ class RecoveryTests(unittest.TestCase):
             self.assertIn(['--tmpfs', path], [argv[i:i+2] for i in range(len(argv)-1)])
         self.assertNotIn('systemctl', argv)
 
+    def test_partial_ops_release_uses_the_installed_tether_bundle(self):
+        code = self.root / 'release'
+        code.mkdir()
+        bundle = self.root / 'tether.mjs'
+        bundle.write_text('// fixture')
+        self.cfg['runtime']['tetherBundle'] = str(bundle)
+        argv = r.runtime_command(self.cfg, self.root, code)
+        self.assertIn(['--ro-bind', str(bundle), '/tether.mjs'], [argv[i:i+3] for i in range(len(argv)-2)])
+
     def test_counts_include_nonended_aico_chats_served_by_sessions_endpoint(self):
         for folder in ['data/secrets', 'tether']:
             (self.root / folder).mkdir(parents=True)

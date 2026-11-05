@@ -274,6 +274,9 @@ def counts(root, cfg):
 
 def runtime_command(cfg, root, code):
     # A scratch runtime must not reach owner sockets, restored fleet peers or the network.
+    tether = code / 'packages/tether/dist/tether.mjs'
+    if not tether.is_file():
+        tether = expanded(cfg['runtime']['tetherBundle'])
     return ['bwrap', '--unshare-all', '--die-with-parent', '--tmpfs', '/',
             '--ro-bind', '/usr', '/usr', '--ro-bind', '/etc', '/etc',
             '--symlink', 'usr/bin', '/bin', '--symlink', 'usr/lib', '/lib',
@@ -281,6 +284,7 @@ def runtime_command(cfg, root, code):
             '--tmpfs', '/home', '--tmpfs', '/run', '--tmpfs', '/tmp', '--tmpfs', '/srv',
             '--ro-bind', str(code), '/app', '--ro-bind', str(Path(__file__).resolve().parent), '/recovery',
             '--ro-bind', str(expanded(cfg['runtime']['node']).resolve()), '/node',
+            '--ro-bind', str(tether.resolve()), '/tether.mjs',
             '--bind', str(root), '/drill', '--chdir', '/app',
             '--clearenv', '--setenv', 'PATH', '/usr/local/bin:/usr/bin:/bin',
             'python3', '/recovery/recovery-runtime.py',

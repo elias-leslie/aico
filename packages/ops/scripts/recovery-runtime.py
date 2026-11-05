@@ -44,9 +44,9 @@ def main():
     }
     children = []
     try:
-        for bundle, extra in [('packages/tether/dist/tether.mjs', ['serve']),
-                              ('packages/web-server/dist/aico-web.mjs', [])]:
-            children.append(subprocess.Popen([args.node, '--disable-warning=ExperimentalWarning', '/app/' + bundle, *extra],
+        for bundle, extra in [('/tether.mjs', ['serve']),
+                              ('/app/packages/web-server/dist/aico-web.mjs', [])]:
+            children.append(subprocess.Popen([args.node, '--disable-warning=ExperimentalWarning', bundle, *extra],
                                              env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
         deadline = time.monotonic() + args.ready_seconds
         while True:
