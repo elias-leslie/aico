@@ -218,10 +218,10 @@ export class LoginStore {
     index.clock = Math.max(index.clock || 0, Date.parse(this.now()) || 0) + 1
     return { time: index.clock, node: this.node }
   }
-  private allowed(entry: Login, caller: LoginCaller, index = this.read()) {
+  private allowed(entry: Login, caller: LoginCaller, index = this.read(), toolRuntime = false) {
     if (caller.owner) return true
     if (policy.restrictedRoles.includes(caller.role)) {
-      if (!entry.lab) return false
+      if (!entry.lab && !(toolRuntime && entry.tool)) return false
     }
     if (
       policy.restrictedTools.includes(entry.tool?.tool || entry.provider || '') &&
@@ -239,9 +239,9 @@ export class LoginStore {
       (entry.roles.includes('*') || entry.roles.includes(caller.role))
     )
   }
-  private require(index: Index, name: string, caller: LoginCaller) {
+  private require(index: Index, name: string, caller: LoginCaller, toolRuntime = false) {
     const entry = index.entries.find((e) => e.name === loginName(name))
-    if (!entry || !this.allowed(entry, caller, index))
+    if (!entry || !this.allowed(entry, caller, index, toolRuntime))
       throw new LoginError('Login unavailable for this role, machine or target')
     return entry
   }
@@ -488,6 +488,17 @@ export class LoginStore {
       const value = privateFile(join(this.folder, entry.file))
       entry.lastUsed = this.now()
       this.record(index, caller, action, name)
+      return value
+    })
+  }
+  /** Existing tool launcher only; raw retrieval keeps the stricter caller scope. */
+  toolValue(name: string, caller: LoginCaller): Buffer {
+    return this.change((index) => {
+      const entry = this.require(index, name, caller, true)
+      if (!entry.tool || entry.verifierOnly) throw new LoginError('Tool login unavailable')
+      const value = privateFile(join(this.folder, entry.file))
+      entry.lastUsed = this.now()
+      this.record(index, caller, 'tool use', name)
       return value
     })
   }

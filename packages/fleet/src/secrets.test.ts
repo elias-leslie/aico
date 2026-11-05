@@ -10,6 +10,8 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
+import { LoginStore } from './logins'
+import { loginCaller } from './logins-cli'
 import {
   forgetLogin,
   loadToolSecrets,
@@ -85,6 +87,41 @@ it('refuses readable or symlinked source secrets', () => {
   symlinkSync(path, join(home, 'link'))
   expect(() => privateFile(join(home, 'link'))).toThrow('0600')
   forgetLogin('unknown', env)
+})
+it('keeps permitted Pi tool sign-in available to hunters while raw login retrieval stays scoped', () => {
+  receiveLogins(
+    JSON.stringify({
+      tools: ['pi'],
+      entries: [
+        {
+          tool: 'pi',
+          name: 'opencode-go',
+          file: 'opencode-go',
+          envVar: 'OPENCODE_API_KEY',
+          value: 'fixture-private-value',
+        },
+      ],
+    }),
+    env,
+  )
+  for (const role of ['hunting', 'recon', 'verification']) {
+    const roleEnv = { ...env, ST_WORK_ROLE: role }
+    expect(toolEnvironment('pi', roleEnv).OPENCODE_API_KEY).toBe('fixture-private-value')
+    expect(new LoginStore(env).list(loginCaller(roleEnv))).toEqual([])
+    expect(() => new LoginStore(env).value('opencode-go', loginCaller(roleEnv))).toThrow(
+      'unavailable',
+    )
+  }
+  receiveLogins(
+    JSON.stringify({
+      tools: ['pi', 'claude-code'],
+      entries: [{ ...entry, value: 'fixture-claude' }],
+    }),
+    env,
+  )
+  expect(() => toolEnvironment('claude-code', { ...env, ST_WORK_ROLE: 'hunting' })).toThrow(
+    'unavailable',
+  )
 })
 
 it('refuses rotating logins and a static entry pointing at an arbitrary auth file', () => {

@@ -91,7 +91,7 @@ export function toolEnvironment(tool: string, env = process.env): NodeJS.Process
   const next = { ...env }
   const store = new LoginStore(env)
   for (const entry of loadToolSecrets(env).filter((entry) => entry.tool === tool && entry.envVar))
-    next[entry.envVar as string] = store.value(entry.file, loginCaller(env)).toString().trim()
+    next[entry.envVar as string] = store.toolValue(entry.file, loginCaller(env)).toString().trim()
   return next
 }
 export async function pushToolLogins(

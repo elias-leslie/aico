@@ -10,6 +10,7 @@ import socket
 import stat
 import sys
 import tempfile
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,38 @@ def private(path: Path, value: bytes) -> None:
     finally:
         if os.path.exists(temp):
             os.unlink(temp)
+
+
+def stamp(index: dict[str, Any], entry: dict[str, Any]) -> None:
+    index['clock'] = max(index.get('clock', 0), int(datetime.now(UTC).timestamp() * 1000)) + 1
+    entry['revision'] = {'time': index['clock'], 'node': socket.gethostname().split('.')[0].lower()}
+
+
+def normalize_tool_aliases(index: dict[str, Any]) -> list[str]:
+    """Keep one runtime binding, retaining every value file and all existing grants."""
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    cleared = []
+    for entry in index['entries']:
+        if entry.get('tool'):
+            tool = entry['tool']
+            groups.setdefault((tool['tool'], tool['name']), []).append(entry)
+    for entries in groups.values():
+        entries.sort(key=lambda e: (not e.get('provider', '').startswith('_host_tool_'), e['kind'] != 'tool login', e['name']))
+        canonical = entries[0]
+        if len(entries) == 1 and canonical['kind'] == 'tool login':
+            continue
+        canonical['kind'] = 'tool login'
+        for field in ('machines', 'roles', 'deniedRoles'):
+            values = sorted({value for entry in entries for value in entry.get(field, [])})
+            if values or field in canonical:
+                canonical[field] = values
+        stamp(index, canonical)
+        for alias in entries[1:]:
+            del alias['tool']
+            stamp(index, alias)
+            cleared.append(alias['name'])
+        index.setdefault('audit', []).append({'id': str(uuid.uuid4()), 'at': datetime.now(UTC).isoformat(), 'actor': 'import', 'action': 'normalize tool binding', 'name': canonical['name']})
+    return sorted(cleared)
 
 
 async def main(args) -> None:
@@ -103,10 +136,12 @@ async def main(args) -> None:
                     entry['tool'] = tool
                 if lab:
                     entry['lab'] = lab
+                stamp(index, entry)
                 index['entries'] = [item for item in index['entries'] if item['name'] != name] + [entry]
                 added.append(name)
+            normalized = normalize_tool_aliases(index)
             private(index_path, json.dumps(index, indent=2).encode())
-        report = {'imported': added, 'skipped': skipped, 'source_rows': len(rows), 'source_preserved': True}
+        report = {'imported': added, 'skipped': skipped, 'normalized_aliases': normalized, 'source_rows': len(rows), 'source_preserved': True}
         args.report.write_text(json.dumps(report, indent=2) + '\n')
         print(f'Imported {len(added)} login rows; skipped {len(skipped)}. Names-only report saved.')
     finally:
