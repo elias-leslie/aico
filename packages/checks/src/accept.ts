@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import type { CheckReport } from './check'
 import { trackedFiles } from './check'
+import { type FixtureRuntime, withAcceptanceFixture } from './fixture'
 import { git, gitOk } from './git'
 import type { Coordination } from './hook'
 import { noteLocalCheck } from './local-check'
@@ -32,6 +33,8 @@ export interface AcceptOptions {
   reuse?: boolean
   jobs?: number
   out?: (line: string) => void
+  env?: NodeJS.ProcessEnv
+  fixtureRuntime?: FixtureRuntime
 }
 
 export interface AcceptReport extends CheckReport {
@@ -117,7 +120,7 @@ export async function accept(config: Config, options: AcceptOptions): Promise<Ac
   const sha = git(main, ['rev-parse', `${rev}^{commit}`]).trim()
   const tree = git(main, ['rev-parse', `${sha}^{tree}`]).trim()
   const store = receiptStore(main)
-  const key = `accept-${tree}`
+  const key = `accept-fixtures-v1-${tree}`
   const prior = store.get<AcceptReport & { at?: string }>(key)
   if (options.reuse !== false && prior?.passed) {
     out(
@@ -136,17 +139,27 @@ export async function accept(config: Config, options: AcceptOptions): Promise<Ac
     const worked: Config = { ...loaded, environmentInputs: config.environmentInputs }
     linkEnvironment(config, work)
     out(`CHECK:acceptance:${sha.slice(0, 12)} (tree ${tree.slice(0, 12)})`)
-    const results = await runSteps(
-      worked,
-      'full',
-      plan(worked, 'full', null, () => trackedFiles(work)),
-      {
+    const planned = plan(worked, 'full', null, () => trackedFiles(work))
+    const run = (steps: typeof planned, env?: NodeJS.ProcessEnv) =>
+      runSteps(worked, 'full', steps, {
         jobs: options.jobs,
         out,
         reuse: options.reuse,
         detailsRoot: main,
-      },
-    )
+        env,
+        cleanEnvironment: env !== undefined,
+      })
+    const results =
+      worked.legacyDefault || worked.acceptance
+        ? await withAcceptanceFixture(
+            worked,
+            planned,
+            join(parent, 'fixture'),
+            options.env ?? process.env,
+            run,
+            options.fixtureRuntime,
+          )
+        : await run(planned)
     const report: AcceptReport = {
       lane: 'full',
       passed: passed(results),
@@ -167,7 +180,7 @@ export async function accept(config: Config, options: AcceptOptions): Promise<Ac
     return report
   } finally {
     // The links go first so removing the worktree never walks into the main checkout's modules.
-    for (const dir of moduleDirs(work, ['node_modules', '.venv']))
+    for (const dir of moduleDirs(work, ['node_modules', '.venv', 'venv']))
       if (lstatSync(join(work, dir)).isSymbolicLink() || dir.endsWith('node_modules'))
         rmSync(join(work, dir), { recursive: true, force: true })
     try {

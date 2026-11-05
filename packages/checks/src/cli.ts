@@ -193,6 +193,7 @@ export async function checkCli(argv: string[], io: CliIo): Promise<number> {
       reuse,
       jobs,
       out: io.out,
+      env: io.env,
     })
     summary = {
       lane: 'acceptance',

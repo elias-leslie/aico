@@ -21,7 +21,7 @@ import {
 import { homedir, setPriority, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
 import { SaxesParser } from 'saxes'
-import { blobIds, changedFiles, commonDir, git } from './git'
+import { blobIds, commonDir, git } from './git'
 import type { Config, Evidence, Lane, Planned, Step } from './plan'
 import { missingLegacySkip, toolBinary, toolDir } from './plan'
 
@@ -380,7 +380,11 @@ export async function runSteps(
           ? 'unavailable'
           : 'fail'
     let because: string | undefined
-    if (state === 'unavailable' && /\bENOENT\b/.test(run.output)) {
+    if (
+      state === 'unavailable' &&
+      /\bENOENT\b/.test(run.output) &&
+      !(config.acceptance?.pytest && step.id === 'pytest')
+    ) {
       const skip = missingLegacySkip(config, step.id)
       if (skip) {
         state = 'skip'
