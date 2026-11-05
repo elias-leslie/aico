@@ -288,7 +288,7 @@ export class Fleet {
         if (!connection) throw new Error('Fleet peer is disconnected')
         const channel = connection.open({
           type: target === 'sync' ? 'sync' : argv ? 'terminal-view' : 'control',
-          target,
+          target: target === 'logins' ? 'jobs' : target,
           ...(argv ? { argv } : {}),
         })
         socket.pipe(channel).pipe(socket)
@@ -335,21 +335,8 @@ export class Fleet {
   private openLocal(channel: Duplex, request: OpenChannel, peer: string): void {
     const s = this.options.settings
     const pin = this.pins().find((entry) => entry.name === peer)
-    if (!pin || (pin.role !== 'full' && !['sync', 'jobs', 'logins'].includes(request.target))) {
+    if (!pin || (pin.role !== 'full' && !['sync', 'jobs'].includes(request.target))) {
       channel.destroy(new Error('Peer role does not allow this action'))
-      return
-    }
-    if (request.target === 'logins') {
-      serveLoginWire(channel, (input) =>
-        loginPeerRpc(
-          input,
-          peer,
-          pin.role,
-          this.options.env || process.env,
-          s,
-          this.pins().find((entry) => entry.name === s.machine)?.role === 'full',
-        ),
-      )
       return
     }
     if (request.target === 'exec' && request.argv) {
@@ -368,13 +355,35 @@ export class Fleet {
       channel.destroy(new Error('Unknown fleet target'))
       return
     }
-    const socket = createConnection({ path, allowHalfOpen: true })
-    socket.on('error', (error) => channel.destroy(error))
-    channel.on('error', () => socket.destroy())
-    channel.once('close', () => socket.end(() => socket.destroy()))
-    // Only the authenticated carrier supplies this preamble, before untrusted HTTP bytes.
-    if (request.target === 'jobs') socket.write(`${peer}\n`)
-    channel.pipe(socket).pipe(channel)
+    const forward = () => {
+      const socket = createConnection({ path, allowHalfOpen: true })
+      socket.on('error', (error) => channel.destroy(error))
+      channel.on('error', () => socket.destroy())
+      channel.once('close', () => socket.end(() => socket.destroy()))
+      if (request.target === 'jobs') socket.write(`${peer}\n`)
+      channel.pipe(socket).pipe(channel)
+    }
+    if (request.target === 'jobs') {
+      // Use the existing worker-safe carrier. Older peers reject the request locally,
+      // keeping their fleet link up while the signed worker update is installed.
+      channel.once('data', (head: Buffer) => {
+        channel.pause()
+        channel.unshift(head)
+        if (head[0] === 0x7b)
+          serveLoginWire(channel, (input) =>
+            loginPeerRpc(
+              input,
+              peer,
+              pin.role,
+              this.options.env || process.env,
+              s,
+              this.pins().find((entry) => entry.name === s.machine)?.role === 'full',
+            ),
+          )
+        else forward()
+        channel.resume()
+      })
+    } else forward()
   }
 
   status(): { name: string; connected: boolean; lastSeen: number | null }[] {
