@@ -490,7 +490,14 @@ export async function scheduledEntries(
   machine: string,
   run: Execute,
 ) {
-  const items = entries(state, cfg, machine)
+  const items = entries(state, cfg, machine, Date.now(), (source) => {
+    if (!source.path.startsWith('/')) return true
+    try {
+      return statSync(source.path, { throwIfNoEntry: false }) !== undefined
+    } catch {
+      return true
+    }
+  })
   const result = await run(['aico', 'jobs', 'list', '--json'])
   let jobs: {
     kind: string
@@ -501,6 +508,11 @@ export async function scheduledEntries(
       jobs = JSON.parse(result.out)
     } catch {}
   for (const item of items) {
+    if (item.state === 'off') {
+      item.nextRun = null
+      item.running = false
+      continue
+    }
     const job = jobs.find(
       (j) => j.kind === `backups-${item.target}${machine === cfg.workstation ? '' : '-' + machine}`,
     )?.state

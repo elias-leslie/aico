@@ -84,7 +84,12 @@
       "pressureKeep": 3,
       "manualPerScope": 20,
       "maxDeletes": 15,
-      "intervalMinutes": 15
+      "intervalMinutes": 15,
+      "deleteBatch": 5,
+      "settleSeconds": 10,
+      "settleMaxSeconds": 180,
+      "settleIoPressure": 10,
+      "settlePollSeconds": 5
     },
     "btrbk": [
       "snapshot_preserve_min latest",
@@ -247,5 +252,6 @@
     ".mypy_cache",
     ".dev-tools",
     ".turbo"
-  ]
+  ],
+  "workSnapshotDeleteHelper": "/usr/local/sbin/summitflow-snapshot-delete"
 }

@@ -63,6 +63,7 @@ export function driveTarget() {
     repository: backend.config.restic_remote_repository,
     passwordFile: backend.config.restic_remote_password_file,
     rcloneConfig: backend.config.restic_rclone_config,
+    pruneQualified: backend.config.restic_offsite_prune_qualified === true,
   }
 }
 export const contains = (parent: string, path: string) =>
@@ -159,24 +160,33 @@ export function entries(
   cfg: BackupConfig,
   machine: string,
   now = Date.now(),
+  present?: (source: Source) => boolean,
 ): BackupEntry[] {
   const all: BackupEntry[] = []
   if (machine === cfg.workstation) {
     for (const source of imported.sources)
       for (const target of ['native', 'drive'] as const) {
         const owner = coverage(source, target, cfg)
-        if (owner)
-          all.push(
-            entry(
-              source.id,
-              cfg.displayNames[source.id as keyof typeof cfg.displayNames] ?? source.name,
-              target,
-              state.copies[copyKey(owner, target)],
-              cfg,
-              machine,
-              now,
-            ),
+        if (owner) {
+          const item = entry(
+            source.id,
+            cfg.displayNames[source.id as keyof typeof cfg.displayNames] ?? source.name,
+            target,
+            state.copies[copyKey(owner, target)],
+            cfg,
+            machine,
+            now,
           )
+          if (!source.enabled && present && !present(source))
+            Object.assign(item, {
+              state: 'off',
+              dataAt: null,
+              nextRun: null,
+              running: false,
+              meaning: 'This source path is gone. Older snapshots may still contain its files.',
+            })
+          all.push(item)
+        }
       }
     for (const root of cfg.nativeSources)
       all.push(
@@ -288,13 +298,20 @@ export function backupRows(items: BackupEntry[]): StatusRow[] {
               ref: `/status?project=${migrated.external.find((s) => s.id === item.source)?.owner_project}`,
             },
           ]
-        : [
-            { kind: 'run', ref: `aico backups request ${item.target}` },
-            {
-              kind: 'detail',
-              ref: `/backups/restore?source=${encodeURIComponent(item.source)}&target=${item.target}&name=${encodeURIComponent(item.name)}`,
-            },
-          ],
+        : item.state === 'off'
+          ? [
+              {
+                kind: 'detail',
+                ref: `/backups/restore?source=${encodeURIComponent(item.source)}&target=${item.target}&name=${encodeURIComponent(item.name)}`,
+              },
+            ]
+          : [
+              { kind: 'run', ref: `aico backups request ${item.target}` },
+              {
+                kind: 'detail',
+                ref: `/backups/restore?source=${encodeURIComponent(item.source)}&target=${item.target}&name=${encodeURIComponent(item.name)}`,
+              },
+            ],
   }))
 }
 export function stateFile(cfg: BackupConfig) {

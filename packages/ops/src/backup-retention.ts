@@ -13,7 +13,7 @@ import {
 } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import ops from '../data/ops.json' with { type: 'json' }
-import { type BackupConfig, type BackupState, homePath, migrated } from './backup-plan'
+import { type BackupConfig, type BackupState, driveTarget, homePath, migrated } from './backup-plan'
 import { checked, type Runtime, resticArgs, resticJson } from './backup-runtime'
 import type { Point } from './snapshots'
 
@@ -30,6 +30,7 @@ export function retentionSelection(
   policy: BackupConfig['retention']['snapshot'],
   now: number,
   pressure = false,
+  released: ReadonlySet<string> = new Set(),
 ): string[] {
   const points = new Map<string, RetentionView[]>()
   for (const entry of entries) {
@@ -67,6 +68,7 @@ export function retentionSelection(
     }
     const scopes = new Map<string, RetentionView[]>()
     for (const e of entries) {
+      if (released.has(e.project_id)) continue
       const scope = `${e.project_id}/${e.scope_type}/${e.scope_name}`
       scopes.set(scope, [...(scopes.get(scope) ?? []), e])
     }
@@ -116,11 +118,15 @@ export function manifests(
 /** Scheduled retention only. Unknown metadata and active recovery copies always preserve the point. */
 export async function snapshotSweep(rt: Runtime, scheduled: boolean): Promise<void> {
   const all = manifests()
-  await captureWorkspace(rt, all)
+  const active = await captureWorkspace(rt, all)
+  const released = new Set(
+    all.flatMap((m) => m.entries.map((e) => e.project_id)).filter((id) => !active.has(id)),
+  )
   const points = all.flatMap((m) => m.entries)
   const allowed = scheduled
-    ? retentionSelection(points, rt.cfg.retention.snapshot, rt.now().getTime())
+    ? retentionSelection(points, rt.cfg.retention.snapshot, rt.now().getTime(), false, released)
     : []
+  let deleted = 0
   for (const path of allowed) {
     const permitted = realpathSync(resolve(ops.snapshots.workspacesRoot, '.snapshots'))
     if (
@@ -134,7 +140,12 @@ export async function snapshotSweep(rt: Runtime, scheduled: boolean): Promise<vo
     )
       continue
     // The same physical lock used by `aico snapshots` surrounds this whole scheduled sweep.
-    await checked(rt.run, ['btrfs', 'subvolume', 'delete', '--', path])
+    if (deleted && deleted % rt.cfg.retention.snapshot.deleteBatch === 0)
+      await settleWorkDeletion(rt)
+    await deleteWorkPoint(rt, path)
+    if (existsSync(path))
+      throw new Error('The physical point remains; its catalogue entries are preserved.')
+    deleted++
     for (const manifest of all) {
       manifest.entries = manifest.entries.filter((e) => physicalKey(e.snapshot_path) !== path)
       const temporary = manifest.path + `.${process.pid}.tmp`
@@ -165,7 +176,7 @@ export async function captureWorkspace(
   rt: Runtime,
   all: ReturnType<typeof manifests>,
   options = { root: ops.snapshots.workspacesRoot, catalogue: homePath(ops.snapshots.catalogue) },
-): Promise<void> {
+): Promise<Set<string>> {
   const root = options.root,
     physicalRoot = realpathSync(root)
   const listed = JSON.parse(await checked(rt.run, ['aico', 'projects', 'list'])) as {
@@ -174,6 +185,11 @@ export async function captureWorkspace(
   }[]
   if (!Array.isArray(listed))
     throw new Error('The active project registry cannot be read; work snapshots were left alone.')
+  const registeredIds = new Set(listed.map((p) => p.id))
+  if (!registeredIds.size && all.some((m) => m.entries.length))
+    throw new Error(
+      'The project registry has no active records; existing snapshot holds are preserved.',
+    )
   const active: {
     manifest: ReturnType<typeof manifests>[number]
     project: string
@@ -217,7 +233,7 @@ export async function captureWorkspace(
       nested,
     })
   }
-  if (!active.length) return
+  if (!active.length) return registeredIds
   const latest = all
     .flatMap((m) => m.entries)
     .filter(
@@ -233,10 +249,10 @@ export async function captureWorkspace(
     rt.now().getTime() - Date.parse(latest.created_at) <
       rt.cfg.retention.snapshot.intervalMinutes * 60000
   )
-    return
+    return registeredIds
   const now = rt.now().toISOString(),
     id = now.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z') + '-' + randomBytes(4).toString('hex')
-  const parent = join(root, '.snapshots', 'aico-autosnap'),
+  const parent = join(root, '.snapshots', 'aico-autosnap', 'projects', 'workspace'),
     path = join(parent, id)
   mkdirSync(parent, { recursive: true })
   const publish = (manifest: ReturnType<typeof manifests>[number]) => {
@@ -310,6 +326,7 @@ export async function captureWorkspace(
     throw new Error(
       'Some work snapshots could not be qualified. Their points remain held and the previous copies are preserved.',
     )
+  return registeredIds
 }
 /** Inspect only this ordinary project; never enter a nested subvolume or follow a symlink. */
 function qualifyWorkProject(
@@ -391,6 +408,8 @@ export function legacyRetentionIds(
 }
 /** Called only by the scheduled Drive run, never by Run now or the restore path. */
 export async function retainDrive(rt: Runtime, state: BackupState): Promise<void> {
+  if (!driveTarget().pruneQualified)
+    throw new Error('Automatic Drive retention is not qualified; backup data is preserved.')
   const request = resticArgs(rt.cfg, 'drive', driveRetentionArgs(rt.cfg))
   request.argv.splice(
     request.argv.indexOf('forget'),
@@ -429,6 +448,8 @@ export async function verifyDrive(rt: Runtime, scheduled: boolean): Promise<void
   const check = resticArgs(rt.cfg, 'drive', ['check', `--read-data-subset=${rt.cfg.verify.sample}`])
   await checked(rt.run, check.argv, { env: check.env })
   if (scheduled) {
+    if (!driveTarget().pruneQualified)
+      throw new Error('Automatic Drive retention is not qualified; backup data is preserved.')
     const prune = resticArgs(rt.cfg, 'drive', [
       '-o',
       'rclone.args=serve restic --stdio --drive-use-trash=true',
@@ -439,5 +460,70 @@ export async function verifyDrive(rt: Runtime, scheduled: boolean): Promise<void
       rt.cfg.verify.maxRepack,
     ])
     await checked(rt.run, prune.argv, { env: prune.env })
+  }
+}
+
+export async function deleteWorkPoint(
+  rt: Runtime,
+  path: string,
+  root = ops.snapshots.workspacesRoot,
+): Promise<void> {
+  const base = join(realpathSync(root), '.snapshots'),
+    absolute = resolve(path)
+  let target = absolute
+  for (let parent = dirname(absolute); dirname(parent) !== parent; parent = dirname(parent)) {
+    if (
+      parent.split('/').at(-1) === '.snapshots' &&
+      existsSync(dirname(parent)) &&
+      realpathSync(dirname(parent)) === realpathSync(root)
+    ) {
+      target = join(base, relative(parent, absolute))
+      break
+    }
+  }
+  if (!target.startsWith(base + '/'))
+    throw new Error('Work retention is confined to the managed snapshot store.')
+  const parts = relative(base, target).split('/')
+  if (
+    parts.length !== 4 ||
+    parts[0] === 'recoveries' ||
+    !['projects', 'worktrees'].includes(parts[1] ?? '') ||
+    parts.some((p) => !p || p === '.' || p === '..' || !/^[a-zA-Z0-9._-]+$/.test(p))
+  )
+    throw new Error('Work retention requires an exact managed snapshot leaf.')
+  for (let dir = target; ; dir = dirname(dir)) {
+    if (lstatSync(dir).isSymbolicLink())
+      throw new Error('Work retention refuses a symlink in the snapshot store.')
+    if (dir === base) break
+  }
+  const info = lstatSync(target)
+  if (info.uid !== process.getuid?.())
+    throw new Error('The work point belongs to another user; it is preserved.')
+  if (
+    (await checked(rt.run, ['btrfs', 'property', 'get', '-ts', target, 'ro'])).trim() !== 'ro=true'
+  )
+    throw new Error('Work retention refuses writable points.')
+  await checked(rt.run, [
+    'sudo',
+    '-n',
+    rt.cfg.workSnapshotDeleteHelper,
+    target,
+    String(info.dev),
+    String(info.ino),
+  ])
+}
+async function settleWorkDeletion(rt: Runtime): Promise<void> {
+  const policy = rt.cfg.retention.snapshot
+  await new Promise((resolve) => setTimeout(resolve, policy.settleSeconds * 1000))
+  const until = Date.now() + policy.settleMaxSeconds * 1000
+  while (Date.now() < until) {
+    let pressure = 0
+    try {
+      pressure = Number(
+        readFileSync('/proc/pressure/io', 'utf8').match(/^some.*avg10=([\d.]+)/m)?.[1] ?? 0,
+      )
+    } catch {}
+    if (pressure < policy.settleIoPressure) return
+    await new Promise((resolve) => setTimeout(resolve, policy.settlePollSeconds * 1000))
   }
 }

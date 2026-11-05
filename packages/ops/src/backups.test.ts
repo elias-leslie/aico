@@ -18,7 +18,12 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { backupJob, copiedDataTime, payloadTime, prepareFolder, volumeJobs } from './backup-drive'
 import { beginBootCapture, expiredCapture, preserveNative } from './backup-native'
 import { backupRows, config, copyKey, emptyState, entries, entry, migrated } from './backup-plan'
-import { captureWorkspace, type RetentionView, retentionSelection } from './backup-retention'
+import {
+  captureWorkspace,
+  deleteWorkPoint,
+  type RetentionView,
+  retentionSelection,
+} from './backup-retention'
 import { copyRootAuth, type Runtime, readState, restic, saveState } from './backup-runtime'
 import {
   cutover,
@@ -621,4 +626,46 @@ it('native metadata expires only after every referenced retained point is gone',
   expect(expiredCapture(receipt, c, new Set(), 'other')).toBe(true)
   expect(expiredCapture({ ...receipt, points: [] }, c, new Set(), 'other')).toBe(false)
   expect(expiredCapture({ ...receipt, adapter: 'unknown' }, c, new Set(), 'other')).toBe(false)
+})
+it('retired and unregistered scopes follow the existing released-project retention rule', () => {
+  const points = [
+    view('latest', 1),
+    view('retired', 200, { project_id: 'retired', source: 'manual' }),
+  ]
+  expect(
+    retentionSelection(points, config({}).retention.snapshot, now, false, new Set(['retired'])),
+  ).toContain('/points/retired')
+})
+
+it('scheduled work expiry uses the installed identity-checking helper and refuses recovery trees', async () => {
+  const root = temp(),
+    point = join(root, '.snapshots', 'p', 'projects', 'p', 'id'),
+    c = cfg()
+  mkdirSync(point, { recursive: true })
+  const run = vi.fn(async (_argv: string[]) => ({ code: 0, out: 'ro=true', err: '' })),
+    rt: Runtime = { cfg: c, run, now: () => new Date(now) }
+  await deleteWorkPoint(rt, point, root)
+  expect(run.mock.calls.some(([argv]) => argv.includes(c.workSnapshotDeleteHelper))).toBe(true)
+  await expect(
+    deleteWorkPoint(rt, join(root, '.snapshots', 'recoveries', 'p', 'id'), root),
+  ).rejects.toThrow()
+})
+it('a removed legacy path is archived rather than borrowing a fresh whole-volume timestamp', () => {
+  const c = cfg(),
+    state = emptyState()
+  state.copies['drive/workspaces'] = {
+    source: 'workspaces',
+    target: 'drive',
+    dataAt: new Date(now).toISOString(),
+    snapshot: 'a'.repeat(64),
+  }
+  const rows = entries(state, c, c.workstation, now, (source) => source.id !== 'a-term')
+  const archived = rows.find((e) => e.source === 'a-term' && e.target === 'drive')
+  expect(archived?.state).toBe('off')
+  expect(archived?.dataAt).toBeNull()
+  expect(
+    backupRows(rows)
+      .find((e) => e.id.endsWith('/drive/a-term'))
+      ?.actions?.map((a) => a.kind),
+  ).toEqual(['detail'])
 })

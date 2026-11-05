@@ -188,7 +188,7 @@ export function BackupsPage() {
                         : row.state === 'failed'
                           ? 'Failed'
                           : row.state === 'off'
-                            ? 'Off'
+                            ? 'Archived'
                             : 'Needs a fresh copy'}
                   </span>
                   <div className={styles.actions}>
@@ -199,7 +199,7 @@ export function BackupsPage() {
                       >
                         Open status
                       </Link>
-                    ) : (
+                    ) : row.state === 'off' ? null : (
                       <button
                         className="lantern-btn ghost small"
                         disabled={!!busy}
