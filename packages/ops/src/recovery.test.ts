@@ -10,7 +10,10 @@ import { stageSqlite } from './backup-drive'
 import { config } from './backup-plan'
 import { drillRow, recovery, recoveryArgs } from './recovery'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 it('tests standalone recovery plans, read-only repository access and scratch cleanup', () => {
   const script = fileURLToPath(new URL('../scripts/test_recovery.py', import.meta.url))
@@ -55,6 +58,32 @@ it('keeps drill help read only without publishing or parsing it as a receipt', a
   vi.stubGlobal('fetch', fetcher)
   await recovery(['drill', '--help'], config({}), {}, async () => ({ code: 0, out: '', err: '' }))
   expect(fetcher).not.toHaveBeenCalled()
+})
+it('gives the scheduler a plain result while keeping snapshot metadata in the receipt', async () => {
+  let output = ''
+  vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+    output += String(chunk)
+    return true
+  })
+  vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+    output += args.join(' ') + '\n'
+  })
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+  const receipt = {
+    ok: true,
+    started: '2026-11-05T00:00:00Z',
+    finished: '2026-11-05T00:01:00Z',
+    durationSeconds: 60,
+    scratchDestroyed: true,
+    snapshot: 'fixture-metadata',
+  }
+  await recovery(['drill', '--scheduled'], config({}), {}, async () => ({
+    code: 0,
+    out: JSON.stringify(receipt),
+    err: '',
+  }))
+  expect(output).toContain('Restore drill passed')
+  expect(output).not.toContain('snapshot')
 })
 it('includes private Logins files in encrypted append payloads on either machine', () => {
   const root = mkdtempSync(join(tmpdir(), 'aico-recovery-'))

@@ -19,6 +19,7 @@ export interface DrillReceipt {
   finished: string
   durationSeconds: number
   scratchDestroyed: boolean
+  skipped?: boolean
 }
 export function drillRow(receipt: DrillReceipt, machine: string): StatusRow {
   return {
@@ -45,9 +46,11 @@ export async function recovery(
   run: Execute = execute,
 ): Promise<number> {
   const result = await run(recoveryArgs(argv, env))
-  if (result.out) process.stdout.write(result.out)
+  const inspection = argv.some((arg) => ['--plan', '--help', '-h'].includes(arg))
+  const scheduled = argv[0] === 'drill' && argv.includes('--scheduled') && !inspection
+  if (result.out && !scheduled) process.stdout.write(result.out)
   if (result.err) process.stderr.write(result.err)
-  if (argv[0] === 'drill' && !argv.some((arg) => ['--plan', '--help', '-h'].includes(arg))) {
+  if (argv[0] === 'drill' && !inspection) {
     // The existing Status alert rule feeds failures to the tray and the app.
     const failed: DrillReceipt = {
       ok: false,
@@ -77,6 +80,7 @@ export async function recovery(
             started: value.started,
             finished: value.finished,
             durationSeconds: value.durationSeconds,
+            skipped: value.skipped === true,
           }
       }
     } catch {
@@ -91,6 +95,14 @@ export async function recovery(
     })
     if (!response.ok)
       throw new Error(`Could not publish restore drill Status (${response.status}).`)
+    if (scheduled)
+      console.log(
+        receipt.ok && receipt.scratchDestroyed
+          ? receipt.skipped
+            ? "This month's restore drill passed. The next drill runs next month."
+            : 'Restore drill passed. Both machines served matching counts; scratch targets removed.'
+          : 'Restore drill failed. Check its Status row and recovery receipt; run aico backups drill to try again.',
+      )
     if (!receipt.ok) return result.code || 1
   }
   return result.code
