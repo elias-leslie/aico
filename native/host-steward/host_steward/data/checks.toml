@@ -43,8 +43,7 @@ user = ["nightshift-memctl.service"]
 # First matching pattern wins. GEM10 logs corrected memory errors without DRAM ECC (owner 2026-10-30).
 [caps]
 "ecc.corrected" = "ok"
-"ecc.spike" = "ok"
-# The memory trend (corrected-event rate, overflow flags) is on record only for the same reason; uncorrected errors and a new region fail through ecc.uncorrected and ecc.new_region.
+# Long-term memory trends remain record-only; the ECC check evaluates the configured daily rate jump.
 "pve.ecc.trend" = "ok"
 
 [checks.workstation]
@@ -135,11 +134,12 @@ what = "PVE memory errors"
 run_on_host = false
 every_min = 15
 slack_min = 10
+push_codes = ["ecc.uncorrected"]
 spike_factor = 3.0
 spike_min = 50
 event_gap_s = 2.0
 region_shift = 21
-# A region with corrected errors that this check had not seen stays a problem for this long (the first run adopts the ones it finds).
+# Keep a note of newly seen corrected-error regions for this long; they do not fail the check.
 hold_hours = 72
 
 [checks.thermal]

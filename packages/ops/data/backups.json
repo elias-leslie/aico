@@ -212,7 +212,8 @@
         "-printf",
         "%T@\\n"
       ],
-      "jsonGuest": true
+      "jsonGuest": true,
+      "statusCommand": ["ssh", "-o", "BatchMode=yes", "proxmox-gem", "qm", "status", "180"]
     }
   },
   "packageStatusPath": "/var/lib/dpkg/status",

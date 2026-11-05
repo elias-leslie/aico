@@ -515,7 +515,17 @@ export async function scheduledEntries(
   machine: string,
   run: Execute,
 ) {
-  const items = entries(state, cfg, machine, Date.now(), (source) => {
+  // Read the current guest state on each listing; restarting a guest must remove the off state.
+  const observed = { ...state, copies: { ...state.copies } }
+  if (machine === cfg.workstation)
+    await observeExternal(
+      { cfg, run, now: () => new Date() },
+      observed,
+      Object.entries(cfg.externalProbes)
+        .filter(([, probe]) => 'statusCommand' in probe)
+        .map(([id]) => id),
+    )
+  const items = entries(observed, cfg, machine, Date.now(), (source) => {
     if (!source.path.startsWith('/')) return true
     try {
       return statSync(source.path, { throwIfNoEntry: false }) !== undefined

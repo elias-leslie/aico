@@ -741,3 +741,62 @@ it('browses and restores a root-owned T7 tree without requiring caller traversal
 it('does not schedule a live Redis capture after its frozen archive is verified', () => {
   expect(cfg().streams.some((stream) => stream.id === 'redis')).toBe(false)
 })
+
+it('shows the stopped external backup owner as off with its last good artifact date and resumes normal checks', async () => {
+  const c = cfg(),
+    state = emptyState()
+  const dataAt = '2026-10-20T12:00:00Z'
+  state.copies['external/portfolio-ai-complete'] = {
+    source: 'portfolio-ai-complete',
+    target: 'drive',
+    dataAt,
+    error: 'Guest unreachable',
+  }
+  let status = 'stopped',
+    statusCode = 0,
+    artifactOk = false
+  const run = vi.fn(async (argv: string[]) => {
+    if (argv.includes('status')) return { code: statusCode, out: `status: ${status}\n`, err: '' }
+    if (argv.includes('exec'))
+      return artifactOk
+        ? {
+            code: 0,
+            out: JSON.stringify({ exitcode: 0, 'out-data': `${Date.now() / 1000}` }),
+            err: '',
+          }
+        : { code: 1, out: '', err: 'guest unreachable' }
+    return { code: 0, out: '[]', err: '' }
+  })
+  const stopped = (await scheduledEntries(state, c, c.workstation, run)).find(
+    (e) => e.id === 'external/portfolio-ai-complete',
+  )
+  expect(stopped).toMatchObject({ state: 'off', dataAt, nextRun: null, running: false })
+  expect(backupRows([stopped!])[0]?.state).toBe('off')
+  expect(run.mock.calls.some(([argv]) => argv.includes('exec'))).toBe(false)
+  state.copies['external/portfolio-ai-complete']!.observed = 'offline'
+  status = 'running'
+  const running = (await scheduledEntries(state, c, c.workstation, run)).find(
+    (e) => e.id === 'external/portfolio-ai-complete',
+  )
+  expect(running?.state).toBe('failed')
+  expect(running?.dataAt).toBe(dataAt)
+  artifactOk = true
+  const resumed = (await scheduledEntries(state, c, c.workstation, run)).find(
+    (e) => e.id === 'external/portfolio-ai-complete',
+  )
+  expect(resumed?.state).toBe('ok')
+  expect(resumed?.dataAt).not.toBe(dataAt)
+  statusCode = 255
+  expect(
+    (await scheduledEntries(state, c, c.workstation, run)).find(
+      (e) => e.id === 'external/portfolio-ai-complete',
+    )?.state,
+  ).toBe('failed')
+  statusCode = 0
+  status = 'unknown'
+  expect(
+    (await scheduledEntries(state, c, c.workstation, run)).find(
+      (e) => e.id === 'external/portfolio-ai-complete',
+    )?.state,
+  ).toBe('failed')
+})

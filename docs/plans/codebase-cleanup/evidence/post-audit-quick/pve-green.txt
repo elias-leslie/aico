@@ -1,0 +1,2 @@
+$ /srv/workspaces/projects/aico/native/host-steward/.venv/bin/pytest -q --tb=short --no-cov -q native/host-steward/tests/test_pve_sender.py
+.................................................                        [100%]

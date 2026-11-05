@@ -515,3 +515,65 @@ def test_receipt_projection_returns_no_pairing_material(tmp_path):
     cfg = {"route": {"devices": str(devices)}}
     assert heartbeat.message_receipts(cfg, "test") == [{"id": "test", "received_at": 100, "shown": True}]
     assert heartbeat.message_receipts(cfg, "other") == []
+
+
+@pytest.mark.parametrize("uncorrected", [False, True])
+def test_corrected_rate_jump_is_visible_but_only_uncorrected_errors_push(cfg, monkeypatch, uncorrected):
+    from pve_sender import watch
+
+    now = 8 * 86400
+    burst = "".join(f"CE {now - 100 - i * 3} 0 0 0x1000 1\n" for i in range(60))
+    journal = f"FIRST 0\n{burst}" + (f"UE {now - 10} 0 0 0x1000 1\n" if uncorrected else "")
+    monkeypatch.setattr(watch.core, "run_command", lambda *_a, **_k: watch.core.Result(
+        0, f"===NS ecc\n{journal}===NS end\n", ""
+    ))
+    beats(cfg, ws=100, ct=now)
+    notices = []
+    status = watchdog.tick(cfg, now=now, boot=0, send=lambda n: notices.append(n) or {"ok": True},
+                           door=lambda *_a: None, publish=False)
+    ecc_row = next(r for r in status["rows"] if r["id"].endswith("/check-ecc"))
+    assert ecc_row["state"] == "failed"
+    pushes = [n for n in notices if n["key"].endswith("/check-ecc")]
+    assert bool(pushes) is uncorrected
+
+
+def test_prior_corrected_region_alarm_clears_without_a_recovery_push(cfg, monkeypatch):
+    from pve_sender import watch
+
+    machine = watchdog.socket.gethostname().split('.')[0]
+    key = f"pve-sender:local:{machine}/check-ecc"
+    write(Path(cfg["state_dir"]) / "state.json", {"started": 100, "alarms": {key: True}})
+    now = 8 * 86400
+    monkeypatch.setattr(watch.core, "run_command", lambda *_a, **_k: watch.core.Result(
+        0, f"===NS ecc\nFIRST 0\nCE {now - 100} 0 0 0x1000 1\n===NS end\n", ""
+    ))
+    beats(cfg, ws=100, ct=now)
+    notices = []
+    watchdog.tick(cfg, now=now, boot=0, send=lambda n: notices.append(n) or {"ok": True},
+                  door=lambda *_a: None, publish=False)
+    assert not [n for n in notices if n["key"] == key]
+    assert key not in read(Path(cfg["state_dir"]) / "state.json")["alarms"]
+
+
+@pytest.mark.parametrize("middle", ["", "unreadable", "spike"])
+def test_uncorrected_episode_still_sends_its_recovery(cfg, monkeypatch, middle):
+    from pve_sender import watch
+
+    now = 8 * 86400
+    phase = "uncorrected"
+    def probe(*_a, **_k):
+        if phase == "unreadable":
+            journal = "ERR unreadable\n"
+        elif phase == "spike":
+            journal = "FIRST 0\n" + "".join(f"CE {now - 100 - i * 3} 0 0 0x1000 1\n" for i in range(60))
+        else:
+            journal = "FIRST 0\n" + (f"UE {now - 10} 0 0 0x1000 1\n" if phase == "uncorrected" else "")
+        return watch.core.Result(0, f"===NS ecc\n{journal}===NS end\n", "")
+    monkeypatch.setattr(watch.core, "run_command", probe)
+    beats(cfg, ws=100, ct=now)
+    notices = []
+    for i, next_phase in enumerate(["uncorrected", *([middle] if middle else []), "ok"]):
+        phase = next_phase
+        watchdog.tick(cfg, now=now + i, boot=0, send=lambda n: notices.append(n) or {"ok": True},
+                      door=lambda *_a: None, publish=False)
+    assert [n["severity"] for n in notices if n["key"].endswith("/check-ecc")] == ["critical", "ok"]

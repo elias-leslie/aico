@@ -1,0 +1,16 @@
+status: stopped
+debugfs 1.47.2 (1-Jan-2025)
+Inode: 2375310   Type: regular    Mode:  0600   Flags: 0x80000
+Generation: 4196794390    Version: 0x00000000:00001649
+User:  1000   Group:  1000   Project:     0   Size: 296090285
+File ACL: 0
+Links: 1   Blockcount: 578312
+Fragment:  Address: 0    Number: 0    Size: 0
+ ctime: 0x6aebbb79:02d43f58 -- Wed Nov  4 18:10:49 2026
+ atime: 0x6aebbb78:01a338f8 -- Wed Nov  4 18:10:48 2026
+ mtime: 0x6aebbb76:d058df6c -- Wed Nov  4 18:10:46 2026
+crtime: 0x6aebbb71:19b8cd40 -- Wed Nov  4 18:10:41 2026
+Size of extra inode fields: 32
+Inode checksum: 0x617ff432
+EXTENTS:
+(ETB0):4754866, (0-12287):10276864-10289151, (12288-45055):10291200-10323967, (45056-55295):10323968-10334207, (55296-57343):10336256-10338303, (57344-61439):10340352-10344447, (61440-72287):10346496-10357343

@@ -1,0 +1,7 @@
+ECC corrected regions remain OK with notes. Daily corrected-event jumps fail using the existing spike_factor/spike_min configuration. Only configured uncorrected signals qualify for ECC phone alerts; known uncorrected recovery episodes survive intermediate unreadable/spike readings. No owner ask is created for corrected errors.
+
+The external backup listing checks the configured owner guest state each time. Stopped VM180 is off, preserving its actual artifact date; running uses the ordinary artifact probe; unknown/unreachable state fails honestly. Unrelated external directory scans are not added to listings. Off with no known date says that explicitly.
+
+Failing-first receipts: ecc-red.txt, backup-red.txt, push-red.txt, recovery-red.txt, recovery-intermediate-red.txt. Focused greens: pve-green.txt (49), backup-green.txt (93). Quick: 10 stages pass, 1232 host tests and 174 contracts; related Vitest 59. UI copy lint: zero violations. Source review: review.md.
+
+VM180 remained stopped. A temporary read-only loop exposed its existing root partition to debugfs metadata-only stat, then was detached. portfolio-artifact-stat.txt records the complete archive's existence, size and exact mtime (2026-11-04T23:10:46Z). The previously missing dataAt was recovered into Aico's existing backup state atomically while holding its existing backup lock. No backup contents or credentials were read, no VM was started.

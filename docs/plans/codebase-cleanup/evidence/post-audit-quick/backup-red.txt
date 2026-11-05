@@ -1,0 +1,46 @@
+$ /srv/workspaces/projects/aico/node_modules/.bin/vitest run --configLoader runner --cache=false run packages/ops/src/backups.test.ts -t stopped external backup owner
+
+ RUN  v4.1.12 /srv/workspaces/projects/aico
+
+(node:961608) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:961609) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ |ops| src/backups.test.ts (38 tests | 1 failed | 37 skipped) 13ms
+   × shows the stopped external backup owner as off with its last good artifact date and resumes normal checks 12ms
+(node:961623) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |ops| src/backups.test.ts > shows the stopped external backup owner as off with its last good artifact date and resumes normal checks
+AssertionError: expected { …(12) } to match object { state: 'off', …(3) }
+(8 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "dataAt": "2026-10-20T12:00:00Z",
+    "nextRun": null,
+    "running": false,
+-   "state": "off",
++   "state": "failed",
+  }
+
+ ❯ src/backups.test.ts:759:19
+    757|   })
+    758|   const stopped = (await scheduledEntries(state, c, c.workstation, run…
+    759|   expect(stopped).toMatchObject({ state: 'off', dataAt, nextRun: null,…
+       |                   ^
+    760|   expect(backupRows([stopped!])[0]?.state).toBe('off')
+    761|   expect(run.mock.calls.some(([argv]) => argv.includes('exec'))).toBe(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 skipped (3)
+      Tests  1 failed | 92 skipped (93)
+   Start at  06:44:36
+   Duration  829ms (transform 701ms, setup 0ms, import 1.24s, tests 13ms, environment 0ms)
+

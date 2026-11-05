@@ -69,7 +69,7 @@ def test_caps_keep_a_record_only_signal_at_ok_and_the_first_pattern_wins():
 
 
 def test_the_row_is_a_valid_status_row_with_slack_and_run_and_log_actions():
-    signals = [core.Signal("ecc.spike", "warn", {"n": 90, "base": "10"}, note=True)]
+    signals = [core.Signal("ecc.corrected", "ok", {"n": 90}, note=True)]
     row = core.make_row("ecc", signals, cfg(), DATA["meanings"], "davion-sidarli", NOW, DATA["caps"])
     assert row["id"] == "davion-sidarli/check-ecc"
     assert row["state"] == "ok"  # the data file's cap: record only

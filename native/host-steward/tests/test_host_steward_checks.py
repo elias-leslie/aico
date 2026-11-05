@@ -313,7 +313,7 @@ def test_ecc_uncorrected_error_is_failed_and_corrected_ones_are_record_only():
     assert states(out)["ecc.uncorrected"] == "failed"
     corrected = "".join(f"CE {NOW - 1000 - i * 60} 0 0 0x{i:x}000 1\n" for i in range(3))
     out = ecc.run(ctx("ecc", pve_run(pve_answer(ecc_text=f"FIRST {int(NOW) - 8 * 86400}\n" + corrected))))
-    assert states(out)["ecc.uncorrected"] == "ok" and states(out)["ecc.corrected"] == "warn"
+    assert states(out)["ecc.uncorrected"] == "ok" and states(out)["ecc.corrected"] == "ok"
     row = core.make_row("ecc", out, DATA["checks"]["ecc"], DATA["meanings"], "m", NOW, DATA["caps"])
     assert row["state"] == "ok" and "recorded only" in row["meaning"]
 
@@ -323,10 +323,13 @@ def test_ecc_a_spike_over_the_baseline_and_a_new_region():
     quiet = "".join(f"CE {NOW - (i + 1) * 86400 - 60} 0 0 0x100000 1\n" for i in range(1, 6))
     burst = "".join(f"CE {NOW - 100 - i} 0 0 0x{(i % 2 + 5):x}00000 1\n" for i in range(0, 3 * 60, 3))
     out = states(ecc.run(ctx("ecc", pve_run(pve_answer(ecc_text=f"FIRST {first}\n" + quiet + burst)))))
-    assert out["ecc.spike"] == "warn"
+    assert out["ecc.spike"] == "failed"
+    signals = ecc.run(ctx("ecc", pve_run(pve_answer(ecc_text=f"FIRST {first}\n" + quiet + burst))))
+    row = core.make_row("ecc", signals, DATA["checks"]["ecc"], DATA["meanings"], "m", NOW, DATA["caps"])
+    assert row["state"] == "failed"
 
 
-def test_ecc_a_new_memory_region_fails_for_the_hold_window_after_the_first_run_adopts_the_known_ones():
+def test_ecc_new_corrected_regions_remain_record_only():
     def at(now, *regions):
         lines = "".join(f"CE {now - 500 - i * 100 - j} 0 0 0x{r * 0x200000 + 0x1000 * j:x} 1\n" for i, r in enumerate(regions) for j in (0, 1))
         text = pve_answer(ecc_text=f"FIRST {int(now) - 8 * 86400}\n{lines}")
@@ -334,8 +337,8 @@ def test_ecc_a_new_memory_region_fails_for_the_hold_window_after_the_first_run_a
 
     state = {}
     assert "ecc.new_region" not in states(ecc.run(at(NOW, 1, 2)))
-    assert states(ecc.run(at(NOW + 3600, 1, 2, 3)))["ecc.new_region"] == "failed"
-    assert states(ecc.run(at(NOW + 7200, 1, 2, 3)))["ecc.new_region"] == "failed"
+    assert states(ecc.run(at(NOW + 3600, 1, 2, 3)))["ecc.new_region"] == "ok"
+    assert states(ecc.run(at(NOW + 7200, 1, 2, 3)))["ecc.new_region"] == "ok"
     assert "ecc.new_region" not in states(ecc.run(at(NOW + 80 * 3600, 1, 2, 3)))
 
 

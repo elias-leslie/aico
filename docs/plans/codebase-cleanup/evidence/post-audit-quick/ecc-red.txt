@@ -1,0 +1,100 @@
+$ /srv/workspaces/projects/aico/native/host-steward/.venv/bin/pytest -q --tb=short --no-cov -q native/host-steward/tests/test_host_steward_checks.py -k ecc_a_spike or ecc_new_corrected
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_____________ test_ecc_a_spike_over_the_baseline_and_a_new_region ______________
+native/host-steward/tests/test_host_steward_checks.py:326: in test_ecc_a_spike_over_the_baseline_and_a_new_region
+    assert out["ecc.spike"] == "failed"
+E   AssertionError: assert 'warn' == 'failed'
+E     
+E     - failed
+E     + warn
+------------------------------ Captured log call -------------------------------
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+______________ test_ecc_new_corrected_regions_remain_record_only _______________
+native/host-steward/tests/test_host_steward_checks.py:340: in test_ecc_new_corrected_regions_remain_record_only
+    assert states(ecc.run(at(NOW + 3600, 1, 2, 3)))["ecc.new_region"] == "ok"
+E   AssertionError: assert 'failed' == 'ok'
+E     
+E     - ok
+E     + failed
+------------------------------ Captured log call -------------------------------
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ce_overflow): attempt to write a readonly database
+WARNING  host-steward:history.py:186 history not written (mem.ue): attempt to write a readonly database
+=========================== short test summary info ============================
+FAILED native/host-steward/tests/test_host_steward_checks.py::test_ecc_a_spike_over_the_baseline_and_a_new_region - AssertionError: assert 'warn' == 'failed'
+  
+  - failed
+  + warn
+FAILED native/host-steward/tests/test_host_steward_checks.py::test_ecc_new_corrected_regions_remain_record_only - AssertionError: assert 'failed' == 'ok'
+  
+  - ok
+  + failed

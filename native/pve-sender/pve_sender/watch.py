@@ -21,6 +21,11 @@ def local_rows(state: dict, now: float, machine: str) -> list[dict]:
                        state=state.setdefault(name, {}), cache={"pve": (sections, "")})
         signals = module.run(ctx)
         item = core.make_row(name, signals, ctx.cfg, data["meanings"], machine, now, data["caps"])
+        push_codes = ctx.cfg.get("push_codes")
+        if push_codes is not None:
+            state.setdefault("push_failed", {})[item["id"]] = any(
+                s.state == "failed" and s.code in push_codes for s in signals
+            )
         item["actions"] = [{"kind": "log", "ref": "journalctl -u aico-pve-sender.service"}]
         rows.append(aico_status.check_row(item))
     return rows

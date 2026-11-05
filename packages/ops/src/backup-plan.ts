@@ -264,12 +264,17 @@ export function entries(
         target: 'external',
         dataAt: copy?.dataAt ?? null,
         nextRun: null,
-        state: copy?.error ? 'failed' : fresh ? 'ok' : 'warn',
+        state:
+          copy?.observed === 'offline' ? 'off' : copy?.error ? 'failed' : fresh ? 'ok' : 'warn',
         meaning:
-          copy?.error ??
-          (fresh
-            ? 'The owner backup artifact is current.'
-            : 'No current owner backup artifact has been verified.'),
+          copy?.observed === 'offline'
+            ? copy?.dataAt
+              ? 'Machine is off; its last good backup date is shown.'
+              : 'Machine is off; no last good backup date is available.'
+            : (copy?.error ??
+              (fresh
+                ? 'The owner backup artifact is current.'
+                : 'No current owner backup artifact has been verified.')),
         snapshot: null,
         path: `/status?project=${external.owner_project}`,
         running: false,

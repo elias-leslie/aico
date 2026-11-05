@@ -2,11 +2,33 @@ import { payloadTime } from './backup-drive'
 import { type BackupState, migrated } from './backup-plan'
 import type { Runtime } from './backup-runtime'
 /** External owners keep their own schedules. Their artifact dates, never unit-success times, prove data age. */
-export async function observeExternal(rt: Runtime, state: BackupState): Promise<void> {
-  for (const source of migrated.external.filter((s) => s.enabled)) {
+export async function observeExternal(
+  rt: Runtime,
+  state: BackupState,
+  sources?: string[],
+): Promise<void> {
+  for (const source of migrated.external.filter(
+    (s) => s.enabled && (!sources || sources.includes(s.id)),
+  )) {
     const probe = rt.cfg.externalProbes[source.id as keyof typeof rt.cfg.externalProbes]
     const old = state.copies[`external/${source.id}`]
     try {
+      if ('statusCommand' in probe) {
+        const status = await rt.run(probe.statusCommand)
+        if (status.code || !/^status: (stopped|running)\s*$/.test(status.out))
+          throw new Error('The backup owner machine state could not be checked.')
+        if (status.out.trim() === 'status: stopped') {
+          state.copies[`external/${source.id}`] = {
+            ...old,
+            source: source.id,
+            target: 'drive',
+            error: undefined,
+            observed: 'offline',
+            attemptedAt: rt.now().toISOString(),
+          }
+          continue
+        }
+      }
       let date: string | null = null
       if ('path' in probe && probe.path) date = payloadTime(probe.path)
       else if ('command' in probe && probe.command) {
@@ -29,6 +51,7 @@ export async function observeExternal(rt: Runtime, state: BackupState): Promise<
         source: source.id,
         target: 'drive',
         dataAt: date,
+        observed: 'ok',
         attemptedAt: rt.now().toISOString(),
       }
     } catch (error) {
@@ -38,6 +61,7 @@ export async function observeExternal(rt: Runtime, state: BackupState): Promise<
         target: 'drive',
         attemptedAt: rt.now().toISOString(),
         error: (error as Error).message,
+        observed: 'failed',
       }
     }
   }

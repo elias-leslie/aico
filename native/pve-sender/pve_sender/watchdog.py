@@ -131,13 +131,29 @@ def tick(cfg: dict, *, now: float | None = None, boot: float | None = None,
         if now - boot >= cfg["boot_settle_s"]:
             for item in local_rows:
                 key = "pve-sender:local:" + item["id"]
+                push_failed = state.get("checks", {}).get("push_failed", {}).get(item["id"], item["state"] == "failed")
+                restricted = item["id"] in state.get("checks", {}).get("push_failed", {})
+                episodes = state.setdefault("local_push_episodes", {})
+                recovering = item["state"] == "ok" and bool(episodes.get(key))
+                # Untyped legacy corrected alarms clear silently; a known uncorrected episode keeps its recovery.
+                if restricted and not push_failed and not recovering:
+                    if episodes.get(key):
+                        continue  # Keep an uncorrected episode until a healthy reading can close it.
+                    state.get("alarms", {}).pop(key, None)
+                    state.get("deliveries", {}).pop(key, None)
+                    episodes.pop(key, None)
+                    continue
                 active = item["state"] == "failed" and away
+                if restricted and active:
+                    episodes[key] = True
                 # Do not close a PVE fault merely because the workstation resumed.
                 if not away and item["state"] == "failed":
                     continue
                 good = transition(state, key, active,
                                   {"title": "Proxmox: " + item["what"], "body": item["meaning"], "severity": "critical"},
                                   {"title": "Proxmox: " + item["what"] + " recovered", "body": item["meaning"], "severity": "ok"}, deliver) and good
+                if restricted and not active and key not in state.get("alarms", {}) and key not in state.get("deliveries", {}):
+                    episodes.pop(key, None)
                 write(state_path, state)
         try:
             result = door(cfg["door_alias"]) if door else watch.door_probe(cfg["door_alias"], cfg["workstation_addr"])

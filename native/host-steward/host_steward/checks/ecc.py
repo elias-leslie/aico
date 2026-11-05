@@ -1,4 +1,4 @@
-"""PVE memory errors: uncorrected events, corrected-event spikes and new regions, from the kernel journal and rasdaemon.
+"""PVE memory errors: uncorrected events and corrected-event rate jumps, from the kernel journal and rasdaemon.
 
 Port of ns/checks/ecc.py and the ECC rules in ns/checks/pve.py. Each run also puts the days of the journal window
 into the trend history (corrected events, events with the overflow flag, uncorrected events per day; the trends
@@ -6,7 +6,7 @@ check evaluates the multi-week rules). The window is the 8 days the PVE snippet 
 corrected errors is new when this check's saved state has not seen it: the first run adopts every region it finds. Memory-controller
 records only: one machine check is logged by up to four banks within the same second, so records are grouped into
 events first. The data file caps corrected-error signals (this PVE host reports them without DRAM ECC: record
-only); uncorrected errors and a new region still fail.
+only); uncorrected errors and a configured rate jump still fail.
 """
 
 from __future__ import annotations
@@ -222,15 +222,15 @@ def evaluate(
     baseline = statistics.median(windows) if windows else None
     spike = baseline is not None and last >= max(cfg["spike_min"], cfg["spike_factor"] * baseline)
     if spike:
-        out.append(Signal("ecc.spike", "warn", {"n": last, "base": f"{baseline:g}"}, note=True))
+        out.append(Signal("ecc.spike", "failed", {"n": last, "base": f"{baseline:g}"}))
     elif last:
-        out.append(Signal("ecc.corrected", "warn", {"n": last}, note=True))
+        out.append(Signal("ecc.corrected", "ok", {"n": last}, note=True))
     else:
         out.append(Signal("ecc.corrected", "ok", {"n": 0}))
     regions = {e["region"] for e in events if e["kind"] == "CE" and e["region"] is not None}
     held = remember_regions(regions, state, now, float(cfg["hold_hours"]) * 3600)
     if held:
-        out.append(Signal("ecc.new_region", "failed", {"n": len(held)}))
+        out.append(Signal("ecc.new_region", "ok", {"n": len(held)}, note=True))
     return out
 
 

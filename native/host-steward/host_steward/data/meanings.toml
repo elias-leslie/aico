@@ -221,13 +221,13 @@ what = "Could not read the PVE kernel journal ({why})"
 impact = "Uncorrected memory errors would go unseen"
 next = "Run journalctl _TRANSPORT=kernel on the PVE host and read the error"
 
-[signal."ecc.new_region"]
+[signal."ecc.new_region:ok"]
 what = "Corrected memory errors appeared in {n} new places"
-impact = "A memory module may be starting to fail"
-next = "Watch it and test the memory"
 
-[signal."ecc.spike:ok"]
-what = "Corrected memory errors spiked to {n} in a day (usual {base}); recorded only"
+[signal."ecc.spike"]
+what = "Corrected memory errors jumped to {n} in a day (usual {base})"
+impact = "The corrected-error rate is above its configured limit"
+next = "Check the memory-error history on the PVE host"
 
 [signal."ecc.corrected:ok"]
 what = "{n} corrected memory errors in a day; recorded only"

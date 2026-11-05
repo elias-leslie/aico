@@ -1,0 +1,16 @@
+$ /srv/workspaces/projects/aico/node_modules/.bin/vitest run --configLoader runner --cache=false run packages/ops/src/backups.test.ts
+
+ RUN  v4.1.12 /srv/workspaces/projects/aico
+
+(node:972505) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:972506) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:972520) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ Test Files  3 passed (3)
+      Tests  93 passed (93)
+   Start at  06:50:54
+   Duration  1.34s (transform 740ms, setup 0ms, import 1.28s, tests 860ms, environment 0ms)
+
