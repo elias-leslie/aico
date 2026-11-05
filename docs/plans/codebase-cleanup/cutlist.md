@@ -357,6 +357,7 @@ Claude's weekly usage ran out on 2026-11-04, so this work was built or reviewed 
 | Sidebar and Status cleanup (ended chats leave the list, chat history in Recent, stopped guests read off) | Codex high (461f08cd, 0eb022a5, cf1fc084) | Codex | Recent history paging for chats, guest power reading over SSH alias |
 | M11c Logins (one store, full-peer sync, CLI and /logins page, lab-login port, Tether peer-recursion fix) | Codex xhigh (82e7664e..39913f44; SF b0d19484) | Codex | merge rule and tombstones, hunter target binding, reveal audit, peer local-only reads |
 | M10c-2b recovery scripts and monthly restore drill (`packages/ops/scripts/recovery.py`, docs/recovery.md) | Codex high (b3c3c3f3, 9b01f052, ade9df8a, 81c42094) | Codex | drill isolation (bubblewrap), what bootstrap restores, recovery.md accuracy (it says Hosts > Logins; the page is /logins) |
+| M5b-1 pve-sender on gem, two heartbeats, FCM token mint in host-steward, Nightshift step B (9 triggers off) | Codex high (7af66a49..983c325e) | Codex | dead-man window (both stale, 45 min), signed phone receipts, token mint path |
 | Coordinator fixes at medium effort | Opus medium (37d7a940 guard allows scratch subvolume deletes; ee8366b9 refused deploy is warn) | none | guard: only `/srv/scratch` is exempt; refused deploys never hide a broken service |
 
 ## 5. Choices the sources did not settle
