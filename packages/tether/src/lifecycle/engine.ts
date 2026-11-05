@@ -3341,8 +3341,3 @@ export function stopLifecycle(): void {
   paneExitFsWatcher = null
   paneExitEventReady.clear()
 }
-
-/** Test/diagnostic: has-session through the exact bound target. */
-function hasSessionArgsFor(widgetId: string): string[] {
-  return hasTargetArgs(tmuxTargetForWidget(widgetId))
-}

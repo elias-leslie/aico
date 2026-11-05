@@ -176,14 +176,6 @@ export interface AdHocPaneSlot extends AdHocSlot {
 
 export type PaneSlot = PaneBasedSlot | AdHocPaneSlot
 
-// ============================================================================
-// Session-to-Slot mapper
-// ============================================================================
-
-/** Where a session is shown: in a web app pane, as a free-standing View, or
- * linked to a pane that is not loaded in this window. */
-type SessionPlace = 'pane' | 'free' | 'unloaded'
-
 export type SessionTitleOptions =
   | { place: 'pane'; paneName: string }
   | { place: 'free' | 'unloaded'; projectName?: string }

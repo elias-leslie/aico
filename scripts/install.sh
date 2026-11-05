@@ -3,6 +3,7 @@
 # SummitFlow host `st service rebuild aico` deploys instead.
 #
 #   scripts/install.sh                 build and install; start nothing
+#   scripts/install.sh --prebuilt      install artifacts built from this accepted source elsewhere
 #   scripts/install.sh --start         ...then enable and (re)start tether@default and the web app
 #   scripts/install.sh --dry-run       print what would happen; change nothing
 #   scripts/install.sh --skip-systemd  build and install files only (no units, no
@@ -25,10 +26,12 @@ cd "$REPO"
 DRY_RUN=0
 START=0
 SKIP_SYSTEMD=0
+PREBUILT=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --start) START=1 ;;
+    --prebuilt) PREBUILT=1 ;;
     --skip-systemd) SKIP_SYSTEMD=1 ;;
     -h | --help)
       sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
@@ -169,9 +172,22 @@ install_units() {
 
 check_prerequisites
 
-step "Node dependencies and builds"
-run npm ci --no-audit --no-fund
-run npm run build
+if [ "$PREBUILT" = 1 ]; then
+  step "Using prebuilt Aico artifacts"
+  if [ "$DRY_RUN" = 0 ]; then
+    for artifact in packages/cli/dist/aico-cli.mjs packages/ops/dist/aico-ops.mjs \
+      packages/jobs/dist/aico-jobs.mjs \
+      packages/tether/dist/tether.mjs packages/web-server/dist/aico-web.mjs \
+      packages/web-frontend/out/index.html; do
+      [ -r "$artifact" ] || fail "prebuilt artifact is missing: $artifact"
+    done
+    [ -d node_modules ] || fail "prebuilt artifact is missing: node_modules"
+  fi
+else
+  step "Node dependencies and builds"
+  run npm ci --no-audit --no-fund
+  run npm run build
+fi
 
 step "Aico command"
 install_link "$REPO/packages/cli/scripts/aico" "$BIN_DIR/aico"

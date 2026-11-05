@@ -76,8 +76,3 @@ export async function resolveLauncher(
   const next = await probeLauncher(name, rest)
   return next ? { path: next, shim: join(shimDir, name) } : null
 }
-
-/** "<shim> execs " when a credential shim stands in front of the launcher. */
-function viaShim(shim: string | null): string {
-  return shim ? `${shim} (Agent Hub credential shim) execs ` : ''
-}

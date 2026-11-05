@@ -156,8 +156,6 @@ function yieldLoop(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve))
 }
 
-type TranscriptRow = Row
-
 /** The part of the store's SQLite handle the history uses (only the store package imports node:sqlite). */
 type SqlValue = string | number | bigint | null
 

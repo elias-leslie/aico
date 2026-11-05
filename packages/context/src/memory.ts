@@ -274,13 +274,3 @@ export function searchMemories(
     })
     .filter((found) => found.score >= (options.minScore ?? 0))
 }
-
-/** Memories per scope and tier. */
-function memoryCounts(db: Database): { scope: string; tier: string; count: number }[] {
-  return db
-    .prepare(
-      `SELECT CASE scope WHEN 'global' THEN 'global' ELSE scope || ':' || scope_id END AS scope,
-         tier, count(*) AS count FROM memories GROUP BY 1, 2 ORDER BY 1, 2`,
-    )
-    .all() as unknown as { scope: string; tier: string; count: number }[]
-}

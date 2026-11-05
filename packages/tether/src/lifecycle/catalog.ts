@@ -621,10 +621,6 @@ export function isRetiredSessionId(id: string): boolean {
   return db.prepare('SELECT 1 FROM retired_session_ids WHERE id = ?').get(id) !== undefined
 }
 
-function hasWidget(id: string): boolean {
-  return db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(id) !== undefined
-}
-
 function nextSeq(): number {
   const r = db.prepare('SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM sessions').get() as { n: number }
   return r.n

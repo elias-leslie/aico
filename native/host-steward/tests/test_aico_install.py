@@ -119,3 +119,44 @@ def test_old_node_is_refused(env: dict[str, str], tmp_path: Path) -> None:
     result = install(env, "--dry-run", "--skip-systemd")
     assert result.returncode == 1
     assert "Node.js 22+ required" in result.stderr
+
+
+def test_prebuilt_install_does_not_run_dependency_or_build_commands(env, home):
+    result = install(env, '--prebuilt', '--dry-run', '--skip-systemd')
+    assert result.returncode == 0, result.stderr
+    assert 'npm ci' not in result.stdout
+    assert 'npm run build' not in result.stdout
+    assert 'Using prebuilt Aico artifacts' in result.stdout
+
+
+def test_prebuilt_install_refuses_incomplete_artifacts_before_writing(env, home, tmp_path):
+    release = tmp_path / 'release'
+    scripts = release / 'scripts'
+    scripts.mkdir(parents=True)
+    script = scripts / 'install.sh'
+    script.write_text(INSTALL.read_text())
+    result = subprocess.run(['bash', str(script), '--prebuilt', '--skip-systemd'],
+                            env=env, capture_output=True, text=True, check=False)
+    assert result.returncode == 1
+    assert 'prebuilt artifact is missing' in result.stderr
+    assert files_under(home) == []
+
+
+def test_prebuilt_install_requires_jobs_bundle_before_writing(env, home, tmp_path):
+    release = tmp_path / 'release-without-jobs'
+    scripts = release / 'scripts'
+    scripts.mkdir(parents=True)
+    script = scripts / 'install.sh'
+    script.write_text(INSTALL.read_text())
+    for artifact in ['packages/cli/dist/aico-cli.mjs', 'packages/ops/dist/aico-ops.mjs',
+                     'packages/tether/dist/tether.mjs', 'packages/web-server/dist/aico-web.mjs',
+                     'packages/web-frontend/out/index.html']:
+        path = release / artifact
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('fixture\n')
+    (release / 'node_modules').mkdir()
+    result = subprocess.run(['bash', str(script), '--prebuilt', '--skip-systemd'],
+                            env=env, capture_output=True, text=True, check=False)
+    assert result.returncode == 1
+    assert 'prebuilt artifact is missing: packages/jobs/dist/aico-jobs.mjs' in result.stderr
+    assert files_under(home) == []

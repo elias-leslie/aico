@@ -37,23 +37,6 @@ export function findSessionByMode(
 }
 
 /**
- * Check if agent should be started for a session
- */
-function shouldStartAgent(
-  pane: TerminalPane,
-  targetSession: PaneSession,
-  sessions: TerminalSession[],
-): boolean {
-  return (
-    pane.active_mode !== 'shell' &&
-    targetSession.is_alive &&
-    !sessions.find(
-      (s) => s.id === targetSession.id && getAgentState(s) === 'running',
-    )
-  )
-}
-
-/**
  * Delay for tmux initialization
  */
 export async function waitForTmuxInit(): Promise<void> {

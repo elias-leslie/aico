@@ -108,11 +108,6 @@ export function getTui(slug: string): TuiSpec | undefined {
   return tool ? toolSpec(tool) : undefined
 }
 
-/** Canonical slug for a slug or alias, or undefined. */
-function canonicalToolSlug(slug: string): string | undefined {
-  return source?.resolveTool(slug)?.slug
-}
-
 export function listTuis(): TuiSpec[] {
   return (source?.listTools({ enabledOnly: true }) ?? []).map(toolSpec)
 }
