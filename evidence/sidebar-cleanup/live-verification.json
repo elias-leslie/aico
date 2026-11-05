@@ -1,0 +1,59 @@
+{
+  "captured_at": "2026-11-05T02:11:09.223665+00:00",
+  "source_commit": "0eb022a59342dd143ac74991cabe9cbed413cab6",
+  "status_before": 16,
+  "status_after": 12,
+  "chats_cleared": 14,
+  "own_test_chats_ended": 1,
+  "physical_android_test": false,
+  "images": {
+    "sidebar-before.png": {
+      "sha256": "77926f17e424d8b8971070a4b4524cfc94fafc50c256b76116a6839dcc85b0d2",
+      "size": [
+        390,
+        844
+      ],
+      "mtime": "2026-11-05T01:38:00.939621+00:00"
+    },
+    "status-before.png": {
+      "sha256": "360411004e70edcf5dd112dcf85bc98a6a00043297316cad7d39ccf7c4aaa63a",
+      "size": [
+        390,
+        844
+      ],
+      "mtime": "2026-11-05T01:38:01.642636+00:00"
+    },
+    "sidebar-after.png": {
+      "sha256": "9ba7caad6c1d85769b169a3c729bba153ed819515eea16d885133ee930edd9b6",
+      "size": [
+        390,
+        844
+      ],
+      "mtime": "2026-11-05T02:09:21.178410+00:00"
+    },
+    "status-after.png": {
+      "sha256": "aa04ce55c55ce64b32ad6137e089e93d9077bf5390ab868f1acc25a138038d22",
+      "size": [
+        390,
+        844
+      ],
+      "mtime": "2026-11-05T02:08:36.187454+00:00"
+    },
+    "fleet-peer-states.png": {
+      "sha256": "f4467d936399901e8cc6dcef2c647911c48bb4ec3bdc16c0fe40caac8056abe5",
+      "size": [
+        390,
+        844
+      ],
+      "mtime": "2026-11-05T02:09:05.862085+00:00"
+    },
+    "ended-chat-history.png": {
+      "sha256": "4c8d7172adaa3026951cb472467808f57f36d9e83597f2a45cdf783cf586a57d",
+      "size": [
+        390,
+        844
+      ],
+      "mtime": "2026-11-05T02:08:02.382735+00:00"
+    }
+  }
+}

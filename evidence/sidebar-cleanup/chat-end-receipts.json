@@ -1,0 +1,128 @@
+[
+  {
+    "endStatus": 200,
+    "id": "01ce3874",
+    "messageCountAfter": 5,
+    "messageCountBefore": 5,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "b608d12e",
+    "messageCountAfter": 9,
+    "messageCountBefore": 9,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "805a082f",
+    "messageCountAfter": 6,
+    "messageCountBefore": 6,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "c9ff7230",
+    "messageCountAfter": 6,
+    "messageCountBefore": 6,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "a1d16743",
+    "messageCountAfter": 20,
+    "messageCountBefore": 20,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "2e08298c",
+    "messageCountAfter": 56,
+    "messageCountBefore": 56,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "5131e230",
+    "messageCountAfter": 58,
+    "messageCountBefore": 58,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "4427d069",
+    "messageCountAfter": 4,
+    "messageCountBefore": 4,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "0927999c",
+    "messageCountAfter": 10,
+    "messageCountBefore": 10,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "20d0e053",
+    "messageCountAfter": 10,
+    "messageCountBefore": 10,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "204966af",
+    "messageCountAfter": 4,
+    "messageCountBefore": 4,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "307436f5",
+    "messageCountAfter": 17,
+    "messageCountBefore": 17,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "f6577bcc",
+    "messageCountAfter": 8,
+    "messageCountBefore": 8,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  },
+  {
+    "endStatus": 200,
+    "id": "7be0690e",
+    "messageCountAfter": 8,
+    "messageCountBefore": 8,
+    "stateAfter": "ended",
+    "stateBefore": "ended",
+    "transcriptSame": true
+  }
+]

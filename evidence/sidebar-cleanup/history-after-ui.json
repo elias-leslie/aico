@@ -1,0 +1,545 @@
+{
+  "kind": "uilint-ui-snapshot",
+  "motion": [
+    {
+      "durations_ms": [
+        150,
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > main > div > header > a"
+    },
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > main > div > header > button"
+    }
+  ],
+  "omissions": [
+    "Shadow-root content was not extracted.",
+    "Only this route and state were captured; hover, focus, other routes and colour schemes were not.",
+    "Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen."
+  ],
+  "page": {
+    "background_stack": [
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html"
+      },
+      {
+        "color": "rgba(28, 31, 36, 1)",
+        "image": false,
+        "selector": "html > body"
+      },
+      {
+        "color": "rgba(11, 13, 17, 1)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2)"
+      },
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2) > main"
+      }
+    ],
+    "color_scheme": "dark",
+    "first_block": {
+      "height": 539,
+      "selector": "html > body > div:nth-of-type(2) > main > div",
+      "top": 0,
+      "width": 390
+    },
+    "prefers_dark": false
+  },
+  "schema_version": 2,
+  "source": {
+    "captured_at": "2026-11-05T02:08:20.481Z",
+    "ready_state": "complete",
+    "state": "",
+    "title": "Recent sessions · Aico",
+    "url": "https://aico.summitflow.dev/history"
+  },
+  "surfaces": [
+    {
+      "color": "rgba(28, 31, 36, 1)",
+      "height": 844,
+      "selector": "html > body",
+      "width": 390
+    },
+    {
+      "color": "rgba(11, 13, 17, 1)",
+      "height": 844,
+      "selector": "html > body > div:nth-of-type(2)",
+      "width": 390
+    },
+    {
+      "color": "rgba(118, 216, 137, 0.102)",
+      "height": 22,
+      "selector": "html > body > div:nth-of-type(2) > main > div > header > span:nth-of-type(2)",
+      "width": 76
+    },
+    {
+      "color": "rgba(11, 13, 17, 0.35)",
+      "height": 230,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl",
+      "width": 362
+    },
+    {
+      "color": "rgba(11, 13, 17, 0.35)",
+      "height": 77,
+      "selector": "html > body > div:nth-of-type(2) > main > div > section > div:nth-of-type(1)",
+      "width": 362
+    },
+    {
+      "color": "rgba(11, 13, 17, 0.35)",
+      "height": 77,
+      "selector": "html > body > div:nth-of-type(2) > main > div > section > div:nth-of-type(2)",
+      "width": 362
+    }
+  ],
+  "texts": [
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > main > div > header > a",
+      "text": "Back to recent sessions"
+    },
+    {
+      "attr": "title",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > main > div > header > a",
+      "text": "Back to recent sessions"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > header > span:nth-of-type(1) > a",
+      "text": "Recent sessions"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > header > span:nth-of-type(1)",
+      "text": "/"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Fraunces, Georgia, serif",
+      "font_size_px": 20,
+      "font_weight": 500,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > header > h1",
+      "text": "aico-sidebar-cleanup"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(118, 216, 137, 0.102)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(122, 214, 138, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > header > span:nth-of-type(2)",
+      "text": "Finished"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > header > button",
+      "text": "Refresh"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(1) > dt",
+      "text": "Tool"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(1) > dd",
+      "text": "aico-agent"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(1) > dd",
+      "text": "·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(1) > dd",
+      "text": "opencode-go/deepseek-v4.1-flash"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(2) > dt",
+      "text": "Folder"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "\"JetBrains Mono\", \"FreeMono Symbols\", ui-monospace, monospace",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(2) > dd",
+      "text": "/srv/scratch/aico-sidebar-cleanup"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(3) > dt",
+      "text": "Time"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(3) > dd",
+      "text": "Nov 4, 8:53 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(3) > dd",
+      "text": "to"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(3) > dd",
+      "text": "Nov 4, 8:53 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(4) > dt",
+      "text": "Tokens"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(4) > dd",
+      "text": "865 in · 0 cached · 20 out"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(5) > dt",
+      "text": "Work"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(5) > dd",
+      "text": "0 tool calls"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(5) > dd",
+      "text": "·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(5) > dd",
+      "text": "0 files"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > dl > div:nth-of-type(5) > dd",
+      "text": "written"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > main > div > section",
+      "text": "Transcript"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > section > div:nth-of-type(1) > div > span:nth-of-type(1)",
+      "text": "You"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > section > div:nth-of-type(1) > div > span:nth-of-type(2)",
+      "text": "Nov 4, 8:53 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > section > div:nth-of-type(1) > pre",
+      "text": "Test only. Do not use tools or edit files. Say a short greeting."
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > section > div:nth-of-type(2) > div > span:nth-of-type(1)",
+      "text": "Assistant"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > section > div:nth-of-type(2) > div > span:nth-of-type(2)",
+      "text": "Nov 4, 8:53 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div > section > div:nth-of-type(2) > pre",
+      "text": "Hello! 👋 I'm here and ready whenever you need me — just say the word."
+    }
+  ],
+  "viewport": {
+    "device_pixel_ratio": 1,
+    "height": 844,
+    "width": 390
+  }
+}

@@ -1,0 +1,5725 @@
+{
+  "generated_at": "2026-11-05T01:43:59.839Z",
+  "rollup": {
+    "problems": 74,
+    "healthy": 210,
+    "counts": {
+      "failed": 7,
+      "late": 2,
+      "unknown": 60,
+      "warn": 5,
+      "ok": 199,
+      "off": 11
+    }
+  },
+  "summary": {
+    "problems": 14,
+    "worst": "failed",
+    "counts": {
+      "failed": 7,
+      "late": 2,
+      "unknown": 0,
+      "warn": 5
+    },
+    "quiet": 60,
+    "healthy": 210,
+    "top": [
+      {
+        "id": "davion-sidarli/check-tripwire",
+        "what": "Login and listener changes",
+        "kind": "check",
+        "machine": "davion-sidarli",
+        "state": "failed",
+        "meaning": "the workstation: Auth config changed (Tue 21:34): /etc/sudoers.d/60-host-steward content. Nothing explains it. Check it, then run: host-steward security-ack --event 85bcaccdea --note WHY.",
+        "last_run": "2026-11-05T01:30:28.809Z",
+        "next_run": "2026-11-05T01:55:28.809Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "sudo -n systemctl start host-steward-check.service"
+          },
+          {
+            "kind": "log",
+            "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+          }
+        ],
+        "updated_at": "2026-11-05T01:30:33.414Z",
+        "shown": "failed",
+        "shown_since": null
+      },
+      {
+        "id": "jobs/github-publish",
+        "what": "Nightly GitHub publication",
+        "kind": "job",
+        "machine": "davion-sidarli",
+        "state": "failed",
+        "meaning": "Exited 1: Publication: 2 pushed; 2 failed.",
+        "project": "aico",
+        "last_run": "2026-11-05T00:57:37.854Z",
+        "next_run": "2026-11-05T08:05:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico jobs run github-publish"
+          },
+          {
+            "kind": "log",
+            "ref": "journalctl --user -u aico-jobs.service -g github-publish -n 200 --no-pager"
+          }
+        ],
+        "updated_at": "2026-11-05T00:57:57.916Z",
+        "shown": "failed",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/external/portfolio-ai-complete",
+        "what": "Portfolio-AI full backup (database and uploads) · Owner backup",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "failed",
+        "meaning": "The backup owner machine could not be reached; its last artifact date is shown.",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/status?project=portfolio-ai"
+          }
+        ],
+        "updated_at": "2026-11-05T01:40:52.601Z",
+        "shown": "failed",
+        "shown_since": null
+      }
+    ]
+  },
+  "rows": [
+    {
+      "id": "davion-sidarli/check-tripwire",
+      "what": "Login and listener changes",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "failed",
+      "meaning": "the workstation: Auth config changed (Tue 21:34): /etc/sudoers.d/60-host-steward content. Nothing explains it. Check it, then run: host-steward security-ack --event 85bcaccdea --note WHY.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "failed",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/github-publish",
+      "what": "Nightly GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "failed",
+      "meaning": "Exited 1: Publication: 2 pushed; 2 failed.",
+      "project": "aico",
+      "last_run": "2026-11-05T00:57:37.854Z",
+      "next_run": "2026-11-05T08:05:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run github-publish"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g github-publish -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:57.916Z",
+      "shown": "failed",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/external/portfolio-ai-complete",
+      "what": "Portfolio-AI full backup (database and uploads) · Owner backup",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "failed",
+      "meaning": "The backup owner machine could not be reached; its last artifact date is shown.",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/status?project=portfolio-ai"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "failed",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/redis",
+      "what": "Redis database · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "failed",
+      "meaning": "The Drive copy failed (restic exit 1); the last good copy is preserved.",
+      "last_run": "2026-11-04T07:33:29.449Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=redis&target=drive&name=Redis%20database"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "failed",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-trends",
+      "what": "Trends",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "failed",
+      "meaning": "PVE host thin pool: pve/data data 65.2%, +1.11/day, worsening: pve/data data reaches 92.0% in ~24 days. Guests freeze if the pool fills. Free space (discard, snapshot pruning) or grow the pool before then.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "failed",
+      "shown_since": null
+    },
+    {
+      "id": "publish:blackbox",
+      "what": "blackbox GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "failed",
+      "meaning": "Local check failed at 519ce38b82: browser-e2e, go-tests, osv, webcrypto. Owning agent: fix it and check again.",
+      "project": "blackbox",
+      "last_run": "2026-11-05T00:57:44.561Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source blackbox"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:44.562Z",
+      "shown": "failed",
+      "shown_since": null
+    },
+    {
+      "id": "publish:ominull",
+      "what": "ominull GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "failed",
+      "meaning": "Main has no local check at cfbbecee35. Owning agent: run st check --acceptance.",
+      "project": "ominull",
+      "last_run": "2026-11-05T00:57:49.355Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source ominull"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:49.355Z",
+      "shown": "failed",
+      "shown_since": null
+    },
+    {
+      "id": "fleet/davion-sidarli/agent-work",
+      "what": "Link to agent-work",
+      "kind": "machine",
+      "machine": "agent-work",
+      "state": "warn",
+      "meaning": "Waiting for agent-work to connect.",
+      "next_run": "2026-11-04T23:27:18.244Z",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "tether hosts"
+        }
+      ],
+      "updated_at": "2026-11-05T01:43:55.502Z",
+      "shown": "late",
+      "shown_since": "2026-11-04T23:27:18.244Z"
+    },
+    {
+      "id": "fleet/davion-sidarli/neri-hunters",
+      "what": "Link to neri-hunters",
+      "kind": "machine",
+      "machine": "neri-hunters",
+      "state": "warn",
+      "meaning": "Waiting for neri-hunters to connect.",
+      "next_run": "2026-11-04T23:27:18.244Z",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "tether hosts"
+        }
+      ],
+      "updated_at": "2026-11-05T01:43:55.502Z",
+      "shown": "late",
+      "shown_since": "2026-11-04T23:27:18.244Z"
+    },
+    {
+      "id": "portfolio-ai/portfolio-aca-landscape",
+      "what": "Aca landscape",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-15T06:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-backfill-indicators",
+      "what": "Backfill indicators",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T02:30:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-capture-macro-tape",
+      "what": "Capture macro tape",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T13:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-check-disk",
+      "what": "Check disk",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T00:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-check-freshness",
+      "what": "Check freshness",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T00:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-cleanup-agent-runs",
+      "what": "Cleanup agent runs",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T04:15:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-cleanup-backups",
+      "what": "Cleanup backups",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T04:45:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-cleanup-debug",
+      "what": "Cleanup debug",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T06:15:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-cleanup-logs",
+      "what": "Cleanup logs",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T02:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-cleanup-maintenance",
+      "what": "Cleanup maintenance",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T05:30:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-cleanup-models",
+      "what": "Cleanup models",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T05:05:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-cleanup-news",
+      "what": "Cleanup news",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T04:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-cleanup-snapshots",
+      "what": "Cleanup snapshots",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T05:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-cleanup-temp",
+      "what": "Cleanup temp",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T02:15:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "jobinator-4000/nightly_enrich_wf",
+      "what": "Company research",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Waiting for this worker's first scheduled result.",
+      "project": "jobinator-4000",
+      "next_run": "2026-11-05T12:30:00.000Z",
+      "updated_at": "2026-11-04T23:08:37.248Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "jobinator-4000/deferred_ab_sweep_wf",
+      "what": "Comparison retries",
+      "kind": "job",
+      "machine": "apps",
+      "state": "off",
+      "meaning": "Paused in Jobinator settings.",
+      "project": "jobinator-4000",
+      "last_run": "2026-11-04T23:30:00.313Z",
+      "next_run": "2026-11-05T01:00:00.000Z",
+      "updated_at": "2026-11-04T23:30:00.324Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-covariance",
+      "what": "Covariance",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T05:30:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-db-size",
+      "what": "Db size",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T05:36:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-drift-snapshot",
+      "what": "Drift snapshot",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T18:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-earnings-surprises",
+      "what": "Earnings surprises",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T05:10:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-fg-calc",
+      "what": "Fg calc",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T03:02:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-fg-inputs",
+      "what": "Fg inputs",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T02:45:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-financial-health",
+      "what": "Financial health",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T05:15:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "jobinator-4000/followup_sweep_wf",
+      "what": "Follow-up reminders",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Waiting for this worker's first scheduled result.",
+      "project": "jobinator-4000",
+      "next_run": "2026-11-05T00:25:00.000Z",
+      "updated_at": "2026-11-04T23:08:37.269Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-ingest-fundamentals",
+      "what": "Ingest fundamentals",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T06:10:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-ingest-macro",
+      "what": "Ingest macro",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T06:30:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-jenny-daily-household-maintenance",
+      "what": "Jenny daily household maintenance",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T13:15:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-jenny-weekly-price-check",
+      "what": "Jenny weekly price check",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-07T13:30:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "jobinator-4000/nightly_screen_wf",
+      "what": "Job screening",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Waiting for this worker's first scheduled result.",
+      "project": "jobinator-4000",
+      "next_run": "2026-11-05T11:30:00.000Z",
+      "updated_at": "2026-11-04T23:08:37.229Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "jobinator-4000/backend",
+      "what": "Jobinator backend",
+      "kind": "service",
+      "machine": "apps",
+      "state": "off",
+      "meaning": "Jobinator backend stopped.",
+      "project": "jobinator-4000",
+      "last_run": "2026-11-04T23:33:16.074Z",
+      "updated_at": "2026-11-04T23:33:16.083Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "jobinator-4000/worker",
+      "what": "Jobinator worker",
+      "kind": "service",
+      "machine": "apps",
+      "state": "off",
+      "meaning": "Hatchet worker process stopped.",
+      "project": "jobinator-4000",
+      "last_run": "2026-11-04T23:33:14.621Z",
+      "updated_at": "2026-11-04T23:33:14.632Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-macro-gate",
+      "what": "Macro gate",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T22:30:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-maintain-historical",
+      "what": "Maintain historical",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T04:15:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-market-macro-calendar-ingestion",
+      "what": "Market macro calendar ingestion",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T11:05:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "jobinator-4000/market_trends_wf",
+      "what": "Market snapshot",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Waiting for this worker's first scheduled result.",
+      "project": "jobinator-4000",
+      "next_run": "2026-11-05T13:30:00.000Z",
+      "updated_at": "2026-11-04T23:08:37.212Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "jobinator-4000/nightly_scan_wf",
+      "what": "Nightly job scan",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Waiting for this worker's first scheduled result.",
+      "project": "jobinator-4000",
+      "next_run": "2026-11-05T08:10:00.000Z",
+      "updated_at": "2026-11-04T23:08:37.192Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-options-activity",
+      "what": "Options activity",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T21:15:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/service",
+      "what": "Portfolio AI",
+      "kind": "service",
+      "machine": "apps",
+      "state": "off",
+      "meaning": "API stopped.",
+      "project": "portfolio-ai",
+      "last_run": "2026-11-04T23:33:15.250Z",
+      "updated_at": "2026-11-04T23:33:15.257Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/worker",
+      "what": "Portfolio job worker",
+      "kind": "service",
+      "machine": "apps",
+      "state": "ok",
+      "meaning": "Hatchet worker is running.",
+      "project": "portfolio-ai",
+      "last_run": "2026-11-04T23:33:11.514Z",
+      "next_run": "2026-11-04T23:33:56.514Z",
+      "updated_at": "2026-11-04T23:33:11.523Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-profile-news",
+      "what": "Profile news",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T00:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-putcall-ratio",
+      "what": "Putcall ratio",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T14:30:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-refresh-news-sentiment",
+      "what": "Refresh news sentiment",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T00:25:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-refresh-ohlcv",
+      "what": "Refresh ohlcv",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T02:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-refresh-property-valuations",
+      "what": "Refresh property valuations",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-12-01T12:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-refresh-watchlist-intraday",
+      "what": "Refresh watchlist intraday",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T13:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-refresh-watchlist-ohlcv",
+      "what": "Refresh watchlist ohlcv",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T02:15:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-refresh-watchlist-scores",
+      "what": "Refresh watchlist scores",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T21:15:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-research-universe-refresh",
+      "what": "Research universe refresh",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-09T11:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-rotate-logs",
+      "what": "Rotate logs",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T01:45:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-rules-validation",
+      "what": "Rules validation",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T03:08:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-sec-cik",
+      "what": "Sec cik",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T06:05:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-snapshots",
+      "what": "Snapshots",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T21:33:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-source-health",
+      "what": "Source health",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T00:30:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-sync-accounts",
+      "what": "Sync accounts",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T11:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-tlh-scan",
+      "what": "Tlh scan",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T13:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-vacuum-db",
+      "what": "Vacuum db",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-08T03:30:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-valuation-metrics",
+      "what": "Valuation metrics",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T04:30:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-vehicle-due-alerts",
+      "what": "Vehicle due alerts",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T14:00:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "jobinator-4000/webinar_refresh_wf",
+      "what": "Webinar refresh",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Waiting for this worker's first scheduled result.",
+      "project": "jobinator-4000",
+      "next_run": "2026-11-05T06:55:00.000Z",
+      "updated_at": "2026-11-04T23:08:37.303Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "portfolio-ai/portfolio-yfinance-ref",
+      "what": "Yfinance ref",
+      "kind": "job",
+      "machine": "apps",
+      "state": "warn",
+      "meaning": "Scheduled on the app's worker. No run has been reported to Aico yet.",
+      "project": "portfolio-ai",
+      "next_run": "2026-11-05T04:02:00.000Z",
+      "updated_at": "2026-11-04T23:10:56.375Z",
+      "shown": "unknown",
+      "shown_since": "2026-11-04T23:34:47.901Z",
+      "unknown_why": "off"
+    },
+    {
+      "id": "davion-sidarli/check-assets",
+      "what": "Asset registry",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "warn",
+      "meaning": "fydor-lab-win11 (111) is a lab machine but is not verified isolated: declared isolated, but no NIC evidence. Its tier assumes it cannot reach the LAN. Check its network cards and the PVE firewall.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "warn",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/context-unused",
+      "what": "Loaded context use",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "warn",
+      "meaning": "0 items have no recorded use across at least 3 observed sessions. 1/26 deliveries fully observed; 25 sessions unavailable.",
+      "project": "aico",
+      "last_run": "2026-11-04T23:22:21.306Z",
+      "next_run": "2026-11-05T09:10:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run context-unused"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g context-unused -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T00:48:30.767Z",
+      "shown": "warn",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-sudo",
+      "what": "Sudo use",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "warn",
+      "meaning": "11 new sudo commands: ./host-steward declare, 8, bin/tether and 8 more. Expected if declared (host-steward or nightshift declare) or run by a known agent; they count as normal after a day. Don't know one? journalctl -t sudo --since -1d -g NAME shows who ran it.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "warn",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-workstation",
+      "what": "Workstation health",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "warn",
+      "meaning": "A package update wants a reboot. Reboot when the work in flight is done.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "warn",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-probes",
+      "what": "Workstation probes",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "warn",
+      "meaning": "2 agent-driven local Chrome (3.1 GiB); 0 fallbacks from the browser VM to local Chrome in 24h (+53 while the browser VM was off on purpose). Agent browsers belong on the browser VM; local ones eat workstation memory. Check why the browser VM is not answering and close stray local Chrome.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "warn",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/root-volume",
+      "what": "/ recovery · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=root-volume&target=native&name=%2F%20recovery"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/home",
+      "what": "/home recovery · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=home&target=native&name=%2Fhome%20recovery"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/srv-models",
+      "what": "/srv/models recovery · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=srv-models&target=native&name=%2Fsrv%2Fmodels%20recovery"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/srv-workspaces",
+      "what": "/srv/workspaces recovery · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=srv-workspaces&target=native&name=%2Fsrv%2Fworkspaces%20recovery"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/var-lib-docker",
+      "what": "/var/lib/docker recovery · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=var-lib-docker&target=native&name=%2Fvar%2Flib%2Fdocker%20recovery"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/var-log",
+      "what": "/var/log recovery · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=var-log&target=native&name=%2Fvar%2Flog%20recovery"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/a-loom",
+      "what": "A-Loom · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=a-loom&target=drive&name=A-Loom"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/a-loom",
+      "what": "A-Loom · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=a-loom&target=native&name=A-Loom"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/context-import",
+      "what": "Agent Hub import into Aico",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Copied 150 memories and 143 prompts from Agent Hub; the project list matches.",
+      "project": "aico",
+      "last_run": "2026-11-05T01:43:28.002Z",
+      "next_run": "2026-11-05T01:53:30.309Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run context-import"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g context-import -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:43:33.006Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/agent-hub-state",
+      "what": "Agent Hub journals and context deliveries · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=agent-hub-state&target=drive&name=Agent%20Hub%20journals%20and%20context%20deliveries"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/agent-hub-state",
+      "what": "Agent Hub journals and context deliveries · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=agent-hub-state&target=native&name=Agent%20Hub%20journals%20and%20context%20deliveries"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/agent-skills",
+      "what": "Agent Skills · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=agent-skills&target=drive&name=Agent%20Skills"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/agent-skills",
+      "what": "Agent Skills · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=agent-skills&target=native&name=Agent%20Skills"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/agent-hub",
+      "what": "Agent-Hub · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=agent-hub&target=drive&name=Agent-Hub"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/agent-hub",
+      "what": "Agent-Hub · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=agent-hub&target=native&name=Agent-Hub"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/append/aico-davion-sidarli",
+      "what": "Aico databases and photos · CT 160",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 44 min old.",
+      "last_run": "2026-11-05T00:56:03.255Z",
+      "next_run": "2026-11-05T01:56:09.719Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request append"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico-davion-sidarli&target=append&name=Aico%20databases%20and%20photos"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/aico-davion-sidarli",
+      "what": "Aico databases and photos · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 26 min old.",
+      "last_run": "2026-11-05T01:14:05.286Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico-davion-sidarli&target=drive&name=Aico%20databases%20and%20photos"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/backups-append",
+      "what": "Aico databases to CT 160",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Backup finished.",
+      "project": "aico",
+      "last_run": "2026-11-05T00:55:42.410Z",
+      "next_run": "2026-11-05T01:56:09.719Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run backups-append"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g backups-append -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T00:56:12.494Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/aico-profile",
+      "what": "Aico durable desktop profile · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico-profile&target=drive&name=Aico%20durable%20desktop%20profile"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/aico-profile",
+      "what": "Aico durable desktop profile · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico-profile&target=native&name=Aico%20durable%20desktop%20profile"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/pve-ct-190-aico-data",
+      "what": "Aico on gem · databases and photos · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 26 min old. Copied from gem by the workstation; no Drive copy runs while the workstation is off.",
+      "last_run": "2026-11-05T01:14:02.000Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=pve-ct-190-aico-data&target=drive&name=Aico%20on%20gem%20%C2%B7%20databases%20and%20photos"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/aico-pre-tether-archive",
+      "what": "Aico pre-Tether data archive (2026-10-15) · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico-pre-tether-archive&target=drive&name=Aico%20pre-Tether%20data%20archive%20(2026-10-15)"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/aico-pre-tether-archive",
+      "what": "Aico pre-Tether data archive (2026-10-15) · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico-pre-tether-archive&target=native&name=Aico%20pre-Tether%20data%20archive%20(2026-10-15)"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/aico-state",
+      "what": "Aico saved application state · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico-state&target=drive&name=Aico%20saved%20application%20state"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/aico-state",
+      "what": "Aico saved application state · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico-state&target=native&name=Aico%20saved%20application%20state"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/aico-web",
+      "what": "Aico web server",
+      "kind": "service",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Serving the app and API on 127.0.0.1:3002.",
+      "project": "aico",
+      "last_run": "2026-11-05T01:43:26.255Z",
+      "next_run": "2026-11-05T01:53:26.255Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "systemctl --user restart aico-web.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-web.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:43:26.255Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/aico",
+      "what": "Aico · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico&target=drive&name=Aico"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/aico",
+      "what": "Aico · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico&target=native&name=Aico"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/job-scrub-native",
+      "what": "Backup disk scrub",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Runs on host-steward's timer; last scrub finished (Sun Oct 18 08:12:23 2026), no errors found.",
+      "last_run": "2026-11-04T03:03:33.357Z",
+      "next_run": "2026-12-07T03:03:33.357Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-scrub-native.service"
+        }
+      ],
+      "updated_at": "2026-11-04T03:03:33.378Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/backups-guard",
+      "what": "Backup storage read-only guard",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Backup finished.",
+      "project": "aico",
+      "last_run": "2026-11-05T01:40:52.339Z",
+      "next_run": "2026-11-05T01:45:52.660Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run backups-guard"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g backups-guard -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:57.358Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-backups",
+      "what": "Backups",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Backups are fresh.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/blackbox",
+      "what": "BlackBox · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=blackbox&target=drive&name=BlackBox"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/blackbox",
+      "what": "BlackBox · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=blackbox&target=native&name=BlackBox"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/external/blackbox-archive",
+      "what": "Blackbox off-building archive pull · Owner backup",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "The owner backup artifact is current.",
+      "last_run": "2026-11-04T08:22:36.129Z",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/status?project=blackbox"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/blackbox-vault-archive",
+      "what": "Blackbox vault recovery archive · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 17 h old.",
+      "last_run": "2026-11-04T08:22:36.129Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=blackbox-vault-archive&target=drive&name=Blackbox%20vault%20recovery%20archive"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/browser-automation",
+      "what": "Browser Automation · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=browser-automation&target=drive&name=Browser%20Automation"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/browser-automation",
+      "what": "Browser Automation · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=browser-automation&target=native&name=Browser%20Automation"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/bugout",
+      "what": "Bugout · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=bugout&target=drive&name=Bugout"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/bugout",
+      "what": "Bugout · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=bugout&target=native&name=Bugout"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/cinderwake",
+      "what": "Cinderwake · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=cinderwake&target=drive&name=Cinderwake"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/cinderwake",
+      "what": "Cinderwake · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=cinderwake&target=native&name=Cinderwake"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/claude-config",
+      "what": "Claude Canonical Configuration · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=claude-config&target=drive&name=Claude%20Canonical%20Configuration"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/claude-config",
+      "what": "Claude Canonical Configuration · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=claude-config&target=native&name=Claude%20Canonical%20Configuration"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/.claude",
+      "what": "Claude Config · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=.claude&target=drive&name=Claude%20Config"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/.claude",
+      "what": "Claude Config · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=.claude&target=native&name=Claude%20Config"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/claude-user-config",
+      "what": "Claude User Configuration · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=claude-user-config&target=drive&name=Claude%20User%20Configuration"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/claude-user-config",
+      "what": "Claude User Configuration · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=claude-user-config&target=native&name=Claude%20User%20Configuration"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "usage/claude",
+      "what": "Claude usage",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "weekly 1% left, resets Nov 6, 5:00 AM. Plan: max_20x.",
+      "project": "aico",
+      "last_run": "2026-11-05T01:39:32.469Z",
+      "next_run": "2026-11-05T01:54:32.469Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico usage collect"
+        }
+      ],
+      "updated_at": "2026-11-05T01:39:32.693Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/code-intelligence",
+      "what": "Code Intelligence · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=code-intelligence&target=drive&name=Code%20Intelligence"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/code-intelligence",
+      "what": "Code Intelligence · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=code-intelligence&target=native&name=Code%20Intelligence"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/codex-config",
+      "what": "Codex Canonical Configuration · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=codex-config&target=drive&name=Codex%20Canonical%20Configuration"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/codex-config",
+      "what": "Codex Canonical Configuration · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=codex-config&target=native&name=Codex%20Canonical%20Configuration"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/.codex",
+      "what": "Codex Config · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=.codex&target=drive&name=Codex%20Config"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/.codex",
+      "what": "Codex Config · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=.codex&target=native&name=Codex%20Config"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "usage/codex",
+      "what": "Codex usage",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Running on credits. 5h used up until Nov 4, 9:15 PM; weekly 53% left, resets Nov 11, 5:35 AM; 11K credits left (about 13.1 days at the recent pace). Plan: plus.",
+      "project": "aico",
+      "last_run": "2026-11-05T01:39:32.469Z",
+      "next_run": "2026-11-05T01:54:32.469Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico usage collect"
+        }
+      ],
+      "updated_at": "2026-11-05T01:39:32.693Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/job-housekeeping",
+      "what": "Daily housekeeping",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Nothing needed cleaning.",
+      "last_run": "2026-11-04T10:22:35.518Z",
+      "next_run": "2026-11-05T13:22:35.518Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-housekeeping.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-housekeeping.service"
+        }
+      ],
+      "updated_at": "2026-11-04T10:22:35.957Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/design-tools",
+      "what": "Design Tools · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=design-tools&target=drive&name=Design%20Tools"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/design-tools",
+      "what": "Design Tools · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=design-tools&target=native&name=Design%20Tools"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/desktop-automation",
+      "what": "Desktop Automation · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=desktop-automation&target=drive&name=Desktop%20Automation"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/desktop-automation",
+      "what": "Desktop Automation · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=desktop-automation&target=native&name=Desktop%20Automation"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/job-space-guard",
+      "what": "Disk space guard",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Nothing needed: / 282 GiB free.",
+      "last_run": "2026-11-05T01:37:32.776Z",
+      "next_run": "2026-11-05T02:02:32.776Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-space-guard.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-space-guard.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:37:32.806Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-security",
+      "what": "Docker access",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Nobody is in the docker group and its socket is locked down.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/backups-verify",
+      "what": "Drive backup read-back check",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Not run yet. Runs daily at 05:00 on davion-sidarli.",
+      "project": "aico",
+      "next_run": "2026-11-05T10:00:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run backups-verify"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g backups-verify -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T00:48:30.767Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/fydor",
+      "what": "Fydor · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=fydor&target=drive&name=Fydor"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/fydor",
+      "what": "Fydor · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=fydor&target=native&name=Fydor"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/gnome-keyring",
+      "what": "GNOME keyring (Chrome password decryption) · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=gnome-keyring&target=drive&name=GNOME%20keyring%20(Chrome%20password%20decryption)"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/gnome-keyring",
+      "what": "GNOME keyring (Chrome password decryption) · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=gnome-keyring&target=native&name=GNOME%20keyring%20(Chrome%20password%20decryption)"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/backups-drive",
+      "what": "Google Drive backup",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Not run yet. Runs daily at 02:30 on davion-sidarli.",
+      "project": "aico",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run backups-drive"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g backups-drive -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T00:48:30.767Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/jobinator-4000",
+      "what": "Jobinator-4000 · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=jobinator-4000&target=drive&name=Jobinator-4000"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/jobinator-4000",
+      "what": "Jobinator-4000 · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=jobinator-4000&target=native&name=Jobinator-4000"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/learn-o-tron",
+      "what": "Learn-o-Tron · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=learn-o-tron&target=drive&name=Learn-o-Tron"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/learn-o-tron",
+      "what": "Learn-o-Tron · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=learn-o-tron&target=native&name=Learn-o-Tron"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "fleet/davion-sidarli/aico",
+      "what": "Link to aico",
+      "kind": "machine",
+      "machine": "aico",
+      "state": "ok",
+      "meaning": "Approved full. Connected to aico.",
+      "last_run": "2026-11-05T01:43:52.527Z",
+      "next_run": "2026-11-05T01:48:52.527Z",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "tether hosts"
+        }
+      ],
+      "updated_at": "2026-11-05T01:43:55.502Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-memory",
+      "what": "Memory",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "No memory stalls or kills, and memctl and Tether's guard are reporting. 3 memory kills in the last 24 hours: java (575 MiB) killed in Session 125cc8cd; fz (6.3 GiB) killed in Session 125cc8cd; java (2.6 GiB) killed in Session 125cc8cd.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/service-memctl",
+      "what": "Memory controller",
+      "kind": "service",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Running: memory green, disk green. Publishing admission and kill records.",
+      "last_run": "2026-11-05T01:41:52.706Z",
+      "next_run": "2026-11-05T01:51:52.706Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u host-steward-memctl.service"
+        }
+      ],
+      "updated_at": "2026-11-05T01:41:52.770Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/monkey-fight",
+      "what": "Monkey Fight · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=monkey-fight&target=drive&name=Monkey%20Fight"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/monkey-fight",
+      "what": "Monkey Fight · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=monkey-fight&target=native&name=Monkey%20Fight"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/job-nvme-long-test",
+      "what": "NVMe long self-test",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Runs on host-steward's timer; last self-test Short, completed without error, 2 days ago.",
+      "last_run": "2026-11-04T03:03:33.730Z",
+      "next_run": "2026-12-06T03:03:33.730Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-nvme-long-test.service"
+        }
+      ],
+      "updated_at": "2026-11-04T03:03:33.771Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/job-nvme-short-test",
+      "what": "NVMe short self-test",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Runs on host-steward's timer; last self-test Short, completed without error, 2 days ago.",
+      "last_run": "2026-11-04T03:03:33.592Z",
+      "next_run": "2026-11-12T03:03:33.592Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-nvme-short-test.service"
+        }
+      ],
+      "updated_at": "2026-11-04T03:03:33.631Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/nightshift",
+      "what": "Nightshift · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=nightshift&target=drive&name=Nightshift"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/nightshift",
+      "what": "Nightshift · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=nightshift&target=native&name=Nightshift"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/notes-export",
+      "what": "Notes export to Drive",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Not exporting tonight: gem is linked and does the nightly export.",
+      "project": "aico",
+      "last_run": "2026-11-04T08:30:00.553Z",
+      "next_run": "2026-11-05T08:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run notes-export"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g notes-export -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T00:48:30.767Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/obsidian-config",
+      "what": "Obsidian app config · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=obsidian-config&target=drive&name=Obsidian%20app%20config"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/obsidian-config",
+      "what": "Obsidian app config · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=obsidian-config&target=native&name=Obsidian%20app%20config"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/references-old-work",
+      "what": "Old work references · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=references-old-work&target=drive&name=Old%20work%20references"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/references-old-work",
+      "what": "Old work references · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=references-old-work&target=native&name=Old%20work%20references"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/ominull-production-state",
+      "what": "Ominull production container recovery · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 5 min old.",
+      "last_run": "2026-11-05T01:35:14.966Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=ominull-production-state&target=drive&name=Ominull%20production%20container%20recovery"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/ominull",
+      "what": "Ominull · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=ominull&target=drive&name=Ominull"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/ominull",
+      "what": "Ominull · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=ominull&target=native&name=Ominull"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/ominull-evidence-replica",
+      "what": "OmniNull evidence replica · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=ominull-evidence-replica&target=drive&name=OmniNull%20evidence%20replica"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/ominull-evidence-replica",
+      "what": "OmniNull evidence replica · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=ominull-evidence-replica&target=native&name=OmniNull%20evidence%20replica"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-ominull-lock",
+      "what": "OmniNull lock",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "The OmniNull lock matches the site file.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/onenote-archive",
+      "what": "OneNote archive · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=onenote-archive&target=drive&name=OneNote%20archive"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/onenote-archive",
+      "what": "OneNote archive · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=onenote-archive&target=native&name=OneNote%20archive"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/onenote-extracted",
+      "what": "OneNote extracted notes · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=onenote-extracted&target=drive&name=OneNote%20extracted%20notes"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/onenote-extracted",
+      "what": "OneNote extracted notes · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=onenote-extracted&target=native&name=OneNote%20extracted%20notes"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "usage/opencode-go",
+      "what": "OpenCode Go usage",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "5h 100% left, resets Nov 4, 9:58 PM; weekly 100% left, resets Nov 8, 7:00 PM; monthly 55% left, resets Nov 26, 3:32 PM. Plan: go.",
+      "project": "aico",
+      "last_run": "2026-11-05T01:39:32.469Z",
+      "next_run": "2026-11-05T01:54:32.469Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico usage collect"
+        }
+      ],
+      "updated_at": "2026-11-05T01:39:32.693Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/chrome-profile",
+      "what": "Owner Chrome profile · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=chrome-profile&target=drive&name=Owner%20Chrome%20profile"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/chrome-profile",
+      "what": "Owner Chrome profile · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=chrome-profile&target=native&name=Owner%20Chrome%20profile"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/home-desktop",
+      "what": "Owner Desktop · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=home-desktop&target=drive&name=Owner%20Desktop"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/home-desktop",
+      "what": "Owner Desktop · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=home-desktop&target=native&name=Owner%20Desktop"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/home-documents",
+      "what": "Owner Documents · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=home-documents&target=drive&name=Owner%20Documents"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/home-documents",
+      "what": "Owner Documents · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=home-documents&target=native&name=Owner%20Documents"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/home-downloads",
+      "what": "Owner Downloads · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=home-downloads&target=drive&name=Owner%20Downloads"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/home-downloads",
+      "what": "Owner Downloads · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=home-downloads&target=native&name=Owner%20Downloads"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/home-pictures",
+      "what": "Owner Pictures · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=home-pictures&target=drive&name=Owner%20Pictures"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/home-pictures",
+      "what": "Owner Pictures · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=home-pictures&target=native&name=Owner%20Pictures"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-guests",
+      "what": "PVE guests",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Guests are running and no segment is open. Stopped on purpose: st-browser (100) by summitflow automation.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-pve",
+      "what": "PVE host health",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "The PVE host has room, no failed units and clean disks.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-ecc",
+      "what": "PVE memory errors",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "No uncorrected memory errors on the PVE host. 24 corrected memory errors in a day; recorded only.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/persona-sandbox",
+      "what": "Persona Sandbox · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=persona-sandbox&target=drive&name=Persona%20Sandbox"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/persona-sandbox",
+      "what": "Persona Sandbox · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=persona-sandbox&target=native&name=Persona%20Sandbox"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/notify-outbox",
+      "what": "Phone alerts",
+      "kind": "service",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Sent 16 alerts to the phone in the last day.",
+      "project": "aico",
+      "last_run": "2026-11-05T01:43:56.249Z",
+      "next_run": "2026-11-05T01:44:56.249Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-web.service -g notify -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:43:56.250Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/portfolio-ai",
+      "what": "Portfolio AI · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=portfolio-ai&target=drive&name=Portfolio%20AI"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/portfolio-ai",
+      "what": "Portfolio AI · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=portfolio-ai&target=native&name=Portfolio%20AI"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/portfolio",
+      "what": "Portfolio · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=portfolio&target=drive&name=Portfolio"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/portfolio",
+      "what": "Portfolio · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=portfolio&target=native&name=Portfolio"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/postgres",
+      "what": "PostgreSQL databases · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 26 min old.",
+      "last_run": "2026-11-05T01:14:00.890Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=postgres&target=drive&name=PostgreSQL%20databases"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/pve-cluster-config",
+      "what": "Proxmox cluster configuration (/etc/pve) · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 26 min old.",
+      "last_run": "2026-11-05T01:14:01.059Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=pve-cluster-config&target=drive&name=Proxmox%20cluster%20configuration%20(%2Fetc%2Fpve)"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/pve-host-files",
+      "what": "Proxmox host files: blackbox identity and recovery descriptor, VM 120 config and cloud-init snippets · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 26 min old.",
+      "last_run": "2026-11-05T01:14:03.672Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=pve-host-files&target=drive&name=Proxmox%20host%20files%3A%20blackbox%20identity%20and%20recovery%20descriptor%2C%20VM%20120%20config%20and%20cloud-init%20snippets"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-gates",
+      "what": "Public login gates",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Every public app asks for a login.",
+      "last_run": "2026-11-05T00:45:05.395Z",
+      "next_run": "2026-11-05T02:05:05.395Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T00:45:09.642Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-floor",
+      "what": "Push path",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "The push path is up.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/rootfall",
+      "what": "Rootfall · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=rootfall&target=drive&name=Rootfall"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/rootfall",
+      "what": "Rootfall · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=rootfall&target=native&name=Rootfall"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-router-drift",
+      "what": "Router drift",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "The router's setup has not changed.",
+      "last_run": "2026-11-04T20:45:02.778Z",
+      "next_run": "2026-11-05T03:45:02.778Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-04T20:45:10.562Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-disk-tests",
+      "what": "Scrubs and disk self-tests",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Scrubs and self-tests found nothing wrong. Last: System disk scrub finished Nov 1, no errors found; Backup disk scrub finished Oct 18, no errors found; NVMe self-test Short, completed without error, 3 days ago.",
+      "last_run": "2026-11-04T21:00:09.091Z",
+      "next_run": "2026-11-05T04:00:09.091Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-04T21:00:13.470Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/sha",
+      "what": "Security Hardening Automation · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=sha&target=drive&name=Security%20Hardening%20Automation"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/sha",
+      "what": "Security Hardening Automation · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=sha&target=native&name=Security%20Hardening%20Automation"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/security-research",
+      "what": "Security Research · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=security-research&target=drive&name=Security%20Research"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/security-research",
+      "what": "Security Research · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=security-research&target=native&name=Security%20Research"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/summitflow",
+      "what": "SummitFlow · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=summitflow&target=drive&name=SummitFlow"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/summitflow",
+      "what": "SummitFlow · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=summitflow&target=native&name=SummitFlow"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/infrastructure",
+      "what": "System Backup · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=infrastructure&target=native&name=System%20Backup"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/job-scrub-root",
+      "what": "System disk scrub",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Runs on host-steward's timer; last scrub finished (Sun Nov  1 08:04:44 2026), no errors found.",
+      "last_run": "2026-11-04T03:03:33.473Z",
+      "next_run": "2026-12-07T03:03:33.473Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-scrub-root.service"
+        }
+      ],
+      "updated_at": "2026-11-04T03:03:33.495Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-journal",
+      "what": "System journal",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "The system journal is readable. 25 new unlabeled journal signatures in 24h (3407 tracked).",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/backups-native",
+      "what": "T7 recovery points",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Backup finished.",
+      "project": "aico",
+      "last_run": "2026-11-05T01:13:01.145Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run backups-native"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g backups-native -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:13:36.247Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-thermal",
+      "what": "Temperatures",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Everything is running cool.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/tether-state",
+      "what": "Tether session state · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=tether-state&target=drive&name=Tether%20session%20state"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/tether-state",
+      "what": "Tether session state · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=tether-state&target=native&name=Tether%20session%20state"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/the-aftertimes-support",
+      "what": "The AfterTimes Support · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=the-aftertimes-support&target=drive&name=The%20AfterTimes%20Support"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/the-aftertimes-support",
+      "what": "The AfterTimes Support · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=the-aftertimes-support&target=native&name=The%20AfterTimes%20Support"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/the-aftertimes",
+      "what": "The AfterTimes · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=the-aftertimes&target=drive&name=The%20AfterTimes"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/the-aftertimes",
+      "what": "The AfterTimes · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=the-aftertimes&target=native&name=The%20AfterTimes"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/trading-plan",
+      "what": "Trading plan · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=trading-plan&target=drive&name=Trading%20plan"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/trading-plan",
+      "what": "Trading plan · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=trading-plan&target=native&name=Trading%20plan"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/usage-collect",
+      "what": "Usage collection",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Usage read: Claude 1% weekly left; Codex on credits; OpenCode Go 55% monthly left.",
+      "project": "aico",
+      "last_run": "2026-11-05T01:39:32.003Z",
+      "next_run": "2026-11-05T01:44:32.725Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run usage-collect"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g usage-collect -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:39:37.020Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-usage",
+      "what": "Usage evidence",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Usage evidence is being collected.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/job-collect-usage",
+      "what": "Usage evidence collection",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Collected 2038 usage records from 4 sources.",
+      "last_run": "2026-11-04T09:47:50.521Z",
+      "next_run": "2026-11-05T11:47:50.521Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-collect-usage.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-collect-usage.service"
+        }
+      ],
+      "updated_at": "2026-11-04T09:48:00.227Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/pve-vm-100-browser-state",
+      "what": "VM 100 st-browser profiles and settings · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Machine is off; its last copy covers the unchanged data.",
+      "last_run": "2026-11-04T07:40:59.790Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=pve-vm-100-browser-state&target=drive&name=VM%20100%20st-browser%20profiles%20and%20settings"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/pve-vm-180-app-recovery",
+      "what": "VM180 app recovery data · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Machine is off; its last copy covers the unchanged data.",
+      "last_run": "2026-11-01T08:24:47.559Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=pve-vm-180-app-recovery&target=drive&name=VM180%20app%20recovery%20data"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/vantage",
+      "what": "Vantage · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=vantage&target=drive&name=Vantage"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/vantage",
+      "what": "Vantage · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=vantage&target=native&name=Vantage"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/vault-tools",
+      "what": "Vault Tools · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=vault-tools&target=drive&name=Vault%20Tools"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/vault-tools",
+      "what": "Vault Tools · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=vault-tools&target=native&name=Vault%20Tools"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/vault",
+      "what": "Vault · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=vault&target=drive&name=Vault"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/vault",
+      "what": "Vault · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=vault&target=native&name=Vault"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "webtools:davion-sidarli",
+      "what": "Web search and fetch",
+      "kind": "service",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "14 calls today (fetch 5, search 9); 0 failed; 0 calls used a fallback (another search engine or the Jina reader).",
+      "last_run": "2026-11-04T20:54:13.649Z",
+      "updated_at": "2026-11-04T20:54:13.660Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/backups-snapshots",
+      "what": "Work recovery snapshots",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Backup finished.",
+      "project": "aico",
+      "last_run": "2026-11-05T01:25:48.877Z",
+      "next_run": "2026-11-05T01:55:50.217Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico jobs run backups-snapshots"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl --user -u aico-jobs.service -g backups-snapshots -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:25:53.895Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/workspace-vault",
+      "what": "Workspace vault content · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=workspace-vault&target=drive&name=Workspace%20vault%20content"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/workspace-vault",
+      "what": "Workspace vault content · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=workspace-vault&target=native&name=Workspace%20vault%20content"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-perf",
+      "what": "Workstation performance",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "No units are crash-looping and swap is calm.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/check-storage",
+      "what": "Workstation storage",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Disks have room, Btrfs is healthy and SMART is clean. System disk holds 6 GiB of emergency ballast.",
+      "last_run": "2026-11-05T01:30:28.809Z",
+      "next_run": "2026-11-05T01:55:28.809Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "sudo -n systemctl start host-steward-check.service"
+        },
+        {
+          "kind": "log",
+          "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+        }
+      ],
+      "updated_at": "2026-11-05T01:30:33.414Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:agent-hub",
+      "what": "agent-hub GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Main is on GitHub at 4907c765c7.",
+      "project": "agent-hub",
+      "last_run": "2026-11-05T00:57:39.012Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source agent-hub"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:39.036Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:agent-skills",
+      "what": "agent-skills GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Main is on GitHub at d6d2e78360.",
+      "project": "agent-skills",
+      "last_run": "2026-11-05T00:57:40.215Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source agent-skills"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:40.217Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:agent-skills",
+      "what": "agent-skills checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Quick check passed: 1 stages in 0 s",
+      "project": "agent-skills",
+      "last_run": "2026-11-05T00:00:22.412Z",
+      "updated_at": "2026-11-05T00:00:22.427Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:aico",
+      "what": "aico GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Published main at 16dabd1078.",
+      "project": "aico",
+      "last_run": "2026-11-05T00:57:44.546Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source aico"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:44.547Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:aico",
+      "what": "aico checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Acceptance passed: 15 stages in 111 s at b00048f667",
+      "project": "aico",
+      "last_run": "2026-11-05T01:43:08.356Z",
+      "updated_at": "2026-11-05T01:43:08.373Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "deploy:aico",
+      "what": "aico deploy",
+      "kind": "service",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Deployed 61ca1da1e6: the deploy code only (5 s)",
+      "project": "aico",
+      "last_run": "2026-11-05T01:18:37.023Z",
+      "updated_at": "2026-11-05T01:18:37.040Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:blackbox",
+      "what": "blackbox checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Quick check passed: 0 stages in 0 s",
+      "project": "blackbox",
+      "last_run": "2026-11-04T23:46:35.934Z",
+      "updated_at": "2026-11-04T23:46:35.950Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:browser-automation",
+      "what": "browser-automation GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Main is on GitHub at 98a936079c.",
+      "project": "browser-automation",
+      "last_run": "2026-11-05T00:57:45.743Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source browser-automation"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:45.744Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:browser-automation",
+      "what": "browser-automation checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Quick check passed: 0 stages in 0 s",
+      "project": "browser-automation",
+      "last_run": "2026-11-04T23:46:36.915Z",
+      "updated_at": "2026-11-04T23:46:36.932Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:bugout",
+      "what": "bugout GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "project": "bugout",
+      "last_run": "2026-11-05T00:57:45.750Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source bugout"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:45.750Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:cinderwake",
+      "what": "cinderwake GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: main unavailable.",
+      "project": "cinderwake",
+      "last_run": "2026-11-05T00:57:45.757Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source cinderwake"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:45.758Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:claude-config",
+      "what": "claude-config GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "project": "claude-config",
+      "last_run": "2026-11-05T00:57:45.763Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source claude-config"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:45.764Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:code-intelligence",
+      "what": "code-intelligence GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Main is on GitHub at f8c4f57a65.",
+      "project": "code-intelligence",
+      "last_run": "2026-11-05T00:57:46.953Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source code-intelligence"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:46.954Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:code-intelligence",
+      "what": "code-intelligence checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Quick check passed: 0 stages in 0 s",
+      "project": "code-intelligence",
+      "last_run": "2026-11-04T23:46:37.932Z",
+      "updated_at": "2026-11-04T23:46:37.949Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:codex-config",
+      "what": "codex-config GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "project": "codex-config",
+      "last_run": "2026-11-05T00:57:46.962Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source codex-config"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:46.962Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:commit-try",
+      "what": "commit-try checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Quick check passed: 1 stages in 0 s",
+      "project": "commit-try",
+      "last_run": "2026-11-04T17:31:41.192Z",
+      "updated_at": "2026-11-04T17:31:41.208Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/machine",
+      "what": "davion-sidarli",
+      "kind": "machine",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Up and reporting to Aico.",
+      "last_run": "2026-11-05T01:43:26.255Z",
+      "next_run": "2026-11-05T01:53:26.255Z",
+      "updated_at": "2026-11-05T01:43:26.255Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:desktop-automation",
+      "what": "desktop-automation GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Main is on GitHub at 9ca5ea8b24.",
+      "project": "desktop-automation",
+      "last_run": "2026-11-05T00:57:48.135Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source desktop-automation"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:48.136Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:desktop-automation",
+      "what": "desktop-automation checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Quick check passed: 1 stages in 0 s",
+      "project": "desktop-automation",
+      "last_run": "2026-11-05T00:16:04.655Z",
+      "updated_at": "2026-11-05T00:16:04.676Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:jobinator-4000",
+      "what": "jobinator-4000 GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Main is on GitHub at 420aa22d8d.",
+      "project": "jobinator-4000",
+      "last_run": "2026-11-05T00:57:49.325Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source jobinator-4000"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:49.326Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:jobinator-4000",
+      "what": "jobinator-4000 checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Quick check passed: 0 stages in 0 s",
+      "project": "jobinator-4000",
+      "last_run": "2026-11-04T23:46:39.889Z",
+      "updated_at": "2026-11-04T23:46:39.905Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:m10b-live-jfldispw",
+      "what": "m10b-live-jfldispw checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Check passed: 1 stages in 0 s",
+      "project": "m10b-live-jfldispw",
+      "last_run": "2026-11-04T19:59:13.528Z",
+      "updated_at": "2026-11-04T19:59:13.544Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:m10b-live-sd60446y",
+      "what": "m10b-live-sd60446y checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Check passed: 1 stages in 0 s",
+      "project": "m10b-live-sd60446y",
+      "last_run": "2026-11-04T19:55:50.537Z",
+      "updated_at": "2026-11-04T19:55:50.556Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:neri",
+      "what": "neri GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: excluded project.",
+      "project": "neri",
+      "last_run": "2026-11-05T00:57:49.332Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source neri"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:49.332Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:neri-hunters",
+      "what": "neri-hunters GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: excluded project.",
+      "project": "neri-hunters",
+      "last_run": "2026-11-05T00:57:49.337Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source neri-hunters"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:49.338Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:nightshift",
+      "what": "nightshift GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "project": "nightshift",
+      "last_run": "2026-11-05T00:57:49.343Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source nightshift"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:49.343Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:portfolio",
+      "what": "portfolio GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "project": "portfolio",
+      "last_run": "2026-11-05T00:57:49.360Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source portfolio"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:49.361Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:portfolio-ai",
+      "what": "portfolio-ai GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Main is on GitHub at 15fe9f1229.",
+      "project": "portfolio-ai",
+      "last_run": "2026-11-05T00:57:50.623Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source portfolio-ai"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:50.624Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:security-research",
+      "what": "security-research GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "project": "security-research",
+      "last_run": "2026-11-05T00:57:50.629Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source security-research"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:50.629Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:summitflow",
+      "what": "summitflow GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Published main at 0c006eb7fe.",
+      "project": "summitflow",
+      "last_run": "2026-11-05T00:57:54.296Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source summitflow"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:54.297Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:summitflow",
+      "what": "summitflow checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Quick check passed: 4 stages in 1 s",
+      "project": "summitflow",
+      "last_run": "2026-11-05T00:55:11.879Z",
+      "updated_at": "2026-11-05T00:55:11.895Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:uilint",
+      "what": "uilint GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: manual mode.",
+      "project": "uilint",
+      "last_run": "2026-11-05T00:57:54.302Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source uilint"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:54.303Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/uilint",
+      "what": "uilint · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T07:30:00.000Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request drive"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=uilint&target=drive&name=uilint"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/uilint",
+      "what": "uilint · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Restorable data is 27 min old.",
+      "last_run": "2026-11-05T01:13:01.385Z",
+      "next_run": "2026-11-05T05:13:32.575Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico backups request native"
+        },
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=uilint&target=native&name=uilint"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:vault",
+      "what": "vault GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Publication skipped: main unavailable.",
+      "project": "vault",
+      "last_run": "2026-11-05T00:57:54.310Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source vault"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:54.311Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "publish:vault-tools",
+      "what": "vault-tools GitHub publication",
+      "kind": "job",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Main is on GitHub at 5253be61ea.",
+      "project": "vault-tools",
+      "last_run": "2026-11-05T00:57:55.502Z",
+      "actions": [
+        {
+          "kind": "run",
+          "ref": "aico publish --source vault-tools"
+        }
+      ],
+      "updated_at": "2026-11-05T00:57:55.503Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "check:vault-tools",
+      "what": "vault-tools checks",
+      "kind": "check",
+      "machine": "davion-sidarli",
+      "state": "ok",
+      "meaning": "Quick check passed: 0 stages in 0 s",
+      "project": "vault-tools",
+      "last_run": "2026-11-04T23:46:46.181Z",
+      "updated_at": "2026-11-04T23:46:46.199Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/agent-hub-telegram-bot-v1",
+      "what": "Agent Hub Telegram Bot v1 · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "off",
+      "meaning": "This source path is gone. Older snapshots may still contain its files.",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=agent-hub-telegram-bot-v1&target=drive&name=Agent%20Hub%20Telegram%20Bot%20v1"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "off",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/agent-hub-telegram-bot-v1",
+      "what": "Agent Hub Telegram Bot v1 · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "off",
+      "meaning": "This source path is gone. Older snapshots may still contain its files.",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=agent-hub-telegram-bot-v1&target=native&name=Agent%20Hub%20Telegram%20Bot%20v1"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "off",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/a-term",
+      "what": "Aico previous app · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "off",
+      "meaning": "This source path is gone. Older snapshots may still contain its files.",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=a-term&target=drive&name=Aico%20previous%20app"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "off",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/a-term",
+      "what": "Aico previous app · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "off",
+      "meaning": "This source path is gone. Older snapshots may still contain its files.",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=a-term&target=native&name=Aico%20previous%20app"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "off",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/aico-web-state",
+      "what": "Aico saved web state · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "off",
+      "meaning": "This source path is gone. Older snapshots may still contain its files.",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico-web-state&target=drive&name=Aico%20saved%20web%20state"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "off",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/aico-web-state",
+      "what": "Aico saved web state · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "off",
+      "meaning": "This source path is gone. Older snapshots may still contain its files.",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=aico-web-state&target=native&name=Aico%20saved%20web%20state"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "off",
+      "shown_since": null
+    },
+    {
+      "id": "jobs/m11a-fleet-review-proof",
+      "what": "Reviewed fleet job takeover check",
+      "kind": "job",
+      "machine": "aico",
+      "state": "off",
+      "meaning": "Fleet check finished. Normal jobs restored.",
+      "project": "aico",
+      "actions": [],
+      "updated_at": "2026-11-04T15:08:06.907Z",
+      "shown": "off",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/drive/tether",
+      "what": "Tether · Drive",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "off",
+      "meaning": "This source path is gone. Older snapshots may still contain its files.",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=tether&target=drive&name=Tether"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "off",
+      "shown_since": null
+    },
+    {
+      "id": "davion-sidarli/backup/native/tether",
+      "what": "Tether · T7",
+      "kind": "backup",
+      "machine": "davion-sidarli",
+      "state": "off",
+      "meaning": "This source path is gone. Older snapshots may still contain its files.",
+      "actions": [
+        {
+          "kind": "detail",
+          "ref": "/backups/restore?source=tether&target=native&name=Tether"
+        }
+      ],
+      "updated_at": "2026-11-05T01:40:52.601Z",
+      "shown": "off",
+      "shown_since": null
+    },
+    {
+      "id": "jobinator-4000/machine",
+      "what": "apps",
+      "kind": "machine",
+      "machine": "apps",
+      "state": "off",
+      "meaning": "VM 180 is off after verification.",
+      "project": "jobinator-4000",
+      "last_run": "2026-11-04T23:34:47.895Z",
+      "next_run": "2026-11-04T23:34:47.895Z",
+      "updated_at": "2026-11-04T23:34:47.901Z",
+      "shown": "off",
+      "shown_since": null
+    },
+    {
+      "id": "portfolio-ai/machine",
+      "what": "apps",
+      "kind": "machine",
+      "machine": "apps",
+      "state": "off",
+      "meaning": "VM 180 is off after verification.",
+      "project": "portfolio-ai",
+      "last_run": "2026-11-04T23:34:47.895Z",
+      "next_run": "2026-11-04T23:34:47.895Z",
+      "updated_at": "2026-11-04T23:34:47.901Z",
+      "shown": "off",
+      "shown_since": null
+    }
+  ],
+  "machine": "davion-sidarli",
+  "running": []
+}

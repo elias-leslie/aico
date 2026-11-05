@@ -1,0 +1,100 @@
+[
+  {
+    "cwd": "/srv/scratch/aico-M8b-2b-live",
+    "id": "01ce3874",
+    "state": "ended",
+    "title": "Branch at turn 1 \u00b7 Test phone chat",
+    "started_by_evidence": "M8b-2b implementation agent; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2b-live.json and M8b-2b-cleanup.json"
+  },
+  {
+    "cwd": "/srv/scratch/aico-M8b-2b-live",
+    "id": "b608d12e",
+    "state": "ended",
+    "title": "Test phone chat",
+    "started_by_evidence": "M8b-2b implementation agent; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2b-live.json and M8b-2b-cleanup.json"
+  },
+  {
+    "cwd": "/srv/scratch/aico-M8b-2b-live",
+    "id": "805a082f",
+    "state": "ended",
+    "title": "Test only: ask me one direct question that needs my answer, with First and Second as choices and Fir",
+    "started_by_evidence": "M8b-2b implementation agent; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2b-live.json and M8b-2b-cleanup.json"
+  },
+  {
+    "cwd": "/srv/scratch/aico-M8b-2b-live",
+    "id": "c9ff7230",
+    "state": "ended",
+    "title": "Test only: ask me one direct question that needs my answer, with First and Second as choices and Fir",
+    "started_by_evidence": "M8b-2b implementation agent; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2b-live.json and M8b-2b-cleanup.json"
+  },
+  {
+    "cwd": "/srv/scratch/aico-M8b-2b-live",
+    "id": "a1d16743",
+    "state": "ended",
+    "title": "Phone chat check. Work only in this scratch folder. Reply exactly with **First** and then a short se",
+    "started_by_evidence": "M8b-2b implementation agent; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2b-live.json and M8b-2b-cleanup.json"
+  },
+  {
+    "cwd": "/srv/scratch/aico-M8b-2b-tester/phone",
+    "id": "2e08298c",
+    "state": "ended",
+    "title": "Phone check. In one short line, greet me and name the folder you are working in.",
+    "started_by_evidence": "M8b-2b phone tester; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2b-tester-phone.md"
+  },
+  {
+    "cwd": "/srv/scratch/aico-M8b-2b-tester/phone",
+    "id": "5131e230",
+    "state": "ended",
+    "title": "Phone check. In one short line, greet me and name the folder you are working in., branch at turn 22",
+    "started_by_evidence": "M8b-2b phone tester; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2b-tester-phone.md"
+  },
+  {
+    "cwd": "/srv/scratch/aico-M8b-2b-live",
+    "id": "4427d069",
+    "state": "ended",
+    "title": "Phone chat check. Work only in this scratch folder. Reply exactly with **First** and then a short se, branch at turn 1",
+    "started_by_evidence": "M8b-2b implementation agent; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2b-live.json and M8b-2b-cleanup.json"
+  },
+  {
+    "cwd": "/srv/scratch/aico-M8b-2b-tester/desktop",
+    "id": "0927999c",
+    "state": "ended",
+    "title": "Hi. This is a scratch folder for a UI check only \u2014 please don't edit files. Reply with one short sen",
+    "started_by_evidence": "M8b-2b desktop tester; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2b-tester-desktop.md"
+  },
+  {
+    "cwd": "/srv/scratch/aico-M8b-2b-tester/desktop",
+    "id": "20d0e053",
+    "state": "ended",
+    "title": "Hi. This is a scratch folder for a UI check only \u2014 please don't edit files. Reply with one short sen, branch at turn 4",
+    "started_by_evidence": "M8b-2b desktop tester; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2b-tester-desktop.md"
+  },
+  {
+    "cwd": "/srv/workspaces/projects/aico/.dev-tools/m8b-2a-live",
+    "id": "204966af",
+    "state": "ended",
+    "title": "Reply exactly: Effort test ready.",
+    "started_by_evidence": "M8b-2a implementation agent; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2a-live.json"
+  },
+  {
+    "cwd": "/srv/workspaces/projects/aico/.dev-tools/m8b-2a-live",
+    "id": "307436f5",
+    "state": "ended",
+    "title": "This is a scratch chat check. Work only in this folder; do not inspect anything outside it or read c",
+    "started_by_evidence": "M8b-2a implementation agent; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2a-live.json"
+  },
+  {
+    "cwd": "/srv/workspaces/projects/aico/.dev-tools/m8b-2a-live",
+    "id": "f6577bcc",
+    "state": "ended",
+    "title": "This is a scratch chat check. Work only in this folder; do not inspect anything outside it or read c, branch at turn 2",
+    "started_by_evidence": "M8b-2a implementation agent; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2a-live.json"
+  },
+  {
+    "cwd": "/srv/workspaces/projects/aico/.dev-tools/m8b-2a-live",
+    "id": "7be0690e",
+    "state": "ended",
+    "title": "Streaming output check for this scratch app: print the integers 1 through 2000 in order, ten per lin",
+    "started_by_evidence": "M8b-2a implementation agent; docs/plans/codebase-cleanup/evidence/M8b-2/M8b-2a-live.json"
+  }
+]

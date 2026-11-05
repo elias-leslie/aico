@@ -1,0 +1,2 @@
+VITEST:vitest:start
+VITEST:OK:0|details:.dev-tools/vitest-18e50285f166250b-2552158-88be3996-details.txt|hint:Tests  48 passed (48)|lane:light|queue_ms:13.018|execution_ms:3537.663

@@ -1,0 +1,140 @@
+
+ RUN  v4.1.12 /srv/workspaces/projects/aico
+
+ ❯ |web-frontend| lib/attention.test.ts (9 tests | 1 failed) 10ms
+     × marks only an unseen completed turn of a live chat as Finished 3ms
+ ❯ |web-server| src/chat.test.ts (17 tests | 3 failed) 208ms
+     × removes an ended chat from Sessions but keeps its history and transcript 10ms
+     × records agent test chat provenance and keeps it after End 7ms
+     × requires an agent session when marking a chat as a test 5ms
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 22 passed (26)
+   Start at  20:36:40
+   Duration  1.09s (transform 368ms, setup 39ms, import 812ms, tests 218ms, environment 267ms)
+
+
+(node:2537542) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |web-server| src/chat.test.ts > Aico chat routes > removes an ended chat from Sessions but keeps its history and transcript
+AssertionError: expected { id: '0b38540c', …(23) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "activity": "idle",
+  "activity_at": 1793842601576,
+  "activity_previous": "idle",
+  "agent_state": "stopped",
+  "asks": [],
+  "backend": "aico-agent",
+  "can_end": false,
+  "can_rename": true,
+  "can_respawn": false,
+  "chat": {
+    "cwd": "/tmp/aico-chat-routes-z98Rwq",
+    "firstModel": "codex/first",
+    "id": "0b38540c",
+    "last": "First answer",
+    "model": "codex/first",
+    "nextModel": "codex/first",
+    "role": "implementation",
+    "startedAt": 1793842601574,
+    "state": "ended",
+    "title": "First question",
+    "updatedAt": 1793842601576,
+  },
+  "created_at": "2026-11-05T01:36:41.574Z",
+  "display_order": 0,
+  "id": "0b38540c",
+  "is_alive": false,
+  "is_external": false,
+  "last_accessed_at": "2026-11-05T01:36:41.576Z",
+  "mode": "aico-chat",
+  "name": "First question",
+  "origin": "aico",
+  "project_id": null,
+  "source": "aico-chat",
+  "task": "First question",
+  "user_id": null,
+  "working_dir": "/tmp/aico-chat-routes-z98Rwq",
+}
+
+ ❯ src/chat.test.ts:387:86
+    385|     questions = [question(id)]
+    386|     await call('DELETE', `/api/sessions/${id}`)
+    387|     expect((await call('GET', '/api/sessions')).body.items.find((s) =>…
+       |                                                                                      ^
+    388|     expect(chats.list().find((chat) => chat.id === id)?.state).toBe('e…
+    389|     const ended = (await call('GET', `/api/chat/${id}`)).body
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  |web-server| src/chat.test.ts > Aico chat routes > records agent test chat provenance and keeps it after End
+AssertionError: expected { id: '860143eb', …(10) } to match object { …(2) }
+(11 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "startedBy": "codex:test-session",
+-   "testing": true,
++   "cwd": "/tmp/aico-chat-routes-K4fXXC",
++   "firstModel": "codex/first",
++   "id": "860143eb",
++   "last": "Test reply",
++   "model": "codex/first",
++   "nextModel": "codex/first",
++   "role": "implementation",
++   "startedAt": 1793842601584,
++   "state": "idle",
++   "title": "Test only",
++   "updatedAt": 1793842601585,
+  }
+
+ ❯ src/chat.test.ts:402:36
+    400|     expect(status).toBe(200)
+    401|     await chats.settled(body.id)
+    402|     expect(chats.summary(body.id)).toMatchObject({ startedBy: 'codex:t…
+       |                                    ^
+    403|     await call('DELETE', `/api/sessions/${body.id}`)
+    404|     expect(chats.summary(body.id)).toMatchObject({ startedBy: 'codex:t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  |web-server| src/chat.test.ts > Aico chat routes > requires an agent session when marking a chat as a test
+AssertionError: expected 200 to be 422 // Object.is equality
+
+- Expected
++ Received
+
+- 422
++ 200
+
+ ❯ src/chat.test.ts:408:132
+    406|   })
+    407|   it('requires an agent session when marking a chat as a test', async …
+    408|     expect((await call('POST', '/api/chat', { role: 'implementation', …
+       |                                                                                                                                    ^
+    409|   })
+    410|   it('keeps the chat readable when Tether’s question listing stalls', …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  |web-frontend| lib/attention.test.ts > attentionOf > marks only an unseen completed turn of a live chat as Finished
+AssertionError: expected 'idle' to be 'finished' // Object.is equality
+
+Expected: "finished"
+Received: "idle"
+
+ ❯ lib/attention.test.ts:81:49
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+

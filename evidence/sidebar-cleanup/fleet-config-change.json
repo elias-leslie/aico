@@ -1,0 +1,9 @@
+{
+  "host": "davion-sidarli",
+  "file": "~/.config/aico/fleet.json",
+  "changed": {
+    "proxmoxSsh": "davion-gem"
+  },
+  "purpose": "Read actual guest power for disconnected fleet Status rows",
+  "secrets_read": false
+}

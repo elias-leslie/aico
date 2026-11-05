@@ -1,0 +1,8 @@
+{
+  "acceptance_artifact": "/srv/workspaces/projects/aico/.git/st/acceptance/2d728836c1398366f2114fc0897ac38799d694a6538f588aa503ed5f75fc551d.json",
+  "acceptance_id": "2d728836c1398366f2114fc0897ac38799d694a6538f588aa503ed5f75fc551d",
+  "source_commit": "ed5bda90337ec85e370a1e372a4ea8293ffba68c",
+  "source_tree": "fd756f4c9664cd420a2d2e3c9e26d73e203a1c84",
+  "state": "success",
+  "reused": false
+}

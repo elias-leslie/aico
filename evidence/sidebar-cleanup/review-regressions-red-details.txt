@@ -1,0 +1,94 @@
+
+ RUN  v4.1.12 /srv/workspaces/projects/aico
+
+ ❯ |fleet| src/power.test.ts (4 tests | 1 failed) 5ms
+     × posts a valid stopped guest as off and never counts it late 3ms
+ ❯ |web-server| src/chat.test.ts (18 tests | 1 failed) 216ms
+     × shares when a live chat was opened across devices 11ms
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 20 passed (22)
+   Start at  20:42:07
+   Duration  1.09s (transform 437ms, setup 0ms, import 907ms, tests 222ms, environment 0ms)
+
+
+(node:2580747) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2580749) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |fleet| src/power.test.ts > fleet peer power status > posts a valid stopped guest as off and never counts it late
+Error: a machine row needs next_run: the unknown rule reads it
+ ❯ parseRow ../status/src/row.ts:190:11
+    188|   if (nextRun !== undefined) row.next_run = nextRun
+    189|   else if (row.kind === 'machine')
+    190|     throw new RowError('next_run', 'a machine row needs next_run: the …
+       |           ^
+    191|   const list = actions(body.actions)
+    192|   if (list !== undefined) row.actions = list
+ ❯ src/power.test.ts:14:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |web-server| src/chat.test.ts > Aico chat routes > shares when a live chat was opened across devices
+AssertionError: expected { id: 'a4c8d3ac', …(23) } to match object { seen_at: 1793842928550 }
+(38 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "seen_at": 1793842928550,
++   "activity": "idle",
++   "activity_at": 1793842928550,
++   "activity_previous": "idle",
++   "agent_state": "stopped",
++   "asks": [],
++   "backend": "aico-agent",
++   "can_end": true,
++   "can_rename": true,
++   "can_respawn": false,
++   "chat": {
++     "cwd": "/tmp/aico-chat-routes-yssesC",
++     "firstModel": "codex/first",
++     "id": "a4c8d3ac",
++     "last": "First answer",
++     "lastReplyAt": 1793842928550,
++     "model": "codex/first",
++     "nextModel": "codex/first",
++     "role": "implementation",
++     "startedAt": 1793842928549,
++     "startedBy": "owner",
++     "state": "idle",
++     "testing": false,
++     "title": "First question",
++     "updatedAt": 1793842928550,
++   },
++   "created_at": "2026-11-05T01:42:08.549Z",
++   "display_order": 0,
++   "id": "a4c8d3ac",
++   "is_alive": true,
++   "is_external": false,
++   "last_accessed_at": "2026-11-05T01:42:08.550Z",
++   "mode": "aico-chat",
++   "name": "First question",
++   "origin": "aico",
++   "project_id": null,
++   "source": "aico-chat",
++   "task": "First question",
++   "user_id": null,
++   "working_dir": "/tmp/aico-chat-routes-yssesC",
+  }
+
+ ❯ src/chat.test.ts:402:86
+    400|     const seen = store.seenAt().get(id)
+    401|     expect(seen).toBeGreaterThan(0)
+    402|     expect((await call('GET', '/api/sessions')).body.items.find((s) =>…
+       |                                                                                      ^
+    403|       seen_at: seen,
+    404|     })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+

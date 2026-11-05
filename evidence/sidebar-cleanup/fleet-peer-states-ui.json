@@ -1,0 +1,608 @@
+{
+  "kind": "uilint-ui-snapshot",
+  "motion": [
+    {
+      "durations_ms": [
+        160,
+        160
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(1) > button"
+    },
+    {
+      "durations_ms": [
+        180
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > button > svg"
+    },
+    {
+      "durations_ms": [
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(1)"
+    },
+    {
+      "durations_ms": [
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(1) > div:nth-of-type(5)"
+    },
+    {
+      "durations_ms": [
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(2)"
+    },
+    {
+      "durations_ms": [
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(2) > div:nth-of-type(5)"
+    },
+    {
+      "durations_ms": [
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(3)"
+    },
+    {
+      "durations_ms": [
+        150
+      ],
+      "property": "transition",
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(3) > div:nth-of-type(5)"
+    }
+  ],
+  "omissions": [
+    "Entered form values were excluded.",
+    "Clamped text is recorded from the DOM; its visible substring is unknown.",
+    "Shadow-root content was not extracted.",
+    "Only this route and state were captured; hover, focus, other routes and colour schemes were not.",
+    "Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen."
+  ],
+  "page": {
+    "background_stack": [
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html"
+      },
+      {
+        "color": "rgba(28, 31, 36, 1)",
+        "image": false,
+        "selector": "html > body"
+      },
+      {
+        "color": "rgba(11, 13, 17, 1)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2)"
+      },
+      {
+        "color": "rgba(0, 0, 0, 0)",
+        "image": false,
+        "selector": "html > body > div:nth-of-type(2) > main"
+      }
+    ],
+    "color_scheme": "dark",
+    "first_block": {
+      "height": 61,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(1)",
+      "top": 0,
+      "width": 390
+    },
+    "prefers_dark": false
+  },
+  "schema_version": 2,
+  "source": {
+    "captured_at": "2026-11-05T02:09:06.167Z",
+    "ready_state": "complete",
+    "state": "",
+    "title": "Status · Aico",
+    "url": "https://aico.summitflow.dev/status"
+  },
+  "surfaces": [
+    {
+      "color": "rgba(28, 31, 36, 1)",
+      "height": 844,
+      "selector": "html > body",
+      "width": 390
+    },
+    {
+      "color": "rgba(11, 13, 17, 1)",
+      "height": 844,
+      "selector": "html > body > div:nth-of-type(2)",
+      "width": 390
+    },
+    {
+      "color": "rgba(28, 31, 36, 1)",
+      "height": 61,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(1)",
+      "width": 390
+    },
+    {
+      "color": "rgba(11, 13, 17, 0.86)",
+      "height": 40,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(1) > label",
+      "width": 286
+    },
+    {
+      "color": "rgba(245, 240, 233, 0.12)",
+      "height": 40,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(1) > button",
+      "width": 72
+    },
+    {
+      "color": "rgba(11, 13, 17, 0.35)",
+      "height": 265,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div",
+      "width": 362
+    },
+    {
+      "color": "rgba(118, 216, 137, 0.102)",
+      "height": 22,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(1) > div:nth-of-type(1) > span",
+      "width": 47
+    },
+    {
+      "color": "rgba(118, 216, 137, 0.102)",
+      "height": 22,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(2) > div:nth-of-type(1) > span",
+      "width": 47
+    }
+  ],
+  "texts": [
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(1) > label > input",
+      "text": "Search rows"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(245, 240, 233, 0.12)",
+        "rgba(28, 31, 36, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(1) > button",
+      "text": "Cancel"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(2)",
+      "text": "3 matches"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(2)",
+      "text": "·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(2)",
+      "text": "no problems"
+    },
+    {
+      "attr": "aria-label",
+      "kind": "attr",
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section",
+      "text": "Healthy"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13.5,
+      "font_weight": 700,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > button > span > b",
+      "text": "3"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13.5,
+      "font_weight": 700,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > button > span > b",
+      "text": "healthy"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > button > span > span",
+      "text": "·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 12.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > button > span > span",
+      "text": "2 OK, 1 off"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(118, 216, 137, 0.102)",
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(122, 214, 138, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(1) > div:nth-of-type(1) > span",
+      "text": "OK"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(1) > div:nth-of-type(2) > button",
+      "text": "Link to agent-work"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 0.58)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(1) > div:nth-of-type(2) > div",
+      "text": "Approved worker. Connected to agent-work."
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(1) > div:nth-of-type(2) > span",
+      "text": "machine"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(1) > div:nth-of-type(2) > span",
+      "text": "·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(1) > div:nth-of-type(2) > span",
+      "text": "agent-work"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(1) > div:nth-of-type(4) > span:nth-of-type(1)",
+      "text": "ran 9:08 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(118, 216, 137, 0.102)",
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(122, 214, 138, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(2) > div:nth-of-type(1) > span",
+      "text": "OK"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(2) > div:nth-of-type(2) > button",
+      "text": "Link to aico"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 0.58)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(2) > div:nth-of-type(2) > div",
+      "text": "Approved full. Connected to aico."
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(2) > div:nth-of-type(2) > span",
+      "text": "machine"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(2) > div:nth-of-type(2) > span",
+      "text": "·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(2) > div:nth-of-type(2) > span",
+      "text": "aico"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(2) > div:nth-of-type(4) > span:nth-of-type(1)",
+      "text": "ran 9:08 PM"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(3) > div:nth-of-type(1) > span",
+      "text": "Off"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 14,
+      "font_weight": 600,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(3) > div:nth-of-type(2) > button",
+      "text": "Link to neri-hunters"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(231, 226, 214, 0.58)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 13,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(3) > div:nth-of-type(2) > div",
+      "text": "neri-hunters is off. Its link will connect when it starts."
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": "machine"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": "·"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(3) > div:nth-of-type(2) > span",
+      "text": "neri-hunters"
+    },
+    {
+      "background_image": false,
+      "background_stack": [
+        "rgba(11, 13, 17, 0.35)",
+        "rgba(11, 13, 17, 1)"
+      ],
+      "color": "rgba(139, 143, 148, 1)",
+      "font_family": "Pretendard, system-ui, sans-serif",
+      "font_size_px": 11.5,
+      "font_weight": 400,
+      "kind": "text",
+      "opacity": 1,
+      "selector": "html > body > div:nth-of-type(2) > main > div:nth-of-type(3) > section > div > div:nth-of-type(3) > div:nth-of-type(4) > span:nth-of-type(1)",
+      "text": "since 9:08 PM"
+    }
+  ],
+  "viewport": {
+    "device_pixel_ratio": 1,
+    "height": 844,
+    "width": 390
+  }
+}

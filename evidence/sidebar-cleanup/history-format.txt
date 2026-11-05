@@ -1,0 +1,2 @@
+BIOME:biome:start
+BIOME:OK:0|details:.dev-tools/biome-18e50396cf0a808e-2667000-c6d454ae-details.txt|hint:Checked 4 files in 29ms. No fixes applied.|lane:light|queue_ms:8.403|execution_ms:132.302

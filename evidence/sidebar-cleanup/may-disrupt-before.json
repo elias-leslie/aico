@@ -1,0 +1,19 @@
+{
+  "target": "aico",
+  "generated_at": "2026-11-05T01:44:30.628527+00:00",
+  "clear": false,
+  "blocking": [
+    "process: restic --repo rclone:summitflow-drive:SummitFlow-Restic --password-file /home/kasadis/.local/state/summitflow/backup-key",
+    "process: rclone serve restic --stdio --b2-hard-delete summitflow-drive:SummitFlow-Restic"
+  ],
+  "unknown": [],
+  "backup_owner_approved_preserving_units": true,
+  "coordination_receipts": [
+    "a2cd48",
+    "bbbef6",
+    "645917",
+    "e6684a",
+    "757bbb",
+    "f6132a"
+  ]
+}

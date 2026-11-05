@@ -1,0 +1,16 @@
+[
+  {
+    "name": "agent-work",
+    "vmid": 200,
+    "node": "davion-gem",
+    "type": "qemu",
+    "status": "stopped"
+  },
+  {
+    "name": "neri-hunters",
+    "vmid": 201,
+    "node": "davion-gem",
+    "type": "qemu",
+    "status": "stopped"
+  }
+]

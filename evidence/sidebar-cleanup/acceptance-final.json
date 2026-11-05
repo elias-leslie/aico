@@ -1,0 +1,9 @@
+{
+  "source_commit": "0eb022a59342dd143ac74991cabe9cbed413cab6",
+  "state": "success",
+  "coverage": "full",
+  "kind": "managed deploy acceptance",
+  "evidence": "history-deploy-checks.txt",
+  "deploy_job": "aico-e17a108c4cfe",
+  "reported_gate": "CHECK:PASS acceptance 109.7s at 0eb022a59342"
+}

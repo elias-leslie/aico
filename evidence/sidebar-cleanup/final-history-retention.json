@@ -1,0 +1,92 @@
+[
+  {
+    "historyEvents": 5,
+    "id": "01ce3874",
+    "messages": 5,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 13,
+    "id": "b608d12e",
+    "messages": 9,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 8,
+    "id": "805a082f",
+    "messages": 6,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 9,
+    "id": "c9ff7230",
+    "messages": 6,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 27,
+    "id": "a1d16743",
+    "messages": 20,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 94,
+    "id": "2e08298c",
+    "messages": 56,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 97,
+    "id": "5131e230",
+    "messages": 58,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 5,
+    "id": "4427d069",
+    "messages": 4,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 14,
+    "id": "0927999c",
+    "messages": 10,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 14,
+    "id": "20d0e053",
+    "messages": 10,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 5,
+    "id": "204966af",
+    "messages": 4,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 20,
+    "id": "307436f5",
+    "messages": 17,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 8,
+    "id": "f6577bcc",
+    "messages": 8,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 9,
+    "id": "7be0690e",
+    "messages": 8,
+    "state": "ended"
+  },
+  {
+    "historyEvents": 2,
+    "id": "0f0778f1",
+    "messages": 2,
+    "state": "ended"
+  }
+]

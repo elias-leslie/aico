@@ -1,0 +1,28 @@
+{
+  "endStatus": 200,
+  "id": "0f0778f1",
+  "messages": 2,
+  "retainedInRecent": [
+    "aico-agent:0f0778f1",
+    "aico-agent:b608d12e",
+    "aico-agent:01ce3874",
+    "aico-agent:805a082f",
+    "aico-agent:c9ff7230",
+    "aico-agent:5131e230",
+    "aico-agent:2e08298c",
+    "aico-agent:4427d069",
+    "aico-agent:a1d16743",
+    "aico-agent:20d0e053",
+    "aico-agent:0927999c",
+    "aico-agent:204966af",
+    "aico-agent:7be0690e",
+    "aico-agent:307436f5",
+    "aico-agent:f6577bcc"
+  ],
+  "startedBy": "codex:683968",
+  "state": "ended",
+  "stillListed": [],
+  "testing": true,
+  "totalLiveSessions": 5,
+  "transcriptUnchanged": true
+}

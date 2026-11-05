@@ -1,0 +1,29 @@
+[deploy] aico at 0eb022a59342: accepting that commit
+CHECK:acceptance:0eb022a59342 (tree 79f745bfad25)
+CHECK:SKIP:no_local_rules: semgrep
+CHECK:OK:ruff|0.0s|details:.dev-tools/ruff-2671528-details.txt|hint:All checks passed!
+CHECK:OK:types|0.4s|details:.dev-tools/types-2671528-details.txt|hint:All checks passed!
+CHECK:OK:gitleaks|0.7s|details:.dev-tools/gitleaks-2671528-details.txt|hint:[]
+CHECK:OK:osv|2.2s|details:.dev-tools/osv-2671528-details.txt|hint:}
+CHECK:OK:pytest|14.0s|details:.dev-tools/pytest-2671528-details.txt|hint:1153 passed in 13.80s
+CHECK:OK:biome|0.7s|details:.dev-tools/biome-2671528-details.txt|hint:Checked 976 files in 478ms. No fixes applied.
+CHECK:OK:tsc|12.2s|details:.dev-tools/tsc-2671528-details.txt|hint:-
+CHECK:OK:boundaries|0.1s|details:.dev-tools/boundaries-2671528-details.txt|hint:boundaries: ok (19 packages, 12 contract fixtures)
+CHECK:OK:ui-spec|0.3s|details:.dev-tools/ui-spec-2671528-details.txt|hint:UILINT:ok|violations=0|checks=5|files=187|items=3990|unverified=0|scope=mechanical-only|not-a-copy-review
+CHECK:OK:gradle-android|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:cargo-tray|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:go-hook|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:depcruise|1.7s|details:.dev-tools/depcruise-2671528-details.txt|hint:‼ 30 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:contracts-host-steward|3.9s|optional|details:.dev-tools/contracts-host-steward-2671528-details.txt|hint:124 passed in 3.35s
+CHECK:OK:vitest|109.4s|details:.dev-tools/vitest-2671528-details.txt|hint:Tests  3387 passed (3387)
+CHECK:PASS acceptance 109.7s at 0eb022a59342
+[deploy] restarting aico-web.service
+[deploy] installing dependencies
+[deploy] building web-server
+[deploy] building web-frontend
+[deploy] restarting aico-web.service
+[deploy] aico-web.service /health: 200
+[deploy] aico-web.service /: 200
+[deploy] aico-web.service: active
+[deploy] removed release 11d3a836241c
+[deploy] Deployed 0eb022a593: aico-web (121 s)

@@ -1,0 +1,36 @@
+
+ RUN  v4.1.12 /srv/workspaces/projects/aico
+
+ ❯ |web-server| src/api.test.ts (41 tests | 1 failed) 158ms
+     × answers a missing session and a removed transcript in words 6ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 40 passed (41)
+   Start at  20:59:02
+   Duration  1.02s (transform 343ms, setup 0ms, import 784ms, tests 158ms, environment 0ms)
+
+
+(node:2665923) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |web-server| src/api.test.ts > session history > answers a missing session and a removed transcript in words
+AssertionError: expected 400 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 400
+
+ ❯ src/api.test.ts:291:81
+    289|     expect((await call('GET', '/api/history?limit=x')).status).toBe(40…
+    290|     // Non-chat history keeps Tether's existing limit clamp.
+    291|     expect((await call('GET', '/api/history/codex%3Aa/events?limit=0')…
+       |                                                                                 ^
+    292|   })
+    293| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

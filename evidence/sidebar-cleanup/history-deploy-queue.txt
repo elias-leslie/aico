@@ -1,0 +1,2 @@
+[deploy] queued aico-e17a108c4cfe for 0eb022a59342
+[deploy] result: aico deploy result aico-e17a108c4cfe   wait: aico deploy wait aico-e17a108c4cfe   log: aico logs aico-deploy-aico-e17a108c4cfe

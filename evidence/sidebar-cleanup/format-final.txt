@@ -1,0 +1,2 @@
+BIOME:biome:start
+BIOME:OK:0|details:.dev-tools/biome-18e502ae96b3743d-2585529-347311ca-details.txt|hint:Found 1 warning.|lane:light|queue_ms:6.712|execution_ms:149.901

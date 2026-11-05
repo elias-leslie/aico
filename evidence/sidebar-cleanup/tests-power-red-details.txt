@@ -1,0 +1,39 @@
+
+ RUN  v4.1.12 /srv/workspaces/projects/aico
+
+ ❯ |fleet| src/power.test.ts (4 tests | 1 failed) 7ms
+     × shows a stopped guest as off, without a connection deadline 5ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  20:38:36
+   Duration  114ms (transform 25ms, setup 0ms, import 32ms, tests 7ms, environment 0ms)
+
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |fleet| src/power.test.ts > fleet peer power status > shows a stopped guest as off, without a connection deadline
+AssertionError: expected { Object (id, what, ...) } to match object { state: 'off', …(1) }
+(6 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "meaning": "worker is off. Its link will connect when it starts.",
+-   "state": "off",
++   "meaning": "Waiting for worker to connect.",
++   "state": "warn",
+  }
+
+ ❯ src/power.test.ts:9:17
+      7|   it('shows a stopped guest as off, without a connection deadline', ()…
+      8|     const row = peerStatusRow(settings, peer, 'worker', 'stopped', 100…
+      9|     expect(row).toMatchObject({ state: 'off', meaning: 'worker is off.…
+       |                 ^
+     10|     expect(row).not.toHaveProperty('next_run')
+     11|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

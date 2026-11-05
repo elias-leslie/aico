@@ -1,0 +1,36 @@
+
+ RUN  v4.1.12 /srv/workspaces/projects/aico
+
+ ❯ |web-server| src/chat.test.ts (19 tests | 1 failed) 232ms
+     × keeps ended chat messages readable and paginated in Recent 10ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 passed (19)
+   Start at  20:56:47
+   Duration  1.19s (transform 379ms, setup 0ms, import 873ms, tests 232ms, environment 0ms)
+
+
+(node:2662150) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |web-server| src/chat.test.ts > Aico chat routes > keeps ended chat messages readable and paginated in Recent
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/chat.test.ts:402:26
+    400|     const path = `/api/history/aico-agent%3A${id}/events`
+    401|     const newest = (await call('GET', `${path}?limit=1`)).body as unkn…
+    402|     expect(newest.items).toHaveLength(1)
+       |                          ^
+    403|     expect(newest.items[0]).toMatchObject({ role: 'assistant', kind: '…
+    404|     expect(newest.older).not.toBeNull()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

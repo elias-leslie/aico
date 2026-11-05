@@ -1,0 +1,14 @@
+
+ RUN  v4.1.12 /srv/workspaces/projects/aico
+
+
+ Test Files  4 passed (4)
+      Tests  49 passed (49)
+   Start at  20:42:42
+   Duration  3.37s (transform 516ms, setup 32ms, import 1.02s, tests 3.42s, environment 196ms)
+
+
+(node:2584406) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2584457) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

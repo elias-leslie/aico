@@ -1,0 +1,1 @@
+[Wait over] command "tail --pid=2630820 -f /dev/null" (aico-wait-3967a81806ec) failed (2651456SERVICE_RESUL) · re: "Aico combined release build process finished" · journalctl --user -u aico-wait-3967a81806ec
