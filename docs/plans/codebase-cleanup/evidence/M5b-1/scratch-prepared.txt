@@ -1,0 +1,1 @@
+Scratch one-second test window prepared; production heartbeats unchanged.

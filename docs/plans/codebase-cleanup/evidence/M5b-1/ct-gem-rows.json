@@ -1,0 +1,157 @@
+{
+  "generated_at": "2026-11-05T03:30:30.671Z",
+  "rows": [
+    {
+      "id": "davion-gem/heartbeat/ct190",
+      "what": "Aico on CT 190 heartbeat",
+      "kind": "service",
+      "machine": "davion-gem",
+      "state": "ok",
+      "meaning": "Last heartbeat 218 seconds ago.",
+      "last_run": "2026-11-05T03:30:22.704Z",
+      "next_run": "2026-11-05T03:37:22.704Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u aico-pve-sender.service"
+        }
+      ],
+      "updated_at": "2026-11-05T03:30:24.278Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-gem/check-pve",
+      "what": "PVE host health",
+      "kind": "check",
+      "machine": "davion-gem",
+      "state": "ok",
+      "meaning": "The PVE host has room, no failed units and clean disks.",
+      "last_run": "2026-11-05T03:30:22.704Z",
+      "next_run": "2026-11-05T03:55:22.704Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u aico-pve-sender.service"
+        }
+      ],
+      "updated_at": "2026-11-05T03:30:24.278Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-gem/check-ecc",
+      "what": "PVE memory errors",
+      "kind": "check",
+      "machine": "davion-gem",
+      "state": "ok",
+      "meaning": "No uncorrected memory errors on the PVE host. 27 corrected memory errors in a day; recorded only.",
+      "last_run": "2026-11-05T03:30:22.704Z",
+      "next_run": "2026-11-05T03:55:22.704Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u aico-pve-sender.service"
+        }
+      ],
+      "updated_at": "2026-11-05T03:30:24.278Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-gem/pve-watch",
+      "what": "Proxmox checks",
+      "kind": "service",
+      "machine": "davion-gem",
+      "state": "ok",
+      "meaning": "Local PVE checks finished.",
+      "last_run": "2026-11-05T03:30:22.704Z",
+      "next_run": "2026-11-05T03:37:22.704Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u aico-pve-sender.service"
+        }
+      ],
+      "updated_at": "2026-11-05T03:30:24.278Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-gem/machine",
+      "what": "Proxmox host",
+      "kind": "machine",
+      "machine": "davion-gem",
+      "state": "ok",
+      "meaning": "The Proxmox watchdog is reporting.",
+      "last_run": "2026-11-05T03:30:22.704Z",
+      "next_run": "2026-11-05T03:37:22.704Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u aico-pve-sender.service"
+        }
+      ],
+      "updated_at": "2026-11-05T03:30:24.278Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-gem/pve-sender",
+      "what": "Proxmox phone sender",
+      "kind": "service",
+      "machine": "davion-gem",
+      "state": "ok",
+      "meaning": "Watching both Aico heartbeats. No alert needed.",
+      "last_run": "2026-11-05T03:30:22.704Z",
+      "next_run": "2026-11-05T03:37:22.704Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u aico-pve-sender.service"
+        }
+      ],
+      "updated_at": "2026-11-05T03:30:24.278Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-gem/heartbeat/workstation",
+      "what": "Workstation heartbeat",
+      "kind": "service",
+      "machine": "davion-gem",
+      "state": "ok",
+      "meaning": "Last heartbeat 203 seconds ago.",
+      "last_run": "2026-11-05T03:30:22.704Z",
+      "next_run": "2026-11-05T03:37:22.704Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u aico-pve-sender.service"
+        }
+      ],
+      "updated_at": "2026-11-05T03:30:24.278Z",
+      "shown": "ok",
+      "shown_since": null
+    },
+    {
+      "id": "davion-gem/rescue-login",
+      "what": "Workstation rescue login",
+      "kind": "service",
+      "machine": "davion-gem",
+      "state": "ok",
+      "meaning": "Proxmox's rescue login works.",
+      "last_run": "2026-11-05T03:30:22.704Z",
+      "next_run": "2026-11-05T03:37:22.704Z",
+      "actions": [
+        {
+          "kind": "log",
+          "ref": "journalctl -u aico-pve-sender.service"
+        }
+      ],
+      "updated_at": "2026-11-05T03:30:24.278Z",
+      "shown": "ok",
+      "shown_since": null
+    }
+  ]
+}

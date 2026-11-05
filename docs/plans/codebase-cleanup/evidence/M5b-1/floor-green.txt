@@ -1,0 +1,2 @@
+TEST:pytest:start
+TEST:OK:0|details:.dev-tools/pytest-18e507d6786e9e1c-3055363-3ff1fa44-details.txt|hint:.......................                                                  [100%]|lane:heavy2|queue_ms:11.970|execution_ms:286.252|report:.dev-tools/pytest-b5334048cd1b461db9fa61ff4fcbe44b-details.xml

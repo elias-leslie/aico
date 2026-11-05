@@ -1,0 +1,2 @@
+{"at": 1793848700.2979543, "silent": false, "ages": {"workstation": 114.55666851997375, "ct190": 111.6767475605011}, "last_send": {}, "rows_posted": true}
+Aico Proxmox sender installed.

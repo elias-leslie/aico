@@ -1,0 +1,2 @@
+TEST:pytest:start
+TEST:FAIL:1|details:.dev-tools/pytest-18e50709800b9419-2980915-73d9d0cc-details.txt|hint:FAILED native/host-steward/tests/test_pve_sender.py::test_status_rows_follow_the_shared_contract|lane:heavy|queue_ms:13.007|execution_ms:238.334|report:.dev-tools/pytest-8669ad900e95452a8d093dcd76ef9d0b-details.xml

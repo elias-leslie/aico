@@ -1,0 +1,2 @@
+TEST:pytest:start
+TEST:FAIL:1|details:.dev-tools/pytest-18e5079356761ba9-3011350-bd5c0a0a-details.txt|hint:FAILED native/host-steward/tests/test_pve_sender.py::test_malformed_phone_does_not_stop_host_heartbeat|lane:heavy|queue_ms:12.186|execution_ms:278.011|report:.dev-tools/pytest-8b0c9e72c2014b06a683ba56693c0406-details.xml

@@ -1,0 +1,13 @@
+nightshift-runner-critical.path                                               enabled         enabled
+nightshift-check.service                                                      static          -
+nightshift-fcm-token.service                                                  static          -
+nightshift-runner@.service                                                    static          -
+nightshift-check.timer                                                        enabled         enabled
+nightshift-fcm-token.timer                                                    enabled         enabled
+nightshift-runner-critical.timer                                              enabled         enabled
+nightshift-runner-monthly.timer                                               enabled         enabled
+nightshift-runner-nightly.timer                                               enabled         enabled
+nightshift-runner-weekly.timer                                                enabled         enabled
+nightshift-notify-critical.path                                              enabled   enabled
+nightshift-notify-critical.service                                           static    -
+nightshift-notify-critical.timer                                             enabled   enabled

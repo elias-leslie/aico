@@ -1,0 +1,10 @@
+{
+  "state": "success",
+  "source_commit": "48de5a70ec843b4b61c213079defdc8b98939ea9",
+  "source_tree": "b35b27241015446f48c9a06f4174ad03d5355ef3",
+  "acceptance_id": "a7456b4e969d0d36af241606c7483fdd9833388b9e071a2b0f244f576caa5d60",
+  "acceptance_artifact": "/srv/workspaces/projects/aico/.git/st/acceptance/a7456b4e969d0d36af241606c7483fdd9833388b9e071a2b0f244f576caa5d60.json",
+  "started_at": "2026-11-05T03:19:57.108760+00:00",
+  "finished_at": null,
+  "reused": true
+}

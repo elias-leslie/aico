@@ -1,0 +1,2 @@
+Created symlink '/etc/systemd/system/timers.target.wants/host-steward-heartbeat.timer' → '/etc/systemd/system/host-steward-heartbeat.timer'.
+CT 190 Aico heartbeat installed.
