@@ -183,7 +183,7 @@ describe('lane lines', () => {
       `[Ready] lane "Store lane" is blocked: permission prompt · st aico widget status --widget-id ${LANE}`,
     )
     expect(laneLine('ended', { ...lane, host: 'neri-vm' }, { exited: true })).toContain(
-      'lane "Store lane" on neri-vm (req neri-r1) ended (its agent exited)',
+      'lane "Store lane" on neri-vm (req neri-r1) has no running agent; the session is still open',
     )
   })
 
@@ -579,7 +579,7 @@ describe('ended', () => {
     gone.add(LANE)
     step(reporter, { state: 'unknown', stateAgentAt: 100 }, SETTLE)
     expect(delivered.map((d) => d.line)).toEqual([
-      expect.stringContaining('ended (its agent exited)'),
+      expect.stringContaining('has no running agent; the session is still open'),
     ])
     step(reporter, { stateAgentAt: 900 }, SETTLE)
     removeWidget(LANE)

@@ -188,7 +188,9 @@ export function laneLine(
       ? `went idle${extra.minutes && extra.minutes >= 1 ? ` after ${extra.minutes}m` : ''}`
       : outcome === 'blocked'
         ? `is blocked: ${extra.detail && BLOCKING_DETAILS.has(extra.detail) ? extra.detail : 'waiting on input'}`
-        : `ended${extra.exited ? ' (its agent exited)' : ''}`
+        : extra.exited
+          ? 'has no running agent; the session is still open'
+          : 'ended'
   const { name, look } = lineNames(lane)
   return `[Ready] lane ${name} ${what} · ${look}`
 }
