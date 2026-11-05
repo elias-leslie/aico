@@ -111,6 +111,7 @@ beforeEach(async () => {
     }),
   )
   vi.stubEnv('HOME', join(dir, 'home'))
+  vi.stubEnv('XDG_STATE_HOME', join(dir, 'home/.local/state'))
   vi.stubEnv('AICO_FLEET_CONFIG', config)
   vi.stubEnv('TETHER_LIB_DIR', lib)
   vi.stubEnv('PATH', join(dir, 'bin') + ':/usr/bin:/bin')
