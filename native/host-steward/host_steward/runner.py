@@ -47,6 +47,9 @@ def run_checks(
     rows, ran = [], []
     for check, module in CHECKS.items():
         cfg = data["checks"][check]
+        if not cfg.get("run_on_host", True):
+            state.get("observations", {}).pop(check, None)
+            continue
         if (only and check not in only) or (not only and not is_due(check, cfg, state, now)):
             continue
         ctx = core.Ctx(

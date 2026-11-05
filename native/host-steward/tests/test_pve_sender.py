@@ -35,6 +35,18 @@ def test_weekly_trim_only_visits_running_containers_and_reports_failures(cfg):
     assert trim.status_row(cfg, 1001)["state"] == "failed"
 
 
+def test_pve_sender_keeps_its_local_ecc_row_when_workstation_publication_is_retired(monkeypatch):
+    from pve_sender import watch
+
+    assert watch.core.load_data()["checks"]["ecc"]["run_on_host"] is False
+    monkeypatch.setattr(watch.core, "run_command", lambda *_a, **_k: watch.core.Result(
+        0, "===NS ecc\nFIRST 100\n===NS end\n", ""
+    ))
+    rows = watch.local_rows({}, 1000, "davion-gem")
+    row = next(row for row in rows if row["id"] == "davion-gem/check-ecc")
+    assert row["what"] == "PVE memory errors"
+
+
 @pytest.fixture
 def cfg(tmp_path):
     data = json.loads((ROOT / "native/pve-sender/config.json").read_text())

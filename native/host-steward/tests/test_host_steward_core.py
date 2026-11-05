@@ -136,7 +136,8 @@ def fake(argv, timeout=60, input_text=None):
 
 def test_the_runner_makes_one_valid_row_per_due_check_even_when_everything_fails():
     rows, ran = runner.run_checks(DATA, {}, NOW, run=fake, machine="davion-sidarli")
-    assert ran == list(CHECKS) == [r["id"].split("check-")[1] for r in rows]
+    active = [name for name in CHECKS if DATA["checks"][name].get("run_on_host", True)]
+    assert ran == active == [r["id"].split("check-")[1] for r in rows]
     for row in rows:
         assert aico_status.check_row(row)["machine"] == "davion-sidarli"
 
@@ -146,6 +147,19 @@ def test_only_runs_the_named_check_and_nothing_due_runs_nothing():
     assert ran == ["journal"] and rows[0]["state"] == "warn"
     state = {"last_run": {name: NOW for name in CHECKS}}
     assert runner.run_checks(DATA, state, NOW + 60, run=fake, machine="m") == ([], [])
+
+
+def test_workstation_does_not_probe_or_publish_the_pve_senders_ecc_check():
+    calls = []
+    state = {"observations": {"ecc": {"at": NOW, "signals": []}}}
+
+    def probe(*args, **kwargs):
+        calls.append(args)
+        return core.Result(127, "", "must not probe another host")
+
+    assert runner.run_checks(DATA, state, NOW, only=["ecc"], run=probe) == ([], [])
+    assert calls == []
+    assert "ecc" not in state["observations"]
 
 
 def test_a_check_that_raises_becomes_a_failed_row(monkeypatch):

@@ -133,6 +133,8 @@ reboot_pending_warn_days = 7
 
 [checks.ecc]
 what = "PVE memory errors"
+# pve-sender owns this row. Keep its shared evaluator settings here.
+run_on_host = false
 every_min = 15
 slack_min = 10
 spike_factor = 3.0
