@@ -1,0 +1,22 @@
+[
+ {
+  "id": "davion-sidarli/check-pve",
+  "what": "PVE host health",
+  "kind": "check",
+  "machine": "davion-sidarli",
+  "state": "ok",
+  "meaning": "The PVE host has room, no failed units and clean disks.",
+  "last_run": "2026-11-05 04:24:15.662393+00:00",
+  "next_run": "2026-11-05 04:49:15.662393+00:00",
+  "actions": [
+   {
+    "kind": "run",
+    "ref": "sudo -n systemctl start host-steward-check.service"
+   },
+   {
+    "kind": "log",
+    "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+   }
+  ]
+ }
+]

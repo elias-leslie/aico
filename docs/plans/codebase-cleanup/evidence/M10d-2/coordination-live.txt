@@ -1,0 +1,3 @@
+Holds: one shared identity took two holds; released the first by id, the second stayed; another session could not release it.
+Handshake: a live no blocked preflight; sender confirmation closed it and the same request no longer blocked.
+Native child: installed hook recorded a background Agent event in live Tether; resumed startup reported unfinished + transcript age; SubagentStop cleared it. Synthetic hook events, no model run or transcript-content read.

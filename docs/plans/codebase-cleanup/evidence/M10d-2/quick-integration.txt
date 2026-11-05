@@ -1,0 +1,40 @@
+CHECK:SCOPE:left out 76 changed file(s) other agents wrote or lease
+CHECK:quick:70 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: gradle-android, cargo-tray, python-st-sdk, biome-agent, biome-checks, biome-cli, biome-context, tsc-context, depcruise-context, biome-fleet, biome-jobs, biome-notes, tsc-notes, depcruise-notes, biome-notify, tsc-notify, depcruise-notify, biome-shared, tsc-shared, depcruise-shared, biome-status, tsc-status, depcruise-status, biome-store, tsc-store, depcruise-store, biome-ui-kit, tsc-ui-kit, depcruise-ui-kit, biome-usage, tsc-usage, depcruise-usage, biome-webtools, tsc-webtools, depcruise-webtools, biome-root
+CHECK:FAIL:ruff|0.0s|details:.dev-tools/ruff-3360817-details.txt|hint:Found 3 errors.
+CHECK:OK:types|0.1s|details:.dev-tools/types-3360817-details.txt|hint:All checks passed!
+CHECK:FAIL:pytest|0.4s|details:.dev-tools/pytest-3360817-details.txt|hint:E   AssertionError: assert {'operator_se...al_s': 604800} == {'operator_setting': True}
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-3360817-details.txt|hint:[]
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-3360817-details.txt|hint:boundaries: ok (20 packages, 12 contract fixtures)
+CHECK:OK:tsc-agent|0.1s|details:.dev-tools/tsc-agent-3360817-details.txt|hint:-
+CHECK:OK:depcruise-agent|0.6s|details:.dev-tools/depcruise-agent-3360817-details.txt|hint:‼ 82 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-checks|0.1s|details:.dev-tools/tsc-checks-3360817-details.txt|hint:-
+CHECK:OK:depcruise-checks|0.5s|details:.dev-tools/depcruise-checks-3360817-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-cli|0.7s|details:.dev-tools/tsc-cli-3360817-details.txt|hint:-
+CHECK:OK:go-hook|2.6s|details:.dev-tools/go-hook-3360817-details.txt|hint:ok  	aico/hook/lease	1.270s
+CHECK:OK:depcruise-cli|0.5s|details:.dev-tools/depcruise-cli-3360817-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-fleet|0.1s|details:.dev-tools/tsc-fleet-3360817-details.txt|hint:-
+CHECK:OK:tsc-jobs|0.1s|details:.dev-tools/tsc-jobs-3360817-details.txt|hint:-
+CHECK:OK:depcruise-fleet|0.5s|details:.dev-tools/depcruise-fleet-3360817-details.txt|hint:‼ 82 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-ops|0.1s|details:.dev-tools/biome-ops-3360817-details.txt|hint:Checked 5 files in 28ms. No fixes applied.
+CHECK:OK:depcruise-jobs|0.5s|details:.dev-tools/depcruise-jobs-3360817-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-ops|0.5s|details:.dev-tools/depcruise-ops-3360817-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:FAIL:biome-tasks|0.1s|details:.dev-tools/biome-tasks-3360817-details.txt|hint:× Formatter would have printed the following content:
+CHECK:OK:tsc-tasks|0.1s|details:.dev-tools/tsc-tasks-3360817-details.txt|hint:-
+CHECK:OK:tsc-ops|0.9s|details:.dev-tools/tsc-ops-3360817-details.txt|hint:-
+CHECK:FAIL:biome-tether|0.2s|details:.dev-tools/biome-tether-3360817-details.txt|hint:× Formatter would have printed the following content:
+CHECK:OK:tsc-tether|0.1s|details:.dev-tools/tsc-tether-3360817-details.txt|hint:-
+CHECK:OK:depcruise-tasks|0.5s|details:.dev-tools/depcruise-tasks-3360817-details.txt|hint:‼ 82 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-tether-client|0.1s|details:.dev-tools/biome-tether-client-3360817-details.txt|hint:Checked 2 files in 12ms. No fixes applied.
+CHECK:OK:tsc-tether-client|0.1s|details:.dev-tools/tsc-tether-client-3360817-details.txt|hint:-
+CHECK:OK:depcruise-tether-client|0.5s|details:.dev-tools/depcruise-tether-client-3360817-details.txt|hint:‼ 82 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-tether|0.9s|details:.dev-tools/depcruise-tether-3360817-details.txt|hint:‼ 50 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:FAIL:biome-web-frontend|0.1s|details:.dev-tools/biome-web-frontend-3360817-details.txt|hint:× Avoid using the index of an array as key property in an element.
+CHECK:OK:depcruise-web-frontend|1.0s|details:.dev-tools/depcruise-web-frontend-3360817-details.txt|hint:‼ 76 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:FAIL:biome-web-server|0.2s|details:.dev-tools/biome-web-server-3360817-details.txt|hint:× Sort these imports.
+CHECK:OK:tsc-web-server|2.6s|details:.dev-tools/tsc-web-server-3360817-details.txt|hint:-
+CHECK:OK:tsc-web-frontend|4.1s|details:.dev-tools/tsc-web-frontend-3360817-details.txt|hint:-
+CHECK:OK:depcruise-web-server|0.8s|details:.dev-tools/depcruise-web-server-3360817-details.txt|hint:‼ 69 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:FAIL:contracts-host-steward|5.2s|details:.dev-tools/contracts-host-steward-3360817-details.txt|hint:E       AssertionError: assert {'operator_se...al_s': 604800} == {'operator_setting': True}
+CHECK:FAIL:vitest|54.5s|details:.dev-tools/vitest-3360817-details.txt|hint:× answers health and version with the API version 20ms
+CHECK:FAIL quick 54.7s (36 ran, 36 skipped): ruff, pytest, vitest, biome-tasks, biome-tether, biome-web-frontend, biome-web-server, contracts-host-steward

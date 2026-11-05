@@ -1,0 +1,10 @@
+Resolved 23 packages in 4ms
+   Building summitflow-st-sdk @ file:///srv/workspaces/projects/aico/native/st-sdk
+      Built summitflow-st-sdk @ file:///srv/workspaces/projects/aico/native/st-sdk
+Prepared 1 package in 359ms
+Uninstalled 1 package in 0.44ms
+Installed 1 package in 0.56ms
+ - summitflow-st-sdk==0.2.0 (from file:///srv/workspaces/projects/aico/native/st-sdk)
+ + summitflow-st-sdk==0.2.1 (from file:///srv/workspaces/projects/aico/native/st-sdk)
+Resolved 24 packages in 0.78ms
+Checked 23 packages in 0.77ms

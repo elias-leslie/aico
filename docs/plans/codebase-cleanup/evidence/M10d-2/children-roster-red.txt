@@ -1,0 +1,13 @@
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=0.0s holder=check vitest project=aico pid=3317435 active_age=12.9s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=5.0s holder=check vitest project=aico pid=3317435 active_age=17.9s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=10.0s holder=check vitest project=aico pid=3317435 active_age=22.9s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=15.0s holder=check vitest project=aico pid=3317435 active_age=27.9s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=20.1s holder=check vitest project=aico pid=3317435 active_age=33.0s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=25.1s holder=check vitest project=aico pid=3317435 active_age=38.0s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=30.1s holder=check vitest project=aico pid=3317435 active_age=43.0s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=35.1s holder=check vitest project=aico pid=3317435 active_age=48.0s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=40.1s holder=check vitest project=aico pid=3317435 active_age=53.0s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=45.2s holder=check vitest project=aico pid=3317435 active_age=58.0s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=50.2s holder=check vitest project=aico pid=3317435 active_age=63.1s
+VITEST:vitest:start
+VITEST:OK:0|details:.dev-tools/vitest-18e50a4f151f1ff9-3324447-e7699307-details.txt|hint:Tests  1 passed | 83 skipped (84)|lane:light|queue_ms:51299.837|execution_ms:603.202|queued_behind:check vitest project=aico

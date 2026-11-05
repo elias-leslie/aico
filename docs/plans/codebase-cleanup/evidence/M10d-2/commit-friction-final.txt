@@ -1,0 +1,4 @@
+CHECK:quick:50 changed file(s)
+CHECK:FAIL:vitest|63.5s|details:.dev-tools/vitest-3641052-details.txt|hint:× formats scoped source when a native stage owns Biome 10ms
+CHECK:FAIL quick 63.6s (35 ran, 37 skipped): vitest
+ERROR: commit refused: the quick check failed (details above)

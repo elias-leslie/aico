@@ -1,0 +1,8 @@
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=0.0s holder=check vitest project=aico pid=3293926 active_age=36.8s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=5.0s holder=check vitest project=aico pid=3293926 active_age=41.8s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=10.0s holder=check vitest project=aico pid=3293926 active_age=46.8s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=15.0s holder=check vitest project=aico pid=3293926 active_age=51.8s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=20.1s holder=check vitest project=aico pid=3293926 active_age=56.8s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=25.1s holder=check vitest project=aico pid=3293926 active_age=61.8s
+VITEST:vitest:start
+VITEST:OK:0|details:.dev-tools/vitest-18e50a39457b692c-3309208-ea7e875b-details.txt|hint:Tests  20 passed (20)|lane:light|queue_ms:28306.255|execution_ms:878.600|queued_behind:check vitest project=aico

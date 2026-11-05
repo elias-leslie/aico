@@ -1,0 +1,2 @@
+Validating rules from /srv/scratch/aico-m10d2-cloudflared.yml
+OK

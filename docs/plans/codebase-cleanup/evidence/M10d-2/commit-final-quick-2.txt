@@ -1,0 +1,9 @@
+CHECK:quick:4 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: python-host-ruff, python-host-types, python-host-tests, gradle-android, cargo-tray, go-hook, python-st-sdk, biome-agent, tsc-agent, depcruise-agent, biome-cli, tsc-cli, depcruise-cli, biome-context, tsc-context, depcruise-context, biome-fleet, tsc-fleet, depcruise-fleet, biome-jobs, tsc-jobs, depcruise-jobs, biome-notes, tsc-notes, depcruise-notes, biome-notify, tsc-notify, depcruise-notify, biome-ops, tsc-ops, depcruise-ops, biome-shared, tsc-shared, depcruise-shared, biome-status, tsc-status, depcruise-status, biome-store, tsc-store, depcruise-store, biome-tasks, tsc-tasks, depcruise-tasks, biome-tether, tsc-tether, depcruise-tether, biome-tether-client, tsc-tether-client, depcruise-tether-client, biome-ui-kit, tsc-ui-kit, depcruise-ui-kit, biome-usage, tsc-usage, depcruise-usage, biome-web-frontend, tsc-web-frontend, depcruise-web-frontend, biome-web-server, tsc-web-server, depcruise-web-server, biome-webtools, tsc-webtools, depcruise-webtools, biome-root, contracts-host-steward
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-3608511-details.txt|hint:boundaries: ok (20 packages, 12 contract fixtures)
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-3608511-details.txt|hint:[]
+CHECK:OK:biome-checks|0.1s|details:.dev-tools/biome-checks-3608511-details.txt|hint:Checked 4 files in 18ms. No fixes applied.
+CHECK:OK:depcruise-checks|0.5s|details:.dev-tools/depcruise-checks-3608511-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-checks|0.8s|details:.dev-tools/tsc-checks-3608511-details.txt|hint:-
+CHECK:OK:vitest|16.6s|details:.dev-tools/vitest-3608511-details.txt|hint:Tests  38 passed (38)
+CHECK:PASS quick 16.7s (6 ran, 66 skipped)

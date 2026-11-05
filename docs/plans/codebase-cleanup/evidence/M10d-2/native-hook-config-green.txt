@@ -1,0 +1,1 @@
+Fresh Claude Code print session: exit 0; result READY; no error; new hook settings valid JSON; original owner effort change preserved.

@@ -1,0 +1,124 @@
+{
+  "source": {
+    "commit": "c2b118223eec0a56d1336a48e59c04b16e7f6fda",
+    "tree": "acc747403c1591da7b2b0f18ad7cfc512084f5eb"
+  },
+  "state": "failed",
+  "coverage": "focused",
+  "cause": "SDK/service required full suites labelled focused",
+  "native": [
+    {
+      "id": "python-host-ruff",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "python-host-types",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "python-host-tests",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "tsc",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "biome",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "depcruise",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "boundaries",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "ui-spec",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "gradle-android",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "cargo-tray",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "go-hook",
+      "state": "pass",
+      "coverage": "full",
+      "required": true
+    },
+    {
+      "id": "python-st-sdk",
+      "state": "pass",
+      "coverage": "focused",
+      "required": true
+    },
+    {
+      "id": "python-service-tools",
+      "state": "pass",
+      "coverage": "focused",
+      "required": true
+    }
+  ],
+  "legacy": {
+    "coverage": "full",
+    "detail": "ARCH:OK:architecture|details:.dev-tools/architecture-details.txt\nIDENTITY:UNKNOWN:registry_unavailable\nIDENTITY:PARTIAL:aico\nAGENTCTX:OK\nVITEST:vitest:start\nVITEST:OK:0|details:.dev-tools/vitest-18e50dcea1974cc9-3819249-e88e23b3-details.txt|hint:Tests  3521 passed (3521)|lane:heavy|queue_ms:15.993|execution_ms:105421.248\nSECURITY:coverage=local_candidate|codeql_equivalence=not_claimed\nGITLEAKS:OK:0|details:.dev-tools/security-gitleaks-18e50dcee8d96758-3819249-1de59e70-details.txt|hint:12:06AM INF no leaks found\nSEMGREP:SKIP:semgrep:no_local_rules;registry_download_disabled;codeql_equivalence_not_claimed\nOSV:OK:0|details:.dev-tools/security-osv-18e50dcf50809138-3819249-6dce3229-details.txt|hint:}\n",
+    "duration_ms": 108423.265,
+    "output_sha256": "21c2adeb4dda99b9d2a41cc04bef8f9e2a4f2c0fcbf7c797b56f16f5b8e9a613",
+    "security_coverage": "local_candidate_codeql_equivalence_not_claimed",
+    "stages": [
+      {
+        "id": "arch",
+        "result": "ARCH:OK:architecture|details:.dev-tools/architecture-details.txt",
+        "state": "pass"
+      },
+      {
+        "id": "vitest",
+        "result": "VITEST:OK:0|details:.dev-tools/vitest-18e50dcea1974cc9-3819249-e88e23b3-details.txt|hint:Tests  3521 passed (3521)|lane:heavy|queue_ms:15.993|execution_ms:105421.248",
+        "state": "pass"
+      },
+      {
+        "id": "gitleaks",
+        "result": "GITLEAKS:OK:0|details:.dev-tools/security-gitleaks-18e50dcee8d96758-3819249-1de59e70-details.txt|hint:12:06AM INF no leaks found",
+        "state": "pass"
+      },
+      {
+        "id": "semgrep",
+        "reason": "no_local_rules;registry_download_disabled;codeql_equivalence_not_claimed",
+        "state": "not-applicable"
+      },
+      {
+        "id": "osv",
+        "result": "OSV:OK:0|details:.dev-tools/security-osv-18e50dcf50809138-3819249-6dce3229-details.txt|hint:}",
+        "state": "pass"
+      }
+    ],
+    "state": "pass"
+  }
+}

@@ -1,0 +1,23 @@
+Aico | http://127.0.0.1:34561/app
+- main
+  - sectionheader
+    - link "Sessions" [ref=e3]
+    - heading "Phone app" [level=1, ref=e4]
+    - button "Refresh" [ref=e5]
+  - paragraph
+    - StaticText "Install Aico on your Android phone to get alerts and answer requests."
+  - paragraph
+    - link "Download the app" [ref=e6]
+  - paragraph
+    - StaticText "Open this page on your phone after installing the app."
+  - button "Pair this phone" [ref=e1]
+  - heading "Paired phones" [level=2, ref=e2]
+  - list
+    - listitem [level=1]
+      - strong
+        - StaticText "Pixel 7 Pro"
+      - StaticText "Last heard 11/5/2026, 4:27:28 AM"
+- alert
+--
+Act: st browser --session m10d2-pairing step click @e1 | step fill @e2 TEXT. Content missing (still loading)? st browser --session m10d2-pairing wait --load networkidle, then observe again.
+JSON receipt: /home/kasadis/.local/state/browser-automation/sessions/115414eb77926219eda4/receipts/browser-observe-b55749c33320.json

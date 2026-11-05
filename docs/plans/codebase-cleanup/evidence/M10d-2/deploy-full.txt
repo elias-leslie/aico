@@ -1,0 +1,2 @@
+[deploy] queued aico-69d467c36f90 for ee3202a75672
+[deploy] result: aico deploy result aico-69d467c36f90   wait: aico deploy wait aico-69d467c36f90   log: aico logs aico-deploy-aico-69d467c36f90

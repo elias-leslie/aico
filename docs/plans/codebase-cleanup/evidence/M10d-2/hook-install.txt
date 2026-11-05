@@ -1,0 +1,1 @@
+aico-hook 6e29282fe72c installed: /home/kasadis/.local/bin/aico-hook -> /home/kasadis/.local/lib/aico/hook/current/aico-hook

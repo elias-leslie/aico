@@ -1,0 +1,4 @@
+Using rules from /etc/cloudflared/config.yml
+Matched rule #12
+	hostname: nightshift.summitflow.dev
+	service: http_status:404

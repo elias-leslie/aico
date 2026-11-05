@@ -1,0 +1,5 @@
+Using rules from /etc/cloudflared/config.yml
+Matched rule #11
+	hostname: nightshift.summitflow.dev
+	path: ^/api/app/(register|health|items|update|apk|stream|token|ack|act)(/|$)
+	service: http://127.0.0.1:3002

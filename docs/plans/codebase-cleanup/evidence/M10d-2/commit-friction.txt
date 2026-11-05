@@ -1,0 +1,3 @@
+CHECK:quick:49 changed file(s)
+CHECK:PASS quick 63.4s (35 ran, 37 skipped)
+ERROR: source changed during the check: stage boundaries inputs; rerun the commit

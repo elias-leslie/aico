@@ -1,0 +1,17 @@
+{
+  "managed_aico_lanes": [
+    {
+      "id": "c2baedfb",
+      "parent": "125cc8cd",
+      "host": null,
+      "state": "live"
+    },
+    {
+      "id": "6b7e52b3",
+      "parent": "125cc8cd",
+      "host": null,
+      "state": "live"
+    }
+  ],
+  "states_compared_with_live_sessions": true
+}

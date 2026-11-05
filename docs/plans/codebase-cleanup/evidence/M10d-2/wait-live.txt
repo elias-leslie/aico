@@ -1,0 +1,1 @@
+[Ready] command "usr/bin/true" (aico-wait-9be5a628965b) succeeded · re: "TEST M10d2 deployed missing-bus command watcher" · journalctl --user -u aico-wait-9be5a628965b

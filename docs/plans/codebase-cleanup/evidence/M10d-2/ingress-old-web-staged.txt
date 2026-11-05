@@ -1,0 +1,4 @@
+Using rules from /srv/scratch/aico-m10d2-cloudflared.yml
+Matched rule #12
+	hostname: nightshift.summitflow.dev
+	service: http_status:404

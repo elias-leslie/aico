@@ -1,0 +1,43 @@
+CHECK:SCOPE:left out 85 changed file(s) other agents wrote or lease
+CHECK:FIX:left out 5 file(s) another session wrote or whose writer is unknown (name your own unknown files individually with --paths): docs/plans/codebase-cleanup/evidence/M10d-2/before-quick.txt, docs/plans/codebase-cleanup/evidence/M10d-2/hook-green.txt, docs/plans/codebase-cleanup/evidence/M10d-2/preflight-before.json, packages/tether/biome.json, packages/web-frontend/biome.json
+CHECK:FIX:biome:30 file(s)|exit 0
+CHECK:quick:93 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: gradle-android, cargo-tray, python-st-sdk, biome-agent, biome-cli, biome-context, tsc-context, depcruise-context, biome-fleet, biome-jobs, biome-notes, tsc-notes, depcruise-notes, biome-notify, tsc-notify, depcruise-notify, biome-shared, tsc-shared, depcruise-shared, biome-status, tsc-status, depcruise-status, biome-store, tsc-store, depcruise-store, biome-ui-kit, tsc-ui-kit, depcruise-ui-kit, biome-usage, tsc-usage, depcruise-usage, biome-webtools, tsc-webtools, depcruise-webtools, biome-root
+CHECK:OK:python-host-ruff|0.0s|details:.dev-tools/python-host-ruff-3452652-details.txt|hint:All checks passed!
+CHECK:OK:python-host-types|0.2s|details:.dev-tools/python-host-types-3452652-details.txt|hint:All checks passed!
+CHECK:OK:gitleaks|0.4s|details:.dev-tools/gitleaks-3452652-details.txt|hint:[]
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-3452652-details.txt|hint:boundaries: ok (20 packages, 12 contract fixtures)
+CHECK:OK:go-hook|2.9s|details:.dev-tools/go-hook-3452652-details.txt|hint:ok  	aico/hook/lease	1.228s
+CHECK:OK:tsc-agent|0.1s|details:.dev-tools/tsc-agent-3452652-details.txt|hint:-
+CHECK:OK:depcruise-agent|0.5s|details:.dev-tools/depcruise-agent-3452652-details.txt|hint:‼ 82 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-checks|0.1s|details:.dev-tools/biome-checks-3452652-details.txt|hint:Checked 3 files in 20ms. No fixes applied.
+CHECK:FAIL:tsc-checks|0.8s|details:.dev-tools/tsc-checks-3452652-details.txt|hint:packages/checks/src/cli.ts(98,41): error TS2345: Argument of type 'Planned[]' is not assignable to parameter of type 'Lane'.
+CHECK:OK:depcruise-checks|0.5s|details:.dev-tools/depcruise-checks-3452652-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-cli|0.1s|details:.dev-tools/tsc-cli-3452652-details.txt|hint:-
+CHECK:OK:depcruise-cli|0.4s|details:.dev-tools/depcruise-cli-3452652-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-fleet|0.1s|details:.dev-tools/tsc-fleet-3452652-details.txt|hint:-
+CHECK:OK:depcruise-fleet|0.5s|details:.dev-tools/depcruise-fleet-3452652-details.txt|hint:‼ 82 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:tsc-jobs|0.7s|details:.dev-tools/tsc-jobs-3452652-details.txt|hint:-
+CHECK:OK:depcruise-jobs|0.5s|details:.dev-tools/depcruise-jobs-3452652-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-ops|0.1s|details:.dev-tools/biome-ops-3452652-details.txt|hint:Checked 5 files in 24ms. No fixes applied.
+CHECK:OK:tsc-ops|0.9s|details:.dev-tools/tsc-ops-3452652-details.txt|hint:-
+CHECK:FAIL:depcruise-ops|0.6s|source_changed_during_checks: stage inputs changed|details:.dev-tools/depcruise-ops-3452652-details.txt|hint:‼ 83 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-tasks|0.1s|details:.dev-tools/biome-tasks-3452652-details.txt|hint:Checked 3 files in 13ms. No fixes applied.
+CHECK:OK:tsc-tasks|0.7s|details:.dev-tools/tsc-tasks-3452652-details.txt|hint:-
+CHECK:OK:depcruise-tasks|0.5s|details:.dev-tools/depcruise-tasks-3452652-details.txt|hint:‼ 82 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-tether|0.2s|details:.dev-tools/biome-tether-3452652-details.txt|hint:Checked 15 files in 65ms. No fixes applied.
+CHECK:FAIL:python-host-tests|14.1s|details:.dev-tools/python-host-tests-3452652-details.txt|hint:response = json.dumps({"error": "native_tui_atomic_admin_unavailable",
+CHECK:OK:tsc-tether|3.2s|details:.dev-tools/tsc-tether-3452652-details.txt|hint:-
+CHECK:OK:biome-tether-client|0.1s|details:.dev-tools/biome-tether-client-3452652-details.txt|hint:Checked 2 files in 13ms. No fixes applied.
+CHECK:OK:tsc-tether-client|0.1s|details:.dev-tools/tsc-tether-client-3452652-details.txt|hint:-
+CHECK:OK:depcruise-tether|1.1s|details:.dev-tools/depcruise-tether-3452652-details.txt|hint:‼ 50 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-tether-client|0.5s|details:.dev-tools/depcruise-tether-client-3452652-details.txt|hint:‼ 82 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:biome-web-frontend|0.1s|details:.dev-tools/biome-web-frontend-3452652-details.txt|hint:Checked 0 files in 4ms. No fixes applied.
+CHECK:OK:tsc-web-frontend|0.1s|details:.dev-tools/tsc-web-frontend-3452652-details.txt|hint:-
+CHECK:OK:biome-web-server|0.1s|details:.dev-tools/biome-web-server-3452652-details.txt|hint:Checked 1 file in 10ms. No fixes applied.
+CHECK:OK:tsc-web-server|0.2s|details:.dev-tools/tsc-web-server-3452652-details.txt|hint:-
+CHECK:OK:depcruise-web-frontend|1.0s|details:.dev-tools/depcruise-web-frontend-3452652-details.txt|hint:‼ 76 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-web-server|0.9s|details:.dev-tools/depcruise-web-server-3452652-details.txt|hint:‼ 69 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:contracts-host-steward|4.2s|details:.dev-tools/contracts-host-steward-3452652-details.txt|hint:164 passed in 3.64s
+CHECK:FAIL:vitest|64.4s|details:.dev-tools/vitest-3452652-details.txt|hint:× runs a selected declared native stage through Aico 22ms
+CHECK:FAIL quick 65.0s (37 ran, 35 skipped): vitest, python-host-tests, tsc-checks, depcruise-ops

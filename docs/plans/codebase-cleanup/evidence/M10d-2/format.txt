@@ -1,0 +1,23 @@
+CHECK:SCOPE:left out 76 changed file(s) other agents wrote or lease
+CHECK:FIX:left out 2 file(s) another session wrote or whose writer is unknown (name your own unknown files individually with --paths): docs/plans/codebase-cleanup/evidence/M10d-2/before-quick.txt, docs/plans/codebase-cleanup/evidence/M10d-2/hook-green.txt
+CHECK:FIX:biome:34 file(s)|exit 0
+CHECK:FIX:ruff:6 file(s)|exit 0
+CHECK:full:73 changed file(s)
+CHECK:SKIP:no_candidate_lockfiles: osv
+CHECK:SKIP:no_local_rules: semgrep
+CHECK:OK:ruff|0.0s|details:.dev-tools/ruff-3369575-details.txt|hint:All checks passed!
+CHECK:OK:types|0.1s|details:.dev-tools/types-3369575-details.txt|hint:All checks passed!
+CHECK:OK:pytest|0.4s|details:.dev-tools/pytest-3369575-details.txt|hint:84 passed in 0.26s
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-3369575-details.txt|hint:[]
+CHECK:FAIL:biome|0.2s|details:.dev-tools/biome-3369575-details.txt|hint:× Formatter would have printed the following content:
+CHECK:OK:depcruise|1.7s|details:.dev-tools/depcruise-3369575-details.txt|hint:‼ 30 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-3369575-details.txt|hint:boundaries: ok (20 packages, 12 contract fixtures)
+CHECK:OK:ui-spec|0.6s|details:.dev-tools/ui-spec-3369575-details.txt|hint:UILINT:ok|violations=0|checks=5|files=190|items=4115|unverified=0|scope=mechanical-only|not-a-copy-review
+CHECK:OK:gradle-android|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:cargo-tray|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:go-hook|2.6s|details:.dev-tools/go-hook-3369575-details.txt|hint:ok  	aico/hook/lease	1.203s
+CHECK:OK:python-st-sdk|2.7s|details:.dev-tools/python-st-sdk-3369575-details.txt|hint:29 passed in 2.02s
+CHECK:OK:tsc|9.3s|details:.dev-tools/tsc-3369575-details.txt|hint:-
+CHECK:OK:contracts-host-steward|4.1s|optional|details:.dev-tools/contracts-host-steward-3369575-details.txt|hint:164 passed in 3.61s
+CHECK:FAIL:vitest|60.8s|details:.dev-tools/vitest-3369575-details.txt|hint:× answers health and version with the API version 20ms
+CHECK:FAIL full 61.4s (15 ran, 2 skipped): vitest, biome

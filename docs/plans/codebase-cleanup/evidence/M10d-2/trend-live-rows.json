@@ -1,0 +1,22 @@
+[
+ {
+  "id": "davion-sidarli/check-trends",
+  "what": "Trends",
+  "kind": "check",
+  "machine": "davion-sidarli",
+  "state": "ok",
+  "meaning": "No slow trend is getting worse. PVE host memory: 50/day corrected (7d), worsening: corrected up to 50/day from 6/day; Error_overflow up to 48/day from 6/day",
+  "last_run": "2026-11-05 04:43:17.735702+00:00",
+  "next_run": "2026-11-05 05:08:17.735702+00:00",
+  "actions": [
+   {
+    "kind": "run",
+    "ref": "sudo -n systemctl start host-steward-check.service"
+   },
+   {
+    "kind": "log",
+    "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+   }
+  ]
+ }
+]

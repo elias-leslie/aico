@@ -1,0 +1,2 @@
+{"register": "ok", "used_code": 401, "re_pair": "same record", "original_phones": 1, "after_re_pair": 2, "original_ids_preserved": true, "apk_published": true}
+{"cleanup": "aico phones remove succeeded", "phone_count_restored": 1}

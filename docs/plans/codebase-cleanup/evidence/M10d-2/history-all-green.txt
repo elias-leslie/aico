@@ -1,0 +1,4 @@
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=0.0s holder=check vitest project=aico pid=3445273 active_age=5.0s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=5.0s holder=check vitest project=aico pid=3445273 active_age=10.0s
+VITEST:vitest:start
+VITEST:FAIL:1|details:.dev-tools/vitest-18e50b49ef84dbd6-3448257-65fc1a97-details.txt|hint:Tests  1 failed | 58 passed (59)|lane:light|queue_ms:8935.547|execution_ms:1501.610|queued_behind:check vitest project=aico

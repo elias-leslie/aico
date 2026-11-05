@@ -1,0 +1,19 @@
+Nov 05 00:16:00 davion-sidarli systemd[2541]: Started aico-deploy-aico-69d467c36f90.service - [systemd-run] /opt/node-v24.14.1-linux-x64/bin/node --disable-warning=ExperimentalWarning /home/kasadis/.local/lib/aico/releases/81c420942578911be67b57ee16d3f7fc5d85022f/packages/ops/dist/aico-ops.mjs deploy aico --sha ee3202a756723ded007c127cd1479248ad6c7b66 --job aico-69d467c36f90 --scope full.
+Nov 05 00:16:01 davion-sidarli node[3878716]: [deploy] aico at ee3202a75672: accepting that commit
+Nov 05 00:16:01 davion-sidarli node[3878864]: CHECK:acceptance:ee3202a75672 (tree fc6dfc5e19d6)
+Nov 05 00:16:01 davion-sidarli node[3878864]: CHECK:SKIP:no_local_rules: semgrep
+Nov 05 00:16:02 davion-sidarli node[3878864]: CHECK:OK:gitleaks|0.9s|details:.dev-tools/gitleaks-3878864-details.txt|hint:[]
+Nov 05 00:16:02 davion-sidarli node[3878864]: CHECK:OK:python-host-ruff|0.0s|details:.dev-tools/python-host-ruff-3878864-details.txt|hint:All checks passed!
+Nov 05 00:16:02 davion-sidarli node[3878864]: CHECK:OK:python-host-types|0.2s|details:.dev-tools/python-host-types-3878864-details.txt|hint:All checks passed!
+Nov 05 00:16:03 davion-sidarli node[3878864]: CHECK:OK:osv|1.5s|details:.dev-tools/osv-3878864-details.txt|hint:}
+Nov 05 00:16:15 davion-sidarli node[3878864]: CHECK:OK:tsc|12.0s|details:.dev-tools/tsc-3878864-details.txt|hint:-
+Nov 05 00:16:15 davion-sidarli node[3878864]: CHECK:OK:biome|0.7s|details:.dev-tools/biome-3878864-details.txt|hint:Checked 1027 files in 525ms. No fixes applied.
+Nov 05 00:16:17 davion-sidarli node[3878864]: CHECK:OK:depcruise|1.6s|details:.dev-tools/depcruise-3878864-details.txt|hint:‼ 30 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+Nov 05 00:16:17 davion-sidarli node[3878864]: CHECK:OK:python-host-tests|14.8s|details:.dev-tools/python-host-tests-3878864-details.txt|hint:1215 passed in 14.24s
+Nov 05 00:16:17 davion-sidarli node[3878864]: CHECK:OK:boundaries|0.1s|details:.dev-tools/boundaries-3878864-details.txt|hint:boundaries: ok (20 packages, 12 contract fixtures)
+Nov 05 00:16:17 davion-sidarli node[3878864]: CHECK:OK:ui-spec|0.3s|details:.dev-tools/ui-spec-3878864-details.txt|hint:UILINT:ok|violations=0|checks=5|files=190|items=4115|unverified=0|scope=mechanical-only|not-a-copy-review
+Nov 05 00:16:23 davion-sidarli node[3878864]: CHECK:OK:cargo-tray|5.3s|details:.dev-tools/cargo-tray-3878864-details.txt|hint:test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Nov 05 00:16:26 davion-sidarli node[3878864]: CHECK:OK:gradle-android|8.9s|details:.dev-tools/gradle-android-3878864-details.txt|hint:Configuration cache entry stored.
+Nov 05 00:16:26 davion-sidarli node[3878864]: CHECK:OK:go-hook|3.8s|details:.dev-tools/go-hook-3878864-details.txt|hint:ok          aico/hook/lease        1.488s
+Nov 05 00:16:29 davion-sidarli node[3878864]: CHECK:OK:python-service-tools|1.9s|details:.dev-tools/python-service-tools-3878864-details.txt|hint:103 passed in 1.26s
+Nov 05 00:16:29 davion-sidarli node[3878864]: CHECK:OK:python-st-sdk|2.7s|details:.dev-tools/python-st-sdk-3878864-details.txt|hint:30 passed in 1.95s

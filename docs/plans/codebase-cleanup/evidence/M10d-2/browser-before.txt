@@ -1,0 +1,36 @@
+Aico | http://127.0.0.1:34561/app
+- complementary
+  - sectionheader
+    - heading "Sessions · 4" [level=2, ref=e28]
+    - button "Collapse session list" [ref=e29]
+    - button "New session" [ref=e30]
+  - button "New chat" [ref=e12]
+  - button "Needs you: 1 agent question waiting" [ref=e13]
+    - StaticText "Needs you"
+  - button "Capture: take a photo or send files" [ref=e14]
+    - StaticText "Capture"
+  - link "Notes: lists, groceries and photos" [ref=e15]
+    - StaticText "Notes"
+  - link "Status: 10 problems: 5 failed, 5 warnings" [ref=e16]
+    - StaticText "Status"
+  - link "Recent sessions: what Claude Code, Codex and Pi did" [ref=e17]
+    - StaticText "Recent"
+  - link "Agents and prompts" [ref=e18]
+    - StaticText "Agents"
+  - link "Backups" [ref=e19]
+  - link "Grants" [ref=e20]
+  - link "Logins" [ref=e21]
+  - button "Hosts" [ref=e22]
+  - navigation "Sessions" [ref=e23]
+    - generic
+      - button "Aico <1m Coordinator Claude Code · idle · 2 working" [ref=e33]
+        - StaticText "Aico"
+        - StaticText "<1m"
+        - StaticText "Coordinator"
+        - StaticText "Claude Code · idle · 2 working"
+      - button "Hide Aico team" [expanded=true, ref=e34]
+      - group "Aico team"
+--
+Cut at 1200 characters. Whole page as text: /home/kasadis/.local/state/browser-automation/sessions/115414eb77926219eda4/receipts/browser-observe-ad7f61e3e24f.txt (grep it), or narrow with --selector CSS.
+Act: st browser --session m10d2-pairing step click @e1 | step fill @e2 TEXT. Content missing (still loading)? st browser --session m10d2-pairing wait --load networkidle, then observe again.
+JSON receipt: /home/kasadis/.local/state/browser-automation/sessions/115414eb77926219eda4/receipts/browser-observe-ad7f61e3e24f.json

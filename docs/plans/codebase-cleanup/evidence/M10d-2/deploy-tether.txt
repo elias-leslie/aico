@@ -1,0 +1,2 @@
+[deploy] queued aico-8d3f7ba34d9b for ee3202a75672
+[deploy] result: aico deploy result aico-8d3f7ba34d9b   wait: aico deploy wait aico-8d3f7ba34d9b   log: aico logs aico-deploy-aico-8d3f7ba34d9b

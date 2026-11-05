@@ -1,0 +1,9 @@
+Live aico commit: two CLI processes committed named paths in one scratch repo; lane B edited an unrelated file after lane A stage signalled ready. Both passed; two separate commits; clean tree; no freeze.
+CHECK:quick:1 changed file(s)
+CHECK:PASS quick 1.3s (1 ran, 0 skipped)
+COMMIT[1]:status=SUCCESS pushed=false detail=6790e892cf32824d5533bc405ae25d40030f2ea8
+Released 0 lease(s).
+CHECK:quick:1 changed file(s)
+CHECK:PASS quick 0.0s (0 ran, 1 skipped)
+COMMIT[1]:status=SUCCESS pushed=false detail=15d70a79f3a4e77b62ea38e5b9169c4fd9e87ac0
+Released 0 lease(s).

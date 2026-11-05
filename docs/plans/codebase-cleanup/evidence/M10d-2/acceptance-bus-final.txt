@@ -1,0 +1,1 @@
+ACCEPTANCE:state=success|source=c6eec3905afb2be30e6abc098bb49b1943cd491a|id=b0f0d3f9b2bd105b02983af4ee0d54d85fb33d0fa544dcea7bd57a4364540b93|artifact=/srv/workspaces/projects/aico/.git/st/acceptance/b0f0d3f9b2bd105b02983af4ee0d54d85fb33d0fa544dcea7bd57a4364540b93.json|reused=false|duration_ms=155019.393|checks=1

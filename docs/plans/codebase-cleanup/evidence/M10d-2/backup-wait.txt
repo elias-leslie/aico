@@ -1,0 +1,1 @@
+[Ready] command "usr/bin/env XDG_RUNTIME_DIR=/run/user/1…" (aico-wait-0a4e4657023c) succeeded · re: "M10d2 rollout: native backup finished" · journalctl --user -u aico-wait-0a4e4657023c

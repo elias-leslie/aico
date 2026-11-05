@@ -1,0 +1,15 @@
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=0.0s holder=check vitest project=aico pid=3398088 active_age=20.5s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=5.0s holder=check vitest project=aico pid=3398088 active_age=25.5s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=10.0s holder=check vitest project=aico pid=3398088 active_age=30.5s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=15.0s holder=check vitest project=aico pid=3398088 active_age=35.6s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=20.1s holder=check vitest project=aico pid=3398088 active_age=40.6s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=25.1s holder=check vitest project=aico pid=3398088 active_age=45.6s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=30.1s holder=check vitest project=aico pid=3398088 active_age=50.6s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=35.1s holder=check vitest project=aico pid=3398088 active_age=55.6s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=40.1s holder=check vitest project=aico pid=3398088 active_age=60.6s
+[st] Waiting for shared light-work lane: check vitest class=light wait_age=45.1s holder=check vitest project=aico pid=3398088 active_age=65.7s
+VITEST:vitest:start
+VITEST:FAIL:1|details:.dev-tools/vitest-18e50aeb70acab05-3407840-9a3113e2-details.txt|hint:Tests  1 failed | 24 skipped (25)|lane:light|queue_ms:47767.043|execution_ms:1768.148|queued_behind:check vitest project=aico
+itest project=aico pid=3398088 active_age=63.8s
+VITEST:vitest:start
+VITEST:FAIL:1|details:.dev-tools/vitest-18e50aeb00dbf967-3401234-4d155c58-details.txt|hint:Tests  1 failed | 24 skipped (25)|lane:light|queue_ms:57798.765|execution_ms:1697.960|queued_behind:check vitest project=aico

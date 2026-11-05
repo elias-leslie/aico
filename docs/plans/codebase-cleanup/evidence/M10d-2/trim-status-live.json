@@ -1,0 +1,21 @@
+[
+  {
+    "id": "davion-gem/ct-trim",
+    "what": "Weekly container trim",
+    "kind": "job",
+    "machine": "davion-gem",
+    "state": "ok",
+    "meaning": "Last trim 0h ago: 4 containers trimmed.",
+    "last_run": "2026-11-05T04:43:17.960Z",
+    "next_run": "2026-11-05T04:50:17.960Z",
+    "actions": [
+      {
+        "kind": "log",
+        "ref": "journalctl -u aico-pve-trim.service"
+      }
+    ],
+    "updated_at": "2026-11-05T04:43:19.401Z",
+    "shown": "ok",
+    "shown_since": null
+  }
+]

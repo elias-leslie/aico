@@ -1,0 +1,3 @@
+{"at": 1793853761.2208905, "silent": false, "ages": {"workstation": 8.059055089950562, "ct190": 216.926411151886}, "last_send": {}, "rows_posted": true}
+Created symlink '/etc/systemd/system/timers.target.wants/aico-pve-trim.timer' → '/etc/systemd/system/aico-pve-trim.timer'.
+Aico Proxmox sender installed.

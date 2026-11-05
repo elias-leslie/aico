@@ -1,0 +1,3 @@
+[st] localhost opens in this workstation's browser, not your VM session: follow up with st browser --local-ai <command>
+✓ Aico
+  http://127.0.0.1:34561/app
