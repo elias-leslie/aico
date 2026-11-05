@@ -37,6 +37,7 @@ import { copyRootAuth, type Runtime, readState, restic, saveState } from './back
 import {
   cutover,
   cutoverReady,
+  nativePath,
   report,
   requestBackup,
   restoreFiles,
@@ -447,6 +448,7 @@ it('a native volume root restores into scratch and success includes a byte compa
   ]
   saveState(c, state)
   const run = vi.fn(async (argv: string[]) => {
+    if (argv.includes('realpath')) return { code: 0, out: `${argv.at(-1)}\n`, err: '' }
     if (argv.includes('mkdir')) mkdirSync(argv.at(-1) as string, { recursive: true })
     if (argv.includes('cp'))
       cpSync(argv.at(-2) as string, argv.at(-1) as string, { recursive: true })
@@ -719,4 +721,20 @@ it('publishes receipts when the local web service is still starting', async () =
   } finally {
     vi.unstubAllGlobals()
   }
+})
+it('browses and restores a root-owned T7 tree without requiring caller traversal permission', async () => {
+  const point = {
+    source: '/srv/workspaces',
+    target: '/root-only/received',
+    snapshot: '/frozen',
+    dataAt: new Date(now).toISOString(),
+  }
+  const run = vi.fn(async (argv: string[]) => ({ code: 0, err: '', out: `${argv.at(-1)}\n` }))
+  const rt: Runtime = { cfg: cfg(), run, now: () => new Date(now) }
+  await expect(
+    nativePath(rt, point, '/srv/workspaces/projects/aico/project.identity.json'),
+  ).resolves.toBe('/root-only/received/projects/aico/project.identity.json')
+  expect(
+    run.mock.calls.every(([argv]) => argv.slice(0, 4).join(' ') === 'sudo -n realpath -e'),
+  ).toBe(true)
 })

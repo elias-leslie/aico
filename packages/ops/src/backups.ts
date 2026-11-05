@@ -7,6 +7,7 @@ import { observeExternal } from './backup-external'
 import { nativeBackup } from './backup-native'
 import {
   type BackupConfig,
+  type BackupPoint,
   type BackupState,
   type BackupTarget,
   backupRows,
@@ -115,13 +116,8 @@ export async function restoreFiles(
   if (target === 'native') {
     const point = readState(rt.cfg).points.find((p) => p.target.split('/').at(-1) === snapshot)
     if (!point) throw new Error('The native snapshot is no longer available.')
-    const from = join(point.target, relative(point.source, path)),
+    const from = await nativePath(rt, point, path),
       dest = join(to, path)
-    if (
-      realpathSync(from) !== realpathSync(point.target) &&
-      !realpathSync(from).startsWith(realpathSync(point.target) + '/')
-    )
-      throw new Error('The restored path must stay in the selected snapshot.')
     await checked(rt.run, ['sudo', '-n', 'mkdir', '-p', dirname(dest)])
     await checked(rt.run, ['sudo', '-n', 'cp', '-a', '--reflink=auto', '--', from, dest])
     await checked(rt.run, ['sudo', '-n', 'diff', '-r', '--no-dereference', '--', from, dest])
@@ -147,6 +143,18 @@ export async function restoreFiles(
   if (result.code)
     throw new Error(`The restore failed (restic exit ${result.code}); inspect its scratch folder.`)
   return { destination: to }
+}
+export async function nativePath(rt: Runtime, point: BackupPoint, path: string): Promise<string> {
+  const from = join(point.target, relative(point.source, path))
+  // T7's receive tree is root-only. Resolve it with the same authority as the read/copy below.
+  const [resolved, base] = await Promise.all(
+    [from, point.target].map(async (p) =>
+      (await checked(rt.run, ['sudo', '-n', 'realpath', '-e', '--', p])).trim(),
+    ),
+  )
+  if (!base || (resolved !== base && !resolved.startsWith(`${base}/`)))
+    throw new Error('Choose a path contained in this snapshot.')
+  return from
 }
 /** Required clean receipts must precede any timer change, even after a failed or interrupted run. */
 export function cutoverReady(
@@ -427,18 +435,18 @@ export async function backups(argv: string[], env = process.env): Promise<number
   }
   if (!snapshot || !path) throw new Error(USAGE)
   if (verb === 'browse') {
-    if (!(await snapshotsFor(rt, target, source)).some((s) => s.id === snapshot))
-      throw new Error('No such snapshot for this source.')
-    if (!path.startsWith('/') || path.split('/').includes('..'))
+    const selected = (await snapshotsFor(rt, target, source)).find((s) => s.id === snapshot)
+    if (!selected) throw new Error('No such snapshot for this source.')
+    if (
+      !path.startsWith('/') ||
+      path.split('/').includes('..') ||
+      !selected.paths.some((p) => path === p || path.startsWith(p.replace(/\/$/, '') + '/'))
+    )
       throw new Error('Choose an absolute path from the snapshot.')
     if (target === 'native') {
       const point = state.points.find((p) => p.target.split('/').at(-1) === snapshot)
       if (!point) throw new Error('That native snapshot is no longer available.')
-      const from = join(point.target, relative(point.source, path))
-      const resolved = realpathSync(from),
-        base = realpathSync(point.target)
-      if (resolved !== base && !resolved.startsWith(base + '/'))
-        throw new Error('Choose a folder in this snapshot.')
+      const from = await nativePath(rt, point, path)
       const result = await checked(rt.run, [
         'sudo',
         '-n',
