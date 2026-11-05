@@ -136,6 +136,7 @@ def hk_cfg(tmp_path, **over):
         **DATA["jobs"]["housekeeping"],
         "spotify_cache": str(tmp_path / "spotify"),
         "guestfs_dir": str(tmp_path / "gfs"),
+        "package_caches": [],
         "versioned": [
             {
                 "name": "Playwright browsers",
@@ -168,7 +169,6 @@ HK_RULES = [
     ),
     (["pgrep"], Result(1)),
     (["snap", "remove"], Result(0)),
-    (["runuser"], Result(0, json.dumps({"items_deleted": 3, "bytes_reclaimed": 2 * GIB}))),
 ]
 
 
@@ -195,7 +195,6 @@ def test_housekeeping_dry_run_lists_the_work_and_changes_nothing(tmp_path, monke
         "libguestfs",
         "chromium-1",
         "chromium-2",
-        "st cleanup host",
     ):
         assert expected in would
     assert "chromium-3" not in would and "chromium-4" not in would  # the newest two stay
@@ -218,26 +217,91 @@ def test_housekeeping_live_does_the_same_work(tmp_path, monkeypatch):
     )
     assert ["journalctl", "--vacuum-size=2G"] in fake.calls and ["apt-get", "clean"] in fake.calls
     assert ["snap", "remove", "foo", "--revision=5"] in fake.calls
-    assert any(c[0] == "runuser" and "cleanup" in c for c in fake.calls)
+    assert not any("cleanup" in c for c in fake.calls)
     assert not (tmp_path / "gfs").exists() and not (tmp_path / "spotify" / "Data").exists()
     assert [p.name for p in sorted((tmp_path / "pw").iterdir())] == ["chromium-3", "chromium-4"]
     text = " ".join(result["actions"])
-    assert "Snap revision foo r5" in text and "removed 3 item(s)" in text
+    assert "Snap revision foo r5" in text
     assert "failed" not in result
 
 
-def test_housekeeping_missing_summitflow_command_fails_the_run(tmp_path):
-    fake = Fake((["runuser"], Result(2, "", "No such command 'cleanup'")))
-    cfg = hk_cfg(tmp_path)
-    result = housekeeping.maintain(cfg, "kasadis", acts.Actor(True, run=fake), NOW, str(tmp_path))
-    assert result["failed"] and "missing from this SummitFlow" in " ".join(result["actions"])
-    assert housekeeping.row_text(result, True)[0] == "warn"
+def test_housekeeping_is_independent_of_retired_cleanup_host(tmp_path):
+    fake = Fake((["runuser"], Result(2, "", "st cleanup: dropped")))
+    result = housekeeping.maintain(hk_cfg(tmp_path), "kasadis", acts.Actor(True, run=fake), NOW, str(tmp_path))
+    assert not result.get("failed")
+    assert housekeeping.row_text(result, True)[0] == "ok"
+    assert not any(call[0] == "runuser" for call in fake.calls)
+
+
+@pytest.mark.parametrize("size,cleaned", [(7 * GIB, False), (8 * GIB, False), (9 * GIB, True)])
+def test_housekeeping_prunes_tool_cache_only_over_its_cap(tmp_path, size, cleaned):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "kept-by-tool").write_text("fixture")
+    spec = {"name": "uv", "path": str(cache), "query": ["uv", "cache", "dir"],
+            "clean": ["uv", "cache", "prune"], "max_gib": 8}
+    fake = Fake((["uv", "cache", "dir"], Result(0, str(cache))),
+                (["du"], Result(0, f"{size}\t{cache}\n")),
+                (["uv", "cache", "prune"], Result(0)))
+    result = housekeeping.maintain(hk_cfg(tmp_path, package_caches=[spec]),
+                                  "kasadis", acts.Actor(True, run=fake), NOW, str(tmp_path))
+    assert any("uv" in c and "prune" in c for c in fake.calls) is cleaned
+    assert not result.get("failed")
+    assert (cache / "kept-by-tool").exists()  # housekeeping never deletes tool cache files itself
+
+
+@pytest.mark.parametrize("spec", DATA["jobs"]["housekeeping"]["package_caches"], ids=lambda s: s["name"])
+def test_housekeeping_uses_each_tools_own_cache_commands(tmp_path, spec):
+    base = tmp_path / "cache"
+    cache = base / spec.get("suffix", "")
+    cache.mkdir(parents=True)
+    spec = {**spec, "path": str(cache)}
+    fake = Fake((spec["query"], Result(0, str(base))),
+                (["du"], Result(0, f"{9 * GIB}\t{cache}")),
+                (spec["clean"], Result(0)))
+    result = housekeeping.maintain(hk_cfg(tmp_path, package_caches=[spec]), "kasadis",
+                                  acts.Actor(True, run=fake), NOW, str(tmp_path))
+    assert not result.get("failed")
+    clean = next(c for c in fake.calls if c[-len(spec["clean"]):] == spec["clean"])
+    assert clean[:4] == ["runuser", "-u", "kasadis", "--"]
+    assert f"--chdir={tmp_path}" in clean and "tools" in clean and "--" in clean
+
+
+def cache_fixture(tmp_path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    return {"name": "pnpm", "path": str(cache), "max_gib": 0,
+            "query": ["pnpm", "store", "path"], "clean": ["pnpm", "store", "prune"]}
+
+
+def test_housekeeping_cache_dry_run_measures_but_does_not_prune(tmp_path):
+    spec = cache_fixture(tmp_path)
+    fake = Fake((spec["query"], Result(0, spec["path"])), (["du"], Result(0, "1\tcache")))
+    actor = acts.Actor(False, run=fake)
+    result = housekeeping.maintain(hk_cfg(tmp_path, package_caches=[spec]), "kasadis", actor, NOW, str(tmp_path))
+    assert not result.get("failed")
+    assert any("prune pnpm cache" in text for text in result["would"])
+    assert not any("prune" in c for c in fake.calls)
+
+
+@pytest.mark.parametrize("failure", ["location", "size", "clean"])
+def test_housekeeping_cache_failures_warn_without_fallback_deletion(tmp_path, failure):
+    spec = cache_fixture(tmp_path)
+    fake = Fake((spec["query"], Result(0, "/unexpected" if failure == "location" else spec["path"])),
+                (["du"], Result(0, "unknown" if failure == "size" else "1\tcache")),
+                (spec["clean"], Result(1)))
+    result = housekeeping.maintain(hk_cfg(tmp_path, package_caches=[spec]), "kasadis",
+                                  acts.Actor(True, run=fake), NOW, str(tmp_path))
+    assert result["failed"] and housekeeping.row_text(result, True)[0] == "warn"
+    assert any("prune" in c for c in fake.calls) is (failure == "clean")
+    assert not any("du" in c for c in fake.calls) if failure == "location" else True
+    assert os.path.isdir(spec["path"])
 
 
 def test_housekeeping_rows():
     assert housekeeping.row_text({"actions": [], "would": ["a", "b"]}, False) == (
         "ok",
-        "Dry run: would a; b. Nightshift still does this until cutover.",
+        "Dry run: would a; b.",
     )
     assert housekeeping.row_text({"actions": [], "would": []}, True) == (
         "ok",

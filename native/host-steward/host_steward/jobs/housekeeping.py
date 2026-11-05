@@ -2,9 +2,8 @@
 
 Port of `maintain` in ns/housekeeping.py: the journal size cap, apt and snap caches, an inactive Spotify cache above
 its size, a stale libguestfs appliance, old versions in the families marked prune (Playwright browsers), and
-SummitFlow's own daily retention commands as the owner (`st cleanup host --if-stale`), so a stopped scheduler of its
-own never lets them stop. Not ported: executor receipt retention and the monthly ledger bundle (both go with
-the executor and ledger Nightshift drops). A failing or missing SummitFlow command makes the row warn.
+package-manager caches above their configured caps. Broader scratch, model and project-artifact retention is
+left to the consolidation audit; there is no delegate to the retired cleanup namespace.
 
 Everything that changes the host goes through acts.Actor. With [acting] housekeeping off it only lists what it
 would do and the row says "Dry run: ..."; the read-only looks (snap list, pgrep, directory sizes) still run.
@@ -44,40 +43,53 @@ def disabled_snap_revisions(text: str) -> list[tuple[str, str]]:
     return out
 
 
-def daily_commands(cfg: dict[str, Any], owner: str, actor: acts.Actor, notes: list[str]) -> bool:
-    """SummitFlow's own retention commands as the owner. True when one failed or is missing."""
+def package_caches(cfg: dict[str, Any], owner: str, actor: acts.Actor, notes: list[str], home: str) -> bool:
+    """Measure only configured tool caches; each tool prunes its own cache above its cap."""
     failed = False
-    for cmd in cfg.get("daily_commands") or []:
-        wrapped = acts.as_owner(owner, cmd)
-        if wrapped is None:
+    wrapper = acts.as_owner(owner, [])
+    if wrapper is None:
+        notes.append("package cache owner is unavailable")
+        return True
+    for spec in cfg.get("package_caches", []):
+        name = spec["name"]
+        path = Path(spec["path"].format(owner=owner)).resolve()
+        if not path.is_dir():
             continue
-        result = actor.do(
-            wrapped, label=f"run as {owner}: {' '.join(cmd)}", timeout=float(cfg["daily_timeout_s"])
-        )
-        if result is None:
+
+        def command(argv: list[str], name: str = name) -> list[str]:
+            # The clean home cwd avoids reading project config; admission keeps scans and prunes bounded.
+            return [*wrapper, "env", f"--chdir={home}", "st", "tools", "run", "--label",
+                    f"Housekeeping {name} cache", "--", *argv]
+
+        query = command(spec["query"])
+        location = actor.run(query, timeout=float(cfg["cache_timeout_s"]))
+        lines = location.out.strip().splitlines()
+        actual = Path(lines[-1]) / spec.get("suffix", "") if lines else None
+        if location.rc or actual is None or not actual.is_absolute() or actual.resolve() != path:
+            notes.append(f"{name} cache location is unavailable or changed")
+            failed = True
             continue
-        name = " ".join(cmd[:3])
-        if core.command_absent(result):
-            notes.append(f"{name} is missing from this SummitFlow")
+        measure = command(["du", "--bytes", "--summarize", "--one-file-system", "--", str(path)])
+        size = actor.run(measure, timeout=float(cfg["cache_timeout_s"]))
+        try:
+            count = int(size.out.split()[0]) if size.rc == 0 else -1
+        except (ValueError, IndexError):
+            count = -1
+        if count < 0:
+            notes.append(f"{name} cache size is unavailable")
             failed = True
-        elif result.rc:
-            tail = (
-                (result.err or result.out).strip().splitlines()[-1][:160]
-                if (result.err or result.out).strip()
-                else ""
-            )
-            notes.append(f"{name} failed (exit {result.rc}){': ' + tail if tail else ''}")
-            failed = True
-        else:
-            try:
-                done = json.loads(result.out)
-                gone = int(done.get("items_deleted") or 0)
-            except (ValueError, TypeError, AttributeError):
-                continue
-            if done.get("status") != "skipped" and gone:
-                notes.append(
-                    f"{name}: removed {gone} item(s), {round(int(done.get('bytes_reclaimed') or 0) / GIB, 1)} GiB"
-                )
+            continue
+        if count <= float(spec["max_gib"]) * GIB:
+            continue
+        clean = command(spec["clean"])
+        result = actor.do(clean, label=f"prune {name} cache ({count / GIB:.1f} GiB, cap {spec['max_gib']:g} GiB)",
+                          timeout=float(cfg["cache_timeout_s"]))
+        if result is not None:
+            if result.rc:
+                notes.append(f"{name} cache cleanup failed (exit {result.rc})")
+                failed = True
+            else:
+                notes.append(f"pruned {name} cache")
     return failed
 
 
@@ -162,9 +174,9 @@ def maintain(
         notes.append(f"versioned cache retention failed: {type(error).__name__}")
     failed = False
     try:
-        failed = daily_commands(cfg, owner, actor, notes)
+        failed = package_caches(cfg, owner, actor, notes, home)
     except Exception as error:  # noqa: BLE001 - the backstop must never stop the rest of housekeeping
-        notes.append(f"daily retention commands failed: {type(error).__name__}")
+        notes.append(f"package cache cleanup failed: {type(error).__name__}")
         failed = True
     return {
         "actions": notes,
@@ -185,7 +197,7 @@ def row_text(result: dict[str, Any], live: bool) -> tuple[str, str]:
     text = acts.say_would(would) if would else "nothing to do"
     return (
         "warn" if result.get("failed") else "ok"
-    ), f"Dry run: would {text}. Nightshift still does this until cutover."
+    ), f"Dry run: would {text}."
 
 
 def job_actions() -> list[dict[str, str]]:
