@@ -1,0 +1,10 @@
+Nov 04 22:17:25 davion-sidarli aico-tray[3025563]: ask 75e6058d arrived, 236346 ms after root published it: showing its card
+Nov 04 22:17:25 davion-sidarli aico-tray[3055694]: window 75e6058d: shown 193 ms after start
+Nov 04 22:17:25 davion-sidarli aico-tray[3055694]: window 75e6058d: shown without focus (an ask arrived)
+Nov 04 22:17:25 davion-sidarli aico-tray[3025563]: notice 3f0daa713565 queued for the corner, 13427 ms after it was logged (sent)
+Nov 04 22:17:25 davion-sidarli aico-tray[3025563]: notice 8c18b590de0d queued for the corner, 12523 ms after it was logged (sent)
+Nov 04 22:17:48 davion-sidarli aico-tray[3055694]: window 75e6058d: ended elsewhere: approved
+Nov 04 22:17:51 davion-sidarli aico-tray[3055694]: window 75e6058d: next open ask 17a98fb8
+Nov 04 22:17:55 davion-sidarli aico-tray[3025563]: ask 92c24dd1 arrived, 266274 ms after root published it: showing its card
+Nov 04 22:17:55 davion-sidarli aico-tray[3025563]: notice 77bdc2ba58fd queued for the corner, 6871 ms after it was logged (sent)
+Nov 04 22:17:55 davion-sidarli aico-tray[3025563]: notice b7d31d692c7a queued for the corner, 6738 ms after it was logged (sent)

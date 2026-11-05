@@ -1,0 +1,2 @@
+TEST:pytest:start
+TEST:FAIL:1|details:.dev-tools/pytest-18e50849aedbd21c-3140097-7ea42ff5-details.txt|hint:FAILED tests/test_pairing_only.py::test_pairing_only_starts_no_background_jobs|lane:heavy2|queue_ms:1.011|execution_ms:186.118|report:.dev-tools/pytest-f450536c7009452aad582cae36dadcdd-details.xml

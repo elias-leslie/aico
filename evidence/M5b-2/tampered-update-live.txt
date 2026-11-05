@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/usr/local/lib/host-steward/install-signed.py", line 13, in <module>
+    install(args.archive, args.signature, Path(cfg["public_key"]), cfg["archive_prefix"])
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/host-steward/host_steward/installer.py", line 56, in install
+    raise ValueError("root update signature is invalid")
+ValueError: root update signature is invalid
+tampered update exit=1
+ActiveState=active
+MainPID=3022694

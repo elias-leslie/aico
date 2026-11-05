@@ -1,0 +1,1 @@
+{"schema_version":1,"name":"m5b2-grants","actor":"01a1a9a0-584e-7ee1-832b-a797f2743692","state":"active","paused":false,"pause_hold":null,"pause_gen":null,"last_used_ms":1793849230102,"runtime_state":"dormant","processes":[],"runtime":null,"stale_receipts":0,"error":null,"next":"st browser --session m5b2-grants open URL (its own Chrome starts then, on the browser VM)"}

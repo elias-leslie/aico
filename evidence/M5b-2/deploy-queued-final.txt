@@ -1,0 +1,2 @@
+[deploy] queued aico-568a1ab1a5b6 for 48de5a70ec84
+[deploy] result: aico deploy result aico-568a1ab1a5b6   wait: aico deploy wait aico-568a1ab1a5b6   log: aico logs aico-deploy-aico-568a1ab1a5b6

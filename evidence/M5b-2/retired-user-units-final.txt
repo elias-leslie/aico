@@ -1,0 +1,6 @@
+Removed '/home/kasadis/.config/systemd/user/timers.target.wants/nightshift-digest.timer'.
+Removed '/home/kasadis/.config/systemd/user/timers.target.wants/nightshift-drill.timer'.
+Removed '/home/kasadis/.config/systemd/user/timers.target.wants/nightshift-couriers.timer'.
+Removed '/home/kasadis/.config/systemd/user/timers.target.wants/nightshift-daily-pass.timer'.
+Removed '/home/kasadis/.config/systemd/user/timers.target.wants/nightshift-notify-critical.timer'.
+Removed '/home/kasadis/.config/systemd/user/paths.target.wants/nightshift-notify-critical.path'.

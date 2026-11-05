@@ -1,0 +1,138 @@
+{
+ "lane": "full",
+ "passed": true,
+ "results": [
+  {
+   "id": "ruff",
+   "state": "pass",
+   "ms": 39.67030799999998,
+   "required": true,
+   "details": ".dev-tools/ruff-3194457-details.txt",
+   "hint": "All checks passed!"
+  },
+  {
+   "id": "types",
+   "state": "pass",
+   "ms": 417.6704,
+   "required": true,
+   "details": ".dev-tools/types-3194457-details.txt",
+   "hint": "All checks passed!"
+  },
+  {
+   "id": "pytest",
+   "state": "pass",
+   "ms": 14259.185795,
+   "required": true,
+   "details": ".dev-tools/pytest-3194457-details.txt",
+   "hint": "1213 passed in 14.10s"
+  },
+  {
+   "id": "vitest",
+   "state": "pass",
+   "ms": 110836.06861999999,
+   "required": true,
+   "details": ".dev-tools/vitest-3194457-details.txt",
+   "hint": "Tests  3406 passed (3406)"
+  },
+  {
+   "id": "gitleaks",
+   "state": "pass",
+   "ms": 850.4607219999999,
+   "required": true,
+   "details": ".dev-tools/gitleaks-3194457-details.txt",
+   "hint": "[]"
+  },
+  {
+   "id": "osv",
+   "state": "pass",
+   "ms": 1547.0850409999998,
+   "required": true,
+   "details": ".dev-tools/osv-3194457-details.txt",
+   "hint": "}"
+  },
+  {
+   "id": "semgrep",
+   "state": "skip",
+   "ms": 0,
+   "required": false,
+   "reason": "no_local_rules"
+  },
+  {
+   "id": "tsc",
+   "state": "pass",
+   "ms": 12527.120782999998,
+   "required": true,
+   "details": ".dev-tools/tsc-3194457-details.txt",
+   "hint": "-"
+  },
+  {
+   "id": "biome",
+   "state": "pass",
+   "ms": 687.2582680000014,
+   "required": true,
+   "details": ".dev-tools/biome-3194457-details.txt",
+   "hint": "Checked 985 files in 498ms. No fixes applied."
+  },
+  {
+   "id": "depcruise",
+   "state": "pass",
+   "ms": 1626.6504220000006,
+   "required": true,
+   "details": ".dev-tools/depcruise-3194457-details.txt",
+   "hint": "‼ 30 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them."
+  },
+  {
+   "id": "boundaries",
+   "state": "pass",
+   "ms": 136.791435000001,
+   "required": true,
+   "details": ".dev-tools/boundaries-3194457-details.txt",
+   "hint": "boundaries: ok (19 packages, 12 contract fixtures)"
+  },
+  {
+   "id": "ui-spec",
+   "state": "pass",
+   "ms": 308.1964369999987,
+   "required": true,
+   "details": ".dev-tools/ui-spec-3194457-details.txt",
+   "hint": "UILINT:ok|violations=0|checks=5|files=188|items=4030|unverified=0|scope=mechanical-only|not-a-copy-review"
+  },
+  {
+   "id": "gradle-android",
+   "state": "pass",
+   "ms": 0,
+   "required": true,
+   "reused": true,
+   "hint": "inputs unchanged since its last pass"
+  },
+  {
+   "id": "cargo-tray",
+   "state": "pass",
+   "ms": 0,
+   "required": true,
+   "reused": true,
+   "hint": "inputs unchanged since its last pass"
+  },
+  {
+   "id": "go-hook",
+   "state": "pass",
+   "ms": 0,
+   "required": true,
+   "reused": true,
+   "hint": "inputs unchanged since its last pass"
+  },
+  {
+   "id": "contracts-host-steward",
+   "state": "pass",
+   "ms": 4138.004047999999,
+   "required": false,
+   "details": ".dev-tools/contracts-host-steward-3194457-details.txt",
+   "hint": "163 passed in 3.63s"
+  }
+ ],
+ "ms": 111038.595368,
+ "scope": null,
+ "sha": "ae73d84b7392ea02fa4b4adfa68975da8d949b15",
+ "tree": "905bc7e96228939bd86e1607b90d7f6edf7276ae",
+ "at": "2026-11-05T03:33:33.104Z"
+}

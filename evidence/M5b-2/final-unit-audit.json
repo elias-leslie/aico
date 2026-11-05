@@ -1,0 +1,112 @@
+{
+  "retired_root": {
+    "nightshift-check.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-fcm-token.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-runner-critical.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-runner-nightly.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-runner-weekly.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-runner-monthly.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-runner-critical.path": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-approvals.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-approvals.path": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-agent-requests.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-agent-requests.path": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-outbox.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-outbox.path": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-approve.service": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-grant.service": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    }
+  },
+  "retired_user": {
+    "nightshift-notify-critical.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-notify-critical.path": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-daily-pass.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-digest.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-drill.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    },
+    "nightshift-couriers.timer": {
+      "ActiveState": "inactive",
+      "UnitFileState": "disabled"
+    }
+  },
+  "replacement": {
+    "host-steward-grants.service": {
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "host-steward-rules.timer": {
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "host-steward-check.timer": {
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "host-steward-heartbeat.timer": {
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    },
+    "host-steward-fcm-token.timer": {
+      "ActiveState": "active",
+      "UnitFileState": "enabled"
+    }
+  }
+}

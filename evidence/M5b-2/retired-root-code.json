@@ -1,0 +1,24 @@
+{
+  "archive": "/var/lib/host-steward/archive/nightshift-root-code.tar.gz",
+  "archive_mode": "0444",
+  "removed": [
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/runner",
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/executor",
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/elevate.py",
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/bypass.py",
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/grantkinds.py",
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/rootinstall.py",
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/root_installs.py",
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/drill.py",
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/canary.py",
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/ledger.py",
+    "/usr/local/lib/nightshift-runner/releases/c0fbff33b5bd/nightshift/rules.py",
+    "/usr/local/lib/nightshift-exec/releases/6b30e7d9be9e/nightshift/runner",
+    "/usr/local/lib/nightshift-exec/releases/6b30e7d9be9e/nightshift/executor",
+    "/usr/local/lib/nightshift-exec/releases/6b30e7d9be9e/nightshift/grantkinds.py",
+    "/usr/local/lib/nightshift-exec/releases/6b30e7d9be9e/nightshift/ledger.py",
+    "/usr/local/lib/nightshift-exec/releases/6b30e7d9be9e/nightshift/rules.py",
+    "/usr/local/sbin/nightshift-runner",
+    "/usr/local/sbin/nightshift-exec"
+  ]
+}

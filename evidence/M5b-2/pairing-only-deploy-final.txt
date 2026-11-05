@@ -1,0 +1,5 @@
+[service] accepting 9cbadd6355c6 in an isolated clone
+[service] acceptance=fresh id=dc0a50e3906b
+[service] detached rebuild job=f9cbd1f73cea4c88b0993046a06ad966 submission_rc=0
+[service] result: st service result f9cbd1f73cea4c88b0993046a06ad966; wait: st service wait f9cbd1f73cea4c88b0993046a06ad966
+[service] details:.dev-tools/service-detached-f9cbd1f73cea4c88b0993046a06ad966-details.txt|hint:Running as unit: sf-rebuild-nightshift.service; invocation ID: b8b1f29366cb41099028127f327a4b36

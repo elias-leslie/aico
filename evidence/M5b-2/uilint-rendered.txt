@@ -1,0 +1,5 @@
+omitted: Shadow-root content was not extracted.
+omitted: Only this route and state were captured; hover, focus, other routes and colour schemes were not.
+omitted: Backgrounds are resolved through DOM ancestors, not painted pixels; overlapping positioned content is not seen.
+checked: https://aico.summitflow.dev/grants "Aico" against the aico spec
+UILINT:ok|violations=0|checks=6|items=45|unverified=0|scope=mechanical-only|not-a-copy-review

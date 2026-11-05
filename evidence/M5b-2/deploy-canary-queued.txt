@@ -1,0 +1,2 @@
+[deploy] queued aico-6d62ac880f16 for 3fe08b60c4fe
+[deploy] result: aico deploy result aico-6d62ac880f16   wait: aico deploy wait aico-6d62ac880f16   log: aico logs aico-deploy-aico-6d62ac880f16

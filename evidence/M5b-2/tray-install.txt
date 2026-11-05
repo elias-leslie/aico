@@ -1,0 +1,3 @@
+   Compiling aico-tray v0.1.0 (/srv/workspaces/projects/aico/native/tray)
+    Finished `release` profile [optimized] target(s) in 3.78s
+aico-tray 929acbbafa3b installed

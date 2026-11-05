@@ -1,0 +1,19 @@
+CHECK:SCOPE:left out 5 changed file(s) other agents wrote or lease
+CHECK:FIX:biome:11 file(s)|exit 0
+CHECK:full:21 changed file(s)
+CHECK:SKIP:no_changed_paths: ruff, types
+CHECK:SKIP:no_relevant_changed_paths: pytest
+CHECK:SKIP:no_candidate_lockfiles: osv
+CHECK:SKIP:no_local_rules: semgrep
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-3065722-details.txt|hint:[]
+CHECK:OK:biome|0.1s|details:.dev-tools/biome-3065722-details.txt|hint:Checked 2 files in 13ms. No fixes applied.
+CHECK:OK:depcruise|1.7s|details:.dev-tools/depcruise-3065722-details.txt|hint:‼ 30 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-3065722-details.txt|hint:boundaries: ok (19 packages, 12 contract fixtures)
+CHECK:OK:tsc|2.6s|details:.dev-tools/tsc-3065722-details.txt|hint:-
+CHECK:OK:gradle-android|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:cargo-tray|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:go-hook|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:ui-spec|0.5s|details:.dev-tools/ui-spec-3065722-details.txt|hint:UILINT:ok|violations=0|checks=5|files=188|items=4030|unverified=0|scope=mechanical-only|not-a-copy-review
+CHECK:OK:vitest|4.3s|details:.dev-tools/vitest-3065722-details.txt|hint:Tests  102 passed (102)
+CHECK:OK:contracts-host-steward|3.1s|optional|details:.dev-tools/contracts-host-steward-3065722-details.txt|hint:163 passed in 2.60s
+CHECK:PASS full 6.0s (11 ran, 5 skipped)

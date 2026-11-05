@@ -1,0 +1,5 @@
+Created symlink '/etc/systemd/system/multi-user.target.wants/host-steward-grants.service' → '/etc/systemd/system/host-steward-grants.service'.
+Created symlink '/etc/systemd/system/timers.target.wants/host-steward-rules.timer' → '/etc/systemd/system/host-steward-rules.timer'.
+Created symlink '/etc/systemd/system/timers.target.wants/host-steward-heartbeat.timer' → '/etc/systemd/system/host-steward-heartbeat.timer'.
+Created symlink '/etc/systemd/system/timers.target.wants/host-steward-fcm-token.timer' → '/etc/systemd/system/host-steward-fcm-token.timer'.
+host-steward installed in /usr/local/lib/host-steward

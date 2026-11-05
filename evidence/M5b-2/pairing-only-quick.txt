@@ -1,0 +1,14 @@
+ARCH:SKIP:architecture:no_changed_paths
+IDENTITY:OK:nightshift
+AGENTCTX:OK
+LINT:ruff:start
+LINT:FAIL:1|details:.dev-tools/ruff-18e50859059834e3-3144296-0efda5c7-details.txt|hint:Found 1 error.|lane:light|queue_ms:0.939|execution_ms:11.238
+TYPES:types:start
+TYPES:OK:0|details:.dev-tools/types-18e508590d717b77-3144296-d271adcf-details.txt|hint:All checks passed!|lane:light|queue_ms:0.595|execution_ms:125.845
+TEST:pytest:start
+TEST:OK:0|details:.dev-tools/pytest-18e50859b9577085-3144296-704af228-details.txt|hint:40 passed in 2.38s|lane:heavy2|queue_ms:0.903|execution_ms:2503.297|report:.dev-tools/pytest-8249a28728fc4e47aaba26de54b81aa7-details.xml
+BIOME:biome:start
+BIOME:OK:0|details:.dev-tools/biome-18e50859bbb7171c-3144296-ac72f73c-details.txt|hint:Checked 0 files in 529µs. No fixes applied.|lane:light|queue_ms:0.537|execution_ms:34.194
+TSC:SKIP:tsc:no_relevant_changed_paths
+TEST:DEFER:frontend-test:requires_full_acceptance:package_script
+GITLEAKS:OK:0|details:.dev-tools/security-gitleaks-18e50859cc632bac-3144296-bcd36284-details.txt|hint:10:26PM INF no leaks found

@@ -1,0 +1,2 @@
+[deploy] queued aico-19cdcc287dee for 916495d7b87d
+[deploy] result: aico deploy result aico-19cdcc287dee   wait: aico deploy wait aico-19cdcc287dee   log: aico logs aico-deploy-aico-19cdcc287dee

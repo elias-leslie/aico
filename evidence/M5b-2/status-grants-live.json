@@ -1,0 +1,78 @@
+[
+  {
+    "id": "davion-sidarli/host-rules",
+    "what": "Host rules",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Checked 5 open findings; decisions recorded locally.",
+    "last_run": "2026-11-05T03:18:48.614Z",
+    "next_run": "2026-11-05T03:20:48.614Z",
+    "actions": [
+      {
+        "kind": "log",
+        "ref": "journalctl -u host-steward-rules.service -n 100 --no-pager"
+      }
+    ],
+    "updated_at": "2026-11-05T03:18:48.615Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "davion-sidarli/grant-75e6058de7bb4dfa0c85b8bd8528aa52",
+    "what": "Open test access for 10 min?",
+    "kind": "grant",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Access is open until 2026-11-05T03:27:48.225900+00:00",
+    "last_run": "2026-11-05T03:19:27.715Z",
+    "next_run": "2026-11-05T03:20:27.715Z",
+    "actions": [
+      {
+        "kind": "detail",
+        "ref": "https://aico.summitflow.dev/grants"
+      }
+    ],
+    "updated_at": "2026-11-05T03:19:27.716Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "davion-sidarli/grant-17a98fb89ce87a2911f84933189096fd",
+    "what": "Open GitHub admin for 1 min?",
+    "kind": "grant",
+    "machine": "davion-sidarli",
+    "state": "off",
+    "meaning": "Access revoked.",
+    "last_run": "2026-11-05T03:19:27.715Z",
+    "next_run": "2026-11-05T03:20:27.715Z",
+    "actions": [
+      {
+        "kind": "detail",
+        "ref": "https://aico.summitflow.dev/grants"
+      }
+    ],
+    "updated_at": "2026-11-05T03:19:27.716Z",
+    "shown": "off",
+    "shown_since": null
+  },
+  {
+    "id": "davion-sidarli/grant-92c24dd15c683241d387b9d4f8b24c3b",
+    "what": "Open your main Chrome for 1 min?",
+    "kind": "grant",
+    "machine": "davion-sidarli",
+    "state": "off",
+    "meaning": "Access revoked.",
+    "last_run": "2026-11-05T03:19:27.715Z",
+    "next_run": "2026-11-05T03:20:27.715Z",
+    "actions": [
+      {
+        "kind": "detail",
+        "ref": "https://aico.summitflow.dev/grants"
+      }
+    ],
+    "updated_at": "2026-11-05T03:19:27.716Z",
+    "shown": "off",
+    "shown_since": null
+  }
+]

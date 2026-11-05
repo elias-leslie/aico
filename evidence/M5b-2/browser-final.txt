@@ -1,0 +1,1 @@
+BROWSER_CHECK:OK|target=local-ai|errors=0|warnings=0|network=0|command_warnings=0|readiness=ready|screenshot=evidence/M5b-2/grants-final.png|mobile=evidence/M5b-2/grants-final-mobile.png|details:.dev-tools/browser-check-local-ai-54d338ddb665-details.txt

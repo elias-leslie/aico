@@ -1,0 +1,11 @@
+Removed '/etc/systemd/system/paths.target.wants/nightshift-runner-critical.path'.
+Removed '/etc/systemd/system/paths.target.wants/nightshift-outbox.path'.
+Removed '/etc/systemd/system/paths.target.wants/nightshift-agent-requests.path'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-check.timer'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-fcm-token.timer'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-runner-critical.timer'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-runner-nightly.timer'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-runner-weekly.timer'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-runner-monthly.timer'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-outbox.timer'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-agent-requests.timer'.

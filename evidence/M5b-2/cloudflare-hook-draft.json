@@ -1,0 +1,11 @@
+{
+  "name": "Aico canary hooks",
+  "type": "self_hosted",
+  "domain": "nightshift.summitflow.dev/hooks/canary/*",
+  "app_launcher_visible": false,
+  "policies": [{
+    "name": "Deliver webhooks to the secret-gated receiver",
+    "decision": "bypass",
+    "include": [{"everyone": {}}]
+  }]
+}

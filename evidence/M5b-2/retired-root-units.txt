@@ -1,0 +1,8 @@
+Removed '/etc/systemd/system/multi-user.target.wants/nightshift-approve.service'.
+Removed '/etc/systemd/system/multi-user.target.wants/nightshift-grant.service'.
+Removed '/etc/systemd/system/paths.target.wants/nightshift-outbox.path'.
+Removed '/etc/systemd/system/paths.target.wants/nightshift-agent-requests.path'.
+Removed '/etc/systemd/system/paths.target.wants/nightshift-approvals.path'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-outbox.timer'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-agent-requests.timer'.
+Removed '/etc/systemd/system/timers.target.wants/nightshift-approvals.timer'.
