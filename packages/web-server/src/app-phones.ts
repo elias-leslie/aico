@@ -177,6 +177,24 @@ export class PhoneRegistry {
     return this.all()?.find((phone) => phone.id === id) ?? null
   }
 
+  /** Pairing replaces this installation's record, preserving every other phone. */
+  register(phone: Phone): Promise<void> {
+    const run = this.tail.then(() => {
+      const current = this.all()
+      if (!current) throw new AppError(503, 'the phone file cannot be read')
+      const phones = current.filter(
+        (p) => p.id !== phone.id && !(phone.fcm_token && p.fcm_token === phone.fcm_token),
+      )
+      phones.push(phone)
+      mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 })
+      const tmp = `${this.path}.${process.pid}.tmp`
+      writeFileSync(tmp, JSON.stringify(phones), { mode: 0o600 })
+      renameSync(tmp, this.path)
+    })
+    this.tail = run.catch(() => {})
+    return run
+  }
+
   /** The phone that signed this request, or an AppError (401: pair again). `now` in epoch seconds. */
   verify(
     method: string,

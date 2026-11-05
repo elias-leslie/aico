@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import type { RouteName, VisionConfig } from '@aico/notes/vision-extract'
 import { defaultTetherSocketPath, hostsFile, tetherSocketPath } from '@aico/tether-client'
 import { DEFAULT_REMOTE_UPLOAD_DIR } from '@aico/tether-client/term'
+import type { PairingConfig } from './app-pairing'
 import type { ExportConfig } from './notes-export'
 
 export interface WebConfig {
@@ -24,6 +25,7 @@ export interface WebConfig {
   allowedOrigins: string[]
   /** Public names that reach only the phone app's routes (the host the installed phone app already uses). */
   phoneHosts: string[]
+  pairing: PairingConfig
   /** packages/web-frontend's static export, served at `/`. */
   staticDir: string
   dbPath: string
@@ -278,6 +280,25 @@ function list(value: string | undefined): string[] | null {
   return items.length ? items : null
 }
 
+/** The installed app's action links survive re-pairing during the Nightshift cutover. */
+function phoneOrigins(env: NodeJS.ProcessEnv, publicHost: string | null): string[] {
+  const explicit = list(env.AICO_APP_OPEN_ORIGINS) ?? list(env.NIGHTSHIFT_OPEN_ORIGINS)
+  if (explicit) return explicit
+  const origins = publicHost ? [`https://${publicHost}`] : []
+  try {
+    const site = JSON.parse(
+      readFileSync(env.NIGHTSHIFT_SITE || '/etc/nightshift/site.json', 'utf8'),
+    )
+    const hosts = [
+      site.urls?.approve_host,
+      ...(Array.isArray(site.urls?.open_hosts) ? site.urls.open_hosts : []),
+    ]
+    for (const host of hosts)
+      if (typeof host === 'string' && /^[a-z0-9.-]+$/i.test(host)) origins.push(`https://${host}`)
+  } catch {}
+  return [...new Set(origins)]
+}
+
 /** AICO_VISION_ROUTES (comma list of agy, ollama), else both in that order. */
 function visionRoutes(value: string | undefined): RouteName[] {
   const names = (list(value) ?? []).map((name) => name.toLowerCase())
@@ -345,6 +366,15 @@ export function loadConfig(
     publicHost,
     allowedHostnames: ['localhost', '127.0.0.1', ...(publicHost ? [publicHost] : [])],
     phoneHosts: (list(env.AICO_PHONE_HOSTS) ?? [DEFAULT_PHONE_HOST]).map((h) => h.toLowerCase()),
+    pairing: {
+      base:
+        env.AICO_APP_BASE || `https://${(list(env.AICO_PHONE_HOSTS) ?? [DEFAULT_PHONE_HOST])[0]}`,
+      origins: phoneOrigins(env, publicHost),
+      gateFile: env.AICO_APP_GATE_FILE || '/var/lib/nightshift/web/app-gate.json',
+      optionsFile: env.AICO_APP_OPTIONS_FILE || '/etc/nightshift/fcm-app.json',
+      codesFile: join(dataDirPath(env), 'app-pair.json'),
+      ttlSeconds: positiveInt(env.AICO_APP_PAIR_TTL_SECONDS, 600),
+    },
     allowedOrigins: list(env.AICO_WEB_ALLOWED_ORIGINS) ?? [
       `http://localhost:${port}`,
       `http://127.0.0.1:${port}`,

@@ -203,6 +203,9 @@ export function SessionSidebar({
         <Link href="/grants" className="lantern-btn ghost small">
           Grants
         </Link>
+        <Link href="/app" className="lantern-btn ghost small">
+          Phone app
+        </Link>
         <Link href="/logins" className="lantern-btn ghost small">
           Logins
         </Link>

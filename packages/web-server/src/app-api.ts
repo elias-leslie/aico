@@ -13,7 +13,7 @@
 //   GET  /api/app/apk             the published APK
 //   GET  /api/app/stream          Server-Sent Events: hello, item, health, reset; a keepalive every 15 s
 //
-// Not here: pairing a new phone (register, the pair link, the gate token) and the hourly canary.
+// Pairing starts on the owner-only /api/phone-pair route; registration keeps the installed app's protocol.
 //
 // Health is "fresh" when aico-web reports itself and the host checks report: checked_at is the
 // older of the two newest reports. The phone alarms when it is more than 60 minutes old.
@@ -24,6 +24,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
 import type { NotifyStore, StoredNotice } from '@aico/notify'
 import { counted, type ShownRow, type StatusStore } from '@aico/status'
+import { Pairing, type PairingConfig } from './app-pairing'
 import { AppError, cantBuzz, type Phone, type PhoneRegistry } from './app-phones'
 import { apkPath, currentRelease, releaseDir } from './app-release'
 import type { Approval, Ask } from './asks'
@@ -41,6 +42,7 @@ const DRILL_MAX_MIN = 120
 const NOT_FOUND = 'not found'
 
 export interface AppApiDeps {
+  pairing?: PairingConfig
   phones: PhoneRegistry
   status: Pick<StatusStore, 'read'>
   notify: Pick<NotifyStore, 'list' | 'get' | 'rowAskIds' | 'markRead'>
@@ -392,6 +394,64 @@ export class AppApi {
   }
 
   register(router: Router): void {
+    const pairing = this.deps.pairing ? new Pairing(this.deps.phones, this.deps.pairing) : null
+    const unsigned =
+      (handler: (ctx: RequestContext) => Promise<unknown>) => async (ctx: RequestContext) => {
+        try {
+          sendJson(ctx.res, 200, await handler(ctx))
+        } catch (error) {
+          if (error instanceof AppError) sendJson(ctx.res, error.status, { error: error.message })
+          else sendJson(ctx.res, 503, { error: 'Phone pairing could not be completed. Try again.' })
+        }
+        return RAW
+      }
+    router.on(
+      'POST',
+      '/api/phone-pair',
+      unsigned(async (ctx) => {
+        if (!pairing) throw new AppError(503, 'Phone pairing is not set up on this host.')
+        return {
+          link: pairing.issue(
+            String(ctx.req.headers['user-agent'] ?? 'Phone'),
+            Math.floor(this.now() / 1000),
+          ),
+          expires_in: this.deps.pairing?.ttlSeconds,
+        }
+      }),
+    )
+    router.on(
+      'POST',
+      '/api/app/register',
+      unsigned(async (ctx) => {
+        if (!pairing) throw new AppError(503, 'Phone pairing is not set up on this host.')
+        return pairing.register(
+          await rawBody(ctx.req),
+          ctx.req.url ?? '',
+          ctx.req.headers,
+          Math.floor(this.now() / 1000),
+        )
+      }),
+    )
+    router.on('GET', '/api/phone-app', async () => ({
+      published: currentRelease(this.deps.dataDir) !== null,
+      phones:
+        this.deps.phones.all()?.map((phone) => ({
+          id: phone.id,
+          name: phone.name || 'Phone',
+          last_ack: phone.last_ack ?? null,
+        })) ?? null,
+    }))
+    router.on('GET', '/app/aico.apk', async (ctx) => {
+      const release = currentRelease(this.deps.dataDir)
+      if (!release) {
+        sendJson(ctx.res, 404, { error: 'The app is not published yet.' })
+        return RAW
+      }
+      ctx.res.setHeader('Content-Type', 'application/vnd.android.package-archive')
+      ctx.res.setHeader('Content-Length', release.size)
+      createReadStream(apkPath(this.deps.dataDir)).pipe(ctx.res)
+      return RAW
+    })
     router.on(
       'GET',
       '/api/app/health',

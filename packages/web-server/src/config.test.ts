@@ -17,6 +17,21 @@ const ID = identity({
 })
 
 describe('loadConfig', () => {
+  it('carries the configured legacy phone action origins into new pairing links', () => {
+    const site = identity({
+      urls: { approve_host: 'approve.example', open_hosts: ['portfolio.example'] },
+    })
+    expect(loadConfig({ NIGHTSHIFT_SITE: site }, ID).pairing.origins).toEqual([
+      'https://app.example',
+      'https://approve.example',
+      'https://portfolio.example',
+    ])
+    expect(
+      loadConfig({ NIGHTSHIFT_SITE: site, NIGHTSHIFT_OPEN_ORIGINS: 'https://old.example' }, ID)
+        .pairing.origins,
+    ).toContain('https://old.example')
+  })
+
   it('puts the sync socket in the runtime directory and reads the sync settings', () => {
     const config = loadConfig({ HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/7' }, ID)
     expect(config.sync).toMatchObject({
