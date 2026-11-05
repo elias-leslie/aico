@@ -1,0 +1,34 @@
+Using CPython 3.14.4
+Creating virtual environment at: .venv
+Resolved 24 packages in 0.84ms
+   Building aico-service-tools @ file:///home/kasadis/.local/lib/aico/releases/488390b74b0ce7beb515da2a892e48b62e6b5d4c/native/service-tools
+   Building summitflow-st-sdk @ file:///home/kasadis/.local/lib/aico/releases/488390b74b0ce7beb515da2a892e48b62e6b5d4c/native/st-sdk
+      Built summitflow-st-sdk @ file:///home/kasadis/.local/lib/aico/releases/488390b74b0ce7beb515da2a892e48b62e6b5d4c/native/st-sdk
+      Built aico-service-tools @ file:///home/kasadis/.local/lib/aico/releases/488390b74b0ce7beb515da2a892e48b62e6b5d4c/native/service-tools
+Prepared 2 packages in 360ms
+Installed 18 packages in 25ms
+ + aico-service-tools==0.1.0 (from file:///home/kasadis/.local/lib/aico/releases/488390b74b0ce7beb515da2a892e48b62e6b5d4c/native/service-tools)
+ + annotated-doc==0.0.5
+ + anyio==4.16.0
+ + certifi==2026.10.23
+ + h11==0.16.0
+ + httpcore==1.0.9
+ + httpx==0.28.1
+ + idna==3.20
+ + markdown-it-py==4.2.0
+ + mdurl==0.1.2
+ + pygments==2.21.0
+ + python-dotenv==1.2.4
+ + pyyaml==6.0.3
+ + rich==15.0.0
+ + shellingham==1.5.4
+ + summitflow-st-sdk==0.2.1 (from file:///home/kasadis/.local/lib/aico/releases/488390b74b0ce7beb515da2a892e48b62e6b5d4c/native/st-sdk)
+ + typer==0.27.3
+ + typing-extensions==4.16.0
+CHECK:PASS acceptance reused: tree c59dffdf9dc0 passed at 2026-11-05T06:19:33.798Z
+CHECK:PASS acceptance reused: tree c59dffdf9dc0 passed at 2026-11-05T06:19:33.798Z
+[service] accepting 90cb5a28f19a in an isolated clone
+[service] acceptance=fresh id=e5d46e0afa4d
+[service] detached rebuild job=7b2cf3f64976414da4f37b6886bf7684 submission_rc=0
+[service] result: st service result 7b2cf3f64976414da4f37b6886bf7684; wait: st service wait 7b2cf3f64976414da4f37b6886bf7684
+[service] details:.dev-tools/service-detached-7b2cf3f64976414da4f37b6886bf7684-details.txt|hint:Running as unit: sf-rebuild-agent-hub.service; invocation ID: e37dc83afe2f411d9e1d11a64f5aca95

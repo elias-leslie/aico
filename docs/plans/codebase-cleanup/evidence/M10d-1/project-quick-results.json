@@ -1,0 +1,123 @@
+[
+  {
+    "project": "agent-hub",
+    "legacy": true,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-agent-hub-compat-quick.txt"
+  },
+  {
+    "project": "agent-skills",
+    "legacy": false,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-agent-skills-compat-quick.txt"
+  },
+  {
+    "project": "aico",
+    "legacy": false,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-aico-compat-quick.txt"
+  },
+  {
+    "project": "blackbox",
+    "legacy": false,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-blackbox-compat-quick.txt"
+  },
+  {
+    "project": "browser-automation",
+    "legacy": false,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-browser-automation-compat-quick.txt"
+  },
+  {
+    "project": "bugout",
+    "legacy": true,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-bugout-compat-quick.txt"
+  },
+  {
+    "project": "claude-config",
+    "legacy": true,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-claude-config-compat-quick.txt"
+  },
+  {
+    "project": "code-intelligence",
+    "legacy": false,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-code-intelligence-compat-quick.txt"
+  },
+  {
+    "project": "codex-config",
+    "legacy": true,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-codex-config-compat-quick.txt"
+  },
+  {
+    "project": "desktop-automation",
+    "legacy": false,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-desktop-automation-compat-quick.txt"
+  },
+  {
+    "project": "jobinator-4000",
+    "legacy": false,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-jobinator-4000-compat-quick.txt"
+  },
+  {
+    "project": "nightshift",
+    "legacy": true,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-nightshift-compat-quick.txt"
+  },
+  {
+    "project": "ominull",
+    "legacy": false,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-ominull-compat-quick2.txt",
+    "initial_exit": 3
+  },
+  {
+    "project": "portfolio",
+    "legacy": true,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-portfolio-compat-quick.txt"
+  },
+  {
+    "project": "portfolio-ai",
+    "legacy": true,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-portfolio-ai-compat-quick.txt"
+  },
+  {
+    "project": "security-research",
+    "legacy": true,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-security-research-compat-quick.txt"
+  },
+  {
+    "project": "summitflow",
+    "legacy": false,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-summitflow-compat-quick.txt"
+  },
+  {
+    "project": "uilint",
+    "legacy": true,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-uilint-compat-quick.txt"
+  },
+  {
+    "project": "vault",
+    "legacy": true,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-vault-compat-quick.txt"
+  },
+  {
+    "project": "vault-tools",
+    "legacy": false,
+    "exit": 0,
+    "log": "/srv/scratch/m10d1-vault-tools-compat-quick.txt"
+  }
+]

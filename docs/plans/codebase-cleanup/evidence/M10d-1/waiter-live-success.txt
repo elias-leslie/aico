@@ -1,0 +1,1 @@
+[Ready] command "bin/true" (aico-wait-91124718d057) succeeded · re: "TEST watcher must report success" · journalctl --user -u aico-wait-91124718d057

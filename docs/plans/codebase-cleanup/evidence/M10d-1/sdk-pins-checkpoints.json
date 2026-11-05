@@ -1,0 +1,80 @@
+[
+  {
+    "project": "browser-automation",
+    "root": "/srv/workspaces/projects/browser-automation",
+    "directory": ".",
+    "paths": [
+      "pyproject.toml",
+      "uv.lock",
+      "vendor/summitflow_st_sdk-0.2.1-py3-none-any.whl"
+    ],
+    "quick_exit": 0,
+    "commit_exit": 0,
+    "commit": "d27200a64992ad40ab06fa2a75d539566cfe1c03"
+  },
+  {
+    "project": "code-intelligence",
+    "root": "/srv/workspaces/projects/code-intelligence",
+    "directory": ".",
+    "paths": [
+      "pyproject.toml",
+      "uv.lock",
+      "vendor/summitflow_st_sdk-0.2.1-py3-none-any.whl"
+    ],
+    "quick_exit": 0,
+    "commit_exit": 0,
+    "commit": "663a18a07bb363634fb6b530c35631e62e308e73"
+  },
+  {
+    "project": "desktop-automation",
+    "root": "/srv/workspaces/projects/desktop-automation",
+    "directory": ".",
+    "paths": [
+      "pyproject.toml",
+      "uv.lock",
+      "vendor/summitflow_st_sdk-0.2.1-py3-none-any.whl"
+    ],
+    "quick_exit": 0,
+    "commit_exit": 0,
+    "commit": "6c754082797c19e1aacd4ed25edee58eccc0b63a"
+  },
+  {
+    "project": "jobinator-4000",
+    "root": "/srv/workspaces/projects/jobinator-4000",
+    "directory": "backend",
+    "paths": [
+      "backend/pyproject.toml",
+      "backend/uv.lock",
+      "backend/vendor/summitflow_st_sdk-0.2.1-py3-none-any.whl"
+    ],
+    "quick_exit": 0,
+    "commit_exit": 0,
+    "commit": "9508f827844e4a0428326827151fecbdd1fd095d"
+  },
+  {
+    "project": "portfolio-ai",
+    "root": "/srv/workspaces/projects/portfolio-ai",
+    "directory": "backend",
+    "paths": [
+      "backend/pyproject.toml",
+      "backend/uv.lock",
+      "docker/workspace-packages/summitflow_st_sdk-0.2.1-py3-none-any.whl"
+    ],
+    "quick_exit": 0,
+    "commit_exit": 0,
+    "commit": "d9b98aa8930461884a03eb2d8f65e6ff96762588"
+  },
+  {
+    "project": "vault-tools",
+    "root": "/srv/workspaces/projects/vault-tools",
+    "directory": ".",
+    "paths": [
+      "pyproject.toml",
+      "uv.lock",
+      "vendor/summitflow_st_sdk-0.2.1-py3-none-any.whl"
+    ],
+    "quick_exit": 0,
+    "commit_exit": 0,
+    "commit": "03bf78e9c7c58cc8f528a623f50f23061a56dfb4"
+  }
+]

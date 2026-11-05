@@ -1,0 +1,9 @@
+JOB:7b2cf3f64976414da4f37b6886bf7684|agent-hub|failed|exit=1|commit=90cb5a28f19a|log=/home/kasadis/.summitflow/services/jobs/7b2cf3f64976414da4f37b6886bf7684.log
+  [service] synced codex-session-sync.timer
+  [service] synced codex-session-sync.service
+  [service] synced codex-session-close-inactive.timer
+  [service] synced codex-session-close-inactive.service
+  [service] synced agent-hub-usage-collect.timer
+  [service] synced agent-hub-usage-collect.service
+  [service] synced agent-hub-hatchet-agent-worker.service
+  [service] rebuild completed with 2 error(s)

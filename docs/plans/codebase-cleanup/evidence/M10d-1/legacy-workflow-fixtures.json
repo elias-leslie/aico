@@ -1,0 +1,38 @@
+[
+  {
+    "project": "agent-hub",
+    "explicit_acceptance": true,
+    "workflow": ".github/workflows/docker-build.yml",
+    "job": "build",
+    "env": false,
+    "services": [],
+    "run_steps": 0
+  },
+  {
+    "project": "codex-config",
+    "explicit_acceptance": false,
+    "workflow": ".github/workflows/agent-hub-context.yml",
+    "job": "private-context",
+    "env": false,
+    "services": [],
+    "run_steps": 3
+  },
+  {
+    "project": "portfolio-ai",
+    "explicit_acceptance": true,
+    "workflow": ".github/workflows/docker-build.yml",
+    "job": "image-smoke",
+    "env": false,
+    "services": [],
+    "run_steps": 1
+  },
+  {
+    "project": "portfolio-ai",
+    "explicit_acceptance": true,
+    "workflow": ".github/workflows/docker-build.yml",
+    "job": "build",
+    "env": false,
+    "services": [],
+    "run_steps": 1
+  }
+]

@@ -1,0 +1,159 @@
+[
+  {
+    "project": "aico",
+    "source_commit": "13b9da207a9898a457b82fb0d820ed1c34c2b0a5",
+    "tree": "8e61bc330b754cdb491e01d17abc8907509859b4",
+    "artifact": "/srv/workspaces/projects/aico/.git/aico-checks/receipts/accept-8e61bc330b754cdb491e01d17abc8907509859b4.json",
+    "passed": true,
+    "ms": 115599.234971,
+    "at": "2026-11-05T06:45:12.246Z",
+    "stages": [
+      {
+        "id": "vitest",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "gitleaks",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "osv",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "semgrep",
+        "state": "skip",
+        "required": false
+      },
+      {
+        "id": "python-host-ruff",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "python-host-types",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "python-host-tests",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "tsc",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "biome",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "depcruise",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "boundaries",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "ui-spec",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "gradle-android",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "cargo-tray",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "go-hook",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "python-st-sdk",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "python-service-tools",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "contracts-host-steward",
+        "state": "pass",
+        "required": false
+      }
+    ]
+  },
+  {
+    "project": "agent-hub",
+    "source_commit": "90cb5a28f19ad52b17bc49d9cfd400ef8bf9de9d",
+    "tree": "c59dffdf9dc06fefe40e8d9e1d02716d06f0f831",
+    "artifact": "/srv/workspaces/projects/agent-hub/.git/aico-checks/receipts/accept-c59dffdf9dc06fefe40e8d9e1d02716d06f0f831.json",
+    "passed": true,
+    "ms": 188834.98676,
+    "at": "2026-11-05T06:19:33.798Z",
+    "stages": [
+      {
+        "id": "ruff",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "types",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "pytest",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "biome",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "tsc",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "vitest",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "gitleaks",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "osv",
+        "state": "pass",
+        "required": true
+      },
+      {
+        "id": "semgrep",
+        "state": "pass",
+        "required": true
+      }
+    ]
+  }
+]

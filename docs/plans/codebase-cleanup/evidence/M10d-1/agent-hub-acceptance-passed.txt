@@ -1,0 +1,13 @@
+CHECK:acceptance:90cb5a28f19a (tree c59dffdf9dc0)
+CHECK:OK:ruff|0.1s|details:.dev-tools/ruff-169657-details.txt|hint:All checks passed!
+CHECK:OK:biome|0.3s|details:.dev-tools/biome-169657-details.txt|hint:Checked 441 files in 187ms. No fixes applied.
+CHECK:OK:types|0.6s|details:.dev-tools/types-169657-details.txt|hint:All checks passed!
+CHECK:OK:vitest|8.5s|details:.dev-tools/vitest-169657-details.txt|hint:Tests  589 passed | 5 skipped (594)
+CHECK:OK:gitleaks|0.7s|details:.dev-tools/gitleaks-169657-details.txt|hint:[]
+CHECK:OK:tsc|10.1s|details:.dev-tools/tsc-169657-details.txt|hint:-
+CHECK:OK:osv|1.1s|details:.dev-tools/osv-169657-details.txt|hint:}
+CHECK:OK:semgrep|1.2s|details:.dev-tools/semgrep-169657-details.txt|hint:Ran 1 rule on 1063 files: 0 findings.
+CHECK:OK:pytest|187.2s|details:.dev-tools/pytest-169657-details.txt|hint:== 5391 passed, 10 skipped, 132 deselected, 28 warnings in 173.24s (0:02:53) ===
+CHECK:PASS acceptance 188.8s at 90cb5a28f19a
+ERROR Local acceptance failed: Aico acceptance passed but its retained report is unavailable
+[service] accepting 90cb5a28f19a in an isolated clone

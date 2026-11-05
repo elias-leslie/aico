@@ -1,0 +1,20 @@
+{
+  "verified_at": "2026-11-05T07:26:15.746380+00:00",
+  "window_seconds": 1800,
+  "journal_alerts": 0,
+  "container_error_lines": 0,
+  "sf_app_units": "inactive/disabled; unit files retained",
+  "postgres_clients": {
+    "agent_hub": 6,
+    "neri": 1,
+    "hatchet": 17,
+    "summitflow": 0
+  },
+  "redis_established_sockets": 0,
+  "context_import": {
+    "last_state": "ok",
+    "last_run": "2026-11-05T07:20:10.356000+00:00",
+    "initial_fence": 155,
+    "final_fence": 158
+  }
+}

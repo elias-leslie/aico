@@ -1,0 +1,7 @@
+dec523ee6d0f  Which mockup should we use? (d63f26a90372)
+  answered · from session c2baedfb
+  | Project: TEST-M10d1
+  | Review the mockups: /mockups?project=TEST-M10d1
+  answer: Use this one: TEST selection proof (d63f26a90372)
+  note: TEST: saved note and selection from the creating session
+  when handled: tether ask done dec523ee6d0f

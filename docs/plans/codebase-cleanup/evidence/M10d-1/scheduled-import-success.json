@@ -1,0 +1,17 @@
+{
+  "kind": "context-import",
+  "home": "davion-sidarli",
+  "state": {
+    "kind": "context-import",
+    "nextRun": 1793862001031,
+    "fence": 155,
+    "leaseId": null,
+    "holder": null,
+    "holderMachine": null,
+    "leaseExpires": null,
+    "lastRun": 1793861398691,
+    "lastState": "ok",
+    "lastMeaning": "Copied 150 memories and 143 prompts from Agent Hub; the project list matches.",
+    "lastMachine": "davion-sidarli"
+  }
+}

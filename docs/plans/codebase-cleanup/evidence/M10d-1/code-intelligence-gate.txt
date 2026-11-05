@@ -1,0 +1,52 @@
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=0.0s holder=aico check project=aico pid=3999052 active_age=78.3s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=5.0s holder=aico check project=aico pid=3999052 active_age=83.3s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=10.0s holder=aico check project=aico pid=3999052 active_age=88.3s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=15.1s holder=aico check project=aico pid=3999052 active_age=93.3s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=20.1s holder=aico check project=aico pid=3999052 active_age=98.3s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=25.1s holder=aico check project=aico pid=3999052 active_age=103.4s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=30.1s holder=aico check project=aico pid=3999052 active_age=108.4s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=35.2s holder=aico check project=aico pid=3999052 active_age=113.4s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=40.2s holder=aico check project=aico pid=4011258 active_age=1.3s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=45.2s holder=aico check project=aico pid=4011258 active_age=6.3s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=50.2s holder=aico check project=aico pid=4011258 active_age=11.3s
+[st] Waiting for shared heavy-work lane: Prepare project service tools class=heavy wait_age=55.3s holder=aico check project=aico pid=4011258 active_age=16.4s
+Using CPython 3.14.4
+Creating virtual environment at: .venv
+Resolved 24 packages in 1ms
+   Building aico-service-tools @ file:///home/kasadis/.local/lib/aico/releases/b1fe0ca16b5c3f288bc4f4512cad479edb6da906/native/service-tools
+   Building summitflow-st-sdk @ file:///home/kasadis/.local/lib/aico/releases/b1fe0ca16b5c3f288bc4f4512cad479edb6da906/native/st-sdk
+      Built summitflow-st-sdk @ file:///home/kasadis/.local/lib/aico/releases/b1fe0ca16b5c3f288bc4f4512cad479edb6da906/native/st-sdk
+      Built aico-service-tools @ file:///home/kasadis/.local/lib/aico/releases/b1fe0ca16b5c3f288bc4f4512cad479edb6da906/native/service-tools
+Prepared 2 packages in 346ms
+Installed 18 packages in 29ms
+ + aico-service-tools==0.1.0 (from file:///home/kasadis/.local/lib/aico/releases/b1fe0ca16b5c3f288bc4f4512cad479edb6da906/native/service-tools)
+ + annotated-doc==0.0.5
+ + anyio==4.16.0
+ + certifi==2026.10.23
+ + h11==0.16.0
+ + httpcore==1.0.9
+ + httpx==0.28.1
+ + idna==3.20
+ + markdown-it-py==4.2.0
+ + mdurl==0.1.2
+ + pygments==2.21.0
+ + python-dotenv==1.2.4
+ + pyyaml==6.0.3
+ + rich==15.0.0
+ + shellingham==1.5.4
+ + summitflow-st-sdk==0.2.1 (from file:///home/kasadis/.local/lib/aico/releases/b1fe0ca16b5c3f288bc4f4512cad479edb6da906/native/st-sdk)
+ + typer==0.27.3
+ + typing-extensions==4.16.0
+CHECK:acceptance:f8c4f57a65ea (tree dcfb30e4beff)
+CHECK:SKIP:no_local_rules: semgrep
+CHECK:SKIP:This Python package has no product frontend or declared frontend test suite. TypeScript parser fixture validation remains covered by the TSC gate.: product-frontend
+CHECK:OK:ruff|0.0s|details:.dev-tools/ruff-4050384-details.txt|hint:All checks passed!
+CHECK:OK:types|0.2s|details:.dev-tools/types-4050384-details.txt|hint:All checks passed!
+CHECK:OK:biome|0.2s|details:.dev-tools/biome-4050384-details.txt|hint:-
+CHECK:OK:tsc|0.2s|details:.dev-tools/tsc-4050384-details.txt|hint:-
+CHECK:OK:osv|0.4s|details:.dev-tools/osv-4050384-details.txt|hint:}
+CHECK:OK:gitleaks|0.9s|details:.dev-tools/gitleaks-4050384-details.txt|hint:[]
+CHECK:FAIL:python|1.9s|details:.dev-tools/python-4050384-details.txt|hint:E       KeyError: 'X-SummitFlow-Agent-Token'
+CHECK:FAIL acceptance 2.3s at f8c4f57a65ea: python
+ERROR Local acceptance failed: Aico acceptance failed for f8c4f57a65ea (exit 1)
+[service] accepting f8c4f57a65ea in an isolated clone

@@ -1,0 +1,14 @@
+Id=summitflow-backend.service
+ActiveState=inactive
+FragmentPath=/home/kasadis/.config/systemd/user/summitflow-backend.service
+UnitFileState=disabled
+
+Id=summitflow-frontend.service
+ActiveState=inactive
+FragmentPath=/home/kasadis/.config/systemd/user/summitflow-frontend.service
+UnitFileState=disabled
+
+Id=summitflow-hatchet-worker.service
+ActiveState=inactive
+FragmentPath=/home/kasadis/.config/systemd/user/summitflow-hatchet-worker.service
+UnitFileState=disabled

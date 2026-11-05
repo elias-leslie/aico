@@ -1,0 +1,174 @@
+[
+  {
+    "project": "agent-hub",
+    "root": "/srv/workspaces/projects/agent-hub",
+    "available": true,
+    "native": false,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "agent-skills",
+    "root": "/srv/workspaces/projects/agent-skills",
+    "available": true,
+    "native": true,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "aico",
+    "root": "/srv/workspaces/projects/aico",
+    "available": true,
+    "native": true,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "blackbox",
+    "root": "/srv/workspaces/projects/blackbox",
+    "available": true,
+    "native": true,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "browser-automation",
+    "root": "/srv/workspaces/projects/browser-automation",
+    "available": true,
+    "native": true,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "bugout",
+    "root": "/srv/workspaces/projects/bugout",
+    "available": true,
+    "native": false,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "cinderwake",
+    "skipped": "coordinator exclusion"
+  },
+  {
+    "project": "claude-config",
+    "root": "/srv/workspaces/projects/claude-config",
+    "available": true,
+    "native": false,
+    "config": false,
+    "git": true
+  },
+  {
+    "project": "code-intelligence",
+    "root": "/srv/workspaces/projects/code-intelligence",
+    "available": true,
+    "native": true,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "codex-config",
+    "root": "/srv/workspaces/projects/codex-config",
+    "available": true,
+    "native": false,
+    "config": false,
+    "git": true
+  },
+  {
+    "project": "desktop-automation",
+    "root": "/srv/workspaces/projects/desktop-automation",
+    "available": true,
+    "native": true,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "jobinator-4000",
+    "root": "/srv/workspaces/projects/jobinator-4000",
+    "available": true,
+    "native": true,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "neri",
+    "skipped": "coordinator exclusion"
+  },
+  {
+    "project": "neri-hunters",
+    "skipped": "coordinator exclusion"
+  },
+  {
+    "project": "nightshift",
+    "root": "/srv/workspaces/projects/nightshift",
+    "available": true,
+    "native": false,
+    "config": false,
+    "git": true
+  },
+  {
+    "project": "ominull",
+    "root": "/srv/workspaces/projects/ominull",
+    "available": true,
+    "native": true,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "portfolio",
+    "root": "/srv/workspaces/projects/portfolio",
+    "available": true,
+    "native": false,
+    "config": false,
+    "git": true
+  },
+  {
+    "project": "portfolio-ai",
+    "root": "/srv/workspaces/projects/portfolio-ai",
+    "available": true,
+    "native": false,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "security-research",
+    "root": "/srv/workspaces/projects/security-research",
+    "available": true,
+    "native": false,
+    "config": false,
+    "git": true
+  },
+  {
+    "project": "summitflow",
+    "root": "/srv/workspaces/projects/summitflow",
+    "available": true,
+    "native": true,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "uilint",
+    "root": "/srv/workspaces/projects/uilint",
+    "available": true,
+    "native": false,
+    "config": true,
+    "git": true
+  },
+  {
+    "project": "vault",
+    "root": "/srv/workspaces/vault",
+    "available": true,
+    "native": false,
+    "config": false,
+    "git": true
+  },
+  {
+    "project": "vault-tools",
+    "root": "/srv/workspaces/projects/vault-tools",
+    "available": true,
+    "native": true,
+    "config": true,
+    "git": true
+  }
+]

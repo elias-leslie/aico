@@ -6,11 +6,13 @@ Restore the CLI links before starting SF:
 
 ```sh
 ln -sfn /srv/workspaces/projects/summitflow/scripts/st /home/kasadis/bin/st
+ln -sfn /srv/workspaces/projects/summitflow/scripts/st /home/kasadis/.local/bin/st
 sudo ln -sfn /srv/workspaces/projects/summitflow/scripts/st /usr/local/bin/st
 ln -sfn /srv/workspaces/projects/aico/packages/web-server/scripts/aico /home/kasadis/.local/bin/aico
+ln -sfn /srv/workspaces/projects/aico/packages/web-server/scripts/aico /home/kasadis/bin/aico
 ```
 
-The newly created `/home/kasadis/.local/bin/st` should point to the SF launcher too if rolling back the alias. Then restore the old services:
+Then restore the old services:
 
 ```sh
 export XDG_RUNTIME_DIR=/run/user/1000

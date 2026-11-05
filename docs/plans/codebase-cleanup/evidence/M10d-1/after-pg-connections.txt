@@ -1,0 +1,10 @@
+agent_hub||client backend|idle|6
+hatchet|server|client backend|idle|12
+hatchet|server:ddl|client backend|idle|1
+hatchet|server:pubsub|client backend|idle|4
+internal||autovacuum launcher||1
+internal||background writer||1
+internal||checkpointer||1
+internal||logical replication launcher||1
+internal||walwriter||1
+neri||client backend|idle|1

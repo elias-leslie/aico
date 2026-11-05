@@ -67,7 +67,7 @@ def main():
     try: projects=json.loads(projects)
     except ValueError: projects=[]
     for project in projects:
-        if project.get('id')=='neri':continue
+        if str(project.get('id', '')).startswith('neri'):continue
         root=project.get('root_path')
         if not root or not Path(root).is_dir():continue
         for directory,dirs,files in os.walk(root):

@@ -1,0 +1,4 @@
+summitflow-stack-hatchet-1 Up 39 hours (healthy)
+summitflow-stack-postgres-1 Up 39 hours (healthy)
+summitflow-stack-redis-1 Up 39 hours (healthy)
+local-searxng Up 39 hours
