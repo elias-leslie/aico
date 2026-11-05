@@ -1,0 +1,5227 @@
+{
+  "captured_at": "2026-11-05T02:05:40.579240+00:00",
+  "deployed_ops": "ed5bda90337ec85e370a1e372a4ea8293ffba68c",
+  "workstation": {
+    "machine": "davion-sidarli",
+    "entries": [
+      {
+        "id": "external/portfolio-ai-complete",
+        "source": "portfolio-ai-complete",
+        "name": "Portfolio-AI full backup (database and uploads)",
+        "target": "external",
+        "dataAt": null,
+        "nextRun": null,
+        "state": "failed",
+        "meaning": "The backup owner machine could not be reached; its last artifact date is shown.",
+        "snapshot": null,
+        "path": "/status?project=portfolio-ai",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/root-volume",
+        "source": "root-volume",
+        "name": "/ recovery",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/root.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/root.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/home",
+        "source": "home",
+        "name": "/home recovery",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/srv-models",
+        "source": "srv-models",
+        "name": "/srv/models recovery",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/models.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/models.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/srv-workspaces",
+        "source": "srv-workspaces",
+        "name": "/srv/workspaces recovery",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/var-lib-docker",
+        "source": "var-lib-docker",
+        "name": "/var/lib/docker recovery",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/docker.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/docker.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/var-log",
+        "source": "var-log",
+        "name": "/var/log recovery",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/var_log.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/var_log.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/a-loom",
+        "source": "a-loom",
+        "name": "A-Loom",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/a-loom",
+        "source": "a-loom",
+        "name": "A-Loom",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/agent-hub-state",
+        "source": "agent-hub-state",
+        "name": "Agent Hub journals and context deliveries",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/agent-hub-state",
+        "source": "agent-hub-state",
+        "name": "Agent Hub journals and context deliveries",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/agent-skills",
+        "source": "agent-skills",
+        "name": "Agent Skills",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/agent-skills",
+        "source": "agent-skills",
+        "name": "Agent Skills",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/agent-hub",
+        "source": "agent-hub",
+        "name": "Agent-Hub",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/agent-hub",
+        "source": "agent-hub",
+        "name": "Agent-Hub",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/aico",
+        "source": "aico",
+        "name": "Aico",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/aico",
+        "source": "aico",
+        "name": "Aico",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "append/aico-davion-sidarli",
+        "source": "aico-davion-sidarli",
+        "name": "Aico databases and photos",
+        "target": "append",
+        "dataAt": "2026-11-05T01:58:21.627Z",
+        "nextRun": "2026-11-05T02:58:25.801Z",
+        "state": "ok",
+        "meaning": "Restorable data is 7 min old.",
+        "snapshot": "405e31d1b7887ed5777d5c8f1640f4c6b1e52b7216b13c4473755ea931618012",
+        "path": "/home/kasadis/.local/state/aico-snapshot/agent.db",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/aico-davion-sidarli",
+        "source": "aico-davion-sidarli",
+        "name": "Aico databases and photos",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:53:42.989Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 11 min old.",
+        "snapshot": "73b922f52e73f4e7d4f696258a9ab95d8bb1958f276af389fe544dd63ddcdad3",
+        "path": "/home/kasadis/.local/state/aico-snapshot/agent.db",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/aico-profile",
+        "source": "aico-profile",
+        "name": "Aico durable desktop profile",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/aico-profile",
+        "source": "aico-profile",
+        "name": "Aico durable desktop profile",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/pve-ct-190-aico-data",
+        "source": "pve-ct-190-aico-data",
+        "name": "Aico on gem \u00b7 databases and photos",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:53:39.000Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 12 min old. Copied from gem by the workstation; no Drive copy runs while the workstation is off.",
+        "snapshot": "659b7afe95a0d8d89382778aa411bfaab016dbfa761865dbb4d306b86da8516e",
+        "path": "/files-lxc-190.tar",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/aico-pre-tether-archive",
+        "source": "aico-pre-tether-archive",
+        "name": "Aico pre-Tether data archive (2026-10-15)",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/aico-pre-tether-archive",
+        "source": "aico-pre-tether-archive",
+        "name": "Aico pre-Tether data archive (2026-10-15)",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/aico-state",
+        "source": "aico-state",
+        "name": "Aico saved application state",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/aico-state",
+        "source": "aico-state",
+        "name": "Aico saved application state",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/blackbox",
+        "source": "blackbox",
+        "name": "BlackBox",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/blackbox",
+        "source": "blackbox",
+        "name": "BlackBox",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "external/blackbox-archive",
+        "source": "blackbox-archive",
+        "name": "Blackbox off-building archive pull",
+        "target": "external",
+        "dataAt": "2026-11-04T08:22:36.129Z",
+        "nextRun": null,
+        "state": "ok",
+        "meaning": "The owner backup artifact is current.",
+        "snapshot": null,
+        "path": "/status?project=blackbox",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/blackbox-vault-archive",
+        "source": "blackbox-vault-archive",
+        "name": "Blackbox vault recovery archive",
+        "target": "drive",
+        "dataAt": "2026-11-04T08:22:36.129Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 17 h old.",
+        "snapshot": "9b3b3bf2ddae974068ee406fc8eeff2bd00ed996172c8f749368f763fc95967c",
+        "path": "/media/kasadis/Backups/blackbox",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/browser-automation",
+        "source": "browser-automation",
+        "name": "Browser Automation",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/browser-automation",
+        "source": "browser-automation",
+        "name": "Browser Automation",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/bugout",
+        "source": "bugout",
+        "name": "Bugout",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/bugout",
+        "source": "bugout",
+        "name": "Bugout",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/cinderwake",
+        "source": "cinderwake",
+        "name": "Cinderwake",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/cinderwake",
+        "source": "cinderwake",
+        "name": "Cinderwake",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/claude-config",
+        "source": "claude-config",
+        "name": "Claude Canonical Configuration",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/claude-config",
+        "source": "claude-config",
+        "name": "Claude Canonical Configuration",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/.claude",
+        "source": ".claude",
+        "name": "Claude Config",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/.claude",
+        "source": ".claude",
+        "name": "Claude Config",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/claude-user-config",
+        "source": "claude-user-config",
+        "name": "Claude User Configuration",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/claude-user-config",
+        "source": "claude-user-config",
+        "name": "Claude User Configuration",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/code-intelligence",
+        "source": "code-intelligence",
+        "name": "Code Intelligence",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/code-intelligence",
+        "source": "code-intelligence",
+        "name": "Code Intelligence",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/codex-config",
+        "source": "codex-config",
+        "name": "Codex Canonical Configuration",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/codex-config",
+        "source": "codex-config",
+        "name": "Codex Canonical Configuration",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/.codex",
+        "source": ".codex",
+        "name": "Codex Config",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/.codex",
+        "source": ".codex",
+        "name": "Codex Config",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/design-tools",
+        "source": "design-tools",
+        "name": "Design Tools",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/design-tools",
+        "source": "design-tools",
+        "name": "Design Tools",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/desktop-automation",
+        "source": "desktop-automation",
+        "name": "Desktop Automation",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/desktop-automation",
+        "source": "desktop-automation",
+        "name": "Desktop Automation",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/fydor",
+        "source": "fydor",
+        "name": "Fydor",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/fydor",
+        "source": "fydor",
+        "name": "Fydor",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/gnome-keyring",
+        "source": "gnome-keyring",
+        "name": "GNOME keyring (Chrome password decryption)",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/gnome-keyring",
+        "source": "gnome-keyring",
+        "name": "GNOME keyring (Chrome password decryption)",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/jobinator-4000",
+        "source": "jobinator-4000",
+        "name": "Jobinator-4000",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/jobinator-4000",
+        "source": "jobinator-4000",
+        "name": "Jobinator-4000",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/learn-o-tron",
+        "source": "learn-o-tron",
+        "name": "Learn-o-Tron",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/learn-o-tron",
+        "source": "learn-o-tron",
+        "name": "Learn-o-Tron",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/monkey-fight",
+        "source": "monkey-fight",
+        "name": "Monkey Fight",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/monkey-fight",
+        "source": "monkey-fight",
+        "name": "Monkey Fight",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/nightshift",
+        "source": "nightshift",
+        "name": "Nightshift",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/nightshift",
+        "source": "nightshift",
+        "name": "Nightshift",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/obsidian-config",
+        "source": "obsidian-config",
+        "name": "Obsidian app config",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/obsidian-config",
+        "source": "obsidian-config",
+        "name": "Obsidian app config",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/references-old-work",
+        "source": "references-old-work",
+        "name": "Old work references",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/references-old-work",
+        "source": "references-old-work",
+        "name": "Old work references",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/ominull",
+        "source": "ominull",
+        "name": "Ominull",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/ominull",
+        "source": "ominull",
+        "name": "Ominull",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/ominull-production-state",
+        "source": "ominull-production-state",
+        "name": "Ominull production container recovery",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:56:58.047Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 8 min old.",
+        "snapshot": "75a5887f3aff1ff1cf48becdcd36c24d5aa7d1dcabe24b832b68510490e60cca",
+        "path": "/media/kasadis/Backups/ominull-production-state/current",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/ominull-evidence-replica",
+        "source": "ominull-evidence-replica",
+        "name": "OmniNull evidence replica",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/ominull-evidence-replica",
+        "source": "ominull-evidence-replica",
+        "name": "OmniNull evidence replica",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/onenote-archive",
+        "source": "onenote-archive",
+        "name": "OneNote archive",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/onenote-archive",
+        "source": "onenote-archive",
+        "name": "OneNote archive",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/onenote-extracted",
+        "source": "onenote-extracted",
+        "name": "OneNote extracted notes",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/onenote-extracted",
+        "source": "onenote-extracted",
+        "name": "OneNote extracted notes",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/chrome-profile",
+        "source": "chrome-profile",
+        "name": "Owner Chrome profile",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/chrome-profile",
+        "source": "chrome-profile",
+        "name": "Owner Chrome profile",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/home-desktop",
+        "source": "home-desktop",
+        "name": "Owner Desktop",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/home-desktop",
+        "source": "home-desktop",
+        "name": "Owner Desktop",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/home-documents",
+        "source": "home-documents",
+        "name": "Owner Documents",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/home-documents",
+        "source": "home-documents",
+        "name": "Owner Documents",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/home-downloads",
+        "source": "home-downloads",
+        "name": "Owner Downloads",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/home-downloads",
+        "source": "home-downloads",
+        "name": "Owner Downloads",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/home-pictures",
+        "source": "home-pictures",
+        "name": "Owner Pictures",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/home-pictures",
+        "source": "home-pictures",
+        "name": "Owner Pictures",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/persona-sandbox",
+        "source": "persona-sandbox",
+        "name": "Persona Sandbox",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/persona-sandbox",
+        "source": "persona-sandbox",
+        "name": "Persona Sandbox",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/portfolio",
+        "source": "portfolio",
+        "name": "Portfolio",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/portfolio",
+        "source": "portfolio",
+        "name": "Portfolio",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/portfolio-ai",
+        "source": "portfolio-ai",
+        "name": "Portfolio AI",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/portfolio-ai",
+        "source": "portfolio-ai",
+        "name": "Portfolio AI",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/postgres",
+        "source": "postgres",
+        "name": "PostgreSQL databases",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:53:38.661Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 12 min old.",
+        "snapshot": "5e5a6afb6676c75d56d4162cc5f34e36102e6b8067b053f4eefe61322c0e027c",
+        "path": "/postgres-dumpall.sql",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/pve-cluster-config",
+        "source": "pve-cluster-config",
+        "name": "Proxmox cluster configuration (/etc/pve)",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:53:38.832Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 12 min old.",
+        "snapshot": "20de673f7cf21fc13afe26e7c2850340498130106690d062992e22b945e8b0e1",
+        "path": "/pve-cluster-config.sql",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/pve-host-files",
+        "source": "pve-host-files",
+        "name": "Proxmox host files: blackbox identity and recovery descriptor, VM 120 config and cloud-init snippets",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:53:41.366Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 11 min old.",
+        "snapshot": "e3f79a3e66a756c938c14b7f8310121e970a5c090b338657995b6530f1330a36",
+        "path": "/files-host.tar",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/redis",
+        "source": "redis",
+        "name": "Redis database",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:53:38.661Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 12 min old.",
+        "snapshot": "6c8d9a405c1522035debe127f5f3e0837b24db1e8ede337677b122c93ae3c044",
+        "path": "/redis-dump.rdb",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/rootfall",
+        "source": "rootfall",
+        "name": "Rootfall",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/rootfall",
+        "source": "rootfall",
+        "name": "Rootfall",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/sha",
+        "source": "sha",
+        "name": "Security Hardening Automation",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/sha",
+        "source": "sha",
+        "name": "Security Hardening Automation",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/security-research",
+        "source": "security-research",
+        "name": "Security Research",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/security-research",
+        "source": "security-research",
+        "name": "Security Research",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/summitflow",
+        "source": "summitflow",
+        "name": "SummitFlow",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/summitflow",
+        "source": "summitflow",
+        "name": "SummitFlow",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/infrastructure",
+        "source": "infrastructure",
+        "name": "System Backup",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/root.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/root.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/tether-state",
+        "source": "tether-state",
+        "name": "Tether session state",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/tether-state",
+        "source": "tether-state",
+        "name": "Tether session state",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/the-aftertimes",
+        "source": "the-aftertimes",
+        "name": "The AfterTimes",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/the-aftertimes",
+        "source": "the-aftertimes",
+        "name": "The AfterTimes",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/the-aftertimes-support",
+        "source": "the-aftertimes-support",
+        "name": "The AfterTimes Support",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/the-aftertimes-support",
+        "source": "the-aftertimes-support",
+        "name": "The AfterTimes Support",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/trading-plan",
+        "source": "trading-plan",
+        "name": "Trading plan",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/trading-plan",
+        "source": "trading-plan",
+        "name": "Trading plan",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/uilint",
+        "source": "uilint",
+        "name": "uilint",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/uilint",
+        "source": "uilint",
+        "name": "uilint",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/vantage",
+        "source": "vantage",
+        "name": "Vantage",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/vantage",
+        "source": "vantage",
+        "name": "Vantage",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/vault",
+        "source": "vault",
+        "name": "Vault",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/vault",
+        "source": "vault",
+        "name": "Vault",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/vault-tools",
+        "source": "vault-tools",
+        "name": "Vault Tools",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/vault-tools",
+        "source": "vault-tools",
+        "name": "Vault Tools",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/pve-vm-100-browser-state",
+        "source": "pve-vm-100-browser-state",
+        "name": "VM 100 st-browser profiles and settings",
+        "target": "drive",
+        "dataAt": "2026-11-04T07:40:59.790018+00:00",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Machine is off; its last copy covers the unchanged data.",
+        "snapshot": "8410231e83320f09282ab9e877d8b1f74fa3a6f352087927cf667d5b04d93451",
+        "path": null,
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/pve-vm-180-app-recovery",
+        "source": "pve-vm-180-app-recovery",
+        "name": "VM180 app recovery data",
+        "target": "drive",
+        "dataAt": "2026-11-01T08:24:47.559087+00:00",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Machine is off; its last copy covers the unchanged data.",
+        "snapshot": "0d0f8462279c41b786ab1aa45a3184c99d597ee0b205ab894aebbfc8138f661d",
+        "path": null,
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/workspace-vault",
+        "source": "workspace-vault",
+        "name": "Workspace vault content",
+        "target": "native",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T05:13:32.575Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/workspace-vault",
+        "source": "workspace-vault",
+        "name": "Workspace vault content",
+        "target": "drive",
+        "dataAt": "2026-11-05T01:13:01.385Z",
+        "nextRun": "2026-11-05T07:30:00.000Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/agent-hub-telegram-bot-v1",
+        "source": "agent-hub-telegram-bot-v1",
+        "name": "Agent Hub Telegram Bot v1",
+        "target": "native",
+        "dataAt": null,
+        "nextRun": null,
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/agent-hub-telegram-bot-v1",
+        "source": "agent-hub-telegram-bot-v1",
+        "name": "Agent Hub Telegram Bot v1",
+        "target": "drive",
+        "dataAt": null,
+        "nextRun": null,
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/a-term",
+        "source": "a-term",
+        "name": "Aico previous app",
+        "target": "native",
+        "dataAt": null,
+        "nextRun": null,
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/a-term",
+        "source": "a-term",
+        "name": "Aico previous app",
+        "target": "drive",
+        "dataAt": null,
+        "nextRun": null,
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/aico-web-state",
+        "source": "aico-web-state",
+        "name": "Aico saved web state",
+        "target": "native",
+        "dataAt": null,
+        "nextRun": null,
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "snapshot": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/home.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/aico-web-state",
+        "source": "aico-web-state",
+        "name": "Aico saved web state",
+        "target": "drive",
+        "dataAt": null,
+        "nextRun": null,
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "snapshot": "20e08be4a27e1730eb3f355df892edcc0ab8d96a98adc99575065575cf7ce592",
+        "path": "/home",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "native/tether",
+        "source": "tether",
+        "name": "Tether",
+        "target": "native",
+        "dataAt": null,
+        "nextRun": null,
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "snapshot": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "path": "/mnt/summitflow-native/native/workspaces.20261104T201302-0500",
+        "running": false,
+        "machine": "davion-sidarli"
+      },
+      {
+        "id": "drive/tether",
+        "source": "tether",
+        "name": "Tether",
+        "target": "drive",
+        "dataAt": null,
+        "nextRun": null,
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "snapshot": "b8c116dc76a2037735bf41293b9849e13fafaf083032e531564d52484a3b5b3c",
+        "path": "/srv/workspaces",
+        "running": false,
+        "machine": "davion-sidarli"
+      }
+    ],
+    "runs": {
+      "native": {
+        "started": "2026-11-05T01:13:01.272Z",
+        "finished": "2026-11-05T01:13:31.327Z",
+        "ok": true
+      },
+      "guard": {
+        "started": "2026-11-05T02:01:00.281Z",
+        "finished": "2026-11-05T02:01:00.313Z",
+        "ok": true
+      },
+      "snapshots": {
+        "started": "2026-11-05T01:55:54.359Z",
+        "finished": "2026-11-05T01:55:56.311Z",
+        "ok": true
+      },
+      "append": {
+        "started": "2026-11-05T01:58:21.626Z",
+        "finished": "2026-11-05T01:58:24.874Z",
+        "ok": true
+      },
+      "drive": {
+        "started": "2026-11-05T01:53:38.660Z",
+        "finished": "2026-11-05T01:58:20.551Z",
+        "ok": true
+      },
+      "verify": {
+        "started": "2026-11-05T01:40:58.148Z",
+        "finished": "2026-11-05T01:52:30.409Z",
+        "ok": true
+      }
+    },
+    "cutover": {
+      "host": "2026-11-05T01:59:01.999Z",
+      "snapshots": "2026-11-05T01:59:02.435Z",
+      "guard": "2026-11-05T01:59:02.957Z",
+      "verify": "2026-11-05T01:59:03.369Z"
+    }
+  },
+  "status": {
+    "generated_at": "2026-11-05T02:05:40.205Z",
+    "rollup": {
+      "problems": 1,
+      "healthy": 133,
+      "counts": {
+        "failed": 1,
+        "late": 0,
+        "unknown": 0,
+        "warn": 0,
+        "ok": 125,
+        "off": 8
+      }
+    },
+    "summary": {
+      "problems": 12,
+      "worst": "failed",
+      "counts": {
+        "failed": 6,
+        "late": 0,
+        "unknown": 0,
+        "warn": 6
+      },
+      "quiet": 60,
+      "healthy": 211,
+      "top": [
+        {
+          "id": "davion-sidarli/check-tripwire",
+          "what": "Login and listener changes",
+          "kind": "check",
+          "machine": "davion-sidarli",
+          "state": "failed",
+          "meaning": "the workstation: Auth config changed (Tue 21:34): /etc/sudoers.d/60-host-steward content. Nothing explains it. Check it, then run: host-steward security-ack --event 85bcaccdea --note WHY.",
+          "last_run": "2026-11-05T02:00:23.794Z",
+          "next_run": "2026-11-05T02:25:23.794Z",
+          "actions": [
+            {
+              "kind": "run",
+              "ref": "sudo -n systemctl start host-steward-check.service"
+            },
+            {
+              "kind": "log",
+              "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+            }
+          ],
+          "updated_at": "2026-11-05T02:00:29.512Z",
+          "shown": "failed",
+          "shown_since": null
+        },
+        {
+          "id": "jobs/github-publish",
+          "what": "Nightly GitHub publication",
+          "kind": "job",
+          "machine": "davion-sidarli",
+          "state": "failed",
+          "meaning": "Exited 1: Publication: 2 pushed; 2 failed.",
+          "project": "aico",
+          "last_run": "2026-11-05T00:57:37.854Z",
+          "next_run": "2026-11-05T08:05:00.000Z",
+          "actions": [
+            {
+              "kind": "run",
+              "ref": "aico jobs run github-publish"
+            },
+            {
+              "kind": "log",
+              "ref": "journalctl --user -u aico-jobs.service -g github-publish -n 200 --no-pager"
+            }
+          ],
+          "updated_at": "2026-11-05T01:52:53.501Z",
+          "shown": "failed",
+          "shown_since": null
+        },
+        {
+          "id": "davion-sidarli/backup/external/portfolio-ai-complete",
+          "what": "Portfolio-AI full backup (database and uploads) \u00b7 Owner backup",
+          "kind": "backup",
+          "machine": "davion-sidarli",
+          "state": "failed",
+          "meaning": "The backup owner machine could not be reached; its last artifact date is shown.",
+          "actions": [
+            {
+              "kind": "detail",
+              "ref": "/status?project=portfolio-ai"
+            }
+          ],
+          "updated_at": "2026-11-05T02:01:00.443Z",
+          "shown": "failed",
+          "shown_since": null
+        }
+      ]
+    },
+    "rows": [
+      {
+        "id": "davion-sidarli/backup/external/portfolio-ai-complete",
+        "what": "Portfolio-AI full backup (database and uploads) \u00b7 Owner backup",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "failed",
+        "meaning": "The backup owner machine could not be reached; its last artifact date is shown.",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/status?project=portfolio-ai"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "failed",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/root-volume",
+        "what": "/ recovery \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=root-volume&target=native&name=%2F%20recovery"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/home",
+        "what": "/home recovery \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=home&target=native&name=%2Fhome%20recovery"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/srv-models",
+        "what": "/srv/models recovery \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=srv-models&target=native&name=%2Fsrv%2Fmodels%20recovery"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/srv-workspaces",
+        "what": "/srv/workspaces recovery \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=srv-workspaces&target=native&name=%2Fsrv%2Fworkspaces%20recovery"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/var-lib-docker",
+        "what": "/var/lib/docker recovery \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=var-lib-docker&target=native&name=%2Fvar%2Flib%2Fdocker%20recovery"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/var-log",
+        "what": "/var/log recovery \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=var-log&target=native&name=%2Fvar%2Flog%20recovery"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/a-loom",
+        "what": "A-Loom \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=a-loom&target=drive&name=A-Loom"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/a-loom",
+        "what": "A-Loom \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=a-loom&target=native&name=A-Loom"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/agent-hub-state",
+        "what": "Agent Hub journals and context deliveries \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=agent-hub-state&target=drive&name=Agent%20Hub%20journals%20and%20context%20deliveries"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/agent-hub-state",
+        "what": "Agent Hub journals and context deliveries \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=agent-hub-state&target=native&name=Agent%20Hub%20journals%20and%20context%20deliveries"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/agent-skills",
+        "what": "Agent Skills \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=agent-skills&target=drive&name=Agent%20Skills"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/agent-skills",
+        "what": "Agent Skills \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=agent-skills&target=native&name=Agent%20Skills"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/agent-hub",
+        "what": "Agent-Hub \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=agent-hub&target=drive&name=Agent-Hub"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/agent-hub",
+        "what": "Agent-Hub \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=agent-hub&target=native&name=Agent-Hub"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/append/aico-davion-sidarli",
+        "what": "Aico databases and photos \u00b7 CT 160",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 2 min old.",
+        "last_run": "2026-11-05T01:58:21.627Z",
+        "next_run": "2026-11-05T02:58:25.801Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request append"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico-davion-sidarli&target=append&name=Aico%20databases%20and%20photos"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/aico-davion-sidarli",
+        "what": "Aico databases and photos \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 7 min old.",
+        "last_run": "2026-11-05T01:53:42.989Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico-davion-sidarli&target=drive&name=Aico%20databases%20and%20photos"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/aico-profile",
+        "what": "Aico durable desktop profile \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico-profile&target=drive&name=Aico%20durable%20desktop%20profile"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/aico-profile",
+        "what": "Aico durable desktop profile \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico-profile&target=native&name=Aico%20durable%20desktop%20profile"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/pve-ct-190-aico-data",
+        "what": "Aico on gem \u00b7 databases and photos \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 7 min old. Copied from gem by the workstation; no Drive copy runs while the workstation is off.",
+        "last_run": "2026-11-05T01:53:39.000Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=pve-ct-190-aico-data&target=drive&name=Aico%20on%20gem%20%C2%B7%20databases%20and%20photos"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/aico-pre-tether-archive",
+        "what": "Aico pre-Tether data archive (2026-10-15) \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico-pre-tether-archive&target=drive&name=Aico%20pre-Tether%20data%20archive%20(2026-10-15)"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/aico-pre-tether-archive",
+        "what": "Aico pre-Tether data archive (2026-10-15) \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico-pre-tether-archive&target=native&name=Aico%20pre-Tether%20data%20archive%20(2026-10-15)"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/aico-state",
+        "what": "Aico saved application state \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico-state&target=drive&name=Aico%20saved%20application%20state"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/aico-state",
+        "what": "Aico saved application state \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico-state&target=native&name=Aico%20saved%20application%20state"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/aico",
+        "what": "Aico \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico&target=drive&name=Aico"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/aico",
+        "what": "Aico \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico&target=native&name=Aico"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/blackbox",
+        "what": "BlackBox \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=blackbox&target=drive&name=BlackBox"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/blackbox",
+        "what": "BlackBox \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=blackbox&target=native&name=BlackBox"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/external/blackbox-archive",
+        "what": "Blackbox off-building archive pull \u00b7 Owner backup",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "The owner backup artifact is current.",
+        "last_run": "2026-11-04T08:22:36.129Z",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/status?project=blackbox"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/blackbox-vault-archive",
+        "what": "Blackbox vault recovery archive \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 17 h old.",
+        "last_run": "2026-11-04T08:22:36.129Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=blackbox-vault-archive&target=drive&name=Blackbox%20vault%20recovery%20archive"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/browser-automation",
+        "what": "Browser Automation \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=browser-automation&target=drive&name=Browser%20Automation"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/browser-automation",
+        "what": "Browser Automation \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=browser-automation&target=native&name=Browser%20Automation"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/bugout",
+        "what": "Bugout \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=bugout&target=drive&name=Bugout"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/bugout",
+        "what": "Bugout \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=bugout&target=native&name=Bugout"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/cinderwake",
+        "what": "Cinderwake \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=cinderwake&target=drive&name=Cinderwake"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/cinderwake",
+        "what": "Cinderwake \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=cinderwake&target=native&name=Cinderwake"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/claude-config",
+        "what": "Claude Canonical Configuration \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=claude-config&target=drive&name=Claude%20Canonical%20Configuration"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/claude-config",
+        "what": "Claude Canonical Configuration \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=claude-config&target=native&name=Claude%20Canonical%20Configuration"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/.claude",
+        "what": "Claude Config \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=.claude&target=drive&name=Claude%20Config"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/.claude",
+        "what": "Claude Config \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=.claude&target=native&name=Claude%20Config"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/claude-user-config",
+        "what": "Claude User Configuration \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=claude-user-config&target=drive&name=Claude%20User%20Configuration"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/claude-user-config",
+        "what": "Claude User Configuration \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=claude-user-config&target=native&name=Claude%20User%20Configuration"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/code-intelligence",
+        "what": "Code Intelligence \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=code-intelligence&target=drive&name=Code%20Intelligence"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/code-intelligence",
+        "what": "Code Intelligence \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=code-intelligence&target=native&name=Code%20Intelligence"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/codex-config",
+        "what": "Codex Canonical Configuration \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=codex-config&target=drive&name=Codex%20Canonical%20Configuration"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/codex-config",
+        "what": "Codex Canonical Configuration \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=codex-config&target=native&name=Codex%20Canonical%20Configuration"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/.codex",
+        "what": "Codex Config \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=.codex&target=drive&name=Codex%20Config"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/.codex",
+        "what": "Codex Config \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=.codex&target=native&name=Codex%20Config"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/design-tools",
+        "what": "Design Tools \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=design-tools&target=drive&name=Design%20Tools"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/design-tools",
+        "what": "Design Tools \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=design-tools&target=native&name=Design%20Tools"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/desktop-automation",
+        "what": "Desktop Automation \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=desktop-automation&target=drive&name=Desktop%20Automation"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/desktop-automation",
+        "what": "Desktop Automation \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=desktop-automation&target=native&name=Desktop%20Automation"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/fydor",
+        "what": "Fydor \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=fydor&target=drive&name=Fydor"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/fydor",
+        "what": "Fydor \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=fydor&target=native&name=Fydor"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/gnome-keyring",
+        "what": "GNOME keyring (Chrome password decryption) \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=gnome-keyring&target=drive&name=GNOME%20keyring%20(Chrome%20password%20decryption)"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/gnome-keyring",
+        "what": "GNOME keyring (Chrome password decryption) \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=gnome-keyring&target=native&name=GNOME%20keyring%20(Chrome%20password%20decryption)"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/jobinator-4000",
+        "what": "Jobinator-4000 \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=jobinator-4000&target=drive&name=Jobinator-4000"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/jobinator-4000",
+        "what": "Jobinator-4000 \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=jobinator-4000&target=native&name=Jobinator-4000"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/learn-o-tron",
+        "what": "Learn-o-Tron \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=learn-o-tron&target=drive&name=Learn-o-Tron"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/learn-o-tron",
+        "what": "Learn-o-Tron \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=learn-o-tron&target=native&name=Learn-o-Tron"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/monkey-fight",
+        "what": "Monkey Fight \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=monkey-fight&target=drive&name=Monkey%20Fight"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/monkey-fight",
+        "what": "Monkey Fight \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=monkey-fight&target=native&name=Monkey%20Fight"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/nightshift",
+        "what": "Nightshift \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=nightshift&target=drive&name=Nightshift"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/nightshift",
+        "what": "Nightshift \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=nightshift&target=native&name=Nightshift"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/obsidian-config",
+        "what": "Obsidian app config \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=obsidian-config&target=drive&name=Obsidian%20app%20config"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/obsidian-config",
+        "what": "Obsidian app config \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=obsidian-config&target=native&name=Obsidian%20app%20config"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/references-old-work",
+        "what": "Old work references \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=references-old-work&target=drive&name=Old%20work%20references"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/references-old-work",
+        "what": "Old work references \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=references-old-work&target=native&name=Old%20work%20references"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/ominull-production-state",
+        "what": "Ominull production container recovery \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 4 min old.",
+        "last_run": "2026-11-05T01:56:58.047Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=ominull-production-state&target=drive&name=Ominull%20production%20container%20recovery"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/ominull",
+        "what": "Ominull \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=ominull&target=drive&name=Ominull"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/ominull",
+        "what": "Ominull \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=ominull&target=native&name=Ominull"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/ominull-evidence-replica",
+        "what": "OmniNull evidence replica \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=ominull-evidence-replica&target=drive&name=OmniNull%20evidence%20replica"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/ominull-evidence-replica",
+        "what": "OmniNull evidence replica \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=ominull-evidence-replica&target=native&name=OmniNull%20evidence%20replica"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/onenote-archive",
+        "what": "OneNote archive \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=onenote-archive&target=drive&name=OneNote%20archive"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/onenote-archive",
+        "what": "OneNote archive \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=onenote-archive&target=native&name=OneNote%20archive"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/onenote-extracted",
+        "what": "OneNote extracted notes \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=onenote-extracted&target=drive&name=OneNote%20extracted%20notes"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/onenote-extracted",
+        "what": "OneNote extracted notes \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=onenote-extracted&target=native&name=OneNote%20extracted%20notes"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/chrome-profile",
+        "what": "Owner Chrome profile \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=chrome-profile&target=drive&name=Owner%20Chrome%20profile"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/chrome-profile",
+        "what": "Owner Chrome profile \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=chrome-profile&target=native&name=Owner%20Chrome%20profile"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/home-desktop",
+        "what": "Owner Desktop \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=home-desktop&target=drive&name=Owner%20Desktop"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/home-desktop",
+        "what": "Owner Desktop \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=home-desktop&target=native&name=Owner%20Desktop"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/home-documents",
+        "what": "Owner Documents \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=home-documents&target=drive&name=Owner%20Documents"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/home-documents",
+        "what": "Owner Documents \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=home-documents&target=native&name=Owner%20Documents"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/home-downloads",
+        "what": "Owner Downloads \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=home-downloads&target=drive&name=Owner%20Downloads"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/home-downloads",
+        "what": "Owner Downloads \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=home-downloads&target=native&name=Owner%20Downloads"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/home-pictures",
+        "what": "Owner Pictures \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=home-pictures&target=drive&name=Owner%20Pictures"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/home-pictures",
+        "what": "Owner Pictures \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=home-pictures&target=native&name=Owner%20Pictures"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/persona-sandbox",
+        "what": "Persona Sandbox \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=persona-sandbox&target=drive&name=Persona%20Sandbox"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/persona-sandbox",
+        "what": "Persona Sandbox \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=persona-sandbox&target=native&name=Persona%20Sandbox"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/portfolio-ai",
+        "what": "Portfolio AI \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=portfolio-ai&target=drive&name=Portfolio%20AI"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/portfolio-ai",
+        "what": "Portfolio AI \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=portfolio-ai&target=native&name=Portfolio%20AI"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/portfolio",
+        "what": "Portfolio \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=portfolio&target=drive&name=Portfolio"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/portfolio",
+        "what": "Portfolio \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=portfolio&target=native&name=Portfolio"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/postgres",
+        "what": "PostgreSQL databases \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 7 min old.",
+        "last_run": "2026-11-05T01:53:38.661Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=postgres&target=drive&name=PostgreSQL%20databases"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/pve-cluster-config",
+        "what": "Proxmox cluster configuration (/etc/pve) \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 7 min old.",
+        "last_run": "2026-11-05T01:53:38.832Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=pve-cluster-config&target=drive&name=Proxmox%20cluster%20configuration%20(%2Fetc%2Fpve)"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/pve-host-files",
+        "what": "Proxmox host files: blackbox identity and recovery descriptor, VM 120 config and cloud-init snippets \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 7 min old.",
+        "last_run": "2026-11-05T01:53:41.366Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=pve-host-files&target=drive&name=Proxmox%20host%20files%3A%20blackbox%20identity%20and%20recovery%20descriptor%2C%20VM%20120%20config%20and%20cloud-init%20snippets"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/redis",
+        "what": "Redis database \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 7 min old.",
+        "last_run": "2026-11-05T01:53:38.661Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=redis&target=drive&name=Redis%20database"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/rootfall",
+        "what": "Rootfall \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=rootfall&target=drive&name=Rootfall"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/rootfall",
+        "what": "Rootfall \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=rootfall&target=native&name=Rootfall"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/sha",
+        "what": "Security Hardening Automation \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=sha&target=drive&name=Security%20Hardening%20Automation"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/sha",
+        "what": "Security Hardening Automation \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=sha&target=native&name=Security%20Hardening%20Automation"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/security-research",
+        "what": "Security Research \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=security-research&target=drive&name=Security%20Research"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/security-research",
+        "what": "Security Research \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=security-research&target=native&name=Security%20Research"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/summitflow",
+        "what": "SummitFlow \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=summitflow&target=drive&name=SummitFlow"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/summitflow",
+        "what": "SummitFlow \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=summitflow&target=native&name=SummitFlow"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/infrastructure",
+        "what": "System Backup \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=infrastructure&target=native&name=System%20Backup"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/tether-state",
+        "what": "Tether session state \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=tether-state&target=drive&name=Tether%20session%20state"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/tether-state",
+        "what": "Tether session state \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=tether-state&target=native&name=Tether%20session%20state"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/the-aftertimes-support",
+        "what": "The AfterTimes Support \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=the-aftertimes-support&target=drive&name=The%20AfterTimes%20Support"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/the-aftertimes-support",
+        "what": "The AfterTimes Support \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=the-aftertimes-support&target=native&name=The%20AfterTimes%20Support"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/the-aftertimes",
+        "what": "The AfterTimes \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=the-aftertimes&target=drive&name=The%20AfterTimes"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/the-aftertimes",
+        "what": "The AfterTimes \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=the-aftertimes&target=native&name=The%20AfterTimes"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/trading-plan",
+        "what": "Trading plan \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=trading-plan&target=drive&name=Trading%20plan"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/trading-plan",
+        "what": "Trading plan \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=trading-plan&target=native&name=Trading%20plan"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/pve-vm-100-browser-state",
+        "what": "VM 100 st-browser profiles and settings \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Machine is off; its last copy covers the unchanged data.",
+        "last_run": "2026-11-04T07:40:59.790Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=pve-vm-100-browser-state&target=drive&name=VM%20100%20st-browser%20profiles%20and%20settings"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/pve-vm-180-app-recovery",
+        "what": "VM180 app recovery data \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Machine is off; its last copy covers the unchanged data.",
+        "last_run": "2026-11-01T08:24:47.559Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=pve-vm-180-app-recovery&target=drive&name=VM180%20app%20recovery%20data"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/vantage",
+        "what": "Vantage \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=vantage&target=drive&name=Vantage"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/vantage",
+        "what": "Vantage \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=vantage&target=native&name=Vantage"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/vault-tools",
+        "what": "Vault Tools \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=vault-tools&target=drive&name=Vault%20Tools"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/vault-tools",
+        "what": "Vault Tools \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=vault-tools&target=native&name=Vault%20Tools"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/vault",
+        "what": "Vault \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=vault&target=drive&name=Vault"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/vault",
+        "what": "Vault \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=vault&target=native&name=Vault"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/workspace-vault",
+        "what": "Workspace vault content \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=workspace-vault&target=drive&name=Workspace%20vault%20content"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/workspace-vault",
+        "what": "Workspace vault content \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=workspace-vault&target=native&name=Workspace%20vault%20content"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/uilint",
+        "what": "uilint \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T07:30:00.000Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request drive"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=uilint&target=drive&name=uilint"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/uilint",
+        "what": "uilint \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Restorable data is 47 min old.",
+        "last_run": "2026-11-05T01:13:01.385Z",
+        "next_run": "2026-11-05T05:13:32.575Z",
+        "actions": [
+          {
+            "kind": "run",
+            "ref": "aico backups request native"
+          },
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=uilint&target=native&name=uilint"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "ok",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/agent-hub-telegram-bot-v1",
+        "what": "Agent Hub Telegram Bot v1 \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=agent-hub-telegram-bot-v1&target=drive&name=Agent%20Hub%20Telegram%20Bot%20v1"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "off",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/agent-hub-telegram-bot-v1",
+        "what": "Agent Hub Telegram Bot v1 \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=agent-hub-telegram-bot-v1&target=native&name=Agent%20Hub%20Telegram%20Bot%20v1"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "off",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/a-term",
+        "what": "Aico previous app \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=a-term&target=drive&name=Aico%20previous%20app"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "off",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/a-term",
+        "what": "Aico previous app \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=a-term&target=native&name=Aico%20previous%20app"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "off",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/aico-web-state",
+        "what": "Aico saved web state \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico-web-state&target=drive&name=Aico%20saved%20web%20state"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "off",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/aico-web-state",
+        "what": "Aico saved web state \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=aico-web-state&target=native&name=Aico%20saved%20web%20state"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "off",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/drive/tether",
+        "what": "Tether \u00b7 Drive",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=tether&target=drive&name=Tether"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "off",
+        "shown_since": null
+      },
+      {
+        "id": "davion-sidarli/backup/native/tether",
+        "what": "Tether \u00b7 T7",
+        "kind": "backup",
+        "machine": "davion-sidarli",
+        "state": "off",
+        "meaning": "This source path is gone. Older snapshots may still contain its files.",
+        "actions": [
+          {
+            "kind": "detail",
+            "ref": "/backups/restore?source=tether&target=native&name=Tether"
+          }
+        ],
+        "updated_at": "2026-11-05T02:01:00.443Z",
+        "shown": "off",
+        "shown_since": null
+      }
+    ],
+    "machine": "davion-sidarli",
+    "running": []
+  },
+  "gem": {
+    "machine": "aico",
+    "entries": [
+      {
+        "id": "append/aico-aico",
+        "source": "aico-aico",
+        "name": "Aico databases and photos",
+        "target": "append",
+        "dataAt": "2026-11-05T01:13:31.960Z",
+        "nextRun": "2026-11-05T02:13:33.892Z",
+        "state": "ok",
+        "meaning": "Restorable data is 52 min old.",
+        "snapshot": "a0aaa287c324b02a5b32015cf20b2581c866424ece237f5cbe70ca1f6cba1605",
+        "path": "/home/kasadis/.local/state/aico-snapshot/agent.db",
+        "running": false,
+        "machine": "aico"
+      }
+    ],
+    "runs": {
+      "append": {
+        "started": "2026-11-05T01:13:31.957Z",
+        "finished": "2026-11-05T01:13:33.703Z",
+        "ok": true
+      }
+    },
+    "cutover": {}
+  },
+  "backup_jobs": [
+    {
+      "kind": "backups-native",
+      "home": "davion-sidarli",
+      "state": {
+        "kind": "backups-native",
+        "nextRun": 1793855612575,
+        "fence": 4,
+        "leaseId": null,
+        "holder": null,
+        "holderMachine": null,
+        "leaseExpires": null,
+        "lastRun": 1793841181145,
+        "lastState": "ok",
+        "lastMeaning": "Backup finished.",
+        "lastMachine": "davion-sidarli"
+      }
+    },
+    {
+      "kind": "backups-drive",
+      "home": "davion-sidarli",
+      "state": {
+        "kind": "backups-drive",
+        "nextRun": 1793863800000,
+        "fence": 0,
+        "leaseId": null,
+        "holder": null,
+        "holderMachine": null,
+        "leaseExpires": null,
+        "lastRun": null,
+        "lastState": null,
+        "lastMeaning": null,
+        "lastMachine": null
+      }
+    },
+    {
+      "kind": "backups-append",
+      "home": "davion-sidarli",
+      "state": {
+        "kind": "backups-append",
+        "nextRun": 1793847505801,
+        "fence": 3,
+        "leaseId": null,
+        "holder": null,
+        "holderMachine": null,
+        "leaseExpires": null,
+        "lastRun": 1793843774262,
+        "lastState": "ok",
+        "lastMeaning": "Backup finished.",
+        "lastMachine": "davion-sidarli"
+      }
+    },
+    {
+      "kind": "backups-snapshots",
+      "home": "davion-sidarli",
+      "state": {
+        "kind": "backups-snapshots",
+        "nextRun": 1793845556453,
+        "fence": 4,
+        "leaseId": null,
+        "holder": null,
+        "holderMachine": null,
+        "leaseExpires": null,
+        "lastRun": 1793843754215,
+        "lastState": "ok",
+        "lastMeaning": "Backup finished.",
+        "lastMachine": "davion-sidarli"
+      }
+    },
+    {
+      "kind": "backups-guard",
+      "home": "davion-sidarli",
+      "state": {
+        "kind": "backups-guard",
+        "nextRun": 1793844360498,
+        "fence": 16,
+        "leaseId": null,
+        "holder": null,
+        "holderMachine": null,
+        "leaseExpires": null,
+        "lastRun": 1793844060165,
+        "lastState": "ok",
+        "lastMeaning": "Backup finished.",
+        "lastMachine": "davion-sidarli"
+      }
+    },
+    {
+      "kind": "backups-append-aico",
+      "home": "aico",
+      "state": {
+        "kind": "backups-append-aico",
+        "nextRun": 1793844813892,
+        "fence": 3,
+        "leaseId": null,
+        "holder": null,
+        "holderMachine": null,
+        "leaseExpires": null,
+        "lastRun": 1793841211721,
+        "lastState": "ok",
+        "lastMeaning": "Backup finished.",
+        "lastMachine": "aico"
+      }
+    },
+    {
+      "kind": "backups-verify",
+      "home": "davion-sidarli",
+      "state": {
+        "kind": "backups-verify",
+        "nextRun": 1793872800000,
+        "fence": 0,
+        "leaseId": null,
+        "holder": null,
+        "holderMachine": null,
+        "leaseExpires": null,
+        "lastRun": null,
+        "lastState": null,
+        "lastMeaning": null,
+        "lastMachine": null
+      }
+    }
+  ],
+  "legacy_timers": [
+    {
+      "Id": "summitflow-host-backup.timer",
+      "ActiveState": "inactive",
+      "FragmentPath": "/home/kasadis/.config/systemd/user/summitflow-host-backup.timer",
+      "UnitFileState": "disabled"
+    },
+    {
+      "Id": "btrfs-autosnapshot.timer",
+      "ActiveState": "inactive",
+      "FragmentPath": "/home/kasadis/.config/systemd/user/btrfs-autosnapshot.timer",
+      "UnitFileState": "disabled"
+    },
+    {
+      "Id": "summitflow-host-verify.timer",
+      "ActiveState": "inactive",
+      "FragmentPath": "/home/kasadis/.config/systemd/user/summitflow-host-verify.timer",
+      "UnitFileState": "disabled"
+    },
+    {
+      "Id": "summitflow-backup-window-guard.timer",
+      "ActiveState": "inactive",
+      "FragmentPath": "/etc/systemd/system/summitflow-backup-window-guard.timer",
+      "UnitFileState": "disabled"
+    }
+  ],
+  "summary": {
+    "copies": 134,
+    "states": {
+      "failed": 1,
+      "ok": 125,
+      "off": 8
+    },
+    "status_rows_unique": true,
+    "remaining_external_failure": "Portfolio backup owner VM is stopped; checked live."
+  }
+}

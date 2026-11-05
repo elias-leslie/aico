@@ -1,0 +1,18 @@
+- Completed M10c-2a. Remaining: None within the agreed scope.
+- Source commits: 5930fe31, b1d46038, f657ca9a, 16dabd10, 11d3a836, 61ca1da1, b00048f6.
+- Evidence checkpoints: aa16d7e5, de692dd5; final artifact commit is in the completion handshake.
+- Source/config/test checkpoint LOC: +5508/-118 across 39 files; generated evidence excluded.
+- Migrated 65 sources, 2 backends, 2 external checks and excludes; preserved existing retention.
+- Added per-machine SQLite hourly append-only CT160/daily Drive coverage, notes/photos and data-age freshness.
+- Backups list, Run now and scratch restore pages; 134 unique source/target Status rows and tray failures.
+- T7 six-volume run, both append clients and full Drive rerun passed; Redis auth resolved.
+- Configured 500M read-back passed. No manual prune/forget or existing credential changes.
+- Owner-authorized CT190-only append credential/repository installed; no secrets displayed; coordinator owns password-manager handoff.
+- UI restored project.identity.json into new /srv/scratch/aico-m10c-2-restore; independent cmp passed (1574 bytes).
+- List+restore screenshots: 1600x900 and 390x844; all four uilint results zero; images visually reviewed.
+- Baseline acceptance 23937172 passed; final b00048f6: 3375 JS/1153 Python, required gates clean; quick gates passed.
+- One Codex review: eleven findings fixed with failing regressions first; live defects also covered.
+- Accepted combined ed5bda90 deployed on both machines; own managed rebuilds and peer deployment verified live.
+- Four legacy timers disabled/inactive with files preserved; Nightshift declared; rollback.md gives re-enable steps.
+- Final rows: 125 current, 8 archived, external Portfolio VM-stopped failure retained honestly. M10c-2b not started.
+- Proof: docs/plans/codebase-cleanup/evidence/M10c-2/ (live-proof.json, restore-proof.json, progress.md, screenshots).
