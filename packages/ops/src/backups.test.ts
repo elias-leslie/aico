@@ -16,8 +16,17 @@ import { parseRow } from '@aico/status'
 import { openDatabase, snapshotDatabase } from '@aico/store'
 import { afterEach, expect, it, vi } from 'vitest'
 import { backupJob, copiedDataTime, payloadTime, prepareFolder, volumeJobs } from './backup-drive'
-import { beginBootCapture, expiredCapture, preserveNative } from './backup-native'
-import { backupRows, config, copyKey, emptyState, entries, entry, migrated } from './backup-plan'
+import { beginBootCapture, expiredCapture, nativeOperation, preserveNative } from './backup-native'
+import {
+  backupRows,
+  config,
+  copyKey,
+  emptyState,
+  entries,
+  entry,
+  homePath,
+  migrated,
+} from './backup-plan'
 import {
   captureWorkspace,
   deleteWorkPoint,
@@ -28,6 +37,7 @@ import { copyRootAuth, type Runtime, readState, restic, saveState } from './back
 import {
   cutover,
   cutoverReady,
+  report,
   requestBackup,
   restoreFiles,
   runBackup,
@@ -70,7 +80,13 @@ it('migrates all 65 source records, both backend records and both external check
     '.cache',
   ])
     expect(excludes.split('\n')).toContain(line)
-  expect(config({}).retention.drive).toEqual({ daily: 7, weekly: 4, monthly: 3, legacyDays: 30 })
+  expect(config({}).retention.drive).toEqual({
+    daily: 7,
+    weekly: 4,
+    monthly: 3,
+    legacyDays: 30,
+    legacyAfterGoodRuns: 3,
+  })
 })
 it('plans host reads from verified frozen points at their real paths', () => {
   const c = cfg(),
@@ -668,4 +684,39 @@ it('a removed legacy path is archived rather than borrowing a fresh whole-volume
       .find((e) => e.id.endsWith('/drive/a-term'))
       ?.actions?.map((a) => a.kind),
   ).toEqual(['detail'])
+})
+
+it('native publication uses the installed helper staging contract', () => {
+  const c = cfg(),
+    id = '20261105T010000Z-1234abcd'
+  expect(nativeOperation(c, id)).toBe(join(homePath(c.legacyHostState), 'operations', id))
+})
+it('legacy retirement keeps the already qualified successful-run count across migration', () => {
+  const c = cfg()
+  c.legacyDriveState = temp()
+  c.legacyHostState = temp()
+  writeFileSync(
+    join(c.legacyDriveState, 'state.json'),
+    JSON.stringify({
+      runs: [{ status: 'ok' }, { status: 'failed' }, { status: 'ok' }, { status: 'ok' }],
+    }),
+  )
+  expect(readState(c)).toMatchObject({ goodDriveRuns: 3 })
+})
+it('publishes receipts when the local web service is still starting', async () => {
+  const c = cfg()
+  c.statusPublish.waitMs = 0
+  const send = vi
+    .fn()
+    .mockRejectedValueOnce(
+      Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }),
+    )
+    .mockResolvedValue({ ok: true })
+  vi.stubGlobal('fetch', send)
+  try {
+    await expect(report(c, emptyState(), c.workstation, ok)).resolves.toBeUndefined()
+    expect(send).toHaveBeenCalledTimes(2)
+  } finally {
+    vi.unstubAllGlobals()
+  }
 })

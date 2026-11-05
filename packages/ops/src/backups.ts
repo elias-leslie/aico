@@ -188,13 +188,25 @@ export async function report(
 ): Promise<void> {
   const rows = backupRows(await scheduledEntries(state, cfg, machine, run))
   const url = process.env.AICO_WEB_URL || cfg.webUrl
-  const result = await fetch(new URL('/api/status/rows', url), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(rows),
-    signal: AbortSignal.timeout(10000),
-  })
-  if (!result.ok) throw new Error(`Could not publish backup Status rows (${result.status}).`)
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const result = await fetch(new URL('/api/status/rows', url), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(rows),
+        signal: AbortSignal.timeout(cfg.statusPublish.timeoutMs),
+      })
+      if (!result.ok) throw new Error(`Could not publish backup Status rows (${result.status}).`)
+      return
+    } catch (error) {
+      // Like jobs/postJob: boot can start the runner before the local web listener is ready.
+      const code =
+        (error as { code?: string; cause?: { code?: string } }).cause?.code ??
+        (error as { code?: string }).code
+      if (code !== 'ECONNREFUSED' || attempt >= cfg.statusPublish.attempts) throw error
+      await new Promise((resolve) => setTimeout(resolve, cfg.statusPublish.waitMs))
+    }
+  }
 }
 export async function runBackup(
   rt: Runtime,

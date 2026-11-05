@@ -14,6 +14,8 @@ export interface BackupPoint {
   snapshot: string
   target: string
   dataAt: string
+  source_uuid?: string
+  received_uuid?: string
 }
 export interface Copy {
   source: string
@@ -37,7 +39,7 @@ export interface BackupState {
   >
   points: BackupPoint[]
   cutover: Record<string, string>
-  goodDriveDays?: string[]
+  goodDriveRuns?: number
 }
 export const emptyState = (): BackupState => ({ copies: {}, runs: {}, points: [], cutover: {} })
 export const homePath = (path: string) => path.replace(/^~(?=\/|$)/, homedir())

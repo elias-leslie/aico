@@ -418,9 +418,7 @@ export async function retainDrive(rt: Runtime, state: BackupState): Promise<void
     'rclone.args=serve restic --stdio --drive-use-trash=true',
   )
   await checked(rt.run, request.argv, { env: request.env })
-  const day = rt.now().toLocaleDateString('sv-SE')
-  state.goodDriveDays = [...new Set([...(state.goodDriveDays ?? []), day])].slice(-3)
-  if (state.goodDriveDays.length >= 3) {
+  if ((state.goodDriveRuns ?? 0) >= rt.cfg.retention.drive.legacyAfterGoodRuns) {
     const snapshots = (await resticJson(rt, 'drive', ['snapshots'])) as {
       id: string
       time: string
@@ -442,6 +440,7 @@ export async function retainDrive(rt: Runtime, state: BackupState): Promise<void
       await checked(rt.run, legacy.argv, { env: legacy.env })
     }
   }
+  state.goodDriveRuns = (state.goodDriveRuns ?? 0) + 1
 }
 export async function verifyDrive(rt: Runtime, scheduled: boolean): Promise<void> {
   if (scheduled && rt.now().getDay() !== rt.cfg.verify.day) return

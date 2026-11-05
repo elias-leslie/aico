@@ -59,8 +59,11 @@ export const checked = async (run: Execute, argv: string[], options?: Parameters
   return result.out
 }
 function readRootState(cfg: BackupConfig): BackupState {
-  if (existsSync(stateFile(cfg)))
-    return JSON.parse(readFileSync(stateFile(cfg), 'utf8')) as BackupState
+  if (existsSync(stateFile(cfg))) {
+    const state = JSON.parse(readFileSync(stateFile(cfg), 'utf8')) as BackupState
+    state.goodDriveRuns ??= legacyGoodRuns(cfg)
+    return state
+  }
   const state = emptyState()
   // Import successful receipts, never job timestamps as proof of a folder's data age.
   try {
@@ -106,7 +109,18 @@ function readRootState(cfg: BackupConfig): BackupState {
           attemptedAt: job.time,
         }
   } catch {}
+  state.goodDriveRuns = legacyGoodRuns(cfg)
   return state
+}
+function legacyGoodRuns(cfg: BackupConfig): number {
+  try {
+    const saved = JSON.parse(
+      readFileSync(join(homePath(cfg.legacyDriveState), 'state.json'), 'utf8'),
+    ) as { runs?: { status?: string }[] }
+    return saved.runs?.filter((run) => run.status === 'ok').length ?? 0
+  } catch {
+    return 0
+  }
 }
 export function saveState(cfg: BackupConfig, state: BackupState) {
   const path = stateFile(cfg)

@@ -134,7 +134,7 @@ export async function nativeBackup(
   const started = rt.now().toISOString()
   const runId =
     started.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z') + '-' + randomBytes(4).toString('hex')
-  const operation = join(homePath(cfg.stateDir), 'native', runId)
+  const operation = nativeOperation(cfg, runId)
   mkdirSync(operation, { recursive: true, mode: 0o700 })
   const helper = ['sudo', '-n', cfg.nativeHelper]
   const window = ['sudo', '-n', cfg.windowHelper]
@@ -192,7 +192,14 @@ export async function nativeBackup(
         ).trim() !== 'ro=true'
       )
         throw new Error('The received backup is not read only.')
-      points.push({ source: row.source_url as string, snapshot, target, dataAt: started })
+      points.push({
+        source: row.source_url as string,
+        snapshot,
+        target,
+        dataAt: started,
+        source_uuid: uuid,
+        received_uuid: uuid,
+      })
     }
     const disks = new Set<string>()
     const mounts: unknown[] = []
@@ -338,4 +345,9 @@ async function cleanupExpiredMetadata(rt: Runtime, current: string): Promise<voi
     if (expiredCapture(saved, rt.cfg, live, current))
       await checked(rt.run, [...helper, 'remove', id])
   }
+}
+
+export function nativeOperation(cfg: BackupConfig, runId: string): string {
+  // The installed root helper accepts caller-owned files only in this existing staging tree.
+  return join(homePath(cfg.nativeOperationsDir), runId)
 }

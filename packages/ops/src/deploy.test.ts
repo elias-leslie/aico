@@ -272,6 +272,37 @@ describe('deploy', () => {
     expect(rows.at(-1)).toMatchObject({ state: 'ok', meaning: expect.stringMatching(/^Deployed /) })
   })
 
+  it('promotes ops before restarting the services that call its CLI', async () => {
+    const { root, deps, head } = setup({ ops: true })
+    const original = deps.run
+    const observed: (string | null)[] = []
+    deps.run = (cmd, args, opts) => {
+      if (cmd === 'systemctl' && args.includes('restart')) observed.push(installedOpsSha(deps))
+      return original(cmd, args, opts)
+    }
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(observed).toEqual([head])
+  })
+
+  it('restores the prior ops link with the prior units if a deploy fails health', async () => {
+    const { root, git, deps, head } = setup({ ops: true })
+    await deploy(request(), root, deps)
+    writeFileSync(join(root, 'packages/web-server/main.ts'), 'v2\n')
+    writeFileSync(join(root, 'packages/ops/src/main.ts'), 'ops v2\n')
+    git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'two')
+    const original = deps.run
+    const observed: (string | null)[] = []
+    deps.run = (cmd, args, opts) => {
+      if (cmd === 'systemctl' && args.includes('restart')) observed.push(installedOpsSha(deps))
+      return original(cmd, args, opts)
+    }
+    deps.probe = async () => 503
+    await expect(deploy(request(), root, deps)).rejects.toThrow(/previous unit files were restored/)
+    expect(observed[0]).not.toBe(head)
+    expect(observed.at(-1)).toBe(head)
+    expect(installedOpsSha(deps)).toBe(head)
+  })
+
   it('a second deploy with no source change restarts nothing; an older commit never replaces a newer one', async () => {
     const { root, git, deps, calls, lines, head } = setup()
     writeFileSync(join(root, 'packages/web-server/main.ts'), 'v2\n')

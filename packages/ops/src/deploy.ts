@@ -780,7 +780,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           await finish('failed', `Deploy of ${sha.slice(0, 10)} lost the deploy lock`)
           throw new Refusal('Another deploy took the deploy lock; nothing was restarted.')
         }
-        const failed = await swapUnits(project, restart, release, sha, deps)
+        const failed = await swapUnits(project, restart, release, sha, deps, installOps)
         if (failed) {
           await finish(
             'failed',
@@ -790,7 +790,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           throw new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`)
         }
       }
-      if (installOps) installOpsBundle(deps, release)
+      if (installOps && !restart.length) installOpsBundle(deps, release)
       const seconds = Math.round((Date.now() - started) / 1000)
       pruneReleases(deps, release)
       const what = restart.length
@@ -908,6 +908,8 @@ interface SwapJournal {
   started_at: string
   /** Each unit's file before the swap (null: there was none). */
   previous: Record<string, string | null>
+  /** CLI bundle used by the previous units; undefined means this swap did not change it. */
+  previousOps?: string | null
 }
 
 const journalPath = (deps: DeployDeps) => join(deps.releasesDir, '.swap.json')
@@ -951,6 +953,7 @@ export function recoverSwap(deps: DeployDeps) {
   deps.out(
     `[deploy] the deploy of ${String(journal.sha).slice(0, 12)} stopped mid-swap; putting back ${units.join(', ')}`,
   )
+  restoreOps(journal.previousOps, deps)
   const problem = restoreUnits(journal.previous, deps)
   if (problem) throw new Refusal(`Putting the previous units back failed: ${problem}`)
   rmSync(journalPath(deps), { force: true })
@@ -966,6 +969,7 @@ async function swapUnits(
   release: string,
   sha: string,
   deps: DeployDeps,
+  installOps: boolean,
 ): Promise<{ failure: string; outcome: string } | null> {
   const systemctl = (...args: string[]) =>
     deps.run('systemctl', ['--user', ...args], { env: deps.env })
@@ -982,10 +986,19 @@ async function swapUnits(
   const previous: Record<string, string | null> = {}
   for (const unit of units) previous[unit] = readFileSafe(join(deps.systemdDir, unit))
   mkdirSync(deps.systemdDir, { recursive: true })
-  const journal: SwapJournal = { sha, started_at: new Date().toISOString(), previous }
+  let previousOps: string | null | undefined
+  if (installOps) {
+    try {
+      previousOps = realpathSync(deps.opsLink)
+    } catch {
+      previousOps = null
+    }
+  }
+  const journal: SwapJournal = { sha, started_at: new Date().toISOString(), previous, previousOps }
   writeFileSync(`${journalPath(deps)}.tmp`, JSON.stringify(journal))
   renameSync(`${journalPath(deps)}.tmp`, journalPath(deps))
   const fail = (failure: string) => {
+    restoreOps(previousOps, deps)
     const problem = restoreUnits(previous, deps)
     if (!problem) rmSync(journalPath(deps), { force: true })
     return {
@@ -995,6 +1008,7 @@ async function swapUnits(
         : 'the previous unit files were restored and restarted',
     }
   }
+  if (installOps) installOpsBundle(deps, release)
   for (const [unit, text] of rendered) writeFileSync(join(deps.systemdDir, unit), text)
   if (systemctl('daemon-reload').code !== 0) return fail('systemctl daemon-reload failed')
   const boot = units.filter(
@@ -1032,6 +1046,11 @@ async function swapUnits(
 // ---- the installed ops bundle ----------------------------------------------------------------
 
 const opsBundle = (release: string) => join(release, 'packages/ops/dist/aico-ops.mjs')
+function restoreOps(previous: string | null | undefined, deps: DeployDeps) {
+  if (previous === undefined) return
+  if (previous === null) rmSync(deps.opsLink, { force: true })
+  else installOpsBundle(deps, previous)
+}
 
 /** The release commit whose ops bundle `aico deploy` runs, or null before the first install. */
 export function installedOpsSha(deps: DeployDeps): string | null {

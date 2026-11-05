@@ -6,6 +6,7 @@
   "sharedLock": "~/.local/state/summitflow/host-recovery/run.lock",
   "legacyHostState": "~/.local/state/summitflow/host-recovery",
   "legacyDriveState": "~/.local/state/summitflow/offsite",
+  "nativeOperationsDir": "~/.local/state/summitflow/host-recovery/operations",
   "btrbkConfig": "/etc/btrbk/summitflow.conf",
   "nativeHelper": "/usr/local/sbin/summitflow-native-capture",
   "windowHelper": "/usr/local/sbin/summitflow-backup-window",
@@ -73,7 +74,8 @@
       "daily": 7,
       "weekly": 4,
       "monthly": 3,
-      "legacyDays": 30
+      "legacyDays": 30,
+      "legacyAfterGoodRuns": 3
     },
     "snapshot": {
       "recentHours": 6,
@@ -151,6 +153,7 @@
     "lockWait": "5m"
   },
   "webUrl": "http://127.0.0.1:3002",
+  "statusPublish": { "attempts": 6, "waitMs": 5000, "timeoutMs": 10000 },
   "restoreRoot": "/srv/scratch",
   "remoteSqlite": {
     "machine": "aico",
