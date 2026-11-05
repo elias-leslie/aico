@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../../.." && pwd)"
+node="${AICO_NODE:-/usr/local/bin/node}"
+[ -x "$node" ] || node="$(command -v node)"
+bundle="$repo/packages/cli/dist/aico-cli.mjs"
+if [ ! -r "$bundle" ]; then
+  python3 "$repo/native/st-sdk/tools_run.py" --label 'Build Aico CLI' -- \
+    env PATH="$(dirname -- "$node"):$PATH" npm --prefix "$repo/packages/cli" run --silent build >&2
+fi
+export AICO_REPO_ROOT="$repo" AICO_CLI_NAME="$(basename -- "$0")"
+exec "$node" --disable-warning=ExperimentalWarning "$bundle" "$@"

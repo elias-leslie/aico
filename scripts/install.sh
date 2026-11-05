@@ -176,7 +176,8 @@ run npm ci --no-audit --no-fund
 run npm run build
 
 step "Aico command"
-install_link "$REPO/packages/web-server/scripts/aico" "$BIN_DIR/aico"
+install_link "$REPO/packages/cli/scripts/aico" "$BIN_DIR/aico"
+install_link "$REPO/packages/cli/scripts/aico" "$BIN_DIR/st"
 if [ -n "${AICO_INSTALL_SOURCE_SHA:-}" ]; then
   [[ "$AICO_INSTALL_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || fail "AICO_INSTALL_SOURCE_SHA must name the exported commit"
   [ "$(basename "$REPO")" = "$AICO_INSTALL_SOURCE_SHA" ] || fail "a committed standalone install belongs in its commit-named release folder"

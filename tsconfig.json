@@ -57,6 +57,9 @@
     },
     {
       "path": "packages/web-frontend"
+    },
+    {
+      "path": "packages/cli"
     }
   ]
 }

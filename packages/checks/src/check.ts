@@ -149,7 +149,11 @@ export function fixScope(
       ],
     })
   const python = present.filter((file) => posix.extname(file) === '.py')
-  if (python.length && config.legacy.includes('ruff'))
+  if (
+    python.length &&
+    (config.legacy.includes('ruff') ||
+      config.stages.some((stage) => posix.basename(stage.argv[0]) === 'ruff'))
+  )
     commands.push({
       tool: 'ruff',
       files: python,

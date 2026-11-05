@@ -115,3 +115,18 @@ export function snapshotDatabase(source: string, destination: string): void {
   chmodSync(temporary, 0o600)
   renameSync(temporary, destination)
 }
+
+/** Inspection opens an existing store with SQLite's read-only handle. No migrations or writes. */
+export function readQuery(path: string, sql: string): Record<string, unknown>[] {
+  if (!/^\s*(?:SELECT|WITH|EXPLAIN)\b/i.test(sql))
+    throw new Error('Only SELECT, WITH and EXPLAIN queries are supported')
+  const db = new DatabaseSync(path, { readOnly: true })
+  try {
+    db.exec('PRAGMA query_only=ON; PRAGMA busy_timeout=10000')
+    const statement = db.prepare(sql)
+    statement.setReadBigInts(true)
+    return statement.all()
+  } finally {
+    db.close()
+  }
+}

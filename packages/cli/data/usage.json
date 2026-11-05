@@ -1,0 +1,208 @@
+[
+  {
+    "surface": "st.commit",
+    "tier": "mandate",
+    "cmd": "st commit -m \"msg\"",
+    "when": "authorized work reaches a verified checkpoint",
+    "precautions": [
+      "review diff for destructive changes, scope",
+      "--paths preserves unrelated work; include the checkpoint's generated changes",
+      "publication: st vcs publish --source ID --sha FULL_OID --now",
+      "commit before destructive ops (abandon, rollback)"
+    ]
+  },
+  {
+    "surface": "st.models.route",
+    "tier": "reference",
+    "cmd": "st models route [--role JOB [--tool TOOL [--model M]] [--project P] | --task TASK] [--json]",
+    "when": "pick a model for a job: --role JOB [--project P] lists each tool's model and effort, whether it is allowed, what usage it has left until when, Codex credits and its last refusal, so you choose; --tool adds one row's detail; st aico create applies the table's model by default. --task: completion-route advice; no options lists both",
+    "task_types": ["model-admin", "model-review"],
+    "on_demand": "model administration"
+  },
+  {
+    "surface": "st.prompt",
+    "tier": "mandate",
+    "cmd": "st prompt list | get | update | measure",
+    "when": "editing agent prompts in DB",
+    "precautions": [
+      "run st prompt measure before and after edits",
+      "keep prompts in DB; never duplicate as checked-in markdown",
+      "goal-first; ordered workflow only when order matters",
+      "agent-only text: terse imperative, no filler; heed STYLE_WARN"
+    ],
+    "task_types": ["config", "prompt-tuning"]
+  },
+  {
+    "surface": "st.create",
+    "tier": "mandate",
+    "cmd": "st create \"title\"",
+    "when": "create a task; project from cwd",
+    "precautions": ["bare title creates a pending task; --plan/--type in --help"]
+  },
+  {
+    "surface": "st.context",
+    "tier": "mandate",
+    "cmd": "st context <task-id>",
+    "when": "read task brief, plan, history",
+    "precautions": [
+      "claim before implementing the assigned task; read-only inspection needs no claim",
+      "--subtask X.Y"
+    ]
+  },
+  {
+    "surface": "st.log",
+    "tier": "reference",
+    "cmd": "st log <task-id> \"progress note\"",
+    "when": "record progress, decisions, or blockers on a claimed task",
+    "precautions": ["prefer task-id first form; trailing task-id is a legacy alias"]
+  },
+  {
+    "surface": "st.pulse",
+    "tier": "reference",
+    "cmd": "st pulse",
+    "when": "read live lane and ownership state when a hint or refusal points at it"
+  },
+  {
+    "surface": "st.lease",
+    "tier": "reference",
+    "cmd": "st lease '<glob>...' | --hold '<purpose>' | --list [--all] | --release | --take <path>",
+    "when": "declare sweep scope before refactor; --hold a repo for integration; release on completion",
+    "precautions": [
+      "the edit hook auto-leases each edited file and warns on another agent's lease; own st commit releases committed paths",
+      "relative globs resolve against the current checkout at acquire time",
+      "stale leases auto-release after 30min idle"
+    ]
+  },
+  {
+    "surface": "st.check",
+    "tier": "mandate",
+    "cmd": "st check --quick --changed-only",
+    "when": "iterate on a failing check; st commit already runs the quick check",
+    "precautions": [
+      "never raw pytest/vitest/biome/tsc/ruff/sqlfluff/squawk",
+      "st check codeql: GitHub CodeQL alert state after code-scanning work"
+    ]
+  },
+  {
+    "surface": "st.claim",
+    "tier": "mandate",
+    "cmd": "st claim <task-id>",
+    "when": "before implementing or completing an assigned task",
+    "precautions": [
+      "subtask: dotted ID (1.2) + --task <parent>",
+      "commits go directly to main; conflicts point at st pulse"
+    ]
+  },
+  {
+    "surface": "st.done",
+    "tier": "mandate",
+    "cmd": "st done <task-id> -m \"summary\"",
+    "when": "assigned-task closeout: acceptance, evidence, checkpoint cleanup",
+    "precautions": [
+      "needs an active owned claim",
+      "scope defaults to the task's declared, leased or committed paths; else --paths a b",
+      "--evidence JSON for required deployment/live checks; never claim done while acceptance remains"
+    ]
+  },
+  {
+    "surface": "st.sessions.send",
+    "tier": "reference",
+    "cmd": "st sessions send AGENT_OR_WINDOW 'question' [--fyi] | st sessions confirm ID [--withdraw] | st sessions ack ID yes|no 'why'|eta:MIN",
+    "when": "ask another agent a question (<=500 chars; a brief file only for long material): it acks, you confirm; --fyi for a status note nobody needs to answer",
+    "precautions": [
+      "address the coordinating parent; workers answer only their own requests; don't-touch: st lease --hold; fleet roots/native threads: --help"
+    ]
+  },
+  {
+    "surface": "st.sessions.inbox",
+    "tier": "reference",
+    "cmd": "st sessions inbox",
+    "when": "see requests waiting for your ack, and the state of requests you sent",
+    "precautions": [
+      "Your sent requests read open/seen (recipient was shown it), open/unseen, or acked; close acked ones with st sessions confirm ID"
+    ]
+  },
+  {
+    "surface": "st.backup.status",
+    "tier": "reference",
+    "cmd": "st backup status",
+    "when": "check that backups are current, or see what the T7 and Google Drive hold and when they last worked",
+    "precautions": [
+      "the first line says 'All backups current.' or lists the real problems",
+      "btrbk keeps 7 days on the T7; the daily Google Drive job is the offsite copy"
+    ],
+    "examples": ["st backup status", "st backup status --json"],
+    "task_types": ["devops", "backup"]
+  },
+  {
+    "surface": "st.backup.restore",
+    "tier": "reference",
+    "cmd": "st backup restore SELECTOR --to DIR",
+    "when": "get a project, postgres or redis dump, or a path back from the Google Drive backup",
+    "precautions": [
+      "restores only into a new or empty directory, never over the live path",
+      "start with --dry-run to see which snapshot would be used",
+      "the restore is read back and verified before it reports success"
+    ],
+    "examples": [
+      "st backup restore aico --to /srv/scratch/aico-back --dry-run",
+      "st backup restore postgres --to /srv/scratch/pg --at 2026-10-25"
+    ],
+    "task_types": ["devops", "backup", "restore"]
+  },
+  {
+    "surface": "st.service.rebuild",
+    "tier": "mandate",
+    "cmd": "st service rebuild <project> --detach",
+    "when": "deployed code/config/worker behavior changed (managed build+migrate+restart); never raw pnpm/npm/uv build or systemctl restart",
+    "precautions": [
+      "explicit project, not cwd; resolve blockers its preflight reports",
+      "no ask needed: deploys committed HEAD only; preflight refuses when unsafe",
+      "full scope for shared or uncertain changes; worker scope includes backend consumers",
+      "required and active optional workers restart automatically; --include-all-workers also starts inactive optional workers"
+    ],
+    "examples": [
+      "st service rebuild summitflow",
+      "st service rebuild agent-hub --detach",
+      "st -P agent-hub service rebuild agent-hub"
+    ],
+    "task_types": ["devops", "config", "frontend", "backend"]
+  },
+  {
+    "surface": "st.tools.run",
+    "tier": "reference",
+    "cmd": "st tools run --label TEXT -- <argv...>",
+    "when": "run an external tool through shared heavy-work admission",
+    "precautions": [
+      "Resource admission only; label is public, so omit secrets. Child argv runs without a shell and inherits admission.",
+      "Not for long disk/network jobs (restores, bulk downloads): run them throttled outside the lane, see docs/transient-heavy-work.md."
+    ]
+  },
+  {
+    "surface": "st.vm.status",
+    "tier": "reference",
+    "cmd": "st vm status <id>",
+    "when": "inspect browser/test VM state when changing or repairing it",
+    "precautions": ["for routine browser work use st browser, not st vm"],
+    "task_types": ["vm-repair", "vm-admin"],
+    "on_demand": "VM repair"
+  },
+  {
+    "surface": "st.db",
+    "tier": "reference",
+    "cmd": "st db tables|schema TABLE|count TABLE|sample TABLE [N]|query SQL [--store NAME]",
+    "when": "inspect an Aico SQLite store; read queries only"
+  },
+  {
+    "surface": "st.mockup.add",
+    "tier": "reference",
+    "cmd": "st mockup add FILE --project ID --title TITLE [--note TEXT]",
+    "when": "put an HTML design on its project review page; Use this one answers the asking session"
+  },
+  {
+    "surface": "st.monitor",
+    "tier": "reference",
+    "cmd": "st monitor status|system-info|connections|processes|mounts",
+    "when": "read local /proc diagnostics; logs use st logs UNIT"
+  }
+]

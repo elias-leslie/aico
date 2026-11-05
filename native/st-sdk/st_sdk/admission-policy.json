@@ -1,0 +1,9 @@
+{
+  "lock_directory": "/tmp/st-heavy-{uid}",
+  "workers": 2,
+  "spare_min_available_bytes": 12884901888,
+  "spare_max_pressure_avg10": 5.0,
+  "host_admission_file": "nightshift/admission.json",
+  "pressure_max_full_avg60": 2.0,
+  "pressure_max_full_avg10": 5.0
+}

@@ -24,15 +24,20 @@
       "ANTIGRAVITY_CONVERSATION_ID",
       "ST_SESSION_ID",
       "TMUX",
-      "TMUX_PANE"
+      "TMUX_PANE",
+      "AICO_DEPLOY_ROOT"
     ],
-    "installedOps": "~/.local/lib/aico/ops"
+    "installedOps": "~/.local/lib/aico/ops",
+    "cliSources": ["packages", "native/st-sdk", "native/service-tools", "native/host-steward"]
   },
   "vm": {
-    "apiBase": "http://127.0.0.1:8001/api",
     "timeoutSeconds": 900,
     "labRegistry": "/var/lib/nightshift/findings/registry.json",
-    "labHours": 4
+    "labHours": 4,
+    "apiUrl": "https://192.168.86.39:8006",
+    "node": "davion-gem",
+    "caBundle": "/home/kasadis/.config/summitflow/pve-root-ca.pem",
+    "login": "proxmox-vm"
   },
   "snapshots": {
     "catalogue": "~/.local/share/st/snaps",

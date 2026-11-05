@@ -42,6 +42,8 @@
                       "@aico/agent/**",
                       "@aico/checks",
                       "@aico/checks/**",
+                      "@aico/cli",
+                      "@aico/cli/**",
                       "@aico/jobs",
                       "@aico/jobs/**",
                       "@aico/notes",

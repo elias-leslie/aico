@@ -8,7 +8,8 @@
     "layer": 4,
     "imports": [
       "@aico/status",
-      "@aico/store"
+      "@aico/store",
+      "@aico/fleet"
     ]
   },
   "type": "module",
@@ -24,7 +25,8 @@
   },
   "dependencies": {
     "@aico/status": "0.1.0",
-    "@aico/store": "0.1.0"
+    "@aico/store": "0.1.0",
+    "@aico/fleet": "0.1.0"
   },
   "devDependencies": {
     "esbuild": "0.25.12"

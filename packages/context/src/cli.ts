@@ -42,7 +42,7 @@ import {
   type Where,
 } from './memory'
 import { Catalog } from './models'
-import { getPrompt, listPrompts } from './prompts'
+import { getPrompt, listPrompts, promptRevisions } from './prompts'
 import { route, UnknownLaunchKey } from './route'
 
 export const CONTEXT_COMMANDS = ['memory', 'prompt', 'models', 'context'] as const
@@ -254,14 +254,17 @@ function memory(db: Database, argv: string[], io: ContextCliIo): number {
 
 function prompt(db: Database, argv: string[], io: ContextCliIo): number {
   const [sub, ...rest] = argv
-  const parsed = parse(rest, {}, ['--global', '--no-global'])
+  const parsed = parse(rest, { '--limit': 'limit' }, ['--global', '--no-global', '--json'])
   if (sub === 'list') {
     const filter = parsed.flags.has('--global')
       ? { global: true }
       : parsed.flags.has('--no-global')
         ? { global: false }
         : {}
-    io.out(`${formatPromptList(listPrompts(db, filter))}\n`)
+    const prompts = listPrompts(db, filter)
+    io.out(
+      `${parsed.flags.has('--json') ? JSON.stringify({ prompts }) : formatPromptList(prompts)}\n`,
+    )
     return 0
   }
   if (sub === 'get') {
@@ -272,7 +275,21 @@ function prompt(db: Database, argv: string[], io: ContextCliIo): number {
       io.err(`No prompt '${slug}'.\n`)
       return 1
     }
-    io.out(`${formatPrompt(found)}\n`)
+    io.out(`${parsed.flags.has('--json') ? JSON.stringify(found) : formatPrompt(found)}\n`)
+    return 0
+  }
+  if (sub === 'revisions') {
+    const slug = parsed.args[0]
+    if (!slug) throw new UsageError('prompt revisions needs a slug')
+    const limit = Number(str(parsed, 'limit') || 100)
+    if (!Number.isSafeInteger(limit) || limit < 1)
+      throw new UsageError('--limit needs a positive integer')
+    const revisions = promptRevisions(db, slug, limit)
+    if (!revisions) {
+      io.err(`No prompt '${slug}'.\n`)
+      return 1
+    }
+    io.out(`${JSON.stringify({ revisions })}\n`)
     return 0
   }
   throw new UsageError(`unknown prompt command ${sub ?? '(none)'}`)

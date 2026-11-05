@@ -2,6 +2,7 @@
 // text plus a revision per version written from here on. Roles link to the
 // prompts they are given (role_prompts).
 
+import { createHash } from 'node:crypto'
 import { type Database, json } from './db'
 
 export interface Prompt {
@@ -120,4 +121,24 @@ export function rolePrompts(db: Database, role: string): Prompt[] {
     )
     .all(role) as unknown as Row[]
   return rows.map(fromRow)
+}
+
+/** Saved Aico versions, in the version-1 root instruction snapshot shape. */
+export function promptRevisions(db: Database, slug: string, limit: number) {
+  const prompt = getPrompt(db, slug)
+  if (!prompt) return null
+  const rows = db
+    .prepare(
+      'SELECT version, content, reason, at FROM prompt_revisions WHERE prompt_id = ? ORDER BY version DESC LIMIT ?',
+    )
+    .all(prompt.id, limit) as { version: number; content: string; reason: string; at: string }[]
+  return rows.map((row) => ({
+    id: String(row.version).padStart(4, '0'),
+    prompt_name: prompt.name,
+    content: row.content,
+    content_hash: createHash('sha256').update(row.content).digest('hex'),
+    created_at: row.at,
+    reason: row.reason,
+    version: row.version,
+  }))
 }

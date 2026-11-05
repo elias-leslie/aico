@@ -739,6 +739,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
                 touches(diff.out.split('\n').filter(Boolean), [
                   ...ops.deploy.rootSources,
                   ...cone(packages, 'ops'),
+                  ...ops.deploy.cliSources,
                 ])
               )
             })()))
@@ -757,7 +758,9 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           [
             ...new Set([
               ...restart.flatMap((unit) => unitBuilds(unit, template(unit))),
-              ...(installOps ? ['ops'] : []),
+              ...(installOps
+                ? ['ops', ...(packages.some((pkg) => pkg.dir === 'cli') ? ['cli'] : [])]
+                : []),
             ]),
           ],
           deps,
@@ -1066,6 +1069,11 @@ export function installedOpsSha(deps: DeployDeps): string | null {
 export function installOpsBundle(deps: DeployDeps, release: string) {
   if (!existsSync(opsBundle(release)))
     throw new Refusal(`The release has no ops bundle at ${opsBundle(release)}`)
+  if (
+    existsSync(join(release, 'packages/cli/package.json')) &&
+    !existsSync(join(release, 'packages/cli/dist/aico-cli.mjs'))
+  )
+    throw new Refusal('The release has no CLI bundle')
   const temporary = `${deps.opsLink}.${process.pid}.tmp`
   rmSync(temporary, { force: true })
   mkdirSync(join(deps.opsLink, '..'), { recursive: true })
@@ -1110,11 +1118,17 @@ export async function jobResult(
     let job = readJob(deps, id)
     if (!job) throw new Refusal(`No deploy job ${id}`)
     if (job.state === 'queued' || job.state === 'running') {
-      const unit = deps
-        .run('systemctl', ['--user', 'is-active', `aico-deploy-${id}.service`], { env: deps.env })
-        .out.trim()
+      const runtime = deps.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`
+      const answer = deps.run('systemctl', ['--user', 'is-active', `aico-deploy-${id}.service`], {
+        env: {
+          ...deps.env,
+          XDG_RUNTIME_DIR: runtime,
+          DBUS_SESSION_BUS_ADDRESS: deps.env.DBUS_SESSION_BUS_ADDRESS || `unix:path=${runtime}/bus`,
+        },
+      })
+      const unit = answer.out.trim()
       if (
-        !['active', 'activating'].includes(unit) &&
+        ['inactive', 'failed', 'unknown'].includes(unit) &&
         (readJob(deps, id) as Job).state === job.state
       ) {
         job = {

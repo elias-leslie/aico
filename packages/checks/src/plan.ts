@@ -642,8 +642,20 @@ function legacyTools(config: Config, lane: Lane): string[] {
     return path !== binary && existsSync(path)
   }
   const extra = [
-    ...(installed('pytest', 'pytest') ? ['pytest'] : []),
-    ...(installed('vitest', 'vitest') ? ['vitest'] : []),
+    ...(!config.stages.some((stage) =>
+      stage.argv.some((arg) =>
+        arg.split(/\s+/).some((token) => posix.basename(token) === 'pytest'),
+      ),
+    ) && installed('pytest', 'pytest')
+      ? ['pytest']
+      : []),
+    ...(!config.stages.some((stage) =>
+      stage.argv.some((arg) =>
+        arg.split(/\s+/).some((token) => posix.basename(token) === 'vitest'),
+      ),
+    ) && installed('vitest', 'vitest')
+      ? ['vitest']
+      : []),
   ]
   return [...new Set([...config.legacy, ...extra])]
 }

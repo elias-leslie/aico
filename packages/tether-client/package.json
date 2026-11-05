@@ -19,7 +19,8 @@
     "./client/contracts": "./src/client/contracts.ts",
     "./client/run-text": "./src/client/run-text.ts",
     "./client/sync-peers": "./src/client/sync-peers.ts",
-    "./term/remote": "./src/term/remote.ts"
+    "./term/remote": "./src/term/remote.ts",
+    "./own-session": "./src/own-session.ts"
   },
   "scripts": {
     "test": "vitest run"

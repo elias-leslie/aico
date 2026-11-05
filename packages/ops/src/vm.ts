@@ -1,12 +1,11 @@
-// `aico vm list|status|start|stop|snapshot`: Proxmox guests through SummitFlow's backend route
-// (`POST /api/vm/op`), the path `st vm` used: the backend holds the Proxmox API token, and that token's
-// pool rights (lab pool full, ops pool power, power pool power, the rest read-only) are what Proxmox
-// enforces, so nothing here decides which guest may be powered or snapshotted. The verbs and output
-// match `st vm`. Deleting a guest or a snapshot is not here: that stays owner-run.
+// Proxmox VM operations use the existing scoped API token held in Aico Logins.
+// Proxmox enforces its pool rights; no SummitFlow service is involved.
 
 import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { request } from 'node:https'
+import { setTimeout as delay } from 'node:timers/promises'
+import { loginCaller } from '@aico/fleet/logins-cli'
+import { LoginClient } from '@aico/fleet/logins-client'
 import ops from '../data/ops.json' with { type: 'json' }
 import { Refusal } from './deploy'
 import { type Runner, tail } from './sh'
@@ -22,73 +21,133 @@ export interface Guest {
   maxdisk: number
 }
 
-/** One `POST /api/vm/op` call: the op's result, or a Refusal carrying Proxmox's own error. */
+/** One scoped Proxmox operation, or a Refusal. */
 export type VmOp = (op: string, vmid?: string, args?: Record<string, unknown>) => Promise<unknown>
 
-/**
- * The caller's SummitFlow identity header, the one `st` sends: the owner token if its file is readable,
- * else the agent token (each file is the env var's path or its default under the home directory).
- */
-export function summitflowIdentity(
+export interface VmCredential {
+  tokenId: string
+  tokenSecret: string
+}
+export type PveRequest = (
+  method: string,
+  path: string,
+  body?: Record<string, unknown>,
+) => Promise<unknown>
+
+/** HTTPS is pinned to the existing PVE CA; Logins grants the existing scoped token at runtime. */
+export interface PveTransport {
+  credential?: () => Promise<VmCredential>
+  ca?: () => Buffer
+  request?: typeof request
+}
+export function pveRequest(
   env: NodeJS.ProcessEnv = process.env,
-  home = homedir(),
-): Record<string, string> {
-  const sources: [string, string, string][] = [
-    [
-      'SUMMITFLOW_OWNER_TOKEN_FILE',
-      '.config/credstore/summitflow/owner-token',
-      'X-SummitFlow-Owner-Token',
-    ],
-    ['SUMMITFLOW_AGENT_TOKEN_FILE', '.config/agent-tokens/summitflow', 'X-SummitFlow-Agent-Token'],
-  ]
-  for (const [name, fallback, header] of sources) {
+  transport: PveTransport = {},
+): PveRequest {
+  return async (method, path, body) => {
+    const login = new LoginClient(env)
+    let credential: VmCredential
     try {
-      const token = readFileSync(env[name]?.trim() || join(home, fallback), 'utf8').trim()
-      if (token) return { [header]: token }
+      credential = transport.credential
+        ? await transport.credential()
+        : (JSON.parse(
+            (await login.value(ops.vm.login, loginCaller(env), 'VM operation')).toString(),
+          ) as VmCredential)
     } catch {
-      // unreadable or missing: try the next one
+      throw new Refusal('Scoped Proxmox login is unavailable in Aico Logins')
     }
+    if (!credential.tokenId || !credential.tokenSecret)
+      throw new Refusal('Scoped Proxmox login is incomplete')
+    const url = new URL(`/api2/json${path}`, ops.vm.apiUrl)
+    const payload = body
+      ? new URLSearchParams(
+          Object.entries(body).map(([k, v]): [string, string] => [k, String(v)]),
+        ).toString()
+      : undefined
+    return new Promise((accept, reject) => {
+      const req = (transport.request ?? request)(
+        url,
+        {
+          method,
+          ca: transport.ca ? transport.ca() : readFileSync(ops.vm.caBundle),
+          headers: {
+            Authorization: `PVEAPIToken=${credential.tokenId}=${credential.tokenSecret}`,
+            ...(payload
+              ? {
+                  'content-type': 'application/x-www-form-urlencoded',
+                  'content-length': Buffer.byteLength(payload),
+                }
+              : {}),
+          },
+        },
+        (res) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk: Buffer) => chunks.push(chunk))
+          res.on('error', () => reject(new Refusal('Proxmox response failed')))
+          res.on('end', () => {
+            if (!res.statusCode || res.statusCode >= 400)
+              return reject(
+                new Refusal(
+                  `Proxmox API refused the operation (HTTP ${res.statusCode ?? 'unknown'})`,
+                ),
+              )
+            try {
+              accept((JSON.parse(Buffer.concat(chunks).toString()) as { data: unknown }).data)
+            } catch {
+              reject(new Refusal('Proxmox returned invalid JSON'))
+            }
+          })
+        },
+      )
+      req.setTimeout(ops.vm.timeoutSeconds * 1000, () => req.destroy(new Error('timeout')))
+      req.on('error', () => reject(new Refusal('Proxmox API connection failed')))
+      req.end(payload)
+    })
   }
-  return {}
 }
 
-/** The backend route `st vm` calls when it holds no Proxmox token (ST_API_BASE, else data/ops.json). */
-export function routeOp(env: NodeJS.ProcessEnv = process.env, fetcher = fetch): VmOp {
-  const url = `${(env.ST_API_BASE?.trim() || ops.vm.apiBase).replace(/\/$/, '')}/vm/op`
+/** A direct PVE API operation. Proxmox continues to enforce the scoped token's pool rights. */
+export function routeOp(
+  env: NodeJS.ProcessEnv = process.env,
+  call: PveRequest = pveRequest(env),
+): VmOp {
   return async (op, vmid, args = {}) => {
-    let response: Response
-    try {
-      response = await fetcher(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'X-Request-Source': 'aico-vm',
-          ...summitflowIdentity(env),
-        },
-        body: JSON.stringify({ op, vmid: vmid ?? null, args }),
-        signal: AbortSignal.timeout(ops.vm.timeoutSeconds * 1000),
+    const guests = guestRows(await call('GET', '/cluster/resources?type=vm'))
+    if (op === 'list_vms') return guests
+    const guest = guests.find((row) => String(row.vmid) === vmid)
+    if (!guest) throw new Refusal(`No visible Proxmox guest ${vmid}`)
+    const base = `/nodes/${encodeURIComponent(guest.node)}/${guest.type}/${guest.vmid}`
+    if (op === 'status')
+      return {
+        ...((await call('GET', `${base}/status/current`)) as object),
+        vmid: guest.vmid,
+        name: guest.name,
+      }
+    let task: unknown
+    if (op === 'start' || op === 'stop') task = await call('POST', `${base}/status/${op}`)
+    else if (op === 'snapshot')
+      task = await call('POST', `${base}/snapshot`, {
+        snapname: args.name,
+        description: args.description,
       })
-    } catch (error) {
-      throw new Refusal(`Proxmox backend route failed: ${(error as Error).message}`)
+    else throw new Refusal(`Unsupported Proxmox operation ${op}`, 2)
+    if (typeof task === 'string' && task.startsWith('UPID:')) {
+      const until = Date.now() + ops.vm.timeoutSeconds * 1000
+      for (;;) {
+        const status = (await call(
+          'GET',
+          `/nodes/${encodeURIComponent(guest.node)}/tasks/${encodeURIComponent(task)}/status`,
+        )) as { status?: string; exitstatus?: string }
+        if (status.status === 'stopped') {
+          if (status.exitstatus !== 'OK')
+            throw new Refusal(`Proxmox task failed: ${status.exitstatus ?? 'unknown'}`)
+          break
+        }
+        if (Date.now() >= until) throw new Refusal(`Proxmox task did not finish: ${task}`)
+        await delay(1000)
+      }
     }
-    const text = await response.text()
-    let body: unknown = null
-    try {
-      body = JSON.parse(text)
-    } catch {}
-    if (!response.ok) {
-      const detail = (body as { detail?: unknown; message?: unknown } | null)?.detail
-      const message =
-        typeof detail === 'string'
-          ? detail
-          : typeof (detail as { message?: unknown } | undefined)?.message === 'string'
-            ? (detail as { message: string }).message
-            : typeof (body as { message?: unknown } | null)?.message === 'string'
-              ? (body as { message: string }).message
-              : text.trim() || `HTTP ${response.status}`
-      throw new Refusal(message)
-    }
-    return (body as { result?: unknown } | null)?.result
+    return null
   }
 }
 

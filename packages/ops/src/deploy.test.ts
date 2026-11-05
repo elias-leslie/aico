@@ -153,6 +153,7 @@ describe('deploy', () => {
       guard?: (args: string[]) => { code: number; out: string }
       workers?: string[]
       ops?: boolean
+      cli?: boolean
       kill?: (cmd: string, args: string[]) => boolean
     } = {},
   ) {
@@ -189,6 +190,14 @@ describe('deploy', () => {
       )
       writeFileSync(join(root, 'packages/ops/src/main.ts'), 'ops v1\n')
     }
+    if (options.cli) {
+      mkdirSync(join(root, 'packages/cli/src'), { recursive: true })
+      writeFileSync(
+        join(root, 'packages/cli/package.json'),
+        JSON.stringify({ name: '@demo/cli', scripts: { build: 'x' } }),
+      )
+      writeFileSync(join(root, 'packages/cli/src/main.ts'), 'cli v1\n')
+    }
     const git = (...args: string[]) => run('git', ['-C', root, ...args])
     git('init', '-q', '-b', 'main')
     git('-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A')
@@ -208,6 +217,10 @@ describe('deploy', () => {
         if (cmd === 'nice' && args.join(' ') === '-n 10 npm run build -w packages/ops') {
           mkdirSync(join(opts?.cwd as string, 'packages/ops/dist'), { recursive: true })
           writeFileSync(join(opts?.cwd as string, 'packages/ops/dist/aico-ops.mjs'), '// ops\n')
+        }
+        if (cmd === 'nice' && args.join(' ') === '-n 10 npm run build -w packages/cli') {
+          mkdirSync(join(opts?.cwd as string, 'packages/cli/dist'), { recursive: true })
+          writeFileSync(join(opts?.cwd as string, 'packages/cli/dist/aico-cli.mjs'), '// cli\n')
         }
         if (cmd === 'systemctl' && args[1] === 'is-active')
           return { code: 0, out: 'active\n', err: '' }
@@ -530,6 +543,43 @@ describe('deploy', () => {
     expect(await jobResult('aico-000000000001', true, deps)).toBe(0)
   })
 
+  it('discovers the user bus and leaves an unreadable deploy unit running', async () => {
+    const { deps } = setup()
+    mkdirSync(deps.jobsDir, { recursive: true })
+    const id = 'aico-000000000001'
+    const path = join(deps.jobsDir, `${id}.json`)
+    writeFileSync(
+      path,
+      JSON.stringify({ id, project: 'demo', sha: 'f'.repeat(40), state: 'running' }),
+    )
+    deps.run = (_cmd, _args, options) => {
+      expect(options?.env?.XDG_RUNTIME_DIR).toBe(`/run/user/${process.getuid?.() ?? 0}`)
+      expect(options?.env?.DBUS_SESSION_BUS_ADDRESS).toBe(
+        `unix:path=/run/user/${process.getuid?.() ?? 0}/bus`,
+      )
+      return { code: 1, out: '', err: 'Failed to connect to bus' }
+    }
+    expect(await jobResult(id, false, deps)).toBe(1)
+    expect(JSON.parse(readFileSync(path, 'utf8')).state).toBe('running')
+  })
+
+  it.each(['inactive', 'failed', 'unknown'])(
+    'only systemd evidence %s marks a missing deploy result failed',
+    async (state) => {
+      const { deps } = setup()
+      mkdirSync(deps.jobsDir, { recursive: true })
+      const id = 'aico-000000000001'
+      const path = join(deps.jobsDir, `${id}.json`)
+      writeFileSync(
+        path,
+        JSON.stringify({ id, project: 'demo', sha: 'f'.repeat(40), state: 'running' }),
+      )
+      deps.run = () => ({ code: 3, out: state, err: '' })
+      expect(await jobResult(id, false, deps)).toBe(1)
+      expect(JSON.parse(readFileSync(path, 'utf8')).state).toBe('failed')
+    },
+  )
+
   it('installs the ops bundle the commit builds, and only when its sources changed', async () => {
     const { root, git, deps, calls, lines, head } = setup({ ops: true })
     expect(await deploy(request(), root, deps)).toBe(0)
@@ -551,6 +601,22 @@ describe('deploy', () => {
     expect(installedOpsSha(deps)).toBe(changed)
     expect(calls.filter((call) => call.includes('restart'))).toEqual([])
     expect(lines.at(-1)).toMatch(/the deploy code only/)
+  })
+
+  it('builds and refreshes installed commands for a CLI-only commit without restarting units', async () => {
+    const { root, git, deps, calls, head } = setup({ ops: true, cli: true })
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(installedOpsSha(deps)).toBe(head)
+    expect(existsSync(join(deps.opsLink, 'packages/cli/dist/aico-cli.mjs'))).toBe(true)
+    calls.length = 0
+    writeFileSync(join(root, 'packages/cli/src/main.ts'), 'cli v2\n')
+    git('-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A')
+    git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'CLI change')
+    const changed = git('rev-parse', 'HEAD').out.trim()
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(installedOpsSha(deps)).toBe(changed)
+    expect(calls).toContain('nice -n 10 npm run build -w packages/cli')
+    expect(calls.filter((call) => call.includes('restart'))).toEqual([])
   })
 
   it('prunes old releases but keeps the ones a unit still runs', () => {

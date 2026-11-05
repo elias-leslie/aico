@@ -1,0 +1,42 @@
+[
+  {
+    "environment": "/home/kasadis/.summitflow/services/projects/agent-hub/releases/1ca83e2b17894cae8224274eda1990d1/source/backend/.venv",
+    "installed": true,
+    "version": "0.2.1"
+  },
+  {
+    "environment": "/home/kasadis/.summitflow/services/projects/browser-automation/releases/370b2da43f1a423fae262a3183df895b/source/.venv",
+    "installed": true,
+    "version": "0.2.1"
+  },
+  {
+    "environment": "/srv/workspaces/projects/agent-hub/backend/.venv",
+    "installed": true,
+    "version": "0.2.1"
+  },
+  {
+    "environment": "/srv/workspaces/projects/code-intelligence/.venv",
+    "installed": true,
+    "version": "0.2.1"
+  },
+  {
+    "environment": "/srv/workspaces/projects/desktop-automation/.venv",
+    "installed": true,
+    "version": "0.2.1"
+  },
+  {
+    "environment": "/srv/workspaces/projects/jobinator-4000/backend/.venv",
+    "installed": true,
+    "version": "0.2.1"
+  },
+  {
+    "environment": "/srv/workspaces/projects/portfolio-ai/backend/.venv",
+    "installed": true,
+    "version": "0.2.1"
+  },
+  {
+    "environment": "/srv/workspaces/projects/vault-tools/.venv",
+    "installed": true,
+    "version": "0.2.1"
+  }
+]

@@ -3,11 +3,12 @@
 // run by aico (no [native] gate, or a tool it does not run): `st check` then keeps the repo.
 
 import { accept } from './accept'
-import { runCheck } from './check'
+import { runCheck, trackedFiles } from './check'
 import { CommitError, commit } from './commit'
 import { GitError, repoPaths, repoRoot } from './git'
 import { type Coordination, CoordinationError } from './hook'
-import { ConfigError, loadConfig } from './plan'
+import { ConfigError, LEGACY, loadConfig, type Planned, plan } from './plan'
+import { passed, runSteps } from './run'
 import { type CheckSummary, postCheckRow } from './status'
 
 export interface CliIo {
@@ -24,6 +25,8 @@ export const CHECK_USAGE = `aico check: the repo's gate (.st-check.toml).
   aico check --quick [--changed-only]     the fast lane on your own changed files (commit runs it)
   aico check [--changed-only]             the full gate on the working tree
   aico check --fix [--paths P...]         Biome and ruff fixes on your own changed files only
+  aico check TOOL -- [ARGS...]           one configured tool (vitest, pytest, ruff, types, biome, tsc)
+  aico check --native --stage ID          one declared native stage (--no-reuse, --json)
   aico check --acceptance [--sha REV]     the full gate on a commit, in a clean worktree
   options: --paths P...  scope to the changed files under P; --no-reuse  rerun a pass on identical
   content; --jobs N  stages at once (default 3); --with-ack ID  a holder's yes for acceptance
@@ -70,6 +73,61 @@ function load(io: CliIo): { root: string; config: ReturnType<typeof loadConfig> 
 }
 
 export async function checkCli(argv: string[], io: CliIo): Promise<number> {
+  const tool = argv[0]
+  const native = argv.includes('--native') || argv.includes('--stage')
+  if (native || (LEGACY as readonly string[]).includes(tool)) {
+    const { root, config } = load(io)
+    if ('unsupported' in config) {
+      io.err(`aico check: ${config.unsupported}`)
+      return 2
+    }
+    let selected: Planned[]
+    let reuse = true,
+      json = false
+    if (native) {
+      const args = parse(argv, ['--stage'])
+      const unknown = [...args.flags].filter(
+        (flag) => !['--native', '--no-reuse', '--json'].includes(flag),
+      )
+      if (unknown.length || args.extra.length)
+        throw new ConfigError('native checks accept --stage ID, --no-reuse and --json')
+      const id = args.values.get('--stage')
+      if (!id)
+        return checkCli(
+          argv.filter((arg) => arg !== '--native' && arg !== '--json'),
+          io,
+        )
+      const stage = config.stages.find((item) => item.id === id)
+      if (!stage) throw new ConfigError(`No declared check stage ${id}`)
+      selected = plan(
+        { ...config, legacy: [], stages: [{ ...stage, coveredBy: undefined }] },
+        'full',
+        null,
+        () => trackedFiles(root),
+      )
+      reuse = !args.flags.has('--no-reuse')
+      json = args.flags.has('--json')
+    } else {
+      selected = plan({ ...config, legacy: [tool], stages: [] }, 'full', null, () =>
+        trackedFiles(root),
+      )
+      const extra = argv.slice(argv[1] === '--' ? 2 : 1)
+      selected = selected.map((item) =>
+        item.step ? { ...item, step: { ...item.step, argv: [...item.step.argv, ...extra] } } : item,
+      )
+    }
+    const results = await runSteps(config, 'full', selected, {
+      out: json ? undefined : io.out,
+      reuse,
+    })
+    const ok = passed(results)
+    io.out(
+      json
+        ? JSON.stringify({ state: ok ? 'pass' : 'fail', stages: results })
+        : `CHECK:${ok ? 'PASS' : 'FAIL'} focused (${results.length} stage(s))`,
+    )
+    return ok ? 0 : 1
+  }
   const args = parse(argv, ['--sha', '--jobs', '--with-ack', '--scope', '--task'])
   if (args.flags.has('--help') || args.flags.has('-h')) {
     io.out(CHECK_USAGE)

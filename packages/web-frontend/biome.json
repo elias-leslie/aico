@@ -88,6 +88,8 @@
                       "@aico/agent/**",
                       "@aico/checks",
                       "@aico/checks/**",
+                      "@aico/cli",
+                      "@aico/cli/**",
                       "@aico/context",
                       "@aico/context/**",
                       "@aico/fleet",

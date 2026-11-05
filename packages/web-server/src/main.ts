@@ -26,6 +26,7 @@ import { WebStore } from './db'
 import { ExtractWorker } from './extract-worker'
 import { registerGrantRoutes } from './grants'
 import { registerLoginRoutes } from './logins'
+import { registerMockupRoutes } from './mockups'
 import { NotesStore } from './notes-db'
 import { registerExportRoutes } from './notes-export'
 import { NotifyHub } from './notify'
@@ -163,6 +164,7 @@ function serve(): void {
   registerCanaryRoutes(api, notify.notifier, join(config.dataDir, 'canary'))
   registerBackupRoutes(api)
   registerLoginRoutes(api, process.env, tether)
+  registerMockupRoutes(api, { dataDir: config.dataDir, tether })
   // The phone alert rule: checked on every write of rows. aico-web's own heartbeat writes every
   // few minutes, so a backup or machine row that goes late is seen then too. A notice notify
   // refuses throws, and the batch is offered again on the next pass.
@@ -175,6 +177,7 @@ function serve(): void {
   notify.register(api)
   registerTrayRoutes(api, { status, notify: notify.store, asks, publicHost: config.publicHost })
   const app = new AppApi({
+    pairing: config.pairing,
     phones,
     status,
     notify: notify.store,

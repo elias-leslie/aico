@@ -36,6 +36,7 @@ import { dataDirPath, loadConfig, webDbPath } from './config'
 import { WebStore } from './db'
 import { createLifecycle, type Lifecycle } from './lifecycle'
 import { runNotesCli } from './notes-import-cli'
+import { runPhonesCli } from './phones-cli'
 import { runStatusCli } from './status-cli'
 import { HttpError } from './tether'
 
@@ -47,6 +48,7 @@ export const CLI_COMMANDS = [
   'status',
   'logins',
   'app',
+  'phones',
   ...CONTEXT_COMMANDS,
   ...USAGE_COMMANDS,
 ]
@@ -562,6 +564,13 @@ function terminalIo(): CliIo {
 
 /** `aico-web tsession|tclaude|tcodex …` against the user's own Tether and the web app's state. */
 export async function runCli(command: string, argv: string[]): Promise<number> {
+  if (command === 'phones')
+    return runPhonesCli(argv, {
+      out: (text) => process.stdout.write(text),
+      err: (text) => process.stderr.write(text),
+      baseUrl: `http://127.0.0.1:${loadConfig().port}`,
+      fetch,
+    })
   if (command === 'logins') return runLogins(argv)
   if (command === 'tnotes') return runNotesCli(argv, terminalIo().repoRoot)
   if (command === 'app')

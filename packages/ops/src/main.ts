@@ -29,10 +29,11 @@ const USAGE = `Usage:
       read-only Btrfs points of the project (the catalogue st snap keeps); restore only for a project
       that is its own subvolume outside the production workspace
   aico vm list | status ID | start ID [--hours H --reason R] | stop ID | snapshot ID [NAME]
-      Proxmox guests through SummitFlow's VM route (its API token; Proxmox enforces the token's pools)`
+      Proxmox guests with Aico Logins' scoped API token (Proxmox enforces its pools)`
 
 /** The repo this launcher belongs to: AICO_REPO_ROOT, else the nearest project.identity.json above cwd. */
 export function repoRoot(env = process.env, cwd = process.cwd()): string {
+  if (env.AICO_DEPLOY_ROOT) return env.AICO_DEPLOY_ROOT
   if (env.AICO_REPO_ROOT) return env.AICO_REPO_ROOT
   for (let dir = resolve(cwd); ; dir = dirname(dir)) {
     if (existsSync(join(dir, 'project.identity.json'))) return dir
