@@ -456,3 +456,13 @@ def test_heartbeat_does_not_wait_for_slow_watchdog_lock(cfg, monkeypatch):
     monkeypatch.setattr(cli.sys, "stdin", io.StringIO('{}'))
     assert cli.main(["--config", str(path), "heartbeat", "workstation"]) == 0
     assert locks == [Path(cfg["state_dir"]) / "heartbeat-lock"]
+
+
+def test_receipt_projection_returns_no_pairing_material(tmp_path):
+    from host_steward import heartbeat
+    devices = tmp_path / "devices.json"
+    devices.write_text(json.dumps([{"fcm_token": "fixture-secret", "sig_pub": "fixture-secret", "last_message_ack": {
+        "id": "test", "received_at": 100, "shown": True, "extra": "fixture-secret"}}]))
+    cfg = {"route": {"devices": str(devices)}}
+    assert heartbeat.message_receipts(cfg, "test") == [{"id": "test", "received_at": 100, "shown": True}]
+    assert heartbeat.message_receipts(cfg, "other") == []

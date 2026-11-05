@@ -86,8 +86,23 @@ def run(cfg: dict, *, execute=subprocess.run, post=aico_status.report) -> int:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path(__file__).with_name("data") / "heartbeat.json")
+    parser.add_argument("--receipt-id", help="show only the phone's signed receipt for this message; sends nothing")
     args = parser.parse_args(argv)
-    return run(json.loads(args.config.read_text()))
+    cfg = json.loads(args.config.read_text())
+    if args.receipt_id:
+        receipts = message_receipts(cfg, args.receipt_id)
+        print(json.dumps({"message": args.receipt_id, "receipts": receipts}))
+        return 0 if receipts else 1
+    return run(cfg)
+
+
+def message_receipts(cfg: dict, message_id: str) -> list[dict]:
+    """A metadata-only view: no device identifier, pairing material or tokens leave the registry."""
+    devices = json.loads(Path(cfg["route"]["devices"]).read_text())
+    return [{key: ack[key] for key in ("id", "received_at", "shown")}
+            for dev in devices if isinstance(dev, dict)
+            and isinstance((ack := dev.get("last_message_ack")), dict)
+            and ack.get("id") == message_id]
 
 
 if __name__ == "__main__":
