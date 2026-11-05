@@ -439,8 +439,18 @@ export class AppApi {
           id: phone.id,
           name: phone.name || 'Phone',
           last_ack: phone.last_ack ?? null,
+          last_message_ack: phone.last_message_ack ?? null,
         })) ?? null,
     }))
+    router.on(
+      'DELETE',
+      '/api/phone-app/:id',
+      unsigned(async (ctx) => {
+        if (!/^[A-Za-z0-9_-]{1,128}$/.test(ctx.params.id ?? ''))
+          throw new AppError(400, 'invalid phone id')
+        return { removed: await this.deps.phones.remove(ctx.params.id as string) }
+      }),
+    )
     router.on('GET', '/app/aico.apk', async (ctx) => {
       const release = currentRelease(this.deps.dataDir)
       if (!release) {

@@ -207,6 +207,34 @@ function call(
 }
 
 describe('signed calls', () => {
+  it('removes exactly the named phone and preserves other paired phones', async () => {
+    const other = {
+      ...(phones.get(device) as NonNullable<ReturnType<typeof phones.get>>),
+      id: 'other-test-phone',
+      fcm_token: 'other-token',
+    }
+    await phones.register(other)
+    const reply = await call('DELETE', `/api/phone-app/${device}`)
+    expect(reply.status).toBe(200)
+    expect(reply.body).toEqual({ removed: true })
+    expect(phones.get(device)).toBeNull()
+    expect(phones.get(other.id)).toEqual(other)
+    expect((await call('DELETE', `/api/phone-app/${device}`)).body).toEqual({ removed: false })
+  })
+
+  it('reports phone receipt metadata to the owner without pairing keys or tokens', async () => {
+    const ack = { id: 'test-message', received_at: NOW / 1000, shown: true }
+    await phones.ack(device, { acks: [{ t: 'm', ...ack }] }, NOW / 1000)
+    const reply = await call('GET', '/api/phone-app')
+    expect(reply.body.phones[0].last_message_ack).toEqual(ack)
+    expect(Object.keys(reply.body.phones[0]).sort()).toEqual([
+      'id',
+      'last_ack',
+      'last_message_ack',
+      'name',
+    ])
+  })
+
   it('refuses a missing, wrong or old signature with {error}', async () => {
     const plain = await call('GET', '/api/app/health', { headers: { 'x-nightshift-sig': 'AAAA' } })
     expect(plain.status).toBe(401)

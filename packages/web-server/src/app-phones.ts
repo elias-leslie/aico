@@ -195,6 +195,21 @@ export class PhoneRegistry {
     return run
   }
 
+  remove(id: string): Promise<boolean> {
+    const run = this.tail.then(() => {
+      const phones = this.all()
+      if (!phones) throw new AppError(503, 'the phone file cannot be read')
+      const keep = phones.filter((phone) => phone.id !== id)
+      if (keep.length === phones.length) return false
+      const tmp = `${this.path}.${process.pid}.tmp`
+      writeFileSync(tmp, JSON.stringify(keep), { mode: 0o600 })
+      renameSync(tmp, this.path)
+      return true
+    })
+    this.tail = run.catch(() => {})
+    return run
+  }
+
   /** The phone that signed this request, or an AppError (401: pair again). `now` in epoch seconds. */
   verify(
     method: string,
