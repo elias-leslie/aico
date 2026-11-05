@@ -1,0 +1,12 @@
+source_commit=72b5d9d31bbd26ead523404381e5478773aabc4a
+{"previous_status_relay_s": 0, "status_relay_s": 300}
+{"at": 1793864225.737418, "silent": false, "ages": {"workstation": 191.47509694099426, "ct190": 151.44369101524353}, "last_send": {}, "rows_posted": true}
+Aico Proxmox sender installed.
+9d7989db65362bf109173e1c9dc4675b8618708102ffb74d1039100d9be99179  /tmp/aico-m10d1-pve.JyDbN3MC/native/pve-sender/pve_sender/watchdog.py
+9d7989db65362bf109173e1c9dc4675b8618708102ffb74d1039100d9be99179  /usr/local/lib/aico-pve-sender/pve_sender/watchdog.py
+{"at": 1793864225.737418, "rows_posted": true, "silent": false}
+{"id": "davion-gem/machine", "state": "ok", "last_run": "2026-11-05T07:37:05.737Z", "next_run": "2026-11-05T07:49:05.737Z", "freshness_seconds": 720.0}
+{"id": "davion-gem/pve-sender", "state": "ok", "last_run": "2026-11-05T07:37:05.737Z", "next_run": "2026-11-05T07:49:05.737Z", "freshness_seconds": 720.0}
+LastTriggerUSec=Thu 2026-11-05 02:35:28 EST
+Id=aico-pve-sender.timer
+ActiveState=active

@@ -14,4 +14,5 @@ Redis: zero established TCP clients; retained by coordinator direction. Redis an
 Inventory covered workstation and running CT150/160/170/190; Neri limited to unit/connection metadata, with no code/data/hunting-session access.
 Rollback: rollback.md restores five links and enables/starts the three retained SF units; no database restore needed.
 Exclusions: Neri/Neri Hunters switch handed to M11c; Cinderwake Python/screenshot and Code Intelligence old-token test findings accepted by coordinator, source left to owners.
+Follow-up: 72b5d9d3 fixes reproduced false Proxmox Late between sender/relay cycles; failing-first/quick passed, installed on PVE, natural relay verified (pve-relay.md).
 Remaining: None within the agreed scope. Evidence: live.md and final-verification.json; no publication by this lane.

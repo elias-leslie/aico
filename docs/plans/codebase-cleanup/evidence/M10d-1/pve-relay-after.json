@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-11-05T07:39:23.507Z",
+  "rows": [
+    {
+      "id": "davion-gem/machine",
+      "state": "ok",
+      "shown": "ok",
+      "last_run": "2026-11-05T07:37:05.737Z",
+      "next_run": "2026-11-05T07:49:05.737Z",
+      "updated_at": "2026-11-05T07:38:59.305Z",
+      "freshness_seconds": 720.0
+    },
+    {
+      "id": "davion-gem/pve-sender",
+      "state": "ok",
+      "shown": "ok",
+      "last_run": "2026-11-05T07:37:05.737Z",
+      "next_run": "2026-11-05T07:49:05.737Z",
+      "updated_at": "2026-11-05T07:38:59.305Z",
+      "freshness_seconds": 720.0
+    }
+  ]
+}

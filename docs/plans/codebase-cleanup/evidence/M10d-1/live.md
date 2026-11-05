@@ -10,6 +10,7 @@ The CLI cutover, functional verification and final 30-minute observation passed.
 | Tether | 66891b6b65aee4171f36b649be6377a7ce932681 |
 | Aico web/jobs | b0a450563e7d1386c6d4a91c9ae02d69114d299c; unchanged source inputs in later command releases |
 | Agent Hub | 90cb5a28f19ad52b17bc49d9cfd400ef8bf9de9d |
+| Proxmox sender follow-up | 72b5d9d31bbd26ead523404381e5478773aabc4a |
 
 All five launcher links (`~/bin/st`, `/usr/local/bin/st`, `~/.local/bin/st`, `~/.local/bin/aico`, `~/bin/aico`) use the committed installed command release. The new CLI has no SF API fallback. `verbs.md` records every former core verb's destination or removal. Unit files and rollback sources remain intact. No Git publication was performed by this lane.
 
@@ -44,3 +45,7 @@ Configuration and connection inventory covered workstation units/compose and run
 Cinderwake's non-Aico proof reached its gate but found a missing configured Python 3.12 and a project screenshot assertion. It stayed inactive/disabled and unmodified. Code Intelligence reached isolated acceptance; the environment inference fix restored its Python/type gate, then its tests failed an old X-SummitFlow-Agent-Token expectation. Per coordinator direction that gate-reached proof was accepted and its source tests were left to its owner; only its separately authorized SDK pins changed.
 
 The first journal scan exposed the verbose project-list caller and old import transport; both are fixed. The final scanner reads only the named dependants and shared containers, emits counts/categories/digests rather than application bodies, and excludes Neri and hunting session logs. Its readiness run found zero journal alerts and zero shared-container error lines. The final 30-minute scan also found zero journal alerts and zero shared-container error lines. Current unit/connection checks passed (`final-verification.json`); all three shared containers are healthy. Redis remains running per coordinator direction despite zero live TCP clients; it and the root SF host monitor remain M12 review candidates. Remaining: None within the agreed scope.
+
+## Coordinator follow-up: Proxmox Status relay
+
+After the original clean window, the coordinator found a healthy Proxmox sender briefly marked Late. The 02:30 EST run posted successfully and reached the workstation at 02:33:54; no post was dropped by a 02:25 local redeploy. Both independent timers run every five minutes, but the row deadline covered only one stage plus two minutes of slack. Live reads and a failing regression reproduced the gap. Commit 72b5d9d3 adds an explicit relay budget, passed all 1,219 host tests and 168 contracts, and was installed on Proxmox through its existing installer. A natural workstation heartbeat received the new row with a 12-minute horizon and both host/sender showing OK. See `pve-relay.md` for timestamps, before/after evidence, install hash and scoped rollback.
