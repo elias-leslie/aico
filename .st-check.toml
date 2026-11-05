@@ -16,7 +16,8 @@ ruff = "native/host-steward/.venv/bin"
 [native]
 schema_version = 1
 locks = ["package-lock.json", "native/host-steward/pyproject.toml", "native/host-steward/uv.lock", "native/st-sdk/pyproject.toml", "native/st-sdk/uv.lock", "native/service-tools/pyproject.toml", "native/service-tools/uv.lock"]
-paths = ["node_modules/.bin"]
+# Declare script-internal Python environments so isolated acceptance prepares them.
+paths = ["node_modules/.bin", "native/st-sdk/.venv/bin", "native/service-tools/.venv/bin"]
 environment_inputs = ["node_modules", "native/st-sdk/.venv", "native/host-steward/.venv", "native/service-tools/.venv"]
 legacy_tools = ["vitest", "security"]
 
