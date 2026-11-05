@@ -10,8 +10,8 @@ import { fleetFile } from './settings'
 const mocks = vi.hoisted(() => ({ exec: vi.fn() }))
 vi.mock('./logins-wire', () => ({ requestLoginWire: mocks.exec }))
 vi.mock('./trust', () => ({
-  readPins: () => [
-    { name: loginMachine(), role: 'worker' },
+  readPins: (path: string) => [
+    { name: loginMachine(), role: path === '/full-pins' ? 'full' : 'worker' },
     { name: 'full-peer', role: 'full' },
   ],
 }))
@@ -75,4 +75,18 @@ it('sends worker writes to a full peer only through encrypted protocol data and 
   await expect(
     client.value('saved', { role: 'hunting', session: 'hunt-one', machine: loginMachine() }),
   ).rejects.toThrow('unavailable')
+})
+it('replicates a reveal record and last-used metadata to other full peers', async () => {
+  const env = environment()
+  const config = JSON.parse((await import('node:fs')).readFileSync(fleetFile(env), 'utf8'))
+  config.allowlist = '/full-pins'
+  writePrivate(fleetFile(env), JSON.stringify(config))
+  new LoginStore(env).set('saved', 'fixture-private-value', {}, owner)
+  mocks.exec.mockResolvedValue(JSON.stringify({ ok: true }))
+  const client = new LoginClient(env)
+  expect((await client.value('saved', owner, 'reveal')).toString()).toBe('fixture-private-value')
+  expect(mocks.exec).toHaveBeenCalled()
+  const snapshot = JSON.parse(mocks.exec.mock.calls[0][1]).snapshot
+  expect(snapshot.audit.some((event: { action: string }) => event.action === 'reveal')).toBe(true)
+  expect(snapshot.entries[0].entry.lastUsed).not.toBeNull()
 })
