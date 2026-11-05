@@ -1,0 +1,11 @@
+{
+  "checked_at": "2026-11-05T01:41:18.728103+00:00",
+  "source": "/srv/workspaces/projects/aico/project.identity.json",
+  "destination": "/srv/scratch/aico-m10c-2-restore/srv/workspaces/projects/aico/project.identity.json",
+  "bytes": 1574,
+  "sha256": "1132baf1a6dada50a4eb4b93db508bd0cc17dedae848db564cc7575a59a04202",
+  "identical": true,
+  "ui_result": "Restored and verified in /srv/scratch/aico-m10c-2-restore.",
+  "engine_verification": "diff -r --no-dereference before success",
+  "independent_comparison": "cmp returned 0"
+}
