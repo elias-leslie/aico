@@ -438,3 +438,21 @@ def test_malformed_cached_token_expiry_reports_failure(tmp_path):
     rows = []
     assert fcm_token.refresh(config, now=100, post=rows.append) == 1
     assert rows[-1]["state"] == "failed"
+
+
+def test_heartbeat_does_not_wait_for_slow_watchdog_lock(cfg, monkeypatch):
+    import contextlib
+    import io
+
+    from pve_sender import cli
+    path = Path(cfg["state_dir"]) / "config.json"
+    write(path, cfg)
+    locks = []
+    @contextlib.contextmanager
+    def lock(directory):
+        locks.append(directory)
+        yield
+    monkeypatch.setattr(cli, "locked", lock)
+    monkeypatch.setattr(cli.sys, "stdin", io.StringIO('{}'))
+    assert cli.main(["--config", str(path), "heartbeat", "workstation"]) == 0
+    assert locks == [Path(cfg["state_dir"]) / "heartbeat-lock"]

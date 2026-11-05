@@ -28,9 +28,21 @@ def main(argv=None) -> int:
     try:
         cfg = read(Path(args.config))
         directory = Path(cfg["state_dir"])
-        with locked(directory):
+        text = ""
+        lock_directory = directory
+        if args.command in ("heartbeat", "push", "sync-credentials"):
+            limit = 262144 if args.command == "sync-credentials" else push.MAX_STDIN
+            text = sys.stdin.read(limit + 1)
+            if len(text.encode()) > limit:
+                raise ValueError("Input is too long.")
+            data = json.loads(text)
+            if args.command == "heartbeat" or (args.command == "push" and args.caller == "aico"
+                    and isinstance(data, dict) and data.get("kind") == "heartbeat"):
+                lock_directory = directory / "heartbeat-lock"
+            elif args.command == "sync-credentials":
+                lock_directory = directory / "credentials-lock"
+        with locked(lock_directory):
             if args.command == "sync-credentials":
-                data = json.loads(sys.stdin.read(262145))
                 route = data.get("fcm", {})
                 if not isinstance(route.get("devices"), list) or not isinstance(route.get("service_account"), dict):
                     raise ValueError("Invalid phone route.")
@@ -51,11 +63,7 @@ def main(argv=None) -> int:
             if args.command == "status":
                 print(json.dumps(read(directory / "status.json", {})))
                 return 0
-            text = sys.stdin.read(push.MAX_STDIN + 1)
-            if len(text.encode()) > push.MAX_STDIN:
-                raise ValueError("Input is too long.")
             if args.command == "heartbeat":
-                data = json.loads(text)
                 if not isinstance(data, dict):
                     raise ValueError("Heartbeat must be an object.")
                 answer = push.heartbeat(cfg, args.source, data, time.time())
