@@ -1,0 +1,68 @@
+$ bash -c set -e; test_tmp=$(mktemp -d /tmp/aico-pytest.XXXXXX); trap 'rm -rf -- "$test_tmp"' EXIT; native/host-steward/.venv/bin/pytest --basetemp "$test_tmp" -q native/host-steward/tests
+........................................................................ [  5%]
+........................................................................ [ 11%]
+........................................................................ [ 17%]
+........................................................................ [ 23%]
+........................................................................ [ 29%]
+........................................................................ [ 35%]
+........................................................................ [ 41%]
+........................................................................ [ 47%]
+........................................................................ [ 53%]
+........................................................................ [ 59%]
+........................................................................ [ 64%]
+........FF.............................................................. [ 70%]
+........................................................................ [ 76%]
+........................................................................ [ 82%]
+........................................................................ [ 88%]
+........................................................................ [ 94%]
+....................................................................     [100%]
+=================================== FAILURES ===================================
+_________ test_backups_native_follows_aico_not_unwritten_host_receipts _________
+
+tmp_path = PosixPath('/tmp/aico-pytest.10eRbu/test_backups_native_follows_ai0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x721855f14d70>
+
+    def test_backups_native_follows_aico_not_unwritten_host_receipts(tmp_path, monkeypatch):
+        monkeypatch.setattr(backups.pwd, "getpwnam", lambda owner: type("Owner", (), {"pw_dir": str(tmp_path), "pw_uid": tmp_path.stat().st_uid}))
+        root = tmp_path / ".local/state/summitflow/host-recovery"
+        write(root / "latest.json", {"status": "completed"})
+        write(root / "last-good.json", {"status": "completed", "capture_complete": True, "artifacts_complete": True,
+                                      "points": [{}], "finished_at": NOW - 70 * 3600})
+        config = tmp_path / "btrbk.conf"
+        config.touch()
+        out = states(backups.run(ctx("backups", run=aico_backup_runner(aico_backup_health()), native_config=str(config))))
+>       assert out["backups.native"] == "ok"
+E       AssertionError: assert 'failed' == 'ok'
+E         
+E         - ok
+E         + failed
+
+native/host-steward/tests/test_host_steward_checks.py:513: AssertionError
+_____________ test_backups_running_drive_uses_last_verified_copies _____________
+
+tmp_path = PosixPath('/tmp/aico-pytest.10eRbu/test_backups_running_drive_use0')
+
+    def test_backups_running_drive_uses_last_verified_copies(tmp_path):
+        data = aico_backup_health()
+        data["runs"]["drive"] = {"ok": False, "started": NOW - 60}
+        for entry in data["entries"]:
+            if entry["target"] == "drive":
+                entry["running"] = True
+        out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
+>       assert out["backups.pve"] == "ok"
+E       AssertionError: assert 'failed' == 'ok'
+E         
+E         - ok
+E         + failed
+
+native/host-steward/tests/test_host_steward_checks.py:523: AssertionError
+=========================== short test summary info ============================
+FAILED native/host-steward/tests/test_host_steward_checks.py::test_backups_native_follows_aico_not_unwritten_host_receipts - AssertionError: assert 'failed' == 'ok'
+  
+  - ok
+  + failed
+FAILED native/host-steward/tests/test_host_steward_checks.py::test_backups_running_drive_uses_last_verified_copies - AssertionError: assert 'failed' == 'ok'
+  
+  - ok
+  + failed
+2 failed, 1218 passed in 6.60s

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "davion-sidarli/check-backups",
+    "state": "failed",
+    "meaning": "The PVE backups are not healthy: the receipt writer stopped 6 h ago. PVE data may lack a verified offsite copy. Check the PVE backup receipt. Also: The backup freshness receipt is 6 h old.",
+    "last_run": "2026-11-05T10:54:59.842Z"
+  },
+  {
+    "id": "davion-sidarli/check-workstation",
+    "state": "warn",
+    "meaning": "A package update wants a reboot. Reboot when the work in flight is done.",
+    "last_run": "2026-11-05T10:54:57.400Z"
+  },
+  {
+    "id": "davion-sidarli/job-housekeeping",
+    "state": "ok",
+    "meaning": "Housekeeping ran: pruned pnpm cache",
+    "last_run": "2026-11-05T10:54:32.155Z"
+  }
+]

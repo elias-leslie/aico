@@ -1,0 +1,25 @@
+{
+  "source": "6f5927b2765e6bbf5c93049b83d759acd1ba4843",
+  "files": [
+    {
+      "path": "host_steward/jobs/housekeeping.py",
+      "sha256": "b251dd59f9e040e8f23fac13bfeb15abe8bfb6e3bfb857780e174063100028ae",
+      "matches_committed_source": true
+    },
+    {
+      "path": "host_steward/checks/backups.py",
+      "sha256": "52f652b81ec9cf84156065ab3343c1d749f3bfcdca22eee86bd51092585547d6",
+      "matches_committed_source": true
+    },
+    {
+      "path": "host_steward/data/checks.toml",
+      "sha256": "901f32a6d13046c6f9044a845672f0da63d44936a56a868d51171aad1a9b18f5",
+      "matches_committed_source": true
+    },
+    {
+      "path": "host_steward/data/meanings.toml",
+      "sha256": "2f1b4b2d5e5df2e2615e5cef5c683e66a76f935f1f6cf06c80d1dab7851ceaad",
+      "matches_committed_source": true
+    }
+  ]
+}

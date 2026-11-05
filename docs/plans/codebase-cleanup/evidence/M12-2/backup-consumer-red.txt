@@ -1,0 +1,61 @@
+$ bash -c set -e; test_tmp=$(mktemp -d /tmp/aico-pytest.XXXXXX); trap 'rm -rf -- "$test_tmp"' EXIT; native/host-steward/.venv/bin/pytest --basetemp "$test_tmp" -q native/host-steward/tests
+........................................................................ [  6%]
+........................................................................ [ 12%]
+........................................................................ [ 18%]
+........................................................................ [ 24%]
+........................................................................ [ 30%]
+........................................................................ [ 36%]
+........................................................................ [ 42%]
+........................................................................ [ 48%]
+........................................................................ [ 54%]
+........................................................................ [ 60%]
+.................................................................F...... [ 66%]
+........................................................................ [ 72%]
+........................................................................ [ 78%]
+........................................................................ [ 84%]
+........................................................................ [ 90%]
+........................................................................ [ 96%]
+................................................                         [100%]
+=================================== FAILURES ===================================
+_________ test_backups_follow_aico_after_retired_receipt_writers_stop __________
+
+tmp_path = PosixPath('/tmp/aico-pytest.HDBKVf/test_backups_follow_aico_after0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7faa0aaa7af0>
+
+    def test_backups_follow_aico_after_retired_receipt_writers_stop(tmp_path, monkeypatch):
+        monkeypatch.setattr(backups.pwd, "getpwnam", lambda owner: type("Owner", (), {"pw_dir": str(tmp_path), "pw_uid": tmp_path.stat().st_uid}))
+        old = tmp_path / ".local/state/summitflow"
+        write(old / "backup-freshness/sources.json", {"generated_at": NOW - 9 * 3600})
+        write(old / "backup-freshness/proxmox.json", {"schema_version": 1, "generated_at": NOW - 9 * 3600})
+        write(old / "backup-health/old.json", {"ok": False})
+        site = {**DATA["site"], "pve": {**DATA["site"]["pve"], "backup_receipt": str(old / "backup-freshness/proxmox.json")}}
+        out = backups.run(ctx("backups", run=aico_backup_runner(aico_backup_health()), site=site, native_config=str(tmp_path / "absent")))
+>       assert out and set(states(out).values()) == {"ok"}
+E       AssertionError: assert ([Signal(code='backups.file.missing', state='warn', fields={'file': 'backup-safety.status'}, note=False), Signal(code='...d', state='ok', fields={}, note=False), Signal(code='backups.sources.failing', state='ok', fields={}, note=False), ...] and {'failed', 'ok', 'warn'} == {'ok'}
+E         
+E         Extra items in the left set:
+E         'failed'
+E         'warn'
+E         
+E         Full diff:
+E           {
+E         +     'failed',
+E               'ok',
+E         +     'warn',
+E           })
+
+native/host-steward/tests/test_host_steward_checks.py:518: AssertionError
+=========================== short test summary info ============================
+FAILED native/host-steward/tests/test_host_steward_checks.py::test_backups_follow_aico_after_retired_receipt_writers_stop - AssertionError: assert ([Signal(code='backups.file.missing', state='warn', fields={'file': 'backup-safety.status'}, note=False), Signal(code='...d', state='ok', fields={}, note=False), Signal(code='backups.sources.failing', state='ok', fields={}, note=False), ...] and {'failed', 'ok', 'warn'} == {'ok'}
+  
+  Extra items in the left set:
+  'failed'
+  'warn'
+  
+  Full diff:
+    {
+  +     'failed',
+        'ok',
+  +     'warn',
+    })
+1 failed, 1199 passed in 7.05s

@@ -1,0 +1,115 @@
+{
+  "host_steward_units": [
+    "host-steward-heartbeat.service static  -",
+    "host-steward-heartbeat.timer   enabled enabled"
+  ],
+  "host_steward_units_exit": 0,
+  "host": "aico",
+  "installed_roots": {
+    "/usr/local/lib/host-steward/host_steward": {
+      "exists": true,
+      "files": 3
+    },
+    "/usr/local/lib/aico-pve-sender": {
+      "exists": false,
+      "files": 0
+    },
+    "/etc/systemd/system": {
+      "exists": true,
+      "files": 44
+    },
+    "/usr/lib/systemd/system": {
+      "exists": true,
+      "files": 190
+    },
+    "/run/systemd/system": {
+      "exists": true,
+      "files": 0
+    },
+    "/etc/systemd/user": {
+      "exists": true,
+      "files": 0
+    },
+    "/usr/lib/systemd/user": {
+      "exists": true,
+      "files": 7
+    },
+    "/run/user/1000/systemd/user": {
+      "exists": false,
+      "files": 0
+    },
+    "/etc/cron.d": {
+      "exists": true,
+      "files": 2
+    },
+    "/etc/cron.hourly": {
+      "exists": true,
+      "files": 1
+    },
+    "/etc/cron.daily": {
+      "exists": true,
+      "files": 5
+    },
+    "/etc/cron.weekly": {
+      "exists": true,
+      "files": 2
+    },
+    "/etc/cron.monthly": {
+      "exists": true,
+      "files": 1
+    },
+    "/home/kasadis/.config/systemd/user": {
+      "exists": true,
+      "files": 20
+    },
+    "/home/kasadis/.local/lib/aico/ops/packages/jobs/data": {
+      "exists": true,
+      "files": 1
+    }
+  },
+  "retired_verbs": [
+    "automations",
+    "autosnap",
+    "cancel",
+    "checkpoints",
+    "claude",
+    "cleanup",
+    "critique",
+    "ctx",
+    "delete",
+    "dep",
+    "design",
+    "docker",
+    "exec-log",
+    "export",
+    "graph",
+    "learn",
+    "native-sessions",
+    "note",
+    "pause",
+    "prune",
+    "ready",
+    "ready-all",
+    "recover",
+    "reopen",
+    "runtime",
+    "session-events",
+    "setup",
+    "show",
+    "subtask",
+    "sync-progress",
+    "test",
+    "update",
+    "verify",
+    "workflow"
+  ],
+  "matches": [],
+  "errors": [],
+  "btrfs_timer": {
+    "exit": 0,
+    "Triggers": "",
+    "TriggeredBy": "",
+    "ActiveState": "inactive",
+    "UnitFileState": ""
+  }
+}

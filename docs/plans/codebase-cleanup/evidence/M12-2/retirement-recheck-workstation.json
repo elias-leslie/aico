@@ -1,0 +1,70 @@
+{
+  "since": "2026-11-05T09:04:43Z",
+  "until": "2026-11-05T09:35:58Z",
+  "journals": [
+    {
+      "scope": "user",
+      "units": [
+        "nightshift-display-guard.service",
+        "nightshift-postboot.service",
+        "aico-web.service",
+        "aico-jobs.service",
+        "aico-tray.service",
+        "tether@default.service",
+        "tether-link@agent-work.service",
+        "agent-hub-backend.service",
+        "agent-hub-frontend.service",
+        "agent-hub-hatchet-agent-worker.service",
+        "agent-hub-hatchet-ops-worker.service",
+        "agent-hub-usage-collect.service",
+        "summitflow-backend.service",
+        "summitflow-frontend.service",
+        "summitflow-hatchet-worker.service"
+      ],
+      "events": {
+        "aico-jobs.service": 30,
+        "tether-link@agent-work.service": 8,
+        "aico-web.service": 4,
+        "aico-tray.service": 2,
+        "nightshift-postboot.service": 4,
+        "tether@default.service": 3
+      },
+      "alerts": []
+    },
+    {
+      "scope": "system",
+      "units": [
+        "nightshift-input-watch.service",
+        "nightshift-boot-mark.service",
+        "nightshift-zswap.service",
+        "summitflow-dnsmasq.service",
+        "summitflow-stack.service",
+        "summitflow-host-monitor.service",
+        "host-steward-check.service",
+        "host-steward-rules.service"
+      ],
+      "events": {
+        "host-steward-rules.service": 112,
+        "host-steward-check.service": 10
+      },
+      "alerts": []
+    }
+  ],
+  "containers": [
+    {
+      "container": "summitflow-stack-postgres-1",
+      "error_categories": {},
+      "error_digests": {}
+    },
+    {
+      "container": "summitflow-stack-redis-1",
+      "error_categories": {},
+      "error_digests": {}
+    },
+    {
+      "container": "summitflow-stack-hatchet-1",
+      "error_categories": {},
+      "error_digests": {}
+    }
+  ]
+}

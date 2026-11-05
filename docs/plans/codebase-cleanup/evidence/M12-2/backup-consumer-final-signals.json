@@ -1,0 +1,29 @@
+[
+  {
+    "code": "backups.sources",
+    "state": "failed",
+    "fields": {
+      "why": "external/portfolio-ai-complete"
+    }
+  },
+  {
+    "code": "backups.pve",
+    "state": "ok",
+    "fields": {}
+  },
+  {
+    "code": "backups.native",
+    "state": "ok",
+    "fields": {}
+  },
+  {
+    "code": "backups.autosnap",
+    "state": "ok",
+    "fields": {}
+  },
+  {
+    "code": "backups.drill",
+    "state": "ok",
+    "fields": {}
+  }
+]

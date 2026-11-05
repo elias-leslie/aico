@@ -1,0 +1,73 @@
+{
+  "source": "75aba57b115aad19ebcd56a3ede3b4aba4bd156a",
+  "housekeeping": {
+    "package_caches": [
+      {
+        "name": "uv",
+        "path": "/home/{owner}/.cache/uv",
+        "max_gib": 8,
+        "query": [
+          "uv",
+          "cache",
+          "dir"
+        ],
+        "clean": [
+          "uv",
+          "cache",
+          "prune"
+        ]
+      },
+      {
+        "name": "pnpm",
+        "path": "/srv/workspaces/.pnpm-store/v11",
+        "max_gib": 0,
+        "query": [
+          "pnpm",
+          "store",
+          "path"
+        ],
+        "clean": [
+          "pnpm",
+          "store",
+          "prune"
+        ]
+      },
+      {
+        "name": "npm",
+        "path": "/home/{owner}/.npm/_cacache",
+        "max_gib": 2,
+        "query": [
+          "npm",
+          "config",
+          "get",
+          "cache"
+        ],
+        "suffix": "_cacache",
+        "clean": [
+          "npm",
+          "cache",
+          "clean",
+          "--force"
+        ]
+      },
+      {
+        "name": "go",
+        "path": "/home/{owner}/.cache/go-build",
+        "max_gib": 4,
+        "query": [
+          "go",
+          "env",
+          "GOCACHE"
+        ],
+        "clean": [
+          "go",
+          "clean",
+          "-cache"
+        ]
+      }
+    ],
+    "cache_timeout_s": 600
+  },
+  "retired_daily_commands_present": false,
+  "reclaim_commands": []
+}

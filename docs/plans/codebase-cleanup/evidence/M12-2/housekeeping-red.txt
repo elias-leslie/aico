@@ -1,0 +1,61 @@
+$ bash -c set -e; test_tmp=$(mktemp -d /tmp/aico-pytest.XXXXXX); trap 'rm -rf -- "$test_tmp"' EXIT; native/host-steward/.venv/bin/pytest --basetemp "$test_tmp" -q native/host-steward/tests
+........................................................................ [  6%]
+........................................................................ [ 12%]
+........................................................................ [ 18%]
+........................................................................ [ 24%]
+........................................................................ [ 30%]
+........................................................................ [ 36%]
+........................................................................ [ 42%]
+........................................................................ [ 48%]
+........................................................................ [ 54%]
+........................................................................ [ 60%]
+........................................................................ [ 66%]
+........................................................................ [ 72%]
+.................F..F................................................... [ 78%]
+........................................................................ [ 84%]
+........................................................................ [ 90%]
+........................................................................ [ 96%]
+........................................                                 [100%]
+=================================== FAILURES ===================================
+___________ test_housekeeping_is_independent_of_retired_cleanup_host ___________
+
+tmp_path = PosixPath('/tmp/aico-pytest.VeyJXn/test_housekeeping_is_independe0')
+
+    def test_housekeeping_is_independent_of_retired_cleanup_host(tmp_path):
+        fake = Fake((["runuser"], Result(2, "", "st cleanup: dropped")))
+        result = housekeeping.maintain(hk_cfg(tmp_path), "kasadis", acts.Actor(True, run=fake), NOW, str(tmp_path))
+>       assert not result.get("failed")
+E       AssertionError: assert not True
+E        +  where True = <built-in method get of dict object at 0x7c4f41af4980>('failed')
+E        +    where <built-in method get of dict object at 0x7c4f41af4980> = {'actions': ['st cleanup host failed (exit 2): st cleanup: dropped'], 'would': [], 'freed_bytes': 0, 'failed': True}.get
+
+native/host-steward/tests/test_host_steward_housekeeping.py:240: AssertionError
+____ test_housekeeping_prunes_tool_cache_only_over_its_cap[9663676416-True] ____
+
+tmp_path = PosixPath('/tmp/aico-pytest.VeyJXn/test_housekeeping_prunes_tool_2')
+size = 9663676416, cleaned = True
+
+    @pytest.mark.parametrize("size,cleaned", [(7 * GIB, False), (8 * GIB, False), (9 * GIB, True)])
+    def test_housekeeping_prunes_tool_cache_only_over_its_cap(tmp_path, size, cleaned):
+        cache = tmp_path / "cache"
+        cache.mkdir()
+        (cache / "kept-by-tool").write_text("fixture")
+        spec = {"name": "uv", "path": str(cache), "query": ["uv", "cache", "dir"],
+                "clean": ["uv", "cache", "prune"], "max_gib": 8}
+        fake = Fake((["uv", "cache", "dir"], Result(0, str(cache))),
+                    (["du"], Result(0, f"{size}\t{cache}\n")),
+                    (["uv", "cache", "prune"], Result(0)))
+        result = housekeeping.maintain(hk_cfg(tmp_path, daily_commands=[], package_caches=[spec], cache_timeout_s=600),
+                                      "kasadis", acts.Actor(True, run=fake), NOW, str(tmp_path))
+>       assert any("uv" in c and "prune" in c for c in fake.calls) is cleaned
+E       assert False is True
+E        +  where False = any(<generator object test_housekeeping_prunes_tool_cache_only_over_its_cap.<locals>.<genexpr> at 0x7c4f40be35e0>)
+
+native/host-steward/tests/test_host_steward_housekeeping.py:257: AssertionError
+=========================== short test summary info ============================
+FAILED native/host-steward/tests/test_host_steward_housekeeping.py::test_housekeeping_is_independent_of_retired_cleanup_host - AssertionError: assert not True
+ +  where True = <built-in method get of dict object at 0x7c4f41af4980>('failed')
+ +    where <built-in method get of dict object at 0x7c4f41af4980> = {'actions': ['st cleanup host failed (exit 2): st cleanup: dropped'], 'would': [], 'freed_bytes': 0, 'failed': True}.get
+FAILED native/host-steward/tests/test_host_steward_housekeeping.py::test_housekeeping_prunes_tool_cache_only_over_its_cap[9663676416-True] - assert False is True
+ +  where False = any(<generator object test_housekeeping_prunes_tool_cache_only_over_its_cap.<locals>.<genexpr> at 0x7c4f40be35e0>)
+2 failed, 1190 passed in 7.00s

@@ -1,0 +1,8 @@
+{
+  "checked_at": "2026-11-05T10:55:20.713250+00:00",
+  "since": "2026-11-05T09:04:43Z",
+  "until": "2026-11-05T09:35:58Z",
+  "duration_seconds": 1875.0,
+  "minimum_seconds": 1800,
+  "legacy_stops_after_window": false
+}

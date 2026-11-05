@@ -1,0 +1,133 @@
+{
+  "host_steward_units": [],
+  "host_steward_units_exit": 1,
+  "host": "davion-gem",
+  "installed_roots": {
+    "/usr/local/lib/host-steward/host_steward": {
+      "exists": true,
+      "files": 68
+    },
+    "/usr/local/lib/aico-pve-sender": {
+      "exists": true,
+      "files": 9
+    },
+    "/etc/systemd/system": {
+      "exists": true,
+      "files": 107
+    },
+    "/usr/lib/systemd/system": {
+      "exists": true,
+      "files": 291
+    },
+    "/run/systemd/system": {
+      "exists": true,
+      "files": 0
+    },
+    "/etc/systemd/user": {
+      "exists": true,
+      "files": 0
+    },
+    "/usr/lib/systemd/user": {
+      "exists": true,
+      "files": 9
+    },
+    "/run/user/1000/systemd/user": {
+      "exists": false,
+      "files": 0
+    },
+    "/etc/cron.d": {
+      "exists": true,
+      "files": 4
+    },
+    "/etc/cron.hourly": {
+      "exists": true,
+      "files": 1
+    },
+    "/etc/cron.daily": {
+      "exists": true,
+      "files": 5
+    },
+    "/etc/cron.weekly": {
+      "exists": true,
+      "files": 2
+    },
+    "/etc/cron.monthly": {
+      "exists": true,
+      "files": 1
+    },
+    "/home/kasadis/.config/systemd/user": {
+      "exists": false,
+      "files": 0
+    },
+    "/home/kasadis/.local/lib/aico/ops/packages/jobs/data": {
+      "exists": false,
+      "files": 0
+    }
+  },
+  "retired_verbs": [
+    "automations",
+    "autosnap",
+    "cancel",
+    "checkpoints",
+    "claude",
+    "cleanup",
+    "critique",
+    "ctx",
+    "delete",
+    "dep",
+    "design",
+    "docker",
+    "exec-log",
+    "export",
+    "graph",
+    "learn",
+    "native-sessions",
+    "note",
+    "pause",
+    "prune",
+    "ready",
+    "ready-all",
+    "recover",
+    "reopen",
+    "runtime",
+    "session-events",
+    "setup",
+    "show",
+    "subtask",
+    "sync-progress",
+    "test",
+    "update",
+    "verify",
+    "workflow"
+  ],
+  "matches": [
+    {
+      "file": "/usr/local/lib/host-steward/host_steward/data/checks.toml",
+      "line": 322,
+      "command": "st cleanup",
+      "comment": false
+    },
+    {
+      "file": "/usr/local/lib/host-steward/host_steward/data/checks.toml",
+      "line": 342,
+      "command": "st cleanup",
+      "comment": false
+    },
+    {
+      "file": "/usr/local/lib/host-steward/host_steward/data/checks.toml",
+      "line": 343,
+      "command": "st autosnap",
+      "comment": false
+    },
+    {
+      "file": "/usr/local/lib/host-steward/host_steward/jobs/housekeeping.py",
+      "line": 5,
+      "command": "st cleanup",
+      "comment": false
+    }
+  ],
+  "errors": [],
+  "btrfs_timer": {
+    "exit": 1
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "at": "2026-11-05T10:54:33.879747+00:00",
+  "exit": 0,
+  "stderr_bytes": 0,
+  "stdout_bytes": 0,
+  "unit": {
+    "ActiveState": "inactive",
+    "SubState": "dead",
+    "Result": "success",
+    "ExecMainStatus": "0"
+  },
+  "result": {
+    "actions": [
+      "pruned pnpm cache"
+    ],
+    "at": 1793876072.1558967,
+    "freed_bytes": 0,
+    "live": true,
+    "would": []
+  }
+}

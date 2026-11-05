@@ -1,0 +1,7 @@
+{
+  "at": "2026-11-05T11:13:10.775951+00:00",
+  "source": "f89c2bb0869c7e70fbe32c13883c0bbcc8b12f8a",
+  "exit": 0,
+  "receipt": "host-steward installed in /usr/local/lib/host-steward",
+  "stderr_bytes": 0
+}

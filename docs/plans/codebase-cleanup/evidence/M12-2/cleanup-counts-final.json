@@ -1,20 +1,20 @@
 {
-  "source_head": "3e0d8797d83a69427919477f0b73707ca5f3361b",
+  "source_head": "f89c2bb0869c7e70fbe32c13883c0bbcc8b12f8a",
   "loc": {
     "source": {
-      "added": 661,
-      "removed": 7067,
-      "net_removed": 6406
+      "added": 831,
+      "removed": 7371,
+      "net_removed": 6540
     },
     "tests": {
-      "added": 307,
-      "removed": 3814,
-      "net_removed": 3507
+      "added": 510,
+      "removed": 3898,
+      "net_removed": 3388
     },
     "config": {
-      "added": 176,
-      "removed": 2081,
-      "net_removed": 1905
+      "added": 204,
+      "removed": 2138,
+      "net_removed": 1934
     }
   }
 }

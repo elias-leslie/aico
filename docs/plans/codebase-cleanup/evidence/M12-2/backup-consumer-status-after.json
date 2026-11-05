@@ -1,0 +1,20 @@
+[
+  {
+    "id": "davion-sidarli/check-backups",
+    "state": "failed",
+    "meaning": "Backup sources need attention: external/portfolio-ai-complete. Some data may lack a fresh copy. Check Aico's Backups page.",
+    "last_run": "2026-11-05T11:07:38.091Z"
+  },
+  {
+    "id": "davion-sidarli/check-workstation",
+    "state": "warn",
+    "meaning": "A package update wants a reboot. Reboot when the work in flight is done.",
+    "last_run": "2026-11-05T10:54:57.400Z"
+  },
+  {
+    "id": "davion-sidarli/job-housekeeping",
+    "state": "ok",
+    "meaning": "Housekeeping ran: pruned pnpm cache",
+    "last_run": "2026-11-05T10:54:32.155Z"
+  }
+]

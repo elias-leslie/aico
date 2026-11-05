@@ -1,0 +1,163 @@
+{
+  "host_steward_units": [
+    "host-steward-check.service           static  -",
+    "host-steward-collect-usage.service   static  -",
+    "host-steward-fcm-token.service       static  -",
+    "host-steward-grants.service          enabled enabled",
+    "host-steward-heartbeat.service       static  -",
+    "host-steward-housekeeping.service    static  -",
+    "host-steward-nvme-long-test.service  static  -",
+    "host-steward-nvme-short-test.service static  -",
+    "host-steward-rules.service           static  -",
+    "host-steward-scrub-native.service    static  -",
+    "host-steward-scrub-root.service      static  -",
+    "host-steward-space-guard.service     static  -",
+    "host-steward-check.timer             enabled enabled",
+    "host-steward-collect-usage.timer     enabled enabled",
+    "host-steward-fcm-token.timer         enabled enabled",
+    "host-steward-heartbeat.timer         enabled enabled",
+    "host-steward-housekeeping.timer      enabled enabled",
+    "host-steward-nvme-long-test.timer    enabled enabled",
+    "host-steward-nvme-short-test.timer   enabled enabled",
+    "host-steward-rules.timer             enabled enabled",
+    "host-steward-scrub-native.timer      enabled enabled",
+    "host-steward-scrub-root.timer        enabled enabled",
+    "host-steward-space-guard.timer       enabled enabled"
+  ],
+  "host_steward_units_exit": 0,
+  "host": "davion-sidarli",
+  "installed_roots": {
+    "/usr/local/lib/host-steward/host_steward": {
+      "exists": true,
+      "files": 68
+    },
+    "/usr/local/lib/aico-pve-sender": {
+      "exists": false,
+      "files": 0
+    },
+    "/etc/systemd/system": {
+      "exists": true,
+      "files": 232
+    },
+    "/usr/lib/systemd/system": {
+      "exists": true,
+      "files": 439
+    },
+    "/run/systemd/system": {
+      "exists": true,
+      "files": 0
+    },
+    "/etc/systemd/user": {
+      "exists": true,
+      "files": 27
+    },
+    "/usr/lib/systemd/user": {
+      "exists": true,
+      "files": 122
+    },
+    "/run/user/1000/systemd/user": {
+      "exists": false,
+      "files": 0
+    },
+    "/etc/cron.d": {
+      "exists": true,
+      "files": 4
+    },
+    "/etc/cron.hourly": {
+      "exists": true,
+      "files": 1
+    },
+    "/etc/cron.daily": {
+      "exists": true,
+      "files": 10
+    },
+    "/etc/cron.weekly": {
+      "exists": true,
+      "files": 3
+    },
+    "/etc/cron.monthly": {
+      "exists": true,
+      "files": 3
+    },
+    "/home/kasadis/.config/systemd/user": {
+      "exists": true,
+      "files": 139
+    },
+    "/home/kasadis/.local/lib/aico/ops/packages/jobs/data": {
+      "exists": true,
+      "files": 1
+    }
+  },
+  "retired_verbs": [
+    "automations",
+    "autosnap",
+    "cancel",
+    "checkpoints",
+    "claude",
+    "cleanup",
+    "critique",
+    "ctx",
+    "delete",
+    "dep",
+    "design",
+    "docker",
+    "exec-log",
+    "export",
+    "graph",
+    "learn",
+    "native-sessions",
+    "note",
+    "pause",
+    "prune",
+    "ready",
+    "ready-all",
+    "recover",
+    "reopen",
+    "runtime",
+    "session-events",
+    "setup",
+    "show",
+    "subtask",
+    "sync-progress",
+    "test",
+    "update",
+    "verify",
+    "workflow"
+  ],
+  "matches": [
+    {
+      "file": "/home/kasadis/.config/systemd/user/btrfs-autosnapshot.service",
+      "line": 10,
+      "command": "st autosnap",
+      "comment": false,
+      "unit_metadata": {
+        "exit": 0,
+        "Triggers": "",
+        "TriggeredBy": "",
+        "ActiveState": "inactive",
+        "UnitFileState": "static"
+      }
+    },
+    {
+      "file": "/home/kasadis/.config/systemd/user/btrfs-autosnapshot.service",
+      "line": 11,
+      "command": "st autosnap",
+      "comment": false,
+      "unit_metadata": {
+        "exit": 0,
+        "Triggers": "",
+        "TriggeredBy": "",
+        "ActiveState": "inactive",
+        "UnitFileState": "static"
+      }
+    }
+  ],
+  "errors": [],
+  "btrfs_timer": {
+    "exit": 0,
+    "Triggers": "btrfs-autosnapshot.service",
+    "TriggeredBy": "",
+    "ActiveState": "inactive",
+    "UnitFileState": "disabled"
+  }
+}
