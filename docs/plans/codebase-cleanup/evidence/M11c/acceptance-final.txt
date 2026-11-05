@@ -1,0 +1,11 @@
+{
+  "state": "success",
+  "source": {
+    "commit": "39913f44db68330972f9e8fbe659405cb30794ba",
+    "tree": "781faff1350410673ffa3f920035f8e221ea8ac4"
+  },
+  "acceptance_id": "b98d3c3609848d3acfee39ebd59bc2b23cb6c9c953c023bc0a38e8e93c58402a",
+  "duration_ms": 150288.082,
+  "coverage": "full",
+  "completed_at": "2026-11-05T02:42:19.712522+00:00"
+}

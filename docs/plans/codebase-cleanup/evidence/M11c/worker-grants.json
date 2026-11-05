@@ -1,0 +1,17 @@
+{
+  "expected": [
+    "host-tool-claude-code-oauth-token",
+    "host-tool-pi-opencode-go",
+    "host-tool-st-summitflow-agent-token",
+    "m11c-scratch",
+    "opencode-go"
+  ],
+  "actual": [
+    "host-tool-claude-code-oauth-token",
+    "host-tool-pi-opencode-go",
+    "host-tool-st-summitflow-agent-token",
+    "m11c-scratch",
+    "opencode-go"
+  ],
+  "matches": true
+}

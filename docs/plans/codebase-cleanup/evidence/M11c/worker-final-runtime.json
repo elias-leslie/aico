@@ -1,0 +1,22 @@
+{
+  "hunting": {
+    "pi_runtime_exit": 0
+  },
+  "recon": {
+    "pi_runtime_exit": 0
+  },
+  "verification": {
+    "pi_runtime_exit": 0
+  },
+  "worker": {
+    "names": [
+      "host-tool-claude-code-oauth-token",
+      "host-tool-pi-opencode-go",
+      "host-tool-st-summitflow-agent-token",
+      "m11c-scratch",
+      "opencode-go"
+    ],
+    "scratch_lab_removed": true,
+    "assignments": []
+  }
+}

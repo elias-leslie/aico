@@ -1,0 +1,9 @@
+{
+  "localCount": 39,
+  "remoteCount": 39,
+  "fullPeerNamesMatch": true,
+  "extraSinceInitialInventory": [
+    "backup-append.ed25519.pub",
+    "m11c-scratch"
+  ]
+}

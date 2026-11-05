@@ -1,0 +1,32 @@
+{
+  "assigned_refs": {
+    "exit": 0
+  },
+  "refresh": {
+    "exit": 0
+  },
+  "patch": {
+    "exit": 0
+  },
+  "other_target_refused": {
+    "exit": 1
+  },
+  "backup_refused": {
+    "exit": 1
+  },
+  "raw_tool_refused": {
+    "exit": 1
+  },
+  "claude_runtime_refused": {
+    "exit": 1
+  },
+  "request_metadata": {
+    "exit": 0
+  },
+  "descriptor_handoff": {
+    "exit": 0
+  },
+  "remove_request_metadata": {
+    "exit": 0
+  }
+}

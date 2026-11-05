@@ -1,0 +1,31 @@
+{
+  "source": "39913f44db68330972f9e8fbe659405cb30794ba",
+  "workstation": {
+    "owner_lists": 55,
+    "peer_local_list": true,
+    "peer_control_sockets": [
+      2,
+      2,
+      2
+    ],
+    "flat": true
+  },
+  "ct190": {
+    "owner_lists": 55,
+    "peer_local_list": true,
+    "peer_control_sockets": [
+      2,
+      2,
+      2
+    ],
+    "flat": true
+  },
+  "both_process_cwds_match_release": true,
+  "bidirectional_logins_sync_after_reads": true,
+  "matching_logins_after_reads": 38,
+  "worker_power": {
+    "agent-work": "powered_off",
+    "neri-hunters": "powered_off",
+    "aico": "connected"
+  }
+}

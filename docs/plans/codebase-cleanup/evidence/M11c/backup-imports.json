@@ -1,0 +1,17 @@
+{
+  "copiedPrivately": [
+    "backup-append.ed25519",
+    "backup-append.password",
+    "restic-local.password",
+    "restic-drive.password",
+    "summitflow-drive.conf",
+    "pve-append.ed25519",
+    "pve-backup.ed25519"
+  ],
+  "originalsPreserved": true,
+  "appEntries": [
+    "service-jobinator-4000.sha256",
+    "service-portfolio-ai.sha256"
+  ],
+  "appEntriesAreVerifiersOnly": true
+}

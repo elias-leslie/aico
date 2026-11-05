@@ -1,0 +1,11 @@
+# Logins rendered review
+
+The own browser session uses the production `/logins` route at 1600×900 and 390×844. Captures contain metadata and synthetic scratch values only. No real value was revealed in a screenshot. Final list captures use accepted source 39913f44 after cleanup; scratch reveal captures use its unchanged frontend at accepted source e40e970b on 2026-11-05 at about 02:24 UTC.
+
+Composition: the page reuses Lantern colors, fonts, compact buttons, bordered groups and status chips. The desktop list keeps names and actions together. The 390px capture wraps long names, notes, badges and action controls within the page; there was no horizontal overflow. Add/replacement fields are labeled password inputs. The lab-target controls sit below the login groups and tool sign-in follows them. This is a visual review, not a mechanical-lint conclusion.
+
+Copy: group names and action labels match the CLI and store concepts. Loading, initial failure, stale-list failure, no logins, no search match, verifier-only entries and offline-sync warnings have distinct copy. The phone uses short action labels and puts access details in the opened form. No desktop chrome was introduced.
+
+Interaction: live scratch add, replacement, reveal, copy, machine access and confirmed removal were exercised. Reveal hides after thirty seconds and on blur/pagehide (the latter events also have source coverage); later DOM inspection confirmed no visible value remained. Copy reported success without reading any unrelated clipboard content. A successful save with an offline-sync warning originally retained its input: a live defect, resolved by e40e970b with two red/green regressions and successful post-deployment phone add and desktop replacement rechecks. Lab coordinator assignment and worker enrollment/refresh/patch/fd handoff have separate live proof.
+
+Mechanical checks: source uilint passed five checks over 187 files. Both rendered viewports passed six checks with zero violations and zero unverified items. These checks do not establish accessibility conformance. Native labeled controls, focus styling and password-input behavior were inspected; a full assistive-technology audit was outside this brief.
