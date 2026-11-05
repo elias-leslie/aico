@@ -239,6 +239,7 @@ func dispatch(cfg *Config, tool, event string, payload map[string]any, raw []byt
 		return Out{Event: event}
 	}
 	name := str(payload["tool_name"])
+	lease.New(cfg.Lease, payload).RecordAgent()
 	switch event {
 	case "PreToolUse":
 		out := Out{Event: event}

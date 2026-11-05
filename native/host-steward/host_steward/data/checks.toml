@@ -827,8 +827,8 @@ code = "pve.thin.trend"
 host = "pve"
 label = "thin pool"
 rules = [
-  { metric = "pool.data_pct", kind = "projection", label = "data", limit = 92.0, horizon_days = 30.0, fmt = "{:.1f}%" },
-  { metric = "pool.meta_pct", kind = "projection", label = "metadata", limit = 92.0, horizon_days = 30.0, fmt = "{:.1f}%" },
+  { metric = "pool.data_pct", kind = "projection", label = "data", limit = 92.0, horizon_days = 30.0, fmt = "{:.1f}%", reset_drop = 3.0, robust = true },
+  { metric = "pool.meta_pct", kind = "projection", label = "metadata", limit = 92.0, horizon_days = 30.0, fmt = "{:.1f}%", reset_drop = 3.0, robust = true },
 ]
 
 [[checks.trends.specs]]

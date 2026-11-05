@@ -76,6 +76,31 @@ func (h *Hook) Pending() []Item {
 			items = append(items, Item{id + ":ack:" + pyStr(r["acked_at"]), fmt.Sprintf("ACK %s yes%s from %s | closed; nothing to do", id, note, pyStr(r["acked_by"])), false, true})
 		}
 	}
+	return append(items, h.childItems()...)
+}
+
+func (h *Hook) childItems() []Item {
+	widget := h.ID.env["AICO_WIDGET_ID"]
+	if widget == "" {
+		return nil
+	}
+	var data struct {
+		Items []map[string]any `json:"items"`
+	}
+	if _, err := tetherCall("GET", "/v1/children", nil, &data); err != nil {
+		return nil
+	}
+	return vanishedChildren(data.Items, widget)
+}
+
+func vanishedChildren(children []map[string]any, parent string) []Item {
+	var items []Item
+	for _, child := range children {
+		if str(child["parent"]) == parent && str(child["state"]) == "vanished" {
+			id := str(child["id"])
+			items = append(items, Item{Key: "child:" + id + ":vanished", Line: "Child agent " + str(child["title"]) + " (" + id + ") vanished; check its session with aico pulse.", Urgent: false, Ride: true})
+		}
+	}
 	return items
 }
 
@@ -180,6 +205,7 @@ func (h *Hook) throttled(event string) bool {
 // InboxHook is one inbox hook call. mode is "turn" (UserPromptSubmit, PostToolUse) or "stop"; provider the
 // harness (claude_code, codex, pi). It returns the text to show as context, or a Stop block reason.
 func (h *Hook) InboxHook(mode, provider string) (context, block string) {
+	h.RecordAgent()
 	event := str(h.Payload["hook_event_name"])
 	worker := str(h.Payload["agent_id"])
 	subagent := ""

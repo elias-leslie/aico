@@ -34,6 +34,7 @@ import {
   SETTINGS_SQL,
   SHARES_SQL,
   TMUX_SERVERS_TABLE_SQL,
+  TRANSCRIPT_OWNERS_SQL,
   TRANSCRIPTS_SQL,
   WAITS_ARMED_BY_COLUMNS,
   WAITS_SQL,
@@ -504,6 +505,12 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(32, now)
+      }
+      if (current < 33) {
+        this.db.exec(TRANSCRIPT_OWNERS_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(33, now)
       }
     })
   }

@@ -14,10 +14,25 @@ import pytest
 import aico_status
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "pve-sender"))
-from pve_sender import push, sender, watchdog
+from pve_sender import push, sender, trim, watchdog
 from pve_sender.state import read, write
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_weekly_trim_only_visits_running_containers_and_reports_failures(cfg):
+    calls = []
+    def run(argv):
+        calls.append(argv)
+        if argv == ["pct", "list"]:
+            return SimpleNamespace(returncode=0, stdout="VMID Status Lock Name\n150 running hub\n160 stopped backup\n190 running aico\n", stderr="")
+        return SimpleNamespace(returncode=1 if argv[-1] == "190" else 0, stdout="", stderr="")
+    result = trim.run(cfg, run=run, now=1000)
+    assert calls == [["pct", "list"], ["pct", "fstrim", "150"], ["pct", "fstrim", "190"]]
+    assert result["state"] == "failed"
+    assert result["trimmed"] == ["150"]
+    assert result["failed"] == ["190"]
+    assert trim.status_row(cfg, 1001)["state"] == "failed"
 
 
 @pytest.fixture

@@ -236,10 +236,10 @@ def record_readings(ctx: Ctx, sections: dict[str, str]) -> None:
     """The pool, metadata and disk readings into the trend history (the trends check evaluates them)."""
     for pool in parse_pools(sections.get("lvs", "")):
         history.record(
-            ctx.cache, "pool.data_pct", "pve", pool["data"], pool["name"], ctx.now, agg="max"
+            ctx.cache, "pool.data_pct", "pve", pool["data"], pool["name"], ctx.now, agg="last"
         )
         history.record(
-            ctx.cache, "pool.meta_pct", "pve", pool["metadata"], pool["name"], ctx.now, agg="max"
+            ctx.cache, "pool.meta_pct", "pve", pool["metadata"], pool["name"], ctx.now, agg="last"
         )
     for metric, value, serial, kind in smart_readings(sections):
         history.record(ctx.cache, metric, "pve", value, serial, ctx.now, agg="max", kind=kind)

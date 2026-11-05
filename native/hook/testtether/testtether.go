@@ -23,10 +23,11 @@ type Server struct {
 	Sessions []map[string]any
 	// BeforePut, when set, runs before each document write is judged (without the server's mutex), so a test
 	// can save the document "from another process" between a writer's read and its write.
-	BeforePut  func(name string)
-	Puts       map[string]int   // writes accepted per document
-	Conflicts  int              // writes refused as version_conflict
-	Deliveries []map[string]any // each POST .../deliveries body, with "session" added
+	BeforePut     func(name string)
+	Puts          map[string]int   // writes accepted per document
+	Conflicts     int              // writes refused as version_conflict
+	Deliveries    []map[string]any // each POST .../deliveries body, with "session" added
+	HistoryOwners []map[string]any
 }
 
 // Start serves on a control.sock in a short temp dir (dir is unused, kept for callers) and points TETHER_SOCKET at it.
@@ -85,6 +86,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
+	case r.Method == "PUT" && p == "/v1/history/owner":
+		var owner map[string]any
+		_ = json.Unmarshal(body, &owner)
+		s.HistoryOwners = append(s.HistoryOwners, owner)
+		reply(w, 200, map[string]any{"kept": true})
 	case r.Method == "GET" && p == "/v1/sessions":
 		reply(w, 200, map[string]any{"items": append([]map[string]any{}, s.Sessions...)})
 	case r.Method == "POST" && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/deliveries"):

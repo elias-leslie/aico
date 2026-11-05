@@ -415,6 +415,14 @@ func (h *Hook) SessionStart() []string {
 	lines := h.Cfg.Observe(h.ID, true, subagent, true)
 	if !truthy(h.Payload["agent_id"]) {
 		h.Cfg.MarkMain(h.ID)
+		widget := h.ID.env["AICO_WIDGET_ID"]
+		if widget == "" {
+			widget = widgetFor(h.ID.Anchor)
+		}
+		tool := map[string]string{"claude_code": "claude-code", "codex_cli": "codex", "pi": "pi"}[h.ID.Provider]
+		if widget != "" && tool != "" {
+			_, _ = tetherCall("PUT", "/v1/history/owner", map[string]any{"session": widget, "nativeId": h.ID.SessionID, "tool": tool}, nil)
+		}
 	}
 	return lines
 }

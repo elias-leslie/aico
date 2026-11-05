@@ -183,6 +183,59 @@ describe('Claude Code reader', () => {
 })
 
 describe('Codex reader', () => {
+  it('accepts hook-time ownership after retirement and maps Claude harness names to history names', async () => {
+    const h = history()
+    const path = claudeFile(
+      'demo',
+      'early',
+      jsonl({ type: 'user', cwd: '/work/demo', timestamp: '2026-11-04T10:00:00Z' }),
+    )
+    store.db
+      .prepare('INSERT INTO retired_session_ids (id, retired_at) VALUES (?, ?)')
+      .run('abcd1234', now)
+    h.bind('abcd1234', 'claude', 'early')
+    await h.scan()
+    expect(h.list()[0]).toMatchObject({
+      id: 'claude-code:early',
+      outcome: 'aborted',
+    })
+    expect(path).toContain('early.jsonl')
+  })
+
+  it('closes a transcript when its owning session ends, including a delayed scan and restart', async () => {
+    const dir = join(home, '.codex', 'sessions', '2026', '11', '04')
+    mkdirSync(dir, { recursive: true })
+    const id = '01a19787-5491-7ac2-ab1f-147ed57e36a2'
+    const path = join(dir, `rollout-2026-11-04T10-00-00-${id}.jsonl`)
+    const h = history()
+    h.bind('abcd1234', 'codex', id)
+    h.endOwned('abcd1234')
+    writeFileSync(
+      path,
+      jsonl(
+        { type: 'session_meta', payload: { id, cwd: '/work/demo' } },
+        { type: 'event_msg', payload: { type: 'task_started' } },
+      ),
+    )
+    const restarted = history()
+    await restarted.scan()
+    expect(restarted.list()[0].outcome).toBe('aborted')
+    appendFileSync(
+      path,
+      jsonl({
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          channel: 'final',
+          content: [{ type: 'output_text', text: 'Done.' }],
+        },
+      }),
+    )
+    await restarted.scan()
+    expect(restarted.list()[0].outcome).toBe('completed')
+  })
+
   it('takes the last running total and finds written files in patches', async () => {
     const dir = join(home, '.codex', 'sessions', '2026', '11', '04')
     mkdirSync(dir, { recursive: true })

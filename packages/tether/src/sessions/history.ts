@@ -192,6 +192,40 @@ export class History {
 
   // --- ingestion ------------------------------------------------------------
 
+  /** Bind an observed native conversation to the workload Tether owns. */
+  bind(session: string, tool: string, nativeId: string): void {
+    if (tool === 'claude') tool = 'claude-code'
+    this.db
+      .prepare(`INSERT INTO transcript_owners (transcript_id, session_id, ended_at)
+      VALUES (?, ?, (SELECT retired_at FROM retired_session_ids WHERE id = ?))
+      ON CONFLICT(transcript_id) DO UPDATE SET session_id = excluded.session_id,
+      ended_at = CASE WHEN session_id = excluded.session_id THEN coalesce(ended_at, excluded.ended_at) ELSE excluded.ended_at END
+      WHERE session_id != excluded.session_id OR (ended_at IS NULL AND excluded.ended_at IS NOT NULL)`)
+      .run(`${tool}:${nativeId}`, session, session)
+  }
+
+  endOwned(session: string): void {
+    this.db
+      .prepare(
+        'UPDATE transcript_owners SET ended_at = ? WHERE session_id = ? AND ended_at IS NULL',
+      )
+      .run(this.now(), session)
+    this.settleEnded()
+  }
+
+  private settleEnded(): void {
+    this.db.exec(`UPDATE transcripts SET outcome = 'aborted'
+      WHERE ignored = 0 AND outcome IS NULL AND id IN
+      (SELECT transcript_id FROM transcript_owners WHERE ended_at IS NOT NULL)`)
+  }
+
+  endRetired(): void {
+    this.db.exec(`UPDATE transcript_owners SET ended_at =
+      (SELECT retired_at FROM retired_session_ids WHERE id = transcript_owners.session_id)
+      WHERE ended_at IS NULL AND session_id IN (SELECT id FROM retired_session_ids)`)
+    this.settleEnded()
+  }
+
   /** One pass over the transcripts; returns how many it read from. */
   async scan(): Promise<{ files: number; bytes: number }> {
     const known = new Map<string, Known>()
@@ -231,6 +265,7 @@ export class History {
       await yieldLoop()
     }
     this.prune()
+    this.settleEnded()
     return { files, bytes }
   }
 

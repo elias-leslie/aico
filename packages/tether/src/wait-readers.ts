@@ -137,6 +137,7 @@ function str(value: unknown): string | null {
 
 /** `st --no-compact service result <id>` as an idle-weight unit, bounded. */
 export function systemdProbe(env: NodeJS.ProcessEnv): (jobId: string) => Promise<string | null> {
+  env = userBusEnv(env)
   return (jobId) =>
     new Promise((resolve) => {
       if (!JOB_ID.test(jobId)) return resolve(null)
@@ -170,6 +171,7 @@ export function systemdProbe(env: NodeJS.ProcessEnv): (jobId: string) => Promise
 
 /** `cmd` watchers as transient user units, outside Tether's cgroup. */
 export function systemdCmdUnits(env: NodeJS.ProcessEnv): CmdUnits {
+  env = userBusEnv(env)
   return {
     start: (ref, spec, resultPath, runtimeSeconds) =>
       new Promise((resolve) => {
@@ -221,6 +223,15 @@ export function systemdCmdUnits(env: NodeJS.ProcessEnv): CmdUnits {
           () => resolve(),
         )
       }),
+  }
+}
+
+function userBusEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const runtime = env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`
+  return {
+    ...env,
+    XDG_RUNTIME_DIR: runtime,
+    DBUS_SESSION_BUS_ADDRESS: env.DBUS_SESSION_BUS_ADDRESS || `unix:path=${runtime}/bus`,
   }
 }
 

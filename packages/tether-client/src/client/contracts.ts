@@ -129,6 +129,15 @@ export interface SessionDescriptor {
   peer?: PeerMark | null
 }
 
+/** A child its launcher started, compared with Tether's current workload inventory. */
+export interface ChildAgent {
+  id: string
+  parent: string
+  host: string | null
+  title: string
+  state: 'live' | 'vanished' | 'unknown'
+}
+
 /** A remote host's link state as the hub sees it. `powered_off`: the Hosts
  * panel powered it off, or its hosts.json `status` command says it is off. */
 export type HostState = 'connected' | 'connecting' | 'offline' | 'powered_off' | 'identity_changed'

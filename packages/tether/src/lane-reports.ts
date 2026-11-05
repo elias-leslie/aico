@@ -509,6 +509,8 @@ export interface LocalLineage {
 }
 
 export interface LaneReportOperations {
+  /** A confirmed process exit, including a failed exit; distinct from clean completion suppression. */
+  childGone?(id: string): boolean
   now(): number
   policy(): LaneReportPolicy
   /** A session on this computer that can take lane reports: an agent Tether
@@ -649,6 +651,45 @@ function endedEvent(memory: Memory | undefined): LaneEvent {
 }
 
 export class LaneReporter {
+  children(): {
+    id: string
+    parent: string
+    host: string | null
+    title: string
+    state: 'live' | 'vanished' | 'unknown'
+  }[] {
+    const local = new Map(this.ops.sessions().map((s) => [s.id, s]))
+    const known = new Map(
+      this.store
+        .cursors()
+        .filter((c) => c.launched && !c.ended && c.coordinatorId)
+        .map((c) => [
+          `${c.host ?? ''}/${c.lane}`,
+          {
+            id: c.lane,
+            parent: c.parentId ?? (c.coordinatorId as string),
+            host: c.host || null,
+            title: c.title ?? c.lane,
+          },
+        ]),
+    )
+    for (const s of local.values())
+      if (s.launched && s.coordinatorId)
+        known.set(`/${s.id}`, {
+          id: s.id,
+          parent: s.parentId ?? s.coordinatorId,
+          host: null,
+          title: this.memory.get(memoryKey(null, s.id))?.view.title ?? s.id,
+        })
+    return [...known.values()].map((c) => ({
+      ...c,
+      state: c.host
+        ? 'unknown'
+        : !local.has(c.id) || (this.ops.childGone ?? this.ops.agentGone)?.(c.id)
+          ? 'vanished'
+          : 'live',
+    }))
+  }
   private readonly memory = new Map<string, Memory>()
   /** Lanes with an explicit watch (any host). */
   private watched = new Set<string>()
@@ -1313,6 +1354,11 @@ export function registerLaneRoutes(
     createdAt: watch.createdAt,
   })
   router
+    .add('GET', '/v1/children', (_req, res) => {
+      const current = reporter()
+      if (!current) throw new HttpError(503, 'lane_reports_unavailable')
+      sendJson(res, 200, { items: current.children() })
+    })
     .add('GET', '/v1/sessions/:id/watches', (_req, res, params) => {
       const watcher = watcherOf(params.id)
       sendJson(res, 200, { items: reporter()?.watchesOf(watcher).map(json) ?? [] })

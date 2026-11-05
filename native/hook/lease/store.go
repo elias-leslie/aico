@@ -19,14 +19,16 @@ import (
 
 // Config is the decided part of the coordination policy (data/hook.json "lease").
 type Config struct {
-	IdleTTLMinutes  int `json:"idle_ttl_minutes"`  // a file/hold lease idle this long is released
-	ActiveMinutes   int `json:"active_minutes"`    // reserved: st's ACTIVE_WINDOW
-	RegistryHours   int `json:"registry_hours"`    // identity rows kept this long after last use
-	NoteHours       int `json:"note_hours"`        // peer reset notes kept this long
-	UnackedMinutes  int `json:"unacked_minutes"`   // a request unanswered this long surfaces once to its sender
-	SnapshotMaxMins int `json:"snapshot_max_mins"` // stale shell snapshots are removed after this
-	RegistrySaveSec int `json:"registry_save_sec"` // registry rows are rewritten at most this often
-	StoreBudgetMs   int `json:"store_budget_ms"`   // one hook call's time for all its coordination store calls
+	BackupUnitPattern    string `json:"backup_unit_pattern"`
+	BackupProcessPattern string `json:"backup_process_pattern"`
+	IdleTTLMinutes       int    `json:"idle_ttl_minutes"`  // a file/hold lease idle this long is released
+	ActiveMinutes        int    `json:"active_minutes"`    // reserved: st's ACTIVE_WINDOW
+	RegistryHours        int    `json:"registry_hours"`    // identity rows kept this long after last use
+	NoteHours            int    `json:"note_hours"`        // peer reset notes kept this long
+	UnackedMinutes       int    `json:"unacked_minutes"`   // a request unanswered this long surfaces once to its sender
+	SnapshotMaxMins      int    `json:"snapshot_max_mins"` // stale shell snapshots are removed after this
+	RegistrySaveSec      int    `json:"registry_save_sec"` // registry rows are rewritten at most this often
+	StoreBudgetMs        int    `json:"store_budget_ms"`   // one hook call's time for all its coordination store calls
 }
 
 // StoreBudget is one hook call's time for all its store calls (SetBudget).

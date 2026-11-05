@@ -81,6 +81,7 @@ describe('Store schema', () => {
       'shares',
       'tmux_servers',
       'transcript_files',
+      'transcript_owners',
       'transcripts',
       'waits',
       'wakes',

@@ -96,6 +96,19 @@ export function registerHistoryRoutes(router: Router, history: History): void {
     return row
   }
   router
+    .add('PUT', '/v1/history/owner', async (req, res) => {
+      const body = await readJsonObject(req)
+      if (
+        typeof body.session !== 'string' ||
+        !/^[0-9a-f]{8}$/.test(body.session) ||
+        typeof body.nativeId !== 'string' ||
+        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(body.nativeId) ||
+        !['codex', 'claude-code', 'pi'].includes(String(body.tool))
+      )
+        throw new HttpError(400, 'invalid_body')
+      history.bind(body.session, String(body.tool), body.nativeId)
+      sendJson(res, 200, { kept: true })
+    })
     .add('GET', '/v1/history', (_req, res, _params, query) => {
       const items = history.list({
         limit: count(query.get('limit'), 'limit'),

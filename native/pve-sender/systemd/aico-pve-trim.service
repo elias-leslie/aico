@@ -1,0 +1,8 @@
+[Unit]
+Description=Return unused blocks from running Proxmox containers
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pve-sender trim
+Nice=19
+IOSchedulingClass=idle

@@ -145,6 +145,20 @@ def test_thin_limit_is_the_pve_failed_line():
     )
 
 
+def test_thin_pool_cleanup_uses_latest_reading_and_restarts_projection(store):
+    fill_days(store, "pool.data_pct", "pve", list(range(52, 66)), "pve/data")
+    ctx = ctx_for("pve", now=NOW + 60, cache={"history": store})
+    pve.record_readings(ctx, {"lvs": json.dumps({"report": [{"lv": [{
+        "vg_name": "pve", "lv_name": "data", "lv_attr": "twi-a-tz--",
+        "data_percent": "47.4", "metadata_percent": "2.02",
+    }]}]})})
+    ev = trend.evaluate(store, spec_named("pve.thin.trend"), NOW + 60)
+    data = ev["rules"]["pool.data_pct"]
+    assert data["current"] == 47.4
+    assert data["verdict"] == "insufficient"
+    assert "days_to_limit" not in data
+
+
 def test_thin_trend_check_is_failed_on_the_pve_host_because_it_holds_data(store, monkeypatch):
     fill_days(
         store,

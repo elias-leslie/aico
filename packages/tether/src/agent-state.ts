@@ -15,7 +15,7 @@
 // A hook's `blocked` holds until the user answers: a UserPromptSubmit report,
 // or a poll whose status changed after the hook fired and is no longer waiting.
 
-import { AGENT_STATES, type AgentSignal, type AgentState } from './agent-signal'
+import type { AgentSignal, AgentState } from './agent-signal'
 import { findEntryProcess } from './continuity'
 import type {
   AgentProbe,
@@ -267,6 +267,8 @@ export class AgentStatePoller {
       models?: (id: string, source: ModelSource) => void
       /** Runs pushed to the session history (the Aico agent's state). */
       runs?: AgentRunLookup
+      /** Persist the conversation's workload owner before the workload can end. */
+      conversation?: (session: string, tool: string, nativeId: string) => void
     } = {},
   ) {}
 
@@ -339,6 +341,12 @@ export class AgentStatePoller {
         watched.found.probe = watched.found.probe.follow(this.context([watched.found.probe.pid]))
       }
       const signal = watched.found?.probe.poll() ?? null
+      if (signal?.agentSessionId && watched.found)
+        this.options.conversation?.(
+          session.id,
+          watched.found.adapter.harness,
+          signal.agentSessionId,
+        )
       this.tracker.observe(session.id, signal)
       if (this.options.models) {
         const source = watched.found?.probe.models?.(signal)

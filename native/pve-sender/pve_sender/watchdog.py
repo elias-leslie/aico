@@ -11,7 +11,7 @@ from pathlib import Path
 
 import aico_status
 
-from . import sender, watch
+from . import sender, trim, watch
 from .state import read, write
 
 
@@ -98,7 +98,7 @@ def tick(cfg: dict, *, now: float | None = None, boot: float | None = None,
     write(state_path, state)
     machine_row = row(cfg, "machine", "Proxmox host", "ok", "The Proxmox watchdog is reporting.", now)
     machine_row["kind"] = "machine"
-    rows = [machine_row]
+    rows = [machine_row, trim.status_row(cfg, now)]
     for name, label in cfg["sources"].items():
         value = ages[name]
         meaning = "No heartbeat received yet." if value is None else f"Last heartbeat {int(value)} seconds ago."

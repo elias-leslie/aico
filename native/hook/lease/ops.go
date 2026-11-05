@@ -44,6 +44,14 @@ func (h *Hook) self() (mine map[string]bool, anchor string) {
 	return lin.SelfIDs(h.ID), lin.MyAnchor()
 }
 
+// A hold is the taking session's, even when builders inherit a coordinator's label.
+func (h *Hook) owns(l Lease, mine map[string]bool, anchor string) bool {
+	if l.Kind == "hold" && l.SessionID != "" {
+		return l.SessionID == h.ID.SessionID && (l.anchor() == "" || anchor == "" || l.anchor() == anchor)
+	}
+	return isMine(l, mine, anchor)
+}
+
 // Acquire leases globs to this agent, or extends the lease it already has on that glob set.
 func (h *Hook) Acquire(project, root string, globs []string, task string) (Lease, error) {
 	s, err := h.storeFor(project)
@@ -113,7 +121,7 @@ func (h *Hook) Hold(project, root, purpose string) (Lease, error) {
 	if len(purpose) > 40 {
 		purpose = purpose[:40]
 	}
-	mine, anchor := h.self()
+	_, anchor := h.self()
 	now := stamp(time.Now())
 	l := Lease{LeaseID: newID(), AgentID: h.ID.AgentID, AgentSlug: h.ID.Slug, SessionID: h.ID.SessionID,
 		Provider: h.ID.Provider, Globs: []string{strings.TrimRight(filepath.Clean(root), "/") + "/**"},
@@ -123,13 +131,7 @@ func (h *Hook) Hold(project, root, purpose string) (Lease, error) {
 	}
 	return l, s.withLock(func() error {
 		d := s.load()
-		var keep []Lease
-		for _, x := range s.purge(d.leases) {
-			if !(x.Kind == "hold" && isMine(x, mine, anchor)) {
-				keep = append(keep, x)
-			}
-		}
-		d.leases = append(keep, l)
+		d.leases = append(s.purge(d.leases), l)
 		return s.save(d)
 	})
 }
@@ -148,7 +150,7 @@ func (h *Hook) Heartbeat(project string) (int, error) {
 		d := s.load()
 		d.leases = s.purge(d.leases)
 		for i := range d.leases {
-			if isMine(d.leases[i], mine, anchor) {
+			if h.owns(d.leases[i], mine, anchor) {
 				d.leases[i].LastHeartbeat = now
 				n++
 			}
@@ -175,7 +177,7 @@ func (h *Hook) Release(project, root, glob string, all bool) (int, error) {
 		if all {
 			var keep []Lease
 			for _, l := range live {
-				if !(l.Kind != "op" && isMine(l, mine, anchor)) {
+				if !(l.Kind != "op" && h.owns(l, mine, anchor)) {
 					keep = append(keep, l)
 				}
 			}
@@ -183,7 +185,7 @@ func (h *Hook) Release(project, root, glob string, all bool) (int, error) {
 			return s.save(d)
 		}
 		for _, l := range live {
-			if l.LeaseID == glob && l.Kind != "op" && isMine(l, mine, anchor) {
+			if l.LeaseID == glob && l.Kind != "op" && h.owns(l, mine, anchor) {
 				var keep []Lease
 				for _, x := range live {
 					if x.LeaseID != glob {
@@ -197,7 +199,7 @@ func (h *Hook) Release(project, root, glob string, all bool) (int, error) {
 		target := projectPath(glob, root)
 		var keep []Lease
 		for _, l := range live {
-			if isMine(l, mine, anchor) && contains(l.Globs, target) {
+			if l.Kind != "op" && h.owns(l, mine, anchor) && contains(l.Globs, target) {
 				n++
 				var rest []string
 				for _, g := range l.Globs {
@@ -289,6 +291,9 @@ func (h *Hook) Listed(project string, kinds ...string) ([]string, error) {
 
 // LeaseLine: "agent · lease:'globs' · task:id · idle:2m" for a file lease, else the holder line.
 func (h *Hook) LeaseLine(project string, l Lease, root string) string {
+	if l.Kind == "hold" {
+		return h.holderLine(project, l, root) + "; release: st lease --release " + l.LeaseID
+	}
 	if l.Kind != "file" {
 		return h.holderLine(project, l, root)
 	}
@@ -430,7 +435,7 @@ func (h *Hook) Guard(project, root, op, withAck string) (string, error) {
 			}
 			return h.holderLine(project, l, root) + "; " + op + " refused; wait for it to finish", nil
 		}
-		if isMine(l, mine, anchor) || (withAck != "" && h.AckAuthorizes(withAck, l, project)) {
+		if h.owns(l, mine, anchor) || (withAck != "" && h.AckAuthorizes(withAck, l, project)) {
 			continue
 		}
 		return h.holderLine(project, l, root) + "; " + op + " refused; request handoff: aico sessions send " +

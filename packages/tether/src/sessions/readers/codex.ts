@@ -80,6 +80,7 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
     if (kind === 'message') {
       const role = str(payload.role)
       const text = textOf(payload.content)
+      if (role === 'assistant' && payload.channel === 'final' && text) fold.outcome = 'completed'
       if (wantEvents && text && (role === 'user' || role === 'assistant')) {
         events.push({ at: at ?? null, role, kind: 'text', text: clip(text) })
       }

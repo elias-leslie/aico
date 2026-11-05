@@ -47,6 +47,58 @@ func TestIdleLeaseIsReleased(t *testing.T) {
 	}
 }
 
+func TestHoldsBelongToTheTakingSession(t *testing.T) {
+	repo := sandbox(t)
+	a, b := agent(sidA, ""), agent(sidB, "")
+	b.ID.AgentID = a.ID.AgentID // builders can inherit the coordinator's label
+	first, _ := a.Hold("demo", repo, "first")
+	second, _ := b.Hold("demo", repo, "second")
+	marks, _ := a.Listed("demo", "hold")
+	if len(marks) != 2 {
+		t.Fatalf("a builder replaced another session's hold: %v", marks)
+	}
+	if n, _ := b.Release("demo", repo, first.LeaseID, false); n != 0 {
+		t.Fatal("released another session's hold")
+	}
+	if n, _ := a.Release("demo", repo, first.LeaseID, false); n != 1 {
+		t.Fatal("cannot release own hold by id")
+	}
+	if n, _ := a.Release("demo", repo, "", true); n != 0 {
+		t.Fatal("release-all released another session's hold")
+	}
+	if n, _ := b.Release("demo", repo, second.LeaseID, false); n != 1 {
+		t.Fatal("cannot release remaining hold")
+	}
+}
+
+func TestSharedSessionCanReleaseOneOfItsHolds(t *testing.T) {
+	repo := sandbox(t)
+	a := agent(sidA, "")
+	first, _ := a.Hold("demo", repo, "builder one")
+	second, _ := a.Hold("demo", repo, "builder two")
+	if n, _ := a.Release("demo", repo, first.LeaseID, false); n != 1 {
+		t.Fatal("first hold was overwritten by the second")
+	}
+	live, _ := a.Listed("demo", "hold")
+	if len(live) != 1 || !strings.Contains(live[0], "builder two") {
+		t.Fatalf("other hold lost: %v", live)
+	}
+	if n, _ := a.Release("demo", repo, second.LeaseID, false); n != 1 {
+		t.Fatal("remaining hold lost")
+	}
+}
+
+func TestChildNoticeOnlyFlagsTheLaunchersVanishedChildren(t *testing.T) {
+	items := vanishedChildren([]map[string]any{
+		{"id": "one", "parent": "root", "title": "Builder", "state": "live"},
+		{"id": "two", "parent": "root", "title": "Reviewer", "state": "vanished"},
+		{"id": "three", "parent": "other", "state": "vanished"},
+	}, "root")
+	if len(items) != 1 || !strings.Contains(items[0].Line, "Reviewer (two) vanished") {
+		t.Fatalf("%v", items)
+	}
+}
+
 func TestLeaseVerbs(t *testing.T) {
 	repo := sandbox(t)
 	real, _ := filepath.EvalSymlinks(repo)

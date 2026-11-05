@@ -102,6 +102,21 @@ function setup(findings: Finding[] | null = [finding({})]) {
 }
 
 describe('aico pulse', () => {
+  it('shows a vanished child from Tether alongside the live children its coordinator started', async () => {
+    const { sources } = setup()
+    const lines = render(
+      await collect({
+        ...sources,
+        children: async () => [
+          { id: 'child1', parent: 'root1', host: null, title: 'Builder', state: 'live' },
+          { id: 'child2', parent: 'root1', host: null, title: 'Reviewer', state: 'vanished' },
+        ],
+      }),
+    )
+    expect(lines).toContain('Children of root1: 1 live, 1 vanished')
+    expect(lines.join('\n')).toContain('Reviewer (child2) vanished; check its session')
+  })
+
   it('shows sessions, claims, fresh leases, open handshakes and Status problems', async () => {
     const { sources } = setup()
     const lines = render(await collect(sources))

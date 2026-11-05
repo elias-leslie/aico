@@ -10,10 +10,32 @@ import {
   cmdResult,
   PullReaders,
   parseJobResult,
+  systemdCmdUnits,
 } from './wait-readers'
 
 const JOB = '0123456789abcdef0123456789abcdef'
 const TAP = 'fedcba9876543210fedcba9876543210'
+
+it('finds the user bus for a wait launched without desktop environment', async () => {
+  const bin = join(dir, 'bin')
+  mkdirSync(bin)
+  writeFileSync(
+    join(bin, 'systemd-run'),
+    '#!/bin/sh\n[ "$XDG_RUNTIME_DIR" = "/run/user/' +
+      (process.getuid?.() ?? 0) +
+      '" ] && [ "$DBUS_SESSION_BUS_ADDRESS" = "unix:path=$XDG_RUNTIME_DIR/bus" ]\n',
+    { mode: 0o755 },
+  )
+  const units = systemdCmdUnits({ PATH: bin })
+  expect(
+    await units.start(
+      '111111111111',
+      { argv: ['/bin/true'], cwd: dir, deadline: Date.now() + 10_000 },
+      join(dir, 'result'),
+      10,
+    ),
+  ).toBe('started')
+})
 
 let dir: string
 let pokes: string[]

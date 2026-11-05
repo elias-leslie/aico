@@ -194,7 +194,7 @@ it('skipping checks creates no publication pass and the nightly schedule calls A
     noCheck: true,
   })
   expect(localCheck(root, committed.sha)).toBeNull()
-  await runCheck(config(root), { lane: 'quick', coordination })
+  await runCheck(config(root), { lane: 'quick', coordination, env: {} })
   expect(localCheck(root, committed.sha)).toBeNull()
   const jobs = JSON.parse(
     readFileSync(new URL('../../jobs/data/jobs.json', import.meta.url), 'utf8'),

@@ -151,6 +151,20 @@ function step(reporter: LaneReporter, next: Partial<LaneView>, ms = 0): void {
 }
 
 describe('lane lines', () => {
+  it('retains the expected child roster across a reporter restart and flags a vanished child', () => {
+    const first = harness({
+      sessions: [{ id: LANE, coordinatorId: ROOT, parentId: ROOT, launched: true }],
+    })
+    step(first.reporter, { state: 'working' })
+    expect(first.reporter.children()[0]).toMatchObject({ id: LANE, parent: ROOT, state: 'live' })
+    const second = harness({ store: first.store })
+    expect(second.reporter.children()[0]).toMatchObject({
+      id: LANE,
+      parent: ROOT,
+      state: 'vanished',
+    })
+  })
+
   it('names the lane, never reply text, and points at status', () => {
     const lane = {
       id: LANE,

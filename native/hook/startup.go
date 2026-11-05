@@ -48,7 +48,10 @@ func sessionStart(cfg *Config, tool, event string, payload map[string]any) Out {
 		}()
 	}
 	if event == "SessionStart" {
-		run(0, func() []string { return lease.New(cfg.Lease, payload).SessionStart() })
+		run(0, func() []string {
+			h := lease.New(cfg.Lease, payload)
+			return append(h.SessionStart(), h.UnfinishedChildren()...)
+		})
 		run(1, func() []string { return startupBrief(cfg, payload) })
 	}
 	if tool != "pi" { // Pi has no command hooks to verify (as before: SummitFlow's startup check ran for Claude and Codex)

@@ -11,6 +11,7 @@ import { blobIds, changedFiles, commonDir, git, gitOk } from './git'
 import type { Coordination } from './hook'
 import { noteLocalCheck } from './local-check'
 import type { Config } from './plan'
+import { sourceKey } from './run'
 
 export class CommitError extends Error {}
 
@@ -141,7 +142,18 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
   if (moved.length)
     throw new CommitError(`source changed during the check: ${moved.join(', ')}; rerun the commit`)
 
+  const verifyInputs = () => {
+    for (const result of report?.results ?? []) {
+      if (result.inputs && sourceKey(root, result.inputs.paths) !== result.inputs.key)
+        throw new CommitError(
+          `source changed during the check: stage ${result.id} inputs; rerun the commit`,
+        )
+    }
+  }
+  verifyInputs()
+
   const sha = await withRepoLock(root, () => {
+    verifyInputs()
     // A different commit may have held the lock after the check finished.
     const current = blobIds(root, files)
     const moved = files.filter((file) => before.get(file) !== current.get(file))

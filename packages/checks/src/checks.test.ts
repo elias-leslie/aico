@@ -1,5 +1,13 @@
 import { execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { openTasksDb, Registry, runTasks, TaskStore } from '@aico/tasks'
@@ -266,6 +274,85 @@ describe('the formatter scope', () => {
 })
 
 describe('commit', () => {
+  it('does not invalidate declared inputs for an unrelated gate-file comment', async () => {
+    const root = repo(
+      `[[native.stages]]\nid = "selected"\nkind = "check"\ncoverage = "full"\nquick = true\ninputs = ["src"]\nargv = ["node", "-e", ${JSON.stringify("require('fs').appendFileSync('.st-check.toml','\\n# another lane documents its gate\\n')")}]\n`,
+    )
+    write(root, 'src/a.ts', 'a2\n')
+    await expect(
+      commit(config(root), {
+        message: 'Selected source',
+        paths: ['src/a.ts'],
+        coordination: coordination(),
+        env: {},
+      }),
+    ).resolves.toMatchObject({ files: ['src/a.ts'] })
+  })
+
+  it('does not treat stage selection patterns as declared inputs', async () => {
+    const root = repo(
+      `[[native.stages]]\nid = "selected"\nkind = "check"\ncoverage = "full"\nquick = true\nquick_paths = ["src/**", "native/**"]\nargv = ["node", "-e", ${JSON.stringify("require('fs').mkdirSync('native',{recursive:true}); require('fs').writeFileSync('native/other.py','other lane')")}]\n`,
+    )
+    write(root, 'src/a.ts', 'a2\n')
+    await expect(
+      commit(config(root), {
+        message: 'Selected source',
+        paths: ['src/a.ts'],
+        coordination: coordination(),
+        env: {},
+      }),
+    ).resolves.toMatchObject({ files: ['src/a.ts'] })
+  })
+
+  it('refuses changed stage inputs without treating an unrelated file as an input', async () => {
+    const root = repo('')
+    write(
+      root,
+      '.st-check.toml',
+      `[native]\nlegacy_tools = []\n[native.tools]\nnode = ${JSON.stringify(process.execPath)}\n[[native.stages]]\nid = "read-input"\nkind = "check"\ncoverage = "full"\nquick = true\ninputs = ["src"]\nargv = ["node", "-e", ${JSON.stringify("const fs = require('fs'); fs.readFileSync('src/b.ts'); fs.writeFileSync('.dev-tools/read-ready', 'ready'); const timer=setInterval(()=>{ if(fs.existsSync('.dev-tools/read-release')) { clearInterval(timer); process.exit(0) } },10)")}]\n`,
+    )
+    git(root, 'add', '.st-check.toml')
+    git(root, 'commit', '-qm', 'Gate')
+    write(root, 'src/a.ts', 'a2\n')
+    const pending = commit(config(root), {
+      message: 'First lane',
+      paths: ['src/a.ts'],
+      coordination: coordination(),
+      env: {},
+    })
+    while (!existsSync(join(root, '.dev-tools/read-ready')))
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    write(root, 'src/b.ts', 'changed dependency\n')
+    write(root, '.dev-tools/read-release', 'go')
+    await expect(pending).rejects.toThrow(/quick check failed/)
+    expect(git(root, 'log', '-1', '--format=%s')).toBe('Gate')
+  })
+
+  it('lets another lane edit and commit unrelated paths while a selected-path stage runs', async () => {
+    const root = repo(stage('lint', 'quick = true\nquick_paths = ["src/**"]\ninputs = ["src"]'))
+    write(root, 'src/a.ts', 'a2\n')
+    write(root, 'docs/readme.md', 'other lane\n')
+    const first = commit(config(root), {
+      message: 'First lane',
+      paths: ['src/a.ts'],
+      coordination: coordination(),
+      env: {},
+    })
+    const second = commit(config(root), {
+      message: 'Second lane',
+      paths: ['docs/readme.md'],
+      coordination: coordination(),
+      env: {},
+    })
+    const results = await Promise.all([first, second])
+    expect(results.map((r) => r.files)).toEqual([['src/a.ts'], ['docs/readme.md']])
+    expect(git(root, 'status', '--porcelain')).toBe('')
+    expect(git(root, 'log', '-2', '--format=%s').split('\n').sort()).toEqual([
+      'First lane',
+      'Second lane',
+    ])
+  })
+
   it('commits only the named paths, leaves other edits and the index alone, and releases those leases', async () => {
     const root = repo(stage('lint', 'quick = true'))
     write(root, 'src/a.ts', 'a2\n')

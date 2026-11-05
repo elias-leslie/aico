@@ -3,7 +3,17 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 32
+export const SCHEMA_VERSION = 33
+
+/** Conversations observed in an owned workload survive its retirement and delayed transcript ingestion. */
+export const TRANSCRIPT_OWNERS_SQL = `
+  CREATE TABLE IF NOT EXISTS transcript_owners (
+    transcript_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    ended_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS transcript_owners_session ON transcript_owners(session_id);
+`
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */

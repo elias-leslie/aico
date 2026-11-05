@@ -1,5 +1,7 @@
 {
   "lease": {
+    "backup_unit_pattern": "(?i)(backup|restic|vzdump|borg|btrbk|pbs-|blackbox-archive)",
+    "backup_process_pattern": "^(restic|borg|vzdump|btrbk)$",
     "idle_ttl_minutes": 30,
     "active_minutes": 10,
     "registry_hours": 24,

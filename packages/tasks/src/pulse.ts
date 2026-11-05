@@ -6,7 +6,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { SessionDescriptor } from '@aico/tether-client'
+import type { ChildAgent, SessionDescriptor } from '@aico/tether-client'
 import policy from '../data/pulse-brief.json' with { type: 'json' }
 import type { Database } from './db'
 import type { Registry } from './projects'
@@ -27,6 +27,7 @@ export interface Finding {
 }
 
 export interface PulseSources {
+  children?(): Promise<ChildAgent[] | null>
   db: Database
   now: () => number
   sessions(): Promise<SessionDescriptor[] | null>
@@ -75,6 +76,7 @@ export interface Claim {
 }
 
 export interface Pulse {
+  children?: ChildAgent[] | null
   generatedAt: number
   /** Null when the source did not answer: unknown, never zero. */
   sessions: SessionDescriptor[] | null
@@ -145,6 +147,7 @@ export async function collect(src: PulseSources, cfg: Policy = policy): Promise<
     }
   }
   return {
+    children: src.children ? await src.children() : null,
     generatedAt: now,
     sessions: await src.sessions(),
     claims: claims.map((c) => ({
@@ -170,6 +173,15 @@ const age = (minutes: number): string => {
 
 export function render(p: Pulse): string[] {
   const out: string[] = []
+  if (p.children === null) out.push('Children: Tether did not answer; child agents are unknown.')
+  for (const parent of new Set((p.children ?? []).map((c) => c.parent))) {
+    const children = (p.children ?? []).filter((c) => c.parent === parent)
+    out.push(
+      `Children of ${parent}: ${children.filter((c) => c.state === 'live').length} live, ${children.filter((c) => c.state === 'vanished').length} vanished${children.some((c) => c.state === 'unknown') ? `, ${children.filter((c) => c.state === 'unknown').length} unknown` : ''}`,
+    )
+    for (const c of children.filter((c) => c.state === 'vanished'))
+      out.push(`  ${c.title} (${c.id}) vanished; check its session`)
+  }
   const live = p.sessions?.filter((s) => s.status === 'running') ?? null
   const projects = new Set<string>()
   for (const s of live ?? []) projects.add(s.projectId ?? '(no project)')

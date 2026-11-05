@@ -72,6 +72,7 @@ export function liveSources(db: Database, env: NodeJS.ProcessEnv, now = Date.now
     db,
     now,
     sessions: () => orNull(() => client.listSessions()),
+    children: () => orNull(() => client.childAgents()),
     docNames: () => orNull(() => client.coordinationDocs()),
     doc: (name) => orNull(() => client.coordinationDoc(name)),
     findings: () => statusFindings(env, now),

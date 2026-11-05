@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import push, sender, watchdog
+from . import push, sender, trim, watchdog
 from .state import locked, read, write
 
 
@@ -19,6 +19,7 @@ def main(argv=None) -> int:
     tick = sub.add_parser("tick")
     tick.add_argument("--test", action="store_true", help="test label; use only with a separate scratch config")
     sub.add_parser("status")
+    sub.add_parser("trim", help="Return unused blocks from running containers")
     sub.add_parser("sync-credentials")
     beat = sub.add_parser("heartbeat")
     beat.add_argument("source")
@@ -42,6 +43,10 @@ def main(argv=None) -> int:
             elif args.command == "sync-credentials":
                 lock_directory = directory / "credentials-lock"
         with locked(lock_directory):
+            if args.command == "trim":
+                result = trim.run(cfg)
+                print(json.dumps(result))
+                return 0 if result["state"] == "ok" else 1
             if args.command == "sync-credentials":
                 route = data.get("fcm", {})
                 if not isinstance(route.get("devices"), list) or not isinstance(route.get("service_account"), dict):

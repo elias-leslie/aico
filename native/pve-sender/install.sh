@@ -23,6 +23,7 @@ if [ "${PVE_SENDER_NO_SYSTEMCTL:-0}" != 1 ]; then
   # Verify the replacement before switching either producer off. No immediate real push is forced.
   "$sbin/pve-sender" tick
   systemctl --no-ask-password enable --now aico-pve-sender.timer
+  systemctl --no-ask-password enable --now aico-pve-trim.timer
   # Keep original files and old package for rollback; only the push wrapper gets a retained copy.
   if [ -f "$sbin/aico-push" ] && [ ! -f "$sbin/aico-push.pre-aico" ]; then
     cp -p "$sbin/aico-push" "$sbin/aico-push.pre-aico"

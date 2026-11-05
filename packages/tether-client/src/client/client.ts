@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import {
   type AgentRunPush,
   type AttachAnswer,
+  type ChildAgent,
   type HistoryDetail,
   type HistoryEventPage,
   type HistorySession,
@@ -135,6 +136,10 @@ export class TetherClient {
 
   async listSessions(): Promise<SessionDescriptor[]> {
     return (await this.json<{ items: SessionDescriptor[] }>('GET', '/v1/sessions')).items
+  }
+
+  async childAgents(): Promise<ChildAgent[]> {
+    return (await this.json<{ items: ChildAgent[] }>('GET', '/v1/children')).items
   }
 
   /** Live-verified descriptor (`409 identity_changed` if it moved meanwhile). */

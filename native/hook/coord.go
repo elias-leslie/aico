@@ -182,7 +182,7 @@ func leaseMain(h *lease.Hook, args []string) int {
 		if l.Purpose != nil {
 			purpose = *l.Purpose
 		}
-		fmt.Printf("Holding %s (%s) as %s; release: st lease --release-all\n", p.ID, purpose, l.AgentID)
+		fmt.Printf("Holding %s (%s) as %s; release this hold: st lease --release %s\n", p.ID, purpose, l.AgentID, l.LeaseID)
 	case list:
 		files, err := h.Listed(p.ID, "file")
 		if err != nil {
@@ -305,7 +305,7 @@ func sessionsMain(h *lease.Hook, args []string) int {
 		switch a {
 		case "--fyi", "--withdraw":
 			flags[a] = "1"
-		case "--source-key", "--delivery", "--scope":
+		case "--source-key", "--delivery", "--scope", "--requests":
 			if i+1 >= len(rest) {
 				return fail("%s needs a value", a)
 			}
@@ -316,6 +316,19 @@ func sessionsMain(h *lease.Hook, args []string) int {
 		}
 	}
 	switch verb {
+	case "may-disrupt":
+		target := "host"
+		if len(pos) > 1 {
+			return fail("usage: sessions may-disrupt [TARGET] [--requests ID,ID]")
+		}
+		if len(pos) == 1 {
+			target = pos[0]
+		}
+		result, err := json.Marshal(h.MayDisrupt(target, strings.Split(flags["--requests"], ",")))
+		if err != nil {
+			return fail("%v", err)
+		}
+		fmt.Println(string(result))
 	case "send":
 		return send(h, pos, flags)
 	case "ack":

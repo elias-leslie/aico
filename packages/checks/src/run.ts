@@ -27,6 +27,7 @@ import type { Config, Evidence, Lane, Planned, Step } from './plan'
 export type StepState = 'pass' | 'fail' | 'skip' | 'timeout' | 'unavailable'
 
 export interface StepResult {
+  inputs?: { paths: string[]; key: string }
   id: string
   state: StepState
   ms: number
@@ -191,10 +192,22 @@ export function inputsKey(config: Config, step: Step): string | null {
   if (!decl?.inputs.length) return null
   const { root } = config
   const hash = createHash('sha256').update(JSON.stringify([decl, step.argv]))
-  hash.update(git(root, ['ls-tree', '-r', 'HEAD', '--', ...decl.inputs]))
-  const dirty = changedFiles(root, decl.inputs)
-  for (const [file, id] of blobIds(root, dirty)) hash.update(`${file}\0${id}\n`)
+  hash.update(sourceKey(root, decl.inputs))
   return hash.digest('hex').slice(0, 32)
+}
+
+/** Effective working-tree content, stable across another lane committing the same bytes. */
+export function sourceKey(root: string, paths: string[]): string {
+  const hash = createHash('sha256')
+  const files = [
+    ...new Set(
+      git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...paths])
+        .split('\0')
+        .filter(Boolean),
+    ),
+  ].sort()
+  for (const [file, id] of blobIds(root, files)) hash.update(`${file}\0${id}\n`)
+  return hash.digest('hex')
 }
 
 function spawnStep(
@@ -296,6 +309,10 @@ export async function runSteps(
 
   const one = async (step: Step): Promise<StepResult> => {
     const required = lane === 'quick' || step.required
+    // quick_paths selects when a stage runs; only inputs declares what its proof depends on.
+    const inputPaths = step.decl?.inputs
+    const boundPaths = inputPaths?.length ? [...new Set(inputPaths)] : undefined
+    const inputs = boundPaths ? { paths: boundPaths, key: sourceKey(root, boundPaths) } : undefined
     const key = reuse ? inputsKey(config, step) : null
     const marker = key && join(passes, `${step.id}-${key}.json`)
     if (marker && existsSync(marker))
@@ -305,6 +322,7 @@ export async function runSteps(
         ms: 0,
         required,
         reused: true,
+        inputs,
         hint: 'inputs unchanged since its last pass',
       }
     const scratch = mkdtempSync(join(work, `${step.id}-`))
@@ -358,6 +376,10 @@ export async function runSteps(
       state = verdict.state
       because = verdict.reason
     }
+    if (state === 'pass' && inputs && sourceKey(root, inputs.paths) !== inputs.key) {
+      state = 'fail'
+      because = 'source_changed_during_checks: stage inputs changed'
+    }
     if (state === 'pass' && marker) {
       mkdirSync(passes, { recursive: true })
       writeFileSync(marker, JSON.stringify({ at: new Date().toISOString(), ms: Math.round(ms) }))
@@ -368,6 +390,7 @@ export async function runSteps(
       state,
       ms,
       required,
+      inputs,
       reason: state === 'timeout' ? `timed out after ${step.timeoutS}s` : because,
       details: `.dev-tools/${step.id}-${process.pid}-details.txt`,
       hint: hint(run.output, state !== 'pass'),

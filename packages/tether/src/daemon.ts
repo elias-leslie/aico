@@ -305,6 +305,15 @@ export async function startDaemon(
   if (reconcileEnabled(env)) {
     // The session history: each tool's transcripts, read in small passes.
     context.history = historyFromEnv(store.db, env, projectRoots)
+    context.history.endRetired()
+    events.subscribe((event) => {
+      if (
+        event.type === 'session.ended' &&
+        typeof event.data.id === 'string' &&
+        typeof event.data.host !== 'string'
+      )
+        context.history?.endOwned(event.data.id)
+    })
   }
   if (reconcileEnabled(env)) {
     const graphical = () => userManagerGraphicalEnvironment()
@@ -578,6 +587,12 @@ export async function startDaemon(
   // the lines are pasted.
   const lanes = reconcileEnabled(env)
     ? new LaneReporter(new LaneReportStore(store.db), {
+        childGone: (id) => {
+          const row = getWidget(id)
+          return Boolean(
+            row && (agentExitOf(row)?.state === 'exit' || context.recovery?.isHeld(id)),
+          )
+        },
         now: Date.now,
         policy: () => wakes.policy(),
         receiver: (id) => wakes.receiver(id),
@@ -872,6 +887,7 @@ export async function startDaemon(
     nodeProcFs,
     env.HOME ?? homedir(),
     {
+      conversation: (id, tool, nativeId) => context.history?.bind(id, tool, nativeId),
       ...(models ? { models: (id, source) => models.see(id, source, nodeFileTail) } : {}),
       ...(context.history ? { runs: context.history.agentRun } : {}),
     },
