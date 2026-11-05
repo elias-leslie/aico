@@ -47,7 +47,9 @@
       "project": "aico",
       "home": "davion-sidarli",
       "at": "04:10",
-      "run": { "post": "/api/context/check" },
+      "run": {
+        "post": "/api/context/check"
+      },
       "lease_s": 300
     },
     {
@@ -60,6 +62,83 @@
         "command": ["../../web-server/scripts/aico", "usage", "collect"]
       },
       "lease_s": 180
+    },
+    {
+      "kind": "backups-native",
+      "what": "T7 recovery points",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "run": {
+        "command": ["../../web-server/scripts/aico", "backups", "run", "native", "--scheduled"]
+      },
+      "lease_s": 300,
+      "every_min": 240
+    },
+    {
+      "kind": "backups-drive",
+      "what": "Google Drive backup",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "run": {
+        "command": ["../../web-server/scripts/aico", "backups", "run", "drive", "--scheduled"]
+      },
+      "lease_s": 300,
+      "at": "02:30"
+    },
+    {
+      "kind": "backups-append",
+      "what": "Aico databases to CT 160",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "run": {
+        "command": ["../../web-server/scripts/aico", "backups", "run", "append", "--scheduled"]
+      },
+      "lease_s": 300,
+      "every_min": 60
+    },
+    {
+      "kind": "backups-snapshots",
+      "what": "Work recovery snapshots",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "run": {
+        "command": ["../../web-server/scripts/aico", "backups", "run", "snapshots", "--scheduled"]
+      },
+      "lease_s": 300,
+      "every_min": 30
+    },
+    {
+      "kind": "backups-guard",
+      "what": "Backup storage read-only guard",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "run": {
+        "command": ["../../web-server/scripts/aico", "backups", "run", "guard", "--scheduled"]
+      },
+      "lease_s": 300,
+      "every_min": 5
+    },
+    {
+      "kind": "backups-append-aico",
+      "what": "Aico gem databases to CT 160",
+      "project": "aico",
+      "home": "aico",
+      "every_min": 60,
+      "run": {
+        "command": ["../../web-server/scripts/aico", "backups", "run", "append", "--scheduled"]
+      },
+      "lease_s": 300
+    },
+    {
+      "kind": "backups-verify",
+      "what": "Drive backup read-back check",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "at": "05:00",
+      "run": {
+        "command": ["../../web-server/scripts/aico", "backups", "run", "verify", "--scheduled"]
+      },
+      "lease_s": 300
     }
   ]
 }
