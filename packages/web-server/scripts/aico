@@ -94,6 +94,7 @@ aico_webtools() {
 }
 
 case "${1:-}" in
+  grants | elevate) shift; exec /usr/local/lib/host-steward/aico-grants "$@" ;;
   memory | prompt | models | context | usage | logins) exec_aico_web "$@" ;;
   check | commit | publish) aico_checks "$@" ;;
   deploy | logs | snapshots | vm | backups) aico_ops "$@" ;;

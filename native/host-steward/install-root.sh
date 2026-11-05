@@ -9,6 +9,10 @@
 # (installed to $HS_USER_UNIT_DIR, enabled; it acts per [acting] memctl).
 # HS_NO_SYSTEMCTL=1 copies files only (tests).
 set -euo pipefail
+if [ "${HS_NO_SYSTEMCTL:-0}" != 1 ] && [ "${HS_SIGNATURE_VERIFIED:-0}" != 1 ]; then
+  echo 'Use install-signed.py with a signed update archive.' >&2
+  exit 1
+fi
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 prefix="${HS_PREFIX:-/usr/local/lib/host-steward}"
@@ -17,15 +21,17 @@ unit_dir="${HS_UNIT_DIR:-/etc/systemd/system}"
 user_unit_dir="${HS_USER_UNIT_DIR:-/etc/systemd/user}"
 sudoers_dir="${HS_SUDOERS_DIR:-/etc/sudoers.d}"
 owner="${HS_OWNER:-kasadis}"
-enable_timers=(host-steward-check.timer host-steward-collect-usage.timer host-steward-housekeeping.timer host-steward-space-guard.timer)
+enable_timers=(host-steward-grants.service host-steward-rules.timer host-steward-heartbeat.timer host-steward-fcm-token.timer host-steward-check.timer host-steward-collect-usage.timer host-steward-housekeeping.timer host-steward-space-guard.timer)
 
 install -d -m 0755 "$prefix" "$bin_dir" "$unit_dir" "$user_unit_dir"
 rm -rf "$prefix/host_steward"
 mkdir -p "$prefix/host_steward"
-(cd "$here/host_steward" && find . -type f \( -name '*.py' -o -name '*.toml' \) -not -path '*/__pycache__/*' \
+(cd "$here/host_steward" && find . -type f \( -name '*.py' -o -name '*.toml' -o -name '*.json' \) -not -path '*/__pycache__/*' \
   -exec install -D -m 0644 {} "$prefix/host_steward/{}" \;)
 install -m 0644 "$here/aico_status.py" "$prefix/aico_status.py"
 install -m 0755 "$here/host-steward" "$prefix/host-steward"
+install -m 0755 "$here/aico-grants" "$prefix/aico-grants"
+install -m 0755 "$here/install-signed.py" "$prefix/install-signed.py"
 ln -sfn "$prefix/host-steward" "$bin_dir/host-steward"
 for unit in "$here"/systemd/*.service "$here"/systemd/*.timer; do
   case "$(basename "$unit")" in
@@ -45,6 +51,12 @@ if [ "$(id -u)" = 0 ]; then chown "$owner" "$hints"; fi
 install -m 0440 "$here/sudoers/60-host-steward" "$sudoers_dir/60-host-steward"
 
 if [ "${HS_NO_SYSTEMCTL:-0}" != 1 ]; then
+  python3 - "$here" <<'MIGRATE'
+import sys
+sys.path.insert(0, sys.argv[1])
+from host_steward.installer import migrate
+migrate()
+MIGRATE
   systemctl --no-ask-password daemon-reload
   systemctl --no-ask-password enable --now "${enable_timers[@]}"
   read -r scrub_on nvme_on < <(python3 -c 'import sys, tomllib

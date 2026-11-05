@@ -16,6 +16,7 @@ import { PhoneRegistry } from './app-phones'
 import { Asks, validateAsk } from './asks'
 import { Background } from './background'
 import { registerBackupRoutes } from './backups'
+import { createCanaryServer, registerCanaryRoutes } from './canary'
 import { CaptureRouter } from './capture-router'
 import { readChatAttachments } from './chat-attachments'
 import { CLI_COMMANDS, runCli } from './cli'
@@ -23,6 +24,7 @@ import { HISTORY_LINES, loadConfig } from './config'
 import { registerContextRoutes } from './context'
 import { WebStore } from './db'
 import { ExtractWorker } from './extract-worker'
+import { registerGrantRoutes } from './grants'
 import { registerLoginRoutes } from './logins'
 import { NotesStore } from './notes-db'
 import { registerExportRoutes } from './notes-export'
@@ -157,6 +159,8 @@ function serve(): void {
   const runs = new StatusRuns()
   registerStatusRoutes(api, status, { changed: notify, machine, running: () => runs.ids() })
   registerStatusActions(api, { status, machine, tether, runs })
+  registerGrantRoutes(api)
+  registerCanaryRoutes(api, notify.notifier, join(config.dataDir, 'canary'))
   registerBackupRoutes(api)
   registerLoginRoutes(api, process.env, tether)
   // The phone alert rule: checked on every write of rows. aico-web's own heartbeat writes every
@@ -197,6 +201,15 @@ function serve(): void {
   }
 
   background.start()
+  const canaryListen = process.env.AICO_CANARY_LISTEN
+  const canary = canaryListen
+    ? createCanaryServer(notify.notifier, join(config.dataDir, 'canary'))
+    : null
+  if (canary && canaryListen) {
+    const [host, port] = canaryListen.split(':')
+    canary.on('error', () => console.error('[aico-web] canary listener unavailable'))
+    canary.listen(Number(port), host)
+  }
   notify.start()
   reader.start()
   let selfRows: ReturnType<typeof startSelfRows> | null = null
@@ -217,6 +230,8 @@ function serve(): void {
     console.log(`[aico-web] ${signal}: stopping`)
     void chats.shutdown()
     ;(selfRows as ReturnType<typeof startSelfRows> | null)?.stop(signal)
+    canary?.close()
+    canary?.closeAllConnections()
     serviceApps?.close()
     serviceApps?.closeAllConnections()
     background.stop()

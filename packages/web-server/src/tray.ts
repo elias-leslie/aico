@@ -41,7 +41,12 @@ const GRANT_LABELS = {
 }
 
 /** Kind letter in a Nightshift approve link (`/e/<id>`, `/k/<id>`, `/g/<id>`). */
-const APPROVE_KIND: Record<string, string> = { e: 'elevate', k: 'passkey', g: 'signing' }
+const APPROVE_KIND: Record<string, string> = {
+  e: 'elevate',
+  k: 'passkey',
+  g: 'signing',
+  grants: 'elevate',
+}
 
 interface Action {
   id: string

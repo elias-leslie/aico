@@ -1,0 +1,32 @@
+owner = "kasadis"
+socket = "/run/host-steward/grants.sock"
+state_dir = "/var/lib/host-steward/grants"
+credentials_file = "/var/lib/host-steward/grants/credential.json"
+token_dir = "/etc/host-steward/grants"
+site_file = "/etc/host-steward/site.json"
+public_url = "https://aico.summitflow.dev/grants"
+notice_url = "http://127.0.0.1:3002/api/notices"
+request_seconds = 900
+default_minutes = 30
+max_minutes = 120
+refresh_seconds = 30
+
+[kinds.github-admin]
+label = "GitHub admin"
+what = "repo settings, visibility, deploy keys, Actions secrets and your profile"
+env = ["GH_TOKEN", "GITHUB_TOKEN"]
+
+[kinds.owner-chrome]
+label = "your main Chrome"
+what = "tabs in your main Chrome profile; Gmail needs its own grant"
+env = []
+
+[kinds.owner-email]
+label = "your email inbox"
+what = "reading and using Gmail in your main Chrome"
+env = []
+
+[kinds.test]
+label = "test access"
+what = "a drill only; no credential or access to anything"
+env = []

@@ -28,6 +28,7 @@ managed_environment_inputs = ["/srv/workspaces/projects/uilint/bin", "/srv/works
 bash = "/usr/bin/bash"
 node = "/usr/local/bin/node"
 python3 = "/usr/bin/python3"
+openssl = "/usr/bin/openssl"
 
 # The whole-repo stages below are the full gate. The generated per-package stages
 # further down are quick views of them (`covered_by`): they run only in
@@ -708,7 +709,7 @@ coverage = "focused"
 required = false
 quick = true
 quick_paths = ["native/host-steward/**", "contracts/**"]
-argv = ["native/host-steward/.venv/bin/pytest", "-q", "native/host-steward/tests/test_aico_status.py", "native/host-steward/tests/test_host_steward_core.py", "native/host-steward/tests/test_view_mutation_contract.py"]
+argv = ["native/host-steward/.venv/bin/pytest", "-q", "native/host-steward/tests/test_aico_status.py", "native/host-steward/tests/test_host_steward_core.py", "native/host-steward/tests/test_pve_sender.py", "native/host-steward/tests/test_view_mutation_contract.py"]
 # END generated
 
 # Nightly deep lane (st check --deep): Tether's live containment proof against a

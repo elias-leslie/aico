@@ -70,6 +70,11 @@ def run_checks(
         rows.append(
             core.make_row(check, signals, cfg, data["meanings"], machine, now, data["caps"])
         )
+        state.setdefault("observations", {})[check] = {
+            "at": now,
+            "valid_until": now + (cfg["every_min"] + cfg["slack_min"]) * 60,
+            "signals": [{"code": s.code, "state": core.cap_state(s.code, s.state, data["caps"]), "fields": s.fields} for s in signals],
+        }
         ran.append(check)
     return rows, ran
 
@@ -77,6 +82,10 @@ def run_checks(
 def main(argv: Sequence[str] | None = None, post: Callable[..., bool] = aico_status.report) -> int:
     parser = argparse.ArgumentParser(prog="host-steward")
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("grants-serve", help="serve the root access-grant socket")
+    rules = sub.add_parser("rules", help="run deterministic host rules")
+    rules.add_argument("--dry-run", action="store_true")
+    sub.add_parser("drill", help="run the on-demand host and grant drill")
     check = sub.add_parser("check", help="run the due host checks and post their Status rows")
     check.add_argument(
         "--only", action="append", default=[], metavar="NAME", help="run this check now"
@@ -87,6 +96,15 @@ def main(argv: Sequence[str] | None = None, post: Callable[..., bool] = aico_sta
     for job in JOBS.values():
         job.add_args(sub.add_parser(job.NAME, help=job.HELP))
     args = parser.parse_args(argv)
+    if args.command == "grants-serve":
+        from host_steward.grants import serve
+        return serve()
+    if args.command == "rules":
+        from host_steward.escalation import main as rules_main
+        return rules_main(args.dry_run)
+    if args.command == "drill":
+        from host_steward.drill import main as drill_main
+        return drill_main()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     data = core.load_data()
     if args.command in JOBS:

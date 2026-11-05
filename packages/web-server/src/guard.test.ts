@@ -79,3 +79,24 @@ describe('phone hosts', () => {
       expect([bad, phoneTargetAllowed(bad)]).toEqual([bad, false])
   })
 })
+
+it('allows only secret canary POST routes on the legacy phone host', () => {
+  const config = {
+    allowedHostnames: ['aico.example.test'],
+    allowedOrigins: [],
+    phoneHosts: ['nightshift.example.test'],
+  }
+  const path = `/hooks/canary/${'x'.repeat(40)}`
+  expect(checkRequest('POST', { host: 'nightshift.example.test' }, config, path)).toBeNull()
+  expect(checkRequest('GET', { host: 'nightshift.example.test' }, config, path)).toBe(
+    'host_not_allowed',
+  )
+  expect(
+    checkRequest(
+      'POST',
+      { host: 'nightshift.example.test' },
+      config,
+      '/hooks/canary/../api/grants',
+    ),
+  ).toBe('host_not_allowed')
+})

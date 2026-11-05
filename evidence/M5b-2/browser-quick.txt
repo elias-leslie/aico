@@ -1,0 +1,7 @@
+CHECK:quick:3 changed file(s)
+CHECK:SKIP:no_relevant_changed_paths: tsc
+CHECK:OK:ruff|0.0s|details:.dev-tools/ruff-2991236-details.txt|hint:All checks passed!
+CHECK:OK:types|0.2s|details:.dev-tools/types-2991236-details.txt|hint:All checks passed!
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-2991236-details.txt|hint:[]
+CHECK:OK:pytest|1.0s|details:.dev-tools/pytest-2991236-details.txt|hint:..........................................................               [100%]
+CHECK:PASS quick 1.1s (4 ran, 1 skipped)

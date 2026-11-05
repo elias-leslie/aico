@@ -1,0 +1,2 @@
+TEST:pytest:start
+TEST:FAIL:1|details:.dev-tools/pytest-18e5073c9bf71ff3-2990221-66e78c65-details.txt|hint:FAILED tests/test_selected_tabs.py::test_ask_files_an_aico_grant_and_tells_the_extension|lane:heavy|queue_ms:1.254|execution_ms:1106.018|report:.dev-tools/pytest-717f4e499063481e94f43b52fcc6b01b-details.xml

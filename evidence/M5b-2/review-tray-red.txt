@@ -1,0 +1,2 @@
+TEST:pytest:start
+TEST:FAIL:1|details:.dev-tools/pytest-18e5073c4308b59e-2990094-a9507b52-details.txt|hint:FAILED native/host-steward/tests/test_host_steward_grants.py::test_request_tap_signed_approval_use_log_and_revoke|lane:heavy|queue_ms:12.950|execution_ms:169.224|report:.dev-tools/pytest-5fe07e9459634328b8f88e5b0e30fb06-details.xml

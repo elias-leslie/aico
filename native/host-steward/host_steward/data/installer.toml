@@ -1,0 +1,13 @@
+public_key = "/etc/host-steward/update-signing.pub"
+signing_key = "~/.local/state/aico/secrets/update-signing-key"
+archive_prefix = "native/host-steward/"
+
+[migration]
+passkey_source = "/var/lib/nightshift-approve/state/credential.json"
+passkey_target = "/var/lib/host-steward/grants/credential.json"
+token_source = "/etc/nightshift/grants"
+token_target = "/etc/host-steward/grants"
+site_source = "/etc/nightshift/site.json"
+site_target = "/etc/host-steward/site.json"
+ledger_source = "/var/lib/nightshift/ledger/chain.jsonl"
+ledger_target = "/var/lib/host-steward/archive/chain.jsonl"

@@ -1,0 +1,2 @@
+checked: /srv/workspaces/projects/aico against the aico spec
+UILINT:ok|violations=0|checks=5|files=188|items=4029|unverified=0|scope=mechanical-only|not-a-copy-review

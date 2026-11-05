@@ -1,0 +1,7 @@
+[Unit]
+Description=Aico host rules
+After=host-steward-check.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/host-steward/host-steward rules

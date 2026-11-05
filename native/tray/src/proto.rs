@@ -8,7 +8,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-pub const SOCK: &str = "/run/nightshift-approve/local.sock";
+pub const SOCK: &str = "/run/host-steward/grants.sock";
 
 pub fn b64url(data: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";

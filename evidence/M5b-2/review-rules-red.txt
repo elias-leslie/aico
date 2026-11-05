@@ -1,0 +1,2 @@
+TEST:pytest:start
+TEST:FAIL:1|details:.dev-tools/pytest-18e507494cffe33a-2992208-e870742f-details.txt|hint:FAILED native/host-steward/tests/test_host_steward_root_side.py::test_rules_use_each_checks_real_deadline_and_clear_owner_rows|lane:heavy|queue_ms:11.902|execution_ms:173.546|report:.dev-tools/pytest-57baf55cd8ca420ab6555215c9137ccb-details.xml

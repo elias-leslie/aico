@@ -5,7 +5,6 @@
 //! the item store's tray summary, items.rs tray_summary).
 
 use serde_json::Value;
-use std::path::Path;
 
 const STATE_DIR: &str = "/var/lib/nightshift";
 
@@ -36,10 +35,6 @@ pub struct Waiting {
     pub titled: bool,
 }
 
-fn read_json(path: &Path) -> Value {
-    std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null)
-}
-
 /// Still-open asks root pushed (a quiet repeat of a still-open ask is skipped), soonest deadline last.
 pub fn waiting(public: &Value, log: &Value, now: f64) -> Vec<Waiting> {
     let mut out = Vec::new();
@@ -67,7 +62,7 @@ pub fn waiting(public: &Value, log: &Value, now: f64) -> Vec<Waiting> {
 }
 
 pub fn public() -> Value {
-    read_json(&public_path())
+    crate::proto::call_ui(&serde_json::json!({"op": "list"})).unwrap_or(Value::Null)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -161,50 +156,14 @@ pub fn aico_asks(feed: &Value, check: impl Fn(&str) -> Option<String>) -> AicoAs
                url: feed["newest"]["url"].as_str().and_then(check), at: at / 1000.0 }
 }
 
-fn random_id() -> Option<String> {
-    let mut b = [0u8; 16];
-    std::fs::File::open("/dev/urandom").and_then(|mut f| std::io::Read::read_exact(&mut f, &mut b)).ok()?;
-    Some(b.iter().map(|x| format!("{x:02x}")).collect())
-}
-
-fn inbox() -> std::path::PathBuf {
-    #[cfg(any(test, debug_assertions))]
-    if let Some(d) = std::env::var_os("NIGHTSHIFT_BYPASS_INBOX") {
-        return d.into();
-    }
-    #[cfg(test)] // a test never files a request with root, whatever the build profile
-    return std::env::temp_dir().join(format!("ns-inbox-test-{}", std::process::id()));
-    #[cfg(not(test))]
-    state_dir().join("bypass/inbox")
-}
-
 /// End every open grant of `kind` now: one revoke request in root's inbox. Root answers in bypass/out and
 /// republishes approvals.json, which the notifier watches.
 pub fn revoke(kind: &str) -> Result<String, String> {
     if kind.is_empty() || !kind.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-') {
         return Err("bad grant kind".into());
     }
-    submit(serde_json::json!({"kind": "revoke", "grant": kind, "agent": "Aico tray"}))
-}
-
-/// One request in root's inbox (bypass.submit's format and modes), with a fresh id and this process's unit.
-pub fn submit(mut body: Value) -> Result<String, String> {
-    use std::io::Write;
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-    let rid = random_id().ok_or("no random id")?;
-    let unit = std::fs::read_to_string("/proc/self/cgroup").ok()
-        .and_then(|c| c.trim().rsplit('/').next().map(|u| u.chars().take(120).collect::<String>())).unwrap_or_default();
-    body["id"] = rid.clone().into();
-    body["unit"] = unit.into();
-    let dir = inbox();
-    let tmp = dir.join(format!(".{rid}.tmp"));
-    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o644)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC).open(&tmp).map_err(|e| e.to_string())?;
-    let _ = f.set_permissions(std::fs::Permissions::from_mode(0o644)); // past the umask: root reads it
-    f.write_all(body.to_string().as_bytes()).map_err(|e| e.to_string())?;
-    drop(f);
-    std::fs::rename(&tmp, dir.join(format!("{rid}.json"))).map_err(|e| e.to_string())?;
-    Ok(rid)
+    crate::proto::call(&serde_json::json!({"op": "revoke", "kind": kind}))
+        .map(|v| v.to_string())
 }
 
 #[cfg(test)]
@@ -275,16 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn revoke_files_one_request_in_the_inbox() {
-        let d = std::env::temp_dir().join(format!("ns-inbox-{}", std::process::id()));
-        std::fs::create_dir_all(&d).unwrap();
-        std::env::set_var("NIGHTSHIFT_BYPASS_INBOX", &d);
+    fn revoke_rejects_invalid_kinds_before_using_the_root_socket() {
         assert!(revoke("../etc").is_err());
-        let rid = revoke("github-admin").unwrap();
-        std::env::remove_var("NIGHTSHIFT_BYPASS_INBOX");
-        let v: Value = serde_json::from_slice(&std::fs::read(d.join(format!("{rid}.json"))).unwrap()).unwrap();
-        assert_eq!((v["kind"].as_str(), v["grant"].as_str(), v["id"].as_str()), (Some("revoke"), Some("github-admin"), Some(rid.as_str())));
-        assert!(crate::proto::valid_id(&rid));
-        let _ = std::fs::remove_dir_all(&d);
     }
 }

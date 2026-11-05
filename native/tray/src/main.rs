@@ -30,10 +30,10 @@ mod x11;
 /// The approve origin's host from Nightshift's site file (siteconf urls.approve_host): the approval path stays on
 /// Nightshift's executor until the grants move (M5b), for the browser fallback link.
 pub fn approve_host() -> String {
-    std::fs::read("/etc/nightshift/site.json")
+    std::fs::read("/etc/host-steward/site.json")
         .ok()
         .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
-        .and_then(|v| v["urls"]["approve_host"].as_str().map(str::to_string))
+        .and_then(|v| v["approve_host"].as_str().map(str::to_string))
         .filter(|h| !h.is_empty() && h.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'.' || c == b'-'))
         .unwrap_or_default()
 }
@@ -56,15 +56,11 @@ pub fn set_status_host(link: &str) {
 }
 
 pub fn ask_url(kind: &str, id: &str) -> String {
-    let path = match kind {
-        "elevate" => "e", "passkey" => "k", "signing" => "g",
-        _ => "",
-    };
-    let host = approve_host();
-    if host.is_empty() || path.is_empty() || !proto::valid_id(id) {
-        return if host.is_empty() { String::new() } else { format!("https://{host}/") };
+    let host = status_host();
+    if host.is_empty() || kind != "elevate" || !proto::valid_id(id) {
+        return String::new();
     }
-    format!("https://{host}/{path}/{id}")
+    format!("https://{host}/grants?request={id}")
 }
 
 fn probe(id: Option<&String>) -> i32 {
@@ -123,4 +119,14 @@ fn main() {
         }
     };
     std::process::exit(code);
+}
+
+#[cfg(test)]
+mod grant_link_tests {
+    #[test]
+    fn tray_grant_links_open_the_grants_view() {
+        crate::set_status_host("https://aico.example.test/status");
+        assert_eq!(crate::ask_url("elevate", &"a".repeat(32)),
+                   format!("https://aico.example.test/grants?request={}", "a".repeat(32)));
+    }
 }

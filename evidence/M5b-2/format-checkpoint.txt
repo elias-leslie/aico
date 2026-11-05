@@ -1,0 +1,22 @@
+CHECK:SCOPE:left out 2 changed file(s) other agents wrote or lease
+CHECK:FIX:left out 1 file(s) another session wrote or whose writer is unknown (name your own unknown files individually with --paths): packages/web-server/src/tray.ts
+CHECK:FIX:biome:14 file(s)|exit 0
+CHECK:FIX:ruff:10 file(s)|exit 0
+CHECK:full:63 changed file(s)
+CHECK:SKIP:whole_suite_runs_in_the_full_gate:config_or_conftest_changed: pytest
+CHECK:SKIP:no_local_rules: semgrep
+CHECK:OK:ruff|0.0s|details:.dev-tools/ruff-3016874-details.txt|hint:All checks passed!
+CHECK:OK:types|0.1s|details:.dev-tools/types-3016874-details.txt|hint:All checks passed!
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-3016874-details.txt|hint:[]
+CHECK:OK:osv|0.4s|details:.dev-tools/osv-3016874-details.txt|hint:}
+CHECK:OK:biome|0.1s|details:.dev-tools/biome-3016874-details.txt|hint:Checked 11 files in 18ms. No fixes applied.
+CHECK:OK:depcruise|1.7s|details:.dev-tools/depcruise-3016874-details.txt|hint:‼ 30 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-3016874-details.txt|hint:boundaries: ok (19 packages, 12 contract fixtures)
+CHECK:OK:tsc|2.5s|details:.dev-tools/tsc-3016874-details.txt|hint:-
+CHECK:OK:gradle-android|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:cargo-tray|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:go-hook|0.0s|reused|hint:inputs unchanged since its last pass
+CHECK:OK:ui-spec|0.6s|details:.dev-tools/ui-spec-3016874-details.txt|hint:UILINT:ok|violations=0|checks=5|files=188|items=4030|unverified=0|scope=mechanical-only|not-a-copy-review
+CHECK:FAIL:contracts-host-steward|3.6s|optional|details:.dev-tools/contracts-host-steward-3016874-details.txt|hint:E       AssertionError: assert [PosixPath('/...not_wait_f0')] == [PosixPath('/...rtbeat-lock')]
+CHECK:OK:vitest|8.0s|details:.dev-tools/vitest-3016874-details.txt|hint:Tests  422 passed (422)
+CHECK:PASS full 8.2s (14 ran, 2 skipped)

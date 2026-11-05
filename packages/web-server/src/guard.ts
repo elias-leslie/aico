@@ -82,7 +82,8 @@ export function checkRequest(
   target?: string,
 ): Refusal | null {
   if (hostIn(headers.host, config.phoneHosts))
-    return phoneTargetAllowed(target) &&
+    return (phoneTargetAllowed(target) ||
+      (method === 'POST' && /^\/hooks\/canary\/[A-Za-z0-9_-]{32,128}$/.test(target ?? ''))) &&
       !(UNSAFE_METHODS.has(method) && foreignOrigin(headers.origin, config))
       ? null
       : 'host_not_allowed'

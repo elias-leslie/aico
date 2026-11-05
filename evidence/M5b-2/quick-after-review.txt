@@ -1,0 +1,18 @@
+CHECK:SCOPE:left out 25 changed file(s) other agents wrote or lease
+CHECK:quick:50 changed file(s)
+CHECK:SKIP:whole_suite_runs_in_the_full_gate:config_or_conftest_changed: pytest
+CHECK:SKIP:no_relevant_changed_paths: gradle-android, go-hook, biome-agent, tsc-agent, depcruise-agent, biome-checks, tsc-checks, depcruise-checks, biome-context, tsc-context, depcruise-context, biome-fleet, tsc-fleet, depcruise-fleet, biome-jobs, tsc-jobs, depcruise-jobs, biome-notes, tsc-notes, depcruise-notes, biome-notify, tsc-notify, depcruise-notify, biome-ops, tsc-ops, depcruise-ops, biome-shared, tsc-shared, depcruise-shared, biome-status, tsc-status, depcruise-status, biome-store, tsc-store, depcruise-store, biome-tasks, tsc-tasks, depcruise-tasks, biome-tether, tsc-tether, depcruise-tether, biome-tether-client, tsc-tether-client, depcruise-tether-client, biome-ui-kit, tsc-ui-kit, depcruise-ui-kit, biome-usage, tsc-usage, depcruise-usage, biome-webtools, tsc-webtools, depcruise-webtools, biome-root
+CHECK:OK:ruff|0.0s|details:.dev-tools/ruff-2996490-details.txt|hint:All checks passed!
+CHECK:OK:types|0.1s|details:.dev-tools/types-2996490-details.txt|hint:All checks passed!
+CHECK:OK:boundaries|0.2s|details:.dev-tools/boundaries-2996490-details.txt|hint:boundaries: ok (19 packages, 12 contract fixtures)
+CHECK:OK:gitleaks|0.3s|details:.dev-tools/gitleaks-2996490-details.txt|hint:[]
+CHECK:OK:biome-web-frontend|0.1s|details:.dev-tools/biome-web-frontend-2996490-details.txt|hint:Checked 2 files in 10ms. No fixes applied.
+CHECK:OK:cargo-tray|0.2s|details:.dev-tools/cargo-tray-2996490-details.txt|hint:test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+CHECK:OK:tsc-web-frontend|0.1s|details:.dev-tools/tsc-web-frontend-2996490-details.txt|hint:-
+CHECK:OK:biome-web-server|0.1s|details:.dev-tools/biome-web-server-2996490-details.txt|hint:Checked 7 files in 19ms. No fixes applied.
+CHECK:OK:tsc-web-server|0.1s|details:.dev-tools/tsc-web-server-2996490-details.txt|hint:-
+CHECK:OK:depcruise-web-frontend|0.9s|details:.dev-tools/depcruise-web-frontend-2996490-details.txt|hint:‼ 76 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:depcruise-web-server|0.8s|details:.dev-tools/depcruise-web-server-2996490-details.txt|hint:‼ 69 stale known violations in the baseline. Run with '--baseline --baseline-mode shrink-only' to remove them.
+CHECK:OK:vitest|5.4s|details:.dev-tools/vitest-2996490-details.txt|hint:Tests  151 passed (151)
+CHECK:FAIL:contracts-host-steward|4.0s|details:.dev-tools/contracts-host-steward-2996490-details.txt|hint:E               subprocess.CalledProcessError: Command '['bash', '/srv/workspaces/projects/aico/native/pve-sender/install.sh']' returned non-zero exit status 1.
+CHECK:FAIL quick 5.5s (13 ran, 55 skipped): contracts-host-steward

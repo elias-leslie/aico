@@ -9,13 +9,13 @@
 import { resolve } from 'node:path'
 import { blobPath } from '@aico/notes/blobs'
 import type { TetherClient } from '@aico/tether-client'
+import { pendingGrants } from './grants'
 import { objectBody, type Router } from './http'
 import { tetherCall } from './lifecycle'
 import type { NotesStore } from './notes-db'
 import { type Notice, type RunCommand, resolveNotice, runCommand, sendNotice } from './notice'
 import { HttpError } from './tether'
 
-const PENDING_TIMEOUT_MS = 8_000
 /** Ids pushed already, so a replayed event never pushes twice. */
 const PUSHED_KEPT = 500
 
@@ -502,11 +502,7 @@ export class Asks {
 
   /** Nightshift's pending taps, or null when it cannot be read. */
   async approvals(): Promise<Approval[] | null> {
-    try {
-      return parsePending(await this.run(['nightshift', 'pending', '--json'], PENDING_TIMEOUT_MS))
-    } catch {
-      return null
-    }
+    return pendingGrants()
   }
 }
 

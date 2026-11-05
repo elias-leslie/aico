@@ -1,0 +1,2 @@
+TEST:pytest:start
+TEST:FAIL:1|details:.dev-tools/pytest-18e50754a465fa94-2993454-80d2f1f6-details.txt|hint:FAILED native/host-steward/tests/test_host_steward_root_side.py::test_signed_update_accepts_only_the_pinned_signature_and_safe_paths|lane:heavy|queue_ms:13.215|execution_ms:181.861|report:.dev-tools/pytest-f2424cec8bb849a9a79d14a56d591888-details.xml

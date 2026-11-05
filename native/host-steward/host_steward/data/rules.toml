@@ -1,0 +1,15 @@
+# Rules act once per observed episode. Clearing a finding starts a fresh episode.
+enabled = true
+state_file = "/var/lib/host-steward/rules.json"
+space_guard_unit = "host-steward-space-guard.service"
+restart_units = ["host-steward-memctl.service", "host-steward-heartbeat.service"]
+
+[owner_codes]
+"ecc.uncorrected" = "Check the PVE host's memory hardware."
+"storage.smart" = "Check the failing drive and arrange a replacement."
+
+[agent_codes]
+"ws.reboot.required" = "A restart is needed; coordinate sessions before rebooting."
+"ws.units.failed" = "Inspect the failed service and fix its cause."
+"tripwire.*" = "Check the login-setting change against declared work."
+"sudo.*" = "Check the sudo event against declared work."
