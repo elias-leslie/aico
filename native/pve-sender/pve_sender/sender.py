@@ -10,6 +10,15 @@ from . import fcm
 from .state import read, write
 
 
+def route_status(cfg: dict) -> dict:
+    """Operational metadata only; never return device identifiers, keys or tokens."""
+    route = (read(Path(cfg["credentials"]), {}) or {}).get("fcm") or {}
+    cache = read(Path(cfg["token_cache"]), {})
+    return {"devices": sum(bool(d.get("fcm_token")) and not bool(d.get("token_gone"))
+                           for d in route.get("devices", []) if isinstance(d, dict)),
+            "token_expires_at": cache.get("expires_at"), "token_minted_at": cache.get("minted_at")}
+
+
 def send(cfg: dict, notice: dict, now: float | None = None) -> dict:
     now = time.time() if now is None else now
     route = (read(Path(cfg["credentials"]), {}) or {}).get("fcm") or {}
@@ -61,5 +70,5 @@ def send(cfg: dict, notice: dict, now: float | None = None) -> dict:
         # Never echo an exception's text: HTTP requests and key parsers may contain secrets.
         return {"ok": False, "result": f"Phone sender failed ({type(error).__name__})."}
     accepted = sum(200 <= c < 300 for c in codes)
-    return {"ok": accepted == len(devices), "accepted": accepted, "devices": len(devices),
+    return {"ok": accepted == len(devices), "accepted": accepted, "devices": len(devices), "message_id": delivery_id,
             "result": f"FCM accepted {accepted}/{len(devices)}; HTTP {','.join(map(str, codes))}."}

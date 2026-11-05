@@ -252,7 +252,14 @@ def floor_ctx(tmp_path, run, state=None, now=NOW, uptime=100_000):
     up = tmp_path / "uptime"
     up.write_text(f"{uptime} 1\n")
     cfg = {**DATA["checks"]["floor"], "uptime_file": str(up), "owner_uid": 1000}
-    cfg["paths"] = [{**p, "delivery_file": ""} for p in cfg["paths"]]
+    # Exercise the generic multi-path/stale-pass detector with explicit fixture units. The production
+    # Nightshift route was retired at M5b; its removal must not erase this behavior coverage.
+    cfg["paths"] = [{**p, "delivery_file": ""} for p in cfg["paths"]] + [{
+        "name": "Nightshift",
+        "user_units": ["nightshift-notify-critical.service", "nightshift-notify-critical.path", "nightshift-notify-critical.timer"],
+        "system_units": ["nightshift-outbox.service", "nightshift-outbox.path", "nightshift-outbox.timer"],
+        "heartbeat_unit": "nightshift-notify-critical.service", "delivery_file": "", "skip_when_absent": True,
+    }]
     return core.Ctx(
         cfg=cfg, site=DATA["site"], now=now, run=run, state=state if state is not None else {}
     )

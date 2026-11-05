@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import push, watchdog
+from . import push, sender, watchdog
 from .state import locked, read, write
 
 
@@ -61,7 +61,7 @@ def main(argv=None) -> int:
                 print(json.dumps({k: v for k, v in status.items() if k != "rows"}))
                 return 0 if status.get("last_send", {}).get("ok", True) else 1
             if args.command == "status":
-                print(json.dumps(read(directory / "status.json", {})))
+                print(json.dumps({**read(directory / "status.json", {}), "route": sender.route_status(cfg)}))
                 return 0
             if args.command == "heartbeat":
                 if not isinstance(data, dict):
