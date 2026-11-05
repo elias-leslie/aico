@@ -4,6 +4,7 @@
   "token_cache": "/var/lib/nightshift/deadman/fcm-token.json",
   "window_s": 2700,
   "tick_s": 300,
+  "status_relay_s": 300,
   "trim_interval_s": 604800,
   "slack_s": 120,
   "boot_settle_s": 900,

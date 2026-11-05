@@ -1,0 +1,32 @@
+[
+  {
+    "observation": "recovered_0225",
+    "generated_at": "2026-11-05T07:28:54.681Z",
+    "id": "davion-gem/machine",
+    "state": "ok",
+    "shown": "ok",
+    "last_run": "2026-11-05T07:25:28.932Z",
+    "next_run": "2026-11-05T07:32:28.932Z",
+    "updated_at": "2026-11-05T07:28:49.881Z"
+  },
+  {
+    "observation": "false_late",
+    "generated_at": "2026-11-05T07:32:50.816Z",
+    "id": "davion-gem/machine",
+    "state": "ok",
+    "shown": "late",
+    "last_run": "2026-11-05T07:25:28.932Z",
+    "next_run": "2026-11-05T07:32:28.932Z",
+    "updated_at": "2026-11-05T07:28:49.881Z"
+  },
+  {
+    "observation": "natural_0230",
+    "generated_at": "2026-11-05T07:33:58.493Z",
+    "id": "davion-gem/machine",
+    "state": "ok",
+    "shown": "ok",
+    "last_run": "2026-11-05T07:30:28.943Z",
+    "next_run": "2026-11-05T07:37:28.943Z",
+    "updated_at": "2026-11-05T07:33:54.289Z"
+  }
+]

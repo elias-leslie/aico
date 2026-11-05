@@ -38,7 +38,9 @@ def decision(heartbeats: dict, state: dict, cfg: dict, now: float, boot: float) 
 def row(cfg: dict, suffix: str, what: str, status: str, meaning: str, now: float) -> dict:
     return {"id": f"{socket.gethostname().split('.')[0]}/{suffix}", "what": what, "kind": "service",
             "machine": socket.gethostname().split('.')[0].lower(), "state": status, "meaning": meaning[:300],
-            "last_run": iso(now), "next_run": iso(now + cfg["tick_s"] + cfg["slack_s"]),
+            "last_run": iso(now),
+            # CT190 takes rows directly; the workstation fetches them on its own heartbeat.
+            "next_run": iso(now + cfg["tick_s"] + cfg.get("status_relay_s", 0) + cfg["slack_s"]),
             "actions": [{"kind": "log", "ref": "journalctl -u aico-pve-sender.service"}]}
 
 

@@ -6,6 +6,7 @@ import math
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -33,6 +34,26 @@ def test_weekly_trim_only_visits_running_containers_and_reports_failures(cfg):
     assert result["trimmed"] == ["150"]
     assert result["failed"] == ["190"]
     assert trim.status_row(cfg, 1001)["state"] == "failed"
+
+
+def test_sender_relay_budget_covers_the_workstation_heartbeat_interval(cfg):
+    heartbeat = json.loads((ROOT / "native/host-steward/host_steward/data/heartbeat.json").read_text())
+    assert cfg["status_relay_s"] >= heartbeat["every_s"]
+
+
+def test_sender_rows_stay_current_until_the_next_workstation_relay(cfg):
+    # A healthy sender runs at :25:29 and :30:29; the separate workstation
+    # heartbeat fetches its rows at :28:49 and :33:49. The earlier row must
+    # remain current through that second relay, rather than expire at :32:29.
+    now = 25 * 60 + 29
+    received = 28 * 60 + 49
+    next_relay = received + 300
+    beats(cfg, ws=now, ct=now)
+    status = ticking(cfg, [], now)
+    for item in status["rows"]:
+        if item["id"].endswith(("/machine", "/pve-sender")):
+            deadline = datetime.fromisoformat(item["next_run"]).timestamp()
+            assert deadline >= next_relay, (item["id"], deadline, next_relay)
 
 
 def test_pve_sender_keeps_its_local_ecc_row_when_workstation_publication_is_retired(monkeypatch):
