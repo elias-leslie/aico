@@ -1,5 +1,5 @@
 M5b-2 implemented/deployed; one public-edge item remains (below).
-Aico commits: 484939e9, 48de5a70, 3fe08b60, 916495d7, ae73d84b; evidence checkpoint follows.
+Aico code commits: 484939e9, 48de5a70, 3fe08b60, 916495d7, ae73d84b; evidence accompanies this report.
 Companions: browser ca8f2e31; SummitFlow 57a18615; Nightshift 9cbadd63.
 LOC source/tests: +1490/-163 across Aico and companions; config/evidence excluded.
 Rules: deterministic fresh episodes, schedule-aware deadlines, agent/owner routing; live pass.
