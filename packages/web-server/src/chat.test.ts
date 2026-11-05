@@ -394,6 +394,26 @@ describe('Aico chat routes', () => {
     expect(ended.messages.length).toBeGreaterThan(0)
     expect(questions).toEqual([])
   })
+  it('keeps ended chat messages readable and paginated in Recent', async () => {
+    const id = await start()
+    await call('DELETE', `/api/sessions/${id}`)
+    const path = `/api/history/aico-agent%3A${id}/events`
+    const newest = (await call('GET', `${path}?limit=1`))
+      .body as unknown as import('@aico/tether-client').HistoryEventPage
+    expect(newest.items).toHaveLength(1)
+    expect(newest.items[0]).toMatchObject({ role: 'assistant', kind: 'text', text: 'First answer' })
+    expect(newest.older).not.toBeNull()
+    const older = (await call('GET', `${path}?limit=1&before=${newest.older}`))
+      .body as unknown as import('@aico/tether-client').HistoryEventPage
+    expect(older.items[0]).toMatchObject({ role: 'user', kind: 'text' })
+    expect(older.older).toBeNull()
+    const forward = (await call('GET', `${path}?limit=1&from=${older.newer}`))
+      .body as unknown as import('@aico/tether-client').HistoryEventPage
+    expect(forward.items).toEqual(newest.items)
+    expect((await call('GET', `${path}?limit=0`)).body.items).toHaveLength(1)
+    // Other pushed runs still use Tether's existing history reader.
+    expect((await call('GET', '/api/history/aico-agent%3Adeadbeef/events')).body.items).toEqual([])
+  })
   it('shares when a live chat was opened across devices', async () => {
     const id = await start()
     expect((await call('POST', '/api/sessions/seen', { ids: [id] })).status).toBe(200)

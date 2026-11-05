@@ -455,7 +455,7 @@ export function buildApi(deps: ApiDeps): Router {
   })
   registerCheckInRoutes(router, life, tether)
   registerRunRoutes(router, tether)
-  registerHistoryRoutes(router, tether)
+  registerHistoryRoutes(router, tether, deps.chats)
   if (deps.chats) registerChatRoutes(router, deps.chats, deps.asks, tether, deps.captures)
 
   // -- Agent Hub, auth, health ------------------------------------------------------

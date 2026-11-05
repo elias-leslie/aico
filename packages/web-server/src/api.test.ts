@@ -287,6 +287,8 @@ describe('session history', () => {
     expect((await call('GET', '/api/history/missing')).status).toBe(404)
     expect(await call('GET', '/api/history/gone/events')).toMatchObject({ status: 410 })
     expect((await call('GET', '/api/history?limit=x')).status).toBe(400)
+    // Non-chat history keeps Tether's existing limit clamp.
+    expect((await call('GET', '/api/history/codex%3Aa/events?limit=0')).status).toBe(200)
   })
 })
 
