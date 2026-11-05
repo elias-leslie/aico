@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import pwd
@@ -755,7 +756,7 @@ def run_release_install(project: ProjectServices, *, development_root: Path, sou
 def _port_open(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.25)
-        return sock.connect_ex(("127.0.0.1", port)) == 0
+        return sock.connect_ex((_SERVICE_POLICY["probe_ipv4"], port)) == 0
 
 
 _SS_PID_RE = re.compile(r"pid=(\d+)")
@@ -925,7 +926,24 @@ def _attested_listener_pids(port: int) -> set[int]:
         result = capture(["ss", "-H", "-ltnp", f"( sport = :{port} )"])
     except OSError as exc:
         raise ServiceError(f"port {port} listener ownership is unavailable") from exc
-    listeners = [set(map(int, _SS_PID_RE.findall(line))) for line in result.stdout.splitlines() if line.strip()]
+    # A different local address can legitimately host another application on this port.
+    # Include wildcard binds, since those can accept the loopback probe too.
+    probe = ipaddress.ip_address(_SERVICE_POLICY["probe_ipv4"])
+    listeners = []
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        fields = line.split()
+        if len(fields) < 5:
+            raise ServiceError(f"port {port} listener ownership is unavailable")
+        host = fields[3].rsplit(":", 1)[0].strip("[]")
+        try:
+            address = ipaddress.ip_address(host.split("%", 1)[0]) if host != "*" else None
+        except ValueError as exc:
+            raise ServiceError(f"port {port} listener ownership is unavailable") from exc
+        mapped = address.ipv4_mapped if isinstance(address, ipaddress.IPv6Address) else None
+        if address is None or address.is_unspecified or address == probe or mapped == probe:
+            listeners.append(set(map(int, _SS_PID_RE.findall(line))))
     if result.returncode or not listeners or any(not pids for pids in listeners):
         raise ServiceError(f"port {port} listener ownership is unavailable")
     return set().union(*listeners)
@@ -1583,7 +1601,7 @@ def verify_health(project: ProjectServices) -> int:
                 # Socket activation needs a request before its paired service
                 # can be attested. Its response still requires full attestation.
                 before = None if activated_service(service) else attest_service_runtime(project, service, port=port)
-                response = httpx.get(f"http://127.0.0.1:{port}{endpoint}", timeout=3.0)
+                response = httpx.get(f"http://{_SERVICE_POLICY['probe_ipv4']}:{port}{endpoint}", timeout=3.0)
                 after = attest_service_runtime(project, service, port=port)
                 ok = 200 <= response.status_code < 400 and (before is None or before == after)
             except (httpx.HTTPError, ServiceError) as exc:

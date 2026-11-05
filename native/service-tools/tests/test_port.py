@@ -97,6 +97,30 @@ def test_missing_unit_state_stays_unknown_without_network_fallback(monkeypatch, 
     assert service_ops.observed_service_states(project) == {"api.service": "unknown"}
 
 
+def test_listener_attestation_ignores_a_separate_lan_bind_on_the_same_port(monkeypatch):
+    monkeypatch.setattr(service_ops, "capture", lambda _args: SimpleNamespace(returncode=0, stdout=(
+        'LISTEN 0 511 192.0.2.1:3003 0.0.0.0:* users:(("node",pid=11,fd=2))\n'
+        'LISTEN 0 511 127.0.0.1:3003 0.0.0.0:* users:(("node",pid=22,fd=3))\n'
+    )))
+    assert service_ops._attested_listener_pids(3003) == {22}
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "0.0.0.0", "[::]", "[::ffff:127.0.0.1]"])
+def test_listener_attestation_still_requires_every_process_reachable_at_the_probe_address(monkeypatch, address):
+    monkeypatch.setattr(service_ops, "capture", lambda _args: SimpleNamespace(returncode=0, stdout=(
+        f'LISTEN 0 511 {address}:3003 0.0.0.0:* users:(("node",pid=33,fd=3))\n'
+    )))
+    assert service_ops._attested_listener_pids(3003) == {33}
+
+
+def test_listener_attestation_refuses_missing_process_identity_at_the_probe_address(monkeypatch):
+    monkeypatch.setattr(service_ops, "capture", lambda _args: SimpleNamespace(returncode=0, stdout=(
+        'LISTEN 0 511 127.0.0.1:3003 0.0.0.0:*\n'
+    )))
+    with pytest.raises(service_ops.ServiceError, match="listener ownership is unavailable"):
+        service_ops._attested_listener_pids(3003)
+
+
 def test_status_mapping_never_opens_or_probes_registered_source(monkeypatch, tmp_path):
     forbidden = tmp_path / "source-must-stay-closed"
     monkeypatch.setitem(service_ops._SERVICE_POLICY, "status_projects", {
