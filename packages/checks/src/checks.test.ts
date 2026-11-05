@@ -101,11 +101,12 @@ describe('stage selection', () => {
     expect(ids('full', null)).toEqual(['lint:run', 'suite:run', 'android:no SDK here'])
   })
 
-  it('leaves a repo without a [native] gate to st check', () => {
+  it('retains the standard gate for a repo without a native declaration', () => {
     const root = repo('')
     write(root, '.st-check.toml', '[paths]\nruff = ".venv/bin"\n')
-    expect(loadConfig(root)).toEqual({
-      unsupported: 'no [native] section (the legacy default gate)',
+    expect(config(root)).toMatchObject({
+      legacyDefault: true,
+      legacy: ['ruff', 'types', 'pytest', 'biome', 'tsc', 'vitest', 'security'],
     })
   })
 

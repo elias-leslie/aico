@@ -235,6 +235,7 @@ export async function runCheck(config: Config, options: CheckOptions): Promise<C
     jobs: options.jobs,
     out,
     reuse,
+    env: options.env,
   })
   const report: CheckReport = {
     lane: options.lane,

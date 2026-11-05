@@ -1,7 +1,7 @@
 // What a check runs: the repo's .st-check.toml [native] stages plus its named legacy tools
 // (`native.legacy_tools`: ruff, ty, pytest, Vitest, Biome, tsc and the security scanners), as
-// steps for the quick lane (commit) or the full gate. A repo without a [native] section, or
-// with a tool this does not run, is unsupported: `st check` keeps serving it.
+// steps for the quick lane (commit) or the full gate. Repos without a [native] section
+// retain the standard legacy gate, selected according to their applicable inputs.
 
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -44,6 +44,10 @@ export interface Config {
   root: string
   stages: StageDecl[]
   legacy: string[]
+  /** No [native] declaration: retain the standard gate and its applicability rules. */
+  legacyDefault: boolean
+  /** Local acceptance fixture, interpreted only in the committed acceptance tree. */
+  acceptance?: TomlTable
   /** native.paths: project-local tool dirs, first on a stage's PATH. */
   paths: string[]
   /** native.tools: names linked onto a stage's PATH. */
@@ -75,6 +79,8 @@ export const LEGACY = [
   'osv',
   'semgrep',
 ] as const
+
+const DEFAULT_GATE = ['ruff', 'types', 'pytest', 'biome', 'tsc', 'vitest', 'security']
 
 const strings = (value: unknown, what: string): string[] => {
   if (value === undefined) return []
@@ -134,16 +140,16 @@ function stage(raw: TomlTable, seen: Set<string>): StageDecl {
   }
 }
 
-/** The repo's gate config, or why this package cannot run it (`st check` then keeps the repo). */
+/** The repo's declared gate, or the standard gate when it has no native declaration. */
 export function loadConfig(root: string): Config | { unsupported: string } {
   const file = join(root, '.st-check.toml')
-  if (!existsSync(file)) return { unsupported: 'no .st-check.toml' }
-  const text = readFileSync(file, 'utf8')
+  const text = existsSync(file) ? readFileSync(file, 'utf8') : ''
   const data = parseToml(text)
-  const native = data.native as TomlTable | undefined
-  if (!native) return { unsupported: 'no [native] section (the legacy default gate)' }
+  const legacyDefault = data.native === undefined
+  const native = (data.native ?? {}) as TomlTable
   const legacy = strings(
-    native.legacy_tools ?? ['ruff', 'types', 'biome', 'tsc', 'security'],
+    native.legacy_tools ??
+      (legacyDefault ? DEFAULT_GATE : ['ruff', 'types', 'biome', 'tsc', 'security']),
     'native.legacy_tools',
   )
   const unknown = legacy.filter((tool) => !(LEGACY as readonly string[]).includes(tool))
@@ -170,6 +176,8 @@ export function loadConfig(root: string): Config | { unsupported: string } {
     root,
     stages,
     legacy,
+    legacyDefault,
+    acceptance: data.acceptance as TomlTable | undefined,
     paths: nativePaths,
     tools,
     environment: record(native.environment, 'native.environment'),
@@ -177,7 +185,11 @@ export function loadConfig(root: string): Config | { unsupported: string } {
     pytestWorkers: typeof pytest?.workers === 'number' ? pytest.workers : undefined,
     pytestNoCov: pytest?.no_cov !== false,
     environmentInputs: [
-      ...new Set([...strings(native.environment_inputs, 'native.environment_inputs'), ...venvs]),
+      ...new Set([
+        ...strings(native.environment_inputs, 'native.environment_inputs'),
+        ...(legacyDefault ? ['node_modules', '.venv', 'venv'] : []),
+        ...venvs,
+      ]),
     ],
     digest: createHash('sha256').update(text).digest('hex').slice(0, 16),
   }
@@ -196,6 +208,8 @@ export interface Step {
   decl?: StageDecl
   /** Files copied to a scratch dir that replaces `{dir}` in argv (scanners never see ignored caches). */
   materialize?: string[]
+  /** Acceptance fixture setup, completed before this step in the same environment. */
+  setup?: string[][]
 }
 
 export interface Planned {
@@ -247,12 +261,159 @@ const base = (path: string) => posix.basename(path)
 const isTest = (path: string) => /^test_.*\.py$|_test\.py$/.test(base(path))
 
 /** Where a legacy tool runs: backend/ for Python tools and frontend/ for JS tools when present. */
-function toolDir(root: string, tool: string): string {
+export function toolDir(root: string, tool: string): string {
   const dir = ['ruff', 'types', 'pytest'].includes(tool) ? 'backend' : 'frontend'
   return ['ruff', 'types', 'pytest', 'vitest', 'biome', 'tsc'].includes(tool) &&
     existsSync(join(root, dir))
     ? dir
     : '.'
+}
+
+function packageData(root: string, dir: string): Record<string, unknown> {
+  const file = join(root, dir, 'package.json')
+  if (!existsSync(file)) return {}
+  try {
+    const value: unknown = JSON.parse(readFileSync(file, 'utf8'))
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error()
+    return value as Record<string, unknown>
+  } catch {
+    throw new ConfigError(`${dir}/package.json must contain a JSON object`)
+  }
+}
+
+/** Applicability belongs to the implicit gate; an explicit native tool remains required. */
+function legacySkip(config: Config, tool: string, listFiles: ListFiles): string | undefined {
+  if (!config.legacyDefault) return undefined
+  const { root } = config
+  if (['ruff', 'types', 'pytest'].includes(tool)) {
+    const excluded = new Set([
+      '.git',
+      '.venv',
+      'venv',
+      'node_modules',
+      '.tools',
+      '.dev-tools',
+      'vendor',
+      'build',
+      'dist',
+      '.next',
+    ])
+    if (
+      !listFiles().some(
+        (file) =>
+          !file.split('/').some((part) => excluded.has(part)) &&
+          (PY.includes(ext(file)) || base(file) === 'pyproject.toml'),
+      )
+    )
+      return 'no_python_inputs'
+  }
+  if (
+    tool === 'tsc' &&
+    !['.', 'frontend'].some((dir) => existsSync(join(root, dir, 'tsconfig.json')))
+  )
+    return 'no_tsconfig'
+  if (tool === 'biome' && config.toolPaths.biome === undefined) {
+    const declared = ['.', 'frontend'].some((dir) => {
+      if (
+        ['biome.json', 'biome.jsonc', 'node_modules/.bin/biome'].some((file) =>
+          existsSync(join(root, dir, file)),
+        )
+      )
+        return true
+      const data = packageData(root, dir)
+      if (
+        ['dependencies', 'devDependencies', 'optionalDependencies'].some((key) => {
+          const value = data[key]
+          return typeof value === 'object' && value !== null && '@biomejs/biome' in value
+        })
+      )
+        return true
+      const scripts = data.scripts
+      return (
+        typeof scripts === 'object' &&
+        scripts !== null &&
+        Object.values(scripts).some(
+          (command) => typeof command === 'string' && /\bbiome\b/.test(command),
+        )
+      )
+    })
+    if (!declared) return 'no_declared_biome_configuration'
+  }
+  return undefined
+}
+
+/** Missing tools were optional only when the implicit gate had no prepared environment for them. */
+export function missingLegacySkip(config: Config, tool: string): string | undefined {
+  if (!config.legacyDefault || config.toolPaths[tool] !== undefined) return undefined
+  if (tool === 'osv' || tool === 'semgrep') return 'tool_not_installed;coverage_not_claimed'
+  if (!['ruff', 'types', 'pytest', 'biome', 'tsc'].includes(tool)) return undefined
+  if (tool === 'biome') return undefined // legacySkip already decided whether it was declared.
+  const dirs = ['tsc'].includes(tool)
+    ? ['frontend/node_modules/.bin', 'node_modules/.bin']
+    : ['backend/.venv/bin', '.venv/bin', 'backend/venv/bin', 'venv/bin']
+  if (!dirs.some((dir) => existsSync(join(config.root, dir)))) return 'tool_not_installed'
+  if (
+    tool === 'tsc' &&
+    !['.', 'frontend'].some((dir) => existsSync(join(config.root, dir, 'package.json')))
+  )
+    return 'no_package_manifest'
+  return undefined
+}
+
+/** The manifest's aggregate frontend suite, including package hooks and non-Vitest scripts. */
+function frontendSuite(config: Config, dir: string): { command: string[]; direct: boolean } | null {
+  const data = packageData(config.root, dir)
+  const scripts = (data.scripts ?? {}) as Record<string, unknown>
+  const name = 'test:ci' in scripts ? 'test:ci' : 'test'
+  const script = scripts[name]
+  const declaresVitest = ['dependencies', 'devDependencies'].some((key) => {
+    const dependencies = data[key]
+    return typeof dependencies === 'object' && dependencies !== null && 'vitest' in dependencies
+  })
+  if (script === undefined) {
+    const local = toolBinary(config, 'vitest', 'vitest', dir)
+    return declaresVitest || config.toolPaths.vitest !== undefined || local !== 'vitest'
+      ? { command: [], direct: true }
+      : null
+  }
+  if (typeof script !== 'string' || !script.trim())
+    throw new ConfigError(`package.json ${name} must be a nonempty command`)
+  if (
+    /(?:^|\s)(?:--watch(?:All)?|--ui|-w)(?:\s|=|$)/.test(script) ||
+    /^vitest\s+watch(?:\s|$)/.test(script)
+  )
+    throw new ConfigError('Interactive test script: declare a non-watch test:ci script')
+  const hooks = `pre${name}` in scripts || `post${name}` in scripts
+  if (/^vitest(?:\s+run)?$/.test(script.trim()) && !hooks) return { command: [], direct: true }
+  const declared = data.packageManager ?? packageData(config.root, '.').packageManager
+  let manager = typeof declared === 'string' ? declared.split('@')[0] : ''
+  if (declared !== undefined && !['npm', 'pnpm', 'yarn', 'bun'].includes(manager))
+    throw new ConfigError('Unsupported packageManager for frontend tests')
+  if (!manager) {
+    manager = 'npm'
+    for (const at of [dir, '.']) {
+      const found = [
+        ['pnpm-lock.yaml', 'pnpm'],
+        ['yarn.lock', 'yarn'],
+        ['bun.lock', 'bun'],
+        ['bun.lockb', 'bun'],
+        ['package-lock.json', 'npm'],
+      ].find(([lock]) => existsSync(join(config.root, at, lock)))
+      if (found) {
+        manager = found[1]
+        break
+      }
+    }
+  }
+  return {
+    command: [
+      manager,
+      'run',
+      name,
+      ...(script.trim() === 'vitest' ? (manager === 'npm' ? ['--', '--run'] : ['--run']) : []),
+    ],
+    direct: false,
+  }
 }
 
 /** The tool's binary: [paths] first, then the project's node_modules or venv, then PATH. */
@@ -460,6 +621,8 @@ function legacySteps(
   listFiles: ListFiles,
 ): Planned[] {
   const { root } = config
+  const skip = legacySkip(config, tool, listFiles)
+  if (skip) return [{ id: tool, skip }]
   const dir = toolDir(root, tool)
   const step = (
     id: string,
@@ -517,6 +680,14 @@ function legacySteps(
         : [{ id: tool, skip: 'no_relevant_changed_paths' }]
     }
     case 'vitest': {
+      if (config.legacyDefault) {
+        const suite = frontendSuite(config, dir)
+        if (!suite) return [{ id: tool, skip: 'no_declared_frontend_suite' }]
+        if (!suite.direct)
+          return changed
+            ? [{ id: 'frontend-test', skip: 'whole_suite_runs_in_the_full_gate:package_script' }]
+            : [step('frontend-test', suite.command[0], suite.command.slice(1))]
+      }
       const flags = vitestFlags(root, dir)
       if (!changed) return [step(tool, 'vitest', ['run', ...flags])]
       const files = within(root, dir, changed, VITEST)

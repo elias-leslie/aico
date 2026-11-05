@@ -23,6 +23,7 @@ import { dirname, isAbsolute, join } from 'node:path'
 import { SaxesParser } from 'saxes'
 import { blobIds, changedFiles, commonDir, git } from './git'
 import type { Config, Evidence, Lane, Planned, Step } from './plan'
+import { missingLegacySkip, toolBinary, toolDir } from './plan'
 
 export type StepState = 'pass' | 'fail' | 'skip' | 'timeout' | 'unavailable'
 
@@ -47,6 +48,9 @@ export interface RunOptions {
   reuse?: boolean
   /** Where .dev-tools/ details go (default the checked tree; acceptance keeps them in the main checkout). */
   detailsRoot?: string
+  /** Caller env, or the complete scrubbed acceptance env when cleanEnvironment is true. */
+  env?: NodeJS.ProcessEnv
+  cleanEnvironment?: boolean
 }
 
 const MAX_OUTPUT = 4 * 1024 * 1024
@@ -338,13 +342,33 @@ export async function runSteps(
       }
       argv = argv.map((arg) => (arg === '{dir}' ? dir : arg))
     }
+    const tool = step.id === 'frontend-test' ? 'vitest' : step.id
+    const binary = toolBinary(config, tool, tool === 'types' ? 'ty' : tool, toolDir(root, tool))
+    const toolPath = binary.includes('/') ? dirname(binary) : undefined
+    const user = options.cleanEnvironment ? { ...options.env } : { ...process.env, ...options.env }
     const env =
-      step.env === 'stage' ? stageEnv(config, aliases, scratch) : { ...process.env, CI: 'true' }
+      step.env === 'stage'
+        ? stageEnv(config, aliases, scratch)
+        : {
+            ...user,
+            CI: 'true',
+            ...(toolPath ? { PATH: `${toolPath}:${user.PATH ?? ''}` } : {}),
+            ...(['vitest', 'frontend-test'].includes(step.id) ? { NODE_ENV: 'test' } : {}),
+          }
     const report =
       step.decl?.evidence?.source === 'file' ? join(root, step.decl.evidence.path as string) : null
     if (report) rmSync(report, { force: true })
     const started = performance.now()
-    const run = await spawnStep(config, step, env, argv)
+    let run = { code: 0 as number | null, output: '', stdout: '', timedOut: false }
+    for (const command of [...(step.setup ?? []), argv]) {
+      const result = await spawnStep(config, step, env, command)
+      run = {
+        ...result,
+        output: `${run.output}${result.output}`,
+        stdout: `${run.stdout}${result.stdout}`,
+      }
+      if (result.code !== 0 || result.timedOut) break
+    }
     const ms = performance.now() - started
     const file = join(details, `${step.id}-${process.pid}-details.txt`)
     writeFileSync(file, `$ ${argv.join(' ')}\n${run.output}`)
@@ -356,6 +380,13 @@ export async function runSteps(
           ? 'unavailable'
           : 'fail'
     let because: string | undefined
+    if (state === 'unavailable' && /\bENOENT\b/.test(run.output)) {
+      const skip = missingLegacySkip(config, step.id)
+      if (skip) {
+        state = 'skip'
+        because = skip
+      }
+    }
     if (step.decl?.evidence && state === 'pass') {
       const ev = step.decl.evidence
       let verdict: { state: StepState; reason?: string }

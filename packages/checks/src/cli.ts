@@ -2,12 +2,14 @@
 // Exit codes: 0 passed or committed, 1 failed or refused, 2 usage, 3 this repo's checks are not
 // run by aico (no [native] gate, or a tool it does not run): `st check` then keeps the repo.
 
+import { existsSync } from 'node:fs'
+import { relative, resolve } from 'node:path'
 import { accept } from './accept'
 import { runCheck, trackedFiles } from './check'
 import { CommitError, commit } from './commit'
 import { GitError, repoPaths, repoRoot } from './git'
 import { type Coordination, CoordinationError } from './hook'
-import { ConfigError, LEGACY, loadConfig, type Planned, plan } from './plan'
+import { ConfigError, LEGACY, loadConfig, type Planned, plan, toolDir } from './plan'
 import { passed, runSteps } from './run'
 import { type CheckSummary, postCheckRow } from './status'
 
@@ -108,17 +110,49 @@ export async function checkCli(argv: string[], io: CliIo): Promise<number> {
       reuse = !args.flags.has('--no-reuse')
       json = args.flags.has('--json')
     } else {
-      selected = plan({ ...config, legacy: [tool], stages: [] }, 'full', null, () =>
-        trackedFiles(root),
+      selected = plan(
+        { ...config, legacyDefault: false, legacy: [tool], stages: [] },
+        'full',
+        null,
+        () => trackedFiles(root),
       )
-      const extra = argv.slice(argv[1] === '--' ? 2 : 1)
-      selected = selected.map((item) =>
-        item.step ? { ...item, step: { ...item.step, argv: [...item.step.argv, ...extra] } } : item,
-      )
+      const extra = argv.slice(argv[1] === '--' ? 2 : 1).map((arg) => {
+        if (arg.startsWith('-') || !existsSync(resolve(root, arg))) return arg
+        const cwd = toolDir(root, tool)
+        return relative(resolve(root, cwd), resolve(root, arg)) || '.'
+      })
+      selected = selected.map((item) => {
+        if (!item.step) return item
+        let base = item.step.argv
+        let args = extra
+        if (tool === 'biome' && extra.some((arg) => !arg.startsWith('-')))
+          base = base.filter((arg) => arg !== '.')
+        if (tool === 'vitest' && extra[0] === 'related') {
+          base = [base[0], ...extra, ...base.slice(2)]
+          args = []
+        }
+        if (tool === 'pytest' && extra.some((arg) => arg && !arg.startsWith('-'))) {
+          base = [base[0], '-q', '--tb=short']
+          if (
+            config.pytestNoCov &&
+            !extra.some((arg) => arg === '--no-cov' || arg.startsWith('--cov'))
+          )
+            args = ['--no-cov', ...extra]
+        } else if (
+          tool === 'pytest' &&
+          extra.some(
+            (arg) =>
+              arg.endsWith('no:xdist') || arg.startsWith('-n') || arg.startsWith('--numprocesses'),
+          )
+        )
+          base = [base[0], '-q', '--tb=short']
+        return { ...item, step: { ...item.step, argv: [...base, ...args] } }
+      })
     }
     const results = await runSteps(config, 'full', selected, {
       out: json ? undefined : io.out,
       reuse,
+      env: io.env,
     })
     const ok = passed(results)
     io.out(

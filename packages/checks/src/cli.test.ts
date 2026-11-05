@@ -122,3 +122,26 @@ it.each([
     expect((await accept(config, { coordination, reuse: false })).passed).toBe(true)
   },
 )
+
+it.each([true, false])(
+  'runs legacy-default project checks without a native section (config=%s)',
+  async (hasConfig) => {
+    const root = fixture()
+    if (hasConfig) writeFileSync(join(root, '.st-check.toml'), '[paths]\npytest="bin"\n')
+    writeFileSync(join(root, 'test_example.py'), 'def test_example(): pass\n')
+    const config = loadConfig(root)
+    if ('unsupported' in config) throw new Error(config.unsupported)
+    expect(config.legacy).toContain('pytest')
+    expect(config.environmentInputs).toContain('.venv')
+    const lines: string[] = []
+    expect(
+      await runCli('check', ['pytest', '--', '--version'], {
+        cwd: root,
+        env: { PATH: join(root, 'bin') },
+        coordination,
+        out: (s) => lines.push(s),
+        err: (s) => lines.push(s),
+      }),
+    ).toBe(0)
+  },
+)
