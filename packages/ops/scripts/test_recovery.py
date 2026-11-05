@@ -114,6 +114,17 @@ class RecoveryTests(unittest.TestCase):
         argv = r.runtime_command(self.cfg, self.root, code)
         self.assertIn(['--ro-bind', str(bundle), '/tether.mjs'], [argv[i:i+3] for i in range(len(argv)-2)])
 
+    def test_ops_only_release_resolves_the_running_web_code_without_restarting_it(self):
+        code = self.root / 'ops-only'
+        code.mkdir()
+        web = self.root / 'live/packages/web-server'
+        (web / 'dist').mkdir(parents=True)
+        (web / 'dist/aico-web.mjs').write_text('// fixture')
+        with patch.object(r, 'run', return_value=subprocess.CompletedProcess([], 0, (str(web) + '\n').encode(), b'')) as run:
+            self.assertEqual(r.runtime_code(self.cfg, code), self.root / 'live')
+            self.assertIn('show', run.call_args.args[0])
+            self.assertNotIn('restart', run.call_args.args[0])
+
     def test_counts_include_nonended_aico_chats_served_by_sessions_endpoint(self):
         for folder in ['data/secrets', 'tether']:
             (self.root / folder).mkdir(parents=True)

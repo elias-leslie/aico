@@ -272,6 +272,23 @@ def counts(root, cfg):
             'logins': len(entries)}
 
 
+def runtime_code(cfg, code):
+    if (code / 'packages/web-server/dist/aico-web.mjs').is_file():
+        return code
+    # Ops-only releases need no web rebuild. Read the live unit's code path;
+    # this never starts, stops or changes the unit, and its data stays outside the drill.
+    env = {**os.environ}
+    env.setdefault('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
+    env.setdefault('DBUS_SESSION_BUS_ADDRESS', f'unix:path={env["XDG_RUNTIME_DIR"]}/bus')
+    result = run(['systemctl', '--user', '--no-ask-password', 'show', cfg['runtime']['webUnit'],
+                  '--property=WorkingDirectory', '--value'], env=env)
+    directory = real(result.stdout.decode().strip())
+    code = directory.parent.parent
+    require((code / 'packages/web-server/dist/aico-web.mjs').is_file(),
+            'No built Aico web runtime found; pass --code for a built checkout.')
+    return code
+
+
 def runtime_command(cfg, root, code):
     # A scratch runtime must not reach owner sockets, restored fleet peers or the network.
     tether = code / 'packages/tether/dist/tether.mjs'
@@ -330,8 +347,15 @@ def drill(cfg, code, *, scheduled=False):
                 tick = time.monotonic()
                 target = owned / machine
                 restored = restore(cfg, machine, target)
+                if any(item['into'] == 'repo' for item in restored.get('items', cfg['machines'][machine]['items'])):
+                    require((target / 'repo/.git').is_dir(), 'The promised project repository was not restored.')
+                    run(['git', '-c', 'core.hooksPath=/dev/null', '-C', str(target / 'repo'), 'rev-parse', '--verify', 'HEAD'])
+                    run(['git', '-c', 'core.hooksPath=/dev/null', '-C', str(target / 'repo'), 'fsck', '--full'])
+                    receipt['projectRepo'] = {'restored': True, 'fsck': True}
                 expected = counts(target, cfg)
-                result = run(runtime_command(cfg, target, real(code)), check=False)
+                runtime = runtime_code(cfg, real(code))
+                receipt['runtimeCode'] = str(runtime)
+                result = run(runtime_command(cfg, target, runtime), check=False)
                 served = json.loads(result.stdout)
                 require(result.returncode == 0, served.get('error', 'Scratch Aico runtime failed.'))
                 require(served == expected, 'Restored Aico serves different counts.')
@@ -341,11 +365,6 @@ def drill(cfg, code, *, scheduled=False):
                                             'nativePoints': list({item['snapshotRoot']: {'root': item['snapshotRoot'], 'dataAt': item['dataAt']} for item in restored['items'] if item.get('snapshotRoot')}.values()),
                                             'expected': expected, 'served': served, 'after': after,
                                             'durationSeconds': round(time.monotonic() - tick, 3)})
-                if any(item['into'] == 'repo' for item in restored.get('items', cfg['machines'][machine]['items'])):
-                    require((target / 'repo/.git').is_dir(), 'The promised project repository was not restored.')
-                    run(['git', '-c', 'core.hooksPath=/dev/null', '-C', str(target / 'repo'), 'rev-parse', '--verify', 'HEAD'])
-                    run(['git', '-c', 'core.hooksPath=/dev/null', '-C', str(target / 'repo'), 'fsck', '--full'])
-                    receipt['projectRepo'] = {'restored': True, 'fsck': True}
             require(receipt.get('projectRepo'), 'No project repository was verified.')
             receipt['ok'] = True
         except RecoveryError as exc:
