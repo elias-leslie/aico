@@ -96,7 +96,9 @@ def tick(cfg: dict, *, now: float | None = None, boot: float | None = None,
                       {"title": prefix + "Aico stopped checking in", "body": "Neither the workstation nor Aico on CT 190 checked in within the alarm window. Proxmox sent this directly.", "severity": "warning" if test else "critical"},
                       {"title": prefix + "Aico is checking in again", "body": "A heartbeat resumed. Proxmox has closed the outage alarm.", "severity": "ok"}, deliver)
     write(state_path, state)
-    rows = []
+    machine_row = row(cfg, "machine", "Proxmox host", "ok", "The Proxmox watchdog is reporting.", now)
+    machine_row["kind"] = "machine"
+    rows = [machine_row]
     for name, label in cfg["sources"].items():
         value = ages[name]
         meaning = "No heartbeat received yet." if value is None else f"Last heartbeat {int(value)} seconds ago."

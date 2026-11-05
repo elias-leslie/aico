@@ -214,6 +214,7 @@ def test_status_rows_follow_the_shared_contract(cfg):
             aico_status.check_row(invalid["row"])
     beats(cfg, ws=150, ct=150)
     status = ticking(cfg, [], 151)
+    assert any(row["kind"] == "machine" for row in status["rows"])
     for row in status["rows"]:
         assert aico_status.check_row(row) == row
 
