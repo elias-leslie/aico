@@ -21,8 +21,12 @@ If an agent is between conversations, the session keeps the last resume ID Tethe
 
 1. Tether waits up to 5 minutes for `DISPLAY` or `WAYLAND_DISPLAY` to reach the user manager, so restored panes have the desktop session.
 2. It recreates each session in its project directory and launches the tool. When the session has a resume ID, the launch uses the tool's resume adapter and passes this prompt as an argument: "Tether resumed this session after a host reboot. Continue where you left off. …"
-3. Agent admission still applies. A launch that is deferred is retried every 30 seconds for up to 15 minutes, and after that it is reported as failed.
+3. Agent admission still applies. Deferred admission, an unavailable reservation, and an entry's exit 75 (temporary prerequisites) stay pending and retry every 30 seconds until the prerequisites return. Pending attempts and their original conversation IDs survive a Tether restart. There is no elapsed-time cutoff for these conditions.
 4. If Aico is connected, Tether asks it to show each restored session.
+
+An agent is restored only after its live process reports the expected conversation. A dispatched launch or a fallback shell does not count. Entries can configure a read-only `probe` in `entries.json`; its JSON must confirm a live native agent, host PID and conversation ID. Entry exit 78 means a configuration or ownership failure and is reported as failed/held, with `tether recovery resume <id>` after repair. Other launch exits and a launch with no matching agent after two minutes are failures, never successes.
+
+Placement keeps each root's original host, memory, CPUs and capabilities in the existing placement owner's durable `placement_intents` setting. Restore and crash recovery rebook those needs before launching, even if the active reservation disappeared. Recovering and held entry sessions retain their booking. Ending a root removes its placement metadata. Existing bookings are carried into this metadata on upgrade. If an old booking had already disappeared before the upgrade, its needs cannot be reconstructed from nothing: seed the known values once with `tether recovery resume <id> --mem-bytes N --cpus N`. Later recovery uses the recorded values automatically; it never replays the original prompt.
 
 Ending a tmux server and then restarting Tether takes the same path. That is how the behaviour is tested without rebooting the host. A server, pane or agent that dies while Tether keeps running goes through [crash recovery](crash-recovery.md) instead, with its own prompt and loop limits. An ended session is deleted from the catalog, so it is never restored.
 

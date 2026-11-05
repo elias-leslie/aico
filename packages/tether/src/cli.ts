@@ -27,7 +27,7 @@ Commands:
   reboot prepare [--timeout SEC] [--no-notify]   ask agents to checkpoint; exit 0 ready, 3 not
   reboot status                 restore results since the last boot
   recovery status               crash recoveries: waiting, recovered or held
-  recovery resume <id>          try a held session's recovery again now
+  recovery resume <id> [--mem-bytes N --cpus N]  resume; optionally seed a lost booking
   sessions end <id>             retire one session (reads its generation first)
   sessions attach <id> [--print]
                                 attach this terminal (exec tmux); --print shows
@@ -438,8 +438,30 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         break
       case 'recovery':
         if (sub === 'status') return api(io, paths, json, 'GET', '/v1/recovery/status')
-        if (sub === 'resume' && rest[0])
-          return api(io, paths, json, 'POST', `/v1/recovery/${encodeURIComponent(rest[0])}/resume`)
+        if (sub === 'resume' && rest[0]) {
+          const options = flags(rest.slice(1), ['--mem-bytes', '--cpus'])
+          const memory = options['--mem-bytes']
+          const cpus = options['--cpus']
+          if (
+            (memory === undefined) !== (cpus === undefined) ||
+            (memory !== undefined &&
+              (!Number.isSafeInteger(Number(memory)) ||
+                Number(memory) <= 0 ||
+                !Number.isFinite(Number(cpus)) ||
+                Number(cpus) <= 0))
+          ) {
+            io.err('tether: give both --mem-bytes and --cpus as positive numbers')
+            return 2
+          }
+          return api(
+            io,
+            paths,
+            json,
+            'POST',
+            `/v1/recovery/${encodeURIComponent(rest[0])}/resume`,
+            memory === undefined ? {} : { needs: { memBytes: Number(memory), cpu: Number(cpus) } },
+          )
+        }
         break
       case 'import-aico': {
         const options = flags(

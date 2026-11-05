@@ -23,6 +23,7 @@ let dir: string
 let stateDir: string
 let savedEnv: { HOME?: string; XDG_RUNTIME_DIR?: string }
 let seq = 0
+let catalog: ReturnType<typeof initStore>
 
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), 'tether-recovery-'))
@@ -31,7 +32,7 @@ beforeAll(() => {
   process.env.HOME = dir
   process.env.XDG_RUNTIME_DIR = join(dir, 'run')
   registerBuiltinTuis()
-  initStore(join(dir, 'catalog.db'))
+  catalog = initStore(join(dir, 'catalog.db'))
 })
 
 afterAll(() => {
@@ -220,6 +221,48 @@ describe('crash recovery', () => {
     h = harness()
   })
 
+  it('holds a terminal entry exit with the supported same-session resume action', async () => {
+    catalog.db
+      .prepare('INSERT INTO session_entries (session_id,name,arg) VALUES (?,?,?)')
+      .run(h.id, 'synthetic', 'test-hunt')
+    h.exit = 78
+    await h.recovery.inspect(row(h), 'running', PANE_PID, null)
+    expect(sessions(h)).toMatchObject([
+      {
+        state: 'held',
+        reason: expect.stringContaining('78'),
+        resume_command: `tether recovery resume ${h.id}`,
+      },
+    ])
+    expect(h.recovery.resumeHeld(h.id)).not.toBeNull()
+    h.respawn.mockImplementation(async () => {
+      h.agent = { pid: 7, resumeId: RESUME }
+      return { status: 'replaced' }
+    })
+    await runDue(h)
+    expect(sessions(h)).toMatchObject([{ state: 'recovered' }])
+  })
+
+  it('keeps retrying entry prerequisites after a process crash without expiring or claiming recovery', async () => {
+    catalog.db
+      .prepare('INSERT INTO session_entries (session_id,name,arg) VALUES (?,?,?)')
+      .run(h.id, 'synthetic', 'test-hunt')
+    await agentKilled(h)
+    h.respawn.mockImplementation(async () => {
+      h.exit = 75
+      return { status: 'replaced' }
+    })
+    await runDue(h)
+    expect(sessions(h)).toMatchObject([{ state: 'waiting', reason: expect.stringContaining('75') }])
+    h.clock.now += 21 * 60_000
+    h.respawn.mockImplementation(async () => {
+      h.agent = { pid: 7, resumeId: RESUME }
+      return { status: 'replaced' }
+    })
+    await h.recovery.tick()
+    expect(sessions(h)).toMatchObject([{ state: 'recovered' }])
+  })
+
   it('resumes a killed agent in its pane and records the recovery once the agent is back', async () => {
     await agentKilled(h)
     h.respawn.mockImplementation(async () => {
@@ -229,6 +272,20 @@ describe('crash recovery', () => {
     await runDue(h)
     expect(h.respawn).toHaveBeenCalledTimes(1)
     expect(sessions(h)).toMatchObject([{ state: 'recovered', attempt: 1 }])
+  })
+
+  it('still resumes a crashed agent after admission returns beyond the former fifteen-minute cutoff', async () => {
+    await agentKilled(h)
+    h.respawn.mockResolvedValue({ status: 'admission_denied', reason: 'temporary host readiness' })
+    await runDue(h)
+    expect(sessions(h)).toMatchObject([{ state: 'waiting' }])
+    h.clock.now += 21 * 60_000
+    h.respawn.mockImplementation(async () => {
+      h.agent = { pid: 7, resumeId: RESUME }
+      return { status: 'replaced' }
+    })
+    await h.recovery.tick()
+    expect(sessions(h)).toMatchObject([{ state: 'recovered' }])
   })
 
   it('waits on memory amber but not on a disk-only amber (Nightshift memory_state green)', async () => {

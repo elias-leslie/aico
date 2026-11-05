@@ -46,6 +46,7 @@ export const LOCAL_HOST = 'local'
 /** The pool a create without `pool` uses: `order`, plus hosts no pool lists. */
 const DEFAULT_POOL = 'default'
 const SETTINGS_KEY = 'placement_reservations'
+const INTENTS_KEY = 'placement_intents'
 const READ_MS = 10_000
 const ROOT_QUERY_MS = 5_000
 const MAX_CAPS = 8
@@ -606,6 +607,7 @@ async function remoteRootFate(peer: PeerView, requestId: string): Promise<RootFa
 export class Placement {
   private tail: Promise<void> = Promise.resolve()
   private readonly reservations: Reservation[]
+  private readonly intents = new Map<string, { host: string; needs: Needs }>()
   private readonly run: Runner
   private readonly readText: (path: string) => Promise<string>
   private readonly cpu: () => { cpus: number; load5: number }
@@ -623,6 +625,36 @@ export class Placement {
     this.now = deps.now ?? Date.now
     this.log = deps.log ?? ((message) => console.log(`[tether:placement] ${message}`))
     this.reservations = this.load()
+    try {
+      const saved: unknown = JSON.parse(this.deps.settings.get(INTENTS_KEY) ?? '{}')
+      for (const [id, value] of Object.entries(record(saved) ?? {})) {
+        const intent = record(value)
+        const needs = parseNeeds(intent?.needs)
+        if (intent && typeof intent.host === 'string' && needs)
+          this.intents.set(id, { host: intent.host, needs })
+      }
+    } catch {
+      /* Existing reservations below still preserve their recorded needs. */
+    }
+    for (const held of this.reservations)
+      if (!this.intents.has(held.requestId))
+        this.intents.set(held.requestId, {
+          host: held.host,
+          needs: { memBytes: held.memBytes, cpu: held.cpu, caps: [] },
+        })
+    this.persistIntents()
+  }
+
+  private persistIntents(): void {
+    this.deps.settings.put(INTENTS_KEY, JSON.stringify(Object.fromEntries(this.intents)))
+  }
+
+  /** Rebook durable launch needs on the original host, without replaying a prompt. */
+  restore(requestId: string): Promise<PlaceResult | null> {
+    const intent = this.intents.get(requestId)
+    return intent
+      ? this.place(requestId, intent.needs, DEFAULT_POOL, intent.host)
+      : Promise.resolve(null)
   }
 
   private load(): Reservation[] {
@@ -674,8 +706,20 @@ export class Placement {
    * for nothing). A host only briefly missing keeps them. */
   private async reconcile(): Promise<void> {
     const held = this.reservations.filter((item) => item.state === 'held')
+    const tracked = new Map(held.map((item) => [item.requestId, item]))
+    for (const [requestId, intent] of this.intents)
+      if (!this.reservations.some((item) => item.requestId === requestId))
+        tracked.set(requestId, {
+          requestId,
+          host: intent.host,
+          memBytes: intent.needs.memBytes,
+          cpu: intent.needs.cpu,
+          at: 0,
+          state: 'held',
+        })
+    const targets = [...tracked.values()]
     const fates = await Promise.all(
-      held.map(async (item): Promise<RootFate | 'retired'> => {
+      targets.map(async (item): Promise<RootFate | 'retired'> => {
         if (item.host === LOCAL_HOST) return this.deps.localRoot(item.requestId)
         const peer = this.deps.peer(item.host)
         if (peer) return this.remoteRoot(peer, item.requestId)
@@ -683,17 +727,25 @@ export class Placement {
       }),
     )
     let changed = false
-    held.forEach((item, index) => {
+    targets.forEach((item, index) => {
       const fate = fates[index]
       if (fate === 'missing' || fate === 'ended' || fate === 'exited' || fate === 'retired') {
-        this.reservations.splice(this.reservations.indexOf(item), 1)
-        this.log(
-          `released ${item.requestId} on ${item.host} (${fate === 'retired' ? 'host no longer in hosts.json' : fate})`,
-        )
-        changed = true
+        const active = this.reservations.indexOf(item)
+        if (active >= 0) {
+          this.reservations.splice(active, 1)
+          this.log(
+            `released ${item.requestId} on ${item.host} (${fate === 'retired' ? 'host no longer in hosts.json' : fate})`,
+          )
+          changed = true
+        }
+        if (fate === 'missing' || fate === 'ended' || fate === 'retired')
+          changed = this.intents.delete(item.requestId) || changed
       }
     })
-    if (changed) this.persist()
+    if (changed) {
+      this.persist()
+      this.persistIntents()
+    }
   }
 
   /** Drop a stopped host's held reservations; in-flight `placing` ones stay. */
@@ -1039,12 +1091,16 @@ export class Placement {
         const name = known ?? LOCAL_HOST
         if (host !== undefined && name !== host)
           return { kind: 'placed_elsewhere', host: name, verdicts: [] } as const
-        return {
-          kind: 'placed',
-          host: name === LOCAL_HOST ? null : name,
-          verdicts: [],
-          done: () => {},
-        } as const
+        if (existing)
+          return {
+            kind: 'placed',
+            host: name === LOCAL_HOST ? null : name,
+            verdicts: [],
+            done: () => {},
+          } as const
+        // A retained root without a booking must be judged and reserved on
+        // that same host. Knowing its identity alone reserves no resources.
+        order = [name]
       }
       const where =
         host !== undefined ? ' (named host)' : pool === DEFAULT_POOL ? '' : ` (pool ${pool})`
@@ -1063,6 +1119,8 @@ export class Placement {
           state: 'placing',
         }
         this.reservations.push(reservation)
+        this.intents.set(requestId, { host: name, needs: { ...needs, caps: [...needs.caps] } })
+        this.persistIntents()
         this.persist()
         this.log(
           `placed ${requestId} on ${name}${where}: ${g(needs.memBytes)} GiB, ${c(needs.cpu)} CPUs (${verdict.reason})`,

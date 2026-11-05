@@ -34,8 +34,10 @@ import {
   readJsonFile,
   writeJsonFile,
 } from './continuity'
+import { probeEntryAgent } from './entry-agent'
 import { entryHomeFiles } from './entry-files'
-import { HttpError, type Router, sendJson } from './http'
+import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import { type Needs, parseNeeds } from './hub/placement'
 import {
   admissionOverrideFromEnv,
   nightshiftAdmissionPath,
@@ -59,7 +61,7 @@ import {
   respawnAndRelaunch,
   verifiedCurrentManagedPane,
 } from './lifecycle/engine'
-import { sessionEntryHome } from './lifecycle/entries'
+import { ENTRY_MISSING_EXIT, ENTRY_RETRY_EXIT, sessionEntryHome } from './lifecycle/entries'
 import { isNamedProcess, processEnvironment } from './lifecycle/procfs'
 import { launchingResume, withRootPrompt } from './lifecycle/root-launch'
 import { paneExitedEventPath } from './lifecycle/tmux'
@@ -93,6 +95,7 @@ import {
   unitOutcome,
   victimsInScope,
 } from './recovery-facts'
+import { restoreSessionReservation } from './recovery-placement'
 
 const execFileAsync = promisify(execFile)
 
@@ -102,7 +105,6 @@ export const LOOP_WINDOW_MS = 10 * 60_000
 const ADMIT_SETTLE_MS = 60_000
 const TICK_MS = 5_000
 const RETRY_MS = 30_000
-const GIVE_UP_MS = 15 * 60_000
 const CLASSIFY_POLLS = 10
 const CLASSIFY_POLL_MS = 2_000
 const KEEP_MS = 24 * 3600_000
@@ -163,6 +165,8 @@ export interface CrashRecord {
   reason: string | null
   detailFile: string | null
   manual: boolean
+  /** A retryable entry prerequisite is not another agent crash. */
+  readiness?: boolean
 }
 
 export interface RecoveryAttempt {
@@ -221,7 +225,7 @@ export interface RecoveryEngine {
   /** The session's live, verified pane, if it has one. */
   currentPane(row: WidgetRow): Promise<{ pid: number } | null>
   /** The agent running under a pane, if any. */
-  agentIn(panePid: number, tool: string): AgentSeen | null
+  agentIn(panePid: number, tool: string, id?: string): AgentSeen | null | Promise<AgentSeen | null>
   /** The agent exit status the pane's fallback shell was given, if any. */
   agentExit(panePid: number): number | null
   reconcile(id: string): Promise<void>
@@ -251,7 +255,15 @@ export interface RecoveryOptions {
   engine?: Partial<RecoveryEngine>
 }
 
-function agentInPane(home: string, panePid: number, tool: string): AgentSeen | null {
+async function agentInPane(
+  home: string,
+  panePid: number,
+  tool: string,
+  id?: string,
+): Promise<AgentSeen | null> {
+  const probe = id ? await probeEntryAgent(id) : { kind: 'unconfigured' as const }
+  if (probe.kind === 'running') return probe
+  if (probe.kind !== 'unconfigured') return null
   const observed = observeAgent(nodeProcFs, home, panePid)
   if (observed) return { pid: observed.pid, resumeId: observed.resumeId }
   // An entry session's agent runs while its entry process does.
@@ -280,7 +292,7 @@ function defaultEngine(home: string, stateDir: string, markerDir: string): Recov
     SCOPE_NAME_RE.test(scopeUnit) ? join(markerDir, scopeUnit) : null
   return {
     currentPane: (row) => verifiedCurrentManagedPane(row),
-    agentIn: (panePid, tool) => agentInPane(home, panePid, tool),
+    agentIn: (panePid, tool, id) => agentInPane(home, panePid, tool, id),
     agentExit: (panePid) => {
       const raw = processEnvironment(panePid)?.get(AGENT_EXIT_ENV)
       return raw !== undefined && /^[0-9]{1,3}$/.test(raw) ? Number(raw) : null
@@ -604,6 +616,15 @@ export class Recovery {
     return record
   }
 
+  async resumeWithReservation(id: string, needs?: Needs): Promise<void> {
+    const record = this.records.get(id)
+    if (record?.state !== 'held') throw new HttpError(409, 'not_held', { id })
+    const reason = await restoreSessionReservation(this.context, id, needs)
+    if (reason) throw new HttpError(409, 'reservation_unavailable', { id, reason })
+    if (this.records.get(id) !== record || !this.resumeHeld(id))
+      throw new HttpError(409, 'not_held', { id })
+  }
+
   // --- detection ----------------------------------------------------------------
 
   /** Engine hook: a session's pane scope is gone. Settles once the death is
@@ -800,7 +821,11 @@ export class Recovery {
     if (panePid === null || this.retains(row.id) || this.awaitingRestore(row.id)) return
     if (row.scopeInvocationId && this.dismissed[row.id] === row.scopeInvocationId) return
     const exit = this.engine.agentExit(panePid)
-    if (exit === null || !CRASH_EXIT_STATUSES.has(exit)) return
+    const entryFailure =
+      getSessionEntry(row.id) && (exit === ENTRY_RETRY_EXIT || exit === ENTRY_MISSING_EXIT)
+        ? exit
+        : null
+    if (exit === null || (!CRASH_EXIT_STATUSES.has(exit) && entryFailure === null)) return
     const existing = this.records.get(row.id)
     if (existing?.kind === 'agent-exited' && existing.scopeInvocationId === row.scopeInvocationId)
       return
@@ -822,8 +847,14 @@ export class Recovery {
     await this.recordCrash({
       id: row.id,
       kind: 'agent-exited',
-      cause: exit === 137 && victim ? 'oom-kill' : 'signal',
-      signal: exit - 128,
+      cause:
+        entryFailure !== null
+          ? 'entry-unavailable'
+          : exit === 137 && victim
+            ? 'oom-kill'
+            : 'signal',
+      signal: entryFailure !== null ? null : exit - 128,
+      entryFailure,
       victim,
       agentWasHog: victim !== null,
       diedAt: exactDeath ?? now,
@@ -852,6 +883,7 @@ export class Recovery {
     diedAtApprox?: boolean
     scopeUnit: string | null
     scopeInvocationId: string | null
+    entryFailure?: number | null
   }): Promise<void> {
     const row = getWidget(crash.id)
     if (!row) return
@@ -866,18 +898,24 @@ export class Recovery {
             ? crash.victim.pid === agentPid
             : processName && crash.victim.comm === processName),
       )
-    const decision = decideRecovery(
-      this.history.filter((attempt) => attempt.id === crash.id),
-      { diedAt: crash.diedAt, agentWasHog },
-      now,
-    )
+    const decision =
+      crash.entryFailure === ENTRY_RETRY_EXIT
+        ? { notBefore: now, attempt: 0 }
+        : decideRecovery(
+            this.history.filter((attempt) => attempt.id === crash.id),
+            { diedAt: crash.diedAt, agentWasHog },
+            now,
+          )
     const resumeId = this.resumeIdFor(crash.id)
     const record: CrashRecord = {
       id: crash.id,
       name: row.name,
       tool: row.tool,
       origin: row.origin,
-      state: 'hold' in decision || !resumeId ? 'held' : 'waiting',
+      state:
+        'hold' in decision || !resumeId || crash.entryFailure === ENTRY_MISSING_EXIT
+          ? 'held'
+          : 'waiting',
       kind: crash.kind,
       cause: crash.cause,
       signal: crash.signal,
@@ -902,13 +940,16 @@ export class Recovery {
       firstTryAt: null,
       recoveredAt: null,
       reason:
-        'hold' in decision
-          ? decision.hold
-          : resumeId
-            ? null
-            : 'no saved conversation was seen for it, so there is nothing to resume',
+        crash.entryFailure === ENTRY_MISSING_EXIT
+          ? 'the agent entry exited 78; repair its configuration or runtime, then resume this session'
+          : 'hold' in decision
+            ? decision.hold
+            : resumeId
+              ? null
+              : 'no saved conversation was seen for it, so there is nothing to resume',
       detailFile: null,
       manual: false,
+      readiness: crash.entryFailure === ENTRY_RETRY_EXIT,
     }
     this.update(record, {})
     this.log(
@@ -1091,15 +1132,18 @@ export class Recovery {
       return
     }
     const now = this.now()
-    if (record.firstTryAt !== null && now - record.firstTryAt > GIVE_UP_MS) {
+    const pane = await this.engine.currentPane(row).catch(() => null)
+    const agent = pane ? await this.engine.agentIn(pane.pid, row.tool, row.id) : null
+    const reservation = await restoreSessionReservation(this.context, row.id)
+    if (reservation) {
       this.update(record, {
-        state: 'held',
-        reason: 'host admission refused the relaunch for 15 minutes',
+        state: 'waiting',
+        readiness: true,
+        notBefore: this.now() + RETRY_MS,
+        reason: reservation,
       })
       return
     }
-    const pane = await this.engine.currentPane(row).catch(() => null)
-    const agent = pane ? this.engine.agentIn(pane.pid, row.tool) : null
     if (agent) {
       // Tether restarted after launching the resume, and it is running.
       if (record.launchedAt && agent.resumeId === record.resumeId) this.finish(record, row)
@@ -1143,12 +1187,21 @@ export class Recovery {
       return
     }
     this.update(record, { launchedAt: this.now() })
-    if (!(await this.confirm(record))) {
+    const confirmed = await this.confirm(record)
+    if (confirmed.kind === 'retry') {
+      this.update(record, {
+        state: 'waiting',
+        readiness: true,
+        notBefore: this.now() + RETRY_MS,
+        reason: confirmed.reason,
+      })
+      return
+    }
+    if (confirmed.kind === 'failed') {
       if (!getWidget(row.id)) return
       this.update(record, {
         state: 'held',
-        reason:
-          'the resume did not start: no agent with its conversation appeared within 2 minutes',
+        reason: confirmed.reason,
       })
       this.log(`${row.id}: held: the resumed agent did not appear`)
       return
@@ -1158,13 +1211,14 @@ export class Recovery {
 
   private finish(record: CrashRecord, row: WidgetRow): void {
     const recoveredAt = this.now()
-    this.history.push({
-      id: row.id,
-      diedAt: record.diedAt,
-      recoveredAt,
-      agentWasHog: record.agentWasHog,
-      ...(record.manual ? { manual: true } : {}),
-    })
+    if (!(record.readiness && record.cause === 'entry-unavailable'))
+      this.history.push({
+        id: row.id,
+        diedAt: record.diedAt,
+        recoveredAt,
+        agentWasHog: record.agentWasHog,
+        ...(record.manual ? { manual: true } : {}),
+      })
     this.transcripts.delete(`${record.id}:${record.diedAt}`)
     this.update(record, { state: 'recovered', recoveredAt, reason: null })
     this.log(`${row.id}: resumed in place (attempt ${record.attempt})`)
@@ -1180,14 +1234,31 @@ export class Recovery {
   }
 
   /** The resumed agent shows up in the session's pane with its conversation. */
-  private async confirm(record: CrashRecord): Promise<boolean> {
+  private async confirm(record: CrashRecord): Promise<LaunchOutcome> {
     const deadline = this.now() + CONFIRM_MS
     for (;;) {
       const row = getWidget(record.id)
-      if (!row) return false
+      if (!row) return { kind: 'failed', reason: 'session was ended' }
       const pane = await this.engine.currentPane(row).catch(() => null)
-      if (pane && this.engine.agentIn(pane.pid, row.tool)?.resumeId === record.resumeId) return true
-      if (this.now() >= deadline) return false
+      if (
+        pane &&
+        (await this.engine.agentIn(pane.pid, row.tool, row.id))?.resumeId === record.resumeId
+      )
+        return { kind: 'launched' }
+      const marker = row.scopeUnit ? this.engine.agentExitMarker(row.scopeUnit)?.marker : null
+      const exit =
+        marker?.state === 'exit' ? marker.status : pane ? this.engine.agentExit(pane.pid) : null
+      if (exit !== null)
+        return {
+          kind: getSessionEntry(row.id) && exit === ENTRY_RETRY_EXIT ? 'retry' : 'failed',
+          reason: `the agent entry exited ${exit}; ${exit === ENTRY_RETRY_EXIT ? 'waiting for its prerequisites' : 'the resume did not start'}`,
+        }
+      if (this.now() >= deadline)
+        return {
+          kind: 'failed',
+          reason:
+            'the resume did not start: no agent with its conversation appeared within 2 minutes',
+        }
       await this.sleep(CONFIRM_POLL_MS)
     }
   }
@@ -1246,9 +1317,17 @@ export function registerRecoveryRoutes(router: Router, recovery: Recovery): void
     .add('GET', '/v1/recovery/status', async (_req, res) => {
       sendJson(res, 200, recovery.status())
     })
-    .add('POST', '/v1/recovery/:id/resume', async (_req, res, params) => {
+    .add('POST', '/v1/recovery/:id/resume', async (req, res, params) => {
       const id = params.id ?? ''
-      if (!recovery.resumeHeld(id)) throw new HttpError(409, 'not_held', { id })
+      const body =
+        !req.headers['transfer-encoding'] &&
+        (!req.headers['content-length'] || req.headers['content-length'] === '0')
+          ? {}
+          : await readJsonObject(req)
+      if (Object.keys(body).some((key) => key !== 'needs')) throw new HttpError(400, 'invalid_body')
+      const needs = body.needs === undefined ? undefined : parseNeeds(body.needs)
+      if (needs === null) throw new HttpError(400, 'invalid_body', { field: 'needs' })
+      await recovery.resumeWithReservation(id, needs)
       sendJson(res, 202, { id, state: 'waiting' })
     })
 }

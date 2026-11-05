@@ -1025,7 +1025,9 @@ nothing.
 | Method and route | Body | Result |
 | --- | --- | --- |
 | `GET /v1/recovery/status` | none | Crash records: waiting, recovering, recovered or held ([crash-recovery.md](crash-recovery.md)) |
-| `POST /v1/recovery/:id/resume` | none | `202 {id, state:"waiting"}`: try a held session again now. `409 not_held` otherwise. |
+| `POST /v1/recovery/:id/resume` | optional `{needs: {memBytes, cpu?, caps?}}` | `202 {id, state:"waiting"}`: try a held session again now. Optional needs seed a lost legacy reservation on the same root and host before queueing recovery. Later retries use durable placement metadata automatically. `409 not_held` or `reservation_unavailable` otherwise. |
+
+An entry configuration can add `probe: ["/absolute/program", "fixed-arg", ...]`. Tether appends the entry's arg and expects JSON `{running: true, pid: POSITIVE_HOST_PID, resumeId: UUID}` for the live native agent, or `{running: false, pid: null, resumeId: null}` while absent. The probe must use process/control-plane facts, never an old transcript as liveness. Exit 75 means temporary unavailability; malformed metadata or other probe failures are terminal. Entries without a probe keep their existing observation adapter. The entry launch itself exits 75 for retryable prerequisites and 78 for invalid configuration/ownership. A fallback shell never counts as a successful restore.
 
 Absent when the daemon runs with `TETHER_RECONCILE=off`.
 

@@ -439,8 +439,47 @@ describe('placement', () => {
     await placement.place('same', needs(1))
     expect(await placement.place('same', needs(1))).toMatchObject({ kind: 'placed', host: null })
     world.existing.elsewhere = 'vm'
-    expect(await placement.place('elsewhere', needs(100))).toMatchObject({ host: 'vm' })
-    expect(placement.list()).toHaveLength(1)
+    expect(await placement.place('elsewhere', needs(1))).toMatchObject({ host: 'vm' })
+    expect(placement.list()).toHaveLength(2)
+  })
+
+  it('rebooks a known root on its original host when its reservation vanished', async () => {
+    const { world, placement } = setup(CONFIG)
+    world.existing.recover = null
+    const booked = await placement.place('recover', needs(2, 1))
+    expect(booked).toMatchObject({ kind: 'placed', host: null })
+    if (booked.kind === 'placed') booked.done()
+    expect(placement.list()).toMatchObject([
+      { requestId: 'recover', memBytes: 2 * GIB, cpu: 1, state: 'held' },
+    ])
+    expect(await placement.place('recover', needs(2), 'default', 'vm')).toMatchObject({
+      kind: 'placed_elsewhere',
+      host: 'local',
+    })
+  })
+
+  it('retains placement needs across a lost booking and delayed host readiness', async () => {
+    const original = setup(CONFIG)
+    const first = await original.placement.place('reboot', needs(2, 1))
+    if (first.kind === 'placed') first.done()
+    original.world.settings.set('placement_reservations', '[]')
+    const rebooted = setup(CONFIG, {
+      settings: original.world.settings,
+      existing: { reboot: null },
+      admission: admission('red', 20),
+    })
+    expect(await rebooted.placement.restore('reboot')).toMatchObject({ kind: 'at_capacity' })
+    expect(rebooted.placement.list()).toEqual([])
+    rebooted.world.admission = admission('green', 20)
+    const restored = await rebooted.placement.restore('reboot')
+    expect(restored).toMatchObject({ kind: 'placed', host: null })
+    if (restored?.kind === 'placed') restored.done()
+    expect(rebooted.placement.list()).toMatchObject([
+      { requestId: 'reboot', memBytes: 2 * GIB, cpu: 1 },
+    ])
+    rebooted.world.local.reboot = 'ended'
+    await rebooted.placement.check(needs(0))
+    expect(await rebooted.placement.restore('reboot')).toBeNull()
   })
 
   it('counts a powered-off VM only when Proxmox has room to start it', async () => {

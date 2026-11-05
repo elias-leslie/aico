@@ -25,6 +25,8 @@ These never recover:
 
 ## What Tether does
 
+An entry that exits 75 has unavailable prerequisites and is retried in the same session without consuming another crash attempt or expiring after 15 minutes. An entry that exits 78 is held with that reason and the supported `tether recovery resume <id>` action. A configured entry's live-agent probe must confirm the exact conversation; an entry process or an old session file alone never confirms recovery. The placement owner rebooks the root's durable recorded needs before a retry can launch.
+
 1. It keeps the agent's resume ID. The crash record in `<stateDir>/recoveries.json` holds it, and `continuity.json` keeps the session listed while the record is open.
 2. Until the resume starts, a plain attach cannot launch a fresh agent in the session's place.
 3. It waits until host admission (Nightshift's memory verdict) has allowed agent launches for 60 seconds, and at least 60 seconds after the crash was found.
@@ -45,7 +47,7 @@ Transcript facts come from a per-tool adapter. Claude Code has one: the main tra
 - A crash within 10 minutes of a recovery is held, not relaunched.
 - An agent that was itself the memory hog is resumed once, with a warning to save notes, compact and keep large outputs out of context. A second such crash is held.
 - One recovery runs at a time, so several sessions that crashed together come back one by one through admission.
-- A launch that admission defers, or that finds another operation on the session in progress, is retried every 30 seconds; after 15 minutes the session is held.
+- A launch that admission defers, or that finds another operation on the session in progress, is retried every 30 seconds until that prerequisite returns. These waits do not use an elapsed-time cutoff. The crash-count and repeated-crash limits above still apply to actual crashes.
 - An owner resume (`tether recovery resume`) does not count toward the 2 in 6 hours, but a crash within 10 minutes of it is still held.
 
 Holding changes nothing in the session itself, so its catalog status stays what its pane really is: `running` when the pane survived (an `agent-exited` crash: the window shows the fallback shell), `uncertain` when the pane is gone. That status says whether a verified workload is in the pane, which is what Aico and `st` act on; whether the agent needs recovering is the record's `state: "held"` in `tether recovery status`, which says why, and Nightshift pushes the owner. `tether recovery resume <id>` tries it again at once, outside the limits.

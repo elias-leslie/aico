@@ -138,6 +138,14 @@ describe('main', () => {
     expect(out.join('\n')).toContain('tether [--instance NAME]')
   })
 
+  it('rejects an incomplete recovery booking before sending a resume', async () => {
+    const { io, err } = capture()
+    expect(
+      await main(['-i', 'clitest', 'recovery', 'resume', 'abcd1234', '--mem-bytes', '1024'], io),
+    ).toBe(2)
+    expect(err.join('\n')).toContain('both --mem-bytes and --cpus')
+  })
+
   it('lists and edits tools through the socket', async () => {
     const list = capture()
     expect(await main(['-i', 'clitest', 'tools'], list.io)).toBe(0)

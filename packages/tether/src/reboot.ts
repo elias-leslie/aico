@@ -18,26 +18,32 @@ import {
   snapshotResumeId,
   writeJsonFile,
 } from './continuity'
+import { probeEntryAgent } from './entry-agent'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { AgentAdmissionDenied } from './lifecycle/agent-admission'
 import { getWidget, listWidgets, type WidgetRow } from './lifecycle/catalog'
 import {
+  agentExitOf,
   ensureSessionSerialized,
   lastEnsureFailure,
+  respawnAndRelaunch,
   verifiedCurrentManagedPane,
   verifySessionStatus,
   whenReady,
 } from './lifecycle/engine'
+import { ENTRY_RETRY_EXIT } from './lifecycle/entries'
 import { withRootPrompt } from './lifecycle/root-launch'
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { getTui } from './lifecycle/tui/registry'
 import { type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
 import { nodeProcFs } from './proc-fs'
 import type { Recovery } from './recovery'
+import { restoreSessionReservation } from './recovery-placement'
 
 const OBSERVE_INTERVAL_MS = 60_000
 const RESTORE_RETRY_MS = 30_000
-const RESTORE_GIVE_UP_MS = 15 * 60_000
+const CONFIRM_MS = 120_000
+const CONFIRM_POLL_MS = 5_000
 const DESKTOP_WAIT_MS = 5 * 60_000
 const PREPARE_POLL_MS = 3_000
 /** An agent may still report idle for a moment after the checkpoint prompt lands. */
@@ -99,6 +105,7 @@ function entry(row: WidgetRow | undefined, id: string, tool: string): RestoreEnt
 
 export class Continuity {
   private timer: NodeJS.Timeout | null = null
+  private stopped = false
   private observing: Promise<Observed[]> | null = null
   private readonly snapshotPath: string
   private readonly reportPath: string
@@ -110,6 +117,8 @@ export class Continuity {
   private readonly headless: boolean
   /** Sessions still waiting to be restored; the observer keeps them listed. */
   private readonly awaitingRestore = new Set<string>()
+  /** Terminal launch failures retain their saved conversation until repaired or ended. */
+  private readonly failedRestore = new Set<string>()
   /** Crash recovery: told about each agent session on every pass. */
   private recovery: Recovery | null = null
   private markPlanned: () => void = () => {}
@@ -123,7 +132,10 @@ export class Continuity {
     this.markFinished = resolve
   })
 
-  constructor(context: LifecycleApiContext, options: ContinuityOptions = {}) {
+  constructor(
+    private readonly context: LifecycleApiContext,
+    options: ContinuityOptions = {},
+  ) {
     this.snapshotPath = join(context.paths.stateDir, 'continuity.json')
     this.reportPath = join(context.paths.stateDir, 'restore.json')
     this.home = process.env.HOME ?? homedir()
@@ -136,6 +148,7 @@ export class Continuity {
 
   /** Restore what the last boot left running, then keep the snapshot fresh. */
   async start(): Promise<void> {
+    this.stopped = false
     await whenReady()
     const restoring = this.restoreAfterStart()
       .catch((error) => this.log(`restore failed: ${(error as Error).message}`))
@@ -146,9 +159,13 @@ export class Continuity {
     this.timer = setInterval(() => void this.observe().catch(() => {}), OBSERVE_INTERVAL_MS)
     this.timer.unref()
     await restoring
+    // Discover an entry's failed launch immediately after restart, even when
+    // startup found a surviving fallback shell and had nothing to recreate.
+    await this.observe()
   }
 
   stop(): void {
+    this.stopped = true
     if (this.timer) clearInterval(this.timer)
     this.timer = null
   }
@@ -196,7 +213,13 @@ export class Continuity {
       let blocked = false
       if (isAgent(row.tool)) {
         const pane = await verifiedCurrentManagedPane(row).catch(() => null)
-        const agent = pane ? observeAgent(nodeProcFs, this.home, pane.pid) : null
+        const probe = pane ? await probeEntryAgent(row.id) : null
+        const agent =
+          probe?.kind === 'running'
+            ? { ...probe, idle: null, blocked: false }
+            : probe?.kind === 'unconfigured' && pane
+              ? observeAgent(nodeProcFs, this.home, pane.pid)
+              : null
         if (agent && isResumeSessionId(getTui(row.tool), agent.resumeId)) resumeId = agent.resumeId
         idle = agent?.idle ?? null
         blocked = agent?.blocked ?? false
@@ -209,7 +232,10 @@ export class Continuity {
     const snapshot = mergeSnapshot(
       readJsonFile<ContinuitySnapshot>(this.snapshotPath),
       observed.map(({ row, resumeId }) => ({ id: row.id, tool: row.tool, resumeId })),
-      (id) => this.awaitingRestore.has(id) || Boolean(this.recovery?.retains(id)),
+      (id) =>
+        this.awaitingRestore.has(id) ||
+        this.failedRestore.has(id) ||
+        Boolean(this.recovery?.retains(id)),
       currentBootId(),
       this.now(),
     )
@@ -275,15 +301,26 @@ export class Continuity {
    * gone (a reboot, or the server ended), resuming its agent. */
   async restoreAfterStart(): Promise<RestoreReport | null> {
     const snapshot = readJsonFile<ContinuitySnapshot>(this.snapshotPath)
+    const previous = readJsonFile<RestoreReport>(this.reportPath)
+    for (const failed of previous?.failed ?? []) this.failedRestore.add(failed.id)
     const statuses = new Map<string, string>()
     for (const session of snapshot?.sessions ?? []) {
       const row = getWidget(session.id)
       if (row) statuses.set(row.id, await verifySessionStatus(row).catch(() => 'uncertain'))
     }
     // A session crash recovery holds is resumed there, never twice.
-    const candidates = restoreCandidates(snapshot, (id) => statuses.get(id) ?? null).filter(
-      (session) => !this.recovery?.retains(session.id),
+    const unfinished = new Set((previous?.pending ?? []).map((s) => s.id))
+    const absent = new Set(
+      restoreCandidates(snapshot, (id) => statuses.get(id) ?? null).map((s) => s.id),
     )
+    const candidates = (snapshot?.sessions ?? [])
+      .filter((session) => getWidget(session.id)?.tool === session.tool)
+      .filter(
+        (session) =>
+          absent.has(session.id) ||
+          (unfinished.has(session.id) && getWidget(session.id)?.tool === session.tool),
+      )
+      .filter((session) => !this.recovery?.retains(session.id))
     for (const session of candidates) this.awaitingRestore.add(session.id)
     this.markPlanned()
     if (candidates.length === 0) return null
@@ -308,8 +345,7 @@ export class Continuity {
     })
 
     let queue = candidates
-    const giveUp = this.now() + RESTORE_GIVE_UP_MS
-    while (queue.length) {
+    while (queue.length && !this.stopped) {
       const retry: typeof queue = []
       for (const session of queue) {
         const outcome = await this.restoreOne(session.id, session.resumeId)
@@ -317,15 +353,17 @@ export class Continuity {
         report.pending = report.pending.filter((p) => p.id !== session.id)
         if (outcome.status === 'restored') {
           this.awaitingRestore.delete(session.id)
+          this.failedRestore.delete(session.id)
           report.restored.push({
             ...entry(row, session.id, session.tool),
             resumed: outcome.resumed,
           })
-        } else if (outcome.status === 'retry' && this.now() < giveUp) {
+        } else if (outcome.status === 'retry') {
           retry.push(session)
           report.pending.push({ ...entry(row, session.id, session.tool), reason: outcome.reason })
         } else {
           this.awaitingRestore.delete(session.id)
+          this.failedRestore.add(session.id)
           report.failed.push({ ...entry(row, session.id, session.tool), reason: outcome.reason })
         }
         writeJsonFile(this.reportPath, report)
@@ -333,7 +371,7 @@ export class Continuity {
       queue = retry
       if (queue.length) await this.sleep(RESTORE_RETRY_MS)
     }
-    report.finishedAt = this.now()
+    report.finishedAt = queue.length ? null : this.now()
     writeJsonFile(this.reportPath, report)
     this.log(`restore finished: ${report.restored.length} restored, ${report.failed.length} failed`)
     void this.observe().catch(() => {})
@@ -351,6 +389,28 @@ export class Continuity {
     const tool = getTui(row.tool)
     const resume = resumeId !== null && isResumeSessionId(tool, resumeId) ? resumeId : null
     try {
+      const reservation = await restoreSessionReservation(this.context, id)
+      if (reservation) return { status: 'retry', reason: reservation }
+      const pane = await verifiedCurrentManagedPane(row).catch(() => null)
+      if (pane && isAgent(row.tool)) {
+        const marker = agentExitOf(row)
+        if (marker?.state !== 'exit' || marker.status !== ENTRY_RETRY_EXIT)
+          return this.confirmAgent(id, resume)
+        const result = await withRootPrompt(
+          id,
+          RESUME_PROMPT,
+          () => respawnAndRelaunch(id, tool, { initialLaunch: true }),
+          resume,
+        )
+        if (result.status === 'busy' || result.status === 'admission_denied')
+          return {
+            status: 'retry',
+            reason: 'reason' in result ? result.reason : 'another session operation is in progress',
+          }
+        if (result.status !== 'replaced')
+          return { status: 'failed', reason: 'reason' in result ? result.reason : result.status }
+        return this.confirmAgent(id, resume)
+      }
       const launch = () => ensureSessionSerialized(id, { cols: 100, rows: 30 })
       const ok = resume ? await withRootPrompt(id, RESUME_PROMPT, launch, resume) : await launch()
       const latest = getWidget(id)
@@ -362,12 +422,58 @@ export class Continuity {
           ? { status: 'retry', reason }
           : { status: 'failed', reason }
       }
-      return { status: 'restored', resumed: Boolean(resume) }
+      return isAgent(row.tool)
+        ? this.confirmAgent(id, resume)
+        : { status: 'restored', resumed: false }
     } catch (error) {
       const reason = (error as Error).message
       return error instanceof AgentAdmissionDenied
         ? { status: 'retry', reason }
         : { status: 'failed', reason }
+    }
+  }
+
+  /** Launch dispatch and a fallback shell never count as a restored agent. */
+  private async confirmAgent(
+    id: string,
+    resume: string | null,
+  ): Promise<
+    { status: 'restored'; resumed: boolean } | { status: 'retry' | 'failed'; reason: string }
+  > {
+    const deadline = this.now() + CONFIRM_MS
+    for (;;) {
+      const row = getWidget(id)
+      if (!row) return { status: 'failed', reason: 'session was ended' }
+      const marker = agentExitOf(row)
+      if (marker?.state === 'exit')
+        return {
+          status: marker.status === ENTRY_RETRY_EXIT ? 'retry' : 'failed',
+          reason: `the agent entry exited ${marker.status}; ${marker.status === ENTRY_RETRY_EXIT ? 'waiting for its prerequisites' : 'the agent did not resume'}`,
+        }
+      if (marker?.state === 'signal')
+        return { status: 'failed', reason: `the agent launch stopped (${marker.signal})` }
+      const pane = await verifiedCurrentManagedPane(row).catch(() => null)
+      const probe = pane ? await probeEntryAgent(id) : null
+      if (probe?.kind === 'failed') return { status: 'failed', reason: probe.reason }
+      const agent =
+        probe?.kind === 'running'
+          ? probe
+          : probe?.kind === 'unconfigured' && pane
+            ? observeAgent(nodeProcFs, this.home, pane.pid)
+            : null
+      if (agent && (resume === null || agent.resumeId === resume))
+        return { status: 'restored', resumed: resume !== null }
+      if (agent)
+        return {
+          status: 'failed',
+          reason: 'a different conversation is running; it was left untouched',
+        }
+      if (this.now() >= deadline)
+        return {
+          status: 'failed',
+          reason: 'no live agent with its conversation appeared within 2 minutes',
+        }
+      await this.sleep(CONFIRM_POLL_MS)
     }
   }
 }

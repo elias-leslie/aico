@@ -28,6 +28,7 @@ import {
   bindCatalog,
   claimLauncher,
   getRootRequest,
+  getSessionEntry,
   getWidget,
   isRetiredSessionId,
   listSessions,
@@ -50,6 +51,7 @@ import {
   verifiedCurrentManagedPane,
   verifySessionStatus,
 } from './lifecycle/engine'
+import { ENTRY_MISSING_EXIT, ENTRY_RETRY_EXIT } from './lifecycle/entries'
 import { setLifecycleInstance } from './lifecycle/ownership'
 import { configureTmuxPaths } from './lifecycle/tmux'
 import { adapterOf, bindToolSource, isDeliveryTool } from './lifecycle/tui/registry'
@@ -367,6 +369,15 @@ export async function startDaemon(
     localRoot: (requestId) => {
       const root = getRootRequest(requestId)
       const row = root ? getWidget(root.widgetId) : undefined
+      const marker = row ? agentExitOf(row) : null
+      const recovering =
+        row &&
+        (context.recovery?.retains(row.id) ||
+          context.continuity?.isAwaitingRestore(row.id) ||
+          (getSessionEntry(row.id) &&
+            marker?.state === 'exit' &&
+            [ENTRY_RETRY_EXIT, ENTRY_MISSING_EXIT].includes(marker.status)))
+      if (recovering) return 'live'
       return localRootFate(Boolean(root), Boolean(row), row ? agentExitOf(row)?.state : null)
     },
     existingHost: (requestId) => {

@@ -40,11 +40,15 @@ export const ENTRY_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/
 export const ENTRY_ARG = /^[a-z0-9][a-z0-9-]{0,79}$/
 /** What the launch line exits with when the entry is gone from entries.json. */
 export const ENTRY_MISSING_EXIT = 78
+/** EX_TEMPFAIL: an entry's prerequisites can return without changing its configuration. */
+export const ENTRY_RETRY_EXIT = 75
 
 const MAX_ARGV = 16
 
 export interface ResolvedEntry {
   argv: string[]
+  /** Read-only live-agent probe. Called with the entry arg appended; emits JSON. */
+  probe?: string[]
   /** Absolute host path of the agent's home for this arg. */
   home: string
 }
@@ -129,7 +133,7 @@ export function resolveEntry(
   })
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw))
     return bad('must be {"argv": [...], "home": "..."}')
-  const { argv, home } = raw as Record<string, unknown>
+  const { argv, home, probe } = raw as Record<string, unknown>
   if (
     !Array.isArray(argv) ||
     argv.length === 0 ||
@@ -138,11 +142,27 @@ export function resolveEntry(
   )
     return bad(`argv must be 1-${MAX_ARGV} non-empty strings`)
   if (!isAbsolute(argv[0] as string)) return bad('argv[0] must be an absolute path')
+  if (
+    probe !== undefined &&
+    (!Array.isArray(probe) ||
+      probe.length === 0 ||
+      probe.length > MAX_ARGV ||
+      probe.some((word) => typeof word !== 'string' || !word || word.includes('\0')) ||
+      !isAbsolute(probe[0] as string))
+  )
+    return bad('probe must be 1-16 non-empty strings with an absolute program path')
   if (typeof home !== 'string' || !home.includes('{arg}'))
     return bad('home must be a path containing {arg}')
   const resolved = expandHome(home, entry.arg, env)
   if (!resolved) return bad('home must start with ~/ or /')
-  return { kind: 'ok', entry: { argv: argv as string[], home: resolved } }
+  return {
+    kind: 'ok',
+    entry: {
+      argv: argv as string[],
+      home: resolved,
+      ...(probe === undefined ? {} : { probe: probe as string[] }),
+    },
+  }
 }
 
 /** `<argv> <arg> -- /bin/sh -c '<line>'`, marked with the agent's home and tool. */
