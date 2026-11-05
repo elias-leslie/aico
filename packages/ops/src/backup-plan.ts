@@ -25,6 +25,7 @@ export interface Copy {
   offlineSince?: string
   attemptedAt?: string
   copiedAt?: string
+  observed?: 'ok' | 'offline' | 'failed'
 }
 export interface BackupState {
   copies: Record<string, Copy>
@@ -121,9 +122,7 @@ export function entry(
   const age = copy?.dataAt ? Math.max(0, now - Date.parse(copy.dataAt)) : null
   const fresh = age !== null && age <= limit * 3600000
   const offline =
-    !!copy?.offlineSince &&
-    !!copy.dataAt &&
-    Date.parse(copy.dataAt) >= Date.parse(copy.offlineSince)
+    !!copy?.offlineSince && !!copy.dataAt && Number.isFinite(Date.parse(copy.offlineSince))
   const state = copy?.error ? 'failed' : fresh || offline ? 'ok' : 'warn'
   const meaning = copy?.error
     ? copy.error
@@ -293,7 +292,7 @@ export function backupRows(items: BackupEntry[]): StatusRow[] {
             { kind: 'run', ref: `aico backups request ${item.target}` },
             {
               kind: 'detail',
-              ref: `/backups/restore?source=${encodeURIComponent(item.source)}&target=${item.target}`,
+              ref: `/backups/restore?source=${encodeURIComponent(item.source)}&target=${item.target}&name=${encodeURIComponent(item.name)}`,
             },
           ],
   }))

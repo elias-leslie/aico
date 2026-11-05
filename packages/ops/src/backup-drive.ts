@@ -222,7 +222,18 @@ export async function backupJob(
         source: job.id,
         target,
         attemptedAt,
-        offlineSince: old?.offlineSince ?? attemptedAt,
+        observed: 'offline',
+        dataAt:
+          old?.dataAt ??
+          (old?.snapshot && old.copiedAt && job.paths[0]
+            ? copiedDataTime(old.copiedAt, payloadTime(job.paths[0]))
+            : undefined),
+        offlineSince:
+          old?.observed === 'offline'
+            ? old.offlineSince
+            : old?.observed === 'ok' && !old.error
+              ? attemptedAt
+              : undefined,
         error: undefined,
       }
     if (job.prepare) job.dataAt = payloadTime(job.paths[0] as string) ?? ''
@@ -269,11 +280,20 @@ export async function backupJob(
       dataAt: job.dataAt,
       snapshot: saved.snapshot_id,
       copiedAt: rt.now().toISOString(),
+      observed: 'ok',
       path: job.paths[0] ?? `/${job.filename}`,
       attemptedAt,
     }
   } catch (error) {
-    return { ...old, source: job.id, target, attemptedAt, error: (error as Error).message }
+    return {
+      ...old,
+      source: job.id,
+      target,
+      attemptedAt,
+      observed: 'failed',
+      offlineSince: undefined,
+      error: (error as Error).message,
+    }
   }
 }
 /** Every local Aico database, including WAL contents, is independently snapshotted and checked. */

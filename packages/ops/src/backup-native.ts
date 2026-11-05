@@ -1,7 +1,13 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { type BackupPoint, type BackupState, copyKey, homePath } from './backup-plan'
+import {
+  type BackupConfig,
+  type BackupPoint,
+  type BackupState,
+  copyKey,
+  homePath,
+} from './backup-plan'
 import { checked, type Runtime } from './backup-runtime'
 
 export function rawRows(output: string): Record<string, string>[] {
@@ -259,6 +265,7 @@ export async function nativeBackup(
       await checked(rt.run, [...helper, 'publish', runId, name, file, digest])
     }
     await checked(rt.run, ['sudo', '-n', 'btrfs', 'subvolume', 'sync', cfg.nativeTarget])
+    if (scheduled) await cleanupExpiredMetadata(rt, runId)
     state.points = points
     for (const p of points)
       state.copies[copyKey(p.source, 'native')] = {
@@ -278,4 +285,57 @@ export async function beginBootCapture(rt: Runtime, runId: string): Promise<stri
   const digest = createHash('sha256').update(readFileSync(rt.cfg.packageStatusPath)).digest('hex')
   await checked(rt.run, ['sudo', '-n', rt.cfg.nativeHelper, 'copy-boot', runId])
   return digest
+}
+
+export function expiredCapture(
+  value: unknown,
+  cfg: BackupConfig,
+  live: Set<string>,
+  current: string,
+): boolean {
+  if (!value || typeof value !== 'object') return false
+  const saved = value as Record<string, unknown>,
+    id = saved.run_id
+  if (
+    typeof id !== 'string' ||
+    !/^\d{8}T\d{6}Z-[a-f0-9]{8}$/.test(id) ||
+    id === current ||
+    saved.adapter !== 'summitflow-btrbk-v1' ||
+    !['completed', 'partial'].includes(String(saved.status)) ||
+    saved.target !== cfg.nativeTarget ||
+    saved.boot_path !==
+      join(dirname(cfg.nativeTarget), 'summitflow-host-recovery', 'captures', id, 'boot') ||
+    !Array.isArray(saved.points) ||
+    !saved.points.length
+  )
+    return false
+  return saved.points.every((point: unknown) => {
+    if (!point || typeof point !== 'object') return false
+    const target = (point as { target?: unknown }).target
+    return typeof target === 'string' && dirname(target) === cfg.nativeTarget && !live.has(target)
+  })
+}
+async function cleanupExpiredMetadata(rt: Runtime, current: string): Promise<void> {
+  const helper = ['sudo', '-n', rt.cfg.nativeHelper]
+  const live = new Set(
+    (await checked(rt.run, [...helper, 'list', 'target'])).trim().split('\n').filter(Boolean),
+  )
+  const parent = join(dirname(rt.cfg.nativeTarget), 'summitflow-host-recovery', 'captures')
+  const directories = (await checked(rt.run, [...helper, 'list', 'captures']))
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+  for (const directory of directories) {
+    const id = basename(directory)
+    if (dirname(directory) !== parent || id === current || !/^\d{8}T\d{6}Z-[a-f0-9]{8}$/.test(id))
+      continue
+    let saved: unknown
+    try {
+      saved = JSON.parse(await checked(rt.run, [...helper, 'read', id]))
+    } catch {
+      continue
+    }
+    if (expiredCapture(saved, rt.cfg, live, current))
+      await checked(rt.run, [...helper, 'remove', id])
+  }
 }

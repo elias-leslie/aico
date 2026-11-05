@@ -15,11 +15,11 @@ import { join } from 'node:path'
 import { parseRow } from '@aico/status'
 import { openDatabase, snapshotDatabase } from '@aico/store'
 import { afterEach, expect, it, vi } from 'vitest'
-import { copiedDataTime, payloadTime, prepareFolder, volumeJobs } from './backup-drive'
-import { beginBootCapture, preserveNative } from './backup-native'
+import { backupJob, copiedDataTime, payloadTime, prepareFolder, volumeJobs } from './backup-drive'
+import { beginBootCapture, expiredCapture, preserveNative } from './backup-native'
 import { backupRows, config, copyKey, emptyState, entries, entry, migrated } from './backup-plan'
 import { captureWorkspace, type RetentionView, retentionSelection } from './backup-retention'
-import { copyRootAuth, type Runtime, readState, saveState } from './backup-runtime'
+import { copyRootAuth, type Runtime, readState, restic, saveState } from './backup-runtime'
 import {
   cutover,
   cutoverReady,
@@ -546,4 +546,79 @@ it('an omitted nested project cannot be published as a completed snapshot view',
     catalogue,
   }).catch(() => {})
   expect(all[0]?.entries.slice(1).some((e) => e.source === 'auto-periodic')).toBe(false)
+})
+
+it('a proven unchanged offline guest keeps its old data age without becoming late', () => {
+  const dataAt = new Date(now - 200 * 3600000).toISOString(),
+    since = new Date(now - 199 * 3600000).toISOString()
+  const row = entry(
+    'guest',
+    'Guest data',
+    'drive',
+    { source: 'guest', target: 'drive', dataAt, offlineSince: since },
+    config({}),
+    'host',
+    now,
+  )
+  expect(row.state).toBe('ok')
+  expect(row.dataAt).toBe(dataAt)
+  expect(row.meaning).toContain('off')
+})
+it('offline freshness proof is carried only from a successful copy, never a failed observation', async () => {
+  const c = cfg(),
+    state = emptyState(),
+    id = 'guest',
+    rt: Runtime = {
+      cfg: c,
+      run: async () => ({ code: 0, out: '', err: '' }),
+      now: () => new Date(now),
+    }
+  state.copies[copyKey(id, 'drive')] = {
+    source: id,
+    target: 'drive',
+    dataAt: new Date(now - 3600000).toISOString(),
+    snapshot: 'a'.repeat(64),
+    error: 'Last capture failed',
+  }
+  expect(
+    (
+      await backupJob(rt, state, {
+        id,
+        paths: [],
+        binds: [],
+        dataAt: new Date(now).toISOString(),
+        offline: true,
+      })
+    ).offlineSince,
+  ).toBeUndefined()
+})
+it('a stale restic lock is recovered using the existing safe unlock protocol', async () => {
+  const c = cfg(),
+    run = vi.fn(async (argv: string[]) => ({
+      code: argv.includes('snapshots') && run.mock.calls.length === 1 ? 11 : 0,
+      out: '[]',
+      err: '',
+    }))
+  const result = await restic({ cfg: c, run, now: () => new Date(now) }, 'append', ['snapshots'])
+  expect(result.code).toBe(0)
+  expect(run.mock.calls.some(([argv]) => argv.includes('unlock'))).toBe(true)
+  expect(run).toHaveBeenCalledTimes(3)
+})
+it('native metadata expires only after every referenced retained point is gone', () => {
+  const c = cfg(),
+    id = '20261101T010000Z-1234abcd',
+    target = join(c.nativeTarget, 'root.old')
+  const receipt = {
+    adapter: 'summitflow-btrbk-v1',
+    run_id: id,
+    status: 'completed',
+    target: c.nativeTarget,
+    boot_path: join(c.nativeTarget, '..', 'summitflow-host-recovery', 'captures', id, 'boot'),
+    points: [{ target }],
+  }
+  expect(expiredCapture(receipt, c, new Set(), id)).toBe(false)
+  expect(expiredCapture(receipt, c, new Set([target]), 'other')).toBe(false)
+  expect(expiredCapture(receipt, c, new Set(), 'other')).toBe(true)
+  expect(expiredCapture({ ...receipt, points: [] }, c, new Set(), 'other')).toBe(false)
+  expect(expiredCapture({ ...receipt, adapter: 'unknown' }, c, new Set(), 'other')).toBe(false)
 })

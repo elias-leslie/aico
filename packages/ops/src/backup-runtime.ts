@@ -81,7 +81,11 @@ function readRootState(cfg: BackupConfig): BackupState {
   try {
     const saved = JSON.parse(
       readFileSync(join(homePath(cfg.legacyDriveState), 'state.json'), 'utf8'),
-    ) as { jobs: Record<string, { time?: string; snapshot_id?: string }> }
+    ) as {
+      jobs: Record<string, { time?: string; snapshot_id?: string }>
+      seen?: Record<string, { status?: string; offline_since?: string }>
+      last_run?: { jobs?: Record<string, { status?: string; offline_since?: string }> }
+    }
     for (const [source, job] of Object.entries(saved.jobs ?? {}))
       if (job.time && job.snapshot_id)
         state.copies[copyKey(source, 'drive')] = {
@@ -91,6 +95,13 @@ function readRootState(cfg: BackupConfig): BackupState {
             ? undefined
             : job.time,
           copiedAt: job.time,
+          observed:
+            (saved.seen ?? saved.last_run?.jobs)?.[source]?.status === 'offline'
+              ? 'offline'
+              : (saved.seen ?? saved.last_run?.jobs)?.[source]?.status === 'failed'
+                ? 'failed'
+                : 'ok',
+          offlineSince: (saved.seen ?? saved.last_run?.jobs)?.[source]?.offline_since,
           snapshot: job.snapshot_id,
           attemptedAt: job.time,
         }
@@ -164,6 +175,7 @@ export function resticArgs(
     GOMAXPROCS: cfg.limits.gomaxprocs,
     GOMEMLIMIT: cfg.limits.gomemlimit,
   }
+  if (root) env.HOME = temp
   if (target === 'drive') {
     const rclone = driveTarget().rcloneConfig
     if (rclone) {
@@ -232,7 +244,13 @@ export async function restic(
     ]
     env = { PATH: process.env.PATH }
   }
-  return rt.run(argv, { env })
+  let result = await rt.run(argv, { env })
+  if (result.code === 11 && args[0] !== 'unlock') {
+    // restic unlock removes stale locks only. Never use --remove-all or disturb a live writer.
+    const unlocked = await restic(rt, target, ['unlock'])
+    if (unlocked.code === 0) result = await rt.run(argv, { env })
+  }
+  return result
 }
 export async function resticJson(
   rt: Runtime,

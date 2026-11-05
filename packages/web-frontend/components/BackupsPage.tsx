@@ -211,7 +211,7 @@ export function BackupsPage() {
                     {row.target !== 'external' && (
                       <Link
                         className="lantern-btn ghost small"
-                        href={`/backups/restore?source=${encodeURIComponent(row.source)}&target=${row.target}`}
+                        href={`/backups/restore?source=${encodeURIComponent(row.source)}&target=${row.target}&name=${encodeURIComponent(row.name)}`}
                       >
                         Open restore
                       </Link>
@@ -228,6 +228,7 @@ export function BackupsPage() {
 }
 export function RestorePage() {
   const [source, setSource] = useState(''),
+    [sourceName, setSourceName] = useState('Selected backup'),
     [target, setTarget] = useState<Target>('drive'),
     [snapshots, setSnapshots] = useState<Snapshot[] | null>(null),
     [snapshot, setSnapshot] = useState(''),
@@ -262,6 +263,7 @@ export function RestorePage() {
             ? 'append'
             : 'drive'
     setSource(s)
+    setSourceName(params.get('name') || 'Selected backup')
     setTarget(t)
     setTo(`/srv/scratch/aico-restore-${Date.now()}`)
     if (s) load(s, t)
@@ -304,8 +306,8 @@ export function RestorePage() {
     <main className={styles.page}>
       <Header restore />
       <p className={styles.help}>
-        {source || 'Backup source'} · {title(target)}. Restore into a new
-        scratch folder, then review the files.
+        {sourceName} · {title(target)}. Restore into a new scratch folder, then
+        review the files.
       </p>
       {error && (
         <div role="alert" className={styles.notice}>
