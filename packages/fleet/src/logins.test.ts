@@ -45,6 +45,7 @@ function lab(
   }
 }
 it('keeps values in 0600 files only; list, show, timestamps and audit contain no value', () => {
+  expect(() => store.set('missing', 'fixture-private-value', {}, owner, true)).toThrow()
   store.set('sample', 'fixture-private-value', { kind: 'password' }, owner)
   expect(lstatSync(join(store.folder, 'sample')).mode & 0o777).toBe(0o600)
   expect(readFileSync(store.path, 'utf8')).not.toContain('fixture-private-value')

@@ -386,6 +386,7 @@ export class LoginStore {
   ): Login {
     const old = index.entries.find((entry) => entry.name === name)
     if (old && !replace) throw new LoginError('Login exists; use rotate to replace it')
+    if (!old && replace) throw new LoginError('Login unavailable; add it before rotating it')
     if (
       !caller.owner &&
       (old
