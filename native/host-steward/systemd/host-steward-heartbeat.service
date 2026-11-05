@@ -1,0 +1,14 @@
+[Unit]
+Description=Aico heartbeat to Proxmox
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -m host_steward.heartbeat
+WorkingDirectory=/usr/local/lib/host-steward
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
+TimeoutStartSec=45s

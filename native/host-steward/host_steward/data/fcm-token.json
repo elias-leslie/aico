@@ -1,0 +1,8 @@
+{
+  "account": "/etc/nightshift/fcm/service-account.json",
+  "token": "/var/lib/nightshift/fcm/token.json",
+  "owner": "kasadis",
+  "refresh_before_s": 2400,
+  "every_s": 1200,
+  "slack_s": 300
+}

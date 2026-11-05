@@ -46,6 +46,7 @@ export interface Phone {
   app_version?: string
   added_at?: number
   last_ack?: number
+  last_message_ack?: { id: string; received_at: number; shown: boolean }
   last_probe?: number
   read_error?: string
   read_error_at?: number
@@ -236,9 +237,16 @@ export class PhoneRegistry {
     const acks = Array.isArray(body.acks) ? body.acks.slice(0, 100) : []
     let readError = ''
     let readOk = false
+    let messageAck: Phone['last_message_ack']
     for (const ack of acks) {
       if (!ack || typeof ack !== 'object') continue
-      const { t, error } = ack as { t?: unknown; error?: unknown }
+      const { t, error, id, received_at, shown } = ack as {
+        t?: unknown
+        error?: unknown
+        id?: unknown
+        received_at?: unknown
+        shown?: unknown
+      }
       if (t === 'e') {
         readError =
           String(error ?? 'unknown')
@@ -248,6 +256,15 @@ export class PhoneRegistry {
       } else if (t === 'm') {
         readOk = true
         readError = ''
+        if (
+          typeof id === 'string' &&
+          /^[A-Za-z0-9._:-]{1,200}$/.test(id) &&
+          typeof received_at === 'number' &&
+          Number.isSafeInteger(received_at) &&
+          received_at >= 0 &&
+          typeof shown === 'boolean'
+        )
+          messageAck = { id, received_at, shown }
       }
     }
     const state =
@@ -256,6 +273,8 @@ export class PhoneRegistry {
         : null
     return this.change(id, (phone) => {
       phone.last_ack = now
+      if (messageAck && messageAck.received_at >= (phone.last_message_ack?.received_at ?? 0))
+        phone.last_message_ack = messageAck
       if (readError) {
         phone.read_error = readError
         phone.read_error_at = now

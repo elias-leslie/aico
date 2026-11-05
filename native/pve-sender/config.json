@@ -1,0 +1,30 @@
+{
+  "state_dir": "/var/lib/aico/pve-sender",
+  "credentials": "/etc/nightshift/deadman/creds.json",
+  "token_cache": "/var/lib/nightshift/deadman/fcm-token.json",
+  "window_s": 2700,
+  "tick_s": 300,
+  "slack_s": 120,
+  "boot_settle_s": 900,
+  "door_alias": "nightwatch-door",
+  "workstation_addr": "192.168.86.128",
+  "door_bad_runs": 2,
+  "status_command": ["pct", "exec", "190", "--", "curl", "--fail", "--silent", "--show-error", "--max-time", "8", "-H", "Content-Type: application/json", "--data-binary", "@-", "http://127.0.0.1:3002/api/status/rows"],
+  "sources": {"workstation": "Workstation", "ct190": "Aico on CT 190"},
+  "callers": {
+    "aico": {
+      "source": "aico", "label": "Aico", "key": "[a-z]{2,12}:[0-9A-Za-z_.-]{1,64}",
+      "log_prefix": "aico:", "kinds": ["question", "todo", "info"],
+      "severities": ["warning", "info"], "title_max": 120, "body_max": 400,
+      "origin": "https://aico.summitflow.dev", "path": "(/[0-9A-Za-z/_.-]{0,60})?(\\?[0-9A-Za-z_.=&-]{1,100})?",
+      "dedupe_s": null, "tray_silent": false
+    },
+    "portfolio": {
+      "source": "portfolio-ai", "label": "Portfolio-AI", "key": "portfolio-ai:[0-9A-Za-z_.:-]{1,80}",
+      "log_prefix": "", "kinds": ["alert", "todo", "info"],
+      "severities": ["critical", "warning", "info", "ok"], "title_max": 200, "body_max": 1000,
+      "origin": "https://port.summitflow.dev", "path": "(/[0-9A-Za-z/_.-]{0,60})?(\\?[0-9A-Za-z_.=&-]{1,100})?(#[0-9A-Za-z_-]{1,40})?",
+      "dedupe_s": 86400, "tray_silent": true
+    }
+  }
+}

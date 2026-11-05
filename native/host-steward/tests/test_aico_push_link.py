@@ -1,112 +1,65 @@
-"""native/pve-sender/aico-push (runs on the Proxmox host): the notice's open link and how it reaches deadman.send."""
-
-import importlib.machinery
-import importlib.util
+"""Guest links retain their existing origin/path contract and become an FCM Open action."""
 import json
-import types
+import sys
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[3] / "native" / "pve-sender" / "aico-push"
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "pve-sender"))
+from pve_sender import push, sender
+from pve_sender.state import write
+
+ROOT = Path(__file__).resolve().parents[3]
 ORIGIN = "https://aico.example.test"
 
 
-def load():
-    loader = importlib.machinery.SourceFileLoader("aico_push", str(SCRIPT))
-    spec = importlib.util.spec_from_loader("aico_push", loader)
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
-    return module
+def caller(name="aico"):
+    row = json.loads((ROOT / "native/pve-sender/config.json").read_text())["callers"][name]
+    row["origin"] = ORIGIN if name == "aico" else "https://port.example.test"
+    return row
 
 
 def notice(**extra):
-    base = {
-        "v": 1,
-        "source": "aico",
-        "kind": "question",
-        "severity": "warning",
-        "title": "Test: a question",
-        "body": "Open Aico to answer it.",
-        "key": "ask:abc123",
-    }
-    return json.dumps({**base, **extra})
+    return {"v": 1, "source": "aico", "kind": "question", "severity": "warning",
+            "title": "Test: a question", "body": "Open Aico to answer it.", "key": "ask:abc123", **extra}
 
 
 def test_ask_and_show_links_on_the_aico_origin_pass():
-    push = load()
     for link in (f"{ORIGIN}/?ask=abc123", f"{ORIGIN}/?show=def456", f"{ORIGIN}/captures?id=7", f"{ORIGIN}/"):
-        assert isinstance(push.check(notice(open=link), ORIGIN), dict), link
+        assert push.validate(json.dumps(notice(open=link)), caller())["open"] == link
+    assert push.validate(json.dumps(notice()), caller())
 
 
-def test_no_link_is_still_a_valid_notice():
-    assert isinstance(load().check(notice(), ORIGIN), dict)
+@pytest.mark.parametrize("link", [
+    "https://evil.example/?ask=1", "http://aico.example.test/?ask=1",
+    "https://aico.example.test.evil.example/?ask=1", "https://user@aico.example.test/?ask=1",
+    "https://aico.example.test:8443/?ask=1", f"{ORIGIN}/?ask=1#frag", f"{ORIGIN}/?ask=1 2",
+    f"{ORIGIN}/?ask=" + "a" * 300, f"{ORIGIN}/é", "/?ask=1", "", None, 7,
+])
+def test_other_links_are_refused(link):
+    with pytest.raises(ValueError):
+        push.validate(json.dumps(notice(open=link)), caller())
 
 
-def test_other_links_are_refused():
-    push = load()
-    bad = [
-        "https://evil.example/?ask=1",
-        "http://aico.example.test/?ask=1",
-        "https://aico.example.test.evil.example/?ask=1",
-        "https://user@aico.example.test/?ask=1",
-        "https://aico.example.test:8443/?ask=1",
-        f"{ORIGIN}/?ask=1#frag",
-        f"{ORIGIN}/?ask=1 2",
-        f"{ORIGIN}/?ask=" + "a" * 300,
-        f"{ORIGIN}/é",
-        "/?ask=1",
-        "",
-        None,
-        7,
-    ]
-    for link in bad:
-        assert load().check(notice(open=link), ORIGIN) == "open must be a plain link on the Aico origin", link
-    # No Aico host known to Nightshift: no link is trusted.
-    assert push.check(notice(open=f"{ORIGIN}/?ask=1"), None) == "open must be a plain link on the Aico origin"
+def test_portfolio_link_may_carry_a_fragment():
+    port = caller("portfolio")
+    for link in ["https://port.example.test/vehicles", "https://port.example.test/money?tab=cards#card-strategy"]:
+        item = notice(source="portfolio-ai", kind="todo", key="portfolio-ai:one", open=link)
+        assert push.validate(json.dumps(item), port)["open"] == link
+    with pytest.raises(ValueError):
+        push.validate(json.dumps(notice(open=f"{ORIGIN}/?ask=1#frag")), caller())
 
 
-def test_send_with_link_adds_the_link_to_both_messages_and_restores_deadman():
-    push = load()
-    seen = {}
-
-    def real_push(sub, payload, *rest, **kw):
-        seen["web"] = payload
-
-    def real_item(entry, base):
-        return json.dumps({"title": entry["title"], "actions": []}).encode()
-
-    def send(*args):
-        deadman.push({"endpoint": "x"}, {"title": "t", "url": "/"}, "info", b"", "sub", 1.0)
-        seen["app"] = json.loads(deadman.fcm_item({"title": "t"}, "https://nightshift.example.test"))
-        return "sent 1/1", False
-
-    deadman = types.SimpleNamespace(push=real_push, fcm_item=real_item, send=send)
+def test_open_link_is_an_app_action_without_monkeypatching_sender(tmp_path, monkeypatch):
+    cfg = {"credentials": str(tmp_path / "credentials"), "token_cache": str(tmp_path / "token"), "state_dir": str(tmp_path)}
+    write(Path(cfg["credentials"]), {"fcm": {"service_account": {"project_id": "fixture", "private_key_id": "fixture"},
+          "devices": [{"fcm_token": "fixture"}]}})
+    write(Path(cfg["token_cache"]), {"access_token": "fixture", "key_id": "fixture", "expires_at": 9999})
+    seen = []
+    def transport(_dev, plain, *_args):
+        seen.append(json.loads(plain))
+        return 200
+    monkeypatch.setattr(sender.fcm, "fcm_push", transport)
     link = f"{ORIGIN}/?ask=abc123"
-    result, carried = push.send_with_link(deadman, link)
-    assert result == ("sent 1/1", False)
-    assert carried == {"web", "app"}
-    assert seen["web"] == {"title": "t", "url": "/", "open": link}
-    assert seen["app"]["actions"] == [{"id": "open", "label": "Open", "tier": "view", "url": link}]
-    assert deadman.push is real_push and deadman.fcm_item is real_item
-
-
-def test_portfolio_links_use_the_port_origin_and_may_carry_a_fragment():
-    push = load()
-    port = push.CALLERS["portfolio"]
-    origin = "https://port.example.test"
-    for link in (f"{origin}/vehicles", f"{origin}/money?tab=cards#card-strategy"):
-        assert push.open_link_ok(link, origin, port), link
-    assert not push.open_link_ok(f"{origin}/money#a b", origin, port)
-    # Aico links keep refusing a fragment.
-    assert not push.open_link_ok(f"{ORIGIN}/?ask=1#frag", ORIGIN)
-
-
-def test_origin_is_the_open_host_with_the_callers_prefix(monkeypatch):
-    import sys
-
-    push = load()
-    site = types.SimpleNamespace(open_hosts=lambda: ["dev.example.test", "port.example.test", "aico.example.test"])
-    monkeypatch.setitem(sys.modules, "nightshift", types.SimpleNamespace(siteconf=site))
-    assert push.origin_for(push.CALLERS["aico"]) == "https://aico.example.test"
-    assert push.origin_for(push.CALLERS["portfolio"]) == "https://port.example.test"
-    monkeypatch.setitem(sys.modules, "nightshift", types.SimpleNamespace(siteconf=types.SimpleNamespace(open_hosts=list)))
-    assert push.origin_for(push.CALLERS["portfolio"]) is None
+    assert sender.send(cfg, notice(open=link), now=100)["ok"]
+    assert seen[0]["actions"] == [{"id": "open", "label": "Open", "tier": "view", "url": link}]

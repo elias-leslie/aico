@@ -268,15 +268,6 @@ optional_user_units = ["aico-jobs.service"]
 system_units = []
 skip_when_absent = true
 
-# Nightshift's own path, until the cutover stops it.
-[[checks.floor.paths]]
-name = "Nightshift"
-user_units = ["nightshift-notify-critical.service", "nightshift-notify-critical.path", "nightshift-notify-critical.timer"]
-system_units = ["nightshift-outbox.service", "nightshift-outbox.path", "nightshift-outbox.timer"]
-heartbeat_unit = "nightshift-notify-critical.service"
-delivery_file = "/var/lib/nightshift/items/delivery.json"
-skip_when_absent = true
-
 [checks.probes]
 what = "Workstation probes"
 every_min = 15

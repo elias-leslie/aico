@@ -1,7 +1,5 @@
 """native/pve-sender/aico-push: the gem container's push-only forced command (a fake sender, no network)."""
 
-import importlib.machinery
-import importlib.util
 import io
 import json
 import sys
@@ -9,6 +7,8 @@ import types
 from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "pve-sender"))
 
 PATH = Path(__file__).resolve().parents[3] / "native" / "pve-sender" / "aico-push"
 
@@ -21,39 +21,26 @@ NOTICE = {
 
 @pytest.fixture
 def push(monkeypatch, tmp_path):
-    sent, log, carried, pushed, details = [], tmp_path / "log.json", [], [], []
-    def read_json(path, default):
-        return json.loads(path.read_text()) if path.exists() else default
-
-    def send(creds, title, body, detail, severity, key, now, log_path, fcm):
-        sent.append((title, body, severity, key))
-        details.append(detail)
-        # What deadman.send does with a push: one Web Push payload and one app item.
-        fake.push({"endpoint": "x"}, {"title": title, "url": "/"}, severity, b"", "sub", now)
-        carried.append(json.loads(fake.fcm_item({"title": title}, "https://nightshift.example"))["actions"])
-        log.write_text(json.dumps([*read_json(log, []), {"key": key, "ts": now}]))
-        return "sent 1/1, app 1/1", False
-
-    fake = types.SimpleNamespace(
-        STATE_DIR=tmp_path, CREDS=tmp_path / "creds.json", _read_json=read_json,
-        load_creds=lambda _: ("creds",), load_fcm=lambda _: None, send=send,
-        push=lambda sub, payload, *rest: pushed.append(payload),
-        fcm_item=lambda entry, base: json.dumps({"title": entry["title"], "actions": []}).encode(),
-    )
-    siteconf = types.SimpleNamespace(open_hosts=lambda: ["dev.example", "aico.example", "port.example"])
-    pkg = types.SimpleNamespace(deadman=fake, siteconf=siteconf)
-    monkeypatch.setitem(sys.modules, "nightshift", pkg)
-    monkeypatch.setitem(sys.modules, "nightshift.deadman", fake)
-    monkeypatch.setitem(sys.modules, "nightshift.siteconf", siteconf)
-    loader = importlib.machinery.SourceFileLoader("aico_push", str(PATH))
-    module = importlib.util.module_from_spec(importlib.util.spec_from_loader("aico_push", loader))
-    loader.exec_module(module)
-
+    from pve_sender import cli, sender
+    sent, carried = [], []
+    cfg = json.loads((PATH.parent / "config.json").read_text())
+    cfg["state_dir"] = str(tmp_path)
+    cfg["callers"]["aico"]["origin"] = "https://aico.example"
+    cfg["callers"]["portfolio"]["origin"] = "https://port.example"
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps(cfg))
+    def send(_cfg, notice, _now):
+        sent.append((notice["title"], notice["body"], notice["severity"], notice["key"]))
+        carried.append(notice.get("open"))
+        return {"ok": True, "result": "sent"}
+    monkeypatch.setattr(sender, "send", send)
     def run(text, *argv):
         monkeypatch.setattr(sys, "stdin", io.StringIO(text))
-        return module.main(list(argv))
-
-    return run, sent, types.SimpleNamespace(pushed=pushed, carried=carried, details=details, log=log, module=module)
+        try:
+            return cli.main(["--config", str(config), "push", *argv])
+        except SystemExit as error:
+            return error.code
+    return run, sent, types.SimpleNamespace(carried=carried, log=tmp_path / "receipts.json")
 
 
 def test_sends_the_notice_once_per_key(push, capsys):
@@ -62,21 +49,19 @@ def test_sends_the_notice_once_per_key(push, capsys):
     assert sent == [(NOTICE["title"], NOTICE["body"], "warning", "aico:ask:0123456789ab")]
     assert run(json.dumps(NOTICE)) == 0
     assert len(sent) == 1
-    assert "already sent" in capsys.readouterr().out
+    assert "Already sent" in capsys.readouterr().out
 
 
-def test_the_open_link_reaches_the_web_push_payload_and_the_app_button(push):
+def test_the_open_link_reaches_the_sender(push):
     run, _sent, wire = push
     assert run(json.dumps(NOTICE)) == 0
-    assert wire.pushed == [{"title": NOTICE["title"], "url": "/", "open": NOTICE["open"]}]
-    assert wire.carried == [[{"id": "open", "label": "Open", "tier": "view", "url": NOTICE["open"]}]]
+    assert wire.carried == [NOTICE["open"]]
 
 
 def test_a_notice_without_a_link_goes_out_as_before(push):
     run, _sent, wire = push
     assert run(json.dumps({k: v for k, v in NOTICE.items() if k != "open"})) == 0
-    assert wire.pushed == [{"title": NOTICE["title"], "url": "/"}]
-    assert wire.carried == [[]]
+    assert wire.carried == [None]
 
 
 @pytest.mark.parametrize("patch", [
@@ -107,9 +92,8 @@ PORT = {
 
 
 def test_the_default_caller_is_aico_and_an_extra_argument_is_refused(push):
-    run, sent, wire = push
+    run, sent, _wire = push
     assert run(json.dumps(NOTICE), "aico") == 0
-    assert wire.details == ["Sent for Aico on the gem container, which has no Nightshift of its own."]
     assert run(json.dumps(NOTICE), "nobody") == 2
     assert run(json.dumps(NOTICE), "aico", "portfolio") == 2
     assert len(sent) == 1
@@ -119,8 +103,7 @@ def test_portfolio_notice_is_taken_as_built_and_ignores_actions(push):
     run, sent, wire = push
     assert run(json.dumps(PORT), "portfolio") == 0
     assert sent == [(PORT["title"], PORT["body"], "warning", "portfolio-ai:vehicle:truck-oil")]
-    assert wire.details == ["Sent for Portfolio-AI on VM 180, which has no Nightshift of its own."]
-    assert wire.pushed == [{"title": PORT["title"], "url": "/", "open": PORT["open"]}]
+    assert wire.carried == [PORT["open"]]
 
 
 @pytest.mark.parametrize("patch", [
@@ -175,9 +158,9 @@ def test_portfolio_dedupes_within_its_window_only(push, capsys):
     run, sent, wire = push
     assert run(json.dumps(PORT), "portfolio") == 0
     assert run(json.dumps(PORT), "portfolio") == 0
-    assert len(sent) == 1 and "already sent" in capsys.readouterr().out
+    assert len(sent) == 1 and "Already sent" in capsys.readouterr().out
     old = json.loads(wire.log.read_text())
-    old[0]["ts"] -= 90000
+    old[PORT["key"]] -= 90000
     wire.log.write_text(json.dumps(old))
     assert run(json.dumps(PORT), "portfolio") == 0
     assert len(sent) == 2

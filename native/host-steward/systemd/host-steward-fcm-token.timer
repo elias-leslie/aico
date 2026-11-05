@@ -1,0 +1,10 @@
+[Unit]
+Description=Keep Aico's phone sender access token current
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=20min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

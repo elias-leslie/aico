@@ -1,0 +1,13 @@
+[Unit]
+Description=Aico phone sender and Proxmox watchdog
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pve-sender tick
+UMask=0077
+TimeoutStartSec=6min
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes

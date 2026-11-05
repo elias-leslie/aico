@@ -1,0 +1,10 @@
+[Unit]
+Description=Aico heartbeat every five minutes
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=5min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

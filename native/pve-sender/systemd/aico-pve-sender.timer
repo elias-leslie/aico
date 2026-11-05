@@ -1,0 +1,10 @@
+[Unit]
+Description=Aico Proxmox watchdog every five minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

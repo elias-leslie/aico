@@ -1,0 +1,14 @@
+[Unit]
+Description=Aico phone sender access token
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -m host_steward.fcm_token
+WorkingDirectory=/usr/local/lib/host-steward
+UMask=0077
+ProtectSystem=full
+PrivateTmp=yes
+NoNewPrivileges=yes
+TimeoutStartSec=45s
