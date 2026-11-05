@@ -41,7 +41,7 @@ interface Data {
   readOnly?: boolean
   warning?: string
 }
-async function api<T>(
+async function api<T = { warning?: string }>(
   path: string,
   body?: unknown,
   method = 'POST',
@@ -58,7 +58,6 @@ async function api<T>(
         },
   )
   const result = await response.json()
-  if (body !== undefined && result.warning) throw new Error(result.warning)
   if (!response.ok)
     throw new Error(result.detail || 'Logins could not complete the operation.')
   return result as T
@@ -159,9 +158,9 @@ export function LoginsPage() {
       )}
       {adding && (
         <AddLogin
-          onSaved={() => {
+          onSaved={(warning) => {
             setAdding(false)
-            void changed('Login saved.')
+            void changed(warning || 'Login saved.')
           }}
         />
       )}
@@ -227,7 +226,9 @@ export function LoginsPage() {
                 sessions={sessions}
                 targets={targets}
                 assignments={data.assignments}
-                onSaved={() => void changed('Lab targets saved.')}
+                onSaved={(warning) =>
+                  void changed(warning || 'Lab targets saved.')
+                }
               />
             )}
           </section>
@@ -274,7 +275,7 @@ export function LoginsPage() {
     </main>
   )
 }
-function AddLogin({ onSaved }: { onSaved(): void }) {
+function AddLogin({ onSaved }: { onSaved(warning?: string): void }) {
   const [kind, setKind] = useState<Kind>('API key'),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
@@ -288,8 +289,9 @@ function AddLogin({ onSaved }: { onSaved(): void }) {
         setBusy(true)
         setError('')
         try {
+          let result: { warning?: string }
           if (kind === 'lab login')
-            await api('/api/logins/lab', {
+            result = await api('/api/logins/lab', {
               target: f.get('target'),
               actor: f.get('actor'),
               kind: f.get('labKind'),
@@ -298,14 +300,14 @@ function AddLogin({ onSaved }: { onSaved(): void }) {
               notes: f.get('notes'),
             })
           else
-            await api('/api/logins', {
+            result = await api('/api/logins', {
               name: f.get('name'),
               kind,
               value: f.get('value'),
               notes: f.get('notes'),
             })
           form.reset()
-          onSaved()
+          onSaved(result.warning)
         } catch (error) {
           setError(
             error instanceof SyntaxError
@@ -428,11 +430,17 @@ function LoginRow({
     }
   }
   async function reveal(copy = false) {
-    const result = await api<{ value: string }>(`${path}/reveal`, {})
+    const result = await api<{ value: string; warning?: string }>(
+      `${path}/reveal`,
+      {},
+    )
     if (copy) {
       await navigator.clipboard.writeText(result.value)
-      await onChanged('Copied.')
-    } else setValue(result.value)
+      await onChanged(result.warning || 'Copied.')
+    } else {
+      setValue(result.value)
+      if (result.warning) await onChanged(result.warning)
+    }
   }
   return (
     <li>
@@ -527,10 +535,10 @@ function LoginRow({
             const form = event.currentTarget,
               value = String(new FormData(form).get('value'))
             void run(async () => {
-              await api(`${path}/replace`, { value })
+              const result = await api(`${path}/replace`, { value })
               form.reset()
               setPanel(null)
-              await onChanged('Login replaced.')
+              await onChanged(result.warning || 'Login replaced.')
             })
           }}
         >
@@ -556,13 +564,13 @@ function LoginRow({
           busy={busy}
           save={(patch) =>
             run(async () => {
-              await api(
+              const result = await api(
                 `/api/logins/lab/${entry.lab?.target}/${entry.lab?.actor}`,
                 patch,
                 'PATCH',
               )
               setPanel(null)
-              await onChanged('Lab fields saved.')
+              await onChanged(result.warning || 'Lab fields saved.')
             })
           }
         />
@@ -574,12 +582,12 @@ function LoginRow({
             event.preventDefault()
             const f = new FormData(event.currentTarget)
             void run(async () => {
-              await api(`${path}/grants`, {
+              const result = await api(`${path}/grants`, {
                 type: f.get('type'),
                 value: f.get('value'),
                 granted: f.get('action') === 'grant',
               })
-              await onChanged('Access saved.')
+              await onChanged(result.warning || 'Access saved.')
             })
           }}
         >
@@ -623,9 +631,9 @@ function LoginRow({
             event.preventDefault()
             const confirm = new FormData(event.currentTarget).get('confirm')
             void run(async () => {
-              await api(`${path}/remove`, { confirm })
+              const result = await api(`${path}/remove`, { confirm })
               setPanel(null)
-              await onChanged('Login removed.')
+              await onChanged(result.warning || 'Login removed.')
             })
           }}
         >
@@ -713,7 +721,7 @@ function Assignment({
   sessions: { id: string; label: string }[]
   targets: string[]
   assignments: Record<string, string[]>
-  onSaved(): void
+  onSaved(warning?: string): void
 }) {
   const [session, setSession] = useState(sessions[0]?.id || ''),
     [selected, setSelected] = useState<string[]>(
@@ -729,8 +737,11 @@ function Assignment({
         setBusy(true)
         setError('')
         try {
-          await api('/api/logins/assign', { session, targets: selected })
-          onSaved()
+          const result = await api('/api/logins/assign', {
+            session,
+            targets: selected,
+          })
+          onSaved(result.warning)
         } catch (error) {
           setError((error as Error).message)
         } finally {

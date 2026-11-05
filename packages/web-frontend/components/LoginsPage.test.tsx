@@ -70,3 +70,50 @@ it('shows a failed list separately from an empty store', async () => {
     screen.queryByText('No logins saved yet. Add one to get started.'),
   ).toBeNull()
 })
+it.each(['add', 'replace'])(
+  'clears the %s form after a saved value even when a machine is offline',
+  async (mode) => {
+    const warning =
+      'Saved here. An offline machine will sync when it reconnects.'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_path: string, options?: RequestInit) =>
+        Response.json(
+          options?.method === 'POST'
+            ? { warning }
+            : _path.endsWith('/sessions')
+              ? { sessions: [] }
+              : { entries: [entry], assignments: {}, revealSeconds: 30 },
+        ),
+      ),
+    )
+    render(<LoginsPage />)
+    await screen.findByText('scratch')
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: mode === 'add' ? 'Add login' : 'Replace',
+      }),
+    )
+    if (mode === 'add')
+      fireEvent.change(screen.getByLabelText('Name'), {
+        target: { value: 'new-scratch' },
+      })
+    fireEvent.change(
+      screen.getByLabelText(
+        mode === 'add' ? 'Value (hidden)' : 'New value (hidden)',
+      ),
+      { target: { value: 'fixture-only' } },
+    )
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: mode === 'add' ? 'Save login' : 'Replace login',
+      }),
+    )
+    await screen.findByText(warning)
+    expect(
+      screen.queryByLabelText(
+        mode === 'add' ? 'Value (hidden)' : 'New value (hidden)',
+      ),
+    ).toBeNull()
+  },
+)
