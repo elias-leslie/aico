@@ -352,6 +352,7 @@ Claude's weekly usage ran out on 2026-11-04, so this work was built or reviewed 
 | M8b-2b phone chat and attachments (agent DB migration, capture provenance) | Codex xhigh (4eab2572 onward) | Codex | attachment recovery across stop/answer, chat captures skip routing, phone Stop |
 | M9-2a context cost view (`packages/context` inventory, /agents page, nightly unused check) | Codex xhigh (90170cc5..a656d5b9) | Codex | use markers (only 2/27 deliveries fully observed: does "No recorded use" ever fire?), page copy shows raw memory ids and "UTF-8 bytes ÷ 4" jargon |
 | M9-2b VM 180 apps on Aico (LAN service tokens, evidence endpoint, portfolio-ai/jobinator thin clients, owner_only Status asks) | Codex high (7657dcb2, 2b659ff5, 131182c8; portfolio 03263585; jobinator 7638c04, 4fbc45b) | Codex | token scope on the LAN API, Jenny/price status mapping, jobinator discovery via evidence, missing jobinator release script |
+| M10b-2 nightly publish (`packages/checks` publish job, SF vcs delegation, CLI-only push transport, 15 workflows deleted, local DB fixtures in .st-check.toml) | Codex xhigh (e2fd3030; SF e5194d96..0c006eb7; per-repo in evidence/M10b-2/commits.json) | Codex | checked-commit binding (dirty-tree rule), kept workflows list, the 7 repos left manual, Blackbox and Ominull held |
 | Coordinator fixes at medium effort | Opus medium (37d7a940 guard allows scratch subvolume deletes; ee8366b9 refused deploy is warn) | none | guard: only `/srv/scratch` is exempt; refused deploys never hide a broken service |
 
 ## 5. Choices the sources did not settle
