@@ -1,0 +1,14 @@
+{
+  "id": "external/portfolio-ai-complete",
+  "source": "portfolio-ai-complete",
+  "name": "Portfolio-AI full backup (database and uploads)",
+  "target": "external",
+  "dataAt": "2026-11-04T23:10:46Z",
+  "nextRun": null,
+  "state": "off",
+  "meaning": "Machine is off; its last good backup date is shown.",
+  "snapshot": null,
+  "path": "/status?project=portfolio-ai",
+  "running": false,
+  "machine": "davion-sidarli"
+}

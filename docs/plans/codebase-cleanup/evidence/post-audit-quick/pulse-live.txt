@@ -1,0 +1,6 @@
+System brief (new since this window; `aico pulse --brief` repeats it):
+- CRIT aico: Nightly GitHub publication: Exited 1: Publication: 1 pushed; 2 failed.
+- WARN aico: Loaded context use: 0 items have no recorded use across at least 3 observed sessions.
+- WARN host: Asset registry: fydor-lab-win11 (111) is a lab machine but is not verified isolated: declared isola…
+- WARN host: Sudo use: 16 new sudo commands: 8, bin/tether, docker update and 13 more.
+- WARN host: Workstation health: A package update wants a reboot.

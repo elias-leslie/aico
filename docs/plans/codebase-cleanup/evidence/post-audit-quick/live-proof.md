@@ -1,0 +1,11 @@
+Source checkpoint: 0eb6f29cf32c4ca4c711b4a29f5cc0d1f9310311. Required Codex source review passed after all concrete findings were fixed with failing-first regressions.
+
+Signed root update installed on the workstation through its existing pinned installer. Gem's sender package and shared ECC evaluator were exported from that same commit, signed, transferred over existing authenticated SSH, and verified before extraction/install. Gem had no permanent update pin: its temporary verification public key was copied from the workstation's existing root-owned pin; signed-input-hashes.txt matches gem-signed-install.txt. No new permanent pin or enrollment was introduced. Sender installer ran copy-only, followed by a real sender tick; rows posted, last_send empty. Exact installed-source hashes match on both hosts. Both host changes were declared before installation.
+
+Managed workstation deploy aico-bf998477689b succeeded. The full isolated acceptance passed 3440 Vitest tests, 1232 host Python tests and 174 contracts. The deploy correctly installed the CLI/ops code only, since these changes do not modify web/jobs/Tether bundles. No service restart beyond the signed root install's normal procedure was needed. See workstation-deploy.txt.
+
+Live owning /api/backups returns external/portfolio-ai-complete = off with dataAt 2026-11-04T23:10:46Z. The exact source Status row was refreshed from this observation using backupRows' existing projection. The installed host-steward backups check was rerun. status-live.json proves ECC = ok (25 corrected events/day and recorded new regions), the source backup = off with last_run matching the real full artifact, and overall Backups = ok. pulse-live.txt has neither issue as CRIT; unrelated existing publication/warnings remain.
+
+VM180 remained stopped, and temporary read-only loop devices were detached. The recovered artifact timestamp was persisted under the existing backup lock. No credentials or backup contents were read; no VM was started. Temporary signed install staging was removed after open-file/symlink checks. Browser check used isolated local headless rendering; no owner desktop focus changed and no persistent browser session was created. UI source copy lint passed mechanically.
+
+Remaining: None within the agreed scope.

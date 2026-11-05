@@ -1,0 +1,6 @@
+Signature Verified Successfully
+f82f8ce93d1b0fa2031b1d2c2e360d5514656904264095fc625adc0944f64d99  /tmp/aico-post-audit-quick.Jm2F8s/pve-sender.tar
+2b3882e58b007c934dbab8bf26b69f4eee3622e1963983d20eda575bb121b46b  /tmp/aico-post-audit-quick.Jm2F8s/update-signing.pub
+Aico Proxmox sender installed.
+{"at": 1793879593.0387816, "silent": false, "ages": {"workstation": 77.45561337471008, "ct190": 18.74159049987793}, "last_send": {}, "rows_posted": true}
+status: stopped

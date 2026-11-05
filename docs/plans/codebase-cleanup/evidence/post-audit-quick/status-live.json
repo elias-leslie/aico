@@ -1,0 +1,62 @@
+[
+  {
+    "id": "davion-sidarli/check-backups",
+    "what": "Backups",
+    "kind": "check",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Backups are fresh.",
+    "last_run": "2026-11-05T11:55:19.397Z",
+    "next_run": "2026-11-05T12:20:19.397Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "sudo -n systemctl start host-steward-check.service"
+      },
+      {
+        "kind": "log",
+        "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"
+      }
+    ],
+    "updated_at": "2026-11-05T11:55:20.367Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "davion-gem/check-ecc",
+    "what": "PVE memory errors",
+    "kind": "check",
+    "machine": "davion-gem",
+    "state": "ok",
+    "meaning": "No uncorrected memory errors on the PVE host. 25 corrected memory errors in a day; recorded only. Corrected memory errors appeared in 1 new places.",
+    "last_run": "2026-11-05T11:53:13.038Z",
+    "next_run": "2026-11-05T12:18:13.038Z",
+    "actions": [
+      {
+        "kind": "log",
+        "ref": "journalctl -u aico-pve-sender.service"
+      }
+    ],
+    "updated_at": "2026-11-05T11:53:35.759Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "davion-sidarli/backup/external/portfolio-ai-complete",
+    "what": "Portfolio-AI full backup (database and uploads) \u00b7 Owner backup",
+    "kind": "backup",
+    "machine": "davion-sidarli",
+    "state": "off",
+    "meaning": "Machine is off; its last good backup date is shown.",
+    "last_run": "2026-11-04T23:10:46.000Z",
+    "actions": [
+      {
+        "kind": "detail",
+        "ref": "/status?project=portfolio-ai"
+      }
+    ],
+    "updated_at": "2026-11-05T11:55:19.304Z",
+    "shown": "off",
+    "shown_since": null
+  }
+]
