@@ -30,6 +30,7 @@ aico_web_stale() {
     "$AICO_REPO_ROOT/packages/shared/src" "$AICO_REPO_ROOT/packages/ui-kit/src" \
     "$AICO_REPO_ROOT/packages/store/src" "$AICO_REPO_ROOT/packages/status/src" "$AICO_REPO_ROOT/packages/notify/src" \
     "$AICO_REPO_ROOT/packages/context/src" "$AICO_REPO_ROOT/packages/context/data" \
+    "$AICO_REPO_ROOT/packages/fleet/src" "$AICO_REPO_ROOT/packages/fleet/data" \
     "$AICO_REPO_ROOT/packages/usage/src" "$AICO_REPO_ROOT/packages/usage/data" \
     \( -name '*.ts' -o -name '*.json' \) -newer "$AICO_WEB_BUNDLE" -print -quit 2>/dev/null)" ]
 }

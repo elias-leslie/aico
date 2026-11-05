@@ -1,0 +1,9 @@
+{
+  "writePeerPreference": ["aico"],
+  "localFiles": ["update-signing-key"],
+  "restrictedTools": ["claude", "claude-code", "anthropic"],
+  "restrictedRoles": ["hunting", "recon", "verification"],
+  "revealSeconds": 30,
+  "maxValueBytes": 65536,
+  "maxRpcBytes": 4194304
+}

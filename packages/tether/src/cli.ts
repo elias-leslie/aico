@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { isAbsolute, resolve } from 'node:path'
+import { runLogins } from '@aico/fleet/logins-cli'
 import { ASK_USAGE, runAsk } from './ask-cli'
 import { CAPTURE_USAGE, runCapture } from './capture-cli'
 import { callSocket } from './client'
@@ -494,6 +495,8 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
       }
       case 'hosts':
         return api(io, paths, json, 'GET', '/v1/hosts')
+      case 'logins':
+        return runLogins(parsed.args.slice(1))
       case 'fleet':
         return runFleet([sub ?? '', ...rest], paths, io)
       case 'link':

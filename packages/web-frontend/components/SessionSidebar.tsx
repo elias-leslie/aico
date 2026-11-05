@@ -200,6 +200,9 @@ export function SessionSidebar({
         <Link href="/backups" className="lantern-btn ghost small">
           Backups
         </Link>
+        <Link href="/logins" className="lantern-btn ghost small">
+          Logins
+        </Link>
         <HostsLauncher />
       </div>
       <nav

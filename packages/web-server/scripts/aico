@@ -94,7 +94,7 @@ aico_webtools() {
 }
 
 case "${1:-}" in
-  memory | prompt | models | context | usage) exec_aico_web "$@" ;;
+  memory | prompt | models | context | usage | logins) exec_aico_web "$@" ;;
   check | commit | publish) aico_checks "$@" ;;
   deploy | logs | snapshots | vm | backups) aico_ops "$@" ;;
   web) shift; aico_webtools "$@" ;;
@@ -142,10 +142,10 @@ case "${1:-}" in
       *) exec tether history "$@" ;;
     esac
     ;;
-  help | -h | --help) exec_aico_web memory --help ;;
+  help | -h | --help) echo 'Logins: aico logins --help — private files, scoped command use and assigned lab logins.'; exec_aico_web memory --help ;;
   *)
     [ $# -gt 0 ] && echo "aico: unknown command '$1'" >&2
-    echo "Usage: aico <memory|prompt|models|context|usage|jobs|tasks|projects|pulse|lease|agent|sessions|check|commit|deploy|logs|snapshots|vm|backups|web|ask> ...  (aico help lists every command)" >&2
+    echo "Usage: aico <memory|prompt|models|context|usage|logins|jobs|tasks|projects|pulse|lease|agent|sessions|check|commit|deploy|logs|snapshots|vm|backups|web|ask> ...  (aico help lists every command)" >&2
     exit 2
     ;;
 esac

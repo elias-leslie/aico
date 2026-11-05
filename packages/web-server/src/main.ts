@@ -23,6 +23,7 @@ import { HISTORY_LINES, loadConfig } from './config'
 import { registerContextRoutes } from './context'
 import { WebStore } from './db'
 import { ExtractWorker } from './extract-worker'
+import { registerLoginRoutes } from './logins'
 import { NotesStore } from './notes-db'
 import { registerExportRoutes } from './notes-export'
 import { NotifyHub } from './notify'
@@ -157,6 +158,7 @@ function serve(): void {
   registerStatusRoutes(api, status, { changed: notify, machine, running: () => runs.ids() })
   registerStatusActions(api, { status, machine, tether, runs })
   registerBackupRoutes(api)
+  registerLoginRoutes(api, process.env, tether)
   // The phone alert rule: checked on every write of rows. aico-web's own heartbeat writes every
   // few minutes, so a backup or machine row that goes late is seen then too. A notice notify
   // refuses throws, and the batch is offered again on the next pass.

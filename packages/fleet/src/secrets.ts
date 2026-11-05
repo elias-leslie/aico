@@ -1,118 +1,32 @@
 // Credentials travel only on an approved full peer's exec channel, never argv or logs.
-import {
-  closeSync,
-  constants,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { lstatSync, mkdirSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { requestExec } from './exec'
+import { join } from 'node:path'
+import { loginCaller } from './logins-cli'
+import { pushLoginGrants } from './logins-delivery'
 import { type FleetSettings, fleetFile } from './settings'
-import staticLogins from './static-logins.json' with { type: 'json' }
 import { readPins } from './trust'
 
-export interface ToolSecret {
-  tool: string
-  name: string
-  file: string
-  envVar?: string
-  authFile?: string
-}
+export { parseToolSecrets } from './secret-files'
+
+import { parseToolSecrets } from './secret-files'
+
+export type { ToolSecret } from './secret-files'
+
+import type { ToolSecret } from './secret-files'
+
+export { privateFile, secretsDir, toolLoginsFile, writePrivate } from './secret-files'
+
+import { LoginStore } from './logins'
+import { privateFile, secretsDir, toolLoginsFile, writePrivate } from './secret-files'
+
 const NAME = /^[a-z0-9][a-z0-9_.-]{0,127}$/
-export function secretsDir(env = process.env): string {
-  return join(
-    env.AICO_DATA_DIR ||
-      join(env.XDG_STATE_HOME || join(env.HOME || homedir(), '.local/state'), 'aico'),
-    'secrets',
-  )
-}
-export function toolLoginsFile(env = process.env): string {
-  return join(
-    env.XDG_CONFIG_HOME || join(env.HOME || homedir(), '.config'),
-    'aico/tool-logins.json',
-  )
-}
-export function privateFile(path: string): Buffer {
-  const stat = lstatSync(path)
-  if (!stat.isFile() || stat.uid !== process.getuid?.() || (stat.mode & 0o777) !== 0o600)
-    throw new Error('Secret file must be owner-only with mode 0600')
-  return readFileSync(path)
-}
-export function writePrivate(path: string, value: string | Buffer): void {
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-  const dir = lstatSync(dirname(path))
-  if (!dir.isDirectory() || dir.uid !== process.getuid?.())
-    throw new Error('Login destination folder must belong to this user')
-  const temp = `${path}.${process.pid}.tmp`
-  try {
-    const fd = openSync(
-      temp,
-      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-      0o600,
-    )
-    try {
-      writeFileSync(fd, value)
-    } finally {
-      closeSync(fd)
-    }
-    renameSync(temp, path)
-  } finally {
-    try {
-      unlinkSync(temp)
-    } catch {}
-  }
-}
-export function parseToolSecrets(value: unknown): ToolSecret[] {
-  if (!Array.isArray(value) || value.length > 100) throw new Error('Invalid tool login map')
-  const seen = new Set<string>()
-  return value.map((item: unknown) => {
-    if (!item || typeof item !== 'object') throw new Error('Invalid tool login map')
-    const { tool, name, file, envVar, authFile } = item as Record<string, unknown>
-    const allowed = staticLogins.find((entry) => entry.tool === tool && entry.name === name)
-    if (
-      typeof tool !== 'string' ||
-      !NAME.test(tool) ||
-      typeof name !== 'string' ||
-      !NAME.test(name) ||
-      typeof file !== 'string' ||
-      !NAME.test(file) ||
-      !allowed ||
-      allowed.envVar !== envVar ||
-      allowed.authFile !== authFile ||
-      !!envVar === !!authFile ||
-      (envVar !== undefined &&
-        (typeof envVar !== 'string' || !/^[A-Z_][A-Z0-9_]*$/.test(envVar))) ||
-      (authFile !== undefined &&
-        (typeof authFile !== 'string' ||
-          !/^\.[a-zA-Z0-9_-]+\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_.-]+$/.test(authFile)))
-    )
-      throw new Error('Invalid tool login map')
-    const id = `${tool}/${name}`
-    if (seen.has(id)) throw new Error('Duplicate tool login')
-    seen.add(id)
-    return {
-      tool,
-      name,
-      file,
-      ...(envVar ? { envVar: envVar as string } : {}),
-      ...(authFile ? { authFile: authFile as string } : {}),
-    }
-  })
-}
 export function loadToolSecrets(env = process.env): ToolSecret[] {
-  try {
-    return parseToolSecrets(JSON.parse(privateFile(toolLoginsFile(env)).toString()))
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw new Error('Could not read the tool login map')
-  }
+  return parseToolSecrets(
+    new LoginStore(env).list().flatMap((entry) => (entry.tool ? [entry.tool] : [])),
+  )
 }
+
 export function receiveLogins(input: string, env = process.env): string[] {
   let raw: unknown
   try {
@@ -148,7 +62,7 @@ export function receiveLogins(input: string, env = process.env): string[] {
     ...entries,
   ]
   // Record destinations first: even a partial delivery can always be revoked.
-  writePrivate(toolLoginsFile(env), JSON.stringify(combined))
+  new LoginStore(env).syncTools(combined)
   entries.forEach((entry, i) => {
     const value = values[i] as string
     writePrivate(join(secretsDir(env), entry.file), value)
@@ -170,14 +84,14 @@ export function forgetLogin(tool: string, env = process.env): void {
       }
     }
   }
-  writePrivate(toolLoginsFile(env), JSON.stringify(entries.filter((entry) => entry.tool !== tool)))
+  const remaining = entries.filter((entry) => entry.tool !== tool)
+  new LoginStore(env).syncTools(remaining)
 }
 export function toolEnvironment(tool: string, env = process.env): NodeJS.ProcessEnv {
   const next = { ...env }
+  const store = new LoginStore(env)
   for (const entry of loadToolSecrets(env).filter((entry) => entry.tool === tool && entry.envVar))
-    next[entry.envVar as string] = privateFile(join(secretsDir(env), entry.file))
-      .toString()
-      .trim()
+    next[entry.envVar as string] = store.value(entry.file, loginCaller(env)).toString().trim()
   return next
 }
 export async function pushToolLogins(
@@ -186,30 +100,11 @@ export async function pushToolLogins(
   tool?: string,
   env = process.env,
 ): Promise<string[]> {
-  const pins = readPins(settings.allowlist)
-  if (
-    pins.find((pin) => pin.name === settings.machine)?.role !== 'full' ||
-    !pins.some((pin) => pin.name === name)
-  )
-    throw new Error('Only a full peer may push logins to an approved machine')
-  const peer = settings.peers.find((peer) => peer.name === name)
-  if (!peer) throw new Error('Machine has no fleet endpoint')
-  if (peer.tools === undefined) return []
-  const entries = loadToolSecrets(env).filter((entry) => peer.tools?.includes(entry.tool))
-  if (tool && !entries.some((entry) => entry.tool === tool))
+  if (tool && !loadToolSecrets(env).some((entry) => entry.tool === tool))
     throw new Error('No approved stored login for this tool')
-  const body = entries.map((entry) => ({
-    ...entry,
-    value: privateFile(join(secretsDir(env), entry.file)).toString(),
-  }))
-  const result = await requestExec(
-    join(settings.peerRoot, name, 'exec.sock'),
-    ['sh', '-c', 'exec "$HOME/.local/lib/tether/bin/tether" fleet receive-logins'],
-    Buffer.from(JSON.stringify({ entries: body, tools: peer.tools })),
-  )
-  if (result.code !== 0) throw new Error('Peer refused the tool login delivery')
-  return entries.map((entry) => entry.file)
+  return pushLoginGrants(settings, name, env)
 }
+
 export function setToolGrant(
   settings: FleetSettings,
   name: string,
@@ -224,6 +119,13 @@ export function setToolGrant(
   if (granted) tools.add(tool)
   else tools.delete(tool)
   peer.tools = [...tools]
+  const store = new LoginStore(env)
+  for (const entry of store.list().filter((entry) => entry.tool?.tool === tool))
+    store.grant(entry.name, 'machine', name, granted, {
+      owner: true,
+      role: 'owner',
+      machine: settings.machine,
+    })
   writePrivate(fleetFile(env), JSON.stringify(settings, null, 2))
   return settings
 }

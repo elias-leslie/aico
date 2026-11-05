@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import { X } from 'lucide-react'
+import Link from 'next/link'
 import { type ReactNode, useState } from 'react'
 import { formatAge } from '@/lib/attention'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
@@ -153,7 +154,8 @@ export function loginText(
   const cannotReach =
     tool.state === 'unknown' &&
     tool.source === 'agent-hub' &&
-    agentHub !== 'reachable'
+    agentHub !== 'reachable' &&
+    agentHub !== 'Aico secrets folder'
   return {
     text: `${LOGIN_LABELS[tool.state]} · ${
       cannotReach
@@ -418,7 +420,9 @@ function HostCard({
       )}
       {sync && <SyncState peer={sync} />}
 
-      <HostSignIn host={host.name} connected={connected} onOpened={onOpened} />
+      <Link href="/logins" className="lantern-btn ghost small mt-3">
+        Logins and tool sign-in
+      </Link>
 
       <ConfirmationDialog
         isOpen={confirm !== null}
@@ -468,7 +472,7 @@ function SyncState({ peer }: { peer: PeerSync }) {
   )
 }
 
-function HostSignIn({
+export function HostSignIn({
   host,
   connected,
   onOpened,
@@ -619,7 +623,8 @@ function LoginRows({
   onSignIn: (tool: string) => void
   onSignOut: (tool: string) => void
 }) {
-  const hubAway = data.agent_hub !== 'reachable'
+  const hubAway =
+    data.agent_hub !== 'reachable' && data.agent_hub !== 'Aico secrets folder'
   if (data.tools.length === 0 && !hubAway) {
     return <Note flush>No tools to sign in to on {host}.</Note>
   }

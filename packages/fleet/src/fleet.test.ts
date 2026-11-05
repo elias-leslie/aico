@@ -6,9 +6,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { requestExec } from './exec'
 import { Fleet } from './fleet'
 import { loadIdentity } from './identity'
+import { LoginStore, labIdentity, loginMachine } from './logins'
+import { pushLoginGrants } from './logins-delivery'
+import { requestLoginWire } from './logins-wire'
 import type { FleetSettings } from './settings'
 import { lanAddress } from './settings'
 import type { Pin } from './trust'
+import * as trust from './trust'
 
 const pushedLogins = vi.hoisted(() => vi.fn(async () => []))
 vi.mock('./secrets', () => ({ pushToolLogins: pushedLogins }))
@@ -61,7 +65,7 @@ async function pair() {
   const makeA = () =>
     new Fleet({
       settings: sa,
-      env: { AICO_FLEET_CONFIG: join(root, 'no-config') },
+      env: { HOME: join(root, 'home-a'), AICO_FLEET_CONFIG: join(root, 'no-config') },
       identity: a,
       pins: () => pins,
       postRows: async () => {},
@@ -70,7 +74,7 @@ async function pair() {
   const makeB = () =>
     new Fleet({
       settings: sb,
-      env: { AICO_FLEET_CONFIG: join(root, 'no-config') },
+      env: { HOME: join(root, 'home-b'), AICO_FLEET_CONFIG: join(root, 'no-config') },
       identity: b,
       pins: () => pins,
       postRows: async () => {},
@@ -478,4 +482,108 @@ it('carries a complete signed-release-sized input and its final exec result', as
   )
   expect(result.code).toBe(0)
   expect(result.stdout.trim()).toBe(String(2 * 1024 * 1024))
+})
+
+it('carries complete Logins responses over the real fleet link and binds worker writes to their assigned target', async () => {
+  const p = await pair()
+  p.setPins([
+    { name: p.a.name, publicKey: p.a.publicKey, role: 'full' },
+    { name: p.b.name, publicKey: p.b.publicKey, role: 'worker' },
+  ])
+  await p.fb.start()
+  await p.fa.start()
+  await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
+  const store = new LoginStore({ HOME: join(p.root, 'home-a') }),
+    owner = { owner: true, role: 'owner', machine: loginMachine() }
+  store.set('large', 'fixture-'.repeat(2000), { machines: [p.b.name] }, owner)
+  const socket = join(p.sb.peerRoot, p.a.name, 'logins.sock')
+  const call = async (operation: string, args: unknown[], role = 'implementation') =>
+    JSON.parse(
+      await requestLoginWire(
+        socket,
+        JSON.stringify({
+          operation,
+          args,
+          caller: { owner: true, role, machine: 'spoofed-full', session: 'hunt-one' },
+        }),
+      ),
+    )
+  const value = await call('value', ['large'])
+  expect(value.ok).toBe(true)
+  expect(Buffer.from(value.value, 'base64').toString()).toBe('fixture-'.repeat(2000))
+  expect((await call('list', [], 'hunting')).value).toEqual([])
+  expect((await call('grant', ['large', 'role', 'hunting', true], 'hunting')).ok).toBe(false)
+  const identity = labIdentity('example-local', 'viewer')
+  store.assign('hunt-one', ['example-local'], owner)
+  const metadata = {
+    kind: 'lab login',
+    lab: {
+      target: 'example-local',
+      actor: 'viewer',
+      kind: 'synthetic',
+      expires_at: null,
+      fields: ['password'],
+    },
+  }
+  const bundle = JSON.stringify({
+    schema_version: 1,
+    reference: identity.reference,
+    kind: 'synthetic',
+    expires_at: null,
+    values: { password: 'fixture-new-password' },
+  })
+  const saved = await call('set', [identity.name, bundle, metadata, false], 'hunting')
+  expect(saved.ok).toBe(true)
+  expect(JSON.stringify(saved)).not.toContain('fixture-new-password')
+  expect(store.list().some((entry) => entry.name === identity.name)).toBe(true)
+})
+
+it('forwards a full-peer merge to an already-connected downstream worker', async () => {
+  const p = await pair(),
+    c = loadIdentity(join(p.root, 'c'), 'peer-c'),
+    cPort = await port()
+  const pins: Pin[] = [
+    { name: p.a.name, publicKey: p.a.publicKey, role: 'full' },
+    { name: p.b.name, publicKey: p.b.publicKey, role: 'full' },
+    { name: c.name, publicKey: c.publicKey, role: 'worker' },
+  ]
+  p.setPins(pins)
+  const pinReader = vi.spyOn(trust, 'readPins').mockImplementation(() => pins)
+  p.sb.peers.push({ name: c.name, endpoint: { address: '127.0.0.1', port: cPort } })
+  const sc: FleetSettings = {
+    ...p.sb,
+    mode: 'worker',
+    machine: c.name,
+    stateDir: join(p.root, 'c'),
+    peerRoot: join(p.root, 'peer-c'),
+    listen: { address: '127.0.0.1', port: cPort },
+    peers: [{ name: p.b.name, endpoint: p.sb.listen }],
+  }
+  const fc = new Fleet({
+    settings: sc,
+    env: { HOME: join(p.root, 'home-c'), AICO_FLEET_CONFIG: join(p.root, 'no-config') },
+    identity: c,
+    pins: () => pins,
+    postRows: async () => {},
+    log: () => {},
+  })
+  cleanup.push(
+    () => pinReader.mockRestore(),
+    () => fc.close(),
+  )
+  await fc.start()
+  await p.fb.start()
+  await p.fa.start()
+  await vi.waitFor(() => expect(fc.status()[0]?.connected).toBe(true))
+  await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
+  const env = { HOME: join(p.root, 'home-a') },
+    store = new LoginStore(env),
+    owner = { owner: true, role: 'owner', machine: loginMachine() }
+  store.set('through-b', 'fixture-private-value', { machines: [c.name] }, owner)
+  await pushLoginGrants(p.sa, p.b.name, env)
+  expect(
+    new LoginStore({ HOME: join(p.root, 'home-c') }).list().map((entry) => entry.name),
+  ).toEqual(['through-b'])
+  await pushLoginGrants(p.sa, p.b.name, env)
+  expect(new LoginStore({ HOME: join(p.root, 'home-c') }).list()).toHaveLength(1)
 })

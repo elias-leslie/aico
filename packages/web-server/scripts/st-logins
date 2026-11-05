@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Thin ST extension: Aico owns the store, caller checks and all verbs.
+set -euo pipefail
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/aico-web.sh"
+exec_aico_web logins "$@"

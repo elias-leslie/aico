@@ -26,6 +26,7 @@ import {
   readToolUsage,
   runContextCli,
 } from '@aico/context'
+import { runLogins } from '@aico/fleet/logins-cli'
 import { machineId } from '@aico/status'
 import { TetherClient, TetherError, TetherUnavailable, tetherSocketPath } from '@aico/tether-client'
 import { runUsageCli, USAGE_COMMANDS } from '@aico/usage'
@@ -44,6 +45,7 @@ export const CLI_COMMANDS = [
   'tcodex',
   'tnotes',
   'status',
+  'logins',
   'app',
   ...CONTEXT_COMMANDS,
   ...USAGE_COMMANDS,
@@ -560,6 +562,7 @@ function terminalIo(): CliIo {
 
 /** `aico-web tsession|tclaude|tcodex …` against the user's own Tether and the web app's state. */
 export async function runCli(command: string, argv: string[]): Promise<number> {
+  if (command === 'logins') return runLogins(argv)
   if (command === 'tnotes') return runNotesCli(argv, terminalIo().repoRoot)
   if (command === 'app')
     return runAppCli(argv, {

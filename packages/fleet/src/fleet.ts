@@ -12,6 +12,8 @@ import type { StatusRow } from '@aico/status'
 import { Connection, type OpenChannel } from './connection'
 import { serveExec } from './exec'
 import { type Identity, loadIdentity, validName } from './identity'
+import { loginPeerRpc } from './logins-client'
+import { serveLoginWire } from './logins-wire'
 import { pushToolLogins } from './secrets'
 import { type FleetSettings, localAddress, readSettings } from './settings'
 import { type Pin, PinCache } from './trust'
@@ -79,7 +81,7 @@ export class Fleet {
         throw new Error('Invalid fleet peer name')
       const dir = join(s.peerRoot, peer.name)
       mkdirSync(dir, { recursive: true, mode: 0o700 })
-      for (const target of ['control', 'sync', 'exec', 'jobs'] as const) {
+      for (const target of ['control', 'sync', 'exec', 'jobs', 'logins'] as const) {
         const path = join(dir, `${target}.sock`)
         await this.listenUnix(path, (socket) => this.forward(peer.name, target, socket))
       }
@@ -333,8 +335,21 @@ export class Fleet {
   private openLocal(channel: Duplex, request: OpenChannel, peer: string): void {
     const s = this.options.settings
     const pin = this.pins().find((entry) => entry.name === peer)
-    if (!pin || (pin.role !== 'full' && !['sync', 'jobs'].includes(request.target))) {
+    if (!pin || (pin.role !== 'full' && !['sync', 'jobs', 'logins'].includes(request.target))) {
       channel.destroy(new Error('Peer role does not allow this action'))
+      return
+    }
+    if (request.target === 'logins') {
+      serveLoginWire(channel, (input) =>
+        loginPeerRpc(
+          input,
+          peer,
+          pin.role,
+          this.options.env || process.env,
+          s,
+          this.pins().find((entry) => entry.name === s.machine)?.role === 'full',
+        ),
+      )
       return
     }
     if (request.target === 'exec' && request.argv) {

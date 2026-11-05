@@ -25,6 +25,10 @@
     "./fleet": "./src/fleet.ts",
     "./exec": "./src/exec.ts",
     "./service": "./src/service.ts",
+    "./logins-client": "./src/logins-client.ts",
+    "./logins": "./src/logins.ts",
+    "./logins-cli": "./src/logins-cli.ts",
+    "./logins-delivery": "./src/logins-delivery.ts",
     "./secrets": "./src/secrets.ts",
     "./releases": "./src/releases.ts"
   },

@@ -9,7 +9,7 @@ import {
 } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSignInWatch, watchSignIn } from '@/lib/hooks/use-host-admin'
-import { HostsSheet } from './HostsSheet'
+import { HostSignIn, HostsSheet } from './HostsSheet'
 
 const push = vi.hoisted(() => vi.fn())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }))
@@ -96,14 +96,22 @@ const loginsFor = (over: Json = {}): { status: number; body: Json } => ({
   },
 })
 
-function renderSheet() {
+function renderSheet(signIn = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   const onOpenChange = vi.fn()
   render(
     <QueryClientProvider client={client}>
-      <HostsSheet open onOpenChange={onOpenChange} />
+      {signIn ? (
+        <HostSignIn
+          host="agent-work"
+          connected={state.hosts[0]?.state === 'connected'}
+          onOpened={() => onOpenChange(false)}
+        />
+      ) : (
+        <HostsSheet open onOpenChange={onOpenChange} />
+      )}
     </QueryClientProvider>,
   )
   return { client, onOpenChange }
@@ -118,6 +126,13 @@ describe('HostsSheet', () => {
     state.answers = []
     push.mockReset()
     stubFetch()
+  })
+  it('shows Aico login state without claiming its store is unreachable', async () => {
+    state.hosts = [host()]
+    state.logins['agent-work'] = loginsFor({ agent_hub: 'Aico secrets folder' })
+    renderSheet(true)
+    await screen.findByTestId('login-codex')
+    expect(screen.queryByTestId('agent-hub-away')).toBeNull()
   })
 
   it('says it is loading, then that no other hosts exist', async () => {
@@ -146,7 +161,7 @@ describe('HostsSheet', () => {
     )
     expect(screen.getByText('ssh: no route')).toBeInTheDocument()
     expect(
-      screen.getByText('Sign-in can be checked once agent-work is connected.'),
+      screen.getByRole('link', { name: 'Logins and tool sign-in' }),
     ).toBeInTheDocument()
     expect(screen.queryByText('Checking sign-in…')).toBeNull()
 
@@ -274,10 +289,8 @@ describe('HostsSheet', () => {
       ],
       actions: {},
     })
-    renderSheet()
-    expect(await screen.findByTestId('host-status')).toHaveTextContent(
-      'Connected · 2 sessions',
-    )
+    renderSheet(true)
+
     expect(await screen.findByTestId('agent-hub-away')).toHaveTextContent(
       'Agent Hub can’t be reached from agent-work',
     )
@@ -345,7 +358,7 @@ describe('HostsSheet', () => {
         pi: { signIn: true, signOut: 'session' },
       },
     })
-    renderSheet()
+    renderSheet(true)
     const codex = await screen.findByTestId('login-codex')
     expect(codex).toHaveTextContent('Signed in · This host')
     // Signed in: no Sign in up front; the credentials fold into Details.
@@ -381,7 +394,7 @@ describe('HostsSheet', () => {
       status: 502,
       body: { detail: 'ssh timed out' },
     }
-    renderSheet()
+    renderSheet(true)
     expect(
       await screen.findByText(
         /Couldn’t check sign-in on agent-work: ssh timed out/,
@@ -410,7 +423,7 @@ describe('HostsSheet', () => {
         body: { host: 'agent-work', session: { id: 'abcd1234' } },
       },
     ]
-    const { onOpenChange } = renderSheet()
+    const { onOpenChange } = renderSheet(true)
     fireEvent.click(
       await screen.findByRole('button', {
         name: 'Sign in to Codex on agent-work',
@@ -440,7 +453,7 @@ describe('HostsSheet', () => {
         },
       },
     ]
-    renderSheet()
+    renderSheet(true)
     fireEvent.click(
       await screen.findByRole('button', {
         name: 'Sign out of Claude Code on agent-work',
@@ -458,7 +471,7 @@ describe('HostsSheet', () => {
     state.hosts = [host({ canSleep: false })]
     state.logins['agent-work'] = loginsFor()
     renderSheet()
-    await screen.findByText('Sign-in')
+    await screen.findByText('Logins and tool sign-in')
     expect(screen.queryByRole('button', { name: 'Power off' })).toBeNull()
   })
 
@@ -476,7 +489,7 @@ describe('HostsSheet', () => {
       ],
       actions: { agy: { signIn: true, signOut: 'session' } },
     })
-    renderSheet()
+    renderSheet(true)
     const row = await screen.findByTestId('login-agy')
     expect(
       within(row).getAllByText('Unknown · not checked')[0],
