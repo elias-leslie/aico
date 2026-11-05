@@ -1,0 +1,1 @@
+ACCEPTANCE:state=success|source=420aa22d8d00c1c59fa7abcb5316f7b891c7274c|id=f0cf1b4fb64658caf6ab241873696f47adb9d9065244c01ac161907ceb250938|artifact=/srv/workspaces/projects/jobinator-4000/.git/st/acceptance/f0cf1b4fb64658caf6ab241873696f47adb9d9065244c01ac161907ceb250938.json|reused=false|duration_ms=31823.592|checks=1

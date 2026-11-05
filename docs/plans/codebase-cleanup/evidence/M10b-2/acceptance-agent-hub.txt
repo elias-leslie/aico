@@ -1,0 +1,3 @@
+ERROR acceptance_checks_failed; TEST:FAIL:4|details:.dev-tools/pytest-18e4fd3784df45de-1370575-311e2e1a-details.txt|hint:E       For further information visit https://errors.pydantic.dev/2.12/v/value_error|lane:heavy2|queue_ms:31732.196|execution_ms:733.807|queued_behind:isolated task acceptance project=summitflow
+ImportError while loading conftest '/srv/workspaces/projects/agent-hub/backend/tests/conftest.py'.
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings; reproduce: st check --ci-repro --seed 1984832030; acceptance evidence: /srv/workspaces/projects/agent-hub/.git/st/acceptance/5e6316981cb48780347602c0c1b887c5c26865c333d339cb5dec50782a36c8f9.json

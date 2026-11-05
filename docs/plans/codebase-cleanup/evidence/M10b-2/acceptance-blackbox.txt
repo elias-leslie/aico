@@ -1,0 +1,1 @@
+ERROR acceptance_checks_failed; OSV:FAIL:1|details:.dev-tools/security-osv-18e4fd5b6e7aaf8a-1426376-7de6a8f3-details.txt|hint:}; reproduce: st check --ci-repro --seed 2508197746; acceptance evidence: /srv/workspaces/projects/blackbox/.git/st/acceptance/40d275dd4d95f978de43ed6f737be37615cdbe7634d0188b3a97e75be283067b.json

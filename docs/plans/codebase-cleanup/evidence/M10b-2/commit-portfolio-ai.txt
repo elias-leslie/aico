@@ -1,0 +1,2 @@
+COMMIT[1]:status=SUCCESS pushed=false detail=420b81b4b187f3ea213bd7d2c9f8752862194b02
+BUDGET:portfolio-ai|state=ok|src=208k|tests=93k|ratio=0.45/0.80|gate=104s/125s|gate_s_per_kloc=0.50|slow>3s=0|slowest10=2s

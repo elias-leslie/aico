@@ -1,0 +1,19 @@
+{
+  "id": "publish:agent-skills",
+  "what": "agent-skills GitHub publication",
+  "kind": "job",
+  "machine": "davion-sidarli",
+  "state": "failed",
+  "meaning": "Main has no local check at 31d4a3362a. Owning agent: run st check --acceptance.",
+  "project": "agent-skills",
+  "last_run": "2026-11-04T23:57:19.238Z",
+  "actions": [
+    {
+      "kind": "run",
+      "ref": "aico publish --source agent-skills"
+    }
+  ],
+  "updated_at": "2026-11-04T23:57:19.258Z",
+  "shown": "failed",
+  "shown_since": null
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "repo": "a-loom",
+    "path": ".github/workflows/ci.yml",
+    "matches_head": true
+  },
+  {
+    "repo": "design-tools",
+    "path": ".github/workflows/ci.yml",
+    "matches_head": true
+  },
+  {
+    "repo": "monkey-fight",
+    "path": ".github/workflows/ci.yml",
+    "matches_head": true
+  },
+  {
+    "repo": "sha",
+    "path": ".github/workflows/ci.yml",
+    "matches_head": true
+  },
+  {
+    "repo": "the-aftertimes",
+    "path": ".github/workflows/ci.yml",
+    "matches_head": true
+  },
+  {
+    "repo": "vantage",
+    "path": ".github/workflows/ci.yml",
+    "matches_head": true
+  }
+]

@@ -1,0 +1,1 @@
+ACCEPTANCE:state=success|source=f8c4f57a65eace51068f2f36354bd606a189a8ed|id=79cf7c1e04ada80598d0bdd6e9f06851d6819b2a24163a898c3cc4b03b8f6cda|artifact=/srv/workspaces/projects/code-intelligence/.git/st/acceptance/79cf7c1e04ada80598d0bdd6e9f06851d6819b2a24163a898c3cc4b03b8f6cda.json|reused=false|duration_ms=5105.175|checks=1

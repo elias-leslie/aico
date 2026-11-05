@@ -1,0 +1,1 @@
+ACCEPTANCE:state=success|source=a68f1d9931d03d696dc75ed67d89733b1c611a03|id=6e717fc5744465e8e04979c444238acf1aa5660842ab6e5f1c6f7c8dc14a2f3e|artifact=/srv/workspaces/projects/uilint/.git/st/acceptance/6e717fc5744465e8e04979c444238acf1aa5660842ab6e5f1c6f7c8dc14a2f3e.json|reused=false|duration_ms=144599.447|checks=1

@@ -1,0 +1,107 @@
+[
+  {
+    "repo": "agent-hub",
+    "kind": "aico.local-check.v1",
+    "sha": "4907c765c7878ea731eb42bd6678dd0e0310e971",
+    "tree": "d3dce878b510a10bb33bfd585542af3c2a3629e6",
+    "passed": true,
+    "lane": "acceptance",
+    "failed": [],
+    "at": "2026-11-05T00:44:50.182678+00:00"
+  },
+  {
+    "repo": "agent-skills",
+    "kind": "aico.local-check.v1",
+    "sha": "d6d2e78360fda9ab18b1b13cfe1863ca17054711",
+    "tree": "5cbfa78eb4462f191f44f628d50896dc3ff32e69",
+    "passed": true,
+    "lane": "quick",
+    "failed": [],
+    "at": "2026-11-05T00:00:22.392Z"
+  },
+  {
+    "repo": "blackbox",
+    "kind": "aico.local-check.v1",
+    "sha": "519ce38b82fc4f997bfc41c58f25752daba49fc3",
+    "tree": "d27c4289a0ffb15071df0658d1441ee437c010d3",
+    "passed": false,
+    "lane": "acceptance",
+    "failed": [
+      "browser-e2e",
+      "go-tests",
+      "osv",
+      "webcrypto"
+    ],
+    "at": "2026-11-05T00:18:12.149065+00:00"
+  },
+  {
+    "repo": "browser-automation",
+    "kind": "aico.local-check.v1",
+    "sha": "98a936079c9232f4cfc11382c725b081b2c2203c",
+    "tree": "fe2e8f8a77196d8850187cf5cf6897480ff221c2",
+    "passed": true,
+    "lane": "acceptance",
+    "failed": [],
+    "at": "2026-11-05T00:22:02.990356+00:00"
+  },
+  {
+    "repo": "code-intelligence",
+    "kind": "aico.local-check.v1",
+    "sha": "f8c4f57a65eace51068f2f36354bd606a189a8ed",
+    "tree": "dcfb30e4beff6f66eb89f296d1c4091a1f56151f",
+    "passed": true,
+    "lane": "acceptance",
+    "failed": [],
+    "at": "2026-11-05T00:22:04.284043+00:00"
+  },
+  {
+    "repo": "desktop-automation",
+    "kind": "aico.local-check.v1",
+    "sha": "9ca5ea8b244ec1ebeab60e58b6d3da43843cf442",
+    "tree": "faec6d12189de3900294970f515adb443a25ef08",
+    "passed": true,
+    "lane": "acceptance",
+    "failed": [],
+    "at": "2026-11-05T00:16:09.056604+00:00"
+  },
+  {
+    "repo": "jobinator-4000",
+    "kind": "aico.local-check.v1",
+    "sha": "420aa22d8d00c1c59fa7abcb5316f7b891c7274c",
+    "tree": "976300c1732099789cae22bde1a43193964b727a",
+    "passed": true,
+    "lane": "acceptance",
+    "failed": [],
+    "at": "2026-11-05T00:08:14.315204+00:00"
+  },
+  {
+    "repo": "portfolio-ai",
+    "kind": "aico.local-check.v1",
+    "sha": "15fe9f1229f4b24bca53fc9f05df435b01d68de8",
+    "tree": "5686ce1af2eb1bb3dcd670c123dfa5f6364fa031",
+    "passed": true,
+    "lane": "acceptance",
+    "failed": [],
+    "at": "2026-11-05T00:31:49.198665+00:00"
+  },
+  {
+    "repo": "uilint",
+    "kind": "aico.local-check.v1",
+    "sha": "a68f1d9931d03d696dc75ed67d89733b1c611a03",
+    "tree": "99a643422cad636735d7e1b5695e77ea5192d883",
+    "passed": true,
+    "lane": "acceptance",
+    "failed": [],
+    "at": "2026-11-05T00:12:30.425626+00:00"
+  },
+  {
+    "repo": "vault-tools",
+    "kind": "aico.local-check.v1",
+    "sha": "5253be61eaceb7cd8021b6ff6f9cf1a5dffb6bd2",
+    "tree": "2072bf425343c2823af901edbc1b2e7a438d5f53",
+    "passed": true,
+    "lane": "acceptance",
+    "failed": [],
+    "at": "2026-11-05T00:13:03.394613+00:00"
+  }
+]

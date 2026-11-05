@@ -1,0 +1,1 @@
+ACCEPTANCE:state=success|source=5253be61eaceb7cd8021b6ff6f9cf1a5dffb6bd2|id=1572030aaef3cc4072d8e29a7c2b72a7a2129ccb0eaa551d9d3907bc06e38d0f|artifact=/srv/workspaces/projects/vault-tools/.git/st/acceptance/1572030aaef3cc4072d8e29a7c2b72a7a2129ccb0eaa551d9d3907bc06e38d0f.json|reused=false|duration_ms=32437.551|checks=1

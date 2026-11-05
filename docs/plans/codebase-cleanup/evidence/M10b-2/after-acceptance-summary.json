@@ -1,0 +1,8 @@
+{
+  "state": "success",
+  "source_commit": "e2fd3030ddf77bf32f13e0f720d8806bd8e1f2c9",
+  "source_tree": "a5d62bba34e2ec3437fa7a791d6c32fb02d68f69",
+  "acceptance_id": "f41c0f3e7aee84e85626af3ab1dc4e37376d9ce6f8504b0e583cabd277032fdc",
+  "check_count": 1,
+  "duration_ms": 149266.563
+}

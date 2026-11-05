@@ -1,0 +1,102 @@
+[
+  {
+    "repo": "agent-hub",
+    "local": "4907c765c7878ea731eb42bd6678dd0e0310e971",
+    "github": "4907c765c7878ea731eb42bd6678dd0e0310e971",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": [
+      ".github/workflows/docker-build.yml"
+    ]
+  },
+  {
+    "repo": "agent-skills",
+    "local": "d6d2e78360fda9ab18b1b13cfe1863ca17054711",
+    "github": "d6d2e78360fda9ab18b1b13cfe1863ca17054711",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": []
+  },
+  {
+    "repo": "aico",
+    "local": "16dabd107899f00eadb800ab18ffc1a95f7af75a",
+    "github": "16dabd107899f00eadb800ab18ffc1a95f7af75a",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": []
+  },
+  {
+    "repo": "blackbox",
+    "local": "519ce38b82fc4f997bfc41c58f25752daba49fc3",
+    "github": "519ce38b82fc4f997bfc41c58f25752daba49fc3",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": []
+  },
+  {
+    "repo": "browser-automation",
+    "local": "98a936079c9232f4cfc11382c725b081b2c2203c",
+    "github": "98a936079c9232f4cfc11382c725b081b2c2203c",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": []
+  },
+  {
+    "repo": "code-intelligence",
+    "local": "f8c4f57a65eace51068f2f36354bd606a189a8ed",
+    "github": "f8c4f57a65eace51068f2f36354bd606a189a8ed",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": []
+  },
+  {
+    "repo": "desktop-automation",
+    "local": "9ca5ea8b244ec1ebeab60e58b6d3da43843cf442",
+    "github": "9ca5ea8b244ec1ebeab60e58b6d3da43843cf442",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": []
+  },
+  {
+    "repo": "jobinator-4000",
+    "local": "420aa22d8d00c1c59fa7abcb5316f7b891c7274c",
+    "github": "420aa22d8d00c1c59fa7abcb5316f7b891c7274c",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": []
+  },
+  {
+    "repo": "portfolio-ai",
+    "local": "15fe9f1229f4b24bca53fc9f05df435b01d68de8",
+    "github": "15fe9f1229f4b24bca53fc9f05df435b01d68de8",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": [
+      ".github/workflows/docker-build.yml"
+    ]
+  },
+  {
+    "repo": "summitflow",
+    "local": "0c006eb7fe4c1ab8b32cc7611871585603a0b7dd",
+    "github": "0c006eb7fe4c1ab8b32cc7611871585603a0b7dd",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": []
+  },
+  {
+    "repo": "uilint",
+    "local": "a68f1d9931d03d696dc75ed67d89733b1c611a03",
+    "github": "a68f1d9931d03d696dc75ed67d89733b1c611a03",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": []
+  },
+  {
+    "repo": "vault-tools",
+    "local": "5253be61eaceb7cd8021b6ff6f9cf1a5dffb6bd2",
+    "github": "5253be61eaceb7cd8021b6ff6f9cf1a5dffb6bd2",
+    "equal": true,
+    "deleted_workflows_absent": true,
+    "workflows_on_github": []
+  }
+]

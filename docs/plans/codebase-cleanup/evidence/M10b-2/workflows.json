@@ -1,0 +1,491 @@
+[
+  {
+    "repo": "a-loom",
+    "path": ".github/workflows/ci.yml",
+    "action": "keep-unregistered",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Select declared Rust toolchain",
+      "- run: pnpm install --frozen-lockfile",
+      "- run: pnpm check",
+      "- run: pnpm --dir apps/aloom-ui build"
+    ]
+  },
+  {
+    "repo": "agent-hub",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Install backend dependencies",
+      "- name: Lint backend",
+      "- name: Typecheck backend",
+      "- name: Migrate test database",
+      "- name: Test backend",
+      "- name: Build backend package",
+      "runs-on: ubuntu-24.04",
+      "- name: Install SDK with test dependencies",
+      "- name: Test SDK",
+      "runs-on: ubuntu-24.04",
+      "- name: Checkout Codex adapter sources",
+      "- name: Checkout Claude adapter sources",
+      "- name: Install adapter test dependencies",
+      "- name: Test private context adapters",
+      "runs-on: ubuntu-24.04",
+      "- name: Install frontend dependencies",
+      "- name: Build and verify workspace packages",
+      "- name: Lint frontend",
+      "- name: Typecheck frontend",
+      "- name: Test frontend",
+      "- name: Build frontend"
+    ]
+  },
+  {
+    "repo": "agent-hub",
+    "path": ".github/workflows/docker-build.yml",
+    "action": "keep",
+    "steps": [
+      "runs-on: ubuntu-latest"
+    ]
+  },
+  {
+    "repo": "agent-skills",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Validate skill frontmatter and relative links",
+      "- name: Check installer shell syntax"
+    ]
+  },
+  {
+    "repo": "aico",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-latest",
+      "- name: Install system dependencies",
+      "- name: Install Node dependencies",
+      "- name: Check",
+      "runs-on: ubuntu-latest",
+      "- name: Install Python dependencies",
+      "- name: Ruff",
+      "- name: Ty",
+      "- name: Pytest"
+    ]
+  },
+  {
+    "repo": "aico",
+    "path": ".github/workflows/release.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-latest",
+      "- name: Create GitHub release"
+    ]
+  },
+  {
+    "repo": "blackbox",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-latest",
+      "- name: Format check",
+      "- name: Vet",
+      "- name: Test",
+      "- name: Build static binary",
+      "runs-on: ubuntu-latest",
+      "- name: Build the WebAssembly crypto core",
+      "- name: Cross-verify the browser crypto path against Go",
+      "runs-on: ubuntu-latest",
+      "- name: Provide a build-time CA placeholder",
+      "- name: Assemble debug",
+      "runs-on: ubuntu-latest",
+      "- name: Syntax check every script",
+      "- name: shellcheck",
+      "runs-on: ubuntu-latest",
+      "- name: Refuse committed key material"
+    ]
+  },
+  {
+    "repo": "browser-automation",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Require the reviewed public toolchain pin",
+      "- name: Bootstrap the canonical ST distribution outside the target checkout",
+      "- name: Install the locked target environment",
+      "- name: Install the locked syntax-check toolchain",
+      "- name: Validate CI configuration through ST",
+      "- name: Validate the bootstrap through ST",
+      "- name: Run the canonical target quality gate",
+      "- name: Retain failed quality diagnostics"
+    ]
+  },
+  {
+    "repo": "code-intelligence",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Require the reviewed public toolchain pin",
+      "- name: Bootstrap the canonical ST distribution outside the target checkout",
+      "- name: Install the locked target environment",
+      "- name: Install the locked syntax-check toolchain",
+      "- name: Validate CI configuration through ST",
+      "- name: Validate the bootstrap through ST",
+      "- name: Run the canonical target quality gate",
+      "- name: Retain failed quality diagnostics"
+    ]
+  },
+  {
+    "repo": "codex-config",
+    "path": ".github/workflows/agent-hub-context.yml",
+    "action": "keep",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Validate reviewed commit",
+      "- name: Check out reviewed public code",
+      "- name: Check out selected Codex integration files",
+      "- name: Check out selected Claude integration files",
+      "- name: Install reviewed dependencies",
+      "- name: Run private integration tests"
+    ]
+  },
+  {
+    "repo": "design-tools",
+    "path": ".github/workflows/ci.yml",
+    "action": "keep-unregistered",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Require the reviewed public toolchain pin",
+      "- name: Bootstrap the canonical ST distribution outside the target checkout",
+      "- name: Install the locked target environment",
+      "- name: Validate CI configuration through ST",
+      "- name: Validate the bootstrap through ST",
+      "- name: Run the canonical target quality gate"
+    ]
+  },
+  {
+    "repo": "desktop-automation",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Require the reviewed public toolchain pin",
+      "- name: Bootstrap the canonical ST distribution outside the target checkout",
+      "- name: Install the locked target environment",
+      "- name: Validate CI configuration through ST",
+      "- name: Validate the bootstrap through ST",
+      "- name: Run the canonical target quality gate"
+    ]
+  },
+  {
+    "repo": "jobinator-4000",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Install backend dependencies",
+      "- name: Create database with a non-superuser owner",
+      "- name: Install PDF browser",
+      "- name: Lint backend",
+      "- name: Typecheck backend",
+      "- name: Apply migrations to an empty database",
+      "- name: Test backend",
+      "runs-on: ubuntu-24.04",
+      "- name: Install frontend dependencies",
+      "- name: Typecheck frontend",
+      "- name: Test frontend",
+      "- name: Build frontend"
+    ]
+  },
+  {
+    "repo": "monkey-fight",
+    "path": ".github/workflows/ci.yml",
+    "action": "keep-unregistered",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- run: pnpm install --frozen-lockfile",
+      "- run: pnpm typecheck",
+      "- run: pnpm test",
+      "- run: pnpm build"
+    ]
+  },
+  {
+    "repo": "ominull",
+    "path": ".github/workflows/ci.yml",
+    "action": "keep",
+    "steps": [
+      "runs-on: ubuntu-latest",
+      "- name: Check out repository",
+      "- name: Verify every version site matches VERSION",
+      "- name: Release HTTP headers and frozen-cohort regression tests",
+      "- name: Router collector regression tests",
+      "runs-on: ubuntu-latest",
+      "- run: npm --prefix web-build ci --ignore-scripts",
+      "- run: web-build/node_modules/.bin/playwright install --with-deps ${{ matrix.browser }}",
+      "- run: bash scripts/check-topology.sh",
+      "- name: Preserve sanitized browser failure evidence",
+      "- name: Preserve sanitized performance measurements",
+      "runs-on: ubuntu-latest",
+      "- name: Check out repository",
+      "- name: Set up Go",
+      "- name: Install hub native test dependencies",
+      "- name: Run Go Test Suite",
+      "- name: Verify isolated IPv6 neighbor discovery",
+      "- name: Linux maintenance package checks",
+      "- name: Check reachable Go vulnerabilities",
+      "runs-on: ubuntu-latest",
+      "- name: Check out repository",
+      "- name: Set up Go",
+      "- name: Install Linux BPF build dependencies",
+      "- name: Compile and Run Linux Feedback Loops",
+      "- name: Build canonical retained binaries",
+      "- name: Upload nonprivileged Windows fixtures",
+      "runs-on: windows-latest",
+      "- name: Execute fixtures on Windows",
+      "- name: Windows maintenance package checks",
+      "runs-on: ubuntu-latest",
+      "- name: Check out repository",
+      "- name: Set up Go",
+      "- name: Install canonical packaging dependencies",
+      "- name: Build Cross-Platform Packages",
+      "- name: Verify Native Package Identities",
+      "runs-on: ubuntu-latest",
+      "- run: npm --prefix web-build ci --ignore-scripts",
+      "- run: web-build/node_modules/.bin/playwright install --with-deps chromium",
+      "- run: xvfb-run --auto-servernum node scripts/soak-console.cjs",
+      "runs-on: ${{ matrix.os }}",
+      "- run: npm --prefix web-build ci --ignore-scripts",
+      "- run: node web-build/node_modules/playwright/cli.js install --with-deps chromium",
+      "- run: xvfb-run --auto-servernum node scripts/check-installed-pwa.cjs",
+      "- run: node scripts/check-installed-pwa.cjs"
+    ]
+  },
+  {
+    "repo": "ominull",
+    "path": ".github/workflows/memory-profile.yml",
+    "action": "keep",
+    "steps": [
+      "runs-on: ubuntu-latest",
+      "- run: npm --prefix web-build ci --ignore-scripts",
+      "- run: node web-build/node_modules/playwright/cli.js install --with-deps chromium",
+      "- run: xvfb-run --auto-servernum node scripts/profile-console-memory.cjs"
+    ]
+  },
+  {
+    "repo": "portfolio-ai",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-latest",
+      "- name: Install backend dependencies",
+      "- name: Audit backend dependencies",
+      "- name: Prepare test database schema",
+      "- name: Ruff",
+      "- name: ty",
+      "- name: Pytest",
+      "runs-on: ubuntu-latest",
+      "- name: Install backend dependencies",
+      "- name: Build database from Alembic",
+      "- name: Deterministic database integration suites",
+      "runs-on: ubuntu-latest",
+      "- name: Install frontend dependencies",
+      "- name: Audit frontend dependencies",
+      "- name: Biome lint",
+      "- name: TypeScript",
+      "- name: Vitest",
+      "- name: Build",
+      "runs-on: ubuntu-latest",
+      "- name: Install backend dependencies",
+      "- name: Install frontend dependencies",
+      "- name: Install Chromium",
+      "- name: Build database from Alembic",
+      "- name: Build frontend",
+      "- name: Seed synthetic browser review evidence",
+      "- name: Exercise running stack in Chromium"
+    ]
+  },
+  {
+    "repo": "portfolio-ai",
+    "path": ".github/workflows/docker-build.yml",
+    "action": "keep",
+    "steps": [
+      "runs-on: ubuntu-latest",
+      "- name: Build backend smoke image",
+      "- name: Build frontend smoke image",
+      "- name: Exercise fresh images",
+      "- name: Scan backend image for fixable HIGH/CRITICAL vulnerabilities",
+      "- name: Scan frontend image for fixable HIGH/CRITICAL vulnerabilities",
+      "runs-on: ubuntu-latest",
+      "- name: Compute image tags"
+    ]
+  },
+  {
+    "repo": "rootfall",
+    "path": ".github/workflows/release-candidate.yml",
+    "action": "keep",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Check out the requested revision",
+      "- name: Check release-tool and isolated-smoke contracts",
+      "- name: Resolve pinned Godot toolchain",
+      "- name: Install verified Godot editor and export templates",
+      "- name: Audit release inputs and original audio",
+      "- name: Run all dependency-free Godot checks",
+      "- name: Export and package release candidate",
+      "- name: Prove Linux save and Web bytes (Windows structural; Steam absent)",
+      "- name: Retain candidate artifacts for review",
+      "- name: Retain isolated-smoke report for review"
+    ]
+  },
+  {
+    "repo": "sha",
+    "path": ".github/workflows/ci.yml",
+    "action": "keep-unregistered",
+    "steps": [
+      "runs-on: ubuntu-latest",
+      "- name: Install backend dependencies",
+      "- name: Run backend tests",
+      "- name: Regenerate source catalog and schemas",
+      "runs-on: ubuntu-latest",
+      "- name: Enable pnpm",
+      "- name: Install frontend dependencies",
+      "- name: Run frontend tests",
+      "- name: Typecheck frontend",
+      "- name: Build frontend",
+      "runs-on: ubuntu-latest",
+      "- name: Test Go agent",
+      "runs-on: ubuntu-latest",
+      "- name: Test PostgreSQL HA runtime",
+      "- name: Test trusted-CA TLS runtime",
+      "- name: Test file-mounted secrets runtime"
+    ]
+  },
+  {
+    "repo": "sha",
+    "path": ".github/workflows/macos-installer-e2e.yml",
+    "action": "keep",
+    "steps": [
+      "runs-on: macos-15",
+      "- name: Install backend dependencies",
+      "- name: Run macOS installer E2E"
+    ]
+  },
+  {
+    "repo": "summitflow",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Install age for backup encryption tests",
+      "- name: Install backend dependencies",
+      "- name: Lint backend",
+      "- name: Verify fresh schema and upgrade compatibility",
+      "- name: Test backend",
+      "- name: Build backend package",
+      "runs-on: ubuntu-24.04",
+      "- name: Pack Agent Hub workspace packages",
+      "- name: Install frontend dependencies",
+      "- name: Lint frontend",
+      "- name: Typecheck frontend",
+      "- name: Test frontend",
+      "- name: Build frontend"
+    ]
+  },
+  {
+    "repo": "summitflow",
+    "path": ".github/workflows/docker-build.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Require observed successful CI for the exact image source",
+      "runs-on: ubuntu-24.04",
+      "- name: Pack workspace packages",
+      "runs-on: ubuntu-24.04"
+    ]
+  },
+  {
+    "repo": "summitflow",
+    "path": ".github/workflows/docker-integration.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Create .env file",
+      "- name: Validate compose syntax",
+      "- name: Pack workspace packages",
+      "- name: Confirm Python wheels remain the checked-in locked releases",
+      "- name: Build SummitFlow images",
+      "- name: Start infrastructure",
+      "- name: Generate Hatchet client token",
+      "- name: Start SummitFlow stack",
+      "- name: Health check \u2014 SummitFlow API",
+      "- name: Health check \u2014 SummitFlow Web",
+      "- name: Show container status",
+      "- name: Collect logs on failure",
+      "- name: Tear down"
+    ]
+  },
+  {
+    "repo": "the-aftertimes",
+    "path": ".github/workflows/ci.yml",
+    "action": "keep-unregistered",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Cache Godot 4.7-stable",
+      "- name: Install Godot 4.7-stable",
+      "- name: Verify Godot install",
+      "- name: Headless import",
+      "- name: Headless check (main scene runs cleanly)",
+      "- name: GDScript syntax check",
+      "runs-on: ubuntu-24.04",
+      "- name: Restore Godot cache",
+      "- name: Run tests"
+    ]
+  },
+  {
+    "repo": "uilint",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Require the reviewed public toolchain pin",
+      "- name: Bootstrap the canonical ST distribution outside the target checkout",
+      "- name: Install the locked target environment",
+      "- name: Validate CI configuration through ST",
+      "- name: Validate the bootstrap through ST",
+      "- name: Run the canonical target quality gate"
+    ]
+  },
+  {
+    "repo": "vantage",
+    "path": ".github/workflows/ci.yml",
+    "action": "keep-unregistered",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- run: uv sync --locked --extra dev",
+      "- run: uv run --locked pytest tests ../tests",
+      "runs-on: ubuntu-24.04",
+      "- run: pnpm install --frozen-lockfile",
+      "- run: pnpm exec biome check .",
+      "- run: pnpm typecheck",
+      "- run: pnpm test",
+      "- run: pnpm build"
+    ]
+  },
+  {
+    "repo": "vault-tools",
+    "path": ".github/workflows/ci.yml",
+    "action": "delete",
+    "steps": [
+      "runs-on: ubuntu-24.04",
+      "- name: Require the reviewed public toolchain pin",
+      "- name: Bootstrap the canonical ST distribution outside the target checkout",
+      "- name: Install the locked target environment",
+      "- name: Validate CI configuration through ST",
+      "- name: Validate the bootstrap through ST",
+      "- name: Run the canonical target quality gate"
+    ]
+  }
+]

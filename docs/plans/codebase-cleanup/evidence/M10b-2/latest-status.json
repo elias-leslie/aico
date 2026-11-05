@@ -1,0 +1,463 @@
+[
+  {
+    "id": "jobs/github-publish",
+    "what": "Nightly GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "failed",
+    "meaning": "Exited 1: Publication: 2 pushed; 2 failed.",
+    "project": "aico",
+    "last_run": "2026-11-05T00:57:37.854Z",
+    "next_run": "2026-11-05T08:05:00.000Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico jobs run github-publish"
+      },
+      {
+        "kind": "log",
+        "ref": "journalctl --user -u aico-jobs.service -g github-publish -n 200 --no-pager"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:57.916Z",
+    "shown": "failed",
+    "shown_since": null
+  },
+  {
+    "id": "publish:blackbox",
+    "what": "blackbox GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "failed",
+    "meaning": "Local check failed at 519ce38b82: browser-e2e, go-tests, osv, webcrypto. Owning agent: fix it and check again.",
+    "project": "blackbox",
+    "last_run": "2026-11-05T00:57:44.561Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source blackbox"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:44.562Z",
+    "shown": "failed",
+    "shown_since": null
+  },
+  {
+    "id": "publish:ominull",
+    "what": "ominull GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "failed",
+    "meaning": "Main has no local check at cfbbecee35. Owning agent: run st check --acceptance.",
+    "project": "ominull",
+    "last_run": "2026-11-05T00:57:49.355Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source ominull"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:49.355Z",
+    "shown": "failed",
+    "shown_since": null
+  },
+  {
+    "id": "publish:agent-hub",
+    "what": "agent-hub GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Main is on GitHub at 4907c765c7.",
+    "project": "agent-hub",
+    "last_run": "2026-11-05T00:57:39.012Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source agent-hub"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:39.036Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:agent-skills",
+    "what": "agent-skills GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Main is on GitHub at d6d2e78360.",
+    "project": "agent-skills",
+    "last_run": "2026-11-05T00:57:40.215Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source agent-skills"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:40.217Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:aico",
+    "what": "aico GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Published main at 16dabd1078.",
+    "project": "aico",
+    "last_run": "2026-11-05T00:57:44.546Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source aico"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:44.547Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:browser-automation",
+    "what": "browser-automation GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Main is on GitHub at 98a936079c.",
+    "project": "browser-automation",
+    "last_run": "2026-11-05T00:57:45.743Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source browser-automation"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:45.744Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:bugout",
+    "what": "bugout GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "project": "bugout",
+    "last_run": "2026-11-05T00:57:45.750Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source bugout"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:45.750Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:cinderwake",
+    "what": "cinderwake GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: main unavailable.",
+    "project": "cinderwake",
+    "last_run": "2026-11-05T00:57:45.757Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source cinderwake"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:45.758Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:claude-config",
+    "what": "claude-config GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "project": "claude-config",
+    "last_run": "2026-11-05T00:57:45.763Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source claude-config"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:45.764Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:code-intelligence",
+    "what": "code-intelligence GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Main is on GitHub at f8c4f57a65.",
+    "project": "code-intelligence",
+    "last_run": "2026-11-05T00:57:46.953Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source code-intelligence"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:46.954Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:codex-config",
+    "what": "codex-config GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "project": "codex-config",
+    "last_run": "2026-11-05T00:57:46.962Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source codex-config"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:46.962Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:desktop-automation",
+    "what": "desktop-automation GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Main is on GitHub at 9ca5ea8b24.",
+    "project": "desktop-automation",
+    "last_run": "2026-11-05T00:57:48.135Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source desktop-automation"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:48.136Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:jobinator-4000",
+    "what": "jobinator-4000 GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Main is on GitHub at 420aa22d8d.",
+    "project": "jobinator-4000",
+    "last_run": "2026-11-05T00:57:49.325Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source jobinator-4000"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:49.326Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:neri",
+    "what": "neri GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: excluded project.",
+    "project": "neri",
+    "last_run": "2026-11-05T00:57:49.332Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source neri"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:49.332Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:neri-hunters",
+    "what": "neri-hunters GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: excluded project.",
+    "project": "neri-hunters",
+    "last_run": "2026-11-05T00:57:49.337Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source neri-hunters"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:49.338Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:nightshift",
+    "what": "nightshift GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "project": "nightshift",
+    "last_run": "2026-11-05T00:57:49.343Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source nightshift"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:49.343Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:portfolio",
+    "what": "portfolio GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "project": "portfolio",
+    "last_run": "2026-11-05T00:57:49.360Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source portfolio"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:49.361Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:portfolio-ai",
+    "what": "portfolio-ai GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Main is on GitHub at 15fe9f1229.",
+    "project": "portfolio-ai",
+    "last_run": "2026-11-05T00:57:50.623Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source portfolio-ai"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:50.624Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:security-research",
+    "what": "security-research GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "project": "security-research",
+    "last_run": "2026-11-05T00:57:50.629Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source security-research"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:50.629Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:summitflow",
+    "what": "summitflow GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Published main at 0c006eb7fe.",
+    "project": "summitflow",
+    "last_run": "2026-11-05T00:57:54.296Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source summitflow"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:54.297Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:uilint",
+    "what": "uilint GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: manual mode.",
+    "project": "uilint",
+    "last_run": "2026-11-05T00:57:54.302Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source uilint"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:54.303Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:vault",
+    "what": "vault GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Publication skipped: main unavailable.",
+    "project": "vault",
+    "last_run": "2026-11-05T00:57:54.310Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source vault"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:54.311Z",
+    "shown": "ok",
+    "shown_since": null
+  },
+  {
+    "id": "publish:vault-tools",
+    "what": "vault-tools GitHub publication",
+    "kind": "job",
+    "machine": "davion-sidarli",
+    "state": "ok",
+    "meaning": "Main is on GitHub at 5253be61ea.",
+    "project": "vault-tools",
+    "last_run": "2026-11-05T00:57:55.502Z",
+    "actions": [
+      {
+        "kind": "run",
+        "ref": "aico publish --source vault-tools"
+      }
+    ],
+    "updated_at": "2026-11-05T00:57:55.503Z",
+    "shown": "ok",
+    "shown_since": null
+  }
+]

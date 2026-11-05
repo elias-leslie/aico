@@ -1,0 +1,2 @@
+COMMIT[1]:status=SUCCESS pushed=false detail=a68f1d9931d03d696dc75ed67d89733b1c611a03
+BUDGET:uilint|state=ok|src=2k|tests=1k|ratio=0.35/0.80|gate=32s/60s|gate_s_per_kloc=20.88|slow>3s=0|slowest10=1s

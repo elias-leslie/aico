@@ -1,0 +1,20 @@
+[
+  {
+    "repo": "agent-hub",
+    "local": "cd4a8146ef0cb94b1f9248179fb964960cecccba",
+    "github": "cd4a8146ef0cb94b1f9248179fb964960cecccba",
+    "equal": true
+  },
+  {
+    "repo": "desktop-automation",
+    "local": "9ca5ea8b244ec1ebeab60e58b6d3da43843cf442",
+    "github": "3241d3066ed9c0b89205dc2846e44e486f91aeb0",
+    "equal": false
+  },
+  {
+    "repo": "portfolio-ai",
+    "local": "d6b6a46c576b54865fdfb0cb047cf74ffda7421e",
+    "github": "d6b6a46c576b54865fdfb0cb047cf74ffda7421e",
+    "equal": true
+  }
+]

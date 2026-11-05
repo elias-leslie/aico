@@ -1,0 +1,9 @@
+{
+  "summitflow_deploy": "JOB:482f58fc60e346bf8483ba7a134526ef|summitflow|succeeded|exit=0|commit=0c006eb7fe4c|deploy=succeeded",
+  "aico_units": "Id=aico-web.service\nActiveState=active\nWorkingDirectory=/home/kasadis/.local/lib/aico/releases/16dabd107899f00eadb800ab18ffc1a95f7af75a/packages/web-server\n\nId=aico-jobs.service\nActiveState=active\nWorkingDirectory=/home/kasadis/.local/lib/aico/releases/16dabd107899f00eadb800ab18ffc1a95f7af75a/packages/jobs",
+  "aico_http": {
+    "/health": 200,
+    "/": 200
+  },
+  "sf_nightly_publication_enabled": false
+}

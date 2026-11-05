@@ -1,0 +1,81 @@
+{
+  "acceptance_id": "0460931a2a36b00c48bfe51b990181a3f7ba5d517d7c378138828a8527ebbdc7",
+  "state": "success",
+  "source_commit": "0c006eb7fe4c1ab8b32cc7611871585603a0b7dd",
+  "source_tree": "1b0fc6e6d51d5354fe4b908efae95b0854320d29",
+  "coverage": "full",
+  "duration_ms": 95048.088,
+  "stages": [
+    {
+      "counts": {
+        "executed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "id": "fresh-schema",
+      "reason": "",
+      "required": true,
+      "reused": false,
+      "state": "pass"
+    },
+    {
+      "counts": {
+        "executed": 6180,
+        "failed": 0,
+        "skipped": 0
+      },
+      "id": "python",
+      "reason": "",
+      "required": true,
+      "reused": false,
+      "state": "pass"
+    },
+    {
+      "id": "fleet",
+      "reason": "coverage_provided_by:python",
+      "required": false,
+      "reused": false,
+      "state": "not-applicable"
+    },
+    {
+      "counts": {
+        "executed": 391,
+        "failed": 0,
+        "skipped": 0
+      },
+      "id": "frontend",
+      "reason": "",
+      "required": true,
+      "reused": true,
+      "state": "pass"
+    },
+    {
+      "id": "live-integrations",
+      "reason": "Live Agent Hub, memory, deployed API and browser E2E tests require separately authorized services and credentials; pytest excludes e2e and slow markers, frontend excludes tests/e2e.",
+      "required": false,
+      "reused": false,
+      "state": "not-applicable"
+    },
+    {
+      "id": "live-browser-systemd",
+      "reason": "Explicit ST_BROWSER_LIVE_FIXTURE and ST_RUN_SERVICE_SYSTEMD_TESTS owner fixtures are not authorized by local acceptance; their named tests are deselected.",
+      "required": false,
+      "reused": false,
+      "state": "not-applicable"
+    },
+    {
+      "id": "operator-global-hook",
+      "reason": "An operator-installed global Git hook is outside clean native fixture scope; only the tracked hook adapter regression runs.",
+      "required": false,
+      "reused": false,
+      "state": "not-applicable"
+    },
+    {
+      "id": "owner-btrfs-snapshots",
+      "reason": "ST_SNAPSHOT_TEST_ROOT requires an owner-assigned isolated Btrfs subvolume and bounded restore/delete privilege; local hermetic acceptance exactly deselects test_native_btrfs_shared_capture_readonly_recovery_and_isolated_restore and test_native_nested_saved_source_is_refused_and_disposable_tracked_fixture_preserved. Separate physical qualification and invocation are documented in docs/native-host-recovery.md.",
+      "required": false,
+      "reused": false,
+      "state": "not-applicable"
+    }
+  ]
+}

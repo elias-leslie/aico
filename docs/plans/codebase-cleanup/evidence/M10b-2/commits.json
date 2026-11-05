@@ -1,0 +1,146 @@
+{
+  "aico": [
+    {
+      "sha": "e2fd3030ddf77bf32f13e0f720d8806bd8e1f2c9",
+      "subject": "Publish checked main commits nightly from Aico"
+    },
+    {
+      "sha": "b1d4603866ecb79ca60a1077a936c8f410733b4b",
+      "subject": "Add the verified backup schedule alongside publication"
+    }
+  ],
+  "summitflow": [
+    {
+      "sha": "e5194d968f79de8f9911080a2ce7795ac3155e96",
+      "subject": "Move GitHub publication decisions to Aico"
+    },
+    {
+      "sha": "d9821834fd94bf662867bda2aa4fdbf4c22900eb",
+      "subject": "Drop the retired Actions publication acceptance tests"
+    },
+    {
+      "sha": "86a65a5333ee2076224679f1395c7cbc21352614",
+      "subject": "Keep the latest failed local check from being published"
+    },
+    {
+      "sha": "137c45290fc3096d65dbab161f8617d3715f1584",
+      "subject": "Read acceptance fixtures from the local gate configuration"
+    },
+    {
+      "sha": "a6509ea61892e8efba43cf076c37dd4f546a51ce",
+      "subject": "Activate local acceptance fixtures without a workflow"
+    },
+    {
+      "sha": "12610222b96793a6a3a4f4eee227ef366994adae",
+      "subject": "Check session privacy without matching fixture path text"
+    },
+    {
+      "sha": "4e9c85d2c22b9aa3249cb3c06c95d9cae6df3049",
+      "subject": "Resolve local fixture tools before seeding test order"
+    },
+    {
+      "sha": "569dc865385d8e8bdf69e7066ea1e749d8ecad53",
+      "subject": "Read failed check names only from verdict lines"
+    },
+    {
+      "sha": "a13875dee727e7703afa096c060d7e6c7412db2d",
+      "subject": "Record clean full-gate results for legacy projects"
+    },
+    {
+      "sha": "0c006eb7fe4c1ab8b32cc7611871585603a0b7dd",
+      "subject": "Find the Aico extension without assuming registry order"
+    }
+  ],
+  "agent-hub": [
+    {
+      "sha": "4a37b3551c87609dac538b13dec736fc79b1ea1f",
+      "subject": "Remove Actions checks repeated by the local gate"
+    },
+    {
+      "sha": "cd4a8146ef0cb94b1f9248179fb964960cecccba",
+      "subject": "Declare the local test environment without Actions"
+    },
+    {
+      "sha": "c2e01408e1c37c101cd860fdad261ac70e8472cc",
+      "subject": "Keep the disposable local test fixture after removing Actions"
+    },
+    {
+      "sha": "4907c765c7878ea731eb42bd6678dd0e0310e971",
+      "subject": "Keep the context API test on its replay clock"
+    }
+  ],
+  "agent-skills": [
+    {
+      "sha": "31d4a3362a7e21833f6ddb68d550898bc01348b1",
+      "subject": "Remove Actions checks repeated by the local gate"
+    },
+    {
+      "sha": "d6d2e78360fda9ab18b1b13cfe1863ca17054711",
+      "subject": "Remove the retired workflow from local gate inputs"
+    }
+  ],
+  "blackbox": [
+    {
+      "sha": "519ce38b82fc4f997bfc41c58f25752daba49fc3",
+      "subject": "Remove Actions checks repeated by the local gate"
+    }
+  ],
+  "browser-automation": [
+    {
+      "sha": "98a936079c9232f4cfc11382c725b081b2c2203c",
+      "subject": "Remove Actions checks repeated by the local gate"
+    }
+  ],
+  "code-intelligence": [
+    {
+      "sha": "f8c4f57a65eace51068f2f36354bd606a189a8ed",
+      "subject": "Remove Actions checks repeated by the local gate"
+    }
+  ],
+  "desktop-automation": [
+    {
+      "sha": "54de7595be701e878f1e7de208045e91d63c2189",
+      "subject": "Remove Actions checks repeated by the local gate"
+    },
+    {
+      "sha": "3241d3066ed9c0b89205dc2846e44e486f91aeb0",
+      "subject": "Declare Bash for the local installer regression check"
+    },
+    {
+      "sha": "9ca5ea8b244ec1ebeab60e58b6d3da43843cf442",
+      "subject": "Declare the complete local desktop test toolchain"
+    }
+  ],
+  "jobinator-4000": [
+    {
+      "sha": "420aa22d8d00c1c59fa7abcb5316f7b891c7274c",
+      "subject": "Remove Actions checks repeated by the local gate"
+    }
+  ],
+  "portfolio-ai": [
+    {
+      "sha": "420b81b4b187f3ea213bd7d2c9f8752862194b02",
+      "subject": "Remove Actions checks repeated by the local gate"
+    },
+    {
+      "sha": "d6b6a46c576b54865fdfb0cb047cf74ffda7421e",
+      "subject": "Declare the local test environment without Actions"
+    },
+    {
+      "sha": "15fe9f1229f4b24bca53fc9f05df435b01d68de8",
+      "subject": "Keep the disposable local test fixture after removing Actions"
+    }
+  ],
+  "uilint": [
+    {
+      "sha": "a68f1d9931d03d696dc75ed67d89733b1c611a03",
+      "subject": "Remove Actions checks repeated by the local gate"
+    }
+  ],
+  "vault-tools": [
+    {
+      "sha": "5253be61eaceb7cd8021b6ff6f9cf1a5dffb6bd2",
+      "subject": "Remove Actions checks repeated by the local gate"
+    }
+  ]
+}

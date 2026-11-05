@@ -1,0 +1,2 @@
+COMMIT[1]:status=SUCCESS pushed=false detail=4a37b3551c87609dac538b13dec736fc79b1ea1f
+BUDGET:agent-hub|state=ok|src=188k|tests=98k|ratio=0.52/0.80|gate=109s/113s|gate_s_per_kloc=0.58|slow>3s=0|slowest10=18s

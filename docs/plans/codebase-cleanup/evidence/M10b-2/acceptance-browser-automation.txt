@@ -1,0 +1,1 @@
+ACCEPTANCE:state=success|source=98a936079c9232f4cfc11382c725b081b2c2203c|id=bcfe1ea17f3657c21f5061e1078da75a8821bb8e2de65c212ec859e413c35ba0|artifact=/srv/workspaces/projects/browser-automation/.git/st/acceptance/bcfe1ea17f3657c21f5061e1078da75a8821bb8e2de65c212ec859e413c35ba0.json|reused=false|duration_ms=40641.914|checks=1

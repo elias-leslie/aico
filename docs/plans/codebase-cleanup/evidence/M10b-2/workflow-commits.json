@@ -1,0 +1,85 @@
+[
+  {
+    "repo": "agent-hub",
+    "sha": "4a37b3551c87609dac538b13dec736fc79b1ea1f",
+    "paths": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/docker-build.yml"
+    ],
+    "head": "4907c765c7878ea731eb42bd6678dd0e0310e971"
+  },
+  {
+    "repo": "agent-skills",
+    "sha": "31d4a3362a7e21833f6ddb68d550898bc01348b1",
+    "paths": [
+      ".github/workflows/ci.yml"
+    ],
+    "followup": "d6d2e78360fda9ab18b1b13cfe1863ca17054711",
+    "head": "d6d2e78360fda9ab18b1b13cfe1863ca17054711"
+  },
+  {
+    "repo": "blackbox",
+    "sha": "519ce38b82fc4f997bfc41c58f25752daba49fc3",
+    "paths": [
+      ".github/workflows/ci.yml"
+    ],
+    "head": "519ce38b82fc4f997bfc41c58f25752daba49fc3"
+  },
+  {
+    "repo": "browser-automation",
+    "sha": "98a936079c9232f4cfc11382c725b081b2c2203c",
+    "paths": [
+      ".github/workflows/ci.yml"
+    ],
+    "head": "98a936079c9232f4cfc11382c725b081b2c2203c"
+  },
+  {
+    "repo": "code-intelligence",
+    "sha": "f8c4f57a65eace51068f2f36354bd606a189a8ed",
+    "paths": [
+      ".github/workflows/ci.yml"
+    ],
+    "head": "f8c4f57a65eace51068f2f36354bd606a189a8ed"
+  },
+  {
+    "repo": "desktop-automation",
+    "sha": "54de7595be701e878f1e7de208045e91d63c2189",
+    "paths": [
+      ".github/workflows/ci.yml"
+    ],
+    "head": "9ca5ea8b244ec1ebeab60e58b6d3da43843cf442"
+  },
+  {
+    "repo": "jobinator-4000",
+    "sha": "420aa22d8d00c1c59fa7abcb5316f7b891c7274c",
+    "paths": [
+      ".github/workflows/ci.yml"
+    ],
+    "head": "420aa22d8d00c1c59fa7abcb5316f7b891c7274c"
+  },
+  {
+    "repo": "portfolio-ai",
+    "sha": "420b81b4b187f3ea213bd7d2c9f8752862194b02",
+    "paths": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/docker-build.yml"
+    ],
+    "head": "15fe9f1229f4b24bca53fc9f05df435b01d68de8"
+  },
+  {
+    "repo": "uilint",
+    "sha": "a68f1d9931d03d696dc75ed67d89733b1c611a03",
+    "paths": [
+      ".github/workflows/ci.yml"
+    ],
+    "head": "a68f1d9931d03d696dc75ed67d89733b1c611a03"
+  },
+  {
+    "repo": "vault-tools",
+    "sha": "5253be61eaceb7cd8021b6ff6f9cf1a5dffb6bd2",
+    "paths": [
+      ".github/workflows/ci.yml"
+    ],
+    "head": "5253be61eaceb7cd8021b6ff6f9cf1a5dffb6bd2"
+  }
+]
