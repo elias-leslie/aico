@@ -592,6 +592,37 @@ it('forwards a full-peer merge to an already-connected downstream worker', async
   expect(new LoginStore({ HOME: join(p.root, 'home-c') }).list()).toHaveLength(1)
 })
 
+it('keeps full-peer channels available after repeated Logins snapshots', async () => {
+  const p = await pair()
+  const pinReader = vi.spyOn(trust, 'readPins').mockReturnValue([
+    { name: p.a.name, publicKey: p.a.publicKey, role: 'full' },
+    { name: p.b.name, publicKey: p.b.publicKey, role: 'full' },
+  ])
+  cleanup.push(() => pinReader.mockRestore())
+  p.sa.maxChannels = 4
+  p.sb.maxChannels = 4
+  await p.fb.start()
+  await p.fa.start()
+  await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
+  const env = { HOME: join(p.root, 'home-a') }
+  new LoginStore(env).set(
+    'sample',
+    'fixture-private-value',
+    {},
+    { owner: true, role: 'owner', machine: loginMachine() },
+  )
+  for (let i = 0; i < 12; i++) await pushLoginGrants(p.sa, p.b.name, env)
+  expect(
+    (
+      await requestExec(
+        join(p.sa.peerRoot, p.b.name, 'exec.sock'),
+        ['/usr/bin/true'],
+        Buffer.alloc(0),
+      )
+    ).code,
+  ).toBe(0)
+})
+
 it('reports actual stopped guests as off and restores warning when the power reading fails', async () => {
   let power: string | null = 'stopped'
   let latest: import('@aico/status').StatusRow[] = []
