@@ -1,0 +1,26 @@
+{
+  "at": "2026-11-05T09:36:47.499741+00:00",
+  "entries": [
+    {
+      "peer": "workstation",
+      "name": "m12-cutover-sync-a",
+      "present": false
+    },
+    {
+      "peer": "workstation",
+      "name": "m12-cutover-sync-b",
+      "present": false
+    },
+    {
+      "peer": "ct190",
+      "name": "m12-cutover-sync-a",
+      "present": false
+    },
+    {
+      "peer": "ct190",
+      "name": "m12-cutover-sync-b",
+      "present": false
+    }
+  ],
+  "values_read": false
+}
