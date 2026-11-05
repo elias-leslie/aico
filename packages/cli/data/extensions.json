@@ -320,7 +320,7 @@
       "namespace": "github-delivery",
       "manifest": "extensions/github-delivery.json",
       "executable": "backend/.venv/bin/st",
-      "execution_source": "accepted_runtime",
+      "execution_source": "checkout",
       "arguments": ["vcs", "deliver"],
       "grant": {
         "enabled": true,

@@ -41,7 +41,7 @@ function harness(env: NodeJS.ProcessEnv = {}) {
   }
 }
 describe('CLI cutover', () => {
-  it('keeps checked-main delivery on the accepted CLI-only transport', async () => {
+  it('keeps checked-main delivery on the registered CLI-only transport', async () => {
     const dir = temp(),
       state = join(dir, 'services'),
       owner = join(state, 'projects/summitflow'),
@@ -50,7 +50,12 @@ describe('CLI cutover', () => {
     mkdirSync(join(accepted, 'backend/.venv/bin'), { recursive: true })
     writeFileSync(leaf, 'fixture', { mode: 0o755 })
     symlinkSync(join(owner, 'releases/accepted'), join(owner, 'current'))
-    const h = harness({ HOME: dir, SUMMITFLOW_SERVICE_STATE_ROOT: state })
+    const { Registry } = await import('@aico/tasks')
+    const file = join(dir, 'tasks.db'),
+      db = openTasksDb(file)
+    new Registry(db).register({ id: 'summitflow', root: accepted })
+    db.close()
+    const h = harness({ HOME: dir, AICO_TASKS_DB: file, SUMMITFLOW_SERVICE_STATE_ROOT: state })
     const args = ['--root', root, '--sha', 'a'.repeat(40)]
     expect(await h.go(['vcs', 'deliver', ...args])).toBe(0)
     expect(h.calls[0]?.argv).toEqual([leaf, 'vcs', 'deliver', ...args])
