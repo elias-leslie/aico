@@ -91,8 +91,21 @@ export function toolEnvironment(tool: string, env = process.env): NodeJS.Process
   const next = { ...env }
   const store = new LoginStore(env)
   for (const entry of loadToolSecrets(env).filter((entry) => entry.tool === tool && entry.envVar))
-    next[entry.envVar as string] = store.toolValue(entry.file, loginCaller(env)).toString().trim()
+    next[entry.envVar as string] = envValue(
+      store.toolValue(entry.file, loginCaller(env)).toString(),
+    )
   return next
+}
+/** Some stored tool logins are the imported `{schema_version, value, expires_at}` wrapper; a variable gets the key alone. */
+function envValue(stored: string): string {
+  const text = stored.trim()
+  if (!text.startsWith('{')) return text
+  try {
+    const wrapped = JSON.parse(text) as { value?: unknown }
+    return typeof wrapped.value === 'string' ? wrapped.value.trim() : text
+  } catch {
+    return text
+  }
 }
 export async function pushToolLogins(
   settings: FleetSettings,

@@ -125,6 +125,25 @@ it('keeps permitted Pi tool sign-in available to hunters while raw login retriev
   )
 })
 
+it('gives a tool variable the key from an imported wrapper, not the wrapper JSON', () => {
+  const wrapped = JSON.stringify({ schema_version: 1, value: 'fixture-key', expires_at: null })
+  receiveLogins(
+    JSON.stringify({
+      tools: ['pi'],
+      entries: [
+        {
+          tool: 'pi',
+          name: 'opencode-go',
+          file: 'opencode-go',
+          envVar: 'OPENCODE_API_KEY',
+          value: wrapped,
+        },
+      ],
+    }),
+    env,
+  )
+  expect(toolEnvironment('pi', env).OPENCODE_API_KEY).toBe('fixture-key')
+})
 it('refuses rotating logins and a static entry pointing at an arbitrary auth file', () => {
   for (const entry of [
     { tool: 'codex', name: 'login', file: 'codex', authFile: '.codex/auth.json' },
