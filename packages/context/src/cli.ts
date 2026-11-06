@@ -78,6 +78,8 @@ export interface ContextCliIo {
     toolUsage(): Promise<Source<string>>
     /** The other sessions in a project, from Tether. */
     activity(project: string, except: string | null): Promise<Source<Activity[]>>
+    /** Whether Aico's project registry lists the project (it then gets project scope). */
+    registered?(project: string): boolean
   }
 }
 
@@ -545,6 +547,7 @@ async function deliverCommand(db: () => Database, rest: string[], io: ContextCli
       hook: HOOK_FORMATS.includes(format),
       ...(toolUsage === undefined ? {} : { toolUsage }),
       ...(activity === undefined ? {} : { activity }),
+      ...(io.delivery?.registered ? { registered: io.delivery.registered } : {}),
       now: io.now(),
     })
   } catch (error) {

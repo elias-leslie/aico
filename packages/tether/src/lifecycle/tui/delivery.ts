@@ -30,6 +30,7 @@ import {
   recordDelivery,
   type Source,
 } from '@aico/context'
+import { registryProjects } from '@aico/tasks/registry'
 import { getSessionEntry, getWidget, listSessions, rootRequestForWidget } from '../catalog'
 import { shellQuote } from './launch'
 import type { TuiSpec } from './spec'
@@ -101,12 +102,15 @@ export interface DeliveryDeps {
   env: NodeJS.ProcessEnv
   now(): Date
   toolUsage(cwd: string | undefined): Promise<Source<string>>
+  /** Whether Aico's project registry lists the project. */
+  registered?(project: string): boolean
 }
 
 const DEFAULT_DEPS: DeliveryDeps = {
   env: process.env,
   now: () => new Date(),
   toolUsage: (cwd) => readToolUsage(undefined, process.env, cwd),
+  registered: (project) => registryProjects(process.env).some((row) => row.id === project),
 }
 
 /** The project's other named sessions, for the Recent Activity lines. */
@@ -153,6 +157,7 @@ export async function withContextDelivery<T extends TuiSpec | undefined>(
       coordinator: row.coordinator,
       toolUsage: await deps.toolUsage(row.projectRoot ?? undefined),
       activity: projectActivity(widgetId, row.projectId),
+      ...(deps.registered ? { registered: deps.registered } : {}),
       now,
       ...(chosen && spec.chosenInstructions
         ? {

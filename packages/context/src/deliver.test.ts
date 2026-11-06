@@ -548,6 +548,18 @@ describe('delivery edge cases', () => {
     ])
   })
 
+  it("gives project scope to a project Aico's registry lists without an imported row", () => {
+    const db = fixtureDb()
+    db.prepare("DELETE FROM project_permissions WHERE project_id = 'alpha'").run()
+    const registered = (project: string) => project === 'alpha'
+    expect(deliver(db, { ...request, project: 'alpha' }).project).toBeNull()
+    const listed = deliver(db, { ...request, project: 'alpha', registered })
+    expect(listed.project).toBe('alpha')
+    expect(listed.sections.map((s) => s.id)).toContain('prompt:alpha-policy')
+    expect(listed.missing).not.toContainEqual(expect.objectContaining({ id: 'project' }))
+    expect(deliver(db, { ...request, project: 'some-folder', registered }).project).toBeNull()
+  })
+
   it("matches tool and role names the way Agent Hub's applicability does", () => {
     const db = fixtureDb()
     const policy = (applicability: object) => JSON.stringify({ scope: 'global', applicability })

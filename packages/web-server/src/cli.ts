@@ -28,6 +28,7 @@ import {
 } from '@aico/context'
 import { runLogins } from '@aico/fleet/logins-cli'
 import { machineId } from '@aico/status'
+import { registryProjects } from '@aico/tasks/registry'
 import { TetherClient, TetherError, TetherUnavailable, tetherSocketPath } from '@aico/tether-client'
 import { runUsageCli, USAGE_COMMANDS } from '@aico/usage'
 import { runAppCli } from './app-cli'
@@ -610,6 +611,7 @@ export async function runCli(command: string, argv: string[]): Promise<number> {
         env: process.env,
         toolUsage: () => readToolUsage(),
         activity: (project, except) => sessionActivity(project, except),
+        registered: (project) => registryProjects(process.env).some((row) => row.id === project),
       },
     })
   }

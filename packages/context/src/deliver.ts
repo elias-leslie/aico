@@ -51,6 +51,8 @@ export interface DeliverRequest {
   toolUsage?: Source<string>
   /** The project's other sessions; omitted: none asked for. */
   activity?: Source<Activity[]>
+  /** Whether Aico's project registry (tasks.db, `aico projects`) lists the project. */
+  registered?: (project: string) => boolean
   /** Caller-owned files, skills or rules actually handed to the agent. */
   sources?: { id: string; title: string; type: ItemType; text: string; required?: boolean }[]
   now?: Date
@@ -159,12 +161,14 @@ function consumerOf(
   }
   if (!tags.size) tags.add('work-role:unknown')
   if (request.coordinator) tags.add('aico-coordinator')
-  // Only a project in the registry (project_permissions, imported from Agent Hub)
-  // gets project scope; a folder name or a stale id gets the global context alone.
+  // Only a registered project gets project scope: Aico's project registry, or a
+  // project row imported from Agent Hub (project_permissions). A folder name or a
+  // stale id gets the global context alone.
   let project = request.project?.trim() || null
   if (
     project &&
-    !db.prepare('SELECT 1 FROM project_permissions WHERE project_id = ? LIMIT 1').get(project)
+    !db.prepare('SELECT 1 FROM project_permissions WHERE project_id = ? LIMIT 1').get(project) &&
+    !request.registered?.(project)
   ) {
     missing.push({
       id: 'project',
