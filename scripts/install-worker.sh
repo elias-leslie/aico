@@ -56,7 +56,7 @@ if [ ! -d "$release/scripts/shims" ]; then
   cp "$release/shims/tether-shim" "$release/shims/shims.list" "$release/scripts/shims/"
 fi
 TETHER_LIB_DIR="$lib" bash "$release/scripts/install-release.sh"
-# Replace the old credential-fetching links with local Aico launchers. The command
+# Write local Aico launchers for the tool commands. The command
 # map is host config, contains no credentials, and names the real tool executables.
 python3 - "$config_dir/tool-commands.json" "$lib/bin/tether" <<'PY'
 import json, os, re, shlex, sys
@@ -73,10 +73,6 @@ for entry in commands:
     temporary.write_text('#!/bin/sh\nexec '+shlex.join([sys.argv[2], 'fleet', 'tool', tool, '--', executable])+' "$@"\n')
     temporary.chmod(0o755)
     temporary.replace(wrapper)
-    legacy = Path.home()/'.local/lib/agent-hub/cred-bin'/command
-    if legacy.is_symlink():
-        legacy.unlink()
-        legacy.symlink_to(wrapper)
 PY
 install -d -m 0755 "$unit_dir/tether@default.service.d"
 cat > "$unit_dir/tether@default.service.d/20-aico-worker.conf" <<EOF
