@@ -33,6 +33,18 @@
     "task_types": ["config", "prompt-tuning"]
   },
   {
+    "surface": "st.declare",
+    "tier": "reference",
+    "cmd": "st declare --host H --what KIND --hours N --reason TEXT [--since H] | st declare list",
+    "when": "before or right after you change a watched host (listeners, units, packages, VMs, firewall, config, keys), so the host check attributes it to you"
+  },
+  {
+    "surface": "st.notify",
+    "tier": "reference",
+    "cmd": "st notify --title T --body B [--severity warning] [--key K] [--open URL] | --json (notice v1 on stdin) | resolve KEY --text T",
+    "when": "tell the owner something through Aico (phone for warning and critical); a repeat of the same key stays quiet for the cooldown"
+  },
+  {
     "surface": "st.pulse",
     "tier": "reference",
     "cmd": "st pulse",

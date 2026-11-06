@@ -10,6 +10,7 @@ import { withOwnWidget } from '@aico/tether-client/own-session'
 import config from '../data/cli.json' with { type: 'json' }
 import usage from '../data/usage.json' with { type: 'json' }
 import { catalog, executable, extensionEnvironment, passiveHelp } from './extensions'
+import { HOST_STEWARD, notify } from './notify'
 
 export type Run = (argv: string[], env: NodeJS.ProcessEnv) => Promise<number>
 export const run: Run = (argv, env) =>
@@ -73,6 +74,8 @@ const NATIVE = new Set([
 const CORE = new Set([
   ...NATIVE,
   ...Object.keys(ALIASES),
+  'declare',
+  'notify',
   'aico',
   'sessions',
   'tools',
@@ -105,6 +108,11 @@ export function apiBase(root: string, env: NodeJS.ProcessEnv): string {
   const identity = JSON.parse(readFileSync(join(root, 'project.identity.json'), 'utf8'))
   return `http://127.0.0.1:${env.AICO_WEB_PORT || identity.runtime.backend_port}/api`
 }
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = []
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
+  return Buffer.concat(chunks).toString('utf8')
+}
 export async function main(argv: string[], options: Options = {}): Promise<number> {
   const root =
     options.root ??
@@ -135,7 +143,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
   const data = join(root, 'packages/cli/data')
   const help = () =>
     out(
-      'Usage: st <projects|sessions|pulse|lease|check|commit|service|logs|backup|vm|memory|prompt|models|web|logins|tools|db|mockup|monitor> ...\nStandalone tools: browser, ui, neri, jobs, portfolio, bugout, ominull, uilint, wiki.\nUse st tools manifest --discover WORD for command details.',
+      'Usage: st <projects|sessions|pulse|lease|check|commit|service|logs|backup|vm|memory|prompt|models|web|logins|declare|notify|tools|db|mockup|monitor> ...\nStandalone tools: browser, ui, neri, jobs, portfolio, bugout, ominull, uilint, wiki.\nUse st tools manifest --discover WORD for command details.',
     )
   try {
     const args = [...argv]
@@ -170,13 +178,16 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     if (projectId) selectedEnv = { ...env, AICO_PROJECT_ID: projectId, ST_PROJECT_ID: projectId }
     const commandContext = (projects = registryProjects(env)) => {
       const project = projects.find((p) => p.id === projectId)
+      const api = apiBase(root, env)
       return {
         contract_version: 1,
         project_id: project?.id ?? projectId,
         project_root: project?.root ?? null,
         cwd,
-        api_base: apiBase(root, env),
-        agent_hub_url: env.AGENT_HUB_URL || config.agentHubUrl,
+        api_base: api,
+        // Contract v1 field: extensions' vendored st-sdk 0.2.1 still requires it.
+        // Agent Hub is retired, so it names Aico's own base.
+        agent_hub_url: api.replace(/\/api$/, ''),
         output,
       }
     }
@@ -385,6 +396,17 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       out(json(body))
       return 0
     }
+    if (verb === 'declare') return execute([HOST_STEWARD, 'declare', ...rest], env)
+    if (verb === 'notify')
+      return notify(rest, {
+        // Notices are taken only from loopback, so the public AICO_WEB_URL is not used.
+        api: apiBase(root, env.AICO_API_BASE ? env : { ...env, AICO_WEB_URL: undefined }),
+        source: projectId,
+        fetcher: options.fetcher ?? fetch,
+        readStdin: () => readStdin(),
+        out,
+        err,
+      })
     if (verb === 'monitor') {
       if (!rest[0] || rest.includes('--help')) {
         out(

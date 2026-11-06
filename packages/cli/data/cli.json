@@ -1,5 +1,4 @@
 {
-  "agentHubUrl": "http://127.0.0.1:8003",
   "stores": {
     "context": "context.db",
     "tasks": "tasks.db",
@@ -11,7 +10,7 @@
     "agent": "agent.db"
   },
   "removed": {
-    "complete": "dropped with Agent Hub; ask a model with aico ask MODEL \"question\", or use a native subagent for work with tools",
+    "complete": "dropped; ask a model with aico ask MODEL \"question\", or use a native subagent for work with tools",
     "sync-progress": "dropped",
     "checkpoints": "dropped",
     "prune": "dropped",

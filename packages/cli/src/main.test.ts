@@ -70,7 +70,7 @@ describe('CLI cutover', () => {
     'done',
     'context',
     'tasks',
-  ])('retires %s without executing Agent Hub', async (verb) => {
+  ])('retires %s without executing anything', async (verb) => {
     const h = harness()
     expect(await h.go([verb, '--help'])).toBe(2)
     expect(h.calls).toEqual([])
@@ -626,19 +626,125 @@ it('advertises the native model and backup syntax', async () => {
   expect(h.output.pop()).toContain('SOURCE SNAPSHOT PATH')
 })
 
-it('passes the versioned Agent Hub context to the Aico session helper', async () => {
-  const h = harness({ AGENT_HUB_URL: 'http://hub.test:8003' }, root)
+it('passes the versioned extension context to the Aico session helper', async () => {
+  const h = harness({ AICO_API_BASE: 'http://aico.test:3002/api' }, root)
   expect(await h.go(['-P', 'aico', 'aico', 'create', 'proof'])).toBe(0)
   expect(JSON.parse(h.calls[0]?.env.ST_EXTENSION_CONTEXT || '{}')).toMatchObject({
     contract_version: 1,
     project_id: 'aico',
     cwd: root,
-    agent_hub_url: 'http://hub.test:8003',
+    api_base: 'http://aico.test:3002/api',
+    agent_hub_url: 'http://aico.test:3002',
   })
 })
 
-it('keeps the verbose project registry read used by Agent Hub', async () => {
+it('keeps the verbose project registry read', async () => {
   const h = harness()
   expect(await h.go(['projects', 'list', '-v'])).toBe(0)
   expect(h.calls[0]?.argv.slice(1)).toEqual(['projects', 'list'])
+})
+
+describe('aico declare and aico notify', () => {
+  it('passes declare to host-steward untouched', async () => {
+    const h = harness()
+    expect(await h.go(['declare', 'add', '--host', 'pve', '--what', 'vm', '--reason', 'lab'])).toBe(
+      0,
+    )
+    expect(h.calls[0]?.argv).toEqual([
+      '/usr/local/bin/host-steward',
+      'declare',
+      'add',
+      '--host',
+      'pve',
+      '--what',
+      'vm',
+      '--reason',
+      'lab',
+    ])
+  })
+  const notifier = (status = 200, body: unknown = { id: 'n1' }) => {
+    const sent: { url: string; body: Record<string, unknown> }[] = []
+    const fetcher = (async (url: string, init: RequestInit) => {
+      sent.push({ url, body: JSON.parse(String(init.body)) })
+      return new Response(JSON.stringify(body), { status })
+    }) as unknown as typeof fetch
+    return { sent, fetcher }
+  }
+  it('posts flags as a notice v1 to the loopback API', async () => {
+    const n = notifier()
+    const out: string[] = []
+    const code = await main(
+      [
+        '-P',
+        'neri',
+        'notify',
+        '--title',
+        'T',
+        '--body',
+        'B',
+        '--severity',
+        'warning',
+        '--key',
+        'k1',
+      ],
+      {
+        root,
+        env: { AICO_WEB_PORT: '3999', AICO_WEB_URL: 'https://public.example' },
+        cwd: temp(),
+        fetcher: n.fetcher,
+        out: (x) => out.push(x),
+      },
+    )
+    expect(code).toBe(0)
+    expect(n.sent[0]).toEqual({
+      url: 'http://127.0.0.1:3999/api/notices',
+      body: { v: 1, source: 'neri', title: 'T', body: 'B', severity: 'warning', key: 'k1' },
+    })
+    expect(out).toEqual(['{"id":"n1"}'])
+  })
+  it('shows the server reason and exits non-zero when the notice is refused', async () => {
+    const n = notifier(422, { detail: 'title: too long' })
+    const errors: string[] = []
+    const code = await main(['notify', '--title', 'T', '--body', 'B'], {
+      root,
+      env: { AICO_API_BASE: 'http://x.test/api' },
+      cwd: temp(),
+      fetcher: n.fetcher,
+      err: (x) => errors.push(x),
+    })
+    expect(code).toBe(2)
+    expect(errors[0]).toContain('title: too long')
+    expect(n.sent[0]?.body.source).toBe('agent')
+  })
+  it('resolves a notice by key', async () => {
+    const n = notifier()
+    await main(['notify', 'resolve', 'k1', '--text', 'fixed', '--source', 'neri'], {
+      root,
+      env: { AICO_API_BASE: 'http://x.test/api' },
+      cwd: temp(),
+      fetcher: n.fetcher,
+      out: () => {},
+    })
+    expect(n.sent[0]).toEqual({
+      url: 'http://x.test/api/notices/resolve',
+      body: { source: 'neri', key: 'k1', text: 'fixed' },
+    })
+  })
+  it('needs a title and body, and prints help', async () => {
+    const errors: string[] = []
+    const out: string[] = []
+    const env = { AICO_API_BASE: 'http://x.test/api' }
+    expect(
+      await main(['notify', '--title', 'T'], {
+        root,
+        env,
+        cwd: temp(),
+        err: (x) => errors.push(x),
+      }),
+    ).toBe(2)
+    expect(
+      await main(['notify', '--help'], { root, env, cwd: temp(), out: (x) => out.push(x) }),
+    ).toBe(0)
+    expect(out[0]).toContain('aico notify --json')
+  })
 })
