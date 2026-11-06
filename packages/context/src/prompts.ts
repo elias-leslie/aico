@@ -109,20 +109,6 @@ export function getPrompt(db: Database, slug: string): Prompt | null {
   return row ? fromRow(row) : null
 }
 
-/** The prompts a role is given, in order. */
-export function rolePrompts(db: Database, role: string): Prompt[] {
-  const rows = db
-    .prepare(
-      `SELECT ${COLUMNS.split(', ')
-        .map((column) => `p.${column}`)
-        .join(', ')}
-       FROM role_prompts r JOIN prompts p ON p.id = r.prompt_id
-       WHERE r.role = ? ORDER BY r.position, p.slug`,
-    )
-    .all(role) as unknown as Row[]
-  return rows.map(fromRow)
-}
-
 /** Saved Aico versions, in the version-1 root instruction snapshot shape. */
 export function promptRevisions(db: Database, slug: string, limit: number) {
   const prompt = getPrompt(db, slug)
