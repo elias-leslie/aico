@@ -19,13 +19,7 @@ import { accessSync, constants, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import {
-  agentHubSource,
-  CONTEXT_COMMANDS,
-  contextDbPath,
-  readToolUsage,
-  runContextCli,
-} from '@aico/context'
+import { CONTEXT_COMMANDS, contextDbPath, readToolUsage, runContextCli } from '@aico/context'
 import { runLogins } from '@aico/fleet/logins-cli'
 import { machineId } from '@aico/status'
 import { registryProjects } from '@aico/tasks/registry'
@@ -592,21 +586,12 @@ export async function runCli(command: string, argv: string[]): Promise<number> {
     })
   }
   if ((CONTEXT_COMMANDS as readonly string[]).includes(command)) {
-    const { port } = loadConfig()
-    const repoRoot = terminalIo().repoRoot
     return runContextCli(command, argv, {
       out: (text) => process.stdout.write(text),
       err: (text) => process.stderr.write(text),
       dbPath: contextDbPath(dataDirPath()),
-      machine: machineId(),
-      statusUrl: `http://127.0.0.1:${port}/api/status/rows`,
-      fetch,
       now: () => new Date(),
       dataDir: dataDirPath(),
-      agentHub: {
-        checkout: process.env.AICO_AGENT_HUB_CHECKOUT || join(dirname(repoRoot), 'agent-hub'),
-        source: agentHubSource,
-      },
       delivery: {
         env: process.env,
         toolUsage: () => readToolUsage(),
@@ -627,11 +612,6 @@ export async function runCli(command: string, argv: string[]): Promise<number> {
       statusUrl: `http://127.0.0.1:${port}/api/status/rows`,
       fetch,
       now: () => new Date(),
-      agentHub: {
-        checkout:
-          process.env.AICO_AGENT_HUB_CHECKOUT || join(dirname(terminalIo().repoRoot), 'agent-hub'),
-        source: agentHubSource,
-      },
     })
   }
   const env = process.env
