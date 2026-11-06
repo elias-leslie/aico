@@ -1011,7 +1011,7 @@ describe('attached files', () => {
     expect(screen.getByRole('tabpanel', { hidden: true })).not.toBeVisible()
 
     fireEvent.click(
-      within(view).getByRole('button', { name: 'Back to the question' }),
+      within(view).getByRole('button', { name: /Back to the question/ }),
     )
     expect(screen.queryByTestId('ask-attached-view')).toBeNull()
     expect(

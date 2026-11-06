@@ -135,34 +135,28 @@ export function AttachedFileView({
         onBack()
       }}
     >
-      <div className="flex flex-none items-center gap-1 px-2 pb-2">
+      <div className="flex flex-none items-center gap-2 px-2 pb-2">
         <button
           type="button"
           // Focus lands here, so the keyboard and a screen reader start at the way back.
           // biome-ignore lint/a11y/noAutofocus: the view replaces the list the focus was in
           autoFocus
-          className="lantern-icon-btn"
-          aria-label="Back to the question"
-          title="Back to the question"
+          className="lantern-btn ghost flex-none max-md:h-11!"
+          title={question}
           onClick={onBack}
         >
-          <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.7} aria-hidden="true" />
+          Back to the question
         </button>
-        <div className="min-w-0 flex-1">
-          <p
-            className="m-0 truncate text-[12px]"
-            style={{ color: 'var(--mist)' }}
-          >
-            {question}
-          </p>
-          <p
-            className="m-0 truncate text-[11.5px]"
-            style={{ fontFamily: 'var(--font-mono)', color: 'var(--mist)' }}
-            title={file.path}
-          >
-            {file.kind === 'folder' ? file.path : root}
-          </p>
-        </div>
+        <p
+          className="m-0 min-w-0 flex-1 truncate text-[11.5px]"
+          style={{ fontFamily: 'var(--font-mono)', color: 'var(--mist)' }}
+          title={file.path}
+          dir="rtl"
+        >
+          {/* Right to left so a long path keeps its end; the path itself reads left to right. */}
+          <bdi dir="ltr">{file.kind === 'folder' ? file.path : root}</bdi>
+        </p>
       </div>
       {file.kind === 'folder' ? (
         <FileBrowser source={{ kind: 'location', root: file.path }} />
