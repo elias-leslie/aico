@@ -2,6 +2,24 @@
 
 Compared with the original plan and cutlist, plus later recorded decisions. Evidence and every baseline row are in [the detailed audit](audit.json). “Unverified” means the result could not be established; it does not mean data was lost.
 
+## Outcomes as of 2026-11-06
+
+Resolved since the audit:
+- Nightly check job (`check-nightly`), dead-code and new-suppression checks are configured.
+- Tasks: replaced by each project's ROADMAP.md and the Projects page; task tables dropped, so task sync and the task carry are moot (carried rows are in the roadmaps).
+- Hook chain collapsed into `use-session-view.ts` (b8f11e85), with the mock-only hook tests trimmed.
+- Stopped on-demand apps read Off from observed Proxmox power (3037ffe5), including the Portfolio-AI backup.
+- Unprotected fleet machines have a Status row; OmniNull hub 1.8.108 reports health rows.
+- Agent Hub and PostgreSQL are retired: Neri moved to SQLite and Aico context, the old stack was dumped to the T7 and removed (owner approved).
+- Publication runs from Aico with no SummitFlow source; missing acceptance runs itself before publishing (15ad1eb6).
+- Deploys install the host-steward root pieces through the signed path (fcb36bdb) and restart the scheduler when its job bundles change (dfe80381).
+
+Assigned to running work (2026-11-06): frontend deploys without restarting the web server; Nightshift retirement (boot markers, postboot, zswap/CPU, display and input helpers, the release signer's Nightshift import); Agent Hub code removal (AGY retrieval check, completion gateway); VM 200/201 and CT 190 OmniNull enrollment; lab isolation evidence.
+
+Next after those: session engine split and fleet code out of Tether; repository copy to the peer and job takeover (failover); the owner's power-off journey.
+
+Left as is unless they cause friction: check-time budgets, separate question schema, context measurement, memory page, notes-module split, contract replay coverage, and the one-time equality and completeness verifications listed below.
+
 ## Missed
 
 - The plan kept nightly full checks and live session checks; the replacement has no nightly job and rejects deep checks; no reason recorded. [Evidence](../../packages/jobs/data/jobs.json).
