@@ -471,14 +471,18 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
         ...rest,
         ...(projectId && ['snap', 'snaps', 'rollback'].includes(verb)
           ? ['--project', projectId]
-          : projectId && ALIASES[verb][0] === 'tasks'
+          : projectId && ALIASES[verb][0] === 'tasks' && !hasProjectOption(rest)
             ? ['-P', projectId]
             : []),
       ])
     if (verb === 'prompt' && !output.compact && !output.human)
       return delegate(['prompt', ...rest, '--json'])
     if (NATIVE.has(verb))
-      return delegate([verb, ...rest, ...(verb === 'tasks' && projectId ? ['-P', projectId] : [])])
+      return delegate([
+        verb,
+        ...rest,
+        ...(verb === 'tasks' && projectId && !hasProjectOption(rest) ? ['-P', projectId] : []),
+      ])
     const extension = catalog(data, state, CORE).find((e) => e.binding.namespace === verb)
     if (extension) {
       const help = extension.status === 'collision' ? null : passiveHelp(extension, rest)
@@ -540,3 +544,8 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
       process.exitCode = 1
     },
   )
+
+/** A project named after the verb (`tasks create T -P ID`) wins over the inherited one. */
+function hasProjectOption(args: string[]): boolean {
+  return args.some((a) => a === '-P' || a === '--project' || a.startsWith('--project='))
+}

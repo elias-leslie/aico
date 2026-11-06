@@ -332,6 +332,9 @@ describe('root command contracts', () => {
     const fromEnv = harness({ ST_PROJECT_ID: 'selected' })
     await fromEnv.go(['list'])
     expect(fromEnv.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'selected'])
+    const named = harness({ AICO_PROJECT_ID: 'selected' })
+    await named.go(['tasks', 'create', 'T', '-P', 'other'])
+    expect(named.calls[0]?.argv.slice(1)).toEqual(['tasks', 'create', 'T', '-P', 'other'])
   })
   it('keeps undeclared help passive unless owner_help is granted', () => {
     const binding = {
