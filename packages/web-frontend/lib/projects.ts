@@ -41,6 +41,10 @@ export interface Place {
   state: RunState
   since?: string | null
   asOf?: string | null
+  /** A power action started here that Proxmox has not finished. */
+  busy?: PowerAction | null
+  /** Why the state is unknown, when it is. */
+  note?: string
 }
 
 export interface ProblemRows {
@@ -231,8 +235,15 @@ export function placeName(place: Place): string {
   return place.label
 }
 
+const BUSY: Record<PowerAction, string> = {
+  start: 'starting',
+  shutdown: 'shutting down',
+  restart: 'restarting',
+}
+
 /** The line beside a place: "since Tue · checked 1 min ago", "stopped at 10:40". */
 export function placeLine(place: Place, now: number): string {
+  if (place.busy) return BUSY[place.busy]
   const since = place.since ? Date.parse(place.since) : Number.NaN
   const hasSince = !Number.isNaN(since)
   const asOf = place.asOf ? Date.parse(place.asOf) : Number.NaN
@@ -263,7 +274,7 @@ export function placeLine(place: Place, now: number): string {
 
 /** What the power sheet offers for a place; null when the mark is only an indicator. */
 export function powerActions(place: Place): PowerAction[] | null {
-  if (!place.power) return null
+  if (!place.power || place.busy) return null
   if (place.state === 'running') return ['shutdown', 'restart']
   if (place.state === 'stopped' || place.state === 'down') return ['start']
   return null

@@ -333,4 +333,37 @@ describe('detail', () => {
       ),
     ).toBeInTheDocument()
   })
+
+  it('lists five rows of a long problem and counts the rest', async () => {
+    const rows = Array.from({ length: 8 }, (_, n) => ({
+      name: `Row ${n}`,
+      detail: '',
+    }))
+    routes['/api/projects/portfolio'] = () =>
+      Response.json({
+        ...DETAIL,
+        problems: [{ kind: 'quiet', count: 8, rows }],
+      })
+    show('portfolio')
+    fireEvent.click(
+      await screen.findByRole('button', { name: '8 checks quiet' }),
+    )
+    const pop = screen.getByRole('dialog', { name: '8 checks quiet' })
+    expect(within(pop).getByText('Row 4')).toBeInTheDocument()
+    expect(within(pop).queryByText('Row 5')).toBeNull()
+    expect(within(pop).getByText('+ 3 more')).toBeInTheDocument()
+  })
+
+  it('shows a power action in progress as an indicator', async () => {
+    routes['/api/projects/portfolio'] = () =>
+      Response.json({
+        ...DETAIL,
+        places: [{ ...DETAIL.places[0], state: 'running', busy: 'shutdown' }],
+      })
+    show('portfolio')
+    expect(await screen.findByText('shutting down')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Open power options/ }),
+    ).toBeNull()
+  })
 })

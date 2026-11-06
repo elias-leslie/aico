@@ -34,18 +34,20 @@ function PlaceRow({
   const name = placeName(place)
   const state = runStateText[place.state]
   const actions = powerActions(place)
-  const note = !place.power
-    ? ' · can’t be changed from here'
-    : place.state === 'unknown'
-      ? ' · can’t reach the Proxmox host'
-      : ''
+  const note = place.busy
+    ? ` · ${placeLine(place, now)}`
+    : !place.power
+      ? ' · can’t be changed from here'
+      : place.state === 'unknown'
+        ? ' · can’t reach the Proxmox host'
+        : ''
   return (
     <div className={styles.place}>
       {actions ? (
         <button
           type="button"
           className={styles.power}
-          data-state={place.state}
+          data-state={place.busy ? 'starting' : place.state}
           aria-label={`${name}: ${state.toLowerCase()}. Open power options`}
           title={state}
           onClick={onOpen}
@@ -55,7 +57,7 @@ function PlaceRow({
       ) : (
         <span
           className={styles.power}
-          data-state={place.state}
+          data-state={place.busy ? 'starting' : place.state}
           data-indicator="true"
           role="img"
           aria-label={`${name}: ${state.toLowerCase()}${note}`}
@@ -71,6 +73,9 @@ function PlaceRow({
     </div>
   )
 }
+
+/** Rows a popover lists before "+ N more". */
+const MAX_ROWS = 5
 
 type Open =
   | { type: 'problem'; kind: ProblemKind }
@@ -168,14 +173,16 @@ export function ProjectDetail({
                     (p) => p.kind === open.kind,
                   )
                   if (!problem) return null
-                  const more = Math.max(0, problem.count - problem.rows.length)
+                  const rows = problem.rows.slice(0, MAX_ROWS)
+                  const more =
+                    Math.max(problem.count, problem.rows.length) - rows.length
                   return (
                     <Popover
                       label={problemText(problem.kind, problem.count)}
                       onClose={close}
                     >
                       <ul>
-                        {problem.rows.map((row) => (
+                        {rows.map((row) => (
                           <li key={row.name}>
                             {row.name}
                             {row.detail && (
