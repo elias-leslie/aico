@@ -35,26 +35,6 @@
       ]
     }
   },
-  "streams": [
-    {
-      "id": "postgres",
-      "name": "PostgreSQL databases",
-      "filename": "postgres-dumpall.sql",
-      "command": [
-        "sudo",
-        "-n",
-        "docker",
-        "exec",
-        "summitflow-stack-postgres-1",
-        "pg_dumpall",
-        "-U",
-        "admin"
-      ],
-      "required": true,
-      "enabled": false,
-      "disabledReason": "container stopped 2026-11-06; DB fate is the owner's call"
-    }
-  ],
   "retention": {
     "drive": {
       "daily": 7,

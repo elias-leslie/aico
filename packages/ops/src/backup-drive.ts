@@ -346,16 +346,6 @@ export async function driveBackup(
 ): Promise<boolean> {
   const jobs: BackupJob[] = machine === rt.cfg.workstation ? volumeJobs(rt.cfg, state) : []
   if (machine === rt.cfg.workstation)
-    for (const s of rt.cfg.streams.filter((stream) => stream.enabled !== false))
-      jobs.push({
-        id: s.id,
-        paths: [],
-        binds: [],
-        filename: s.filename,
-        command: s.command,
-        dataAt: rt.now().toISOString(),
-      })
-  if (machine === rt.cfg.workstation)
     for (const s of migrated.sources.filter((s) => s.enabled)) {
       if (s.path.startsWith('proxmox://')) {
         try {

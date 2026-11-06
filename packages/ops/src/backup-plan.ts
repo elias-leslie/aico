@@ -211,18 +211,6 @@ export function entries(
           now,
         ),
       )
-    for (const stream of cfg.streams.filter((s) => s.enabled !== false))
-      all.push(
-        entry(
-          stream.id,
-          stream.name,
-          'drive',
-          state.copies[copyKey(stream.id, 'drive')],
-          cfg,
-          machine,
-          now,
-        ),
-      )
   }
   for (const target of (machine === cfg.workstation
     ? ['append', 'drive']
