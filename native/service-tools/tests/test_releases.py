@@ -197,6 +197,37 @@ def test_release_cleanup_keeps_a_release_a_running_st_still_executes(tmp_path: P
     assert service_release.prune_old_releases(current, service_references=set()) == (in_use.release_root,)
 
 
+def test_release_cleanup_keeps_a_release_a_live_process_uses_and_prunes_it_later(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = tmp_path / "state"
+    current = _release_for_cleanup(state, "1" * 32)
+    cwd_user = _release_for_cleanup(state, "4" * 32)
+    mapped_user = _release_for_cleanup(state, "5" * 32)
+    idle = _release_for_cleanup(state, "6" * 32)
+    (state / "projects" / "example" / "current").symlink_to(current.release_root)
+
+    proc = tmp_path / "proc"
+    (proc / "10").mkdir(parents=True)
+    (proc / "10" / "cwd").symlink_to(cwd_user.release_root / "source")
+    (proc / "11").mkdir()
+    (proc / "11" / "maps").write_text(
+        f"7f00-7f01 r-xp 0 08:01 1 {mapped_user.release_root}/source/backend/.venv/lib/x.so\n"
+    )
+    (proc / "self").mkdir()
+    monkeypatch.setattr(service_release, "_PROC", proc)
+
+    removed = service_release.prune_old_releases(current, service_references=set())
+    assert removed == (idle.release_root,)
+    assert cwd_user.release_root.is_dir()
+    assert mapped_user.release_root.is_dir()
+
+    (proc / "10" / "cwd").unlink()  # the process exited
+    (proc / "11" / "maps").unlink()
+    removed = service_release.prune_old_releases(current, service_references=set())
+    assert removed == (cwd_user.release_root, mapped_user.release_root)
+
+
 @pytest.mark.parametrize("references", [None, {Path("/outside/managed/releases")}])
 def test_release_cleanup_fails_closed_for_unknown_or_invalid_service_references(
     tmp_path: Path, references: set[Path] | None

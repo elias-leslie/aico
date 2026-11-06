@@ -367,7 +367,7 @@ export interface DeployDeps {
   processPaths: () => string[]
 }
 
-/** cwd, exe and command line of every live process, read from /proc. */
+/** cwd, exe, command line, open files and mapped files of every live process, read from /proc. */
 export function procPaths(procDir = '/proc'): string[] {
   const found: string[] = []
   let pids: string[] = []
@@ -382,6 +382,14 @@ export function procPaths(procDir = '/proc'): string[] {
     }
     const cmdline = readFileSafe(join(procDir, pid, 'cmdline'))
     if (cmdline) found.push(cmdline.replaceAll('\0', ' '))
+    try {
+      for (const fd of readdirSync(join(procDir, pid, 'fd')))
+        try {
+          found.push(readlinkSync(join(procDir, pid, 'fd', fd)))
+        } catch {}
+    } catch {}
+    const maps = readFileSafe(join(procDir, pid, 'maps'))
+    if (maps) found.push(maps)
   }
   return found
 }

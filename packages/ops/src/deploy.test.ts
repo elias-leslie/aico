@@ -1037,7 +1037,15 @@ describe('deploy', () => {
     symlinkSync('/somewhere/cwd', join(proc, '42', 'cwd'))
     writeFileSync(join(proc, '42', 'cmdline'), 'node\0/rel/x.mjs\0')
     mkdirSync(join(proc, 'self'), { recursive: true })
-    expect(procPaths(proc)).toEqual(['/somewhere/cwd', 'node /rel/x.mjs '])
+    mkdirSync(join(proc, '42', 'fd'))
+    symlinkSync('/rel/open-file', join(proc, '42', 'fd', '3'))
+    writeFileSync(join(proc, '42', 'maps'), '7f00-7f01 r-xp 0 08:01 1 /rel/mapped.so\n')
+    expect(procPaths(proc)).toEqual([
+      '/somewhere/cwd',
+      'node /rel/x.mjs ',
+      '/rel/open-file',
+      '7f00-7f01 r-xp 0 08:01 1 /rel/mapped.so\n',
+    ])
   })
 })
 

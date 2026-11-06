@@ -479,6 +479,50 @@ def _release_in_use(release_dir: Path) -> bool:
     return False
 
 
+_PROC = Path("/proc")
+
+
+def _live_release_names(releases: Path) -> set[str]:
+    """Release ids some live process still runs from: its cwd, exe, command line, open file or mapped file."""
+    prefixes = {str(releases) + "/"}
+    try:
+        prefixes.add(str(releases.resolve()) + "/")
+    except OSError:
+        pass
+    pattern = re.compile(
+        "(?:" + "|".join(re.escape(prefix) for prefix in sorted(prefixes)) + r")([0-9a-f]{32})(?![0-9a-f])"
+    )
+    found: set[str] = set()
+
+    def scan(text: str) -> None:
+        found.update(match.group(1) for match in pattern.finditer(text))
+
+    try:
+        pids = [entry for entry in _PROC.iterdir() if entry.name.isdigit()]
+    except OSError:
+        return found
+    for pid in pids:
+        for link in ("cwd", "exe"):
+            try:
+                scan(os.readlink(pid / link))
+            except OSError:
+                pass
+        try:
+            for descriptor in (pid / "fd").iterdir():
+                try:
+                    scan(os.readlink(descriptor))
+                except OSError:
+                    pass
+        except OSError:
+            pass
+        for name in ("cmdline", "maps"):
+            try:
+                scan((pid / name).read_bytes().replace(b"\0", b" ").decode(errors="replace"))
+            except OSError:
+                pass
+    return found
+
+
 def prune_old_releases(
     release: PreparedRelease, *, service_references: set[Path] | None
 ) -> tuple[Path, ...]:
@@ -530,9 +574,10 @@ def prune_old_releases(
         return ()
 
     removed: list[Path] = []
+    live = _live_release_names(releases) if candidates else set()
     for candidate in sorted(candidates):
-        if _release_in_use(candidate):
-            print(f"[service] release cleanup kept {candidate.name}: a running st still uses it")
+        if _release_in_use(candidate) or candidate.name in live:
+            print(f"[service] release cleanup kept {candidate.name}: a running process still uses it")
             continue
         try:
             shutil.rmtree(candidate)
