@@ -32,6 +32,8 @@ export type InstructionsSummary = Omit<InstructionsSnapshot, 'content'>
 
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
+// st prompt revisions: positive versions padded to four digits (then unpadded).
+const VERSION = /^(?:[0-9]{4}|[1-9][0-9]{4,})$/
 
 function singleLine(value: unknown, max: number): value is string {
   return (
@@ -55,8 +57,8 @@ export function parseInstructions(value: unknown): InstructionsSnapshot | null {
     typeof prompt !== 'string' ||
     !SLUG.test(prompt) ||
     !singleLine(name, 200) ||
-    typeof revision !== 'string' ||
-    !UUID.test(revision) ||
+    !singleLine(revision, 36) ||
+    !(UUID.test(revision) || (VERSION.test(revision) && revision !== '0000')) ||
     (contentHash !== null &&
       !(typeof contentHash === 'string' && /^[0-9a-f]{1,128}$/.test(contentHash))) ||
     (createdAt !== null && !singleLine(createdAt, 64)) ||

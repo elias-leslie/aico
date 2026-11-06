@@ -52,6 +52,14 @@ function launchedArgs(line: string): string[] {
 }
 
 describe('chosen instructions', () => {
+  it.each(['0001', '0002', '0003', '0004', '9999', '10000'])(
+    'accepts canonical Aico prompt revision %s',
+    (revision) => {
+      const numeric = { ...snapshot, revision }
+      expect(parseInstructions(numeric)).toEqual(numeric)
+    },
+  )
+
   it('accepts an Agent Hub revision snapshot and refuses anything else', () => {
     expect(parseInstructions(snapshot)).toEqual(snapshot)
     expect(
@@ -62,6 +70,9 @@ describe('chosen instructions', () => {
       'code-reviewer',
       { ...snapshot, extra: 1 },
       { ...snapshot, revision: '20110df2' },
+      ...['0000', '1', '004', '00001', '010000', '-0001', 'v0004', '0004x', '0004\n'].map(
+        (revision) => ({ ...snapshot, revision }),
+      ),
       { ...snapshot, prompt: '../etc' },
       { ...snapshot, name: 'two\nlines' },
       { ...snapshot, content: '  ' },

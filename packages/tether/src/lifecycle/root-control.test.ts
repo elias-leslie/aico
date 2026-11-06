@@ -1239,7 +1239,7 @@ describe('private root workload control', () => {
       const instructions = {
         prompt: 'code-reviewer',
         name: 'Code Reviewer',
-        revision: '20110df2-9d3f-4e0d-85af-38d9b844a282',
+        revision: '0004',
         content: 'Review carefully.',
       }
       const input = { ...create('with-instructions'), instructions }
