@@ -25,8 +25,8 @@ import java.io.File
 
 class ModelTest {
     private fun payload(json: String) = B64.encode(json.toByteArray())
-    private val good = """{"v":1,"base":"https://nightshift.summitflow.dev","code":"c1","cid":"id","csec":"sec",
-        "origins":["https://nightshift.summitflow.dev","https://approve.summitflow.dev"],"web_label":"Chrome",
+    private val good = """{"v":1,"base":"https://app.summitflow.dev","code":"c1","cid":"id","csec":"sec",
+        "origins":["https://app.summitflow.dev","https://approve.summitflow.dev"],"web_label":"Chrome",
         "fcm":{"project_id":"p","app_id":"1:2:android:3","api_key":"k","sender_id":"123"}}"""
 
     private fun refused(p: String?) {
@@ -37,7 +37,7 @@ class ModelTest {
 
     @Test fun goodPairingPayloadParses() {
         val p = PairingParser.parse(payload(good))
-        assertEquals("https://nightshift.summitflow.dev", p.base)
+        assertEquals("https://app.summitflow.dev", p.base)
         assertEquals("c1", p.code)
         assertEquals(2, p.origins.size)
         assertEquals("123", p.fcm.senderId)
@@ -50,46 +50,46 @@ class ModelTest {
         refused(payload("[1,2]"))
         refused(payload("""{"v":2}"""))
         refused(payload(good.replace("\"v\":1", "\"v\":2")))
-        refused(payload(good.replace("https://nightshift.summitflow.dev\",\"code", "http://nightshift.summitflow.dev\",\"code")))
+        refused(payload(good.replace("https://app.summitflow.dev\",\"code", "http://app.summitflow.dev\",\"code")))
         refused(payload(good.replace("\"code\":\"c1\",", "")))
         refused(payload(good.replace("\"csec\":\"sec\",", "")))
         refused(payload(good.replace("\"api_key\":\"k\",", "")))
         refused(payload(good.replace(",\n        \"fcm\"", ",\"x\":1,\"fcm_gone\"")))
         refused(payload(good.replace("\"https://approve.summitflow.dev\"", "\"http://approve.summitflow.dev\"")))
         refused(payload(good.replace("\"https://approve.summitflow.dev\"", "42")))
-        refused(payload(good.replace("[\"https://nightshift.summitflow.dev\",\"https://approve.summitflow.dev\"]", "[]")))
+        refused(payload(good.replace("[\"https://app.summitflow.dev\",\"https://approve.summitflow.dev\"]", "[]")))
         refused("A".repeat(9000))
     }
 
     // --- origin allowlist ---
 
-    private val origins = listOf("https://nightshift.summitflow.dev", "https://approve.summitflow.dev:8443")
+    private val origins = listOf("https://app.summitflow.dev", "https://approve.summitflow.dev:8443")
 
     @Test fun listedHttpsOriginsOpen() {
-        assertTrue(Origins.allowed("https://nightshift.summitflow.dev/n/abc?x=1#y", origins))
-        assertTrue(Origins.allowed("https://NIGHTSHIFT.summitflow.dev:443/n/abc", origins))
+        assertTrue(Origins.allowed("https://app.summitflow.dev/n/abc?x=1#y", origins))
+        assertTrue(Origins.allowed("https://APP.summitflow.dev:443/n/abc", origins))
         assertTrue(Origins.allowed("https://approve.summitflow.dev:8443/a/1", origins))
     }
 
     @Test fun aicoOriginIsAlwaysAllowedOnceAndTheOldOnesStay() {
         val withAico = Origins.withAico(origins, "https://aico.summitflow.dev")
         assertTrue(Origins.allowed("https://aico.summitflow.dev/status", withAico))
-        assertTrue(Origins.allowed("https://nightshift.summitflow.dev/n/abc", withAico))
+        assertTrue(Origins.allowed("https://app.summitflow.dev/n/abc", withAico))
         assertEquals(withAico, Origins.withAico(withAico, "https://AICO.summitflow.dev"))
         assertFalse(Origins.allowed("https://aico.summitflow.dev/status", origins))
     }
 
     @Test fun everythingElseIsBlocked() {
         assertFalse(Origins.allowed(null, origins))
-        assertFalse(Origins.allowed("http://nightshift.summitflow.dev/n/abc", origins))
+        assertFalse(Origins.allowed("http://app.summitflow.dev/n/abc", origins))
         assertFalse(Origins.allowed("https://evil.example/n/abc", origins))
-        assertFalse(Origins.allowed("https://nightshift.summitflow.dev.evil.example/", origins))
-        assertFalse(Origins.allowed("https://nightshift.summitflow.dev@evil.example/", origins))
-        assertFalse(Origins.allowed("https://evil.example@nightshift.summitflow.dev/", origins))
+        assertFalse(Origins.allowed("https://app.summitflow.dev.evil.example/", origins))
+        assertFalse(Origins.allowed("https://app.summitflow.dev@evil.example/", origins))
+        assertFalse(Origins.allowed("https://evil.example@app.summitflow.dev/", origins))
         assertFalse(Origins.allowed("https://approve.summitflow.dev/a/1", origins)) // wrong port
-        assertFalse(Origins.allowed("intent://nightshift.summitflow.dev/#Intent;end", origins))
+        assertFalse(Origins.allowed("intent://app.summitflow.dev/#Intent;end", origins))
         assertFalse(Origins.allowed("javascript:alert(1)", origins))
-        assertFalse(Origins.allowed("https://nightshift.summitflow.dev\\@evil.example/", origins))
+        assertFalse(Origins.allowed("https://app.summitflow.dev\\@evil.example/", origins))
         assertNull(Origins.parseOrigin("https://x.example/path"))
     }
 
@@ -97,7 +97,7 @@ class ModelTest {
 
     @Test fun itemPushParsesWithRowIdAndActions() {
         val p = Push.parse("m", """{"v":1,"id":"ab12","title":"T","body":"B","detail":"D","severity":"warning",
-            "channel":"warning","tag":"tg","group":"g","kind":"k","ts":5,"ends":9,"url":"https://nightshift.summitflow.dev/n/ab12",
+            "channel":"warning","tag":"tg","group":"g","kind":"k","ts":5,"ends":9,"url":"https://app.summitflow.dev/n/ab12",
             "actions":[{"id":"look-into","label":"Look into it","tier":"plain"},
                        {"id":"approve","label":"Approve","tier":"key","url":"https://approve.summitflow.dev/x"},
                        {"id":"weird","label":"Weird"},
@@ -154,7 +154,7 @@ class ModelTest {
 
     @Test fun itemJsonRoundTripsForTheOfflineCache() {
         val src = parseObject("""{"id":"k:1","title":"T","body":"B","severity":"critical","state":"Needs you","ts":4,"age":"2h",
-            "url":"https://nightshift.summitflow.dev/#need-1","actions":[{"id":"approve","label":"Approve","tier":"key","url":"https://approve.summitflow.dev/1"}]}""")
+            "url":"https://app.summitflow.dev/#need-1","actions":[{"id":"approve","label":"Approve","tier":"key","url":"https://approve.summitflow.dev/1"}]}""")
         val item = Item.parse(src)!!
         assertEquals(item, Item.parse(item.toJson()))
         assertNotNull(item.actions.single().url)
@@ -190,9 +190,9 @@ class PhoneApiContractTest {
 
     @Test fun rowsOnlyOpenOriginsTheAppTrusts() {
         val snap = ItemsSnapshot.parse(fixtures.obj("items")!!, 1)
-        val origins = Origins.withAico(listOf("https://nightshift.summitflow.dev"), "https://aico.example.dev")
+        val origins = Origins.withAico(listOf("https://app.summitflow.dev"), "https://aico.example.dev")
         assertEquals(1, snap.needsYou[0].usableActions(origins).size)
-        assertEquals(0, snap.needsYou[0].usableActions(listOf("https://nightshift.summitflow.dev")).size)
+        assertEquals(0, snap.needsYou[0].usableActions(listOf("https://app.summitflow.dev")).size)
     }
 
     @Test fun healthAndUpdateAndAnswersParse() {

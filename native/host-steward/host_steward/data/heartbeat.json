@@ -12,7 +12,7 @@
     "account": "/etc/host-steward/fcm/service-account.json",
     "token": "/var/lib/host-steward/fcm/token.json",
     "devices": "/home/kasadis/.local/state/aico/phones.json",
-    "base": "https://nightshift.summitflow.dev"
+    "base": "https://app.summitflow.dev"
   },
   "sync_command": ["/usr/local/sbin/pve-sender", "sync-credentials"]
 }

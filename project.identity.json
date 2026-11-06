@@ -60,8 +60,7 @@
     "team_domain": "summitflow.cloudflareaccess.com",
     "audiences": {
       "aico.summitflow.dev": "4d6af2d588089c88703bd03cbfc78b4e43318026cde374a9430f1b5f7788a92a",
-      "app.summitflow.dev": "301c7397efa7052e09c585273003498f523ac579c61d28134299723a5cfbbc67",
-      "nightshift.summitflow.dev": "01f41ca9fc4f61b16b56654f84594c9a1bd85967937bc1572f0830e7d4a2a399"
+      "app.summitflow.dev": "301c7397efa7052e09c585273003498f523ac579c61d28134299723a5cfbbc67"
     }
   },
   "artifacts": {

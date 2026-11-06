@@ -207,8 +207,8 @@ function accessFrom(identity: Identity): AccessConfig | null {
 
 // The Python backend's settings names and defaults, so its EnvironmentFile keeps
 // working; only the upload dir name is Aico's own.
-/** The hosts the phone app uses: the first is the pairing base; the old name stays until the phone has re-paired. */
-const DEFAULT_PHONE_HOSTS = ['app.summitflow.dev', 'nightshift.summitflow.dev']
+/** The host the phone app uses; it is also the pairing base. */
+const DEFAULT_PHONE_HOSTS = ['app.summitflow.dev']
 const DEFAULT_CAPTURE_MAX_MB = 25
 const DEFAULT_CAPTURE_MAX_FILES = 20
 /** Least time between two kept revisions of one note field while it is being edited. */

@@ -47,7 +47,7 @@ pressure_warn_full_pct = 2.0
 pressure_warn_some_pct = 10.0
 internet_probes = ["https://cloudflare.com/cdn-cgi/trace", "https://1.1.1.1/cdn-cgi/trace"]
 tunnel_ready_url = "http://127.0.0.1:20241/ready"
-cert_endpoints = ["app.summitflow.dev", "nightshift.summitflow.dev", "app.summitflow.dev@localhost:443", "nightshift.summitflow.dev@localhost:443"]
+cert_endpoints = ["app.summitflow.dev", "app.summitflow.dev@localhost:443"]
 cert_warn_days = 21
 cert_crit_days = 7
 
