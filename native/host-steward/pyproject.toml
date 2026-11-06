@@ -1,5 +1,5 @@
 # Not a package: the check environment for Tether's operator scripts
-# (stdlib only) and their tests. `uv sync --locked --directory native/host-steward`
+# (stdlib only, plus PyYAML for the GitHub delivery workflow check) and their tests. `uv sync --locked --directory native/host-steward`
 # makes native/host-steward/.venv, which `st check` and CI run pytest, Ruff and ty from.
 [project]
 name = "tether-scripts"
@@ -7,6 +7,7 @@ version = "0"
 requires-python = ">=3.13"
 dependencies = [
     "cryptography==50.0.2",
+    "pyyaml==6.0.3",
 ]
 
 [dependency-groups]

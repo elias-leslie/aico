@@ -1,6 +1,6 @@
 {
-  "id": "summitflow.github-delivery",
-  "owner": "summitflow",
+  "id": "aico.github-delivery",
+  "owner": "aico",
   "namespace": "github-delivery",
   "version": "1.0.0",
   "st_contract_versions": [1],
@@ -13,7 +13,7 @@
     "credentials",
     "process"
   ],
-  "summary": "Deliver checked main through the retained authenticated Git transport. No SummitFlow service is used.",
+  "summary": "Deliver checked main through the retained authenticated Git transport.",
   "help": {
     "": "Internal checked-main transport. Used by aico publish; use aico publish --help."
   },

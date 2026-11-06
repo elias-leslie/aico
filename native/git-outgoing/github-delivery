@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Checked-main delivery to GitHub (the github-delivery extension, `st vcs deliver`): see git_outgoing/delivery.py.
+set -euo pipefail
+root="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+BASH_ENV='' PYTHONPATH="$root" exec /usr/bin/python3 -B -m git_outgoing.delivery "$@"

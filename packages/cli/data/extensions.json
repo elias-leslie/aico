@@ -267,13 +267,13 @@
       }
     },
     {
-      "id": "summitflow.github-delivery",
-      "owner": "summitflow",
+      "id": "aico.github-delivery",
+      "owner": "aico",
       "namespace": "github-delivery",
       "manifest": "extensions/github-delivery.json",
-      "executable": "backend/.venv/bin/st",
-      "execution_source": "accepted_runtime",
-      "arguments": ["vcs", "deliver"],
+      "executable": "native/git-outgoing/github-delivery",
+      "execution_source": "checkout",
+      "arguments": [],
       "grant": {
         "enabled": true,
         "effects": [
