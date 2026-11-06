@@ -196,8 +196,45 @@ export async function report(
   machine: string,
   run: Execute = execute,
 ): Promise<void> {
-  const rows = backupRows(await scheduledEntries(state, cfg, machine, run))
+  const rows = backupRows(
+    (await scheduledEntries(state, cfg, machine, run)).filter((item) => !item.gone),
+  )
   const url = process.env.AICO_WEB_URL || cfg.webUrl
+  await post(cfg, url, rows)
+  await prune(cfg, url, machine, new Set(rows.map((row) => row.id)))
+}
+
+/** This machine's backup rows no plan entry writes any more (a retired or gone source). */
+async function prune(cfg: BackupConfig, url: string, machine: string, kept: Set<string>) {
+  try {
+    const query = new URLSearchParams({ kind: 'backup', machine })
+    const answer = await fetch(new URL(`/api/status?${query}`, url), {
+      signal: AbortSignal.timeout(cfg.statusPublish.timeoutMs),
+    })
+    if (!answer.ok) return
+    const { rows } = (await answer.json()) as { rows: { id: string }[] }
+    for (const { id } of rows) {
+      // The restore drill writes its own row (recovery.ts).
+      if (
+        !id.startsWith(`${machine}/backup/`) ||
+        kept.has(id) ||
+        id === `${machine}/backup/restore-drill`
+      )
+        continue
+      const gone = new URL('/api/status/rows', url)
+      gone.searchParams.set('id', id)
+      await fetch(gone, {
+        method: 'DELETE',
+        signal: AbortSignal.timeout(cfg.statusPublish.timeoutMs),
+      })
+    }
+  } catch (error) {
+    // The rows themselves went out; a leftover row is tidied on the next report.
+    console.error(`Could not tidy old backup Status rows: ${(error as Error).message}`)
+  }
+}
+
+async function post(cfg: BackupConfig, url: string, rows: unknown[]): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     try {
       const result = await fetch(new URL('/api/status/rows', url), {

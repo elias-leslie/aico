@@ -754,7 +754,33 @@ it('publishes receipts when the local web service is still starting', async () =
   vi.stubGlobal('fetch', send)
   try {
     await expect(report(c, emptyState(), c.workstation, ok)).resolves.toBeUndefined()
-    expect(send).toHaveBeenCalledTimes(2)
+    expect(send.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2)
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})
+it('drops backup rows no plan entry writes any more, but not the restore drill or other machines', async () => {
+  const c = cfg()
+  const m = c.workstation
+  const calls: { url: string; method: string; body?: { id: string }[] }[] = []
+  vi.stubGlobal('fetch', async (url: URL, init?: RequestInit) => {
+    calls.push({
+      url: String(url),
+      method: init?.method ?? 'GET',
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    })
+    if (init?.method === 'POST' || init?.method === 'DELETE') return { ok: true }
+    const posted = calls.find((call) => call.method === 'POST')?.body ?? []
+    const kept = posted[0]?.id as string
+    const rows = [kept, `${m}/backup/drive/a-term`, `${m}/backup/restore-drill`, 'other/backup/x']
+    return { ok: true, json: async () => ({ rows: rows.map((id) => ({ id })) }) }
+  })
+  try {
+    await report(c, emptyState(), m, ok)
+    const deleted = calls
+      .filter((call) => call.method === 'DELETE')
+      .map((call) => new URL(call.url).searchParams.get('id'))
+    expect(deleted).toEqual([`${m}/backup/drive/a-term`])
   } finally {
     vi.unstubAllGlobals()
   }

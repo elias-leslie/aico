@@ -105,6 +105,8 @@ export interface BackupEntry {
   path: string | null
   running: boolean
   machine: string
+  /** A retired source whose path is gone: listed for its old copies, but no Status row. */
+  gone?: boolean
 }
 /** How often a target's backup job runs, in minutes (Drive: daily). */
 export function runPeriodMinutes(target: BackupTarget, cfg: BackupConfig): number {
@@ -189,6 +191,7 @@ export function entries(
               nextRun: null,
               running: false,
               meaning: 'This source path is gone. Older snapshots may still contain its files.',
+              gone: true,
             })
           all.push(item)
         }
