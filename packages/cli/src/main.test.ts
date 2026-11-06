@@ -16,7 +16,8 @@ const temp = () => {
   scratch.push(p)
   return p
 }
-function harness(env: NodeJS.ProcessEnv = {}) {
+// cwd defaults to a folder outside every registered project, so the live registry never picks one.
+function harness(env: NodeJS.ProcessEnv = {}, cwd: string = temp()) {
   const calls: { argv: string[]; env: NodeJS.ProcessEnv }[] = [],
     output: string[] = [],
     errors: string[] = []
@@ -28,7 +29,7 @@ function harness(env: NodeJS.ProcessEnv = {}) {
       main(argv, {
         root,
         env,
-        cwd: root,
+        cwd,
         out: (x) => output.push(x),
         err: (x) => errors.push(x),
         execute: async (argv, env) => {
@@ -337,15 +338,40 @@ describe('root command contracts', () => {
     expect(h.output.join()).toContain('ui')
   })
   it('carries root project to native tasks and reads the ST_PROJECT_ID alias', async () => {
-    const h = harness()
+    const outside = temp()
+    const h = harness({}, outside)
     expect(await h.go(['-P', 'selected', 'tasks', 'list'])).toBe(0)
     expect(h.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'selected'])
-    const fromEnv = harness({ ST_PROJECT_ID: 'selected' })
+    const fromEnv = harness({ ST_PROJECT_ID: 'selected' }, outside)
     await fromEnv.go(['list'])
     expect(fromEnv.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'selected'])
-    const named = harness({ AICO_PROJECT_ID: 'selected' })
+    const named = harness({ AICO_PROJECT_ID: 'selected' }, outside)
     await named.go(['tasks', 'create', 'T', '-P', 'other'])
     expect(named.calls[0]?.argv.slice(1)).toEqual(['tasks', 'create', 'T', '-P', 'other'])
+  })
+  it('picks the project: -P, then the project holding cwd, then the inherited id', async () => {
+    const dir = temp(),
+      file = join(dir, 'tasks.db'),
+      projectB = join(dir, 'b'),
+      nested = join(projectB, 'src'),
+      outside = join(dir, 'elsewhere')
+    for (const p of [nested, outside]) mkdirSync(p, { recursive: true })
+    const db = openTasksDb(file)
+    const { Registry } = await import('@aico/tasks')
+    new Registry(db).register({ id: 'b', root: projectB })
+    db.close()
+    const env = { AICO_TASKS_DB: file, AICO_PROJECT_ID: 'a', ST_PROJECT_ID: 'a' }
+    const inB = harness(env, nested)
+    await inB.go(['tasks', 'list'])
+    expect(inB.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'b'])
+    expect(inB.calls[0]?.env).toMatchObject({ AICO_PROJECT_ID: 'b', ST_PROJECT_ID: 'b' })
+    const nowhere = harness(env, outside)
+    await nowhere.go(['tasks', 'list'])
+    expect(nowhere.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'a'])
+    const flagged = harness(env, nested)
+    await flagged.go(['-P', 'c', 'tasks', 'list'])
+    expect(flagged.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'c'])
+    expect(flagged.calls[0]?.env).toMatchObject({ AICO_PROJECT_ID: 'c', ST_PROJECT_ID: 'c' })
   })
   it('keeps undeclared help passive unless owner_help is granted', () => {
     const binding = {
@@ -617,7 +643,7 @@ it('advertises the native model and backup syntax', async () => {
 })
 
 it('passes the versioned Agent Hub context to the Aico session helper', async () => {
-  const h = harness({ AGENT_HUB_URL: 'http://hub.test:8003' })
+  const h = harness({ AGENT_HUB_URL: 'http://hub.test:8003' }, root)
   expect(await h.go(['-P', 'aico', 'aico', 'create', 'proof'])).toBe(0)
   expect(JSON.parse(h.calls[0]?.env.ST_EXTENSION_CONTEXT || '{}')).toMatchObject({
     contract_version: 1,

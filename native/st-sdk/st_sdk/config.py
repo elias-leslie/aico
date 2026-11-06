@@ -172,10 +172,13 @@ def _resolve_project() -> tuple[str | None, str | None, str]:
         return _runtime_config.project_id, _runtime_config.project_root, "context"
     if _project_override:
         return _project_override, get_project_root_path(_project_override), "flag"
+    # The project holding cwd beats an inherited id: a session started in A that works in B acts for B.
+    project_id, root = _detect_project_from_cwd()
+    if project_id:
+        return project_id, root, "cwd"
     if project_id := os.getenv("AICO_PROJECT_ID") or os.getenv("ST_PROJECT_ID"):
         return project_id, None, "env"
-    project_id, root = _detect_project_from_cwd()
-    return project_id, root, "cwd"
+    return None, None, "cwd"
 
 
 @lru_cache

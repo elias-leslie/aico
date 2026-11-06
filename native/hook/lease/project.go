@@ -19,9 +19,15 @@ type Project struct {
 // `project:` of the first .index.yaml in the checkout root, the canonical repo root, or a parent; else
 // the checkout directory's name.
 func ProjectFor(path string) (Project, bool) {
+	project, _, ok := projectFor(path)
+	return project, ok
+}
+
+// projectFor is ProjectFor plus whether the id was declared by an .index.yaml (false: the directory name).
+func projectFor(path string) (project Project, declared, ok bool) {
 	top, gitEntry, ok := toplevel(expandHome(path))
 	if !ok {
-		return Project{}, false
+		return Project{}, false, false
 	}
 	candidates := []string{top}
 	if common := commonRoot(top, gitEntry); common != "" {
@@ -40,10 +46,10 @@ func ProjectFor(path string) (Project, bool) {
 		}
 		seen[dir] = true
 		if id := indexProject(filepath.Join(dir, ".index.yaml")); id != "" {
-			return Project{id, top}, true
+			return Project{id, top}, true, true
 		}
 	}
-	return Project{filepath.Base(top), top}, true
+	return Project{filepath.Base(top), top}, false, true
 }
 
 // toplevel is `git rev-parse --show-toplevel` from path (or its nearest existing parent), read from the tree.

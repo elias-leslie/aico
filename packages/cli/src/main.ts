@@ -148,13 +148,15 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     )
   try {
     const args = [...argv]
-    let projectId = env.AICO_PROJECT_ID || env.ST_PROJECT_ID || null
+    let projectId: string | null = null
+    let explicitProject = false
     const output = { human: false, compact: true, progress_only: false }
     while (args[0]?.startsWith('-') && !['--help', '-h'].includes(args[0])) {
       const option = args.shift()
       if (option === '-P' || option === '--project') {
         projectId = args.shift() || null
         if (!projectId) throw new Error('Project option needs an id')
+        explicitProject = true
       } else if (option === '--human') output.human = true
       else if (option === '--compact' || option === '-c') output.compact = true
       else if (option === '--no-compact') output.compact = false
@@ -163,13 +165,20 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     }
     output.human = output.human && !output.compact && !output.progress_only
     output.compact = output.compact || output.progress_only
+    // -P wins; else the registered project holding cwd; else the id this session inherited.
+    if (!explicitProject) {
+      let known: ReturnType<typeof registryProjects> = []
+      try {
+        known = registryProjects(env)
+      } catch {}
+      const here = known
+        .filter((p) => cwd === p.root || cwd.startsWith(`${p.root}/`))
+        .sort((a, b) => b.root.length - a.root.length)[0]
+      projectId = here?.id ?? (env.AICO_PROJECT_ID || env.ST_PROJECT_ID || null)
+    }
     if (projectId) selectedEnv = { ...env, AICO_PROJECT_ID: projectId, ST_PROJECT_ID: projectId }
     const commandContext = (projects = registryProjects(env)) => {
-      const project = projectId
-        ? projects.find((p) => p.id === projectId)
-        : projects
-            .filter((p) => cwd === p.root || cwd.startsWith(`${p.root}/`))
-            .sort((a, b) => b.root.length - a.root.length)[0]
+      const project = projects.find((p) => p.id === projectId)
       return {
         contract_version: 1,
         project_id: project?.id ?? projectId,

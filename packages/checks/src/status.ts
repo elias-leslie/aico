@@ -18,16 +18,16 @@ export interface CheckSummary {
   sha?: string
 }
 
-/** The registry project that holds root, else the directory name. */
+/** The registry project that holds root, else the inherited id, else the directory name. */
 export function projectId(root: string, env: NodeJS.ProcessEnv = process.env): string {
-  if (env.ST_PROJECT_ID?.trim()) return env.ST_PROJECT_ID.trim()
   try {
     const hit = registryProjects(env)
       .filter((project) => root === project.root || root.startsWith(`${project.root}/`))
       .sort((a, b) => b.root.length - a.root.length)[0]
     if (hit) return hit.id
   } catch {}
-  return basename(root).toLowerCase()
+  // Outside every registered project the inherited id stands in.
+  return env.ST_PROJECT_ID?.trim() || basename(root).toLowerCase()
 }
 
 export function checkRow(project: string, summary: CheckSummary, now = new Date()): StatusRow {

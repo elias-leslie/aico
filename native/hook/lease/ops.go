@@ -12,15 +12,15 @@ import (
 // The `aico lease` verbs: the same leases the edit hook writes (st lease's semantics, leases.py), run by the
 // agent's own hook identity (New with an empty payload resolves it from the harness process and environment).
 
-// CLIProject is the project a verb acts on: ST_PROJECT_ID, else the one owning the current directory; root is
-// what relative globs resolve against.
+// CLIProject is the project a verb acts on: the one that declares the current directory, else the inherited
+// ST_PROJECT_ID, else the checkout's directory name; root is what relative globs resolve against.
 func CLIProject() (Project, error) {
 	cwd, _ := os.Getwd()
-	here, ok := ProjectFor(cwd)
+	here, declared, ok := projectFor(cwd)
+	if ok && declared {
+		return here, nil
+	}
 	if id := os.Getenv("ST_PROJECT_ID"); id != "" {
-		if ok && here.ID == id {
-			return here, nil
-		}
 		return Project{ID: id, Root: here.Root}, nil
 	}
 	if !ok {

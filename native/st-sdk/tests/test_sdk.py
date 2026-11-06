@@ -233,3 +233,22 @@ def test_standalone_owners_keep_approved_legacy_identity_source(monkeypatch, tmp
     )
     assert credentials.load_credentials() == ('fixture-client', 'fixture-source')
     assert credentials.load_internal_service_secret() == 'fixture-private'
+
+
+def test_cwd_project_beats_inherited_env_and_flag_beats_both(monkeypatch, tmp_path):
+    project_b, elsewhere = tmp_path / 'b', tmp_path / 'elsewhere'
+    project_b.mkdir()
+    elsewhere.mkdir()
+    monkeypatch.setattr(config, 'run_json', lambda *args: (
+        [{'id': 'b', 'root_path': str(project_b)}] if args[1] == 'list' else {'id': args[2], 'root_path': '/x'}))
+    monkeypatch.setattr(config, '_detect_project_from_local_metadata', lambda cwd: (None, None))
+    monkeypatch.setenv('AICO_PROJECT_ID', 'a')
+    monkeypatch.setenv('ST_PROJECT_ID', 'a')
+    monkeypatch.chdir(project_b)
+    assert (config.get_config().project_id, config.get_config().source) == ('b', 'cwd')
+    config.get_config.cache_clear()
+    monkeypatch.chdir(elsewhere)
+    assert (config.get_config().project_id, config.get_config().source) == ('a', 'env')
+    config.set_project_override('c')
+    monkeypatch.chdir(project_b)
+    assert (config.get_config().project_id, config.get_config().source) == ('c', 'flag')

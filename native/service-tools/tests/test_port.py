@@ -256,3 +256,14 @@ def test_no_import_or_client_runtime_depends_on_summitflow():
                 assert (node.module or "").split(".")[0] not in {"app", "cli"}, path
             if isinstance(node, ast.Name):
                 assert node.id not in {"STClient", "wait_for_summitflow_api"}, path
+
+
+def test_selected_project_is_the_registry_current_one_before_the_inherited_id(monkeypatch):
+    monkeypatch.setenv("AICO_PROJECT_ID", "a")
+    monkeypatch.setattr(registry, "query", lambda *_args: [{"id": "a"}, {"id": "b", "current": True}])
+    assert registry.selected_project_id() == "b"
+    monkeypatch.setattr(registry, "query", lambda *_args: [{"id": "a"}, {"id": "b"}])
+    assert registry.selected_project_id() == "a"
+    monkeypatch.delenv("AICO_PROJECT_ID")
+    with pytest.raises(registry.RegistryError):
+        registry.selected_project_id()

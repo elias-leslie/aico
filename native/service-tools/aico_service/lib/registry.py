@@ -35,14 +35,21 @@ def project_ids(*, include_inactive: bool = False) -> list[str]:
 
 
 def selected_project_id() -> str:
-    if selected := os.environ.get("AICO_PROJECT_ID") or os.environ.get("ST_PROJECT_ID"):
-        return selected
-    rows = query("list")
+    # The registry marks the project holding cwd (else the inherited id) as current; cwd beats the environment.
+    inherited = os.environ.get("AICO_PROJECT_ID") or os.environ.get("ST_PROJECT_ID")
+    try:
+        rows = query("list")
+    except RegistryError:
+        if inherited:
+            return inherited
+        raise
     current = [row["id"] for row in rows if isinstance(row, dict) and row.get("current") is True
                and isinstance(row.get("id"), str)] if isinstance(rows, list) else []
-    if len(current) != 1:
-        raise RegistryError("No project selected. Pass the project id to rebuild.")
-    return current[0]
+    if len(current) == 1:
+        return current[0]
+    if inherited:
+        return inherited
+    raise RegistryError("No project selected. Pass the project id to rebuild.")
 
 
 def project_record(project_id: str) -> tuple[dict[str, Any], Path]:
