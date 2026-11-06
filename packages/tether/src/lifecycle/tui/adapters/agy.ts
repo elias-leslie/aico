@@ -4,12 +4,9 @@
 // adapter, no hooks of Tether's and no transcript Tether follows: those are
 // capabilities set to false below. Tether delivers to it by the gated paste.
 
-import { execFile } from 'node:child_process'
-import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { AgentSignal } from '../../../agent-state'
 import type { ProcFs } from '../../../proc-fs'
-import { agentHubRepo, unknownCheckout } from '../context-support'
 import type { ContextStatus } from '../spec'
 import type { AgentProbe, TuiAdapter } from './contract'
 
@@ -263,36 +260,13 @@ export class AgyConversation {
 
 // --- context ---------------------------------------------------------------------
 
-/** Reuse the canonical installer's registration/link checks for retrieval clients. */
-function canonicalRetrieval(surface: 'antigravity'): Promise<ContextStatus> {
-  const repo = agentHubRepo()
-  if (!repo) return Promise.resolve(unknownCheckout('AGENT_HUB_REPO', 'agent-hub'))
-  return new Promise((resolve) => {
-    execFile(
-      'python3',
-      [join(repo, 'integrations/context-delivery/install.py'), '--surface', surface, '--check'],
-      { timeout: 20000 },
-      (error, stdout) => {
-        try {
-          const result = JSON.parse(stdout) as { passed?: unknown }
-          if (!error && result.passed === true) {
-            resolve({
-              state: 'available',
-              detail:
-                'Canonical retrieval rule installed; agent retrieval is required. Model receipt is unverified.',
-            })
-            return
-          }
-        } catch {
-          // Failed installation checks remain visible and never block launch.
-        }
-        resolve({
-          state: 'missing',
-          detail:
-            'Canonical retrieval rule installation is unavailable or unconfirmed; native agent continues',
-        })
-      },
-    )
+/** Aico delivers agy's context at launch (delivery.ts, an AGENTS.md in an added
+ * directory); a launch that got none has none, and the native agent continues. */
+function agyContext(): Promise<ContextStatus> {
+  return Promise.resolve({
+    state: 'missing',
+    detail:
+      'Aico delivered no context at this launch (aico context delivery agy on turns it on); native agent continues',
   })
 }
 
@@ -354,10 +328,14 @@ export const agy: TuiAdapter = {
     isDefault: false,
     enabled: true,
     aliases: [],
+    // The stored context_hook value (schema.ts CONTEXT_HOOKS) keeps its old name;
+    // it only picks this adapter. The context is Aico's launch delivery below.
     contextHook: 'canonical-retrieval:antigravity',
   },
   launch: { ensureArgs: [] },
-  spec: {},
+  // agy reads an AGENTS.md in a directory it adds like a workspace's own (checked
+  // live with agy 1.5.0 in print mode: the added folder's AGENTS.md was in context).
+  spec: { contextDelivery: { kind: 'agents-md', arguments: ['--add-dir'] } },
   capabilities: {
     root: false,
     blankSlate: false,
@@ -380,19 +358,14 @@ export const agy: TuiAdapter = {
       agyProbe(ctx.fs, ctx.home, ctx.pids, previous, ctx.seams?.agy as AgyRead | undefined),
   },
   context: {
-    kind: { kind: 'canonical-retrieval', surface: 'antigravity' },
-    check: () => canonicalRetrieval('antigravity'),
+    kind: { kind: 'agy-agents-md' },
+    check: agyContext,
   },
   hooks: {
     provider: null,
     rideAlong: [],
     stateReports: [],
-    installs: [
-      {
-        what: 'canonical retrieval rule',
-        path: 'agent-hub integrations/context-delivery/install.py --surface antigravity',
-      },
-    ],
+    installs: [],
   },
   login: {
     signIn: "echo 'agy asks you to sign in when it starts.'; agy",

@@ -11,6 +11,7 @@
     "agent": "agent.db"
   },
   "removed": {
+    "complete": "dropped with Agent Hub; ask a model with aico ask MODEL \"question\", or use a native subagent for work with tools",
     "sync-progress": "dropped",
     "checkpoints": "dropped",
     "prune": "dropped",

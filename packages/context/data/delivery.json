@@ -10,6 +10,9 @@
     },
     "pi": {
       "budgetBytes": 32768
+    },
+    "agy": {
+      "budgetBytes": 32768
     }
   },
   "aliases": {

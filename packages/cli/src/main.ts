@@ -93,6 +93,7 @@ const CORE = new Set([
   'mandates',
   'vcs',
   'service',
+  'skills',
 ])
 export interface Options {
   root?: string
@@ -455,6 +456,8 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       if (code === 3 && ['result', 'wait'].includes(rest[0])) return delegate(['deploy', ...rest])
       return code
     }
+    if (verb === 'skills')
+      return execute([join(root, 'native/service-tools/st-skills'), ...rest], selectedEnv)
     if (env.AICO_CLI_NAME === 'aico' && ['context', 'jobs', 'agent'].includes(verb))
       return delegate([verb, ...rest])
     if (verb === 'projects')

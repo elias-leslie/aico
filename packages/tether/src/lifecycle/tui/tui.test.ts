@@ -57,9 +57,6 @@ function mockPaneResolve(path: string | null): void {
 
 beforeEach(() => {
   mockPaneResolve(null)
-  vi.stubEnv('TETHER_PROJECTS_DIR', '/opt/projects')
-  vi.stubEnv('AGENT_HUB_REPO', '')
-  vi.stubEnv('CODEX_CONFIG_REPO', '')
 })
 
 function mockCodexHooks(

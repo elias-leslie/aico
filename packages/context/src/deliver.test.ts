@@ -428,7 +428,7 @@ describe('context delivery switch', () => {
       expect(await runContextCli('context', ['delivery', 'codex', 'on'], io)).toBe(0)
       expect(await runContextCli('context', ['delivery', 'codex', 'maybe'], io)).toBe(2)
       expect(out.join('')).toBe(
-        "Tether delivers Aico's context to: codex (the rest get Agent Hub's)\n",
+        "Tether delivers Aico's context to: codex (the rest only get their aico-hook's)\n",
       )
     } finally {
       rmSync(dir, { recursive: true, force: true })

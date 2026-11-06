@@ -17,7 +17,8 @@ export type ContextHook =
   | { kind: 'claude-session-start' }
   | { kind: 'codex-hooks' }
   | { kind: 'pi-extension' }
-  | { kind: 'canonical-retrieval'; surface: 'antigravity' }
+  /** Antigravity: Aico's launch delivery, an AGENTS.md in an added directory. */
+  | { kind: 'agy-agents-md' }
   /** A Blank Slate session (blank-slate.ts): no supplemental context by design. */
   | { kind: 'blank-slate' }
 
@@ -78,11 +79,13 @@ export interface TuiSpec {
   /** How the tool takes Aico's context delivery (delivery.ts): `claude-md`, a
    * CLAUDE.md in a directory added with `arguments` (and `env`); `config`,
    * `arguments` then `key=<TOML string>`; `file`, `arguments` then a file whose
-   * text the tool appends to its system prompt. */
+   * text the tool appends to its system prompt; `agents-md`, an AGENTS.md in a
+   * directory added with `arguments` (Antigravity reads it like a workspace's own). */
   contextDelivery?:
     | { kind: 'claude-md'; arguments: string[]; env: Record<string, string> }
     | { kind: 'config'; arguments: string[]; key: string }
     | { kind: 'file'; arguments: string[] }
+    | { kind: 'agents-md'; arguments: string[] }
   /** Set per launch by `withContextDelivery`: the shell words and environment
    * that hand this launch's delivery to the tool. `instructions`: the chosen
    * instructions are in the delivery, so the launch adds no second copy. */

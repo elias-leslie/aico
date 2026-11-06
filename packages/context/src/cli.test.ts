@@ -1,10 +1,11 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import { type ContextCliIo, runContextCli } from './cli'
 import { openContext } from './db'
-import { putPrompt } from './prompts'
+import { addMemory, getMemories } from './memory'
+import { getPrompt, putPrompt } from './prompts'
 
 it('serves prompt JSON and saved revisions for root instruction snapshots', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aico-prompt-cli-'))
@@ -55,6 +56,81 @@ it('serves prompt JSON and saved revisions for root instruction snapshots', asyn
       ['0001', 'first text'],
     ])
     expect(revisions[0].content_hash).toMatch(/^[0-9a-f]{64}$/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+it('updates a prompt and a memory as new revisions, and measures prompts', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-update-cli-'))
+  try {
+    const path = join(dir, 'context.db')
+    const db = openContext(path)
+    putPrompt(
+      db,
+      {
+        id: 1,
+        slug: 'fixture',
+        name: 'Fixture',
+        description: 'Test',
+        content: 'old',
+        kind: 'standard',
+        isGlobal: true,
+        bootEligible: true,
+        contextPolicy: null,
+        updatedAt: '2026-11-05T00:00:00Z',
+      },
+      'first',
+    )
+    const memory = addMemory(db, { content: 'Use Agent Hub.' }, '2026-11-05T00:00:00Z')
+    db.close()
+    const out: string[] = []
+    const io: ContextCliIo = {
+      dbPath: path,
+      machine: 'test',
+      statusUrl: null,
+      fetch,
+      now: () => new Date('2026-11-06T00:00:00Z'),
+      agentHub: {
+        checkout: '/missing',
+        source: () => {
+          throw new Error('No Agent Hub calls')
+        },
+      },
+      out: (s) => out.push(s),
+      err: (s) => out.push(s),
+    }
+    const file = join(dir, 'new.md')
+    writeFileSync(file, 'new text')
+    expect(await runContextCli('prompt', ['update', 'fixture', '--content-file', file], io)).toBe(0)
+    expect(await runContextCli('prompt', ['update', 'nope', '--content-file', file], io)).toBe(1)
+    expect(await runContextCli('prompt', ['measure', '--json'], io)).toBe(0)
+    expect(JSON.parse(out.pop() || '{}').prompts).toEqual([
+      { slug: 'fixture', bytes: 8, lines: 1, tokens: expect.any(Number) },
+    ])
+    expect(
+      await runContextCli(
+        'memory',
+        ['update', memory.id.slice(0, 8), 'Use Aico.', '--reason', 'retired'],
+        io,
+      ),
+    ).toBe(0)
+    const check = openContext(path)
+    expect(getPrompt(check, 'fixture')).toMatchObject({ content: 'new text', version: 2 })
+    expect(
+      check.prepare("SELECT 1 FROM context_local_edits WHERE kind = 'prompt'").get(),
+    ).toBeTruthy()
+    expect(getMemories(check, [memory.id]).found[0]).toMatchObject({
+      content: 'Use Aico.',
+      version: 2,
+      updatedAt: '2026-11-06T00:00:00.000Z',
+    })
+    expect(
+      check
+        .prepare('SELECT reason FROM memory_revisions WHERE memory_id = ? ORDER BY version')
+        .all(memory.id),
+    ).toEqual([{ reason: 'created' }, { reason: 'retired' }])
+    check.close()
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

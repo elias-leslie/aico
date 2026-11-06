@@ -4,17 +4,17 @@
 // recent sessions, under the tool's byte budget), writes it to the session's
 // delivery folder and hands it to the tool the way its adapter declares
 // (`contextDelivery`): Claude Code reads a CLAUDE.md in a directory it adds,
-// Codex a developer_instructions override, Pi a system-prompt file. The content
-// never travels through tmux, only the paths.
+// Antigravity an AGENTS.md in one, Codex a developer_instructions override, Pi a
+// system-prompt file. The content never travels through tmux, only the paths.
 //
-// AICO_CONTEXT_DELIVERED=<hash> tells Agent Hub's launchers, hooks and Pi
-// extension and aico-hook to stand down, but only in the process the launch
-// started: launchLine also exports AICO_CONTEXT_PID, the agent's own pid, and
-// every check honours the marker only when that pid is the process itself (a
-// launcher, the Pi extension) or one of its few parents (a hook the agent runs).
-// A session the agent starts in turn (`codex exec` from a Claude session)
-// inherits the variables but not the pid, so it gets its own delivery. When the switch is off, the tool takes no delivery, or
-// anything fails, the launch stays as it was and Agent Hub's delivery runs.
+// AICO_CONTEXT_DELIVERED=<hash> tells aico-hook to stand down, but only in the
+// process the launch started: launchLine also exports AICO_CONTEXT_PID, the
+// agent's own pid, and every check honours the marker only when that pid is the
+// process itself (the Pi extension) or one of its few parents (a hook the agent
+// runs). A session the agent starts in turn (`codex exec` from a Claude session)
+// inherits the variables but not the pid, so it gets its own delivery. When the
+// switch is off, the tool takes no delivery, or anything fails, the launch stays
+// as it was and the tool's aico-hook delivers, if it has one.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -51,7 +51,7 @@ export function deliveryDir(widgetId: string, env: NodeJS.ProcessEnv = process.e
 }
 
 /** The files a delivery of `text` writes in `dir`, and what the launch adds
- * to hand them to the tool. No text: no files and no words, but Agent Hub
+ * to hand them to the tool. No text: no files and no words, but aico-hook
  * still stands down (an empty delivery is a delivery). `instructions`: the
  * text holds the session's chosen instructions too. */
 export function deliveryLaunch(
@@ -75,6 +75,8 @@ export function deliveryLaunch(
       files: { 'CLAUDE.md': text },
       delivered: delivered([...flags, shellQuote(dir)], how.env),
     }
+  if (how.kind === 'agents-md')
+    return { files: { 'AGENTS.md': text }, delivered: delivered([...flags, shellQuote(dir)]) }
   if (how.kind === 'config') {
     // A JSON string is a TOML basic string; `$(cat)` keeps its bytes as one word.
     const file = join(dir, 'config.toml')
@@ -167,7 +169,7 @@ export async function withContextDelivery<T extends TuiSpec | undefined>(
         : {}),
     })
     // Codex takes one developer_instructions: the chosen instructions join the
-    // delivery in it, after the context as Agent Hub's launcher put them.
+    // delivery in it, after the context.
     const text = delivery.text
     const { files, delivered } = deliveryLaunch(how, dir, text, delivery.hash, chosen !== null)
     rmSync(dir, { recursive: true, force: true })
@@ -184,7 +186,7 @@ export async function withContextDelivery<T extends TuiSpec | undefined>(
     return { ...spec, deliveredContext: delivered }
   } catch (error) {
     console.error(
-      `[tether:delivery] ${widgetId}: ${error instanceof Error ? error.message : String(error)}; Agent Hub's delivery runs instead`,
+      `[tether:delivery] ${widgetId}: ${error instanceof Error ? error.message : String(error)}; launching without it`,
     )
     return spec
   } finally {

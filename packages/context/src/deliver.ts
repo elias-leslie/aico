@@ -645,7 +645,7 @@ export function recordDelivery(
 
 const SWITCH = 'delivery.tools'
 
-/** Tools Tether delivers context to itself (the rest still get Agent Hub's). */
+/** Tools Tether delivers context to at launch (the rest only get their aico-hook's). */
 export function deliveryTools(db: Database): string[] {
   return getSetting<string[]>(db, SWITCH) ?? []
 }

@@ -24,39 +24,6 @@
       "owner_manifest": "st-extensions/agents.json"
     },
     {
-      "id": "agent-hub.complete",
-      "owner": "agent-hub",
-      "namespace": "complete",
-      "manifest": "extensions/complete.json",
-      "executable": "backend/.venv/bin/agent-hub-st",
-      "arguments": ["complete"],
-      "grant": {
-        "enabled": true,
-        "effects": [
-          "network",
-          "read-remote",
-          "write-remote",
-          "read-local",
-          "write-local",
-          "credentials"
-        ]
-      },
-      "environment": []
-    },
-    {
-      "id": "agent-hub.skills",
-      "owner": "agent-hub",
-      "namespace": "skills",
-      "manifest": "extensions/skills.json",
-      "executable": "backend/.venv/bin/agent-hub-st",
-      "arguments": ["skills"],
-      "grant": {
-        "enabled": true,
-        "effects": ["read-local", "write-local", "process"]
-      },
-      "environment": ["ST_AGENT_SKILLS_DIR", "ST_SKILLS_PROFILE"]
-    },
-    {
       "id": "bugout.recon",
       "owner": "bugout",
       "namespace": "bugout",

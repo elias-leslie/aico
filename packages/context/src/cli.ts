@@ -3,10 +3,11 @@
 // agents read it; `context import-agent-hub` copies Agent Hub's rows in (M6/M7).
 
 import { readFileSync } from 'node:fs'
+import { transaction } from '@aico/store'
 import { routeFacts } from '@aico/usage'
 import importData from '../data/agent-hub-import.json' with { type: 'json' }
 import { startedBy } from './ancestry'
-import { bindContextSession } from './cost'
+import { bindContextSession, estimatedTokens } from './cost'
 import { type Database, openContext } from './db'
 import {
   type Activity,
@@ -34,6 +35,7 @@ import {
   addMemory,
   getMemories,
   listMemories,
+  putMemory,
   SCOPES,
   type Scope,
   searchMemories,
@@ -42,7 +44,7 @@ import {
   type Where,
 } from './memory'
 import { Catalog } from './models'
-import { getPrompt, listPrompts, promptRevisions } from './prompts'
+import { getPrompt, listPrompts, promptRevisions, putPrompt } from './prompts'
 import { route, UnknownLaunchKey } from './route'
 
 export const CONTEXT_COMMANDS = ['memory', 'prompt', 'models', 'context'] as const
@@ -85,8 +87,11 @@ const USAGE = `Usage: aico <memory|prompt|models|context> ...
   aico memory list [-l N] [--cursor N] [-t TIER] [-s SCOPE] [--scope-id ID] [--tag TAG]
   aico memory get ID [ID...]
   aico memory save CONTENT [-S SUMMARY] [-t TIER] [-s SCOPE] [--scope-id ID] [--tags a,b] [--content-file F]
+  aico memory update ID (CONTENT | --content-file F) [-S SUMMARY] [-t TIER] [--reason R]
   aico prompt list [--global|--no-global]
   aico prompt get SLUG
+  aico prompt update SLUG --content-file F [--reason R]
+  aico prompt measure [SLUG...]   (none: the global prompts)
   aico models route --role R [--tool T] [--model M] [--project P] [--json]
   aico context import-agent-hub [--checkout DIR] [--json] [--no-status]
   aico context deliver --tool T [--project P] [--session S] [--role R] [--coordinator]
@@ -168,6 +173,7 @@ const MEMORY_FLAGS = {
   '--summary': 'summary',
   '--tags': 'tags',
   '--content-file': 'content-file',
+  '--reason': 'reason',
 }
 
 function where(parsed: Parsed): Where {
@@ -249,12 +255,90 @@ function memory(db: Database, argv: string[], io: ContextCliIo): number {
     )
     return 0
   }
+  if (sub === 'update') {
+    const [id, ...words] = parsed.args
+    if (!id) throw new UsageError('memory update needs an id')
+    const file = str(parsed, 'content-file')
+    const content = file ? readFileSync(file, 'utf8') : words.join(' ')
+    const summary = str(parsed, 'summary')
+    const tier = oneOf<Tier>(parsed, 'tier', TIERS)
+    if (!content && summary === undefined && !tier)
+      throw new UsageError('memory update needs new content, --summary or --tier')
+    const { found } = getMemories(db, [id])
+    if (found.length !== 1) {
+      io.err(found.length ? `'${id}' names ${found.length} memories.\n` : `No memory '${id}'.\n`)
+      return 1
+    }
+    const before = found[0] as (typeof found)[number]
+    const at = io.now().toISOString()
+    const next = {
+      ...before,
+      ...(content && { content }),
+      ...(summary !== undefined && { summary }),
+      ...(tier && { tier }),
+      version: before.version + 1,
+      updatedAt: at,
+    }
+    transaction(db, () => putMemory(db, next, str(parsed, 'reason') ?? 'aico memory update', at))
+    io.out(`UPDATED:${next.id.slice(0, 8)} [${next.tier}] v${next.version}\n`)
+    return 0
+  }
   throw new UsageError(`unknown memory command ${sub ?? '(none)'}`)
 }
 
 function prompt(db: Database, argv: string[], io: ContextCliIo): number {
   const [sub, ...rest] = argv
-  const parsed = parse(rest, { '--limit': 'limit' }, ['--global', '--no-global', '--json'])
+  const parsed = parse(
+    rest,
+    { '--limit': 'limit', '--content-file': 'content-file', '--reason': 'reason' },
+    ['--global', '--no-global', '--json'],
+  )
+  if (sub === 'update') {
+    const slug = parsed.args[0]
+    const file = str(parsed, 'content-file')
+    if (!slug || !file) throw new UsageError('prompt update needs a slug and --content-file')
+    const found = getPrompt(db, slug)
+    if (!found) {
+      io.err(`No prompt '${slug}'.\n`)
+      return 1
+    }
+    const content = readFileSync(file, 'utf8')
+    // Kept as a local edit, like one made in Aico's editor: an import never overwrites it.
+    transaction(db, () => {
+      putPrompt(
+        db,
+        { ...found, content, updatedAt: io.now().toISOString() },
+        str(parsed, 'reason') ?? 'aico prompt update',
+      )
+      db.prepare('INSERT OR IGNORE INTO context_local_edits VALUES (?, ?)').run('prompt', slug)
+    })
+    io.out(`UPDATED:${slug} v${getPrompt(db, slug)?.version}\n`)
+    return 0
+  }
+  if (sub === 'measure') {
+    const prompts = parsed.args.length
+      ? parsed.args.map((slug) => {
+          const found = getPrompt(db, slug)
+          if (!found) throw new UsageError(`no prompt '${slug}'`)
+          return found
+        })
+      : listPrompts(db, { global: true })
+    const rows = prompts.map((found) => {
+      const bytes = Buffer.byteLength(found.content)
+      return {
+        slug: found.slug,
+        bytes,
+        lines: found.content.split('\n').length,
+        tokens: estimatedTokens(bytes),
+      }
+    })
+    io.out(
+      parsed.flags.has('--json')
+        ? `${JSON.stringify({ prompts: rows })}\n`
+        : rows.map((r) => `${r.slug} ${r.bytes}B ${r.lines}L ~${r.tokens}tok\n`).join(''),
+    )
+    return 0
+  }
   if (sub === 'list') {
     const filter = parsed.flags.has('--global')
       ? { global: true }
@@ -499,7 +583,7 @@ function deliverySwitch(db: Database, rest: string[], io: ContextCliIo): number 
   }
   const tools = deliveryTools(db)
   io.out(
-    `Tether delivers Aico's context to: ${tools.length ? tools.join(', ') : 'none'} (the rest get Agent Hub's)\n`,
+    `Tether delivers Aico's context to: ${tools.length ? tools.join(', ') : 'none'} (the rest only get their aico-hook's)\n`,
   )
   return 0
 }

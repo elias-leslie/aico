@@ -243,13 +243,14 @@ describe('aico web', () => {
     expect(answer.page.title).toBe('Plain title')
   })
 
-  it('leaves Lightpanda, doctor and benchmark to Agent Hub (exit 3) and rejects bad flags (exit 2)', async () => {
+  it('refuses the retired rendered-page options, doctor and benchmark, and bad flags (exit 2)', async () => {
     const h = harness({})
     expect(await runWebCli(['fetch', 'https://a.example/', '--backend', 'lightpanda'], h.io)).toBe(
-      3,
+      2,
     )
-    expect(await runWebCli(['fetch', 'https://a.example/', '--selector', 'main'], h.io)).toBe(3)
-    expect(await runWebCli(['doctor'], h.io)).toBe(3)
+    expect(await runWebCli(['fetch', 'https://a.example/', '--selector', 'main'], h.io)).toBe(2)
+    expect(h.err.join('')).toContain('st browser')
+    expect(await runWebCli(['doctor'], h.io)).toBe(2)
     expect(await runWebCli(['search'], h.io)).toBe(2)
     expect(await runWebCli(['search', 'q', '--search-type', 'video'], h.io)).toBe(2)
     expect(await runWebCli(['fetch', 'ftp://a.example/'], h.io)).toBe(1)

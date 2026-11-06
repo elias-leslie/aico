@@ -1,6 +1,7 @@
 // `aico web search|research|fetch|batch|refocus`: the flags and JSON output `st web` had.
-// Exit 0 done, 1 the answer carries an error, 2 usage, 3 not handled here (doctor,
-// benchmark, Lightpanda: `st web` then runs Agent Hub's own code, as before).
+// Exit 0 done, 1 the answer carries an error, 2 usage. Rendered-page options
+// (--selector, --wait-script, --backend lightpanda) and doctor/benchmark ran on
+// Agent Hub's web stack, which is retired: they are refused with the way to go.
 
 import { parseArgs } from 'node:util'
 import type { StatusRow } from '@aico/status'
@@ -16,7 +17,8 @@ import {
   searchWeb,
 } from './fetch'
 
-export const NOT_HANDLED = 3
+/** What to use instead of the retired rendered-page options. */
+const RENDERED = 'use `st browser` for a rendered page or a selector'
 
 export interface WebIo {
   out(text: string): void
@@ -118,7 +120,7 @@ async function run(
     values['wait-script'] !== undefined ||
     values.backend === 'lightpanda'
   )
-    return NOT_HANDLED
+    throw new UsageError(`--selector, --wait-script and --backend lightpanda are gone; ${RENDERED}`)
   const compact = Boolean(values.compact || values.raw)
   const deps = { fetch: io.fetch, env: io.env }
   const fetchOptions = {
@@ -210,7 +212,12 @@ export async function runWebCli(argv: string[], io: WebIo): Promise<number> {
     return verb ? 0 : 2
   }
   if (!(VERBS as readonly string[]).includes(verb)) {
-    if (verb === 'doctor' || verb === 'benchmark') return NOT_HANDLED
+    if (verb === 'doctor' || verb === 'benchmark') {
+      io.err(
+        `aico web ${verb}: gone with Agent Hub's web stack; calls and failures show in aico status\n`,
+      )
+      return 2
+    }
     io.err(`aico web: unknown command '${verb}'\n${USAGE}`)
     return 2
   }

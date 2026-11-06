@@ -159,6 +159,17 @@ describe('CLI cutover', () => {
       ['publish', '--all'],
     ])
   })
+  it('runs st skills from Aico and refuses the dropped st complete', async () => {
+    const h = harness()
+    await h.go(['skills', 'status', '--json'])
+    expect(h.calls[0]?.argv).toEqual([
+      join(root, 'native/service-tools/st-skills'),
+      'status',
+      '--json',
+    ])
+    expect(await h.go(['complete', '--agent', 'x'])).not.toBe(0)
+    expect(h.calls).toHaveLength(1)
+  })
   it('projects strips optional JSON spelling', async () => {
     const h = harness()
     await h.go(['projects', 'list', '--json'])

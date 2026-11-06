@@ -75,6 +75,10 @@ function read(how: NonNullable<TuiSpec['contextDelivery']>, started: Started): s
       for (const [key, value] of Object.entries(how.env)) expect(started.env[key]).toBe(value)
     return dirs.map((dir) => readFileSync(join(dir, 'CLAUDE.md'), 'utf8'))
   }
+  if (how.kind === 'agents-md')
+    return after(started.argv, how.arguments[0] as string).map((dir) =>
+      readFileSync(join(dir, 'AGENTS.md'), 'utf8'),
+    )
   if (how.kind === 'config')
     return after(started.argv, how.arguments[0] as string)
       .filter((value) => value.startsWith(`${how.key}=`))
@@ -112,35 +116,39 @@ describe.each(delivering.map((adapter) => [adapter.id, adapter] as const))('%s',
       expect(read(how, started)).toEqual(delivery.text ? [delivery.text] : [])
     })
 
-  it('reads the delivery and the chosen instructions, each once', () => {
-    const [entry] = DELIVERY_FIXTURE.cases
-    const { request, settings } = fixtureRequest(entry as (typeof DELIVERY_FIXTURE.cases)[number])
-    const delivery = deliver(db, { ...request, tool: id }, settings)
-    const dir = join(root, id, 'chosen')
-    mkdirSync(dir, { recursive: true })
-    const chosenFile = join(dir, 'chosen.md')
-    const chosen = 'Review only.\nQuote \'this\' and "that" and $HOME literally.'
-    writeFileSync(chosenFile, chosen)
-    const merged = how.kind === 'config' && how.key === spec.instructions?.key
-    const text = merged ? `${delivery.text}\n\n${chosen}` : delivery.text
-    const { files, delivered } = deliveryLaunch(how, dir, text, delivery.hash, merged)
-    for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body)
-    const started = start({
-      ...spec,
-      chosenInstructions: { file: chosenFile, label: 'review@00000000' },
-      deliveredContext: delivered,
-    })
-    const flag = spec.instructions?.arguments[0] as string
-    const values = after(started.argv, flag)
-    if (merged) {
-      expect(read(how, started)).toEqual([text])
-      expect(values).toHaveLength(1)
-    } else {
-      // Pi reads both from its one flag; Claude Code the delivery from its CLAUDE.md.
-      const seen = [...read(how, started), ...(how.kind === 'file' ? [] : values)]
-      expect(seen.sort()).toEqual([delivery.text, chosen].sort())
-    }
-  })
+  // agy takes no chosen instructions.
+  it.runIf(Boolean(spec.instructions))(
+    'reads the delivery and the chosen instructions, each once',
+    () => {
+      const [entry] = DELIVERY_FIXTURE.cases
+      const { request, settings } = fixtureRequest(entry as (typeof DELIVERY_FIXTURE.cases)[number])
+      const delivery = deliver(db, { ...request, tool: id }, settings)
+      const dir = join(root, id, 'chosen')
+      mkdirSync(dir, { recursive: true })
+      const chosenFile = join(dir, 'chosen.md')
+      const chosen = 'Review only.\nQuote \'this\' and "that" and $HOME literally.'
+      writeFileSync(chosenFile, chosen)
+      const merged = how.kind === 'config' && how.key === spec.instructions?.key
+      const text = merged ? `${delivery.text}\n\n${chosen}` : delivery.text
+      const { files, delivered } = deliveryLaunch(how, dir, text, delivery.hash, merged)
+      for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body)
+      const started = start({
+        ...spec,
+        chosenInstructions: { file: chosenFile, label: 'review@00000000' },
+        deliveredContext: delivered,
+      })
+      const flag = spec.instructions?.arguments[0] as string
+      const values = after(started.argv, flag)
+      if (merged) {
+        expect(read(how, started)).toEqual([text])
+        expect(values).toHaveLength(1)
+      } else {
+        // Pi reads both from its one flag; Claude Code the delivery from its CLAUDE.md.
+        const seen = [...read(how, started), ...(how.kind === 'file' ? [] : values)]
+        expect(seen.sort()).toEqual([delivery.text, chosen].sort())
+      }
+    },
+  )
 })
 
 it('a launch with no delivery adds nothing', () => {

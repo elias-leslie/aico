@@ -1,34 +1,12 @@
-// What the adapters' context checks share: where the sibling checkouts are and
-// which launcher the managed pane PATH resolves a command to.
+// What the adapters' context checks share: which launcher the managed pane PATH
+// resolves a command to.
 
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { effectiveTuiPath } from './launch'
-import type { ContextStatus, TuiSpec } from './spec'
-
-/** A sibling checkout (agent-hub, codex-config): `$<override>` when set, else
- * `$TETHER_PROJECTS_DIR/<name>`. With neither set there is no guess (the old
- * `~/projects` default named a folder that need not exist); the caller shows
- * {@link unknownCheckout} instead. */
-export function checkout(override: string, name: string): string | null {
-  const direct = process.env[override]
-  if (direct) return direct
-  const projects = process.env.TETHER_PROJECTS_DIR
-  return projects ? join(projects, name) : null
-}
-
-export function agentHubRepo(): string | null {
-  return checkout('AGENT_HUB_REPO', 'agent-hub')
-}
-
-export function unknownCheckout(override: string, name: string): ContextStatus {
-  return {
-    state: 'missing',
-    detail: `TETHER_PROJECTS_DIR is not set and neither is ${override}, so the ${name} checkout can't be found; native agent continues`,
-  }
-}
+import type { TuiSpec } from './spec'
 
 /** Agent Hub's credential shims on a remote host. Each fetches its tool's
  * credentials, then execs the next same-named command on PATH, so it sits

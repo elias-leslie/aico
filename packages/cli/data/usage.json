@@ -203,5 +203,13 @@
     "tier": "reference",
     "cmd": "st tools extensions [--format text|json]",
     "when": "list versioned standalone tool extensions and their availability"
+  },
+  {
+    "surface": "st.skills",
+    "tier": "reference",
+    "cmd": "st skills status",
+    "when": "inspect skill distribution across registered harnesses",
+    "task_types": ["skill-admin"],
+    "on_demand": "skill management"
   }
 ]
