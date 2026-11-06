@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { peerDir } from '@aico/fleet/hosts'
 import { drainOutbox, machineId, outboxDir, type StatusRow } from '@aico/status'
-import { act, systemdUnits, unitInFlight } from './act'
+import { act, postJob, systemdUnits, unitInFlight } from './act'
 import { remoteAuthority, serveLeases } from './fleet-leases'
 import { type JobDef, readJobs } from './jobs'
 import { type JobState, JobStore, jobsDbPath } from './leases'
@@ -16,6 +16,7 @@ const USAGE = `Usage: aico jobs <command>
   list           each job: its home machine and lease holder, when it runs next, who holds it, how it last went
   run KIND       make KIND due at its lease holder; an eligible worker runs it
   serve          run the scheduler (aico-jobs.service): eligible jobs, using their configured lease holders
+  post PATH      POST to aico-web and print the result as JSON (what a POST job's unit runs)
   --machine M    act as machine M (tests and drills on one host)
 Settings: AICO_JOBS_FILE (job list, default data/jobs.json), AICO_JOBS_DB (default jobs.db in
 AICO_DATA_DIR or ~/.local/state/aico), AICO_WEB_URL (aico-web, for jobs and Status rows).`
@@ -93,6 +94,14 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     console.log(USAGE)
     return command ? 0 : 2
   }
+  if (command === 'post') {
+    if (!rest[0]?.startsWith('/')) {
+      console.error('aico jobs post: needs a path starting with /')
+      return 2
+    }
+    console.log(JSON.stringify(await postJob(settings(env).webUrl, rest[0])))
+    return 0
+  }
   const flag = rest.indexOf('--machine')
   const machine = flag >= 0 ? (rest[flag + 1] ?? '').toLowerCase() : machineId()
   if (!machine) {
@@ -158,8 +167,8 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     console.error(`aico jobs: unknown command '${command}'\n${USAGE}`)
     return 2
   }
-  // Each command job runs as its own systemd unit, so a restart here leaves the run going; the
-  // next scheduler adopts it (Runner.adopt) instead of starting a second.
+  // Each job runs as its own systemd unit, so a restart here leaves the run going; the next
+  // scheduler adopts it (Runner.adopt) instead of starting a second.
   const units = { host: systemdUnits(env), dir: join(dataDir, 'job-runs') }
   const outbox = { dir: outboxDir(dataDir) }
   const rowsUrl = new URL('/api/status/rows', webUrl).toString()
@@ -169,9 +178,8 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     machine,
     holder: `${machine}:${process.pid}`,
     authority,
-    act: act(webUrl, units),
-    inFlight: (job) =>
-      'command' in job.run ? unitInFlight(job.kind, units) : Promise.resolve(false),
+    act: act([process.execPath, process.argv[1] as string], units),
+    inFlight: (job) => unitInFlight(job.kind, units),
     drain: async () => void (await drainOutbox(rowsUrl, outbox)),
     postRows: (rows) => postRows(webUrl, rows),
   })

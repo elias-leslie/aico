@@ -1,9 +1,10 @@
 // What a job does: POST to the local aico-web, or run a command. Neither has a
 // time limit: a job is never stopped for taking long.
 //
-// A command runs as its own transient systemd unit (aico-job-KIND), not as a child of the
-// scheduler, so restarting aico-jobs does not touch it. The unit's wrapper leaves the exit code
-// in a file; the scheduler (this one or the next after a restart) attaches to the live unit, or
+// Either runs as its own transient systemd unit (aico-job-KIND), not as a child of the
+// scheduler, so restarting aico-jobs does not touch it. A POST job's unit is `aico jobs post
+// PATH`, which holds the request open and prints the answer's result as its last line. The
+// unit's wrapper leaves the exit code in a file; the scheduler (this one or the next after a restart) attaches to the live unit, or
 // picks up the finished run's code, and records the result once. The unit name is the one-run
 // guard: a run that finds it live attaches instead of starting a second.
 
@@ -56,6 +57,8 @@ export function answerResult({ status, body }: Answer): JobResult {
     said = typeof parsed.message === 'string' ? parsed.message : null
     said ??= typeof parsed.detail === 'string' ? parsed.detail : null
   } catch {}
+  // The route says a run of it is already going (the export's guard): busy, not failed.
+  if (status === 409) return { state: 'ok', busy: true, meaning: said ?? 'Already running.' }
   const ok = status >= 200 && status < 300
   return {
     state: ok ? (reported ?? 'ok') : 'failed',
@@ -196,6 +199,7 @@ export async function unitJob(
   kind: string,
   argv: readonly string[],
   options: UnitJobOptions,
+  read: (code: number, tail: string) => JobResult = (code, tail) => exitResult(code, null, tail),
 ): Promise<JobResult> {
   const { host, dir } = options
   const unit = unitName(kind)
@@ -217,10 +221,38 @@ export async function unitJob(
   const log = readIf(`${base}.log`) ?? ''
   rmSync(`${base}.code`, { force: true })
   if (code === null) return { state: 'failed', meaning: 'It was stopped before it left a result.' }
-  return exitResult(Number(code.trim()), null, log.slice(-TAIL_BYTES))
+  return read(Number(code.trim()), log.slice(-TAIL_BYTES))
 }
 
-export function act(webUrl: string, units: UnitJobOptions): (job: JobDef) => Promise<JobResult> {
+/** A POST job unit's result: the JSON line `aico jobs post` printed last; else its exit as a command's. */
+export function postedResult(code: number, tail: string): JobResult {
+  const last = tail.trim().split('\n').at(-1) ?? ''
+  try {
+    const result = JSON.parse(last) as Partial<JobResult>
+    if (
+      code === 0 &&
+      (result.state === 'ok' || result.state === 'warn' || result.state === 'failed') &&
+      typeof result.meaning === 'string'
+    )
+      return {
+        state: result.state,
+        meaning: result.meaning,
+        ...(result.busy ? { busy: true } : {}),
+      }
+  } catch {}
+  return exitResult(code, null, tail)
+}
+
+/**
+ * Runs each job in its own unit. `self` is how to start this program again (node and the
+ * aico-jobs bundle), for a POST job's `aico jobs post PATH` unit.
+ */
+export function act(
+  self: readonly string[],
+  units: UnitJobOptions,
+): (job: JobDef) => Promise<JobResult> {
   return (job) =>
-    'post' in job.run ? postJob(webUrl, job.run.post) : unitJob(job.kind, job.run.command, units)
+    'post' in job.run
+      ? unitJob(job.kind, [...self, 'post', job.run.post], units, postedResult)
+      : unitJob(job.kind, job.run.command, units)
 }

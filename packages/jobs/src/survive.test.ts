@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  act,
+  answerResult,
   exitResult,
+  postedResult,
   type UnitHost,
   type UnitJobOptions,
   unitArgv,
@@ -148,6 +151,80 @@ describe('a run survives a scheduler restart', () => {
     // One of them takes the code file; the other, finding it gone, reports it was not left.
     expect([one.meaning, two.meaning].sort()).toContain('once')
     expect(readFileSync(join(dir, 'backup.log'), 'utf8')).toBe('once\n')
+  })
+})
+
+describe('a POST job survives a scheduler restart too', () => {
+  // Stands in for `node aico-jobs.mjs`: `post PATH` holds "the request" open, then prints the result.
+  const self = [
+    'sh',
+    '-c',
+    'sleep 0.4; echo "{\\"state\\":\\"warn\\",\\"meaning\\":\\"Copied; one peer behind.\\"}"',
+    'self',
+  ]
+  const postJobDef: JobDef = {
+    ...job,
+    kind: 'notes-export',
+    run: { post: '/api/export/notes' },
+  }
+
+  it('runs in its own unit; the next scheduler adopts it and records its answer once', async () => {
+    const dir = scratch()
+    const { host, started } = fakeUnits()
+    const units = { host, dir, pollMs: 20 }
+    const store = new JobStore(':memory:')
+    const logs: string[] = []
+    const make = (holder: string, run: Act) =>
+      new Runner({
+        store,
+        jobs: [postJobDef],
+        machine: 'a',
+        holder,
+        act: run,
+        inFlight: (j) => unitInFlight(j.kind, units),
+        postRows: async () => {},
+        log: (line) => logs.push(line),
+      })
+    // The first scheduler starts the unit and is killed before it records anything.
+    const first = make('a:1', async (j) => {
+      void act(self, units)(j)
+      return new Promise(() => {})
+    })
+    first.start()
+    await first.tick()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(started).toEqual(['aico-job-notes-export'])
+
+    const second = make('a:2', act(self, units))
+    second.start()
+    await second.tick()
+    await second.idle()
+    expect(logs.some((line) => line.includes('adopted the run a:1 left'))).toBe(true)
+    expect(started).toEqual(['aico-job-notes-export'])
+    expect(store.get('notes-export')).toMatchObject({
+      leaseId: null,
+      lastState: 'warn',
+      lastMeaning: 'Copied; one peer behind.',
+    })
+  })
+
+  it("reads the printed result, and a run that printed none as a command's exit", () => {
+    expect(postedResult(0, 'noise\n{"state":"ok","meaning":"Uploaded."}\n')).toEqual({
+      state: 'ok',
+      meaning: 'Uploaded.',
+    })
+    expect(postedResult(0, '{"state":"ok","busy":true,"meaning":"Already running."}')).toEqual({
+      state: 'ok',
+      busy: true,
+      meaning: 'Already running.',
+    })
+    expect(postedResult(1, 'aico jobs: boom')).toEqual({
+      state: 'failed',
+      meaning: 'Exited 1: aico jobs: boom',
+    })
+    expect(
+      answerResult({ status: 409, body: '{"detail":"An export is already running"}' }),
+    ).toEqual({ state: 'ok', busy: true, meaning: 'An export is already running' })
   })
 })
 
