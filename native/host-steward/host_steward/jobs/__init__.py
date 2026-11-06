@@ -11,7 +11,10 @@ from types import ModuleType
 from host_steward.jobs import (
     collect_usage,
     declare,
+    display_guard,
+    home_off,
     housekeeping,
+    input_watch,
     lab_use,
     memctl,
     nvme_test,
@@ -25,7 +28,10 @@ JOBS: dict[str, ModuleType] = {
     for module in (
         collect_usage,
         declare,
+        display_guard,
+        home_off,
         housekeeping,
+        input_watch,
         lab_use,
         memctl,
         nvme_test,

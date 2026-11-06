@@ -1,0 +1,42 @@
+[Unit]
+Description=Host steward input watch: stamps when a physical keyboard or mouse was last used (the display guard reads it; agents' injected input does not count)
+After=systemd-udevd.service
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/local/lib/host-steward/host-steward input-watch
+Restart=always
+RestartSec=5s
+# Reads /dev/input only; keeps nothing it reads. The stamp (/run/host-steward-input/physical-input) is the one thing written.
+DynamicUser=yes
+SupplementaryGroups=input
+RuntimeDirectory=host-steward-input
+RuntimeDirectoryMode=0755
+UMask=0022
+DevicePolicy=closed
+DeviceAllow=char-input r
+PrivateNetwork=yes
+IPAddressDeny=any
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+ProtectHome=yes
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+MemoryMax=96M
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

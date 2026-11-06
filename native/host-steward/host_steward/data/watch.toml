@@ -1,0 +1,17 @@
+# Settings of the three desk-and-power duties: input-watch, display-guard, home-off.
+
+[input-watch]
+# The unit's RuntimeDirectory is host-steward-input; display-guard reads the same file.
+stamp = "/run/host-steward-input/physical-input"
+touch_every_s = 1.0   # at most one stamp write per second
+rescan_s = 10.0       # a node can appear before udev has given it its group, so hotplug alone is not enough
+
+[display-guard]
+min_idle_s = 300      # GNOME's idle-delay is honoured, but never shorter than this (0 there = never blank)
+poll_s = 20.0
+dark_poll_s = 0.5     # while the guard holds the monitor dark, how soon it notices the owner
+
+[home-off]
+ttl_s = 43200         # long enough for a phone offline overnight; home's next answer clears a late one
+request_timeout_s = 8.0
+budget_s = 15.0       # the whole send; the unit's TimeoutStopSec is a little above this

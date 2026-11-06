@@ -1,0 +1,16 @@
+[Unit]
+Description=Host steward display guard: monitor off after the idle delay without physical input (agents' ydotool and virtual-pointer input does not count)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/local/lib/host-steward/host-steward display-guard
+Restart=on-failure
+RestartSec=10s
+MemoryMax=96M
+Nice=5
+
+[Install]
+WantedBy=graphical-session.target

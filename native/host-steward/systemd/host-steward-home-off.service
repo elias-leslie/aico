@@ -1,0 +1,24 @@
+[Unit]
+Description=Host steward home-off: at a clean poweroff, tells the paired phone apps home is off on purpose (no outage alarm)
+After=network-online.target
+Wants=network-online.target
+# At shutdown the tunnel goes down first (units stop in reverse start order), so nothing reaches home through it once
+# the phone app has the home-off (its ack, an outage probe). At boot cloudflared waits for this start, which is instant
+# (ExecStart does nothing); ordering only, so a failed start doesn't hold it.
+Before=cloudflared.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+# Sends nothing when a reboot, kexec or soft-reboot job is queued; bounded by budget_s in data/watch.toml.
+ExecStop=/usr/local/lib/host-steward/host-steward home-off
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
+TimeoutStopSec=20s
+
+[Install]
+WantedBy=multi-user.target
