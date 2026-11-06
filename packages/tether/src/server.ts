@@ -59,7 +59,7 @@ export interface ServerContext {
   asks?: AskDelivery
   /** The owner's waiting notices; Aico web reports what the owner has seen. */
   waiting?: WaitingNotices
-  /** The Nightshift tray's asks file; absent: none is written. */
+  /** The Aico tray's asks file; absent: none is written. */
   asksFeed?: {
     write(feed: NeedsYouFeed): void
     nameOf(sessionId: string): string | null

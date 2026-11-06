@@ -36,14 +36,11 @@ function admission(state: 'green' | 'amber' | 'red', gib: number, expiresIn = 20
   })
 }
 
-/** Nightshift's admission.json with disk red and memory green, as memctl
- * writes it (nightshift tests/fixtures/admission-disk-red.json), made fresh. */
+/** host-steward's admission.json with disk red and memory green, as memctl
+ * writes it (host-steward memctl), made fresh. */
 function diskRed(nowMs: number): string {
   const doc = JSON.parse(
-    readFileSync(
-      new URL('../test-fixtures/nightshift-admission-disk-red.json', import.meta.url),
-      'utf8',
-    ),
+    readFileSync(new URL('../test-fixtures/host-admission-disk-red.json', import.meta.url), 'utf8'),
   ) as Record<string, unknown>
   return JSON.stringify({ ...doc, expires_at: Math.floor(nowMs / 1000) + 30 })
 }
@@ -172,7 +169,7 @@ describe('placement', () => {
         put: (key, value) => world.settings.set(key, value),
       },
       readText: async (path) => {
-        if (path === '/run/test/nightshift/admission.json' && world.admission !== null)
+        if (path === '/run/test/host-steward/admission.json' && world.admission !== null)
           return world.admission
         if (path in world.files) return world.files[path] as string
         throw Object.assign(new Error('missing'), { code: 'ENOENT' })
@@ -320,7 +317,7 @@ describe('placement', () => {
     ])
   })
 
-  it('reads the Nightshift file only while it is fresh', () => {
+  it('reads the host-steward file only while it is fresh', () => {
     expect(parseLocalAdmission(admission('green', 20), NOW)).toMatchObject({
       state: 'green',
       memAvailableBytes: 20 * GIB,
@@ -330,13 +327,13 @@ describe('placement', () => {
     expect(parseGuest(guest(4)).memAvailableBytes).toBe(4 * GIB)
   })
 
-  it('refuses this computer while Nightshift says disk red, with memory green', async () => {
+  it('refuses this computer while The host says disk red, with memory green', async () => {
     expect(parseLocalAdmission(diskRed(NOW), NOW)).toMatchObject({ state: 'red' })
     const { placement } = setup(CONFIG, { admission: diskRed(NOW) })
     const result = await placement.place('r1', needs(1))
     const local = result.verdicts.find((verdict) => verdict.host === 'local')
     expect(local).toMatchObject({ fits: false })
-    expect(local?.reason).toContain('Nightshift says red: Disk is critical')
+    expect(local?.reason).toContain('The host says red: Disk is critical')
     expect(result).not.toMatchObject({ kind: 'placed', host: null }) // never this computer
   })
 
@@ -803,7 +800,7 @@ describe('placement', () => {
     expect((await amber.placement.check(needs(1), 'hunt'))[0]).toEqual({
       host: 'box',
       fits: false,
-      reason: 'shares this computer: Nightshift says amber: amber test',
+      reason: 'shares this computer: The host says amber: amber test',
       room: null,
     })
     const missing = setup(ROOM, { hosts: [] })

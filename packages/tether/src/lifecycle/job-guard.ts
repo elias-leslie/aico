@@ -1,7 +1,7 @@
 /**
  * Runaway agent-job guard (default instance only, every 5 s).
  *
- * Nightshift owns host memory: its memctl publishes the host's state in
+ * host-steward owns host memory: its memctl publishes the host's state in
  * admission.json (green, amber, red). Tether owns what happens inside the
  * agent panes, by the owner's memory policy (src/memory-policy.ts):
  *   amber or red  the fastest-growing pane gets a warning record, so its agent
@@ -17,10 +17,10 @@
  * Each tick it also moves pane tools that inherited the agent's oom_score_adj
  * 100 back to 200, so the kernel prefers a tool over the agent.
  *
- * Records go to the shared memory event record Nightshift's readers already
- * read (~/.local/state/nightshift/memory-events.jsonl, schema v1, killer
+ * Records go to the shared memory event record host-steward's readers already
+ * read (~/.local/state/host-steward/memory-events.jsonl, schema v1, killer
  * "tether"); the kill record is written before the signal. The heartbeat
- * ($runtimeDir/memory-guard.json) tells Nightshift whether a job the guard
+ * ($runtimeDir/memory-guard.json) tells host-steward whether a job the guard
  * may stop exists (its outside-hog note waits for that) and that the guard is
  * alive. On red the guard only reads /proc and /sys.
  */
@@ -265,9 +265,9 @@ function fastestPane(history: Map<string, number[]>, minGrowth = MIN_GROWTH): st
   return best
 }
 
-/** Host memory state from Nightshift's admission.json (contract v1); null when
+/** Host memory state from host-steward's admission.json (contract v1); null when
  * it is missing, unreadable or past expires_at: no verdict, no kill. A file
- * with memory_state (Nightshift since 2026-10-31) is read by it: its state is
+ * with memory_state (since 2026-10-31) is read by it: its state is
  * the worse of memory and disk, and a full disk is no reason to warn about
  * memory or kill a tool job. */
 export function parseHostState(text: string, nowMs: number): HostState | null {
@@ -418,15 +418,15 @@ function setAdj(procRoot: string, p: Proc, value: number): boolean {
   }
 }
 
-/** The shared memory event record (Nightshift memevents.py, schema v1) this
- * Tether appends to: ~/.local/state/nightshift/memory-events.jsonl, or the
- * absolute path in TETHER_NIGHTSHIFT_EVENTS (a Tether running as another user
- * than Nightshift's keeps its own file where Nightshift can read it). */
+/** The shared memory event record (host-steward memevents.py, schema v1) this
+ * Tether appends to: ~/.local/state/host-steward/memory-events.jsonl, or the
+ * absolute path in TETHER_MEMORY_EVENTS (a Tether running as another user
+ * than host-steward's keeps its own file where host-steward can read it). */
 export function memoryEventsPath(env: NodeJS.ProcessEnv, home: string): string {
-  if (env.TETHER_NIGHTSHIFT_EVENTS?.startsWith('/')) return env.TETHER_NIGHTSHIFT_EVENTS
+  if (env.TETHER_MEMORY_EVENTS?.startsWith('/')) return env.TETHER_MEMORY_EVENTS
   return join(
     env.XDG_STATE_HOME || join(home, '.local', 'state'),
-    'nightshift',
+    'host-steward',
     'memory-events.jsonl',
   )
 }
@@ -514,7 +514,7 @@ export interface JobGuardOptions {
   uid: number
   procRoot?: string
   cgroupRoot?: string
-  /** Nightshift's admission.json; null means no host verdict ever. */
+  /** host-steward's admission.json; null means no host verdict ever. */
   admissionPath: string | null
   eventsPath: string
   heartbeatPath: string
@@ -905,7 +905,7 @@ export class JobGuard {
       critical_since: this.criticalSince ? Math.floor(this.criticalSince / 1000) : null,
       last_kill_at: Number.isFinite(this.lastKill) ? Math.floor(this.lastKill / 1000) : null,
       kill_enabled: policy.killEnabled,
-      // a tool job the guard may stop exists: Nightshift's outside-hog waits for it
+      // a tool job the guard may stop exists: host-steward's outside-hog waits for it
       kill_candidate: candidate !== null && policy.killEnabled,
     }
   }

@@ -3,7 +3,7 @@
  * agent tool jobs. Tether owns it as data (the `settings` row
  * `memory_policy`); the owner edits it through `GET/PUT /v1/memory-policy`
  * (the web app's settings panel). Host memory policy (the host's pressure state,
- * admission, swap, systemd-oomd, the app.slice cap) stays with Nightshift.
+ * admission, swap, systemd-oomd, the app.slice cap) stays with host-steward.
  */
 
 export type KillOrder = 'largest' | 'background-first'

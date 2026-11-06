@@ -97,7 +97,7 @@ export interface PaneUnit {
 }
 
 /** Live pane scopes must keep running when one of their processes is killed
- * (OOMPolicy=continue) and carry a finite MemoryMax cap. Nightshift installs
+ * (OOMPolicy=continue) and carry a finite MemoryMax cap. host-steward installs
  * both; Tether only reports. Null means systemctl could not answer. */
 export function checkPaneOomPolicy(panes: PaneUnit[] | null): Check {
   const name = 'pane-oom-policy'
@@ -114,7 +114,7 @@ export function checkPaneOomPolicy(panes: PaneUnit[] | null): Check {
     ? {
         name,
         status: 'warn',
-        detail: `${problems.join('; ')}. Run Nightshift's deploy/systemd/install.sh; a pane it cannot change keeps the old policy until it is recreated`,
+        detail: `${problems.join('; ')}. Run host-steward's installer; a pane it cannot change keeps the old policy until it is recreated`,
       }
     : {
         name,

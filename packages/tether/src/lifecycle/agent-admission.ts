@@ -4,7 +4,7 @@
  * Admission is pressure-based by default: a launch is deferred only while
  * MemAvailable or memory PSI shows an unhealthy host. A numeric ceiling on
  * concurrently active agents exists solely as an opt-in emergency brake and is
- * disabled unless configured. When Nightshift's memory controller publishes a
+ * disabled unless configured. When host-steward's memory controller publishes a
  * fresh verdict (admission.json), green replaces Tether's own memory thresholds
  * and red defers. Amber ("defer heavy work", from 8 GiB available) is meant for
  * builds: an agent launch needs well under 1 GiB, so on amber it still passes
@@ -210,34 +210,34 @@ export interface AgentAdmissionObservations {
   meminfo(): Promise<string>
   memoryPressure(): Promise<string>
   activeAgentScopes(): Promise<Set<string>>
-  /** Nightshift's fresh host verdict, or null to use Tether's own thresholds. */
-  nightshiftVerdict?(): Promise<NightshiftVerdict | null>
+  /** host-steward's fresh host verdict, or null to use Tether's own thresholds. */
+  hostVerdict?(): Promise<HostAdmissionVerdict | null>
 }
 
-export interface NightshiftVerdict {
+export interface HostAdmissionVerdict {
   admit: boolean
   /** green, amber or red; null when the file names none. */
   state: 'green' | 'amber' | 'red' | null
-  /** Memory alone (memory_state, Nightshift since 2026-10-31: state is the
+  /** Memory alone (memory_state, since 2026-10-31: state is the
    * worse of memory and disk); null when the file has none. */
   memoryState?: 'green' | 'amber' | 'red' | null
   reason: string
 }
 
-/** Nightshift's admission state, rewritten atomically every ~10 s. In
- * $XDG_RUNTIME_DIR/nightshift/, or the absolute path in TETHER_NIGHTSHIFT_ADMISSION
- * (a Tether running as another user than Nightshift's reads the file Nightshift
+/** host-steward's admission state, rewritten atomically every ~10 s. In
+ * $XDG_RUNTIME_DIR/host-steward/, or the absolute path in TETHER_HOST_ADMISSION
+ * (a Tether running as another user than the memctl user's reads the file memctl
  * publishes in a dir that user can read). */
-export function nightshiftAdmissionPath(env: NodeJS.ProcessEnv = process.env): string | null {
-  if (env.TETHER_NIGHTSHIFT_ADMISSION?.startsWith('/')) return env.TETHER_NIGHTSHIFT_ADMISSION
+export function hostAdmissionPath(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.TETHER_HOST_ADMISSION?.startsWith('/')) return env.TETHER_HOST_ADMISSION
   const runtime = env.XDG_RUNTIME_DIR
-  return runtime ? join(runtime, 'nightshift', 'admission.json') : null
+  return runtime ? join(runtime, 'host-steward', 'admission.json') : null
 }
 
-/** The verdict in Nightshift's admission.json (contract v1). Null when the
+/** The verdict in host-steward's admission.json (contract v1). Null when the
  * file is missing, unparsable, of another version or past `expires_at`, so
  * the caller falls back to its own thresholds. */
-export function parseNightshiftAdmission(text: string, nowMs: number): NightshiftVerdict | null {
+export function parseHostAdmission(text: string, nowMs: number): HostAdmissionVerdict | null {
   let state: unknown
   try {
     state = JSON.parse(text)
@@ -264,24 +264,24 @@ export function parseNightshiftAdmission(text: string, nowMs: number): Nightshif
   }
 }
 
-/** Nightshift admission is red (memory or disk): heavy and probing work such
+/** Host admission is red (memory or disk): heavy and probing work such
  * as `wait cmd` watchers waits. False when the file is missing or stale. */
-export function nightshiftAdmissionRed(path: string | null, nowMs: number = Date.now()): boolean {
+export function hostAdmissionRed(path: string | null, nowMs: number = Date.now()): boolean {
   if (!path) return false
   try {
-    return parseNightshiftAdmission(readFileSync(path, 'utf8'), nowMs)?.state === 'red'
+    return parseHostAdmission(readFileSync(path, 'utf8'), nowMs)?.state === 'red'
   } catch {
     return false
   }
 }
 
-export async function readNightshiftAdmission(
+export async function readHostAdmission(
   path: string | null,
   nowMs: number = Date.now(),
-): Promise<NightshiftVerdict | null> {
+): Promise<HostAdmissionVerdict | null> {
   if (!path) return null
   try {
-    return parseNightshiftAdmission(await readFile(path, 'utf8'), nowMs)
+    return parseHostAdmission(await readFile(path, 'utf8'), nowMs)
   } catch {
     return null
   }
@@ -406,11 +406,11 @@ export class AgentAdmission {
     let available: number | null = null
     let psi: MemoryPressure | null = null
     let failure: string | null = null
-    const verdict = (await this.observations.nightshiftVerdict?.().catch(() => null)) ?? null
+    const verdict = (await this.observations.hostVerdict?.().catch(() => null)) ?? null
     // Amber leaves the launch to Tether's own thresholds below.
     const amber = verdict !== null && !verdict.admit && verdict.state === 'amber'
     if (verdict && !verdict.admit && !amber)
-      failure = `Nightshift has closed agent admission (${verdict.reason}).`
+      failure = `The host has closed agent admission (${verdict.reason}).`
     try {
       available = parseMemAvailable(await this.observations.meminfo())
       observation.memAvailableGiB = round(available / 1024 ** 3)
@@ -446,7 +446,7 @@ export class AgentAdmission {
       return this.ticket()
     }
     if (failure) return defer(failure)
-    // A fresh Nightshift admit replaces Tether's own memory thresholds.
+    // A fresh host admit replaces Tether's own memory thresholds.
     const ownThresholds = !verdict || amber
     if (ownThresholds && available !== null && available < limits.minAvailableBytes)
       return defer(

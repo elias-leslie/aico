@@ -1,6 +1,6 @@
 // Reboot continuity service: the observer that keeps continuity.json current,
 // the restore that runs after startup reconciliation, and the routes
-// Nightshift uses around a planned reboot (docs/reboot-continuity.md).
+// host-steward uses around a planned reboot (docs/reboot-continuity.md).
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -282,7 +282,7 @@ export class Continuity {
     }
   }
 
-  /** Nightshift's post-boot view (contract agreed with LANE A2). */
+  /** host-steward's post-boot view (contract agreed with LANE A2). */
   status(): Record<string, unknown> {
     const report = readJsonFile<RestoreReport>(this.reportPath)
     const snapshot = readJsonFile<ContinuitySnapshot>(this.snapshotPath)

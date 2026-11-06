@@ -654,7 +654,7 @@ export function sessionAsks(sessionId: string): Record<string, unknown>[] {
 /** How often the feed is rewritten unchanged, so a reader can tell Tether is up. */
 const FEED_HEARTBEAT_MS = 60_000
 
-/** The Nightshift tray's view of the asks (handoffs TRAY-FEED-CONTRACT.md):
+/** The Aico tray's view of the asks (handoffs TRAY-FEED-CONTRACT.md):
  * counts and the newest open ask's id and asker, never the question. */
 export interface NeedsYouFeed {
   version: 1

@@ -139,14 +139,11 @@ function guard(
   return { g, killed }
 }
 
-/** Nightshift's admission.json with disk red and memory green, as memctl
- * writes it (nightshift tests/fixtures/admission-disk-red.json), made fresh. */
+/** host-steward's admission.json with disk red and memory green, as memctl
+ * writes it (host-steward memctl), made fresh. */
 function diskRed(nowMs: number): string {
   const doc = JSON.parse(
-    readFileSync(
-      new URL('../test-fixtures/nightshift-admission-disk-red.json', import.meta.url),
-      'utf8',
-    ),
+    readFileSync(new URL('../test-fixtures/host-admission-disk-red.json', import.meta.url), 'utf8'),
   ) as Record<string, unknown>
   return JSON.stringify({ ...doc, expires_at: Math.floor(nowMs / 1000) + 30 })
 }
@@ -350,18 +347,18 @@ describe('JobGuard', () => {
     expect(statSync(heartbeat).mode & 0o777).toBe(0o644)
   })
 
-  it('appends to ~/.local/state/nightshift unless TETHER_NIGHTSHIFT_EVENTS names an absolute path', () => {
+  it('appends to ~/.local/state/host-steward unless TETHER_MEMORY_EVENTS names an absolute path', () => {
     expect(memoryEventsPath({}, '/home/u')).toBe(
-      '/home/u/.local/state/nightshift/memory-events.jsonl',
+      '/home/u/.local/state/host-steward/memory-events.jsonl',
     )
     expect(memoryEventsPath({ XDG_STATE_HOME: '/s' }, '/home/u')).toBe(
-      '/s/nightshift/memory-events.jsonl',
+      '/s/host-steward/memory-events.jsonl',
     )
-    expect(memoryEventsPath({ TETHER_NIGHTSHIFT_EVENTS: '/home/u/e.jsonl' }, '/home/u')).toBe(
+    expect(memoryEventsPath({ TETHER_MEMORY_EVENTS: '/home/u/e.jsonl' }, '/home/u')).toBe(
       '/home/u/e.jsonl',
     )
-    expect(memoryEventsPath({ TETHER_NIGHTSHIFT_EVENTS: 'e.jsonl' }, '/home/u')).toBe(
-      '/home/u/.local/state/nightshift/memory-events.jsonl',
+    expect(memoryEventsPath({ TETHER_MEMORY_EVENTS: 'e.jsonl' }, '/home/u')).toBe(
+      '/home/u/.local/state/host-steward/memory-events.jsonl',
     )
   })
 })

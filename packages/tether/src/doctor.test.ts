@@ -57,7 +57,7 @@ describe('doctor checks', () => {
     expect(mixed.status).toBe('warn')
     expect(mixed.detail).toContain('not on OOMPolicy=continue: tmux-spawn-b.scope')
     expect(mixed.detail).toContain('no MemoryMax cap: tmux-spawn-b.scope')
-    expect(mixed.detail).toContain("Nightshift's deploy/systemd/install.sh")
+    expect(mixed.detail).toContain("host-steward's installer")
     expect(checkPaneOomPolicy(panes.slice(0, 1)).status).toBe('ok')
     expect(checkPaneOomPolicy([]).status).toBe('ok')
     expect(checkPaneOomPolicy(null).status).toBe('warn')

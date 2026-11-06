@@ -10,26 +10,23 @@ import {
   admissionLimitsFromEnv,
   admissionOverrideFromEnv,
   DEFAULT_AGENT_ADMISSION_LIMITS,
+  type HostAdmissionVerdict,
+  hostAdmissionPath,
+  hostAdmissionRed,
   LAUNCH_SETTLE_MS,
-  type NightshiftVerdict,
-  nightshiftAdmissionPath,
-  nightshiftAdmissionRed,
   observeAgentScopes,
+  parseHostAdmission,
   parseMemAvailable,
   parseMemoryPressure,
-  parseNightshiftAdmission,
-  readNightshiftAdmission,
+  readHostAdmission,
   type ScopeFs,
 } from './agent-admission'
 
-/** Nightshift's admission.json with disk red and memory green, as memctl
- * writes it (nightshift tests/fixtures/admission-disk-red.json), made fresh. */
+/** host-steward's admission.json with disk red and memory green, as memctl
+ * writes it (host-steward memctl), made fresh. */
 function diskRed(nowMs: number): string {
   const doc = JSON.parse(
-    readFileSync(
-      new URL('../test-fixtures/nightshift-admission-disk-red.json', import.meta.url),
-      'utf8',
-    ),
+    readFileSync(new URL('../test-fixtures/host-admission-disk-red.json', import.meta.url), 'utf8'),
   ) as Record<string, unknown>
   return JSON.stringify({ ...doc, expires_at: Math.floor(nowMs / 1000) + 30 })
 }
@@ -45,7 +42,7 @@ interface Host {
   mem: string
   pressure: string
   scopes: Set<string> | Error
-  verdict: NightshiftVerdict | null | Error
+  verdict: HostAdmissionVerdict | null | Error
 }
 
 function harness(host: Partial<Host> = {}, limits: Partial<AgentAdmissionLimits> = {}) {
@@ -67,7 +64,7 @@ function harness(host: Partial<Host> = {}, limits: Partial<AgentAdmissionLimits>
         if (state.scopes instanceof Error) throw state.scopes
         return new Set(state.scopes)
       },
-      nightshiftVerdict: async () => {
+      hostVerdict: async () => {
         if (state.verdict instanceof Error) throw state.verdict
         return state.verdict
       },
@@ -416,7 +413,7 @@ describe('observeAgentScopes', () => {
   })
 })
 
-describe('Nightshift admission state', () => {
+describe('Host admission state', () => {
   const now = 1_791_819_000_000
   const state = (fields: Record<string, unknown>) =>
     JSON.stringify({
@@ -429,7 +426,7 @@ describe('Nightshift admission state', () => {
       ...fields,
     })
 
-  it('defers every launch while Nightshift denies admission, with its reason', async () => {
+  it('defers every launch while the host denies admission, with its reason', async () => {
     const {
       admission,
       state: host,
@@ -438,7 +435,7 @@ describe('Nightshift admission state', () => {
       verdict: { admit: false, state: 'red', reason: 'swap 80%' },
     })
     const denied = await denial(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))
-    expect(denied.reason).toBe('Nightshift has closed agent admission (swap 80%).')
+    expect(denied.reason).toBe('The host has closed agent admission (swap 80%).')
     expect(records.at(-1)).toMatchObject({ decision: 'deferred' })
     host.verdict = null
     await expect(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' })).resolves.toBeTruthy()
@@ -461,7 +458,7 @@ describe('Nightshift admission state', () => {
     ).toContain('full avg10')
   })
 
-  it("lets a fresh Nightshift admit replace Tether's own thresholds", async () => {
+  it("lets a fresh host admit replace Tether's own thresholds", async () => {
     const { admission } = harness({
       mem: meminfo(2),
       pressure: psi(50, 3, 6),
@@ -479,63 +476,66 @@ describe('Nightshift admission state', () => {
   })
 
   it('a red disk closes agent launches and wait cmd starts', async () => {
-    const verdict = parseNightshiftAdmission(diskRed(now), now)
+    const verdict = parseHostAdmission(diskRed(now), now)
     expect(verdict).toMatchObject({ admit: false, state: 'red', memoryState: 'green' })
-    // daemon.ts wires wait cmd's admissionRed() to nightshiftAdmissionRed(admission path)
+    // daemon.ts wires wait cmd's admissionRed() to hostAdmissionRed(admission path)
     const dir = mkdtempSync(join(tmpdir(), 'tether-admission-'))
     const file = join(dir, 'admission.json')
     writeFileSync(file, diskRed(now))
-    expect(nightshiftAdmissionRed(file, now)).toBe(true)
-    expect(nightshiftAdmissionRed(file, now + 3_600_000)).toBe(false) // stale: no verdict
-    expect(nightshiftAdmissionRed(join(dir, 'missing.json'), now)).toBe(false)
-    expect(nightshiftAdmissionRed(null, now)).toBe(false)
+    expect(hostAdmissionRed(file, now)).toBe(true)
+    expect(hostAdmissionRed(file, now + 3_600_000)).toBe(false) // stale: no verdict
+    expect(hostAdmissionRed(join(dir, 'missing.json'), now)).toBe(false)
+    expect(hostAdmissionRed(null, now)).toBe(false)
     const { admission } = harness({ verdict })
     const denied = await denial(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))
-    expect(denied.reason).toContain('Nightshift has closed agent admission (Disk is critical')
+    expect(denied.reason).toContain('The host has closed agent admission (Disk is critical')
   })
 
   it('parses contract v1 and ignores stale, unknown or malformed state', () => {
-    expect(parseNightshiftAdmission(state({}), now)).toEqual({
+    expect(parseHostAdmission(state({}), now)).toEqual({
       admit: false,
       state: 'red',
       memoryState: null,
       reason: 'swap 80%',
     })
-    expect(
-      parseNightshiftAdmission(state({ state: 'green', admit: true, reason: '' }), now),
-    ).toEqual({ admit: true, state: 'green', memoryState: null, reason: 'no reason given' })
-    expect(parseNightshiftAdmission(state({ state: 'purple' }), now)).toMatchObject({
+    expect(parseHostAdmission(state({ state: 'green', admit: true, reason: '' }), now)).toEqual({
+      admit: true,
+      state: 'green',
+      memoryState: null,
+      reason: 'no reason given',
+    })
+    expect(parseHostAdmission(state({ state: 'purple' }), now)).toMatchObject({
       state: null,
     })
-    expect(parseNightshiftAdmission(state({ expires_at: now / 1000 - 1 }), now)).toBeNull()
-    expect(parseNightshiftAdmission(state({ v: 2 }), now)).toBeNull()
-    expect(parseNightshiftAdmission(state({ admit: 'no' }), now)).toBeNull()
-    expect(parseNightshiftAdmission('{not json', now)).toBeNull()
+    expect(parseHostAdmission(state({ expires_at: now / 1000 - 1 }), now)).toBeNull()
+    expect(parseHostAdmission(state({ v: 2 }), now)).toBeNull()
+    expect(parseHostAdmission(state({ admit: 'no' }), now)).toBeNull()
+    expect(parseHostAdmission('{not json', now)).toBeNull()
   })
 
   it('reads admission.json under XDG_RUNTIME_DIR and treats a missing file as no verdict', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-admission-'))
-    expect(nightshiftAdmissionPath({ XDG_RUNTIME_DIR: dir })).toBe(
-      join(dir, 'nightshift', 'admission.json'),
+    expect(hostAdmissionPath({ XDG_RUNTIME_DIR: dir })).toBe(
+      join(dir, 'host-steward', 'admission.json'),
     )
-    expect(nightshiftAdmissionPath({})).toBeNull()
-    // another user's Tether reads the file Nightshift publishes elsewhere; a relative override is ignored
+    expect(hostAdmissionPath({})).toBeNull()
+    // another user's Tether reads the file memctl publishes elsewhere; a relative override is ignored
     expect(
-      nightshiftAdmissionPath({
+      hostAdmissionPath({
         XDG_RUNTIME_DIR: dir,
-        TETHER_NIGHTSHIFT_ADMISSION: '/run/nightshift/admission.json',
+        TETHER_HOST_ADMISSION: '/run/host-steward-memctl/admission.json',
       }),
-    ).toBe('/run/nightshift/admission.json')
+    ).toBe('/run/host-steward-memctl/admission.json')
     expect(
-      nightshiftAdmissionPath({ TETHER_NIGHTSHIFT_ADMISSION: '/run/nightshift/admission.json' }),
-    ).toBe('/run/nightshift/admission.json')
-    expect(
-      nightshiftAdmissionPath({ XDG_RUNTIME_DIR: dir, TETHER_NIGHTSHIFT_ADMISSION: 'x/y.json' }),
-    ).toBe(join(dir, 'nightshift', 'admission.json'))
+      hostAdmissionPath({ TETHER_HOST_ADMISSION: '/run/host-steward-memctl/admission.json' }),
+    ).toBe('/run/host-steward-memctl/admission.json')
+    expect(hostAdmissionPath({ XDG_RUNTIME_DIR: dir, TETHER_HOST_ADMISSION: 'x/y.json' })).toBe(
+      join(dir, 'host-steward', 'admission.json'),
+    )
     const file = join(dir, 'admission.json')
-    expect(await readNightshiftAdmission(file, now)).toBeNull()
+    expect(await readHostAdmission(file, now)).toBeNull()
     writeFileSync(file, state({}))
-    expect(await readNightshiftAdmission(file, now)).toEqual({
+    expect(await readHostAdmission(file, now)).toEqual({
       admit: false,
       state: 'red',
       memoryState: null,

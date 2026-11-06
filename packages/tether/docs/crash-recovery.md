@@ -29,8 +29,8 @@ An entry that exits 75 has unavailable prerequisites and is retried in the same 
 
 1. It keeps the agent's resume ID. The crash record in `<stateDir>/recoveries.json` holds it, and `continuity.json` keeps the session listed while the record is open.
 2. Until the resume starts, a plain attach cannot launch a fresh agent in the session's place.
-3. It waits until host admission (Nightshift's memory verdict) has allowed agent launches for 60 seconds, and at least 60 seconds after the crash was found.
-4. It writes a detail file, `<stateDir>/recovery/<widget>-<time>.md`, with the raw unit and kernel journal lines, memctl's lines, `nightshift memory events` when that command exists, the calls that were killed or in flight, unfinished workflows with their script paths, background jobs that never reported back, `git status --short` and the session's leases.
+3. It waits until host admission (host-steward's memory verdict) has allowed agent launches for 60 seconds, and at least 60 seconds after the crash was found.
+4. It writes a detail file, `<stateDir>/recovery/<widget>-<time>.md`, with the raw unit and kernel journal lines, memctl's lines, the pane's lines from the memory event record, the calls that were killed or in flight, unfinished workflows with their script paths, background jobs that never reported back, `git status --short` and the session's leases.
 5. Just before relaunching, it checks that no other session is resuming or running the same conversation (a fresh continuity pass). If one is, the record is dropped, so two agents never share a conversation.
 6. It relaunches the agent with its resume adapter and a prompt of at most 2000 bytes: when and why it died, the likely culprit, the code state, unfinished workflows, which attempt this is, the detail file path, and what to do first. Facts come from the journal, the transcripts and git, never from the screen.
    - The pane is gone (`pane-stopped`, `server-died`): the session is recreated through the reboot-restore launch path.
@@ -50,11 +50,11 @@ Transcript facts come from a per-tool adapter. Claude Code has one: the main tra
 - A launch that admission defers, or that finds another operation on the session in progress, is retried every 30 seconds until that prerequisite returns. These waits do not use an elapsed-time cutoff. The crash-count and repeated-crash limits above still apply to actual crashes.
 - An owner resume (`tether recovery resume`) does not count toward the 2 in 6 hours, but a crash within 10 minutes of it is still held.
 
-Holding changes nothing in the session itself, so its catalog status stays what its pane really is: `running` when the pane survived (an `agent-exited` crash: the window shows the fallback shell), `uncertain` when the pane is gone. That status says whether a verified workload is in the pane, which is what Aico and `st` act on; whether the agent needs recovering is the record's `state: "held"` in `tether recovery status`, which says why, and Nightshift pushes the owner. `tether recovery resume <id>` tries it again at once, outside the limits.
+Holding changes nothing in the session itself, so its catalog status stays what its pane really is: `running` when the pane survived (an `agent-exited` crash: the window shows the fallback shell), `uncertain` when the pane is gone. That status says whether a verified workload is in the pane, which is what Aico and `st` act on; whether the agent needs recovering is the record's `state: "held"` in `tether recovery status`, which says why, and host-steward pushes the owner. `tether recovery resume <id>` tries it again at once, outside the limits.
 
 While a death is being classified, or its record is waiting or held, `st aico create --resume-session` for the same conversation is refused with `409 recovery_pending` and the widget that owns it, so two agents never resume one conversation.
 
-## Status for Nightshift
+## Status for host-steward
 
 ```
 tether recovery status [--json]

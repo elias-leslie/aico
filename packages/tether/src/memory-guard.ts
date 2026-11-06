@@ -7,7 +7,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { TetherPaths } from './config'
-import { nightshiftAdmissionPath } from './lifecycle/agent-admission'
+import { hostAdmissionPath } from './lifecycle/agent-admission'
 import { JobGuard, memoryEventsPath } from './lifecycle/job-guard'
 import {
   applyPaneCapDropIn,
@@ -111,7 +111,7 @@ export function startMemoryGuard(
   const service = new MemoryPolicyService(store, systemdPaneCapFiles(env, home))
   const guard = new JobGuard({
     uid: process.getuid?.() ?? -1,
-    admissionPath: nightshiftAdmissionPath(env),
+    admissionPath: hostAdmissionPath(env),
     eventsPath: memoryEventsPath(env, home),
     heartbeatPath: join(paths.runtimeDir, 'memory-guard.json'),
     policy: () => service.get(),

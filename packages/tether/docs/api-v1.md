@@ -512,7 +512,7 @@ and close. Not relayed from remote hosts; asks stay on the asking session's
 own Tether.
 
 **Tray feed.** The daemon keeps `<stateDir>/needs-you.json` (0600, written
-atomically) for the Nightshift tray: `{version: 1, writtenAt, open, blocking,
+atomically) for the Aico tray: `{version: 1, writtenAt, open, blocking,
 newest: null | {id, name, blocking, createdAt, url}}`, where `name` is the
 session's title or the requester and `url` is Aico's link to the ask
 (`TETHER_AICO_URL` + `/?ask=<id>`, null when that is unset). It never holds the question. It is rewritten on every
@@ -561,9 +561,9 @@ SSE was rejected. NDJSON is simpler to consume from both Node and Python (`httpx
 ## Memory policy
 
 Tether owns the agent-pane memory policy: the pane cap and the kill policy for runaway agent tool jobs. Host memory
-(the host's pressure state in Nightshift's `admission.json`, swap, systemd-oomd, the app.slice cap) stays with
-Nightshift. The web app's settings panel edits it. The guard acts on `memory_state` (memory alone) when the file
-has it, else `state`: since 2026-10-31 Nightshift's `state` is the worse of memory and disk, and a full disk is no
+(the host's pressure state in host-steward's `admission.json`, swap, systemd-oomd, the app.slice cap) stays with
+host-steward. The web app's settings panel edits it. The guard acts on `memory_state` (memory alone) when the file
+has it, else `state`: since 2026-10-31 the `state` is the worse of memory and disk, and a full disk is no
 reason to warn about memory or kill a tool job. The other readers keep `state`/`admit`: placement on this computer
 needs green (an amber or red disk closes it), agent launches and `wait cmd` starts close on red, and automatic crash
 recovery waits on memory amber or anything red but not on a disk-only amber (`memory_state` green).
@@ -587,11 +587,11 @@ The cap is the drop-in `~/.config/systemd/user/tmux-spawn-.scope.d/40-tether-pan
 on OOMPolicy=continue (a pane past it loses one process and keeps running); every 5 s the guard also caps any running
 pane at no cap, or at the cap the owner just replaced, unless it is already near the cap. A cap raised by hand at
 runtime is kept. The guard (`src/lifecycle/job-guard.ts`) never kills a pane's root shell or its agent; it writes
-`kill`, `warning` and `agent-hog` records with killer `tether` to Nightshift's memory event record
-(`~/.local/state/nightshift/memory-events.jsonl`, schema v1; `TETHER_NIGHTSHIFT_EVENTS` names another absolute path, which
-the agent user's unit uses to keep the record in its state dir where Nightshift reads it) before acting, and its heartbeat
+`kill`, `warning` and `agent-hog` records with killer `tether` to host-steward's memory event record
+(`~/.local/state/host-steward/memory-events.jsonl`, schema v1; `TETHER_MEMORY_EVENTS` names another absolute path, which
+the agent user's unit uses to keep the record in its state dir where host-steward reads it) before acting, and its heartbeat
 `$XDG_RUNTIME_DIR/tether/default/memory-guard.json` (`v, ts, pid, host_state, critical_since, last_kill_at,
-kill_enabled, kill_candidate`) tells Nightshift whether a job it may stop exists and that the guard is alive.
+kill_enabled, kill_candidate`) tells host-steward whether a job it may stop exists and that the guard is alive.
 
 ## Wakes *(post-cutover)*
 
@@ -795,7 +795,7 @@ the launch model again clears it. The watch is kept in the `model_watch` setting
 loses a switch.
 
 Who is told: a launched lane's launcher gets the `model` line ([Lane reports](#lane-reports)); any other session gets
-the owner one Nightshift notice (`aico-model:<id>:<key>`, "Model changed in …" or "Model refused in …"), from the
+the owner one Aico notice (`aico-model:<id>:<key>`, "Model changed in …" or "Model refused in …"), from the
 Tether that knows Aico's address, resolved when the switch clears or the session ends (or, after a restart, is gone).
 A lane whose line has no receiver gets the owner's notice too. Aico shows the switch above
 the session.
@@ -817,10 +817,10 @@ stops it again if it answers. CLI: `st aico root rewind REQ [--generation G]`, t
 A wait tells an agent when something it waits on is ready, instead of a check-in at a guessed time. Kind `session`:
 another session finished a turn, is idle, is blocked on the user, or ended. Lanes an agent launched report on their own
 ([Lane reports](#lane-reports)); a wait is for anything else. The pull kinds (API 17, below) wait on a service job, a
-request, an owner ask, a host or a Nightshift tap; `cmd` (API 18) runs a bounded watcher command of
+request, an owner ask, a host; `cmd` (API 18) runs a bounded watcher command of
 the waiter's own. The CLI is `st aico wait session ID|REQ
 [--until finished|idle|blocked|ended] [--timeout 2h] [--note T] [--key K] [--block]`, `st aico wait job|reply|ask|
-host|tap REF [--until …]` with the same options, `st aico wait cmd [--timeout 6h] [--note T] [--key K] [--block] --
+host REF [--until …]` with the same options, `st aico wait cmd [--timeout 6h] [--note T] [--key K] [--block] --
 ARGV...`, `st aico waits [--recent]`, `st aico wait cancel WAIT`,
 `st aico wait get WAIT [--block]`, `st aico wait time WHEN NOTE` (the same as `st aico wake`) and `st aico nudge KIND
 REF`. The CLI asks `/v1/version` before it sends a pull kind or a nudge (API 17; `cmd` API 18) and says so when
@@ -883,16 +883,14 @@ armed (at least hourly).
 ### Pull kinds
 
 The truth stays with each thing's owner; Tether reads it read-only when the wait is armed, when it changes (a directory
-watch, an event), on a nudge, at every 60 s look and at start. A ref the owner does not know is `404 not_found` at arm
-(a tap may not be taken in yet, so a tap is never `404` or gone).
+watch, an event), on a nudge, at every 60 s look and at start. A ref the owner does not know is `404 not_found` at arm.
 
 | Kind | `ref` | `until` | Read from | Fires |
 |---|---|---|---|---|
-| `job` | a SummitFlow service job id, or a unique prefix of 8+ hex (kept whole) | `done` | `~/.summitflow/services/jobs/<id>.json` (`SUMMITFLOW_SERVICE_STATE_ROOT`, or `TETHER_WAIT_JOBS_DIR`); while the file says `queued`/`running`, `st --no-compact service result <id>` at most once a minute (at once on a nudge) as an idle-weight transient unit, never while Nightshift admission is red, so a killed runner reads `interrupted` | `succeeded`, `failed` (with its exit code), `interrupted`; a job file that goes is `gone` |
+| `job` | a SummitFlow service job id, or a unique prefix of 8+ hex (kept whole) | `done` | `~/.summitflow/services/jobs/<id>.json` (`SUMMITFLOW_SERVICE_STATE_ROOT`, or `TETHER_WAIT_JOBS_DIR`); while the file says `queued`/`running`, `st --no-compact service result <id>` at most once a minute (at once on a nudge) as an idle-weight transient unit, never while host admission is red, so a killed runner reads `interrupted` | `succeeded`, `failed` (with its exit code), `interrupted`; a job file that goes is `gone` |
 | `reply` | a coordination request id you sent (`st sessions send`) | `acked` (answered with an intent, also when closed), `closed` | the coordination ledger `~/.summitflow/leases/_coord.json` (`TETHER_WAIT_LEDGER`): its id, state, intent, recipient and withdrawn only, never its text | closed or withdrawn without an answer is `gone` for `acked` |
 | `ask` | an owner ask id | `answered` | Tether's asks | `withdrawn` is `gone` |
 | `host` | a remote host this hub federates | `connected` | the hub's peer state (`peer.state`) | |
-| `tap` | a Nightshift tap or agent request id (32 hex) | `decided` | `/var/lib/nightshift/bypass/out/<id>.resp.json` and `/var/lib/nightshift/agent-responses/<id>.resp.json` (`TETHER_WAIT_TAP_DIRS`, colon-separated) | any outcome but `pending` |
 | `cmd` | none sent: Tether makes a 12-hex ref | `succeeded` | the watcher's own unit (below) | exit 0 is `until`; any other end is `gone` (`failed (exit N)`, `failed (signal SIG)`, `failed (timeout)`, `failed (oom-kill)`, `could not start`) |
 
 **`cmd`** (API 18). The waiter sends `argv` (1-64 strings, 16 KB in all, no NUL) and an absolute `cwd`; the CLI sends
@@ -900,7 +898,7 @@ the words after `--` untouched and its own directory, with `--timeout` defaultin
 `<state>/wait-cmd/<ref>.json` and runs it as the transient user unit `aico-wait-<ref>` (`systemd-run --user
 --collect --expand-environment=no`, `CPUWeight=idle`, `IOWeight=10`, `MemoryMax=512M`, `RuntimeMaxSec` the time
 left to the wait's deadline plus 60 s, so the wait times out first with the watcher still `running`). It is not
-started while Nightshift admission is red: the 60 s look (or a nudge) starts it once it is not. The unit's
+started while host admission is red: the 60 s look (or a nudge) starts it once it is not. The unit's
 `ExecStopPost` writes systemd's own words for how it ended (`$SERVICE_RESULT $EXIT_CODE $EXIT_STATUS`) to
 `<ref>.result`, which Tether reads on the directory watch and at start, so an end while Tether was down is seen. When
 the wait is over (fired, timed out, cancelled) Tether stops the unit if it still runs and drops its files; at the 60 s
@@ -914,8 +912,7 @@ argv. Lines: `[Ready] command "sleep 20" (aico-wait-<ref>) succeeded · journalc
 
 Lines name the thing by typed values only and end with the command that shows it, e.g. `[Ready] service job 66d97c21
 (aico) succeeded · st service result <id>`, `[Ready] request fd315b to cc:1c7a9f answered: yes · st sessions inbox`,
-`[Wait timed out] tap
-0942… not decided after 2h · nightshift pending`. **Told once.** An ask's answer is told to the session it goes to (source `ask:<id>`); an
+`[Wait timed out] ask "Rebuild aico now?" (c0ffee123456) not answered after 2h · tether ask get c0ffee123456`. **Told once.** An ask's answer is told to the session it goes to (source `ask:<id>`); an
 `ask` wait by that session fires without a second line.
 
 | Policy field | Default | Meaning |
@@ -1050,9 +1047,9 @@ One update runs on a host at a time (`flock` on `~/.local/lib/tether/.update.loc
 **Create.** `POST /v1/sessions` and `POST /v1/roots` accept `host`: null or absent is this computer; a name sends the create to that host without `host`. An unknown name is `400 unknown_host`. A host that is not connected is first brought up: the hub runs its `wake` (a host that is already on fails it harmlessly), asks the link to retry at once, and waits for the link, the identity check and every `health` URL (fetched on the host through the link with `curl`), within `wakeTimeoutSec`; a host without `wake` gets 10 s for its link. The create answers when the host's own create does, so clients allow `HOST_CREATE_TIMEOUT_MS` (7 min). Concurrent creates for one host share one wake. Meanwhile `GET /v1/hosts` and `peer.state` show `wake`. A host that does not come up, answers as another machine, or whose services do not answer is `409 host_unavailable {host, state, reason}` with the real reason (nothing was created); a link that breaks mid-create is `409 outcome_uncertain`. `GET /v1/tools?host=` and `GET /v1/projects?host=` answer with that host's tools and projects (`host` added). A root's `entry` *(15)* goes only to a host whose health says `apiVersion` 15 or later; to an older one it is `400 entry_unsupported {host, reason}` and nothing is sent. A `codex` root's `entry` *(19)* goes only to a host at 19 or later, and a `pi` root's *(20)* only to one at 20 or later, the same way.
 
 **Placement** *(10)*. `POST /v1/roots` with `host: "auto"` and `needs: {memBytes, cpu?, caps?}` (whole bytes; CPUs 0-1024; up to 8 capability names) lets Tether pick the host (`src/hub/placement.ts`). `needs` goes with `auto` or *(14)* a named host, `pool` only with `auto`; neither is part of the digest. Hosts are tried in the order of the create's `pool` *(11)* from `~/.config/tether/placement.json` (or `$TETHER_PLACEMENT_FILE`): without `pool` the `default` pool, which is `pools.default` or else `order` (`local` is this computer; hosts that no pool lists follow in hosts.json order); a named pool, `pools.<name>: [host, ...]`, is exactly the hosts it lists, which the default pool then leaves out unless it lists them too (`pools: {"neri-hunt": ["neri-hunters"]}` keeps general work off the hunter VM). `skip` leaves a host out of every pool. A pool the file does not define is `400 unknown_pool {pool, pools}`, nothing reserved; the first whose room fits wins, and the create then goes there exactly as with that host's name (a powered-off host is woken). Room is live free memory and CPUs minus the owner's reserve minus open reservations:
-- this computer: Nightshift's `admission.json` must be fresh and `green`; free memory is its `mem_available_gib`, free CPUs are the CPU count less the 5-minute load. Amber, red, missing or expired is unknown: nothing is placed here.
+- this computer: host-steward's `admission.json` must be fresh and `green`; free memory is its `mem_available_gib`, free CPUs are the CPU count less the 5-minute load. Amber, red, missing or expired is unknown: nothing is placed here.
 - a remote host: its own `MemAvailable`, memory PSI (over Tether's admission thresholds is refused), CPU count and load, read over the link; with `proxmox: {ssh, node, vmid, storage?, reserveGiB?, minFreeStorageGiB?}` also the node's available memory less its reserve and every reservation on that node (the smaller room counts) and the storage's free space (below `minFreeStorageGiB`, default 20, nothing is placed). A powered-off VM counts only when the node has room for its full memory; its room is then its memory less the reserve. A host whose link is down or whose reading fails is unknown.
-- a host with `room: "local"` *(14)* (a container on this computer, e.g. a Neri hunt slot): its own `/proc` would show this computer again, so it is judged by this computer's Nightshift reading (green and fresh, else unknown, `shares this computer: ...`), less this computer's reserve, the reservations on `local` and on every `room: "local"` host (one shared room, each reservation counted once), and its own `reserveGiB`/`reserveCpu` (default 0) on top. This computer's own verdict counts those hosts' reservations too. Powered off (its link down and hosts.json `status` says off) it fits by that room when hosts.json has `wake`, and the create wakes it; capabilities are read over its link only once it runs, so a powered-off one with `caps` is unknown, unless `capabilitiesOn: "local"`: then they are this computer's (the C2 sandbox, proxy and firewall of a slot made here belong to this computer, not to a proxy inside the container), read with this computer's marker and fingerprint command whether the slot runs or sleeps, never the slot's own marker; a missing or stale one there is `checked on this computer: not live-ready: ...`. `capabilitiesOn` takes only `"local"` and only with `room: "local"`. `room` and `proxmox` do not go together; `room` takes only `"local"` and not on `local` itself (a broken entry is an ordinary host at the remote defaults).
+- a host with `room: "local"` *(14)* (a container on this computer, e.g. a Neri hunt slot): its own `/proc` would show this computer again, so it is judged by this computer's host reading (green and fresh, else unknown, `shares this computer: ...`), less this computer's reserve, the reservations on `local` and on every `room: "local"` host (one shared room, each reservation counted once), and its own `reserveGiB`/`reserveCpu` (default 0) on top. This computer's own verdict counts those hosts' reservations too. Powered off (its link down and hosts.json `status` says off) it fits by that room when hosts.json has `wake`, and the create wakes it; capabilities are read over its link only once it runs, so a powered-off one with `caps` is unknown, unless `capabilitiesOn: "local"`: then they are this computer's (the C2 sandbox, proxy and firewall of a slot made here belong to this computer, not to a proxy inside the container), read with this computer's marker and fingerprint command whether the slot runs or sleeps, never the slot's own marker; a missing or stale one there is `checked on this computer: not live-ready: ...`. `capabilitiesOn` takes only `"local"` and only with `room: "local"`. `room` and `proxmox` do not go together; `room` takes only `"local"` and not on `local` itself (a broken entry is an ordinary host at the remote defaults).
 - capabilities: `capabilities.<name>: {marker, fingerprint}` (default `live-ready`: marker `~/.local/state/neri-proxy/live-ready.json`, no fingerprint command) is read on the host; the marker's `fingerprint` must equal what the `fingerprint` argv prints there now. No marker, no command or a different value is not ready; a powered-off host cannot be checked.
 
 Reserves are `hosts.<name>: {reserveGiB, reserveCpu, proxmox?, room?}` (defaults: this computer 6 GiB and 2 CPUs, a host 2 GiB and 1 CPU, a `room: "local"` host 0 and 0, a Proxmox node 2 GiB). A placed root holds its needs on that host from the decision until the Tether that owns it says it is gone, ended or its agent exited; a host that cannot answer keeps them. Restore and crash recovery book a root whose agent exited again before relaunching it here; a root on another host, which its own Tether restores, is booked again at the next decision or dry run once it reports live. A repeat create for an ended or exited root is not judged (it answers as that create does). A host taken out of hosts.json (the hub has no link for it, and

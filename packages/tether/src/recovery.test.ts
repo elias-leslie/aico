@@ -294,9 +294,9 @@ describe('crash recovery', () => {
     expect(sessions(h)).toMatchObject([{ state: 'recovered' }])
   })
 
-  it('waits on memory amber but not on a disk-only amber (Nightshift memory_state green)', async () => {
-    const file = join(dir, 'run', 'nightshift', 'admission.json')
-    mkdirSync(join(dir, 'run', 'nightshift'), { recursive: true })
+  it('waits on memory amber but not on a disk-only amber (host memory_state green)', async () => {
+    const file = join(dir, 'run', 'host-steward', 'admission.json')
+    mkdirSync(join(dir, 'run', 'host-steward'), { recursive: true })
     const verdict = (memory: string) =>
       writeFileSync(
         file,

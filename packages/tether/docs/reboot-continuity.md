@@ -1,6 +1,6 @@
 # Reboot continuity
 
-Every session that was running before a reboot comes back afterwards, and its agent resumes the same conversation. This applies to an owner-initiated reboot and to one Nightshift coordinates.
+Every session that was running before a reboot comes back afterwards, and its agent resumes the same conversation. This applies to an owner-initiated reboot and to one host-steward coordinates.
 
 ## What Tether records
 
@@ -30,7 +30,7 @@ Placement keeps each root's original host, memory, CPUs and capabilities in the 
 
 Ending a tmux server and then restarting Tether takes the same path. That is how the behaviour is tested without rebooting the host. A server, pane or agent that dies while Tether keeps running goes through [crash recovery](crash-recovery.md) instead, with its own prompt and loop limits. An ended session is deleted from the catalog, so it is never restored.
 
-## Nightshift interface
+## host-steward interface
 
 Both commands run on the host as the owner and use the instance's private socket.
 

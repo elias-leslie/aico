@@ -74,6 +74,31 @@ export function parseJournal(text: string): JournalEntry[] {
   return entries
 }
 
+/** The memory event records' lines for one pane scope (schema v1 JSON lines,
+ * from host-steward's file and Tether's own), the last 40; null when no file
+ * has any for it. */
+export function scopeMemoryEvents(paths: string[], scope: string): string | null {
+  const lines: string[] = []
+  for (const path of paths) {
+    let text: string
+    try {
+      text = readFileSync(path, 'utf8')
+    } catch {
+      continue
+    }
+    for (const line of text.split('\n')) {
+      if (!line.includes(scope)) continue
+      try {
+        if ((JSON.parse(line) as { scope?: unknown }).scope === scope) lines.push(line)
+      } catch {
+        // partial line
+      }
+    }
+  }
+  lines.splice(0, Math.max(0, lines.length - 40))
+  return lines.length ? lines.join('\n') : null
+}
+
 function message(entry: JournalEntry): string {
   const value = entry.MESSAGE
   if (typeof value === 'string') return value
@@ -851,8 +876,8 @@ export function renderDetail(facts: CrashFacts, sections: DetailSections): strin
   out.push('## Prompt the agent was resumed with', '', sections.synopsis, '')
   block('Unit journal', sections.unitLines)
   block('Kernel OOM records', sections.kernelLines)
-  block('Memory controller (Nightshift memctl, Tether memory guard)', sections.memctlLines)
-  if (sections.memoryEvents) block('nightshift memory events', sections.memoryEvents.split('\n'))
+  block('Memory controller (host-steward memctl, Tether memory guard)', sections.memctlLines)
+  if (sections.memoryEvents) block('memory events', sections.memoryEvents.split('\n'))
   const t = facts.transcript
   if (t) {
     out.push('## Calls in flight or killed', '')

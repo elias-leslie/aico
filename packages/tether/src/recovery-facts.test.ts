@@ -18,6 +18,7 @@ import {
   renderDetail,
   renderSynopsis,
   SERVER_LOST,
+  scopeMemoryEvents,
   unitOutcome,
   victimsInScope,
 } from './recovery-facts'
@@ -159,6 +160,31 @@ describe('journal evidence', () => {
       comm: 'node',
       constraint: 'memcg',
     })
+  })
+})
+
+describe('memory events for a pane scope', () => {
+  it('reads the record file directly: only that scope, nothing when absent', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'tether-events-'))
+    try {
+      const file = join(tmp, 'memory-events.jsonl')
+      const other = 'tmux-spawn-other.scope'
+      writeFileSync(
+        file,
+        [
+          JSON.stringify({ v: 1, kind: 'kill', scope: SCOPE, killer: 'tether' }),
+          JSON.stringify({ v: 1, kind: 'warning', scope: other }),
+          `not json but mentions ${SCOPE}`,
+          JSON.stringify({ v: 1, kind: 'agent-hog', scope: SCOPE }),
+        ].join('\n'),
+      )
+      const lines = scopeMemoryEvents([join(tmp, 'missing.jsonl'), file], SCOPE)?.split('\n') ?? []
+      expect(lines.map((line) => JSON.parse(line).kind)).toEqual(['kill', 'agent-hog'])
+      expect(scopeMemoryEvents([file], 'tmux-spawn-none.scope')).toBeNull()
+      expect(scopeMemoryEvents([join(tmp, 'missing.jsonl')], SCOPE)).toBeNull()
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
   })
 })
 

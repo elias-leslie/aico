@@ -5,7 +5,7 @@
 // reading is missing, stale or failed is unknown and never placed on. There is
 // no agent count anywhere: only memory, CPU and capabilities.
 //
-// Readings: this computer from Nightshift's admission file (green required);
+// Readings: this computer from host-steward's admission file (green required);
 // a remote VM from its own /proc (MemAvailable, PSI, CPUs, load) through the
 // link's ssh master, plus its Proxmox node's free memory and storage (clones
 // and ballooning draw on them). A powered-off VM counts only when Proxmox has
@@ -32,7 +32,7 @@ import { peerRequest } from '@aico/fleet/peer-http'
 import {
   type AgentAdmissionLimits,
   admissionLimitsFromEnv,
-  nightshiftAdmissionPath,
+  hostAdmissionPath,
   parseMemAvailable,
   parseMemoryPressure,
 } from '../lifecycle/agent-admission'
@@ -344,7 +344,7 @@ function loadPlacement(path: string, hostNames: string[]): PlacementConfig {
 
 // ---------------------------------------------------------------- readings
 
-/** Nightshift's admission file, read for placement: memory is unknown unless fresh. */
+/** host-steward's admission file, read for placement: memory is unknown unless fresh. */
 export interface LocalAdmission {
   state: 'green' | 'amber' | 'red'
   reason: string
@@ -833,16 +833,16 @@ export class Placement {
     return null
   }
 
-  /** This computer's room as Nightshift reads it, less its reserve and the
+  /** This computer's room as host-steward reads it, less its reserve and the
    * reservations on it and on every host that shares it; or why it is unknown. */
   private async localRoom(
     config: PlacementConfig,
   ): Promise<{ mem: number; cpu: number; detail: string } | string> {
-    const path = nightshiftAdmissionPath(this.deps.env)
+    const path = hostAdmissionPath(this.deps.env)
     let reading: LocalAdmission | null = null
     if (path) reading = parseLocalAdmission(await this.readText(path).catch(() => ''), this.now())
-    if (!reading) return "Nightshift's memory reading is missing or stale"
-    if (reading.state !== 'green') return `Nightshift says ${reading.state}: ${reading.reason}`
+    if (!reading) return "The host's memory reading is missing or stale"
+    if (reading.state !== 'green') return `The host says ${reading.state}: ${reading.reason}`
     const own = config.hosts[LOCAL_HOST] ?? DEFAULT_LOCAL
     const held = this.held(this.inLocalRoom(config))
     const cpu = this.cpu()
@@ -892,7 +892,7 @@ export class Placement {
   }
 
   /** A host in this computer's room (a container): its own /proc would show
-   * this computer's memory again, so Nightshift's reading judges it, less the
+   * this computer's memory again, so host-steward's reading judges it, less the
    * local reserve, the room's reservations and the host's own reserve. A
    * powered-off one with `wake` fits by that room. Capabilities are read on
    * this computer with `capabilitiesOn: "local"` (asleep too), else over the

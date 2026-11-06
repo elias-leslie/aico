@@ -8,7 +8,7 @@
 // after reboot" prompt. The catalog keeps the identity (tool, name, project);
 // the snapshot adds only what the catalog cannot know: the native resume ID.
 //
-// Nightshift drives a planned reboot through `prepare` (list, ask agents to
+// host-steward drives a planned reboot through `prepare` (list, ask agents to
 // checkpoint, report readiness) and reads `status` after boot.
 
 import { randomUUID } from 'node:crypto'

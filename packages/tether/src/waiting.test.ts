@@ -176,7 +176,7 @@ describe('notice contract v1', () => {
 })
 
 describe('postAicoNotice', () => {
-  it("posts the notice and its resolve to Aico's notify on loopback, never the Nightshift CLI", async () => {
+  it("posts the notice and its resolve to Aico's notify on loopback, never a CLI", async () => {
     const got: { url: string; body: unknown }[] = []
     const server = createServer((req, res) => {
       let text = ''

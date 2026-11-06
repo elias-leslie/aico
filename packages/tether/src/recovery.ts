@@ -16,7 +16,7 @@
 // recovery holds; an agent that was itself the memory hog twice holds; one
 // recovery runs at a time. A held session keeps its pane's own status
 // (running while the fallback shell is up, uncertain once the pane is gone);
-// its reason is in <stateDir>/recoveries.json, which Nightshift reads to push
+// its reason is in <stateDir>/recoveries.json, which host-steward reads to push
 // the owner.
 
 import { execFile } from 'node:child_process'
@@ -40,8 +40,8 @@ import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { type Needs, parseNeeds } from './hub/placement'
 import {
   admissionOverrideFromEnv,
-  nightshiftAdmissionPath,
-  readNightshiftAdmission,
+  hostAdmissionPath,
+  readHostAdmission,
 } from './lifecycle/agent-admission'
 import {
   getSessionEntry,
@@ -62,6 +62,7 @@ import {
   verifiedCurrentManagedPane,
 } from './lifecycle/engine'
 import { ENTRY_MISSING_EXIT, ENTRY_RETRY_EXIT, sessionEntryHome } from './lifecycle/entries'
+import { memoryEventsPath } from './lifecycle/job-guard'
 import { isNamedProcess, processEnvironment } from './lifecycle/procfs'
 import { launchingResume, withRootPrompt } from './lifecycle/root-launch'
 import { paneExitedEventPath } from './lifecycle/tmux'
@@ -91,6 +92,7 @@ import {
   renderDetail,
   renderSynopsis,
   SERVER_LOST,
+  scopeMemoryEvents,
   type TranscriptFacts,
   unitOutcome,
   victimsInScope,
@@ -991,7 +993,7 @@ export class Recovery {
     } catch {
       // malformed override: launches use the normal verdict
     }
-    const verdict = override ? null : await readNightshiftAdmission(nightshiftAdmissionPath(), now)
+    const verdict = override ? null : await readHostAdmission(hostAdmissionPath(), now)
     // A disk-only amber (memory green) does not hold recovery: agent launches pass on amber, and a low
     // disk can last for days. Memory amber or anything red still waits.
     const diskAmber = verdict?.state === 'amber' && verdict.memoryState === 'green'
@@ -1042,7 +1044,7 @@ export class Recovery {
         [
           '--user',
           '-u',
-          'nightshift-memctl.service',
+          'host-steward-memctl.service',
           // Tether's own runaway-job guard logs in the daemon's journal
           '-u',
           `tether@${this.context.paths.instance}.service`,
@@ -1057,17 +1059,16 @@ export class Recovery {
     )
       .filter(
         (entry) =>
-          entry._SYSTEMD_USER_UNIT === 'nightshift-memctl.service' ||
+          entry._SYSTEMD_USER_UNIT === 'host-steward-memctl.service' ||
           (typeof entry.MESSAGE === 'string' && entry.MESSAGE.includes('[tether:memory-guard]')),
       )
       .map((entry) => (typeof entry.MESSAGE === 'string' ? entry.MESSAGE : ''))
       .filter(Boolean)
       .slice(-60)
     const events = record.scopeUnit
-      ? await this.run(
-          'nightshift',
-          ['memory', 'events', '--scope', record.scopeUnit, '--json'],
-          5_000,
+      ? scopeMemoryEvents(
+          [...new Set([memoryEventsPath(process.env, this.home), memoryEventsPath({}, this.home)])],
+          record.scopeUnit,
         )
       : null
     let git: GitState | null = null
