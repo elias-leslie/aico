@@ -91,6 +91,19 @@ export interface TimelinePage {
   available?: boolean
 }
 
+/** The pages' days in order, one block per date: a page can end partway through a day, and the next
+ * page then starts with the rest of it. */
+export function joinDays(pages: readonly TimelinePage[]): TimelinePage['days'] {
+  const days: TimelinePage['days'] = []
+  for (const day of pages.flatMap((page) => page.days)) {
+    const last = days.at(-1)
+    if (last?.date === day.date)
+      last.commits = [...last.commits, ...day.commits]
+    else days.push({ ...day })
+  }
+  return days
+}
+
 export const fetchOverview = () =>
   apiFetch<ProjectSummary[]>(
     '/api/projects/overview',

@@ -6,6 +6,7 @@ import {
   blockedReason,
   clip,
   dayLabel,
+  joinDays,
   type ProjectDetail,
   type RoadmapItem,
 } from '@/lib/projects'
@@ -103,7 +104,7 @@ export function Timeline({
         project.later.length +
         other.length ===
       0
-  const days = timeline.data?.pages.flatMap((page) => page.days) ?? []
+  const days = joinDays(timeline.data?.pages ?? [])
   const oldest = days.at(-1)?.date
 
   return (

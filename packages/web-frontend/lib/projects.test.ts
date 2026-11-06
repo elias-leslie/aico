@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   clip,
   dayLabel,
+  joinDays,
   orderProjects,
   type Place,
   type ProjectSummary,
@@ -152,5 +153,34 @@ describe('places', () => {
     expect(powerSummary(vm, 0, NOW)).toBe(
       'Stopped at 10:40 · checked 1 min ago',
     )
+  })
+})
+
+describe('joinDays', () => {
+  it('joins a day that a page boundary split, keeping the order', () => {
+    const commit = (sha: string) => ({ sha, subject: sha, at: '' })
+    const days = joinDays([
+      {
+        end: false,
+        days: [
+          { date: '2026-10-29', commits: [commit('a')] },
+          { date: '2026-10-27', commits: [commit('b')] },
+        ],
+      },
+      {
+        end: true,
+        days: [
+          { date: '2026-10-27', commits: [commit('c')] },
+          { date: '2026-10-26', commits: [commit('d')] },
+        ],
+      },
+    ])
+    expect(
+      days.map((day) => [day.date, day.commits.map((c) => c.sha)]),
+    ).toEqual([
+      ['2026-10-29', ['a']],
+      ['2026-10-27', ['b', 'c']],
+      ['2026-10-26', ['d']],
+    ])
   })
 })
