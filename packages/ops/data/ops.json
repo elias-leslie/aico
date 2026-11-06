@@ -42,7 +42,7 @@
       "installer": "/usr/local/lib/host-steward/install-signed.py",
       "receipt": "/usr/local/lib/host-steward/installed.json",
       "signingKey": "update-signing-key",
-      "declareWhat": "units"
+      "declareWhat": "any"
     }
   },
   "vm": {
