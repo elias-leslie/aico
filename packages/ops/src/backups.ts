@@ -122,7 +122,19 @@ export async function restoreFiles(
       dest = join(to, path)
     await checked(rt.run, ['sudo', '-n', 'mkdir', '-p', dirname(dest)])
     await checked(rt.run, ['sudo', '-n', 'cp', '-a', '--reflink=auto', '--', from, dest])
-    await checked(rt.run, ['sudo', '-n', 'diff', '-r', '--no-dereference', '--', from, dest])
+    // Live tmux control sockets in Tether's state copy as sockets, but `diff` reports any two sockets as different.
+    await checked(rt.run, [
+      'sudo',
+      '-n',
+      'diff',
+      '-r',
+      '--no-dereference',
+      '-x',
+      '*.sock',
+      '--',
+      from,
+      dest,
+    ])
     await checked(rt.run, [
       'sudo',
       '-n',

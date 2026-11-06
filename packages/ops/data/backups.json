@@ -102,7 +102,7 @@
     "otherDirs": ["~/.local/state/tether/default"],
     "stagingDir": "~/.local/state/aico-snapshot",
     "machines": ["davion-sidarli", "aico"],
-    "recoveryPaths": ["~/.config/systemd/user", "~/.config/aico"]
+    "recoveryPaths": ["~/.config/systemd/user", "~/.config/aico", "~/.config/tether"]
   },
   "prepare": {
     "ominull-production-state": {
