@@ -61,3 +61,10 @@ watches and lines already delivered or being sent keep their history; old turns 
 replayed. Answered Aico asks and Neri's case/program owner-page asks keep their existing
 history and owner. An uncertain Neri outcome keeps a durable intent; repeat the exact command
 to finish it. No new hunt stage, service, database migration or direct database repair is used.
+
+An ended historical lane has no live catalog entry or generation: its retained root descriptor
+is `status: ended, generation: null`, and its widget lookup is `404 not_found`. It cannot pass
+the transfer preflight and is not a transfer target. There is no supported historical metadata
+move through this operation, and none is needed for display or saved-result review. Keep Neri's
+launch/reporting fields as history; the coordinator reviewing saved results can own that review
+without changing the ended hunt. Do not restart an ended hunt just to transfer its lineage.
