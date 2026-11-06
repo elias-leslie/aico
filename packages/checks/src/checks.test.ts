@@ -101,6 +101,30 @@ describe('stage selection', () => {
     expect(ids('full', null)).toEqual(['lint:run', 'suite:run', 'android:no SDK here'])
   })
 
+  it('hands a declared stage the changed files of a scoped run, and none to a whole-tree run', async () => {
+    const log = join(mkdtempSync(join(tmpdir(), 'aico-scope-')), 'seen')
+    roots.push(dirname(log))
+    const root = repo(
+      `[[native.stages]]\nid = "scoped"\nkind = "check"\ncoverage = "full"\nquick = true\nargv = ["node", "-e", ${JSON.stringify(`const fs = require('fs'); const f = process.env.CHECK_SCOPE_FILE; fs.appendFileSync(${JSON.stringify(log)}, (f ? fs.readFileSync(f, 'utf8').trim().split('\\n').join(',') : 'tree') + '\\n')`)}]\n`,
+    )
+    const cfg = config(root)
+    await runSteps(
+      cfg,
+      'quick',
+      plan(cfg, 'quick', ['src/a.ts', 'src/b.ts'], () => []),
+      {
+        reuse: false,
+      },
+    )
+    await runSteps(
+      cfg,
+      'full',
+      plan(cfg, 'full', null, () => []),
+      { reuse: false },
+    )
+    expect(readFileSync(log, 'utf8')).toBe('src/a.ts,src/b.ts\ntree\n')
+  })
+
   it('retains the standard gate for a repo without a native declaration', () => {
     const root = repo('')
     write(root, '.st-check.toml', '[paths]\nruff = ".venv/bin"\n')

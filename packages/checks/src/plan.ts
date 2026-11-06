@@ -213,6 +213,8 @@ export interface Step {
   materialize?: string[]
   /** Acceptance fixture setup, completed before this step in the same environment. */
   setup?: string[][]
+  /** The changed files a scoped run checks; a declared stage reads them from CHECK_SCOPE_FILE. */
+  scope?: string[]
 }
 
 export interface Planned {
@@ -929,6 +931,7 @@ export function plan(
               timeoutS: decl.timeoutS,
               required: decl.required,
               decl,
+              ...(changed ? { scope: changed } : {}),
             },
           }
     if (!decl.applicable) out.push(native(decl.reason))

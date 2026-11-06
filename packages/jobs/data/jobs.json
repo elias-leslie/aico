@@ -13,6 +13,17 @@
       "lease_s": 300
     },
     {
+      "kind": "check-nightly",
+      "what": "Nightly full check and live session checks",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "at": "01:30",
+      "run": {
+        "command": ["../../web-server/scripts/aico", "nightly", "--source", "aico"]
+      },
+      "lease_s": 300
+    },
+    {
       "kind": "github-publish",
       "what": "Nightly GitHub publication",
       "project": "aico",

@@ -1,0 +1,21 @@
+{
+  "native/android/app/src/main/kotlin/dev/summitflow/nightshift/update/Updater.kt": {
+    "@Suppress(\"DEPRECATION\")": 1
+  },
+  "native/host-steward/host_steward/checks/guests.py": {
+    "nets[p[1]] = ipaddress.ip_interface(p[2]).network  # type: ignore[assignment]": 1
+  },
+  "native/host-steward/host_steward/checks/tripwire.py": {
+    "except Exception:  # noqa: BLE001": 1
+  },
+  "native/st-sdk/st_sdk/runtime.py": {
+    "command.rich_markup_mode = None  # type: ignore[attr-defined]": 1,
+    "command.rich_markup_mode = rich_markup_mode  # type: ignore[attr-defined]": 1
+  },
+  "native/tray/src/fido.rs": {
+    "#[allow(clippy::too_many_arguments)]": 1
+  },
+  "packages/web-frontend/lib/hooks/terminal-instance-utils.ts": {
+    "// eslint-disable-next-line no-console": 1
+  }
+}

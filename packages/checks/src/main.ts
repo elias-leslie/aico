@@ -1,15 +1,18 @@
-// aico-checks: `aico check`, `aico commit` and `aico tasks done` (the launcher routes those here).
+// aico-checks: `aico check`, `aico commit`, `aico nightly`, `aico publish` and `aico tasks done`
+// (the launcher routes those here).
 
 import { openTasksDb, tasksDbPathFromEnv } from '@aico/tasks'
 import { runCli } from './cli'
 import { doneWithReceipt } from './done'
 import { hookCoordination } from './hook'
+import { nightlyCli } from './nightly'
 import { publishCli } from './publish'
 import { postCheckRow } from './status'
 
 export async function main(argv: string[], env = process.env): Promise<number> {
   const [verb, ...rest] = argv
   if (verb === 'publish') return publishCli(rest, env)
+  if (verb === 'nightly') return nightlyCli(rest, env)
   const coordination = hookCoordination(env)
   const out = (line: string) => console.log(line)
   const err = (line: string) => console.error(line)
@@ -34,7 +37,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       db.close()
     }
   }
-  err('Usage: aico-checks <check|commit|tasks done> ...')
+  err('Usage: aico-checks <check|commit|nightly|publish|tasks done> ...')
   return 2
 }
 

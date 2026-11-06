@@ -355,6 +355,10 @@ export async function runSteps(
             ...(toolPath ? { PATH: `${toolPath}:${user.PATH ?? ''}` } : {}),
             ...(['vitest', 'frontend-test'].includes(step.id) ? { NODE_ENV: 'test' } : {}),
           }
+    if (step.scope && step.env === 'stage') {
+      writeFileSync(join(scratch, 'scope'), step.scope.map((file) => `${file}\n`).join(''))
+      env.CHECK_SCOPE_FILE = join(scratch, 'scope')
+    }
     const report =
       step.decl?.evidence?.source === 'file' ? join(root, step.decl.evidence.path as string) : null
     if (report) rmSync(report, { force: true })

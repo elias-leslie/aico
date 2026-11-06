@@ -8,6 +8,7 @@
 # `aico tasks | projects`: tasks.db (light tasks, claims, the projects registry; packages/tasks).
 # `aico agent run`: Aico's own agent harness (packages/agent, agent.db).
 # `aico check | commit`, `aico tasks done`: the repo gate, path-scoped commits and closeout (packages/checks).
+# `aico nightly`: the nightly deep lane (full gate on HEAD plus the live checks; packages/checks).
 # `aico deploy | logs | snapshots | vm`: deploys, unit logs, Btrfs points and Proxmox guests (packages/ops).
 # `aico web search|research|fetch|batch|refocus`: public web search and fetch with a call counter (packages/webtools).
 # `aico ask MODEL "question"`: one question to one model, no tools (packages/agent).
@@ -96,7 +97,7 @@ aico_webtools() {
 case "${1:-}" in
   grants | elevate) shift; exec /usr/local/lib/host-steward/aico-grants "$@" ;;
   memory | prompt | models | context | usage | logins | app | status | phones) exec_aico_web "$@" ;;
-  check | commit | publish) aico_checks "$@" ;;
+  check | commit | publish | nightly) aico_checks "$@" ;;
   deploy | logs | snapshots | vm | backups) aico_ops "$@" ;;
   web) shift; aico_webtools "$@" ;;
   jobs)
