@@ -47,6 +47,7 @@
   },
   "vm": {
     "timeoutSeconds": 900,
+    "labRegistry": "/var/lib/nightshift/findings/registry.json",
     "labHours": 4,
     "apiUrl": "https://192.168.86.39:8006",
     "node": "davion-gem",
