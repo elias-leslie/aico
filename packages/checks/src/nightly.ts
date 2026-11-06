@@ -1,7 +1,7 @@
 // `aico nightly [--source ID]`: the nightly deep lane (the check-nightly job). The full gate on
 // HEAD in a clean worktree with nothing reused, so its wall time is the real cost, then the repo's
 // `[[deep.stages]]` (live session checks) in a fresh worktree of the same commit (nobody's
-// uncommitted edits count) with the caller's environment.
+// uncommitted edits count) with the caller's environment plus AICO_MAIN_CHECKOUT (the main checkout).
 // The last line is the job's Status row: the gate time next to the previous night's, the slowest
 // stages and what failed. Exit 1 when anything failed, so the row turns failed and alerts.
 
@@ -170,7 +170,9 @@ export async function nightly(options: NightlyOptions): Promise<{ ok: boolean; l
     const results: DeepResult[] = []
     for (const stage of deepStages(work)) {
       out(`NIGHTLY:${stage.id}`)
-      const result = await (options.deep ?? ((s) => runDeep(work, s, env, out)))(stage)
+      const result = await (
+        options.deep ?? ((s) => runDeep(work, s, { ...env, AICO_MAIN_CHECKOUT: root }, out))
+      )(stage)
       out(`NIGHTLY:${result.passed ? 'PASS' : 'FAIL'}:${stage.id} ${seconds(result.ms)}`)
       results.push(result)
     }

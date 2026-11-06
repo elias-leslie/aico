@@ -28,6 +28,7 @@ func TestCLIProjectPrefersDeclaredCwdOverInheritedEnv(t *testing.T) {
 		}
 	}
 	t.Setenv("ST_PROJECT_ID", "")
+	t.Chdir(bare) // map order above is random; the last cwd may be the declared checkout
 	if got, err := CLIProject(); err != nil || got.ID != "bare" {
 		t.Fatalf("no env, undeclared checkout: %q, %v", got.ID, err)
 	}
