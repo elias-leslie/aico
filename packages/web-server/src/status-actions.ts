@@ -240,8 +240,20 @@ export function statusKey(batch: AlertBatch): string {
 }
 
 /**
- * The Status alert notice (contracts/notice.schema.json): failed rows stay on the tray; once
- * per `cooldownS` for the same changes, so a row that flaps doesn't push every time.
+ * Whether a failed row is the owner's to hear about on the phone: a row with no project (backups,
+ * links, machines, host checks, the phone path itself) or one with an owner-only action. A
+ * project's own rows (its checks, publication and jobs, and the LAN apps' rows) have an owning
+ * agent; they stay on the tray, and an app alerts the owner itself through its own notices.
+ */
+export function ownerFailure(row: StatusRow): boolean {
+  return !row.project || (row.actions?.some((action) => action.owner_only === true) ?? false)
+}
+
+/**
+ * The Status alert notice (contracts/notice.schema.json). The phone hears a backup or machine row
+ * going late and a failed row the owner must see (ownerFailure); a batch of only project-owned
+ * failures stays on the tray. Once per `cooldownS` for the same changes, so a flapping row doesn't
+ * push every time.
  */
 export function statusNotice(
   batch: AlertBatch,
@@ -250,6 +262,7 @@ export function statusNotice(
 ): Record<string, unknown> {
   const { title, body } = alertText(batch)
   const failed = batch.changes.some((change) => change.to === 'failed')
+  const phone = batch.changes.some((change) => change.to === 'late' || ownerFailure(change.row))
   return {
     v: 1,
     source: 'aico',
@@ -259,7 +272,7 @@ export function statusNotice(
     body: body.slice(0, 1000),
     key: statusKey(batch),
     cooldown: cooldownS,
-    push: failed ? 'tray' : 'phone',
+    push: phone ? 'phone' : 'tray',
     ...(publicHost ? { open: `https://${publicHost}/status` } : {}),
   }
 }

@@ -256,17 +256,43 @@ describe('statusNotice', () => {
     },
   })
 
-  it('keeps failed rows as tray alerts under the notice contract', () => {
+  it('sends a failed owner row to the phone under the notice contract', () => {
     const notice = parseNotice(statusNotice(batchOf(shown()), 'aico.example.dev', 6 * 3600))
     expect(notice).toMatchObject({
       source: 'aico',
       severity: 'critical',
-      push: 'tray',
+      push: 'phone',
       title: '1 failed: Job',
       body: 'Broke. 4 healthy.',
       key: 'status:here/job=failed',
       cooldown: 6 * 3600,
       open: 'https://aico.example.dev/status',
+    })
+  })
+
+  it('keeps project-owned failures on the tray unless an action is owner-only', () => {
+    const project = shown({ id: 'publish:x', project: 'x' })
+    expect(parseNotice(statusNotice(batchOf(project), null, 60)).push).toBe('tray')
+    const app = shown({ id: 'portfolio-ai/job', machine: 'apps', project: 'portfolio-ai' })
+    expect(parseNotice(statusNotice(batchOf(project, app), null, 60)).push).toBe('tray')
+    const owner = shown({
+      id: 'x/decide',
+      project: 'x',
+      actions: [{ kind: 'look', ref: 'Decide', owner_only: true }],
+    })
+    expect(parseNotice(statusNotice(batchOf(project, owner), null, 60)).push).toBe('phone')
+    expect(parseNotice(statusNotice(batchOf(project, shown({ id: 'b' })), null, 60)).push).toBe(
+      'phone',
+    )
+  })
+
+  it('sends a late backup row to the phone', () => {
+    const late = shown({ id: 'here/backup/x', kind: 'backup', project: 'aico' })
+    const batch = batchOf(late)
+    batch.changes = [{ row: { ...late, shown: 'late' }, from: 'ok', to: 'late' }]
+    expect(parseNotice(statusNotice(batch, null, 60))).toMatchObject({
+      severity: 'warning',
+      push: 'phone',
     })
   })
 
@@ -279,10 +305,10 @@ describe('statusNotice', () => {
     expect(parseNotice(statusNotice(batchOf(...many), null, 60)).key).toBe(key)
   })
 
-  it('a row that flaps reaches the tray once per cooldown', () => {
+  it('a row that flaps reaches the phone once per cooldown', () => {
     const notify = new NotifyStore(':memory:')
     const send = (at: number) =>
-      notify.accept(parseNotice(statusNotice(batchOf(shown()), null, 3600)), 'local', [], at)
+      notify.accept(parseNotice(statusNotice(batchOf(shown()), null, 3600)), 'local', ['p'], at)
     const t0 = Date.parse('2026-11-03T12:00:00Z')
     expect(send(t0).repeat).toBe(false)
     expect(send(t0 + 25 * 60_000).repeat).toBe(true)
