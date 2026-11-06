@@ -101,7 +101,7 @@ function writeAtomic(path: string, body: string): void {
 export interface DeliveryDeps {
   env: NodeJS.ProcessEnv
   now(): Date
-  toolUsage(cwd: string | undefined): Promise<Source<string>>
+  toolUsage(cwd: string | undefined, project: string | null): Promise<Source<string>>
   /** Whether Aico's project registry lists the project. */
   registered?(project: string): boolean
 }
@@ -109,7 +109,7 @@ export interface DeliveryDeps {
 const DEFAULT_DEPS: DeliveryDeps = {
   env: process.env,
   now: () => new Date(),
-  toolUsage: (cwd) => readToolUsage(undefined, process.env, cwd),
+  toolUsage: (cwd, project) => readToolUsage(undefined, process.env, cwd, project),
   registered: (project) => registryProjects(process.env).some((row) => row.id === project),
 }
 
@@ -155,7 +155,7 @@ export async function withContextDelivery<T extends TuiSpec | undefined>(
       session: row.sessionId,
       role: rootRequestForWidget(widgetId)?.workRole ?? null,
       coordinator: row.coordinator,
-      toolUsage: await deps.toolUsage(row.projectRoot ?? undefined),
+      toolUsage: await deps.toolUsage(row.projectRoot ?? undefined, row.projectId),
       activity: projectActivity(widgetId, row.projectId),
       ...(deps.registered ? { registered: deps.registered } : {}),
       now,

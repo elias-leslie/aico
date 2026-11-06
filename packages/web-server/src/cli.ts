@@ -594,7 +594,7 @@ export async function runCli(command: string, argv: string[]): Promise<number> {
       dataDir: dataDirPath(),
       delivery: {
         env: process.env,
-        toolUsage: () => readToolUsage(),
+        toolUsage: (project) => readToolUsage(undefined, process.env, undefined, project),
         activity: (project, except) => sessionActivity(project, except),
         registered: (project) => registryProjects(process.env).some((row) => row.id === project),
       },

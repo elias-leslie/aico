@@ -19,6 +19,7 @@
     },
     {
       "id": "jobinator-4000.jobs",
+      "projects": ["jobinator-4000"],
       "owner": "jobinator-4000",
       "namespace": "jobs",
       "manifest": "extensions/jobs.json",
@@ -31,6 +32,7 @@
     },
     {
       "id": "neri.neri",
+      "projects": ["neri", "neri-hunters"],
       "owner": "neri",
       "namespace": "neri",
       "manifest": "extensions/neri.json",
@@ -60,6 +62,7 @@
     },
     {
       "id": "portfolio-ai.portfolio",
+      "projects": ["portfolio", "portfolio-ai"],
       "owner": "portfolio-ai",
       "namespace": "portfolio",
       "manifest": "extensions/portfolio.json",

@@ -7,6 +7,8 @@ export interface Binding {
   namespace: string
   manifest: string
   owner_manifest?: string
+  /** Projects whose startup tool-usage block lists this extension; absent: every project. */
+  projects?: string[]
   executable: string
   execution_source?: string
   grant: { enabled: boolean; effects: string[] }
@@ -78,6 +80,8 @@ export function parseBinding(value: unknown): Binding {
       ))
   )
     throw new Error('Invalid extension environment')
+  if (value.projects !== undefined && !strings(value.projects))
+    throw new Error('Invalid extension projects')
   if (value.arguments !== undefined && !strings(value.arguments))
     throw new Error('Invalid extension arguments')
   if (

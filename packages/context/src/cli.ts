@@ -63,7 +63,7 @@ export interface ContextCliIo {
     parentOf?(pid: number): number | null
     /** This process's pid (default: process.pid). */
     pid?: number
-    toolUsage(): Promise<Source<string>>
+    toolUsage(project: string): Promise<Source<string>>
     /** The other sessions in a project, from Tether. */
     activity(project: string, except: string | null): Promise<Source<Activity[]>>
     /** Whether Aico's project registry lists the project (it then gets project scope). */
@@ -466,7 +466,7 @@ async function deliverCommand(db: () => Database, rest: string[], io: ContextCli
   const project = str(parsed, 'project') ?? env.AICO_PROJECT_ID ?? ''
   const session = str(parsed, 'session') ?? env.AICO_SESSION_ID ?? null
   const [toolUsage, activity] = await Promise.all([
-    io.delivery?.toolUsage(),
+    io.delivery?.toolUsage(project),
     project ? io.delivery?.activity(project, session) : undefined,
   ])
   let result: ReturnType<typeof deliver>

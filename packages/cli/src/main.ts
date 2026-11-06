@@ -258,12 +258,13 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
           task: { type: 'string' },
           agent: { type: 'string' },
           profile: { type: 'string' },
+          project: { type: 'string' },
           help: { type: 'boolean' },
         },
       })
       if (values.help) {
         out(
-          'st tools manifest --surface ID | --discover WORD | --density core|full [--format json|inject]',
+          'st tools manifest --surface ID | --discover WORD | --density core|full [--project ID] [--format json|inject]',
         )
         return 0
       }
@@ -271,19 +272,33 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
         ...new Map(
           [
             ...usage,
-            ...extensions.flatMap((e) => (e.status === 'unverified' ? e.manifest.usage : [])),
+            ...extensions.flatMap((e) =>
+              e.status === 'unverified'
+                ? e.manifest.usage.map((row) =>
+                    e.binding.projects ? { ...row, projects: e.binding.projects } : row,
+                  )
+                : [],
+            ),
           ].map((row) => [row.surface, row]),
         ).values(),
       ] as Record<string, unknown>[]
-      const found = rows.filter((row) =>
-        values.surface
+      // --project: the startup block leaves out the tools another project owns (jobs, neri,
+      // portfolio); surface and discover lookups name no project and still find everything.
+      const found = rows.filter((row) => {
+        if (
+          values.project !== undefined &&
+          Array.isArray(row.projects) &&
+          !row.projects.includes(values.project)
+        )
+          return false
+        return values.surface
           ? row.surface === values.surface
           : values.discover
             ? JSON.stringify(row).toLowerCase().includes(values.discover.toLowerCase())
             : values.task
               ? (row.task_types as string[] | undefined)?.includes(values.task)
-              : values.density === 'full' || row.tier === 'mandate' || row.tier === 'guardrail',
-      )
+              : values.density === 'full' || row.tier === 'mandate' || row.tier === 'guardrail'
+      })
       if (!found.length && (values.surface || values.discover))
         throw new Error(`No tool surface matches ${values.surface || values.discover}`)
       if (values.format === 'json') out(json({ manifest_version: 1, tools: found }))

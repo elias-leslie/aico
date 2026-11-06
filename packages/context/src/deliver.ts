@@ -666,13 +666,15 @@ export function setDeliveryTool(db: Database, tool: string, on: boolean): string
 
 // --- the tool-usage block -------------------------------------------------------
 
-/** Run the configured tool-usage command (`st tools manifest ...`): its output, or why not. */
+/** Run the configured tool-usage command (`st tools manifest ...`) for the session's
+ * project (tools another project owns are left out): its output, or why not. */
 export function readToolUsage(
   settings: DeliveryConfig = DELIVERY,
   env: NodeJS.ProcessEnv = process.env,
   cwd?: string,
+  project?: string | null,
 ): Promise<Source<string>> {
-  const [command, ...args] = settings.toolUsage.command
+  const [command, ...args] = [...settings.toolUsage.command, '--project', project ?? '']
   return new Promise((resolve) => {
     execFile(
       command as string,

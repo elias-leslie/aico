@@ -748,3 +748,31 @@ describe('aico declare and aico notify', () => {
     expect(out[0]).toContain('aico notify --json')
   })
 })
+
+it('leaves the jobs, neri and portfolio tools out of the startup block of other projects', async () => {
+  const surfaces = async (...extra: string[]) => {
+    const h = harness()
+    expect(await h.go(['tools', 'manifest', '--format', 'json', ...extra])).toBe(0)
+    return (JSON.parse(h.output[0]).tools as { surface: string }[]).map((row) => row.surface)
+  }
+  const all = await surfaces()
+  expect(all.some((s) => s.startsWith('st.jobs.'))).toBe(true)
+  expect(all.some((s) => s.startsWith('st.neri.'))).toBe(true)
+  expect(all.some((s) => s.startsWith('st.portfolio.'))).toBe(true)
+  const aico = await surfaces('--project', 'aico')
+  expect(aico).toContain('st.commit')
+  expect(aico).toContain('st.browser')
+  expect(aico.some((s) => /^st\.(jobs|neri|portfolio)\./.test(s))).toBe(false)
+  expect((await surfaces('--project', '')).some((s) => s.startsWith('st.jobs.'))).toBe(false)
+  expect(
+    (await surfaces('--project', 'jobinator-4000')).some((s) => s.startsWith('st.jobs.')),
+  ).toBe(true)
+  expect((await surfaces('--project', 'neri-hunters')).some((s) => s.startsWith('st.neri.'))).toBe(
+    true,
+  )
+  // A named surface is still found from any project.
+  const named = harness()
+  expect(
+    await named.go(['tools', 'manifest', '--surface', 'st.jobs.ready', '--format', 'json']),
+  ).toBe(0)
+})

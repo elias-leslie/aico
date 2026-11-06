@@ -7,7 +7,7 @@
     "precautions": [
       "review diff for destructive changes, scope",
       "--paths preserves unrelated work; include the checkpoint's generated changes",
-      "publication: st vcs publish --source ID --sha FULL_OID --now",
+      "publication: st publish --source ID --sha FULL_OID",
       "commit before destructive ops (abandon, rollback)"
     ]
   },
