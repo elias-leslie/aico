@@ -169,3 +169,40 @@ it.each([true, false])(
     ).toBe(0)
   },
 )
+
+it.each([
+  [
+    '[native]\nmanaged_environment_inputs=[".venv"]\n',
+    'unknown key native.managed_environment_inputs; did you mean environment_inputs?',
+  ],
+  [
+    '[native]\nlegacy_tools=[]\n[[native.stages]]\nid="a"\nargv=["x"]\ncoverage="full"\nquik=true\n',
+    'unknown key native.stages[0].quik; did you mean quick?',
+  ],
+  ['[pytest]\nno_cov=false\nworkres=2\n', 'unknown key pytest.workres; did you mean workers?'],
+  ['[nativ]\nx=1\n', 'unknown key nativ; did you mean native?'],
+])('rejects an unknown .st-check.toml key and names the nearest one (%#)', (text, message) => {
+  const root = fixture()
+  writeFileSync(join(root, '.st-check.toml'), text)
+  expect(() => loadConfig(root)).toThrow(`${join(root, '.st-check.toml')}: ${message}`)
+})
+
+it('fails acceptance at once when a declared environment input is not prepared', async () => {
+  const { accept } = await import('./accept')
+  const root = fixture()
+  writeFileSync(
+    join(root, '.st-check.toml'),
+    '[native]\nlegacy_tools=[]\nenvironment_inputs=["backend/.venv","node_modules"]\n',
+  )
+  execFileSync('git', ['add', '-A'], { cwd: root })
+  execFileSync(
+    'git',
+    ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'Source'],
+    { cwd: root },
+  )
+  const config = loadConfig(root)
+  if ('unsupported' in config) throw new Error(config.unsupported)
+  await expect(accept(config, { coordination, reuse: false })).rejects.toThrow(
+    `environment not prepared: backend/.venv missing in ${root}; run the repo's setup (e.g. uv sync / pnpm install)`,
+  )
+})

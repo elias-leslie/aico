@@ -6,6 +6,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, posix, relative } from 'node:path'
+import { unknownKey } from './config-keys'
 import { matches } from './git'
 import { parseToml, type TomlTable } from './toml'
 
@@ -60,6 +61,8 @@ export interface Config {
   pytestNoCov: boolean
   /** Ignored runtime dirs an acceptance worktree links in (node_modules, venvs). */
   environmentInputs: string[]
+  /** native.environment_inputs as declared: acceptance needs each of these prepared in the checkout. */
+  declaredInputs: string[]
   /** Hash of the config text: part of every reuse key. */
   digest: string
 }
@@ -148,6 +151,8 @@ export function loadConfig(root: string): Config | { unsupported: string } {
   const file = join(root, '.st-check.toml')
   const text = existsSync(file) ? readFileSync(file, 'utf8') : ''
   const data = parseToml(text)
+  const badKey = unknownKey(data, file)
+  if (badKey) throw new ConfigError(badKey)
   const legacyDefault = data.native === undefined
   const native = (data.native ?? {}) as TomlTable
   const legacy = strings(
@@ -175,6 +180,7 @@ export function loadConfig(root: string): Config | { unsupported: string } {
   const venvs = [...Object.values(toolPaths), ...nativeExecutables]
     .map((dir) => /^(.*?\.venv)(?:\/|$)/.exec(dir)?.[1])
     .filter((dir): dir is string => !!dir)
+  const declaredInputs = strings(native.environment_inputs, 'native.environment_inputs')
   return {
     root,
     stages,
@@ -187,9 +193,10 @@ export function loadConfig(root: string): Config | { unsupported: string } {
     toolPaths,
     pytestWorkers: typeof pytest?.workers === 'number' ? pytest.workers : undefined,
     pytestNoCov: pytest?.no_cov !== false,
+    declaredInputs,
     environmentInputs: [
       ...new Set([
-        ...strings(native.environment_inputs, 'native.environment_inputs'),
+        ...declaredInputs,
         ...(legacyDefault ? ['node_modules', '.venv', 'venv'] : []),
         ...venvs,
       ]),

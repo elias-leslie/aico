@@ -21,10 +21,6 @@ paths = ["node_modules/.bin", "native/st-sdk/.venv/bin", "native/service-tools/.
 environment_inputs = ["node_modules", "native/st-sdk/.venv", "native/host-steward/.venv", "native/service-tools/.venv"]
 legacy_tools = ["vitest", "security"]
 
-# uilint runs from its checkout (st uilint is the same CLI); its package is a
-# prepared input so isolated acceptance can import it.
-managed_environment_inputs = ["/srv/workspaces/projects/uilint/bin", "/srv/workspaces/projects/uilint/uilint"]
-
 [native.tools]
 bash = "/usr/bin/bash"
 node = "/usr/local/bin/node"

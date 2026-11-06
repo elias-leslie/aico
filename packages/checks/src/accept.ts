@@ -93,6 +93,19 @@ function linkModules(main: string, work: string, dir: string): void {
   }
 }
 
+/** Fails at once, naming the path, when a declared environment input is not in the checkout. */
+function requireEnvironment(config: Config): void {
+  for (const input of config.declaredInputs) {
+    const found = input.includes('/')
+      ? existsSync(resolve(config.root, input))
+      : moduleDirs(config.root, [input]).length > 0
+    if (!found)
+      throw new ConfigError(
+        `environment not prepared: ${input} missing in ${config.root}; run the repo's setup (e.g. uv sync / pnpm install)`,
+      )
+  }
+}
+
 /** Links the main checkout's prepared runtime inputs into the worktree. */
 export function linkEnvironment(config: Config, work: string): void {
   const main = config.root
@@ -190,6 +203,7 @@ export async function withWorktree<T>(
   fn: (work: string, worked: Config, parent: string) => Promise<T>,
 ): Promise<T> {
   const main = config.root
+  requireEnvironment(config)
   const parent = mkdtempSync(join(tmpdir(), 'aico-accept-'))
   const work = join(parent, 'tree')
   git(main, ['worktree', 'add', '--detach', '-q', work, sha])
