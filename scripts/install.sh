@@ -4,6 +4,8 @@
 #
 #   scripts/install.sh                 build and install; start nothing
 #   scripts/install.sh --prebuilt      install artifacts built from this accepted source elsewhere
+#   scripts/install.sh --keep-tether   leave the installed Tether as it is (a release that built no
+#                                      Tether; signed Tether updates reach it separately)
 #   scripts/install.sh --start         ...then enable and (re)start tether@default and the web app
 #   scripts/install.sh --dry-run       print what would happen; change nothing
 #   scripts/install.sh --skip-systemd  build and install files only (no units, no
@@ -27,11 +29,13 @@ DRY_RUN=0
 START=0
 SKIP_SYSTEMD=0
 PREBUILT=0
+KEEP_TETHER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --start) START=1 ;;
     --prebuilt) PREBUILT=1 ;;
+    --keep-tether) KEEP_TETHER=1 ;;
     --skip-systemd) SKIP_SYSTEMD=1 ;;
     -h | --help)
       sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
@@ -183,6 +187,7 @@ if [ "$PREBUILT" = 1 ]; then
       packages/jobs/dist/aico-jobs.mjs \
       packages/tether/dist/tether.mjs packages/web-server/dist/aico-web.mjs \
       packages/web-frontend/out/index.html; do
+      [ "$KEEP_TETHER" = 1 ] && [ "$artifact" = packages/tether/dist/tether.mjs ] && continue
       [ -r "$artifact" ] || fail "prebuilt artifact is missing: $artifact"
     done
     [ -d node_modules ] || fail "prebuilt artifact is missing: node_modules"
@@ -204,8 +209,17 @@ if [ -n "${AICO_INSTALL_SOURCE_SHA:-}" ]; then
 fi
 
 step "Tether"
-[ "$DRY_RUN" = 1 ] || [ -f packages/tether/dist/tether.mjs ] || fail "packages/tether/dist/tether.mjs is missing after the build"
-run env TETHER_LIB_DIR="$LIB_DIR" packages/tether/scripts/install-release.sh
+if [ "$KEEP_TETHER" = 1 ]; then
+  [ -x "$LIB_DIR/bin/tether" ] || fail "--keep-tether needs an installed Tether in $LIB_DIR"
+  echo "Keeping the installed Tether"
+  # Its running daemon and sessions stay up too.
+  kept=()
+  for unit in "${START_UNITS[@]}"; do [ "$unit" = tether@default.service ] || kept+=("$unit"); done
+  START_UNITS=("${kept[@]}")
+else
+  [ "$DRY_RUN" = 1 ] || [ -f packages/tether/dist/tether.mjs ] || fail "packages/tether/dist/tether.mjs is missing after the build"
+  run env TETHER_LIB_DIR="$LIB_DIR" packages/tether/scripts/install-release.sh
+fi
 install_link "$LIB_DIR/bin/tether" "$BIN_DIR/tether"
 
 step "Pi model rules"

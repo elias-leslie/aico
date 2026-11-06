@@ -10,15 +10,16 @@
 #   scripts/deploy-remote.sh <ssh-host> --dry-run       show what would be copied; change nothing
 #
 # <ssh-host> is an alias from ~/.ssh/config that logs in as the peer's Aico user without a prompt.
-# The release must already be built on the workstation: `st service rebuild aico` and then
-# `st service rebuild aico --worker tether@default` at that commit build everything the peer needs.
+# The release must already be built on the workstation (`st service rebuild aico`). A release whose
+# deploy built no Tether (Tether did not change) keeps the peer's installed Tether; the workstation's
+# signed Tether reaches it with `tether fleet push-update` (scripts/peer-release.sh does both).
 # Remote command strings expand on the peer, so they stay single-quoted here.
 # shellcheck disable=SC2016
 set -euo pipefail
 
 RELEASES="${AICO_RELEASES_DIR:-$HOME/.local/lib/aico/releases}"
 # What the peer's installer runs; each one lands in this release by a deploy at its commit.
-NEEDED=(web-server web-frontend jobs ops cli tether)
+NEEDED=(web-server web-frontend jobs ops cli)
 # Build caches and host-local environments: never part of what a peer runs.
 FILTERS=(--exclude=/.aico-release.json --exclude=.next/ --exclude=.venv/ --exclude=__pycache__/
   --exclude=.dev-tools/)
@@ -59,9 +60,13 @@ fi
 release="$RELEASES/$SHA"
 [ -r "$release/.aico-release.json" ] || fail "no workstation release for $SHA; deploy it first: st service rebuild aico"
 for pkg in "${NEEDED[@]}"; do
-  grep -q "\"$pkg\"" "$release/.aico-release.json" ||
-    fail "the $SHA release has no $pkg build; run: st service rebuild aico$([ "$pkg" = tether ] && echo ' --worker tether@default')"
+  grep -q "\"$pkg\"" "$release/.aico-release.json" || fail "the $SHA release has no $pkg build; run: st service rebuild aico"
 done
+install_flags=(--prebuilt --start)
+if ! grep -q '"tether"' "$release/.aico-release.json"; then
+  install_flags+=(--keep-tether)
+  echo "==> Release $SHA built no Tether; $HOST keeps its installed Tether"
+fi
 
 ssh_peer() { ssh -o BatchMode=yes "$HOST" "$@"; }
 remote_home="$(ssh_peer 'printf %s "$HOME"')"
@@ -98,7 +103,7 @@ if [ "$DRY_RUN" = 1 ]; then
 fi
 
 echo "==> Installing $SHA on $HOST"
-ssh_peer "cd '$target' && AICO_INSTALL_SOURCE_SHA='$SHA' bash scripts/install.sh --prebuilt --start"
+ssh_peer "cd '$target' && AICO_INSTALL_SOURCE_SHA='$SHA' bash scripts/install.sh ${install_flags[*]}"
 ssh_peer 'for i in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:3002/health && exit 0; sleep 1; done; exit 1' ||
   fail "Aico on $HOST did not answer its health check within 30 s"
 running="$(ssh_peer 'basename "$(readlink -f "$HOME/.local/lib/aico/ops")"')"

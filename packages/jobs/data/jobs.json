@@ -143,6 +143,17 @@
         "command": ["../../web-server/scripts/aico", "backups", "run", "verify", "--scheduled"]
       },
       "lease_s": 300
+    },
+    {
+      "kind": "peer-release",
+      "what": "Aico container on the workstation's release",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "every_min": 15,
+      "run": {
+        "command": ["../../../scripts/peer-release.sh", "aico-gem", "aico"]
+      },
+      "lease_s": 900
     }
   ]
 }
