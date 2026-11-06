@@ -27,6 +27,8 @@ export interface Publication extends Delivery {
   sha: string | null
   failed: string[]
   state: 'ok' | 'failed' | 'skip'
+  /** Status could not record this result; the publication outcome itself stands. */
+  status_unposted?: boolean
 }
 export interface PublishOptions {
   dryRun?: boolean
@@ -39,9 +41,15 @@ export interface PublishOptions {
   post?: (row: StatusRow) => Promise<void>
 }
 
+/**
+ * Proof is a whole-tree (full or acceptance) check of the exact commit being pushed. A quick
+ * check covers only one commit's changed files, so it never proves the tree, and a passing tip
+ * covers every ancestor it carries: what lands on GitHub is that checked tree.
+ */
 export function publishDecision(sha: string, check: LocalCheck | null): string | null {
   if (!check || check.sha !== sha) return 'unchecked_commit'
   if (!check.passed || check.failed.length) return 'local_check_failed'
+  if (check.lane === 'quick') return 'unchecked_commit'
   return null
 }
 
@@ -49,7 +57,7 @@ export function publicationRow(result: Publication, now = new Date()): StatusRow
   const source = result.sha ? ` at ${result.sha.slice(0, 10)}` : ''
   const problem =
     result.reason === 'unchecked_commit'
-      ? `Main has no local check${source}. Owning agent: run st check --acceptance.`
+      ? `Main has no full or acceptance check${source}. Owning agent: run st check --acceptance.`
       : result.reason === 'local_check_failed'
         ? `Local check failed${source}: ${result.failed.join(', ') || 'check'}. Owning agent: fix it and check again.`
         : `Publication failed${source}: ${result.reason.replaceAll('_', ' ')}. Owning agent: inspect the publish log.`
@@ -140,15 +148,24 @@ export async function publishRepos(
           if (!gitOk(root, ['rev-parse', '--verify', '--quiet', 'refs/heads/main']))
             result.reason = 'main_unavailable'
           else {
-            const sha = git(root, ['rev-parse', 'refs/heads/main']).trim()
-            const held = hold?.through && hold.through !== sha
+            const main = git(root, ['rev-parse', 'refs/heads/main']).trim()
+            // A hold through REV still publishes REV once main contains it.
+            const through = hold?.through
+            const reachable =
+              !through ||
+              through === main ||
+              gitOk(root, ['merge-base', '--is-ancestor', through, main])
+            const sha = through && reachable ? through : main
+            const held = !reachable
             result = { ...result, sha, state: held ? 'skip' : 'failed' }
-            const check = localCheck(root, sha)
+            const check = held ? null : localCheck(root, sha)
             result.failed = check?.failed ?? []
             result.reason = held
               ? 'owner_hold'
               : options.sha && git(root, ['rev-parse', `${options.sha}^{commit}`]).trim() !== sha
-                ? 'source_is_not_main'
+                ? through
+                  ? 'source_is_not_hold'
+                  : 'source_is_not_main'
                 : (publishDecision(sha, check) ?? 'checked_main')
             if (result.reason === 'checked_main') {
               if (options.dryRun) result.state = 'ok'
@@ -178,7 +195,13 @@ export async function publishRepos(
       }
     }
     rows.push(result)
-    if (!options.dryRun) await options.post?.(publicationRow(result))
+    // One unreachable Status post never stops the other repos' publication.
+    if (!options.dryRun)
+      try {
+        await options.post?.(publicationRow(result))
+      } catch {
+        result.status_unposted = true
+      }
   }
   return rows
 }
@@ -308,7 +331,7 @@ export async function publishCli(argv: string[], env = process.env): Promise<num
   else {
     for (const result of results)
       console.log(
-        `${result.project}: ${result.reason}${result.sha ? ` (${result.sha.slice(0, 12)})` : ''}`,
+        `${result.project}: ${result.reason}${result.sha ? ` (${result.sha.slice(0, 12)})` : ''}${result.status_unposted ? '; Status not updated' : ''}`,
       )
     console.log(
       `Publication: ${results.filter((r) => r.pushed).length} pushed; ${results.filter((r) => r.state === 'failed').length} failed.`,

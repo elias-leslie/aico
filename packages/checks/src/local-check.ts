@@ -13,13 +13,22 @@ export interface LocalCheck {
   at: string
 }
 
-export function recordLocalCheck(root: string, sha: string, result: CheckSummary): LocalCheck {
+export function recordLocalCheck(
+  root: string,
+  sha: string,
+  result: CheckSummary & { scope?: string[] | null },
+): LocalCheck {
+  // A check scoped to some files proves no more than a quick check does.
+  const lane = result.scope ? 'quick' : result.lane
+  const prior = localCheck(root, sha)
+  // A narrower pass never replaces the whole-tree pass publication relies on.
+  if (prior?.passed && prior.lane !== 'quick' && lane === 'quick' && result.passed) return prior
   const value: LocalCheck = {
     kind: 'aico.local-check.v1',
     sha,
     tree: git(root, ['rev-parse', `${sha}^{tree}`]).trim(),
     passed: result.passed,
-    lane: result.lane,
+    lane,
     failed: result.results
       .filter((r) => r.required && !['pass', 'skip'].includes(r.state))
       .map((r) => r.id),

@@ -44,8 +44,8 @@ it('policy controls update the registry that scheduled and manual publishing rea
 const git = (root: string, ...args: string[]) =>
   execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
 const coordination: Coordination = { foreign: () => ({}), guard: () => null, committed: () => '' }
-const result = (passed: boolean): CheckSummary => ({
-  lane: 'quick',
+const result = (passed: boolean, lane: CheckSummary['lane'] = 'full'): CheckSummary => ({
+  lane,
   passed,
   ms: 10,
   results: [{ id: 'types', state: passed ? 'pass' : 'fail', required: true, ms: 10 }],
@@ -111,6 +111,74 @@ it('a pass on the previous commit or a tampered tree never checks a new main', a
   const receipt = recordLocalCheck(root, sha, result(true))
   receiptStore(root).put(`publish-${sha}`, { ...receipt, tree: '0'.repeat(40) })
   expect(localCheck(root, sha)).toBeNull()
+})
+
+it('a quick or file-scoped pass never proves main, and never replaces a whole-tree pass', async () => {
+  const root = repo()
+  const sha = git(root, 'rev-parse', 'HEAD')
+  recordLocalCheck(root, sha, result(true, 'quick'))
+  expect((await publishRepos([project(root)], { dryRun: true }))[0].reason).toBe('unchecked_commit')
+  recordLocalCheck(root, sha, { ...result(true), scope: ['note'] })
+  expect(localCheck(root, sha)?.lane).toBe('quick')
+  expect((await publishRepos([project(root)], { dryRun: true }))[0].reason).toBe('unchecked_commit')
+  recordLocalCheck(root, sha, result(true, 'acceptance'))
+  recordLocalCheck(root, sha, result(true, 'quick'))
+  expect(localCheck(root, sha)?.lane).toBe('acceptance')
+  expect((await publishRepos([project(root)], { dryRun: true }))[0].reason).toBe('checked_main')
+})
+
+it('an unchecked tip never carries checked ancestors out, nor a checked ancestor its tip', async () => {
+  const root = repo()
+  recordLocalCheck(root, git(root, 'rev-parse', 'HEAD'), result(true))
+  writeFileSync(join(root, 'note'), 'unchecked')
+  git(root, 'commit', '-qam', 'unchecked')
+  const deliver = vi.fn()
+  expect((await publishRepos([project(root)], { deliver }))[0].reason).toBe('unchecked_commit')
+  expect(deliver).not.toHaveBeenCalled()
+})
+
+it('a hold through REV publishes REV once main contains it, never the commits after it', async () => {
+  const root = repo()
+  const through = git(root, 'rev-parse', 'HEAD')
+  recordLocalCheck(root, through, result(true))
+  writeFileSync(join(root, 'note'), 'later')
+  git(root, 'commit', '-qam', 'later')
+  const deliver = vi.fn(async () => ({ publication_complete: true, reason: 'source_published' }))
+  const held = {
+    ...project(root),
+    agent_configs: { publication_hold: { through, reason: 'owner hold' } },
+  }
+  expect((await publishRepos([held], { deliver }))[0]).toMatchObject({ state: 'ok', sha: through })
+  expect(deliver).toHaveBeenCalledWith(root, through, [])
+  deliver.mockClear()
+  git(root, 'switch', '-qc', 'side', `${through}`)
+  writeFileSync(join(root, 'note'), 'side')
+  git(root, 'commit', '-qam', 'side')
+  const side = git(root, 'rev-parse', 'HEAD')
+  git(root, 'switch', '-q', 'main')
+  const offMain = { ...held, agent_configs: { publication_hold: { through: side, reason: 'x' } } }
+  expect((await publishRepos([offMain], { deliver }))[0].reason).toBe('owner_hold')
+  expect(deliver).not.toHaveBeenCalled()
+})
+
+it('one failed Status post leaves the rest of the pass running', async () => {
+  const first = repo()
+  const second = repo()
+  for (const root of [first, second])
+    recordLocalCheck(root, git(root, 'rev-parse', 'HEAD'), result(true))
+  const deliver = vi.fn(async () => ({ publication_complete: true, reason: 'source_published' }))
+  const post = vi.fn(async () => {
+    throw new Error('Publication Status answered 502')
+  })
+  const rows = await publishRepos([project(first, 'one'), project(second, 'two')], {
+    deliver,
+    post,
+  })
+  expect(rows.map((r) => [r.state, r.status_unposted])).toEqual([
+    ['ok', true],
+    ['ok', true],
+  ])
+  expect(deliver).toHaveBeenCalledTimes(2)
 })
 
 it('uses main rather than the checked-out branch and rejects a requested older source', async () => {
