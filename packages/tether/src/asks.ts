@@ -62,6 +62,9 @@ export interface Ask {
   command: string | null
   /** An https link the ask opens (an app notice's item), or null. */
   open: string | null
+  /** Who filed it when an app did: `notice` (a notice that asks something) or
+   * `status` (a failed Status row); null for a question an agent or person asked. */
+  origin: AskOrigin | null
   /** A `tether share` id to look at. */
   share: string | null
   /** The files the ask wants, or null. */
@@ -97,6 +100,7 @@ export interface AskRequest {
   body: string | null
   command: string | null
   open: string | null
+  origin: AskOrigin | null
   share: string | null
   wantsFiles: WantsFiles | null
   blocking: boolean
@@ -113,6 +117,7 @@ interface AskRow {
   body: string | null
   command: string | null
   open_url?: string | null
+  origin?: AskOrigin | null
   share_id: string | null
   files_min?: number | null
   files_max?: number | null
@@ -161,6 +166,7 @@ function fromRow(row: AskRow): Ask {
     body: row.body,
     command: row.command,
     open: row.open_url ?? null,
+    origin: row.origin ?? null,
     share: row.share_id,
     wantsFiles,
     files,
@@ -239,6 +245,7 @@ function parseAsk(body: Record<string, unknown>): AskRequest {
     'body',
     'command',
     'open',
+    'origin',
     'share',
     'files',
     'blocking',
@@ -287,10 +294,21 @@ function parseAsk(body: Record<string, unknown>): AskRequest {
     body: multiLine(body.body, 'body', 4000),
     command: multiLine(body.command, 'command', 2000),
     open: openLink(body.open),
+    origin: parseOrigin(body.origin),
     share: share as string | null,
     wantsFiles: parseWantsFiles(body.files),
     blocking: body.blocking === true,
   }
+}
+
+const ASK_ORIGINS = ['notice', 'status'] as const
+export type AskOrigin = (typeof ASK_ORIGINS)[number]
+
+function parseOrigin(value: unknown): AskOrigin | null {
+  if (value === undefined || value === null) return null
+  if (!ASK_ORIGINS.includes(value as AskOrigin))
+    throw new HttpError(400, 'invalid_body', { field: 'origin', detail: ASK_ORIGINS.join(' or ') })
+  return value as AskOrigin
 }
 
 /** `open`: one https link of at most 300 characters. */
@@ -437,6 +455,7 @@ export class AskStore {
       request.body,
       request.command,
       request.open,
+      request.origin,
       request.share,
       request.blocking ? 1 : 0,
     ]
@@ -449,7 +468,7 @@ export class AskStore {
       this.db
         .prepare(
           `UPDATE asks SET requester = ?, question = ?, options = ?, recommended = ?, body = ?,
-             command = ?, open_url = ?, share_id = ?, blocking = ?, files_min = ?, files_max = ?, files_hint = ?,
+             command = ?, open_url = ?, origin = ?, share_id = ?, blocking = ?, files_min = ?, files_max = ?, files_hint = ?,
              updated_at = ? WHERE id = ?`,
         )
         .run(...values, ...wants, now, existing.id)
@@ -459,9 +478,9 @@ export class AskStore {
     this.db
       .prepare(
         `INSERT INTO asks (id, session_id, requester, question, options, recommended, body,
-           command, open_url, share_id, blocking, files_min, files_max, files_hint, question_hash,
+           command, open_url, origin, share_id, blocking, files_min, files_max, files_hint, question_hash,
            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(id, request.session, ...values, ...wants, hash, now, now)
     return { ask: this.get(id) as Ask, created: true }

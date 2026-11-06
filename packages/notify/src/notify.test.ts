@@ -269,6 +269,7 @@ describe('Needs you', () => {
         body: 'Drive refused the upload.',
         command: 'aico jobs run backup',
         open: null,
+        origin: 'status',
       },
     ])
     await needsYou.rowsWritten([row('ok')])
@@ -388,6 +389,7 @@ describe('Needs you', () => {
         body: 'Open Jobinator to see who.',
         command: null,
         open: 'https://jobinator.example/followups',
+        origin: 'notice',
       },
     ])
     store.close()

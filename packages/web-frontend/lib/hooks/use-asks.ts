@@ -33,6 +33,8 @@ export interface OwnerAsk {
   command: string | null
   /** An https link the ask opens (an app notice's item); absent from an older Tether. */
   open?: string | null
+  /** Set when an app filed it (a notice or a failed Status row): nobody to reply to. */
+  origin?: 'notice' | 'status' | null
   share: string | null
   /** The files it wants; null or absent (an older Tether): none. */
   wantsFiles?: WantsFiles | null

@@ -787,11 +787,23 @@ export const ASK_FILES_COLUMNS: readonly { table: string; column: string; sql: s
 ]
 
 /**
- * v35: an ask that opens something (src/asks.ts). `open_url` is the https link
- * an app notice's ask opens, null for an ask with nothing to open.
+ * v35: asks an app files (src/asks.ts). `open_url` is the https link the ask
+ * opens, null for an ask with nothing to open; `origin` says an app filed it
+ * (`notice`: a notice that asks something, `status`: a failed Status row), null
+ * for a question an agent or a person asked.
  */
-export const ASK_OPEN_SQL =
-  "ALTER TABLE asks ADD COLUMN open_url TEXT CHECK(open_url IS NULL OR (length(open_url) <= 300 AND open_url LIKE 'https://%'))"
+export const ASK_ORIGIN_COLUMNS: readonly { table: string; column: string; sql: string }[] = [
+  {
+    table: 'asks',
+    column: 'open_url',
+    sql: "ALTER TABLE asks ADD COLUMN open_url TEXT CHECK(open_url IS NULL OR (length(open_url) <= 300 AND open_url LIKE 'https://%'))",
+  },
+  {
+    table: 'asks',
+    column: 'origin',
+    sql: "ALTER TABLE asks ADD COLUMN origin TEXT CHECK(origin IS NULL OR origin IN ('notice', 'status'))",
+  },
+]
 
 /**
  * v31: the session history (src/sessions/). One row per conversation a tool

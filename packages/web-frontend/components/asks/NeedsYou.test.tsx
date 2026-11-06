@@ -466,6 +466,7 @@ describe('NeedsYouDrawer', () => {
         body: 'Open Jobinator to see who.',
         command: null,
         open: 'https://jobinator.example/followups',
+        origin: 'notice',
         blocking: false,
         answerTo: null,
       }),
@@ -486,20 +487,51 @@ describe('NeedsYouDrawer', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Done')
   })
 
-  it('keeps the reply box for an ask with no link, and refuses a link that is not https', () => {
+  it('keeps the agent card for an ask no app filed, and never links a URL that is not https', () => {
     state.asks = [
-      ask({ session: null, requester: 'cron', answerTo: null }),
+      ask({
+        session: null,
+        requester: 'cron',
+        open: 'https://x.example/a',
+        answerTo: null,
+      }),
       ask({
         id: 'bbbbbbbbbbbb',
         session: null,
         requester: 'x',
         open: 'javascript:alert(1)',
+        origin: 'notice',
         answerTo: null,
       }),
     ]
     render(<NeedsYouDrawer open onOpenChange={() => {}} />)
-    expect(screen.getAllByTestId('answer-route')).toHaveLength(2)
+    expect(screen.getAllByTestId('answer-route')).toHaveLength(1)
     expect(screen.queryByRole('link', { name: 'Open' })).toBeNull()
+  })
+
+  it('gives a failed Status row the same card: Done and its command, no agent reply', () => {
+    state.asks = [
+      ask({
+        session: null,
+        requester: 'Aico Status',
+        question: 'Nightly backup failed on davion-sidarli',
+        options: [],
+        recommended: null,
+        command: 'aico jobs run backup',
+        origin: 'status',
+        blocking: false,
+        answerTo: null,
+      }),
+    ]
+    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    const card = screen.getByTestId('ask-card')
+    expect(within(card).getByText('aico jobs run backup')).toBeInTheDocument()
+    expect(
+      within(card).getByRole('button', { name: 'Done' }),
+    ).toBeInTheDocument()
+    expect(within(card).queryByRole('textbox')).toBeNull()
+    expect(card).not.toHaveTextContent('Not now')
+    expect(screen.queryByTestId('answer-route')).toBeNull()
   })
 
   it('names the launcher when the answer went there', async () => {

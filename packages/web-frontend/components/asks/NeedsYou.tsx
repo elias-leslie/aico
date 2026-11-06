@@ -636,10 +636,10 @@ function answerRoute(
   }
 }
 
-/** An ask an app filed from a notice: no session asked it and nobody is waiting to read the
+/** An ask an app filed (a notice or a failed Status row): nobody is waiting to read the
  * answer, so the card shows its choices and the link it opens, nothing to say to an agent. */
 function isAppAsk(ask: OwnerAsk): boolean {
-  return ask.session === null && !ask.launcher && openLink(ask) !== null
+  return Boolean(ask.origin)
 }
 
 /** The https link the ask opens, else null. */
@@ -652,7 +652,7 @@ function openLink(ask: OwnerAsk): string | null {
 /** The question as the owner reads it: a notice's ask ends with a short id that only keeps
  * two notices from merging in Tether. */
 function askTitle(ask: OwnerAsk): string {
-  return ask.session === null
+  return ask.origin === 'notice'
     ? ask.question.replace(/\s*\(#[0-9a-f]{6}\)$/, '') || ask.question
     : ask.question
 }

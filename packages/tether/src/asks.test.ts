@@ -186,6 +186,18 @@ describe('POST /v1/asks', () => {
       link,
     )
     expect((await ask({ requester: 'jobinator', question: 'No link' })).body.open).toBeNull()
+    const noticed = await ask({
+      requester: 'jobinator',
+      question: 'From a notice',
+      origin: 'notice',
+    })
+    expect(noticed.body.origin).toBe('notice')
+    expect((await call('GET', `/v1/asks/${noticed.body.id}`)).body.origin).toBe('notice')
+    expect((await ask({ requester: 'cron', question: 'Plain' })).body.origin).toBeNull()
+    for (const origin of ['agent', '', 3])
+      expect((await ask({ requester: 'x', question: 'Q?', origin })).status, String(origin)).toBe(
+        400,
+      )
     for (const open of ['http://x.example/a', 'javascript:alert(1)', 'https://a b', '', 7])
       expect((await ask({ requester: 'x', question: 'Q?', open })).status, String(open)).toBe(400)
   })
@@ -497,6 +509,7 @@ describe('answerNote', () => {
     body: null,
     command: null,
     open: null,
+    origin: null,
     share: null,
     wantsFiles: null,
     files: [],

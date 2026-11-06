@@ -10,7 +10,7 @@ import {
   AGENT_TOOLS_TABLE_SQL,
   ASK_FILES_COLUMNS,
   ASK_HANDOFF_COLUMNS,
-  ASK_OPEN_SQL,
+  ASK_ORIGIN_COLUMNS,
   ASKS_SQL,
   COORDINATOR_SQL,
   DELIVERIES_SQL,
@@ -525,11 +525,13 @@ export class Store {
           .run(34, now)
       }
       if (current < 35) {
-        // v35: an ask that opens something (asks.open_url).
-        const has = this.db
-          .prepare("SELECT 1 FROM pragma_table_info('asks') WHERE name = 'open_url'")
-          .get()
-        if (!has) this.db.exec(ASK_OPEN_SQL)
+        // v35: asks an app files (asks.open_url, asks.origin).
+        for (const { table, column, sql } of ASK_ORIGIN_COLUMNS) {
+          const has = this.db
+            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
+            .get(table, column)
+          if (!has) this.db.exec(sql)
+        }
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(35, now)

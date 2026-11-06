@@ -48,6 +48,8 @@ describe('validateAsk', () => {
     expect(validateAsk({ ...ASK, open: 'https://x.example/a' })).toMatchObject({
       open: 'https://x.example/a',
     })
+    expect(validateAsk({ ...ASK, origin: 'status' })).toMatchObject({ origin: 'status' })
+    expect(validateAsk({ ...ASK, origin: 'agent' })).toBeNull()
     for (const open of ['http://x.example/a', 'javascript:alert(1)', 5])
       expect(validateAsk({ ...ASK, open }), String(open)).toBeNull()
     for (const patch of [

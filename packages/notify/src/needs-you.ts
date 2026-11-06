@@ -17,6 +17,8 @@ export interface AskRequest {
   command: string | null
   /** The https link the card opens: the notice's own item. */
   open: string | null
+  /** An app filed it: the card has nothing to say to an agent. */
+  origin: 'notice' | 'status'
 }
 
 /** What Needs you needs of Tether's asks. */
@@ -73,6 +75,7 @@ function noticeAsk(id: string, notice: Notice): AskRequest {
     body: cut(body, 4000),
     command: notice.command ?? null,
     open: notice.open ?? null,
+    origin: 'notice',
   }
 }
 
@@ -85,6 +88,7 @@ export function rowAsk(row: StatusRow): AskRequest {
     body: row.meaning,
     command: run?.ref ?? null,
     open: null,
+    origin: 'status',
   }
 }
 
