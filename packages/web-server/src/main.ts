@@ -163,6 +163,7 @@ function serve(): void {
     tether,
     status,
     notifier: notify.notifier,
+  registerMemoryRoutes(api, { dataDir: config.dataDir })
   })
   registerSyncRoutes(api, sync.loop)
   const runs = new StatusRuns()
