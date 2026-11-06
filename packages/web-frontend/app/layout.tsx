@@ -51,6 +51,7 @@ export default function RootLayout({
           href="/manifest.webmanifest"
           crossOrigin="use-credentials"
         />
+        <meta name="aico-page-swap-check" content="1" />
       </head>
       <body>
         <Providers>{children}</Providers>
