@@ -1,6 +1,7 @@
 // Owner notices in aico-web (packages/notify does the work):
 //
 // - POST /api/notices: a program on this machine sends a notice (contracts/notice.schema.json).
+// - POST /api/notices/resolve: that program ends its notice by `{source, key, text}`.
 // - GET /api/notices: the notice log, newest first.
 // - POST /api/ominull/push: the OmniNull hub sends notices and Status rows. It names itself with
 //   X-API-Key, checked against the sha256 hashes in the keys file (the hub's own scheme for its
@@ -318,6 +319,26 @@ export class NotifyHub {
       if (!fromThisMachine(ctx.req))
         throw new HttpError(403, 'Notices are sent only by programs on this machine (loopback)')
       return this.receive(await ctx.body(), 'local')
+    })
+    // A program on this machine ends its own notice (`nightshift resolve`'s
+    // replacement): the owner question it filed is withdrawn, an `ok` follows.
+    router.on('POST', '/api/notices/resolve', async (ctx) => {
+      if (!fromThisMachine(ctx.req))
+        throw new HttpError(403, 'Notices are resolved only by programs on this machine (loopback)')
+      const body = (await ctx.body()) as Record<string, unknown> | undefined
+      const text = (name: string, max: number, pattern?: RegExp) => {
+        const value = body?.[name]
+        if (typeof value !== 'string' || !value.trim() || value.length > max)
+          throw new HttpError(422, `${name}: a string of 1 to ${max} characters`)
+        if (pattern && !pattern.test(value)) throw new HttpError(422, `${name}: not allowed`)
+        return value
+      }
+      return this.notifier.resolve(
+        // The notice contract's source and key patterns (contracts/notice.schema.json).
+        text('source', 40, /^[a-z0-9][a-z0-9-]{0,39}$/),
+        text('key', 200, /^[A-Za-z0-9][A-Za-z0-9_.:/@+=,-]{0,199}$/),
+        text('text', 1000),
+      )
     })
     router.on('GET', '/api/notices', (ctx) => {
       const limit = Math.min(Math.max(Number(ctx.query.get('limit')) || 50, 1), 500)

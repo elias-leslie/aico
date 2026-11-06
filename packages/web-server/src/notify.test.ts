@@ -142,6 +142,32 @@ describe('POST /api/notices', () => {
   })
 })
 
+describe('POST /api/notices/resolve', () => {
+  it("ends a loopback sender's notice by key and refuses the public host", async () => {
+    const notice = {
+      v: 1,
+      source: 'tether',
+      kind: 'todo',
+      title: 'Claude Code waiting in S',
+      body: 'Open it in Aico to answer.',
+      key: 'aico-waiting:0123abcd',
+    }
+    expect((await call('POST', '/api/notices', { body: notice })).status).toBe(200)
+    const body = { source: 'tether', key: 'aico-waiting:0123abcd', text: 'No longer waits.' }
+    const proxied = await call('POST', '/api/notices/resolve', {
+      body,
+      headers: { host: 'aico.example.dev', 'x-forwarded-for': '203.0.113.9' },
+    })
+    expect(proxied.status).toBe(403)
+    const resolved = await call('POST', '/api/notices/resolve', { body })
+    expect(resolved.status).toBe(200)
+    expect(resolved.body).toMatchObject({ resolved: 1 })
+    expect(
+      (await call('POST', '/api/notices/resolve', { body: { ...body, key: '' } })).status,
+    ).toBe(422)
+  })
+})
+
 describe('POST /api/ominull/push', () => {
   const row = {
     id: 'ominull/hub',
