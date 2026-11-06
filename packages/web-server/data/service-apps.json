@@ -126,7 +126,7 @@
         "jobs-tailor-gemini-system-prompt",
         "jobs-tailor-system-prompt"
       ],
-      "machine": "apps"
+      "machine": "jobinator"
     }
   },
   "evidence": {
