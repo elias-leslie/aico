@@ -25,6 +25,22 @@
   "kind": "lxc",
   "vmid": 190
  },
+ "pve-ct-191-jobinator-data": {
+  "digest": "d56bb1ebce2064a64b12a7f7f204a38e680379ee98859cb98f2e921b410dad3c",
+  "files": {
+   "excludes": [
+    "jobinator/jobinator.db",
+    "jobinator/jobinator.db-wal",
+    "jobinator/jobinator.db-shm"
+   ],
+   "paths": [
+    "/var/lib/jobinator"
+   ],
+   "via": "pct"
+  },
+  "kind": "lxc",
+  "vmid": 191
+ },
  "pve-host-files": {
   "digest": "0dfaf52fedefbabc93c6eef19d8390e444635442fd74f60fc7c28eac11512fea",
   "files": {

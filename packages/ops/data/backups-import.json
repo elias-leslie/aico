@@ -518,6 +518,17 @@
       "storage_backend_id": null
     },
     {
+      "id": "pve-ct-191-jobinator-data",
+      "name": "Jobinator container: database snapshot, artifacts and documents (read from the stopped container's disk when it is off)",
+      "path": "proxmox://proxmox-gem/lxc/191/files?via=pct&path=/var/lib/jobinator&exclude=jobinator/jobinator.db&exclude=jobinator/jobinator.db-wal&exclude=jobinator/jobinator.db-shm",
+      "source_type": "workspace",
+      "project_id": null,
+      "enabled": true,
+      "frequency": "daily",
+      "retention_days": 30,
+      "storage_backend_id": null
+    },
+    {
       "id": "pve-host-files",
       "name": "Proxmox host files: blackbox identity and recovery descriptor, VM 120 config and cloud-init snippets",
       "path": "proxmox://proxmox-gem/host/files?path=/vault/identity&path=/vault/meta/recovery-key.json&path=/etc/pve/qemu-server/120.conf&path=/var/lib/vz/snippets/neri-120-init.yaml&path=/var/lib/vz/snippets/neri-120-meta.yaml",

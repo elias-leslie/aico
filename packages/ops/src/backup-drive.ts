@@ -1,14 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { basename, dirname, join, relative } from 'node:path'
 import { snapshotDatabase } from '@aico/store'
@@ -102,12 +93,15 @@ async function pveSsh(rt: Runtime, key: string): Promise<string[]> {
   ]
 }
 /**
- * A stopped guest has nothing to read and counts as off, except a VM whose files the Proxmox host
- * reads straight from its stopped disk (the guest agent is not needed): VM 180 is off between uses
- * and its shutdown dump must still reach Drive.
+ * A stopped guest has nothing to read and counts as off, except a guest whose files the Proxmox host
+ * reads straight from its stopped disk (neither the guest agent nor pct exec is needed): VM 180 and
+ * the Jobinator container are off between uses and their last state must still reach Drive.
  */
 export function hostReadsStoppedDisk(type: string, parts: string[], via: string | null): boolean {
-  return type === 'qemu' && parts[2] === 'files' && via === 'agent'
+  return (
+    parts[2] === 'files' &&
+    ((type === 'qemu' && via === 'agent') || (type === 'lxc' && via === 'pct'))
+  )
 }
 async function proxmoxJob(
   rt: Runtime,
@@ -174,7 +168,7 @@ export async function prepareFolder(
     operation: 'prepare_backup',
     project: spec.project,
     source_id: job.id,
-    backup_id: 'bkp-' + randomBytes(8).toString('hex'),
+    backup_id: `bkp-${randomBytes(8).toString('hex')}`,
     qualified_previous: previousQualification(job, state),
   }
   const context = {

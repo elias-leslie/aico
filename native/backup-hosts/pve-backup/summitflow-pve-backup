@@ -8,8 +8,8 @@ sends one fixed verb; no shell ever runs what it sends:
   guests                  guest list (pvesh get /cluster/resources --type vm)
   thinpool                data_percent of the guest thin pool
   sources                 the installed source list (install.sh shows what a re-install changes)
-  capture SOURCE DIGEST   stream one registered source to stdout (a stopped VM is read from a
-                          read-only thin snapshot of its disk, not through the guest agent)
+  capture SOURCE DIGEST   stream one registered source to stdout (a stopped VM or container is read from a
+                          read-only thin snapshot of its disk, not through the guest agent or pct exec)
 
 What a source captures comes only from /etc/summitflow-pve-backup/sources.json, which
 root installs from SummitFlow's registered sources. DIGEST is the SHA-256 of the source
@@ -170,21 +170,21 @@ def vzdump(kind, vmid, run=subprocess.run):
     return code
 
 
-def _guest_of(vmid, run=subprocess.run):
+def _guest_of(vmid, run=subprocess.run, kind="qemu"):
     listing = run(["pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json"],
                   capture_output=True, text=True, check=True)
     for item in json.loads(listing.stdout):
-        if item.get("vmid") == vmid and item.get("type") == "qemu":
+        if item.get("vmid") == vmid and item.get("type") == kind:
             return item
-    raise Refused(f"qemu {vmid} does not exist")
+    raise Refused(f"{kind} {vmid} does not exist")
 
 
-def _boot_volume(node, vmid, run):
-    """The VM's boot disk as a device path: the first of boot order, scsi0, virtio0, sata0, ide0 on a VM-owned volume."""
-    config = json.loads(run(["pvesh", "get", f"/nodes/{node}/qemu/{vmid}/config", "--output-format", "json"],
+def _boot_volume(node, vmid, run, kind="qemu"):
+    """The guest's root disk as a device path: a VM's first of boot order, scsi0, virtio0, sata0, ide0; a container's rootfs."""
+    config = json.loads(run(["pvesh", "get", f"/nodes/{node}/{kind}/{vmid}/config", "--output-format", "json"],
                             capture_output=True, text=True, check=True).stdout)
     order = re.search(r"order=([^;]*)", str(config.get("boot", "")))
-    keys = (order.group(1).split(";") if order else []) + ["scsi0", "virtio0", "sata0", "ide0"]
+    keys = ["rootfs"] if kind == "lxc" else (order.group(1).split(";") if order else []) + ["scsi0", "virtio0", "sata0", "ide0"]
     for key in keys:
         match = re.fullmatch(rf"([A-Za-z0-9_-]+):(vm-{vmid}-disk-[0-9]+)(?:,.*)?", str(config.get(key, "")))
         if match:
@@ -212,13 +212,15 @@ def _root_partition(device, run):
     return best["path"], best["fstype"]
 
 
-def disk_files(vmid, files, out, node, run=subprocess.run):
-    """Tar a stopped VM's files from a read-only mount of a thin snapshot of its disk (nothing is written to the guest).
+def disk_files(vmid, files, out, node, run=subprocess.run, kind="qemu"):
+    """Tar a stopped guest's files from a read-only mount of a thin snapshot of its disk (nothing is written to the guest).
+
+    A container's disk is one filesystem and is mounted as it is (no loop device); its owner ids are the host's mapped ids.
 
     The snapshot is point-in-time, so a VM that starts meanwhile cannot change what is read. Paths are checked after the
     mount: one that resolves outside the mounted filesystem (an absolute symlink) is refused, never followed on the host.
     """
-    device = _boot_volume(node, vmid, run)
+    device = _boot_volume(node, vmid, run, kind)
     group, volume = device.split("/")[2:4]
     snapshot_name = f"st-backup-{vmid}"
     snapshot = f"{group}/{snapshot_name}"
@@ -247,10 +249,17 @@ def disk_files(vmid, files, out, node, run=subprocess.run):
     try:
         run(["lvcreate", "--snapshot", "--name", snapshot_name, "--setactivationskip", "n", "--quiet", f"{group}/{volume}"],
             capture_output=True, text=True, check=True)
-        loop = run(["losetup", "--find", "--show", "--read-only", "--partscan", f"/dev/{snapshot}"],
-                   capture_output=True, text=True, check=True).stdout.strip()
-        run(["udevadm", "settle", "--timeout=30"], capture_output=True, text=True)
-        partition, fstype = _root_partition(loop, run)
+        if kind == "lxc":
+            partition = f"/dev/{snapshot}"
+            fstype = run(["blkid", "-o", "value", "-s", "TYPE", partition], capture_output=True, text=True,
+                         check=True).stdout.strip()
+            if fstype not in {"ext4", "xfs", "btrfs"}:
+                raise Refused("the stopped container's disk has no readable root filesystem")
+        else:
+            loop = run(["losetup", "--find", "--show", "--read-only", "--partscan", f"/dev/{snapshot}"],
+                       capture_output=True, text=True, check=True).stdout.strip()
+            run(["udevadm", "settle", "--timeout=30"], capture_output=True, text=True)
+            partition, fstype = _root_partition(loop, run)
         mount = Path(tempfile.mkdtemp(prefix=f"st-backup-{vmid}-", dir=MOUNT_PARENT))
         options = "ro,nodev,nosuid,noexec" + (",norecovery" if fstype in {"ext4", "xfs"} else "")
         run(["mount", "-t", fstype, "-o", options, partition, str(mount)], capture_output=True, text=True, check=True)
@@ -262,7 +271,8 @@ def disk_files(vmid, files, out, node, run=subprocess.run):
                 raise Refused(f"{path} resolves outside the guest filesystem")
         out.flush()
         tar = shlex.join(tar_command(files, root=str(mount)))
-        return run(["bash", "-c", f'set -o pipefail; {{ {tar}; rc=$?; [ "$rc" -le 1 ]; }} | gzip -n']).returncode
+        packed = "cat" if kind == "lxc" else "gzip -n"
+        return run(["bash", "-c", f'set -o pipefail; {{ {tar}; rc=$?; [ "$rc" -le 1 ]; }} | {packed}']).returncode
     finally:
         release()
 
@@ -313,6 +323,9 @@ def capture(entry, out, run=subprocess.run):
     if kind == "host":
         return _tar_ok(run(tar_command(files, host=True)).returncode)
     if kind == "lxc":
+        guest_ct = _guest_of(vmid, run, "lxc")
+        if guest_ct.get("status") == "stopped":
+            return disk_files(vmid, files, out, str(guest_ct["node"]), run, "lxc")
         return _tar_ok(run(["pct", "exec", str(vmid), "--", *tar_command(files)]).returncode)
     return agent_files(vmid, files, out, run)
 

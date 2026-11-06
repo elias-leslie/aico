@@ -73,8 +73,8 @@ const cfg = () => {
   return c
 }
 const ok = (_argv: string[]) => Promise.resolve({ code: 0, out: '', err: '' })
-it('migrates all 65 source records, both backend records and both external checks, preserving paths and excludes', () => {
-  expect(migrated.sources).toHaveLength(65)
+it('migrates all 66 source records, both backend records and both external checks, preserving paths and excludes', () => {
+  expect(migrated.sources).toHaveLength(66)
   expect(migrated.backends).toHaveLength(2)
   expect(migrated.external).toHaveLength(2)
   expect(migrated.sources.find((s) => s.id === 'pve-ct-190-aico-data')?.path).toContain(
@@ -102,8 +102,8 @@ it('plans host reads from verified frozen points at their real paths', () => {
     s = emptyState()
   s.points = Object.values(c.subvolumes).map((spec) => ({
     source: spec.mount,
-    snapshot: '/frozen' + spec.mount,
-    target: '/target' + spec.mount,
+    snapshot: `/frozen${spec.mount}`,
+    target: `/target${spec.mount}`,
     dataAt: new Date(now).toISOString(),
   }))
   const jobs = volumeJobs(c, s)
@@ -879,9 +879,10 @@ it('shows the stopped external backup owner as off with its last good artifact d
   ).toBe('failed')
 })
 
-it('a stopped VM file source is read from its disk by the host; containers and whole guests are not', () => {
+it('a stopped VM or container file source is read from its disk by the host; whole guests are not', () => {
   expect(hostReadsStoppedDisk('qemu', ['qemu', '180', 'files'], 'agent')).toBe(true)
-  expect(hostReadsStoppedDisk('lxc', ['lxc', '190', 'files'], 'pct')).toBe(false)
+  expect(hostReadsStoppedDisk('lxc', ['lxc', '191', 'files'], 'pct')).toBe(true)
+  expect(hostReadsStoppedDisk('lxc', ['lxc', '191'], null)).toBe(false)
   expect(hostReadsStoppedDisk('qemu', ['qemu', '180'], null)).toBe(false)
 })
 

@@ -331,13 +331,41 @@ def test_host_tar_never_carries_pve_private_files_and_accepts_a_changed_file(dis
     assert dispatcher.main(f"capture h {digests['h']}", run=Runs({"tar": (2, "")}), out=io.BytesIO()) == 2
 
 
+def _container(status: str):
+    return {"pvesh": json.dumps([{"vmid": 140, "type": "lxc", "node": "davion-gem", "status": status}])}
+
+
 def test_container_files_run_tar_through_pct_without_a_shell(dispatcher):
     digests = _install(dispatcher, {"ct": CT})
-    runs = Runs()
+    runs = Runs(_container("running"))
     assert dispatcher.main(f"capture ct {digests['ct']}", run=runs, out=io.BytesIO()) == 0
-    command = runs.calls[0]
+    command = runs.calls[-1]
     assert command[:4] == ["pct", "exec", "140", "--"] and command[4] == "tar" and "sh" not in command and "-c" not in command
     assert "--exclude=*.tmp" in command and command[-1] == "srv/data"
+
+
+def test_a_stopped_container_is_read_from_a_read_only_thin_snapshot_without_starting_it(dispatcher, tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digests = _install(dispatcher, {"ct": CT})
+
+    def pvesh(argv: list[str]) -> str:
+        if argv[2] == "/cluster/resources":
+            return json.dumps([{"vmid": 140, "type": "lxc", "node": "davion-gem", "status": "stopped"}])
+        assert argv[2] == "/nodes/davion-gem/lxc/140/config"
+        return json.dumps({"rootfs": "local-lvm:vm-140-disk-0,size=12G", "hostname": "x"})
+
+    runs = Runs({"pvesh": pvesh, "pvesm": "/dev/pve/vm-140-disk-0\n", "blkid": "ext4\n"})
+    assert dispatcher.main(f"capture ct {digests['ct']}", run=runs, out=io.BytesIO()) == 0
+    verbs = [call[0] for call in runs.calls]
+    assert "pct" not in verbs and not any(call[0] == "losetup" and "--find" in call for call in runs.calls)
+    create = next(call for call in runs.calls if call[0] == "lvcreate")
+    assert create[-1] == "pve/vm-140-disk-0" and "st-backup-140" in create
+    mount = next(call for call in runs.calls if call[0] == "mount")
+    assert mount[-2] == "/dev/pve/st-backup-140" and "ro,nodev,nosuid,noexec,norecovery" in mount
+    tar = next(call for call in runs.calls if call[0] == "bash")
+    assert "--exclude=*.tmp" in tar[-1] and "srv/data" in tar[-1] and "gzip" not in tar[-1]
+    assert verbs[-2:] == ["umount", "lvremove"]
+    assert list(tmp_path.glob("st-backup-140-*")) == []
 
 
 def test_whole_guest_streams_in_snapshot_mode_and_trims_week_old_logs(dispatcher):
