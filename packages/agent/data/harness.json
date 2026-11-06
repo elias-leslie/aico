@@ -150,7 +150,7 @@
   "chat": {
     "default_role": "implementation",
     "prompt": [
-      "In this Aico chat, put a question that needs the owner\u2019s answer in Needs you by running `tether ask create \"Question\" --option \"First\" --option \"Second\" --recommend 1` with bash; use the actual question and choices, omit choices for a free-text answer, then end your turn. The answer arrives as a new chat message."
+      "In this Aico chat, put a question that needs the owner\u2019s answer in Needs you by running `tether ask create \"Question\" --option \"First\" --option \"Second\" --recommend 1` with bash; use the actual question and choices, omit choices for a free-text answer, add `--file PATH` for each file you want them to look at, then end your turn. The answer arrives as a new chat message."
     ],
     "roles": {
       "implementation": "Build and fix code in this project.",
