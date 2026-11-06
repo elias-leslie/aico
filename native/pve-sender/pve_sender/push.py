@@ -34,6 +34,52 @@ def validate(text: str, caller: dict) -> dict:
     return notice
 
 
+RELAY_SEVERITIES = ("critical", "warning", "info", "ok")
+RELAY_CHANNELS = ("critical", "needs_you", "warning", "info")
+
+
+def _text(value, limit: int, *, lines: bool = False) -> bool:
+    if not isinstance(value, str) or len(value) > limit:
+        return False
+    return all(line.isprintable() for line in value.split("\n")) if lines else value.isprintable()
+
+
+def _link(value, caller: dict) -> bool:
+    origin = caller["origin"]
+    return (isinstance(value, str) and len(value) <= 300 and value.isascii()
+            and (value == origin or value.startswith(origin + "/")) and not any(c.isspace() for c in value))
+
+
+def relay_item(item, caller: dict) -> dict:
+    """A finished phone item from Aico on CT 190 (packages/notify itemPlaintext); only its own links."""
+    if not isinstance(item, dict) or item.get("v") != 1:
+        raise ValueError("Relay item must be an app item.")
+    if not isinstance(item.get("id"), str) or re.fullmatch(r"[0-9A-Za-z_.:-]{1,80}", item["id"]) is None:
+        raise ValueError("Bad relay item id.")
+    if item.get("severity") not in RELAY_SEVERITIES or item.get("channel") not in RELAY_CHANNELS:
+        raise ValueError("Relay severity or channel is not allowed.")
+    if not (_text(item.get("title"), 300) and item["title"] and _text(item.get("body"), 2000, lines=True)
+            and _text(item.get("detail", ""), 2900, lines=True)):
+        raise ValueError("Relay text is not plain text within its limit.")
+    for field in ("tag", "group", "kind", "public"):
+        if not _text(item.get(field), 120):
+            raise ValueError("Relay item field is not plain text.")
+    if not isinstance(item.get("ts"), int) or ("ends" in item and not isinstance(item["ends"], int)):
+        raise ValueError("Relay times must be whole seconds.")
+    if "url" in item and not _link(item["url"], caller):
+        raise ValueError("Relay link is outside the caller's origin.")
+    actions = item.get("actions")
+    if not isinstance(actions, list) or len(actions) > 3 or any(
+            not isinstance(a, dict) or not _text(a.get("id"), 40) or not _text(a.get("label"), 40)
+            or not _text(a.get("tier"), 20) or not _link(a.get("url"), caller) for a in actions):
+        raise ValueError("Relay actions are not allowed.")
+    allowed = {"v", "id", "title", "body", "detail", "severity", "channel", "tag", "group", "kind", "ts", "url",
+               "actions", "public", "ends"}
+    if set(item) - allowed:
+        raise ValueError("Relay item has unknown fields.")
+    return item
+
+
 def heartbeat(cfg: dict, source: str, data: dict, now: float) -> dict:
     if source not in cfg["sources"]:
         raise ValueError("Unknown heartbeat source.")
@@ -53,6 +99,13 @@ def push(cfg: dict, name: str, text: str, *, now=None, send=None) -> dict:
     # The existing Aico CT key stays push-only. It can refresh only its own named heartbeat.
     if name == "aico" and isinstance(raw, dict) and raw.get("v") == 1 and raw.get("source") == "aico" and raw.get("kind") == "heartbeat":
         return heartbeat(cfg, "ct190", raw, now)
+    # Aico on CT 190 has no FCM sender of its own: it hands over each finished phone item, and the
+    # per-phone receipts in sender.deliver send it to each phone once however often it asks.
+    if name == "aico" and isinstance(raw, dict) and raw.get("v") == 1 and raw.get("source") == "aico" and raw.get("kind") == "relay":
+        if len(text.encode()) > MAX_STDIN:
+            raise ValueError("Notice is too long.")
+        item = relay_item(raw.get("item"), caller)
+        return (send or (lambda message: sender.deliver(cfg, message, "relay:" + message["id"], now)))(item)
     notice = validate(text, caller)
     key = caller["log_prefix"] + notice["key"]
     path = Path(cfg["state_dir"]) / "receipts.json"

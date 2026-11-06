@@ -33,6 +33,7 @@ import { type TetherClient, TetherError } from '@aico/tether-client'
 import type { NotifyConfig } from './config'
 import { fromThisMachine } from './guard'
 import { type RequestContext, Router } from './http'
+import { relaySender } from './phone-relay'
 import { HttpError } from './tether'
 
 /** The one Tether call notify makes. */
@@ -219,10 +220,11 @@ export class NotifyHub {
   constructor(private readonly deps: NotifyDeps) {
     const { config } = deps
     this.store = new NotifyStore(notifyDbPath(deps.dataDir))
-    const sender = new FcmSender({
-      tokenFile: config.fcmTokenFile,
-      devicesFile: config.devicesFile,
-    })
+    // A host without its own FCM sender (CT 190) hands each phone item to the Proxmox sender.
+    const relay = process.env.AICO_PUSH_SSH?.trim()
+    const sender = relay
+      ? relaySender(relay)
+      : new FcmSender({ tokenFile: config.fcmTokenFile, devicesFile: config.devicesFile })
     this.outbox = new Outbox({ store: this.store, sender, publicHost: deps.publicHost })
     this.needsYou = new NeedsYou({
       store: this.store,
