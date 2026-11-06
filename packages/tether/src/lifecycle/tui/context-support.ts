@@ -8,11 +8,11 @@ import { dirname, join } from 'node:path'
 import { effectiveTuiPath } from './launch'
 import type { TuiSpec } from './spec'
 
-/** Agent Hub's credential shims on a remote host. Each fetches its tool's
- * credentials, then execs the next same-named command on PATH, so it sits
- * first on the pane PATH ahead of the context launcher it hands over to. */
+/** Aico's sign-in launchers on a worker host (scripts/install-worker.sh). Each
+ * runs its tool through `tether fleet tool`, so it sits first on the pane PATH
+ * ahead of the real command it hands over to. */
 function credShimDir(): string {
-  return join(homedir(), '.local', 'lib', 'agent-hub', 'cred-bin')
+  return join(homedir(), '.local', 'lib', 'aico', 'auth-bin')
 }
 
 function probeLauncher(name: string, pathValue: string): Promise<string | null> {

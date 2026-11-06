@@ -28,10 +28,9 @@ def descriptor(payload, owner="aico"):
     fields = [payload[k] for k in ("tool", "projectId", "projectRoot", "initialPrompt", "role", "leadRootReference", "facetCapsuleRef")]
     if payload.get("resumeSessionId"):
         fields.append(payload["resumeSessionId"])
-    if payload.get("model") or payload.get("reasoningEffort") or payload.get("daybreak") is not None or payload.get("agentHubContext") is not None:
+    if payload.get("model") or payload.get("reasoningEffort") or payload.get("daybreak") is not None:
         fields.append({"model": payload.get("model"), "reasoningEffort": payload.get("reasoningEffort"),
-                       **({"daybreak": payload["daybreak"]} if payload.get("daybreak") is not None else {}),
-                       **({"agentHubContext": payload["agentHubContext"]} if payload.get("agentHubContext") is not None else {})})
+                       **({"daybreak": payload["daybreak"]} if payload.get("daybreak") is not None else {})})
     if payload.get("workRole"):
         fields.append({"workRole": payload.get("workRole"), "workRoleDisplayName": payload.get("workRoleDisplayName")})
     if payload.get("instructions"):

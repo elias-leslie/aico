@@ -60,7 +60,7 @@ describe('chosen instructions', () => {
     },
   )
 
-  it('accepts an Agent Hub revision snapshot and refuses anything else', () => {
+  it('accepts a prompt revision snapshot and refuses anything else', () => {
     expect(parseInstructions(snapshot)).toEqual(snapshot)
     expect(
       parseInstructions({ ...snapshot, contentHash: undefined, createdAt: undefined }),

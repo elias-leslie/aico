@@ -14,8 +14,6 @@ import type { RootLaunchOptions } from './root-control'
 
 export type TmuxAllocationState = 'unallocated' | 'legacy-unclassified' | 'bound' | 'external'
 export type LaunchState = 'none' | 'gated' | 'dispatched'
-/** What holds the session: a tmux pane, or an Agent Hub session (no pane). */
-export type SessionBackend = 'tmux' | 'agent-hub'
 
 export interface WidgetRow {
   id: string
@@ -86,9 +84,6 @@ export interface WidgetRow {
    * relaunch or the hub's lineage), not an owner's mark or join; only such a
    * lane reports to its launcher (src/lane-reports.ts). */
   launched: boolean
-  /** Tether: `agent-hub` rows have no pane; every tmux field stays at its
-   * never-allocated default and no tmux loop sees the row (`listWidgets`). */
-  backend: SessionBackend
 }
 
 export type SessionOrigin = 'aico' | 'a-term' | 'root' | 'cli'
@@ -120,7 +115,6 @@ interface Raw {
   coordinator_color: string | null
   parent_id: string | null
   launched: number | null
-  backend: SessionBackend | null
 }
 
 let db: DatabaseSync
@@ -164,7 +158,6 @@ function toRow(r: Raw): WidgetRow {
     coordinatorColor: r.coordinator_color ?? null,
     parentId: r.parent_id ?? null,
     launched: r.launched === 1,
-    backend: r.backend ?? 'tmux',
   }
 }
 
@@ -565,26 +558,18 @@ export function clearCrashedTmuxServerBinding(id: string, expectedTmuxServerId: 
   return result.changes === 1
 }
 
-/** Every tmux-backed widget, oldest first. Reconciliation, recovery, reboot
- * continuity, the agent-state poll and the memory guard iterate this list, so
- * an Agent Hub row (no pane) never reaches them. */
+/** Every session, oldest first. Reconciliation, recovery, reboot continuity,
+ * the agent-state poll and the memory guard iterate this list. */
 export function listWidgets(): WidgetRow[] {
-  return (
-    db
-      .prepare("SELECT * FROM sessions WHERE backend = 'tmux' ORDER BY created_at ASC")
-      .all() as unknown[]
-  ).map((r) => toRow(r as Raw))
-}
-
-/** Every session of either backend, oldest first: the API list, session
- * events and project-name retitling. */
-export function listSessions(): WidgetRow[] {
   return (db.prepare('SELECT * FROM sessions ORDER BY created_at ASC').all() as unknown[]).map(
     (r) => toRow(r as Raw),
   )
 }
 
-/** Every Agent Hub session, oldest first. */
+/** The API list, session events and project-name retitling read the same rows. */
+export function listSessions(): WidgetRow[] {
+  return listWidgets()
+}
 
 export function getWidget(id: string): WidgetRow | undefined {
   // This is also the lifecycle's hot lookup. Re-preparing it for every read
@@ -629,7 +614,6 @@ function nextSeq(): number {
 export interface SessionInsertOptions {
   origin?: SessionOrigin
   aTermSessionId?: string | null
-  backend?: SessionBackend
 }
 
 function insertInternalWidget(
@@ -641,8 +625,8 @@ function insertInternalWidget(
 ): WidgetRow {
   db.prepare(
     `INSERT INTO sessions (
-       id, seq, created_at, tool, session_id, tmux_allocation_state, origin, a_term_session_id, backend
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       id, seq, created_at, tool, session_id, tmux_allocation_state, origin, a_term_session_id
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     nextSeq(),
@@ -652,7 +636,6 @@ function insertInternalWidget(
     allocationState,
     options.origin ?? 'aico',
     options.aTermSessionId ?? null,
-    options.backend ?? 'tmux',
   )
   return getWidget(id) as WidgetRow
 }
@@ -797,12 +780,11 @@ const flag = (value: boolean | null | undefined) => (value == null ? null : valu
 
 function saveLaunchOptions(sessionId: string, options: RootLaunchOptions): void {
   db.prepare(`INSERT OR IGNORE INTO session_launch_options
-    (session_id, model, reasoning_effort, daybreak, agent_hub_context) VALUES (?, ?, ?, ?, ?)`).run(
+    (session_id, model, reasoning_effort, daybreak) VALUES (?, ?, ?, ?)`).run(
     sessionId,
     options.model || null,
     options.reasoningEffort || null,
     flag(options.daybreak),
-    flag(options.agentHubContext),
   )
 }
 
@@ -811,14 +793,13 @@ function saveLaunchOptions(sessionId: string, options: RootLaunchOptions): void 
 export function getLaunchOptions(sessionId: string): RootLaunchOptions | null {
   const row = db
     .prepare(
-      'SELECT model, reasoning_effort, daybreak, agent_hub_context FROM session_launch_options WHERE session_id = ?',
+      'SELECT model, reasoning_effort, daybreak FROM session_launch_options WHERE session_id = ?',
     )
     .get(sessionId) as
     | {
         model: string | null
         reasoning_effort: string | null
         daybreak: number | null
-        agent_hub_context: number | null
       }
     | undefined
   if (!row) return null
@@ -826,7 +807,6 @@ export function getLaunchOptions(sessionId: string): RootLaunchOptions | null {
     model: row.model,
     reasoningEffort: row.reasoning_effort,
     ...(row.daybreak === null ? {} : { daybreak: row.daybreak === 1 }),
-    ...(row.agent_hub_context === null ? {} : { agentHubContext: row.agent_hub_context === 1 }),
   }
 }
 

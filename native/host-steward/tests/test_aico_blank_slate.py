@@ -22,7 +22,6 @@ def run(monkeypatch, tmp_path):
     monkeypatch.setenv("CODEX_REAL", str(tmp_path / "codex-real"))
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-home"))
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
-    monkeypatch.setenv("AGENT_HUB_CONTEXT_PREINJECTED_TEXT", "context")
     exec_calls = []
 
     def fake_exec(path, argv, env):
@@ -59,7 +58,6 @@ def test_claude_keeps_only_pretooluse_guards_model_effort_status_line_and_bypass
                                      "switchModelsOnFlag": False})]
     assert argv[5:] == ["--strict-mcp-config", "--disable-slash-commands", "--no-chrome", "--permission-mode", "auto"]
     assert env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] == env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
-    assert "AGENT_HUB_CONTEXT_PREINJECTED_TEXT" not in env
     # The flagged-request model switch stays off, as in the user's settings; other env entries are not carried.
     assert env["CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK"] == "1" and "OTHER" not in env
     trusted = json.loads(state.read_text())

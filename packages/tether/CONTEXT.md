@@ -10,10 +10,6 @@ Tether is the per-user authority for durable terminal sessions. The Aico web app
 One running terminal workload and its durable tmux state, owned by Tether whichever app created it. Closing a view does not end it.
 _Avoid_: Widget, pane, attachment, when naming the workload
 
-**Agent Hub session**:
-A session of tool `agent-hub`: a chat on an Agent Hub agent with no tmux workload. Tether stores the Agent Hub session id, posts turns to it and reads its turn state; Agent Hub holds the conversation. Ending it cancels the turn and closes the Agent Hub session.
-_Avoid_: Chat window, hub pane
-
 **Session ID**:
 The eight-character lowercase hexadecimal identity of a session (`AICO_WIDGET_ID` inside its pane). It is never reused.
 _Avoid_: Widget ID, outside Aico compatibility surfaces
@@ -39,7 +35,7 @@ A scheduled check-in on a session: a time and a note Tether pastes into the idle
 _Avoid_: Reminder, alarm, timer
 
 **Delivery**:
-One line another owner (SummitFlow's coordination inbox) queues on a session's delivery queue. It rides with wait lines and lane reports and goes out once: pasted, as an Agent Hub turn, or to a native puller (Claude's asyncRewake hook, Pi's extension).
+One line another owner (SummitFlow's coordination inbox) queues on a session's delivery queue. It rides with wait lines and lane reports and goes out once: pasted, or to a native puller (Claude's asyncRewake hook, Pi's extension).
 
 **Wait**:
 An agent's request to hear once when something it waits on is ready (another session finished, idle, blocked or ended; a service job, request, workflow run, owner ask, host or Nightshift tap, read from its owner), or that it timed out. Its line rides the wake delivery queue; it is not a wake and is not listed or counted with check-ins.

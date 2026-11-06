@@ -519,7 +519,6 @@ function keptProbe(previous: AgentProbe | null, pid: number, file: string): Clau
 export const claudeCode: TuiAdapter = {
   id: 'claude-code',
   harness: 'claude',
-  executor: 'claude_code',
   seed: {
     slug: 'claude-code',
     name: 'Claude Code',
@@ -566,7 +565,6 @@ export const claudeCode: TuiAdapter = {
     transcriptFacts: true,
     threadSubagents: false,
     nativeAdmin: false,
-    agentHubContext: false,
     environmentSelection: false,
     delivery: { idlePaste: true, nextTurn: true, toolResult: true },
   },

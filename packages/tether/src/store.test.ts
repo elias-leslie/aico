@@ -2,7 +2,7 @@ import { mkdtempSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AGENT_TOOLS_TABLE_SQL, SCHEMA_VERSION } from './schema'
+import { AGENT_TOOLS_TABLE_SQL, LEGACY_CHAT_TABLES_SQL, SCHEMA_VERSION } from './schema'
 import { Store } from './store'
 import { ToolValidationError } from './tools'
 
@@ -61,8 +61,6 @@ describe('Store schema', () => {
       }[]
     ).map((row) => row.name)
     expect(tables).toEqual([
-      'agent_hub_queue',
-      'agent_hub_sessions',
       'agent_tools',
       'asks',
       'deliveries',
@@ -406,15 +404,39 @@ describe('settings', () => {
   })
 })
 
-it('keeps a retired Agent Hub tool row as history without admitting it as a session tool', () => {
-  const store = open()
-  store.db
+it('v36 drops the Agent Hub chat sessions, tables and tool row, keeping tmux sessions', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tether-agent-hub-retire-'))
+  const path = join(dir, 'tether.db')
+  const old = open(path)
+  old.db.exec(LEGACY_CHAT_TABLES_SQL)
+  const session = old.db.prepare(
+    `INSERT INTO sessions (id, seq, created_at, tool, backend) VALUES (?, ?, 1, ?, ?)`,
+  )
+  session.run('aaaa0001', 1, 'claude-code', 'tmux')
+  session.run('aaaa0002', 2, 'agent-hub', 'agent-hub')
+  old.db
+    .prepare(
+      `INSERT INTO agent_hub_sessions (session_id, hub_session_id, agent_slug) VALUES (?, ?, ?)`,
+    )
+    .run('aaaa0002', 'hub-session-1', 'assistant')
+  old.db
     .prepare(`INSERT INTO agent_tools
     (id, slug, name, argv, process_name, display_order, is_default, enabled, aliases, created_at, updated_at)
     VALUES ('old-chat', 'agent-hub', 'Agent Hub', '[]', '', 4, 0, 1, '[]', 1, 1)`)
     .run()
-  expect(store.getTool('old-chat')).toBeDefined()
-  expect(store.listTools().some((tool) => tool.slug === 'agent-hub')).toBe(false)
-  expect(store.resolveTool('agent-hub')).toBeUndefined()
-  expect(store.resolveTool('old-chat')).toBeUndefined()
+  old.db.exec('DELETE FROM schema_version WHERE version >= 36')
+  old.close()
+  const migrated = open(path)
+  expect(migrated.schemaVersion()).toBe(SCHEMA_VERSION)
+  expect(migrated.db.prepare('SELECT id FROM sessions ORDER BY id').all()).toEqual([
+    { id: 'aaaa0001' },
+  ])
+  const tables = migrated.db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE name LIKE 'agent_hub%' OR name LIKE '%_agent_hub'",
+    )
+    .all()
+  expect(tables).toEqual([])
+  expect(migrated.getTool('old-chat')).toBeUndefined()
+  expect(migrated.resolveTool('agent-hub')).toBeUndefined()
 })

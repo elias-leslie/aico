@@ -45,7 +45,7 @@ export const EXPECTED_TETHER_API_VERSION = 31
 /** The API version Aico's clients speak; Tether must still accept it. */
 const AICO_TETHER_API_VERSION = 1
 
-/** Tether's check of a session's Agent Hub context hook (docs/api-v1.md). */
+/** Tether's check of a session's context hook (docs/api-v1.md). */
 export interface ContextHook {
   /** `available`, `missing`, `unsupported`, `not_applicable` or `unknown`. */
   state: string
@@ -83,7 +83,7 @@ export interface SessionDescriptor {
   resumeId?: string | null
   /** Absent from a Tether older than the context-hook field. */
   contextHook?: ContextHook
-  /** The Agent Hub prompt revision chosen at creation, or null; absent from
+  /** The prompt revision chosen at creation, or null; absent from
    * an older Tether. Never the content. */
   instructions?: {
     prompt: string
@@ -120,10 +120,6 @@ export interface SessionDescriptor {
   asks?: SessionAsk[]
   /** Present on a 202 create: why the session is not running yet. */
   failure?: { code: string; reason?: string } | null
-  /** `agent-hub` for a chat on an Agent Hub agent (no pane); absent on a tmux session. */
-  backend?: 'agent-hub'
-  /** The Agent Hub side of such a session (tether docs/api-v1.md "Agent Hub sessions"). */
-  agentHub?: AgentHubInfo | null
   /** The remote host that runs this session (tether docs/api-v1.md "Remote
    * hosts"); null or absent for a session on this computer. */
   host?: string | null
@@ -185,24 +181,6 @@ export interface HostWake {
 /** A create on a host may first power it on and wait for it (the host's
  * `wakeTimeoutSec`, 240 s by default) before the host's own create runs. */
 export const HOST_CREATE_TIMEOUT_MS = 420_000
-
-/** What Tether holds and last saw of an Agent Hub session. */
-export interface AgentHubInfo {
-  /** The Agent Hub session id (not the Tether session id). */
-  sessionId: string
-  agentSlug: string
-  /** The catalog model the root asked for, if it overrode the agent's own. */
-  requestedModel: string | null
-  /** The model Agent Hub last reported. */
-  model: string | null
-  turnState: 'running' | 'idle' | null
-  turnPhase: string | null
-  /** Follow-ups waiting for the turn to end. */
-  queued: number
-  reachable: boolean | null
-  created: boolean
-  promptSent: boolean
-}
 
 /** A session's pending wake as its descriptor carries it. */
 export interface SessionAsk {

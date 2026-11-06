@@ -48,7 +48,7 @@ interface SlotSessionFields {
   /** When the session (or its pane) began: the session list's order. */
   createdAt?: string | null
   can: SlotCapabilities
-  /** An Agent Hub chat: the view shows its transcript, not a terminal. */
+  /** An Aico chat: the view shows its transcript, not a terminal. */
   chat?: boolean
   chatSummary?: import('../chat').ChatSummary
   /** The remote host the session runs on; absent on this computer. */

@@ -20,12 +20,6 @@ const projectState = vi.hoisted(() => ({
 const tools = [
   { slug: 'claude-code', name: 'Claude Code', color: null, description: null },
   { slug: 'codex', name: 'Codex', color: null, description: null },
-  {
-    slug: 'agent-hub',
-    name: 'Agent Hub',
-    color: '#7C83F6',
-    description: 'Any model',
-  },
 ]
 
 vi.mock('@/lib/hooks/use-project-settings', () => ({
@@ -67,7 +61,6 @@ vi.mock('@/lib/hooks/use-hosts', async (importOriginal) => ({
   },
 }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
-  CHAT_TOOL_SLUG: 'agent-hub',
   useAgentTools: () => ({ enabledTools: tools, defaultTool: tools[0] }),
 }))
 
@@ -299,11 +292,10 @@ describe('NewSessionDialog', () => {
     expect(onStart).toHaveBeenCalledWith('aico', '/srv/aico', 'shell')
   })
 
-  it('opens New chat and leaves the old Agent Hub tool out of the picker', () => {
+  it('opens New chat from the picker', () => {
     const open = vi.fn()
     window.addEventListener('aico:new-chat', open)
     const { onStart } = renderDialog()
-    expect(screen.queryByRole('button', { name: /Agent Hub/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'New chat' }))
     expect(open).toHaveBeenCalledOnce()
     expect(onStart).not.toHaveBeenCalled()

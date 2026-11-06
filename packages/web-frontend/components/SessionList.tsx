@@ -160,7 +160,7 @@ export function sessionLabel(
 
 /** A session as its list row names it, with its agent and where it runs, so
  * one of several same-named sessions can be told apart:
- * `“Agent-Hub #3” (Pi on agent-work)`. */
+ * `“Fix login #3” (Pi on agent-work)`. */
 export function sessionWhoWhere(
   slots: Array<TerminalSlot | PaneSlot>,
   slot: TerminalSlot | PaneSlot,

@@ -1024,7 +1024,6 @@ describe('private root workload control', () => {
       AICO_ROOT_MODEL: '',
       AICO_ROOT_REASONING_EFFORT: '',
       AICO_ROOT_DAYBREAK: '',
-      AICO_ROOT_AGENT_HUB_CONTEXT: '',
       AICO_ROOT_FRESH_SESSION_ID: '',
     })
     const replacementResult = execFileSync(
@@ -1275,9 +1274,6 @@ describe('private root workload control', () => {
     expect(parseRootCreate(input)).not.toBeNull()
     expect(parseRootCreate({ ...input, tool: 'antigravity' })).toBeNull()
     expect(
-      parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol', agentHubContext: false }),
-    ).toBeNull()
-    expect(
       parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol', daybreak: true }),
     ).toBeNull()
     expect(parseRootCreate({ ...input, tool: 'pi', model: 'openai/gpt-6-sol' })).not.toBeNull()
@@ -1314,43 +1310,34 @@ describe('private root workload control', () => {
     }
   })
 
-  it('carries Pi Daybreak and optional context for fresh and resumed launches without leaking the prompt', async () => {
+  it('carries Pi Daybreak for fresh and resumed launches without leaking the prompt', async () => {
     const input = {
       ...create('pi-daybreak'),
       tool: 'pi',
       model: 'openai/gpt-6-sol',
       reasoningEffort: 'xhigh',
       daybreak: true,
-      agentHubContext: false,
     }
-    const parsed = present(parseRootCreate(input))
     for (const change of [
       { daybreak: 'on' },
       { model: 'openai-codex/gpt-6-sol' },
       { model: 'openai/another-model' },
-      { agentHubContext: 'off' },
-      { tool: 'codex' },
     ])
       expect(parseRootCreate({ ...input, ...change })).toBeNull()
-    expect(rootRequestDigest(parsed)).not.toBe(
-      rootRequestDigest(present(parseRootCreate({ ...input, agentHubContext: true }))),
-    )
     const first = await call('/v1/roots', 'POST', input)
     expect(first.status).toBe(200)
     expect(ensure).toHaveBeenLastCalledWith(first.body.hostIdentity, input.initialPrompt, null, {
       model: input.model,
       reasoningEffort: 'xhigh',
       daybreak: true,
-      agentHubContext: false,
     })
-    expect((await call('/v1/roots', 'POST', { ...input, agentHubContext: true })).status).toBe(409)
     const root = present(getRootRequest(input.requestId))
     const tool = {
       ...present(getTui('pi')),
       command: [
         process.execPath,
         '-e',
-        'console.log(JSON.stringify({args:process.argv.slice(1),model:process.env.AICO_ROOT_MODEL,daybreak:process.env.AICO_ROOT_DAYBREAK,context:process.env.AICO_ROOT_AGENT_HUB_CONTEXT,prompt:process.env.AICO_ROOT_INITIAL_PROMPT}))',
+        'console.log(JSON.stringify({args:process.argv.slice(1),model:process.env.AICO_ROOT_MODEL,daybreak:process.env.AICO_ROOT_DAYBREAK,prompt:process.env.AICO_ROOT_INITIAL_PROMPT}))',
         '--',
       ],
     }
@@ -1383,17 +1370,15 @@ describe('private root workload control', () => {
               ],
               model: input.model,
               daybreak: daybreak.toString(),
-              context: 'false',
             })
           },
           resume,
-          { model: input.model, reasoningEffort: 'xhigh', daybreak, agentHubContext: false },
+          { model: input.model, reasoningEffort: 'xhigh', daybreak },
         )
     // Later launches get the created selection back, never a prompt, and a
     // new conversation under the id the host picked for that launch.
     const later = rootLaunchEnvironment(root.widgetId)
     expect(later.AICO_ROOT_DAYBREAK).toBe('true')
-    expect(later.AICO_ROOT_AGENT_HUB_CONTEXT).toBe('false')
     expect(later.AICO_ROOT_FRESH_SESSION_ID).toMatch(UUID)
     expect(rootLaunchEnvironment(root.widgetId).AICO_ROOT_FRESH_SESSION_ID).not.toBe(
       later.AICO_ROOT_FRESH_SESSION_ID,
@@ -1419,7 +1404,6 @@ describe('private root workload control', () => {
         ],
         model: input.model,
         daybreak: 'true',
-        context: 'false',
       })
   })
 
@@ -1700,7 +1684,7 @@ describe('private root workload control', () => {
   })
 
   it('retries a launch host admission deferred and shows why until it starts', async () => {
-    const reason = 'Nightshift has closed agent admission (memory is tight).'
+    const reason = 'The host has closed agent admission (memory is tight).'
     admission = reason
     const first = await call('/v1/roots', 'POST', create('deferred-1'))
     const widgetId = String(first.body.hostIdentity)
@@ -1725,7 +1709,7 @@ describe('private root workload control', () => {
   })
 
   it('stops retrying a deferred launch once its root ends', async () => {
-    admission = 'Nightshift has closed agent admission (memory is tight).'
+    admission = 'The host has closed agent admission (memory is tight).'
     const first = await call('/v1/roots', 'POST', create('deferred-ended'))
     const widgetId = String(first.body.hostIdentity)
     removeWidget(widgetId)
@@ -1792,7 +1776,7 @@ describe('root lists with a retained request history', () => {
     for (let i = 0; i < 1721; i++) {
       const id = i.toString(16).padStart(8, '0')
       seed.run(`history-${i}`, id, `logical-${i}`, i, i === 1720 ? 'a-term' : 'aico')
-      if (i >= 1719) insertWidget(id, i === 1720 ? 'agent-hub' : 'codex')
+      if (i >= 1719) insertWidget(id, i === 1720 ? 'claude-code' : 'codex')
     }
     // Observe actual session reads at the socket handler, including reads
     // through reused statements. Query count must not grow with tombstones.

@@ -123,19 +123,19 @@ describe('AgentStateTracker', () => {
 
   it('a first sighting without the agent’s time does not invent a finished turn', () => {
     const { t, tick } = tracker()
-    const hub = (state: 'idle' | 'working') => ({
+    const polled = (state: 'idle' | 'working') => ({
       state,
-      source: 'agent-hub',
+      source: 'agent-polled',
       detail: null,
       at: null,
       agentSessionId: null,
     })
-    t.observe('a', hub('idle'))
+    t.observe('a', polled('idle'))
     expect(t.get('a').stateAgentAt).toBe(0)
     tick(10)
-    t.observe('a', hub('working'))
+    t.observe('a', polled('working'))
     tick(10)
-    t.observe('a', hub('idle'))
+    t.observe('a', polled('idle'))
     expect(t.get('a').stateAgentAt).toBe(1020)
   })
 

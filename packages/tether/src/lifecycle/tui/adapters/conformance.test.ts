@@ -151,14 +151,13 @@ function signal(adapter: TuiAdapter, ctx: StateContext): AgentSignal | null {
 }
 
 describe('adapter registry', () => {
-  it('lists each tool once, by id, harness and executor', () => {
+  it('lists each tool once, by id and harness', () => {
     const unique = (values: (string | null)[]) => {
       const named = values.filter((v) => v !== null)
       expect(new Set(named).size).toBe(named.length)
     }
     unique(ADAPTERS.map((a) => a.id))
     unique(ADAPTERS.map((a) => a.harness))
-    unique(ADAPTERS.map((a) => a.executor))
     unique(ADAPTERS.map((a) => a.seed.processName))
   })
 

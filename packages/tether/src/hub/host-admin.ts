@@ -71,8 +71,7 @@ export const runCommand: Runner = (argv, timeoutMs) =>
  * `session` sign-out are shell lines typed into a new session there; `command` runs over ssh. */
 export type { ToolLogin }
 
-/** The tools' own logins (agent-hub docs/remote-host-credentials.md), from
- * their adapters. A `host-logins.json` next to hosts.json overrides them per tool. */
+/** The tools' own logins, from their adapters. A `host-logins.json` next to hosts.json overrides them per tool. */
 export const DEFAULT_LOGINS: Record<string, ToolLogin> = Object.fromEntries(
   ADAPTERS.map((adapter) => [adapter.id, adapter.login]),
 )
@@ -114,7 +113,7 @@ export function shellQuote(word: string): string {
 }
 
 /** Run one shell line on the host through the link's ControlMaster, in a login
- * shell so the host's own PATH (agent-hub, codex) applies. */
+ * shell so the host's own PATH (codex, claude) applies. */
 export function remoteArgv(_entry: HostEntry, control: string, line: string): string[] {
   return execArgv(control, ['bash', '-lc', line])
 }
@@ -187,18 +186,16 @@ export class HostAdmin {
     return loadLogins(this.deps.env, this.read, this.log)
   }
 
-  /** `GET /v1/hosts/:name/logins`: the host's `login status --json` as it
+  /** `GET /v1/hosts/:name/logins`: the host's `tether fleet login-status` as it
    * printed it, plus which tools Aico can sign in or out there. */
   async status(name: string): Promise<Record<string, unknown>> {
     const { entry, control } = this.live(name)
     const result = await this.run(remoteArgv(entry, control, STATUS_LINE), STATUS_TIMEOUT_MS)
-    // A host without the Agent Hub command (a full Aico install such as gem, or the
-    // workstation seen from it) cannot say who is signed in. List the tools anyway,
-    // Unknown and with their own sign-in, so the owner can sign in there.
-    if (result.code === 127 || /agent-hub: (command )?not found/.test(result.output))
+    // A host without Tether's fleet command cannot say who is signed in. List the
+    // tools anyway, Unknown and with their own sign-in, so the owner can sign in there.
+    if (result.code === 127)
       return {
         host: name,
-        agent_hub: `no Agent Hub command on ${name}`,
         tools: await this.localStatus(name, entry, control),
         checkedAt: Date.now(),
         actions: this.actions(),
@@ -217,7 +214,7 @@ export class HostAdmin {
     return { ...parsed, host: name, checkedAt: Date.now(), actions: this.actions() }
   }
 
-  /** Without Agent Hub: each tool's own login file on the host says whether it
+  /** Without the fleet command: each tool's own login file on the host says whether it
    * is signed in (a file can hold an expired login; the tool says so when run). */
   private async localStatus(
     name: string,
@@ -498,7 +495,7 @@ export class HostAdmin {
   }
 }
 
-/** `login status --json` output: the whole of it, or its last JSON object. */
+/** `tether fleet login-status` output: the whole of it, or its last JSON object. */
 export function parseStatus(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{')
   if (start < 0) return null

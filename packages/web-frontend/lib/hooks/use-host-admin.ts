@@ -16,7 +16,7 @@ export interface LoginCredential {
   name: string
   rotates: boolean
   state: LoginState
-  /** `agent-hub` (served at launch) or `host:<path>` (a login on the host's disk). */
+  /** `Aico secrets folder` (served at launch) or `host:<path>` (a login on the host's disk). */
   source: string
   detail?: string
   expires_at?: string | null
@@ -36,8 +36,6 @@ export interface ToolActions {
 
 export interface HostLogins {
   host: string
-  /** `reachable`, or why Agent Hub can't be reached from the host. */
-  agent_hub: string
   tools: ToolLogin[]
   checkedAt: number
   actions: Record<string, ToolActions>

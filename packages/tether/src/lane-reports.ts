@@ -15,7 +15,7 @@
 //   only while it is there.
 // - Receivers are worked out when the report fires, from the lane's current
 //   lineage, and must be agent sessions on this computer that Tether can
-//   deliver to (Claude Code, Codex, Pi, Agent Hub). Only lineage from a launch
+//   deliver to (Claude Code, Codex, Pi). Only lineage from a launch
 //   counts (`launched`), never an owner's mark or join; nothing from before
 //   the deploy is reported. `st aico watch` adds an explicit watch and
 //   `st aico unwatch` an exception.
@@ -62,7 +62,7 @@
 //
 // Each report is one event line queued on the receiver's delivery queue
 // (wakes, kind `event`): pasted once the agent is idle, nobody is typing and
-// the input line is empty, or sent as an Agent Hub follow-up turn.
+// the input line is empty.
 
 import type { DatabaseSync } from 'node:sqlite'
 import { AGENT_STATES, type AgentState } from './agent-state'
@@ -519,7 +519,7 @@ export interface LaneReportOperations {
   now(): number
   policy(): LaneReportPolicy
   /** A session on this computer that can take lane reports: an agent Tether
-   * delivers to (Claude Code, Codex, Pi, agy, Agent Hub), not a shell. */
+   * delivers to (Claude Code, Codex, Pi, agy), not a shell. */
   receiver(id: string): boolean
   /** Local sessions' lineage (watch cycles, lineage receivers). */
   sessions(): LocalLineage[]

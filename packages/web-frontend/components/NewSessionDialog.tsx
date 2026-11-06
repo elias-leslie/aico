@@ -5,7 +5,7 @@ import { clsx } from 'clsx'
 import { Search, X } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import { newChat } from '@/lib/chat'
-import { CHAT_TOOL_SLUG, useAgentTools } from '@/lib/hooks/use-agent-tools'
+import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HOST_STATE_LABELS,
   startingLabel,
@@ -79,16 +79,11 @@ export function NewSessionDialog({
 
   const tool =
     kind === 'agent'
-      ? (enabledTools.find(
-          (t) => t.slug === pickedToolSlug && t.slug !== 'agent-hub',
-        ) ?? defaultTool)
+      ? (enabledTools.find((t) => t.slug === pickedToolSlug) ?? defaultTool)
       : undefined
-  // Agent Hub chats run here; everything else may run on a linked host.
-  const hostable = tool?.slug !== CHAT_TOOL_SLUG
-  const host =
-    hostable && hosts.some((h) => h.name === pickedHost)
-      ? (pickedHost ?? undefined)
-      : undefined
+  const host = hosts.some((h) => h.name === pickedHost)
+    ? (pickedHost ?? undefined)
+    : undefined
   // A session on another host starts in one of that host's projects.
   const remote = useHostProjects(host)
   // A host that is off can't list them; starting there turns it on, and its
@@ -235,38 +230,27 @@ export function NewSessionDialog({
               )}
               {kind === 'agent' && enabledTools.length > 0 && (
                 <fieldset aria-label="Agent" className="lantern-tools mt-2.5">
-                  {enabledTools
-                    .filter((t) => t.slug !== 'agent-hub')
-                    .map((t) => (
-                      <button
-                        key={t.slug}
-                        type="button"
-                        aria-pressed={t.slug === tool?.slug}
-                        onClick={() => setPickedToolSlug(t.slug)}
-                        className="lantern-tool"
-                      >
-                        <AgentIcon
-                          slug={t.slug}
-                          color={getAgentColor(t.slug, t.color)}
-                        />
-                        <span className="truncate">{t.name}</span>
-                      </button>
-                    ))}
+                  {enabledTools.map((t) => (
+                    <button
+                      key={t.slug}
+                      type="button"
+                      aria-pressed={t.slug === tool?.slug}
+                      onClick={() => setPickedToolSlug(t.slug)}
+                      className="lantern-tool"
+                    >
+                      <AgentIcon
+                        slug={t.slug}
+                        color={getAgentColor(t.slug, t.color)}
+                      />
+                      <span className="truncate">{t.name}</span>
+                    </button>
+                  ))}
                 </fieldset>
-              )}
-              {tool?.slug === CHAT_TOOL_SLUG && tool.description && (
-                <p
-                  className="mt-2 text-xs"
-                  style={{ color: 'var(--mist)' }}
-                  data-testid="new-session-tool-note"
-                >
-                  {tool.description}
-                </p>
               )}
             </div>
           </div>
 
-          {hostable && (hosts.length > 0 || hostsError) && (
+          {(hosts.length > 0 || hostsError) && (
             <div className="flex-none pb-1">
               <SectionTitle>Runs on</SectionTitle>
               {hostsError ? (
@@ -307,7 +291,7 @@ export function NewSessionDialog({
               )}
             </div>
           )}
-          {hostable && hostsLoading && hosts.length === 0 && (
+          {hostsLoading && hosts.length === 0 && (
             <p className="sr-only" aria-live="polite">
               Loading hosts…
             </p>

@@ -318,7 +318,6 @@ function agyProbe(
 export const agy: TuiAdapter = {
   id: 'agy',
   harness: 'agy',
-  executor: null,
   seed: {
     slug: 'agy',
     name: 'Antigravity',
@@ -357,7 +356,6 @@ export const agy: TuiAdapter = {
     transcriptFacts: false,
     threadSubagents: false,
     nativeAdmin: false,
-    agentHubContext: false,
     environmentSelection: false,
     delivery: { idlePaste: true, nextTurn: false, toolResult: false },
   },

@@ -20,7 +20,6 @@ export type EventType =
   | 'show.requested'
   | 'asks.changed'
   | 'wakes.changed'
-  | 'runs.changed'
   | 'peer.state'
   | 'peer.resync'
 

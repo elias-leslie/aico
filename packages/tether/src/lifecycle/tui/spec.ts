@@ -9,7 +9,7 @@
  * `kind` is implemented exactly once in context.ts and reused by every TUI that
  * declares it — so a new Claude-family TUI reuses `claude-session-start` rather
  * than reimplementing delivery. Aico independently verifies the source chain
- * and live Agent Hub delivery availability through each TUI's hook surface; it
+ * and live context delivery availability through each TUI's hook surface; it
  * does not claim what an already-running session received. Failure stays visible
  * but never blocks the native TUI/model. The surface differs per family, so
  * `kind` selects it. */

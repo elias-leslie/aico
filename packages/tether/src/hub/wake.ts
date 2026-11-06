@@ -1,7 +1,7 @@
 // The readiness gate (docs/plans/remote-hosts.md "Create"): a create for a host
 // that is not up runs its hosts.json `wake`, then waits, bounded and with its
 // progress on `GET /v1/hosts` and `peer.state`, for the link, the identity
-// check and the host's health URLs (the forwarded Agent Hub and SummitFlow)
+// check and the host's health URLs (the forwarded services)
 // before the create is sent. The link unit never wakes a host; a create does.
 
 import { spawn } from 'node:child_process'

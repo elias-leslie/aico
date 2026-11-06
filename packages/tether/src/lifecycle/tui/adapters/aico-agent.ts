@@ -55,7 +55,6 @@ class AgentRunProbe implements AgentProbe {
 export const aicoAgent: TuiAdapter = {
   id: 'aico-agent',
   harness: 'aico-agent',
-  executor: null,
   seed: {
     slug: 'aico-agent',
     name: 'Aico agent',
@@ -87,7 +86,6 @@ export const aicoAgent: TuiAdapter = {
     transcriptFacts: false,
     threadSubagents: false,
     nativeAdmin: false,
-    agentHubContext: false,
     environmentSelection: false,
     delivery: { idlePaste: true, nextTurn: false, toolResult: false },
   },

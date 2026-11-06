@@ -760,8 +760,7 @@ export interface WakeOperations {
   lastKeyAt(sessionId: string): Promise<number | null>
   /** Paste and submit; false when the session is not running. */
   deliver(sessionId: string, text: string): Promise<boolean>
-  /** The rows went out (`paste`: the gated paste or an Agent Hub turn, which
-   * the runtime tells apart; `native`: a native puller took them). */
+  /** The rows went out (`paste`: the gated paste; `native`: a native puller took them). */
   delivered?(sessionId: string, rows: readonly Wake[], via: 'paste' | 'native'): void
   /** The running session that holds this conversation, if any. */
   conversationHolder(resumeId: string): Promise<string | null>

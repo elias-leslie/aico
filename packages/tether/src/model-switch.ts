@@ -18,7 +18,7 @@
 //   (served).
 //
 // The baseline is the session's first model; a switch is a model that is not
-// the baseline (the rule of Agent Hub's is_model_switch: provider prefix, case
+// the baseline (provider prefix, case
 // and dated snapshot suffix are the same model). A switch nobody asked for (a
 // refusal fallback, a substitution) stops the agent's turn at once (Escape,
 // as the owner would) and again whenever the fallback model answers while it
@@ -83,8 +83,7 @@ export function bareModel(model: string): string {
   return last.replace(/\[[^\]]*\]$/, '').replace(SNAPSHOT_SUFFIX, '')
 }
 
-/** True when `served` is a different model than `requested` (Agent Hub's
- * `is_model_switch`). Unknown on either side is no switch. */
+/** True when `served` is a different model than `requested`. Unknown on either side is no switch. */
 export function isModelSwitch(
   requested: string | null | undefined,
   served: string | null | undefined,

@@ -5,8 +5,7 @@ import { join } from 'node:path'
  * 2: resize claims carry a viewer label (still accepted without one).
  * 3: session wakes; End takes `keepWakes`.
  * 4: shares link files where they are (`paths`); GET /v1/shares lists them.
- * 5: Agent Hub chat routes (`/chat`, `/chat/stream`, `/chat/cancel`, `/v1/chat/models`).
- * 6: an Agent Hub session's `inject` takes `model` (a catalog model for that turn; null for the agent's own routing).
+ * 5, 6: chat routes and a chat `inject` model (retired with the Agent Hub chat backend).
  * 9: `parentId` on descriptors; root `lineage` takes `parentId`.
  * 10: `host: "auto"` with `needs` on `POST /v1/roots`; `GET /v1/placement`.
  * 12: lane reports: descriptors carry `stateAgentAt`, `waitingOn` and `launched`;

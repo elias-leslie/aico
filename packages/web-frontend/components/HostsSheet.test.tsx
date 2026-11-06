@@ -72,13 +72,12 @@ const loginsFor = (over: Json = {}): { status: number; body: Json } => ({
   status: 200,
   body: {
     host: 'agent-work',
-    agent_hub: 'reachable',
     checkedAt: 1,
     tools: [
       {
         tool: 'claude-code',
         state: 'signed_in',
-        source: 'agent-hub',
+        source: 'Aico secrets folder',
         credentials: [],
       },
       {
@@ -127,14 +126,6 @@ describe('HostsSheet', () => {
     push.mockReset()
     stubFetch()
   })
-  it('shows Aico login state without claiming its store is unreachable', async () => {
-    state.hosts = [host()]
-    state.logins['agent-work'] = loginsFor({ agent_hub: 'Aico secrets folder' })
-    renderSheet(true)
-    await screen.findByTestId('login-codex')
-    expect(screen.queryByTestId('agent-hub-away')).toBeNull()
-  })
-
   it('says it is loading, then that no other hosts exist', async () => {
     renderSheet()
     expect(screen.getByText('Loading hosts…')).toBeInTheDocument()
@@ -258,12 +249,11 @@ describe('HostsSheet', () => {
   it('shows each tool with its state and source, never Unknown as signed out', async () => {
     state.hosts = [host({ sessions: 2 })]
     state.logins['agent-work'] = loginsFor({
-      agent_hub: 'timed out',
       tools: [
         {
           tool: 'claude-code',
           state: 'unknown',
-          source: 'agent-hub',
+          source: 'Aico secrets folder',
           credentials: [],
         },
         {
@@ -283,7 +273,7 @@ describe('HostsSheet', () => {
         {
           tool: 'st',
           state: 'needs_sign_in',
-          source: 'agent-hub',
+          source: 'Aico secrets folder',
           credentials: [],
         },
       ],
@@ -291,11 +281,8 @@ describe('HostsSheet', () => {
     })
     renderSheet(true)
 
-    expect(await screen.findByTestId('agent-hub-away')).toHaveTextContent(
-      'Agent Hub can’t be reached from agent-work',
-    )
-    expect(screen.getByTestId('login-claude-code')).toHaveTextContent(
-      'Unknown · Agent Hub can’t be reached',
+    expect(await screen.findByTestId('login-claude-code')).toHaveTextContent(
+      'Unknown · Aico secrets folder',
     )
     expect(screen.getByTestId('login-claude-code')).not.toHaveTextContent(
       'Needs sign-in',
@@ -306,7 +293,7 @@ describe('HostsSheet', () => {
     expect(codex).not.toHaveTextContent('/home/agent/.codex/auth.json')
     expect(codex).toHaveTextContent('token expired')
     expect(screen.getByTestId('login-st')).toHaveTextContent(
-      'Needs sign-in · Agent Hub',
+      'Needs sign-in · Aico secrets folder',
     )
   })
 
@@ -330,13 +317,13 @@ describe('HostsSheet', () => {
         {
           tool: 'pi',
           state: 'signed_in',
-          source: 'agent-hub',
+          source: 'Aico secrets folder',
           credentials: [
             {
               name: 'minimax',
               rotates: false,
               state: 'needs_sign_in',
-              source: 'agent-hub',
+              source: 'Aico secrets folder',
             },
             {
               name: 'oauth',
@@ -348,7 +335,7 @@ describe('HostsSheet', () => {
               name: 'opencode-go',
               rotates: false,
               state: 'signed_in',
-              source: 'agent-hub',
+              source: 'Aico secrets folder',
             },
           ],
         },
@@ -382,8 +369,12 @@ describe('HostsSheet', () => {
       within(pi).getByRole('button', { name: 'Sign in to pi on agent-work' }),
     ).toBeInTheDocument()
     const piDetails = pi.querySelector('details')
-    expect(piDetails).toHaveTextContent('minimax · Needs sign-in · Agent Hub')
-    expect(piDetails).toHaveTextContent('opencode-go · Signed in · Agent Hub')
+    expect(piDetails).toHaveTextContent(
+      'minimax · Needs sign-in · Aico secrets folder',
+    )
+    expect(piDetails).toHaveTextContent(
+      'opencode-go · Signed in · Aico secrets folder',
+    )
     expect(piDetails).toHaveTextContent('oauth · Needs sign-in · This host')
     expect(piDetails).not.toHaveTextContent('auth.json')
   })
@@ -475,10 +466,9 @@ describe('HostsSheet', () => {
     expect(screen.queryByRole('button', { name: 'Power off' })).toBeNull()
   })
 
-  it('lists tools as Unknown with Sign in on a host with no Agent Hub command', async () => {
+  it('lists tools as Unknown with Sign in on a host with no fleet command', async () => {
     state.hosts = [host()]
     state.logins['agent-work'] = loginsFor({
-      agent_hub: 'no Agent Hub command on agent-work',
       tools: [
         {
           tool: 'agy',

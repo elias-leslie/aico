@@ -87,7 +87,6 @@ export function rootLaunchEnvironment(widgetId: string): Record<string, string> 
     AICO_ROOT_MODEL: options?.model ?? '',
     AICO_ROOT_REASONING_EFFORT: options?.reasoningEffort ?? '',
     AICO_ROOT_DAYBREAK: options?.daybreak?.toString() ?? '',
-    AICO_ROOT_AGENT_HUB_CONTEXT: options?.agentHubContext?.toString() ?? '',
     // A tool that starts under an ID Tether picks gets a new one per launch,
     // picked here so a host reader knows it wherever the agent runs (an
     // entry's container: continuity.ts findEntryProcess).
@@ -136,9 +135,7 @@ function selectionFlags(tool: TuiSpec): string {
 function cleanEnvironment(tool: TuiSpec): string {
   return (
     `/usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u ${FRESH_SESSION_ENV} -u AICO_ROOT_REASONING_EFFORT` +
-    (tool.environmentSelection
-      ? ''
-      : ' -u AICO_ROOT_MODEL -u AICO_ROOT_DAYBREAK -u AICO_ROOT_AGENT_HUB_CONTEXT')
+    (tool.environmentSelection ? '' : ' -u AICO_ROOT_MODEL -u AICO_ROOT_DAYBREAK')
   )
 }
 

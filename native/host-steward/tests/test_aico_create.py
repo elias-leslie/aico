@@ -393,8 +393,7 @@ def test_pi_selection_is_forwarded_without_using_another_tool(monkeypatch, provi
     assert calls[0]["resumeSessionId"] == THREAD
 
 
-@pytest.mark.parametrize("context", ["on", "off"])
-def test_pi_daybreak_and_optional_context_are_bound_to_create_digest(monkeypatch, context):
+def test_pi_daybreak_is_bound_to_create_digest(monkeypatch):
     calls = []
     def receipt(_, path, route, payload, **kwargs):
         calls.append(payload)
@@ -403,9 +402,8 @@ def test_pi_daybreak_and_optional_context_are_bound_to_create_digest(monkeypatch
     monkeypatch.setattr(admin, "emit_json", lambda *_: None)
     argv = ["pi" if arg == "codex" else arg for arg in BASE]
     assert admin.main([*argv, "--model", "openai/gpt-6-sol", "--reasoning-effort", "xhigh",
-                       "--daybreak", "on", "--agent-hub-context", context]) == 0
+                       "--daybreak", "on"]) == 0
     assert calls[0]["daybreak"] is True
-    assert calls[0]["agentHubContext"] is (context == "on")
 
 
 @pytest.mark.parametrize("role", ["unknown", "invalid role", ""])
@@ -545,7 +543,7 @@ def test_pi_credential_check_accepts_every_source_pi_reads(monkeypatch, pi_home,
 
 
 def test_pi_credential_check_leaves_an_agent_hosts_shim_to_fetch_the_key(monkeypatch, pi_home, tmp_path):
-    shim = tmp_path / ".local/lib/agent-hub/cred-bin/pi"
+    shim = tmp_path / ".local/lib/aico/auth-bin/pi"
     shim.parent.mkdir(parents=True)
     shim.write_text("#!/bin/sh\n")
     assert admin.pi_provider_unavailable("opencode/sample-model") is not None  # not executable
@@ -559,7 +557,7 @@ def test_an_agent_host_is_known_by_its_credential_shims(monkeypatch, tmp_path):
     monkeypatch.delenv("ST_AGENT_HOST", raising=False)
     monkeypatch.setattr(admin.socket, "gethostname", lambda: "agent-work.lan")
     assert admin.agent_host() is None
-    (tmp_path / ".local/lib/agent-hub/cred-bin").mkdir(parents=True)
+    (tmp_path / ".local/lib/aico/auth-bin").mkdir(parents=True)
     assert admin.agent_host() == "agent-work"
 
 
@@ -597,12 +595,10 @@ def test_blank_slate_creates_in_its_own_empty_workspace(monkeypatch):
     assert admin.main(["create", "review-1", "Review the attached brief.", "--tool", "claude-code", "--blank-slate"]) == 0
     assert calls[0]["projectRoot"] == str(Path.home() / ".local/share/aico/blank-slate/review-1")
     assert calls[0]["projectId"] == "blank-slate"
-    assert "agentHubContext" not in calls[0] or calls[0]["agentHubContext"] is None
 
 
-@pytest.mark.parametrize("extra", [["--project-root", "/fixture/project"], ["--agent-hub-context", "off"],
-                                   ["--resume-session", THREAD]])
-def test_blank_slate_refuses_project_resume_and_context_options(monkeypatch, extra):
+@pytest.mark.parametrize("extra", [["--project-root", "/fixture/project"], ["--resume-session", THREAD]])
+def test_blank_slate_refuses_project_and_resume_options(monkeypatch, extra):
     monkeypatch.setattr(admin.Collector, "receipt", lambda *a, **k: pytest.fail("contacted owner"))
     with pytest.raises(SystemExit):
         admin.main(["create", "review-1", "Review.", "--tool", "pi", "--blank-slate", *extra])
@@ -656,7 +652,7 @@ def test_instructions_refuse_an_unclear_revision_before_contacting_the_owner(mon
         admin.main(["create", "review-3", "Review.", "--tool", "pi", "--blank-slate", "--instructions", selection])
 
 
-# ---- launch defaults from Agent Hub's table (GET /api/models/launch-defaults) --------------------
+# ---- launch defaults from Aico's table (GET /api/models/launch-defaults) --------------------
 
 def table_row(**changes):
     return {"job": "testing", "model": "claude-haiku-5-5", "effort": "high", "daybreak": None,
@@ -743,7 +739,7 @@ def test_unreadable_table_launches_on_the_tools_own_settings_and_says_so(monkeyp
 
 def test_a_mistyped_work_role_is_refused_before_tether(monkeypatch, capsys):
     def lookup(role, tool, *_args):
-        raise ValueError(f"--work-role {role} is not a work role Agent Hub knows.")
+        raise ValueError(f"--work-role {role} is not a work role Aico knows.")
 
     monkeypatch.setattr(admin, "launch_row", lookup)
     monkeypatch.setattr(admin.Collector, "receipt", lambda *a, **k: pytest.fail("contacted owner"))
@@ -753,7 +749,7 @@ def test_a_mistyped_work_role_is_refused_before_tether(monkeypatch, capsys):
 
 
 def launch_server(answers, seen):
-    """A fake Agent Hub: answers[path] is (status, body); seen gets each request's path and query."""
+    """A fake Aico API: answers[path] is (status, body); seen gets each request's path and query."""
     from urllib.parse import parse_qs, urlsplit
 
     class Hub(BaseHTTPRequestHandler):
@@ -797,7 +793,7 @@ def launch_answer(row, **top):
             "rows": [row], **top}
 
 
-def test_launch_row_reads_agent_hubs_launch_defaults_for_the_model_and_project(launch_api):
+def test_launch_row_reads_aicos_launch_defaults_for_the_model_and_project(launch_api):
     seen = launch_api(200, launch_answer(table_row()))
     assert REAL_LAUNCH_ROW("verification", "pi", "anthropic/claude-opus-5-5", "neri-hunters") == table_row()
     assert seen == [("/api/models/launch-defaults", {"role": "verification", "tool": "pi",
@@ -837,14 +833,11 @@ def test_launch_row_is_none_when_the_table_cannot_be_read(launch_api, status, bo
     assert REAL_LAUNCH_ROW("implementation", "codex") is None
 
 
-def test_launch_row_is_none_without_agent_hub(monkeypatch):
-    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)
-    assert REAL_LAUNCH_ROW("implementation", "codex") is None
-    monkeypatch.setenv("ST_EXTENSION_CONTEXT", json.dumps({"agent_hub_url": "http://127.0.0.1:9"}))
+def test_launch_row_is_none_when_the_table_cannot_be_asked():
     assert REAL_LAUNCH_ROW("implementation", "codex") is None
 
 
-# ---- hard rules: a launch Agent Hub denies never reaches Tether ---------------------------------
+# ---- hard rules: a launch Aico denies never reaches Tether ---------------------------------
 
 DENY = "Owner 2026-11-01: Claude never for active hunting or recon"
 
@@ -868,7 +861,7 @@ HUNT = ["create", "hunt-9", "Hunt.", "--work-role", "hunting", "--project", "ner
     ["--tool", "pi", "--model", "anthropic/claude-opus-5-5", "--host", "auto", "--needs", "mem=6G,cpu=2",
      "--pool", "neri-hunt", "--entry", "neri-hunt:h-1"],
 ])
-def test_a_denied_hunting_launch_is_refused_with_agent_hubs_reason(launch_api, monkeypatch, capsys, launch):
+def test_a_denied_hunting_launch_is_refused_with_aicos_reason(launch_api, monkeypatch, capsys, launch):
     seen = launch_api(200, launch_answer(table_row(job="hunting", work_roles=["hunting"], model=None, context="full",
                                                    allowed=False, deny_reason=DENY)))
     error = refused_create(monkeypatch, capsys, [*HUNT, *launch])
@@ -895,7 +888,6 @@ def test_an_allowed_launch_goes_ahead(launch_api, monkeypatch):
 
 @pytest.mark.parametrize(("role", "project"), [("hunting", None), ("recon", "sample-app"), ("verification", "neri-hunters")])
 def test_without_the_rules_a_claude_launch_for_case_work_is_refused(monkeypatch, capsys, role, project):
-    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)  # Agent Hub can't be asked
     monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
     error = refused_create(monkeypatch, capsys, ["create", "case-1", "Work.", "--tool", "claude-code",
                                                  "--work-role", role, "--blank-slate",
@@ -905,7 +897,6 @@ def test_without_the_rules_a_claude_launch_for_case_work_is_refused(monkeypatch,
 
 @pytest.mark.parametrize("project", [None, "neri", "sample-app"])
 def test_without_the_rules_verification_outside_neri_hunters_keeps_claude(monkeypatch, project):
-    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)
     monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
     calls = []
     monkeypatch.setattr(admin.Collector, "receipt", lambda _, path, route, payload, **k: (calls.append(payload), (200, descriptor(payload)))[1])
@@ -918,7 +909,6 @@ def test_without_the_rules_verification_outside_neri_hunters_keeps_claude(monkey
 
 @pytest.mark.parametrize("model", ["anthropic/claude-opus-5-5", "Sonnet-5-5", "haiku-5-5"])
 def test_without_the_rules_a_claude_model_on_another_tool_is_refused_for_case_work(monkeypatch, capsys, model):
-    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)
     monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
     error = refused_create(monkeypatch, capsys, ["create", "case-2", "Work.", "--tool", "pi", "--model", model,
                                                  "--work-role", "hunting", "--blank-slate"])
@@ -934,7 +924,6 @@ def test_a_row_that_does_not_say_allowed_is_the_floor_too(monkeypatch, capsys):
 @pytest.mark.parametrize("launch", [["--tool", "claude-code", "--work-role", "coordinator"],
                                     ["--tool", "codex", "--work-role", "hunting"]])
 def test_without_the_rules_other_launches_go_ahead(monkeypatch, launch):
-    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)
     monkeypatch.setattr(admin, "launch_row", REAL_LAUNCH_ROW)
     monkeypatch.setattr(admin, "codex_model_unavailable", lambda *_: None)
     calls = []
@@ -964,7 +953,6 @@ def test_table_blank_slate_does_not_apply_when_only_one_project_flag_is_given(mo
 def test_table_pi_model_passes_the_pi_model_check(monkeypatch):
     row = table_row(model="opencode-go/deepseek-v4.1-flash", effort="high")
     calls, output = served(monkeypatch, row)
-    monkeypatch.delenv("ST_EXTENSION_CONTEXT", raising=False)
     assert admin.main(["create", "pi-table-1", "Try it.", "--tool", "pi", "--work-role", "verification"]) == 0
     assert (calls[0]["tool"], calls[0]["model"], calls[0]["reasoningEffort"]) == ("pi", "opencode-go/deepseek-v4.1-flash", "high")
     assert output[0]["launchDefault"]["retryWith"] == "--blank-slate --model opencode-go/deepseek-v4.1-flash --reasoning-effort high"
@@ -978,9 +966,9 @@ def test_create_prints_the_flags_that_repeat_what_the_table_filled_in(monkeypatc
     assert output[0]["launchDefault"]["retryWith"] == "--model gpt-6-sol --reasoning-effort xhigh --daybreak on"
 
 
-def test_resume_is_not_refused_over_a_work_role_agent_hub_no_longer_lists(monkeypatch):
+def test_resume_is_not_refused_over_a_work_role_aico_no_longer_lists(monkeypatch):
     def lookup(role, tool, *_args):
-        raise ValueError(f"--work-role {role} is not a work role Agent Hub knows.")
+        raise ValueError(f"--work-role {role} is not a work role Aico knows.")
 
     calls = []
     monkeypatch.setattr(admin, "launch_row", lookup)

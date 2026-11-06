@@ -83,7 +83,7 @@ export interface ToolLogin {
   /** A served tool: sign-in grants it to the host first (push needs the grant). */
   grant?: boolean
   /** The tool's command and its own login file (home-relative), for a host
-   * without Agent Hub: Aico checks the file is there instead. */
+   * without a sign-in service: Aico checks the file is there instead. */
   local?: { bin: string; authFile: string }
   /** The sign-in screen prints a URL to open in a browser: its host. Aico then
    * shows the URL as one clean link (lifecycle/tui/sign-in-link.ts). */
@@ -128,8 +128,6 @@ export interface Capabilities {
   threadSubagents: boolean
   /** Atomic native admin (clear/compact) is a route for it. */
   nativeAdmin: boolean
-  /** Takes an Agent Hub context flag at launch. */
-  agentHubContext: boolean
   /** Launch settings travel in AICO_ROOT_* environment variables its extension reads. */
   environmentSelection: boolean
   /** How Tether delivers event lines to it. */
@@ -148,8 +146,6 @@ export interface TuiAdapter {
   id: string
   /** The short name the tool's own hooks and Tether's model watch use. */
   harness: string
-  /** Agent Hub's name for this tool as a workflow step executor; null: not one. */
-  executor: string | null
   /** The `agent_tools` row seeded for it: command, process name, colour, … */
   seed: ToolSeed
   /** Launch settings beyond the seed's argv. */

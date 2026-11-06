@@ -93,11 +93,6 @@ function isAgent(tool: string): boolean {
   return (getTui(tool)?.command.length ?? 0) > 0
 }
 
-/** An Agent Hub session is an agent with no pane (src/agent-hub/). */
-function isHub(row: WidgetRow | undefined): boolean {
-  return row?.backend === 'agent-hub'
-}
-
 /** The session's wakes for its descriptor (`wakes`), oldest first. */
 let bound: WakeStore | null = null
 
@@ -168,11 +163,7 @@ export class WakeService {
       lastKeyAt: (id) => this.lastKeyAt(id),
       deliver: (id, text) => pasteIntoRunningSession(id, text),
       delivered: (id, rows, via) => {
-        this.deliveries.delivered(
-          rows,
-          via === 'native' ? 'native' : isHub(getWidget(id)) ? 'turn' : 'paste',
-          now(),
-        )
+        this.deliveries.delivered(rows, via === 'native' ? 'native' : 'paste', now())
         this.noteReached(id, rows)
       },
       conversationHolder: (resumeId) => this.conversationHolder(resumeId),
@@ -200,11 +191,10 @@ export class WakeService {
   }
 
   /** Whether event lines (lane reports, waits, deliveries) go to this
-   * session: an agent session Tether delivers to (Claude Code, Codex, Pi, agy,
-   * Agent Hub). */
+   * session: an agent session Tether delivers to (Claude Code, Codex, Pi, agy). */
   receiver(id: string): boolean {
     const row = getWidget(id)
-    return Boolean(row && (isHub(row) || isDeliveryTool(row.tool)))
+    return Boolean(row && isDeliveryTool(row.tool))
   }
 
   /** Queue an event line due now on a session (coalesced by source while
@@ -285,7 +275,7 @@ export class WakeService {
     for (const [key, at] of this.told) if (now - at > TOLD_KEEP_MS) this.told.delete(key)
   }
 
-  /** Rows that went out to a session (pasted, an Agent Hub turn, or taken
+  /** Rows that went out to a session (pasted, or taken
    * by its puller or hook): if one came from outside, a lane's next went-idle
    * line is a first line (LaneReporter.reached). */
   noteReached(sessionId: string, rows: readonly Wake[]): void {
@@ -337,14 +327,13 @@ export class WakeService {
   /** Whether wakes can be delivered to this session: an agent whose state
    * Tether reads (a shell reports none, so idle would never come). */
   supports(row: WidgetRow): boolean {
-    if (isHub(row)) return true
     return isAgent(row.tool) && agentStateOf(row.id).state !== 'unknown'
   }
 
   private async busy(sessionId: string): Promise<string | null> {
     const row = getWidget(sessionId)
     if (!row) return 'the session is gone'
-    if (!(isHub(row) || isAgent(row.tool))) return `${row.tool} is not an agent`
+    if (!isAgent(row.tool)) return `${row.tool} is not an agent`
     const held = agentBusyReason(agentStateOf(sessionId))
     if (held) return held
     const status = await verifySessionStatus(row).catch(() => 'uncertain')
@@ -360,8 +349,6 @@ export class WakeService {
 
   private async inputEmpty(sessionId: string): Promise<boolean> {
     const row = getWidget(sessionId)
-    // No input line: a follow-up is a turn, not typing.
-    if (isHub(row)) return true
     try {
       return inputLineEmpty(
         await runTmux(captureVisibleTargetArgs(tmuxPaneTargetForWidget(sessionId), true)),
@@ -373,7 +360,6 @@ export class WakeService {
   }
 
   private async lastKeyAt(sessionId: string): Promise<number | null> {
-    if (isHub(getWidget(sessionId))) return null
     let stdout: string
     try {
       stdout = await runTmux(clientActivityTargetArgs(tmuxTargetForWidget(sessionId)))
@@ -398,7 +384,6 @@ export class WakeService {
   /** What a kept wake needs to start this session's conversation again. */
   async endedSnapshot(row: WidgetRow): Promise<EndedSession> {
     let resumeId: string | null = null
-    if (isHub(row)) return endedSnapshotOf(row, null)
     const tool = getTui(row.tool)
     const pane = await verifiedCurrentManagedPane(row).catch(() => null)
     const agent = pane ? observeAgent(nodeProcFs, this.home, pane.pid) : null
@@ -421,10 +406,6 @@ export class WakeService {
     message: string,
   ): Promise<{ status: 'started'; id: string } | { status: 'retry' | 'failed'; reason: string }> {
     await whenReady()
-    // A kept wake has no Agent Hub conversation to start again: the session
-    // was closed with its End.
-    if (ended.tool === 'agent-hub')
-      return { status: 'failed', reason: 'an ended Agent Hub session cannot be started again' }
     // Never on this host: its agent ran through an entry that ended with it.
     if (ended.entry)
       return {

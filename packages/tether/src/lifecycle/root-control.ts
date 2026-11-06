@@ -35,7 +35,6 @@ import {
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 /** A provider/model id: the tool's provider flag takes the part before the slash. */
 const PROVIDER_MODEL = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:/-]*$/
-const AGENT_SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/
 const MAX_BODY_BYTES = 128 * 1024
 // 2000 UTF-8 bytes can occupy 12000 bytes with JSON \uXXXX escaping,
 // plus the fixed fields and bounded request key. Accept either JSON encoding.
@@ -58,23 +57,15 @@ export interface RootLaunchOptions {
   model: string | null
   reasoningEffort: string | null
   daybreak?: boolean | null
-  agentHubContext?: boolean | null
 }
 
 /** The explicit launch options a create asked for, or null for none. */
 function rootLaunchOptions(input: RootCreateRequest): RootLaunchOptions | null {
-  if (
-    !input.model &&
-    !input.reasoningEffort &&
-    input.daybreak == null &&
-    input.agentHubContext == null
-  )
-    return null
+  if (!input.model && !input.reasoningEffort && input.daybreak == null) return null
   return {
     model: input.model ?? null,
     reasoningEffort: input.reasoningEffort ?? null,
     ...(input.daybreak != null ? { daybreak: input.daybreak } : {}),
-    ...(input.agentHubContext != null ? { agentHubContext: input.agentHubContext } : {}),
   }
 }
 
@@ -95,11 +86,7 @@ export interface RootCreateRequest {
   model?: string | null
   reasoningEffort?: string | null
   daybreak?: boolean | null
-  /** Pi optional context only; required shared and native context is retained. */
-  agentHubContext?: boolean | null
-  /** The Agent Hub agent an `agent-hub` root runs (and only that tool takes it). */
-  agentSlug?: string | null
-  /** An Agent Hub prompt revision added to the tool's prompt (tui/instructions.ts).
+  /** A prompt revision added to the tool's prompt (tui/instructions.ts).
    * The digest covers its revision id. */
   instructions?: InstructionsSnapshot | null
   /** The entries.json program the agent runs through on every launch
@@ -165,8 +152,8 @@ export type MutationRejection = { status: number; error: string; reason?: string
 export interface RootControlOperations {
   available(): boolean
   validate(request: RootCreateRequest): boolean
-  /** Tether: an async refusal before the root is reserved (Agent Hub: unknown
-   * agent, Agent Hub unreachable; a model the tool does not list). `null` lets
+  /** Tether: an async refusal before the root is reserved (a model the tool
+   * does not list). `null` lets
    * the create go ahead. */
   refuse?(request: RootCreateRequest): Promise<MutationRejection | null>
   ensure(
@@ -383,8 +370,6 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
           'model',
           'reasoningEffort',
           'daybreak',
-          'agentHubContext',
-          'agentSlug',
           'instructions',
           'entry',
           'origin',
@@ -411,8 +396,6 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     model = null,
     reasoningEffort = null,
     daybreak = null,
-    agentHubContext = null,
-    agentSlug = null,
     instructions: rawInstructions = null,
     origin = 'aico',
     aTermSessionId = null,
@@ -443,19 +426,15 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     typeof requestId !== 'string' ||
     !KEY.test(requestId) ||
     !isRootCreateTool(tool) ||
-    agentSlug !== null ||
     ((model !== null || reasoningEffort !== null || daybreak !== null) &&
       !getTui(tool)?.modelSelection) ||
     (daybreak !== null && typeof daybreak !== 'boolean') ||
     (daybreak !== null && !getTui(tool)?.modelSelection?.daybreak) ||
     (daybreak !== null && daybreakModel !== undefined && model !== daybreakModel) ||
-    (agentHubContext !== null &&
-      (typeof agentHubContext !== 'boolean' || !adapterOf(tool)?.capabilities.agentHubContext)) ||
-    // Blank Slate runs without extensions or Agent Hub, which carry these options.
+    // Blank Slate runs without extensions, which carry these options.
     (typeof projectRoot === 'string' &&
       isBlankSlateRoot(projectRoot) &&
       (!supportsBlankSlate(tool as string) ||
-        agentHubContext !== null ||
         (daybreak !== null && getTui(tool as string)?.environmentSelection))) ||
     (getTui(tool)?.modelSelection?.modelProvider !== undefined &&
       (typeof model !== 'string' || !PROVIDER_MODEL.test(model))) ||
@@ -512,7 +491,6 @@ export function parseRootCreate(value: unknown): RootCreateRequest | null {
     model: model as string | null,
     reasoningEffort: reasoningEffort as string | null,
     daybreak: daybreak as boolean | null,
-    agentHubContext: agentHubContext as boolean | null,
     instructions,
     origin,
     aTermSessionId: (aTermSessionId as string | null) ?? null,
@@ -555,18 +533,12 @@ export function rootRequestDigest(request: RootCreateRequest): string {
         request.leadRootReference,
         request.facetCapsuleRef,
         ...(request.resumeSessionId ? [request.resumeSessionId] : []),
-        ...(request.model ||
-        request.reasoningEffort ||
-        request.daybreak != null ||
-        request.agentHubContext != null
+        ...(request.model || request.reasoningEffort || request.daybreak != null
           ? [
               {
                 model: request.model ?? null,
                 reasoningEffort: request.reasoningEffort ?? null,
                 ...(request.daybreak != null ? { daybreak: request.daybreak } : {}),
-                ...(request.agentHubContext != null
-                  ? { agentHubContext: request.agentHubContext }
-                  : {}),
               },
             ]
           : []),
@@ -579,7 +551,6 @@ export function rootRequestDigest(request: RootCreateRequest): string {
             ]
           : []),
         ...(request.instructions ? [{ instructions: request.instructions.revision }] : []),
-        ...(request.agentSlug ? [{ agentSlug: request.agentSlug }] : []),
         ...(request.entry ? [{ entry: [request.entry.name, request.entry.arg] }] : []),
       ]),
     )

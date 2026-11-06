@@ -469,19 +469,6 @@ describe('panes', () => {
     expect((await call('GET', '/api/panes/detached')).body).toMatchObject({ total: 0 })
   })
 
-  it('directs the retired Agent Hub chat launcher to New chat', async () => {
-    expect(
-      (
-        await call('POST', '/api/panes', {
-          pane_type: 'project',
-          pane_name: 'Aico',
-          project_id: 'aico',
-          agent_tool_slug: 'agent-hub',
-        })
-      ).status,
-    ).toBe(410)
-  })
-
   it('ends what it created and drops the tab when Tether refuses a session', async () => {
     tether.failTool = 'claude'
     const { status } = await call('POST', '/api/panes', {
@@ -538,7 +525,7 @@ describe('panes', () => {
   })
 
   it("passes a host's sign-in state, power and trust through to the hub", async () => {
-    const logins = { host: 'agent-work', agent_hub: 'reachable', tools: [], actions: {} }
+    const logins = { host: 'agent-work', tools: [], actions: {} }
     tether.hostAnswers.set('GET /v1/hosts/agent-work/logins', { status: 200, body: logins })
     expect((await call('GET', '/api/hosts/agent-work/logins')).body).toEqual(logins)
 
@@ -681,7 +668,7 @@ describe('panes', () => {
   })
 })
 
-describe('projects, tools, Agent Hub, health', () => {
+describe('projects, tools, health', () => {
   it("lists a host's own projects for a session started there", async () => {
     tether.hostProjects['agent-work'] = [{ id: 'lab', name: 'Lab', root: '/home/u/lab' }]
     expect((await call('GET', '/api/projects?host=agent-work')).body).toEqual([

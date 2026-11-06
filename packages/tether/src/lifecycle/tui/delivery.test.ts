@@ -112,7 +112,6 @@ describe.each(delivering.map((adapter) => [adapter.id, adapter] as const))('%s',
       expect(started.env.AICO_CONTEXT_DELIVERED).toBe(delivery.hash)
       // The marker names the started agent itself, so a session it starts is not covered.
       expect(started.env.AICO_CONTEXT_PID).toBe(String(started.pid))
-      expect(started.env.AGENT_HUB_CONTEXT_BYPASS).toBeUndefined()
       expect(read(how, started)).toEqual(delivery.text ? [delivery.text] : [])
     })
 
@@ -161,7 +160,6 @@ it('a launch with no delivery adds nothing', () => {
       updatedAt: 0,
     })
     const started = start(spec)
-    expect(started.env.AGENT_HUB_CONTEXT_BYPASS).toBeUndefined()
     expect(started.env.AICO_CONTEXT_DELIVERED).toBeUndefined()
     expect(started.argv).toEqual([])
   }
@@ -200,7 +198,7 @@ describe('withContextDelivery', () => {
     db.close()
   }
 
-  it('leaves the launch to Agent Hub while the tool is switched off', async () => {
+  it('leaves the launch alone while the tool is switched off', async () => {
     switched(false)
     const spec = codex()
     expect(await withContextDelivery(spec, 'e0000001', deps)).toBe(spec)
@@ -211,7 +209,6 @@ describe('withContextDelivery', () => {
     switched(true)
     const spec = await withContextDelivery(codex(), 'e0000001', deps)
     const delivered = spec.deliveredContext
-    expect(delivered?.env).not.toHaveProperty('AGENT_HUB_CONTEXT_BYPASS')
     const started = start(spec)
     const [text] = read(spec.contextDelivery as NonNullable<TuiSpec['contextDelivery']>, started)
     expect(text).toContain('## Alpha Policy')

@@ -16,7 +16,7 @@
 //
 // Kind `session`: another session (here or relayed from a host) finished a
 // turn since `since`, is idle, is blocked on a prompt, or ended. The pull
-// kinds (src/wait-kinds.ts: job, reply, run, ask, host, tap, cmd) read their
+// kinds (src/wait-kinds.ts: job, reply, ask, host, cmd) read their
 // owner's state at arm, when it changes (a file watch, an event, a nudge),
 // every 60 s and at start. Lines are built from typed values only: never
 // agent reply text or an owner's free text. A `cmd` wait names no ref: the
@@ -837,7 +837,7 @@ export class WaitService {
   }
 
   /** A pull kind: the ref names something its owner knows now (a job, a
-   * request, a run, an ask, a host), or a tap not taken in yet. */
+   * request, an ask, a host). */
   private armPull(input: ArmInput, kind: PullKind, now: number): { wait: Wait; created: boolean } {
     const ref = this.ops.pullRef(kind, input.ref)
     if (ref === null) throw new WaitRefused(404, 'not_found', { field: 'ref' })

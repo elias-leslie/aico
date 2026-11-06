@@ -1,7 +1,7 @@
 // Blank Slate: a session that starts with only the harness's own prompt and
 // what the user types. The mode is the workspace: a session whose project root
 // is a direct child of the Blank Slate directory launches through
-// scripts/aico-blank-slate, which execs the native harness without Agent Hub
+// scripts/aico-blank-slate, which execs the native harness without Aico
 // context, instruction files, skills, plugins, MCP servers, memory or
 // context-injecting hooks. Keying it on the root keeps it through restarts,
 // tool replacement, crash recovery and reboot restore without a catalog field.

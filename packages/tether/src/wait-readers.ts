@@ -1,7 +1,6 @@
 // What the pull kinds of a wait read (src/wait-kinds.ts), from each thing's
-// owner, read-only: SummitFlow's job files and coordination ledger, Agent
-// Hub runs as Tether follows them, Tether's own asks and hub peers, and
-// Nightshift's tap answers. Files are read when they change (a directory
+// owner, read-only: SummitFlow's job files and coordination ledger, Tether's
+// own asks and hub peers. Files are read when they change (a directory
 // watch), on a nudge, at every 60 s look and at start. A job whose runner
 // may have died is asked of its owner's CLI (`st service result`) as an
 // idle-weight transient unit, at most once a minute per job, never while
@@ -35,15 +34,12 @@ const PLAIN_PATH = /^\/[A-Za-z0-9/._-]+$/
 /** A unit outlives its wait's deadline by this much: the wait times out first,
  * with the watcher's state, then stops it. */
 const CMD_GRACE_SECONDS = 60
-const TAP_ID = /^[0-9a-f]{32}$/
 /** A probe of one job at most this often (a nudge skips it). */
 const PROBE_EVERY_MS = 60_000
 
 export interface PullReaderPaths {
   /** SummitFlow's service jobs (`<32 hex>.json`). */
   jobsDir: string
-  /** Nightshift's tap answers (`<32 hex>.resp.json`): owner taps, agent requests. */
-  tapDirs: readonly string[]
   /** Tether's own `cmd` watcher records: `<ref>.json` (what to run),
    * `<ref>.started`, `<ref>.result` (systemd's words for how it ended). */
   cmdDir: string
@@ -108,7 +104,7 @@ export interface PullReaderDeps {
   agentTitle?(anchor: string): string | null
   /** A hub peer's state; null when this hub has no such host. */
   host(name: string): string | null
-  /** Nightshift admission is red: heavy and probing work waits. */
+  /** Host admission is red: heavy and probing work waits. */
   admissionRed(): boolean
   /** Run the job's owner CLI: stdout, or null when it could not answer. */
   probeJob?(jobId: string): Promise<string | null>
@@ -272,11 +268,6 @@ export class PullReaders {
       const id = name.endsWith('.json') ? name.slice(0, -5) : ''
       if (JOB_ID.test(id)) this.deps.poke('job', id)
     })
-    for (const dir of paths.tapDirs)
-      this.watchDir(dir, (name) => {
-        const id = name.endsWith('.resp.json') ? name.slice(0, -10) : ''
-        if (TAP_ID.test(id)) this.deps.poke('tap', id)
-      })
     try {
       mkdirSync(paths.cmdDir, { recursive: true, mode: 0o700 })
     } catch {
@@ -296,7 +287,7 @@ export class PullReaders {
       watcher.on('error', () => watcher.close())
       this.watchers.push(watcher)
     } catch {
-      // Not there (no SummitFlow, no Nightshift) or not readable: the 60 s look reads it.
+      // Not there (no SummitFlow) or not readable: the 60 s look reads it.
     }
   }
 
@@ -311,14 +302,10 @@ export class PullReaders {
         return this.jobId(ref)
       case 'reply':
         return this.ledger()?.has(ref) ? ref : null
-      case 'run':
-        return null
       case 'ask':
         return this.deps.ask(ref) ? ref : null
       case 'host':
         return this.deps.host(ref) !== null ? ref : null
-      case 'tap':
-        return TAP_ID.test(ref) ? ref : null
       case 'cmd':
         return this.cmdSpec(ref) ? ref : null
     }
@@ -330,9 +317,6 @@ export class PullReaders {
         return this.readJob(ref)
       case 'reply':
         return this.readReply(ref)
-      case 'run': {
-        return null
-      }
       case 'ask': {
         const ask = this.deps.ask(ref)
         return ask ? { state: ask.state, detail: null, title: ask.question ?? null } : null
@@ -341,8 +325,6 @@ export class PullReaders {
         const state = this.deps.host(ref)
         return state === null ? null : { state, detail: null, title: null }
       }
-      case 'tap':
-        return this.readTap(ref)
       case 'cmd':
         return this.readCmd(ref)
     }
@@ -647,21 +629,6 @@ export class PullReaders {
       else if (!records.has(`${ref}.json`))
         rmSync(join(this.deps.paths.cmdDir, name), { force: true })
     }
-  }
-
-  private readTap(id: string): PullRead {
-    for (const dir of this.deps.paths.tapDirs) {
-      let raw: Record<string, unknown>
-      try {
-        raw = readJson(join(dir, `${id}.resp.json`)) as Record<string, unknown>
-      } catch {
-        continue
-      }
-      const outcome = str(raw.outcome)
-      if (outcome) return { state: outcome, detail: null, title: null }
-    }
-    // Not answered yet, or not taken in yet: never "gone".
-    return undefined
   }
 }
 

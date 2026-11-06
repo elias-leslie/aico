@@ -25,7 +25,7 @@ export const ASK_USAGE = `Usage:
   tether ask done <id>         close it once you have acted on the answer
   tether ask withdraw <id>     take back a question that no longer applies
 
-The answer comes back to an Aico session (Claude Code, Codex, Pi, Agent Hub) as
+The answer comes back to an Aico session (Claude Code, Codex, Pi) as
 a message once the agent is idle. Elsewhere (Antigravity, a script) read it
 with tether ask get <id>.`
 

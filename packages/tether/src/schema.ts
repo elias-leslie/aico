@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 35
+export const SCHEMA_VERSION = 36
 
 /** Conversations observed in an owned workload survive its retirement and delayed transcript ingestion. */
 export const TRANSCRIPT_OWNERS_SQL = `
@@ -271,39 +271,26 @@ export const SHARES_SQL = `
 `
 
 /**
- * v12: Agent Hub sessions (src/agent-hub/). `sessions.backend` says what holds
- * the session: a tmux pane (`tmux`, every earlier row) or an Agent Hub session
- * (`agent-hub`, no pane, so every tmux column stays at its never-allocated
- * default). `agent_hub_sessions` keeps what Tether needs to find that session
- * again after a restart: the Agent Hub session id Tether picked before it
- * created it, the agent, and whether it was created and its first prompt
- * posted. `agent_hub_queue` holds follow-ups waiting for the running turn to
- * end. Both go with the session row, whichever path deleted it.
+ * v12: `sessions.backend` (always `tmux` now; v36 removed the other value's
+ * rows and tables) and the retired chat backend's session tables, which v36
+ * drops. Kept so the migration versions stay valid.
  */
-export const AGENT_HUB_BACKEND_SQL = `
+export const LEGACY_BACKEND_SQL = `
   ALTER TABLE sessions ADD COLUMN backend TEXT NOT NULL DEFAULT 'tmux'
     CHECK(backend IN ('tmux', 'agent-hub'));
 `
 
-/**
- * v13: a queued follow-up keeps the model chosen when it was sent: NULL asks
- * for the session's model (a row queued before v13), '' for the agent's own
- * routing, anything else is a catalog model id.
- */
-export const AGENT_HUB_QUEUE_MODEL_SQL = `
+/** v13: the retired chat backend's follow-up queue gained a model column (dropped in v36). */
+export const LEGACY_QUEUE_MODEL_SQL = `
   ALTER TABLE agent_hub_queue ADD COLUMN model TEXT;
 `
 
-/**
- * v14: a queued follow-up keeps the thinking level chosen when it was sent:
- * NULL or '' for the model's own default, anything else a level Agent Hub's
- * turn API takes.
- */
-export const AGENT_HUB_QUEUE_THINKING_SQL = `
+/** v14: the same queue gained a thinking-level column (dropped in v36). */
+export const LEGACY_QUEUE_THINKING_SQL = `
   ALTER TABLE agent_hub_queue ADD COLUMN thinking_level TEXT;
 `
 
-export const AGENT_HUB_SQL = `
+export const LEGACY_CHAT_TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS agent_hub_sessions (
     session_id     TEXT PRIMARY KEY
                      CHECK(length(session_id) = 8 AND session_id NOT GLOB '*[^0-9a-f]*'),
@@ -326,6 +313,19 @@ export const AGENT_HUB_SQL = `
     DELETE FROM agent_hub_queue WHERE session_id = old.id;
     DELETE FROM agent_hub_sessions WHERE session_id = old.id;
   END;
+`
+
+/**
+ * v36: the retired Agent Hub chat backend's leftovers. Its sessions had no
+ * pane and nothing serves them now, so their rows go (the delete trigger
+ * retires their ids); then its trigger, tables and tool-registry row.
+ */
+export const DROP_LEGACY_CHAT_SQL = `
+  DROP TRIGGER IF EXISTS sessions_end_agent_hub;
+  DELETE FROM sessions WHERE backend = 'agent-hub';
+  DROP TABLE IF EXISTS agent_hub_queue;
+  DROP TABLE IF EXISTS agent_hub_sessions;
+  DELETE FROM agent_tools WHERE slug = 'agent-hub';
 `
 
 /**
@@ -547,7 +547,7 @@ export const SESSION_ENTRIES_SQL = `
 
 /**
  * v23: a root's explicit launch options (`model`, `reasoningEffort`,
- * `daybreak`, `agentHubContext` on `POST /v1/roots`), so crash recovery,
+ * `daybreak` on `POST /v1/roots`), so crash recovery,
  * restart, wakes and reboot restore launch the agent with them as the create
  * did. Written once, with the root's reservation; null fields were not given.
  */
@@ -558,7 +558,7 @@ export const SESSION_LAUNCH_OPTIONS_SQL = `
     model             TEXT CHECK(model IS NULL OR length(model) BETWEEN 1 AND 200),
     reasoning_effort  TEXT CHECK(reasoning_effort IS NULL OR length(reasoning_effort) BETWEEN 1 AND 40),
     daybreak          INTEGER CHECK(daybreak IS NULL OR daybreak IN (0, 1)),
-    agent_hub_context INTEGER CHECK(agent_hub_context IS NULL OR agent_hub_context IN (0, 1))
+    agent_hub_context INTEGER CHECK(agent_hub_context IS NULL OR agent_hub_context IN (0, 1)) -- retired, never read or written
   );
   CREATE TRIGGER IF NOT EXISTS sessions_end_launch_options AFTER DELETE ON sessions
   BEGIN
@@ -715,7 +715,7 @@ export const REACH_BACKFILL_SQL = `
  * v21: deliveries (src/deliveries.ts). A line another owner queued on a
  * session's delivery queue (`POST /v1/sessions/:id/deliveries`): its id is
  * the wakes row's, and the row here says when and how it went out (`via`:
- * the gated paste, an Agent Hub turn or a native puller). Undelivered with no
+ * the gated paste or a native puller). Undelivered with no
  * wakes row left means it was dropped (the session ended). Pruned after 7 days.
  */
 export const DELIVERIES_SQL = `

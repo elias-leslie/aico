@@ -93,7 +93,7 @@ export function refusalCategory(value: unknown): string | null {
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, '_')
-  // Codex reroute reasons (Agent Hub refusal_codes.py).
+  // Codex reroute reasons.
   if (word.replace(/_/g, '') === 'highriskcyberactivity') return 'cyber'
   return CATEGORY.test(word) ? word : null
 }

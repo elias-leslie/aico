@@ -195,7 +195,7 @@ export function SessionView({
     return <ChatSession key={sessionId} id={sessionId} onBack={onChatBack} />
 
   const workingDir = getSlotWorkingDir(slot)
-  // An Agent Hub session is a chat; it has no terminal to refit, search or type keys into.
+  // A chat has no terminal to refit, search or type keys into.
   const chat = slot.chat === true
   const awayHere =
     !chat && hostAway?.key === termKey && status === 'connected'

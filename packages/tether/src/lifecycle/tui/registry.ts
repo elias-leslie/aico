@@ -35,7 +35,7 @@ export function adapterForContext(kind: ContextHook['kind']): TuiAdapter | undef
 }
 
 /** How each tool takes a session's chosen instructions on top of its own
- * prompt. The Agent Hub launchers merge these with the context they deliver. */
+ * prompt. The launchers merge these with the context they deliver. */
 export function supportsInstructions(slug: string): boolean {
   return adapterOf(slug)?.capabilities.instructions ?? false
 }

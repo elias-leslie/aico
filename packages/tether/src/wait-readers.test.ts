@@ -14,7 +14,6 @@ import {
 } from './wait-readers'
 
 const JOB = '0123456789abcdef0123456789abcdef'
-const TAP = 'fedcba9876543210fedcba9876543210'
 
 it.each([
   ['success', '0', 'succeeded'],
@@ -102,7 +101,6 @@ function readers(): PullReaders {
     ledgerDoc: () => ledger,
     paths: {
       jobsDir: join(dir, 'jobs'),
-      tapDirs: [join(dir, 'out'), join(dir, 'agent')],
       cmdDir: join(dir, 'cmd'),
     },
     ask: (id) =>
@@ -129,7 +127,7 @@ const job = (state: string, extra: Record<string, unknown> = {}) =>
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'tether-wait-readers-'))
-  for (const sub of ['jobs', 'out', 'agent']) mkdirSync(join(dir, sub))
+  mkdirSync(join(dir, 'jobs'))
   ledger = { version: 0, doc: {} }
   pokes = []
   probes = []
@@ -254,19 +252,8 @@ describe('PullReaders', () => {
     expect(anchorWidget(fs, 'bad')).toBeNull()
   })
 
-  it('reads a tap from either answer dir; unanswered is unknown, never gone', () => {
+  it('reads asks and hosts from Tether', () => {
     const r = readers()
-    expect(r.pullRef('tap', TAP)).toBe(TAP)
-    expect(r.read('tap', TAP)).toBeUndefined()
-    writeFileSync(join(dir, 'agent', `${TAP}.resp.json`), JSON.stringify({ outcome: 'denied' }))
-    expect(r.read('tap', TAP)).toEqual({ state: 'denied', detail: null, title: null })
-  })
-
-  it('reads runs, asks and hosts from Tether', () => {
-    const r = readers()
-    expect(r.read('run', 'run-1')).toBeNull()
-    expect(r.read('run', 'run-2')).toBeNull()
-    expect(r.pullRef('run', 'run-3')).toBeNull()
     expect(r.read('ask', 'c'.repeat(12))?.state).toBe('answered')
     expect(r.read('ask', 'd'.repeat(12))).toBeNull()
     expect(r.read('host', 'gem')?.state).toBe('connected')
@@ -278,10 +265,9 @@ describe('PullReaders', () => {
     r.watch()
     try {
       job('running')
-      writeFileSync(join(dir, 'out', `${TAP}.resp.json`), '{"outcome": "applied"}')
-      for (let i = 0; i < 50 && pokes.length < 2; i += 1)
+      for (let i = 0; i < 50 && pokes.length < 1; i += 1)
         await new Promise((resolve) => setTimeout(resolve, 20))
-      expect(pokes).toEqual(expect.arrayContaining([`job:${JOB}`, `tap:${TAP}`]))
+      expect(pokes).toEqual(expect.arrayContaining([`job:${JOB}`]))
     } finally {
       r.stop()
     }

@@ -11,7 +11,7 @@ export interface LoginCredential {
   name: string
   rotates: boolean
   state: LoginState
-  /** `agent-hub` (served at launch) or `host:<path>` (a login on the host's disk). */
+  /** `Aico secrets folder` (served at launch) or `host:<path>` (a login on the host's disk). */
   source: string
   detail?: string
   expires_at?: string | null
@@ -31,11 +31,9 @@ export interface ToolLoginActions {
   signOut: 'revoke' | 'command' | 'session' | null
 }
 
-/** `GET /v1/hosts/:name/logins`: the host's `agent-hub login status --json`. */
+/** `GET /v1/hosts/:name/logins`: the host's `tether fleet login-status`. */
 export interface HostLogins {
   host: string
-  /** `reachable`, or why Agent Hub could not be reached from the host. */
-  agent_hub: string
   tools: ToolLoginStatus[]
   checkedAt: number
   actions: Record<string, ToolLoginActions>

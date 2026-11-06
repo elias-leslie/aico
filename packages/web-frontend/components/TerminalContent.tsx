@@ -83,7 +83,7 @@ function TerminalContentBody({
   const [phoneList, setPhoneList] = useState(false)
   // biome-ignore lint/correctness/useExhaustiveDependencies: a deep link or new chat opens the chosen session
   useEffect(() => setPhoneList(false), [activeSessionId])
-  // A chat (an Agent Hub session, or a workflow step opened read-only) has no terminal to type keys into.
+  // A chat has no terminal to type keys into.
   const chatShown = shownSlot?.chat === true
   const sessionName = (session: string) => {
     const slot = terminalSlots.find((candidate) =>

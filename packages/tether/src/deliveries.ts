@@ -1,8 +1,7 @@
 // Deliveries (docs/api-v1.md "Deliveries"): one line another owner queues on
 // a session's delivery queue, the same gated queue Tether's own event lines
 // ride (wakes, kind `event`): pasted once the agent is idle, nobody has typed
-// for a moment and the input line is empty; an Agent Hub chat takes it as a
-// turn; a native puller (Claude's asyncRewake hook, Pi's extension) takes it
+// for a moment and the input line is empty; a native puller (Claude's asyncRewake hook, Pi's extension) takes it
 // as a notice while attached. SummitFlow's coordination inbox queues its
 // `[Message] …` lines here instead of typing into panes itself.
 //

@@ -619,7 +619,7 @@ AGENT_IN_GROUP = "4242 bash\n4250 bash\n4251 claude\n"
 
 @pytest.mark.parametrize("foreground, group, screen, terminal", [
     ("bash", SHELL_ONLY,
-     b"agent-hub-cred-exec: pi: Agent Hub holds no current credential for that tool\n$ \n", "agent_exited"),
+     b"pi: no current credential for that tool\n$ \n", "agent_exited"),
     ("-bash", SHELL_ONLY, b"$ \n", "agent_exited"),
     ("node", SHELL_ONLY, b"$ \n", "ambiguous"),
     # tmux names the wrapper's shell while the agent runs under it.

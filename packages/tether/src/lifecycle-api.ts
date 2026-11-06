@@ -3,7 +3,6 @@
 // parse, fence and map results; every lifecycle decision is the engine's.
 
 import { execFile } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
 import { promisify } from 'node:util'
@@ -263,14 +262,6 @@ export function generationOf(row: WidgetRow): string {
  * no probe for the session's current tool has finished yet.
  */
 function contextHookOf(row: WidgetRow): Record<string, unknown> {
-  if (row.backend === 'agent-hub')
-    return {
-      state: 'unknown',
-      detail: 'Agent Hub delivers context itself.',
-      tool: row.tool,
-      applicable: false,
-      checkedAt: null,
-    }
   const status = contextStatus(row.id)
   if (status && status.slug === row.tool) {
     return {
@@ -293,9 +284,8 @@ function contextHookOf(row: WidgetRow): Record<string, unknown> {
 }
 
 export function descriptor(row: WidgetRow, status: SessionStatus): Record<string, unknown> {
-  const hub = row.backend === 'agent-hub'
   const server = row.tmuxServerId ? getTmuxServer(row.tmuxServerId) : undefined
-  const target = hub ? { socket: null } : tmuxTargetForWidget(row.id)
+  const target = tmuxTargetForWidget(row.id)
   return {
     id: row.id,
     ownershipId: row.sessionId,
@@ -334,8 +324,6 @@ export function descriptor(row: WidgetRow, status: SessionStatus): Record<string
     launched: row.launched,
     asks: sessionAsks(row.id),
     createdAt: row.createdAt,
-    // An Agent Hub session has no pane (its `tmux` fields stay null) and says
-    // which Agent Hub session it is; a tmux session carries neither field.
     // This computer's own session; the hub tags a remote host's with its name.
     host: null,
   }
@@ -511,7 +499,7 @@ export async function pressKeysInRunningSession(
   generation?: string,
 ): Promise<boolean> {
   const row = getWidget(widgetId)
-  if (!row || row.backend === 'agent-hub' || keys.length === 0) return false
+  if (!row || keys.length === 0) return false
   const pressed = await withRunningSession(
     row.id,
     generation ?? generationOf(row),
@@ -522,22 +510,6 @@ export async function pressKeysInRunningSession(
     },
   )
   return pressed === true
-}
-
-/** A route that needs a terminal answers an Agent Hub session with this. */
-function requireTerminal(row: WidgetRow): void {
-  if (row.backend === 'agent-hub')
-    throw new HttpError(409, 'workload_unavailable', {
-      reason: 'an Agent Hub session has no terminal',
-    })
-}
-
-/** A route that replaces the session's tool or project cannot apply to one. */
-function requireTmuxBackend(row: WidgetRow): void {
-  if (row.backend === 'agent-hub')
-    throw new HttpError(409, 'unsupported_backend', {
-      reason: 'an Agent Hub session cannot be replaced in place',
-    })
 }
 
 /** Mark, unmark, or join a coordinator, and publish every changed session. */
@@ -714,7 +686,6 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
       context.events.publish('root.updated', { id: widgetId })
     },
     status: async (row) => {
-      if (row.backend === 'agent-hub') return verifySessionStatus(row)
       if (
         row.launchState === 'dispatched' &&
         (await rootManagedGateState(row)) === 'active-workload'
@@ -761,7 +732,6 @@ export function learnProjects(
     for (const row of listSessions()) notifySessionChanged(row.id, { force: true })
 }
 
-const AGENT_SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
 
 export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
@@ -844,8 +814,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         'origin',
         'aTermSessionId',
         'size',
-        'agentSlug',
-        'model',
         'host',
       ])
       if (body.host !== undefined && body.host !== null) {
@@ -897,7 +865,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
           throw new HttpError(400, 'invalid_body', { field: 'blankSlate' })
         if (!supportsBlankSlate(tool.slug)) throw new HttpError(400, 'blank_slate_unsupported')
       }
-      // An Agent Hub prompt revision the caller resolved (tui/instructions.ts).
+      // A prompt revision the caller resolved (tui/instructions.ts).
       const instructions =
         body.instructions === undefined || body.instructions === null
           ? null
@@ -906,8 +874,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         throw new HttpError(400, 'invalid_body', { field: 'instructions' })
       if (instructions && !supportsInstructions(tool.slug))
         throw new HttpError(400, 'instructions_unsupported')
-      if (body.agentSlug !== undefined || body.model !== undefined)
-        throw new HttpError(400, 'invalid_body', { field: 'agentSlug' })
       await whenReady()
       if (!lingerEnabled()) throw new HttpError(503, 'linger_required')
 
@@ -943,7 +909,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       if (!latest) throw new HttpError(404, 'not_found')
       if (generationOf(latest) !== generation) throw new HttpError(409, 'identity_changed')
       // `resumeId`: the native conversation ID of a Claude Code or Codex session, as last
-      // observed (the root's own session in Agent Hub's usage data); null when none is known.
+      // observed; null when none is known.
       sendJson(res, 200, {
         ...descriptor(latest, status),
         resumeId: context.continuity?.resumeIdOf(latest.id, latest.tool) ?? null,
@@ -1127,7 +1093,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       only(body, ['generation'])
       const generation = requireGeneration(body)
       const row = requireSession(params.id)
-      requireTmuxBackend(row)
       fence(row, generation)
       await whenReady()
       const result = await respawnAndRelaunch(row.id, getTui(row.tool), {
@@ -1146,7 +1111,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       if (!spec) throw new HttpError(400, 'unknown_tool')
       // A chat has no terminal to put in a pane.
       const row = requireSession(params.id)
-      requireTmuxBackend(row)
       fence(row, generation)
       if (
         isBlankSlateRoot(row.projectRoot) &&
@@ -1178,7 +1142,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       if (byRoot && !isProjectRootPath(body.projectRoot))
         throw new HttpError(400, 'invalid_body', { field: 'projectRoot' })
       const row = requireSession(params.id)
-      requireTmuxBackend(row)
       fence(row, generation)
       const projectId = byId ? (body.projectId as string) : null
       const projectRoot = projectId
@@ -1203,14 +1166,12 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     // report state changes here; see docs/agent-state.md.
     .add('POST', '/v1/sessions/:id/agent-event', async (req, res, params) => {
       const row = requireSession(params.id)
-      requireTmuxBackend(row)
       const report = parseHookReport(await readJsonObject(req))
       const applied = agentStates?.report(row.id, report) ?? false
       sendJson(res, 200, { applied, ...agentStateOf(row.id) })
     })
     .add('POST', '/v1/sessions/:id/context-check', async (_req, res, params) => {
       const row = requireSession(params.id)
-      requireTmuxBackend(row)
       const spec = sessionSpec(getTui(row.tool), row.projectRoot, row.id)
       if (spec) await probeContext(row.id, spec)
       const latest = requireSession(row.id)
@@ -1218,7 +1179,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('GET', '/v1/sessions/:id/pane-mode', async (_req, res, params) => {
       const row = requireSession(params.id)
-      requireTerminal(row)
       if (isNeverAllocatedWidget(row)) throw new HttpError(409, 'workload_unavailable')
       const target = tmuxPaneTargetForWidget(row.id)
       if (!target.socket) throw new HttpError(409, 'workload_unavailable')
@@ -1232,7 +1192,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('GET', '/v1/sessions/:id/attach', async (_req, res, params) => {
       const row = requireSession(params.id)
-      requireTerminal(row)
       if (isNeverAllocatedWidget(row)) throw new HttpError(409, 'workload_unavailable')
       await whenReady()
       // Recovery only: an allocated session is never implicitly relaunched.
@@ -1252,7 +1211,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('GET', '/v1/sessions/:id/capture', async (_req, res, params, query) => {
       const row = requireSession(params.id)
-      requireTerminal(row)
       if (isNeverAllocatedWidget(row)) throw new HttpError(409, 'workload_unavailable')
       const escapes = query.get('escapes') === '1'
       let text: string
@@ -1267,7 +1225,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     // URL; `url` is null until the tool has printed it. 404 for any other session.
     .add('GET', '/v1/sessions/:id/sign-in-link', async (_req, res, params) => {
       const row = requireSession(params.id)
-      requireTerminal(row)
       const tool = signInToolOf(row.name)
       const link = tool ? adapterOf(tool)?.login.signInLink : undefined
       if (!tool || !link) throw new HttpError(404, 'no_sign_in_link')
@@ -1282,7 +1239,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('GET', '/v1/sessions/:id/scrollback', async (_req, res, params, query) => {
       const row = requireSession(params.id)
-      requireTerminal(row)
       if (isNeverAllocatedWidget(row)) throw new HttpError(409, 'workload_unavailable')
       const number = (key: string) => {
         const value = query.get(key)
@@ -1355,7 +1311,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       only(body, ['generation'])
       const generation = requireGeneration(body)
       const row = requireSession(params.id)
-      requireTerminal(row)
       fence(row, generation)
       if (!adapterOf(row.tool)?.capabilities.rewind)
         throw new HttpError(409, 'rewind_unsupported', { tool: row.tool })
@@ -1410,7 +1365,6 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const viewer = parseViewerLabel(body.viewer)
       if (viewer === null) throw new HttpError(400, 'invalid_viewer')
       const row = requireSession(params.id)
-      requireTerminal(row)
       fence(row, generation)
       const isCurrent = () => {
         const latest = getWidget(row.id)

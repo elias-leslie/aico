@@ -411,7 +411,7 @@ export function buildApi(deps: ApiDeps): Router {
     const iso = (ms: unknown) =>
       typeof ms === 'number' && ms > 0 ? new Date(ms).toISOString() : null
     return items
-      .filter((tool) => typeof tool.slug === 'string' && tool.slug !== 'agent-hub')
+      .filter((tool) => typeof tool.slug === 'string')
       .map((tool) => ({
         id: tool.id ?? tool.slug,
         slug: tool.slug,
@@ -457,7 +457,7 @@ export function buildApi(deps: ApiDeps): Router {
   registerHistoryRoutes(router, tether, deps.chats)
   if (deps.chats) registerChatRoutes(router, deps.chats, deps.asks, tether, deps.captures)
 
-  // -- Agent Hub, auth, health ------------------------------------------------------
+  // -- Auth, health -------------------------------------------------------------
 
   // The app has no login of its own (Cloudflare Access gates the public host);
   // host-steward's public-gate check (checks.toml) still reads this path.

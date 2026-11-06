@@ -76,12 +76,6 @@ class FakePeer {
   shares: Record<string, unknown>[] | null = []
   /** Control the gap between asks being cached and the whole link-up finishing. */
   sharesReady: Promise<void> | null = null
-  runs: Record<string, unknown> = {
-    status: 'ok',
-    error: null,
-    updatedAt: 1,
-    items: [{ runId: 'run-1' }],
-  }
 
   constructor(readonly socket: string) {}
 
@@ -132,7 +126,6 @@ class FakePeer {
       if (this.failSessions) return sendJson(res, 500, { error: 'internal_error' })
       return sendJson(res, 200, { items: this.sessions })
     }
-    if (url === '/v1/runs') return sendJson(res, 200, this.runs)
     if (url === '/v1/asks' && this.asks) return sendJson(res, 200, { items: this.asks })
     if (url === '/v1/shares' && this.shares) {
       await this.sharesReady

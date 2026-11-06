@@ -85,7 +85,7 @@ describe('loadConfig', () => {
     expect(access({ team_domain: 'team.cloudflareaccess.com' })).toBeNull()
   })
 
-  it('lets the environment override port, origins, paths and Agent Hub', () => {
+  it('lets the environment override port, origins and paths', () => {
     const config = loadConfig(
       {
         HOME: '/home/u',

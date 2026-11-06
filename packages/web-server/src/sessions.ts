@@ -63,8 +63,6 @@ export interface WebSession {
   can_rename: boolean
   can_respawn: boolean
   can_end: boolean
-  /** `agent-hub` for a chat on an Agent Hub agent (no terminal); null on a tmux session. */
-  backend: 'agent-hub' | null
   /** The remote host the session runs on; null on this computer. */
   host: string | null
   /** Set while that host cannot be reached: the session is shown as last seen. */
@@ -225,7 +223,6 @@ export function fromTether(
     can_rename: true,
     can_respawn: !isRoot,
     can_end: true,
-    backend: descriptor.backend === 'agent-hub' && descriptor.agentHub ? 'agent-hub' : null,
     host: typeof descriptor.host === 'string' ? descriptor.host : null,
     peer:
       descriptor.peer && typeof descriptor.peer.state === 'string'

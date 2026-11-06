@@ -88,7 +88,6 @@ export async function runFleet(
     io.out(
       JSON.stringify({
         host: machineName(hostname()),
-        agent_hub: 'Aico secrets folder',
         tools: [...new Set(entries.map((entry) => entry.tool))].map((tool) => ({
           tool,
           state: entries

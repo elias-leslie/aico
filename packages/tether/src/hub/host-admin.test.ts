@@ -33,7 +33,6 @@ const CONTROL = '/run/user/1000/aico/fleet/vm-1/exec.sock'
 
 const STATUS = {
   host: 'vm-1',
-  agent_hub: 'reachable',
   tools: [{ tool: 'codex', state: 'needs_sign_in', source: 'host:/home/u/.codex/auth.json' }],
 }
 
@@ -77,7 +76,7 @@ function setup(
       )
     },
     grant: async (name, tool, granted) => {
-      fetches.push({ url: name + '/' + tool, method: granted ? 'PUT' : 'DELETE', headers: {} })
+      fetches.push({ url: `${name}/${tool}`, method: granted ? 'PUT' : 'DELETE', headers: {} })
       await options.grant?.(name, tool, granted)
     },
     readFile: (path) => {
@@ -109,7 +108,7 @@ async function refusal(promise: Promise<unknown>): Promise<HttpError> {
 }
 
 describe('login status', () => {
-  it('runs agent-hub on the host through the link and returns its answer', async () => {
+  it('runs the fleet login status on the host through the link and returns its answer', async () => {
     const { admin, runs } = setup()
     const answer = await admin.status('vm-1')
     expect(runs[0]).toEqual(
@@ -124,12 +123,12 @@ describe('login status', () => {
     })
   })
 
-  it('lists the tools as unknown, with their sign-in, on a host with no agent-hub command', async () => {
+  it('lists the tools as unknown, with their sign-in, on a host with no fleet command', async () => {
     const { admin } = setup({
-      run: () => ({ code: 127, stdout: '', output: 'bash: line 1: agent-hub: command not found' }),
+      run: () => ({ code: 127, stdout: '', output: 'bash: line 1: tether: command not found' }),
     })
     const answer = await admin.status('vm-1')
-    expect(answer).toMatchObject({ host: 'vm-1', agent_hub: 'no Agent Hub command on vm-1' })
+    expect(answer).toMatchObject({ host: 'vm-1' })
     const tools = answer.tools as { tool: string; state: string }[]
     expect(tools.map((item) => item.tool)).toEqual(
       expect.arrayContaining(['claude-code', 'codex', 'pi', 'agy']),
@@ -138,11 +137,11 @@ describe('login status', () => {
     expect(answer.actions).toMatchObject({ agy: { signIn: true, signOut: 'session' } })
   })
 
-  it("checks each tool's own login file on a host with no agent-hub command", async () => {
+  it("checks each tool's own login file on a host with no fleet command", async () => {
     const { admin, runs } = setup({
       run: (argv) =>
         argv.at(-1)?.includes('fleet login-status')
-          ? { code: 127, stdout: '', output: 'bash: line 1: agent-hub: command not found' }
+          ? { code: 127, stdout: '', output: 'bash: line 1: tether: command not found' }
           : { code: 0, stdout: 'claude-code n n\ncodex y n\npi n n\nagy y y\n', output: '' },
     })
     const answer = await admin.status('vm-1')

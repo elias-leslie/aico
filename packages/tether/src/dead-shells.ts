@@ -32,7 +32,7 @@ function paneless(row: WidgetRow): boolean {
 
 /** A plain shell: a terminal session with no agent command to resume. */
 function isShellSession(row: WidgetRow): boolean {
-  return row.backend !== 'agent-hub' && (getTui(row.tool)?.command.length ?? 0) === 0
+  return (getTui(row.tool)?.command.length ?? 0) === 0
 }
 
 export class DeadShells {

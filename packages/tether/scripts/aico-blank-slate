@@ -3,12 +3,12 @@
 
 Tether runs this, instead of the tool's usual command, for a session whose
 workspace is a Blank Slate directory: `aico-blank-slate SLUG [ARGS...]`. It
-execs the native harness directly, so the Agent Hub launchers never deliver
+execs the native harness directly, so Aico's context launchers never deliver
 context, and turns off everything else that would add first-party text to
 the model's context: project and user instruction files, skills, plugins,
 MCP servers, memory, and every hook except the user's silent PreToolUse
 guards (they speak only when they refuse a tool call) and, for Pi with a
-work role, Agent Hub's model guard (it speaks only when it refuses a model).
+work role, Aico's model guard (it speaks only when it refuses a model).
 Claude keeps the user's model, effort and status line settings and their
 Bypass Permissions acceptance. The workspace is empty, so there are no
 project files either. Docs: docs/root-control.md.
@@ -40,9 +40,6 @@ CLAUDE_KEPT_SETTINGS = ("model", "effortLevel", "modelSettings", "alwaysThinking
 # Entries of the user settings' env kept too: the opt-out of Claude's switch to another model after a flagged
 # request (with switchModelsOnFlag above), so a blank session stops instead of going on with the fallback model.
 CLAUDE_KEPT_ENV = ("CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK",)
-# Environment the normal launchers leave for their hooks; never carried into a blank session.
-DROPPED_ENV = ("AGENT_HUB_CONTEXT_PREINJECTED_HASH", "AGENT_HUB_CONTEXT_PREINJECTED_CONTRACT",
-               "AGENT_HUB_CONTEXT_PREINJECTED_TEXT", "AICO_ROOT_AGENT_HUB_CONTEXT")
 
 
 def fail(message: str) -> NoReturn:
@@ -51,7 +48,7 @@ def fail(message: str) -> NoReturn:
 
 
 def native(variable: str, default: Path) -> str:
-    """The real harness binary, found the way its Agent Hub launcher finds it."""
+    """The real harness binary, found the way its launcher finds it."""
     candidate = os.environ.get(variable) or str(default)
     if not os.access(candidate, os.X_OK):
         fail(f"native binary not found: {candidate} (set {variable})")
@@ -196,7 +193,7 @@ def codex(argv: list[str], env: dict[str, str]) -> list[str]:
 
 def pi(argv: list[str], env: dict[str, str]) -> list[str]:
     blank = ["pi", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-mcp"]
-    # Agent Hub's model guard adds no text to the model's context: it only refuses a model the launch
+    # Aico's model guard adds no text to the model's context: it only refuses a model the launch
     # rules deny for this session's work role (Pi shares one login file, so /model could reach Claude).
     # --no-extensions still loads an explicit -e path.
     if env.get("ST_WORK_ROLE", "").strip():
@@ -215,7 +212,7 @@ ADAPTERS = {"claude-code": claude, "codex": codex, "pi": pi}
 def main(argv: list[str]) -> NoReturn:
     if not argv or argv[0] not in ADAPTERS:
         fail(f"Blank Slate supports {', '.join(sorted(ADAPTERS))}; got {argv[0] if argv else 'nothing'}")
-    env = {key: value for key, value in os.environ.items() if key not in DROPPED_ENV}
+    env = dict(os.environ)
     command = ADAPTERS[argv[0]](argv[1:], env)
     try:
         os.execvpe(command[0], command, env)

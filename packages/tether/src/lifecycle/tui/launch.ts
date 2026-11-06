@@ -69,7 +69,7 @@ export function launchLine(spec: TuiSpec): string | null {
   ]
   // A delivered launch exports the agent's own pid beside the delivered marker: the
   // shell becomes the agent (exec), so its $$ is the agent's pid, which is what lets
-  // Agent Hub's checks and the aico CLI tell this process from one it starts.
+  // the aico CLI tell this process from one it starts.
   const command = env.AICO_CONTEXT_DELIVERED
     ? ['sh', '-c', shellQuote('export AICO_CONTEXT_PID=$$; exec "$@"'), 'sh']
     : []

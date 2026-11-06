@@ -18,7 +18,7 @@ def session(id="12345678", **overrides):
 
 def test_inventory_includes_unlinked_pi_codex_and_coordinator_root(monkeypatch):
     calls, output = [], []
-    rows = [session(), session("aabbcc01", tool="codex", projectId="agent-hub", state="idle"),
+    rows = [session(), session("aabbcc01", tool="codex", projectId="side-project", state="idle"),
             session("aabbcc02", tool="codex", origin="root", coordinator=True,
                     coordinatorId="aabbcc02", rootRequestId="root-fixture"),
             session("aabbcc03", projectId="Personal Workspace")]

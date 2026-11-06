@@ -257,7 +257,6 @@ function piProbe(
 export const pi: TuiAdapter = {
   id: 'pi',
   harness: 'pi',
-  executor: 'pi',
   seed: {
     slug: 'pi',
     name: 'Pi',
@@ -303,7 +302,6 @@ export const pi: TuiAdapter = {
     transcriptFacts: false,
     threadSubagents: false,
     nativeAdmin: false,
-    agentHubContext: true,
     environmentSelection: true,
     delivery: { idlePaste: true, nextTurn: true, toolResult: true },
   },

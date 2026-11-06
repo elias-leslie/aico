@@ -177,7 +177,7 @@ HOST_CREATE_SECONDS = 420
 # How long a --host create waits for an answer before saying the host may be powering on.
 HOST_WAIT_NOTICE_SECONDS = 3
 # Refusals besides every 400 and 422: the owner created nothing.
-REFUSED_CREATES = frozenset({"request_conflict", "recovery_pending", "agent_hub_unavailable", "at_capacity"})
+REFUSED_CREATES = frozenset({"request_conflict", "recovery_pending", "at_capacity"})
 # `--host auto`: Tether picks the host from live readings (packages/tether/src/hub/placement.ts).
 AUTO_HOST = "auto"
 # This computer by name: `--host local --needs` books a reservation here like a VM create does.
@@ -349,9 +349,9 @@ def aico_read(args: list[str], timeout: float = 10) -> tuple[int, typing.Any] | 
 
 
 def opencode_go_quota_block(model: str | None) -> str | None:
-    """`<window> resets <time>` while Agent Hub reports an opencode-go window rate-limited, else None.
+    """`<window> resets <time>` while `aico usage show` reports an opencode-go window rate-limited, else None.
 
-    Best effort: without the ST context's Agent Hub URL or a known reply, the launch goes ahead.
+    Best effort: without a known reply, the launch goes ahead.
     """
     if not model or not model.startswith("opencode-go/"):
         return None
@@ -450,8 +450,8 @@ PI_MODEL_REASON = "pi needs --model provider/model"
 
 
 def credential_shims() -> Path:
-    """Aico's credential shims, installed on agent hosts only (the workstation runs Agent Hub)."""
-    return Path.home() / ".local/lib/agent-hub/cred-bin"
+    """Aico's credential shims, installed on agent hosts only (scripts/install-worker.sh)."""
+    return Path.home() / ".local/lib/aico/auth-bin"
 
 
 def through_credential_shim(command: str) -> bool:
@@ -1274,7 +1274,7 @@ def st_prompt(*args: str) -> typing.Any:
 
 
 def resolve_instructions(selection: str) -> dict:
-    """The Agent Hub prompt revision `PROMPT[@REVISION]` names, as the snapshot
+    """The prompt revision `PROMPT[@REVISION]` names, as the snapshot
     Tether keeps for the session. REVISION is a revision id or a unique prefix
     of one; without it, the revision holding the prompt's current content."""
     slug, _, wanted = selection.partition("@")
@@ -1314,7 +1314,7 @@ EFFORTS = ("none", "off", "minimal", "low", "medium", "high", "xhigh", "max")
 # The safety floor that holds when Aico's launch rules can't be read (model-choice build plan,
 # owner 2026-11-01): a Claude launch is refused for hunting and recon work in any project and for
 # verification work in project neri-hunters, no wider than Aico's deny rows; every other launch
-# goes ahead. With the rules readable, Agent Hub alone answers allowed or denied.
+# goes ahead. With the rules readable, Aico alone answers allowed or denied.
 CLAUDE_FLOOR_ROLES = ("hunting", "recon")
 CLAUDE_FLOOR_PROJECT_ROLES = {"verification": "neri-hunters"}
 CLAUDE_TOOL = "claude-code"  # always Claude
@@ -1329,7 +1329,7 @@ def launch_row(role: str, tool: str, model: str | None = None, project: str | No
     """Aico's launch-table row for this work role and tool (GET /api/models/launch-defaults,
     what `st models route --role ROLE --tool TOOL` shows), judged for the explicit model and the
     project: the row carries Aico's `allowed` and `deny_reason`. None when the table can't be
-    read. Raises ValueError when Agent Hub has no such work role, so a typo such as `tester` fails
+    read. Raises ValueError when Aico has no such work role, so a typo such as `tester` fails
     here instead of launching as an unknown role with the full delivery."""
     args = ["models", "route", "--role", role, "--tool", ROUTE_TOOL_NAMES.get(tool, tool), "--json"]
     if model:
@@ -1492,12 +1492,11 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; leaves shared defaults alone. Codex: only models its catalog lists with "
                         "Daybreak for this account (on any other, create refuses and names the ones that have it); "
                         "Pi: openai/gpt-6-sol only")
-    parser.add_argument("--agent-hub-context", choices=("on", "off"), help="Pi optional Agent Hub context; off retains required policy, native/project instructions and ingestion")
     parser.add_argument("--blank-slate", action="store_true", help=(
-        "fresh session in a new empty workspace with no Agent Hub, project, memory, skill, plugin, MCP or "
+        "fresh session in a new empty workspace with no project, memory, skill, plugin, MCP or "
         "context hook; only the harness's own prompt and yours (claude-code, codex, pi; docs/root-control.md)"))
     parser.add_argument("--instructions", metavar="PROMPT[@REVISION]", help=(
-        "add this Agent Hub prompt revision to the agent's instructions, kept for the session's restarts; "
+        "add this prompt revision to the agent's instructions, kept for the session's restarts; "
         "default revision: the prompt's current one. A Blank Slate session gets only these"))
     parser.add_argument("--host", help=(
         "start it on this remote host from ~/.config/tether/hosts.json (powered on first if it is off); "
@@ -1528,8 +1527,6 @@ def create_main(argv: list[str]) -> int:
     if args.work_role_name is not None and (not args.work_role or not args.work_role_name.strip()
             or len(args.work_role_name) > 128 or re.search(r"[\x00-\x1f\x7f]", args.work_role_name)):
         refuse("work role name must be 1-128 characters of single-line text")
-    if args.tool == "agent-hub":
-        refuse("Agent Hub sessions are retired; start an Aico chat or a native agent session")
     launch, applied = None, {}
     if args.work_role is not None:
         try:
@@ -1544,11 +1541,11 @@ def create_main(argv: list[str]) -> int:
         if launch is not None:
             applied = apply_launch_defaults(args, launch)
     if args.blank_slate:
-        if args.project_root is not None or args.resume_session is not None or args.agent_hub_context is not None:
+        if args.project_root is not None or args.resume_session is not None:
             refuse("--blank-slate starts fresh in its own empty workspace; drop --project-root, "
-                         "--resume-session and --agent-hub-context")
+                         "and --resume-session")
         if args.project is None:
-            # Agent Hub only knows registered projects; a chat's blank slate is its empty workspace.
+            # A blank slate is its own empty workspace, outside the project registry.
             args.project = "blank-slate"
     elif args.project is None or args.project_root is None:
         refuse("--project and --project-root are required unless --blank-slate")
@@ -1670,12 +1667,10 @@ def create_main(argv: list[str]) -> int:
         if args.resume_session:
             payload["resumeSessionId"] = args.resume_session
             fields.append(args.resume_session)
-        if args.model or args.reasoning_effort or args.daybreak is not None or args.agent_hub_context is not None:
+        if args.model or args.reasoning_effort or args.daybreak is not None:
             selection = {"model": args.model, "reasoningEffort": args.reasoning_effort}
             if args.daybreak is not None:
                 selection["daybreak"] = args.daybreak == "on"
-            if args.agent_hub_context is not None:
-                selection["agentHubContext"] = args.agent_hub_context == "on"
             payload.update(selection)
             fields.append(selection)
         if args.work_role:
@@ -1707,7 +1702,7 @@ def create_main(argv: list[str]) -> int:
                   409: ("request_conflict", "recovery_pending", "host_unavailable", "outcome_uncertain",
                         "at_capacity"),
                   422: ("launch_unavailable", "unknown_agent", "unknown_model", "entry_unavailable"),
-                  503: ("unavailable", "agent_hub_unavailable")}
+                  503: ("unavailable",)}
         if status not in (200, 202):
             reason = data.get("error")
             if reason not in errors.get(status, ()):
@@ -2182,8 +2177,7 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     The caller's generation must still be the root's and its Tether session's;
     Tether's inject route fences it again under the lifecycle lock and sends one
     bracketed paste plus Enter, which a busy harness queues as steering. Delivered
-    means the pane received it, not that the agent consumed it. An Agent Hub chat
-    root takes it as a turn (`queued` when one was running). Never retried."""
+    means the pane received it, not that the agent consumed it. Never retried."""
     if not re.fullmatch(GENERATION, args.generation):
         parser.error("--generation expects the root's exact SHA-256 generation")
     if args.stdin and args.text is not None:
@@ -2229,9 +2223,6 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         if data.get("generation") != args.generation or data.get("delivered") is not True:
             raise Unavailable("send_receipt_unqualified")
         output.update(applied=True, delivered=True, bytes=len(text.encode("utf-8")))
-        if data.get("queued") is True:
-            # Agent Hub chat root with a turn running: held until it is idle.
-            output["queued"] = True
         emit_json(collector, output)
         return 0
     except (Unavailable, Stopped) as error:
@@ -2324,7 +2315,7 @@ NATIVE_ID = r"[0-9A-Za-z][0-9A-Za-z-]{7,99}"
 
 
 RESUME_BUDGET = 2.0  # seconds for all the resume-id reads together
-OUTPUT_RESERVE = 3.0  # seconds the collector keeps for the Agent Hub context read (2 s) and printing
+OUTPUT_RESERVE = 3.0  # seconds the collector keeps for the context read (2 s) and printing
 
 
 
@@ -2436,7 +2427,7 @@ def sessions_main(argv: list[str]) -> int:
 
 WAKE_ID = r"[0-9a-f]{12}"
 WAKE_REFUSALS = {
-    "wake_unsupported": "this session's tool does not report when it is idle; check-ins need Claude Code, Codex or Pi with its state known, or an Agent Hub session",
+    "wake_unsupported": "this session's tool does not report when it is idle; check-ins need Claude Code, Codex or Pi with its state known",
     "too_many_wakes": "this session already has its maximum number of check-ins; cancel one first",
     "not_found": "no such session or check-in",
 }
@@ -2652,7 +2643,6 @@ CMD_DEFAULT_MINUTES = 360
 PULL_WAITS = {
     "job": (("done",), r"[0-9a-f]{8,32}", "a SummitFlow service job id (8+ hex; st service rebuild --detach)"),
     "reply": (("acked", "closed"), r"[0-9a-f]{6,12}", "a request you sent with st sessions send (its id)"),
-    "run": (("finished", "needs-you"), r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}", "an Agent Hub workflow run id"),
     "ask": (("answered",), r"[0-9a-f]{12}", "an owner ask id (tether ask create)"),
     "host": (("connected",), r"[a-z0-9][a-z0-9-]{0,63}", "a remote host name (st aico placement)"),
     "tap": (("decided",), r"[0-9a-f]{32}", "a Nightshift tap or request id"),
@@ -2665,13 +2655,13 @@ WAIT_UNREACHABLE_SECONDS = 120
 WAIT_CLIENT_SECONDS = 31 * 86400
 WAIT_REFUSALS = {
     "wait_unsupported": ("this session does not take wait lines (waits need a Claude Code, Codex, Pi, "
-                         "Antigravity or Agent Hub session); outside one, use --block"),
+                         "or Antigravity session); outside one, use --block"),
     "cmd_unavailable": "Tether could not record the command to run; see journalctl --user -u tether@default",
     "not_main_agent": ("you are not this session's main agent, so the line would reach it instead of you; "
                        "use --block in a background shell"),
     "self_wait": "a session cannot wait on itself",
     "too_many_waits": "this session already has its maximum number of armed waits; cancel one first",
-    "not_found": "no such session, job, request, run, ask, host, command or wait",
+    "not_found": "no such session, job, request, ask, host, command or wait",
     "wait_kind_unsupported": "this Tether is older than that wait kind; it arrives with the next aico rebuild",
     "not_armed": "that wait is already over (fired, timed out or cancelled)",
     "key_conflict": "this session already has an armed wait with that key on another session or --until; use another key",
@@ -2827,13 +2817,13 @@ def nudge_main(argv: list[str]) -> int:
 
 
 def wait_main(argv: list[str]) -> int:
-    """`st aico wait session|job|reply|run|ask|host|tap|cmd|time|get|cancel` and `st aico waits`."""
+    """`st aico wait session|job|reply|ask|host|tap|cmd|time|get|cancel` and `st aico waits`."""
     operation = argv[0] if argv else ""
     if operation == "time":
         return wake_main(["set", *argv[1:]])
     if operation not in ("session", *PULL_WAITS, "cmd", "get", "cancel", "list"):
         print("usage: st aico wait session ID|REQ [--until finished|idle|blocked|ended] | "
-              "wait job ID | wait reply ID [--until acked|closed] | wait run ID [--until finished|needs-you] | "
+              "wait job ID | wait reply ID [--until acked|closed] | "
               "wait ask ID | wait host NAME | wait tap ID | wait cmd [options] -- ARGV...  "
               "[--timeout 2h] [--note T] [--key K] [--block] | "
               "wait time WHEN NOTE | wait get WAIT [--block] | wait cancel WAIT | waits [--recent]",
@@ -2854,7 +2844,7 @@ def wait_main(argv: list[str]) -> int:
     prog = "st aico waits" if operation == "list" else f"st aico wait {operation}"
     parser = argparse.ArgumentParser(prog=prog, description=(
         "Wait for a session (finished, idle, blocked, ended), a service job (done), a request you sent "
-        "(acked, closed), a workflow run (finished, needs-you), an owner ask (answered), a host (connected) "
+        "(acked, closed), an owner ask (answered), a host (connected) "
         "or a Nightshift tap (decided), or run a bounded watcher command (cmd: Tether runs it as the "
         "idle-weight user unit aico-wait-<ref>; exit 0 is ready, anything else failed): you get one line "
         "when it is ready, over or timed out, and nothing after a cancel. Lanes you launch report on their "

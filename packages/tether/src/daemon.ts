@@ -23,7 +23,7 @@ import { listenPrivateSocket } from './http'
 import { Hub } from './hub/hub'
 import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
 import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
-import { nightshiftAdmissionPath, nightshiftAdmissionRed } from './lifecycle/agent-admission'
+import { hostAdmissionPath, hostAdmissionRed } from './lifecycle/agent-admission'
 import {
   bindCatalog,
   claimLauncher,
@@ -198,7 +198,7 @@ export async function startDaemon(
     recovery: undefined as Recovery | undefined,
     wakes: undefined as WakeService | undefined,
     asks: undefined as AskDelivery | undefined,
-    // The Nightshift tray reads this file for its Aico row.
+    // The Aico tray reads this file for its Aico row.
     asksFeed: {
       write: (feed: NeedsYouFeed) => writeJsonFile(join(paths.stateDir, 'needs-you.json'), feed),
       nameOf: (id: string) => {
@@ -481,7 +481,7 @@ export async function startDaemon(
           context.waits?.heardFrom(lane, host ?? '', receivers, event) ?? new Set(),
         agentGone: (id) => {
           const row = getWidget(id)
-          if (!row || row.backend === 'agent-hub') return false
+          if (!row) return false
           const exit = agentExitOf(row)
           return (
             (exit?.state === 'exit' && exit.status === 0) || Boolean(context.recovery?.isHeld(id))
@@ -511,8 +511,8 @@ export async function startDaemon(
       }
     })
   }
-  // General waits: an agent's wait on another session, a job, a request, a
-  // run, an ask, a host or a tap fires once, as one line on its delivery
+  // General waits: an agent's wait on another session, a job, a request, an
+  // ask or a host fires once, as one line on its delivery
   // queue (src/waits.ts); pasted, so only where Tether observes sessions.
   const askStore = new AskStore(store.db)
   let pokeWaits: (kind: PullKind, ref?: string) => void = () => {}
@@ -521,16 +521,10 @@ export async function startDaemon(
   })
   const summitflowRoot =
     env.SUMMITFLOW_SERVICE_STATE_ROOT || join(env.HOME ?? homedir(), '.summitflow', 'services')
-  const admissionPath = nightshiftAdmissionPath(env)
+  const admissionPath = hostAdmissionPath(env)
   const readers = new PullReaders({
     paths: {
       jobsDir: env.TETHER_WAIT_JOBS_DIR || join(summitflowRoot, 'jobs'),
-      tapDirs: (
-        env.TETHER_WAIT_TAP_DIRS ||
-        '/var/lib/nightshift/bypass/out:/var/lib/nightshift/agent-responses'
-      )
-        .split(':')
-        .filter((dir) => dir.startsWith('/')),
       cmdDir: join(paths.stateDir, 'wait-cmd'),
     },
     cmdUnits: systemdCmdUnits(env),
@@ -542,7 +536,7 @@ export async function startDaemon(
       return row ? displayTitle(row) : null
     },
     host: (name) => hosts?.peerView(name)?.state ?? null,
-    admissionRed: () => nightshiftAdmissionRed(admissionPath),
+    admissionRed: () => hostAdmissionRed(admissionPath),
     probeJob: systemdProbe(env),
     poke: (kind, ref) => pokeWaits(kind, ref),
     now: Date.now,
@@ -597,7 +591,7 @@ export async function startDaemon(
         },
         agentGone: (id) => {
           const row = getWidget(id)
-          if (!row || row.backend === 'agent-hub') return false
+          if (!row) return false
           const exit = agentExitOf(row)
           return (
             (exit?.state === 'exit' && exit.status === 0) || Boolean(context.recovery?.isHeld(id))

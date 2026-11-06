@@ -1,11 +1,11 @@
-// Chosen instructions: an Agent Hub prompt revision picked when a session is
+// Chosen instructions: an Aico prompt revision picked when a session is
 // created (`st aico create --instructions PROMPT[@REVISION]`). The caller
 // resolves the revision and sends Tether an immutable snapshot; Tether keeps it
 // per session beside the catalog and every launch of that session (restart,
 // resume, crash recovery, tool replacement) adds it through the tool's
 // declarative `instructions` adapter. A Blank Slate session gets nothing but
 // these; other sessions get them on top of their usual context, which the
-// Agent Hub launchers merge (`--append-system-prompt`, `developer_instructions`).
+// launchers merge (`--append-system-prompt`, `developer_instructions`).
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -16,11 +16,11 @@ import type { TuiSpec } from './spec'
 const MAX_INSTRUCTIONS_BYTES = 64 * 1024
 
 export interface InstructionsSnapshot {
-  /** Agent Hub prompt slug. */
+  /** Prompt slug. */
   prompt: string
   /** The prompt's name at that revision. */
   name: string
-  /** Agent Hub prompt revision id. */
+  /** Prompt revision id. */
   revision: string
   contentHash: string | null
   createdAt: string | null

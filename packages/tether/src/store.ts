@@ -3,10 +3,6 @@ import { chmodSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import {
-  AGENT_HUB_BACKEND_SQL,
-  AGENT_HUB_QUEUE_MODEL_SQL,
-  AGENT_HUB_QUEUE_THINKING_SQL,
-  AGENT_HUB_SQL,
   AGENT_TOOLS_TABLE_SQL,
   ASK_FILES_COLUMNS,
   ASK_HANDOFF_COLUMNS,
@@ -14,6 +10,7 @@ import {
   ASKS_SQL,
   COORDINATOR_SQL,
   DELIVERIES_SQL,
+  DROP_LEGACY_CHAT_SQL,
   INDEXES_SQL,
   LANE_ENDED_BY_COLUMNS,
   LANE_ENDED_BY_SQL,
@@ -21,6 +18,10 @@ import {
   LANE_REPORTS_COLUMNS,
   LANE_REPORTS_SQL,
   LANE_STREAK_COLUMNS,
+  LEGACY_BACKEND_SQL,
+  LEGACY_CHAT_TABLES_SQL,
+  LEGACY_QUEUE_MODEL_SQL,
+  LEGACY_QUEUE_THINKING_SQL,
   PARENT_SQL,
   REACH_BACKFILL_SQL,
   REACH_COLUMNS,
@@ -286,12 +287,12 @@ export class Store {
           .run(11, now)
       }
       if (current < 12) {
-        // v12: Agent Hub sessions (backend column, session ids, follow-up queue).
+        // v12: the backend column and the chat backend's tables (dropped in v36).
         const hasBackend = this.db
           .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'backend'")
           .get()
-        if (!hasBackend) this.db.exec(AGENT_HUB_BACKEND_SQL)
-        this.db.exec(AGENT_HUB_SQL)
+        if (!hasBackend) this.db.exec(LEGACY_BACKEND_SQL)
+        this.db.exec(LEGACY_CHAT_TABLES_SQL)
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(12, now)
@@ -301,7 +302,7 @@ export class Store {
         const hasModel = this.db
           .prepare("SELECT 1 FROM pragma_table_info('agent_hub_queue') WHERE name = 'model'")
           .get()
-        if (!hasModel) this.db.exec(AGENT_HUB_QUEUE_MODEL_SQL)
+        if (!hasModel) this.db.exec(LEGACY_QUEUE_MODEL_SQL)
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(13, now)
@@ -313,25 +314,13 @@ export class Store {
             "SELECT 1 FROM pragma_table_info('agent_hub_queue') WHERE name = 'thinking_level'",
           )
           .get()
-        if (!hasLevel) this.db.exec(AGENT_HUB_QUEUE_THINKING_SQL)
+        if (!hasLevel) this.db.exec(LEGACY_QUEUE_THINKING_SQL)
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(14, now)
       }
       if (current < 15) {
-        // v15: the Agent Hub chat joins the tool registry, so the new-session
-        // menus list it like any tool. An existing registry keeps what the
-        // owner set: nothing is added if the slug or alias is already taken.
-        const chat = DEFAULT_TOOLS.find((tool) => tool.slug === 'agent-hub')
-        if (chat && !this.getTool(chat.slug)) {
-          try {
-            this.assertNamesFree(chat.slug, chat.aliases, null)
-            this.insertTool(chat, now)
-          } catch (error) {
-            if (!(error instanceof ToolValidationError)) throw error
-            this.insertTool({ ...chat, aliases: [] }, now)
-          }
-        }
+        // v15: the chat backend's tool-registry row (never seeded now; v36 removes it).
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(15, now)
@@ -500,8 +489,8 @@ export class Store {
           .run(31, now)
       }
       if (current < 32) {
-        // v32: Aico's own agent harness joins the tool registry (as v15 did for the
-        // Agent Hub chat): added unless its slug is already taken.
+        // v32: Aico's own agent harness joins the tool registry, unless its slug is
+        // already taken.
         const agent = DEFAULT_TOOLS.find((tool) => tool.slug === 'aico-agent')
         if (agent && !this.getTool(agent.slug)) this.insertTool(agent, now)
         this.db
@@ -535,6 +524,13 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(35, now)
+      }
+      if (current < 36) {
+        // v36: the retired Agent Hub chat backend's rows, tables and tool entry go.
+        this.db.exec(DROP_LEGACY_CHAT_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(36, now)
       }
     })
   }
@@ -575,7 +571,7 @@ export class Store {
     const rows = this.db
       .prepare(`SELECT * FROM agent_tools ${where} ORDER BY display_order, name`)
       .all() as unknown as RawTool[]
-    return rows.map(toTool).filter((tool) => tool.slug !== 'agent-hub')
+    return rows.map(toTool)
   }
 
   getTool(idOrSlug: string): AgentTool | undefined {
@@ -587,10 +583,10 @@ export class Store {
 
   /** Resolve a slug or alias (the web app's `claude`) to its tool. */
   resolveTool(slugOrAlias: string): AgentTool | undefined {
-    const tool =
+    return (
       this.getTool(slugOrAlias) ??
       this.listTools().find((tool) => tool.aliases.includes(slugOrAlias))
-    return tool?.slug === 'agent-hub' ? undefined : tool
+    )
   }
 
   /** The default enabled tool, else the first enabled tool by order. */

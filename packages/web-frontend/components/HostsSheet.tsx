@@ -120,7 +120,6 @@ function Chip({
 }
 
 function sourceLabel(source: string): { label: string } {
-  if (source === 'agent-hub') return { label: 'Agent Hub' }
   if (source.startsWith('host:')) return { label: 'This host' }
   return { label: source }
 }
@@ -139,29 +138,17 @@ function partialSignIn(
     : null
 }
 
-/** A tool's sign-in line: `Signed in · Agent Hub`, `1 of 3 signed in`, with
+/** A tool's sign-in line: `Signed in · Aico secrets folder`, `1 of 3 signed in`, with
  * Unknown saying why. */
-function loginText(
-  tool: ToolLogin,
-  agentHub: string,
-): { text: string; tone: Tone } {
+function loginText(tool: ToolLogin): { text: string; tone: Tone } {
   const partial = partialSignIn(tool)
   if (partial)
     return {
       text: `${partial.ready} of ${partial.total} signed in`,
       tone: 'wait',
     }
-  const cannotReach =
-    tool.state === 'unknown' &&
-    tool.source === 'agent-hub' &&
-    agentHub !== 'reachable' &&
-    agentHub !== 'Aico secrets folder'
   return {
-    text: `${LOGIN_LABELS[tool.state]} · ${
-      cannotReach
-        ? 'Agent Hub can’t be reached'
-        : sourceLabel(tool.source).label
-    }`,
+    text: `${LOGIN_LABELS[tool.state]} · ${sourceLabel(tool.source).label}`,
     tone: LOGIN_TONE[tool.state],
   }
 }
@@ -614,27 +601,14 @@ function LoginRows({
   onSignIn: (tool: string) => void
   onSignOut: (tool: string) => void
 }) {
-  const hubAway =
-    data.agent_hub !== 'reachable' && data.agent_hub !== 'Aico secrets folder'
-  if (data.tools.length === 0 && !hubAway) {
+  if (data.tools.length === 0) {
     return <Note flush>No tools to sign in to on {host}.</Note>
   }
   return (
     <>
-      {hubAway && (
-        <p
-          data-testid="agent-hub-away"
-          className="mb-2 text-[12px] break-words"
-          style={{ color: 'var(--mist)' }}
-        >
-          Agent Hub can’t be reached from {host}
-          {data.agent_hub ? ` (${data.agent_hub})` : ''}. Tools it serves show
-          Unknown.
-        </p>
-      )}
       <ul className="flex flex-col gap-2">
         {data.tools.map((tool) => {
-          const { text, tone } = loginText(tool, data.agent_hub)
+          const { text, tone } = loginText(tool)
           const actions = data.actions[tool.tool]
           // Nothing to sign out of while it needs a sign-in; unknown may be signed in.
           const canSignOut =

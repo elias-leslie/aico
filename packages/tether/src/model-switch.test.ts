@@ -187,7 +187,7 @@ describe('Claude Code', () => {
     expect(h.watch.switchOf(SESSION)?.stopped).toBe(false)
   })
 
-  it("reads Agent Hub's fallback fixture", () => {
+  it('reads the fallback fixture', () => {
     const follower = new ModelFollower()
     const found = fixture('claude-fallback.jsonl')
       .split('\n')

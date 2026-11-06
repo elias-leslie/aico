@@ -42,9 +42,9 @@ import {
   type AdmissionTicket,
   AgentAdmission,
   AgentAdmissionDenied,
-  nightshiftAdmissionPath,
+  hostAdmissionPath,
   observeAgentScopes,
-  readNightshiftAdmission,
+  readHostAdmission,
 } from './agent-admission'
 import {
   activateTmuxServer,
@@ -137,7 +137,6 @@ import {
 } from './root-launch'
 import { terminalClientEnv } from './terminal-env'
 import {
-  hasTargetArgs,
   internalTarget,
   isTmuxTransportUnavailable,
   killTargetArgs,
@@ -251,7 +250,7 @@ const agentAdmission = new AgentAdmission(
         agentProcessNames: agentProcessNames(),
       })
     },
-    nightshiftVerdict: () => readNightshiftAdmission(nightshiftAdmissionPath()),
+    hostVerdict: () => readHostAdmission(hostAdmissionPath()),
   },
   {
     // Numbers and identifiers only: never prompt, session or terminal content.
@@ -3142,8 +3141,7 @@ export function setGenerationFunction(fn: (row: WidgetRow) => string): void {
 
 export async function verifySessionStatus(row: WidgetRow): Promise<SessionStatus> {
   let status: SessionStatus
-  if (row.backend === 'agent-hub') status = 'uncertain'
-  else if (isNeverAllocatedWidget(row)) status = 'pending'
+  if (isNeverAllocatedWidget(row)) status = 'pending'
   else if (
     row.lifecycleVersion >= MANAGED_LIFECYCLE_VERSION &&
     row.launchState === 'dispatched' &&
@@ -3158,7 +3156,6 @@ export async function verifySessionStatus(row: WidgetRow): Promise<SessionStatus
 export function cachedSessionStatus(row: WidgetRow): SessionStatus {
   const cached = statusCache.get(row.id)
   if (cached && cached.generation === generationOf(row)) return cached.status
-  if (row.backend === 'agent-hub') return 'uncertain'
   if (isNeverAllocatedWidget(row)) return 'pending'
   return 'uncertain'
 }

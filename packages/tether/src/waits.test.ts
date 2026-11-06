@@ -836,19 +836,6 @@ describe('pull kinds', () => {
     ])
   })
 
-  it('a tap not taken in yet arms and waits; a timeout says so', async () => {
-    const h = harness()
-    const TAP = 'b'.repeat(32)
-    h.pulls.set(`tap:${TAP}`, undefined)
-    const { wait } = await h.arm({ kind: 'tap', ref: TAP, until: 'decided', timeoutMinutes: 1 })
-    expect(wait.state).toBe('armed')
-    vi.setSystemTime(T0 + 61_000)
-    h.waits.check()
-    expect(h.delivered[0]?.line).toBe(
-      '[Wait timed out] tap bbbbbbbb not decided after 1m · nightshift pending',
-    )
-  })
-
   it('an ask answered to the waiter itself fires without a second line', async () => {
     const h = harness()
     const ASK = 'c'.repeat(12)
@@ -858,16 +845,6 @@ describe('pull kinds', () => {
     h.pull('ask', ASK, { state: 'answered', detail: null, title: null })
     expect(h.waits.store.get(wait.id)).toMatchObject({ state: 'fired', outcome: 'until' })
     expect(h.delivered).toEqual([])
-  })
-
-  it('a run that ends without needing the owner is gone for needs-you', async () => {
-    const h = harness()
-    h.pulls.set('run:run-1', { state: 'running', detail: null, title: null })
-    const { wait } = await pullArm(h, 'run', 'run-1', 'needs-you')
-    h.pull('run', 'run-1', { state: 'succeeded', detail: null, title: null })
-    expect(h.waits.store.get(wait.id)?.line).toBe(
-      '[Wait over] workflow run run-1 ended without needing the owner: succeeded · st workflow get run-1',
-    )
   })
 
   it('a nudge re-reads the waits of that kind and ref at once, forcing the probe', async () => {

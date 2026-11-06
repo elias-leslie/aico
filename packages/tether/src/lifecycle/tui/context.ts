@@ -8,8 +8,7 @@ import type { ContextHook, ContextStatus, TuiSpec } from './spec'
 
 const BLANK_SLATE_STATUS: ContextStatus = {
   state: 'not_applicable',
-  detail:
-    'Blank Slate: no Agent Hub, project, memory, skill, plugin, MCP or launch-hook context is added.',
+  detail: 'Blank Slate: no project, memory, skill, plugin, MCP or launch-hook context is added.',
 }
 
 /** The status with the session's chosen instructions named, if it has some. */
@@ -19,7 +18,7 @@ function withChosen(spec: TuiSpec, status: ContextStatus): ContextStatus {
   if (spec.context?.kind === 'blank-slate')
     return {
       state: status.state,
-      detail: `Blank Slate with chosen instructions ${chosen.label}; no Agent Hub, project, memory, skill, plugin, MCP or launch-hook context is added.`,
+      detail: `Blank Slate with chosen instructions ${chosen.label}; no project, memory, skill, plugin, MCP or launch-hook context is added.`,
     }
   return { state: status.state, detail: `${status.detail}. Chosen instructions: ${chosen.label}.` }
 }

@@ -320,7 +320,6 @@ describe('Aico chat routes', () => {
       (await call('POST', `/api/chat/${id}/send`, { message: ' ', model: 'outside-role' })).status,
     ).toBe(422)
     expect((await call('GET', '/api/chat/missing')).status).toBe(404)
-    expect((await call('GET', '/api/agent-hub/models')).status).toBe(404)
   })
   it('returns queued messages as a draft on Stop and can finish the interrupted reply', async () => {
     const id = await start()

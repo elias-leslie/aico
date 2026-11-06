@@ -298,9 +298,7 @@ describe('root create with entry', () => {
         reason: 'entry.arg must match ^[a-z0-9][a-z0-9-]{0,79}$',
       },
     })
-    expect(
-      await call(body('hunt-agent-hub', { tool: 'agent-hub', agentSlug: 'synthetic-agent' })),
-    ).toEqual({
+    expect(await call(body('hunt-unsupported', { tool: 'opencode' }))).toEqual({
       status: 400,
       body: {
         error: 'unsupported_tool',
@@ -317,7 +315,7 @@ describe('root create with entry', () => {
       'hunt-unknown',
       'hunt-config',
       'hunt-bad',
-      'hunt-agent-hub',
+      'hunt-unsupported',
       'hunt-codex-instr',
       'hunt-codex-unknown',
     ])
@@ -386,7 +384,6 @@ describe('root create with entry', () => {
       'MODEL',
       'REASONING_EFFORT',
       'DAYBREAK',
-      'AGENT_HUB_CONTEXT',
     ].map((name) => `AICO_ROOT_${name}="$AICO_ROOT_${name}"`)
     writeFileSync(
       piEnter,
@@ -421,7 +418,6 @@ describe('root create with entry', () => {
           tool: 'pi',
           model: hunt.model,
           reasoningEffort: 'high',
-          agentHubContext: true,
           entry: { name: 'neri-hunt', arg: hunt.arg },
         }),
       )
@@ -484,7 +480,6 @@ describe('root create with entry', () => {
         expect(environment).toMatchObject({
           AICO_ROOT_MODEL: hunt.model,
           AICO_ROOT_REASONING_EFFORT: 'high',
-          AICO_ROOT_AGENT_HUB_CONTEXT: 'true',
         })
         const args = launch(hunt.widgetId, hunt.arg, environment)
         expect(args).toEqual([

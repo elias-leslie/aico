@@ -37,7 +37,7 @@ it('reads launch defaults through Aico with literal model and project arguments'
   )
 })
 
-it('aborts a denied provider request after switching away from Agent Hub', async () => {
+it('aborts a denied provider request', async () => {
   vi.stubEnv('ST_WORK_ROLE', 'hunting')
   vi.mocked(execFile).mockImplementation(((_file, _args, _options, callback) => {
     ;(callback as (error: Error | null, stdout: string, stderr: string) => void)(

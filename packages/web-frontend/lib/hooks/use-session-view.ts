@@ -469,8 +469,7 @@ export function useSessionView({
           return
         }
         openNewSession(target.id)
-        // A chat is running from the start: nothing to wait for or start.
-        if (targetMode !== 'shell' && target.backend !== 'agent-hub') {
+        if (targetMode !== 'shell') {
           await delay(TMUX_INIT_DELAY_MS)
           await startAgent(target.id)
         }

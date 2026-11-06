@@ -4,7 +4,6 @@
 // format is undocumented (docs/agent-state.md), so every reader is in this module.
 
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { AgentSignal } from '../../../agent-state'
@@ -522,7 +521,6 @@ function codexProbe(
 export const codex: TuiAdapter = {
   id: 'codex',
   harness: 'codex',
-  executor: 'codex',
   seed: {
     slug: 'codex',
     name: 'Codex',
@@ -560,7 +558,6 @@ export const codex: TuiAdapter = {
     transcriptFacts: false,
     threadSubagents: true,
     nativeAdmin: true,
-    agentHubContext: false,
     environmentSelection: false,
     delivery: { idlePaste: true, nextTurn: true, toolResult: true },
   },

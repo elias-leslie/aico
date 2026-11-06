@@ -1,5 +1,5 @@
 // The owner's "waiting" notice. A session blocked on the owner (a permission
-// prompt or a question), or a workflow run waiting for an answer, that nobody
+// prompt or a question) that nobody
 // has opened for 2 minutes gets one notice through Aico's notify (contract v1,
 // `POST /api/notices` on loopback), pushed to the phone so an unattended
 // stuck agent is noticed; a repeat for the same session stays quiet for the
@@ -34,7 +34,7 @@ export interface WaitingNotice {
   push: 'phone' | 'tray'
 }
 
-/** A session or run waiting on the owner, as an Aico notice (contract v1). */
+/** A session waiting on the owner, as an Aico notice (contract v1). */
 export function waitingNotice(parts: {
   key: string
   title: string
@@ -89,7 +89,7 @@ export function agentName(session: WaitingSession, tools: readonly WaitingTool[]
   return tool?.name ?? own
 }
 
-/** The notice for a waiting session, or a run (`run:` ids). */
+/** The notice for a waiting session. */
 export function noticeFor(
   item: { session: WaitingSession },
   tools: readonly WaitingTool[],

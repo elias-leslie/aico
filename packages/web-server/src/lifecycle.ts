@@ -132,7 +132,6 @@ export function createLifecycle(deps: LifecycleDeps) {
     const tool = await findTool(ref)
     if (!tool || typeof tool.slug !== 'string')
       throw new HttpError(404, `Agent tool '${ref}' not found`)
-    if (tool.slug === 'agent-hub') throw new HttpError(410, 'Start an Aico chat with New chat.')
     if (tool.enabled === false)
       throw new HttpError(400, `Agent tool '${String(tool.name ?? tool.slug)}' is disabled`)
     return tool.slug
