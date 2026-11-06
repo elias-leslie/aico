@@ -61,6 +61,9 @@ export function LoadEarlierPill({
   const more = history ? history.total - history.lines : 0
   if (!history || (!loading && (more <= 0 || !top))) return null
 
+  // The count is on the button itself, not only in the tooltip, so it is
+  // read out and found by anything that reads the page as text.
+  const shown = `${count(history.lines)} of ${count(history.total)} shown`
   const detail = loading
     ? 'Loading earlier lines'
     : `Showing the last ${count(history.lines)} of ${count(history.total)} lines. Load ${count(Math.min(step, more))} earlier lines.`
@@ -80,12 +83,12 @@ export function LoadEarlierPill({
         onPointerDown={(event) => {
           if (event.pointerType !== 'mouse') event.preventDefault()
         }}
-        aria-label={detail}
         title={detail}
         className="lantern-jump pointer-events-auto disabled:opacity-70"
       >
         <ArrowUp aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.7} />
-        <span>{loading ? 'Loading…' : 'Load earlier'}</span>
+        <span>{loading ? 'Loading earlier lines…' : 'Load earlier'}</span>
+        {!loading && <span className="font-normal opacity-80">{shown}</span>}
       </button>
     </div>
   )

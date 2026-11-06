@@ -50,10 +50,14 @@ describe('LoadEarlierPill', () => {
   it('shows at the top of a shortened history and loads more on tap', () => {
     const { term } = makeTerm(0)
     const { onLoad } = mount(term)
+    // The count is visible text, so it is part of the accessible name.
     const button = screen.getByRole('button', {
-      name: 'Showing the last 2,000 of 20,000 lines. Load 5,000 earlier lines.',
+      name: 'Load earlier 2,000 of 20,000 shown',
     })
-    expect(button).toHaveTextContent('Load earlier')
+    expect(button).toHaveAttribute(
+      'title',
+      'Showing the last 2,000 of 20,000 lines. Load 5,000 earlier lines.',
+    )
     fireEvent.click(button)
     expect(onLoad).toHaveBeenCalledOnce()
   })
@@ -90,11 +94,14 @@ describe('LoadEarlierPill', () => {
     const { rerender } = mount(term, {
       history: { lines: 18000, total: 20000 },
     })
-    expect(
-      screen.getByRole('button', {
-        name: 'Showing the last 18,000 of 20,000 lines. Load 2,000 earlier lines.',
-      }),
-    ).toBeEnabled()
+    const button = screen.getByRole('button', {
+      name: 'Load earlier 18,000 of 20,000 shown',
+    })
+    expect(button).toBeEnabled()
+    expect(button).toHaveAttribute(
+      'title',
+      'Showing the last 18,000 of 20,000 lines. Load 2,000 earlier lines.',
+    )
     rerender(
       <LoadEarlierPill
         terminalRef={{ current: term } as never}
@@ -105,9 +112,9 @@ describe('LoadEarlierPill', () => {
         onLoad={() => {}}
       />,
     )
-    const busy = screen.getByRole('button', { name: 'Loading earlier lines' })
+    const busy = screen.getByRole('button', { name: 'Loading earlier lines…' })
     expect(busy).toBeDisabled()
-    expect(busy).toHaveTextContent('Loading…')
+    expect(busy).toHaveAttribute('aria-busy', 'true')
   })
 
   it('is hidden under a full-screen program', () => {
