@@ -43,4 +43,15 @@ describe('aico projects', () => {
     })
     expect(await projects('retire', 'other', '--reason', 'x')).toBe(1)
   })
+
+  it('renames a project and keeps its id', async () => {
+    const { projects, take, err } = setup()
+    expect(await projects('rename', 'aico', 'Aico', 'Hub')).toBe(0)
+    take()
+    await projects('list')
+    expect(JSON.parse(take())).toMatchObject([{ id: 'aico', name: 'Aico Hub' }])
+    expect(await projects('rename', 'nope', 'X')).toBe(1)
+    expect(await projects('rename', 'aico')).toBe(2)
+    expect(err.length).toBeGreaterThan(0)
+  })
 })

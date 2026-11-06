@@ -1,8 +1,10 @@
 // Where projects run, and the power buttons: a poller reads Proxmox (through the fleet's SSH
 // alias) for each place's power state, and the page's start / shutdown / restart go through the
 // same route. Shutdown and restart are clean (guest shutdown / reboot); there is no hard stop.
-// A shutdown records the machine as owner-stopped first, so Status shows it off instead of
-// paging for the late rows (packages/status/src/show.ts).
+// Every reading is also fed to Status as the machine's observed power (setObservedPower), so an
+// on-demand machine is expected off while stopped and on while running, however it was started
+// or shut down (aico vm, Proxmox, the page). A shutdown from the page also records the machine
+// as owner-stopped first, so an always-on one shows off instead of paging (show.ts).
 
 import type { Guest, GuestAction } from '@aico/fleet/power'
 import type { StatusStore } from '@aico/status'
@@ -29,8 +31,6 @@ export interface PlaceView extends Place {
   asOf: string | null
   /** A power action the page started and Proxmox has not finished, else null. */
   busy: PowerAction | null
-  /** When the owner started this on-demand place for use (RFC 3339), else null. */
-  usedSince: string | null
   /** Why the state is unknown, when it is. */
   note?: string
 }
@@ -42,7 +42,7 @@ export interface GuestSource {
 
 type Marks = Pick<
   StatusStore,
-  'expectedOff' | 'intents' | 'syncIntents' | 'markStopped' | 'markUsed' | 'rows' | 'read'
+  'expectedOff' | 'intents' | 'syncIntents' | 'setObservedPower' | 'markStopped' | 'rows' | 'read'
 >
 
 export interface PlacesOptions {
@@ -112,9 +112,28 @@ export class Places {
       this.snapshot = new Map(list.map((guest) => [guest.vmid, guest]))
       this.readAt = at
       this.failure = null
+      this.observe(at)
       this.settle(at)
     } catch (error) {
       this.failure = `Proxmox did not answer (${(error as Error).message.split('\n')[0]}).`
+    }
+  }
+
+  /** Feeds each declared guest's power state into Status; a guest Proxmox does not list or reports oddly keeps its last reading. */
+  private observe(at: number): void {
+    const done = new Set<string>()
+    for (const place of this.options.declared()) {
+      if (!place.machine || place.kind === 'host' || place.id === undefined) continue
+      if (done.has(place.machine)) continue
+      const guest = this.snapshot?.get(place.id)
+      if (guest?.status !== 'running' && guest?.status !== 'stopped') continue
+      done.add(place.machine)
+      this.options.status.setObservedPower(
+        place.machine,
+        guest.status === 'running',
+        at,
+        guest.status === 'running' ? at - guest.uptime * 1000 : at,
+      )
     }
   }
 
@@ -168,14 +187,7 @@ export class Places {
   }
 
   view(place: Place): PlaceView {
-    const used = place.machine
-      ? this.options.status.intents().find((m) => m.machine === place.machine)?.usedSince
-      : undefined
-    const base = {
-      ...place,
-      busy: null as PowerAction | null,
-      usedSince: used ? iso(used) : null,
-    }
+    const base = { ...place, busy: null as PowerAction | null }
     if (place.kind === 'host') return this.hostView(base)
     const asOf = this.readAt === null ? null : iso(this.readAt)
     const pending = place.id === undefined ? undefined : this.pending.get(place.id)
@@ -222,9 +234,7 @@ export class Places {
     }
   }
 
-  private hostView(
-    base: Place & { busy: PowerAction | null; usedSince: string | null },
-  ): PlaceView {
+  private hostView(base: Place & { busy: PowerAction | null }): PlaceView {
     const at = iso(this.now())
     if (base.machine === undefined || base.machine === this.options.machine)
       return { ...base, state: 'running', since: iso(this.startedAt), asOf: at }
@@ -282,11 +292,11 @@ export class Places {
     const mark = (): void => {
       if (!machine) return
       // The owner's move is recorded first: the rows of a machine that goes quiet must never
-      // page. A shutdown ends any use; a start of a place that is not always on is temporary
-      // use; a restart of an always-on place is a short stop its next report ends.
+      // page. Starting an always-on place ends its stop; a place that is not always on needs no
+      // mark for a start (the poller sees it run); a restart of an always-on place is a short
+      // stop its next report ends.
       if (action === 'shutdown') status.markStopped(machine, at)
-      else if (action === 'start')
-        place.intent === 'always' ? status.markStopped(machine, null) : status.markUsed(machine, at)
+      else if (action === 'start') status.markStopped(machine, null)
       else if (place.intent === 'always') status.markStopped(machine, at)
     }
     if (action === 'shutdown' && !running) {
@@ -297,10 +307,7 @@ export class Places {
     try {
       await guests.act(guest, GUEST_ACTION[action])
     } catch (error) {
-      if (machine && before) {
-        status.markUsed(machine, before.usedSince)
-        status.markStopped(machine, before.stoppedAt)
-      }
+      if (machine && before) status.markStopped(machine, before.stoppedAt)
       throw new HttpError(
         502,
         `${place.label}: Proxmox refused ${action} (${(error as Error).message.split('\n')[0]}).`,

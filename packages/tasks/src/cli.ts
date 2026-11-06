@@ -22,6 +22,7 @@ const PROJECTS_USAGE = `Usage: aico projects <command>
   list [--all]                         registered projects (--all includes retired ones)
   show ID                              one project, its settings and lifecycle events
   register ID --root PATH [--name N] [--category C]
+  rename ID NAME                       the name shown for a project (the id stays)
   runtime ID [--set JSON | --clear]    where the project runs: a JSON list of places
                                        {kind: host|vm|ct, id?, label, power, machine?}
   retire ID --reason TEXT              the project leaves lists; its history stays`
@@ -80,6 +81,12 @@ export async function runProjects(argv: string[], deps: Deps, io: Io): Promise<n
         category: values.category,
       })
       io.out(`PASS Project ${positionals[0]} registered.`)
+    } else if (command === 'rename') {
+      const { positionals } = opts(rest, {})
+      const [id, ...name] = positionals
+      if (!id || name.length === 0) throw new UsageError('aico projects rename ID NAME')
+      registry.rename(id, name.join(' '))
+      io.out(`PASS Project ${id} is now called ${name.join(' ').trim()}.`)
     } else if (command === 'runtime') {
       const { values, positionals } = opts(rest, {
         set: { type: 'string' },

@@ -187,6 +187,14 @@ export class Registry {
     }
   }
 
+  /** Sets the name the owner sees for a project; the id stays. */
+  rename(id: string, name: string): Project {
+    if (!this.get(id)) throw new ProjectError(`no project ${id}`)
+    if (!name.trim()) throw new ProjectError('a project needs a name')
+    this.db.prepare('UPDATE projects SET name = ? WHERE id = ?').run(name.trim(), id)
+    return this.get(id) as Project
+  }
+
   /** Replaces where the project runs (an empty list: nothing deployed). */
   setRuntime(id: string, places: unknown): Project {
     if (!this.get(id)) throw new ProjectError(`no project ${id}`)

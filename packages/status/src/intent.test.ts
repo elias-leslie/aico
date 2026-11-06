@@ -33,7 +33,7 @@ function watched(intent?: 'always' | 'on-demand' | 'off') {
 }
 
 describe('expectedState', () => {
-  it('is on for always, and for on-demand only while in use', () => {
+  it('is on for always, and for on-demand only while running', () => {
     expect(expectedState('always', false)).toBe('on')
     expect(expectedState('on-demand', false)).toBe('off')
     expect(expectedState('on-demand', true)).toBe('on')
@@ -68,17 +68,51 @@ describe('machine intent', () => {
     expect(store.isExpectedOff('apps')).toBe(true)
   })
 
-  it('expects an on-demand machine on while it is in use, and off again after shutdown', () => {
+  it('derives on-demand expectation from observed power, with no marks', () => {
     const { store, clock, batches } = watched('on-demand')
-    store.upsert([machineRow(T0 + HOUR)])
-    store.markUsed('apps', T0)
+    store.upsert([machineRow(T0 + HOUR), job(T0 + HOUR)])
+    // Started outside the page: running, so silence is late.
+    store.setObservedPower('apps', true, T0, T0 - 5 * 60_000)
     expect(store.isExpectedOff('apps')).toBe(false)
     clock.now = T0 + 2 * HOUR
     store.checkAlerts()
     expect(batches).toHaveLength(1)
-    store.markStopped('apps', clock.now)
+    expect(store.read().rows.find((r) => r.id === 'apps/machine')?.shown).toBe('late')
+    // Shut down outside the page: off, not late, not paged, quiet count zero.
+    store.setObservedPower('apps', false, clock.now)
     expect(store.isExpectedOff('apps')).toBe(true)
-    expect(store.intents()[0]).toMatchObject({ usedSince: null, stoppedAt: clock.now })
+    const shown = store.read().rows
+    expect(shown.find((r) => r.id === 'apps/machine')?.shown).toBe('off')
+    expect(shown.find((r) => r.id === 'apps/job')).toMatchObject({ unknown_why: 'off' })
+    expect(store.read().summary.problems).toBe(0)
+    expect(store.expectedOff().get('apps')).toBe(clock.now)
+  })
+
+  it('keeps the last observed power and its time when nothing new is read', () => {
+    const { store } = watched('on-demand')
+    store.setObservedPower('apps', true, T0, T0 - 1000)
+    store.setObservedPower('apps', true, T0 + 1000, T0 + 500) // still running: since is kept
+    expect(store.intents()[0]).toMatchObject({
+      power: 'on',
+      powerSince: T0 - 1000,
+      powerAt: T0 + 1000,
+    })
+    expect(store.isExpectedOff('apps')).toBe(false)
+  })
+
+  it('does not page an always machine the owner shut down, and ends that when it runs again', () => {
+    const { store, clock, batches } = watched('always')
+    store.upsert([machineRow(T0 + HOUR)])
+    store.setObservedPower('apps', true, T0)
+    store.markStopped('apps', T0)
+    store.setObservedPower('apps', false, T0)
+    clock.now = T0 + 2 * HOUR
+    store.checkAlerts()
+    expect(batches).toEqual([])
+    expect(store.read().rows[0]?.shown).toBe('off')
+    store.markStopped('apps', null)
+    store.checkAlerts()
+    expect(batches).toHaveLength(1) // an always machine that is down without the owner's say is a problem
   })
 
   it('covers a parked machine, and one with no machine row of its own', () => {
@@ -106,8 +140,9 @@ describe('machine intent', () => {
     store.markStopped('apps', T0)
     store.syncIntents([{ machine: 'apps', intent: 'always' }])
     expect(store.isExpectedOff('apps')).toBe(true)
+    store.setObservedPower('apps', true, T0)
     store.syncIntents([{ machine: 'apps', intent: 'on-demand' }])
-    expect(store.intents()[0]).toMatchObject({ intent: 'on-demand', stoppedAt: null })
+    expect(store.intents()[0]).toMatchObject({ intent: 'on-demand', stoppedAt: null, power: 'on' })
     store.syncIntents([])
     expect(store.intents()).toEqual([])
   })

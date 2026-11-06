@@ -68,6 +68,13 @@ function migrations(now: () => number): Migration[] {
        stopped_at INTEGER,
        used_since INTEGER
      ) STRICT`,
+    // Power is observed, not marked: what the hypervisor last said, since when, and as of when.
+    (db) => {
+      db.exec('ALTER TABLE machine_intent DROP COLUMN used_since')
+      db.exec('ALTER TABLE machine_intent ADD COLUMN power_on INTEGER')
+      db.exec('ALTER TABLE machine_intent ADD COLUMN power_since INTEGER')
+      db.exec('ALTER TABLE machine_intent ADD COLUMN power_at INTEGER')
+    },
   ]
 }
 
@@ -129,20 +136,26 @@ export class StatusStore {
   intents(): MachineIntent[] {
     return (
       this.db
-        .prepare('SELECT machine, intent, since, stopped_at, used_since FROM machine_intent')
+        .prepare(
+          'SELECT machine, intent, since, stopped_at, power_on, power_since, power_at FROM machine_intent',
+        )
         .all() as {
         machine: string
         intent: Intent
         since: number
         stopped_at: number | null
-        used_since: number | null
+        power_on: number | null
+        power_since: number | null
+        power_at: number | null
       }[]
     ).map((r) => ({
       machine: r.machine,
       intent: r.intent,
       since: r.since,
       stoppedAt: r.stopped_at,
-      usedSince: r.used_since,
+      power: r.power_on === null ? null : r.power_on ? 'on' : 'off',
+      powerSince: r.power_since,
+      powerAt: r.power_at,
     }))
   }
 
@@ -163,7 +176,7 @@ export class StatusStore {
 
   /**
    * Makes the table match the registry: new machines are added, a changed intent starts over,
-   * and machines no longer declared are dropped. The owner's stops and starts survive a sync.
+   * and machines no longer declared are dropped. The owner's stops and the observed power survive a sync.
    */
   syncIntents(declared: readonly { machine: string; intent: Intent }[]): void {
     const at = this.now()
@@ -179,7 +192,7 @@ export class StatusStore {
           .prepare(
             `INSERT INTO machine_intent (machine, intent, since) VALUES (?, ?, ?)
              ON CONFLICT (machine) DO UPDATE SET
-               intent = excluded.intent, since = excluded.since, stopped_at = NULL, used_since = NULL`,
+               intent = excluded.intent, since = excluded.since, stopped_at = NULL`,
           )
           .run(machine, intent, at)
       }
@@ -187,28 +200,27 @@ export class StatusStore {
     if (this.alertHook) this.checkAlerts()
   }
 
-  /** The owner shut `machine` down (`at`, default now) or undid that (`null`); a shutdown ends its use. */
+  /** The owner shut `machine` down (`at`, default now) or undid that (`null`). */
   markStopped(machine: string, at: number | null = this.now()): void {
-    this.db
-      .prepare(
-        at === null
-          ? 'UPDATE machine_intent SET stopped_at = NULL WHERE machine = ?'
-          : 'UPDATE machine_intent SET stopped_at = ?, used_since = NULL WHERE machine = ?',
-      )
-      .run(...(at === null ? [machine] : [at, machine]))
+    this.db.prepare('UPDATE machine_intent SET stopped_at = ? WHERE machine = ?').run(at, machine)
     if (this.alertHook) this.checkAlerts()
   }
 
-  /** The owner started `machine` (`at`, default now) for use, which ends a stop; `null` ends the use. */
-  markUsed(machine: string, at: number | null = this.now()): void {
+  /**
+   * What the hypervisor says about `machine`'s power, read at `at`; `since` is when it reached
+   * that state if known (a running guest's start). Call it only with a reading: when the
+   * hypervisor cannot be reached the last reading stays, with its own time.
+   */
+  setObservedPower(machine: string, running: boolean, at: number, since: number = at): void {
+    const m = this.intents().find((i) => i.machine === machine)
+    if (!m) return
+    const changed = m.power !== (running ? 'on' : 'off')
     this.db
       .prepare(
-        at === null
-          ? 'UPDATE machine_intent SET used_since = NULL WHERE machine = ?'
-          : 'UPDATE machine_intent SET used_since = ?, stopped_at = NULL WHERE machine = ?',
+        'UPDATE machine_intent SET power_on = ?, power_since = ?, power_at = ? WHERE machine = ?',
       )
-      .run(...(at === null ? [machine] : [at, machine]))
-    if (this.alertHook) this.checkAlerts()
+      .run(running ? 1 : 0, changed ? since : (m.powerSince ?? since), at, machine)
+    if (changed && this.alertHook) this.checkAlerts()
   }
 
   /** Drops a row (a thing that no longer exists); false when there was none. */

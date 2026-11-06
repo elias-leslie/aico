@@ -217,7 +217,7 @@ describe('Places power', () => {
     expect(g.calls.every((call) => !call.endsWith(':stop'))).toBe(true)
   })
 
-  it('marks an on-demand place stopped before a shutdown, reads stopped, and start marks it used', async () => {
+  it('marks an on-demand place stopped before a shutdown, reads stopped, and start clears the stop', async () => {
     const g = guests()
     const { p, status } = places(g.source)
     await p.refresh()
@@ -233,8 +233,7 @@ describe('Places power', () => {
     await p.power(CT, 'start')
     expect(g.calls).toEqual(['191:shutdown', '191:start'])
     expect(p.view(CT).state).toBe('starting')
-    expect(status.intents()[0]).toMatchObject({ stoppedAt: null, usedSince: T0 })
-    expect(p.view(CT).usedSince).toBe(new Date(T0).toISOString())
+    expect(status.intents()[0]).toMatchObject({ stoppedAt: null })
   })
 
   it('reads an always-on place that is off as down, and a stopped one the owner shut as stopped', async () => {
@@ -251,7 +250,7 @@ describe('Places power', () => {
     g.source.fail = true
     const { p, status } = places(g.source)
     await expect(p.power(CT, 'shutdown')).rejects.toMatchObject({ status: 502 })
-    expect(status.intents()[0]).toMatchObject({ stoppedAt: null, usedSince: null })
+    expect(status.intents()[0]).toMatchObject({ stoppedAt: null })
   })
 
   it('refuses places the page does not power, restart of a stopped guest, and a busy guest', async () => {
@@ -291,6 +290,55 @@ describe('Places power', () => {
     expect(view.state).toBe('unknown')
     expect(view.asOf).toBe(new Date(T0).toISOString())
     await expect(p.power(CT, 'shutdown')).rejects.toMatchObject({ status: 503 })
+  })
+
+  it('derives expectations from observed power with no marks, and keeps them when Proxmox is unreachable', async () => {
+    const g = guests({ status: 'stopped', uptime: 0 })
+    const clock = { now: T0 }
+    const { p, status } = places(g.source, clock)
+    status.upsert([
+      parseRow({
+        id: 'jobinator/machine',
+        what: 'jobinator',
+        kind: 'machine',
+        machine: 'jobinator',
+        state: 'ok',
+        meaning: 'Fine.',
+        next_run: new Date(T0 - 3_600_000).toISOString(),
+      }),
+    ])
+    clock.now = T0 + 3_600_000
+    await p.refresh()
+    // Stopped outside the page: off, not late, no marks.
+    expect(status.intents()[0]).toMatchObject({ stoppedAt: null, power: 'off' })
+    expect(status.read().rows[0]?.shown).toBe('off')
+    expect(p.view(CT).state).toBe('stopped')
+    // Started outside the page: expected on, so the silent machine row is late.
+    g.list[0]!.status = 'running'
+    g.list[0]!.uptime = 60
+    clock.now += 60_000
+    await p.refresh()
+    expect(status.isExpectedOff('jobinator')).toBe(false)
+    expect(status.read().rows[0]?.shown).toBe('late')
+    // Proxmox unreachable: the last reading stays, as of its own time.
+    const seenAt = clock.now
+    g.source.down = true
+    clock.now += 600_000
+    await p.refresh()
+    expect(status.intents()[0]).toMatchObject({ power: 'on', powerAt: seenAt })
+    expect(status.isExpectedOff('jobinator')).toBe(false)
+  })
+
+  it('does not flip a stopped on-demand place to late when Proxmox cannot be reached', async () => {
+    const g = guests({ status: 'stopped', uptime: 0 })
+    const clock = { now: T0 }
+    const { p, status } = places(g.source, clock)
+    await p.refresh()
+    g.source.down = true
+    clock.now += 600_000
+    await p.refresh()
+    expect(status.intents()[0]).toMatchObject({ power: 'off', powerAt: T0 })
+    expect(status.isExpectedOff('jobinator')).toBe(true)
   })
 
   it('ends a machine with no report of its own once it is running again', async () => {
