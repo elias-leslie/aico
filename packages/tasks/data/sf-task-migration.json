@@ -1,5 +1,0 @@
-{
-  "statuses": ["pending", "paused", "running"],
-  "updatedSince": "2026-10-25",
-  "excludeProjects": ["agent-hub", "summitflow", "nightshift"]
-}

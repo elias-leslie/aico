@@ -368,3 +368,32 @@ func TestComposeLine(t *testing.T) {
 		t.Error("nothing waits for a third agent")
 	}
 }
+
+// The Tether adapters' hooks.rideAlong must agree with takesRide; both tests read this fixture.
+func TestTakesRideMatchesFixture(t *testing.T) {
+	raw, err := os.ReadFile("../../../contracts/ride-along-fixtures.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fx struct {
+		Events []string            `json:"events"`
+		Takes  map[string][]string `json:"takes"`
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatal(err)
+	}
+	for provider, want := range fx.Takes {
+		got := []string{}
+		for _, event := range fx.Events {
+			if takesRide(provider, event, "") {
+				got = append(got, event)
+			}
+		}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("%s: takesRide events %v, fixture %v", provider, got, want)
+		}
+		if takesRide(provider, "UserPromptSubmit", "a1") {
+			t.Errorf("%s: a subagent took a ride-along line", provider)
+		}
+	}
+}

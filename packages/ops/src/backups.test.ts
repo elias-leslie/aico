@@ -812,6 +812,14 @@ it('does not schedule a live Redis capture after its frozen archive is verified'
   expect(cfg().streams.some((stream) => stream.id === 'redis')).toBe(false)
 })
 
+it('keeps the stopped SummitFlow database stream off the plan and the Drive jobs, with its reason on record', () => {
+  const c = cfg()
+  const stream = c.streams.find((s) => s.id === 'postgres')
+  expect(stream?.enabled).toBe(false)
+  expect(stream?.disabledReason).toContain('DB fate is the owner')
+  expect(entries(emptyState(), c, c.workstation, now).some((e) => e.id === 'postgres')).toBe(false)
+})
+
 it('shows the stopped external backup owner as off with its last good artifact date and resumes normal checks', async () => {
   const c = cfg(),
     state = emptyState()

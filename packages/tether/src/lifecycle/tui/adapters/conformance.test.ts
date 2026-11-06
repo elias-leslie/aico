@@ -2,8 +2,7 @@
 // Antigravity, against fixtures of the real status-file, rollout, session and
 // conversation shapes. A new adapter joins by being listed in ADAPTERS.
 
-import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { AgentSignal } from '../../../agent-state'
 import type { FileTail, ProcFs } from '../../../proc-fs'
@@ -246,31 +245,19 @@ describe.each(ADAPTERS.map((adapter) => [adapter.id, adapter] as const))(
   },
 )
 
-// The Python side (SummitFlow coord_inbox.takes_ride) decides which hook
-// events carry ride-along lines. It stays in Python; this only checks that the
-// adapters' declared facts still agree with it, where that checkout exists.
-const COORD_INBOX = '/srv/workspaces/projects/summitflow/scripts/lib'
-
-describe.skipIf(!existsSync(`${COORD_INBOX}/coord_inbox.py`))('coord_inbox takes_ride', () => {
-  const EVENTS = ['UserPromptSubmit', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'Notification']
+// Which hook events carry ride-along lines is decided by aico-hook (native/hook/lease takesRide). Its Go test
+// and this one read the same fixture, so the adapters' declared facts and the hook cannot drift apart.
+describe('ride-along events', () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL('../../../../../../contracts/ride-along-fixtures.json', import.meta.url),
+      'utf8',
+    ),
+  ) as { events: string[]; takes: Record<string, string[]> }
   it('agrees with every adapter hooks.rideAlong', () => {
-    const providers = ADAPTERS.map((a) => a.hooks.provider ?? 'none')
-    const out = execFileSync(
-      'python3',
-      [
-        '-I',
-        '-c',
-        'import ast,json,sys;src=open(sys.argv[1]).read();fn=next(n for n in ast.parse(src).body if isinstance(n,ast.FunctionDef) and n.name=="takes_ride");ns={};exec(ast.get_source_segment(src,fn),ns);c=ns["takes_ride"];p,e=json.loads(sys.argv[2]),json.loads(sys.argv[3]);print(json.dumps({x:[v for v in e if c(x,v)] for x in p}))',
-        `${COORD_INBOX}/coord_inbox.py`,
-        JSON.stringify(providers),
-        JSON.stringify(EVENTS),
-      ],
-      { encoding: 'utf8' },
-    )
-    const python = JSON.parse(out) as Record<string, string[]>
     for (const adapter of ADAPTERS)
-      expect(python[adapter.hooks.provider ?? 'none']).toEqual(
-        EVENTS.filter((event) => adapter.hooks.rideAlong.includes(event)),
+      expect(fixture.takes[adapter.hooks.provider ?? 'none']).toEqual(
+        fixture.events.filter((event) => adapter.hooks.rideAlong.includes(event)),
       )
   })
 })

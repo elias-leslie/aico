@@ -1,0 +1,10 @@
+{
+  "note": "Which hook events carry Tether's ride-along lines, per provider (native/hook/lease takesRide). The Tether adapters' hooks.rideAlong must agree.",
+  "events": ["UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "Stop", "Notification"],
+  "takes": {
+    "claude_code": ["UserPromptSubmit", "PostToolUse", "PostToolUseFailure"],
+    "codex": ["UserPromptSubmit", "PostToolUse"],
+    "pi": ["UserPromptSubmit", "PostToolUse"],
+    "none": []
+  }
+}

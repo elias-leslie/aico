@@ -352,7 +352,7 @@ export async function driveBackup(
 ): Promise<boolean> {
   const jobs: BackupJob[] = machine === rt.cfg.workstation ? volumeJobs(rt.cfg, state) : []
   if (machine === rt.cfg.workstation)
-    for (const s of rt.cfg.streams)
+    for (const s of rt.cfg.streams.filter((stream) => stream.enabled !== false))
       jobs.push({
         id: s.id,
         paths: [],

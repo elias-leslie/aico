@@ -208,7 +208,7 @@ export function entries(
           now,
         ),
       )
-    for (const stream of cfg.streams)
+    for (const stream of cfg.streams.filter((s) => s.enabled !== false))
       all.push(
         entry(
           stream.id,

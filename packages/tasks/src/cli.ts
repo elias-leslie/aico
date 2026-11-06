@@ -7,7 +7,6 @@ import { type Database, openTasksDb } from './db'
 import { contextLines, createdLine, subtaskLine, taskLine, time } from './format'
 import { callerFromEnv } from './identity'
 import { ProjectError, Registry } from './projects'
-import { importProjects, importTasks, loadRule, type SfQuery, stQuery } from './summitflow-import'
 import { isSubtaskRef, type NewTask, type Task, TaskError, TaskStore } from './tasks'
 
 export interface Io {
@@ -22,8 +21,6 @@ export interface Deps {
   env: NodeJS.ProcessEnv
   /** One line about a linked session from the session history, or null when unknown. */
   describeSession?: (id: string) => Promise<string | null>
-  sfQuery?: SfQuery
-  ruleFile?: string
 }
 
 class UsageError extends Error {}
@@ -38,7 +35,6 @@ const TASKS_USAGE = `Usage: aico tasks <command> [options]
   log ID MESSAGE    append a progress note
   done ID           record the summary and outcome (-m, --outcome completed|failed)
   abandon ID        abandon a task (preview, then --confirm TOKEN) or reset a subtask
-  import-summitflow projects|tasks [--dry-run]   carry SummitFlow's registry and tasks (re-runnable)
 Project: -P ID, else the project whose folder holds the current directory, else AICO_PROJECT_ID.`
 
 const PROJECTS_USAGE = `Usage: aico projects <command>
@@ -458,61 +454,6 @@ async function abandon(argv: string[], deps: Deps, io: Io): Promise<void> {
   io.out(`PASS Task ${taskId} abandoned.`)
 }
 
-async function importSummitflow(argv: string[], deps: Deps, io: Io): Promise<void> {
-  const { values, positionals } = opts(argv, {
-    'dry-run': { type: 'boolean' },
-    json: { type: 'boolean' },
-  })
-  const query = deps.sfQuery ?? stQuery()
-  const dryRun = values['dry-run'] === true
-  if (positionals[0] === 'projects') {
-    const report = importProjects(deps.db, query, dryRun)
-    if (values.json) return io.out(JSON.stringify(report))
-    io.out(
-      `${dryRun ? 'DRY RUN ' : ''}projects: ${report.sourceProjects} in SummitFlow, ${report.retiredInSource} retired, ${report.carried} carried`,
-    )
-    io.out(
-      `  added ${report.added}, updated ${report.updated}, unchanged ${report.unchanged}, retired here ${report.retiredHere}`,
-    )
-    io.out(
-      `  lifecycle events: ${report.events.source} in SummitFlow, ${report.events.added} added`,
-    )
-    io.out(
-      `  project hash ${report.hash.match ? 'matches' : 'differs'} (${report.hash.source.slice(0, 12)} / ${report.hash.target.slice(0, 12)})`,
-    )
-    io.out(
-      `  event hash ${report.eventHash.match ? 'matches' : 'differs'} (${report.eventHash.source.slice(0, 12)} / ${report.eventHash.target.slice(0, 12)})`,
-    )
-    return
-  }
-  if (positionals[0] === 'tasks') {
-    const rule = loadRule(
-      deps.ruleFile ?? new URL('../data/sf-task-migration.json', import.meta.url).pathname,
-    )
-    const report = importTasks(deps.db, query, rule, dryRun)
-    if (values.json) return io.out(JSON.stringify(report))
-    io.out(
-      `${dryRun ? 'DRY RUN ' : ''}tasks: rule ${rule.statuses.join('/')} updated since ${rule.updatedSince}, not ${rule.excludeProjects.join('/')}`,
-    )
-    for (const [project, count] of Object.entries(report.selected).sort())
-      io.out(`  ${project}: ${count}`)
-    io.out(
-      `  carried ${report.selectedTotal}: ${report.subtasks} subtasks, ${report.log} log entries, ${report.blockers} blockers`,
-    )
-    const skipped = Object.entries(report.skippedProjects)
-      .sort()
-      .map(([p, n]) => `${p} ${n}`)
-      .join(', ')
-    io.out(`  left in SummitFlow by project rule: ${skipped || 'none'}`)
-    if (!dryRun)
-      io.out(
-        `  added ${report.added}, updated ${report.updated}, unchanged ${report.unchanged}, newer here ${report.keptNewerHere}`,
-      )
-    return
-  }
-  throw new UsageError('aico tasks import-summitflow projects|tasks [--dry-run] [--json]')
-}
-
 export async function runTasks(argv: string[], deps: Deps, io: Io): Promise<number> {
   const [command, ...rest] = argv
   if (!command || command === '--help' || command === '-h' || command === 'help') {
@@ -529,7 +470,6 @@ export async function runTasks(argv: string[], deps: Deps, io: Io): Promise<numb
     log,
     done,
     abandon,
-    'import-summitflow': importSummitflow,
   }
   const run = commands[command]
   if (!run) {
