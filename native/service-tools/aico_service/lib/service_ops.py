@@ -67,6 +67,9 @@ class ProjectServices:
     # The backend unit serves the built web page (no services.frontend, a
     # frontend build exists): a frontend deploy restarts it and health probes "/".
     page_on_backend: bool = False
+    # Identity ``runtime.frontend_build: false``: the project ships no web page
+    # (e.g. a retired frontend whose source stays in the repo), so nothing builds it.
+    frontend_build: bool = True
 
     @property
     def page_service(self) -> str:
@@ -213,6 +216,11 @@ def _project_from_identity(identity: Mapping[str, Any], project_id: str, root: P
     if any(canonical_unit(unit) in managed for unit in manual_workers):
         raise ServiceError("services.manual_workers must not repeat a backend, frontend or rebuild-managed worker")
     backend_service = str(services.get("backend") or "")
+    frontend_build = runtime.get("frontend_build", True)
+    if not isinstance(frontend_build, bool):
+        raise ServiceError("runtime.frontend_build must be true or false")
+    if not frontend_build and services.get("frontend"):
+        raise ServiceError("runtime.frontend_build false cannot keep a services.frontend unit")
     return ProjectServices(
         project_id=canonical_id,
         root=root,
@@ -234,8 +242,9 @@ def _project_from_identity(identity: Mapping[str, Any], project_id: str, root: P
         runtime_user=runtime_user,
         infra=tuple(infra),
         deployment=deployment,
-        page_on_backend=bool(inspect_source and backend_service and not services.get("frontend")
+        page_on_backend=bool(inspect_source and frontend_build and backend_service and not services.get("frontend")
                              and (frontend_dir / "package.json").is_file()),
+        frontend_build=frontend_build,
     )
 
 
@@ -336,7 +345,7 @@ def install_clone_dependencies(project: ProjectServices) -> int:
     clone = project_at_source(project, project.source_repo)
     if (code := sync_backend(clone)) != 0:
         return code
-    plan = frontend_install_plan(clone.frontend_dir, clone.root)
+    plan = frontend_install_plan(clone.frontend_dir, clone.root) if clone.frontend_build else None
     return release_install(plan.command, plan.manager, clone.root, cwd=plan.cwd) if plan else 0
 
 
@@ -1324,7 +1333,7 @@ def frontend_install_plan(frontend_dir: Path, root: Path) -> FrontendInstall | N
 
 
 def build_frontend(project: ProjectServices) -> int:
-    plan = frontend_install_plan(project.frontend_dir, project.root)
+    plan = frontend_install_plan(project.frontend_dir, project.root) if project.frontend_build else None
     if plan is None:
         return 0
     # Next's build cache is content-addressed; seeding it only skips recompiling unchanged modules.

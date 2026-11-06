@@ -97,6 +97,19 @@ def test_missing_unit_state_stays_unknown_without_network_fallback(monkeypatch, 
     assert service_ops.observed_service_states(project) == {"api.service": "unknown"}
 
 
+def test_frontend_build_false_skips_a_retired_frontend_left_in_the_source(monkeypatch, tmp_path):
+    (tmp_path / "frontend").mkdir()
+    (tmp_path / "frontend" / "package.json").write_text("{}")
+    identity = {"services": {"backend": "api.service"}, "runtime": {"frontend_build": False}}
+    project = service_ops._project_from_identity(identity, "example", tmp_path)
+    assert not project.page_on_backend and project.page_service == ""
+    monkeypatch.setattr(service_ops, "run", lambda *_args, **_kwargs: pytest.fail("retired frontend was built"))
+    assert service_ops.build_frontend(project) == 0
+    with pytest.raises(service_ops.ServiceError):
+        service_ops._project_from_identity({"services": {"backend": "api.service", "frontend": "web.service"},
+                                            "runtime": {"frontend_build": False}}, "example", tmp_path)
+
+
 def test_listener_attestation_ignores_a_separate_lan_bind_on_the_same_port(monkeypatch):
     monkeypatch.setattr(service_ops, "capture", lambda _args: SimpleNamespace(returncode=0, stdout=(
         'LISTEN 0 511 192.0.2.1:3003 0.0.0.0:* users:(("node",pid=11,fd=2))\n'
