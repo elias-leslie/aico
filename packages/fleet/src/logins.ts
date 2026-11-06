@@ -1,6 +1,15 @@
 // Metadata and values share the existing secrets folder. Only explicit use reads values.
+import { spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, readdirSync, rmdirSync, unlinkSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  unlinkSync,
+} from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
 import policy from '../data/logins-policy.json' with { type: 'json' }
@@ -185,34 +194,68 @@ export class LoginStore {
       throw new LoginError('Could not read the Logins index')
     }
   }
-  private change<T>(fn: (index: Index) => T): T {
+  /** Overridable through the environment; the policy file holds the defaults. */
+  private limit(variable: string, fallback: number) {
+    const value = Number(this.env[variable])
+    return Number.isFinite(value) && value > 0 ? value : fallback
+  }
+  /** Activity is capped by age and count so the index, and each full snapshot, stays small. */
+  private trim(audit: LoginAudit[]): LoginAudit[] {
+    const since =
+      (Date.parse(this.now()) || Date.now()) -
+      this.limit('AICO_LOGINS_AUDIT_MAX_DAYS', policy.auditMaxDays) * 86_400_000
+    return audit
+      .filter((event) => !(Date.parse(event.at) < since))
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .slice(-this.limit('AICO_LOGINS_AUDIT_MAX_ENTRIES', policy.auditMaxEntries))
+  }
+  /** flock(2) on a descriptor this process holds: the kernel drops it if the process dies. */
+  private change<T>(fn: (index: Index) => T, persist: () => boolean = () => true): T {
     mkdirSync(this.folder, { recursive: true, mode: 0o700 })
     const dir = lstatSync(this.folder)
     if (!dir.isDirectory() || dir.uid !== process.getuid?.() || dir.mode & 0o077)
       throw new LoginError('Secrets folder must be private')
-    const lock = join(this.folder, '.index-lock')
+    const fd = openSync(join(this.folder, '.index.flock'), 'a', 0o600)
     try {
-      mkdirSync(lock, { mode: 0o700 })
-    } catch {
-      throw new LoginError('Another Logins change is in progress')
-    }
-    try {
+      // The helper locks our open file description; the lock outlives the helper until we close fd.
+      const held = spawnSync('flock', ['-x', '-w', String(policy.lockWaitSeconds), '3'], {
+        stdio: ['ignore', 'ignore', 'ignore', fd],
+      })
+      if (held.error) throw new LoginError('Logins needs flock (util-linux) on this machine')
+      if (held.status !== 0) throw new LoginError('Another Logins change is in progress')
       const index = this.read()
       const result = fn(index)
-      writePrivate(this.path, JSON.stringify(index, null, 2))
+      if (persist()) {
+        index.audit = this.trim(index.audit)
+        writePrivate(this.path, JSON.stringify(index, null, 2))
+      }
       return result
     } finally {
-      rmdirSync(lock)
+      closeSync(fd)
     }
   }
-  private record(index: Index, caller: LoginCaller, action: string, name: string) {
-    index.audit.push({
-      id: randomUUID(),
-      at: this.now(),
-      action,
-      name,
-      actor: caller.session || (caller.owner ? 'owner' : caller.role),
-    })
+  /** Explicit actions always record; machine reads record once per actor, action and login per window. */
+  private record(
+    index: Index,
+    caller: LoginCaller,
+    action: string,
+    name: string,
+    collapse = false,
+  ): boolean {
+    const at = this.now(),
+      actor = caller.session || (caller.owner ? 'owner' : caller.role)
+    if (collapse && !policy.auditExplicitActions.includes(action)) {
+      const since =
+        (Date.parse(at) || Date.now()) -
+        this.limit('AICO_LOGINS_AUDIT_COLLAPSE_SECONDS', policy.auditCollapseSeconds) * 1000
+      for (let i = index.audit.length - 1; i >= 0; i--) {
+        const event = index.audit[i]
+        if (Date.parse(event.at) < since) break
+        if (event.action === action && event.name === name && event.actor === actor) return false
+      }
+    }
+    index.audit.push({ id: randomUUID(), at, action, name, actor })
+    return true
   }
   private revision(index: Index): LoginRevision {
     index.clock = Math.max(index.clock || 0, Date.parse(this.now()) || 0) + 1
@@ -479,28 +522,37 @@ export class LoginStore {
     return entry
   }
 
+  /** A read rewrites the index only when it adds an activity record; it never syncs by itself. */
   value(name: string, caller: LoginCaller, action = 'use'): Buffer {
-    return this.change((index) => {
-      const entry = this.require(index, name, caller)
-      if (entry.verifierOnly) throw new LoginError('Only a verifier is stored here')
-      if (entry.lab && !caller.owner)
-        throw new LoginError('Use lab run for a scoped descriptor handoff')
-      const value = privateFile(join(this.folder, entry.file))
-      entry.lastUsed = this.now()
-      this.record(index, caller, action, name)
-      return value
-    })
+    let recorded = false
+    return this.change(
+      (index) => {
+        const entry = this.require(index, name, caller)
+        if (entry.verifierOnly) throw new LoginError('Only a verifier is stored here')
+        if (entry.lab && !caller.owner)
+          throw new LoginError('Use lab run for a scoped descriptor handoff')
+        const value = privateFile(join(this.folder, entry.file))
+        recorded = this.record(index, caller, action, name, true)
+        if (recorded) entry.lastUsed = this.now()
+        return value
+      },
+      () => recorded,
+    )
   }
   /** Existing tool launcher only; raw retrieval keeps the stricter caller scope. */
   toolValue(name: string, caller: LoginCaller): Buffer {
-    return this.change((index) => {
-      const entry = this.require(index, name, caller, true)
-      if (!entry.tool || entry.verifierOnly) throw new LoginError('Tool login unavailable')
-      const value = privateFile(join(this.folder, entry.file))
-      entry.lastUsed = this.now()
-      this.record(index, caller, 'tool use', name)
-      return value
-    })
+    let recorded = false
+    return this.change(
+      (index) => {
+        const entry = this.require(index, name, caller, true)
+        if (!entry.tool || entry.verifierOnly) throw new LoginError('Tool login unavailable')
+        const value = privateFile(join(this.folder, entry.file))
+        recorded = this.record(index, caller, 'tool use', name, true)
+        if (recorded) entry.lastUsed = this.now()
+        return value
+      },
+      () => recorded,
+    )
   }
   grant(
     name: string,
@@ -562,7 +614,7 @@ export class LoginStore {
   }
   audit(caller: LoginCaller) {
     this.owner(caller)
-    return this.read().audit
+    return this.trim(this.read().audit)
   }
   snapshot(machine: string, full: boolean): LoginSnapshot {
     const index = this.read()
@@ -612,9 +664,11 @@ export class LoginStore {
               },
         ]),
       ),
-      audit: full
-        ? index.audit
-        : index.audit.filter((event) => entries.some((entry) => entry.name === event.name)),
+      audit: this.trim(
+        full
+          ? index.audit
+          : index.audit.filter((event) => entries.some((entry) => entry.name === event.name)),
+      ),
     }
   }
   mergeSnapshot(snapshot: LoginSnapshot, machine = loginMachine()): boolean {
@@ -766,15 +820,13 @@ export class LoginStore {
           index.assignments[session] = item.targets
         }
       }
-      const events = new Map(index.audit.map((event) => [event.id || JSON.stringify(event), event]))
-      for (const event of snapshot.audit) {
-        const key = event.id || JSON.stringify(event)
-        if (!events.has(key)) {
-          events.set(key, event)
-          changed = true
-        }
-      }
-      index.audit = [...events.values()].sort((a, b) => a.at.localeCompare(b.at))
+      const key = (event: LoginAudit) => event.id || JSON.stringify(event)
+      const before = new Set(this.trim(index.audit).map(key))
+      const events = new Map(index.audit.map((event) => [key(event), event]))
+      for (const event of snapshot.audit) if (!events.has(key(event))) events.set(key(event), event)
+      // Only records that survive the cap count as news, so trimmed history never ping-pongs.
+      index.audit = this.trim([...events.values()])
+      if (index.audit.some((event) => !before.has(key(event)))) changed = true
       return changed
     })
   }
@@ -855,53 +907,60 @@ export class LoginStore {
     labIdentity(target, 'default')
     if (!Array.isArray(requests) || !requests.length)
       throw new LoginError('Lab selection must be a nonempty list')
-    return this.change((index) => {
-      const seen = new Set<string>()
-      const resolved = requests.map((item: unknown) => {
-        const r = item as { reference?: unknown; fields?: unknown; optional_fields?: unknown }
-        if (
-          !r ||
-          typeof r.reference !== 'string' ||
-          !Array.isArray(r.fields) ||
-          !r.fields.length ||
-          (r.optional_fields !== undefined && !Array.isArray(r.optional_fields))
-        )
-          throw new LoginError('Invalid lab selection')
-        const match = /^secret:\/\/lab\/([^/]+)\/([^/]+)$/.exec(r.reference)
-        if (!match || match[1] !== target || seen.has(r.reference))
-          throw new LoginError('Lab selection outside target or duplicated')
-        seen.add(r.reference)
-        const names = [...r.fields, ...(r.optional_fields || [])] as unknown[]
-        if (
-          new Set(names).size !== names.length ||
-          names.some((n) => typeof n !== 'string' || !field.test(n))
-        )
-          throw new LoginError('Invalid lab field selection')
-        const entry = this.require(index, labIdentity(target, match[2]).name, caller)
-        const p = labPayload(
-          privateFile(join(this.folder, entry.file)).toString(),
-          target,
-          match[2],
-        )
-        if (r.fields.some((name) => !Object.hasOwn(p.values, name)))
-          throw new LoginError('A required lab field is unavailable')
-        return {
-          reference: r.reference,
-          values: Object.fromEntries(
-            (names as string[])
-              .filter((name) => Object.hasOwn(p.values, name))
-              .map((name) => [name, p.values[name]]),
-          ),
+    let recorded = false
+    return this.change(
+      (index) => {
+        const seen = new Set<string>()
+        const resolved = requests.map((item: unknown) => {
+          const r = item as { reference?: unknown; fields?: unknown; optional_fields?: unknown }
+          if (
+            !r ||
+            typeof r.reference !== 'string' ||
+            !Array.isArray(r.fields) ||
+            !r.fields.length ||
+            (r.optional_fields !== undefined && !Array.isArray(r.optional_fields))
+          )
+            throw new LoginError('Invalid lab selection')
+          const match = /^secret:\/\/lab\/([^/]+)\/([^/]+)$/.exec(r.reference)
+          if (!match || match[1] !== target || seen.has(r.reference))
+            throw new LoginError('Lab selection outside target or duplicated')
+          seen.add(r.reference)
+          const names = [...r.fields, ...(r.optional_fields || [])] as unknown[]
+          if (
+            new Set(names).size !== names.length ||
+            names.some((n) => typeof n !== 'string' || !field.test(n))
+          )
+            throw new LoginError('Invalid lab field selection')
+          const entry = this.require(index, labIdentity(target, match[2]).name, caller)
+          const p = labPayload(
+            privateFile(join(this.folder, entry.file)).toString(),
+            target,
+            match[2],
+          )
+          if (r.fields.some((name) => !Object.hasOwn(p.values, name)))
+            throw new LoginError('A required lab field is unavailable')
+          return {
+            reference: r.reference,
+            values: Object.fromEntries(
+              (names as string[])
+                .filter((name) => Object.hasOwn(p.values, name))
+                .map((name) => [name, p.values[name]]),
+            ),
+          }
+        })
+        for (const item of resolved) {
+          const actor = item.reference.split('/').pop() as string
+          const name = labIdentity(target, actor).name
+          if (this.record(index, caller, 'lab use', name, true)) {
+            this.require(index, name, caller).lastUsed = this.now()
+            recorded = true
+          }
         }
-      })
-      for (const item of resolved) {
-        const actor = item.reference.split('/').pop() as string
-        this.require(index, labIdentity(target, actor).name, caller).lastUsed = this.now()
-        this.record(index, caller, 'lab use', labIdentity(target, actor).name)
-      }
 
-      return { schema_version: 1, target, credentials: resolved }
-    })
+        return { schema_version: 1, target, credentials: resolved }
+      },
+      () => recorded,
+    )
   }
 }
 

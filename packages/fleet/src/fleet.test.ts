@@ -635,8 +635,9 @@ it('reports actual stopped guests as off and restores warning when the power rea
       return new Map([['peer-b', power]])
     },
   })
+  p.sa.powerCacheMs = 20
   await p.fa.start()
-  expect(latest[0]).toMatchObject({ state: 'off' })
+  await vi.waitFor(() => expect(latest[0]).toMatchObject({ state: 'off' }))
   expect(latest[0]?.next_run).toBeDefined()
   power = 'running'
   await vi.waitFor(() => expect(latest[0]?.state).toBe('warn'))
@@ -646,4 +647,28 @@ it('reports actual stopped guests as off and restores warning when the power rea
   await vi.waitFor(() => expect(latest[0]?.state).toBe('warn'))
   await p.fb.start()
   await vi.waitFor(() => expect(latest[0]?.state).toBe('ok'))
+})
+
+it('reads guest power once per cache window and keeps reporting while a reading hangs', async () => {
+  let reads = 0,
+    reports = 0
+  let release: (value: Map<string, string>) => void = () => {}
+  const p = await pair({
+    postRows: async () => {
+      reports++
+    },
+    peerPower: () => {
+      reads++
+      return new Promise((resolve) => {
+        release = resolve
+      })
+    },
+  })
+  await p.fa.start()
+  const before = reports
+  await vi.waitFor(() => expect(reports).toBeGreaterThan(before + 3))
+  expect(reads).toBe(1)
+  release(new Map([['peer-b', 'stopped']]))
+  await vi.waitFor(() => expect(reports).toBeGreaterThan(before + 6))
+  expect(reads).toBe(1)
 })

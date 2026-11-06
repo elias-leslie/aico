@@ -90,3 +90,15 @@ it('replicates a reveal record and last-used metadata to other full peers', asyn
   expect(snapshot.audit.some((event: { action: string }) => event.action === 'reveal')).toBe(true)
   expect(snapshot.entries[0].entry.lastUsed).not.toBeNull()
 })
+it('does not push snapshots for machine reads', async () => {
+  const env = environment()
+  const config = JSON.parse((await import('node:fs')).readFileSync(fleetFile(env), 'utf8'))
+  config.allowlist = '/full-pins'
+  writePrivate(fleetFile(env), JSON.stringify(config))
+  new LoginStore(env).set('saved', 'fixture-private-value', {}, owner)
+  mocks.exec.mockResolvedValue(JSON.stringify({ ok: true }))
+  const client = new LoginClient(env)
+  for (let i = 0; i < 5; i++) await client.value('saved', owner, 'VM operation')
+  await client.value('saved', owner)
+  expect(mocks.exec).not.toHaveBeenCalled()
+})

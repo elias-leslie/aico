@@ -44,16 +44,23 @@ export function pveRequest(
   env: NodeJS.ProcessEnv = process.env,
   transport: PveTransport = {},
 ): PveRequest {
+  // One token fetch per operation: task polling reuses it instead of reading Logins every second.
+  let pending: Promise<VmCredential> | null = null
+  const fetchCredential = async () =>
+    transport.credential
+      ? await transport.credential()
+      : (JSON.parse(
+          (
+            await new LoginClient(env).value(ops.vm.login, loginCaller(env), 'VM operation')
+          ).toString(),
+        ) as VmCredential)
   return async (method, path, body) => {
-    const login = new LoginClient(env)
     let credential: VmCredential
     try {
-      credential = transport.credential
-        ? await transport.credential()
-        : (JSON.parse(
-            (await login.value(ops.vm.login, loginCaller(env), 'VM operation')).toString(),
-          ) as VmCredential)
+      pending ??= fetchCredential()
+      credential = await pending
     } catch {
+      pending = null
       throw new Refusal('Scoped Proxmox login is unavailable in Aico Logins')
     }
     if (!credential.tokenId || !credential.tokenSecret)

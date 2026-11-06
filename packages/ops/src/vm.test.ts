@@ -162,10 +162,14 @@ it('uses only the scoped login and pinned CA at the HTTPS boundary', async () =>
     }) as typeof req.end
     return req
   }) as unknown as typeof import('node:https').request
+  let fetched = 0
   const call = pveRequest(
     {},
     {
-      credential: async () => ({ tokenId: 'fixture@pve!scoped', tokenSecret: 'fixture-private' }),
+      credential: async () => {
+        fetched++
+        return { tokenId: 'fixture@pve!scoped', tokenSecret: 'fixture-private' }
+      },
       ca: () => Buffer.from('fixture-ca'),
       request: requester,
     },
@@ -180,6 +184,10 @@ it('uses only the scoped login and pinned CA at the HTTPS boundary', async () =>
   expect(sent.options).not.toHaveProperty('rejectUnauthorized', false)
   expect(sent.timeout).toBeGreaterThan(0)
   expect(sent.payload).toBe('force=0')
+  // Task polling reuses the operation's token instead of reading Logins on every request.
+  await call('GET', '/nodes/node/tasks/UPID/status')
+  await call('GET', '/nodes/node/tasks/UPID/status')
+  expect(fetched).toBe(1)
 })
 it('keeps a deploy source root distinct from the installed runtime root', async () => {
   const { repoRoot } = await import('./main')

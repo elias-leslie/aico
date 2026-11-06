@@ -5,5 +5,10 @@
   "restrictedRoles": ["hunting", "recon", "verification"],
   "revealSeconds": 30,
   "maxValueBytes": 65536,
-  "maxRpcBytes": 4194304
+  "maxRpcBytes": 4194304,
+  "auditMaxEntries": 2000,
+  "auditMaxDays": 90,
+  "auditCollapseSeconds": 3600,
+  "auditExplicitActions": ["reveal"],
+  "lockWaitSeconds": 5
 }

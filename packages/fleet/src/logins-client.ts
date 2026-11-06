@@ -115,12 +115,11 @@ export async function loginRpc(input: string, env = process.env): Promise<string
     const authority = loginPeers(env)
     if (!authority.full) throw new LoginError('Only a full peer accepts login writes')
     const result = perform(new LoginStore(env), request)
-    if (
-      (!reads.has(request.operation) ||
-        request.operation === 'value' ||
-        request.operation === 'resolveLab') &&
-      authority.settings
-    ) {
+    // Machine reads never push snapshots; their collapsed records ride along with the next sync.
+    const reveal =
+      request.operation === 'value' &&
+      loginPolicy.auditExplicitActions.includes(String(request.args[1]))
+    if ((!reads.has(request.operation) || reveal) && authority.settings) {
       // Each snapshot also updates target assignments. Disconnected peers catch up on their next link.
       const settings = authority.settings
       const deliveries = await Promise.allSettled(

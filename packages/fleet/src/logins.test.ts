@@ -1,4 +1,13 @@
-import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -386,4 +395,77 @@ it('delivers machine grants through the fleet stdin and removes revoked delivere
   )
   expect(receiver.list()).toEqual([])
   expect(existsSync(join(receiver.folder, 'sample'))).toBe(false)
+})
+it('collapses repeated machine reads, keeps explicit reveals, and caps activity by count and age', () => {
+  let now = Date.parse('2026-11-06T00:00:00Z')
+  const clocked = new LoginStore(
+    { ...env, AICO_LOGINS_AUDIT_MAX_ENTRIES: '50', AICO_LOGINS_AUDIT_MAX_DAYS: '2' },
+    () => new Date(now).toISOString(),
+  )
+  clocked.set('sample', 'fixture-private-value', {}, owner)
+  const machine: LoginCaller = { role: 'coordinator', machine: loginMachine() }
+  const before = readFileSync(clocked.path, 'utf8')
+  for (let i = 0; i < 20; i++) clocked.value('sample', machine, 'VM operation')
+  const reads = () => clocked.audit(owner).filter((e) => e.action === 'VM operation')
+  expect(reads()).toHaveLength(1)
+  const once = readFileSync(clocked.path, 'utf8')
+  expect(once).not.toBe(before)
+  now += 60_000
+  clocked.value('sample', machine, 'VM operation')
+  expect(readFileSync(clocked.path, 'utf8')).toBe(once) // collapsed reads leave the index alone
+  clocked.value('sample', owner, 'reveal')
+  clocked.value('sample', owner, 'reveal')
+  expect(clocked.audit(owner).filter((e) => e.action === 'reveal')).toHaveLength(2)
+  now += 3_601_000
+  clocked.value('sample', machine, 'VM operation')
+  expect(reads()).toHaveLength(2)
+  for (let i = 0; i < 80; i++) {
+    now += 3_601_000
+    clocked.value('sample', machine, 'VM operation')
+  }
+  const kept = JSON.parse(readFileSync(clocked.path, 'utf8')).audit
+  expect(kept.length).toBeLessThanOrEqual(50)
+  expect(kept.every((e: { at: string }) => Date.parse(e.at) >= now - 2 * 86_400_000)).toBe(true)
+  expect(clocked.snapshot(loginMachine(), true).audit.length).toBeLessThanOrEqual(50)
+})
+it('trims an oversized existing activity log on the next write', () => {
+  store.set('sample', 'fixture-private-value', {}, owner)
+  const index = JSON.parse(readFileSync(store.path, 'utf8'))
+  const at = new Date().toISOString()
+  index.audit = Array.from({ length: 5000 }, (_, i) => ({
+    id: `old-${i}`,
+    at,
+    action: 'VM operation',
+    name: 'sample',
+    actor: `caller-${i}`,
+  }))
+  writeFileSync(store.path, JSON.stringify(index))
+  store.grant('sample', 'role', 'coordinator', true, owner)
+  expect(JSON.parse(readFileSync(store.path, 'utf8')).audit.length).toBe(2000)
+})
+it('merges only activity that survives the cap, so trimmed history is not news', () => {
+  const now = () => '2026-11-06T00:00:00.000Z'
+  const a = new LoginStore(env, now)
+  a.set('sample', 'fixture-private-value', {}, owner)
+  const snapshot = a.snapshot(loginMachine(), true)
+  const old = {
+    id: 'ancient',
+    at: '2020-01-01T00:00:00.000Z',
+    action: 'use',
+    name: 'sample',
+    actor: 'x',
+  }
+  expect(a.mergeSnapshot({ ...snapshot, audit: [...snapshot.audit, old] })).toBe(false)
+  expect(a.audit(owner).some((e) => e.id === 'ancient')).toBe(false)
+})
+it('takes a kernel lock that a crashed holder cannot leave behind', () => {
+  mkdirSync(join(store.folder, '.index-lock'), { recursive: true })
+  // -o: only the flock process holds the lock; SIGKILL it mid-hold like a crashed writer.
+  const held = spawnSync('flock', ['-o', '-x', join(store.folder, '.index.flock'), 'sleep', '2'], {
+    timeout: 200,
+    killSignal: 'SIGKILL',
+  })
+  expect(held.signal).toBe('SIGKILL')
+  store.set('after-crash', 'fixture-private-value', {}, owner)
+  expect(store.show('after-crash', owner).name).toBe('after-crash')
 })

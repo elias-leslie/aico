@@ -51,6 +51,8 @@ export class Fleet {
   private timer: NodeJS.Timeout | null = null
   private stopping = false
   private reporting = false
+  private power: { at: number; value: ReadonlyMap<string, string> } | null = null
+  private powerProbe: Promise<void> | null = null
   private readonly startedAt = Date.now()
 
   constructor(private readonly options: FleetOptions) {
@@ -402,15 +404,13 @@ export class Fleet {
     this.reporting = true
     const s = this.options.settings
     try {
-      let power: ReadonlyMap<string, string> = new Map()
-      if (this.status().some((peer) => !peer.connected)) {
-        try {
-          power = await (this.options.peerPower?.() ??
-            (s.proxmoxSsh ? guestPower(s.proxmoxSsh, s.deadMs) : Promise.resolve(power)))
-        } catch (error) {
-          this.log(`Could not read guest power: ${(error as Error).message}`)
-        }
-      }
+      if (this.status().some((peer) => !peer.connected)) this.refreshPower()
+      // A reading older than one refresh (a peer that just dropped) is not evidence it is off.
+      const power =
+        this.power &&
+        Date.now() - this.power.at < (s.powerCacheMs ?? 60_000) + (s.powerTimeoutMs ?? 10_000)
+          ? this.power.value
+          : new Map<string, string>()
       if (this.stopping) return
       const pins = this.pins()
       const rows = this.status().map((peer) =>
@@ -428,6 +428,31 @@ export class Fleet {
     } finally {
       this.reporting = false
     }
+  }
+
+  /** Reads guest power at most once per powerCacheMs, in the background so a hung probe never
+   * holds up link Status; a fresh reading reports at once. A failed reading clears the cache. */
+  private refreshPower(): void {
+    const s = this.options.settings
+    if (this.powerProbe || (this.power && Date.now() - this.power.at < (s.powerCacheMs ?? 60_000)))
+      return
+    const read =
+      this.options.peerPower ??
+      (() =>
+        s.proxmoxSsh
+          ? guestPower(s.proxmoxSsh, s.powerTimeoutMs ?? 10_000)
+          : Promise.resolve(new Map<string, string>()))
+    this.powerProbe = (async () => {
+      try {
+        this.power = { at: Date.now(), value: await read() }
+      } catch (error) {
+        this.power = { at: Date.now(), value: new Map() }
+        this.log(`Could not read guest power: ${(error as Error).message}`)
+      }
+    })().finally(() => {
+      this.powerProbe = null
+      if (!this.stopping) void this.report()
+    })
   }
 
   async close(): Promise<void> {

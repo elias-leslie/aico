@@ -29,6 +29,10 @@ export interface FleetSettings {
   retryMaxMs: number
   deadMs: number
   statusMs: number
+  /** How long a Proxmox guest power reading is reused (default 60 s). */
+  powerCacheMs?: number
+  /** SSH timeout for one guest power reading (default 10 s). */
+  powerTimeoutMs?: number
   statusUrl: string
 }
 
@@ -109,7 +113,13 @@ export function readSettings(env: NodeJS.ProcessEnv, controlSocket: string): Fle
     value.retryMaxMs < value.retryMinMs
   )
     throw new Error('Fleet retry, silence and Status intervals must be positive')
-  for (const key of ['stableMs', 'maxChannels', 'bufferBytes'] as const) {
+  for (const key of [
+    'stableMs',
+    'maxChannels',
+    'bufferBytes',
+    'powerCacheMs',
+    'powerTimeoutMs',
+  ] as const) {
     const n = value[key]
     if (n !== undefined && (!Number.isSafeInteger(n) || n <= 0))
       throw new Error(`Invalid fleet ${key}`)
