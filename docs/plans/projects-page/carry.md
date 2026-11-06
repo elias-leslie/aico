@@ -12,6 +12,6 @@ The Aico task system is gone. Its 52 rows (38 were a same-day bulk import from S
 | jobinator-4000 | 2 | Applications to 1Password, Cohere and Tanium (Next) | VM 180 release-path row (Jobinator now runs in CT 191) |
 | ominull | 20 | Grant signature gap and fuzzing, Topology and ESTATS checks (Now); Traffic overhaul, Rust parsing library, IP and CIDR rules, FQDN rules, code signing, posture port (Next); BloodHound, household router work, phases 2 to 4, umbrella direction (Later) | Upload budget (landed in 1.8.60); several direction-2026-10 rows merged into one Later line each |
 | portfolio-ai | 2 | Net-worth cockpit and UX hardening (Now), Money panel fixtures and money revamp (Next) | none |
-| other projects | 13 | nightshift (hand duties to Aico, Now; open-source export, Later), uilint (two Now/Next lines from PLAN.md) | pointer-only rows for monkey-fight, portfolio and vault-tools (nothing in flight in the repos) |
+| nightshift, uilint, monkey-fight, portfolio, vault-tools | 13 | none from rows; nightshift (hand duties to Aico, Now; open-source export, Later) and uilint (two lines) come from their own plans and STATUS docs | pointer-only rows (nothing in flight in the repos) |
 
 Projects with a ROADMAP.md and no lines: agent-skills, browser-automation, claude-config, code-intelligence, desktop-automation, monkey-fight, portfolio, vault-tools.
