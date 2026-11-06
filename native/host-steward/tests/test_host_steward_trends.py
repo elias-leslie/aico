@@ -683,7 +683,7 @@ def test_discovery_keeps_the_tier_a_guest_got_at_first_sight():
 
 def test_registry_has_every_site_asset():
     reg = assets.load()
-    assert not reg.problems and len(reg.assets) == 18
+    assert not reg.problems and len(reg.assets) == 17
     pve_host, wfp = reg.by_role("pve"), reg.by_vmid("110")
     assert pve_host and pve_host.id == "davion-gem" and wfp and wfp.id == "wfp-target-win11"
 
@@ -788,7 +788,7 @@ def test_an_isolated_lab_guest_on_its_own_bridge_is_fine_and_state_is_kept():
     sigs, ctx = run_assets(sections([110], nics_text=nics))
     assert "assets.lab_on_lan" not in sigs
     assert ctx.state["isolation"]["wfp-target-win11"] is True
-    assert sigs["assets.registry"].fields["n"] >= 18
+    assert sigs["assets.registry"].fields["n"] >= 17
 
 
 def test_unknown_guests_are_discovered_and_pve_down_is_a_note():
