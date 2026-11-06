@@ -1001,8 +1001,6 @@
                       "@aico/ops/**",
                       "@aico/store",
                       "@aico/store/**",
-                      "@aico/tasks",
-                      "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
                       "@aico/ui-kit",
@@ -1010,7 +1008,7 @@
                       "@aico/web-frontend",
                       "@aico/web-frontend/**"
                     ],
-                    "message": "@aico/web-server (layer 5): import only @aico/shared, @aico/context, @aico/notify, @aico/status, @aico/usage, @aico/fleet, @aico/notes, @aico/tether-client, @aico/agent, @aico/webtools (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/web-server (layer 5): import only @aico/shared, @aico/context, @aico/notify, @aico/status, @aico/tasks, @aico/usage, @aico/fleet, @aico/notes, @aico/tether-client, @aico/agent, @aico/webtools (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

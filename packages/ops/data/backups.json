@@ -179,6 +179,13 @@
       "/home/kasadis/.local/state/aico-snapshot/notes.db"
     ]
   },
+  "sourceProjects": {
+    "aico-davion-sidarli": "aico",
+    "aico-aico": "aico",
+    "pve-ct-190-aico-data": "aico",
+    "pve-vm-180-app-recovery": "portfolio-ai",
+    "ominull-evidence-replica": "ominull"
+  },
   "displayNames": {
     "a-term": "Aico previous app",
     "aico-web-state": "Aico saved web state"

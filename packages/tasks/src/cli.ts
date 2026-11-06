@@ -22,6 +22,8 @@ const PROJECTS_USAGE = `Usage: aico projects <command>
   list [--all]                         registered projects (--all includes retired ones)
   show ID                              one project, its settings and lifecycle events
   register ID --root PATH [--name N] [--category C]
+  runtime ID [--set JSON | --clear]    where the project runs: a JSON list of places
+                                       {kind: host|vm|ct, id?, label, power, machine?}
   retire ID --reason TEXT              the project leaves lists; its history stays`
 
 function opts<const T extends ParseArgsOptionsConfig>(argv: string[], options: T) {
@@ -78,6 +80,26 @@ export async function runProjects(argv: string[], deps: Deps, io: Io): Promise<n
         category: values.category,
       })
       io.out(`PASS Project ${positionals[0]} registered.`)
+    } else if (command === 'runtime') {
+      const { values, positionals } = opts(rest, {
+        set: { type: 'string' },
+        clear: { type: 'boolean' },
+      })
+      const id = positionals[0]
+      if (!id || (values.set !== undefined && values.clear))
+        throw new UsageError('aico projects runtime ID [--set JSON | --clear]')
+      if (values.set !== undefined) {
+        let places: unknown
+        try {
+          places = JSON.parse(values.set)
+        } catch {
+          throw new UsageError('--set takes a JSON list of places')
+        }
+        registry.setRuntime(id, places)
+      } else if (values.clear) registry.setRuntime(id, [])
+      const project = registry.get(id)
+      if (!project) throw new UsageError(`no project ${id}`)
+      io.out(JSON.stringify(project.runtime))
     } else if (command === 'retire') {
       const { values, positionals } = opts(rest, { reason: { type: 'string', short: 'r' } })
       if (!positionals[0]) throw new UsageError('aico projects retire ID --reason TEXT')

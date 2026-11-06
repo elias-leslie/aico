@@ -27,6 +27,7 @@ export function drillRow(receipt: DrillReceipt, machine: string): StatusRow {
     what: 'Aico monthly restore drill',
     kind: 'backup',
     machine,
+    project: 'aico',
     state: receipt.ok && receipt.scratchDestroyed ? 'ok' : 'failed',
     meaning:
       receipt.ok && receipt.scratchDestroyed

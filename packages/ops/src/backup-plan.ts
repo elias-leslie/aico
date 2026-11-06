@@ -105,6 +105,8 @@ export interface BackupEntry {
   path: string | null
   running: boolean
   machine: string
+  /** The project this backup belongs to (its Status row carries it); absent for the machine's own. */
+  project?: string
   /** A retired source whose path is gone: listed for its old copies, but no Status row. */
   gone?: boolean
 }
@@ -184,6 +186,7 @@ export function entries(
             machine,
             now,
           )
+          if (source.project_id) item.project = source.project_id
           if (!source.enabled && present && !present(source))
             Object.assign(item, {
               state: 'off',
@@ -285,8 +288,12 @@ export function entries(
         path: `/status?project=${external.owner_project}`,
         running: false,
         machine,
+        project: external.owner_project,
       })
     }
+  // Backups of a project's data that no source row names (Proxmox copies, the Aico databases).
+  for (const item of all)
+    item.project ??= (cfg.sourceProjects as Record<string, string>)[item.source]
   const order = { failed: 0, warn: 1, ok: 2, off: 3 }
   return all.sort((a, b) => order[a.state] - order[b.state] || a.name.localeCompare(b.name))
 }
@@ -299,6 +306,7 @@ export function backupRows(items: BackupEntry[]): StatusRow[] {
     ),
     kind: 'backup',
     machine: item.machine,
+    ...(item.project ? { project: item.project } : {}),
     state: item.state,
     meaning: item.meaning,
     ...(item.dataAt ? { last_run: item.dataAt } : {}),

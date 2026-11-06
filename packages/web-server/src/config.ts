@@ -44,6 +44,13 @@ export interface WebConfig {
    * the same rows turning the same way again stay off the phone (`AICO_STATUS_ALERT_COOLDOWN_SECONDS`).
    */
   status: { heartbeatMs: number; alertCooldownS: number }
+  /**
+   * The Projects page: how often Proxmox is read for each place's power state
+   * (`AICO_PROJECTS_POLL_SECONDS`), how long a start, shutdown or restart is shown as going
+   * (`AICO_PROJECTS_BUSY_SECONDS`), how long a project's last commit time is reused
+   * (`AICO_PROJECTS_ACTIVITY_SECONDS`) and the Proxmox call's timeout (`AICO_PROJECTS_PVE_TIMEOUT_SECONDS`).
+   */
+  projects: { pollMs: number; busyMs: number; activityMs: number; pveTimeoutMs: number }
   /** Owner notices (notify.ts): the phone push files, the outbox pace, the OmniNull hub's door. */
   serviceApps: { listen: { host: string; port: number } | null }
   notify: NotifyConfig
@@ -202,6 +209,10 @@ const DEFAULT_BLOB_GRACE_DAYS = 7
 const DEFAULT_EXPORT_REMOTE = 'aico-notes-drive'
 const DEFAULT_EXPORT_FOLDER = 'SummitFlow-Notes'
 const DEFAULT_STATUS_HEARTBEAT_SECONDS = 5 * 60
+const DEFAULT_PROJECTS_POLL_SECONDS = 30
+const DEFAULT_PROJECTS_BUSY_SECONDS = 10 * 60
+const DEFAULT_PROJECTS_ACTIVITY_SECONDS = 30
+const DEFAULT_PROJECTS_PVE_TIMEOUT_SECONDS = 15
 // A row that flaps pushes at most this often for the same change (notify's per-key cooldown).
 const DEFAULT_STATUS_ALERT_COOLDOWN_SECONDS = 6 * 60 * 60
 // Where Nightshift keeps the phone push files today. The FCM access token is still minted there; the paired
@@ -412,6 +423,15 @@ export function loadConfig(
         positiveInt(env.AICO_STATUS_ALERT_COOLDOWN_SECONDS, DEFAULT_STATUS_ALERT_COOLDOWN_SECONDS),
         7 * 24 * 60 * 60,
       ),
+    },
+    projects: {
+      pollMs: positiveInt(env.AICO_PROJECTS_POLL_SECONDS, DEFAULT_PROJECTS_POLL_SECONDS) * 1000,
+      busyMs: positiveInt(env.AICO_PROJECTS_BUSY_SECONDS, DEFAULT_PROJECTS_BUSY_SECONDS) * 1000,
+      activityMs:
+        positiveInt(env.AICO_PROJECTS_ACTIVITY_SECONDS, DEFAULT_PROJECTS_ACTIVITY_SECONDS) * 1000,
+      pveTimeoutMs:
+        positiveInt(env.AICO_PROJECTS_PVE_TIMEOUT_SECONDS, DEFAULT_PROJECTS_PVE_TIMEOUT_SECONDS) *
+        1000,
     },
     serviceApps: { listen: privateListen(env.AICO_SERVICE_APPS_LISTEN) },
     notify: {

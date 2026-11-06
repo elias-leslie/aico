@@ -4,11 +4,13 @@
 
 import { join } from 'node:path'
 import { agentDbPath, ChatSessions, openAgentDb, tetherPush } from '@aico/agent'
+import { guestAction, listGuests, proxmoxSshFrom } from '@aico/fleet/power'
 import { loadCaptureTypes } from '@aico/notes/capture-types'
 import { execRunner, PreviewJobs } from '@aico/notes/heic'
 import { extract } from '@aico/notes/vision-extract'
 import { realRunners } from '@aico/notes/vision-extract/runners'
 import { machineId, StatusStore, statusDbPath } from '@aico/status'
+import { openTasksDb, Registry, tasksDbPathFromEnv } from '@aico/tasks'
 import { TetherClient } from '@aico/tether-client'
 import { buildApi } from './api'
 import { AppApi } from './app-api'
@@ -36,6 +38,8 @@ import { NotesOwner } from './owners/notes'
 import { PortfolioAiOwner } from './owners/portfolio-ai'
 import type { OwnerAdapter } from './owners/types'
 import { VehiclesOwner } from './owners/vehicles'
+import { Places } from './places'
+import { ProjectsService, registerProjectRoutes } from './projects'
 import { createWebServer } from './server'
 import { createServiceAppsServer } from './service-apps'
 import { Shows } from './shows'
@@ -118,9 +122,8 @@ function serve(): void {
     attachments: (ids) =>
       readChatAttachments(ids, { store: notes, blobsDir, limits: config.captures }),
   })
-  asks.onChange = () => chats.changed()
-  asks.onChange = () => chats.changed()
   chatsRef = chats
+  asks.onChange = () => chats.changed()
   const background = new Background({
     tether,
     store,
@@ -169,6 +172,33 @@ function serve(): void {
   const runs = new StatusRuns()
   registerStatusRoutes(api, status, { changed: notify, machine, running: () => runs.ids() })
   registerStatusActions(api, { status, machine, tether, runs })
+  const proxmox = proxmoxSshFrom(process.env)
+  const registry = new Registry(openTasksDb(tasksDbPathFromEnv(process.env)))
+  const places = new Places({
+    declared: () => registry.list().flatMap((project) => project.runtime),
+    guests: proxmox
+      ? {
+          list: () => listGuests(proxmox, config.projects.pveTimeoutMs),
+          act: (guest, action) => guestAction(proxmox, guest, action, config.projects.pveTimeoutMs),
+        }
+      : null,
+    status,
+    machine,
+    pollMs: config.projects.pollMs,
+    busyMs: config.projects.busyMs,
+  })
+  registerProjectRoutes(
+    api,
+    new ProjectsService({
+      registry,
+      status,
+      tether,
+      asks,
+      places,
+      activityMs: config.projects.activityMs,
+    }),
+  )
+  places.start()
   registerGrantRoutes(api)
   registerCanaryRoutes(api, notify.notifier, join(config.dataDir, 'canary'))
   registerBackupRoutes(api)
@@ -247,6 +277,8 @@ function serve(): void {
     serviceApps?.close()
     serviceApps?.closeAllConnections()
     background.stop()
+    places.stop()
+    registry.db.close()
     reader.stop()
     terminals.stop()
     app.stop()

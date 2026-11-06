@@ -1,6 +1,12 @@
 export { type Deps, type Io, runProjects } from './cli'
 export { openTasksDb, tasksDbPath, tasksDbPathFromEnv } from './db'
-export { type Project, type PublicationPolicy, Registry, registryProjects } from './projects'
+export {
+  type Place,
+  type Project,
+  type PublicationPolicy,
+  Registry,
+  registryProjects,
+} from './projects'
 export {
   parseRoadmap,
   ROADMAP_FILE,

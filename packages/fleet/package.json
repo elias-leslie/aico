@@ -30,7 +30,8 @@
     "./logins-cli": "./src/logins-cli.ts",
     "./logins-delivery": "./src/logins-delivery.ts",
     "./secrets": "./src/secrets.ts",
-    "./releases": "./src/releases.ts"
+    "./releases": "./src/releases.ts",
+    "./power": "./src/power.ts"
   },
   "scripts": {
     "test": "vitest run"
