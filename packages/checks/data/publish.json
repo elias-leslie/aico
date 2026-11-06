@@ -1,5 +1,19 @@
 {
-  "description": "Nightly GitHub publication uses the existing CLI-only authenticated fast-forward transport and outgoing-history secret verifier. No SummitFlow service or database is used. Excluded projects are never opened.",
+  "description": "Nightly GitHub publication uses the existing CLI-only authenticated fast-forward transport and outgoing-history secret verifier. No SummitFlow service or database is used. Excluded projects are never opened. A source with no whole-tree check at main gets its acceptance run first, one repo at a time through managed admission, up to maxPerRun per pass; the rest wait for the next pass.",
   "transport": ["st", "vcs", "deliver"],
-  "excludedProjects": ["neri", "neri-hunters"]
+  "excludedProjects": ["neri", "neri-hunters"],
+  "acceptance": {
+    "command": [
+      "st",
+      "tools",
+      "run",
+      "--label",
+      "Publication acceptance",
+      "--",
+      "st",
+      "check",
+      "--acceptance"
+    ],
+    "maxPerRun": 20
+  }
 }

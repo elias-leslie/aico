@@ -1,7 +1,7 @@
 // A nightly pass over registered repos. Only checked main commits leave this machine;
 // each repo writes Status directly, with no owner ask and no GitHub Actions wait.
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -18,7 +18,8 @@ import { git, gitOk, repoRoot } from './git'
 import { acceptedCheck, type LocalCheck } from './local-check'
 import { webUrl } from './status'
 
-export type PublishProject = Pick<Project, 'id' | 'root_path' | 'agent_configs'>
+export type PublishProject = Pick<Project, 'id' | 'root_path' | 'agent_configs'> &
+  Partial<Pick<Project, 'retired_at'>>
 export interface Delivery {
   publication_complete: boolean
   pushed?: boolean
@@ -33,6 +34,17 @@ export interface Publication extends Delivery {
   accepted_note?: string
   /** Status could not record this result; the publication outcome itself stands. */
   status_unposted?: boolean
+  /** The acceptance this pass ran for the source, and where its output went. */
+  acceptance_log?: string
+  /** The environment problem an acceptance reported ("environment not prepared: ..."). */
+  acceptance_note?: string
+}
+/** One acceptance run for a source: whether it passed and where its output is. */
+export interface AcceptanceRun {
+  passed: boolean
+  log: string
+  /** Set when the repo's environment is not prepared; the run never reached its stages. */
+  notPrepared?: string
 }
 export interface PublishOptions {
   dryRun?: boolean
@@ -42,6 +54,10 @@ export interface PublishOptions {
   authorizedWorkflows?: string[]
   excludedProjects?: readonly string[]
   deliver?: (root: string, sha: string, authorized: string[]) => Promise<Delivery>
+  /** Runs the missing acceptance for a source with no whole-tree check at main. Unset: never runs. */
+  acceptance?: (root: string, sha: string, projectId: string) => Promise<AcceptanceRun>
+  /** Most acceptances one pass starts (default: the policy's maxPerRun). */
+  acceptanceCap?: number
   post?: (row: StatusRow) => Promise<void>
 }
 
@@ -66,9 +82,15 @@ export function publicationRow(result: Publication, now = new Date()): StatusRow
   const problem =
     result.reason === 'unchecked_commit'
       ? `Main has no full or acceptance check${source}. Owning agent: run st check --acceptance.`
-      : result.reason === 'local_check_failed'
-        ? `Local check failed${source}: ${result.failed.join(', ') || 'check'}. Owning agent: fix it and check again.`
-        : `Publication failed${source}: ${result.reason.replaceAll('_', ' ')}. Owning agent: inspect the publish log.`
+      : result.reason === 'acceptance_failed'
+        ? `Acceptance failed${source}: ${result.failed.join(', ') || 'a stage'}. Log: ${result.acceptance_log}. Owning agent: fix it.`
+        : result.reason === 'acceptance_incomplete'
+          ? `Acceptance did not finish${source}. Log: ${result.acceptance_log}. Owning agent: run st check --acceptance.`
+          : result.reason === 'environment_not_prepared'
+            ? `Acceptance could not start${source}: ${result.acceptance_note ?? 'environment not prepared'}. Log: ${result.acceptance_log}.`
+            : result.reason === 'local_check_failed'
+              ? `Local check failed${source}: ${result.failed.join(', ') || 'check'}. Owning agent: fix it and check again.`
+              : `Publication failed${source}: ${result.reason.replaceAll('_', ' ')}. Owning agent: inspect the publish log.`
   return {
     id: `publish:${result.project}`,
     what: `${result.project} GitHub publication`,
@@ -132,6 +154,7 @@ export async function publishRepos(
   options: PublishOptions = {},
 ): Promise<Publication[]> {
   const rows: Publication[] = []
+  let started = 0
   for (const project of projects) {
     let result: Publication = {
       project: project.id,
@@ -166,18 +189,47 @@ export async function publishRepos(
             const sha = through && reachable ? through : main
             const held = !reachable
             result = { ...result, sha, state: held ? 'skip' : 'failed' }
-            const accepted = held ? null : acceptedCheck(root, sha)
-            const check = accepted?.check ?? null
-            result.failed = check?.failed ?? []
-            if (accepted?.carriedFrom)
-              result.accepted_note = `accepted at ${accepted.carriedFrom.slice(0, 10)}; later commits change docs only`
+            let accepted = held ? null : acceptedCheck(root, sha)
+            const noteAccepted = () => {
+              result.failed = accepted?.check.failed ?? []
+              if (accepted?.carriedFrom)
+                result.accepted_note = `accepted at ${accepted.carriedFrom.slice(0, 10)}; later commits change docs only`
+            }
+            noteAccepted()
             result.reason = held
               ? 'owner_hold'
               : options.sha && git(root, ['rev-parse', `${options.sha}^{commit}`]).trim() !== sha
                 ? through
                   ? 'source_is_not_hold'
                   : 'source_is_not_main'
-                : (publishDecision(sha, check, accepted?.carriedFrom) ?? 'checked_main')
+                : (publishDecision(sha, accepted?.check ?? null, accepted?.carriedFrom) ??
+                  'checked_main')
+            // The missing step belongs to publication: run the acceptance, then decide again.
+            if (
+              result.reason === 'unchecked_commit' &&
+              options.acceptance &&
+              !options.dryRun &&
+              project.retired_at == null
+            ) {
+              if (started >= (options.acceptanceCap ?? policy.acceptance.maxPerRun)) {
+                result.state = 'skip'
+                result.reason = 'acceptance_deferred'
+              } else {
+                started++
+                const run = await options.acceptance(root, sha, project.id)
+                result.acceptance_log = run.log
+                accepted = acceptedCheck(root, sha)
+                noteAccepted()
+                result.reason = run.notPrepared
+                  ? 'environment_not_prepared'
+                  : (publishDecision(sha, accepted?.check ?? null, accepted?.carriedFrom) ??
+                    'checked_main')
+                if (run.notPrepared) result.acceptance_note = run.notPrepared
+                else if (result.reason === 'unchecked_commit')
+                  result.reason = 'acceptance_incomplete'
+                else if (result.reason === 'local_check_failed') result.reason = 'acceptance_failed'
+              }
+            }
             if (result.reason === 'checked_main') {
               if (options.dryRun) result.state = 'ok'
               else {
@@ -217,20 +269,58 @@ export async function publishRepos(
   return rows
 }
 
+/**
+ * Runs the policy's acceptance command (managed admission, so one heavy job at a time) for one
+ * source in its own checkout. Output goes to a log per source; a repo whose environment is not
+ * prepared is reported as that, not as a failed stage.
+ */
+function acceptanceRunner(logDir: string): NonNullable<PublishOptions['acceptance']> {
+  return (root, sha, projectId) =>
+    new Promise((done) => {
+      mkdirSync(logDir, { recursive: true })
+      const log = join(logDir, `${projectId}.log`)
+      const file = createWriteStream(log)
+      const [command, ...args] = policy.acceptance.command
+      const child = spawn(command, [...args, '--sha', sha], {
+        cwd: root,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      let tail = ''
+      const take = (chunk: Buffer) => {
+        file.write(chunk)
+        tail = (tail + chunk.toString('utf8')).slice(-16_000)
+      }
+      child.stdout.on('data', take)
+      child.stderr.on('data', take)
+      const finish = (passed: boolean) => {
+        const notPrepared = tail.match(/environment not prepared:[^\n]*/)?.[0]
+        file.end(() => done({ passed, log, notPrepared }))
+      }
+      child.on('error', (error) => {
+        file.write(`${error.message}\n`)
+        finish(false)
+      })
+      child.on('close', (code) => finish(code === 0))
+    })
+}
+
+const dataDir = (env: NodeJS.ProcessEnv) =>
+  env.AICO_DATA_DIR?.trim() ||
+  join(env.XDG_STATE_HOME?.trim() || join(homedir(), '.local', 'state'), 'aico')
+const publishLogDir = (env: NodeJS.ProcessEnv) => join(dataDir(env), 'publish-logs')
+
 async function postPublicationRow(row: StatusRow, env = process.env): Promise<void> {
   const base = webUrl(env)
   if (!base) throw new Error('Publication Status address is unavailable')
   // aico-web restarting keeps the row waiting instead of dropping it.
   await postOrKeep(new URL('/api/status/rows', base).toString(), [row], {
-    dir: outboxDir(
-      env.AICO_DATA_DIR?.trim() ||
-        join(env.XDG_STATE_HOME?.trim() || join(homedir(), '.local', 'state'), 'aico'),
-    ),
+    dir: outboxDir(dataDir(env)),
   })
 }
 
-const PUBLISH_USAGE = `aico publish [--source ID] [--sha REV] [--dry-run] [--json]
-  Publish this project's checked main to GitHub. --all runs the nightly pass over registered
+const PUBLISH_USAGE = `aico publish [--source ID] [--sha REV] [--dry-run] [--no-accept] [--json]
+  Publish this project's checked main to GitHub. A main with no full or acceptance check gets its
+  acceptance run first (--no-accept skips that and reports it unchecked). --all runs the nightly pass over registered
   projects. Failed and unchecked commits write Status for the owning agent; no owner ask.
   --authorize-workflow PATH grants an explicitly requested workflow effect; repeat as needed.`
 
@@ -304,6 +394,7 @@ export async function publishCli(argv: string[], env = process.env): Promise<num
       'dry-run': { type: 'boolean' },
       json: { type: 'boolean' },
       now: { type: 'boolean' },
+      'no-accept': { type: 'boolean' },
       'with-ack': { type: 'string' },
       'authorize-workflow': { type: 'string', multiple: true },
       help: { type: 'boolean', short: 'h' },
@@ -335,6 +426,7 @@ export async function publishCli(argv: string[], env = process.env): Promise<num
     manual: !values.all,
     sha: values.sha,
     dryRun: values['dry-run'],
+    acceptance: values['no-accept'] ? undefined : acceptanceRunner(publishLogDir(env)),
     authorizedWorkflows: values['authorize-workflow'],
     post: (row) => postPublicationRow(row, env),
   })

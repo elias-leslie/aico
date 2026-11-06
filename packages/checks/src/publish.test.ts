@@ -372,3 +372,117 @@ it('merges: a docs-only merge carries, a merge that brings code does not', async
   git(root, 'merge', '-q', '--no-ff', '-m', 'merge code', 'code')
   expect((await decide(root)).reason).toBe('unchecked_commit')
 })
+
+const deliverOk = () =>
+  vi.fn(async () => ({ publication_complete: true, pushed: true, reason: 'source_published' }))
+
+it('runs the missing acceptance for an unchecked main, then publishes it', async () => {
+  const root = repo()
+  const sha = git(root, 'rev-parse', 'HEAD')
+  recordLocalCheck(root, sha, result(true, 'quick'))
+  const deliver = deliverOk()
+  const acceptance = vi.fn(async () => {
+    recordLocalCheck(root, sha, result(true, 'acceptance'))
+    return { passed: true, log: '/logs/example.log' }
+  })
+  const rows: StatusRow[] = []
+  const post = async (row: StatusRow) => {
+    rows.push(row)
+  }
+  const dry = await publishRepos([project(root)], { dryRun: true, acceptance })
+  expect(dry[0].reason).toBe('unchecked_commit')
+  expect(acceptance).not.toHaveBeenCalled()
+  const [published] = await publishRepos([project(root)], { deliver, acceptance, post })
+  expect(acceptance).toHaveBeenCalledWith(root, sha, 'example')
+  expect(deliver).toHaveBeenCalledWith(root, sha, [])
+  expect(published).toMatchObject({ state: 'ok', pushed: true })
+  expect(rows.at(-1)?.state).toBe('ok')
+  // Already accepted: no second run.
+  await publishRepos([project(root)], { deliver, acceptance })
+  expect(acceptance).toHaveBeenCalledTimes(1)
+})
+
+it('a failed acceptance is a failed row naming the stage and the log; nothing is published', async () => {
+  const root = repo()
+  const sha = git(root, 'rev-parse', 'HEAD')
+  const deliver = deliverOk()
+  const acceptance = async () => {
+    recordLocalCheck(root, sha, result(false, 'acceptance'))
+    return { passed: false, log: '/logs/example.log' }
+  }
+  const rows: StatusRow[] = []
+  const [failed] = await publishRepos([project(root)], {
+    deliver,
+    acceptance,
+    post: async (row) => {
+      rows.push(row)
+    },
+  })
+  expect(failed).toMatchObject({ state: 'failed', reason: 'acceptance_failed', failed: ['types'] })
+  expect(rows.at(-1)).toMatchObject({ state: 'failed' })
+  expect(rows.at(-1)?.meaning).toContain('types')
+  expect(rows.at(-1)?.meaning).toContain('/logs/example.log')
+  expect(deliver).not.toHaveBeenCalled()
+})
+
+it('an unprepared environment shows as that, and a run that records nothing is incomplete', async () => {
+  const root = repo()
+  const rows: StatusRow[] = []
+  const post = async (row: StatusRow) => {
+    rows.push(row)
+  }
+  const [unprepared] = await publishRepos([project(root)], {
+    post,
+    acceptance: async () => ({
+      passed: false,
+      log: '/logs/example.log',
+      notPrepared: 'environment not prepared: .venv missing in /x',
+    }),
+  })
+  expect(unprepared.reason).toBe('environment_not_prepared')
+  expect(rows.at(-1)?.meaning).toContain('environment not prepared: .venv missing')
+  const [incomplete] = await publishRepos([project(root)], {
+    post,
+    acceptance: async () => ({ passed: false, log: '/logs/example.log' }),
+  })
+  expect(incomplete.reason).toBe('acceptance_incomplete')
+  expect(rows.at(-1)?.meaning).toContain('/logs/example.log')
+})
+
+it('starts no more acceptances than the cap, and defers the rest to the next pass', async () => {
+  const roots = [repo(), repo(), repo()]
+  const acceptance = vi.fn(async (root: string, sha: string) => {
+    recordLocalCheck(root, sha, result(true, 'acceptance'))
+    return { passed: true, log: '/logs/x.log' }
+  })
+  const rows = await publishRepos(
+    roots.map((root, i) => project(root, `p${i}`)),
+    { deliver: deliverOk(), acceptance, acceptanceCap: 2 },
+  )
+  expect(acceptance).toHaveBeenCalledTimes(2)
+  expect(rows.map((r) => r.state)).toEqual(['ok', 'ok', 'skip'])
+  expect(rows[2].reason).toBe('acceptance_deferred')
+})
+
+it('never runs acceptance for manual-mode, held, excluded or retired sources', async () => {
+  const acceptance = vi.fn(async () => ({ passed: true, log: '/logs/x.log' }))
+  const manual = {
+    ...project(repo(), 'manual'),
+    agent_configs: { publication_mode: 'manual' },
+  }
+  const held = {
+    ...project(repo(), 'held'),
+    agent_configs: { publication_hold: { through: null, reason: 'x', set_at: 'now' } },
+  }
+  const retired = { ...project(repo(), 'retired'), retired_at: 1 }
+  const rows = await publishRepos([manual, held, retired, project(repo(), 'neri')], {
+    acceptance,
+  })
+  expect(rows.map((r) => r.reason)).toEqual([
+    'manual_mode',
+    'owner_hold',
+    'unchecked_commit',
+    'excluded_project',
+  ])
+  expect(acceptance).not.toHaveBeenCalled()
+})
