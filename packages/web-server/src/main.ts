@@ -62,8 +62,8 @@ function serve(): void {
   const machine = machineId()
 
   const tether = new TetherClient(config.tetherSocket)
-  // The paired phones (first start: copied from Nightshift's file): the sender and the app's API share it.
-  const phones = new PhoneRegistry(config.notify.devicesFile, config.notify.devicesSeedFile)
+  // The paired phones: the sender and the app's API share the file.
+  const phones = new PhoneRegistry(config.notify.devicesFile)
   const notify = new NotifyHub({
     config: config.notify,
     dataDir: config.dataDir,
@@ -77,11 +77,12 @@ function serve(): void {
     historyLines: HISTORY_LINES,
     touched: (id) => store.touchLink(id),
   })
-  const shows = new Shows({ tether, publicHost: config.publicHost })
+  const shows = new Shows({ tether, publicHost: config.publicHost, notices: notify.notifier })
   const blobsDir = join(config.dataDir, 'blobs')
   const asks = new Asks({
     tether,
     publicHost: config.publicHost,
+    notices: notify.notifier,
     files: { store: notes, blobsDir, hostName: config.hostName },
     starterOf: (ask) =>
       ask.session && chatsRef?.has(ask.session) ? chatStarter(chatsRef.summary(ask.session)) : null,
@@ -107,6 +108,7 @@ function serve(): void {
         config.portfolio.appUrl && `${config.portfolio.appUrl.replace(/\/+$/, '')}/vehicles`,
     },
     publicHost: config.publicHost,
+    notices: notify.notifier,
   })
   const reader = new ExtractWorker({
     router,

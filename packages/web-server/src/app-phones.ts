@@ -1,26 +1,17 @@
 // The paired phones, for the phone app's API (app-api.ts): one JSON file in Aico's data directory
-// (0600) with each phone's keys, FCM token and what its last ack said. The file keeps Nightshift's
-// record shape, so the phone paired there stays paired here: the first start copies Nightshift's
-// file when this one does not exist yet. The sender (packages/notify fcm.ts) reads the same file.
+// (0600) with each phone's keys, FCM token and what its last ack said. The sender (packages/notify
+// fcm.ts) reads the same file.
 //
 // Every request from the app is signed by the phone's own key (docs of the wire protocol: the
-// Nightshift app protocol, unchanged): METHOD \n PATH \n TS \n b64u(sha256(body)), ECDSA P-256
+// phone app's protocol, unchanged): METHOD \n PATH \n TS \n b64u(sha256(body)), ECDSA P-256
 // SHA-256, DER signature, the timestamp within 5 minutes of this clock.
 
 import { createHash, createPublicKey, verify } from 'node:crypto'
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 export const CLOCK_SKEW_S = 300
-/** Channels the app's state report may name (Nightshift's list; the app creates these). */
+/** Channels the app's state report may name (the app creates these). */
 const CHANNELS = ['critical', 'needs_you', 'warning', 'info', 'reports']
 
 /** A refusal the app reads: `{error}` with this status. */
@@ -33,7 +24,7 @@ export class AppError extends Error {
   }
 }
 
-/** One paired phone, as the file stores it (snake_case, as Nightshift wrote it). */
+/** One paired phone, as the file stores it (snake_case). */
 export interface Phone {
   id: string
   sig_pub: string
@@ -156,16 +147,8 @@ export class PhoneRegistry {
    */
   constructor(
     readonly path: string,
-    seedFrom?: string,
     private readonly startedAt = Math.floor(Date.now() / 1000),
-  ) {
-    if (!existsSync(path) && seedFrom && existsSync(seedFrom)) {
-      mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-      copyFileSync(seedFrom, path)
-      chmodSync(path, 0o600)
-      console.log(`[app] phones copied from ${seedFrom} to ${path}`)
-    }
-  }
+  ) {}
 
   /** The paired phones; null when the file exists but cannot be read. A missing file is no phones. */
   all(): Phone[] | null {

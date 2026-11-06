@@ -113,7 +113,7 @@ beforeEach(async () => {
     file,
     JSON.stringify([{ id: device, sig_pub: sigPub, enc_pub: 'x', auth: 'y', fcm_token: 'old' }]),
   )
-  phones = new PhoneRegistry(file, undefined, NOW / 1000 - 3600)
+  phones = new PhoneRegistry(file, NOW / 1000 - 3600)
   clock = NOW
   status = new StatusStore(':memory:', () => clock)
   notify = new NotifyStore(':memory:')
@@ -530,7 +530,7 @@ describe('a signed POST is used once', () => {
 
   it('does not reopen after a restart: a POST signed before the process started is refused', () => {
     const file = phones.path
-    const later = new PhoneRegistry(file, undefined, NOW / 1000 + 10)
+    const later = new PhoneRegistry(file, NOW / 1000 + 10)
     const bodyBuf = Buffer.from(JSON.stringify(body))
     const ts = String(Math.floor(NOW / 1000))
     const sig = sign('sha256', Buffer.from(canonical('POST', path, ts, bodyBuf)), {

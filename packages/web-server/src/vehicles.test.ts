@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CaptureRouter } from './capture-router'
 import { NotesStore } from './notes-db'
 import { VehiclesOwner } from './owners/vehicles'
+import { QUIET } from './testing-notices'
 
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 3)])
 const PDF = Buffer.from('%PDF-1.4 invoice')
@@ -50,7 +51,7 @@ describe('vehicles hand-off', () => {
       blobsDir: blobs,
       table: buildTable(null),
       adapters: new Map([['vehicles', owner()]]),
-      run: async () => {},
+      notices: QUIET,
       log: () => {},
     })
 

@@ -1,6 +1,5 @@
-// The notice a sender gives Aico (contracts/notice.schema.json): Nightshift's
-// notice v1, read the same way (its notify/contract.py validate), so senders
-// and the OmniNull hub keep their JSON. The schema is the contract;
+// The notice a sender gives Aico (contracts/notice.schema.json), notice v1:
+// senders and the OmniNull hub keep their JSON. The schema is the contract;
 // contract.test.ts holds these lists and limits to it and replays
 // contracts/notice-fixtures.json.
 

@@ -27,7 +27,7 @@ it('pairs and re-pairs a signed test phone once, while an existing phone remains
       sender_id: 'fixture',
     }),
   )
-  const phones = new PhoneRegistry(join(dir, 'phones.json'), undefined, 1)
+  const phones = new PhoneRegistry(join(dir, 'phones.json'), 1)
   writeFileSync(
     phones.path,
     JSON.stringify([{ id: 'existing', name: 'Existing phone', fcm_token: 'keep' }]),

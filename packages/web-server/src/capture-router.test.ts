@@ -11,6 +11,7 @@ import { type CaptureRow, NotesStore } from './notes-db'
 import type { Notice } from './notice'
 import { PortfolioAiOwner, uuidV5 } from './owners/portfolio-ai'
 import type { OwnerAdapter } from './owners/types'
+import { QUIET } from './testing-notices'
 
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 3)])
 
@@ -34,7 +35,8 @@ describe('capture router and the portfolio-ai owner', () => {
   let seen: Seen[]
   let byClient: Map<string, string>
   let health: boolean
-  let sent: { argv: string[]; notice?: Notice }[]
+  let sent: Notice[]
+  let resolved: [string, string, string][]
   let n = 0
 
   const tokenFile = () => join(dir, 'token')
@@ -47,8 +49,11 @@ describe('capture router and the portfolio-ai owner', () => {
       adapters,
       ownerUrls: { 'portfolio-ai': 'https://portfolio.example/capture' },
       publicHost: 'aico.example',
-      run: async (argv, _ms, input) => {
-        sent.push({ argv, notice: input ? (JSON.parse(input) as Notice) : undefined })
+      notices: {
+        receive: (notice) => sent.push(notice as Notice),
+        resolve: async (source, key, text) => {
+          resolved.push([source, key, text])
+        },
       },
       log: () => {},
     })
@@ -92,6 +97,7 @@ describe('capture router and the portfolio-ai owner', () => {
     byClient = new Map()
     health = true
     sent = []
+    resolved = []
     fake = createServer((req, res) => {
       const parts: Buffer[] = []
       req.on('data', (chunk: Buffer) => parts.push(chunk))
@@ -146,13 +152,13 @@ describe('capture router and the portfolio-ai owner', () => {
       canSend: true,
     })
     expect(sent).toHaveLength(1)
-    expect(sent[0]?.notice).toMatchObject({
+    expect(sent[0]).toMatchObject({
       kind: 'todo',
       push: 'tray',
       key: routeKey(row?.id as string),
       open: `https://aico.example/captures?id=${row?.id}`,
     })
-    expect(JSON.stringify(sent[0]?.notice)).not.toContain('Costco')
+    expect(JSON.stringify(sent[0])).not.toContain('Costco')
 
     const filed = await r.act(row?.id as string, 'send')
     expect(filed).toMatchObject({
@@ -175,13 +181,7 @@ describe('capture router and the portfolio-ai owner', () => {
     })
     expect(existsSync(blobPath(blobs, row?.hash as string))).toBe(false)
     expect(existsSync(blobPath(blobs, row?.hash as string, 'thumb'))).toBe(false)
-    expect(sent[1]?.argv).toEqual([
-      'nightshift',
-      'resolve',
-      routeKey(row?.id as string),
-      '--text',
-      'Sent from Aico.',
-    ])
+    expect(resolved).toEqual([['aico', routeKey(row?.id as string), 'Sent from Aico.']])
     expect(r.describe(filed)?.url).toBe('https://portfolio.example/capture')
 
     // The same capture sent again (a retry) answers with the same Portfolio AI row.
@@ -283,7 +283,7 @@ describe('capture router and the portfolio-ai owner', () => {
       type: 'receipt',
       route_state: 'kept',
     })
-    expect(sent.filter((s) => s.argv[1] === 'resolve')).toHaveLength(2)
+    expect(resolved).toHaveLength(2)
     await expect(r.act(b?.id as string, 'keep')).rejects.toThrow('nothing to decide')
   })
 
@@ -315,7 +315,7 @@ describe('capture router and the portfolio-ai owner', () => {
       blobsDir: blobs,
       table,
       adapters: new Map([['portfolio-ai', owner()]]),
-      run: async () => {},
+      notices: QUIET,
       log: () => {},
     })
     expect(custom.plan('warranty')).toEqual({

@@ -1,13 +1,13 @@
 // Agent shares: the default Tether announces `show.requested` with links to
 // files or folders where they already are (or a web link) and keeps the list
-// (GET /v1/shares). The server pushes a fixed-text Nightshift notice for each
+// (GET /v1/shares). The server pushes a fixed-text notice for each
 // new one and hands the UI the list; the files open through the location
 // routes (file-locations.ts). Every field crosses an agent-controlled
 // boundary, so each is checked again here.
 
 import { isAbsolute } from 'node:path'
 import type { Router } from './http'
-import { type Notice, type RunNotice, runCommand, sendNotice } from './notice'
+import { type Notice, type NoticeSink, sendNotice } from './notice'
 
 /** Ids pushed already, so a replayed event never pushes twice. */
 const PUSHED_KEPT = 500
@@ -118,7 +118,7 @@ export function pushTitle(share: Share): string {
   return what ? `Shared: ${what}` : 'Shared a link'
 }
 
-/** The Nightshift notice for a new share: something to look at, so a tray todo that leads to the share. */
+/** The notice for a new share: something to look at, so a tray todo that leads to the share. */
 export function showNotice(share: Share, publicHost: string | null): Notice {
   const notice: Notice = {
     v: 1,
@@ -148,7 +148,8 @@ export class Shows {
     private readonly options: {
       tether: ShareSource
       publicHost: string | null
-      run?: RunNotice
+      /** This server's Notifier. */
+      notices: NoticeSink
     },
   ) {}
 
@@ -162,7 +163,7 @@ export class Shows {
     if (this.pushed.has(share.id)) return
     this.pushed.add(share.id)
     if (this.pushed.size > PUSHED_KEPT) this.pushed.delete(this.pushed.values().next().value ?? '')
-    await sendNotice(this.options.run ?? runCommand, showNotice(share, this.options.publicHost))
+    await sendNotice(this.options.notices, showNotice(share, this.options.publicHost))
   }
 
   /** Tether's shares, oldest first; any that fail the checks are left out. */

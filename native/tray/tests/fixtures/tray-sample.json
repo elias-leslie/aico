@@ -69,7 +69,7 @@
    "body": "Approve with your security key within 13 min or deny.",
    "left": 780,
    "left_text": "13 min left",
-   "open": "https://approve.example/e/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+   "open": "https://approve.example/grants?request=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
    "notice": null,
    "actions": [
     {
@@ -89,7 +89,7 @@
      "tier": "view",
      "hint": "Where this item lives.",
      "primary": false,
-     "url": "https://approve.example/e/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+     "url": "https://approve.example/grants?request=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
     }
    ]
   }

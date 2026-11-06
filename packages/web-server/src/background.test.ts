@@ -15,7 +15,12 @@ vi.mock('@aico/tether-client', async (original) => ({
 let tether: FakeTether
 let store: WebStore
 let shows: Shows
-let pushes: string[][]
+let pushes: unknown[]
+/** What the notices go to: every notice taken lands in `pushes`. */
+const into = (list: unknown[]) => ({
+  receive: (notice: unknown) => list.push(notice),
+  resolve: async () => {},
+})
 let paneId: string
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -36,10 +41,7 @@ function background(trustShows = true, forward?: (event: unknown) => void) {
     asks: new Asks({
       tether: tether.client,
       publicHost: null,
-      run: async (argv, _t, input) => {
-        pushes.push(input === undefined ? argv : [...argv, input])
-        return ''
-      },
+      notices: into(pushes),
     }),
     trustShows,
     uploads: { dir: '/nonexistent/uploads', remoteDir: '~/uploads', maxBytes: 1, maxAgeMs: 1 },
@@ -61,9 +63,7 @@ beforeEach(() => {
   shows = new Shows({
     tether: tether.client,
     publicHost: null,
-    run: async (argv) => {
-      pushes.push(argv)
-    },
+    notices: into(pushes),
   })
   paneId = store.createPane({ projectId: 'aico', name: 'Aico', activeMode: 'codex' }).id
 })
@@ -183,7 +183,7 @@ describe('events', () => {
     expect(pushes).toEqual([])
     await background(true).event(event('asks.changed', { ask, created: true }))
     expect(pushes).toHaveLength(1)
-    expect(JSON.parse(pushes[0]?.at(-1) ?? '{}').body).toBe(
+    expect((pushes[0] as { body: string }).body).toBe(
       '“nightly” has a question for you. Open Aico to answer it.',
     )
   })
@@ -253,9 +253,9 @@ describe('one push per ask across two doors', () => {
   })
 
   it('pushes the workstation ask from the workstation and the gem ask from gem, once each', async () => {
-    const workstation: string[][] = []
-    const gem: string[][] = []
-    const door = (into: string[][]) =>
+    const workstation: unknown[] = []
+    const gem: unknown[] = []
+    const door = (list: unknown[]) =>
       new Background({
         tether: tether.client,
         store,
@@ -263,10 +263,7 @@ describe('one push per ask across two doors', () => {
         asks: new Asks({
           tether: tether.client,
           publicHost: null,
-          run: async (argv, _t, input) => {
-            into.push(input === undefined ? argv : [...argv, input])
-            return ''
-          },
+          notices: into(list),
         }),
         trustShows: true,
         uploads: { dir: '/nonexistent/uploads', remoteDir: '~/uploads', maxBytes: 1, maxAgeMs: 1 },
@@ -295,8 +292,8 @@ describe('one push per ask across two doors', () => {
     await g.event(event('asks.changed', { ask: theirs, created: true }))
     expect(workstation).toHaveLength(1)
     expect(gem).toHaveLength(1)
-    expect(workstation[0]?.at(-1)).toContain('ask:111111111111')
-    expect(gem[0]?.at(-1)).toContain('ask:222222222222')
+    expect(workstation[0]).toMatchObject({ key: 'ask:111111111111' })
+    expect(gem[0]).toMatchObject({ key: 'ask:222222222222' })
   })
 })
 

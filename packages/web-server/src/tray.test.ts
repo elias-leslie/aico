@@ -257,14 +257,14 @@ describe('questions and approvals', () => {
     expect(tray.questions_unknown).toBe("Tether can't be read (refused)")
   })
 
-  it('shows Nightshift taps as approvals the key signs, titled for the log', () => {
+  it('shows pending host grants as approvals the key signs, titled for the log', () => {
     const id = 'e'.repeat(32)
     const tray = read({
       approvals: [
         {
           id,
           title: 'Open GitHub admin for 30 min?',
-          url: `https://approve.example/e/${id}`,
+          url: `https://approve.example/grants?request=${id}`,
           expiresInS: 600,
         },
         { id: 'x', title: 'Odd', url: 'https://approve.example/zz/x', expiresInS: 600 },
@@ -309,7 +309,7 @@ describe('the tray door and the native tray agree', () => {
         {
           id,
           title: 'Open GitHub admin for 30 min?',
-          url: `https://approve.example/e/${id}`,
+          url: `https://approve.example/grants?request=${id}`,
           expiresInS: 780,
         },
       ],
@@ -330,21 +330,6 @@ describe('the tray door and the native tray agree', () => {
     const now = fixed(scene())
     if (process.env.UPDATE_TRAY_FIXTURE) writeFileSync(path, `${JSON.stringify(now, null, 1)}\n`)
     expect(now).toEqual(JSON.parse(readFileSync(path, 'utf8')))
-  })
-
-  it('every field of the shape nightshift inbox --json had is in the door, row by row', () => {
-    const old = JSON.parse(readFileSync(join(FIXTURES, 'inbox-sample.json'), 'utf8'))
-    const door = fixed(scene())
-    for (const key of Object.keys(old)) expect(door, key).toHaveProperty(key)
-    for (const section of ['needs', 'approvals', 'questions', 'notifications']) {
-      expect(door[section].length, section).toBeGreaterThan(0)
-      for (const sample of old[section].slice(0, 1))
-        for (const field of Object.keys(sample))
-          for (const row of door[section]) expect(row, `${section}.${field}`).toHaveProperty(field)
-    }
-    // the ended alert and the read-nothing alert: only the open report is listed
-    expect(door.notifications.map((n: { title: string }) => n.title)).toEqual(['Disk full'])
-    expect(door.counts.needs).toBe(2)
   })
 })
 
@@ -416,7 +401,7 @@ describe('the routes', () => {
     const own = await call('GET', '/api/tray')
     expect(own.status).toBe(200)
     expect(own.body.counts.needs).toBe(1)
-    expect(own.body.approvals).toEqual([]) // Nightshift unreadable: no approvals listed, not a made-up list
+    expect(own.body.approvals).toEqual([]) // grants unreadable: no approvals listed, not a made-up list
     const proxied = await call('GET', '/api/tray', undefined, {
       host: HOST,
       'x-forwarded-for': '203.0.113.9',

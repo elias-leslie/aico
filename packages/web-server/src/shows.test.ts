@@ -8,6 +8,7 @@ import {
   validateShare,
 } from './shows'
 import { serveRoutes } from './testing'
+import { QUIET, recorder } from './testing-notices'
 
 const SHOW_ID = 'ab12cd34ef56'
 
@@ -89,16 +90,17 @@ describe('validateShare', () => {
 
 describe('Shows', () => {
   it('pushes a fixed notice once per share, with the public host when set', async () => {
-    const run = vi.fn(async () => {})
-    const shows = new Shows({ tether: tetherWith([]), publicHost: 'aico.example.dev', run })
+    const { sink, received } = recorder()
+    const shows = new Shows({
+      tether: tetherWith([]),
+      publicHost: 'aico.example.dev',
+      notices: sink,
+    })
     await shows.receive(payload())
     await shows.receive(payload())
     await shows.receive({ ...payload(), id: 'not valid' })
-    expect(run).toHaveBeenCalledTimes(1)
-    expect(run).toHaveBeenCalledWith(
-      ['nightshift', 'push', '--json'],
-      expect.any(Number),
-      JSON.stringify({
+    expect(received).toEqual([
+      {
         v: 1,
         source: 'aico',
         kind: 'todo',
@@ -110,8 +112,8 @@ describe('Shows', () => {
         actions: ['done'],
         primary: 'done',
         open: `https://aico.example.dev/?show=${SHOW_ID}`,
-      }),
-    )
+      },
+    ])
   })
 
   it('names what was shared and never puts a URL in the notice', () => {
@@ -131,12 +133,15 @@ describe('Shows', () => {
   })
 
   it('keeps going when a push fails', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const shows = new Shows({
       tether: tetherWith([]),
       publicHost: null,
-      run: async () => {
-        throw new Error('offline')
+      notices: {
+        receive: () => {
+          throw new Error('offline')
+        },
+        resolve: async () => {},
       },
     })
     await expect(shows.receive(payload())).resolves.toBeUndefined()
@@ -146,6 +151,7 @@ describe('Shows', () => {
     const shows = new Shows({
       tether: tetherWith([payload(), { ...payload(), id: 'bad' }, payload({ id: 'bbbbbbbbbbbb' })]),
       publicHost: null,
+      notices: QUIET,
     })
     expect((await shows.list()).map((item) => item.id)).toEqual([SHOW_ID, 'bbbbbbbbbbbb'])
   })
@@ -158,6 +164,7 @@ describe('share routes', () => {
     const shows = new Shows({
       tether: tetherWith([payload(), payload({ id: 'bbbbbbbbbbbb', title: null })]),
       publicHost: null,
+      notices: QUIET,
     })
     server = await serveRoutes((router) => registerShowRoutes(router, shows))
   })

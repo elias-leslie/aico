@@ -9,6 +9,7 @@ import { registerNoteRoutes } from './notes'
 import { NotesStore, SCHEMA_VERSION } from './notes-db'
 import { NotesOwner } from './owners/notes'
 import { serveRoutes } from './testing'
+import { QUIET } from './testing-notices'
 
 const HASH = 'b'.repeat(64)
 const MINUTE = 60_000
@@ -60,7 +61,7 @@ describe('notes', () => {
       blobsDir: join(dir, 'blobs'),
       table: buildTable(null),
       adapters: new Map([['notes', new NotesOwner(store)]]),
-      run: async () => {},
+      notices: QUIET,
       log: () => {},
     })
 

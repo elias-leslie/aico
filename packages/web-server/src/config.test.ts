@@ -21,14 +21,14 @@ describe('loadConfig', () => {
     const site = identity({
       urls: { approve_host: 'approve.example', open_hosts: ['portfolio.example'] },
     })
-    expect(loadConfig({ NIGHTSHIFT_SITE: site }, ID).pairing.origins).toEqual([
+    expect(loadConfig({ AICO_SITE_FILE: site }, ID).pairing.origins).toEqual([
       'https://app.example',
       'https://approve.example',
       'https://portfolio.example',
     ])
     expect(
-      loadConfig({ NIGHTSHIFT_SITE: site, NIGHTSHIFT_OPEN_ORIGINS: 'https://old.example' }, ID)
-        .pairing.origins,
+      loadConfig({ AICO_SITE_FILE: site, AICO_APP_OPEN_ORIGINS: 'https://old.example' }, ID).pairing
+        .origins,
     ).toContain('https://old.example')
   })
 
@@ -182,18 +182,15 @@ describe('loadConfig: uploads, shares and maintenance', () => {
   it("keeps the paired phones and the pairing gate in Aico's data directory", () => {
     const config = loadConfig({ AICO_DATA_DIR: '/data/aico' }, ID)
     expect(config.notify.devicesFile).toBe('/data/aico/phones.json')
-    expect(config.notify.devicesSeedFile).toBeUndefined()
     expect(config.pairing.gateFile).toBe('/data/aico/app-gate.json')
     const set = loadConfig(
       {
         AICO_DATA_DIR: '/data/aico',
         AICO_PHONE_DEVICES_FILE: '/x/phones.json',
-        AICO_PHONE_DEVICES_SEED: '/x/seed.json',
       },
       ID,
     )
     expect(set.notify.devicesFile).toBe('/x/phones.json')
-    expect(set.notify.devicesSeedFile).toBe('/x/seed.json')
   })
 
   it("trusts agent shares only from the owner's default Tether", () => {

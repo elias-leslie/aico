@@ -1,9 +1,9 @@
 // Owner asks for the web app's Needs you drawer: the default Tether keeps them
 // (GET /v1/asks) and announces each change (`asks.changed`); the server lists
-// them for the drawer, passes the owner's answer back, and pushes one fixed-text
-// Nightshift notice for each new blocking ask. The Approvals tab lists
-// Nightshift's pending taps (`nightshift pending --json`) as links only:
-// approving stays in Nightshift. Every field crosses an agent-controlled
+// them for the drawer, passes the owner's answer back, and sends one fixed-text
+// notice (the Notifier) for each new blocking ask. The Approvals tab lists
+// the pending host grants (host-steward) as links only: approving stays in
+// the grant page with the security key. Every field crosses an agent-controlled
 // boundary, so each is checked again here.
 
 import { resolve } from 'node:path'
@@ -13,7 +13,7 @@ import { pendingGrants } from './grants'
 import { objectBody, type Router } from './http'
 import { tetherCall } from './lifecycle'
 import type { NotesStore } from './notes-db'
-import { type Notice, type RunCommand, resolveNotice, runCommand, sendNotice } from './notice'
+import { type Notice, type NoticeSink, resolveNotice, sendNotice } from './notice'
 import { HttpError } from './tether'
 
 /** Ids pushed already, so a replayed event never pushes twice. */
@@ -230,9 +230,7 @@ export function validateAsk(data: unknown): Ask | null {
   }
 }
 
-export type { RunCommand }
-
-/** The Nightshift notice for a new blocking ask: the session's name, never the question. A question needs the
+/** The notice for a new blocking ask: the session's name, never the question. A question needs the
  * ask's own link; without the public host it goes as plain information. */
 export function askNotice(ask: Ask, who: string | null, publicHost: string | null): Notice {
   const notice: Notice = {
@@ -255,7 +253,7 @@ export function askNotice(ask: Ask, who: string | null, publicHost: string | nul
 
 const askKey = (id: string) => `ask:${id}`
 
-/** A Nightshift tap waiting for the owner, as a link. */
+/** A host grant waiting for the owner, as a link. */
 export interface Approval {
   id: string
   title: string
@@ -317,7 +315,8 @@ export class Asks {
       tether: AskSource
       publicHost: string | null
       pendingGrants?: () => Promise<Approval[] | null>
-      run?: RunCommand
+      /** This server's Notifier: the phone push for a new blocking ask. */
+      notices: NoticeSink
       files?: AskFileSource
       /** The session that started the chat this ask came from, when another
        * session did: its asks go to that session, not the owner's Needs you. */
@@ -333,10 +332,6 @@ export class Asks {
   }
   private readonly undelivered = new Set<string>()
 
-  private get run(): RunCommand {
-    return this.options.run ?? runCommand
-  }
-
   /** An `asks.changed` event's data from the trusted Tether: push a new blocking ask once. */
   async receive(data: unknown): Promise<void> {
     const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
@@ -348,7 +343,7 @@ export class Asks {
     if (record.created !== true) {
       // A blocking ask that is no longer open stops being a waiting notice.
       if (ask?.blocking && ask.state !== 'open')
-        await resolveNotice(this.run, askKey(ask.id), `The ask was ${ask.state}.`)
+        await resolveNotice(this.options.notices, askKey(ask.id), `The ask was ${ask.state}.`)
       return
     }
     if (!ask) {
@@ -368,7 +363,7 @@ export class Asks {
         // The push still goes out, naming no session.
       }
     } else who = ask.requester
-    await sendNotice(this.run, askNotice(ask, who, this.options.publicHost))
+    await sendNotice(this.options.notices, askNotice(ask, who, this.options.publicHost))
   }
 
   /** The question as one line for the session that started the chat; false when it could not be told. */
@@ -523,7 +518,7 @@ export class Asks {
     }
   }
 
-  /** Nightshift's pending taps, or null when it cannot be read. */
+  /** The pending host grants, or null when they cannot be read. */
   async approvals(): Promise<Approval[] | null> {
     return (this.options.pendingGrants ?? pendingGrants)()
   }
@@ -566,7 +561,7 @@ export function registerAskRoutes(router: Router, asks: Asks, answered?: (ask: A
     ask: await asks.act(ctx.params.askId, 'done'),
   }))
 
-  // Links only: approving happens in Nightshift with the security key.
+  // Links only: approving happens on the grant page with the security key.
   router.on('GET', '/api/approvals', async () => {
     const taps = await asks.approvals()
     return taps === null ? { state: 'unavailable', taps: [] } : { state: 'ok', taps }

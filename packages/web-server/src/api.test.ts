@@ -9,6 +9,7 @@ import { createWebServer } from './server'
 import { Shows } from './shows'
 import { TerminalHub } from './terminal'
 import { FakeTether } from './testing'
+import { QUIET } from './testing-notices'
 
 let tether: FakeTether
 let store: WebStore
@@ -54,9 +55,9 @@ beforeEach(async () => {
     shows: new Shows({
       tether: tether.client,
       publicHost: null,
-      run: async () => {},
+      notices: QUIET,
     }),
-    asks: new Asks({ tether: tether.client, publicHost: null, run: async () => '' }),
+    asks: new Asks({ tether: tether.client, publicHost: null, notices: QUIET }),
   })
   const hub = new TerminalHub({ tether: tether.client, historyLines: 100, touched: () => {} })
   server = createWebServer(guard, api, hub)

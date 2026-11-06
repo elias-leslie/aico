@@ -1,10 +1,9 @@
 // The phone route: FCM HTTP v1 data messages carrying the whole item, encrypted
 // to the app's own key (RFC 8291, one aes128gcm record), the message the paired
-// Aico/Nightshift Android app reads today (Nightshift notify/fcm.py and
-// deadman.encrypt, app contract `m`).
+// Aico Android app reads (app contract `m`).
 //
 // Nothing secret is held here. The short-lived FCM access token is minted by
-// root (the Firebase key never leaves root) and read from its file; the paired
+// host-steward as root (the Firebase key never leaves root) and read from its file; the paired
 // devices (FCM token, the app's public key and auth secret) are read from
 // theirs. Both paths come from config and neither file is ever logged.
 
@@ -15,7 +14,7 @@ import { asksOwner, type Notice } from './notice'
 export const FCM_URL = 'https://fcm.googleapis.com/v1/projects/{project}/messages:send'
 /** Plaintext bytes: FCM data is 4096 bytes, less base64 and the record overhead. */
 export const PAYLOAD_MAX = 2900
-/** How long FCM keeps an undelivered message, by severity (Nightshift push.TTL). */
+/** How long FCM keeps an undelivered message, by severity. */
 export const TTL_S: Readonly<Record<Notice['severity'], number>> = {
   critical: 86400,
   warning: 43200,

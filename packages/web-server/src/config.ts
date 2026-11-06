@@ -71,12 +71,10 @@ export interface WebConfig {
 }
 
 export interface NotifyConfig {
-  /** The FCM access token Nightshift's root timer mints (ns-20); read to send, never logged. */
+  /** The FCM access token host-steward's root timer mints; read to send, never logged. */
   fcmTokenFile: string
   /** The paired phones: FCM token, push keys and signing key per phone. Aico's own file (the phone app's API writes it). */
   devicesFile: string
-  /** Nightshift's phone file: copied to `devicesFile` once, when that does not exist yet, so the phone keeps its pairing. */
-  devicesSeedFile?: string
   /** How often the outbox looks for due sends and writes its Status row. */
   passMs: number
   ominull: {
@@ -84,7 +82,7 @@ export interface NotifyConfig {
     keysFile: string
     /** A private LAN address (`host:port`) where the hub's pushes are also taken; null: loopback only. */
     listen: { host: string; port: number } | null
-    /** The Nightshift site file whose `ominull` ingest source names the hub's URL and CA. */
+    /** The site file whose `ominull` ingest source names the hub's URL and CA. */
     siteFile: string
     /** The key the hub's verdict route takes (0600, yours); read to send, never logged. */
     relayKeyFile: string
@@ -231,11 +229,12 @@ const DEFAULT_PROJECTS_ACTIVITY_SECONDS = 30
 const DEFAULT_PROJECTS_PVE_TIMEOUT_SECONDS = 15
 // A row that flaps pushes at most this often for the same change (notify's per-key cooldown).
 const DEFAULT_STATUS_ALERT_COOLDOWN_SECONDS = 6 * 60 * 60
-// Where Nightshift keeps the phone push files today. The FCM access token is still minted there; the paired
-// phones are copied once into Aico's data directory (phones.json), so the phone keeps its pairing.
-const DEFAULT_FCM_TOKEN_FILE = '/var/lib/nightshift/fcm/token.json'
+// The FCM access token host-steward's root timer mints; the paired phones live in Aico's data directory
+// (phones.json). The site file and the app's FCM options are the shared, readable copies under /etc/aico.
+const DEFAULT_FCM_TOKEN_FILE = '/var/lib/host-steward/fcm/token.json'
 const DEFAULT_NOTIFY_PASS_SECONDS = 30
-const DEFAULT_OMINULL_SITE = '/etc/nightshift/site.json'
+const DEFAULT_SITE_FILE = '/etc/aico/site.json'
+const DEFAULT_APP_OPTIONS_FILE = '/etc/aico/fcm-app.json'
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
 const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
@@ -306,15 +305,13 @@ function list(value: string | undefined): string[] | null {
   return items.length ? items : null
 }
 
-/** The installed app's action links survive re-pairing during the Nightshift cutover. */
+/** The installed app's action links: Aico's host plus the hosts the site file lists. */
 function phoneOrigins(env: NodeJS.ProcessEnv, publicHost: string | null): string[] {
-  const explicit = list(env.AICO_APP_OPEN_ORIGINS) ?? list(env.NIGHTSHIFT_OPEN_ORIGINS)
+  const explicit = list(env.AICO_APP_OPEN_ORIGINS)
   if (explicit) return explicit
   const origins = publicHost ? [`https://${publicHost}`] : []
   try {
-    const site = JSON.parse(
-      readFileSync(env.NIGHTSHIFT_SITE || '/etc/nightshift/site.json', 'utf8'),
-    )
+    const site = JSON.parse(readFileSync(env.AICO_SITE_FILE?.trim() || DEFAULT_SITE_FILE, 'utf8'))
     const hosts = [
       site.urls?.approve_host,
       ...(Array.isArray(site.urls?.open_hosts) ? site.urls.open_hosts : []),
@@ -398,7 +395,7 @@ export function loadConfig(
         env.AICO_APP_BASE || `https://${(list(env.AICO_PHONE_HOSTS) ?? [DEFAULT_PHONE_HOST])[0]}`,
       origins: phoneOrigins(env, publicHost),
       gateFile: env.AICO_APP_GATE_FILE || join(dataDirPath(env), 'app-gate.json'),
-      optionsFile: env.AICO_APP_OPTIONS_FILE || '/etc/nightshift/fcm-app.json',
+      optionsFile: env.AICO_APP_OPTIONS_FILE || DEFAULT_APP_OPTIONS_FILE,
       codesFile: join(dataDirPath(env), 'app-pair.json'),
       ttlSeconds: positiveInt(env.AICO_APP_PAIR_TTL_SECONDS, 600),
     },
@@ -454,17 +451,16 @@ export function loadConfig(
     notify: {
       fcmTokenFile: env.AICO_FCM_TOKEN_FILE?.trim() || DEFAULT_FCM_TOKEN_FILE,
       devicesFile: env.AICO_PHONE_DEVICES_FILE?.trim() || join(dataDirPath(env), 'phones.json'),
-      devicesSeedFile: env.AICO_PHONE_DEVICES_SEED?.trim() || undefined,
       passMs: positiveInt(env.AICO_NOTIFY_PASS_SECONDS, DEFAULT_NOTIFY_PASS_SECONDS) * 1000,
       ominull: {
         keysFile: resolve(
           expandHome(env.AICO_OMINULL_KEYS?.trim() || '~/.config/aico/ominull-keys.json', home),
         ),
         listen: privateListen(env.AICO_OMINULL_LISTEN),
-        siteFile: env.AICO_OMINULL_SITE?.trim() || DEFAULT_OMINULL_SITE,
+        siteFile: env.AICO_SITE_FILE?.trim() || DEFAULT_SITE_FILE,
         relayKeyFile: resolve(
           expandHome(
-            env.AICO_OMINULL_RELAY_KEY?.trim() || '~/.config/nightshift/ominull-relay.key',
+            env.AICO_OMINULL_RELAY_KEY?.trim() || '~/.config/aico/ominull-relay.key',
             home,
           ),
         ),

@@ -22,6 +22,7 @@ import { createWebServer } from './server'
 import { Shows } from './shows'
 import { TerminalHub } from './terminal'
 import { FakeTether } from './testing'
+import { QUIET } from './testing-notices'
 
 const first = fauxProvider({ provider: 'openai', api: 'faux-chat', models: [{ id: 'first' }] })
 const models = createModels()
@@ -164,7 +165,7 @@ beforeEach(async () => {
     captures,
     asks,
     uploads: { dir: folder, remoteDir: folder, maxBytes: 1024, maxAgeMs: 1000 },
-    shows: new Shows({ tether: tether.client, publicHost: null, run: async () => {} }),
+    shows: new Shows({ tether: tether.client, publicHost: null, notices: QUIET }),
   })
   server = createWebServer(
     { allowedHostnames: ['127.0.0.1'], allowedOrigins: [] },

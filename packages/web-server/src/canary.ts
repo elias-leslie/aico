@@ -1,6 +1,6 @@
 // Secret-gated canary/honeypot receiver. The migrated registry stays private; it is never an API response.
 //
-// As Nightshift's canary.py did: every trip is kept in the folder's events.jsonl (newest 20000); a
+// Every trip is kept in the folder's events.jsonl (newest 20000); a
 // trip of the same decoy from the same source within 3 min is kept but not sent again; each decoy
 // has one notice key with a 10-min cooldown, so a scan sends one alert, not one per probe; and each
 // caller may post 20 events a minute (120 in all) before the hook answers 429.

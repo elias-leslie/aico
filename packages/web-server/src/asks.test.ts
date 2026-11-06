@@ -1,10 +1,11 @@
 // Owner asks in the web server: Tether's asks checked again, one push per new
 // blocking ask naming the session (never the question), the answer passed
-// through, and Nightshift's pending taps as links.
+// through, and the pending host grants as links.
 
 import { describe, expect, it } from 'vitest'
 import { type Ask, Asks, askNotice, validateAsk } from './asks'
 import { NotesStore } from './notes-db'
+import { QUIET, recorder } from './testing-notices'
 
 const ASK: Ask = {
   id: 'abcdefabcdef',
@@ -84,25 +85,19 @@ describe('where the answer goes (Tether API 17)', () => {
 
 describe('the push', () => {
   it('pushes a new blocking ask once, naming the session and linking to it', async () => {
-    const runs: string[][] = []
+    const { sink, received } = recorder()
     const asks = new Asks({
       tether: fakeTether().client as never,
       publicHost: 'aico.example',
-      run: async (argv, _t, input) => {
-        runs.push(input === undefined ? argv : [...argv, input])
-        return ''
-      },
+      notices: sink,
     })
     await asks.receive({ ask: ASK, created: true })
     await asks.receive({ ask: ASK, created: true })
     await asks.receive({ ask: { ...ASK, id: '111111111111', blocking: false }, created: true })
     await asks.receive({ ask: { ...ASK, id: '222222222222' }, created: false })
-    expect(runs).toHaveLength(1)
-    expect(runs[0]?.slice(0, 3)).toEqual(['nightshift', 'push', '--json'])
-    expect(runs[0]?.[3]).toBe(
-      JSON.stringify(askNotice(ASK, 'Disk merge & history', 'aico.example')),
-    )
-    expect(JSON.parse(String(runs[0]?.[3]))).toEqual({
+    expect(received).toHaveLength(1)
+    expect(received[0]).toEqual(askNotice(ASK, 'Disk merge & history', 'aico.example'))
+    expect(received[0]).toEqual({
       v: 1,
       source: 'aico',
       kind: 'question',
@@ -115,26 +110,23 @@ describe('the push', () => {
       actions: ['answer'],
       primary: 'answer',
     })
-    expect(runs[0]?.[3]).not.toContain(ASK.question)
+    expect(JSON.stringify(received[0])).not.toContain(ASK.question)
   })
 
   it('resolves the notice when a blocking ask is answered or withdrawn', async () => {
-    const runs: string[][] = []
+    const { sink, resolved } = recorder()
     const asks = new Asks({
       tether: fakeTether().client as never,
       publicHost: 'aico.example',
-      run: async (argv, _t, input) => {
-        runs.push(input === undefined ? argv : [...argv, input])
-        return ''
-      },
+      notices: sink,
     })
     await asks.receive({ ask: { ...ASK, state: 'answered' }, created: false })
     await asks.receive({ ask: { ...ASK, id: '111111111111', state: 'withdrawn' }, created: false })
     await asks.receive({ ask: ASK, created: false })
     await asks.receive({ ask: { ...ASK, blocking: false, state: 'answered' }, created: false })
-    expect(runs).toEqual([
-      ['nightshift', 'resolve', 'ask:abcdefabcdef', '--text', 'The ask was answered.'],
-      ['nightshift', 'resolve', 'ask:111111111111', '--text', 'The ask was withdrawn.'],
+    expect(resolved).toEqual([
+      ['aico', 'ask:abcdefabcdef', 'The ask was answered.'],
+      ['aico', 'ask:111111111111', 'The ask was withdrawn.'],
     ])
   })
 
@@ -166,7 +158,7 @@ describe('asks from a linked host', () => {
       'GET /v1/asks?hosts=all': { items: [ASK, REMOTE, AWAY] },
       [`POST /v1/asks/${REMOTE.id}/done`]: { ...REMOTE, state: 'done' },
     })
-    const asks = new Asks({ tether: tether.client as never, publicHost: null, run: async () => '' })
+    const asks = new Asks({ tether: tether.client as never, publicHost: null, notices: QUIET })
     expect((await asks.list()).map((ask) => [ask.id, ask.host, ask.peer?.state])).toEqual([
       [ASK.id, undefined, undefined],
       [REMOTE.id, 'gem', undefined],
@@ -187,7 +179,7 @@ describe('list and answer', () => {
       'GET /v1/asks?hosts=all': { items: [ASK, { ...ASK, id: 'bad' }] },
       'POST /v1/asks/abcdefabcdef/answer': { ...ASK, state: 'answered', answer: 'Finish it now' },
     })
-    const asks = new Asks({ tether: tether.client as never, publicHost: null, run: async () => '' })
+    const asks = new Asks({ tether: tether.client as never, publicHost: null, notices: QUIET })
     expect(await asks.list()).toEqual([ASK])
     expect(await asks.act('abcdefabcdef', 'answer', { option: 0, note: 'go' })).toMatchObject({
       state: 'answered',
@@ -251,7 +243,7 @@ describe('asks that want files', () => {
     const asks = new Asks({
       tether: tether.client as never,
       publicHost: null,
-      run: async () => '',
+      notices: QUIET,
       files: { store: notes, blobsDir: '/data/blobs', hostName: 'door' },
     })
     return { asks, notes, tether, add, ask: wanting }
@@ -377,7 +369,7 @@ describe('an ask with a minimum is not answered below it', () => {
     const asks = new Asks({
       tether: tether.client as never,
       publicHost: null,
-      run: async () => '',
+      notices: QUIET,
       files: { store: notes, blobsDir: '/data/blobs', hostName: 'door' },
     })
     const add = (name: string) =>
@@ -433,8 +425,8 @@ describe('an ask with a minimum is not answered below it', () => {
 describe('Aico grant taps', () => {
   it('keeps empty and unavailable grant feeds distinct without touching the real socket', async () => {
     const options = { tether: fakeTether().client as never, publicHost: null }
-    const empty = new Asks({ ...options, pendingGrants: async () => [] })
-    const unavailable = new Asks({ ...options, pendingGrants: async () => null })
+    const empty = new Asks({ ...options, notices: QUIET, pendingGrants: async () => [] })
+    const unavailable = new Asks({ ...options, notices: QUIET, pendingGrants: async () => null })
     expect(await empty.approvals()).toEqual([])
     expect(await unavailable.approvals()).toBeNull()
   })
@@ -444,8 +436,8 @@ describe('asks from a chat another session started', () => {
   const STARTER = '89abcdef'
   const starterOf = (ask: Ask) => (ask.session === ASK.session ? STARTER : null)
   const pushes = () => {
-    const runs: string[][] = []
-    return { runs, run: async (argv: string[]) => (runs.push(argv), '') }
+    const { sink, received } = recorder()
+    return { runs: received, notices: sink }
   }
 
   it('tells the starting session, keeps it from the owner and sends no push', async () => {
@@ -454,11 +446,11 @@ describe('asks from a chat another session started', () => {
         items: [ASK, { ...ASK, id: '111111111111', session: '99999999' }],
       },
     })
-    const { runs, run } = pushes()
+    const { runs, notices } = pushes()
     const asks = new Asks({
       tether: tether.client as never,
       publicHost: 'aico.example',
-      run,
+      notices,
       starterOf,
       answerUrl: 'http://127.0.0.1:1',
     })
@@ -482,8 +474,8 @@ describe('asks from a chat another session started', () => {
         return tether.client.request(method, path)
       },
     }
-    const { runs, run } = pushes()
-    const asks = new Asks({ tether: failing as never, publicHost: null, run, starterOf })
+    const { runs, notices } = pushes()
+    const asks = new Asks({ tether: failing as never, publicHost: null, notices, starterOf })
     await asks.receive({ ask: ASK, created: true })
     expect(runs).toHaveLength(1)
     expect(asks.snapshot().asks.map((ask) => ask.id)).toEqual([ASK.id])

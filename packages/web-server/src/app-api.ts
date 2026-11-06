@@ -1,7 +1,7 @@
 // The phone app's API (native/android): /api/app/*, every call signed by the phone's own key
-// (app-phones.ts). The wire protocol is the Nightshift app's, unchanged, so the phone paired there
-// keeps working: errors are `{error}`; the rows are Status problems, open Tether asks, Nightshift's
-// pending taps and the notice log.
+// (app-phones.ts). The wire protocol is the Android app's, unchanged (its x-nightshift-* header names are
+// part of it): errors are `{error}`; the rows are Status problems, open Tether asks, the pending
+// host grants and the notice log.
 //
 //   GET  /api/app/health          {ok, now, checked_at, phone_confirmed_at, line}; 503 {drill:true} in a drill
 //   GET  /api/app/items           {health, needs_you: [Row], recent: [Row]}

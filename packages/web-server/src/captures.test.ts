@@ -10,6 +10,7 @@ import { CaptureRouter } from './capture-router'
 import { type CaptureJson, registerCaptureRoutes } from './captures'
 import { NotesStore } from './notes-db'
 import { serveRoutes } from './testing'
+import { QUIET } from './testing-notices'
 import { HttpError } from './tether'
 
 const MAX_BYTES = 1024 * 1024
@@ -97,7 +98,7 @@ describe('capture routes', () => {
         blobsDir: blobs,
         table: buildTable(null),
         adapters: new Map([['portfolio-ai', adapter]]),
-        run: async () => {},
+        notices: QUIET,
         log: () => {},
       })
       server = await serveRoutes((router) =>

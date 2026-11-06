@@ -12,7 +12,7 @@ import { readBlob, removeBlobs } from '@aico/notes/blobs'
 import { needsPreview } from '@aico/notes/capture-files'
 import type { CaptureTypeRow, CaptureTypeTable } from '@aico/notes/capture-types'
 import type { CaptureRow, NotesStore, RoutePlan, RouteState } from './notes-db'
-import { type Notice, type RunNotice, resolveNotice, runCommand, sendNotice } from './notice'
+import { type Notice, type NoticeSink, resolveNotice, sendNotice } from './notice'
 import type { GroupMember, HandOff, OwnerAdapter } from './owners/types'
 import { HttpError } from './tether'
 
@@ -47,7 +47,8 @@ export interface RouterDeps {
   ownerUrls?: Record<string, string | null>
   /** Aico's public host, for the notice's link; without it the notice has none. */
   publicHost?: string | null
-  run?: RunNotice
+  /** This server's Notifier: where the owner's tray todo goes. */
+  notices: NoticeSink
   log?: (message: string) => void
 }
 
@@ -62,10 +63,6 @@ export class CaptureRouter {
 
   constructor(private readonly deps: RouterDeps) {
     this.log = deps.log ?? ((message) => console.error(`[aico-web] ${message}`))
-  }
-
-  private get run(): RunNotice {
-    return this.deps.run ?? runCommand
   }
 
   /** What to do with a capture of this type, or null: nobody takes it. */
@@ -111,7 +108,7 @@ export class CaptureRouter {
         await this.deliver(row.id)
       return
     }
-    await sendNotice(this.run, this.notice(row, this.deps.table.type(row.type)))
+    await sendNotice(this.deps.notices, this.notice(row, this.deps.table.type(row.type)))
   }
 
   /** A suggestion for an owner that is set up and wants a tap raises a tray todo; the rest don't. */
@@ -144,7 +141,7 @@ export class CaptureRouter {
   /** The tray todo for this capture is over (sent, kept, deleted). */
   async clearNotice(row: CaptureRow, text: string): Promise<void> {
     if (row.route_state !== 'suggested' || !this.needsTap(row)) return
-    await resolveNotice(this.run, routeKey(row.id), text)
+    await resolveNotice(this.deps.notices, routeKey(row.id), text)
   }
 
   /** The owner's tap: send it, keep it here, or say it is not that kind of thing. */

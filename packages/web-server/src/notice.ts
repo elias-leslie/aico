@@ -1,15 +1,14 @@
-// The owner notices Aico sends through Nightshift (notice contract v1): one
-// small builder per notice, written to `nightshift push --json` on stdin.
-// Failures are logged and never reach the caller; exit 2 is a contract
-// refusal, a bug in the builder, and is logged loudly.
+// The owner notices Aico sends itself (notice contract v1, contracts/notice.schema.json): one
+// small builder per notice, handed to this process's own Notifier (packages/notify), which logs it,
+// queues the phone push through the host's sender (FCM, or the Proxmox relay on a host without
+// its own) and files the Needs you ask. Failures are logged and never reach the caller; a
+// contract refusal is a bug in the builder and is logged loudly.
 
-import { execFile } from 'node:child_process'
-
-const PUSH_TIMEOUT_MS = 10_000
+import { NoticeError } from '@aico/notify'
 
 export type NoticeAction = 'answer' | 'done' | 'open'
 
-/** The part of notice v1 Aico uses (Nightshift docs/notify-contract.schema.json). */
+/** The part of notice v1 Aico uses. */
 export interface Notice {
   v: 1
   source: 'aico'
@@ -24,57 +23,28 @@ export interface Notice {
   push: 'phone' | 'tray'
 }
 
-/** Runs a command, optionally feeding stdin; rejects on a non-zero exit, with `code` on the error. */
-export type RunCommand = (argv: string[], timeoutMs: number, input?: string) => Promise<string>
-
-/** What notices need of a runner; any result is fine. */
-export type RunNotice = (argv: string[], timeoutMs: number, input?: string) => Promise<unknown>
-
-export const runCommand: RunCommand = (argv, timeoutMs, input) =>
-  new Promise((resolve, reject) => {
-    const child = execFile(argv[0], argv.slice(1), { timeout: timeoutMs }, (error, stdout) =>
-      error ? reject(error) : resolve(String(stdout)),
-    )
-    if (input !== undefined) {
-      child.stdin?.on('error', () => {})
-      child.stdin?.end(input)
-    }
-  })
-
-export const PUSH_ARGV = ['nightshift', 'push', '--json']
-
-/** Where this host's pushes go. A host with Nightshift runs `nightshift push --json`.
- * A host without it (the gem container) sets `AICO_PUSH_SSH` to an ssh alias whose key
- * on the Proxmox host is forced to a push-only command that reads the same notice on
- * stdin (native/pve-sender/); it cannot resolve a push afterwards. */
-export function pushRoute(env: NodeJS.ProcessEnv = process.env): {
-  argv: string[]
-  canResolve: boolean
-} {
-  const alias = env.AICO_PUSH_SSH?.trim()
-  if (!alias) return { argv: PUSH_ARGV, canResolve: true }
-  return {
-    argv: ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', alias],
-    canResolve: false,
-  }
+/** What notices need of the Notifier. */
+export interface NoticeSink {
+  receive(notice: unknown, via: 'local'): unknown
+  resolve(source: string, key: string, text: string): Promise<unknown>
 }
 
 /** Sends the notice; logs a failure, loudly for a contract refusal, and never throws. */
-export async function sendNotice(run: RunNotice, notice: Notice): Promise<void> {
+export async function sendNotice(sink: NoticeSink, notice: Notice): Promise<void> {
   try {
-    await run(pushRoute().argv, PUSH_TIMEOUT_MS, JSON.stringify(notice))
+    sink.receive(notice, 'local')
   } catch (error) {
-    const err = error as Error & { code?: unknown }
-    const refused = err.code === 2 ? ' (contract refusal, a bug)' : ''
-    console.error(`[aico-web] notice failed key=${notice.key}${refused}: ${err.message}`)
+    const refused = error instanceof NoticeError ? ' (contract refusal, a bug)' : ''
+    console.error(
+      `[aico-web] notice failed key=${notice.key}${refused}: ${(error as Error).message}`,
+    )
   }
 }
 
-/** Tells Nightshift the condition behind `key` is over. */
-export async function resolveNotice(run: RunNotice, key: string, text: string): Promise<void> {
-  if (!pushRoute().canResolve) return
+/** Ends the notice behind `key`: its Needs you ask is withdrawn and an `ok` follows. */
+export async function resolveNotice(sink: NoticeSink, key: string, text: string): Promise<void> {
   try {
-    await run(['nightshift', 'resolve', key, '--text', text], PUSH_TIMEOUT_MS)
+    await sink.resolve('aico', key, text)
   } catch (error) {
     console.warn(`[aico-web] notice resolve failed key=${key}: ${(error as Error).message}`)
   }

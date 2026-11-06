@@ -322,8 +322,8 @@ export class NotifyHub {
         throw new HttpError(403, 'Notices are sent only by programs on this machine (loopback)')
       return this.receive(await ctx.body(), 'local')
     })
-    // A program on this machine ends its own notice (`nightshift resolve`'s
-    // replacement): the owner question it filed is withdrawn, an `ok` follows.
+    // A program on this machine ends its own notice (`aico notify resolve`): the owner
+    // question it filed is withdrawn, an `ok` follows.
     router.on('POST', '/api/notices/resolve', async (ctx) => {
       if (!fromThisMachine(ctx.req))
         throw new HttpError(403, 'Notices are resolved only by programs on this machine (loopback)')

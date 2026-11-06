@@ -460,7 +460,7 @@ export function buildApi(deps: ApiDeps): Router {
   // -- Agent Hub, auth, health ------------------------------------------------------
 
   // The app has no login of its own (Cloudflare Access gates the public host);
-  // Nightshift's public-gate probe still reads this path.
+  // host-steward's public-gate check (checks.toml) still reads this path.
   router.on('GET', '/api/auth/session', () => ({
     enabled: false,
     mode: 'none',

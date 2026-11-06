@@ -40,11 +40,8 @@ const GRANT_LABELS = {
   'owner-email': 'your email inbox',
 }
 
-/** Kind letter in a Nightshift approve link (`/e/<id>`, `/k/<id>`, `/g/<id>`). */
+/** The approval kind a host-grant link (`/grants?request=<id>`) opens; the tray's card is for this kind. */
 const APPROVE_KIND: Record<string, string> = {
-  e: 'elevate',
-  k: 'passkey',
-  g: 'signing',
   grants: 'elevate',
 }
 
@@ -70,7 +67,7 @@ export interface TrayInput {
   askError: string | null
   /** Tether asks that stand for failing Status rows. */
   rowAsks: ReadonlySet<string>
-  /** Null: Nightshift's pending approvals could not be read. */
+  /** Null: the pending host grants could not be read. */
   approvals: Approval[] | null
 }
 
@@ -243,7 +240,7 @@ export function buildTray(input: TrayInput): Record<string, unknown> {
     answered: '',
   }))
 
-  // Approvals: Nightshift's pending taps; the tray's Approve opens its card and the key signs there.
+  // Approvals: the pending host grants; the tray's Approve opens its card and the key signs there.
   const approvals = (input.approvals ?? []).flatMap((tap) => {
     const kind = APPROVE_KIND[new URL(tap.url).pathname.split('/')[1] ?? ''] ?? ''
     if (!kind) return []
