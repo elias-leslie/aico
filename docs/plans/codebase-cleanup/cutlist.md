@@ -373,3 +373,7 @@ Claude's weekly usage ran out on 2026-11-04, so this work was built or reviewed 
 - Archive location `/srv/workspaces/archive/pre-aico/` and 14-project keep-list rule for the registry.
 - Postgres, Redis and Hatchet stop only after confirming no other project (e.g. Neri backend) still uses them.
 - LOC counts include JSON/SQL/unit files (e.g. AH codex protocol JSON copies), first-claim-wins when areas overlap. New-code guess: SF ~35k, AH ~30k, NS ~42k lines.
+
+### 4.3 Post-consolidation user review (owner 2026-11-06)
+
+After the running work lands: (1) refresh `evidence/M13/differences.md` against the plan with everything done since 11-05; (2) Haiku 5.5 `user-tester` agents run the owner's journeys with only what a real user has (Status, tray, phone width, notes, projects and roadmaps, backups, VM power, Needs you, sessions on phone and desktop, `aico` CLI from its help); a Haiku that can't follow something is a finding against the product or its help; (3) an Opus 5.5 user then walks the same journeys and judges as an experienced user. Lenses: design, UI, UX, usability, intuitiveness, plus what a solo developer running several agent tools, projects and hosts needs (glanceability, interruptions, trust in status, recovery when a host is down, phone use, speed). The coordinator validates every finding live, merges both viewpoints into one recommendation list for the owner, and changes nothing until the owner approves.
