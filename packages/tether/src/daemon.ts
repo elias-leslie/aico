@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { chmodSync, mkdirSync, readFileSync } from 'node:fs'
 import type { Server } from 'node:http'
 import { homedir } from 'node:os'
@@ -78,7 +78,7 @@ import { Store } from './store'
 import { VERSION } from './version'
 import type { PullKind } from './wait-kinds'
 import { anchorWidget, PullReaders, systemdCmdUnits, systemdProbe } from './wait-readers'
-import { readWaitingState, WAIT_NOTICE_MS, WaitingNotices } from './waiting'
+import { postAicoNotice, readWaitingState, WAIT_NOTICE_MS, WaitingNotices } from './waiting'
 import { WaitService, WaitStore } from './waits'
 import { bindWaitingOn, bindWakeStore, WakeService } from './wake-runtime'
 
@@ -114,32 +114,6 @@ const SIZE_HOLDERS_KEY = 'size_holders'
 const WAITING_KEY = 'waiting_notices'
 const MODEL_WATCH_KEY = 'model_watch'
 const MODEL_NOTICE_KEY = 'model_notices'
-
-/** Runs `nightshift` (notice contract v1); logs the outcome, never throws. */
-function nightshift(args: string[], what: string, input?: string): void {
-  try {
-    const child = execFile('nightshift', args, { timeout: 30_000 }, (error, stdout) => {
-      const last =
-        String(stdout ?? '')
-          .trim()
-          .split('\n')
-          .pop()
-          ?.trim() ?? ''
-      const word = /^[a-z][a-z0-9 ,:/-]{0,39}$/.test(last) ? last.replace(/ /g, '_') : ''
-      if (error?.code === 2)
-        console.error(`[tether] Nightshift refused the ${what} (a bug): ${error.message}`)
-      console.log(
-        `[tether:event] ${what} result=${error ? 'failed' : 'ok'}${word ? ` nightshift=${word}` : ''}${error ? ` exit=${String(error.code ?? 'error')}` : ''}`,
-      )
-    })
-    if (input !== undefined) {
-      child.stdin?.on('error', () => {})
-      child.stdin?.end(input)
-    }
-  } catch (error) {
-    console.warn(`[tether] nightshift ${args[0]} failed to start: ${(error as Error).message}`)
-  }
-}
 
 /** The desktop variables the graphical session imported into the user
  * manager; empty before login or when systemctl cannot answer. */
@@ -322,9 +296,7 @@ export async function startDaemon(
       return row ? displayTitle(row) : null
     },
     cancel: (wakeId, why) => wakes.cancelLine(wakeId, why),
-    withdraw: (source) => {
-      wakes.withdrawEvents(null, source)
-    },
+    withdraw: (source) => wakes.withdrawEvents(null, source).withdrawn,
     noteMaxChars: () => wakes.policy().noteMaxChars,
     sessionChanged: (sessionId) => {
       if (getWidget(sessionId)) notifySessionChanged(sessionId, { force: true })
@@ -397,14 +369,12 @@ export async function startDaemon(
           origin: aicoUrl,
           tools: () => store.listTools(),
           send: (notice) =>
-            nightshift(
-              ['push', '--json'],
-              `waiting_notice key=${notice.key}`,
-              JSON.stringify(notice),
-            ),
+            postAicoNotice(env, '/api/notices', notice, `waiting_notice key=${notice.key}`),
           resolve: (key) =>
-            nightshift(
-              ['resolve', key, '--text', 'The session no longer waits on you.'],
+            postAicoNotice(
+              env,
+              '/api/notices/resolve',
+              { source: 'aico', key, text: 'The session no longer waits on you.' },
               `waiting_resolve key=${key}`,
             ),
           state: {
@@ -430,14 +400,12 @@ export async function startDaemon(
       ? new ModelNotices({
           origin: aicoUrl,
           send: (notice) =>
-            nightshift(
-              ['push', '--json'],
-              `model_notice key=${notice.key}`,
-              JSON.stringify(notice),
-            ),
+            postAicoNotice(env, '/api/notices', notice, `model_notice key=${notice.key}`),
           resolve: (key) =>
-            nightshift(
-              ['resolve', key, '--text', 'The session is back on its model or gone.'],
+            postAicoNotice(
+              env,
+              '/api/notices/resolve',
+              { source: 'aico', key, text: 'The session is back on its model or gone.' },
               `model_resolve key=${key}`,
             ),
           state: {

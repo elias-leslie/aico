@@ -491,10 +491,14 @@ export class AskStore {
 
   /** Transfer open questions with their still-running lane. Answered questions
    * keep their delivery history; future questions read the new catalog lineage. */
-  transferLineage(session: string, launcher: string | null, coordinator: string): Ask[] {
+  transferLineage(
+    session: string,
+    launcher: string | null,
+    coordinator: string,
+  ): { ask: Ask; from: string | null }[] {
     const open = this.openFor(session)
     for (const ask of open) this.setLineage(ask.id, launcher, coordinator)
-    return open.map((ask) => this.get(ask.id) as Ask)
+    return open.map((ask) => ({ ask: this.get(ask.id) as Ask, from: ask.launcher }))
   }
 
   /** Open asks another session filed that this one holds as launcher. */
@@ -691,8 +695,8 @@ export interface AskDelivery {
   /** Take back a line not yet delivered (`why` is logged). */
   cancel(wakeId: string, why: string): void
   /** Take back undelivered lines by source on any session (an `[Ask] filed`
-   * line once its ask is answered or closed). */
-  withdraw?(source: string): void
+   * line once its ask is answered or closed). Returns the lines taken. */
+  withdraw?(source: string): number
   noteMaxChars(): number
   /** The session's descriptor changed (its `asks`). */
   sessionChanged(sessionId: string): void
@@ -732,10 +736,16 @@ function askFiledLine(ask: Ask, name: string, max: number): string {
   return `${head}"${clipLine(ask.question, Math.min(room, 120))}"${tail}`
 }
 
-/** Move the undelivered notice of an existing question, without asking again. */
-export function transferAskNotices(asks: readonly Ask[], delivery: AskDelivery): void {
-  for (const ask of asks) {
-    delivery.withdraw?.(`ask:${ask.id}:filed`)
+/** Move the undelivered notice of an existing question, without asking again:
+ * only a notice still queued for a launcher that changed goes to the new one.
+ * One already delivered stays delivered (the new launcher reads the ask). */
+export function transferAskNotices(
+  moves: readonly { ask: Ask; from: string | null }[],
+  delivery: AskDelivery,
+): void {
+  for (const { ask, from } of moves) {
+    if (ask.launcher === from) continue
+    if (!delivery.withdraw?.(`ask:${ask.id}:filed`)) continue
     if (ask.launcher && delivery.receiver?.(ask.launcher))
       delivery.wake(
         ask.launcher,

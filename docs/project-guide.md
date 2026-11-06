@@ -114,14 +114,14 @@ gives live, two-way access to the same sessions.
 
 An agent's question and a new share reach the owner through Nightshift's notice contract v1 (`nightshift push
 --json`, see Nightshift's `docs/notify-contract.md`; sender: `packages/web-server/src/notice.ts`): a question offers Answer
-and opens `?ask=<id>`, a share opens `?show=<id>`. A session that waits on the owner for two minutes is a notice from Tether.
+and opens `?ask=<id>`, a share opens `?show=<id>`. A session that waits on the owner for two minutes is a phone notice from Tether, through Aico's notify (`POST /api/notices` on loopback).
 
 ## Architecture
 
 ```text
 Tether (separate daemon; owns sessions)
   ├─ tmux servers, panes, agent launch, admission, End, roots, context hooks
-  ├─ the 2-minute waiting notices (Nightshift)
+  ├─ the 2-minute waiting notices (Aico notify, phone)
   └─ API v1 on $XDG_RUNTIME_DIR/tether/<instance>/control.sock (also `st aico` and SummitFlow)
 
 aico-web (a Tether client, port 3002)

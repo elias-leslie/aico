@@ -1,13 +1,16 @@
 // The owner's "waiting" notice. A session blocked on the owner (a permission
 // prompt or a question), or a workflow run waiting for an answer, that nobody
-// has opened for 2 minutes gets one Nightshift notice (contract v1: the desktop
-// tray, never the phone). It is resolved once the session no longer waits:
+// has opened for 2 minutes gets one notice through Aico's notify (contract v1,
+// `POST /api/notices` on loopback), pushed to the phone so an unattended
+// stuck agent is noticed; a repeat for the same session stays quiet for the
+// notice cooldown (an hour). It is resolved once the session no longer waits:
 // answered, seen or gone. "Seen" is Aico web telling Tether the owner had the
 // session open and visible (POST /v1/sessions/seen).
 //
 // Only the Tether that knows where Aico is (TETHER_AICO_URL) sends these: it
 // sees its own sessions and every remote host's, so a remote Tether stays quiet.
 
+import { DEFAULT_URL as AICO_WEB_DEFAULT_URL } from './capture-cli'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 
 /** Blocked and unseen this long: one notice. */
@@ -28,15 +31,17 @@ export interface WaitingNotice {
   open?: string
   actions: ['open']
   primary: 'open'
-  push: 'tray'
+  push: 'phone' | 'tray'
 }
 
-/** A session or run waiting on the owner, as a Nightshift notice (contract v1). */
+/** A session or run waiting on the owner, as an Aico notice (contract v1). */
 export function waitingNotice(parts: {
   key: string
   title: string
   body: string
   open?: string
+  /** Where it reaches the owner: the phone (default) or the desktop tray. */
+  push?: 'phone' | 'tray'
 }): WaitingNotice {
   return {
     v: 1,
@@ -49,7 +54,7 @@ export function waitingNotice(parts: {
     ...(parts.open?.startsWith('https://') ? { open: parts.open } : {}),
     actions: ['open'],
     primary: 'open',
-    push: 'tray',
+    push: parts.push ?? 'phone',
   }
 }
 
@@ -126,9 +131,9 @@ export function readWaitingState(raw: string | null): WaitingState {
 }
 
 export interface WaitingDeps {
-  /** `nightshift push --json` with the notice on stdin. */
+  /** Aico's `POST /api/notices`. */
   send(notice: WaitingNotice): void
-  /** `nightshift resolve <key>`. */
+  /** Aico's `POST /api/notices/resolve` for this key. */
   resolve(key: string): void
   tools(): readonly WaitingTool[]
   origin: string
@@ -266,4 +271,37 @@ export function registerSeenRoute(router: Router, waiting: WaitingNotices, now =
     waiting.seen(ids as string[], at)
     sendJson(res, 200, { seenAt: at })
   })
+}
+
+/** Sends a notice (contract v1) or its resolve to Aico's notify on loopback
+ * (`AICO_WEB_URL`, default http://127.0.0.1:3002); logs the outcome, never throws. */
+export function postAicoNotice(
+  env: NodeJS.ProcessEnv,
+  path: '/api/notices' | '/api/notices/resolve',
+  body: unknown,
+  what: string,
+): Promise<void> {
+  const base = (env.AICO_WEB_URL?.trim() || AICO_WEB_DEFAULT_URL).replace(/\/+$/, '')
+  return fetch(`${base}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30_000),
+  })
+    .then(async (response) => {
+      const answer = (await response.json().catch(() => null)) as {
+        id?: unknown
+        repeat?: unknown
+        detail?: unknown
+      } | null
+      if (response.status === 422)
+        console.error(`[tether] Aico refused the ${what} (a bug): ${String(answer?.detail ?? '')}`)
+      const id = typeof answer?.id === 'string' ? ` notice=${answer.id}` : ''
+      console.log(
+        `[tether:event] ${what} result=${response.ok ? 'ok' : 'failed'}${id}${answer?.repeat === true ? ' repeat' : ''}${response.ok ? '' : ` status=${response.status}`}`,
+      )
+    })
+    .catch((error: unknown) =>
+      console.warn(`[tether:event] ${what} result=failed reason=${(error as Error).message}`),
+    )
 }

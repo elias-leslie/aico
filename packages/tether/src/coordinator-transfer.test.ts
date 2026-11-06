@@ -148,7 +148,8 @@ it('moves existing and future open questions, including their fallback after the
     noteMaxChars: () => 500,
     sessionChanged: () => {},
   }
-  transferAskNotices([asks.get(id)!], delivery)
+  withdraw.mockReturnValue(1)
+  transferAskNotices([{ ask: asks.get(id)!, from: OLD }], delivery)
   expect(withdraw).toHaveBeenCalledWith(`ask:${id}:filed`)
   expect(wake).toHaveBeenCalledWith(
     NEXT,
@@ -164,6 +165,40 @@ it('moves existing and future open questions, including their fallback after the
     launcher: NEXT,
     coordinator: NEXT,
   })
+})
+
+/** The queued `[Ask] filed` notices for this ask, by receiver. */
+const filed = (id: string) =>
+  (
+    daemon.store.db
+      .prepare('SELECT session_id FROM wakes WHERE source = ? ORDER BY session_id')
+      .all(`ask:${id}:filed`) as { session_id: string }[]
+  ).map((r) => r.session_id)
+
+it('the transfer route moves a still-queued [Ask] notice to the new launcher', async () => {
+  const created = await callSocket(paths.socket, 'POST', '/v1/asks', {
+    session: LANE,
+    question: 'Synthetic queued notice?',
+  })
+  const id = (created.body as { id: string }).id
+  expect(filed(id)).toEqual([OLD])
+  expect((await transfer()).status).toBe(200)
+  expect(filed(id)).toEqual([NEXT])
+  // A response-loss retry changes no launcher and sends nothing again.
+  expect((await transfer()).status).toBe(200)
+  expect(filed(id)).toEqual([NEXT])
+})
+
+it('the transfer route never re-sends an [Ask] notice already delivered', async () => {
+  const created = await callSocket(paths.socket, 'POST', '/v1/asks', {
+    session: LANE,
+    question: 'Synthetic delivered notice?',
+  })
+  const id = (created.body as { id: string }).id
+  // The old launcher took the line.
+  daemon.store.db.prepare('DELETE FROM wakes WHERE source = ?').run(`ask:${id}:filed`)
+  expect((await transfer()).status).toBe(200)
+  expect(filed(id)).toEqual([])
 })
 
 it('rolls the lineage back if an open-question update fails', async () => {

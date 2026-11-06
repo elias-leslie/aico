@@ -1,6 +1,6 @@
 // The owner's model notice. A session nobody launched (a window the owner
 // opened) has no launcher to tell when its model switches or a refusal stops
-// it: the owner gets one Nightshift notice per switch (contract v1, the same
+// it: the owner gets one Aico notice (tray) per switch (contract v1, the same
 // path as the waiting notice), resolved when the session is back on its model
 // or gone. Launched lanes tell their launcher instead (src/lane-reports.ts),
 // unless nobody could take the line (`unheard`).
@@ -69,6 +69,7 @@ function modelNotice(
     title: `${change.kind === 'paused' ? 'Model refused' : 'Model changed'} in ${name.slice(0, 80)}`,
     body: `It ${change.kind === 'paused' ? '' : 'is '}${what}. ${tail.charAt(0).toUpperCase()}${tail.slice(1)}.`,
     open: `${origin}/?session=${encodeURIComponent(session.id)}`,
+    push: 'tray',
   })
 }
 

@@ -80,7 +80,10 @@ beforeEach(async () => {
       cancelled.push(id)
       cancelReasons.push(why)
     },
-    withdraw: (source) => withdrawn.push(source),
+    withdraw: (source) => {
+      withdrawn.push(source)
+      return 0
+    },
     noteMaxChars: () => 500,
     sessionChanged: (id) => changed.push(id),
   }

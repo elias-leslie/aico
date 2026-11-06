@@ -1,7 +1,10 @@
-import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
 import {
   noticeFor,
+  postAicoNotice,
   readWaitingState,
   WAIT_NOTICE_MS,
   type WaitingNotice,
@@ -59,7 +62,7 @@ const blocked = (at: number, extra: Record<string, unknown> = {}) => ({
 })
 
 describe('waiting notices', () => {
-  it('sends one tray notice after 2 minutes blocked and unseen, and resolves it once answered', () => {
+  it('sends one phone notice after 2 minutes blocked and unseen, and resolves it once answered', () => {
     const h = harness()
     h.waiting.session(blocked(h.now()))
     h.advance(WAIT_NOTICE_MS - 1)
@@ -77,7 +80,7 @@ describe('waiting notices', () => {
         open: `${ORIGIN}/?session=abcd1234`,
         actions: ['open'],
         primary: 'open',
-        push: 'tray',
+        push: 'phone',
       },
     ])
     // The same wait again (a re-published descriptor) sends nothing more.
@@ -147,25 +150,64 @@ describe('waiting notices', () => {
   })
 })
 
-const hasNightshift = (() => {
-  try {
-    execFileSync('nightshift', ['push', '--schema'], { stdio: 'ignore' })
-    return true
-  } catch {
-    return false
-  }
-})()
-
 describe('notice contract v1', () => {
-  // Nightshift only opens links on its allowed origins.
+  // Aico's notify checks every notice against contracts/notice.schema.json.
+  const schema = JSON.parse(
+    readFileSync(new URL('../../../contracts/notice.schema.json', import.meta.url), 'utf8'),
+  ) as {
+    required: string[]
+    properties: Record<string, { const?: unknown; enum?: unknown[]; pattern?: string }>
+  }
   const AICO = 'https://aico.summitflow.dev'
   const notices: [string, WaitingNotice][] = [
     ['session', noticeFor({ session: blocked(1) }, TOOLS, AICO)],
   ]
-  it.skipIf(!hasNightshift).each(notices)('Nightshift accepts the %s notice', (_name, notice) => {
-    const out = execFileSync('nightshift', ['push', '--json', '--dry-run'], {
-      input: JSON.stringify(notice),
+  it.each(notices)('the %s notice fits the schema and reaches the phone', (_name, notice) => {
+    for (const field of schema.required) expect(notice).toHaveProperty(field)
+    for (const [field, value] of Object.entries(notice)) {
+      const rule = schema.properties[field]
+      expect(rule, field).toBeDefined()
+      if (rule?.const !== undefined) expect(value).toBe(rule.const)
+      if (rule?.enum) expect(rule.enum).toContain(value)
+      if (rule?.pattern) expect(String(value)).toMatch(new RegExp(rule.pattern))
+    }
+    expect(notice.push).toBe('phone')
+  })
+})
+
+describe('postAicoNotice', () => {
+  it("posts the notice and its resolve to Aico's notify on loopback, never the Nightshift CLI", async () => {
+    const got: { url: string; body: unknown }[] = []
+    const server = createServer((req, res) => {
+      let text = ''
+      req.on('data', (part: Buffer) => {
+        text += part.toString('utf8')
+      })
+      req.on('end', () => {
+        got.push({ url: req.url ?? '', body: JSON.parse(text) })
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ id: 'n1', repeat: false }))
+      })
     })
-    expect(String(out).length).toBeGreaterThan(0)
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const env = { AICO_WEB_URL: `http://127.0.0.1:${(server.address() as AddressInfo).port}/` }
+      const notice = noticeFor({ session: blocked(1) }, TOOLS, ORIGIN)
+      await postAicoNotice(env, '/api/notices', notice, 'waiting_notice')
+      const resolve = { source: 'aico', key: notice.key, text: 'No longer waits.' }
+      await postAicoNotice(env, '/api/notices/resolve', resolve, 'waiting_resolve')
+      expect(got).toEqual([
+        { url: '/api/notices', body: notice },
+        { url: '/api/notices/resolve', body: resolve },
+      ])
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
+
+  it('logs and swallows an unreachable Aico', async () => {
+    await expect(
+      postAicoNotice({ AICO_WEB_URL: 'http://127.0.0.1:9' }, '/api/notices', {}, 'x'),
+    ).resolves.toBeUndefined()
   })
 })
