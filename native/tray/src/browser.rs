@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-const OWNER_PROFILE: &str = "Default"; // NIGHTSHIFT_APPROVE_CHROME_PROFILE names another ("" = system default)
+const OWNER_PROFILE: &str = "Default"; // AICO_APPROVE_CHROME_PROFILE names another ("" = system default)
 
 fn default_browser() -> String {
     Command::new("xdg-settings")
@@ -20,7 +20,7 @@ fn which(name: &str) -> Option<PathBuf> {
 }
 
 pub fn argv(url: &str) -> Vec<String> {
-    let profile = std::env::var("NIGHTSHIFT_APPROVE_CHROME_PROFILE").unwrap_or_else(|_| OWNER_PROFILE.into());
+    let profile = std::env::var("AICO_APPROVE_CHROME_PROFILE").unwrap_or_else(|_| OWNER_PROFILE.into());
     let home = std::env::var("HOME").unwrap_or_default();
     if let Some(chrome) = which("google-chrome") {
         if !profile.is_empty() && !profile.contains('/') && default_browser().starts_with("google-chrome")

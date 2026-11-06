@@ -1,5 +1,5 @@
 //! aico-web's tray door (packages/web-server/src/tray.ts): plain HTTP/1.1 on loopback, one request per connection.
-//! GET /api/tray is the panel's data (what `nightshift inbox --json` gave, built from Aico's Status, asks and
+//! GET /api/tray is the panel's data (built from Aico's Status, asks and
 //! notices), POST /api/tray/seen records reads, GET /api/tray/notice/<id> is a notice's card. No TLS, no auth: the
 //! door answers this machine only.
 

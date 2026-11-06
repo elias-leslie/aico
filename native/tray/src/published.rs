@@ -1,25 +1,24 @@
-//! Open passkey asks as root publishes them (approvals.json: ids, kinds, states, never argv), titled with the push the
-//! owner got for each (the push log, from the item store's read: notices::log_of). Same rules as nightshift.web.page.waiting_approvals. Also the access
-//! grants open now (approvals.json grants), ending one early through root's normal revoke route (the bypass inbox,
-//! as `nightshift elevate revoke`; it only ever narrows), and what the board's Needs you count can honestly say (from
-//! the item store's tray summary, items.rs tray_summary).
+//! Open access requests as host-steward's grants service lists them (its socket, `op: list`: ids, kinds, states, never
+//! argv), titled with the push the owner got for each (the push log, from aico-web's read: notices::log_of). Also the
+//! access grants open now, ending one early through the service's revoke op (it only ever narrows), and what the
+//! board's Needs you count can honestly say (from aico-web's tray summary, items.rs tray_summary).
 
 use serde_json::Value;
 
-const STATE_DIR: &str = "/var/lib/nightshift";
-
-/// Nightshift's state directory; debug builds may point at a test copy (NIGHTSHIFT_STATE_DIR), release builds never.
+/// The tray's own state directory (the quiet hour): `$XDG_STATE_HOME/aico/tray`, else `~/.local/state/aico/tray`.
+/// Debug builds may point at a test copy (AICO_TRAY_STATE_DIR), release builds never.
 pub fn state_dir() -> std::path::PathBuf {
     #[cfg(debug_assertions)]
-    if let Some(d) = std::env::var_os("NIGHTSHIFT_STATE_DIR") {
+    if let Some(d) = std::env::var_os("AICO_TRAY_STATE_DIR") {
         return d.into();
     }
-    STATE_DIR.into()
+    state_home().join("aico/tray")
 }
 
-/// Root's published approvals list (approvals.json).
-pub fn public_path() -> std::path::PathBuf {
-    state_dir().join("approvals.json")
+fn state_home() -> std::path::PathBuf {
+    std::env::var_os("XDG_STATE_HOME").map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::Path::new(&h).join(".local/state")))
+        .unwrap_or_default()
 }
 const TTL_S: f64 = 900.0;
 const KINDS: [&str; 3] = ["elevate", "passkey", "signing"];
@@ -35,7 +34,7 @@ pub struct Waiting {
     pub titled: bool,
 }
 
-/// Still-open asks root pushed (a quiet repeat of a still-open ask is skipped), soonest deadline last.
+/// Still-open access requests the service pushed (a quiet repeat of a still-open one is skipped), soonest deadline last.
 pub fn waiting(public: &Value, log: &Value, now: f64) -> Vec<Waiting> {
     let mut out = Vec::new();
     let empty = Vec::new();
@@ -53,7 +52,8 @@ pub fn waiting(public: &Value, log: &Value, now: f64) -> Vec<Waiting> {
         let key = format!("approve:{kind}:{id}");
         let e = pushed.iter().rev().find(|e| e["key"].as_str() == Some(key.as_str()));
         let family = r["family"].as_str().filter(|s| !s.is_empty()).unwrap_or(kind);
-        let title = e.and_then(|e| e["title"].as_str()).map_or_else(|| format!("Approve: {family}"), str::to_string);
+        let title = e.and_then(|e| e["title"].as_str()).or_else(|| r["title"].as_str().filter(|t| !t.is_empty()))
+            .map_or_else(|| format!("Approve: {family}"), str::to_string);
         let body = e.and_then(|e| e["body"].as_str()).unwrap_or("").to_string();
         out.push(Waiting { id: id.into(), kind: kind.into(), expires, title, body, titled: e.is_some() });
     }
@@ -127,13 +127,10 @@ pub fn unread_rows(summary: &Value, now: f64) -> Option<Vec<Vec<String>>> {
 /// minute, never with question text. Tests (and debug builds) may point elsewhere.
 pub fn aico_feed_path() -> std::path::PathBuf {
     #[cfg(any(test, debug_assertions))]
-    if let Some(p) = std::env::var_os("NIGHTSHIFT_AICO_FEED") {
+    if let Some(p) = std::env::var_os("AICO_ASKS_FEED") {
         return p.into();
     }
-    let state = std::env::var_os("XDG_STATE_HOME").map(std::path::PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| std::path::Path::new(&h).join(".local/state")))
-        .unwrap_or_default();
-    state.join("tether/default/needs-you.json")
+    state_home().join("tether/default/needs-you.json")
 }
 
 /// The Aico asks waiting on the owner. `at` is when Tether wrote it (s); 0 when the file is missing or unreadable.
@@ -156,8 +153,7 @@ pub fn aico_asks(feed: &Value, check: impl Fn(&str) -> Option<String>) -> AicoAs
                url: feed["newest"]["url"].as_str().and_then(check), at: at / 1000.0 }
 }
 
-/// End every open grant of `kind` now: one revoke request in root's inbox. Root answers in bypass/out and
-/// republishes approvals.json, which the notifier watches.
+/// End every open grant of `kind` now: one revoke call on the grants service, which the notifier sees on its next read.
 pub fn revoke(kind: &str) -> Result<String, String> {
     if kind.is_empty() || !kind.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-') {
         return Err("bad grant kind".into());

@@ -2,7 +2,7 @@
 //! without taking focus, gone after HIDE_S unless the pointer is on it. A click on the card opens it as its own card
 //! (notice.rs) in the same place (an agent's push: the app link it carries, e.g. its Aico session), × dismisses it (its page on the board has Stop
 //! these); each of those clears it everywhere (notices::mark_seen).
-//! Hiding by itself clears nothing: it still reaches the phone later if it was waiting for that (push.release_held).
+//! Hiding by itself clears nothing.
 
 use crate::notices;
 use gtk::glib;

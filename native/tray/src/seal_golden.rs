@@ -1,5 +1,5 @@
-// Test vectors made with Python's cryptography exactly as root and the approve page do it; tests/test_approve_local.py
-// test_desktop_seal_vectors checks the same values against signing.py.
+// Test vectors made with Python's cryptography exactly as root's verifier does it. The salt, info and AAD strings in
+// seal.rs are a contract with stored keys, so these values must never change.
 pub const PRF_HMAC_SALT: &str = "hQfR5oBGD42TYVUw8vL7pbUoFLxbFNubtKIiLUhYmdI";
 pub const TRANSPORT: &str = "64a7e8d5fd7125deffefd880013c24f241e95d1f183c311da5b45d5ad4290c74";
 pub const TRANSPORT_PUB: &str = "BOtkaI4Wj2DTdCwBv99sYVcXYCSvVLAvZVP9H5S3MfKpp1ewsCIqEEpmolrP9eaLwOjYokevrwsodqHmhjB7jgI";

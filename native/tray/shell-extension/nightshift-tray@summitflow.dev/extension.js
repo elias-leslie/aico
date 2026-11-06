@@ -196,7 +196,7 @@ export default class NightshiftTrayExtension extends Extension {
         this._cancel = new Gio.Cancellable();
         this._proxy = new TrayProxy(Gio.DBus.session, BUS, PATH, (proxy, error) => {
             if (error && !error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                console.warn(`nightshift-tray: ${error.message}`);
+                console.warn(`aico-tray: ${error.message}`);
             else if (!error && proxy === this._proxy)
                 this._sync();
         }, this._cancel, Gio.DBusProxyFlags.DO_NOT_AUTO_START);
@@ -262,7 +262,7 @@ export default class NightshiftTrayExtension extends Extension {
             return;
         this._proxy.OpenRemote((_r, error) => {
             if (error)
-                console.warn(`nightshift-tray: Open: ${error.message}`);
+                console.warn(`aico-tray: Open: ${error.message}`);
         });
     }
 
@@ -273,7 +273,7 @@ export default class NightshiftTrayExtension extends Extension {
         }
         this._proxy.MenuRemote((res, error) => {
             if (error)
-                console.warn(`nightshift-tray: Menu: ${error.message}`);
+                console.warn(`aico-tray: Menu: ${error.message}`);
             done(error ? null : res[0]);
         });
     }
@@ -281,7 +281,7 @@ export default class NightshiftTrayExtension extends Extension {
     menuClick(id) {
         this._proxy?.MenuClickRemote(id, (_r, error) => {
             if (error)
-                console.warn(`nightshift-tray: MenuClick: ${error.message}`);
+                console.warn(`aico-tray: MenuClick: ${error.message}`);
         });
     }
 

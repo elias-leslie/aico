@@ -1,11 +1,10 @@
-//! The background notifier (user unit aico-tray). A new passkey ask opens the approval card right
+//! The background notifier (user unit aico-tray). A new access request opens the approval card right
 //! away in the bottom-right corner above the panel, without taking the keyboard (window --passive; a click on it
 //! takes it, into the PIN field); a new other owner notification shows as the app's own corner card (toast.rs) that
-//! hides by itself. No GNOME banners. Event-driven: inotify on root's published list and Tether's feed; Aico's tray
-//! door (`GET /api/tray`, off this thread) is read every 15 s and when those files change, for the badge, the push
-//! log and the read marks; a timer for the 30 s heartbeat (while it is alive pushes skip this desktop's browser and, at
-//! the desk, wait here before the phone gets them: push.desktop_popups_alive, push.at_desk). The notifier itself never touches the key or signs
-//! anything; the tray (tray.rs) shows the icon with a dot while anything waits. In the owner's quiet hour (quiet.rs) no
+//! hides by itself. No GNOME banners. Event-driven: inotify on Tether's feed and the tray's state directory; Aico's
+//! tray door (`GET /api/tray`, off this thread) is read every 15 s and when those files change, for the badge, the push
+//! log and the read marks; the grants service (host-steward's socket) is asked for open requests every few seconds.
+//! The notifier itself never touches the key or signs anything; the tray (tray.rs) shows the icon with a dot while anything waits. In the owner's quiet hour (quiet.rs) no
 //! card comes up except an ask about to expire; what waited comes up when it ends.
 
 use crate::published;
@@ -19,7 +18,7 @@ use std::os::fd::RawFd;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const HEARTBEAT_S: u32 = 30;
+const GRANTS_EVERY_S: u32 = 5; // how often the grants service is asked for new access requests (it publishes no file)
 const ITEMS_EVERY_S: u32 = 15; // how often Aico is read for the badge, the pushes and the read marks (published::SUMMARY_MAX_AGE_S is the floor it must beat)
 
 pub fn now() -> f64 {
@@ -235,9 +234,7 @@ fn refresh(st: &Shared) {
     }
     drop(s);
     if let Some((rid, kind)) = new.first() {
-        let age = std::fs::metadata(published::public_path()).and_then(|m| m.modified()).ok()
-            .and_then(|m| SystemTime::now().duration_since(m).ok()).map_or(-1.0, |d| d.as_secs_f64() * 1000.0);
-        eprintln!("ask {} arrived, {age:.0} ms after root published it: showing its card", &rid[..8]);
+        eprintln!("ask {} arrived: showing its card", &rid[..8]);
         open_window(st, rid, kind); // the card walks every open ask, the others included
     }
     refresh_notices(st);
@@ -330,13 +327,6 @@ fn queue(st: &Shared) {
     }
     let s2 = st.clone();
     glib::timeout_add_local_once(Duration::from_millis(30), move || refresh(&s2)); // one read per burst of writes
-}
-
-fn heartbeat() {
-    let path = published::state_dir().join("notify/desktop-popups");
-    if let Ok(f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = f.set_modified(SystemTime::now());
-    }
 }
 
 /// An ask came in: its card, shown without the keyboard, unless a card is up (it walks every open ask). With the inbox
@@ -441,8 +431,7 @@ struct Wds {
     aico: Option<i32>,
 }
 
-/// What a batch of events touched: Nightshift's approvals.json and quiet.json and Tether's feed (re-read them, and
-/// Aico: its questions and approvals come from the same files).
+/// What a batch of events touched: the quiet hour's file and Tether's feed (re-read both and Aico).
 #[derive(Debug, Default, PartialEq)]
 struct Hit {
     files: bool,
@@ -454,7 +443,7 @@ fn hit_of(h: &mut Hit, wds: Wds, wd: i32, mask: u32, name: &[u8], aico_name: &[u
         h.files = true;
     } else if Some(wd) == wds.aico {
         h.files |= name == aico_name;
-    } else if [&b"approvals.json"[..], b"quiet.json"].contains(&name) {
+    } else if name == b"quiet.json" {
         h.files = true;
     }
 }
@@ -488,12 +477,13 @@ pub fn run() -> i32 {
     let st: Shared = Rc::new(RefCell::new(State { shown: load_notes(), notice_shown, notice_since, ..Default::default() }));
     let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
     let mask = libc::IN_MOVED_TO | libc::IN_CLOSE_WRITE | libc::IN_CREATE | libc::IN_DELETE | libc::IN_MOVED_FROM;
-    let state = published::state_dir().to_string_lossy().into_owned();
+    let state = published::state_dir();
+    let _ = std::fs::create_dir_all(&state);
+    let state = state.to_string_lossy().into_owned();
     if fd < 0 || watch(fd, &state, mask).is_none() {
         eprintln!("aico-tray: cannot watch {state}");
         return 2;
     }
-    watch(fd, &format!("{state}/notify"), mask);
     let wds = Wds {
         aico: published::aico_feed_path().parent().and_then(|d| d.to_str()).and_then(|dir| watch(fd, dir, mask)), // Tether's feed
     };
@@ -570,11 +560,13 @@ pub fn run() -> i32 {
         }
         Err(e) => eprintln!("aico-tray: no session bus ({e}); no tray icon"),
     }
-    heartbeat();
-    glib::timeout_add_seconds_local(HEARTBEAT_S, || {
-        heartbeat();
-        glib::ControlFlow::Continue
-    });
+    {
+        let s2 = st.clone();
+        glib::timeout_add_seconds_local(GRANTS_EVERY_S, move || {
+            queue(&s2);
+            glib::ControlFlow::Continue
+        });
+    }
     read_items(&st);
     refresh(&st);
     let main = glib::MainLoop::new(None, false);
@@ -616,7 +608,7 @@ mod tests {
         assert!(hit(4, libc::IN_MOVED_TO, b"needs-you.json")); // Tether's feed
         assert!(!hit(1, libc::IN_MOVED_TO, b"needs-you.json")); // the same name elsewhere is not it
         assert!(!hit(1, libc::IN_MOVED_TO, b"changed"));
-        assert!(hit(1, libc::IN_CLOSE_WRITE, b"approvals.json"));
+        assert!(!hit(1, libc::IN_CLOSE_WRITE, b"approvals.json")); // the old root list is no trigger any more
         assert!(hit(2, libc::IN_CLOSE_WRITE, b"quiet.json"));
         assert!(!hit(2, libc::IN_MOVED_TO, b"log.json"));
         assert!(hit(2, libc::IN_Q_OVERFLOW, b""));

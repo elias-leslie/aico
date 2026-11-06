@@ -27,7 +27,7 @@ fn fido_lib() -> Result<&'static Fido, String> {
     FIDO.get_or_init(|| Fido::load().map_err(|e| format!("{e:?}"))).as_ref().map_err(Clone::clone)
 }
 
-/// Nightshift's look for a window of this app (after gtk::init): dark theme, the shared CSS, plus `extra`.
+/// The look of a window of this app (after gtk::init): dark theme, the shared CSS, plus `extra`.
 pub fn style(extra: &str) {
     #[allow(deprecated)] // the colours below are explicit; this keeps built-in widgets (menus, selection) dark too
     if let Some(settings) = gtk::Settings::default() {
@@ -45,7 +45,7 @@ pub fn log(msg: impl AsRef<str>) {
     eprintln!("window {}: {}", ID8.get().map_or("-", String::as_str), msg.as_ref());
 }
 
-// Nightshift's own palette (status page and approve page tokens): dark, low glare, whatever the desktop theme is.
+// Aico's palette (status and approve page tokens): dark, low glare, whatever the desktop theme is.
 const CSS: &str = "
 window.ns-win { background-color: #0f1218; color: #e6e9f0; }
 window.ns-win.ns-popover { border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px #2b3242; }
@@ -803,7 +803,7 @@ pub fn run(id: &str, review: bool, fallback_url: &str, passive: bool) -> i32 {
             glib::Propagation::Proceed
         });
         win.add_controller(keys);
-        let click_at = std::env::var("NIGHTSHIFT_CLICK_AT").ok().and_then(|v| v.parse::<f64>().ok());
+        let click_at = std::env::var("AICO_CLICK_AT").ok().and_then(|v| v.parse::<f64>().ok());
         win.connect_map(move |_| {
             let since = click_at.map(|c| format!(", {:.0} ms after the click", (now() - c) * 1000.0)).unwrap_or_default();
             log(format!("shown {:.0} ms after start{since}", t0.elapsed().as_secs_f64() * 1000.0));

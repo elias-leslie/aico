@@ -1009,7 +1009,7 @@ mod tests {
     use super::*;
 
     fn sample() -> Value {
-        serde_json::from_str(include_str!("../tests/fixtures/inbox-sample.json")).unwrap()
+        serde_json::from_str(include_str!("../tests/fixtures/tray-sample.json")).unwrap()
     }
 
     #[test]

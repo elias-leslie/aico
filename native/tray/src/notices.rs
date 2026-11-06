@@ -1,12 +1,12 @@
-//! Owner notifications other than approval asks, from the push log as the item store gives it (`nightshift items
-//! --json --pushes`, read_marks: docs/adr/0005): which ones the tray shows as popups next to it and when it takes one
+//! Owner notifications other than approval asks, from the push log as aico-web's tray door gives it (`GET /api/tray`,
+//! read_marks): which ones the tray shows as popups next to it and when it takes one
 //! down, and which the tray lists. Cleared anywhere means cleared everywhere: its page opened on any device, its
 //! notification or tray row clicked or dismissed here, or the tray's "Mark all read" clicked after it came (read_at),
-//! or its issue over (over_at). A cleared one never reaches the phone either (push.release_held). Opening the
+//! or its issue over (over_at). Opening the
 //! notifications page from the tray clears nothing: the tray keeps listing what is new until it is read.
 //!
-//! The notifier reads the store (daemon.rs, on the items/changed stamp) and hands the corner card its pushes; a card
-//! started on its own reads them itself (entries). A read here goes to the store through `nightshift seen` (a click:
+//! The notifier reads the door (daemon.rs, every few seconds) and hands the corner card its pushes; a card
+//! started on its own reads them itself (entries). A read here goes to aico-web (`POST /api/tray/seen`; a click:
 //! in the background, and kept in memory meanwhile so the card goes at once; the panel waits for it, since its lists
 //! come from the store).
 
@@ -40,7 +40,7 @@ pub fn entry(id: &str) -> Result<Option<Value>, String> {
 }
 
 /// Reads made in this process (ids, and the last Mark all read): they count at once, before the store's next read
-/// shows them (and still count if `nightshift seen` could not record them).
+/// shows them (and still count if aico-web could not record them).
 static LOCAL: Mutex<(Vec<(String, f64)>, f64)> = Mutex::new((Vec::new(), 0.0));
 
 fn note_local(ids: &[&str], all: Option<f64>) {
@@ -132,7 +132,7 @@ pub fn unread(log: &Value, cleared: &Cleared) -> usize {
     log.as_array().unwrap_or(&empty).iter().filter(|e| in_tray(e) && !cleared.of(e)).count()
 }
 
-/// The icon's "N new" under the tray rule (web/inbox.py attention): the items the item store lists (surface.tray
+/// The icon's "N new" under the tray rule: the items the door lists (the tray summary
 /// unread_rows, each item's unread pushes) with a push not cleared here. A read here or anywhere clears it at once,
 /// and so does its issue ending (owner 2026-11-03); an id no longer in the log counts as cleared.
 pub fn unread_items(rows: &[Vec<String>], log: &Value, cleared: &Cleared) -> usize {
@@ -217,9 +217,9 @@ pub fn mark_seen(id: &str) {
     mark_read_pressed_bg(&[id.to_string()], "tray");
 }
 
-/// Where a notification may open: Aico itself, and the other apps Nightshift's site file allows (urls.open_hosts).
+/// Where a notification may open: Aico itself, and the other apps the site file allows (urls.open_hosts).
 fn open_hosts() -> Vec<String> {
-    let site: Vec<String> = std::fs::read("/etc/nightshift/site.json").ok()
+    let site: Vec<String> = std::fs::read("/etc/aico/site.json").ok()
         .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
         .and_then(|v| v["urls"]["open_hosts"].as_array().map(|a| a.iter().filter_map(|h| h.as_str().map(str::to_string)).collect()))
         .unwrap_or_default();
@@ -227,7 +227,7 @@ fn open_hosts() -> Vec<String> {
 }
 
 /// The other app an agent's push points at (refs.open, e.g. its Aico session or share): opened 
-/// Only an https link on an allowed host, checked again here like push.open_link.
+/// Only an https link on an allowed host, checked again here.
 pub fn open_link(e: &Value) -> Option<String> {
     link_on(e["refs"]["open"].as_str()?, &open_hosts())
 }

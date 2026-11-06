@@ -27,8 +27,8 @@ mod tray;
 mod window;
 mod x11;
 
-/// The approve origin's host from Nightshift's site file (siteconf urls.approve_host): the approval path stays on
-/// Nightshift's executor until the grants move (M5b), for the browser fallback link.
+/// The approve origin's host from host-steward's site file (approve_host): the WebAuthn relying party the grants
+/// service verifies against, and the host the security key is asked for.
 pub fn approve_host() -> String {
     std::fs::read("/etc/host-steward/site.json")
         .ok()

@@ -1,4 +1,4 @@
-//! The approve uid's local socket (one JSON line each way) and the WebAuthn pieces the app builds itself: the client
+//! The grants service's local socket (host-steward, one JSON line each way) and the WebAuthn pieces the app builds itself: the client
 //! data root verifies (type webauthn.get, the challenge root bound to this request and decision, the local origin) and
 //! the answer it posts.
 
@@ -83,7 +83,7 @@ pub fn call_ui(msg: &Value) -> Result<Value, String> {
 
 fn sock() -> String {
     if cfg!(debug_assertions) {
-        if let Ok(p) = std::env::var("NIGHTSHIFT_APPROVE_LOCAL_SOCK") {
+        if let Ok(p) = std::env::var("AICO_GRANTS_SOCKET") {
             return p; // debug builds only (window tests against a fake service)
         }
     }
@@ -143,7 +143,7 @@ mod tests {
         assert!(unb64url("a+b").is_none());
     }
 
-    /// The exact bytes tests/test_approve_local.py feeds root's verifier (GOLDEN_CLIENT_DATA there).
+    /// The exact client data bytes the grants service's verifier parses.
     #[test]
     fn client_data_is_what_root_parses() {
         let cd = client_data(&[0xab; 32], "nightshift-desktop://approve.example.test");

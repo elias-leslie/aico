@@ -1,5 +1,5 @@
 //! The security key behind the approval window: the real one (libfido2), or in debug builds only a scripted fake
-//! (NIGHTSHIFT_FAKE_KEY=ok|uv|timeout|denied|blocked|nokey|unplug|noprf) so the PIN, touch and error paths can be driven on a
+//! (AICO_FAKE_KEY=ok|uv|timeout|denied|blocked|nokey|unplug|noprf) so the PIN, touch and error paths can be driven on a
 //! test display without touching a key. Release builds have no fake: the variable is ignored there.
 
 use crate::fido::{self, Assertion, Error, Fido};
@@ -14,7 +14,7 @@ impl Key {
     /// The key to ask, or a plain sentence why there is none. `log` gets one line per step.
     pub fn find(lib: Result<&'static Fido, String>, log: &dyn Fn(String)) -> Result<Key, String> {
         #[cfg(debug_assertions)]
-        if let Ok(mode) = std::env::var("NIGHTSHIFT_FAKE_KEY") {
+        if let Ok(mode) = std::env::var("AICO_FAKE_KEY") {
             return fake::find(&mode, log).map(Key::Fake);
         }
         let lib = lib.map_err(|e| {

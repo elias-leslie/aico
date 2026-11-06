@@ -1,5 +1,5 @@
 //! What the tray reads from Aico: aico-web's tray door (aico.rs, `GET /api/tray`), one answer in the shape
-//! `nightshift inbox --json` had: the panel's lists (needs, approvals, questions, notifications), the frame (snapshot,
+//! the tray panel needs: the panel's lists (needs, approvals, questions, notifications), the frame (snapshot,
 //! health, counts, links), the badge summary (`summary`) and the push log with its read marks (`read_marks`). The door
 //! builds every word from Aico's Status, asks and notices at the moment of the read; nothing here computes one.
 

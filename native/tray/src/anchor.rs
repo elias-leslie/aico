@@ -12,9 +12,9 @@ use std::path::PathBuf;
 
 const MARGIN: i32 = 8;
 /// Set on a window started from the tray (its icon or menu): the pointer is then beside the icon.
-pub const FROM_TRAY: &str = "NIGHTSHIFT_FROM_TRAY";
+pub const FROM_TRAY: &str = "AICO_FROM_TRAY";
 /// Set on the inbox when the GNOME Shell extension shows the icon (shell.rs): it opens as the icon's popover.
-pub const POPOVER: &str = "NIGHTSHIFT_POPOVER";
+pub const POPOVER: &str = "AICO_POPOVER";
 
 fn path() -> PathBuf {
     std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("aico-tray-anchor")

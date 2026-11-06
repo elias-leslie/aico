@@ -1,19 +1,19 @@
-//! "Quiet for 1 hour" from the tray: notify/quiet.json {"until": epoch}, the same file push.quiet_hour_until reads.
-//! While it is on, pushes wait (push.py) and the notifier shows no cards, except an approval ask close to expiring;
-//! ending it early writes the time it ended, so what waited goes out from then on.
+//! "Quiet for 1 hour" from the tray: quiet.json {"until": epoch} in the tray's state directory. While it is on, the
+//! notifier shows no cards, except an access request close to expiring; ending it early writes the time it ended, so
+//! what waited comes up from then on.
 
 use serde_json::Value;
 
 pub const HOUR_S: f64 = 3600.0;
-const MAX_S: f64 = 2.0 * 3600.0; // push.QUIET_MAX_S: a far-off end is not a quiet hour
-/// An ask's card still comes up once it has this little time left (push.QUIET_ASK_NEAR_S).
+const MAX_S: f64 = 2.0 * 3600.0; // a far-off end is not a quiet hour
+/// An ask's card still comes up once it has this little time left.
 pub const ASK_NEAR_S: f64 = 300.0;
 
 fn path() -> std::path::PathBuf {
-    crate::published::state_dir().join("notify/quiet.json")
+    crate::published::state_dir().join("quiet.json")
 }
 
-/// When the quiet hour ends, or 0 when none is on (same rules as push.quiet_hour_until).
+/// When the quiet hour ends, or 0 when none is on.
 pub fn until_in(v: &Value, now: f64) -> f64 {
     match v["until"].as_f64() {
         Some(end) if now < end && end <= now + MAX_S => end,
@@ -56,7 +56,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn quiet_hour_reads_like_the_push_side() {
+    fn quiet_hour_reads_its_end() {
         assert_eq!(until_in(&json!({"until": 4600.0}), 1000.0), 4600.0);
         assert_eq!(until_in(&json!({"until": 1000.0}), 1000.0), 0.0); // ended
         assert_eq!(until_in(&json!({"until": 1000.0 + 3.0 * 3600.0}), 1000.0), 0.0); // bogus far-off end

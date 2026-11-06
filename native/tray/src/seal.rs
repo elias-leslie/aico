@@ -1,8 +1,9 @@
-//! The approve page's signing-handover extra, done the same way in the app (byte for byte, so root and the stored
-//! release keys cannot tell the two apart): the key's CTAP2 hmac-secret over SHA-256("WebAuthn PRF" || 0x00 ||
+//! The signing-handover extra of an approval, done the same way as the browser does it (byte for byte, so root and
+//! the stored keys cannot tell the two apart; the salt and info strings below are a contract with stored keys and never
+//! change, whatever the old name in them): the key's CTAP2 hmac-secret over SHA-256("WebAuthn PRF" || 0x00 ||
 //! salt), which is exactly what the browser's WebAuthn PRF extension returns for `eval.first = salt` (so the same passkey opens the same keys),
 //! sealed to root's per-request transport key: ECDH P-256 with a fresh key, HKDF-SHA256 (salt = request id bytes,
-//! info nightshift-prf-transport-v1), AES-256-GCM with the AAD "<id>:<credential id>" (signing.open_prf). Nothing
+//! info nightshift-prf-transport-v1), AES-256-GCM with the AAD "<id>:<credential id>" (root's open_prf). Nothing
 //! here is ever logged or written to disk.
 
 use crate::proto::{b64url, unb64url, unhex};
@@ -77,7 +78,7 @@ mod tests {
 
     #[test]
     fn prf_salt_is_webauthns() {
-        // SHA-256(b"WebAuthn PRF\x00" + SHA-256(b"nightshift release signing v1")), signing.PRF_SALT through the browser
+        // SHA-256(b"WebAuthn PRF\x00" + SHA-256(b"nightshift release signing v1")), the signing salt through the browser
         let input = crate::proto::sha256(b"nightshift release signing v1");
         assert_eq!(b64url(&prf_salt(&input)), golden::PRF_HMAC_SALT);
     }
