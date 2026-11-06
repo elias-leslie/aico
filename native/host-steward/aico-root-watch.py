@@ -1396,9 +1396,11 @@ def apply_launch_defaults(args: argparse.Namespace, row: dict) -> dict:
         args.model = applied["model"] = model
         if args.reasoning_effort is None and row.get("effort") in EFFORTS:
             args.reasoning_effort = applied["reasoningEffort"] = row["effort"]
-        if args.tool == "codex" and args.daybreak is None and isinstance(row.get("daybreak"), bool):
-            args.daybreak = "on" if row["daybreak"] else "off"
-            applied["daybreak"] = row["daybreak"]
+    if (args.tool == "codex" and args.model == model and args.daybreak is None
+            and isinstance(row.get("daybreak"), bool)):
+        # Daybreak belongs to the table's model, also when the caller names that model itself.
+        args.daybreak = "on" if row["daybreak"] else "off"
+        applied["daybreak"] = row["daybreak"]
     return applied
 
 
@@ -1631,6 +1633,11 @@ def create_main(argv: list[str]) -> int:
         if (local_codex and args.daybreak == "on"
                 and (reason := codex_daybreak_unavailable(args.model))):
             refuse(reason)
+        if (local_codex and args.daybreak is None and (catalog := codex_catalog()) is not None
+                and catalog[0].get("daybreak") is True and codex_daybreak_unavailable(args.model)):
+            # Codex's shared config turns Daybreak on, and this model lacks it: Codex would reject
+            # the first turn and leave an idle root, so this one launch runs without it.
+            args.daybreak = "off"
         # The hub forwards an entry only when it runs entries for this tool itself.
         if args.entry is not None and (reason := entry_api_refusal(collector, endpoint, args.tool)):
             refuse(reason)

@@ -982,3 +982,33 @@ def test_resume_is_not_refused_over_a_work_role_agent_hub_no_longer_lists(monkey
     monkeypatch.setattr(admin, "emit_json", lambda *_: None)
     argv = [arg if arg != "codex" else "claude-code" for arg in BASE]
     assert admin.main(argv) == 0 and calls[0]["resumeSessionId"] == THREAD
+
+
+def test_codex_shared_daybreak_default_is_turned_off_for_a_model_without_it(monkeypatch, tmp_path):
+    """config.toml's daybreak = true would make Codex reject gpt-6.1-sol's first turn (2026-11-06)."""
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex/config.toml").write_text('model = "gpt-6.1-sol"\ndaybreak = true\n')
+    (tmp_path / ".codex/models_cache.json").write_text(json.dumps({"models": [
+        {"slug": "gpt-6.1-sol", "available_access_programs": {"cyber": ["standard"]}},
+        {"slug": "gpt-6-sol", "available_access_programs": {"cyber": ["standard", "daybreak_blue"]}}]}))
+    monkeypatch.setattr(admin.Path, "home", lambda: tmp_path)
+    calls = []
+
+    def receipt(_, endpoint, route, payload, **kwargs):
+        calls.append(payload)
+        return 200, descriptor(payload)
+
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    assert admin.main([*BASE, "--model", "gpt-6.1-sol", "--reasoning-effort", "xhigh"]) == 0
+    assert calls[0]["daybreak"] is False
+    assert admin.main([*BASE, "--model", "gpt-6-sol"]) == 0
+    assert "daybreak" not in calls[1]
+
+
+def test_explicit_table_model_still_takes_the_tables_daybreak(monkeypatch):
+    row = table_row(job="review", model="gpt-6.1-sol", effort="xhigh", daybreak=False, context="full")
+    calls, _ = served(monkeypatch, row)
+    assert admin.main(["create", "rev-2", "Review.", "--tool", "codex", "--work-role", "review",
+                       "--project", "sample-app", "--project-root", "/fixture/project",
+                       "--model", "gpt-6.1-sol", "--reasoning-effort", "xhigh"]) == 0
+    assert calls[0]["daybreak"] is False
