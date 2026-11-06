@@ -246,6 +246,23 @@ describe('claude -p', () => {
 })
 
 describe('agy', () => {
+  it('refuses a prompt too big for one argument instead of calling agy "not installed"', async () => {
+    const agy = fakeBin('agy-big', echoing(agyResult({})))
+    const huge = { question: 'x'.repeat(200 * 1024) }
+    const result = await ask(request('gemini-3.8-flash', huge), { context, bins: { agy } })
+    expect(result.outcome).toMatchObject({ kind: 'bad_input' })
+    expect(JSON.stringify(result.outcome)).not.toContain('not installed')
+    expect(existsSync(`${agy}.args`)).toBe(false)
+  })
+
+  it('still reports a missing agy command as not installed', async () => {
+    const result = await ask(request('gemini-3.8-flash'), {
+      context,
+      bins: { agy: join(dir, 'no-such-agy') },
+    })
+    expect(JSON.stringify(result.outcome)).toContain('not installed')
+  })
+
   it('returns the answer and its schema-checked data', async () => {
     const agy = fakeBin(
       'agy-ok',

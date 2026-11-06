@@ -377,7 +377,8 @@ export class ChatSessions {
     )
     return this.get(id)
   }
-  async stop(id: string, end = false) {
+  /** Queued messages go back to the draft so none is lost or silently sent after a stop. */
+  private queuedToDraft(id: string) {
     const row = this.row(id)
     const queued = parse<QueuedMessage[]>(row.queued, [])
     const draft = [row.draft, ...queued.map(promptText)].filter(Boolean).join('\n\n')
@@ -387,6 +388,10 @@ export class ChatSessions {
     this.db
       .prepare("UPDATE chats SET queued = '[]', draft = ?, draft_attachments = ? WHERE run_id = ?")
       .run(draft, JSON.stringify(attachments), id)
+  }
+  async stop(id: string, end = false) {
+    this.row(id)
+    this.queuedToDraft(id)
     const active = this.active.get(id)
     active?.controller.abort()
     await active?.done
@@ -543,7 +548,10 @@ export class ChatSessions {
       }
       const row = this.row(id)
       const queued = parse<QueuedMessage[]>(row.queued, [])
-      if (!controller.signal.aborted && row.state === 'idle' && queued.length) {
+      if (!controller.signal.aborted && row.state !== 'idle' && queued.length) {
+        this.queuedToDraft(id)
+        this.changed(id)
+      } else if (!controller.signal.aborted && row.state === 'idle' && queued.length) {
         const next = queued.shift() as QueuedMessage
         this.db
           .prepare('UPDATE chats SET queued = ? WHERE run_id = ?')

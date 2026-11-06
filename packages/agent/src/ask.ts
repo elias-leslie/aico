@@ -138,6 +138,8 @@ export function fileBlocks(
   return { text: blocks.join('\n\n') }
 }
 
+const MAX_ARG_BYTES = 128 * 1024
+
 interface CliRun {
   lines: string[]
   code: number | null
@@ -161,7 +163,7 @@ function runCli(
     try {
       child = spawn(bin, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
     } catch (error) {
-      out.missing = true
+      out.missing = (error as NodeJS.ErrnoException).code === 'ENOENT'
       out.stderr = (error as Error).message
       done(out)
       return
@@ -320,6 +322,17 @@ async function viaAgy(
   const args = ['-p', prompt, '--model', entry.id, '--output-format', 'stream-json']
   if (req.effort) args.push('--effort', req.effort)
   if (schema !== undefined) args.push('--json-schema', JSON.stringify(schema))
+  // agy takes the prompt as an argument (its stdin is only the stream-json protocol), and Linux
+  // refuses a single argument of 128 KiB or more with E2BIG.
+  const tooBig = args.find((arg) => Buffer.byteLength(arg) >= MAX_ARG_BYTES)
+  if (tooBig)
+    return {
+      outcome: {
+        kind: 'bad_input',
+        detail: `this model takes the prompt as a command argument, and this one is ${Math.round(Buffer.byteLength(tooBig) / 1024)} KiB; the limit is ${MAX_ARG_BYTES / 1024} KiB. Shorten it or pick another model.`,
+      },
+      tokens: NO_TOKENS,
+    }
   const run = await runCli(deps.bins?.agy ?? 'agy', args, null, process.env, scratch, silenceMs)
   if (run.silent) return silentOutcome(entry.id, silenceMs)
   if (run.missing) return failed(entry.id, 'the agy command is not installed')

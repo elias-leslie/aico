@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openDatabase } from '@aico/store'
+import { createModels, fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai'
 import { describe, expect, it } from 'vitest'
 import { ChatSessions } from './chats'
 import { contextMessages } from './compaction'
@@ -68,5 +69,34 @@ describe('chat restart recovery', () => {
     })
     expect(contextMessages(Transcript.open(db, '1234abcd').entries)).toHaveLength(1)
     db.close()
+  })
+})
+
+describe('queued messages after a reply that did not finish', () => {
+  it('moves them back to the draft when the reply fails', async () => {
+    const faux = fauxProvider({
+      provider: 'openai',
+      api: 'faux-openai',
+      models: [{ id: 'first', reasoning: true }],
+    })
+    faux.setResponses([fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'boom' })])
+    const models = createModels()
+    models.setProvider(faux.provider)
+    const db = openAgentDb(':memory:')
+    const cwd = mkdtempSync(join(tmpdir(), 'aico-chat-queue-'))
+    const chats = new ChatSessions(db, {
+      dataDir: cwd,
+      push: async () => {},
+      rules: () => rules,
+      models,
+      contextFiles: [],
+    })
+    const { id } = await chats.start({ role: 'implementation', cwd, message: 'first question' })
+    chats.send(id, 'queued follow-up')
+    expect(chats.get(id).queued).toEqual(['queued follow-up'])
+    await chats.settled(id)
+    expect(chats.get(id)).toMatchObject({ state: 'failed', queued: [], draft: 'queued follow-up' })
+    db.close()
+    rmSync(cwd, { recursive: true, force: true })
   })
 })
