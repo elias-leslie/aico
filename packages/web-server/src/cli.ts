@@ -2,7 +2,7 @@
 //
 // - `tsession open|list|projects`: open, list and attach Tether sessions
 //   (the Python backend's cli/session_broker.py, same flags and output).
-// - `tnotes import-summitflow|import-keep|verify-keep`: import into Notes
+// - `tnotes import-keep|verify-keep`: import into Notes
 //   (notes-import-cli.ts).
 // - `tclaude` / `tcodex [project|-l]`: pick a project (fzf), find its folder,
 //   then `tsession open --attach` (the old scripts/lib/project-launcher.sh).

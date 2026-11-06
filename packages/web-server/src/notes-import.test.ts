@@ -11,15 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { blobPath } from '@aico/notes/blobs'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  importAll,
-  keepReport,
-  mapSummitflow,
-  planKeep,
-  readKeepFolder,
-  type SummitflowRow,
-  verifyKeep,
-} from './notes-import'
+import { importAll, keepReport, planKeep, readKeepFolder, verifyKeep } from './notes-import'
 import { type NotesCliIo, runNotesCommand } from './notes-import-cli'
 import { dump, Link, openHost, pull } from './sync/harness'
 
@@ -337,74 +329,8 @@ describe('verify-keep', () => {
   })
 })
 
-const row = (fields: Partial<SummitflowRow>): SummitflowRow => ({
-  id: 'note-1',
-  project_scope: 'summitflow',
-  type: 'note',
-  title: 'First',
-  content: 'text',
-  tags: ['ai'],
-  pinned: false,
-  metadata: {},
-  created_at: '2026-03-24T20:30:01.895732+00:00',
-  updated_at: '2026-03-25T20:30:01.895732+00:00',
-  ...fields,
-})
-
-describe('importing SummitFlow notes', () => {
-  it('maps type, scope, tags, pinned and times', () => {
-    const { notes, drops } = mapSummitflow([
-      row({}),
-      row({
-        id: 'note-2',
-        type: 'prompt',
-        pinned: true,
-        project_scope: null,
-        tags: null,
-        metadata: { a: 1 },
-      }),
-    ])
-    expect(notes[0]).toMatchObject({
-      source: 'summitflow:note-1',
-      kind: 'note',
-      scope: 'summitflow',
-      labels: ['ai', 'project:summitflow'],
-      createdAt: Date.parse('2026-03-24T20:30:01.895Z'),
-    })
-    expect(notes[1]).toMatchObject({ kind: 'prompt', pinned: true, scope: null, labels: [] })
-    expect(drops).toEqual({ 'metadata dropped': 1 })
-  })
-
-  it('imports, then the rerun updates instead of duplicating', async () => {
-    const host = store()
-    const first = mapSummitflow([
-      row({}),
-      row({ id: 'note-2', type: 'prompt', title: 'Second' }),
-    ]).notes
-    expect((await importAll(host.notes.notes, blobs, first, false)).counts).toMatchObject({
-      created: 2,
-      updated: 0,
-    })
-    const second = mapSummitflow([
-      row({ content: 'changed', tags: ['ai', 'x'] }),
-      row({ id: 'note-2', type: 'prompt', title: 'Second' }),
-    ]).notes
-    expect((await importAll(host.notes.notes, blobs, second, false)).counts).toMatchObject({
-      created: 0,
-      updated: 1,
-      unchanged: 1,
-    })
-    const note = must(host.notes.notes.findBySource('summitflow:note-1'))
-    expect(note.body).toBe('changed')
-    expect(note.edited_at).toBe(Date.parse('2026-03-25T20:30:01.895Z'))
-    expect(host.notes.notes.labelsOf(note.id).sort()).toEqual(['ai', 'project:summitflow', 'x'])
-    expect(host.notes.notes.list({ archived: 'all' }).total).toBe(2)
-    expect(must(host.notes.notes.findBySource('summitflow:note-2')).kind).toBe('prompt')
-  })
-})
-
 describe('tnotes', () => {
-  function run(host: ReturnType<typeof store>, argv: string[], rows: SummitflowRow[] = []) {
+  function run(host: ReturnType<typeof store>, argv: string[]) {
     const io = { out: '', err: '' }
     const cliIo: NotesCliIo = {
       out: (t) => (io.out += t),
@@ -412,24 +338,11 @@ describe('tnotes', () => {
       env: {},
       repoRoot: top,
     }
-    return runNotesCommand(
-      cliIo,
-      { notes: host.notes, blobsDir: blobs, summitflowRows: () => rows },
-      argv,
-    ).then((code) => ({ code, ...io }))
+    return runNotesCommand(cliIo, { notes: host.notes, blobsDir: blobs }, argv).then((code) => ({
+      code,
+      ...io,
+    }))
   }
-
-  it('import-summitflow --dry-run reports counts and writes nothing; the real run then the rerun', async () => {
-    const host = store()
-    const rows = [row({}), row({ id: 'note-2', title: 'Second' })]
-    let result = await run(host, ['import-summitflow', '--dry-run'], rows)
-    expect(result.out).toContain('2 read, 2 to create')
-    expect(host.notes.notes.list({ archived: 'all' }).total).toBe(0)
-    result = await run(host, ['import-summitflow'], rows)
-    expect(result.out).toContain('2 created')
-    result = await run(host, ['import-summitflow'], rows)
-    expect(result.out).toContain('0 created, 0 updated, 2 unchanged')
-  })
 
   it('import-keep and verify-keep: report, exit codes and usage errors', async () => {
     const host = store()

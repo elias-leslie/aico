@@ -1,8 +1,8 @@
-// Import into Notes (Milestone 8): SummitFlow's notes table and a Google Keep
-// Takeout folder. Both become the same shape (`ImportNote`) and go in through
+// Import into Notes (Milestone 8): a Google Keep Takeout folder. It becomes
+// a list of `ImportNote` and goes in through
 // the notes layer (`NoteStore`), so every row carries the sync stamps and
 // replicates like a note made in the app. A stable `source` per note
-// (`summitflow:<id>`, `keep:<created usec>`) makes a rerun update in place.
+// (`keep:<created usec>`) makes a rerun update in place.
 //
 // Takeout data is untrusted: only JSON is parsed and files are only read as
 // bytes (hashed and stored); nothing in it is ever executed.
@@ -159,51 +159,6 @@ function replaceItems(notes: NoteStore, note: NoteRow, wanted: ImportNote['items
     else notes.addItem(note.id, { text: item.text, checked: item.checked, position })
   })
   for (const row of items.slice(wanted.length)) notes.removeItem(note.id, row.id)
-}
-
-// -- SummitFlow ---------------------------------------------------------------------
-
-/** The columns of SummitFlow's `notes` table that matter. */
-export interface SummitflowRow {
-  id: string
-  project_scope: string | null
-  type: string
-  title: string | null
-  content: string | null
-  tags: string[] | null
-  pinned: boolean | null
-  metadata: Record<string, unknown> | null
-  created_at: string
-  updated_at: string
-}
-
-/** `type=prompt` stays a prompt; every other type is a plain note (counted in `drops`). */
-export function mapSummitflow(rows: SummitflowRow[]): { notes: ImportNote[]; drops: Drops } {
-  const drops: Drops = {}
-  const notes = rows.map((row): ImportNote => {
-    if (row.type !== 'prompt' && row.type !== 'note')
-      bump(drops, `type "${row.type}" imported as a note`)
-    if (row.metadata && Object.keys(row.metadata).length > 0) bump(drops, 'metadata dropped')
-    const scope = row.project_scope?.trim() || null
-    const labels = [...(row.tags ?? []), ...(scope ? [`project:${scope}`] : [])]
-    const created = Date.parse(row.created_at)
-    const edited = Date.parse(row.updated_at)
-    return {
-      source: `summitflow:${row.id}`,
-      kind: row.type === 'prompt' ? 'prompt' : 'note',
-      title: row.title ?? '',
-      body: row.content ?? '',
-      pinned: Boolean(row.pinned),
-      archived: false,
-      scope,
-      labels,
-      items: [],
-      createdAt: created,
-      editedAt: Number.isFinite(edited) ? edited : created,
-      files: [],
-    }
-  })
-  return { notes, drops }
 }
 
 export interface ImportCounts {
