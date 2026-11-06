@@ -1414,7 +1414,6 @@ describe('hub', () => {
         store: initStore(join(dir, 'catalog.db')),
         events: new EventBus(),
         projects: new ProjectProvider({
-          summitflowUrl: null,
           localFile: join(dir, 'projects.json'),
         }),
         projectRoots: new Map(),

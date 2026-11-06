@@ -61,7 +61,7 @@ Commands:
   tools add <slug> <name> -- <argv...>
   tools default|enable|disable <slug>
   tools rm <slug>
-  projects [--refresh]          project list (SummitFlow, else local)
+  projects [--refresh]          project list (registry, else local)
   hosts                         remote hosts this Tether federates, with link state
   fleet identity ROLE           show the public enrollment key and code (full|worker)
   fleet enroll PUBLIC_FILE      ask the owner to approve a machine

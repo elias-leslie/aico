@@ -17,7 +17,6 @@ it('keeps serving locally, reports a failed link and retries after fleet start t
     TETHER_RUNTIME_DIR: join(root, 'tether'),
     XDG_CONFIG_HOME: join(root, 'config'),
     AICO_FLEET_CONFIG: join(root, 'fleet.json'),
-    TETHER_SUMMITFLOW_URL: 'off',
     TETHER_RECONCILE: 'off',
     AICO_TASKS_DB: '/nonexistent/tasks.db',
   }

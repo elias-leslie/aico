@@ -20,7 +20,6 @@ let daemon: RunningDaemon
 
 // Never observe, adopt or stop real tmux servers from a unit test.
 const TEST_ENV = {
-  TETHER_SUMMITFLOW_URL: 'off',
   AICO_TASKS_DB: '/nonexistent/aico/tasks.db',
   TETHER_RECONCILE: 'off',
   HOME: '/nonexistent',
@@ -70,7 +69,6 @@ it('keeps two full Tethers from recursively federating peer session lists', asyn
         store: daemon.store,
         events: daemon.events,
         projects: new ProjectProvider({
-          summitflowUrl: null,
           localFile: join(dir, 'projects.json'),
         }),
         projectRoots: new Map(),
@@ -149,7 +147,7 @@ describe('control socket', () => {
     expect((await call('DELETE', '/v1/health')).status).toBe(405)
   })
 
-  it('serves the local project list when SummitFlow is off', async () => {
+  it('serves the local project list when the registry is empty', async () => {
     const projects = await call('GET', '/v1/projects')
     expect(projects.body).toMatchObject({ source: 'local', projects: [] })
   })
@@ -177,7 +175,7 @@ describe('projects API', () => {
     expect((await call('GET', '/v1/projects?refresh=1')).body).toMatchObject({ projects: [] })
   })
 
-  it("marks SummitFlow's active project when it is listed", async () => {
+  it("marks st's active project when it is listed", async () => {
     await daemon.close()
     const pointer = join(dir, 'active-project.json')
     daemon = await startDaemon(paths, { ...TEST_ENV, TETHER_ACTIVE_PROJECT_FILE: pointer })

@@ -1,56 +1,20 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import {
-  ProjectProvider,
-  parseSummitFlowProjects,
-  readLocalProjects,
-  summitflowTokenHeaders,
-  summitflowUrlFromEnv,
-} from './projects'
+import { ProjectProvider, readLocalProjects } from './projects'
 
-const rows = [
-  { id: 'aico', name: 'Aico', root_path: '/home/demo/projects/aico', lifecycle: 'active' },
-  { id: 'old', name: 'Old', root_path: '/srv/old', lifecycle: 'archived' },
-  { id: 'bad', name: 'Bad', root_path: 'relative' },
-  {
-    id: 'agent-hub',
-    name: 'Agent Hub',
-    root_path: '/home/demo/projects/agent-hub/',
-    lifecycle: 'active',
-  },
-]
-
-describe('parseSummitFlowProjects', () => {
-  it('keeps valid, non-archived projects sorted by id', () => {
-    expect(parseSummitFlowProjects(rows)).toEqual([
-      {
-        id: 'agent-hub',
-        name: 'Agent Hub',
-        root: '/home/demo/projects/agent-hub/',
-        lifecycle: 'active',
-      },
-      { id: 'aico', name: 'Aico', root: '/home/demo/projects/aico', lifecycle: 'active' },
-    ])
-    expect(() => parseSummitFlowProjects({ items: [] })).toThrow()
-  })
-})
-
-describe('ProjectProvider registry source', () => {
-  it('serves the registry once it has projects, and falls back to SummitFlow while it has none', async () => {
+describe('ProjectProvider', () => {
+  it('serves the registry once it has projects, and the local list while it has none', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-projects-'))
+    const localFile = join(dir, 'projects.json')
+    writeFileSync(localFile, JSON.stringify([{ id: 'home', root: dir }]))
     let registry: { id: string; name: string; root: string }[] = []
-    let asked = 0
-    const provider = new ProjectProvider({
-      registry: () => registry,
-      summitflowUrl: 'http://127.0.0.1:8001/api/projects',
-      localFile: '/nonexistent/projects.json',
-      fetchJson: async () => {
-        asked += 1
-        return rows
-      },
+    const provider = new ProjectProvider({ registry: () => registry, localFile })
+    expect(await provider.list({ refresh: true })).toMatchObject({
+      source: 'local',
+      projects: [{ id: 'home', root: dir }],
     })
-    expect((await provider.list({ refresh: true })).source).toBe('summitflow')
     registry = [
       { id: 'zeta', name: 'Zeta', root: '/srv/zeta' },
       { id: 'aico', name: 'Aico', root: '/srv/aico' },
@@ -59,24 +23,51 @@ describe('ProjectProvider registry source', () => {
     const list = await provider.list({ refresh: true })
     expect(list.source).toBe('registry')
     expect(list.projects.map((project) => project.id)).toEqual(['aico', 'zeta'])
-    expect(asked).toBe(1)
   })
 
-  it('falls back when the registry cannot be read', async () => {
+  it('caches the registry for its TTL', async () => {
+    let now = 0
+    let reads = 0
     const provider = new ProjectProvider({
       registry: () => {
-        throw new Error('locked')
+        reads += 1
+        return [{ id: 'aico', name: 'Aico', root: '/srv/aico' }]
       },
-      summitflowUrl: 'http://x',
       localFile: '/nonexistent/projects.json',
-      fetchJson: async () => rows,
+      ttlMs: 100,
+      now: () => now,
     })
-    expect((await provider.list()).source).toBe('summitflow')
+    await provider.list()
+    await provider.list()
+    expect(reads).toBe(1)
+    now = 200
+    await provider.list()
+    expect(reads).toBe(2)
   })
-})
 
-describe('ProjectProvider', () => {
-  it('caches SummitFlow, serves the cache while it is down, then falls back to local', async () => {
+  it('falls back to the local list when the registry cannot be read, with no network fetch', async () => {
+    const realFetch = globalThis.fetch
+    let fetched = 0
+    globalThis.fetch = (async () => {
+      fetched += 1
+      throw new Error('no network')
+    }) as typeof fetch
+    try {
+      const provider = new ProjectProvider({
+        registry: () => {
+          throw new Error('locked')
+        },
+        localFile: '/nonexistent/projects.json',
+      })
+      expect(await provider.list()).toMatchObject({ source: 'local', projects: [] })
+      expect(fetched).toBe(0)
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+
+  it('reads nothing from a missing local file and skips roots that are not directories', () => {
+    expect(readLocalProjects('/nonexistent/projects.json')).toEqual([])
     const dir = mkdtempSync(join(tmpdir(), 'tether-projects-'))
     const localFile = join(dir, 'projects.json')
     writeFileSync(
@@ -86,60 +77,6 @@ describe('ProjectProvider', () => {
         { id: 'gone', root: '/nonexistent/x' },
       ]),
     )
-    let now = 0
-    let calls = 0
-    let up = true
-    const provider = new ProjectProvider({
-      summitflowUrl: 'http://127.0.0.1:8001/api/projects',
-      localFile,
-      ttlMs: 100,
-      now: () => now,
-      fetchJson: async () => {
-        calls += 1
-        if (!up) throw new Error('down')
-        return rows
-      },
-    })
-    expect((await provider.list()).source).toBe('summitflow')
-    expect((await provider.list()).source).toBe('summitflow')
-    expect(calls).toBe(1)
-    now = 200
-    up = false
-    const cached = await provider.list()
-    expect(cached.source).toBe('summitflow-cache')
-    expect(cached.projects).toHaveLength(2)
-
-    const local = new ProjectProvider({
-      summitflowUrl: 'http://x',
-      localFile,
-      fetchJson: async () => {
-        throw new Error('down')
-      },
-    })
-    expect(await local.list()).toMatchObject({
-      source: 'local',
-      projects: [{ id: 'home', root: dir }],
-    })
-  })
-
-  it('reads nothing from a missing local file and honours TETHER_SUMMITFLOW_URL=off', () => {
-    expect(readLocalProjects('/nonexistent/projects.json')).toEqual([])
-    expect(summitflowUrlFromEnv({ TETHER_SUMMITFLOW_URL: 'off' })).toBeNull()
-    expect(summitflowUrlFromEnv({})).toBe('http://127.0.0.1:8001/api/projects')
-  })
-})
-
-describe('summitflowTokenHeaders', () => {
-  it('sends the owner token, else the agent token, else nothing', () => {
-    const home = mkdtempSync(join(tmpdir(), 'tether-token-'))
-    expect(summitflowTokenHeaders({}, home)).toEqual({})
-    mkdirSync(join(home, '.config/agent-tokens'), { recursive: true })
-    writeFileSync(join(home, '.config/agent-tokens/summitflow'), 'agent-s3cret\n')
-    expect(summitflowTokenHeaders({}, home)).toEqual({ 'X-SummitFlow-Agent-Token': 'agent-s3cret' })
-    const ownerFile = join(home, 'owner')
-    writeFileSync(ownerFile, 'owner-s3cret\n')
-    expect(summitflowTokenHeaders({ SUMMITFLOW_OWNER_TOKEN_FILE: ownerFile }, home)).toEqual({
-      'X-SummitFlow-Owner-Token': 'owner-s3cret',
-    })
+    expect(readLocalProjects(localFile).map((project) => project.id)).toEqual(['home'])
   })
 })

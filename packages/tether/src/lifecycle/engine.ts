@@ -197,7 +197,7 @@ interface EngineConfig {
   events: EventBus | null
   /** Base environment the server allow-list filters (the daemon's own). */
   env: NodeJS.ProcessEnv
-  /** Resolve a project id to its root (SummitFlow/local provider cache). */
+  /** Resolve a project id to its root (registry/local provider cache). */
   projectRoot: (projectId: string) => string | null
   /** The desktop session's current graphical variables; they win over `env`. */
   graphicalEnv?: () => Record<string, string>

@@ -38,7 +38,7 @@ def main():
         'AICO_SYNC_SOCKET': str(runtime / 'sync.sock'), 'TETHER_INSTANCE': 'recovery',
         'TETHER_SOCKET': str(runtime / 'control.sock'), 'TETHER_RUNTIME_DIR': str(runtime),
         'TETHER_STATE_DIR': str(root / 'tether'), 'TETHER_RECONCILE': 'off',
-        'TETHER_SUMMITFLOW_URL': 'off', 'AICO_FLEET_CONFIG': str(root / 'absent-fleet'),
+        'AICO_FLEET_CONFIG': str(root / 'absent-fleet'),
         'AICO_PORTFOLIO_URL': 'off', 'MAINTENANCE_ENABLED': '0',
         'AICO_AGY_PATH': '/bin/false', 'AICO_PHONE_DEVICES_SEED': str(root / 'absent-devices'),
     }

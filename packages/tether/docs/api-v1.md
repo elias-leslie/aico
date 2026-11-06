@@ -418,18 +418,16 @@ There is no `aider` row, on purpose: Aider isn't installed and no session has ru
 
 `GET /v1/projects` (query `refresh=1` bypasses the cache) returns `{source, fetchedAt, activeProjectId, projects: [{id, name, root, lifecycle, current}]}`.
 
-`activeProjectId` and `current` *(post-cutover)* name SummitFlow's persisted active project (`st projects active`), read from its pointer file `~/.local/share/st/active-project.json` on every request. It is null, and every `current` false, when the file is absent or malformed or names a project that is not listed. `TETHER_ACTIVE_PROJECT_FILE` overrides the path; `off` ignores it. Changing the pointer publishes no event.
+`activeProjectId` and `current` *(post-cutover)* name st's persisted active project (`st projects active`), read from its pointer file `~/.local/share/st/active-project.json` on every request. It is null, and every `current` false, when the file is absent or malformed or names a project that is not listed. `TETHER_ACTIVE_PROJECT_FILE` overrides the path; `off` ignores it. Changing the pointer publishes no event.
 
 `source` is one of:
 
 - `registry`: the projects registry (`aico projects`, `tasks.db`), read on every call and cached for 30 s, once it has projects. Retired projects are excluded. It is the source whenever it has projects, so `POST /v1/projects` answers `409 projects_managed_by_registry`: use `aico projects register`.
-- `summitflow`: from SummitFlow's `GET http://127.0.0.1:8001/api/projects` over loopback with no token, cached for 30 s. Archived projects are excluded.
-- `summitflow-cache`: SummitFlow is unreachable, so the last good answer is served.
-- `local`: SummitFlow is not installed or not reachable and there is no cache. The list comes from `~/.config/tether/projects.json`, a list of `{id, name?, root}`; entries whose roots are not directories are skipped.
+- `local`: the registry has no projects or cannot be read. The list comes from `~/.config/tether/projects.json`, a list of `{id, name?, root}`; entries whose roots are not directories are skipped.
 
-`TETHER_SUMMITFLOW_URL` overrides the URL. Set it to `off` to disable SummitFlow. `refresh=1` re-reads `projects.json` in local mode.
+`refresh=1` re-reads `projects.json` in local mode.
 
-`POST /v1/projects` *(3a)* with `{id, root, name?}` registers a project in local mode: it appends to `projects.json` atomically (temp file and rename, mode 0600), refreshes the list, returns `201 {id, name, root, lifecycle: null}` and publishes `projects.changed`. Errors: `400 invalid_project_id` (`[A-Za-z0-9][A-Za-z0-9._-]{0,127}`), `400 invalid_project_root` (not an absolute directory), `409 project_exists`, `409 local_projects_unreadable`, and `409 projects_managed_by_summitflow` when the source is SummitFlow (register the project there).
+`POST /v1/projects` *(3a)* with `{id, root, name?}` registers a project in local mode: it appends to `projects.json` atomically (temp file and rename, mode 0600), refreshes the list, returns `201 {id, name, root, lifecycle: null}` and publishes `projects.changed`. Errors: `400 invalid_project_id` (`[A-Za-z0-9][A-Za-z0-9._-]{0,127}`), `400 invalid_project_root` (not an absolute directory), `409 project_exists`, `409 local_projects_unreadable`, and `409 projects_managed_by_registry` when the source is the registry.
 
 ## Asks *(post-cutover)*
 

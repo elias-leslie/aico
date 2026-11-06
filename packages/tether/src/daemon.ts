@@ -68,7 +68,7 @@ import { startMemoryGuard } from './memory-guard'
 import { ModelNotices, readModelNoticeState } from './model-notices'
 import { ModelWatch, readAlternates, readWatchEntries, worktreeFacts } from './model-switch'
 import { nodeFileTail, nodeProcFs } from './proc-fs'
-import { activeProjectFileFromEnv, ProjectProvider, summitflowUrlFromEnv } from './projects'
+import { activeProjectFileFromEnv, ProjectProvider } from './projects'
 import { Continuity } from './reboot'
 import { Recovery, runCommand } from './recovery'
 import { createTetherServer } from './server'
@@ -150,7 +150,6 @@ export async function startDaemon(
   const events = new EventBus()
   const projects = new ProjectProvider({
     registry: () => registryProjects(env),
-    summitflowUrl: summitflowUrlFromEnv(env),
     localFile: paths.localProjectsFile,
   })
   const projectRoots = new Map<string, string>()

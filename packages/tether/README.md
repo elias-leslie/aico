@@ -14,7 +14,7 @@ Tether serves a versioned HTTP API on a private Unix socket (`$XDG_RUNTIME_DIR/t
 
 **Status:** early release (v0.1.0, API v1). In daily use on the author's workstation since October 2026, where `tether@default` owns every Aico session ([cutover retrospective](../../docs/history/cutover-log-2026-10-11.md)). Aico web is a client: it keeps only its views (panes, layout and project display settings) and requires API v1 or later.
 
-Tether's project list comes from SummitFlow, the author's workspace tool, when it answers on `http://127.0.0.1:8001/api/projects` (override with `TETHER_SUMMITFLOW_URL`, or set it to `off`). Otherwise Tether reads a local list at `~/.config/tether/projects.json`, so it works without SummitFlow. The original migration plan is in [docs/history/migration-plan.md](../../docs/history/migration-plan.md).
+Tether's project list comes from Aico's project registry (`aico projects`) once it has projects. Otherwise Tether reads a local list at `~/.config/tether/projects.json`. The original migration plan is in [docs/history/migration-plan.md](../../docs/history/migration-plan.md).
 
 ## Requirements
 

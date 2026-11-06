@@ -295,7 +295,7 @@ export interface TetherProject {
   id: string
   name: string
   root: string
-  /** SummitFlow's active project (`st projects active`); absent from older Tether. */
+  /** st's active project (`st projects active`); absent from older Tether. */
   current?: boolean
 }
 

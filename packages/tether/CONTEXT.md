@@ -85,7 +85,7 @@ A registry entry that defines what a session launches: the agent CLI argv, its p
 _Avoid_: TUI, mode, agent
 
 **Project**:
-The working directory and identity a session starts in. It comes from SummitFlow when SummitFlow is installed.
+The working directory and identity a session starts in. It comes from Aico's project registry (`aico projects`), else the local list.
 _Avoid_: Workspace
 
 **Owner** (retired):

@@ -47,7 +47,6 @@ beforeEach(async () => {
   })
   daemon = await startDaemon(paths, {
     TETHER_RECONCILE: 'off',
-    TETHER_SUMMITFLOW_URL: 'off',
     AICO_TASKS_DB: '/nonexistent/tasks.db',
     HOME: '/nonexistent',
   })
