@@ -653,7 +653,7 @@ export class Placement {
   restore(requestId: string): Promise<PlaceResult | null> {
     const intent = this.intents.get(requestId)
     return intent
-      ? this.place(requestId, intent.needs, DEFAULT_POOL, intent.host)
+      ? this.place(requestId, intent.needs, DEFAULT_POOL, intent.host, true)
       : Promise.resolve(null)
   }
 
@@ -1067,9 +1067,18 @@ export class Placement {
    * and the pool is not used. Reservations are per host, whatever pool placed
    * them. A request already placed (a retry) goes to the same host without a
    * new reservation; one naming a different host than it holds is refused.
+   * A known root without a booking (ended, or its agent exited) is likewise
+   * sent there unjudged on a create, whose own answer decides; only `rebook`
+   * (restore and recovery) judges and reserves it on that host again.
    * Call `done()` once the create has answered, whatever the answer.
    */
-  place(requestId: string, needs: Needs, pool = DEFAULT_POOL, host?: string): Promise<PlaceResult> {
+  place(
+    requestId: string,
+    needs: Needs,
+    pool = DEFAULT_POOL,
+    host?: string,
+    rebook = false,
+  ): Promise<PlaceResult> {
     return this.locked(async () => {
       const config = this.config()
       let order: string[]
@@ -1091,15 +1100,15 @@ export class Placement {
         const name = known ?? LOCAL_HOST
         if (host !== undefined && name !== host)
           return { kind: 'placed_elsewhere', host: name, verdicts: [] } as const
-        if (existing)
+        if (existing || !rebook)
           return {
             kind: 'placed',
             host: name === LOCAL_HOST ? null : name,
             verdicts: [],
             done: () => {},
           } as const
-        // A retained root without a booking must be judged and reserved on
-        // that same host. Knowing its identity alone reserves no resources.
+        // Restoring a retained root without a booking judges and reserves it
+        // on that same host. Knowing its identity alone reserves no resources.
         order = [name]
       }
       const where =

@@ -59,6 +59,8 @@ interface Harness {
   respawn: Mock<(id: string) => Promise<RespawnResult>>
   ensure: Mock<(id: string) => Promise<boolean>>
   sleep: (ms: number) => Promise<void>
+  /** Runs inside the engine's conversation scan, while recovery awaits it. */
+  duringScan: (() => Promise<void>) | null
 }
 
 function harness(): Harness {
@@ -83,6 +85,7 @@ function harness(): Harness {
     release: 'released',
     running: [],
     paneExitedAt: null,
+    duringScan: null,
     systemState: 'running',
     journal: '',
     kernel: '',
@@ -105,7 +108,10 @@ function harness(): Harness {
     lastFailure: () => undefined,
     notify: () => {},
     paneExitedAt: () => h.paneExitedAt,
-    runningConversations: async () => h.running,
+    runningConversations: async () => {
+      await h.duringScan?.()
+      return h.running
+    },
     // Only the session's own pane scope has a marker.
     agentExitMarker: (scopeUnit) => (scopeUnit === `tmux-spawn-${id}.scope` ? h.marker : null),
     agentExitMarkers: () => [...h.markers].map(([scopeUnit, at]) => ({ scopeUnit, at })),
@@ -358,6 +364,27 @@ describe('crash recovery', () => {
     await h.recovery.inspect(row(h), 'running', PANE_PID, 9)
     expect(sessions(h)).toMatchObject([{ state: 'recovered' }])
     expect(h.respawn).toHaveBeenCalledTimes(launches)
+  })
+
+  it('a tick that waited while the observer settled a launched resume neither respawns nor finishes twice', async () => {
+    await agentKilled(h)
+    // An earlier launch is waiting to be retried (its entry was not ready).
+    const internals = h.recovery as unknown as {
+      records: Map<string, { launchedAt?: number }>
+      history: unknown[]
+    }
+    const record = internals.records.get(h.id)
+    if (record) record.launchedAt = h.clock.now
+    h.duringScan = async () => {
+      h.duringScan = null
+      // The resumed agent appears; the observer pass sees it first.
+      h.agent = { pid: 9, resumeId: RESUME }
+      await h.recovery.inspect(row(h), 'running', PANE_PID, 9)
+    }
+    await runDue(h)
+    expect(sessions(h)).toMatchObject([{ state: 'recovered' }])
+    expect(h.respawn).not.toHaveBeenCalled()
+    expect(internals.history).toHaveLength(1)
   })
 
   it('does not resume a conversation another session is already running', async () => {

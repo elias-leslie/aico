@@ -11,7 +11,7 @@ export async function restoreSessionReservation(
   if (!root) return needs ? 'the session has no root to reserve' : null
   if (!context.placement) return needs ? 'placement is unavailable' : null
   const result = needs
-    ? await context.placement.place(root.requestId, needs, undefined, LOCAL_HOST)
+    ? await context.placement.place(root.requestId, needs, undefined, LOCAL_HOST, true)
     : await context.placement.restore(root.requestId)
   // A root created without placement has no needs to restore. Older missing
   // bookings can be seeded once through recovery resume's explicit needs.

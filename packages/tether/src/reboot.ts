@@ -124,7 +124,9 @@ export class Continuity {
   private markPlanned: () => void = () => {}
   private markFinished: () => void = () => {}
   /** Settles once this start knows which sessions it restores (they are then
-   * awaiting restore), and once every restore has finished or failed. */
+   * awaiting restore), and once the first full restore pass is through: each
+   * session restored, failed or retrying (still awaiting restore). A session
+   * that stays pending must not hold back what waits on the pass. */
   readonly restorePlanned = new Promise<void>((resolve) => {
     this.markPlanned = resolve
   })
@@ -369,6 +371,7 @@ export class Continuity {
         writeJsonFile(this.reportPath, report)
       }
       queue = retry
+      this.markFinished()
       if (queue.length) await this.sleep(RESTORE_RETRY_MS)
     }
     report.finishedAt = queue.length ? null : this.now()

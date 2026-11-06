@@ -805,9 +805,11 @@ export class Recovery {
         panePid !== null
       ) {
         const live = await this.engine.agentIn(panePid, row.tool, row.id)
+        if (this.unsettled(record, 'held', 'waiting')) return
         if (live?.pid === agentPid && live.resumeId === record.resumeId) {
           const reservation = await restoreSessionReservation(this.context, row.id)
-          if (this.records.get(row.id) !== record) return
+          // A recovery step that ran meanwhile may have settled the record.
+          if (this.unsettled(record, 'held', 'waiting')) return
           if (reservation)
             this.update(record, {
               state: 'waiting',
@@ -1155,6 +1157,8 @@ export class Recovery {
     const pane = await this.engine.currentPane(row).catch(() => null)
     const agent = pane ? await this.engine.agentIn(pane.pid, row.tool, row.id) : null
     const reservation = await restoreSessionReservation(this.context, row.id)
+    // The observer pass may have settled the record while this step waited.
+    if (this.unsettled(record, 'waiting')) return
     if (reservation) {
       this.update(record, {
         state: 'waiting',
@@ -1173,7 +1177,7 @@ export class Recovery {
     }
     const elsewhere = await this.conversationElsewhere(record)
     // The observer pass that answered may have settled the record meanwhile.
-    if (this.records.get(record.id) !== record) return
+    if (this.unsettled(record, 'waiting')) return
     if (elsewhere) {
       this.drop(
         record,
@@ -1186,6 +1190,7 @@ export class Recovery {
     const { synopsis, detail, detailFile } = await this.gather(record, row, now)
     mkdirSync(this.recoveryDir, { recursive: true, mode: 0o700 })
     await writeFile(detailFile, detail, { mode: 0o600 })
+    if (this.unsettled(record, 'recovering')) return
     record.detailFile = detailFile
     let outcome: LaunchOutcome
     try {
@@ -1208,6 +1213,7 @@ export class Recovery {
     }
     this.update(record, { launchedAt: this.now() })
     const confirmed = await this.confirm(record)
+    if (this.unsettled(record, 'recovering')) return
     if (confirmed.kind === 'retry') {
       this.update(record, {
         state: 'waiting',
@@ -1229,7 +1235,15 @@ export class Recovery {
     this.finish(record, getWidget(row.id) ?? row)
   }
 
+  /** The record is no longer this one in one of `states`: another step
+   * (observer pass, tick, End, dismiss) settled it during an await. */
+  private unsettled(record: CrashRecord, ...states: RecoveryState[]): boolean {
+    return this.records.get(record.id) !== record || !states.includes(record.state)
+  }
+
   private finish(record: CrashRecord, row: WidgetRow): void {
+    // Once only: a late confirm and an observer pass can both see the agent.
+    if (record.state === 'recovered') return
     const recoveredAt = this.now()
     if (!(record.readiness && record.cause === 'entry-unavailable'))
       this.history.push({

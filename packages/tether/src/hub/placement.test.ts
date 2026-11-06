@@ -439,14 +439,29 @@ describe('placement', () => {
     await placement.place('same', needs(1))
     expect(await placement.place('same', needs(1))).toMatchObject({ kind: 'placed', host: null })
     world.existing.elsewhere = 'vm'
-    expect(await placement.place('elsewhere', needs(1))).toMatchObject({ host: 'vm' })
-    expect(placement.list()).toHaveLength(2)
+    expect(await placement.place('elsewhere', needs(100))).toMatchObject({
+      kind: 'placed',
+      host: 'vm',
+    })
+    expect(placement.list()).toHaveLength(1)
+  })
+
+  it('a repeat create for a known root without a booking is no capacity question', async () => {
+    const { world, placement } = setup(CONFIG, { admission: admission('red', 20) })
+    world.existing.gone = null
+    // An ended or exited root: the create's own answer (no-op or 410) decides.
+    expect(await placement.place('gone', needs(100))).toMatchObject({ kind: 'placed', host: null })
+    expect(placement.list()).toEqual([])
+    // Restore still judges it, so a full host refuses the rebooking.
+    expect(await placement.place('gone', needs(100), undefined, undefined, true)).toMatchObject({
+      kind: 'at_capacity',
+    })
   })
 
   it('rebooks a known root on its original host when its reservation vanished', async () => {
     const { world, placement } = setup(CONFIG)
     world.existing.recover = null
-    const booked = await placement.place('recover', needs(2, 1))
+    const booked = await placement.place('recover', needs(2, 1), undefined, undefined, true)
     expect(booked).toMatchObject({ kind: 'placed', host: null })
     if (booked.kind === 'placed') booked.done()
     expect(placement.list()).toMatchObject([

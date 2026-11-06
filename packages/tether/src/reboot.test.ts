@@ -222,6 +222,25 @@ describe('reboot agent readiness', () => {
     expect(h.launches.every((id) => id === RESUME)).toBe(true)
   })
 
+  it('settles restoreFinished after the first full pass while a session is still retrying', async () => {
+    h.exit = 75
+    let finished = false
+    let finishedWhileRetrying = false
+    service = continuity(async (ms) => {
+      now += ms
+      await new Promise((resolve) => setImmediate(resolve))
+      if (finished) finishedWhileRetrying = true
+      h.agent = true
+    })
+    void service.restoreFinished.then(() => {
+      finished = true
+    })
+    const report = await service.restoreAfterStart()
+    // Dead-shell cleanup waits on this; a pending session must not hold it.
+    expect(finishedWhileRetrying).toBe(true)
+    expect(report?.restored).toMatchObject([{ id: ID }])
+  })
+
   it('resumes a durable pending attempt after Tether restarts at a fallback shell', async () => {
     h.status = 'running'
     h.exit = 75
