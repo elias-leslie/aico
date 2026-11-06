@@ -101,6 +101,14 @@ async function pveSsh(rt: Runtime, key: string): Promise<string[]> {
     `${fields.user || 'root'}@${fields.hostname}`,
   ]
 }
+/**
+ * A stopped guest has nothing to read and counts as off, except a VM whose files the Proxmox host
+ * reads straight from its stopped disk (the guest agent is not needed): VM 180 is off between uses
+ * and its shutdown dump must still reach Drive.
+ */
+export function hostReadsStoppedDisk(type: string, parts: string[], via: string | null): boolean {
+  return type === 'qemu' && parts[2] === 'files' && via === 'agent'
+}
 async function proxmoxJob(
   rt: Runtime,
   state: BackupState,
@@ -131,6 +139,7 @@ async function proxmoxJob(
     if (!guest) throw new Error('The registered Proxmox guest is unavailable.')
     if (
       guest.status !== 'running' &&
+      !hostReadsStoppedDisk(guest.type, parts, target.searchParams.get('via')) &&
       (parts[2] === 'files' || state.copies[copyKey(source.id, 'drive')]?.snapshot)
     )
       return { id: source.id, paths: [], binds: [], dataAt: rt.now().toISOString(), offline: true }

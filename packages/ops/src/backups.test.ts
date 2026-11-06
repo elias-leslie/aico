@@ -15,7 +15,14 @@ import { join } from 'node:path'
 import { parseRow } from '@aico/status'
 import { openDatabase, snapshotDatabase } from '@aico/store'
 import { afterEach, expect, it, vi } from 'vitest'
-import { backupJob, copiedDataTime, payloadTime, prepareFolder, volumeJobs } from './backup-drive'
+import {
+  backupJob,
+  copiedDataTime,
+  hostReadsStoppedDisk,
+  payloadTime,
+  prepareFolder,
+  volumeJobs,
+} from './backup-drive'
 import { beginBootCapture, expiredCapture, nativeOperation, preserveNative } from './backup-native'
 import {
   backupRows,
@@ -862,4 +869,28 @@ it('shows the stopped external backup owner as off with its last good artifact d
       (e) => e.id === 'external/portfolio-ai-complete',
     )?.state,
   ).toBe('failed')
+})
+
+it('a stopped VM file source is read from its disk by the host; containers and whole guests are not', () => {
+  expect(hostReadsStoppedDisk('qemu', ['qemu', '180', 'files'], 'agent')).toBe(true)
+  expect(hostReadsStoppedDisk('lxc', ['lxc', '190', 'files'], 'pct')).toBe(false)
+  expect(hostReadsStoppedDisk('qemu', ['qemu', '180'], null)).toBe(false)
+})
+
+it('a copy read from a stopped VM is fresh, an unrefreshed one goes late, and neither is a failure', () => {
+  const c = cfg(),
+    fresh = new Date(now - 3600000).toISOString(),
+    stale = new Date(now - (c.schedule.freshDriveHours + 1) * 3600000).toISOString()
+  const row = (dataAt: string) =>
+    entry(
+      'vm',
+      'VM',
+      'drive',
+      { source: 'vm', target: 'drive', dataAt, observed: 'ok' },
+      c,
+      c.workstation,
+      now,
+    )
+  expect(row(fresh).state).toBe('ok')
+  expect(row(stale).state).toBe('warn')
 })
