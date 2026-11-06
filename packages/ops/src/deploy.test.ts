@@ -139,6 +139,18 @@ describe('unit selection from package cones', () => {
     expect(configApiVersion('x\nexport const API_VERSION = 31\n')).toBe(31)
     expect(configApiVersion('nothing')).toBeNull()
   })
+  it('every package the scheduler job commands run restarts it', () => {
+    // Jobs run web-server/scripts/aico, which dispatches to these bundles in the same release.
+    const script = ['scripts/aico', 'scripts/lib/aico-web.sh']
+      .map((file) => readFileSync(`${repo}/packages/web-server/${file}`, 'utf8'))
+      .join('\n')
+    const bundles = [...script.matchAll(/packages\/([a-z-]+)\b/g)].map((m) => m[1])
+    expect(bundles).toEqual(expect.arrayContaining(['checks', 'ops', 'web-server']))
+    for (const dir of new Set(bundles))
+      expect(pick([`packages/${dir}/src/x.ts`]).restart, dir).toContain('aico-jobs.service')
+    expect(pick(['packages/checks/src/publish.ts']).restart).toContain('aico-jobs.service')
+  })
+
   it('context and usage changes restart the scheduler that calls their CLI bundle', () => {
     expect(pick(['packages/context/src/db.ts']).restart).toContain('aico-jobs.service')
     expect(pick(['packages/usage/src/db.ts']).restart).toContain('aico-jobs.service')
