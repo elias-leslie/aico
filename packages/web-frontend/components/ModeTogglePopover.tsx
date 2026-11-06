@@ -29,6 +29,16 @@ export function ModeTogglePopover({
     )
   }, [buttonRef])
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      onClose()
+      buttonRef.current?.focus()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [buttonRef, onClose])
+
   return (
     <>
       <div

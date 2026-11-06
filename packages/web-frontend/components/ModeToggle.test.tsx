@@ -122,6 +122,25 @@ describe('ModeToggle', () => {
     })
   })
 
+  it('closes the mode menu on Escape and returns focus to the toggle', async () => {
+    render(
+      <ModeToggle
+        value="shell"
+        onChange={vi.fn()}
+        agentTools={[
+          mockTool({}),
+          mockTool({ id: 't2', name: 'Codex', slug: 'codex' }),
+        ]}
+      />,
+    )
+    const button = screen.getByTestId('mode-toggle')
+    fireEvent.click(button)
+    await screen.findByRole('menu')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(document.activeElement).toBe(button)
+  })
+
   it('disables agent entry when no agent tools are loaded yet', () => {
     const onChange = vi.fn()
     render(<ModeToggle value="shell" onChange={onChange} />)
