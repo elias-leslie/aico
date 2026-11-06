@@ -86,6 +86,7 @@ import {
   type MutationRejection,
   parseLabel,
   type RootControlOperations,
+  type RootHandlerState,
   type WidgetMutation,
   widgetMutationOperation,
 } from './lifecycle/root-control'
@@ -178,6 +179,9 @@ export interface LifecycleApiContext {
   wakes?: WakeService
   /** The remote hosts this Tether federates; absent in route-only tests. */
   hub?: Hub
+  /** Root-handler state shared by every router of this daemon (one
+   * serialization per request, whichever router took it). */
+  rootState?: RootHandlerState
   /** `host: "auto"` placement; absent in route-only tests. */
   placement?: Placement
   /** Lane reports; absent where Tether does not observe sessions. */
@@ -767,7 +771,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     (id) => getWidget(id) !== undefined,
   )
   const { store, events } = context
-  const rootHandler = createRootHandler(rootOperations(context))
+  const rootHandler = createRootHandler(rootOperations(context), undefined, context.rootState)
   const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
 
   router

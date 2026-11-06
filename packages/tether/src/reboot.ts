@@ -444,6 +444,9 @@ export class Continuity {
     { status: 'restored'; resumed: boolean } | { status: 'retry' | 'failed'; reason: string }
   > {
     const deadline = this.now() + CONFIRM_MS
+    // Like Recovery.confirm: a conversation id read too early (the agent has
+    // not opened the resumed one yet) is not the answer; poll to the deadline.
+    let other = false
     for (;;) {
       const row = getWidget(id)
       if (!row) return { status: 'failed', reason: 'session was ended' }
@@ -466,15 +469,13 @@ export class Continuity {
             : null
       if (agent && (resume === null || agent.resumeId === resume))
         return { status: 'restored', resumed: resume !== null }
-      if (agent)
-        return {
-          status: 'failed',
-          reason: 'a different conversation is running; it was left untouched',
-        }
+      other = agent !== null
       if (this.now() >= deadline)
         return {
           status: 'failed',
-          reason: 'no live agent with its conversation appeared within 2 minutes',
+          reason: other
+            ? 'a different conversation is running; it was left untouched'
+            : 'no live agent with its conversation appeared within 2 minutes',
         }
       await this.sleep(CONFIRM_POLL_MS)
     }

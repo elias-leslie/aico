@@ -1,7 +1,8 @@
 // `tether ask` flags and output for asks that want files.
 
 import { describe, expect, it } from 'vitest'
-import { askCreateBody, formatAsk } from './ask-cli'
+import { ASK_USAGE, askCreateBody, formatAsk, runAsk } from './ask-cli'
+import type { TetherPaths } from './config'
 
 const env = { AICO_WIDGET_ID: 'aico-widget-0123abcd' }
 const create = (...args: string[]) => askCreateBody(['Q?', ...args], env, '/x')
@@ -89,5 +90,30 @@ describe('formatAsk with files', () => {
     )
     expect(text).toContain('  file bbbbbbbbbbbb  a.pdf  application/pdf  12 B  (no path)')
     expect(text).toContain('when handled: tether ask done abcdefabcdef')
+  })
+})
+
+describe('tether ask <sub> --help', () => {
+  it('prints the usage and exits 0 instead of an unknown-option error', async () => {
+    for (const args of [
+      ['create', '--help'],
+      ['list', '-h'],
+      ['get', '--help'],
+    ]) {
+      const out: string[] = []
+      const err: string[] = []
+      const paths = { socket: '/nonexistent/tether.sock', instance: 'test' } as TetherPaths
+      const code = await runAsk(
+        { out: (text) => out.push(text), err: (text) => err.push(text) },
+        paths,
+        false,
+        args,
+        {},
+        '/tmp',
+      )
+      expect(code).toBe(0)
+      expect(err).toEqual([])
+      expect(out.join('')).toBe(ASK_USAGE)
+    }
   })
 })

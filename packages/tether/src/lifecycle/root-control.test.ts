@@ -27,6 +27,7 @@ import { LifecycleOwnerLock, type ManagedGateState } from './lifecycle-guard'
 import { sessionGeneration } from './owner-retirement'
 import {
   createRootHandler,
+  createRootHandlerState,
   isProjectRootPath,
   MAX_FRESH_PROMPT_BYTES,
   parseRootCreate,
@@ -85,27 +86,31 @@ describe('private root workload control', () => {
   const status = vi.fn(async (row: WidgetRow) =>
     running.has(row.id) ? ('running' as const) : ('uncertain' as const),
   )
-  const handle = createRootHandler(
-    {
-      available: () => available,
-      validate: (input) => input.projectRoot !== '/missing',
-      resumeOwner: (resumeSessionId) =>
-        resumeSessionId === '00000000-0000-4000-8000-0000000000aa' ? 'c0ffee01' : null,
-      launched: (widgetId, launchedBy) => {
-        recordLauncher(widgetId, launchedBy)
-      },
-      ensure,
-      status,
-      mutate: (widgetId, generation, mutation) =>
-        mutation.kind === 'coordinator'
-          ? coordinator(widgetId, generation, mutation.coordinator)
-          : title(widgetId, generation, mutation.label),
-      launchDeferral: (widgetId) => deferrals.get(widgetId) ?? null,
+  const shared = createRootHandlerState()
+  const operations: Parameters<typeof createRootHandler>[0] = {
+    available: () => available,
+    validate: (input) => input.projectRoot !== '/missing',
+    resumeOwner: (resumeSessionId) =>
+      resumeSessionId === '00000000-0000-4000-8000-0000000000aa' ? 'c0ffee01' : null,
+    launched: (widgetId, launchedBy) => {
+      recordLauncher(widgetId, launchedBy)
     },
-    RETRY_MS,
-  )
+    ensure,
+    status,
+    mutate: (widgetId, generation, mutation) =>
+      mutation.kind === 'coordinator'
+        ? coordinator(widgetId, generation, mutation.coordinator)
+        : title(widgetId, generation, mutation.label),
+    launchDeferral: (widgetId) => deferrals.get(widgetId) ?? null,
+  }
+  const handle = createRootHandler(operations, RETRY_MS, shared)
+  // A second router's handler of the same daemon (the peer-only one).
+  const peerHandle = createRootHandler(operations, RETRY_MS, shared)
+  /** When set, requests alternate between the two handlers. */
+  let alternate = false
+  let turn = 0
   const server = createServer((req, res) => {
-    void handle(req, res)
+    void (alternate && turn++ % 2 === 1 ? peerHandle : handle)(req, res)
   })
   beforeAll(async () => {
     registerBuiltinTuis()
@@ -1687,6 +1692,34 @@ describe('private root workload control', () => {
       status: 'ended',
       launch: null,
     })
+  })
+
+  it('serializes one request across both routers of a daemon', async () => {
+    // Two launches of one request never overlap, whichever router took each.
+    let inFlight = 0
+    let most = 0
+    const slow = async (widgetId: string) => {
+      inFlight += 1
+      most = Math.max(most, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      inFlight -= 1
+      running.add(widgetId)
+    }
+    ensure.mockImplementationOnce(slow).mockImplementationOnce(slow)
+    alternate = true
+    turn = 0
+    try {
+      const input = create('target-two-routers')
+      const results = await Promise.all([
+        call('/v1/roots', 'POST', input),
+        call('/v1/roots', 'POST', input),
+      ])
+      expect(results.map((result) => result.status)).toEqual([200, 200])
+      expect(results[0].body).toEqual(results[1].body)
+      expect(most).toBe(1)
+    } finally {
+      alternate = false
+    }
   })
 })
 

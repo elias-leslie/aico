@@ -200,6 +200,20 @@ describe('reboot agent readiness', () => {
     ])
     expect(h.respawn).not.toHaveBeenCalled()
   })
+  it('keeps confirming when an early probe still names another conversation', async () => {
+    h.agent = true
+    h.probe = { kind: 'running', pid: 123, resumeId: '5a7741ea-e6b1-4062-853b-0d9d2e03d549' }
+    service = continuity(async (ms) => {
+      now += ms
+      // The resumed conversation shows up on the next look.
+      h.probe = { kind: 'running', pid: 123, resumeId: RESUME }
+    })
+    const report = await service.restoreAfterStart()
+    expect(report?.failed).toEqual([])
+    expect(report?.restored).toMatchObject([{ id: ID, resumed: true }])
+    expect(h.respawn).not.toHaveBeenCalled()
+  })
+
   it('reports an entry that exited 78 as failed, never as a restored Pi', async () => {
     const report = await service.restoreAfterStart()
     expect(report?.restored).toEqual([])

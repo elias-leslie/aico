@@ -286,6 +286,11 @@ export async function runAsk(
   cwd: string,
 ): Promise<number> {
   const [sub, ...rest] = args
+  // `tether ask create --help` (any subcommand) is a request for the usage.
+  if (rest.includes('--help') || rest.includes('-h')) {
+    io.out(ASK_USAGE)
+    return 0
+  }
   let method = 'GET'
   let path: string
   let body: Record<string, unknown> | undefined

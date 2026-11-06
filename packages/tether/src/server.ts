@@ -13,6 +13,7 @@ import { HostAdmin, registerHostAdminRoutes } from './hub/host-admin'
 import type { Hub } from './hub/hub'
 import { getWidget } from './lifecycle/catalog'
 import { lifecycleStatus } from './lifecycle/engine'
+import { createRootHandlerState, type RootHandlerState } from './lifecycle/root-control'
 import { supportsBlankSlate } from './lifecycle/tui/blank-slate'
 import { isRootCreateTool, supportsInstructions } from './lifecycle/tui/registry'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
@@ -65,6 +66,8 @@ export interface ServerContext {
     origin?: string | null
   }
   hub?: Hub
+  /** Shared by both routers' root handlers; made here when absent. */
+  rootState?: RootHandlerState
   /** The session history (`/v1/history`); absent: the routes answer 404. */
   history?: History
 }
@@ -452,9 +455,12 @@ function buildRouter(context: ServerContext): Router {
 const RETIRED_DESKTOP_ROUTES = /^\/v1\/gui(?:\/|$)/
 
 export function createTetherServer(context: ServerContext): Server {
-  const router = buildRouter(context)
+  // One root-handler state for both routers: a peer's create and the hub's
+  // own for the same request serialize together.
+  const shared = { ...context, rootState: context.rootState ?? createRootHandlerState() }
+  const router = buildRouter(shared)
   // All peer lists and per-object requests stop here, including roots, runs and asks.
-  const localRouter = context.hub ? buildRouter({ ...context, hub: undefined }) : router
+  const localRouter = context.hub ? buildRouter({ ...shared, hub: undefined }) : router
   return createServer((request, response) => {
     if (RETIRED_DESKTOP_ROUTES.test(request.url?.split('?')[0] ?? '')) {
       sendError(response, new HttpError(410, 'windows_retired'))

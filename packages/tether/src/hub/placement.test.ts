@@ -947,6 +947,13 @@ describe('placement', () => {
     world.remote.n1 = 'exited'
     await placement.check(needs(1))
     expect(placement.list().map((item) => item.requestId)).toEqual(['n4'])
+    // Its own Tether brought the agent back: the hub books its needs again.
+    world.remote.n1 = 'live'
+    await placement.check(needs(1))
+    expect(placement.list().map((item) => item.requestId)).toEqual(['n4', 'n1'])
+    expect(placement.list().find((item) => item.requestId === 'n1')).toMatchObject({
+      state: 'held',
+    })
   })
 
   it('wakes a named sleeping VM like auto does, and names a room "local" host the same way', async () => {

@@ -645,16 +645,28 @@ const terminalAdmin = {
 } as const
 
 /** A root's `owner` is its stored origin, and `?origin=` filters the list. */
+/** What one Tether's root handlers share: every handler for this daemon
+ * (the hub's router and the peer-only one) serializes on the same keys. */
+export interface RootHandlerState {
+  // A failed or disconnected request retains its reservation. Subsequent calls
+  // reconcile that exact widget through Aico's existing launch gate.
+  pending: Map<string, Promise<void>>
+  // A peer may route back here (directly or through other workers). Carry
+  // visited handlers so real indirect roots remain visible without cycling.
+  rootListHop: string
+  deferredLaunches: Map<string, DeferredLaunch>
+}
+
+export function createRootHandlerState(): RootHandlerState {
+  return { pending: new Map(), rootListHop: randomUUID(), deferredLaunches: new Map() }
+}
+
 export function createRootHandler(
   operations: RootControlOperations,
   retryMs: number = DEFERRED_LAUNCH_RETRY_MS,
+  state: RootHandlerState = createRootHandlerState(),
 ) {
-  // A failed or disconnected request retains its reservation. Subsequent calls
-  // reconcile that exact widget through Aico's existing launch gate.
-  const pending = new Map<string, Promise<void>>()
-  // A peer may route back here (directly or through other workers). Carry
-  // visited handlers so real indirect roots remain visible without cycling.
-  const rootListHop = randomUUID()
+  const { pending, rootListHop, deferredLaunches } = state
   const serialize = async (key: string, action: () => Promise<void>) => {
     const prior = pending.get(key) ?? Promise.resolve()
     const next = prior.catch(() => {}).then(action)
@@ -666,8 +678,8 @@ export function createRootHandler(
     }
   }
   // A launch host admission deferred is tried again on its own, by the same
-  // path as repeating the create, until it starts or the root ends.
-  const deferredLaunches = new Map<string, DeferredLaunch>()
+  // path as repeating the create, until it starts or the root ends
+  // (`deferredLaunches`).
   const launchRoot = async (widgetId: string, input: RootCreateRequest) => {
     // Do not disclose the launch error or prompt; identity/state is the
     // reconciliation receipt, including an ambiguous launch outcome.

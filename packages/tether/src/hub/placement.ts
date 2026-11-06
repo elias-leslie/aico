@@ -703,7 +703,8 @@ export class Placement {
 
   /** Release the reservations whose root has definitely ended, and those on
    * a host taken out of hosts.json (it can take no launch, so its room counts
-   * for nothing). A host only briefly missing keeps them. */
+   * for nothing). A host only briefly missing keeps them. A remote root
+   * released when its agent exited is booked again once it is live. */
   private async reconcile(): Promise<void> {
     const held = this.reservations.filter((item) => item.state === 'held')
     const tracked = new Map(held.map((item) => [item.requestId, item]))
@@ -729,6 +730,14 @@ export class Placement {
     let changed = false
     targets.forEach((item, index) => {
       const fate = fates[index]
+      // A remote root whose agent came back (its own Tether restored it, with
+      // no hub placement step) holds its needs there again.
+      if (fate === 'live' && item.host !== LOCAL_HOST && !this.reservations.includes(item)) {
+        this.reservations.push({ ...item, at: this.now(), state: 'held' })
+        this.log(`rebooked ${item.requestId} on ${item.host} (its agent is live again)`)
+        changed = true
+        return
+      }
       if (fate === 'missing' || fate === 'ended' || fate === 'exited' || fate === 'retired') {
         const active = this.reservations.indexOf(item)
         if (active >= 0) {
