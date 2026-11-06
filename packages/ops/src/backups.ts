@@ -17,6 +17,7 @@ import {
   entries,
   homePath,
   migrated,
+  runPeriodMinutes,
 } from './backup-plan'
 import { retainDrive, snapshotSweep, verifyDrive } from './backup-retention'
 import {
@@ -559,8 +560,15 @@ export async function scheduledEntries(
     const job = jobs.find(
       (j) => j.kind === `backups-${item.target}${machine === cfg.workstation ? '' : '-' + machine}`,
     )?.state
-    item.nextRun = job ? new Date(job.nextRun).toISOString() : null
     item.running = !!job?.leaseId && !!job.leaseExpires && job.leaseExpires > Date.now()
+    // While the job runs, the scheduler still holds the due time it started at; posting that would
+    // show the row late from the run's first report until the next one. Due a period after now,
+    // as the scheduler sets it when the run completes.
+    const due =
+      job && item.running && item.target !== 'external'
+        ? Math.max(job.nextRun, Date.now() + runPeriodMinutes(item.target, cfg) * 60000)
+        : job?.nextRun
+    item.nextRun = due !== undefined ? new Date(due).toISOString() : null
   }
   return items
 }

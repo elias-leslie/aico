@@ -106,6 +106,14 @@ export interface BackupEntry {
   running: boolean
   machine: string
 }
+/** How often a target's backup job runs, in minutes (Drive: daily). */
+export function runPeriodMinutes(target: BackupTarget, cfg: BackupConfig): number {
+  return target === 'native'
+    ? cfg.schedule.localMinutes
+    : target === 'append'
+      ? cfg.schedule.appendMinutes
+      : 1440
+}
 export function entry(
   source: string,
   name: string,
@@ -134,12 +142,7 @@ export function entry(
       : offline
         ? 'Machine is off; its last copy covers the unchanged data.'
         : `${fresh ? 'Restorable data is' : 'Restorable data is late:'} ${age < 3600000 ? Math.floor(age / 60000) + ' min' : Math.floor(age / 3600000) + ' h'} old.`
-  const period =
-    target === 'native'
-      ? cfg.schedule.localMinutes
-      : target === 'append'
-        ? cfg.schedule.appendMinutes
-        : 1440
+  const period = runPeriodMinutes(target, cfg)
   const attempted = copy?.attemptedAt && Date.parse(copy.attemptedAt)
   const nextRun = new Date((attempted || now) + period * 60000).toISOString()
   return {

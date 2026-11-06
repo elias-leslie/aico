@@ -161,10 +161,25 @@ it('gets next-run and running state from the real scheduler; unavailable is unkn
     ]),
     err: '',
   }))
+  const before = Date.now()
   const list = await scheduledEntries(s, c, c.workstation, run)
-  expect(list.find((r) => r.target === 'drive')?.nextRun).toBe(new Date(now).toISOString())
-  expect(list.find((r) => r.target === 'drive')?.running).toBe(true)
+  // A running job's due time is the one it started at; the row is due a period after now instead.
+  const drive = list.find((r) => r.target === 'drive')
+  expect(Date.parse(drive?.nextRun as string)).toBeGreaterThanOrEqual(before + 1440 * 60000)
+  expect(drive?.running).toBe(true)
   expect(list.find((r) => r.target === 'append')?.nextRun).toBeNull()
+  const idleRun = async (_argv: string[]) => ({
+    code: 0,
+    out: JSON.stringify([
+      { kind: 'backups-drive', state: { nextRun: now, leaseId: null, leaseExpires: null } },
+    ]),
+    err: '',
+  })
+  const idle = (await scheduledEntries(s, c, c.workstation, idleRun)).find(
+    (r) => r.target === 'drive',
+  )
+  expect(idle?.nextRun).toBe(new Date(now).toISOString())
+  expect(idle?.running).toBe(false)
 })
 const view = (id: string, hours: number, extra: Partial<RetentionView> = {}): RetentionView => ({
   id,
