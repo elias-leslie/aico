@@ -115,6 +115,7 @@ function read(record: Record<string, unknown>, state: State, wantEvents: boolean
   const usage = obj(message.usage) ? usageOf(message.usage as Record<string, unknown>) : undefined
   if (usage) {
     fold.usage = messageId && messageId === state.messageId ? growth(usage, state.usage) : usage
+    fold.context = usage.input + usage.cacheRead + usage.cacheWrite
     state.messageId = messageId ?? null
     state.usage = usage
   }

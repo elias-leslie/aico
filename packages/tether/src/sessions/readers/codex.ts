@@ -69,6 +69,9 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
     if (kind === 'token_count') {
       const total = obj(obj(payload.info)?.total_token_usage)
       if (total) fold.usageTotal = totalOf(total)
+      // The last call's input (cached part included) is the context it sent.
+      const last = obj(obj(payload.info)?.last_token_usage)
+      if (last) fold.context = num(last.input_tokens)
     } else if (kind === 'task_started') fold.outcome = null
     else if (kind === 'task_complete') fold.outcome = 'completed'
     else if (kind === 'turn_aborted') fold.outcome = 'aborted'

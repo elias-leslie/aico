@@ -25,6 +25,9 @@ export interface Fold {
   usage?: Usage
   /** The tool's running total for the whole conversation: replaces the row's. */
   usageTotal?: Usage
+  /** Prompt tokens of this record's model call (cached parts included): how full the
+   * conversation's context was then. The latest one replaces the row's. */
+  context?: number
   toolCalls?: number
   /** Paths the record wrote. */
   files?: string[]

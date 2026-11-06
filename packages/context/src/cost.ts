@@ -49,9 +49,13 @@ export interface CostDelivery {
   budget: number | null
   missing: { id: string; reason: string }[]
   observed: boolean
+  /** The session's context fill as last observed (prompt tokens of its latest model
+   * call, from the provider's usage); null: unknown. */
+  contextTokens: number | null
   items: InventoryItem[]
 }
-interface DeliveryRow extends Omit<CostDelivery, 'tokens' | 'items' | 'missing' | 'observed'> {
+interface DeliveryRow
+  extends Omit<CostDelivery, 'tokens' | 'items' | 'missing' | 'observed' | 'contextTokens'> {
   missing: string
 }
 interface ItemRow {
@@ -132,18 +136,23 @@ export function recentDeliveries(db: Database, now = new Date()): CostDelivery[]
   const allItems = db.prepare(
     'SELECT * FROM delivery_items WHERE delivery_id = ? ORDER BY position',
   )
-  const observation = db.prepare('SELECT complete FROM context_observations WHERE delivery_id = ?')
+  const observation = db.prepare(
+    'SELECT complete, context_tokens FROM context_observations WHERE delivery_id = ?',
+  )
   const used = db.prepare('SELECT item FROM context_uses WHERE delivery_id = ?')
   const result = rows.map((row): CostDelivery => {
     const uses = new Set((used.all(row.id) as { item: string }[]).map((u) => u.item))
-    const complete = (observation.get(row.id) as { complete: number } | undefined)?.complete === 1
+    const seen = observation.get(row.id) as
+      | { complete: number; context_tokens: number | null }
+      | undefined
     return {
       ...row,
       session: contextSessionId(row.session),
       tokens: estimatedTokens(row.bytes),
       budget: tokenBudget(db, row.tool, row.role),
       missing: json(row.missing, []),
-      observed: complete,
+      observed: seen?.complete === 1,
+      contextTokens: seen?.context_tokens ?? null,
       items: (allItems.all(row.id) as unknown as ItemRow[]).map((i) => ({
         id: i.item,
         title: i.title ?? i.item,
@@ -235,6 +244,14 @@ export function observeDelivery(
     now.toISOString(),
     complete ? 1 : 0,
     source,
+  )
+}
+
+/** The session's context fill as Tether last read it; kept even when use evidence is partial. */
+export function recordContextFill(db: Database, deliveryId: number, tokens: number | null): void {
+  db.prepare('UPDATE context_observations SET context_tokens = ? WHERE delivery_id = ?').run(
+    tokens,
+    deliveryId,
   )
 }
 

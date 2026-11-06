@@ -42,6 +42,7 @@ const view: ContextView = {
       tokens: 100,
       budget: null,
       observed: false,
+      contextTokens: null,
       missing: [{ id: 'tool-usage', reason: 'Unavailable' }],
       items: [
         {
@@ -74,10 +75,28 @@ it('shows partial delivery, unknown use and no budget without inventing zeros', 
   expect(screen.getByRole('status')).toHaveTextContent('Loading')
   expect(await screen.findByText('Usage unknown')).toBeInTheDocument()
   expect(screen.getByText('No token budget set')).toBeInTheDocument()
-  expect(screen.getByText(/Partial delivery/)).toHaveTextContent('Unavailable')
+  expect(screen.getByText(/Partial delivery/)).toHaveTextContent(
+    '1 item did not load: Unavailable',
+  )
+  expect(screen.getByText(/Partial delivery/)).not.toHaveTextContent(
+    'tool-usage',
+  )
+  expect(screen.getByText('Context in use unknown')).toBeInTheDocument()
+  expect(screen.queryByText(/prompt:guide|UTF-8/)).toBeNull()
+  expect(screen.getByText('Prompt')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('checkbox'))
   expect(
     screen.getByText('No items qualify for this view.'),
+  ).toBeInTheDocument()
+})
+it('shows the context in use when the provider counted it', async () => {
+  const counted = {
+    ...view,
+    deliveries: [{ ...view.deliveries[0]!, contextTokens: 41_250 }],
+  }
+  show(vi.fn(async () => Response.json(counted)))
+  expect(
+    await screen.findByText('41,250 tokens in use at last reply'),
   ).toBeInTheDocument()
 })
 it('keeps a draft when a stale save is refused', async () => {

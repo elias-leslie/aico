@@ -36,7 +36,7 @@ import { join } from 'node:path'
  * 26: asks that want files: `files` on `POST /v1/asks`, `files` on an answer,
  *     `wantsFiles` and `files` on the ask (schema 30).
  * 27: `GET /v1/history`, `/v1/history/:id`, `/v1/history/:id/events` (schema 31). */
-export const API_VERSION = 29
+export const API_VERSION = 30
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

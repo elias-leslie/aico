@@ -43,6 +43,7 @@ function deps(
     getSession: async () => {
       throw new TetherError(404, 'unknown', {})
     },
+    history: async () => ({ items: [] }),
     historySession: async () => ({ project: null, outcome }),
     historyEvents: async () => ({ items: events, newer: null, older: null, size: 100 }),
   } as unknown as ContextDeps['tether']
@@ -272,4 +273,48 @@ it('stays green with partial coverage when nothing qualifies', () => {
   const unseen = { ...used, id: 2, observed: false } as CostDelivery
   expect(nightlyRow([used, unseen], 1, 'test', now).state).toBe('ok')
   expect(nightlyRow([unseen], 1, 'test', now).state).toBe('warn')
+})
+it('finds an ended launch session through the conversations Tether bound to it', async () => {
+  const db = openContext(':memory:')
+  const d = deps()
+  const asked: string[] = []
+  const conversation = (id: string, startedAt: number, endedAt: number | null) => ({
+    id,
+    tool: 'codex',
+    startedAt,
+    endedAt,
+    contextTokens: 41_000,
+  })
+  d.options.tether.history = async (options) => {
+    asked.push(`list ${options?.session}`)
+    return {
+      items: [
+        // Ended before this launch: an earlier launch's conversation.
+        conversation('codex:before', now.getTime() - 9000, now.getTime() - 5000),
+        conversation('codex:later', now.getTime() + 5000, null),
+        conversation('codex:launched', now.getTime() + 500, now.getTime() + 4000),
+      ],
+    } as never
+  }
+  d.options.tether.historySession = async (id) => {
+    asked.push(id)
+    return { project: null, outcome: 'aborted', contextTokens: 41_000 } as never
+  }
+  try {
+    launched(db)
+    expect(await observeContext(db, d.options.tether, now)).toBe(0)
+    expect(asked).toEqual(['list 1234abcd', 'codex:launched'])
+    expect(source(db)).toBe('codex:launched')
+    expect(recentDeliveries(db, now)[0]).toMatchObject({ observed: true, contextTokens: 41_000 })
+    // A Tether older than api 30 ignores `session`: its list is never taken as this session's.
+    db.prepare('DELETE FROM context_observations').run()
+    d.options.tether.history = async () =>
+      ({
+        items: [{ id: 'codex:someone-else', tool: 'codex', startedAt: 0, endedAt: null }],
+      }) as never
+    expect(await observeContext(db, d.options.tether, now)).toBe(1)
+    expect(recentDeliveries(db, now)[0]).toMatchObject({ observed: false, contextTokens: null })
+  } finally {
+    db.close()
+  }
 })

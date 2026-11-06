@@ -114,6 +114,7 @@ export function registerHistoryRoutes(router: Router, history: History): void {
         limit: count(query.get('limit'), 'limit'),
         tool: query.get('tool') ?? undefined,
         project: query.get('project') ?? undefined,
+        session: query.get('session') ?? undefined,
       })
       sendJson(res, 200, { items })
     })

@@ -79,6 +79,7 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
           cacheWrite: num(usage.cacheWrite),
           output: num(usage.output),
         }
+        fold.context = fold.usage.input + fold.usage.cacheRead + fold.usage.cacheWrite
       }
       const stop = str(message.stopReason)
       if (stop === 'stop' || stop === 'length') fold.outcome = 'completed'

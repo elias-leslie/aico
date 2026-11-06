@@ -34,6 +34,7 @@ import {
   SETTINGS_SQL,
   SHARES_SQL,
   TMUX_SERVERS_TABLE_SQL,
+  TRANSCRIPT_CONTEXT_SQL,
   TRANSCRIPT_OWNERS_SQL,
   TRANSCRIPTS_SQL,
   WAITS_ARMED_BY_COLUMNS,
@@ -511,6 +512,16 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(33, now)
+      }
+      if (current < 34) {
+        // v34: the context fill (transcripts.context_tokens); a v31 table made now has it.
+        const has = this.db
+          .prepare("SELECT 1 FROM pragma_table_info('transcripts') WHERE name = 'context_tokens'")
+          .get()
+        if (!has) this.db.exec(TRANSCRIPT_CONTEXT_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(34, now)
       }
     })
   }

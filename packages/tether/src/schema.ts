@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 33
+export const SCHEMA_VERSION = 34
 
 /** Conversations observed in an owned workload survive its retirement and delayed transcript ingestion. */
 export const TRANSCRIPT_OWNERS_SQL = `
@@ -14,6 +14,9 @@ export const TRANSCRIPT_OWNERS_SQL = `
   );
   CREATE INDEX IF NOT EXISTS transcript_owners_session ON transcript_owners(session_id);
 `
+
+/** v34: the latest model call's prompt tokens per conversation (its context fill). */
+export const TRANSCRIPT_CONTEXT_SQL = 'ALTER TABLE transcripts ADD COLUMN context_tokens INTEGER'
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -808,6 +811,7 @@ export const TRANSCRIPTS_SQL = `
     cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
     cache_write_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens      INTEGER NOT NULL DEFAULT 0,
+    context_tokens     INTEGER,
     tool_calls    INTEGER NOT NULL DEFAULT 0,
     ignored       INTEGER NOT NULL DEFAULT 0,
     read_offset   INTEGER NOT NULL DEFAULT 0,

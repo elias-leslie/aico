@@ -51,6 +51,8 @@ export interface SessionSummary {
   endedAt: number | null
   outcome: Outcome | null
   tokens: Tokens
+  /** Prompt tokens of the latest model call: the context fill. null: not read yet. */
+  contextTokens: number | null
   toolCalls: number
   filesWritten: number
 }
@@ -123,6 +125,7 @@ interface Row {
   cache_read_tokens: number
   cache_write_tokens: number
   output_tokens: number
+  context_tokens: number | null
   tool_calls: number
   ignored: number
   read_offset: number
@@ -374,6 +377,7 @@ export class History {
       cache_read_tokens: 0,
       cache_write_tokens: 0,
       output_tokens: 0,
+      context_tokens: null,
       tool_calls: 0,
       ignored: 0,
       read_offset: 0,
@@ -425,7 +429,7 @@ export class History {
         .prepare(
           `UPDATE transcripts SET parent_id = ?, project = ?, cwd = ?, model = ?, path = ?,
              started_at = ?, ended_at = ?, outcome = ?, input_tokens = ?, cache_read_tokens = ?,
-             cache_write_tokens = ?, output_tokens = ?, tool_calls = ?, read_offset = ?,
+             cache_write_tokens = ?, output_tokens = ?, context_tokens = ?, tool_calls = ?, read_offset = ?,
              file_size = ?, file_mtime = ?, file_inode = ?, head_hash = ?, tail_hash = ?,
              reader_state = ?
            WHERE id = ?`,
@@ -443,6 +447,7 @@ export class History {
           row.cache_read_tokens,
           row.cache_write_tokens,
           row.output_tokens,
+          row.context_tokens,
           row.tool_calls,
           row.read_offset,
           row.file_size,
@@ -531,7 +536,10 @@ export class History {
 
   // --- reading --------------------------------------------------------------
 
-  list(options: { limit?: number; tool?: string; project?: string } = {}): SessionSummary[] {
+  /** `session`: only the conversations bound to that Tether session (live or ended). */
+  list(
+    options: { limit?: number; tool?: string; project?: string; session?: string } = {},
+  ): SessionSummary[] {
     const where = ['ignored = 0', 'parent_id IS NULL', 'cwd IS NOT NULL']
     const args: (string | number)[] = []
     if (options.tool) {
@@ -541,6 +549,10 @@ export class History {
     if (options.project) {
       where.push('project = ?')
       args.push(options.project)
+    }
+    if (options.session) {
+      where.push('id IN (SELECT transcript_id FROM transcript_owners WHERE session_id = ?)')
+      args.push(options.session)
     }
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 500)
     const rows = this.db
@@ -681,6 +693,7 @@ function summaryOf(row: Row & { files_written: number }): SessionSummary {
     endedAt: row.ended_at,
     outcome: row.outcome,
     tokens: tokensOf(row),
+    contextTokens: row.context_tokens ?? null,
     toolCalls: row.tool_calls,
     filesWritten: row.files_written,
   }
@@ -733,6 +746,7 @@ function applyFold(row: Row, fold: Fold, written: Map<string, number>): void {
   }
   addUsage(row, fold.usage)
   if (fold.usageTotal) setUsage(row, fold.usageTotal)
+  if (fold.context) row.context_tokens = fold.context
   if (fold.toolCalls) row.tool_calls += fold.toolCalls
   for (const path of fold.files ?? []) written.set(path, (written.get(path) ?? 0) + 1)
   if (fold.outcome !== undefined) row.outcome = fold.outcome

@@ -167,12 +167,13 @@ export class TetherClient {
 
   /** Recent sessions of Claude Code, Codex and Pi (docs/api-v1.md "Session history"). */
   async history(
-    options: { limit?: number; tool?: string; project?: string } = {},
+    options: { limit?: number; tool?: string; project?: string; session?: string } = {},
   ): Promise<{ items: HistorySession[] }> {
     const query = new URLSearchParams()
     if (options.limit) query.set('limit', String(options.limit))
     if (options.tool) query.set('tool', options.tool)
     if (options.project) query.set('project', options.project)
+    if (options.session) query.set('session', options.session)
     return this.json('GET', `/v1/history${query.size ? `?${query}` : ''}`)
   }
 

@@ -14,6 +14,7 @@ export {
   type InventoryItem,
   observeDelivery,
   recentDeliveries,
+  recordContextFill,
   tokenBudget,
   type UseEvent,
   unusedItems,
@@ -38,8 +39,8 @@ export { type AgentHubSource, type ImportResult, importAgentHub } from './import
 export { type LaunchPolicy, loadPolicy } from './launch'
 export {
   addMemory,
-  type Found,
   deleteMemory,
+  type Found,
   getMemories,
   listMemories,
   type Memory,

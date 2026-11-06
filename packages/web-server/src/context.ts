@@ -13,6 +13,7 @@ import {
   observeDelivery,
   openContext,
   recentDeliveries,
+  recordContextFill,
   type UseEvent,
   unusedItems,
 } from '@aico/context'
@@ -27,7 +28,7 @@ export interface ContextDeps {
   dataDir: string
   machine: string
   publicHost: string | null
-  tether: Pick<TetherClient, 'getSession' | 'historySession' | 'historyEvents'>
+  tether: Pick<TetherClient, 'getSession' | 'history' | 'historySession' | 'historyEvents'>
   status: Pick<StatusStore, 'upsert' | 'read'>
   notifier: Pick<Notifier, 'receive'>
   now?: () => Date
@@ -35,7 +36,8 @@ export interface ContextDeps {
 
 /** Where a delivery's conversation lives in Tether's history, when that is known.
  * A hook delivery carries the tool's own id; a launch delivery carries Tether's
- * session id, linked to the tool's id only by the startup hook's bind or by a live
+ * session id, linked to the tool's id by the startup hook's bind, by Tether's own
+ * record of the conversations a session owned (kept after it ends), or by a live
  * session's resumeId. Never guess: older passes saved `tool:<Tether id>` (and
  * `tool:aico-widget-…`, from before ids were normalized) when Tether no longer knew
  * the session, which matches no transcript; such a saved source is ignored. */
@@ -45,6 +47,22 @@ export function knownSource(d: CostDelivery, saved: string | undefined): string 
   const id = saved.slice(saved.indexOf(':') + 1)
   if (id === d.session || id.startsWith('aico-widget-')) return null
   return saved
+}
+
+/** The conversation Tether bound to this launch's session that was open at or after
+ * the delivery (the earliest such, so a later cleared conversation does not take it). */
+async function ownedConversation(
+  tether: ContextDeps['tether'],
+  d: CostDelivery,
+): Promise<string | null> {
+  const at = Date.parse(d.at)
+  const { items } = await tether.history({ session: d.session as string, tool: d.tool })
+  // A Tether before api 30 ignores `session` (and has no contextTokens): its list is not this session's.
+  if (items.some((i) => i.contextTokens === undefined)) return null
+  const open = items
+    .filter((i) => i.tool === d.tool && (i.endedAt === null || i.endedAt >= at))
+    .sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0))
+  return open[0]?.id ?? null
 }
 
 /** Missing, clipped, changing or unfinished evidence leaves absence unknown. */
@@ -69,6 +87,7 @@ export async function observeContext(
     const d = group[0] as CostDelivery
     let historyId = source
     try {
+      if (!historyId) historyId = await ownedConversation(tether, d)
       if (!historyId) {
         let live: Awaited<ReturnType<ContextDeps['tether']['getSession']>>
         try {
@@ -82,7 +101,8 @@ export async function observeContext(
         if (!live.resumeId) throw new Error('native conversation unknown')
         historyId = `${d.tool}:${live.resumeId}`
       }
-      const detail = await tether.historySession(historyId)
+      const id = historyId
+      const detail = await tether.historySession(id)
       if (detail.project !== d.project || COST.excludedProjects.includes(detail.project ?? ''))
         throw new Error('session project differs')
       let from = 0
@@ -91,7 +111,7 @@ export async function observeContext(
       let complete = Boolean(detail.outcome)
       const events: UseEvent[] = []
       for (;;) {
-        const page = await tether.historyEvents(historyId, { from, limit: 500 })
+        const page = await tether.historyEvents(id, { from, limit: 500 })
         if (size !== null && size !== page.size) complete = false
         size = page.size
         for (const event of page.items)
@@ -114,9 +134,10 @@ export async function observeContext(
           delivery,
           scoped,
           complete && scoped.some((e) => e.kind === 'text' && e.text.trim()),
-          historyId,
+          id,
           now,
         )
+        recordContextFill(db, delivery.id, detail.contextTokens ?? null)
       }
     } catch {
       unavailable++

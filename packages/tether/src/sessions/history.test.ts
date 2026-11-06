@@ -162,6 +162,8 @@ describe('Claude Code reader', () => {
       filesWritten: 1,
       outcome: 'completed',
       tokens: { input: 12, cacheRead: 220, cacheWrite: 20, output: 34 },
+      // The last message's whole prompt: uncached, cache read and cache write.
+      contextTokens: 137,
     })
     expect(row?.startedAt).toBe(Date.parse('2026-11-04T10:00:00Z'))
     expect(row?.endedAt).toBe(Date.parse('2026-11-04T10:00:09Z'))
@@ -234,6 +236,9 @@ describe('Codex reader', () => {
     )
     await restarted.scan()
     expect(restarted.list()[0].outcome).toBe('completed')
+    // The owning session finds its conversation after it ended; another session does not.
+    expect(restarted.list({ session: 'abcd1234' }).map((s) => s.id)).toEqual([`codex:${id}`])
+    expect(restarted.list({ session: 'ffff0000' })).toEqual([])
   })
 
   it('takes the last running total and finds written files in patches', async () => {
@@ -251,6 +256,7 @@ describe('Codex reader', () => {
             cached_input_tokens: cached,
             output_tokens: output,
           },
+          last_token_usage: { input_tokens: input / 2, cached_input_tokens: cached },
         },
       },
     })
@@ -293,6 +299,7 @@ describe('Codex reader', () => {
       filesWritten: 2,
       outcome: 'completed',
       tokens: { input: 200, cacheRead: 100, output: 20 },
+      contextTokens: 150,
     })
   })
 })
@@ -339,6 +346,7 @@ describe('Pi reader', () => {
       filesWritten: 1,
       outcome: 'completed',
       tokens: { input: 30, cacheRead: 14, cacheWrite: 2, output: 6 },
+      contextTokens: 28,
     })
   })
 })

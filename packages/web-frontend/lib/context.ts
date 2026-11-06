@@ -27,6 +27,8 @@ export interface ContextDelivery {
   tokens: number
   budget: number | null
   observed: boolean
+  /** The session's context fill at its latest reply, from the provider's usage; null: unknown. */
+  contextTokens: number | null
   missing: { id: string; reason: string }[]
   items: {
     id: string

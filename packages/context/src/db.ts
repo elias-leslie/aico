@@ -204,6 +204,15 @@ const MIGRATIONS = [
      role TEXT PRIMARY KEY REFERENCES roles(name) ON DELETE CASCADE,
      mode TEXT NOT NULL CHECK (mode IN ('default', 'blank-slate'))
    ) STRICT;`,
+  // The session's context fill (its latest model call's prompt tokens) as last observed.
+  (db: Database) => {
+    const has = db
+      .prepare(
+        "SELECT 1 FROM pragma_table_info('context_observations') WHERE name = 'context_tokens'",
+      )
+      .get()
+    if (!has) db.exec('ALTER TABLE context_observations ADD COLUMN context_tokens INTEGER')
+  },
 ]
 
 /** The context DB file in a data directory. */

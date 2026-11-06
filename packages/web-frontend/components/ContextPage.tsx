@@ -18,6 +18,14 @@ const group = (d: ContextDelivery) =>
   JSON.stringify([d.tool, d.role, d.project])
 const who = (d: ContextDelivery) =>
   `${d.tool} · ${d.role ?? 'No role'} · ${d.project ?? 'No project'}`
+const typeText = {
+  prompt: 'Prompt',
+  memory: 'Memory',
+  skill: 'Skill',
+  rule: 'Rule',
+  file: 'File',
+  computed: 'Generated',
+} as const
 const useText = {
   used: 'Use recorded',
   unused: 'No recorded use',
@@ -40,8 +48,9 @@ function Costs({ view }: { view: ContextView }) {
   return (
     <section aria-label="Context cost">
       <p className={styles.help}>
-        Estimated tokens: UTF-8 bytes ÷ {view.bytesPerToken}. Loaded context
-        only; provider billing and the conversation add more.
+        Token counts for loaded context are estimates from text size. The
+        conversation and provider billing add more. Context in use comes from
+        the provider’s own count at the session’s latest reply.
       </p>
       {!view.deliveries.length ? (
         <p>
@@ -86,16 +95,20 @@ function Costs({ view }: { view: ContextView }) {
                     ? 'No token budget set'
                     : `Budget ${count(current.budget)}${current.tokens > current.budget ? ' · Over budget' : ''}`}
                 </span>
+                <span>
+                  {current.contextTokens === null
+                    ? 'Context in use unknown'
+                    : `${count(current.contextTokens)} tokens in use at last reply`}
+                </span>
                 <time dateTime={current.at}>
                   {new Date(current.at).toLocaleString()}
                 </time>
               </div>
               {current.missing.length > 0 && (
                 <p role="status">
-                  Partial delivery:{' '}
-                  {current.missing
-                    .map((m) => `${m.id}: ${m.reason}`)
-                    .join('; ')}
+                  Partial delivery. {current.missing.length} item
+                  {current.missing.length === 1 ? '' : 's'} did not load:{' '}
+                  {current.missing.map((m) => m.reason).join('; ')}
                 </p>
               )}
               <p className={styles.help}>
@@ -106,8 +119,9 @@ function Costs({ view }: { view: ContextView }) {
               </p>
               {!current.observed && (
                 <p className={styles.help}>
-                  This delivery is not fully observed. Missing, clipped or
-                  unfinished transcripts stay unknown.
+                  This session’s transcript could not be fully read (it is
+                  missing, cut short or still running), so its use stays
+                  unknown.
                 </p>
               )}
               <label className={styles.toggle}>
@@ -126,7 +140,7 @@ function Costs({ view }: { view: ContextView }) {
                       <div className={styles.itemName}>
                         <span>{i.title}</span>
                         <small>
-                          {i.type} · {i.id}
+                          {typeText[i.type as keyof typeof typeText] ?? i.type}
                         </small>
                       </div>
                       <span className={styles.size}>

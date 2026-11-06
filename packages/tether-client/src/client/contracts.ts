@@ -429,6 +429,8 @@ export interface HistorySession {
   /** null: no final answer yet (a turn is running, or the tool stopped without one). */
   outcome: HistoryOutcome | null
   tokens: HistoryTokens
+  /** The latest model call's prompt tokens: the context fill (api 30); null: not read yet. */
+  contextTokens?: number | null
   toolCalls: number
   filesWritten: number
 }
