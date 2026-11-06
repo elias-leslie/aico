@@ -1,6 +1,7 @@
 // Keyless public web search. SearXNG when WEB_SEARCH_SEARXNG_URL names one; otherwise
-// DuckDuckGo's lite page for text and Bing's RSS for news. Fallbacks must retain
-// the requested scope and recency; unsupported provider filters fail closed.
+// DuckDuckGo's lite page for text and Bing's RSS for news. Fallbacks keep the requested
+// scope. Bing's RSS cannot filter by recency; when it is the only route left, its results
+// come back flagged time_filtered=false rather than failing the search.
 
 import { plainText } from './extract'
 import { normalizeWhitespace } from './focus'
@@ -32,6 +33,8 @@ export interface SearchOutcome {
   results: SearchResult[]
   /** Providers tried first that failed or had nothing. */
   errors: { provider: string; detail: string }[]
+  /** Set false when a recency limit was asked for but the answering provider could not apply it. */
+  time_filtered?: boolean
 }
 
 type Raw = Omit<SearchResult, 'rank'>
@@ -146,11 +149,11 @@ export function parseRss(xml: string): Raw[] {
   })
 }
 
+/** Bing's RSS only honours recency for news at d/w/m; every other limit goes unfiltered. */
+const bingCanFilter = (req: SearchRequest) =>
+  !req.timelimit || (req.type === 'news' && req.timelimit !== 'y')
+
 async function bing(fetcher: Fetch, req: SearchRequest): Promise<Raw[]> {
-  if (req.timelimit && (req.type === 'text' || req.timelimit === 'y'))
-    throw new Error(
-      `Bing RSS cannot preserve the requested ${req.type} recency filter (${req.timelimit})`,
-    )
   const params = new URLSearchParams({ q: req.query, format: 'rss' })
   const interval = req.timelimit && BING_INTERVAL[req.timelimit]
   if (interval && req.type === 'news') params.set('qft', `interval="${interval}"`)
@@ -180,15 +183,23 @@ export async function search(
   for (const [provider, run] of order) {
     try {
       const results = collect(await run(), max)
-      if (results.length) return { provider, results, errors }
+      if (results.length) {
+        const unfiltered = provider === 'bing' && !bingCanFilter(req)
+        return { provider, results, errors, ...(unfiltered && { time_filtered: false }) }
+      }
       errors.push({ provider, detail: 'no results' })
     } catch (error) {
       errors.push({ provider, detail: (error as Error).message })
     }
   }
-  const last = errors.at(-1)
-  // Every provider answered with nothing: that is "no results", not a failure.
-  if (errors.every((e) => e.detail === 'no results'))
-    return { provider: last?.provider ?? 'none', results: [], errors: [] }
+  // A provider that answered with nothing makes this "no results", not a failure; only
+  // when every provider errored is the search itself failed.
+  const empty = errors.filter((e) => e.detail === 'no results')
+  if (empty.length)
+    return {
+      provider: empty.at(-1)?.provider as string,
+      results: [],
+      errors: errors.filter((e) => e.detail !== 'no results'),
+    }
   return { provider: 'none', results: [], errors }
 }

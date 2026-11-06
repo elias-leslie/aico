@@ -6,7 +6,7 @@ const RSS = '<item><title>Old result</title><link>https://example.com/old</link>
 
 describe('search fallback constraints', () => {
   it.each(['d', 'w', 'm', 'y'])(
-    'never drops the text recency filter %s on fallback',
+    'falls back to Bing for text recency %s and labels the results as not time-filtered',
     async (timelimit) => {
       const calls: string[] = []
       const result = await searchWeb(
@@ -20,24 +20,52 @@ describe('search fallback constraints', () => {
           }) as typeof fetch,
         },
       )
-      expect(result).toHaveProperty('error')
-      expect(calls).toEqual(['https://lite.duckduckgo.com/lite/'])
+      expect(result).not.toHaveProperty('error')
+      expect(result).toMatchObject({
+        provider: 'bing',
+        status: 'results',
+        timelimit,
+        time_filtered: false,
+      })
+      expect(String(result.note)).toContain('NOT limited')
+      expect(calls).toHaveLength(2)
     },
   )
 
-  it('refuses an unsupported yearly news filter before requesting unfiltered results', async () => {
-    const calls: string[] = []
+  it('labels yearly news as not time-filtered instead of failing', async () => {
     const result = await search(
       { query: 'topic', type: 'news', timelimit: 'y', max: 1 },
       {},
-      (async (url) => {
-        calls.push(String(url))
-        return new Response(RSS)
-      }) as typeof fetch,
+      (async () => new Response(RSS)) as typeof fetch,
     )
-    expect(result.provider).toBe('none')
-    expect(result.errors[0]?.detail).toContain('recency')
-    expect(calls).toEqual([])
+    expect(result.provider).toBe('bing')
+    expect(result.time_filtered).toBe(false)
+    expect(result.results).toHaveLength(1)
+  })
+
+  it('does not label a filtered Bing news answer as unfiltered', async () => {
+    const result = await search(
+      { query: 'topic', type: 'news', timelimit: 'w', max: 1 },
+      {},
+      (async () => new Response(RSS)) as typeof fetch,
+    )
+    expect(result).not.toHaveProperty('time_filtered')
+  })
+
+  it('reports zero results as no_results even after a failed provider', async () => {
+    const result = await searchWeb(
+      'topic',
+      {},
+      {
+        env: {},
+        fetch: (async (url) =>
+          String(url).includes('duckduckgo')
+            ? new Response('captcha')
+            : new Response('<rss></rss>')) as typeof fetch,
+      },
+    )
+    expect(result).not.toHaveProperty('error')
+    expect(result).toMatchObject({ status: 'no_results', result_count: 0, provider: 'bing' })
   })
 
   it('does not fall back from news to ordinary DuckDuckGo text results', async () => {

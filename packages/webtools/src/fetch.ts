@@ -520,6 +520,10 @@ export async function searchWeb(
   if (outcome.errors.length) payload.provider_errors = outcome.errors
   payload.status = outcome.results.length ? 'results' : 'no_results'
   if (options.timelimit) payload.timelimit = options.timelimit
+  if (outcome.time_filtered === false) {
+    payload.time_filtered = false
+    payload.note = `${outcome.provider} cannot filter by time; these results are NOT limited to the requested timelimit (${options.timelimit}).`
+  }
   return payload
 }
 
