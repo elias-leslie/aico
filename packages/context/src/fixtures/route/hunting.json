@@ -60,8 +60,8 @@
             "observed_at": "2026-11-04T00:47:56+00:00",
             "age_seconds": 974,
             "source": "claude_statusline",
-            "used_percent": 85.0,
-            "left_percent": 15.0,
+            "used_percent": 85,
+            "left_percent": 15,
             "resets_at": "2026-11-06T10:00:00+00:00",
             "resets_in_seconds": 204949,
             "state": "ok"
@@ -113,8 +113,8 @@
             "observed_at": "2026-11-02T21:26:31.124000+00:00",
             "age_seconds": 99459,
             "source": "codex_session_log",
-            "used_percent": 100.0,
-            "left_percent": 0.0,
+            "used_percent": 100,
+            "left_percent": 0,
             "resets_at": "2026-11-04T10:28:52+00:00",
             "resets_in_seconds": 33881,
             "state": "used_up"
@@ -144,22 +144,22 @@
       "launchable": true,
       "alternates": [
         {
-          "model": "opencode-go/glm-5.3",
-          "effort": "high",
-          "when": "a second hunter model",
+          "model": "opencode-go/glm-5.3-flash",
+          "effort": "max",
+          "when": "a cheaper second hunter model",
           "last_refusal": null
         },
         {
-          "model": "opencode-go/glm-5.3-flash",
-          "effort": "high",
-          "when": "a cheaper second hunter model",
+          "model": "opencode-go/glm-5.3",
+          "effort": "max",
+          "when": "a second hunter model",
           "last_refusal": null
         }
       ],
       "subagent": null,
       "work_roles": ["hunting"],
-      "why": "Owner 2026-11-01: Pi hunters run DeepSeek 4.1 Flash high; GLM 5.3 and GLM 5.3 Flash are good hunters too. Neri's hunts.tools picks per hunt.",
-      "note": "Owner 2026-11-01: Pi hunts; outside hunting it is the last choice.",
+      "why": "Owner approved 2026-11-05 (Aico ask 3d3ec396a1ac): Pi hunters run DeepSeek 4.1 Flash high; alternates in order are GLM 5.3 Flash max, then GLM 5.3 max. Neri's hunts.tools picks per hunt.",
+      "note": "Owner 2026-11-01: Pi hunts; outside hunting it is the last choice for builds (never hook, fleet, coordination, root, secrets or deletion code, or design calls). Owner 2026-11-04: it runs testers and read-only sweeps.",
       "allowed": true,
       "deny_reason": null,
       "project_default": null,
@@ -174,8 +174,8 @@
             "observed_at": "2026-11-04T01:00:16.693682+00:00",
             "age_seconds": 234,
             "source": "opencode_go_usage",
-            "used_percent": 0.0,
-            "left_percent": 100.0,
+            "used_percent": 0,
+            "left_percent": 100,
             "resets_at": "2026-11-04T06:00:16.647000+00:00",
             "resets_in_seconds": 17765,
             "state": "ok"
@@ -186,8 +186,8 @@
             "observed_at": "2026-11-04T00:55:18.957558+00:00",
             "age_seconds": 531,
             "source": "opencode_go_usage",
-            "used_percent": 0.0,
-            "left_percent": 100.0,
+            "used_percent": 0,
+            "left_percent": 100,
             "resets_at": "2026-11-09T00:00:00+00:00",
             "resets_in_seconds": 428149,
             "state": "ok"
@@ -198,8 +198,8 @@
             "observed_at": "2026-11-04T00:55:18.957558+00:00",
             "age_seconds": 531,
             "source": "opencode_go_usage",
-            "used_percent": 45.0,
-            "left_percent": 55.0,
+            "used_percent": 45,
+            "left_percent": 55,
             "resets_at": "2026-11-26T20:32:22+00:00",
             "resets_in_seconds": 1970891,
             "state": "ok"

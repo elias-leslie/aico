@@ -33,7 +33,7 @@
         {
           "model": "claude-sonnet-5-5",
           "effort": "high",
-          "when": "Haiku can't do the job",
+          "when": "the task truly needs it after the help, prompts or system were fixed (a smaller model failing is a usability finding first)",
           "last_refusal": null
         },
         {
@@ -73,8 +73,8 @@
             "observed_at": "2026-11-04T00:47:56+00:00",
             "age_seconds": 975,
             "source": "claude_statusline",
-            "used_percent": 85.0,
-            "left_percent": 15.0,
+            "used_percent": 85,
+            "left_percent": 15,
             "resets_at": "2026-11-06T10:00:00+00:00",
             "resets_in_seconds": 204948,
             "state": "ok"
@@ -126,8 +126,8 @@
             "observed_at": "2026-11-02T21:26:31.124000+00:00",
             "age_seconds": 99460,
             "source": "codex_session_log",
-            "used_percent": 100.0,
-            "left_percent": 0.0,
+            "used_percent": 100,
+            "left_percent": 0,
             "resets_at": "2026-11-04T10:28:52+00:00",
             "resets_in_seconds": 33880,
             "state": "used_up"
@@ -150,7 +150,7 @@
       "label": "Testing",
       "tool": "pi",
       "model": "opencode-go/deepseek-v4.1-flash",
-      "effort": "high",
+      "effort": "xhigh",
       "daybreak": null,
       "context": "blank-slate",
       "use": true,
@@ -158,15 +158,15 @@
       "alternates": [
         {
           "model": "opencode-go/glm-5.3",
-          "effort": "high",
+          "effort": "xhigh",
           "when": "DeepSeek is unavailable or stuck",
           "last_refusal": null
         }
       ],
       "subagent": "user-tester",
       "work_roles": ["verification"],
-      "why": "Owner 2026-11-01: Pi is the last choice outside hunting (DeepSeek 4.1 Flash, GLM 5.3).",
-      "note": "Owner 2026-11-01: Pi hunts; outside hunting it is the last choice.",
+      "why": "Owner 2026-11-04: real-user tests may run on DeepSeek 4.1 Flash at max effort; more usage there, and it shows whether lower-level agents can use the system.",
+      "note": "Owner 2026-11-01: Pi hunts; outside hunting it is the last choice for builds (never hook, fleet, coordination, root, secrets or deletion code, or design calls). Owner 2026-11-04: it runs testers and read-only sweeps.",
       "allowed": true,
       "deny_reason": null,
       "project_default": null,
@@ -181,8 +181,8 @@
             "observed_at": "2026-11-04T01:00:16.693682+00:00",
             "age_seconds": 234,
             "source": "opencode_go_usage",
-            "used_percent": 0.0,
-            "left_percent": 100.0,
+            "used_percent": 0,
+            "left_percent": 100,
             "resets_at": "2026-11-04T06:00:16.647000+00:00",
             "resets_in_seconds": 17765,
             "state": "ok"
@@ -193,8 +193,8 @@
             "observed_at": "2026-11-04T00:55:18.957558+00:00",
             "age_seconds": 532,
             "source": "opencode_go_usage",
-            "used_percent": 0.0,
-            "left_percent": 100.0,
+            "used_percent": 0,
+            "left_percent": 100,
             "resets_at": "2026-11-09T00:00:00+00:00",
             "resets_in_seconds": 428148,
             "state": "ok"
@@ -205,8 +205,8 @@
             "observed_at": "2026-11-04T00:55:18.957558+00:00",
             "age_seconds": 532,
             "source": "opencode_go_usage",
-            "used_percent": 45.0,
-            "left_percent": 55.0,
+            "used_percent": 45,
+            "left_percent": 55,
             "resets_at": "2026-11-26T20:32:22+00:00",
             "resets_in_seconds": 1970890,
             "state": "ok"

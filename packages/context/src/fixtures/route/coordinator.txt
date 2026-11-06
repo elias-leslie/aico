@@ -1,5 +1,5 @@
 OPTIONS[coordinator] policy=v5 facts as of 11-03 20:04; you choose, then st aico create --work-role coordinator --tool T [--model M]
-claude-code  claude-opus-5-5 xhigh  has room
+claude-code  claude-opus-5-5 medium  has room
     5h not reported; weekly 15% left, resets 11-06 05:00 (2.4d), read 16m ago
     last refusal 11-02 08:57 (cyber), role unknown/agent-hub (74 recorded)
 codex  gpt-6.1-sol xhigh  running on credits
