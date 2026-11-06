@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs'
@@ -23,6 +24,7 @@ import {
   NOT_HANDLED,
   type Project,
   parseDeployArgs,
+  procPaths,
   pruneReleases,
   type Refusal,
   readPackages,
@@ -252,6 +254,7 @@ describe('deploy', () => {
       },
       self: '/bundle.mjs',
       opsLink: join(top, 'ops'),
+      processPaths: () => [],
     }
     const head = git('rev-parse', 'HEAD').out.trim()
     return { root, git, deps, calls, lines, rows, head }
@@ -676,6 +679,34 @@ describe('deploy', () => {
     pruneReleases(deps, join(deps.releasesDir, names[4] as string))
     const left = names.filter((name) => existsSync(join(deps.releasesDir, name)))
     expect(left).toEqual([names[0], names[2], names[3], names[4]])
+  })
+
+  it('keeps a release a live process runs from (cwd, exe or command line)', () => {
+    const { deps } = setup()
+    const names = ['1', '2', '3', '4', '5', '6'].map((c) => c.repeat(40))
+    for (const [i, name] of names.entries()) {
+      mkdirSync(join(deps.releasesDir, name), { recursive: true })
+      utimesSync(join(deps.releasesDir, name), 1_000 + i, 1_000 + i)
+    }
+    const at = (i: number) => join(deps.releasesDir, names[i] as string)
+    deps.processPaths = () => [
+      `${at(0)}/packages/jobs`,
+      `node ${at(1)}/packages/ops/dist/aico-ops.mjs jobs`,
+      '/usr/bin/node',
+    ]
+    pruneReleases(deps, at(5))
+    const left = names.filter((name) => existsSync(join(deps.releasesDir, name)))
+    expect(left).toEqual([names[0], names[1], names[3], names[4], names[5]])
+  })
+
+  it('reads process paths from a /proc-shaped directory', () => {
+    const { deps } = setup()
+    const proc = join(deps.releasesDir, '..', 'proc')
+    mkdirSync(join(proc, '42'), { recursive: true })
+    symlinkSync('/somewhere/cwd', join(proc, '42', 'cwd'))
+    writeFileSync(join(proc, '42', 'cmdline'), 'node\0/rel/x.mjs\0')
+    mkdirSync(join(proc, 'self'), { recursive: true })
+    expect(procPaths(proc)).toEqual(['/somewhere/cwd', 'node /rel/x.mjs '])
   })
 })
 

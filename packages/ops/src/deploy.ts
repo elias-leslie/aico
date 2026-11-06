@@ -19,6 +19,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -326,6 +327,27 @@ export interface DeployDeps {
   self: string
   /** The link to the release whose ops bundle `aico deploy` runs (data/ops.json deploy.installedOps). */
   opsLink: string
+  /** The paths live processes run from (cwd, exe, command line), so prune keeps their release. */
+  processPaths: () => string[]
+}
+
+/** cwd, exe and command line of every live process, read from /proc. */
+export function procPaths(procDir = '/proc'): string[] {
+  const found: string[] = []
+  let pids: string[] = []
+  try {
+    pids = readdirSync(procDir).filter((name) => /^\d+$/.test(name))
+  } catch {}
+  for (const pid of pids) {
+    for (const link of ['cwd', 'exe']) {
+      try {
+        found.push(readlinkSync(join(procDir, pid, link)))
+      } catch {}
+    }
+    const cmdline = readFileSafe(join(procDir, pid, 'cmdline'))
+    if (cmdline) found.push(cmdline.replaceAll('\0', ' '))
+  }
+  return found
 }
 
 function userBusEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -369,6 +391,7 @@ export function defaultDeps(env: NodeJS.ProcessEnv = process.env): DeployDeps {
     },
     self: process.argv[1] ?? '',
     opsLink: expandHome(env.AICO_OPS_INSTALLED || ops.deploy.installedOps),
+    processPaths: () => procPaths(),
   }
 }
 
@@ -1096,19 +1119,25 @@ export function installOpsBundle(deps: DeployDeps, release: string) {
   deps.out(`[deploy] aico deploy now runs from ${release.split('/').at(-1)?.slice(0, 12)}`)
 }
 
-/** Keep the newest releases and every one a unit file still runs; the rest are rebuildable. */
+/**
+ * Keep the newest releases, every one a unit file still runs and every one a live process runs
+ * from (a job started before a deploy keeps reading its release's data files); the rest are
+ * rebuildable.
+ */
 export function pruneReleases(deps: DeployDeps, current: string) {
   const units = existsSync(deps.systemdDir)
     ? readdirSync(deps.systemdDir)
         .map((name) => readFileSafe(join(deps.systemdDir, name)) ?? '')
         .join('\n')
     : ''
+  const live = deps.processPaths().join('\n')
   for (const [index, name] of releases(deps).entries()) {
     const path = join(deps.releasesDir, name)
     if (
       index < ops.deploy.keepReleases ||
       path === current ||
       units.includes(`${path}/`) ||
+      live.includes(path) ||
       installedOpsSha(deps) === name
     )
       continue
