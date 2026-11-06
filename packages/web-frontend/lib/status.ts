@@ -38,8 +38,10 @@ export interface StatusRow {
   updated_at: string
   shown: Shown
   shown_since: string | null
-  /** Its machine is off, went late, has no machine row, or is back and this hasn't reported since. */
-  unknown_why?: 'off' | 'late' | 'missing' | 'back'
+  /** Its machine went late, has no machine row, or is back and this hasn't reported since. */
+  unknown_why?: 'late' | 'missing' | 'back'
+  /** Shown off because its machine is off on purpose; `shown_since` is when it went off. */
+  machine_off?: true
 }
 
 export interface StatusSummary {
@@ -173,12 +175,11 @@ export function summaryLine(summary: StatusSummary): string {
   return `${plural(summary.problems, 'problem')}: ${parts.join(', ')}`
 }
 
-/** Why a late or unknown row is so, said before its last report. */
+/** Why a late, unknown or machine-off row is so, said before its last report. */
 export function reason(row: StatusRow): string {
+  if (row.machine_off) return `${row.machine} is off.`
   if (row.shown === 'late') return 'Didn’t report when due.'
   if (row.shown !== 'unknown') return ''
-  if (row.unknown_why === 'off')
-    return `${row.machine} is off, so this can’t report.`
   if (row.unknown_why === 'late') return `${row.machine} stopped reporting.`
   if (row.unknown_why === 'back')
     return `${row.machine} is back; this hasn’t reported since.`
@@ -259,6 +260,13 @@ export function when(row: StatusRow, now: number): When {
       short: since === null ? 'no word' : `since ${atShort(since, now)}`,
       tone: 'strong',
     }
+  if (row.machine_off)
+    return {
+      lead: `Last report ${at(updated, now)}`,
+      sub: `${row.machine} off since ${at(since, now)}`,
+      short: `reported ${atShort(updated, now)}`,
+      tone: 'plain',
+    }
   if (row.shown === 'off')
     return {
       lead: `Off since ${at(updated, now)}`,
@@ -314,7 +322,9 @@ export function rowButtons(
 ): { buttons: RowButton[]; primary: ButtonKind | null } {
   const local = row.machine === context.here && !row.id.startsWith('ominull')
   // Unknown because its machine isn't reporting (not just back and waiting on this row).
-  const silent = row.shown === 'unknown' && row.unknown_why !== 'back'
+  const silent =
+    row.machine_off === true ||
+    (row.shown === 'unknown' && row.unknown_why !== 'back')
   const buttons: RowButton[] = []
   for (const action of row.actions ?? []) {
     if ((action.kind === 'run' || action.kind === 'log') && !local) continue
@@ -343,8 +353,9 @@ export function rowButtons(
   )
   const has = (kind: ButtonKind) =>
     buttons.some((button) => button.kind === kind && !button.disabled)
-  const primary: ButtonKind | null =
-    row.shown === 'unknown'
+  const primary: ButtonKind | null = row.machine_off
+    ? null
+    : row.shown === 'unknown'
       ? has('hosts')
         ? 'hosts'
         : !silent && has('run')

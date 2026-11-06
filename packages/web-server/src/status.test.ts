@@ -278,10 +278,12 @@ describe('st status', () => {
       { ...ROW, machine: 'apps', id: 'apps/two' },
     ])
     const text = formatStatus(store.read(), false, NOW)
-    expect(text).toContain('No problems: 1 row healthy (1 off).')
-    expect(text).toContain("2 rows on apps aren't reporting: it's turned off on purpose.")
-    expect(text).not.toContain('Unknown  Backup')
-    expect(formatStatus(store.read(), true, NOW)).toContain('Unknown  Backup (backup, apps)')
+    expect(text).toContain('No problems: 3 rows healthy (3 off).')
+    expect(text).toContain("2 rows on apps: it's turned off on purpose.")
+    expect(text).not.toContain('Backup (backup')
+    const all = formatStatus(store.read(), true, NOW)
+    expect(all).toContain('Off      Backup (backup, apps), apps off since')
+    expect(all).not.toContain('Unknown')
     store.close()
   })
 

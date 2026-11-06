@@ -19,11 +19,11 @@ import {
 } from './show'
 
 /**
- * What a row's alert state is remembered as. Unknown is never kept: a row whose machine went
- * away keeps the state it had, so coming back to it is no change.
+ * What a row's alert state is remembered as. Unknown, and off with its machine, are never kept: a
+ * row whose machine went away keeps the state it had, so coming back to it is no change.
  */
 function seenState(row: ShownRow): Shown | null {
-  return row.shown === 'unknown' ? null : row.shown
+  return row.shown === 'unknown' || row.machine_off ? null : row.shown
 }
 
 function readRows(db: Database): StoredRow[] {

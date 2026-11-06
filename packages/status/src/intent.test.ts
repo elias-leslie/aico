@@ -61,8 +61,8 @@ describe('machine intent', () => {
     const shown = store.read().rows
     expect(shown.find((r) => r.id === 'apps/machine')?.shown).toBe('off')
     expect(shown.find((r) => r.id === 'apps/job')).toMatchObject({
-      shown: 'unknown',
-      unknown_why: 'off',
+      shown: 'off',
+      machine_off: true,
     })
     expect(store.read().summary.problems).toBe(0)
     expect(store.isExpectedOff('apps')).toBe(true)
@@ -83,7 +83,10 @@ describe('machine intent', () => {
     expect(store.isExpectedOff('apps')).toBe(true)
     const shown = store.read().rows
     expect(shown.find((r) => r.id === 'apps/machine')?.shown).toBe('off')
-    expect(shown.find((r) => r.id === 'apps/job')).toMatchObject({ unknown_why: 'off' })
+    expect(shown.find((r) => r.id === 'apps/job')).toMatchObject({
+      shown: 'off',
+      machine_off: true,
+    })
     expect(store.read().summary.problems).toBe(0)
     expect(store.expectedOff().get('apps')).toBe(clock.now)
   })
@@ -119,7 +122,7 @@ describe('machine intent', () => {
     const { store } = watched('off')
     store.upsert([job()])
     expect(store.read().summary.problems).toBe(0)
-    expect(store.read().rows[0]).toMatchObject({ unknown_why: 'off' })
+    expect(store.read().rows[0]).toMatchObject({ shown: 'off', machine_off: true })
   })
 
   it('lets the owner stop an always-on machine, and ends that when it reports again', () => {

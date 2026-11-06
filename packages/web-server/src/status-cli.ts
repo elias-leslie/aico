@@ -77,6 +77,10 @@ function rowLines(row: ShownRow, now: number): string[] {
     head += row.shown_since
       ? `, no word from ${row.machine} since ${when(row.shown_since, now)}`
       : `, no word from ${row.machine}`
+  if (row.machine_off)
+    head += row.shown_since
+      ? `, ${row.machine} off since ${when(row.shown_since, now)}`
+      : `, ${row.machine} is off`
   const indent = ' '.repeat(9)
   const lines = [head]
   const said =
@@ -114,9 +118,11 @@ export function formatStatus(
     .filter((state) => rollup.counts[state] > 0)
     .map((state) => `${rollup.counts[state]} ${state}`)
     .join(', ')
-  // Unknown only because their machine is off on purpose (or just back): not a problem, as on the
-  // badge (show.ts counted). Folded into one line per machine unless --all.
+  // Rows waiting for their first report since their machine came back are not problems either, as
+  // on the badge (show.ts counted); folded into one line per machine unless --all. Rows of a
+  // machine turned off on purpose are off, so they are healthy rows.
   const quiet = rows.filter((row) => row.shown === 'unknown' && !counted(row))
+  const away = rows.filter((row) => row.machine_off)
   const problems = rollup.problems - quiet.length
   const out: string[] = []
   out.push(
@@ -128,22 +134,21 @@ export function formatStatus(
     ? rows
     : rows.filter((row) => row.shown !== 'ok' && row.shown !== 'off' && !quiet.includes(row))
   for (const row of shown) out.push('', ...rowLines(row, now))
-  if (!all && quiet.length > 0) {
-    const machines = new Map<string, { n: number; why: string }>()
-    for (const row of quiet) {
-      const entry = machines.get(row.machine) ?? { n: 0, why: row.unknown_why ?? 'off' }
-      entry.n += 1
-      machines.set(row.machine, entry)
-    }
-    out.push('')
-    for (const [machine, { n, why }] of machines)
-      out.push(
-        why === 'back'
-          ? `${plural(n, 'row')} on ${machine} wait for their first report since it came back.`
-          : `${plural(n, 'row')} on ${machine} aren't reporting: it's turned off on purpose.`,
-      )
+  const folded = (list: ShownRow[], line: (machine: string, n: number) => string) => {
+    const machines = new Map<string, number>()
+    for (const row of list) machines.set(row.machine, (machines.get(row.machine) ?? 0) + 1)
+    for (const [machine, n] of machines) out.push(line(machine, n))
   }
-  if (!all && rollup.healthy > 0 && (problems > 0 || quiet.length > 0))
+  if (!all && (quiet.length > 0 || away.length > 0)) {
+    out.push('')
+    folded(away, (machine, n) => `${plural(n, 'row')} on ${machine}: it's turned off on purpose.`)
+    folded(
+      quiet,
+      (machine, n) =>
+        `${plural(n, 'row')} on ${machine} wait for their first report since it came back.`,
+    )
+  }
+  if (!all && rollup.healthy > 0 && (problems > 0 || quiet.length > 0 || away.length > 0))
     out.push('', `${rollup.healthy} healthy (${healthyParts}) not listed; --all lists them.`)
   return `${out.join('\n')}\n`
 }

@@ -87,7 +87,7 @@ describe('view', () => {
     expect(ids({ sort: 'next' })).toEqual(['b/three', 'a/one', 'b/four', 'a/two'])
   })
 
-  it('says why a row is unknown and keeps a machine turned off on purpose out of the badge', () => {
+  it('shows rows of a machine turned off on purpose as off, with the last report, not as problems', () => {
     const rows = [
       ...ALL,
       stored({
@@ -103,16 +103,27 @@ describe('view', () => {
     ]
     const result = view(rows, NOW)
     const byId = new Map(result.rows.map((row) => [row.id, row]))
-    expect(byId.get('c/job')).toMatchObject({ shown: 'unknown', unknown_why: 'off' })
+    expect(byId.get('c/job')).toMatchObject({
+      shown: 'off',
+      machine_off: true,
+      state: 'failed',
+      meaning: 'Broke.',
+      shown_since: expect.any(String),
+    })
+    expect(byId.get('c/job')?.unknown_why).toBeUndefined()
+    expect(byId.get('c/machine')?.machine_off).toBeUndefined()
     expect(byId.get('d/job')).toMatchObject({ shown: 'unknown', unknown_why: 'missing' })
     expect(byId.get('a/one')?.unknown_why).toBeUndefined()
-    // The screen still counts both unknown rows; the badge leaves out c's.
-    expect(result.rollup.counts.unknown).toBe(2)
+    // c's rows are off, not unknown: the screen and the badge count only d's as unknown.
+    expect(result.rollup.counts.unknown).toBe(1)
+    expect(result.rollup.counts.off).toBe(3)
+    expect(result.rollup.problems).toBe(3)
+    expect(result.rows.slice(-3).map((row) => row.shown)).toEqual(['off', 'off', 'off'])
     expect(result.summary).toMatchObject({
       problems: 3,
       worst: 'failed',
       counts: { failed: 1, late: 1, unknown: 1, warn: 0 },
-      quiet: 1,
+      quiet: 0,
     })
     expect(result.summary.top.map((row) => row.id)).toEqual(['a/two', 'b/three', 'd/job'])
     // The summary covers every row, whatever the filter.

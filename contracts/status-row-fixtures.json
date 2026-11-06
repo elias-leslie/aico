@@ -545,7 +545,7 @@
       }
     },
     {
-      "name": "a machine switched off makes its rows unknown",
+      "name": "a machine switched off makes its rows off, not unknown",
       "now": "2026-11-03T12:00:00Z",
       "rows": [
         {
@@ -576,7 +576,7 @@
       "expect": [
         {
           "id": "d/backup",
-          "shown": "unknown",
+          "shown": "off",
           "shown_since": "2026-11-03T10:00:00.000Z"
         },
         {
@@ -586,8 +586,8 @@
         }
       ],
       "rollup": {
-        "problems": 1,
-        "healthy": 1
+        "problems": 0,
+        "healthy": 2
       }
     },
     {

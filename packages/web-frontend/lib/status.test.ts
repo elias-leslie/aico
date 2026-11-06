@@ -4,6 +4,7 @@ import {
   lookProject,
   matches,
   NO_FILTER,
+  reason,
   rollup,
   rowButtons,
   type StatusRow,
@@ -156,14 +157,40 @@ describe('filters and words', () => {
     })
   })
 
+  it('shows a row of a machine turned off on purpose as off with its last report, not a problem', () => {
+    const apps = row({
+      id: 'apps/job',
+      machine: 'apps',
+      kind: 'job',
+      shown: 'off',
+      shown_since: '2026-11-03T11:00:00',
+      machine_off: true,
+      meaning: 'Last run completed.',
+      updated_at: '2026-11-03T10:35:00',
+      actions: [{ kind: 'run', ref: 'x' }],
+    })
+    expect(reason(apps)).toBe('apps is off.')
+    expect(when(apps, NOW)).toMatchObject({
+      lead: 'Last report 10:35 AM',
+      sub: 'apps off since 11:00 AM',
+      short: 'reported 10:35 AM',
+    })
+    const hosts = { here: 'davion-sidarli', hosts: new Set(['apps']) }
+    const buttons = rowButtons(apps, hosts)
+    expect(buttons.buttons.map((b) => b.kind)).toEqual(['hosts'])
+    expect(buttons.primary).toBeNull()
+    expect(rollup([apps]).off).toBe(1)
+    expect(reason(row({ shown: 'off', state: 'off' }))).toBe('')
+  })
+
   it('names the row and why in a look message, and picks its project', () => {
     const off = row({
       shown: 'unknown',
-      unknown_why: 'off',
+      unknown_why: 'late',
       machine: 'davion-gem',
     })
     expect(lookMessage(off)).toBe(
-      'Status row aico-web is unknown: davion-gem is off, so this can’t report. Serving. Find out why and fix it.',
+      'Status row aico-web is unknown: davion-gem stopped reporting. Serving. Find out why and fix it.',
     )
     const projects = [
       { id: 'nightshift', root_path: '/srv/workspaces/projects/nightshift' },

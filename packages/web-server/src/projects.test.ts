@@ -88,7 +88,7 @@ describe('problems', () => {
       shown({ id: 'c/1', what: 'Check', project: 'p' }, 'warn'),
       shown({ id: 'c/2', what: 'Check 2', project: 'p' }),
       shown({ id: 'q/1', what: 'Quiet', project: 'p' }, 'unknown', 'missing'),
-      shown({ id: 'q/2', what: 'Parked', project: 'p' }, 'unknown', 'off'),
+      shown({ id: 'q/2', what: 'Waiting', project: 'p' }, 'unknown', 'back'),
       shown({ id: 'o/1', what: 'Other', project: 'other' }),
     ]
     expect(problemsOf(rows, 'p').map(({ kind, count, worst }) => ({ kind, count, worst }))).toEqual(
