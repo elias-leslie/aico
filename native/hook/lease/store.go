@@ -21,14 +21,16 @@ import (
 type Config struct {
 	BackupUnitPattern    string `json:"backup_unit_pattern"`
 	BackupProcessPattern string `json:"backup_process_pattern"`
-	IdleTTLMinutes       int    `json:"idle_ttl_minutes"`  // a file/hold lease idle this long is released
-	ActiveMinutes        int    `json:"active_minutes"`    // reserved: st's ACTIVE_WINDOW
-	RegistryHours        int    `json:"registry_hours"`    // identity rows kept this long after last use
-	NoteHours            int    `json:"note_hours"`        // peer reset notes kept this long
-	UnackedMinutes       int    `json:"unacked_minutes"`   // a request unanswered this long surfaces once to its sender
-	SnapshotMaxMins      int    `json:"snapshot_max_mins"` // stale shell snapshots are removed after this
-	RegistrySaveSec      int    `json:"registry_save_sec"` // registry rows are rewritten at most this often
-	StoreBudgetMs        int    `json:"store_budget_ms"`   // one hook call's time for all its coordination store calls
+	IdleTTLMinutes       int    `json:"idle_ttl_minutes"`     // a file/hold lease idle this long is released
+	ActiveMinutes        int    `json:"active_minutes"`       // reserved: st's ACTIVE_WINDOW
+	RegistryHours        int    `json:"registry_hours"`       // identity rows kept this long after last use
+	NoteHours            int    `json:"note_hours"`           // peer reset notes kept this long
+	UnackedMinutes       int    `json:"unacked_minutes"`      // a request unanswered this long surfaces once to its sender
+	SnapshotMaxMins      int    `json:"snapshot_max_mins"`    // stale shell snapshots are removed after this
+	RegistrySaveSec      int    `json:"registry_save_sec"`    // registry rows are rewritten at most this often
+	StoreBudgetMs        int    `json:"store_budget_ms"`      // one hook call's time for all its coordination store calls
+	FinishedChildHours   int    `json:"finished_child_hours"` // a finished native child row is kept this long
+	ChildMaxHours        int    `json:"child_max_hours"`      // any native child row, finished or not, is kept this long
 }
 
 // StoreBudget is one hook call's time for all its store calls (SetBudget).
@@ -43,7 +45,8 @@ func (c Config) withDefaults() Config {
 		v   *int
 		def int
 	}{{&c.IdleTTLMinutes, 30}, {&c.ActiveMinutes, 10}, {&c.RegistryHours, 24}, {&c.NoteHours, 24},
-		{&c.UnackedMinutes, 10}, {&c.SnapshotMaxMins, 120}, {&c.RegistrySaveSec, 60}, {&c.StoreBudgetMs, 1500}} {
+		{&c.UnackedMinutes, 10}, {&c.SnapshotMaxMins, 120}, {&c.RegistrySaveSec, 60}, {&c.StoreBudgetMs, 1500},
+		{&c.FinishedChildHours, 24}, {&c.ChildMaxHours, 72}} {
 		if *f.v <= 0 {
 			*f.v = f.def
 		}

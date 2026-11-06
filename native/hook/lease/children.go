@@ -56,6 +56,15 @@ func (h *Hook) RecordAgent() {
 		children := rows(doc, "native_children")
 		key := h.ID.SessionID + "/" + id
 		row := children[key]
+		if row == nil && event == "SubagentStop" {
+			// A Codex child records its own start under its own session; its stop may name the parent's.
+			for other, earlier := range children {
+				if str(earlier["id"]) == id {
+					key, row = other, earlier
+					break
+				}
+			}
+		}
 		if row == nil {
 			row = map[string]any{"id": id, "parent_session": h.ID.SessionID, "started": stamp(time.Now())}
 		}
@@ -79,10 +88,12 @@ func (h *Hook) RecordAgent() {
 		if filepath.IsAbs(transcript) {
 			row["transcript"] = filepath.Clean(transcript)
 		}
+		now := time.Now()
 		if event == "SubagentStop" || event == "PostToolUseFailure" || (event == "PostToolUse" && !truthy(input["run_in_background"]) && str(response["status"]) != "async_launched") {
-			row["finished"] = stamp(time.Now())
+			row["finished"] = stamp(now)
 		}
 		children[key] = row
+		h.Cfg.pruneChildren(children, now)
 		doc["native_children"] = toAny(children)
 		return h.Cfg.saveDoc(doc)
 	})
@@ -107,4 +118,21 @@ func (h *Hook) UnfinishedChildren() []string {
 		out = append(out, fmt.Sprintf("Native child %s (%s) started but has no completion notice; %s. Silence does not prove it ended.", str(child["id"]), str(child["agent_type"]), changed))
 	}
 	return out
+}
+
+// pruneChildren keeps the list bounded: a finished child goes after finished_child_hours, and any row after
+// child_max_hours (its parent context is long gone; an unfinished row that old is no live evidence).
+func (c Config) pruneChildren(children map[string]map[string]any, now time.Time) {
+	c = c.withDefaults()
+	for key, row := range children {
+		at, ok := parseStamp(str(row["finished"]))
+		limit := time.Duration(c.FinishedChildHours) * time.Hour
+		if !ok {
+			at, ok = parseStamp(str(row["started"]))
+			limit = time.Duration(c.ChildMaxHours) * time.Hour
+		}
+		if ok && now.Sub(at) > limit {
+			delete(children, key)
+		}
+	}
 }

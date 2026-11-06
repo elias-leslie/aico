@@ -1,6 +1,7 @@
 package lease
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,5 +56,40 @@ func TestSessionStartBindsHistoryBeforeAnyPoll(t *testing.T) {
 	owner := fake.HistoryOwners[0]
 	if owner["session"] != "abcd1234" || owner["nativeId"] != sidA || owner["tool"] != "claude-code" {
 		t.Fatalf("%v", owner)
+	}
+}
+
+func TestCodexChildStopFinishesItsSelfRecordedStartAndOldRowsArePruned(t *testing.T) {
+	sandbox(t)
+	const child = "01a1aaab-d0db-7e20-b992-4fe413fe6780"
+	start := agent(child, "SubagentStart")
+	start.ID.env["AICO_WIDGET_ID"] = "abcd1234"
+	start.Payload = map[string]any{"hook_event_name": "SubagentStart", "session_id": child, "agent_id": child, "agent_type": "worker"}
+	start.RecordAgent()
+	parent := agent(sidA, "SessionStart")
+	parent.ID.env["AICO_WIDGET_ID"] = "abcd1234"
+	if got := parent.UnfinishedChildren(); len(got) != 1 {
+		t.Fatalf("running Codex child not listed for its coordinator: %v", got)
+	}
+	// The stop may name the parent's session; it still finishes the child's own row.
+	stop := agent(sidA, "SubagentStop")
+	stop.Payload = map[string]any{"hook_event_name": "SubagentStop", "session_id": sidA, "agent_id": child, "agent_type": "worker"}
+	stop.RecordAgent()
+	if got := parent.UnfinishedChildren(); len(got) != 0 {
+		t.Fatalf("stopped Codex child still unfinished: %v", got)
+	}
+	var doc map[string]map[string]any
+	_ = json.Unmarshal(fake.Doc("_coord")["native_children"], &doc)
+	children := map[string]map[string]any{}
+	for k, v := range doc {
+		children[k] = v
+	}
+	old := stamp(time.Now().Add(-100 * time.Hour))
+	children["x/stale"] = map[string]any{"id": "stale", "started": old}
+	children["x/done"] = map[string]any{"id": "done", "started": old, "finished": stamp(time.Now().Add(-25 * time.Hour))}
+	children["x/live"] = map[string]any{"id": "live", "started": stamp(time.Now().Add(-2 * time.Hour))}
+	testConfig().pruneChildren(children, time.Now())
+	if children["x/stale"] != nil || children["x/done"] != nil || children["x/live"] == nil || len(children) != 2 {
+		t.Fatalf("pruning kept or dropped the wrong rows: %v", children)
 	}
 }

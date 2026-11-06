@@ -9,7 +9,9 @@
     "unacked_minutes": 10,
     "snapshot_max_mins": 120,
     "registry_save_sec": 60,
-    "store_budget_ms": 1500
+    "store_budget_ms": 1500,
+    "finished_child_hours": 24,
+    "child_max_hours": 72
   },
   "tools": {
     "shell": "^(Bash|bash|exec_command|shell)$",
