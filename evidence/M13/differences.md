@@ -1,136 +1,123 @@
 # Differences from the cleanup plan
 
-Compared with the original plan and cutlist, plus later recorded decisions. Evidence and every baseline row are in [the detailed audit](audit.json). “Unverified” means the result could not be established; it does not mean data was lost.
+Updated 2026-11-06 against main at c000d4f9. This replaces the 2026-11-05 version. Every one of the 106 original differences and every M14 review finding was re-checked against the code or the live system (`aico status`, `aico jobs list`, CLI help, files, Proxmox). The original baseline rows are in [the detailed audit](audit.json); the M14 sources are [review-findings](../../docs/plans/codebase-cleanup/evidence/M14/review-findings.md) and [proposal-check](../../docs/plans/codebase-cleanup/evidence/M14/proposal-check.md). "Fixed" means the change is in main (commit given). "Unverified" means the result could not be established, not that data was lost.
 
-## Outcomes as of 2026-11-06
+## Counts
 
-Resolved since the audit:
-- Nightly check job (`check-nightly`), dead-code and new-suppression checks are configured.
-- Tasks: replaced by each project's ROADMAP.md and the Projects page; task tables dropped, so task sync and the task carry are moot (carried rows are in the roadmaps).
-- Hook chain collapsed into `use-session-view.ts` (b8f11e85), with the mock-only hook tests trimmed.
-- Stopped on-demand apps read Off from observed Proxmox power (3037ffe5), including the Portfolio-AI backup.
-- Unprotected fleet machines have a Status row; OmniNull hub 1.8.108 reports health rows.
-- Agent Hub and PostgreSQL are retired: Neri moved to SQLite and Aico context, the old stack was dumped to the T7 and removed (owner approved).
-- Publication runs from Aico with no SummitFlow source; missing acceptance runs itself before publishing (15ad1eb6).
-- Deploys install the host-steward root pieces through the signed path (fcb36bdb) and restart the scheduler when its job bundles change (dfe80381).
+| | Fixed | On purpose | Still missed | Still cut short | In progress | Total |
+| --- | --- | --- | --- | --- | --- | --- |
+| Original 106 differences | 31 | 62 | 2 | 9 | 2 | 106 |
+| M14 review findings | 52 | 2 | 0 | 11 | 0 | 65 |
+| New since 2026-11-05 | 6 | 5 | 0 | 1 | 2 | 14 |
 
-Assigned to running work (2026-11-06): frontend deploys without restarting the web server; Nightshift retirement (boot markers, postboot, zswap/CPU, display and input helpers, the release signer's Nightshift import); Agent Hub code removal (AGY retrieval check, completion gateway); VM 200/201 and CT 190 OmniNull enrollment; lab isolation evidence.
+Live now: `aico status` shows 8 problems and 304 healthy rows, all warnings, none failed or unknown. The three biggest changes since yesterday: SummitFlow, Agent Hub and Nightshift are retired and archived; Postgres, Redis and Hatchet are off on the workstation; Neri runs on SQLite.
 
-Next after those: session engine split and fleet code out of Tether; repository copy to the peer and job takeover (failover); the owner's power-off journey.
+## Still open
 
-Left as is unless they cause friction: check-time budgets, separate question schema, context measurement, memory page, notes-module split, contract replay coverage, and the one-time equality and completeness verifications listed below.
+From the original 106 (11):
+- Missed: no copy of active repos to the peer host after each commit (failover work, on the roadmap under Next).
+- Missed: the `repo` Status row type still exists with no producer (per-repo publication rows cover it); delete the type or build the rows.
+- Cut short: scheduled jobs cannot move to another machine when their home is down; all 14 jobs stay bound to their home.
+- Cut short: fleet code is still inside Tether's session service (roadmap Next).
+- Cut short: the session engine is still 3,340 lines (roadmap Next).
+- Cut short: the power-off journey (phone rescue and notes with each machine down) has not been run; planned with the owner.
+- Cut short: the Keep import has had a dry run and verify only; the recipe and car-note spot check is not recorded.
+- Cut short: the old 14 host registrations have no recorded disposition (3 hosts are linked now).
+- Cut short: the project keep-list and history reconciliation is not recorded.
+- Cut short: the old root and CI helper scripts have no recorded one-line disposition (VM 130 st-ci-runner still exists, stopped).
+- Cut short: the rendered session-list check was never done (the browser failed once); the Haiku user-test round in 4.3 covers it.
 
-## Missed
+New (1): the canary webhook path skips the Access check at the origin (b6a203fd) while the plan record says the owner rejected public callbacks; whether the Cloudflare edge lets it through is not checked. Needs the owner to confirm it is wanted (details under New differences).
 
-- The plan kept nightly full checks and live session checks; the replacement has no nightly job and rejects deep checks; no reason recorded. [Evidence](../../packages/jobs/data/jobs.json).
-- The plan kept check budgets and timing checks; the replacement rejects the budget command; no reason recorded. [Evidence](../../packages/checks/src/cli.ts).
-- The plan added dead-code and new-suppression checks after consolidation; neither check is configured; no reason recorded. [Evidence](../../.st-check.toml).
-- The plan copied active repositories to peers after each commit; no peer-copy or repository-home mechanism was built; no reason recorded. [Evidence](../../packages/checks/src/commit.ts).
-- The plan synced tasks and questions between full peers; notes, view settings and Logins sync, but tasks and questions still belong to one host; no reason recorded. [Evidence](../../packages/web-server/src/sync/registry.ts).
-- The plan shared the full question contract across components; notification fixtures exist, but no separate question schema was added; no reason recorded. [Evidence](../../packages/tether/src/asks.ts).
-- The plan collapsed the old multi-view hook chain; its session, pane, slot and project-switch helpers still form the same chain; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/audit/aico.md).
-- The plan included a memory page; only the store and commands were built; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/cutlist.md).
-- The plan kept context measurements; actual per-session context size is now unknown, while the cost page estimates delivered context; the coordinator accepted this gap. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The plan carried roughly thirteen live tasks; none was imported, and the coordinator left their reentry unresolved with the originals archived. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/reentries.md).
-- The plan replaced Repo status with Status rows; the row type exists, but no producer or live repository rows exist; no reason recorded. [Evidence](../../packages/status/src/row.ts).
-- The agreed Status behavior marks deliberately stopped apps Off; the Portfolio-AI backup still shows Failed while its VM is off, a gap handed to this audit. [Evidence](audit.json).
-- The plan moved the release signer to OmniNull before retirement; its installed command still imports Nightshift; no reason recorded. [Evidence](audit.json).
-- The plan made OmniNull push alerts and health into Aico; only the receiver was built, the hub still serves the old pull feed, and live health rows are absent; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/cutlist.md).
-- The plan moved retired-build checks into OmniNull; no replacement Status producer was found; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/cutlist.md).
-- The plan showed fleet machines without OmniNull protection; that Status row was never built; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/cutlist.md).
-- The plan installed an OmniNull agent in Aico’s always-on container; no agent is installed there; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/plan.md).
+From M14 (11):
+- `st aico`, `st aico --help` and `st aico list` print the root-watch helper's usage instead of Aico help.
+- The startup trust dialog shows "No status" on the session.
+- Non-blocking asks do not show on the session row.
+- There is no "working, quiet N min" signal.
+- Antigravity (agy) sessions may have no guard hook; not confirmed.
+- The Sudo use check warns daily: `summitflow-backup-window` ran 289 times against 13 a day (the 5-minute backups guard calls it through sudo).
+- Delivered context still names retired systems (3 memories; prompts not counted); the context audit in 4.3 covers it.
+- Does the Neri entry map crashes to exit 75 (which skips crash-loop limits)? Unanswered; Neri coordinator's to answer.
+- Archive counts differ from the cutlist (notifications 741 vs 1680); the archive is not readable from here.
+- `tether@.service` has no wait for network-online (hygiene; the 5 s retry covers it).
+- Ended launch lanes showing as open in the session list: not rechecked (`st sessions list` today still shows some old `live-smoke-*` rows as open).
 
-## Cut short or done lazily
+## In progress elsewhere
 
-- The plan let another machine take scheduled work when its home disappeared; takeover support exists, but every shipped job stays bound to its home; no reason recorded. [Evidence](../../packages/jobs/data/jobs.json).
-- The plan gave Notes its own module and database; most notes, capture and sync code still lives in the web server; no reason recorded. [Evidence](../../packages/notes/package.json).
-- The plan moved machine placement and links into Fleet; much of that code remains inside the session service; no reason recorded. [Evidence](../../packages/tether/src/hub).
-- The plan shipped screen changes without restarting the web server; a frontend deploy still selects and restarts that server; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/briefs/M10c-1.md).
-- The plan capped full checks at 105 seconds; the recorded full-check median is about 145 seconds and no final package timings were recorded; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/cutlist.md).
-- The plan removed tests tied to exact wording; new screen tests still assert exact loading text; no reason recorded. [Evidence](../../packages/web-frontend/app/mockups/page.test.tsx).
-- The plan had every native component replay shared contracts; the gate only checks that some test reads each contract, leaving several native components without replay coverage; no reason recorded. [Evidence](../../scripts/boundaries.mjs).
-- The plan proved phone rescue and notes with either host physically down; later evidence shows service/link tests, but no complete power-off journey or BIOS setting proof; no reason recorded. [Evidence](../../docs/plans/notes-and-capture.md).
-- The plan verified the Keep import and checked recipes and car notes; 22 imported notes are present, but a completed verification and spot-check record was not found; no reason recorded. [Evidence](../../docs/plans/notes-and-capture.md).
-- The plan trimmed heavy mock and source-text tests; some dead tests went, but the named hook tests and source-reading tests remain, with no completed trim recorded; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/audit/aico.md).
-- The plan split both large lifecycle files and added direct tests; the host watcher was split, but the session engine is still about 3,343 lines with only narrow engine tests; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/audit/aico.md).
-- The plan ran dead-code and duplication tools before pruning; manual audits exist, but no retained tool-run evidence was found; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/audit).
-- The plan replaced shared context delivery; AGY still checks the Agent Hub retrieval installer, and its live dependency remains unverified; no narrowing decision recorded. [Evidence](../../packages/context/data/delivery.json).
-- The plan accounted for fourteen hosts; only four are pinned now, with no complete disposition for the old registrations, eleven of which were already revoked. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/reentries.md).
-- The data plan verified copied memories and prompts by content hash; counts are verified, but the promised equality checks are unverified; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/reentries.md).
-- The plan reconciled a project keep list and its history; the registry has current projects, but history and keep-list completeness remain unverified; no reconciliation recorded. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-1/verification.json).
-- The plan carried miscellaneous root and CI helpers with their owning modules; the named helpers have no verified port or final disposition; no reason recorded. [Evidence](../../docs/plans/codebase-cleanup/briefs/M7a.md).
-- The plan copied the original sudo and asset baselines; presence and schema checks pass, but original equality remains unverified, as the retirement report acknowledged. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/baseline-metadata.json).
-- The plan enrolled the two agent VMs with specific protection settings; enrollment and monitor-only settings remain unverified from permitted evidence; no completion record found. [Evidence](../../docs/plans/codebase-cleanup/plan.md).
-- The plan checked alerts after the first ordinary hunting run; no completion record was found, and this audit did not open hunting sessions. [Evidence](../../docs/plans/codebase-cleanup/plan.md).
+- OmniNull M1 (one expected-rule model), running in the OmniNull project. Live warnings that belong to it: detection floor drill missed 2 of 85 cases; detection health 3 pages against a budget of 1. The drill fix 7a02bd9 is committed; the warning has not cleared yet.
+- OmniNull enrollment of VMs 200 (agent-work) and 201 (neri-hunters), both off now; the check that alerts work after the first ordinary hunting run waits on them. CT 190 already runs the agent; the fleet coverage row reads OK.
+- Renaming nightshift.summitflow.dev to app.summitflow.dev: code, Access audience and cert checks use app.summitflow.dev only (01191718, 1fbdda47); the old name no longer resolves and the new one answers. Still waiting on a Cloudflare login: the DNS record and Access app for approve.summitflow.dev.
 
-## Done differently on purpose
+## New differences since 2026-11-05
 
-- The plan put all database access in one store module; 24 direct database imports are still exempted from the boundary check; M0b allowed old exceptions, and these remain. [Evidence](../../packages/web-server/src/notes-db.ts).
-- The plan forbade import cycles and cross-layer exceptions; 23 cycle violations and two disallowed package imports remain exempted; M0b allowed old exceptions, and these remain. [Evidence](audit.json).
-- The plan required a final rendered session-list check; it remains unverified after the managed browser failed, accepted by the coordinator. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/verification.md).
-- The plan used Opus builders and reviewers for key pieces; Codex built and reviewed many after Claude usage ran out, and the promised Opus follow-up is still pending. [Evidence](../../docs/plans/codebase-cleanup/cutlist.md).
-- The plan added a separate affected-package script; package dependency lists now select checks directly, removing the redundant script. [Evidence](../../scripts/packages.cjs).
-- The plan ran complete test projects for each changed package; related tests replaced that after measurements showed they were faster. [Evidence](../../docs/plans/codebase-cleanup/cutlist.md).
-- The plan allowed imports only from lower layers; four explicit same-layer pairs and a lower layer for Usage were chosen for shared behavior. [Evidence](../../packages/usage/package.json).
-- The plan kept the agent independent of the session client; it now posts its state and totals through that client so the session service never reads its database. [Evidence](../../docs/plans/codebase-cleanup/cutlist.md).
-- The plan limited Python to host checks, the off-host sender and a tiny SDK; service controls and tool admission also remain Python ports. [Evidence](../../docs/plans/codebase-cleanup/evidence/M10d-1/report.md).
-- The plan kept a release folder and two links per service; deployments instead share commit-named exports and record previous unit files for rollback. [Evidence](../../packages/ops/src/deploy.ts).
-- The early plan added a Wake button and timed a phone wake test; the owner later deferred the button, leaving the existing manual wake command. [Evidence](../../docs/plans/codebase-cleanup/plan.md).
-- The early notes design queued offline edits and imported a Drive inbox; the settled design keeps a read-only phone cache and two local stores instead. [Evidence](../../docs/plans/codebase-cleanup/plan.md).
-- The vision test planned five samples and a Gemini API run; the owner accepted three photos, and the API run was skipped to avoid sending personal photos there. [Evidence](../../docs/plans/codebase-cleanup/plan.md).
-- The notes plan reused the backup login for readable Drive copies; a separate limited Drive login was chosen to keep the backup credential off the other host. [Evidence](../../docs/plans/codebase-cleanup/plan.md).
-- The early notes scope included reminders; car reminders moved to Portfolio-AI and generic note reminders were excluded from the first version. [Evidence](../../docs/plans/notes-and-capture.md).
-- The early plan listed four Neri entries; they remain unverified here because this effort never opens Neri and its coordinator owns that work. [Evidence](../../docs/plans/codebase-cleanup/briefs/M13.md).
-- The plan reserved SSH for manual rescue; guest power checks and backup control still use it, as later briefs allowed. [Evidence](../../docs/plans/codebase-cleanup/briefs/M10c-1.md).
-- The early plan deleted the Claude command files; the installed command is gone, but its old files remain in the retired checkout. [Evidence](../../packages/cli/data/cli.json).
-- The early plan fixed the old guard fixture; Aico replaced its subprocess replay with an in-process Go corpus instead. [Evidence](../../native/hook/guard/corpus_test.go).
-- The early plan deleted the obsolete system-monitor experiment; it remains in the old checkout after runtime consolidation. [Evidence](audit.json).
-- The early plan pruned old dead files and mockup ratings; the replacement omits ratings, while old files and empty tables remain archived. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-1/verification.json).
-- The early plan squashed SummitFlow migrations; the old migrations remain intact while Aico uses SQLite instead. [Evidence](../../packages/tasks/src/db.ts).
-- The plan kept only routed models; the catalog also keeps alias targets so model restrictions can recognize them. [Evidence](../../packages/context/data/models.json).
-- The plan retired Agent Hub and PostgreSQL; both still run for the unconfirmed Neri switch, older sessions and retained commands, as the coordinator required. [Evidence](../../docs/plans/codebase-cleanup/briefs/M12-2.md).
-- The plan removed the completion gateway and command; both remain because the update skill still calls its dependency-manager agent. [Evidence](../../packages/agent/package.json).
-- The plan estimated fifteen roles; the chosen set is twelve job policies and five named roles, following the curated keep list. [Evidence](../../packages/context/data/agent-hub-import.json).
-- The plan had a provider sign-in card and secret files; the owner replaced them with a shared Logins store, page and machine sync. [Evidence](../../docs/plans/codebase-cleanup/briefs/M11c-logins.md).
-- The plan entered four context budgets by hand; a one-time script copied them instead, using an import guard to preserve later edits. [Evidence](../../packages/context/src/import.ts).
-- The data table started usage history fresh; useful daily history was carried and hash-checked instead, following the earlier accounting row. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/reentries.md).
-- The plan had the owner reenter secrets; the owner later authorized a direct migration into Logins, preserving the originals. [Evidence](../../docs/plans/codebase-cleanup/briefs/M11c-logins.md).
-- The plan handed the new login and SDK calls to the Neri coordinator; a switch note exists, but delivery and completion remain unverified because no coordinator was available. [Evidence](../../docs/plans/codebase-cleanup/evidence/M11c/neri-switch.md).
-- The early plan deleted the Claude worker files; they remain in the old checkout, while their runtimes were retired under the later rebuild decision. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The early plan pruned unreachable context-editor files; the whole old frontend was disabled and replaced instead. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The early plan deduplicated old Codex protocol files; the old checkout retains them as reference, with no Aico client dependency. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The early plan moved audits and evaluations out of the main checkout; they remain there, with selected evaluation files also archived under the later consolidation. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The early plan squashed Agent Hub migrations; they remain intact while SQLite replaces their use in Aico and legacy callers retain PostgreSQL. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The early plan removed dead modules and backfill scripts individually; those files remain in the old checkout after runtime retirement. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The early plan trimmed Agent Hub mock-heavy tests; Aico rebuilt tests around new modules instead of pruning the old suite. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The plan dropped the old cleanup system; only package-cache cleanup was restored, leaving scratch, model and project-artifact retention deferred by the coordinator. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/coordinator-followup.md).
-- The plan moved publication into Aico; scheduling moved, but Git delivery and the outgoing verifier still run from SummitFlow source, as the coordinator retained them. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/coordinator-followup.md).
-- The plan rebuilt tool manifests and reports; manifests and managed runs stayed, while adoption, audit and cost reports were dropped with their old telemetry. [Evidence](../../docs/plans/codebase-cleanup/evidence/M10d-1/verbs.md).
-- The plan optionally copied nine recent mockups; they remain in the archive, and the coordinator accepted leaving that optional copy undone. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/reentries.md).
-- The plan cleared regenerable check state; SummitFlow still holds about 3.2 GB of isolated observations, with replacement aging deferred by the coordinator. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/coordinator-followup.md).
-- The plan started operational history fresh; selected host metrics were carried so trend checks could work immediately after cutover. [Evidence](../../native/host-steward/host_steward/checks/__init__.py).
-- The plan moved reboot and postboot checks into Aico; Nightshift still supplies boot markers and the postboot timer under a coordinator-approved deferral. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The plan ported telemetry; run and step measurements stayed, while the incident table and retired-board readers were deliberately omitted. [Evidence](../../native/host-steward/host_steward/telemetry.py).
-- The plan ported the independent push alarm; sending moved to the Proxmox sender so it works when the workstation is down. [Evidence](../../docs/plans/codebase-cleanup/evidence/M5b-1/replacements.md).
-- The plan ported the purple-team drill; the later brief narrowed it to grants and a synthetic canary, omitting real decoys, listener detection and item-store restore. [Evidence](../../docs/plans/codebase-cleanup/briefs/M5b-2.md).
-- The plan kept canary callbacks; they are LAN-only because the owner rejected public callbacks, and the bypass draft was never applied. [Evidence](../../packages/web-server/src/canary.ts).
-- The plan carried one open Nightshift item and twenty documents; reentry has not been demonstrated, and the coordinator preserved the originals instead of guessing. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/reentries.md).
-- The plan re-paired the phone; the app kept its existing identity and pairing for an in-place update, avoiding an unnecessary owner step. [Evidence](../../docs/plans/codebase-cleanup/briefs/M4b.md).
-- The plan deleted empty Web Push state; Web Push stopped, but the old state file remains with coordinator-preserved rollback data. [Evidence](../../docs/plans/codebase-cleanup/evidence/M5b-1/replacements.md).
-- The plan rebuilt standalone notice pages; notices and actions now use Status, Needs you, the tray and phone, following the settled screen design. [Evidence](../../docs/plans/codebase-cleanup/plan.md).
-- The plan exposed host commands through Aico; they remain a separate host-steward command selected by the port briefs, with no recorded reason for the changed spelling. [Evidence](../../docs/plans/codebase-cleanup/briefs/M5a-1.md).
-- The plan deleted the old comparison table; its timer stopped, but the table remains in preserved source data and the archive for rollback. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The plan deleted the old decision database after archiving; the runtime stopped, but its original database remains under the coordinator’s preservation decision. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-1/verification.json).
-- The plan dropped the GNOME tray extension once desktop-bridge covered it; that replacement is incomplete, so the port deliberately kept the extension and icon. [Evidence](../../docs/plans/codebase-cleanup/plan.md).
-- The plan moved passkey enrollment into tray storage; enrollment remains in the root grant store, following the later root-verifier design. [Evidence](../../native/host-steward/host_steward/data/grants.toml).
-- The plan retired legacy host helpers; display and input handling, zswap and CPU setup still use the old services under coordinator-approved deferrals. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The broad plan kept phone approval; the more specific tray-only design lets the phone view and revoke grants, while approval requires the desktop security key. [Evidence](../../packages/web-frontend/app/grants/page.tsx).
-- The early plan sped up Nightshift’s existing suite; new native tests replaced that suite under consolidation instead. [Evidence](../../.st-check.toml).
-- The early plan merged old decision modules and feed versions; the settled cutlist dropped those runtimes and rebuilt deterministic rules instead. [Evidence](audit.json).
-- The early plan kept the ledger and monthly drill; the settled plan archived the ledger and made the smaller drill run on demand. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-1/verification.json).
-- The plan deleted the old OmniNull cache; it remains with preserved rollback state after retirement. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/inventory.md).
-- The plan proved service controls on another project; Cinderwake stopped at existing Python and screenshot-test failures, accepted by the coordinator as that project’s follow-up. [Evidence](../../docs/plans/codebase-cleanup/evidence/M10d-1/live.md).
-- The plan proved the Code Intelligence integration; its existing token-header test still fails, so the coordinator accepted only proof that the gate ran. [Evidence](../../docs/plans/codebase-cleanup/evidence/M10d-1/live.md).
-- The plan ported pressure reclamation; the old automatic snapshot-prune command was removed with no configured replacement, under the bounded cleanup decision. [Evidence](../../docs/plans/codebase-cleanup/evidence/M12-2/coordinator-followup.md).
-- The plan ported push-path testing; the old drill that stopped delivery services was omitted in favor of a bounded off-host alarm proof. [Evidence](../../docs/plans/codebase-cleanup/evidence/M5b-1/replacements.md).
-- The asset check was ported, but fydor-lab-win11 still warns that isolation lacks network-card evidence; that existing lab finding was left outside cleanup fixes. [Evidence](../../native/host-steward/host_steward/checks/registry.py).
+On purpose:
+- Tasks left Aico: the task tables are dropped (ef9f1f0c); each project's ROADMAP.md and the Projects page replace them. The 38 still-real tasks were carried into those roadmaps (4654b83b, d678c4b4). The plan expected to carry about 13.
+- Nightshift's postboot check and boot markers were dropped, not ported; Tether's own restore after reboot replaces them (decision log, ef7ae28a).
+- Kept in place on purpose: `/etc/nightshift` secrets (deleting them is the owner's call), the release signer store and FCM token under `/var/lib/nightshift`, and on gem its `deadman` data.
+- Root helpers named `summitflow-*` remain in `/usr/local/sbin` (backup window, native capture, snapshot delete, steward receipt) as Aico-owned sources; only the names are old.
+- Machine intent in Status (always, on demand, off): a machine turned off on purpose shows Off with its last report, not Unknown (7d12739a, 3037ffe5, 1abe5459, 9aa1fc0f, cd1b2d3a). The plan had no such state.
+
+Fixed along the way (not in the plan):
+- Cloudflare Access token checked at the origin on every tunneled request (ee4ecca6).
+- Backup checks for Portfolio's artifact and Jobinator's container (c892a6c3, d401d0e7, 43cad446, 824502b5, 75a4b83b); Jobinator reports from its own machine (f4393541).
+- Browser profile fixes: closing or reaping the AI browser leaves no Chrome or multi-GB profile copy (browser-automation 7f53fb3, 51508f5, 7d891c3).
+- Release pruning keeps any release a live process still uses (a1b66cf0, 779b235f).
+- Portfolio dropped Hatchet; its worker schedules its own jobs (portfolio-ai bda14f2a9).
+- Projects page and server (2fc677a7, b67a3318, 137cf7c6).
+
+Still cut short:
+- The canary webhook path now skips the Access check at the origin (b6a203fd) so phone-host callbacks work, but the plan record says the owner rejected public callbacks. Whether the Cloudflare edge lets it through is not checked here. Needs the owner to confirm this is wanted.
+
+## Fixed (31 of the original 106)
+
+Missed, now done:
+- Nightly full check and live checks: `check-nightly` job, gate time in its Status row (4dd4c393, 619d0bcc, 737ef960). Last run: gate 105 s.
+- Dead-code and new-suppression guards, with baselines (4dd4c393, 01578e4c, e236b0b4).
+- Multi-view hook chain collapsed into one state module (b8f11e85).
+- Memory page: list, search, delete on the agents page (0db1126a).
+- Per-session context size recorded and shown (cc0933b2, 70e0a018, 30ee87cc).
+- Live task carry: tasks replaced by roadmaps (ef9f1f0c, 09b435ba, 4654b83b).
+- Portfolio backup showing Failed while its VM is off (0eb6f29c, 3037ffe5, 824502b5, 43cad446).
+- OmniNull: own release signer replaces the Nightshift one (OmniNull 5fd4c93); alerts and health pushed to Aico, pull feed retired (bcf902e); old-release-key row (`ominull.builds.*`); fleet coverage row (ae22053); agent running on CT 190.
+
+Cut short, now done:
+- Frontend deploys swap the page build without restarting aico-web (223207c4).
+- Full check at the time target: 105 s.
+- Heavy hook tests trimmed with the collapse (b8f11e85; the 934-line tabs test is gone).
+- Dead-code and duplication runs: the audit was wrong; the tool-run evidence exists (evidence/M12-2/fallow-final.json).
+- AGY context no longer depends on Agent Hub (031401c0).
+
+On purpose, now closed:
+- Opus review of the Codex-built pieces ran (133aa812); its findings are in the M14 section below.
+- Agent Hub and PostgreSQL retired and archived (99c5630c, 910cf026, 61ef4112); `st complete` and its extension dropped (031401c0).
+- Neri switch note: Neri runs on SQLite and Aico context (owner-stated; Neri data not opened here).
+- Publication fully in Aico: outgoing verifier, delivery transport, importers (11e675b2, 3b6a367b, 42f73a9d).
+- Old SummitFlow check receipts: the checkout and its state are gone (`~/.summitflow/SummitFlow` is empty); archived in `/srv/workspaces/archive/summitflow-2026-11-06`.
+- Reboot and runtime remainders (display guard, input watch, zswap, split DNS, home-off): moved to host-steward (d53e27ce, 3f26f6de, 44accd50, e81bfddd).
+- The one Nightshift item and 20 "documents": nothing to carry (they were runtime state); the open critical lab item became an isolation-check rule (4654b83b).
+- Old Web Push state, decide database, OmniNull cache: in `archive/nightshift-2026-11-06/state`; `/var/lib/nightshift` is down to the kept signer store and FCM token.
+- Automatic snapshot-prune under pressure: back as thinning of work snapshots (2eeb340e).
+- Lab isolation warning for VM 111: VM deleted, asset entry dropped (ff95e007, 777d5756), and lab flows past isolation page (4332a359).
+
+## On purpose (62 of the original 106)
+
+Unchanged from the first list unless noted; each one has its reason in audit.json.
+- Allowed old exceptions (M0b): 24 direct database imports, 23 import cycles, 2 disallowed package imports, all still exempted (2).
+- Left as is, recommended in M14 and not an owner decision yet: separate question schema (the notice schema already has `kind: question`); a check-budget command (gate time is in the nightly row instead); native contract replay beyond the five components that read contracts; the Notes module split (6.7k lines stay in the web server); exact-wording tests (they test the "each state has its own copy" rule); original-equality checks for memories, prompts, sudo and asset baselines (the live rows changed legitimately); asks stay on the host that filed them (tasks sync is moot) (8).
+- Tooling choices: related tests instead of full projects, package dependency lists instead of an affected script, same-layer pairs, agent posts through the session client, Python ports for service controls, commit-named releases instead of two links, vitest, one catalog of alias models (7).
+- Product choices: Wake button deferred, read-only phone notes cache, three vision photos and no API run, separate limited Drive login, car reminders in Portfolio, twelve job policies and five roles, Logins store, one-time context budget import, daily usage history carried, direct secret migration, owner kept phone pairing, notices on Status and Needs you, phone views grants but approval is desktop-only, tray extension kept, passkeys in the root grant store (15).
+- Operational choices: SSH kept for guest power and backup control, sending moved to the Proxmox sender, LAN-only canary (see new differences), drill limited to grants and a synthetic canary, telemetry without the incident table, selected host metrics carried, host commands as `aico declare`/host-steward, bounded cleanup (package caches only; scratch, model and artifact retention deferred), tool manifests kept and old reports dropped, mockups not copied, deliberate omissions of the old delivery drill, Cinderwake and Code Intelligence proofs stopped at known failures (13).
+- Left in the archive with the retired projects (old command files, guard fixture, system-monitor, dead files, squashed migrations, Agent Hub workers, frontend, protocol files, docs, migrations, backfills and tests, Nightshift tests, decide modules and ledger, comparison table): all now under `/srv/workspaces/archive` (16).
+- Not opened by this effort: the four early Neri entries (1).
+
+## M14 review findings (65): 52 fixed
+
+- Context and chat: context-unused check fires and now reports real findings (a058b09c); failed Status rows needing the owner reach the phone (ef9446c0); web search time limit falls back and zero results is `no_results` (4a2d7021); chat asks route to the session that started the chat, with files (b98e0819, 3f1183da); queued chat messages return to the draft and oversize agy prompts are refused (bd117ec5); always-on rules never counted unused (a058b09c); context page labels (70e0a018).
+- Checks and publish: only whole-tree-checked commits publish, a failed Status post no longer aborts the pass, holds through REV honored (02ff0ccd); failed swap recovery reported as a failed deploy (13eb1daf); Codex children finished and the ledger pruned (2aa2a276); pve trim has its own lock (2eeb340e); Proxmox token fetched once per operation.
+- Fleet and root: Logins activity bounded, lock is flock (c6c26a15, b8c2b31d); CT 190 phone alerts go through the Proxmox sender (eac7cbd0); canary cooldown, rate limit and event store (25141eb8); guest power cached, not an SSH every 5 s (a7759962); CT 190 fleet.json carries `proxmoxSsh` (live-checked); finished grant rows expire (ff95e007); one root handler (19837c9c).
+- Ops and docs: backup rows stay due while their run goes (3b908e38); `st rollback` previews and needs a single-use confirm (e583a7cf); recovery.md corrected and has the workstation-and-T7-lost path (15587a80); the backup stream that needed SummitFlow's Postgres is gone (4478102e).
+- Rex review: fleet link row clears when up (16cde506); stale `tether-link@` unit removed (2358a4d0, 4499b3b4); docs updated (7d842b74); Access token checked at the origin (ee4ecca6); phone gate moved to Aico's data directory (b2d2a14b).
+- Coordinator recovery: root's own lane wait kept (e434e4ef); repeat create for a known root no-ops (19837c9c, live-checked in code); late confirm settled once (6b186b12); remote roots rebooked (19837c9c); restore of finished roots resolves (6b186b12); transfer no longer re-sends filed asks, tested through the route (e01f91f8); End-cancels-waits documented in api-v1.md.
+- Rex research: waiting sessions push to the phone after two minutes (e01f91f8); guard blocks deleting Aico's backups, secrets and databases, including python/node one-liners (775bfa26); `tether ask create --help` works (19837c9c); terminal compression, alternate-screen seeds and no history resend on resize (c4d03fd5); origin Access check (ee4ecca6).
+- Proposal check: Agent Hub units no longer re-enabled and retired units removed (b18b373b, 4499b3b4); CT 190 takes signed updates and follows the workstation's release (f99f2011, 2358a4d0, a9060a6a); Status noise: owner-off rows folded, gone backup sources dropped, revoked grants expire, fleet row clears (abb5c77a, ff95e007, 9aa1fc0f, 16cde506); `nightshift` CLI gone from PATH; broken task importer removed (42f73a9d, 4fab4f08).
+- On purpose (2): lab assignment trusts the self-reported work role (by design per the Neri switch note); blocking asks via the Nightshift CLI is moot now that Nightshift is retired.
