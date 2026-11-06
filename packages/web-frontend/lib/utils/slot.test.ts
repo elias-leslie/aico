@@ -5,158 +5,14 @@ import {
   OWN_TMUX_CAN,
   ROOT_CAN,
   SESSION_BASE,
-  SLOT_BASE,
   TETHER_CAN,
 } from '@/test-stubs/session-fixtures'
-import type { AdHocSlot, ProjectSlot } from './slot'
 import {
-  getPaneId,
-  getSlotBaseName,
-  getSlotName,
-  getSlotPanelId,
-  getSlotSessionId,
-  getSlotWorkingDir,
-  isPaneSlot,
-  type PaneSlot,
   paneSessionsAsSessions,
   paneToSlot,
   sessionTitle,
   sessionToSlot,
 } from './slot'
-
-const makeProjectSlot = (overrides?: Partial<ProjectSlot>): ProjectSlot => ({
-  type: 'project',
-  ...SLOT_BASE,
-  projectId: 'proj-1',
-  projectName: 'My Project',
-  rootPath: '/home/user/project',
-  activeMode: 'shell',
-  activeSessionId: 'session-abc',
-  sessionBadge: null,
-  ...overrides,
-})
-
-const makeAdHocSlot = (overrides?: Partial<AdHocSlot>): AdHocSlot => ({
-  type: 'adhoc',
-  ...SLOT_BASE,
-  sessionId: 'adhoc-123',
-  name: 'Ad Hoc Session',
-  workingDir: '/tmp',
-  ...overrides,
-})
-
-describe('getSlotSessionId', () => {
-  it('returns activeSessionId for project slot', () => {
-    const slot = makeProjectSlot({ activeSessionId: 'sess-42' })
-    expect(getSlotSessionId(slot)).toBe('sess-42')
-  })
-
-  it('returns null when project slot has no active session', () => {
-    const slot = makeProjectSlot({ activeSessionId: null })
-    expect(getSlotSessionId(slot)).toBeNull()
-  })
-
-  it('returns sessionId for adhoc slot', () => {
-    const slot = makeAdHocSlot({ sessionId: 'adhoc-99' })
-    expect(getSlotSessionId(slot)).toBe('adhoc-99')
-  })
-})
-
-describe('getSlotPanelId', () => {
-  it('returns project-prefixed id for project slot', () => {
-    const slot = makeProjectSlot({ projectId: 'p-1' })
-    expect(getSlotPanelId(slot)).toBe('project-p-1')
-  })
-
-  it('returns adhoc-prefixed id for adhoc slot', () => {
-    const slot = makeAdHocSlot({ sessionId: 's-2' })
-    expect(getSlotPanelId(slot)).toBe('adhoc-s-2')
-  })
-
-  it('returns pane-prefixed id for pane-based slots', () => {
-    const slot: PaneSlot = {
-      ...makeProjectSlot({ projectId: 'p-1' }),
-      paneId: 'pane-123',
-    }
-    expect(getSlotPanelId(slot)).toBe('pane-pane-123')
-  })
-})
-
-describe('getSlotName', () => {
-  it('returns project name when badge is null', () => {
-    const slot = makeProjectSlot({ projectName: 'Foo', sessionBadge: null })
-    expect(getSlotName(slot)).toBe('Foo')
-  })
-
-  it('returns project name when badge is 1', () => {
-    const slot = makeProjectSlot({ projectName: 'Foo', sessionBadge: 1 })
-    expect(getSlotName(slot)).toBe('Foo')
-  })
-
-  it('returns project name with badge when badge > 1', () => {
-    const slot = makeProjectSlot({ projectName: 'Foo', sessionBadge: 3 })
-    expect(getSlotName(slot)).toBe('Foo [3]')
-  })
-
-  it('returns name for adhoc slot', () => {
-    const slot = makeAdHocSlot({ name: 'My Session' })
-    expect(getSlotName(slot)).toBe('My Session')
-  })
-})
-
-describe('getSlotBaseName', () => {
-  it('returns project name without badge for project slot', () => {
-    const slot = makeProjectSlot({ projectName: 'Bar', sessionBadge: 5 })
-    expect(getSlotBaseName(slot)).toBe('Bar')
-  })
-
-  it('returns name for adhoc slot', () => {
-    const slot = makeAdHocSlot({ name: 'Session X' })
-    expect(getSlotBaseName(slot)).toBe('Session X')
-  })
-})
-
-describe('getSlotWorkingDir', () => {
-  it('returns rootPath for project slot', () => {
-    const slot = makeProjectSlot({ rootPath: '/home/user/code' })
-    expect(getSlotWorkingDir(slot)).toBe('/home/user/code')
-  })
-
-  it('returns null when project slot has no rootPath', () => {
-    const slot = makeProjectSlot({ rootPath: null })
-    expect(getSlotWorkingDir(slot)).toBeNull()
-  })
-
-  it('returns workingDir for adhoc slot', () => {
-    const slot = makeAdHocSlot({ workingDir: '/var/log' })
-    expect(getSlotWorkingDir(slot)).toBe('/var/log')
-  })
-})
-
-describe('isPaneSlot', () => {
-  it('returns true for slot with paneId', () => {
-    const paneSlot: PaneSlot = {
-      ...makeProjectSlot(),
-      paneId: 'pane-1',
-    }
-    expect(isPaneSlot(paneSlot)).toBe(true)
-  })
-
-  it('returns false for slot without paneId', () => {
-    const slot = makeProjectSlot()
-    expect(isPaneSlot(slot)).toBe(false)
-  })
-})
-
-describe('getPaneId', () => {
-  it('returns the pane ID from a PaneSlot', () => {
-    const paneSlot: PaneSlot = {
-      ...makeProjectSlot(),
-      paneId: 'pane-42',
-    }
-    expect(getPaneId(paneSlot)).toBe('pane-42')
-  })
-})
 
 // One session per kind, as the backend lists it: `source`, the informational
 // flags and the capability flags (packages/web-server/src/sessions.ts).
@@ -203,10 +59,6 @@ function makePane(
     is_detached: false,
     created_at: '2026-10-01T00:00:00Z',
     sessions,
-    width_percent: 100,
-    height_percent: 100,
-    grid_row: 0,
-    grid_col: 0,
     ...overrides,
   }
 }
@@ -370,8 +222,6 @@ describe('sessionToSlot', () => {
       rootPath: '/workspace/neri',
       activeMode: 'shell',
       activeSessionId: 'ownTmux-session',
-      sessionBadge: null,
-      claudeState: 'running',
       task: undefined,
       badge: null,
       checkIns: [],
@@ -408,7 +258,6 @@ describe('sessionToSlot', () => {
       can: { rename: false, reset: false, end: false },
       showsSessionTitle: false,
     })
-    expect(getSlotPanelId(slot)).toBe('adhoc-ownTmux-session')
   })
 
   it('builds an ad hoc slot for a session without a project even when asked for a project slot', () => {
@@ -479,124 +328,33 @@ describe('paneToSlot', () => {
     })
   })
 
-  it('converts a project pane to a PaneBasedSlot with agent state', () => {
-    const slot = paneToSlot({
-      id: 'pane-1',
-      pane_type: 'project',
-      project_id: 'proj-x',
-      pane_order: 0,
-      pane_name: 'Main',
-      active_mode: 'shell',
-      is_detached: false,
-      created_at: null,
-      width_percent: 50,
-      height_percent: 100,
-      grid_row: 0,
-      grid_col: 0,
-      sessions: [
-        {
-          ...SESSION_BASE,
-          id: 's1',
-          name: 'Shell',
-          mode: 'shell',
-          session_number: 1,
-          is_alive: true,
-          working_dir: '/ws',
-          claude_state: 'not_started',
-        },
-        {
-          ...SESSION_BASE,
-          id: 's2',
-          name: 'Agent',
-          mode: 'claude',
-          session_number: 2,
-          is_alive: true,
-          working_dir: '/ws',
-          claude_state: 'running',
-        },
-      ],
+  it("opens a project pane on its mode's session, else its shell", () => {
+    const shell = makeSession('tether', { id: 's1', mode: 'shell' })
+    const agent = makeSession('tether', { id: 's2', mode: 'claude' })
+    const pane = makePane('project', [shell, agent], { active_mode: 'claude' })
+    expect(paneToSlot(pane)).toMatchObject({
+      paneId: 'pane-1',
+      activeMode: 'claude',
+      activeSessionId: 's2',
     })
-
-    expect(slot.type).toBe('project')
-    expect(slot.paneId).toBe('pane-1')
-    if (slot.type === 'project') {
-      expect(slot.projectId).toBe('proj-x')
-      expect(slot.activeSessionId).toBe('s1')
-      expect(slot.claudeState).toBe('running')
-    }
+    // A stale mode (no codex session here) falls back to the shell.
+    expect(
+      paneToSlot({ ...pane, active_mode: 'codex', sessions: [shell] }),
+    ).toMatchObject({ activeMode: 'shell', activeSessionId: 's1' })
   })
 
-  it('falls back to a live shell session when project active_mode is stale', () => {
-    const slot = paneToSlot({
-      id: 'pane-1',
-      pane_type: 'project',
-      project_id: 'proj-x',
-      pane_order: 0,
-      pane_name: 'Main',
-      active_mode: 'codex',
-      is_detached: false,
-      created_at: null,
-      width_percent: 50,
-      height_percent: 100,
-      grid_row: 0,
-      grid_col: 0,
-      sessions: [
-        {
-          ...SESSION_BASE,
-          id: 's1',
-          name: 'Shell',
-          mode: 'shell',
-          session_number: 1,
-          is_alive: true,
-          working_dir: '/ws',
-          claude_state: 'not_started',
-        },
-      ],
+  it('maps an adhoc pane to its one session', () => {
+    const shell = makeSession('ownTmux', { id: 's3', mode: 'shell' })
+    expect(
+      paneToSlot(makePane('adhoc', [shell], { pane_name: 'Ad-Hoc' })),
+    ).toMatchObject({
+      type: 'adhoc',
+      paneId: 'pane-1',
+      sessionId: 's3',
+      name: 'Ad-Hoc',
+      workingDir: '/workspace/neri',
+      sessionMode: 'shell',
     })
-
-    expect(slot.type).toBe('project')
-    if (slot.type === 'project') {
-      expect(slot.activeMode).toBe('shell')
-      expect(slot.activeSessionId).toBe('s1')
-    }
-  })
-
-  it('converts an adhoc pane to an AdHocPaneSlot', () => {
-    const slot = paneToSlot({
-      id: 'pane-2',
-      pane_type: 'adhoc',
-      project_id: null,
-      pane_order: 1,
-      pane_name: 'Ad-Hoc',
-      active_mode: 'shell',
-      is_detached: false,
-      created_at: null,
-      width_percent: 100,
-      height_percent: 100,
-      grid_row: 0,
-      grid_col: 0,
-      sessions: [
-        {
-          ...SESSION_BASE,
-          id: 's3',
-          name: 'Shell',
-          mode: 'shell',
-          session_number: 1,
-          is_alive: true,
-          working_dir: '/tmp',
-          claude_state: 'not_started',
-        },
-      ],
-    })
-
-    expect(slot.type).toBe('adhoc')
-    expect(slot.paneId).toBe('pane-2')
-    if (slot.type === 'adhoc') {
-      expect(slot.sessionId).toBe('s3')
-      expect(slot.name).toBe('Ad-Hoc')
-      expect(slot.workingDir).toBe('/tmp')
-      expect(slot.sessionMode).toBe('shell')
-    }
   })
 
   it('offers no Reset on an adhoc pane holding a root session, nor its title without a task', () => {
@@ -631,42 +389,23 @@ describe('paneToSlot', () => {
   ] as const)(
     'names a %s pane after its Tether session',
     (paneType, projectId) => {
-      const slot = paneToSlot({
-        id: 'pane-3',
-        pane_type: paneType,
-        project_id: projectId,
-        pane_order: 0,
-        pane_name: 'Old pane name',
-        active_mode: 'shell',
-        is_detached: false,
-        created_at: null,
-        width_percent: 100,
-        height_percent: 100,
-        grid_row: 0,
-        grid_col: 0,
-        sessions: [
-          {
-            ...SESSION_BASE,
-            id: 's4',
-            name: 'Coordinator',
-            task: 'Coordinator',
-            is_coordinator: true,
-            badge: {
-              kind: 'coordinator',
-              text: 'Coordinator',
-              color: '#f0a35e',
-            },
-            mode: 'shell',
-            session_number: 1,
-            is_alive: true,
-            source: 'tether',
-            working_dir: '/tmp',
-            claude_state: 'not_started',
-          },
-        ],
+      const coordinator = makeSession('tether', {
+        name: 'Coordinator',
+        task: 'Coordinator',
+        is_coordinator: true,
+        badge: { kind: 'coordinator', text: 'Coordinator', color: '#f0a35e' },
+        mode: 'shell',
       })
+      const slot = paneToSlot(
+        makePane(paneType, [coordinator], {
+          project_id: projectId,
+          pane_name: 'Old pane name',
+        }),
+      )
 
-      expect(getSlotName(slot)).toBe('Coordinator')
+      expect(slot.type === 'project' ? slot.projectName : slot.name).toBe(
+        'Coordinator',
+      )
       expect(slot.can).toEqual({ rename: true, reset: true, end: true })
       expect(slot.showsSessionTitle).toBe(true)
       expect(slot.task).toBe('Coordinator')

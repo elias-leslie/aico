@@ -3,17 +3,78 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { paneSessionsAsSessions } from '@/lib/utils/slot'
-import * as api from './terminal-panes-api'
-import type {
-  PaneListResponse,
-  PanePlacementOptions,
-  TerminalPane,
-  UpdatePaneRequest,
-} from './terminal-panes-types'
+import { apiFetch } from '../api-fetch'
 import {
   SESSION_REFRESH_MS,
   type TerminalSession,
 } from './use-terminal-sessions'
+
+export interface TerminalPane {
+  id: string
+  pane_type: 'project' | 'adhoc'
+  project_id: string | null
+  pane_order: number
+  pane_name: string
+  active_mode: string
+  is_detached: boolean
+  created_at: string | null
+  /** The same full sessions the Sessions API returns. */
+  sessions: TerminalSession[]
+}
+
+export interface PaneListResponse {
+  items: TerminalPane[]
+  total: number
+}
+
+interface CreatePaneRequest {
+  pane_type: 'project' | 'adhoc'
+  pane_name: string
+  project_id?: string
+  working_dir?: string
+  agent_tool_slug?: string
+  detached?: boolean
+  /** A Tether peer to start the session on; absent for this computer. */
+  host?: string
+}
+
+interface UpdatePaneRequest {
+  pane_name?: string
+  active_mode?: string
+}
+
+interface PanePlacementOptions {
+  detached?: boolean
+  host?: string
+}
+
+const api = {
+  fetchPanes: (): Promise<PaneListResponse> => apiFetch('/api/panes'),
+  fetchDetachedPanes: (): Promise<PaneListResponse> =>
+    apiFetch('/api/panes/detached'),
+  createPane: (request: CreatePaneRequest): Promise<TerminalPane> =>
+    apiFetch('/api/panes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }),
+  updatePane: (
+    paneId: string,
+    request: UpdatePaneRequest,
+  ): Promise<TerminalPane> =>
+    apiFetch(`/api/panes/${paneId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }),
+  deletePane: async (paneId: string): Promise<void> => {
+    await apiFetch(
+      `/api/panes/${paneId}`,
+      { method: 'DELETE' },
+      'Failed to delete pane',
+    )
+  },
+}
 
 const ACTIVE_PANES_QUERY_KEY = ['terminal-panes']
 const DETACHED_PANES_QUERY_KEY = ['terminal-detached-panes']
@@ -285,11 +346,3 @@ export function useTerminalPanes() {
     isDeleting: deleteMutation.isPending,
   }
 }
-
-export type {
-  CreatePaneRequest,
-  PanePlacementOptions,
-  PaneSession,
-  TerminalPane,
-  UpdatePaneRequest,
-} from './terminal-panes-types'

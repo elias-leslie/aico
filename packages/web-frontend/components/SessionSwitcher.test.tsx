@@ -37,7 +37,6 @@ function makeProjectSlot(id: string, name: string): PaneSlot {
     rootPath: `/workspace/${id}`,
     activeMode: 'shell',
     activeSessionId: `${id}-session`,
-    sessionBadge: null,
   }
 }
 

@@ -80,7 +80,6 @@ function makeProjectSlot(
     rootPath: `/workspace/${id}`,
     activeMode: 'shell',
     activeSessionId: `${id}-session`,
-    sessionBadge: null,
   }
 }
 

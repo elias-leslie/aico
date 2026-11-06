@@ -17,7 +17,6 @@ import type {
   SessionModelSwitch,
   TerminalSession,
 } from '@/lib/hooks/use-terminal-sessions'
-import { getAgentState } from './agent-state'
 import {
   type CoordinatorBadgeInfo,
   getCoordinatorBadge,
@@ -63,7 +62,7 @@ interface SlotSessionFields {
   showsSessionTitle: boolean
 }
 
-// Slot types for split-pane terminal sessions
+// A project session (its pane shows its shell or its agent)
 export interface ProjectSlot extends SlotSessionFields {
   slotId?: string
   type: 'project'
@@ -73,10 +72,6 @@ export interface ProjectSlot extends SlotSessionFields {
   activeMode: string
   // Current active session (based on mode)
   activeSessionId: string | null
-  // Session badge (1-indexed position among project sessions)
-  sessionBadge: number | null
-  // Claude state for the active session
-  claudeState?: 'not_started' | 'starting' | 'running' | 'stopped' | 'error'
 }
 
 export interface AdHocSlot extends SlotSessionFields {
@@ -120,28 +115,9 @@ export function getSlotPanelId(slot: TerminalSlot | PaneSlot): string {
   return `adhoc-${slot.sessionId}`
 }
 
-/**
- * Get display name for a slot (includes badge if applicable).
- */
+/** A slot's title (a pane's number is part of its name). */
 export function getSlotName(slot: TerminalSlot | PaneSlot): string {
-  if (slot.type === 'project') {
-    const badge = slot.sessionBadge
-    if (badge !== null && badge > 1) {
-      return `${slot.projectName} [${badge}]`
-    }
-    return slot.projectName
-  }
-  return slot.name
-}
-
-/**
- * Get base project name without badge.
- */
-export function getSlotBaseName(slot: TerminalSlot | PaneSlot): string {
-  if (slot.type === 'project') {
-    return slot.projectName
-  }
-  return slot.name
+  return slot.type === 'project' ? slot.projectName : slot.name
 }
 
 /**
@@ -294,8 +270,6 @@ export function sessionToSlot(
       rootPath: session.working_dir,
       activeMode: session.mode,
       activeSessionId: session.id,
-      sessionBadge: null,
-      claudeState: getAgentState(session),
       ...slotFields(session, 'project'),
     }
   }
@@ -335,7 +309,6 @@ export function paneToSlot(pane: TerminalPane): PaneSlot {
       pane.sessions.find((s) => s.mode === pane.active_mode) ??
       pane.sessions.find((s) => s.mode === 'shell') ??
       pane.sessions[0]
-    const agentSession = pane.sessions.find((s) => s.mode !== 'shell')
     return {
       type: 'project',
       paneId: pane.id,
@@ -349,8 +322,6 @@ export function paneToSlot(pane: TerminalPane): PaneSlot {
       rootPath: activeSession?.working_dir ?? null,
       activeMode: activeSession?.mode ?? pane.active_mode,
       activeSessionId: activeSession?.id ?? null,
-      sessionBadge: null, // Badge is now part of pane_name
-      claudeState: getAgentState(agentSession),
       ...slotFields(activeSession, 'project'),
       // The pane's start, so switching agent and shell never moves the row.
       createdAt: pane.created_at,
@@ -371,21 +342,6 @@ export function paneToSlot(pane: TerminalPane): PaneSlot {
     ...slotFields(session, 'adhoc'),
     createdAt: pane.created_at ?? session?.created_at,
   }
-}
-
-/**
- * Convert array of TerminalPanes to PaneSlots.
- * Panes are already ordered by pane_order from the API.
- */
-export function panesToSlots(panes: TerminalPane[]): PaneSlot[] {
-  return panes.map(paneToSlot)
-}
-
-/**
- * Get the pane ID from a PaneSlot.
- */
-export function getPaneId(slot: PaneSlot): string {
-  return slot.paneId
 }
 
 /**

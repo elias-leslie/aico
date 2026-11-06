@@ -3,11 +3,21 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_BASE } from '@/test-stubs/session-fixtures'
-import * as api from './terminal-panes-api'
-import type { PaneListResponse, TerminalPane } from './terminal-panes-types'
-import { usePaneListError, useTerminalPanes } from './use-terminal-panes'
+import { apiFetch } from '../api-fetch'
+import {
+  type PaneListResponse,
+  type TerminalPane,
+  usePaneListError,
+  useTerminalPanes,
+} from './use-terminal-panes'
 
-vi.mock('./terminal-panes-api')
+vi.mock('../api-fetch', () => ({ apiFetch: vi.fn() }))
+
+/** The server, by request: `GET /api/panes`, `POST /api/panes`, ... */
+const server = new Map<string, () => Promise<unknown>>()
+function serve(route: string, reply: () => Promise<unknown>) {
+  server.set(route, reply)
+}
 
 const detachedPane: TerminalPane = {
   id: 'pane-detached',
@@ -30,10 +40,6 @@ const detachedPane: TerminalPane = {
       claude_state: 'not_started',
     },
   ],
-  width_percent: 100,
-  height_percent: 100,
-  grid_row: 0,
-  grid_col: 0,
 }
 
 function paneList(items: TerminalPane[]): PaneListResponse {
@@ -49,10 +55,13 @@ function createWrapper(queryClient: QueryClient) {
 describe('useTerminalPanes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(api.fetchPanes).mockResolvedValue(paneList([]))
-    vi.mocked(api.fetchDetachedPanes).mockResolvedValue(
-      paneList([detachedPane]),
-    )
+    server.clear()
+    vi.mocked(apiFetch).mockImplementation((url, options) => {
+      const reply = server.get(`${options?.method ?? 'GET'} ${url}`)
+      return reply ? (reply() as never) : Promise.reject(new Error(url))
+    })
+    serve('GET /api/panes', async () => paneList([]))
+    serve('GET /api/panes/detached', async () => paneList([detachedPane]))
   })
 
   it('puts a new detached pane in the detached cache and the full session list at once', async () => {
@@ -66,10 +75,7 @@ describe('useTerminalPanes', () => {
     queryClient.setQueryData(['terminal-detached-panes'], paneList([]))
     queryClient.setQueryData(['terminal-sessions', false], [])
     queryClient.setQueryData(['terminal-sessions', true], [])
-    vi.mocked(api.createPane).mockResolvedValue(detachedPane)
-    vi.mocked(api.fetchDetachedPanes).mockResolvedValue(
-      paneList([detachedPane]),
-    )
+    serve('POST /api/panes', async () => detachedPane)
 
     const { result } = renderHook(() => useTerminalPanes(), {
       wrapper: createWrapper(queryClient),
@@ -85,7 +91,10 @@ describe('useTerminalPanes', () => {
       )
     })
 
-    expect(vi.mocked(api.createPane).mock.calls[0]?.[0]).toMatchObject({
+    const create = vi
+      .mocked(apiFetch)
+      .mock.calls.find(([, options]) => options?.method === 'POST')
+    expect(JSON.parse(String(create?.[1]?.body))).toMatchObject({
       project_id: 'project-a',
       detached: true,
     })
@@ -106,7 +115,7 @@ describe('useTerminalPanes', () => {
   })
 
   it('stays failed, not loading, while a list that never loaded is refetched', async () => {
-    vi.mocked(api.fetchPanes).mockRejectedValue(new Error('down'))
+    serve('GET /api/panes', () => Promise.reject(new Error('down')))
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -119,7 +128,7 @@ describe('useTerminalPanes', () => {
     expect(result.current.panes.isLoading).toBe(false)
     expect(result.current.panes.loadFailed).toBe(true)
 
-    vi.mocked(api.fetchPanes).mockReturnValue(new Promise(() => {}))
+    serve('GET /api/panes', () => new Promise(() => {}))
     act(() => result.current.list.retry())
     await waitFor(() =>
       expect(queryClient.isFetching({ queryKey: ['terminal-panes'] })).toBe(1),

@@ -10,7 +10,7 @@ import {
   useMarkActiveSeen,
   useSessionAttention,
 } from '@/lib/hooks/use-session-attention'
-import { useTerminalOrchestration } from '@/lib/hooks/use-terminal-orchestration'
+import { useSessionView } from '@/lib/hooks/use-session-view'
 import { useVisualViewportHeight } from '@/lib/hooks/use-visual-viewport-height'
 import {
   getSlotSessionId,
@@ -82,7 +82,7 @@ export function TerminalTabs({
     handleUploadClick,
     handleFileSelect,
     handleFileInputChange,
-  } = useTerminalOrchestration({ projectId, projectPath })
+  } = useSessionView({ projectId, projectPath })
   // Opening a session clears its needs-you/finished state; the title carries
   // the count of sessions waiting on the owner.
   useMarkActiveSeen(activeSessionId)
@@ -168,7 +168,7 @@ export function TerminalTabs({
         handleOpenTerminalManager={handleOpenTerminalManager}
         handleUploadClick={handleUploadClick}
         onModeSwitch={handleSlotModeSwitch}
-        isModeSwitching={!!isModeSwitching}
+        isModeSwitching={isModeSwitching}
         fileInputRef={fileInputRef}
         progress={progress}
         isUploading={isUploading}

@@ -23,8 +23,8 @@ const slot: TerminalSlot = {
   sessionMode: 'shell',
 }
 
-vi.mock('@/lib/hooks/use-terminal-orchestration', () => ({
-  useTerminalOrchestration: () => ({
+vi.mock('@/lib/hooks/use-session-view', () => ({
+  useSessionView: () => ({
     isLoading: false,
     sessions: sessions.list,
     terminalSlots: slots.list,

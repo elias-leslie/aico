@@ -50,10 +50,6 @@ function projectPane(
     is_detached: false,
     created_at: null,
     sessions: [session(`${paneId}-session`, overrides)],
-    width_percent: 100,
-    height_percent: 100,
-    grid_row: 0,
-    grid_col: 0,
   }
 }
 
@@ -199,7 +195,6 @@ function ownSlot(id: string): PaneSlot {
     rootPath: '/tmp/project-1',
     activeMode: 'shell',
     activeSessionId: `session-${id}`,
-    sessionBadge: null,
   }
 }
 
