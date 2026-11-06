@@ -198,12 +198,16 @@ def test_a_pull_kind_on_an_older_tether_is_refused_before_arming(monkeypatch):
 @pytest.mark.parametrize("argv", [
     ["wait", "job", "xyz"],
     ["wait", "ask", "abc"],
-    ["wait", "tap", "1234"],
     ["wait", "reply", "abc123", "--until", "done"],
 ])
 def test_pull_refs_and_untils_are_checked_locally(monkeypatch, argv):
     with pytest.raises(SystemExit):
         run(monkeypatch, argv, [])
+
+
+def test_the_retired_tap_kind_is_refused(monkeypatch):
+    code, calls, _ = run(monkeypatch, ["wait", "tap", "0" * 32], [])
+    assert code == 2 and calls == []
 
 
 def test_reply_wait_takes_closed_and_blocks(monkeypatch, capsys):

@@ -2645,7 +2645,6 @@ PULL_WAITS = {
     "reply": (("acked", "closed"), r"[0-9a-f]{6,12}", "a request you sent with st sessions send (its id)"),
     "ask": (("answered",), r"[0-9a-f]{12}", "an owner ask id (tether ask create)"),
     "host": (("connected",), r"[a-z0-9][a-z0-9-]{0,63}", "a remote host name (st aico placement)"),
-    "tap": (("decided",), r"[0-9a-f]{32}", "a Nightshift tap or request id"),
 }
 # GET /v1/waits/:id?wait= holds at most this long (packages/tether/src/waits.ts LONG_POLL_MAX_SECONDS).
 WAIT_POLL_SECONDS = 55
@@ -2817,14 +2816,14 @@ def nudge_main(argv: list[str]) -> int:
 
 
 def wait_main(argv: list[str]) -> int:
-    """`st aico wait session|job|reply|ask|host|tap|cmd|time|get|cancel` and `st aico waits`."""
+    """`st aico wait session|job|reply|ask|host|cmd|time|get|cancel` and `st aico waits`."""
     operation = argv[0] if argv else ""
     if operation == "time":
         return wake_main(["set", *argv[1:]])
     if operation not in ("session", *PULL_WAITS, "cmd", "get", "cancel", "list"):
         print("usage: st aico wait session ID|REQ [--until finished|idle|blocked|ended] | "
               "wait job ID | wait reply ID [--until acked|closed] | "
-              "wait ask ID | wait host NAME | wait tap ID | wait cmd [options] -- ARGV...  "
+              "wait ask ID | wait host NAME | wait cmd [options] -- ARGV...  "
               "[--timeout 2h] [--note T] [--key K] [--block] | "
               "wait time WHEN NOTE | wait get WAIT [--block] | wait cancel WAIT | waits [--recent]",
               file=sys.stderr)
@@ -2844,8 +2843,7 @@ def wait_main(argv: list[str]) -> int:
     prog = "st aico waits" if operation == "list" else f"st aico wait {operation}"
     parser = argparse.ArgumentParser(prog=prog, description=(
         "Wait for a session (finished, idle, blocked, ended), a service job (done), a request you sent "
-        "(acked, closed), an owner ask (answered), a host (connected) "
-        "or a Nightshift tap (decided), or run a bounded watcher command (cmd: Tether runs it as the "
+        "(acked, closed), an owner ask (answered) or a host (connected), or run a bounded watcher command (cmd: Tether runs it as the "
         "idle-weight user unit aico-wait-<ref>; exit 0 is ready, anything else failed): you get one line "
         "when it is ready, over or timed out, and nothing after a cancel. Lanes you launch report on their "
         "own; use this for anything else you wait on. Subagents and agents outside Aico: --block."))
