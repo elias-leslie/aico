@@ -745,6 +745,15 @@
       "target": "portfolio-backup.service",
       "frequency": "weekly",
       "enabled": true
+    },
+    {
+      "id": "jobinator-snapshot",
+      "name": "Jobinator database snapshot (inside the container)",
+      "owner_project": "jobinator-4000",
+      "kind": "guest_unit",
+      "target": "jobinator-4000-snapshot.service",
+      "frequency": "daily",
+      "enabled": true
     }
   ],
   "backends": [

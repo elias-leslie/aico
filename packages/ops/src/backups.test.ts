@@ -23,6 +23,7 @@ import {
   prepareFolder,
   volumeJobs,
 } from './backup-drive'
+import { observeExternal } from './backup-external'
 import { beginBootCapture, expiredCapture, nativeOperation, preserveNative } from './backup-native'
 import {
   backupRows,
@@ -73,10 +74,10 @@ const cfg = () => {
   return c
 }
 const ok = (_argv: string[]) => Promise.resolve({ code: 0, out: '', err: '' })
-it('migrates all 66 source records, both backend records and both external checks, preserving paths and excludes', () => {
+it('migrates all 66 source records, both backend records and the three external checks, preserving paths and excludes', () => {
   expect(migrated.sources).toHaveLength(66)
   expect(migrated.backends).toHaveLength(2)
-  expect(migrated.external).toHaveLength(2)
+  expect(migrated.external).toHaveLength(3)
   expect(migrated.sources.find((s) => s.id === 'pve-ct-190-aico-data')?.path).toContain(
     'aico-snapshot',
   )
@@ -868,6 +869,30 @@ it('shows the stopped external backup owner as off with its last good artifact d
       (e) => e.id === 'external/portfolio-ai-complete',
     )?.state,
   ).toBe('failed')
+})
+
+it('the Jobinator snapshot row reads the container with pct exec, is off while it is stopped and ok once a snapshot is seen', async () => {
+  const c = cfg(),
+    state = emptyState()
+  let status = 'stopped'
+  const run = vi.fn(async (argv: string[]) => {
+    if (argv.includes('status')) return { code: 0, out: `status: ${status}\n`, err: '' }
+    if (argv.includes('exec') && argv.includes('191'))
+      return { code: 0, out: `${Math.floor(Date.now() / 1000) - 600}.5,`, err: '' }
+    return { code: 0, out: '[]', err: '' }
+  })
+  const row = async () =>
+    (await scheduledEntries(state, c, c.workstation, run)).find(
+      (e) => e.id === 'external/jobinator-snapshot',
+    )
+  expect(await row()).toMatchObject({ state: 'off', project: 'jobinator-4000' })
+  expect(run.mock.calls.some(([argv]) => argv.includes('exec'))).toBe(false)
+  await observeExternal({ cfg: c, run, now: () => new Date() }, state, ['jobinator-snapshot'])
+  expect(state.copies['external/jobinator-snapshot']).toMatchObject({ observed: 'offline' })
+  status = 'running'
+  await observeExternal({ cfg: c, run, now: () => new Date() }, state, ['jobinator-snapshot'])
+  expect(state.copies['external/jobinator-snapshot']).toMatchObject({ observed: 'ok' })
+  expect((await row())?.state).toBe('ok')
 })
 
 it('a stopped VM or container file source is read from its disk by the host; whole guests are not', () => {

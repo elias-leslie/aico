@@ -164,6 +164,7 @@
     "aico-aico": "aico",
     "pve-ct-190-aico-data": "aico",
     "pve-vm-180-app-recovery": "portfolio-ai",
+    "pve-ct-191-jobinator-data": "jobinator-4000",
     "ominull-evidence-replica": "ominull"
   },
   "displayNames": {
@@ -203,6 +204,29 @@
       ],
       "jsonGuest": true,
       "statusCommand": ["ssh", "-o", "BatchMode=yes", "proxmox-gem", "qm", "status", "180"]
+    },
+    "jobinator-snapshot": {
+      "command": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "proxmox-gem",
+        "pct",
+        "exec",
+        "191",
+        "--",
+        "/usr/bin/find",
+        "/var/lib/jobinator/snapshot",
+        "-maxdepth",
+        "1",
+        "-type",
+        "f",
+        "-name",
+        "jobinator.db",
+        "-printf",
+        "%T@,"
+      ],
+      "statusCommand": ["ssh", "-o", "BatchMode=yes", "proxmox-gem", "pct", "status", "191"]
     }
   },
   "packageStatusPath": "/var/lib/dpkg/status",

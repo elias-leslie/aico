@@ -37,7 +37,12 @@ export async function observeExternal(
           throw new Error(
             'The backup owner machine could not be reached; its last artifact date is shown.',
           )
-        const guest = JSON.parse(result.out) as { exitcode?: number; 'out-data'?: string }
+        // `qm guest exec` wraps the output in JSON; `pct exec` prints it as is.
+        const guest = (
+          result.out.trimStart().startsWith('{')
+            ? JSON.parse(result.out)
+            : { exitcode: 0, 'out-data': result.out }
+        ) as { exitcode?: number; 'out-data'?: string }
         if (guest.exitcode !== 0) throw new Error('The owner backup artifact could not be read.')
         const times = (guest['out-data'] ?? '')
           .split(/[^0-9.]+/)
