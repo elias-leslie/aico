@@ -228,6 +228,37 @@ describe('CLI cutover', () => {
   })
 })
 describe('versioned extensions', () => {
+  it('reads Neri hunt transfer help from its accepted owner manifest', () => {
+    const state = temp(),
+      source = join(state, 'projects/neri/current/source')
+    mkdirSync(source, { recursive: true })
+    const bundled = JSON.parse(
+      readFileSync(join(root, 'packages/cli/data/extensions/neri.json'), 'utf8'),
+    )
+    writeFileSync(
+      join(source, 'st-extension.json'),
+      JSON.stringify({
+        ...bundled,
+        help: {
+          ...bundled.help,
+          hunt: 'Hunts',
+          'hunt transfer': 'Transfer a running hunt in place',
+        },
+      }),
+    )
+    const extension = catalog(join(root, 'packages/cli/data'), state, new Set()).find(
+      (entry) => entry.binding.owner === 'neri',
+    )!
+    expect(passiveHelp(extension, ['hunt', 'transfer', '--help'])).toBe(
+      'Transfer a running hunt in place',
+    )
+    rmSync(join(source, 'st-extension.json'))
+    const fallback = catalog(join(root, 'packages/cli/data'), state, new Set()).find(
+      (entry) => entry.binding.owner === 'neri',
+    )!
+    expect(passiveHelp(fallback, ['--help'])).toBe(bundled.help[''])
+  })
+
   it('loads trusted retained extensions, without executing owners', () => {
     const entries = catalog(join(root, 'packages/cli/data'), '/missing', new Set())
     expect(entries.find((x) => x.binding.namespace === 'browser')?.status).toBe('unverified')

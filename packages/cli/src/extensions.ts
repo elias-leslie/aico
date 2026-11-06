@@ -133,7 +133,7 @@ export function catalog(data: string, state: string, core: Set<string>): Extensi
       ),
       binding,
     )
-    if (binding.owner_manifest && binding.owner !== 'neri') {
+    if (binding.owner_manifest) {
       try {
         manifest = parseManifest(
           JSON.parse(

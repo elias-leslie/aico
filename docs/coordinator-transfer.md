@@ -52,6 +52,10 @@ and the repository gates verify this coverage. These are synthetic results, not 
 that a live hunt has been moved. Deployment is verified separately by API version and CLI
 help without submitting a transfer.
 
+Aico's command facade reads Neri's deployed owner manifest so `st neri hunt transfer --help`
+and capability discovery expose the command. The retained bundled manifest is only a fallback
+when the owner manifest is missing or invalid; the old Neri-specific exception hid hunt help.
+
 Limits: one Tether authority, a linked lane and a running top-level destination. Explicit
 watches and lines already delivered or being sent keep their history; old turns are not
 replayed. Answered Aico asks and Neri's case/program owner-page asks keep their existing
