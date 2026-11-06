@@ -48,7 +48,6 @@ func sandbox(t *testing.T) string {
 				t.Fatal(err)
 			}
 			cfg["context"].(map[string]any)["command"] = []any{}
-			cfg["inbox"].(map[string]any)["memory"] = []any{}
 			raw, _ = json.Marshal(cfg)
 		}
 		if err := os.WriteFile(filepath.Join(data, name), raw, 0o644); err != nil {

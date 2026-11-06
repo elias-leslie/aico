@@ -24,7 +24,6 @@
     "tool": { "claude": "claude-code", "codex": "codex", "pi": "pi" }
   },
   "inbox": {
-    "memory": ["bash", "~/.claude/hooks/coord-inbox.sh", "memory"],
     "timeout_seconds": 1.5
   },
   "startup_brief": {

@@ -1,16 +1,12 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"aico/hook/lease"
 )
@@ -517,7 +513,7 @@ func inboxMain(args []string) int {
 	}
 	lease.SetBudget(started, cfg.Lease.StoreBudget())
 	h := lease.New(cfg.Lease, payload)
-	h.Extra = func(event string) string { return memoryNotice(cfg, provider, raw) }
+	h.Extra = func(event string) string { return memoryNotice(cfg, provider, h.ID.AgentID, payload) }
 	context, block := h.InboxHook(mode, provider)
 	switch {
 	case block != "":
@@ -531,44 +527,4 @@ func inboxMain(args []string) int {
 			"hookEventName": event, "additionalContext": context}}))
 	}
 	return 0
-}
-
-// memoryNotice is the memory-pressure notice for this pane (Nightshift's record, rendered by SummitFlow's
-// coord_memory), from the command hook.json inbox.memory names: it is handed the same hook payload and answers
-// with hook JSON. Empty on any fault or when there is nothing to say.
-func memoryNotice(cfg *Config, provider string, raw []byte) string {
-	argv := cfg.Inbox.Memory
-	if len(argv) == 0 {
-		return ""
-	}
-	argv = append(append([]string{}, argv...), provider)
-	home, _ := os.UserHomeDir()
-	for i, a := range argv {
-		if strings.HasPrefix(a, "~/") {
-			argv[i] = filepath.Join(home, a[2:])
-		}
-	}
-	timeout := time.Duration(cfg.Inbox.TimeoutSeconds * float64(time.Second))
-	if timeout <= 0 {
-		timeout = 1500 * time.Millisecond // it runs beside the store calls, well inside the hook's own timeout
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Stdin = bytes.NewReader(raw)
-	cmd.WaitDelay = 100 * time.Millisecond // a child the script left holding stdout does not stretch the timeout
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if cmd.Run() != nil {
-		return ""
-	}
-	var ans struct {
-		Out struct {
-			Context string `json:"additionalContext"`
-		} `json:"hookSpecificOutput"`
-	}
-	if json.Unmarshal(bytes.TrimSpace(out.Bytes()), &ans) != nil {
-		return ""
-	}
-	return ans.Out.Context
 }

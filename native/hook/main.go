@@ -50,8 +50,7 @@ type Config struct {
 	shell, edit   *regexp.Regexp // Tools, compiled by loadConfig
 	GitHubPATHint string         `json:"github_pat_hint"`
 	Inbox         struct {
-		Memory         []string `json:"memory"`
-		TimeoutSeconds float64  `json:"timeout_seconds"`
+		TimeoutSeconds float64 `json:"timeout_seconds"`
 	} `json:"inbox"`
 	Context struct {
 		Command        []string          `json:"command"`
