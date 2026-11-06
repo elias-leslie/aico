@@ -11,7 +11,6 @@ import {
   checkUpgrade,
   type GuardConfig,
   HOST_HEADER,
-  isCanaryHook,
 } from './guard'
 import { type Router, sendJson } from './http'
 import type { StaticSite } from './static'
@@ -46,10 +45,8 @@ export function createWebServer(
     const refused = checkRequest(req.method ?? 'GET', req.headers, guard, req.url)
     if (refused) return sendJson(res, 403, { error: refused })
     const url = new URL(req.url ?? '/', 'http://localhost')
-    const checked = isCanaryHook(req.method ?? 'GET', req.headers, guard, req.url)
-      ? Promise.resolve(null)
-      : access.check(req.headers)
-    checked
+    access
+      .check(req.headers)
       .then((denied) => {
         if (!denied) return router.handle(req, res, url)
         console.warn(`[aico-web] refused a tunnel request to ${req.headers.host}: ${denied}`)

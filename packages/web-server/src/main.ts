@@ -18,7 +18,8 @@ import { PhoneRegistry } from './app-phones'
 import { Asks, validateAsk } from './asks'
 import { Background } from './background'
 import { registerBackupRoutes } from './backups'
-import { createCanaryServer, registerCanaryRoutes } from './canary'
+import { CanaryEvents, createCanaryServer, registerCanaryRoutes } from './canary'
+import { CanaryPoller } from './canary-poll'
 import { CaptureRouter } from './capture-router'
 import { chatStarter } from './chat'
 import { readChatAttachments } from './chat-attachments'
@@ -202,7 +203,10 @@ function serve(): void {
   )
   places.start()
   registerGrantRoutes(api)
-  registerCanaryRoutes(api, notify.notifier, join(config.dataDir, 'canary'))
+  const canaryFolder = join(config.dataDir, 'canary')
+  const canaryEvents = new CanaryEvents(canaryFolder)
+  const canaryPoller = new CanaryPoller(canaryFolder, notify.notifier, canaryEvents)
+  registerCanaryRoutes(api, notify.notifier, canaryFolder, canaryEvents, canaryPoller)
   registerBackupRoutes(api)
   registerLoginRoutes(api, process.env, tether)
   registerMockupRoutes(api, { dataDir: config.dataDir, tether })
@@ -255,7 +259,7 @@ function serve(): void {
   background.start()
   const canaryListen = process.env.AICO_CANARY_LISTEN
   const canary = canaryListen
-    ? createCanaryServer(notify.notifier, join(config.dataDir, 'canary'))
+    ? createCanaryServer(notify.notifier, canaryFolder, canaryEvents)
     : null
   if (canary && canaryListen) {
     const [host, port] = canaryListen.split(':')
@@ -263,6 +267,7 @@ function serve(): void {
     canary.listen(Number(port), host)
   }
   notify.start()
+  canaryPoller.start(Number(process.env.AICO_CANARY_POLL_SECONDS) || undefined)
   reader.start()
   let selfRows: ReturnType<typeof startSelfRows> | null = null
   server.listen(config.port, config.host, () => {
@@ -282,6 +287,7 @@ function serve(): void {
     console.log(`[aico-web] ${signal}: stopping`)
     void chats.shutdown()
     ;(selfRows as ReturnType<typeof startSelfRows> | null)?.stop(signal)
+    canaryPoller.stop()
     canary?.close()
     canary?.closeAllConnections()
     serviceApps?.close()

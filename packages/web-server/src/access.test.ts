@@ -113,16 +113,13 @@ describe('the web server', () => {
   let port: number
 
   beforeEach(async () => {
-    const router = new Router()
-      .on('GET', '/api/ping', () => ({ ok: true }))
-      .on('POST', '/hooks/canary/:secret', () => ({ ok: true }))
+    const router = new Router().on('GET', '/api/ping', () => ({ ok: true }))
     const tether = new FakeTether()
     server = createWebServer(
       {
         allowedHostnames: ['127.0.0.1', 'app.example'],
         allowedOrigins: [],
         access: config,
-        phoneHosts: ['phone.example'],
       },
       router,
       new TerminalHub({ tether: tether.client, historyLines: 10, touched: () => {} }),
@@ -154,25 +151,6 @@ describe('the web server', () => {
     expect(await get(edge(token()))).toBe(200)
     expect(await get(edge())).toBe(403)
     expect(await get(edge(token({}, other.privateKey)))).toBe(403)
-  })
-
-  it('lets a canary webhook through on a phone host without a token, nowhere else', async () => {
-    const hook = (host: string, path: string) =>
-      new Promise<number>((resolve, reject) => {
-        request(
-          { port, host: '127.0.0.1', path, method: 'POST', headers: edge(undefined, host) },
-          (res) => {
-            res.resume()
-            resolve(res.statusCode ?? 0)
-          },
-        )
-          .on('error', reject)
-          .end('{}')
-      })
-    const path = `/hooks/canary/${'s'.repeat(40)}`
-    expect(await hook('phone.example', path)).toBe(200)
-    expect(await hook('app.example', path)).toBe(403)
-    expect(await hook('phone.example', '/api/app/health')).toBe(403)
   })
 
   it('refuses a tunnel WebSocket without a token', async () => {

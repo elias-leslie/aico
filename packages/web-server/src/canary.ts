@@ -169,13 +169,41 @@ export class CanaryEvents {
   }
 }
 
+/** Keeps one trip and sends its alert, unless it is a repeat of the same decoy from the same source. */
+export async function alertTrip(
+  events: CanaryEvents,
+  notifier: Pick<Notifier, 'receive'>,
+  trip: CanaryTrip,
+  source: 'canary' | 'honeypot',
+): Promise<{ event: string; repeat?: true; notice?: unknown }> {
+  const { id, repeat } = events.record(trip, source)
+  if (repeat) return { event: id, repeat: true }
+  const notice = await notifier.receive(
+    {
+      v: 1,
+      source: 'aico',
+      kind: 'alert',
+      severity: 'critical',
+      title: trip.title,
+      body: trip.body,
+      // One key per decoy: a burst of probes is one alert, counted as repeats.
+      key: `canary:${createHash('sha256').update(trip.name).digest('hex').slice(0, 10)}`,
+      push: 'phone',
+      cooldown: PUSH_COOLDOWN_S,
+    },
+    'local',
+  )
+  return { event: id, notice }
+}
+
 export function registerCanaryRoutes(
   router: Router,
   notifier: Pick<Notifier, 'receive'>,
   folder: string,
+  events: CanaryEvents = new CanaryEvents(folder),
+  poller?: { poll(): Promise<unknown> },
 ): void {
   const limiter = new CanaryLimiter()
-  const events = new CanaryEvents(folder)
   async function receive(ctx: Parameters<Parameters<Router['on']>[2]>[0], test: boolean) {
     if (test && !fromThisMachine(ctx.req))
       throw new HttpError(403, 'The drill runs on this machine.')
@@ -197,8 +225,6 @@ export function registerCanaryRoutes(
         throw new HttpError(403, 'Hook refused.')
     }
     const payload = objectBody(await ctx.body())
-    // canarytokens.org posts this once when a token is saved with a webhook, and wants a 2xx back.
-    if (payload.token === 'a+test+token') return { ok: true, ignored: 'webhook validation' }
     let registry: { tokens?: CanaryEntry[] } | CanaryEntry[]
     try {
       registry = JSON.parse(readFileSync(join(folder, 'registry.json'), 'utf8'))
@@ -228,36 +254,31 @@ export function registerCanaryRoutes(
     }
     const trip = describeCanary(payload, entries)
     if (!trip) return { ok: true, ignored: 'honeypot startup event' }
-    const { id, repeat } = events.record(
+    const sent = await alertTrip(
+      events,
+      notifier,
       trip,
       typeof payload.token === 'string' ? 'canary' : 'honeypot',
     )
-    if (repeat) return { ok: true, event: id, repeat: true }
-    const notice = await notifier.receive(
-      {
-        v: 1,
-        source: 'aico',
-        kind: 'alert',
-        severity: 'critical',
-        title: trip.title,
-        body: trip.body,
-        // One key per decoy: a burst of probes is one alert, counted as repeats.
-        key: `canary:${createHash('sha256').update(trip.name).digest('hex').slice(0, 10)}`,
-        push: 'phone',
-        cooldown: PUSH_COOLDOWN_S,
-      },
-      'local',
-    )
-    return { ok: true, test, event: id, notice }
+    return { ok: true, test, ...sent }
   }
   router.on('POST', '/hooks/canary/:secret', (ctx) => receive(ctx, false))
   router.on('POST', '/api/canary/drill', (ctx) => receive(ctx, true))
+  if (poller)
+    router.on('POST', '/api/canary/poll', (ctx) => {
+      if (!fromThisMachine(ctx.req)) throw new HttpError(403, 'The poll runs on this machine.')
+      return poller.poll()
+    })
 }
 
 /** The former honeypot listener, serving only hooks; no pages or app API on the LAN. */
-export function createCanaryServer(notifier: Pick<Notifier, 'receive'>, folder: string) {
+export function createCanaryServer(
+  notifier: Pick<Notifier, 'receive'>,
+  folder: string,
+  events?: CanaryEvents,
+) {
   const hooks = new Router(64 * 1024)
-  registerCanaryRoutes(hooks, notifier, folder)
+  registerCanaryRoutes(hooks, notifier, folder, events)
   return createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
     if (req.method !== 'POST' || !/^\/hooks\/canary\/[A-Za-z0-9_-]{32,128}$/.test(url.pathname)) {

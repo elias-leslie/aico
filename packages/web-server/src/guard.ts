@@ -77,23 +77,6 @@ export function fromThisMachine(req: IncomingMessage): boolean {
   return !FORWARDING_HEADERS.some((name) => req.headers[name] !== undefined)
 }
 
-/**
- * A canary webhook on a phone host: the Access app bypasses this one path at the edge and the
- * route checks its own secret, so the origin does not ask for an Access token here.
- */
-export function isCanaryHook(
-  method: string,
-  headers: IncomingHttpHeaders,
-  config: GuardConfig,
-  target: string | undefined,
-): boolean {
-  return (
-    method === 'POST' &&
-    hostIn(headers.host, config.phoneHosts) &&
-    /^\/hooks\/canary\/[A-Za-z0-9_-]{32,128}$/.test(target ?? '')
-  )
-}
-
 /** Why an HTTP request is refused, or null. */
 export function checkRequest(
   method: string,
@@ -102,7 +85,8 @@ export function checkRequest(
   target?: string,
 ): Refusal | null {
   if (hostIn(headers.host, config.phoneHosts))
-    return (phoneTargetAllowed(target) || isCanaryHook(method, headers, config, target)) &&
+    return (phoneTargetAllowed(target) ||
+      (method === 'POST' && /^\/hooks\/canary\/[A-Za-z0-9_-]{32,128}$/.test(target ?? ''))) &&
       !(UNSAFE_METHODS.has(method) && foreignOrigin(headers.origin, config))
       ? null
       : 'host_not_allowed'

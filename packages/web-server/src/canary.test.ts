@@ -146,16 +146,6 @@ it('a burst of trips on one decoy is one notice key with a cooldown', async () =
     for (const src of ['192.0.2.1', '192.0.2.1', '192.0.2.2'])
       expect((await post(src)).status).toBe(200)
     expect(notices).toHaveLength(2)
-    const saved = await fetch(`${server.base}/hooks/canary/${secret}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        token: 'a+test+token',
-        memo: 'Congrats! The newly saved webhook works',
-      }),
-    })
-    expect(saved.status).toBe(200)
-    expect(notices).toHaveLength(2)
     expect(notices[0]?.key).toBe(notices[1]?.key)
     expect(notices[0]?.key).toMatch(/^canary:[0-9a-f]{10}$/)
     expect(notices[0]?.cooldown).toBe(600)
