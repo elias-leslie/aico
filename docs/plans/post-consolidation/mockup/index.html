@@ -1,0 +1,995 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aico mockup · after fixes</title>
+<!-- Lantern tokens and vendored fonts, referenced in place (no copies). -->
+<link rel="stylesheet" href="file:///srv/workspaces/projects/aico/packages/ui-kit/src/tokens.css">
+<link rel="stylesheet" href="file:///srv/workspaces/projects/aico/packages/ui-kit/fonts/fonts.css">
+<style>
+/* Aico mockup. Colours, fonts and easing come only from packages/ui-kit tokens.
+   Local aliases below are strengths of those tokens, not a new palette. */
+:root {
+  --line: rgb(var(--glass-rgb) / 0.07);
+  --line-strong: rgb(var(--glass-rgb) / 0.12);
+  --card: var(--paper);
+  --amber-tint: rgb(var(--lantern-rgb) / 0.12);
+  --amber-line: rgb(var(--lantern-rgb) / 0.45);
+  --jade-tint: rgb(122 214 138 / 0.12);
+  --ember-tint: rgb(201 72 61 / 0.14);
+  --pop: rgb(var(--umber-rgb));
+  --t: 0.18s;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--ink);
+  color: var(--bone);
+  font: 14px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--lantern); outline-offset: 2px; }
+a { color: var(--lantern); }
+
+/* ---------- mockup chrome (outside the app) ---------- */
+.mock-bar {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+  padding: 10px 16px; background: var(--pop); border-bottom: 1px solid var(--line-strong);
+  font-size: 13px;
+}
+.mock-title { font-family: var(--font-display); font-weight: 600; font-size: 15px; }
+.mock-sub { color: var(--mist); }
+.mock-check { display: inline-flex; gap: 6px; align-items: center; color: var(--mist); }
+.mock-check select { background: var(--rim); border: 1px solid var(--line-strong); border-radius: 6px; padding: 4px 6px; }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+.seg button { background: transparent; border: 0; padding: 6px 12px; color: var(--mist); }
+.seg button[aria-pressed="true"] { background: var(--amber-tint); color: var(--lantern); }
+.stage { padding: 20px 16px 40px; display: flex; justify-content: center; }
+body.shooting .mock-bar { display: none; }
+body.shooting .stage { padding: 0; }
+
+/* ---------- frames ---------- */
+.desk {
+  width: 1440px; height: 880px; display: grid; grid-template-columns: 280px 1fr;
+  background: var(--rim); border: 1px solid var(--frame-edge); border-radius: 10px; overflow: hidden;
+  position: relative; box-shadow: var(--shadow-soft);
+}
+body.shooting .desk { border-radius: 0; border: 0; height: 900px; }
+.phone {
+  width: 390px; height: 844px; display: flex; flex-direction: column;
+  background: var(--rim); border: 1px solid var(--frame-edge); border-radius: 28px; overflow: hidden;
+  position: relative; box-shadow: var(--shadow-soft);
+}
+body.shooting .phone { border-radius: 0; border: 0; }
+
+/* ---------- desktop sidebar ---------- */
+.side { background: var(--ink); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.side-top { display: flex; align-items: center; gap: 8px; padding: 14px 14px 8px; }
+.brand { font-family: var(--font-display); font-size: 18px; font-weight: 600; flex: 1; }
+.nav { display: flex; flex-direction: column; padding: 4px 8px; gap: 2px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 8px;
+  background: transparent; border: 0; color: var(--mist); text-align: left; width: 100%;
+  transition: background var(--t) var(--ease-arrival), color var(--t) var(--ease-arrival);
+}
+.nav-item:hover { background: var(--paper); color: var(--bone); }
+.nav-item[aria-current="page"] { background: var(--amber-tint); color: var(--lantern); }
+.nav-item .count { margin-left: auto; }
+.nav-more { padding-left: 18px; }
+.side-label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--mist); padding: 14px 18px 6px; display: flex; justify-content: space-between; }
+.side-list { overflow: auto; padding: 0 8px 12px; flex: 1; min-height: 0; }
+.srow {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; width: 100%; text-align: left;
+  padding: 8px 10px; border-radius: 8px; background: transparent; border: 0; border-left: 2px solid transparent;
+}
+.srow:hover { background: var(--paper); }
+.srow[aria-current="true"] { background: var(--paper-veil); border-left-color: var(--lantern); }
+.srow .nm { font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.srow .meta { grid-column: 1 / -1; color: var(--mist); font-size: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.group-h { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--mist); padding: 12px 10px 4px; display: flex; gap: 6px; }
+
+/* ---------- page frame (one per screen, item #18) ---------- */
+.main { min-width: 0; min-height: 0; overflow: auto; position: relative; }
+.page { max-width: 980px; padding: 24px 32px 48px; }
+.page.wide { max-width: none; }
+.page-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.page-head h1 { font-family: var(--font-display); font-weight: 600; font-size: 22px; margin: 0; }
+.page-head .sub { color: var(--mist); font-size: 13px; }
+.page-head .actions { margin-left: auto; display: flex; gap: 8px; }
+.phone .page { padding: 14px 16px 24px; }
+.phone .page-head h1 { font-size: 20px; }
+.phone .page-head .actions { margin-left: 0; width: 100%; }
+.hint {
+  font: 600 10px/1 var(--font-mono); color: var(--mist); border: 1px dashed var(--line-strong);
+  border-radius: 4px; padding: 3px 5px; white-space: nowrap; vertical-align: middle; text-transform: none; letter-spacing: 0;
+}
+body.no-hints .hint { display: none; }
+h2 { font-family: var(--font-ui); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--mist); margin: 22px 0 8px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+h2 .more { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.mist { color: var(--mist); }
+.small { font-size: 12px; }
+
+/* ---------- phone chrome ---------- */
+.ph-status { height: 28px; display: flex; justify-content: space-between; padding: 6px 22px 0; font-size: 12px; color: var(--bone); flex: none; }
+.ph-top { display: flex; align-items: center; gap: 4px; padding: 0 8px; min-height: 52px; border-bottom: 1px solid var(--line); flex: none; }
+.ph-top .ttl { font-family: var(--font-display); font-weight: 600; font-size: 18px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 8px; }
+.ph-body { flex: 1; overflow: auto; min-height: 0; position: relative; }
+.tabs { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); background: var(--ink); flex: none; padding-bottom: 14px; }
+.tab {
+  min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: transparent; border: 0; color: var(--mist); font-size: 11px; position: relative;
+}
+.tab[aria-current="page"] { color: var(--lantern); }
+.tab .badge { position: absolute; top: 6px; left: calc(50% + 6px); }
+
+/* ---------- controls ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line-strong);
+  background: var(--paper); color: var(--bone); font-weight: 600; font-size: 13px; white-space: nowrap;
+  transition: background var(--t) var(--ease-arrival), border-color var(--t) var(--ease-arrival);
+}
+.btn:hover { background: var(--paper-veil); }
+.btn.primary { background: var(--amber-tint); border-color: var(--amber-line); color: var(--lantern); }
+.btn.primary:hover { background: rgb(var(--lantern-rgb) / 0.2); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--mist); }
+.btn.ghost:hover { color: var(--bone); background: var(--paper); }
+.btn.danger { color: var(--ember); border-color: rgb(201 72 61 / .45); background: transparent; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+.btn.sm { min-height: 30px; padding: 0 10px; font-size: 12px; }
+.phone .btn, .phone .btn.sm { min-height: 44px; }
+.icon-btn { width: 36px; height: 36px; display: inline-grid; place-items: center; border-radius: 8px; border: 0; background: transparent; color: var(--mist); flex: none; }
+.icon-btn:hover { background: var(--paper); color: var(--bone); }
+.phone .icon-btn { width: 44px; height: 44px; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.field label, .field .lbl { font-size: 12px; color: var(--mist); font-weight: 600; }
+.input, textarea.input, select.input {
+  min-height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line-strong);
+  background: var(--ink); color: var(--bone); width: 100%;
+}
+.phone .input { min-height: 44px; }
+textarea.input { resize: vertical; }
+.choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.choice {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 8px 12px;
+  border-radius: 8px; border: 1px solid var(--line-strong); background: var(--paper); text-align: left;
+}
+.choice[aria-pressed="true"] { border-color: var(--amber-line); background: var(--amber-tint); }
+.choice small { color: var(--mist); font-size: 11px; }
+
+/* ---------- chips and badges (status lives here) ---------- */
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.chip.plain::before { display: none; }
+.chip.needs { color: var(--beacon); background: var(--beacon-tint); }
+.chip.needs::before { animation: wait 1.6s var(--ease-arrival) infinite alternate; }
+@keyframes wait { from { opacity: 1; } to { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .chip.needs::before { animation: none; } }
+.chip.working { color: var(--jade); background: var(--jade-tint); }
+.chip.idle { color: var(--mist); border-color: var(--line-strong); }
+.chip.done { color: var(--mist); background: var(--paper); }
+.chip.failed { color: var(--ember); background: var(--ember-tint); }
+.chip.warn { color: var(--lantern); background: var(--amber-tint); }
+.chip.role { color: var(--helm); background: var(--helm-tint); }
+.chip.role::before { display: none; }
+.chip.stale { color: var(--mist); border: 1px dashed var(--line-strong); }
+.chip.stale::before { display: none; }
+.badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--beacon); color: var(--ink); font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; }
+.badge.quiet { background: var(--paper-veil); color: var(--bone); }
+
+/* ---------- cards and rows ---------- */
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.card + .card { margin-top: 12px; }
+.card.attn { border-color: var(--amber-line); }
+.rows { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card); }
+.row { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); min-height: 52px; }
+.row:first-child { border-top: 0; }
+.row.click { cursor: pointer; width: 100%; text-align: left; background: transparent; border-left: 0; border-right: 0; border-bottom: 0; }
+.row.click:hover { background: var(--paper); }
+.row .grow { flex: 1; min-width: 0; }
+.row .t { font-weight: 600; }
+.row .d { color: var(--mist); font-size: 12.5px; margin-top: 2px; }
+.row .end { display: flex; gap: 6px; align-items: center; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.phone .row { flex-wrap: wrap; }
+.phone .row .end { width: 100%; justify-content: flex-start; }
+.phone .row.compact .end { width: auto; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.phone .grid2, .phone .grid3 { grid-template-columns: 1fr; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.stat .n { font-family: var(--font-display); font-size: 24px; font-weight: 600; }
+.stat .l { color: var(--mist); font-size: 12px; }
+.kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; font-size: 13px; }
+.kv dt { color: var(--mist); }
+.kv dd { margin: 0; }
+
+/* ---------- home triage ---------- */
+.triage { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; align-items: start; }
+.phone .triage { grid-template-columns: 1fr; }
+.quota { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12.5px; color: var(--mist); padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; }
+.quota b { color: var(--bone); font-weight: 600; }
+.digest { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.digest .pill { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+
+/* ---------- needs you card (item #3, #28) ---------- */
+.ask-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--mist); font-size: 12.5px; margin-bottom: 8px; }
+.ask-q { font-size: 16px; font-weight: 600; margin: 0 0 8px; line-height: 1.4; }
+.md p { margin: 0 0 8px; color: var(--bone); }
+.md ul { margin: 0 0 8px; padding-left: 18px; }
+.md li { margin-bottom: 4px; }
+.md strong { color: var(--bone); }
+.md { color: rgb(var(--bone-rgb) / .86); }
+.files { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 12px; }
+.file-chip {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 12px 6px 8px;
+  border-radius: 10px; border: 1px solid var(--line-strong); background: var(--ink); text-align: left; max-width: 100%;
+}
+.file-chip:hover { border-color: var(--amber-line); }
+.file-chip .ft { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; background: var(--paper-veil); font: 700 9px var(--font-mono); color: var(--lantern); flex: none; }
+.file-chip .fn { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chip .fs { color: var(--mist); font-size: 11px; }
+.phone .file-chip { min-height: 48px; width: 100%; }
+.opts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.opt { display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: transparent; text-align: left; }
+.opt[aria-pressed="true"] { border-color: var(--amber-line); background: var(--amber-tint); }
+.opt .num { color: var(--lantern); font-weight: 700; width: 14px; }
+.opt .rec { margin-left: auto; color: var(--lantern); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.ask-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ask-foot .spacer { flex: 1; }
+.phone .ask-foot .btn { flex: 1; }
+.note-box { min-height: 84px; }
+.subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.subtab { background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; min-height: 40px; color: var(--mist); font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
+.subtab[aria-selected="true"] { color: var(--bone); border-bottom-color: var(--lantern); }
+.phone .subtab { min-height: 44px; flex: 1; justify-content: center; }
+
+/* ---------- session view (items #15, #16) ---------- */
+.sv { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.sv-head { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.sv-title { font-family: var(--font-display); font-size: 18px; font-weight: 600; }
+.sv-sub { color: var(--mist); font-size: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sv-tools { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.mode { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--paper); }
+.mode .k { color: var(--mist); font-size: 12px; }
+.mode .v { font-weight: 600; font-size: 13px; }
+.banner { display: flex; align-items: center; gap: 12px; margin: 10px 16px 0; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--amber-line); background: var(--amber-tint); font-size: 13px; flex-wrap: wrap; }
+.banner .grow { flex: 1; min-width: 180px; }
+.banner.ok { border-color: var(--line-strong); background: var(--paper); }
+.banner.down { border-color: rgb(201 72 61 / .5); background: var(--ember-tint); }
+.term { flex: 1; min-height: 0; margin: 10px 16px 16px; background: var(--ink); border-radius: 10px; border: 1px solid var(--line); padding: 12px 14px; font: 13px/1.55 var(--font-mono); overflow: auto; white-space: pre-wrap; color: var(--bone); }
+.term .dim { color: var(--mist); }
+.term .acc { color: var(--lantern); }
+.term .ok { color: var(--jade); }
+.phone .term { margin: 8px; font-size: 11.5px; }
+.keys { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 6px 6px 18px; background: var(--ink); border-top: 1px solid var(--line); flex: none; }
+.keys button { min-height: 44px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--paper); font: 600 12px var(--font-mono); color: var(--bone); }
+.ph-sv-top { display: flex; align-items: center; gap: 2px; padding: 4px 4px 4px 4px; border-bottom: 1px solid var(--line); flex: none; }
+.ph-sv-top .tblock { flex: 1; min-width: 0; padding: 0 4px; }
+.ph-sv-top .tname { font-family: var(--font-display); font-weight: 600; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-sv-top .tsub { font-size: 11.5px; color: var(--mist); display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; }
+.tip { position: relative; }
+.tip-box { display: none; position: absolute; right: 0; top: calc(100% + 6px); background: var(--pop); border: 1px solid var(--line-strong); border-radius: 8px; padding: 8px 10px; font-size: 12px; width: 240px; color: var(--bone); z-index: 5; box-shadow: var(--shadow-soft); }
+
+/* ---------- menus, sheets, dialogs ---------- */
+.scrim { position: absolute; inset: 0; background: var(--scrim); backdrop-filter: blur(2px); z-index: 20; display: flex; align-items: center; justify-content: center; animation: fade .18s var(--ease-arrival); }
+@keyframes fade { from { opacity: 0; } }
+.dialog { width: 560px; max-height: 88%; display: flex; flex-direction: column; background: var(--pop); border: 1px solid var(--line-strong); border-radius: 14px; box-shadow: var(--shadow-soft); animation: rise .2s var(--ease-arrival); }
+.dialog.wide { width: 760px; }
+@keyframes rise { from { transform: translateY(8px); opacity: 0; } }
+.dialog-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.dialog-head h3 { margin: 0; font-family: var(--font-display); font-size: 18px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dialog-body { padding: 16px; overflow: auto; min-height: 0; }
+.dialog-foot { padding: 12px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+.phone .scrim { align-items: flex-end; }
+.phone .dialog, .phone .dialog.wide { width: 100%; max-height: 90%; border-radius: 18px 18px 0 0; border-bottom: 0; }
+.phone .dialog-foot .btn { flex: 1; }
+.menu { position: absolute; z-index: 25; background: var(--pop); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--shadow-soft); padding: 6px; width: 300px; animation: rise .16s var(--ease-arrival); }
+.menu .mh { padding: 8px 10px; font-size: 12px; color: var(--mist); border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.menu button.mi { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+.menu button.mi:hover { background: var(--paper); }
+.menu button.mi[disabled] { color: var(--mist); cursor: not-allowed; }
+.menu .mi .r { margin-left: auto; color: var(--mist); font-size: 11px; }
+.phone .menu button.mi { min-height: 44px; }
+
+/* file viewer */
+.viewer-img { background: var(--ink); border-radius: 10px; border: 1px solid var(--line); padding: 12px; }
+table.tbl { border-collapse: collapse; width: 100%; font-size: 13px; }
+.tbl th, .tbl td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.tbl th { color: var(--mist); font-weight: 600; font-size: 12px; }
+.tbl td.num, .tbl th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* roadmap */
+.rm { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.rm:first-child { border-top: 0; }
+.rm .lab { flex: none; width: 46px; }
+.rm .tx { flex: 1; min-width: 0; }
+.rm .tx .d { color: var(--mist); font-size: 12px; margin-top: 2px; }
+.place { display: flex; align-items: center; gap: 10px; padding: 8px 0; flex-wrap: wrap; }
+.place .grow { flex: 1; min-width: 160px; }
+
+/* projects split */
+.split { display: grid; grid-template-columns: 300px 1fr; height: 100%; min-height: 0; }
+.split > .list { border-right: 1px solid var(--line); overflow: auto; }
+.split > .detail { overflow: auto; min-width: 0; }
+.prow { display: block; width: 100%; text-align: left; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line); background: transparent; border-left: 2px solid transparent; min-height: 52px; }
+.prow:hover { background: var(--paper); }
+.prow[aria-current="true"] { background: var(--paper-veil); border-left-color: var(--lantern); }
+.prow .top { display: flex; gap: 8px; align-items: center; }
+.prow .top .nm { font-weight: 600; flex: 1; }
+.prow .d { color: var(--mist); font-size: 12px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* charts */
+.bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; align-items: end; height: 140px; padding: 8px 4px 0; }
+.bar { display: flex; flex-direction: column-reverse; border-radius: 4px 4px 0 0; overflow: hidden; }
+.bar span { display: block; }
+.bar-l { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; font-size: 11px; color: var(--mist); text-align: center; padding: 4px 4px 0; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--mist); flex-wrap: wrap; margin-top: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.s-claude { background: var(--lantern); }
+.s-codex { background: rgb(var(--bone-rgb) / .62); }
+.s-oc { background: var(--mist); opacity: .55; }
+.meter { height: 6px; border-radius: 3px; background: var(--paper-veil); overflow: hidden; margin-top: 6px; }
+.meter > span { display: block; height: 100%; background: var(--lantern); }
+.meter.full > span { background: var(--ember); }
+
+/* failed and stale state (item #2) */
+.stale-wrap { opacity: .5; filter: saturate(.6); pointer-events: none; }
+.down-banner { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 10px; border: 1px solid rgb(201 72 61 / .5); background: var(--ember-tint); margin-bottom: 16px; flex-wrap: wrap; }
+.down-banner .grow { flex: 1; min-width: 180px; }
+.down-banner b { color: var(--bone); }
+
+.push { background: var(--pop); border: 1px solid var(--line-strong); border-radius: 14px; padding: 10px 12px; display: flex; gap: 10px; max-width: 360px; }
+.push .app { width: 28px; height: 28px; border-radius: 7px; background: var(--amber-tint); color: var(--lantern); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; }
+.toast { position: absolute; left: 50%; bottom: 80px; transform: translateX(-50%); background: var(--pop); border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px 14px; z-index: 30; font-size: 13px; box-shadow: var(--shadow-soft); white-space: nowrap; }
+.desk .toast { bottom: 24px; }
+.empty { text-align: center; padding: 28px 16px; color: var(--mist); border: 1px dashed var(--line-strong); border-radius: 12px; }
+.empty b { display: block; color: var(--bone); margin-bottom: 4px; font-weight: 600; }
+.chev { color: var(--mist); }
+.tip:hover .tip-box, .tip:focus-within .tip-box, .tip:focus .tip-box, .tip.show .tip-box { display: block; }
+.phone .sev { width: 100% !important; }
+</style>
+</head>
+<body>
+<header class="mock-bar" aria-label="Mockup controls">
+  <strong class="mock-title">Aico after the proposed fixes</strong>
+  <span class="mock-sub">Mockup only · fake data</span>
+  <div class="seg" role="group" aria-label="Device">
+    <button type="button" data-device="desktop">Desktop</button>
+    <button type="button" data-device="phone">Phone</button>
+  </div>
+  <label class="mock-check"><input type="checkbox" id="toggle-down"> Server down (#2)</label>
+  <label class="mock-check"><input type="checkbox" id="toggle-hints" checked> Item hints</label>
+  <label class="mock-check">Jump to
+    <select id="jump" aria-label="Jump to screen"></select>
+  </label>
+</header>
+<div id="stage" class="stage"></div>
+<script>
+/* Aico mockup after the proposed fixes. Fake data; no network calls.
+   State lives in the URL hash so every screen and sheet has a link:
+   #s=<screen>&d=desktop|phone&x=<id>&sh=<sheet>&down=1&tip=1 */
+(function () {
+  "use strict";
+
+  // ---------------------------------------------------------------- icons
+  const P = {
+    home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',
+    inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
+    pulse: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
+    folder: '<path d="M3 6h7l2 2h9v11H3z"/>',
+    history: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/>',
+    dots: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    x: '<path d="M6 6l12 12M18 6L6 18"/>',
+    left: '<path d="M15 5l-7 7 7 7"/>',
+    right: '<path d="M9 5l7 7-7 7"/>',
+    down: '<path d="M6 9l6 6 6-6"/>',
+    term: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/>',
+    sessions: '<rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/>',
+    file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
+    power: '<path d="M12 3v9"/><path d="M6.3 7a8 8 0 1 0 11.4 0"/>',
+    search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+    archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9M10 13h4"/>',
+    key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+    note: '<path d="M5 3h14v18H5z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+    camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+    server: '<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/>',
+    refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>',
+    check: '<path d="M5 12l5 5 9-10"/>',
+    phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+    lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  };
+  const ic = (n, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ""}</svg>`;
+  const hint = (n) => `<span class="hint">item ${n}</span>`;
+
+  // ---------------------------------------------------------------- data
+  const NOW = "4:31 PM";
+  const sessions = [
+    { id: "coord", name: "Aico coordinator", role: "Coordinator", agent: "Claude Code", model: "Opus 5.5", project: "Aico", host: "Workstation", state: "working", label: "Working", detail: "1 question, no rush", ask: "pace" },
+    { id: "rules", name: "Rule noise cleanup", agent: "Claude Code", model: "Opus 5.5", project: "OmniNull", host: "CT 190", state: "needs", label: "Needs you", detail: "waiting 12 min", ask: "mute" },
+    { id: "page", name: "Projects page build", agent: "Claude Code", model: "Opus 5.5", project: "Aico", host: "Workstation", state: "working", label: "Working", detail: "edited a file 2 min ago" },
+    { id: "hunt", name: "Security hunt", agent: "Codex", model: "gpt-6-luna", project: "Neri", host: "neri-hunters VM", state: "working", label: "Working", detail: "quiet 14 min" },
+    { id: "cockpit", name: "Portfolio cockpit fixes", agent: "Codex", model: "gpt-6.1", project: "Portfolio AI", host: "Workstation", state: "idle", label: "Idle 40 min", detail: "stopped after its last reply" },
+    { id: "gemsh", name: "Shell on gem", agent: "Shell", project: "", host: "gem", state: "idle", label: "Idle 2 h", detail: "no output since 2:28 PM" },
+  ];
+  const finished = [
+    { id: "jobs", name: "Weekly job search", agent: "Claude Code", project: "Jobinator", host: "Workstation", state: "done", label: "Finished", when: "3:52 PM", reply: "Scored 14 new postings; 3 are worth tailoring (Grafana, Tailscale, Fly). Drafts are in the Jobinator queue, nothing sent." },
+    { id: "drill", name: "Restore drill", agent: "Claude Code", project: "Aico", host: "Workstation", state: "failed", label: "Failed", when: "1:10 PM", reply: "Stopped for memory after checking 3 of 5 backup sets. Tether state and project notes restored cleanly; Google Drive and T7 sets not checked." },
+    { id: "skills", name: "Skill sync", agent: "Claude Code", project: "Agent Skills", host: "Workstation", state: "done", label: "Finished", when: "11:20 AM", reply: "Synced 41 skills to Claude Code, Codex and Pi. Two skills had drifted copies; both now match the source." },
+  ];
+  const olderRecent = [
+    { id: "cleanup", name: "Leftover sweep", agent: "Codex", project: "SummitFlow", host: "Workstation", state: "done", label: "Finished", when: "Yesterday 9:40 PM", reply: "Removed 12 retired units and 3 stale timers. Nothing running used them; list of removals in the transcript." },
+    { id: "deck", name: "Phone header fix", agent: "Claude Code", project: "Aico", host: "Workstation", state: "done", label: "Ended by you", when: "Yesterday 6:15 PM", reply: "Title now truncates before the status pill; committed, not deployed yet." },
+  ];
+  const allSessions = () => sessions.concat(finished, olderRecent);
+  const sById = (id) => allSessions().find((s) => s.id === id) || sessions[2];
+
+  const asks = [
+    {
+      id: "pace", session: "coord", urgency: "No rush", ago: "asked 48 min ago",
+      q: "Codex credits run out in 2–3 days at the current hunting pace. Pace hunting so it lasts until the Nov 11 reset?",
+      md: `<p>Codex's weekly allowance is used up until <strong>Nov 11</strong>, with about 4.6K credits left. Hunting alone has been using 1.4K–2K a day.</p>
+<ul><li><strong>Pace hunting:</strong> cap it at about 1.5K credits a day and try the cheaper gpt-6-luna for the recon part.</li>
+<li><strong>Let it run:</strong> full speed, and accept a stall around Nov 8–9 until the reset.</li></ul>
+<p>Builder sessions only use Codex when Claude is used up, either way.</p>`,
+      files: [
+        { name: "pace-plan.md", type: "Markdown", size: "3.1 KB", kind: "md" },
+        { name: "credits-by-day.png", type: "Image", size: "48 KB", kind: "img" },
+        { name: "hunt-spend.csv", type: "CSV", size: "1.2 KB", kind: "csv" },
+      ],
+      opts: [{ t: "Yes, pace it and try luna", rec: true }, { t: "No, hunt at full speed" }],
+    },
+    {
+      id: "mute", session: "rules", urgency: "Waiting on this", ago: "asked 12 min ago",
+      q: "Stop paging for the “upload to a new place” rule on the build machine?",
+      md: `<p>It paged 3 times this week, all from the nightly build uploading release files. Other machines keep paging as before.</p>`,
+      files: [{ name: "upload-incidents.txt", type: "Text", size: "2.4 KB", kind: "txt" }],
+      opts: [{ t: "Yes, mute it for the build machine only", rec: true }, { t: "No, keep paging" }],
+    },
+  ];
+
+  const projects = [
+    { id: "aico", name: "Aico", state: "needs", note: "1 question waiting · 2 sessions working", desc: "Agent sessions that keep running in the background and open in a browser or on the phone, plus status, backups, notes and project tooling." },
+    { id: "omni", name: "OmniNull", state: "needs", note: "1 question waiting", desc: "Detection and alerting for the home lab." },
+    { id: "neri", name: "Neri", state: "working", note: "a security hunt is running", desc: "Bug bounty hunting." },
+    { id: "port", name: "Portfolio AI", state: "idle", note: "1 session idle 40 min", desc: "Net-worth cockpit." },
+    { id: "jobs", name: "Jobinator", state: "done", note: "finished 3:52 PM", desc: "Job search pipeline." },
+    { id: "skills", name: "Agent Skills", state: "done", note: "finished 11:20 AM", desc: "Shared skills for every agent." },
+    { id: "monkey", name: "Monkey Fight", state: "none", note: "no sessions today", desc: "A small browser game." },
+  ];
+
+  // ---------------------------------------------------------------- state
+  const st = { s: "home", d: "desktop", x: "", sh: "", down: false, tip: false, nt: "q", used: false, sel: {}, toast: "", more: false, menu: "", agent: "claude", kind: "agent", host: "ws" };
+  function readHash() {
+    const h = new URLSearchParams(location.hash.slice(1));
+    st.s = h.get("s") || "home";
+    st.d = h.get("d") || st.d;
+    st.x = h.get("x") || "";
+    st.sh = h.get("sh") || "";
+    st.down = h.get("down") === "1";
+    st.tip = h.get("tip") === "1";
+    st.used = h.get("used") === "1";
+    st.menu = h.get("menu") || "";
+    st.nt = h.get("nt") || "q";
+    if (h.get("shoot") === "1") document.body.classList.add("shooting");
+    if (h.get("hints") === "0") document.body.classList.add("no-hints");
+  }
+  function writeHash(patch) {
+    Object.assign(st, patch);
+    const h = new URLSearchParams();
+    h.set("s", st.s); h.set("d", st.d);
+    if (st.x) h.set("x", st.x);
+    if (st.sh) h.set("sh", st.sh);
+    if (st.down) h.set("down", "1");
+    if (st.used) h.set("used", "1");
+    if (st.menu) h.set("menu", st.menu);
+    if (st.nt !== "q") h.set("nt", st.nt);
+    if (document.body.classList.contains("shooting")) h.set("shoot", "1");
+    if (document.body.classList.contains("no-hints")) h.set("hints", "0");
+    if (st.tip) h.set("tip", "1");
+    location.hash = h.toString();
+  }
+  const phone = () => st.d === "phone";
+
+  // ---------------------------------------------------------------- pieces
+  const chip = (cls, text) => `<span class="chip ${cls}">${text}</span>`;
+  const stateChip = (s) => chip(s.state, s.label);
+  function downBanner(what) {
+    if (!st.down) return "";
+    return `<div class="down-banner" role="alert">${ic("refresh")}<div class="grow"><b>Can't reach Aico since 4:23 PM.</b> <span class="mist">${what || "Showing what was known then; it may be out of date."}</span></div><button class="btn sm" data-act="retry">Retry</button>${hint("#2")}</div>`;
+  }
+  const staleOpen = () => (st.down ? '<div class="stale-wrap" aria-hidden="true">' : "<div>");
+  function pageHead(title, sub, items, actions) {
+    return `<div class="page-head"><h1>${title}</h1>${sub ? `<span class="sub">${sub}</span>` : ""}${items ? items.map(hint).join(" ") : ""}${actions ? `<div class="actions">${actions}</div>` : ""}</div>`;
+  }
+  function page(title, sub, items, body, opts = {}) {
+    if (phone() && opts.phoneNoHead) return `<div class="page">${downBanner(opts.downText)}${staleOpen()}${body}</div></div>`;
+    return `<div class="page ${opts.wide ? "wide" : ""}">${pageHead(title, sub, items, opts.actions)}${downBanner(opts.downText)}${staleOpen()}${body}</div></div>`;
+  }
+  function sessionRow(s, opts = {}) {
+    const meta = [s.agent, s.project, s.host].filter(Boolean).join(" · ");
+    const role = s.role ? chip("role", s.role) : "";
+    const askNote = s.ask && s.state !== "needs" ? chip("needs", "1 question") : "";
+    return `<button class="row click" data-go="session:${s.id}">
+      <div class="grow"><div class="t">${s.name} ${role}</div><div class="d">${meta}${s.detail ? " · " + s.detail : ""}${s.when ? " · " + s.when : ""}</div></div>
+      <div class="end">${askNote}${stateChip(s)}${opts.chev === false ? "" : `<span class="chev">${ic("right", 16)}</span>`}</div></button>`;
+  }
+
+  // ---------------------------------------------------------------- screens
+  const screens = {};
+
+  screens.home = function () {
+    const needs = sessions.filter((s) => s.state === "needs" || s.ask);
+    const working = sessions.filter((s) => s.state === "working");
+    const idle = sessions.filter((s) => s.state === "idle");
+    const a = asks[1];
+    const first = `<div class="card attn">
+      <div class="ask-meta">${chip("needs", "Waiting on this")}<span>${sById(a.session).name} · OmniNull</span><span>· ${a.ago}</span></div>
+      <p class="ask-q">${a.q}</p>
+      <div class="opts">${a.opts.map((o, i) => `<button class="opt" data-act="pick" aria-pressed="false"><span class="num">${i + 1}</span><span>${o.t}</span>${o.rec ? '<span class="rec">Recommended</span>' : ""}</button>`).join("")}</div>
+      <div class="ask-foot"><button class="btn ghost sm" data-go="needs">See all 2 questions</button><span class="spacer"></span><button class="btn sm" data-go="session:rules">Open session</button></div>
+    </div>`;
+    const digest = `<div class="card"><div class="digest"><b>While you were away</b><span class="mist small">since 11:40 PM yesterday</span>
+      <span class="pill">${chip("done", "3 finished")}</span><span class="pill">${chip("failed", "1 failed")}</span><span class="pill">${chip("idle", "1 stuck")}</span><span class="pill">${chip("needs", "2 questions")}</span><span class="pill">${chip("warn", "2 new problems")}</span>
+      <button class="btn sm" data-go="digest" style="margin-left:auto">See summary</button>${hint("#23")}</div></div>`;
+    const left = `
+      <h2>Needs you <span class="badge">2</span>${hint("#7")}<span class="more"><button class="btn ghost sm" data-go="needs">Open Needs you</button></span></h2>${first}
+      <h2>Working <span class="badge quiet">${working.length}</span></h2><div class="rows">${working.map((s) => sessionRow(s)).join("")}</div>
+      <h2>Idle or stuck <span class="badge quiet">${idle.length}</span></h2><div class="rows">${idle.map((s) => sessionRow(s)).join("")}</div>`;
+    const right = `
+      <h2>Worst problem<span class="more"><button class="btn ghost sm" data-go="status">All 6 in Status</button></span></h2>
+      <div class="card"><div class="ask-meta">${chip("failed", "Lost work")}<span>Workstation · 1:10 PM</span></div>
+        <div class="t" style="font-weight:600;margin-bottom:4px">Restore drill was stopped for memory</div>
+        <div class="mist small">It checked 3 of 5 backup sets before it stopped. Google Drive and T7 weren't checked.</div>
+        <div class="ask-foot"><button class="btn primary sm" data-act="resume">Resume session</button><button class="btn ghost sm" data-go="status">Open Status</button></div></div>
+      <h2>Finished since you last looked <span class="badge quiet">3</span><span class="more"><button class="btn ghost sm" data-go="recent">Recent</button></span></h2>
+      <div class="rows">${finished.map((s) => sessionRow(s)).join("")}</div>
+      <h2>Quota</h2>
+      <div class="quota"><span><b>Claude</b> 5-hour 62% · week 41%</span><span><b>Codex</b> used up until Nov 11 · 4.6K credits left (2–3 days)</span><span><b>OpenCode Go</b> 5-hour used up, resets 9:16 PM</span><button class="btn ghost sm" data-go="status:usage">Usage</button></div>`;
+    const body = `${digest}<div class="triage"><div>${left}</div><div>${right}</div></div>`;
+    return page("Home", "Fri, Nov 6 · " + NOW, ["#7"], body, { phoneNoHead: false });
+  };
+
+  screens.needs = function () {
+    const tabs = `<div class="subtabs" role="tablist">
+      <button class="subtab" role="tab" aria-selected="${st.nt === "q"}" data-act="nt:q">Questions <span class="badge">2</span></button>
+      <button class="subtab" role="tab" aria-selected="${st.nt === "g"}" data-act="nt:g">Grants <span class="badge">1</span></button>
+      <button class="subtab" role="tab" aria-selected="${st.nt === "a"}" data-act="nt:a">Answered</button></div>`;
+    let body = "";
+    if (st.nt === "q") body = asks.slice().reverse().map(askCard).join("");
+    else if (st.nt === "g") body = `<div class="rows">${grantRows().waiting}</div><p class="mist small">Approved and past grants live in <button class="btn ghost sm" data-go="grants">Grants</button></p>`;
+    else body = `<div class="rows">
+      <div class="row"><div class="grow"><div class="t">Run the post-consolidation user review now?</div><div class="d">You answered “Yes, all four testers” · 10:12 AM · Aico coordinator</div></div><div class="end">${chip("done", "Answered")}</div></div>
+      <div class="row"><div class="grow"><div class="t">Keep the off-site Aico backup set daily?</div><div class="d">You answered “Daily” · yesterday 7:40 PM · Restore drill</div></div><div class="end">${chip("done", "Answered")}</div></div></div>`;
+    return page("Needs you", "2 questions · 1 grant waiting", ["#3", "#28"], tabs + body);
+  };
+
+  function askCard(a) {
+    const s = sById(a.session);
+    const sel = st.sel[a.id];
+    return `<div class="card ${a.urgency === "Waiting on this" ? "attn" : ""}">
+      <div class="ask-meta">${chip(a.urgency === "No rush" ? "idle" : "needs", a.urgency)}<span>${s.name} · ${s.project}</span><span>· ${a.ago}</span></div>
+      <p class="ask-q">${a.q}</p>
+      <div class="md">${a.md}</div>
+      <div class="lbl small mist" style="margin-top:8px">Shared for this question ${hint("#28")}</div>
+      <div class="files">${a.files.map((f, i) => `<button class="file-chip" data-sheet="file:${a.id}:${i}" aria-label="Open ${f.name}"><span class="ft">${f.name.split(".").pop().toUpperCase()}</span><span><span class="fn">${f.name}</span><br><span class="fs">${f.type} · ${f.size}</span></span></button>`).join("")}</div>
+      <div class="opts">${a.opts.map((o, i) => `<button class="opt" data-act="sel:${a.id}:${i}" aria-pressed="${sel === i}"><span class="num">${i + 1}</span><span>${o.t}</span>${o.rec ? '<span class="rec">Recommended</span>' : ""}</button>`).join("")}</div>
+      <div class="field" style="margin:0"><label for="n-${a.id}">Note to the agent (optional)</label><textarea id="n-${a.id}" class="input note-box" placeholder="Anything it should know"></textarea></div>
+      <div class="ask-foot"><button class="btn primary" ${sel === undefined ? "disabled" : ""} data-act="send">Send answer</button><button class="btn" data-go="session:${s.id}">Open session</button><span class="spacer"></span><button class="btn ghost" data-act="notnow">Not now</button></div>
+    </div>`;
+  }
+
+  screens.sessions = function () {
+    const groups = [
+      ["Needs you", sessions.filter((s) => s.state === "needs")],
+      ["Working", sessions.filter((s) => s.state === "working")],
+      ["Idle", sessions.filter((s) => s.state === "idle")],
+      ["Finished today", finished],
+    ];
+    const body = groups.map(([g, list]) => `<h2>${g} <span class="badge quiet">${list.length}</span></h2><div class="rows">${list.map((s) => sessionRow(s)).join("")}</div>`).join("") +
+      `<p class="mist small" style="margin-top:14px">6 test sessions hidden. <button class="btn ghost sm">Show</button></p>`;
+    return page("Sessions", "6 running · 3 finished today", ["#17", "#1"], body, { actions: `<button class="btn primary" data-sheet="new">${ic("plus", 16)} New session</button>` });
+  };
+
+  const termAgent = `<span class="dim">› Make the projects page show where each project runs.</span>
+
+<span class="acc">⏺</span> Reading web/src/routes/projects/ and the places API…
+<span class="acc">⏺</span> The power buttons had no labels, so I'm adding “Power off” / “Power on” text
+  next to each place and a confirm step for powering off a machine with live sessions.
+
+  <span class="ok">✓</span> web/src/routes/projects/Places.tsx      +48 −12
+  <span class="ok">✓</span> web/src/routes/projects/Roadmap.tsx     +31 −40
+  <span class="dim">… running focused checks</span>
+
+<span class="acc">⏺</span> 14 checks passed. Next: render phone and desktop shots to compare with the mockup.
+`;
+  const termShell = `<span class="ok">kasadis@gem</span>:<span class="acc">~</span>$ pveversion
+pve-manager/9.1.2
+<span class="ok">kasadis@gem</span>:<span class="acc">~</span>$ qm list | head -4
+      VMID NAME             STATUS
+       200 agent-work       stopped
+       201 neri-hunters     running
+<span class="ok">kasadis@gem</span>:<span class="acc">~</span>$ █`;
+
+  screens.session = function () {
+    const s = sById(st.x || "page");
+    const isShell = s.agent === "Shell";
+    const running = !s.when;
+    const liveChip = st.down ? chip("stale", "Disconnected") : running ? chip(s.state === "needs" ? "needs" : "working", s.state === "needs" ? "Live · needs you" : s.state === "idle" ? "Live · " + s.label.toLowerCase() : "Live · working") : chip(s.state, s.label + " " + s.when);
+    const sizeBanner = st.down
+      ? `<div class="banner down">${ic("refresh")}<span class="grow"><b>Can't reach this session since 4:23 PM.</b> Output below is from then.</span><button class="btn sm" data-act="retry">Retry</button>${hint("#2")}</div>`
+      : !running ? `<div class="banner ok"><span class="grow">This session ended ${s.when}. ${s.state === "failed" ? "It stopped before finishing." : ""}</span><button class="btn sm" data-sheet="tr:${s.id}">Transcript</button>${s.state === "failed" ? '<button class="btn primary sm" data-act="resume">Resume</button>' : ""}</div>`
+      : st.used
+        ? `<div class="banner ok">${ic("check")}<span class="grow">Now sized for this ${phone() ? "phone" : "desktop"}. Your ${phone() ? "desktop" : "phone"} shows it scrolled until you choose Use here there.</span><button class="btn ghost sm" data-act="unuse">Got it</button>${hint("#15")}</div>`
+        : `<div class="banner"><span class="grow">Sized for your ${phone() ? "desktop" : "phone"}, so it ${phone() ? "runs off the screen here" : "looks narrow here"}.</span><button class="btn primary sm" data-act="usehere">Use here</button>${hint("#15")}</div>`;
+    const modeLabel = isShell ? "Shell" : s.agent;
+    const checkIn = isShell
+      ? `<span class="tip ${st.tip ? "show" : ""}" tabindex="0"><button class="btn sm" disabled aria-describedby="tip-ci">Check in later</button><span class="tip-box" id="tip-ci" role="tooltip">Only agent sessions can check in later. A shell can't report back on its own.</span></span>`
+      : `<button class="btn sm">Check in later</button>`;
+    const term = `<div class="term ${st.down ? "stale-wrap" : ""}">${isShell ? termShell : termAgent}</div>`;
+    const menu = st.menu === "mode" ? modeMenu(s) : st.menu === "more" ? sessionMoreMenu(s) : "";
+    if (phone()) {
+      return `<div class="sv">
+        <div class="ph-sv-top"><button class="icon-btn" data-go="home" aria-label="Back to sessions">${ic("left", 22)}</button>
+          <div class="tblock"><div class="tname">${s.name}</div><div class="tsub">${liveChip}<span>${modeLabel} · ${s.project || s.host}</span></div></div>
+          <button class="icon-btn" data-act="menu:more" aria-label="Session menu">${ic("dots", 22)}</button></div>
+        ${sizeBanner}${term}
+        <div class="keys">${["Esc", "Tab", "Ctrl", "↑", "↓", "↵", "Keys"].map((k) => `<button>${k}</button>`).join("")}</div>${menu}</div>`;
+    }
+    return `<div class="sv">
+      <div class="sv-head">
+        <span class="mist">${ic(isShell ? "term" : "sessions", 20)}</span>
+        <div><div class="sv-title">${s.name}</div><div class="sv-sub">${liveChip}${s.role ? chip("role", s.role) : ""}<span>${[s.model ? s.agent + " · " + s.model : s.agent, s.project, s.host].filter(Boolean).join(" · ")}</span></div></div>
+        <div class="sv-tools">
+          <button class="mode" data-act="menu:mode" aria-haspopup="menu" aria-label="Change what runs in this session"><span class="k">Runs</span><span class="v">${modeLabel}</span>${ic("down", 14)}</button>${hint("#16")}
+          ${checkIn}
+          <button class="icon-btn" aria-label="Search output">${ic("search")}</button>
+          <button class="icon-btn" aria-label="Files">${ic("folder")}</button>
+          <button class="icon-btn" data-act="menu:more" aria-label="Session menu">${ic("dots")}</button>
+        </div>
+      </div>${sizeBanner}${term}${menu}</div>`;
+  };
+  function modeMenu(s) {
+    const opts = ["Shell", "Claude Code", "Codex", "Antigravity", "Pi", "Aico agent"];
+    const cur = s.agent === "Shell" ? "Shell" : s.agent;
+    return `<div class="menu" role="menu" style="top:56px;right:${phone() ? 8 : 220}px">
+      <div class="mh"><b style="color:var(--bone)">Change what runs here</b><br>Switching stops ${cur} and starts the new one in this session. ${cur === "Shell" ? "" : "This conversation stays in Recent."}</div>
+      ${opts.map((o) => `<button class="mi" role="menuitem">${o}${o === cur ? '<span class="r">Running now</span>' : ""}</button>`).join("")}</div>`;
+  }
+  function sessionMoreMenu(s) {
+    const isShell = s.agent === "Shell";
+    return `<div class="menu" role="menu" style="top:${phone() ? 52 : 56}px;right:8px">
+      ${phone() ? `<button class="mi" role="menuitem" data-act="menu:mode">Change what runs here<span class="r">${isShell ? "Shell" : s.agent} · restarts it</span></button>
+      <button class="mi" role="menuitem" ${isShell ? "disabled" : ""}>Check in later<span class="r">${isShell ? "Agent sessions only" : ""}</span></button>
+      <button class="mi" role="menuitem">Search output</button><button class="mi" role="menuitem">Files</button>` : ""}
+      <button class="mi" role="menuitem">Rename</button>
+      <button class="mi" role="menuitem" data-sheet="tr:${s.id}">Transcript so far</button>
+      <button class="mi" role="menuitem" style="color:var(--ember)">End session…</button></div>`;
+  }
+
+  screens.status = function () {
+    const prob = (sev, sevText, title, text, where, ran, actions) => `<div class="row" style="align-items:flex-start">
+      <div class="sev" style="width:84px;flex:none;padding-top:2px">${chip(sev, sevText)}</div>
+      <div class="grow"><div class="t">${title}</div><div class="d" style="color:rgb(var(--bone-rgb)/.78)">${text}</div><div class="d">${where} · ${ran}</div></div>
+      <div class="end">${actions}</div></div>`;
+    const groups = `
+      <h2>Lost work ${hint("#20")}</h2><div class="rows">
+      ${prob("failed", "Failed", "Restore drill was stopped for memory", "The session Restore drill was stopped at 1:10 PM while Chrome used 1.8 GB beside it. It checked 3 of 5 backup sets; Google Drive and T7 weren't checked.", "Workstation", "checked 4:15 PM", '<button class="btn primary sm" data-act="resume">Resume session</button><button class="btn ghost sm">Log</button>')}</div>
+      <h2>Security</h2><div class="rows">
+      ${prob("warn", "Warning", "New sudo commands", "Aico coordinator ran <b>userdel test-m10</b> at 2:41 PM. Release signer (OmniNull) ran <b>ominull-release-signer</b> at 3:05 PM. Both match declared work. The backup window ran sudo 287 times today (usual 13).", "Workstation", "checked 4:15 PM", '<button class="btn sm">Mark as expected</button><button class="btn ghost sm">Log</button>')}
+      ${prob("warn", "Warning", "Detection paged more than planned", "3 pages in 7 days; the weekly budget is 1. All 3 came from the “upload to a new place” rule (there's a question about it in Needs you). Every page was still sent.", "ominull-hub", "checked 4:17 PM", '<button class="btn sm" data-go="needs">Open question</button>')}</div>
+      <h2>Spend</h2><div class="rows">
+      ${prob("warn", "Warning", "Codex weekly allowance used up", "Used up until Nov 11, 7:00 PM. About 4.6K credits left: 2–3 days at today's pace.", "Workstation", "checked 4:16 PM", '<button class="btn sm" data-go="status:usage">Usage</button>')}</div>
+      <h2>Performance</h2><div class="rows">
+      ${prob("warn", "Warning", "Swap 82% full", "22 GiB of memory is free, but Chrome tabs pinned pages into swap, so things run slower than they need to.", "Workstation", "checked 4:15 PM", '<button class="btn sm">Look into it</button>')}</div>
+      <h2>Maintenance</h2><div class="rows">
+      ${prob("warn", "Warning", "Windows updates failed on the laptop", "The laptop has been off since Oct 30; the update runs again when it's back.", "LAPTOP-85T7", "checked 4:17 PM", '<button class="btn ghost sm">Log</button>')}</div>
+      <div class="rows" style="margin-top:16px"><button class="row click"><div class="grow"><div class="t">308 healthy</div><div class="d">228 OK · 80 off (machines powered off on purpose)</div></div><span class="chev">${ic("down", 16)}</span></button></div>`;
+    const summary = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${chip("failed", "1 failed")}${chip("warn", "5 warnings")}${chip("idle", "0 late")}${chip("idle", "0 unknown")}${chip("working", "228 OK")}${chip("idle", "80 off")}</div>`;
+    const body = summary + groups + usage();
+    return page("Status", "314 checks on 8 machines · updated 4:29 PM", ["#20", "#24", "#5"], body);
+  };
+  function usage() {
+    const days = [["Sat", 30, 12, 6], ["Sun", 22, 18, 4], ["Mon", 44, 26, 8], ["Tue", 52, 30, 10], ["Wed", 38, 34, 12], ["Thu", 46, 28, 9], ["Fri", 40, 22, 14]];
+    const max = 100;
+    return `<h2 id="usage">Usage ${hint("#5")} ${hint("#24")}</h2>
+    <div class="grid3">
+      <div class="stat"><div class="t" style="font-weight:600">Claude <span class="mist small">Max</span></div>
+        <div class="small" style="margin-top:6px">5-hour window: 62% used, resets 9:16 PM</div><div class="meter"><span style="width:62%"></span></div>
+        <div class="small" style="margin-top:8px">Week: 41% used, resets Nov 8, 7:00 PM</div><div class="meter"><span style="width:41%"></span></div>
+        <div class="mist small" style="margin-top:8px">At today's pace the week lasts until the reset.</div></div>
+      <div class="stat"><div class="t" style="font-weight:600">Codex <span class="mist small">Pro</span></div>
+        <div class="small" style="margin-top:6px">Week: used up until Nov 11, 7:00 PM</div><div class="meter full"><span style="width:100%"></span></div>
+        <div class="small" style="margin-top:8px">Credits: about 4.6K left</div><div class="meter"><span style="width:23%"></span></div>
+        <div class="mist small" style="margin-top:8px">2–3 days left at today's pace (1.4K–2K a day).</div></div>
+      <div class="stat"><div class="t" style="font-weight:600">OpenCode Go</div>
+        <div class="small" style="margin-top:6px">5-hour window: used up, resets 9:16 PM</div><div class="meter full"><span style="width:100%"></span></div>
+        <div class="small" style="margin-top:8px">Week: used up until Nov 8, 7:00 PM</div><div class="meter full"><span style="width:100%"></span></div>
+        <div class="mist small" style="margin-top:8px">Month: 95% used, resets Nov 26.</div></div>
+    </div>
+    <div class="card" style="margin-top:12px"><div class="t" style="font-weight:600">Spend per day, by provider <span class="mist small">(share of each plan's daily allowance)</span></div>
+      <div class="bars" role="img" aria-label="Spend per day for the last 7 days">${days.map(([, a, b, c]) => `<div class="bar" style="height:${((a + b + c) / max) * 100}%"><span class="s-claude" style="height:${(a / (a + b + c)) * 100}%"></span><span class="s-codex" style="height:${(b / (a + b + c)) * 100}%"></span><span class="s-oc" style="height:${(c / (a + b + c)) * 100}%"></span></div>`).join("")}</div>
+      <div class="bar-l">${days.map((d) => `<span>${d[0]}</span>`).join("")}</div>
+      <div class="legend"><span><i class="s-claude"></i>Claude</span><span><i class="s-codex"></i>Codex</span><span><i class="s-oc"></i>OpenCode Go</span></div></div>`;
+  }
+
+  screens.projects = function () {
+    const cur = st.x || (phone() ? "" : "aico");
+    const list = projects.map((p) => `<button class="prow" data-go="${phone() ? "project" : "projects"}:${p.id}" aria-current="${p.id === cur}">
+      <div class="top"><span class="nm">${p.name}</span>${p.state === "needs" ? chip("needs", "Needs you") : p.state === "working" ? chip("working", "Working") : p.state === "idle" ? chip("idle", "Idle") : ""}</div>
+      <div class="d">${p.note}</div></button>`).join("");
+    if (phone()) return page("Projects", "7 projects", ["#6", "#8"], `<div class="rows">${list}</div>`);
+    return `<div class="split"><div class="list"><div style="padding:12px"><input class="input" placeholder="Find a project" aria-label="Find a project"></div>${list}</div><div class="detail">${projectDetail(cur)}</div></div>`;
+  };
+  screens.project = function () { return projectDetail(st.x || "aico"); };
+  function projectDetail(id) {
+    const p = projects.find((q) => q.id === id) || projects[0];
+    const places = id === "monkey"
+      ? `<div class="place"><span class="mist">${ic("server")}</span><div class="grow"><b>Workstation</b> <span class="mist small">· On since 3:43 PM</span></div></div>`
+      : `<div class="place"><span class="mist">${ic("server")}</span><div class="grow"><b>Workstation</b> <span class="mist small">· On since 3:43 PM · checked just now</span></div>${chip("working", "On")}<button class="btn sm">${ic("power", 14)} Power off</button></div>
+         <div class="place"><span class="mist">${ic("server")}</span><div class="grow"><b>CT 190</b> <span class="mist small">· On since Tue · checked just now</span></div>${chip("working", "On")}<button class="btn sm">${ic("power", 14)} Power off</button></div>
+         <div class="place"><span class="mist">${ic("server")}</span><div class="grow"><b>agent-work VM</b> <span class="mist small">· Off since Nov 3</span></div>${chip("idle", "Off")}<button class="btn sm">${ic("power", 14)} Power on</button></div>`;
+    const rm = id === "monkey"
+      ? `<div class="empty"><b>No roadmap yet</b>Agents add Now and Next items here when they plan work for Monkey Fight.</div>`
+      : `<div class="card" style="padding:4px 16px">
+        ${[["Now", "Post-consolidation fixes from the user review", "27 items waiting for your approval", "post"], ["Now", "Projects page: where each project runs, power actions, then check on phone and desktop", "Projects page build is working on it", "projects"], ["Next", "Enroll VMs 200 and 201 into the Aico fleet", "", ""], ["Next", "Split the session engine out of Tether", "", "engine"], ["Later", "Failover: copy active repos to the peer machine", "", ""]]
+          .map(([l, t, d, plan]) => `<div class="rm"><span class="lab">${chip(l === "Now" ? "warn" : "idle", l).replace('class="chip', 'class="chip plain')}</span><div class="tx">${t}${d ? `<div class="d">${d}</div>` : ""}</div>${plan ? `<button class="btn sm" data-sheet="plan:${plan}">${ic("file", 14)} Open plan</button>` : ""}</div>`).join("")}</div>`;
+    const changes = id === "monkey" ? `<div class="empty"><b>No changes this week</b>The last commit was Oct 28.</div>` : `<div class="rows">
+      ${["Usage records Claude tokens again, per day, model and project", "aico agent skips models whose subscription is used up and says until when", "Backups: restoring Tether's saved state no longer trips on its sockets", "Model list: gpt-6-luna is available for recon"].map((t) => `<div class="row"><div class="grow">${t}</div><span class="mist small">Today</span></div>`).join("")}</div>`;
+    const back = "";
+    return page(p.name, p.note, ["#6"], `${back}<p class="mist" style="margin-top:0">${p.desc}</p>
+      <h2>Where it runs</h2><div class="card" style="padding:4px 16px">${places}</div>
+      <h2>Roadmap</h2>${rm}
+      <h2>Changes</h2>${changes}`, { phoneNoHead: false });
+  }
+
+  screens.backups = function () {
+    const grp = (title, n, rows) => `<h2>${title} <span class="badge quiet">${n}</span><span class="more"><button class="btn ghost sm">Show all ${n}</button></span></h2><div class="rows">${rows.map(([nm, last, next]) => `<div class="row compact"><div class="grow"><div class="t">${nm}</div><div class="d">Last copy ${last} · next ${next}</div></div><div class="end">${chip("working", "Current")}</div></div>`).join("")}</div>`;
+    const body = `<div class="card" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">${chip("working", "All current")}<span><b>All 96 sets current</b> <span class="mist">· 36 archived · checked 4:10 PM</span></span><button class="btn sm" style="margin-left:auto">Restore a set…</button></div>
+      ${grp("Workstation snapshots", 52, [["Projects (/srv/workspaces)", "4:00 PM", "5:00 PM"], ["Aico state (~/.config/tether, sessions)", "4:00 PM", "5:00 PM"], ["Home folder", "3:00 PM", "7:00 PM"]])}
+      ${grp("Portable T7 drive", 22, [["Projects", "today 6:00 AM", "tomorrow 6:00 AM"], ["Aico state", "today 6:00 AM", "tomorrow 6:00 AM"]])}
+      ${grp("Google Drive (off-site)", 22, [["Aico set (notes, prompts, memories, hosts)", "today 3:30 AM", "tomorrow 3:30 AM"], ["Project registry", "today 3:30 AM", "tomorrow 3:30 AM"]])}`;
+    return page("Backups", "Grouped by where the copy lives", ["#12", "#18"], body, { downText: "Showing the last list Aico loaded, from 4:10 PM." });
+  };
+
+  function grantRows() {
+    return {
+      waiting: `<div class="row"><div class="grow"><div class="t">GitHub admin to create the aico-mobile repo</div><div class="d">Asked by Aico coordinator · 5 min ago · ends 1 hour after you approve</div></div><div class="end">${chip("needs", "Waiting for your tap")}<button class="btn primary sm">Approve…</button><button class="btn ghost sm">Decline</button></div></div>`,
+      active: `<div class="row"><div class="grow"><div class="t">Owner email access for Weekly job search</div><div class="d">Approved 3:40 PM · ends 4:40 PM</div></div><div class="end">${chip("working", "Active")}<button class="btn sm">End now</button></div></div>`,
+    };
+  }
+  screens.grants = function () {
+    const g = grantRows();
+    const hist = [["Chrome tabs access for Weekly job search", "Expired at 11:02 AM without an answer", "Expired"], ["GitHub admin to publish aico-cli", "Approved Nov 5, 6:12 PM · ended 6:20 PM", "Ended"], ["Owner email access for Jobinator", "Declined Nov 4, 9:05 AM", "Declined"]];
+    const body = `<h2>Active <span class="badge quiet">2</span>${hint("#11")}</h2><div class="rows">${g.waiting}${g.active}</div>
+      <h2>History</h2><div class="rows">${hist.map(([t, d, c]) => `<div class="row compact"><div class="grow"><div class="t" style="font-weight:400">${t}</div><div class="d">${d}</div></div><div class="end">${chip("done", c)}</div></div>`).join("")}</div>`;
+    return page("Grants", "Time-limited access you approve with a tap", ["#11", "#9"], body);
+  };
+
+  screens.more = function () {
+    const items = [["recent", "history", "Recent", "Past sessions and their transcripts"], ["digest", "sun", "While you were away", "What happened since you last looked"], ["backups", "archive", "Backups", "All 96 sets current"], ["grants", "key", "Grants", "1 waiting for your tap"], ["recovery", "refresh", "Recovery", "4 of 5 resumed after the 6:02 AM restart"], ["notes", "note", "Notes", "12 notes"], ["capture", "camera", "Capture", "Screenshot or photo into a note"], ["logins", "lock", "Logins", "Accounts agents can use"], ["hosts", "server", "Session hosts", "Machines that can run sessions"], ["settings", "gear", "Settings", "Agents, phone app, notifications"]];
+    return page("More", "", ["#7", "#8"], `<div class="rows">${items.map(([s, i, t, d]) => `<button class="row click" data-go="${s}"><span class="mist">${ic(i, 20)}</span><div class="grow"><div class="t">${t}</div><div class="d">${d}</div></div><span class="chev">${ic("right", 16)}</span></button>`).join("")}</div>`);
+  };
+
+  screens.settings = function () {
+    const agents = [["Claude Code", "Default for new sessions (last used)", "working", "Ready"], ["Codex", "Used up until Nov 11; sessions use it only when Claude is used up", "warn", "Used up"], ["OpenCode Go", "5-hour window used up, resets 9:16 PM", "warn", "Used up"], ["Pi", "", "working", "Ready"], ["Antigravity", "", "working", "Ready"], ["Aico agent", "Picks the first model with allowance left", "working", "Ready"]];
+    const body = `<h2>Agents ${hint("#13")}</h2><div class="rows">${agents.map(([n, d, c, l]) => `<div class="row compact"><div class="grow"><div class="t">${n}</div>${d ? `<div class="d">${d}</div>` : ""}</div><div class="end">${chip(c, l)}</div></div>`).join("")}</div>
+      <div class="card" style="margin-top:12px"><div class="t" style="font-weight:600">What agents read when a session starts</div>
+        <div class="mist small" style="margin:4px 0 8px">18K of the 40K tokens allowed. 65 items weren't used in the last 3 sessions, so they may be worth trimming.</div>
+        <div class="meter"><span style="width:45%"></span></div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn sm">Review unused items</button><button class="btn ghost sm">Prompts</button><button class="btn ghost sm">Roles</button></div></div>
+      <h2>Phone app ${hint("#18")}</h2><div class="card"><div class="t" style="font-weight:600">Pixel 9 paired</div><div class="mist small">Push works · last seen 4:20 PM</div><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm">${ic("phone", 14)} Pair another phone</button><button class="btn ghost sm">Send a test push</button></div></div>
+      <h2>Notifications ${hint("#23")}</h2><div class="card"><div class="t" style="font-weight:600">Morning summary</div><div class="mist small">One push at 8:00 AM with what finished, failed, got stuck or asked for you overnight. Questions that stop a session still push right away.</div>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="mist small" for="mt">Send at</label><select id="mt" class="input" style="width:120px"><option>8:00 AM</option><option>7:00 AM</option></select></div></div>`;
+    return page("Settings", "", ["#13"], body);
+  };
+
+  screens.digest = function () {
+    const sec = (title, n, rows) => `<h2>${title} <span class="badge quiet">${n}</span></h2><div class="rows">${rows}</div>`;
+    const body = `<div class="card" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div class="push"><span class="app">A</span><div><div class="small"><b>Aico</b> <span class="mist">· 8:00 AM</span></div><div class="small">Overnight: 3 finished, 1 failed, 1 stuck, 2 questions waiting.</div></div></div>
+        <div class="mist small" style="flex:1;min-width:200px">The phone gets this as one push each morning instead of one per event. ${hint("#23")}</div></div>
+      ${sec("Questions", 2, asks.map((a) => `<button class="row click" data-go="needs"><div class="grow"><div class="t">${a.q}</div><div class="d">${sById(a.session).name} · ${a.ago}</div></div><div class="end">${chip(a.urgency === "No rush" ? "idle" : "needs", a.urgency)}</div></button>`).join(""))}
+      ${sec("Failed", 1, sessionRow(finished[1]))}
+      ${sec("Stuck", 1, sessionRow(sessions[4]))}
+      ${sec("Finished", 2, sessionRow(finished[0]) + sessionRow(finished[2]))}
+      ${sec("New problems", 2, `<button class="row click" data-go="status"><div class="grow"><div class="t">Swap 82% full</div><div class="d">Workstation · since 2:10 AM</div></div>${chip("warn", "Warning")}</button><button class="row click" data-go="status"><div class="grow"><div class="t">Codex weekly allowance used up</div><div class="d">until Nov 11 · since 5:40 AM</div></div>${chip("warn", "Warning")}</button>`)}
+      <h2>Spend</h2><div class="quota"><span><b>Claude</b> 9% of the week overnight</span><span><b>Codex</b> 1.6K credits</span><span><b>OpenCode Go</b> one 5-hour window used up</span></div>`;
+    return page("While you were away", "Since 11:40 PM yesterday", ["#23"], body, { actions: `<button class="btn">Mark all as seen</button>` });
+  };
+
+  screens.recent = function () {
+    const rows = finished.concat(olderRecent).map((s) => `<div class="row" style="align-items:flex-start"><div class="grow"><div class="t">${s.name}</div><div class="d">${[s.agent, s.project, s.host].join(" · ")} · ended ${s.when}</div><div class="d" style="color:rgb(var(--bone-rgb)/.8);margin-top:6px">“${s.reply}”</div></div><div class="end">${stateChip(s)}<button class="btn sm" data-sheet="tr:${s.id}">Transcript</button></div></div>`).join("");
+    const filters = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><input class="input" style="max-width:280px" placeholder="Search past sessions" aria-label="Search past sessions"><select class="input" style="max-width:180px" aria-label="Project"><option>All projects</option></select><span class="mist small" style="align-self:center">6 test sessions hidden ${hint("#1")}</span></div>`;
+    return page("Recent", "Sessions that ended · last reply shown", ["#25", "#9"], filters + `<div class="rows">${rows}</div>`);
+  };
+
+  screens.recovery = function () {
+    const ok = [["Aico coordinator", "6:03 AM"], ["Security hunt", "6:03 AM"], ["Rule noise cleanup", "6:04 AM"], ["Shell on gem", "6:04 AM"]];
+    const body = `<div class="grid3"><div class="stat"><div class="n">5</div><div class="l">running before the restart</div></div><div class="stat"><div class="n">4</div><div class="l">resumed on their own</div></div><div class="stat"><div class="n" style="color:var(--ember)">1</div><div class="l">didn't resume</div></div></div>
+      <h2>Didn't resume ${hint("#26")}</h2><div class="rows"><div class="row" style="align-items:flex-start"><div class="grow"><div class="t">Release notes draft</div><div class="d">Claude Code · Monkey Fight · Workstation</div><div class="d" style="color:rgb(var(--bone-rgb)/.8)">The agent exited while starting up (out of memory at 6:03 AM). Its conversation is saved, so Resume picks up where it was.</div></div><div class="end">${chip("failed", "Not running")}<button class="btn primary sm" data-act="resume">Resume</button></div></div></div>
+      <h2>Resumed</h2><div class="rows">${ok.map(([n, t]) => `<div class="row compact"><div class="grow"><div class="t" style="font-weight:400">${n}</div></div><div class="end">${chip("working", "Resumed " + t)}</div></div>`).join("")}</div>
+      <h2>Earlier</h2><div class="rows"><div class="row compact"><div class="grow"><div class="t" style="font-weight:400">gem restarted · Nov 4, 11:15 PM</div><div class="d">2 of 2 sessions resumed</div></div></div></div>`;
+    return page("Recovery", "Workstation restarted at 6:02 AM today (system update)", ["#26"], body, { actions: `<button class="btn primary" data-act="resume">Resume 1 session</button>` });
+  };
+
+  screens.notes = function () {
+    const notes = [["Telegram bot setup", "Bot name aico_alerts, token ••••••••••••••• (hidden, looks like a secret)"], ["Grocery run", "oat milk, coffee, batteries for the T7 enclosure"], ["Ideas for Monkey Fight", "Two-player mode on one keyboard; banana power-up"]];
+    return page("Notes", "12 notes", ["#4"], `<div class="rows">${notes.map(([t, d]) => `<div class="row"><div class="grow"><div class="t">${t}</div><div class="d">${d}</div></div><span class="chev">${ic("right", 16)}</span></div>`).join("")}</div><p class="mist small">Previews hide anything that looks like a token or password. A new note is saved once you type something.</p>`, { actions: `<button class="btn">${ic("plus", 14)} New note</button>` });
+  };
+  screens.capture = function () {
+    return page("Capture", "", [], `<div class="empty"><b>Nothing captured yet today</b>Take a screenshot or photo and it becomes a note.</div><div style="margin-top:12px"><button class="btn primary">${ic("camera", 16)} Capture</button></div>`);
+  };
+  screens.logins = function () {
+    return page("Logins", "Accounts agents can use in their browser", [], `<div class="rows">${[["GitHub", "Signed in · checked 4:00 PM"], ["Google (Drive backups)", "Signed in · checked 3:30 AM"], ["LinkedIn", "Signed out since Nov 2"]].map(([t, d], i) => `<div class="row compact"><div class="grow"><div class="t">${t}</div><div class="d">${d}</div></div><div class="end">${i === 2 ? chip("warn", "Signed out") : chip("working", "Signed in")}</div></div>`).join("")}</div>`);
+  };
+  screens.hosts = function () {
+    const rows = [["Workstation", "This is where Aico runs · on", "working", "On", ""], ["CT 190", "Container on gem · on", "working", "On", "Power off"], ["agent-work VM", "VM on gem · off since Nov 3", "idle", "Off", "Power on"], ["neri-hunters VM", "VM on gem · on", "working", "On", "Power off"]];
+    return page("Session hosts", "Machines that can run sessions", ["#10", "#9"], `<div class="rows">${rows.map(([t, d, c, l, a]) => `<div class="row"><div class="grow"><div class="t">${t}</div><div class="d">${d}</div></div><div class="end">${chip(c, l)}${a ? `<button class="btn sm">${ic("power", 14)} ${a}</button>` : ""}</div></div>`).join("")}</div><p class="mist small">Status watches 8 machines. The other 4 (gem, the router, the laptop and ominull-hub) don't run sessions.</p>`);
+  };
+
+  // ---------------------------------------------------------------- sheets
+  function sheet() {
+    if (!st.sh) return "";
+    const [kind, a, b] = st.sh.split(":");
+    let head = "", body = "", foot = "", wide = false;
+    if (kind === "new") {
+      head = "New session";
+      const agents = [["claude", "Claude Code", "Last used"], ["codex", "Codex", "Used up until Nov 11"], ["anti", "Antigravity", ""], ["pi", "Pi", ""], ["aico", "Aico agent", ""]];
+      const hosts = [["ws", "Workstation", ""], ["ct", "CT 190", ""], ["aw", "agent-work VM", "Off · starts it"], ["nh", "neri-hunters VM", ""]];
+      body = `<div class="field"><label for="ns-name">Name (optional) ${hint("#14")}</label><input id="ns-name" class="input" placeholder="e.g. Fix the backups page"><span class="mist small">Left empty, it's named after your first message.</span></div>
+        <div class="field"><span class="lbl">What runs</span><div class="seg" role="group" style="width:fit-content"><button aria-pressed="${st.kind === "agent"}" data-act="kind:agent">Agent</button><button aria-pressed="${st.kind === "shell"}" data-act="kind:shell">Shell</button></div></div>
+        ${st.kind === "agent" ? `<div class="field"><span class="lbl">Agent</span><div class="choice-grid">${agents.map(([k, n, d]) => `<button class="choice" aria-pressed="${st.agent === k}" data-act="agent:${k}"><span>${n}</span><small>${d}</small></button>`).join("")}</div></div>` : ""}
+        <div class="field"><span class="lbl">Session host ${hint("#10")}</span><div class="choice-grid">${hosts.map(([k, n, d]) => `<button class="choice" aria-pressed="${st.host === k}" data-act="host:${k}"><span>${n}</span><small>${d}</small></button>`).join("")}</div></div>
+        <div class="field"><label for="ns-p">Project</label><select id="ns-p" class="input"><option>Aico</option><option>OmniNull</option><option>Portfolio AI</option><option>No project (home folder)</option></select></div>`;
+      const an = st.kind === "shell" ? "a shell" : agents.find((x) => x[0] === st.agent)[1];
+      foot = `<button class="btn ghost" data-act="close">Cancel</button><button class="btn primary" data-act="close">Start ${an} in Aico</button>`;
+    } else if (kind === "file") {
+      const ask = asks.find((x) => x.id === a); const f = ask.files[+b];
+      head = f.name; wide = true;
+      body = `<div class="mist small" style="margin-bottom:12px">${f.type} · ${f.size} · shared by ${sById(ask.session).name} for “${ask.q.slice(0, 60)}…” ${hint("#28")}</div>` + fileBody(f);
+      foot = `<span class="mist small" style="margin-right:auto">${ask.files.length > 1 ? `${+b + 1} of ${ask.files.length}` : ""}</span>${ask.files.length > 1 ? `<button class="btn" data-sheet="file:${a}:${(+b + 1) % ask.files.length}">Next file</button>` : ""}<button class="btn">Download</button><button class="btn primary" data-act="close">Back to the question</button>`;
+    } else if (kind === "plan") {
+      head = a === "post" ? "Plan: post-consolidation fixes" : a === "projects" ? "Plan: projects page" : "Plan: split the session engine";
+      wide = true;
+      body = `<div class="mist small" style="margin-bottom:12px">docs/plans/${a === "post" ? "post-consolidation/recommendations.md" : a + "/plan.md"} · updated today 3:12 PM ${hint("#6")}</div>
+        <div class="md"><p><strong>Goal.</strong> Fix what the four user testers and the review found, in order: wrong or misleading first, then finding your way, sessions, look and feel, Status and the CLI.</p>
+        <ul><li><strong>A. Wrong or misleading:</strong> session state, failed states, the Needs you card, masked note previews, usage wording, roadmap.</li>
+        <li><strong>B. Finding your way:</strong> Home as a triage view, phone tab bar, one name per concept.</li>
+        <li><strong>C. Sessions:</strong> name field, phone header, mode switch, row states.</li></ul>
+        <p><strong>Status:</strong> waiting for your approval. Nothing changes until then.</p></div>`;
+      foot = `<button class="btn ghost">Copy path</button><button class="btn primary" data-act="close">Done</button>`;
+    } else if (kind === "tr") {
+      const s = sById(a); head = s.name; wide = true;
+      body = `<div class="ask-meta">${stateChip(s)}<span>${[s.agent, s.project, s.host].join(" · ")} · ended ${s.when || "—"}</span>${hint("#25")}</div>
+        <h2 style="margin-top:8px">Final reply</h2><div class="card md"><p>${s.reply || "Still running; this is the transcript so far."}</p></div>
+        <h2>Transcript</h2><div class="term" style="margin:0;max-height:260px"><span class="dim">› ${s.id === "jobs" ? "Run the weekly job search." : "Run the restore drill across all five backup sets."}</span>
+
+<span class="acc">⏺</span> ${s.id === "jobs" ? "Scanning tracked boards… 42 new postings." : "Restoring Tether state into a scratch folder…"}
+<span class="acc">⏺</span> ${s.id === "jobs" ? "Screened 42; 14 passed; scoring…" : "Tether state and project notes match."}
+<span class="dim">…</span></div>`;
+      foot = `<button class="btn ghost">Open folder</button>${s.state === "failed" ? '<button class="btn" data-act="resume">Resume</button>' : ""}<button class="btn primary" data-act="close">Done</button>`;
+    }
+    return `<div class="scrim" data-act="close-scrim"><div class="dialog ${wide ? "wide" : ""}" role="dialog" aria-modal="true" aria-label="${head}">
+      <div class="dialog-head"><h3>${head}</h3><button class="icon-btn" data-act="close" aria-label="Close">${ic("x")}</button></div>
+      <div class="dialog-body">${body}</div><div class="dialog-foot">${foot}</div></div></div>`;
+  }
+  function fileBody(f) {
+    if (f.kind === "md") return `<div class="card md"><p><strong>Pace plan until the Nov 11 reset</strong></p><ul><li>Cap hunting at about 1.5K credits a day.</li><li>Recon on gpt-6-luna (cheaper, same tools); exploitation stays on gpt-6.1.</li><li>Check each morning: if under 1.2K left with 2+ days to go, pause hunting.</li></ul><p>Expected: 4.6K lasts to Nov 10 evening with a small buffer.</p></div>`;
+    if (f.kind === "img") {
+      const v = [1.4, 1.9, 2.0, 1.7, 1.6, 1.8, 1.5];
+      return `<div class="viewer-img"><svg viewBox="0 0 520 220" width="100%" role="img" aria-label="Credits used per day, last 7 days">
+        <line x1="40" y1="190" x2="510" y2="190" stroke="var(--mist)" stroke-opacity=".4"/>
+        <line x1="40" y1="${190 - 1.5 * 80}" x2="510" y2="${190 - 1.5 * 80}" stroke="var(--lantern)" stroke-dasharray="4 4"/>
+        <text x="44" y="${185 - 1.5 * 80}" fill="var(--lantern)" font-size="11" font-family="Pretendard">pace cap 1.5K</text>
+        ${v.map((x, i) => `<rect x="${60 + i * 64}" y="${190 - x * 80}" width="36" height="${x * 80}" rx="3" fill="rgb(var(--bone-rgb) / .6)"/><text x="${78 + i * 64}" y="206" text-anchor="middle" fill="var(--mist)" font-size="11" font-family="Pretendard">${["Oct 31", "Nov 1", "2", "3", "4", "5", "6"][i]}</text><text x="${78 + i * 64}" y="${184 - x * 80}" text-anchor="middle" fill="var(--bone)" font-size="11" font-family="Pretendard">${x}K</text>`).join("")}
+      </svg></div>`;
+    }
+    if (f.kind === "csv") return `<table class="tbl"><thead><tr><th>Day</th><th class="num">Recon</th><th class="num">Exploit</th><th class="num">Total</th></tr></thead><tbody>${[["Nov 2", 0.9, 1.1], ["Nov 3", 0.8, 0.9], ["Nov 4", 0.7, 0.9], ["Nov 5", 0.9, 0.9], ["Nov 6", 0.6, 0.9]].map(([d, r, e]) => `<tr><td>${d}</td><td class="num">${r}K</td><td class="num">${e}K</td><td class="num">${(r + e).toFixed(1)}K</td></tr>`).join("")}</tbody></table>`;
+    return `<div class="term" style="margin:0">Nov 3 02:14  upload to a new place  build-01 → releases bucket  (nightly build)
+Nov 4 02:11  upload to a new place  build-01 → releases bucket  (nightly build)
+Nov 6 02:16  upload to a new place  build-01 → releases bucket  (nightly build)</div>`;
+  }
+
+  // ---------------------------------------------------------------- layout
+  const navMain = [["home", "home", "Home"], ["needs", "inbox", "Needs you", 2], ["status", "pulse", "Status", 6], ["projects", "folder", "Projects"], ["recent", "history", "Recent"]];
+  const navMore = [["digest", "While you were away"], ["backups", "Backups"], ["grants", "Grants"], ["recovery", "Recovery"], ["notes", "Notes"], ["capture", "Capture"], ["logins", "Logins"], ["hosts", "Session hosts"], ["settings", "Settings"]];
+  function desktop(content) {
+    const cur = st.s;
+    const showMore = st.more || navMore.some(([s]) => s === cur);
+    const grouped = [["Needs you", sessions.filter((s) => s.state === "needs")], ["Working", sessions.filter((s) => s.state === "working")], ["Idle", sessions.filter((s) => s.state === "idle")]];
+    const srow = (s) => `<button class="srow" data-go="session:${s.id}" aria-current="${cur === "session" && st.x === s.id}"><span class="nm">${s.name}</span><span class="mist small">${s.state === "idle" ? s.label.replace("Idle ", "") : ""}</span><span class="meta">${s.role ? chip("role", s.role) : ""}${s.state === "needs" ? chip("needs", "Needs you") : s.state === "working" ? chip("working", "Working") : chip("idle", "Idle")}${s.ask && s.state !== "needs" ? chip("needs", "1 question") : ""}<span>${s.agent}${s.project ? " · " + s.project : ""}</span></span></button>`;
+    const side = `<aside class="side"><div class="side-top"><span class="brand">Aico</span><button class="btn primary sm" data-sheet="new">${ic("plus", 14)} New session</button></div>
+      <nav class="nav" aria-label="Main">${navMain.map(([s, i, t, n]) => `<button class="nav-item" data-go="${s}" aria-current="${cur === s || (s === "projects" && cur === "project") ? "page" : "false"}">${ic(i)}<span>${t}</span>${n ? `<span class="count badge ${s === "status" ? "quiet" : ""}">${n}</span>` : ""}</button>`).join("")}
+        <button class="nav-item" data-act="togglemore" aria-expanded="${showMore}">${ic("dots")}<span>More</span><span class="count">${ic(showMore ? "down" : "right", 14)}</span></button>
+        ${showMore ? navMore.map(([s, t]) => `<button class="nav-item nav-more" data-go="${s}" aria-current="${cur === s ? "page" : "false"}">${t}</button>`).join("") : ""}</nav>
+      <div class="side-label"><span>Sessions · 6 ${hint("#17")}</span><button class="btn ghost sm" data-go="sessions">All</button></div>
+      <div class="side-list ${st.down ? "stale-wrap" : ""}">${grouped.map(([g, l]) => `<div class="group-h">${g}</div>${l.map(srow).join("")}`).join("")}</div></aside>`;
+    const mainScroll = cur === "session" || cur === "projects";
+    return `<div class="desk">${side}<main class="main" ${mainScroll ? 'style="overflow:hidden;display:flex;flex-direction:column"' : ""}>${content}</main>${sheet()}${toast()}</div>`;
+  }
+  const tabsDef = [["home", "sessions", "Sessions"], ["needs", "inbox", "Needs you", 2], ["status", "pulse", "Status", 6], ["projects", "folder", "Projects"], ["more", "dots", "More"]];
+  const tabOf = { home: "home", sessions: "home", session: "home", needs: "needs", status: "status", projects: "projects", project: "projects" };
+  const titles = { home: "Aico", sessions: "Sessions", needs: "Needs you", status: "Status", projects: "Projects", project: "Project", more: "More", backups: "Backups", grants: "Grants", settings: "Settings", digest: "While you were away", recent: "Recent", recovery: "Recovery", notes: "Notes", capture: "Capture", logins: "Logins", hosts: "Session hosts" };
+  function phoneFrame(content) {
+    const curTab = tabOf[st.s] || "more";
+    const bar = `<div class="ph-status"><span>4:31</span><span>5G ▮▮▮ 82%</span></div>`;
+    if (st.s === "session") return `<div class="phone">${bar}<div class="ph-body" style="display:flex;flex-direction:column">${content}</div>${sheet()}${toast()}</div>`;
+    const isTop = ["home", "needs", "status", "projects", "more"].includes(st.s);
+    const top = `<div class="ph-top">${isTop ? "" : `<button class="icon-btn" data-go="${st.s === "project" ? "projects" : "more"}" aria-label="Back">${ic("left", 22)}</button>`}<span class="ttl">${st.s === "project" ? (projects.find((q) => q.id === st.x) || projects[0]).name : titles[st.s] || "Aico"}</span>${st.s === "home" ? `<button class="icon-btn" data-go="sessions" aria-label="All sessions">${ic("sessions", 20)}</button>` : ""}<button class="icon-btn" data-sheet="new" aria-label="New session">${ic("plus", 22)}</button></div>`;
+    const tabs = `<nav class="tabs" aria-label="Main">${tabsDef.map(([s, i, t, n]) => `<button class="tab" data-go="${s}" aria-current="${curTab === s ? "page" : "false"}">${ic(i, 22)}<span>${t}</span>${n ? `<span class="badge ${s === "status" ? "quiet" : ""}">${n}</span>` : ""}</button>`).join("")}</nav>`;
+    return `<div class="phone">${bar}${top}<div class="ph-body">${content}</div>${tabs}${sheet()}${toast()}</div>`;
+  }
+  const toast = () => (st.toast ? `<div class="toast" role="status">${st.toast}</div>` : "");
+
+  // phone hides page titles already shown in the top bar
+  function render() {
+    const fn = screens[st.s] || screens.home;
+    let html = fn();
+    if (phone()) html = html.replace(/<div class="page-head"><h1>[^<]*<\/h1>/, '<div class="page-head">');
+    document.getElementById("stage").innerHTML = phone() ? phoneFrame(html) : desktop(html);
+    document.querySelectorAll("[data-device]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.device === st.d)));
+    document.getElementById("toggle-down").checked = st.down;
+    document.getElementById("toggle-hints").checked = !document.body.classList.contains("no-hints");
+    const jump = document.getElementById("jump");
+    if (!jump.options.length) JUMPS.forEach(([v, t]) => jump.add(new Option(t, v)));
+    jump.value = JUMPS.find(([v]) => v === jumpKey()) ? jumpKey() : "";
+    if (st.s === "status" && st.x === "usage") { const u = document.getElementById("usage"); if (u) u.scrollIntoView(); }
+  }
+  const jumpKey = () => [st.s, st.x, st.sh].join("|");
+  const JUMPS = [
+    ["home||", "Home triage (#7)"], ["needs||", "Needs you (#3)"], ["needs||file:pace:0", "Needs you · file viewer (#28)"],
+    ["sessions||", "Session list (#17)"], ["session|page|", "Session view · agent (#15, #16)"], ["session|gemsh|", "Session view · shell (#16)"],
+    ["home||new", "New session dialog (#14)"], ["status||", "Status + usage (#20, #24)"], ["projects|aico|", "Projects + roadmap (#6)"],
+    ["projects|aico|plan:post", "Plan opened in Aico (#6)"], ["projects|monkey|", "Project without roadmap (#6)"], ["backups||", "Backups (#12)"],
+    ["grants||", "Grants (#11)"], ["more||", "More (#8)"], ["settings||", "Settings · Agents (#13)"], ["digest||", "While you were away (#23)"],
+    ["recent||", "Recent (#25)"], ["recent||tr:jobs", "Recent · transcript (#25)"], ["recovery||", "Recovery (#26)"],
+    ["notes||", "Notes (#4)"], ["hosts||", "Session hosts (#10)"], ["", "—"],
+  ];
+
+  // ---------------------------------------------------------------- events
+  function flash(msg) { st.toast = msg; render(); clearTimeout(flash.t); flash.t = setTimeout(() => { st.toast = ""; render(); }, 2200); }
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-go],[data-sheet],[data-act],[data-device]");
+    if (!t) return;
+    if (t.dataset.device) return writeHash({ d: t.dataset.device, menu: "" });
+    if (t.dataset.go) {
+      const [s, x] = t.dataset.go.split(":");
+      return writeHash({ s, x: x || "", sh: "", menu: "", used: false, tip: false });
+    }
+    if (t.dataset.sheet) return writeHash({ sh: t.dataset.sheet, menu: "" });
+    const act = t.dataset.act;
+    if (act === "close-scrim") { if (e.target === t) writeHash({ sh: "" }); return; }
+    if (act === "close") return writeHash({ sh: "" });
+    if (act === "retry") return flash("Still can't reach Aico. Tried at 4:31 PM.");
+    if (act === "usehere") return writeHash({ used: true });
+    if (act === "unuse") return writeHash({ used: false });
+    if (act === "resume") return flash("Resuming… it shows up under Working when it's back.");
+    if (act === "send") return flash("Answer sent to the session.");
+    if (act === "notnow") return flash("Told the agent “not now”. The question stays here.");
+    if (act === "togglemore") { st.more = !st.more; return render(); }
+    if (act.startsWith("menu:")) { const m = act.slice(5); return writeHash({ menu: st.menu === m ? "" : m }); }
+    if (act.startsWith("nt:")) return writeHash({ nt: act.slice(3) });
+    if (act.startsWith("sel:")) { const [, id, i] = act.split(":"); st.sel[id] = +i; return render(); }
+    if (act.startsWith("kind:")) { st.kind = act.slice(5); return render(); }
+    if (act.startsWith("agent:")) { st.agent = act.slice(6); return render(); }
+    if (act.startsWith("host:")) { st.host = act.slice(5); return render(); }
+    if (act === "pick") { t.setAttribute("aria-pressed", "true"); return; }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && (st.sh || st.menu)) writeHash({ sh: "", menu: "" }); });
+  document.getElementById("toggle-down").addEventListener("change", (e) => writeHash({ down: e.target.checked }));
+  document.getElementById("toggle-hints").addEventListener("change", (e) => { document.body.classList.toggle("no-hints", !e.target.checked); writeHash({}); render(); });
+  document.getElementById("jump").addEventListener("change", (e) => { if (!e.target.value) return; const [s, x, sh] = e.target.value.split("|"); writeHash({ s, x, sh, menu: "", used: false }); });
+  window.addEventListener("hashchange", () => { readHash(); render(); });
+  readHash();
+  render();
+})();
+</script>
+</body>
+</html>
