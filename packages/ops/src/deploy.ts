@@ -156,13 +156,17 @@ export function parseDeployArgs(argv: string[]): DeployRequest | { notHandled: s
 
 export interface Selection {
   restart: string[]
-  /** Manual workers whose sources changed, left running (they restart only when named). */
+  /** Manual workers a deploy restarts because they run changed code or are behind the release. */
+  auto: string[]
+  /** Manual workers whose sources changed, left running (a frontend-only or single-unit scope). */
   stale: string[]
 }
 
 export interface SelectContext {
   active(unit: string): boolean
   changed(unit: string): boolean
+  /** The running daemon speaks an older API than this release (Tether's /v1/version). */
+  behind?(unit: string): boolean
 }
 
 /** Which units this deploy restarts; refuses the combinations st refused. */
@@ -195,7 +199,7 @@ export function selectUnits(project: Project, req: DeployRequest, ctx: SelectCon
     throw new Refusal(
       'A manual worker deploys alone: drop other workers, --scope and --include-all-workers.',
     )
-  if (manual.length) return { restart: [...new Set(manual)], stale: [] }
+  if (manual.length) return { restart: [...new Set(manual)], auto: [], stale: [] }
 
   const optional = project.optionalWorkers.filter(
     (unit) => req.includeAllWorkers || ctx.active(unit),
@@ -213,8 +217,14 @@ export function selectUnits(project: Project, req: DeployRequest, ctx: SelectCon
       workers.includes(unit) ||
       (candidates.includes(unit) && ctx.changed(unit)),
   )
-  const stale = project.manualWorkers.filter((unit) => ctx.changed(unit))
-  return { restart, stale }
+  // A manual worker still restarts when the release changes what it runs or its contract with the
+  // units being restarted (a web server sending fields an older daemon rejects); a frontend-only
+  // or single-unit scope leaves it alone.
+  const wholeRelease = !scope || ['full', 'backend', 'worker'].includes(scope)
+  const behind = (unit: string) => ctx.changed(unit) || ctx.behind?.(unit) === true
+  const auto = wholeRelease ? project.manualWorkers.filter(behind) : []
+  const stale = project.manualWorkers.filter((unit) => !auto.includes(unit) && ctx.changed(unit))
+  return { restart: [...restart, ...auto], auto, stale }
 }
 
 // ---- package cones -------------------------------------------------------------------------
@@ -611,6 +621,14 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
   }
   const active = (unit: string) =>
     deps.run('systemctl', ['--user', 'is-active', unit], { env: deps.env }).out.trim() === 'active'
+  const behindCache = new Map<string, boolean>()
+  const behind = (unit: string) => {
+    if (!behindCache.has(unit)) {
+      const config = deps.run('git', ['-C', root, 'show', `${sha}:packages/tether/src/config.ts`])
+      behindCache.set(unit, config.code === 0 && daemonBehind(deps, unit, config.out))
+    }
+    return behindCache.get(unit) as boolean
+  }
   // Refuse a bad combination before queueing anything.
   selectUnits(project, req, { active, changed: () => false })
 
@@ -728,7 +746,12 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         if (refused) throw new Refusal(refused, 2, true)
         recoverSwap(deps)
       }
-      const selection = selectUnits(project, req, { active, changed })
+      const selection = selectUnits(project, req, { active, changed, behind })
+      for (const unit of selection.auto)
+        deps.out(`[deploy] ${unit} restarts: ${manualReason(changed(unit), behind(unit))}`)
+      for (const unit of project.manualWorkers)
+        if (!selection.restart.includes(unit) && !selection.stale.includes(unit))
+          deps.out(`[deploy] ${unit} left running: nothing it runs changed`)
       for (const unit of selection.stale)
         if (!selection.restart.includes(unit))
           deps.out(
@@ -915,6 +938,45 @@ export function prepareRelease(
   }
   return dir
 }
+
+/** Tether's API version in a release's packages/tether/src/config.ts, or null when unreadable. */
+export const configApiVersion = (configSource: string): number | null => {
+  const match = /export const API_VERSION = (\d+)/.exec(configSource)
+  return match ? Number(match[1]) : null
+}
+
+/** The instance a Tether unit serves (`tether@default.service`), or null for any other unit. */
+const tetherInstance = (unit: string) =>
+  /^tether@([A-Za-z0-9_-]+)\.service$/.exec(unit)?.[1] ?? null
+
+/**
+ * The running Tether daemon reports an older API than the release being deployed (`tether --json
+ * version`, the daemon's /v1/version). An unreachable daemon is not "behind": it restarts anyway
+ * when its code changed, and a deploy does not start what is stopped.
+ */
+function daemonBehind(deps: DeployDeps, unit: string, configSource: string): boolean {
+  const instance = tetherInstance(unit)
+  const wanted = configApiVersion(configSource)
+  if (!instance || wanted === null) return false
+  const answer = deps.run('tether', ['--instance', instance, '--json', 'version'], {
+    env: deps.env,
+  })
+  if (answer.code !== 0) return false
+  try {
+    const running = (JSON.parse(answer.out) as { apiVersion?: unknown }).apiVersion
+    return typeof running === 'number' && running < wanted
+  } catch {
+    return false
+  }
+}
+
+const manualReason = (changed: boolean, behind: boolean) =>
+  [
+    changed && 'its sources changed since the release it runs',
+    behind && 'the running daemon speaks an older API than this release',
+  ]
+    .filter(Boolean)
+    .join('; ')
 
 /** Next's build cache is content-addressed: the newest other release's cache only skips unchanged work. */
 function seedNextCache(dir: string, deps: DeployDeps) {

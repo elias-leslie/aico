@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   cone,
+  configApiVersion,
   type DeployDeps,
   defaultDeps,
   deploy,
@@ -85,17 +86,58 @@ describe('unit selection from package cones', () => {
     expect(cone(packages, 'store')).toEqual(['packages/store'])
   })
 
-  it('a store change restarts every unit built on it and flags Tether, which restarts only when named', () => {
+  it('a store change restarts every unit built on it, Tether included', () => {
     const selection = pick(['packages/store/src/db.ts'])
-    expect(selection.restart).toEqual(['aico-web.service', 'aico-jobs.service'])
-    expect(selection.stale).toEqual(['tether@default.service'])
+    expect(selection.restart).toEqual([
+      'aico-web.service',
+      'aico-jobs.service',
+      'tether@default.service',
+    ])
+    expect(selection.auto).toEqual(['tether@default.service'])
   })
 
-  it('a web-frontend change restarts only the unit that serves the page', () => {
-    expect(pick(['packages/web-frontend/app/page.tsx'])).toEqual({
-      restart: ['aico-web.service'],
-      stale: [],
-    })
+  it('a packages/tether change restarts Tether', () => {
+    const selection = pick(['packages/tether/src/config.ts'])
+    expect(selection.restart).toEqual(['tether@default.service'])
+    expect(selection.auto).toEqual(['tether@default.service'])
+  })
+
+  it('no Tether change leaves Tether running', () => {
+    const selection = pick(['packages/web-frontend/app/page.tsx'])
+    expect(selection).toEqual({ restart: ['aico-web.service'], auto: [], stale: [] })
+  })
+
+  it('a daemon behind the release restarts even when its sources did not change', () => {
+    const behind = (unit: string) => unit === 'tether@default.service'
+    const select = (scope?: string) =>
+      selectUnits(
+        project,
+        {
+          project: 'aico',
+          workers: [],
+          includeAllWorkers: false,
+          detach: false,
+          rollback: false,
+          scope,
+        },
+        { active: () => true, changed: changedBy([]), behind },
+      )
+    expect(select().restart).toEqual(['tether@default.service'])
+    expect(select('backend').restart).toEqual(['aico-web.service', 'tether@default.service'])
+  })
+
+  it('a frontend-only or single-unit scope leaves a changed Tether running and flags it', () => {
+    const selection = pick(['packages/tether/src/config.ts'], { scope: 'frontend' })
+    expect(selection.restart).toEqual(['aico-web.service'])
+    expect(selection.stale).toEqual(['tether@default.service'])
+    expect(pick(['packages/tether/src/config.ts'], { scope: 'aico-jobs' }).restart).toEqual([
+      'aico-jobs.service',
+    ])
+  })
+
+  it('reads the API version from a release and the running daemon', () => {
+    expect(configApiVersion('x\nexport const API_VERSION = 31\n')).toBe(31)
+    expect(configApiVersion('nothing')).toBeNull()
   })
   it('context and usage changes restart the scheduler that calls their CLI bundle', () => {
     expect(pick(['packages/context/src/db.ts']).restart).toContain('aico-jobs.service')

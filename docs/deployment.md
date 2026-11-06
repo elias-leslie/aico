@@ -1,6 +1,6 @@
 # Aico deployments
 
-From the workstation checkout, commit and check the source, run `st sessions may-disrupt aico`, then `st service rebuild aico --detach`. Tether is a manual worker: deploy it explicitly with `st service rebuild aico --worker tether@default --detach` after the main deploy. Wait for each printed job result and verify health.
+From the workstation checkout, commit and check the source, run `st sessions may-disrupt aico`, then `st service rebuild aico --detach`. Tether (tether@default) is a manual worker, but the deploy restarts it whenever the release changes what it runs (packages/tether, or a package it bundles) or the running daemon's API is older than the release's; the deploy log says why, or that it was left running. Restart it alone with `st service rebuild aico --worker tether@default --detach`. Wait for each printed job result and verify health.
 
 ## CT 190, the standalone full peer
 

@@ -22,7 +22,8 @@ const USAGE = `Usage:
   aico deploy [PROJECT] [--scope full|backend|frontend|worker|UNIT] [--worker UNIT]... [--include-all-workers]
               [--detach] [--sha REV] [--rollback] [--with-ack ID]
       put one commit live: HEAD when it starts (or --sha), accepted and built in its own release;
-      only units whose package cone changed restart; a manual worker (tether@default) only when named
+      only units whose package cone changed restart; Tether (tether@default, a manual worker) restarts too when
+      its own code or the running daemon's API is behind the release; otherwise only when named
   aico deploy result|wait JOB [--timeout S]   a detached deploy's result (wait: until it ends)
   aico logs UNIT|PROJECT [-n N] [--since 2h] [-l ERROR|WARN|INFO|DEBUG] [-f]
   aico snapshots take [NAME] | list | restore ID|NAME|-N  [--root DIR] [--project ID]

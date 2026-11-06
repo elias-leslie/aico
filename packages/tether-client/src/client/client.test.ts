@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   applyStreamEvent,
   compatibleVersion,
+  EXPECTED_TETHER_API_VERSION,
   eventStreamPath,
   followEvents,
   parseAttachAnswer,
@@ -156,6 +157,32 @@ describe('Tether requests', () => {
     await expect(
       new TetherClient('/nonexistent/tether.sock').listSessions(),
     ).rejects.toBeInstanceOf(TetherUnavailable)
+  })
+})
+
+describe('a body an older daemon rejects', () => {
+  const reject =
+    (apiVersion: number): Handler =>
+    (req, res) => {
+      if (req.url === '/v1/version') json(res, 200, { apiVersion })
+      else json(res, 400, { error: 'invalid_body', field: 'origin' })
+    }
+
+  it('names the daemon as older than this release', async () => {
+    const { client } = await fakeTether(reject(EXPECTED_TETHER_API_VERSION - 1))
+    const error = await client.request('POST', '/v1/asks', { origin: 'status' }).catch((e) => e)
+    expect(error).toBeInstanceOf(TetherError)
+    expect(error).toMatchObject({ status: 400, code: 'invalid_body' })
+    expect(error.reason).toBe(
+      `Tether daemon is older than this release (API ${EXPECTED_TETHER_API_VERSION - 1} < ${EXPECTED_TETHER_API_VERSION})`,
+    )
+  })
+
+  it('leaves the rejection alone when the daemon is current', async () => {
+    const { client } = await fakeTether(reject(EXPECTED_TETHER_API_VERSION))
+    const error = await client.request('POST', '/v1/asks', {}).catch((e) => e)
+    expect(error).toMatchObject({ code: 'invalid_body', body: { field: 'origin' } })
+    expect(error.reason).toBeUndefined()
   })
 })
 

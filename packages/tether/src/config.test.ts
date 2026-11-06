@@ -1,5 +1,7 @@
+import { EXPECTED_TETHER_API_VERSION } from '@aico/tether-client'
 import { describe, expect, it } from 'vitest'
 import {
+  API_VERSION,
   ownsTmuxServerUnit,
   paneExitMarkerPath,
   resolvePaths,
@@ -56,5 +58,11 @@ describe('tmux server units', () => {
     expect(ownsTmuxServerUnit('dev', `aico-tmux-server-${id}.service`)).toBe(false)
     expect(ownsTmuxServerUnit('dev', `tether-dev-tmux-server-${id}.service`)).toBe(true)
     expect(ownsTmuxServerUnit('dev', `tether-dev-2-tmux-server-${id}.service`)).toBe(false)
+  })
+})
+
+describe('API version', () => {
+  it('is the one the web server expects of the daemon', () => {
+    expect(API_VERSION).toBe(EXPECTED_TETHER_API_VERSION)
   })
 })

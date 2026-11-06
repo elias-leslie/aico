@@ -12,6 +12,7 @@ import {
   type AgentRunPush,
   type AttachAnswer,
   type ChildAgent,
+  EXPECTED_TETHER_API_VERSION,
   type HistoryDetail,
   type HistoryEventPage,
   type HistorySession,
@@ -69,7 +70,37 @@ export class TetherClient {
 
   /** One JSON exchange. Throws TetherError for a non-2xx answer and
    * TetherUnavailable when the socket or the exchange failed. */
-  request<T>(
+  async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    options: RequestOptions = {},
+  ): Promise<{ status: number; body: T }> {
+    try {
+      return await this.exchange<T>(method, path, body, options)
+    } catch (error) {
+      if (error instanceof TetherError && error.status === 400 && error.code === 'invalid_body')
+        throw await this.explainRejection(error)
+      throw error
+    }
+  }
+
+  /** A body Tether rejects may carry fields only a newer daemon knows: when the daemon is
+   * older than this release, say so (and log it) instead of a bare invalid_body. */
+  private async explainRejection(error: TetherError): Promise<TetherError> {
+    let api: number
+    try {
+      api = (await this.exchange<TetherVersion>('GET', '/v1/version')).body.apiVersion
+    } catch {
+      return error
+    }
+    if (!(api < EXPECTED_TETHER_API_VERSION)) return error
+    const reason = `Tether daemon is older than this release (API ${api} < ${EXPECTED_TETHER_API_VERSION})`
+    console.error(`[tether-client] ${reason}; restart it: aico deploy aico --worker tether@default`)
+    return new TetherError(error.status, error.code, { ...error.body, reason })
+  }
+
+  private exchange<T>(
     method: string,
     path: string,
     body?: unknown,

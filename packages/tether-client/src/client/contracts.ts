@@ -39,6 +39,9 @@ export interface SizeHolder {
 /** Lowest Tether API version these clients need (GET /v1/version): 2 accepts
  * the resize claim's viewer label, 3 session wakes and End's `keepWakes`. */
 const MIN_TETHER_API_VERSION = 3
+/** The Tether API version this release was written against (packages/tether's API_VERSION, which
+ * a test keeps equal). A daemon reporting less is older than the web server expects. */
+export const EXPECTED_TETHER_API_VERSION = 31
 /** The API version Aico's clients speak; Tether must still accept it. */
 const AICO_TETHER_API_VERSION = 1
 
