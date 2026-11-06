@@ -36,13 +36,14 @@ export function StateChip({ state }: { state: Shown | 'running' }) {
   return <span className={`status-chip ${state}`}>{WORD[state]}</span>
 }
 
-/** The meaning, led by why a late or unknown row is so. */
+/** The meaning, led by why a late, unknown or machine-off row is so. */
 export function Meaning({ row }: { row: Row }) {
   const why = reason(row)
   if (!why) return <>{row.meaning}</>
   return (
     <>
-      <span className="why">{why}</span> Last report: {row.meaning}
+      <span className="why">{why}</span>{' '}
+      {row.machine_off ? row.meaning : `Last report: ${row.meaning}`}
     </>
   )
 }
