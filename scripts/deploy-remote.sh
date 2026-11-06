@@ -64,6 +64,8 @@ for pkg in "${NEEDED[@]}"; do
 done
 install_flags=(--prebuilt --start)
 if ! grep -q '"tether"' "$release/.aico-release.json"; then
+  grep -q -- '--keep-tether)' "$release/scripts/install.sh" ||
+    fail "the $SHA release built no Tether and its installer predates --keep-tether; send a later release"
   install_flags+=(--keep-tether)
   echo "==> Release $SHA built no Tether; $HOST keeps its installed Tether"
 fi
