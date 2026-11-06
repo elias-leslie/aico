@@ -89,7 +89,18 @@ def test_dry_run_lists_every_unit(env: dict[str, str], home: Path) -> None:
         "would run: systemctl --user restart tether@default.service aico-web.service"
         in result.stdout
     )
+    assert "tether-link@" not in result.stdout
     assert files_under(home) == []
+
+
+@pytest.mark.skipif(not REAL_HOST, reason="needs /usr/bin/tmux and cgroup v2")
+def test_a_leftover_tether_link_unit_is_removed(env: dict[str, str], home: Path) -> None:
+    leftover = home / ".config/systemd/user/tether-link@.service"
+    leftover.parent.mkdir(parents=True)
+    leftover.write_text("[Service]\nExecStart=tether link %i\n")
+    result = install(env, "--dry-run", "--start")
+    assert result.returncode == 0, result.stderr
+    assert f"would run: rm -f {leftover}" in result.stdout
 
 
 def test_pi_extension_links_only_when_summitflow_has_it(

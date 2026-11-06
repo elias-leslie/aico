@@ -4,17 +4,16 @@ From the workstation checkout, commit and check the source, run `st sessions may
 
 ## CT 190, the standalone full peer
 
-CT 190 has no Git checkout and has a smaller memory budget. Build and accept the commit on the workstation, then transfer that exact source and its built artifacts into a **new** `/home/kasadis/.local/lib/aico/releases/FULL_COMMIT` directory. Never overlay a prior release or copy runtime state, `.env` files, authentication files, or workstation configuration.
-
-Create the source payload with `git archive FULL_COMMIT`. Overlay only the workstation release's `node_modules`, each package's `dist` directory, and `packages/web-frontend/out`. Those dependencies contain workspace links relative to the source tree. Compare the transfer's checksum on both machines and record the accepted source commit and deploy receipts.
-
-Declare the CT change through host-steward, run `st sessions may-disrupt aico` on the workstation, and install as kasadis in CT 190:
+CT 190 has no Git checkout and too little memory to build. It runs the same commit-named release the workstation built and accepted. After the workstation's main and Tether deploys at a commit, declare the CT change through host-steward and run `st sessions may-disrupt aico`, then from the workstation checkout:
 
 ```
-AICO_INSTALL_SOURCE_SHA=FULL_COMMIT bash scripts/install.sh --prebuilt --start
+scripts/deploy-remote.sh aico-gem            # the commit the workstation runs now
+scripts/deploy-remote.sh aico-gem --sha FULL_COMMIT
 ```
 
-`--prebuilt` checks the required bundles, static page and dependencies before installing files; it runs no dependency install or build. The normal installer then installs the CLI, Tether, units and extensions and starts the existing Aico services. Keep CT 190's existing configuration and data. The release directory must be named with the full source commit.
+It copies the workstation release (the commit's source plus its `node_modules`, built bundles and `packages/web-frontend/out`; no build caches, runtime state, `.env` or auth files) into a **new** `~/.local/lib/aico/releases/FULL_COMMIT` on the CT, unchanged files hard-linked to its current release. It compares every file's checksum against the workstation copy, then runs that release's `AICO_INSTALL_SOURCE_SHA=FULL_COMMIT bash scripts/install.sh --prebuilt --start` and waits for web health. `--prebuilt` checks the required bundles, static page and dependencies before installing files and runs no dependency install or build. The CT keeps its configuration and data. `--dry-run` shows the copy and changes nothing.
+
+Tether alone also reaches peers on its own: a workstation holding the update signing key signs each Tether release it installs, and its hub sends that signed release to a pinned peer whose Tether API is older when their link comes up.
 
 Afterward verify web health, Tether health, active unit paths, a synthetic Logins entry reaching both peers and its removal reaching both, the CT's own append-only backup job, and its heartbeat Status row. Read metadata only; never reveal the entry's value.
 

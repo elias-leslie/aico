@@ -343,13 +343,15 @@ export async function pushRelease(
       stdout: UPDATE_INSTALLING,
       output: 'The signed update did not report its result before the update deadline',
     }
-  } catch {
+  } catch (error) {
     if (installing)
       return {
         code: 1,
         stdout: UPDATE_INSTALLING,
         output: 'Could not read the signed update result',
       }
-    return fail('No usable signed release; nothing sent')
+    // Say why (no signed-update.json, a bad signature, unreadable pins), or the
+    // log repeats one opaque line on every link-up.
+    return fail(`No usable signed release (${(error as Error).message}); nothing sent`)
   }
 }

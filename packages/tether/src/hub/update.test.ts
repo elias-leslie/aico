@@ -234,6 +234,32 @@ it('removes stale update metadata when an unsigned local release is installed', 
   expect(existsSync(join(lib, SIGNED_RELEASE))).toBe(false)
 })
 
+it('signs the installed release where the update signing key is held', () => {
+  const calls = join(dir, 'sign-calls')
+  put(join(release, 'bin/tether'), `#!/bin/sh\necho "$@" >> ${calls}\n`, 0o755)
+  mkdirSync(join(release, 'scripts/shims'), { recursive: true })
+  for (const file of ['tether-shim', 'shims.list'])
+    copyFileSync(join(release, 'shims', file), join(release, 'scripts/shims', file))
+  const install = () =>
+    execFileSync('bash', [join(release, 'scripts/install-release.sh')], {
+      env: process.env,
+      stdio: 'pipe',
+    })
+  install()
+  expect(existsSync(calls)).toBe(false)
+  put(join(dir, 'home/.local/state/aico/secrets/update-signing-key'), 'key', 0o600)
+  install()
+  expect(readFileSync(calls, 'utf8')).toBe(`fleet sign-update ${lib}\n`)
+})
+
+it('names why a release could not be sent', async () => {
+  const result = await pushRelease(release, target)
+  expect(result.code).toBeNull()
+  expect(result.output).toMatch(
+    /^No usable signed release \(.*signed-update\.json.*\); nothing sent$/,
+  )
+})
+
 it('worker installation stops at failed signature verification before replacing code', () => {
   const before = readFileSync(join(lib, 'dist/tether.mjs'), 'utf8')
   put(join(dir, 'bin/sudo'), '#!/bin/sh\nexit 0\n', 0o755)

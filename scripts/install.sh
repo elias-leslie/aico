@@ -12,8 +12,8 @@
 # Installs (rerunning changes only what differs):
 #   node_modules and the Tether/web builds
 #   ~/.local/lib/tether (Tether's bundle, CLI and shims), ~/.local/bin/tether
-#   user units from scripts/systemd/ plus packages/tether/deploy/tether@.service and
-#   tether-link@.service
+#   user units from scripts/systemd/ plus packages/tether/deploy/tether@.service
+#   (and removes a leftover tether-link@.service: the daemon owns fleet links)
 #   ~/.pi/agent/extensions/model-guard.ts (Aico launch rules)
 #
 # TETHER_LIB_DIR and TETHER_BIN_DIR move the Tether install; XDG_CONFIG_HOME
@@ -160,8 +160,12 @@ install_units() {
   done
   # The generic template, for test instances such as tether@dev.
   install_content "$(cat packages/tether/deploy/tether@.service)" "$UNIT_DIR/tether@.service" 0644 && changed=1
-  # One ssh link per remote host in ~/.config/tether/hosts.json (enabled per host).
-  install_content "$(cat packages/tether/deploy/tether-link@.service)" "$UNIT_DIR/tether-link@.service" 0644 && changed=1
+  # Retired: the daemon owns every fleet link. An old copy ran `tether link`,
+  # which now exits 2, so an enabled instance crash-looped.
+  if [ -e "$UNIT_DIR/tether-link@.service" ]; then
+    run rm -f "$UNIT_DIR/tether-link@.service"
+    changed=1
+  fi
   if [ "$changed" = 1 ]; then
     run systemctl --user daemon-reload ||
       echo "systemd: could not reach the user manager; run 'systemctl --user daemon-reload' later." >&2

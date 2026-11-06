@@ -89,22 +89,23 @@ Runtime peer connections now use the [pinned fleet link](fleet-link.md). The
 SSH deployment command below is a manual bootstrap/rescue route. Do not enable
 SSH peer link units: configure and approve the fleet keys instead.
 
-A host without SummitFlow (such as the gem container) gets the same build from
-the workstation's checkout:
+A machine that does not build (such as the gem container) runs the release the
+workstation built and accepted for a commit:
 
 ```bash
-scripts/deploy-remote.sh <ssh-alias>            # copy the git-tracked tree, then scripts/install.sh --start there
-scripts/deploy-remote.sh <ssh-alias> --dry-run  # show the copy; change nothing
+scripts/deploy-remote.sh <ssh-alias> [--sha COMMIT]  # copy the built release, then install.sh --prebuilt --start there
+scripts/deploy-remote.sh <ssh-alias> --dry-run       # show the copy; change nothing
 ```
 
-It rsyncs the tracked files to `$AICO_REMOTE_DIR` (default
-`/srv/workspaces/projects/aico`, where the shipped units expect the checkout;
-`node_modules` and builds stay between runs) and runs `scripts/install.sh --start`
-there, so there is one installer. The machine needs Node 22+ (the same major as
-the workstation), npm, git, Python 3, tmux, rsync, a systemd user manager with
-linger, and for notes `libheif-examples` and `rclone`. Deploy the machine
-with the older database first, so a newer schema never reaches a host that
-cannot read it; a different schema pauses sync and the Hosts card says so.
+It copies the workstation's `~/.local/lib/aico/releases/<commit>` (source,
+`node_modules` and built bundles) into a new release folder of the same name on
+the machine, checks the copy and runs that release's `scripts/install.sh
+--prebuilt --start`, so there is one installer ([deployment.md](deployment.md)).
+The machine needs Node 22+ (the same major as the workstation), Python 3, tmux,
+rsync, curl, a systemd user manager with linger, and for notes
+`libheif-examples` and `rclone`. Deploy the machine with the older database
+first, so a newer schema never reaches a host that cannot read it; a different
+schema pauses sync and the Hosts card says so.
 
 Once per machine, as drop-ins (they survive redeploys):
 

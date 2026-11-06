@@ -47,3 +47,12 @@ fi
 # shellcheck source=scripts/install-shims.sh
 source "$repo/scripts/install-shims.sh"
 install_shims "$repo" "$lib_dir"
+# A machine holding the update signing key (a full peer that publishes
+# releases) signs what it just installed, so its hub can send this release to
+# peers on link-up (src/hub/update.ts pushRelease). Elsewhere the release stays
+# as received: signed by its sender, or unsigned.
+signing_key="${AICO_DATA_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/aico}/secrets/update-signing-key"
+if [ ! -f "$repo/signed-update.json" ] && [ -f "$signing_key" ]; then
+  "$lib_dir/bin/tether" fleet sign-update "$lib_dir" >/dev/null ||
+    echo "tether install-release: could not sign $lib_dir; peers will not receive this release" >&2
+fi
