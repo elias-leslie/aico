@@ -514,8 +514,9 @@ async function deliverCommand(db: () => Database, rest: string[], io: ContextCli
   if (HOOK_FORMATS.includes(format) && delivered && !parsed.flags.has('--force')) {
     // Startup knows both ids while the agent is alive. Keep the link so the
     // nightly pass can observe this exact conversation after its session ends.
+    // A subagent's start carries the subagent's id, not the conversation's: never bind it.
     const native = str(parsed, 'session')
-    if (marked && env.AICO_SESSION_ID && native)
+    if (marked && env.AICO_SESSION_ID && native && str(parsed, 'event') !== 'SubagentStart')
       try {
         bindContextSession(db(), tool, env.AICO_SESSION_ID, native)
       } catch (error) {

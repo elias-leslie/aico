@@ -221,6 +221,21 @@ describe('aico context deliver', () => {
       { AICO_SESSION_ID: 'own-proof', AICO_CONTEXT_DELIVERED: 'abc', AICO_CONTEXT_PID: '80' },
       { 100: 90, 90: 80 },
     )
+    // A subagent starting later in the same agent keeps the conversation's link.
+    await run(
+      [
+        '--tool',
+        'codex',
+        '--session',
+        'subagent-id',
+        '--format',
+        'codex',
+        '--event',
+        'SubagentStart',
+      ],
+      { AICO_SESSION_ID: 'own-proof', AICO_CONTEXT_DELIVERED: 'abc', AICO_CONTEXT_PID: '80' },
+      { 100: 90, 90: 80 },
+    )
     const read = openContext(dbPath)
     try {
       expect(
