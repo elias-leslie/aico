@@ -319,6 +319,41 @@ it('preserves lab-use reason and hours defaults and explicit overrides', () => {
   })
   expect(snapshotName(new Date('2026-11-04T13:05:09Z'))).toBe('snap-20261104-130509')
 })
+it('declares lab use with host-steward when a VM starts, and still starts when that fails', async () => {
+  const runs: string[][] = []
+  const out: string[] = [],
+    err: string[] = []
+  const start = (code: number) =>
+    vm(
+      ['start', '100', '--reason', 'browser tests', '--hours', '2'],
+      routeOp({}, async (_method, path) =>
+        path.includes('resources')
+          ? guests
+          : path.includes('/tasks/')
+            ? { status: 'stopped', exitstatus: 'OK' }
+            : 'UPID:task',
+      ),
+      (cmd, args) => {
+        runs.push([cmd, ...args])
+        return { code, out: 'declared 121', err: code ? 'boom' : '' }
+      },
+      (s) => out.push(s),
+      (s) => err.push(s),
+    )
+  expect(await start(0)).toBe(0)
+  expect(runs[0]).toEqual([
+    'host-steward',
+    'lab-use',
+    'start',
+    '100',
+    '--hours',
+    '2',
+    '--reason',
+    'browser tests',
+  ])
+  expect(await start(1)).toBe(0)
+  expect(err[0]).toContain('lab-use declaration for VM 100 failed')
+})
 it('rejects too-small ids and unsupported verbs before any API write', async () => {
   const h = fixture()
   await expect(h.run('status', '12')).rejects.toThrow('from 100')

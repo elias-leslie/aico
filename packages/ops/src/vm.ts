@@ -339,24 +339,6 @@ export function listLines(guests: Guest[]): string[] {
   ]
 }
 
-/** Nightshift's asset id when the guest is parked or lab tier (its board shows who runs it), else null. */
-export function labAsset(vmid: string, registry: string): string | null {
-  try {
-    const findings = JSON.parse(readFileSync(registry, 'utf8')).findings ?? []
-    const rows =
-      findings.find((f: { code?: string }) => f.code === 'assets.registry')?.details?.assets ?? []
-    const row = rows.find(
-      (r: Record<string, unknown>) =>
-        String(r.vmid) === vmid &&
-        r.kind !== 'template' &&
-        (r.presence === 'parked' || r.tier === 'lab'),
-    )
-    return row ? String(row.id ?? row.vmid) : null
-  } catch {
-    return null
-  }
-}
-
 export function snapshotName(now = new Date()): string {
   return `snap-${now.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)}`
 }
@@ -370,7 +352,7 @@ const vmId = (vmid: string | undefined) => {
 const option = (rest: string[], flag: string) =>
   rest.includes(flag) ? rest[rest.indexOf(flag) + 1] : undefined
 
-/** `start`'s Nightshift lab-use declaration; an empty --reason (st passes one) falls back to the default. */
+/** `start`'s lab-use declaration (host-steward lab-use, by VM id); an empty --reason (st passes one) falls back to the default. */
 export const labUse = (vmid: string, rest: string[]) => ({
   reason: option(rest, '--reason') || `aico vm start ${vmid}`,
   hours: Number(option(rest, '--hours')) || ops.vm.labHours,
@@ -413,22 +395,21 @@ export async function vm(
       const vmid = vmId(rawId)
       await call(verb, vmid)
       out(`VM ${vmid} ${verb === 'start' ? 'started' : 'stopped'}`)
-      const asset = verb === 'start' ? labAsset(vmid, ops.vm.labRegistry) : null
-      if (asset) {
+      if (verb === 'start') {
         const { reason, hours } = labUse(vmid, rest)
-        const declared = run('nightshift', [
+        const declared = run('host-steward', [
           'lab-use',
           'start',
-          asset,
+          vmid,
           '--hours',
           String(hours),
           '--reason',
           reason,
         ])
-        if (declared.code === 0) out(`Nightshift: ${declared.out.trim() || `declared ${asset}`}`)
+        if (declared.code === 0) out(`host check: ${declared.out.trim() || `declared ${vmid}`}`)
         else
           err(
-            `Warning: Nightshift lab-use declaration for ${asset} failed (${tail(declared, 1)}); started anyway`,
+            `Warning: lab-use declaration for VM ${vmid} failed (${tail(declared, 1)}); started anyway`,
           )
       }
       return 0
