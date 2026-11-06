@@ -8,6 +8,14 @@ export const CONNECTION_TIMEOUT = 10000
  * carries. Very large buffers slow xterm.js down as a session ages. */
 export const SCROLLBACK = 10000
 
+/** History lines a phone loads with a session (owner, 2026-11-06: about the
+ * last 2,000); Load earlier brings more. A desktop loads all the server
+ * carries. A slow phone link pays for every line on each attach. */
+export const PHONE_HISTORY_LINES = 2000
+
+/** Lines each Load earlier adds (the size of a Tether scrollback page). */
+export const LOAD_EARLIER_LINES = 5000
+
 /** Mobile device width threshold in pixels */
 export const MOBILE_WIDTH_THRESHOLD = 768
 

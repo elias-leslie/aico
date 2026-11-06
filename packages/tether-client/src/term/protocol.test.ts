@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  buildScreenRepaint,
   buildSeed,
   ControlProtocol,
   controlArgv,
   decodeOutputValue,
   inputCommands,
+  leavesAlternateScreen,
   parseSeedFlags,
   SEED_FLAGS,
   type SeedFlags,
+  seedHistoryLines,
   socketArgsOf,
   tmuxCommandArgv,
 } from './protocol'
@@ -36,6 +39,7 @@ function flags(overrides: Partial<SeedFlags> = {}): SeedFlags {
     mouse_sgr_flag: 0,
     scroll_region_upper: 0,
     scroll_region_lower: 23,
+    history_size: 0,
     client_pid: 4242,
     ...overrides,
   }
@@ -63,7 +67,8 @@ describe('parseSeedFlags', () => {
     expect(parsed?.paneId).toBe('%7')
     expect(parsed?.pane_height).toBe(1)
     expect(parsed?.alternate_on).toBe(2)
-    expect(parsed?.scroll_region_lower).toBe(SEED_FLAGS.length - 2)
+    expect(parsed?.scroll_region_lower).toBe(SEED_FLAGS.length - 3)
+    expect(parsed?.history_size).toBe(SEED_FLAGS.length - 2)
     expect(parsed?.client_pid).toBe(SEED_FLAGS.length - 1)
   })
 
@@ -84,27 +89,38 @@ describe('buildSeed', () => {
     expect(seed.endsWith(`${ESC}[2;5H`)).toBe(true)
   })
 
-  it('puts the saved normal screen under an alternate one', () => {
+  it('puts the saved normal screen under an alternate one, without the hidden history', () => {
     const screen = ['h1', 'h2', 'alt1', 'alt2']
-    const seed = buildSeed(
-      flags({ pane_height: 2, alternate_on: 1, alternate_saved_x: 2, alternate_saved_y: 1 }),
-      screen,
-      ['n1', 'n2'],
-    )
-    const normalAt = seed.indexOf(`h1${ESC}[0m\r\nh2${ESC}[0m\r\nn1${ESC}[0m\r\nn2`)
+    const f = flags({
+      pane_height: 2,
+      alternate_on: 1,
+      alternate_saved_x: 2,
+      alternate_saved_y: 1,
+      history_size: 2,
+    })
+    const seed = buildSeed(f, screen, ['n1', 'n2'])
+    const normalAt = seed.indexOf(`${ESC}cn1${ESC}[0m\r\nn2`)
     const switchAt = seed.indexOf(`${ESC}[2;3H${ESC}[?1049h${ESC}[H`)
     const altAt = seed.indexOf(`alt1${ESC}[0m\r\nalt2`)
-    expect(normalAt).toBeGreaterThan(0)
+    expect(normalAt).toBe(0)
     expect(switchAt).toBeGreaterThan(normalAt)
     expect(altAt).toBeGreaterThan(switchAt)
+    expect(seed).not.toContain('h1')
+    expect(seedHistoryLines(f, screen)).toBe(0)
   })
 
   it("splits the alternate screen from history by the pane's own height", () => {
     // An unsized client knows no rows of its own: the pane's height decides.
     const seed = buildSeed(flags({ pane_height: 1, alternate_on: 1 }), ['h1', 'alt'], ['n1', 'n2'])
-    expect(seed).toContain(`h1${ESC}[0m\r\nn2${ESC}[0m`)
+    expect(seed).toContain(`${ESC}cn2${ESC}[0m`)
     expect(seed).not.toContain('n1')
+    expect(seed).not.toContain('h1')
     expect(seed).toContain(`${ESC}[?1049h${ESC}[Halt${ESC}[0m`)
+  })
+
+  it('counts the history lines a normal-screen seed carries', () => {
+    expect(seedHistoryLines(flags({ pane_height: 2 }), ['a', 'b', 'c', 'd', 'e'])).toBe(3)
+    expect(seedHistoryLines(flags({ pane_height: 2 }), ['a', 'b'])).toBe(0)
   })
 
   it('restores the modes tmux reports', () => {
@@ -130,6 +146,46 @@ describe('buildSeed', () => {
 
   it('asks for any-event tracking when that is the only mouse mode', () => {
     expect(buildSeed(flags({ mouse_any_flag: 1 }), ['x'], [])).toContain(`${ESC}[?1003h`)
+  })
+})
+
+describe('buildScreenRepaint', () => {
+  it('rewrites each visible row in place without a reset, keeping history', () => {
+    const paint = buildScreenRepaint(flags({ pane_height: 2 }), ['top', 'bottom'])
+    expect(paint).not.toContain(`${ESC}c`)
+    expect(paint).toContain(`${ESC}[1;1H${ESC}[2Ktop${ESC}[0m${ESC}[2;1H${ESC}[2Kbottom`)
+    // Rows below the pane are cleared, the cursor goes back where tmux has it.
+    expect(paint).toContain(`bottom${ESC}[0m${ESC}[J`)
+    expect(paint).toContain(`${ESC}[2;5H`)
+  })
+
+  it('sets every mode explicitly, since nothing reset them', () => {
+    const off = buildScreenRepaint(flags(), ['x'])
+    for (const mode of ['[?25h', '[?7h', '[4l', '[?1l', '>', '[?1000l', '[?1006l'])
+      expect(off).toContain(`${ESC}${mode}`)
+    const on = buildScreenRepaint(
+      flags({
+        cursor_flag: 0,
+        wrap_flag: 0,
+        keypad_flag: 1,
+        mouse_standard_flag: 1,
+        mouse_sgr_flag: 1,
+      }),
+      ['x'],
+    )
+    for (const mode of ['[?25l', '[?7l', '=', '[?1000h', '[?1006h'])
+      expect(on).toContain(`${ESC}${mode}`)
+    // Mouse modes are cleared before the ones in use are set again.
+    expect(on.indexOf(`${ESC}[?1000h`)).toBeGreaterThan(on.indexOf(`${ESC}[?1000l`))
+  })
+})
+
+describe('leavesAlternateScreen', () => {
+  it('matches the ways a program leaves the alternate screen', () => {
+    for (const mode of ['1049', '1047', '47'])
+      expect(leavesAlternateScreen(`x${ESC}[?${mode}l`)).toBe(true)
+    expect(leavesAlternateScreen(`${ESC}[?1049h`)).toBe(false)
+    expect(leavesAlternateScreen(`${ESC}[?1000l`)).toBe(false)
   })
 })
 

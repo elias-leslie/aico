@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConnectionStatus } from '../../components/Terminal'
 import {
+  type HistoryFrame,
   type HostStateFrame,
   openWebSocketConnection,
   type SizeHolderFrame,
@@ -28,6 +29,10 @@ interface UseTerminalWebSocketOptions {
   onHostState?: (frame: HostStateFrame) => void
   /** Called with how much history the server's seed carries (sent before the seed) */
   onHistoryLines?: (historyLines: number) => void
+  /** Called after each seed with the history it carried and could have */
+  onHistory?: (frame: HistoryFrame) => void
+  /** History lines to ask the seeds for; null: all the server carries */
+  getHistoryLines?: () => number | null
   /** Called before reconnect data arrives — clear terminal buffer to prevent duplicates */
   onBeforeReconnectData?: () => void
   /** Get current terminal dimensions for resize message */
@@ -69,6 +74,8 @@ export function useTerminalWebSocket({
   onSizeHolder,
   onHostState,
   onHistoryLines,
+  onHistory,
+  getHistoryLines,
   onBeforeReconnectData,
   getDimensions,
 }: UseTerminalWebSocketOptions): UseTerminalWebSocketReturn {
@@ -90,6 +97,8 @@ export function useTerminalWebSocket({
   const onSizeHolderRef = useRef(onSizeHolder)
   const onHostStateRef = useRef(onHostState)
   const onHistoryLinesRef = useRef(onHistoryLines)
+  const onHistoryRef = useRef(onHistory)
+  const getHistoryLinesRef = useRef(getHistoryLines)
   const onBeforeReconnectDataRef = useRef(onBeforeReconnectData)
   const getDimensionsRef = useRef(getDimensions)
 
@@ -101,6 +110,8 @@ export function useTerminalWebSocket({
     onSizeHolderRef.current = onSizeHolder
     onHostStateRef.current = onHostState
     onHistoryLinesRef.current = onHistoryLines
+    onHistoryRef.current = onHistory
+    getHistoryLinesRef.current = getHistoryLines
     onBeforeReconnectDataRef.current = onBeforeReconnectData
     getDimensionsRef.current = getDimensions
   }, [
@@ -110,6 +121,8 @@ export function useTerminalWebSocket({
     onSizeHolder,
     onHostState,
     onHistoryLines,
+    onHistory,
+    getHistoryLines,
     onBeforeReconnectData,
     getDimensions,
   ])
@@ -151,6 +164,8 @@ export function useTerminalWebSocket({
         onMessage: (data) => onMessageRef.current?.(data),
         onHistoryLines: (historyLines) =>
           onHistoryLinesRef.current?.(historyLines),
+        onHistory: (frame) => onHistoryRef.current?.(frame),
+        getHistoryLines: () => getHistoryLinesRef.current?.() ?? null,
         onBeforeReconnectData: () => onBeforeReconnectDataRef.current?.(),
         onDisconnect: () => onDisconnectRef.current?.(),
         getDimensions: () => getDimensionsRef.current?.() ?? null,

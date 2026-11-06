@@ -23,6 +23,13 @@
 // unsized, and its claims count only while nobody holds the size or another
 // automated view does. A real view opening a session an automated view holds
 // takes it back.
+//
+// History: the page may ask for fewer history lines than the server's
+// `historyLines` (`history_lines` in its first control message; the phone
+// does), and for more later (`refresh: true` with `history_lines`, its Load
+// earlier). After each seed the page gets `history: {lines, total}`: lines the
+// seed carried and lines it could have. `refresh: 'screen'` repaints only the
+// visible screen. Every read of the pane is logged with its cause.
 
 import type { IncomingMessage } from 'node:http'
 import {
@@ -40,6 +47,7 @@ import {
   createSizeClaim,
   ownAttachTarget,
   parseViewerFrame,
+  type ReseedReport,
   sizeAtAttach,
   streamToViewer,
   VIEWER_CREDIT_BYTES,
@@ -76,6 +84,8 @@ export type TerminalLink = Pick<
   | 'write'
   | 'paste'
   | 'reseed'
+  | 'repaint'
+  | 'setHistoryLines'
   | 'resize'
   | 'settleSize'
   | 'windowState'
@@ -90,10 +100,21 @@ export interface TerminalDeps {
   tether: TetherClient
   /** Marks the session's tab as just viewed. */
   touched(sessionId: string): void
+  /** The most history lines a seed carries (and the page's scrollback holds). */
   historyLines: number
-  openLink?(argv: string[], env: Record<string, string>, size: Size | null): TerminalLink
+  openLink?(
+    argv: string[],
+    env: Record<string, string>,
+    size: Size | null,
+    options: LinkOptions,
+  ): TerminalLink
   /** The wait before remote reattach try `attempt`; tests shorten it. */
   retryDelay?(attempt: number): number
+}
+
+export interface LinkOptions {
+  historyLines: number
+  onReseed(report: ReseedReport): void
 }
 
 export type ClientMessage =
@@ -129,6 +150,31 @@ export function sizeOf(message: Record<string, unknown>): Size | null {
   if (typeof cols !== 'number' || typeof rows !== 'number') return null
   if (!Number.isFinite(cols) || !Number.isFinite(rows)) return null
   return { cols: clamp(cols, MAX_COLS), rows: clamp(rows, MAX_ROWS) }
+}
+
+/** A `history_lines` request, clamped to what the server carries; null when absent or malformed. */
+export function historyLinesOf(message: Record<string, unknown>, max: number): number | null {
+  const lines = message.history_lines
+  if (typeof lines !== 'number' || !Number.isFinite(lines)) return null
+  return Math.min(max, Math.max(0, Math.trunc(lines)))
+}
+
+/** One journal line per read of the pane, so how often and why can be counted. */
+export function reseedLogLine(
+  sessionId: string,
+  report: ReseedReport,
+  compressed: boolean,
+): string {
+  return [
+    `[aico-web] reseed session=${sessionId}`,
+    `wire=${compressed ? 'deflate' : 'raw'}`,
+    `reason=${report.reason}`,
+    `kind=${report.kind}`,
+    `bytes=${report.seedBytes}`,
+    `history=${report.historyLines}/${report.historySize}`,
+    `readMs=${report.readMs}`,
+    `sinceInputMs=${report.sinceInputMs}`,
+  ].join(' ')
 }
 
 /** An agent's headless Chrome: it may watch a session but never takes its size. */
@@ -202,17 +248,20 @@ export function retryDelay(attempt: number, random: () => number = Math.random):
   return Math.round(base * (0.5 + random()))
 }
 
-const defaultOpenLink =
-  (historyLines: number) =>
-  (argv: string[], env: Record<string, string>, size: Size | null): TerminalLink =>
-    new ControlTerminal(argv, env, size, { historyLines, creditBytes: VIEWER_CREDIT_BYTES })
+const defaultOpenLink = (
+  argv: string[],
+  env: Record<string, string>,
+  size: Size | null,
+  options: LinkOptions,
+): TerminalLink =>
+  new ControlTerminal(argv, env, size, { ...options, creditBytes: VIEWER_CREDIT_BYTES })
 
 export class TerminalHub {
   private readonly views = new Map<string, Set<View>>()
   private readonly openLink: NonNullable<TerminalDeps['openLink']>
 
   constructor(private readonly deps: TerminalDeps) {
-    this.openLink = deps.openLink ?? defaultOpenLink(deps.historyLines)
+    this.openLink = deps.openLink ?? defaultOpenLink
   }
 
   /** Close every open socket (the server is stopping). */
@@ -358,10 +407,13 @@ export class TerminalHub {
 
     let size: Size | null = null
     let browser: string | null = null
+    // History lines this page's seeds carry: what it asked for, else all.
+    let historyLines = this.deps.historyLines
     for (const message of early) {
       if (message.kind !== 'control') continue
       size = sizeOf(message.message) ?? size
       browser = viewerIdOf(message.message) ?? browser
+      historyLines = historyLinesOf(message.message, this.deps.historyLines) ?? historyLines
       if (message.message.automated === true) automated = true
     }
     // An automated browser attaches unsized, as an observer does.
@@ -464,7 +516,24 @@ export class TerminalHub {
       }
       if (!open) return
 
-      const current = this.openLink(target.argv, attachEnvironment(target), size)
+      const current = this.openLink(target.argv, attachEnvironment(target), size, {
+        historyLines,
+        onReseed: (report) => {
+          console.log(
+            reseedLogLine(sessionId, report, ws.extensions.includes('permessage-deflate')),
+          )
+          if (report.kind === 'repaint' || !open || link !== current) return
+          ws.send(
+            controlFrame({
+              __ctrl: true,
+              history: {
+                lines: report.historyLines,
+                total: Math.max(0, Math.min(report.historySize, this.deps.historyLines)),
+              },
+            }),
+          )
+        },
+      })
       link = current
       generation = target.generation
       this.deps.touched(sessionId)
@@ -637,7 +706,15 @@ export class TerminalHub {
       if (sizing && 'resize' in control && size) link.resize(size.cols, size.rows)
       if (sizing && control.claim === true) claimWhenReady()
       if (typeof control.paste === 'string' && control.paste) link.paste(control.paste)
-      if (control.refresh) link.reseed()
+      if (control.refresh === 'screen') link.repaint()
+      else if (control.refresh) {
+        const more = historyLinesOf(control, this.deps.historyLines)
+        if (more !== null) {
+          historyLines = more
+          link.setHistoryLines(more)
+        }
+        link.reseed()
+      }
     }
 
     if (host && descriptor.peer) waitForHost(descriptor.peer.state)

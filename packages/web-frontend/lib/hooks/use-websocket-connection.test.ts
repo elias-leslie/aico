@@ -120,6 +120,24 @@ describe('dispatchControlMessage', () => {
     expect(callbacks.onHistoryLines).toHaveBeenCalledWith(20000)
   })
 
+  it('reports the history a seed carried and could have', () => {
+    const onHistory = vi.fn()
+    const callbacks = { ...buildCallbacks(), onHistory }
+
+    expect(
+      dispatchControlMessage(
+        '{"__ctrl":true,"history":{"lines":2000,"total":20000}}',
+        callbacks,
+      ),
+    ).toBe(true)
+    expect(onHistory).toHaveBeenCalledWith({ lines: 2000, total: 20000 })
+    dispatchControlMessage(
+      '{"__ctrl":true,"history":{"lines":"2000","total":20000}}',
+      callbacks,
+    )
+    expect(onHistory).toHaveBeenCalledOnce()
+  })
+
   it("reports a remote session's host state", () => {
     const onHostState = vi.fn()
     const callbacks = { ...buildCallbacks(), onHostState }
@@ -171,6 +189,23 @@ describe('openWebSocketConnection', () => {
     expect(JSON.parse(sockets[0].sent[0] as string)).toEqual({
       __ctrl: true,
       resize: { cols: 120, rows: 40 },
+      capabilities: ['binary_protocol'],
+      viewer_id: expect.any(String),
+    })
+  })
+
+  it('asks for the history lines this view wants', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    const refs = buildRefs()
+    const callbacks = { ...buildCallbacks(), getHistoryLines: () => 2000 }
+
+    connect(refs, callbacks)
+    sockets[0].emitOpen()
+
+    expect(JSON.parse(sockets[0].sent[0] as string)).toEqual({
+      __ctrl: true,
+      history_lines: 2000,
       capabilities: ['binary_protocol'],
       viewer_id: expect.any(String),
     })

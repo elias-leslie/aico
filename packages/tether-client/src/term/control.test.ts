@@ -2,7 +2,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ControlTerminal, type ControlTerminalOptions } from './control'
+import { ControlTerminal, type ControlTerminalOptions, type ReseedReport } from './control'
 import { SEED_FLAGS } from './protocol'
 import { FLEET_BIN } from './remote'
 
@@ -133,15 +133,121 @@ describe('ControlTerminal pid', () => {
 })
 
 describe('ControlTerminal seed', () => {
-  it('sizes the client, then reads flags, both captures and the unfinished escape at once', async () => {
+  it('sizes the client, then reads flags, the screen captures and the unfinished escape at once', async () => {
     const { tmux } = link()
     await flush()
     expect(tmux.sent).toEqual([
       'refresh-client -C 80x24',
       expect.stringMatching(
-        /^display-message -p '#\{pane_id\} #\{pane_height\} .*' ; capture-pane -p -e -S -100 -E - ; capture-pane -p -e -q -a -S -100 -E - ; capture-pane -p -P$/,
+        /^display-message -p '#\{pane_id\} #\{pane_height\} .*#\{history_size\} #\{client_pid\}' ; capture-pane -p -e ; capture-pane -p -e -q -a ; capture-pane -p -P$/,
       ),
     ])
+  })
+
+  it('attaches progressively: the screen first, then the history it asked for', async () => {
+    const reports: ReseedReport[] = []
+    const { tmux, data } = link({ cols: 80, rows: 2 }, { onReseed: (r) => reports.push(r) })
+    tmux.reply([])
+    tmux.reply([flagsLine({ pane_height: 2, history_size: 500 })], ['s1', 's2'], [], [])
+    await flush()
+    expect(data).toHaveLength(1)
+    expect(data[0].startsWith(`${ESC}cs1${ESC}[0m\r\ns2`)).toBe(true)
+    expect(tmux.sent.at(-1)).toMatch(
+      /^display-message .* ; capture-pane -p -e -S -100 -E - ; capture-pane -p -e -q -a -S -100 -E - ; capture-pane -p -P$/,
+    )
+    tmux.reply([flagsLine({ pane_height: 2, history_size: 500 })], ['h1', 'h2', 's1', 's2'], [], [])
+    await flush()
+    expect(data[1].startsWith(`${ESC}ch1${ESC}[0m\r\nh2`)).toBe(true)
+    expect(reports.map((r) => [r.reason, r.kind, r.historyLines, r.historySize])).toEqual([
+      ['attach', 'screen', 0, 500],
+      ['history', 'seed', 2, 500],
+    ])
+  })
+
+  it('reads no history when tmux holds none, or when it hides under an alternate screen', async () => {
+    const cases: Record<string, number>[] = [
+      { history_size: 0 },
+      { history_size: 500, alternate_on: 1 },
+    ]
+    for (const extra of cases) {
+      const { tmux } = link()
+      tmux.reply([])
+      tmux.reply([flagsLine(extra)], ['s'], [], [])
+      await flush()
+      expect(tmux.sent.filter((line) => line.startsWith('display-message'))).toHaveLength(1)
+    }
+  })
+
+  it('carries the history lines it is set to, and none when set to zero', async () => {
+    const { term, tmux } = link({ cols: 80, rows: 24 }, { historyLines: 0 })
+    await flush()
+    // Nothing to follow the screen with: the first read is the whole seed.
+    expect(tmux.sent.at(-1)).toContain('capture-pane -p -e -S -0 -E -')
+    tmux.reply([])
+    tmux.reply([flagsLine({ history_size: 9 })], ['s'], [], [])
+    await flush()
+    term.setHistoryLines(2000)
+    term.reseed()
+    await flush()
+    expect(tmux.sent.at(-1)).toContain('capture-pane -p -e -S -2000 -E -')
+  })
+
+  it('reads the normal history once the program leaves its alternate screen', async () => {
+    const reports: string[] = []
+    const { tmux } = link({ cols: 80, rows: 24 }, { onReseed: (r) => reports.push(r.reason) })
+    tmux.reply([])
+    tmux.reply([flagsLine({ alternate_on: 1, history_size: 300 })], ['alt'], ['normal'], [])
+    await flush()
+    tmux.output('%5', 'still in the app')
+    await flush()
+    expect(tmux.sent.filter((line) => line.startsWith('display-message'))).toHaveLength(1)
+    tmux.output('%5', '\\033[?1049l')
+    await flush()
+    expect(tmux.sent.at(-1)).toContain('capture-pane -p -e -S -100 -E -')
+    tmux.reply([flagsLine({ history_size: 300 })], ['h', 's'], [], [])
+    await flush()
+    expect(reports).toEqual(['attach', 'alt-exit'])
+  })
+
+  it('after a size change repaints only the screen, with no reset', async () => {
+    vi.useFakeTimers()
+    try {
+      const reports: ReseedReport[] = []
+      const { term, tmux, data } = link({ cols: 80, rows: 2 }, { onReseed: (r) => reports.push(r) })
+      tmux.reply([])
+      tmux.reply([flagsLine({ pane_height: 2 })], ['a', 'b'], [], [])
+      await vi.advanceTimersByTimeAsync(0)
+      term.resize(60, 2)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(tmux.sent.at(-1)).toMatch(
+        /^display-message -p '.*' ; capture-pane -p -e ; display-message -p "" ; capture-pane -p -P$/,
+      )
+      tmux.reply([]) // refresh-client -C
+      tmux.reply([flagsLine({ pane_height: 2, history_size: 40 })], ['A', 'B'], [''], [])
+      await vi.advanceTimersByTimeAsync(0)
+      const paint = data.at(-1) ?? ''
+      expect(paint).not.toContain(`${ESC}c`)
+      expect(paint).toContain(`${ESC}[1;1H${ESC}[2KA`)
+      expect(reports.at(-1)).toMatchObject({ reason: 'resize', kind: 'repaint', historyLines: 0 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a reseed asked for while a repaint is read replaces it', async () => {
+    const reports: string[] = []
+    const { term, tmux } = link({ cols: 80, rows: 24 }, { onReseed: (r) => reports.push(r.kind) })
+    tmux.reply([])
+    tmux.reply([flagsLine()], ['s'], [], [])
+    await flush()
+    term.repaint()
+    term.reseed()
+    term.repaint()
+    tmux.reply([flagsLine()], ['s'], [''], [])
+    await flush()
+    tmux.reply([flagsLine()], ['s'], [], [])
+    await flush()
+    expect(reports).toEqual(['screen', 'repaint', 'seed'])
   })
 
   it('an unsized client sends no size until it is given one', async () => {

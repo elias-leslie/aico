@@ -30,6 +30,9 @@ interface UseTerminalWriteQueueReturn {
   /** Tell the queue the viewport moved, so a held repaint can be requested
    * as soon as the reader is back at the bottom. */
   onViewportMoved: () => void
+  /** The reader asked for the seed that comes next (Load earlier): write it
+   * even while they are scrolled up, then run `applied`. */
+  expectReset: (applied: () => void) => void
 }
 
 export function useTerminalWriteQueue({
@@ -45,6 +48,7 @@ export function useTerminalWriteQueue({
   // stream is dropped. The server repaints the whole pane once they are back
   // at the bottom, so nothing is lost.
   const reseedHeldRef = useRef(false)
+  const expectedResetRef = useRef<(() => void) | null>(null)
   const reseedRef = useRef(reseed)
   useEffect(() => {
     reseedRef.current = reseed
@@ -72,6 +76,15 @@ export function useTerminalWriteQueue({
           reseedHeldRef.current = false
           reseedRef.current?.request()
           resolve()
+          return
+        }
+        const expected = expectedResetRef.current
+        if (expected && data.includes(FULL_RESET)) {
+          expectedResetRef.current = null
+          term.write(data, () => {
+            expected()
+            resolve()
+          })
           return
         }
         if (isScrolledUp && reseedRef.current?.available()) {
@@ -151,6 +164,11 @@ export function useTerminalWriteQueue({
     resetGenerationRef.current += 1
     pendingWritesRef.current.length = 0
     reseedHeldRef.current = false
+    expectedResetRef.current = null
+  }, [])
+
+  const expectReset = useCallback((applied: () => void) => {
+    expectedResetRef.current = applied
   }, [])
 
   const restartStream = useCallback(() => {
@@ -179,5 +197,6 @@ export function useTerminalWriteQueue({
     resetQueue,
     restartStream,
     onViewportMoved,
+    expectReset,
   }
 }

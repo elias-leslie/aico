@@ -7,13 +7,19 @@
 // output (%output), so xterm parses exactly what the program wrote: native
 // scrollback, native selection, and the program's real mouse/alt-screen state.
 //
-// On attach (and after a resize, a backlog pause or a manual refresh) the link
-// reads the pane's state in one atomic tmux command list -- mode flags,
-// history plus screen, the saved normal screen under an alternate one, and an
-// escape sequence the pane has not finished -- and sends it ahead of the
-// stream as a terminal reset plus repaint. Output tmux sends before that
-// command list's last %end is already in the captures and is dropped; output
-// after it is newer and follows the seed.
+// On attach (and after a backlog pause or a manual refresh) the link reads the
+// pane's state in one atomic tmux command list -- mode flags, history plus
+// screen, the saved normal screen under an alternate one, and an escape
+// sequence the pane has not finished -- and sends it ahead of the stream as a
+// terminal reset plus repaint. Output tmux sends before that command list's
+// last %end is already in the captures and is dropped; output after it is
+// newer and follows the seed.
+//
+// Attach is progressive: the visible screen first (small, so a slow phone
+// link shows the session at once), then the history the viewer asked for.
+// A size change repaints only the visible screen: xterm reflows the history it
+// already holds. Under an alternate screen a seed carries no normal history
+// (it cannot be seen); the link reads it once the program leaves.
 //
 // Flow control: tmux pauses a pane for a client that falls PAUSE_AFTER_SECONDS
 // behind (`pause-after`), and the link reseeds when it does. A viewer with
@@ -24,12 +30,15 @@
 import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
 import {
   type Block,
+  buildScreenRepaint,
   buildSeed,
   ControlProtocol,
   controlArgv,
   inputCommands,
+  leavesAlternateScreen,
   parseSeedFlags,
   SEED_FLAGS,
+  seedHistoryLines,
   tmuxCommandArgv,
 } from './protocol'
 import { FLEET_BIN, FLEET_SESSION_REFUSED } from './remote'
@@ -44,6 +53,10 @@ export interface TerminalLink {
   paste(text: string): void
   /** Re-read the pane from tmux and repaint the terminal from it. */
   reseed(): void
+  /** Re-read only the visible screen; the terminal keeps its history. */
+  repaint(): void
+  /** History lines later seeds carry. */
+  setHistoryLines(lines: number): void
   resize(cols: number, rows: number): void
   /** The shared window's size changed under this client (another client held
    * it and this one took it back): read the pane again once typing pauses. */
@@ -99,20 +112,43 @@ const SHOW_CURSOR = '\x1b[?25h'
 type Phase = 'starting' | 'seeding' | 'live' | 'closed'
 
 /** Why the pane was read again; reported with every reseed. */
-export type ReseedReason = 'attach' | 'resize' | 'pause' | 'refresh' | 'queued'
+export type ReseedReason =
+  | 'attach'
+  | 'history'
+  | 'resize'
+  | 'pause'
+  | 'refresh'
+  | 'alt-exit'
+  | 'queued'
+
+/**
+ * What a read sends: `seed` resets the terminal and writes history and
+ * screen; `screen` resets it and writes the screen only (the first step of a
+ * progressive attach); `repaint` rewrites the visible screen and keeps the
+ * terminal's history (after a size change).
+ */
+export type ReseedKind = 'seed' | 'screen' | 'repaint'
+
+const KIND_RANK: Record<ReseedKind, number> = { repaint: 0, screen: 1, seed: 2 }
 
 export interface ReseedReport {
   reason: ReseedReason
+  kind: ReseedKind
   /** The attach target (`$3`). */
   target: string
   readMs: number
   seedBytes: number
+  /** History lines the seed carried (0 for screen and repaint). */
+  historyLines: number
+  /** History lines tmux holds for the pane (-1 when unreadable). */
+  historySize: number
   /** Since the last input, or -1 when there was none. */
   sinceInputMs: number
 }
 
 export interface ControlTerminalOptions {
-  /** History lines each seed carries (the viewer's scrollback should hold as many). */
+  /** History lines each seed carries (the viewer's scrollback should hold as
+   * many); `setHistoryLines` changes it for later seeds. */
   historyLines: number
   /**
    * Text this viewer may have outstanding (emitted, not yet `delivered`)
@@ -133,7 +169,11 @@ export class ControlTerminal implements TerminalLink {
   private decoder = new TextDecoder('utf-8')
   private phase: Phase = 'starting'
   private paneId: string | null = null
-  private reseedQueued: { continuePane: boolean } | null = null
+  private reseedQueued: { continuePane: boolean; kind: ReseedKind; reason: ReseedReason } | null =
+    null
+  private historyLines: number
+  /** The last seed left out normal-screen history (an alternate screen was on). */
+  private historyHidden = false
   private markReady: () => void = () => {}
   /** Settles once the first seed is in (or the link closed): input before it
    * has no pane to reach. */
@@ -146,6 +186,7 @@ export class ControlTerminal implements TerminalLink {
   private holdSince = 0
   private seedStartedAt = 0
   private seedReason: ReseedReason = 'attach'
+  private seedKind: ReseedKind = 'seed'
   /** Input waits behind a paste so typed keys cannot overtake it. */
   private inputChain: Promise<void> = this.ready
   private pasteSeq = 0
@@ -174,6 +215,7 @@ export class ControlTerminal implements TerminalLink {
   ) {
     this.cols = size?.cols ?? 0
     this.rows = size?.rows ?? 0
+    this.historyLines = Math.max(0, Math.trunc(options.historyLines))
     const argv = controlArgv(attachArgv)
     this.child = (options.spawn ?? spawnPiped)(argv, env)
     this.protocol = new ControlProtocol({
@@ -207,7 +249,12 @@ export class ControlTerminal implements TerminalLink {
     })
     this.child.on('error', () => this.finish())
     if (size) this.send([`refresh-client -C ${this.cols}x${this.rows}`])
-    this.reseed(false, 'attach')
+    this.read(false, 'attach', this.historyLines > 0 ? 'screen' : 'seed')
+  }
+
+  /** History lines later seeds carry (a viewer that asked for earlier lines). */
+  setHistoryLines(lines: number): void {
+    this.historyLines = Math.max(0, Math.trunc(lines))
   }
 
   /** The tmux client's own pid, which size claims name, read with the first
@@ -284,8 +331,8 @@ export class ControlTerminal implements TerminalLink {
     this.settleSize()
   }
 
-  /** tmux and xterm rewrap old lines differently; once the size settles, take
-   * the pane from tmux again so the two agree. */
+  /** Once the size settles, take the visible screen from tmux again (the
+   * program redrew it at the new size); xterm reflows its own history. */
   settleSize(): void {
     if (this.phase === 'closed') return
     if (this.reseedTimer) clearTimeout(this.reseedTimer)
@@ -341,28 +388,45 @@ export class ControlTerminal implements TerminalLink {
       return
     }
     this.holdSince = 0
-    this.reseed(false, 'resize')
+    this.read(false, 'resize', 'repaint')
   }
 
   /** Re-read the pane from tmux and repaint the terminal from it. */
   reseed(continuePane = false, reason: ReseedReason = 'refresh'): void {
+    this.read(continuePane, reason, 'seed')
+  }
+
+  /** Re-read only the visible screen and rewrite it, keeping the history. */
+  repaint(reason: ReseedReason = 'refresh'): void {
+    this.read(false, reason, 'repaint')
+  }
+
+  private read(continuePane: boolean, reason: ReseedReason, kind: ReseedKind): void {
     if (this.phase === 'closed') return
     if (this.phase === 'seeding') {
-      this.reseedQueued = { continuePane: continuePane || !!this.reseedQueued?.continuePane }
+      const queued = this.reseedQueued
+      const larger = !queued || KIND_RANK[kind] > KIND_RANK[queued.kind]
+      this.reseedQueued = {
+        continuePane: continuePane || !!queued?.continuePane,
+        kind: larger ? kind : (queued?.kind ?? kind),
+        reason: larger ? reason : (queued?.reason ?? reason),
+      }
       return
     }
     this.phase = 'seeding'
     this.seedStartedAt = Date.now()
     this.seedReason = reason
+    this.seedKind = kind
     const fmt = SEED_FLAGS.map((flag) => `#{${flag}}`).join(' ')
-    const history = `-S -${this.options.historyLines}`
+    // `-S -0` is the screen's first row: no history.
+    const history = kind === 'seed' ? `-S -${this.historyLines} -E -` : ''
     const resume =
       continuePane && this.paneId ? [`refresh-client -A '${this.paneId}:continue'`] : []
     const commands = [
       ...resume,
       `display-message -p '${fmt}'`,
-      `capture-pane -p -e ${history} -E -`,
-      `capture-pane -p -e -q -a ${history} -E -`,
+      `capture-pane -p -e ${history}`.trim(),
+      kind === 'repaint' ? 'display-message -p ""' : `capture-pane -p -e -q -a ${history}`.trim(),
       // The start of an escape sequence the pane has not finished yet: its
       // end streams after the seed and must not land as text.
       'capture-pane -p -P',
@@ -376,13 +440,24 @@ export class ControlTerminal implements TerminalLink {
         const flags = flagsBlock.error ? null : parseSeedFlags(flagsBlock.lines[0] ?? '')
         if (!flags || mainBlock.error) {
           // Not readable (pane gone): stream from here rather than stall.
-          this.goLive('')
+          this.goLive('', 0, -1)
           return
         }
         this.paneId = flags.paneId
         if (flags.client_pid > 0) this.clientPid = flags.client_pid
+        const partial = partialBlock.error ? '' : partialBlock.lines.join('')
+        if (kind === 'repaint') {
+          this.goLive(buildScreenRepaint(flags, mainBlock.lines) + partial, 0, flags.history_size)
+          return
+        }
         const seed = buildSeed(flags, mainBlock.lines, altBlock.error ? [] : altBlock.lines)
-        this.goLive(seed + (partialBlock.error ? '' : partialBlock.lines.join('')))
+        const carried = seedHistoryLines(flags, mainBlock.lines)
+        this.historyHidden = !!flags.alternate_on && flags.history_size > 0
+        this.goLive(seed + partial, carried, flags.history_size)
+        // The screen is in: the history follows at once, unless tmux holds
+        // none to show (or it is hidden under an alternate screen).
+        if (kind === 'screen' && flags.history_size > 0 && !flags.alternate_on)
+          this.read(false, 'history', 'seed')
       },
       resume.map((_, i) => i),
     )
@@ -403,29 +478,39 @@ export class ControlTerminal implements TerminalLink {
     }
   }
 
-  private goLive(seed: string): void {
+  private goLive(seed: string, historyLines: number, historySize: number): void {
     if (this.phase === 'closed') return
     this.decoder = new TextDecoder('utf-8')
     this.flushOutput(true)
     if (seed) this.emit(seed)
     this.options.onReseed?.({
       reason: this.seedReason,
+      kind: this.seedKind,
       target: this.attachArgv.at(-1) ?? '?',
       readMs: Date.now() - this.seedStartedAt,
       seedBytes: seed.length,
+      historyLines,
+      historySize,
       sinceInputMs: this.lastInputAt ? Date.now() - this.lastInputAt : -1,
     })
     this.phase = 'live'
     this.markReady()
     const queued = this.reseedQueued
     this.reseedQueued = null
-    if (queued) this.reseed(queued.continuePane, 'queued')
+    if (queued) this.read(queued.continuePane, queued.reason, queued.kind)
   }
 
   private output(paneId: string, bytes: Buffer): void {
     // While seeding, these bytes are already in the captures being read.
     if (this.phase === 'live' && paneId === this.paneId) {
-      this.pendingOutput += this.decoder.decode(bytes, { stream: true })
+      const text = this.decoder.decode(bytes, { stream: true })
+      this.pendingOutput += text
+      // The program left its alternate screen: the normal history the seed
+      // left out can be seen now.
+      if (this.historyHidden && leavesAlternateScreen(text)) {
+        this.historyHidden = false
+        this.reseed(false, 'alt-exit')
+      }
     }
   }
 

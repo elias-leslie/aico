@@ -39,12 +39,22 @@ export interface HostStateFrame {
   state: string
 }
 
+/** History the last seed carried (`lines`) and the most it could have
+ * (`total`): fewer means earlier lines can be loaded. */
+export interface HistoryFrame {
+  lines: number
+  total: number
+}
+
 export interface WebSocketConnectionCallbacks {
   onMessage?: (data: string) => void
   onSizeHolder?: (holder: SizeHolderFrame) => void
   onHostState?: (frame: HostStateFrame) => void
   /** How much history the server's seed carries (sent before the seed). */
   onHistoryLines?: (historyLines: number) => void
+  onHistory?: (frame: HistoryFrame) => void
+  /** History lines this view asks its seeds to carry; null: all the server carries. */
+  getHistoryLines?: () => number | null
   onBeforeReconnectData?: () => void
   onDisconnect?: () => void
   getDimensions?: () => { cols: number; rows: number } | null
@@ -218,10 +228,12 @@ export function openWebSocketConnection(
     // session does not take its size. The server claims with this size only
     // when nobody holds it yet; an observer sends none.
     const dims = sendInitialResize ? getDimensions?.() : null
+    const historyLines = callbacks.getHistoryLines?.() ?? null
     ws.send(
       JSON.stringify({
         __ctrl: true,
         ...(dims ? { resize: { cols: dims.cols, rows: dims.rows } } : {}),
+        ...(historyLines !== null ? { history_lines: historyLines } : {}),
         capabilities: CLIENT_CAPABILITIES,
         viewer_id: browserViewerId(),
         ...(isAutomatedBrowser(navigator) ? { automated: true } : {}),
@@ -349,6 +361,20 @@ export function dispatchControlMessage(
             ? { cols: size.cols as number, rows: size.rows as number }
             : null,
         sameBrowser: holder.same_browser === true,
+      })
+      return true
+    }
+
+    const history = control.history as Record<string, unknown> | undefined
+    if (
+      history &&
+      typeof history === 'object' &&
+      Number.isSafeInteger(history.lines) &&
+      Number.isSafeInteger(history.total)
+    ) {
+      callbacks.onHistory?.({
+        lines: history.lines as number,
+        total: history.total as number,
       })
       return true
     }

@@ -34,6 +34,8 @@ export const SEED_FLAGS = [
   'mouse_sgr_flag',
   'scroll_region_upper',
   'scroll_region_lower',
+  // History lines tmux holds above the screen (what a seed could carry).
+  'history_size',
   // Not pane state: the reading client's own pid (the remote one over ssh).
   'client_pid',
 ] as const
@@ -76,31 +78,32 @@ function isOctal(value: string, at: number): boolean {
   return true
 }
 
+const seedLines = (list: string[]) => list.map((line) => `${line}${ESC}[0m`).join('\r\n')
+
 /**
  * The terminal state for a pane, as one string for xterm: a full reset, the
- * history and screen (with the saved normal screen under an alternate one),
- * then the cursor and the modes tmux reports. Lines arrive as tmux printed
- * them with -e (one row each, colour escapes included).
+ * history and screen, then the cursor and the modes tmux reports. Lines
+ * arrive as tmux printed them with -e (one row each, colour escapes
+ * included). Under an alternate screen only what could be seen comes along:
+ * the saved normal screen and the alternate one, not the normal history the
+ * program hides (the link reads the pane again when the program leaves it).
  */
 export function buildSeed(
   flags: SeedFlags,
   screenAndHistory: string[],
   savedNormal: string[],
 ): string {
-  const lines = (list: string[]) => list.map((line) => `${line}${ESC}[0m`).join('\r\n')
   const rows = flags.pane_height
   let seed = `${ESC}c`
   if (flags.alternate_on) {
-    const split = Math.max(0, screenAndHistory.length - rows)
-    const history = screenAndHistory.slice(0, split)
-    const altScreen = screenAndHistory.slice(split)
+    const altScreen = screenAndHistory.slice(Math.max(0, screenAndHistory.length - rows))
     const normal = rows ? savedNormal.slice(-rows) : []
-    seed += lines([...history, ...normal])
+    seed += seedLines(normal)
     seed += `${ESC}[${flags.alternate_saved_y + 1};${flags.alternate_saved_x + 1}H`
     seed += `${ESC}[?1049h${ESC}[H`
-    seed += lines(altScreen)
+    seed += seedLines(altScreen)
   } else {
-    seed += lines(screenAndHistory)
+    seed += seedLines(screenAndHistory)
   }
   seed += `${ESC}[0m${ESC}[${flags.scroll_region_upper + 1};${flags.scroll_region_lower + 1}r`
   if (flags.origin_flag) seed += `${ESC}[?6h`
@@ -110,12 +113,59 @@ export function buildSeed(
   if (flags.insert_flag) seed += `${ESC}[4h`
   if (flags.keypad_cursor_flag) seed += `${ESC}[?1h`
   if (flags.keypad_flag) seed += `${ESC}=`
-  if (flags.mouse_standard_flag) seed += `${ESC}[?1000h`
-  if (flags.mouse_button_flag) seed += `${ESC}[?1002h`
-  if (flags.mouse_any_flag && !flags.mouse_standard_flag && !flags.mouse_button_flag)
-    seed += `${ESC}[?1003h`
-  if (flags.mouse_sgr_flag) seed += `${ESC}[?1006h`
+  seed += mouseModes(flags)
   return seed
+}
+
+/** History lines a seed built from `screenAndHistory` carries. */
+export function seedHistoryLines(flags: SeedFlags, screenAndHistory: string[]): number {
+  return flags.alternate_on ? 0 : Math.max(0, screenAndHistory.length - flags.pane_height)
+}
+
+function mouseModes(flags: SeedFlags): string {
+  let modes = ''
+  if (flags.mouse_standard_flag) modes += `${ESC}[?1000h`
+  if (flags.mouse_button_flag) modes += `${ESC}[?1002h`
+  if (flags.mouse_any_flag && !flags.mouse_standard_flag && !flags.mouse_button_flag)
+    modes += `${ESC}[?1003h`
+  if (flags.mouse_sgr_flag) modes += `${ESC}[?1006h`
+  return modes
+}
+
+const setOrReset = (on: number, mode: string) => `${ESC}[${mode}${on ? 'h' : 'l'}`
+
+/**
+ * Repaint only the visible screen, keeping the terminal's history: after a
+ * size change xterm reflows its own scrollback, so only the rows tmux redrew
+ * at the new size need to come again. No reset (the reader's place and
+ * history stay); every mode is set explicitly, on or off, since nothing
+ * cleared them. `screen` is the visible rows only (`capture-pane -p -e`).
+ */
+export function buildScreenRepaint(flags: SeedFlags, screen: string[]): string {
+  let paint = `${ESC}[?6l${ESC}[r${ESC}[0m`
+  screen.forEach((line, row) => {
+    paint += `${ESC}[${row + 1};1H${ESC}[2K${line}${ESC}[0m`
+  })
+  // Rows below the pane's (a taller view) hold nothing of it.
+  paint += `${ESC}[J`
+  paint += `${ESC}[${flags.scroll_region_upper + 1};${flags.scroll_region_lower + 1}r`
+  if (flags.origin_flag) paint += `${ESC}[?6h`
+  paint += `${ESC}[${flags.cursor_y + 1};${flags.cursor_x + 1}H`
+  paint += setOrReset(flags.cursor_flag, '?25')
+  paint += setOrReset(flags.wrap_flag, '?7')
+  paint += setOrReset(flags.insert_flag, '4')
+  paint += setOrReset(flags.keypad_cursor_flag, '?1')
+  paint += flags.keypad_flag ? `${ESC}=` : `${ESC}>`
+  paint += `${ESC}[?1000l${ESC}[?1002l${ESC}[?1003l${ESC}[?1006l`
+  paint += mouseModes(flags)
+  return paint
+}
+
+const LEAVE_ALTERNATE = ['1049', '1047', '47'].map((mode) => `${ESC}[?${mode}l`)
+
+/** Output in which the program leaves the alternate screen (xterm's 1049/1047/47 reset). */
+export function leavesAlternateScreen(text: string): boolean {
+  return LEAVE_ALTERNATE.some((sequence) => text.includes(sequence))
 }
 
 /** `tmux … attach-session -t X` from Tether, as a control-mode client. On a

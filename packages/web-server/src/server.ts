@@ -29,7 +29,14 @@ export function createWebServer(
   terminals: TerminalHub,
   site?: StaticSite,
 ): Server {
-  const sockets = new WebSocketServer({ noServer: true, maxPayload: 4 << 20 })
+  // Terminal frames are text, and a seed is a whole screen plus history: deflate
+  // shrinks a seed of code about 3.7x (0.74 MB in ~12 ms of zlib's thread
+  // pool). Frames under a kilobyte (typed echoes) go as they are.
+  const sockets = new WebSocketServer({
+    noServer: true,
+    maxPayload: 4 << 20,
+    perMessageDeflate: { threshold: 1024, zlibDeflateOptions: { level: 6 } },
+  })
   const server = createServer((req, res) => {
     applySecurityHeaders(res)
     if (guard.hostName) res.setHeader(HOST_HEADER, guard.hostName)

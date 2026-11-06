@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Terminal } from '@xterm/headless'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { ControlTerminal, type ControlTerminalOptions } from './control'
+import { ControlTerminal, type ControlTerminalOptions, type ReseedReport } from './control'
 
 const hasTmux = (() => {
   try {
@@ -183,9 +183,11 @@ describe.skipIf(!hasTmux)('ControlTerminal against tmux', () => {
         '    sys.stdout.flush()',
       ].join('\n'),
     )
-    run(`clear; echo under-the-app; python3 ${script}`)
+    // tput clear would drop tmux's history too; keep it.
+    run(`seq 1 300; printf '\\033[H\\033[2J'; echo under-the-app; python3 ${script}`)
     await sleep(800)
-    const v = view(80, 24)
+    const reports: ReseedReport[] = []
+    const v = view(80, 24, { onReseed: (r) => reports.push(r) })
     await settle(v, 800)
     expect(tmux('display', '-p', '-t', 't', '#{alternate_on}').trim()).toBe('1')
     expect(v.term.buffer.active.type).toBe('alternate')
@@ -204,6 +206,14 @@ describe.skipIf(!hasTmux)('ControlTerminal against tmux', () => {
     await settle(v, 600)
     expect(v.term.buffer.active.type).toBe('normal')
     expect(screenOf(v)).toEqual(tmuxScreen(24))
+    // The seed under the program carried no hidden history; leaving it read
+    // the history, which now matches tmux.
+    expect(reports.map((r) => [r.reason, r.historyLines])).toEqual([
+      ['attach', 0],
+      ['alt-exit', expect.any(Number)],
+    ])
+    expect(reports[0].historySize).toBeGreaterThan(0)
+    expect(historyOf(v)).toEqual(tmuxHistory())
   })
 
   it('re-reads the pane from tmux after a resize so the two agree', async () => {
@@ -239,14 +249,17 @@ describe.skipIf(!hasTmux)('ControlTerminal against tmux', () => {
         "sys.stdout.write('\\x1b[?1049l'); sys.stdout.flush()",
       ].join('\n'),
     )
-    const v = view(80, 24)
+    const seeds: number[] = []
+    let watching = false
+    const v = view(80, 24, {
+      onReseed: () => {
+        if (watching) seeds.push(Date.now())
+      },
+    })
     await settle(v)
     run(`python3 ${prompt}`)
     await sleep(600)
-    const seeds: number[] = []
-    v.link.onData((data) => {
-      if (data.startsWith(`${'\x1b'}c`)) seeds.push(Date.now())
-    })
+    watching = true
     const promptLine = () => screenOf(v)[4]
     let longest = 0
     let shortened = 0

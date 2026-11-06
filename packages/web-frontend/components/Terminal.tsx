@@ -11,7 +11,12 @@ import {
 } from 'react'
 import '@xterm/xterm/css/xterm.css'
 import { sizeHolderName } from '@aico/ui-kit/size-holder-copy'
-import { LANTERN_TERMINAL_THEME, SCROLLBACK } from '../lib/constants/terminal'
+import {
+  LANTERN_TERMINAL_THEME,
+  LOAD_EARLIER_LINES,
+  PHONE_HISTORY_LINES,
+  SCROLLBACK,
+} from '../lib/constants/terminal'
 import type { TerminalRendererStatus } from '../lib/hooks/terminal-instance-utils'
 import { useTerminalHandle } from '../lib/hooks/use-terminal-handle'
 import { useTerminalInstance } from '../lib/hooks/use-terminal-instance'
@@ -20,6 +25,7 @@ import { useTerminalScrolling } from '../lib/hooks/use-terminal-scrolling'
 import { useTerminalSearch } from '../lib/hooks/use-terminal-search'
 import { useTerminalWebSocket } from '../lib/hooks/use-terminal-websocket'
 import { useTerminalWriteQueue } from '../lib/hooks/use-terminal-write-queue'
+import type { HistoryFrame } from '../lib/hooks/use-websocket-connection'
 import {
   swallowQueryReplies,
   trackSgrMouse,
@@ -27,6 +33,7 @@ import {
 import { usableDimensions } from '../lib/terminal/fit'
 import { keepReadingPlace } from '../lib/terminal/reading-place'
 import { isMobileDevice } from '../lib/utils/device'
+import { LoadEarlierPill } from './LoadEarlierPill'
 import { ScrollToBottomPill } from './ScrollToBottomPill'
 import type { TerminalHandle, TerminalProps } from './terminal.types'
 
@@ -116,7 +123,7 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
       [],
     )
 
-    const { enqueueWrite, restartStream, onViewportMoved } =
+    const { enqueueWrite, restartStream, onViewportMoved, expectReset } =
       useTerminalWriteQueue({
         terminalRef,
         isVisibleRef,
@@ -145,6 +152,17 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     const onHostStateChangeRef = useRef(onHostStateChange)
     onHostStateChangeRef.current = onHostStateChange
 
+    // History lines this view's seeds carry: a phone loads the last few
+    // thousand (a slow link pays for each line on every attach) and more on
+    // Load earlier; null loads all the server carries.
+    const historyBudgetRef = useRef<number | null>(
+      typeof window !== 'undefined' && isMobileDevice()
+        ? PHONE_HISTORY_LINES
+        : null,
+    )
+    const [history, setHistory] = useState<HistoryFrame | null>(null)
+    const [loadingEarlier, setLoadingEarlier] = useState(false)
+
     const { status, wsRef, reconnect, sendInput, connect, disconnect } =
       useTerminalWebSocket({
         sessionId,
@@ -156,6 +174,11 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
           if (terminalRef.current)
             terminalRef.current.options.scrollback = historyLines
           setControlHistoryLines(historyLines)
+        },
+        getHistoryLines: () => historyBudgetRef.current,
+        onHistory: (frame) => {
+          setHistory(frame)
+          setLoadingEarlier(false)
         },
         onStatusChange,
         onDisconnect,
@@ -330,13 +353,35 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     }, [handleResize])
     reclaimRef.current = claimSize
 
-    // Shown at another size than before: the pane is read again at it.
+    // Shown at another size than before: the visible screen is read again at
+    // it (xterm reflowed the history itself).
     const viewCols = viewSize?.cols ?? 0
     const viewRows = viewSize?.rows ?? 0
     // biome-ignore lint/correctness/useExhaustiveDependencies: repaint when the shown size changes
     useEffect(() => {
-      if (viewCols > 0 && status === 'connected') reseedSource.request()
+      if (viewCols > 0 && wsRef.current?.readyState === WebSocket.OPEN)
+        wsRef.current.send(JSON.stringify({ __ctrl: true, refresh: 'screen' }))
     }, [viewCols, viewRows])
+
+    // Load earlier: the server sends the pane again with more history; the
+    // reader stays on the line they were reading, now further down.
+    const loadEarlier = useCallback(() => {
+      const ws = wsRef.current
+      const term = terminalRef.current
+      if (!history || !term || ws?.readyState !== WebSocket.OPEN) return
+      const lines = Math.min(history.total, history.lines + LOAD_EARLIER_LINES)
+      historyBudgetRef.current = lines
+      const before = term.buffer.normal.length
+      const viewportY = term.buffer.active.viewportY
+      expectReset(() => {
+        const added = term.buffer.normal.length - before
+        term.scrollToLine(Math.max(0, viewportY + added))
+      })
+      setLoadingEarlier(true)
+      ws.send(
+        JSON.stringify({ __ctrl: true, refresh: true, history_lines: lines }),
+      )
+    }, [expectReset, history, wsRef])
 
     const reconnectHost = useCallback(() => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) return
@@ -371,6 +416,7 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     // A new connection hears the holder afresh.
     useEffect(() => {
       if (status === 'connected') return
+      setLoadingEarlier(false)
       heardHolderRef.current = false
       sameBrowserHolderRef.current = false
       holdsSizeRef.current = false
@@ -424,6 +470,16 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
             width: '100%',
           }}
         />
+        {status === 'connected' && (
+          <LoadEarlierPill
+            terminalRef={terminalRef}
+            isReady={isReady}
+            history={history}
+            step={LOAD_EARLIER_LINES}
+            loading={loadingEarlier}
+            onLoad={loadEarlier}
+          />
+        )}
         <ScrollToBottomPill terminalRef={terminalRef} isReady={isReady} />
       </div>
     )

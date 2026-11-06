@@ -172,6 +172,27 @@ describe('useTerminalWriteQueue viewport following', () => {
       expect(request).toHaveBeenCalledTimes(1)
     })
 
+    it('writes a seed the reader asked for while scrolled up, then hands back', async () => {
+      const { term, hook, write, request } = await setupReseed()
+      term.scrollToLine(0)
+      const applied = vi.fn()
+      act(() => hook.result.current.expectReset(applied))
+
+      await write(seed)
+
+      expect(applied).toHaveBeenCalledOnce()
+      expect(term.buffer.active.getLine(0)?.translateToString(true)).toBe(
+        'seeded 0',
+      )
+      expect(request).not.toHaveBeenCalled()
+      // Only that one: the next reset while reading is held again.
+      term.scrollToLine(0)
+      await write(seed.replace(/seeded/g, 'again'))
+      expect(term.buffer.active.getLine(0)?.translateToString(true)).toBe(
+        'seeded 0',
+      )
+    })
+
     it('applies a reset at once when the reader is at the bottom', async () => {
       const { term, write, request } = await setupReseed()
 

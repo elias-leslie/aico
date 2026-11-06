@@ -8,8 +8,11 @@ import { Router } from './http'
 import { createWebServer } from './server'
 import {
   deviceLabel,
+  historyLinesOf,
+  type LinkOptions,
   parseClientMessage,
   RECONNECT_CODE,
+  reseedLogLine,
   retryDelay,
   SESSION_DEAD_CODE,
   type Size,
@@ -29,6 +32,8 @@ class FakeLink {
   readonly pasted: string[] = []
   readonly resized: Size[] = []
   reseeds = 0
+  repaints = 0
+  historyLines: number[] = []
   readonly ready = Promise.resolve()
   private data: ((text: string) => void)[] = []
   private exits: (() => void)[] = []
@@ -36,6 +41,7 @@ class FakeLink {
   constructor(
     readonly argv: string[],
     readonly size: Size | null,
+    readonly options: LinkOptions,
   ) {
     this.cols = size?.cols ?? 0
     this.rows = size?.rows ?? 0
@@ -48,6 +54,12 @@ class FakeLink {
   }
   reseed() {
     this.reseeds += 1
+  }
+  repaint() {
+    this.repaints += 1
+  }
+  setHistoryLines(lines: number) {
+    this.historyLines.push(lines)
   }
   resize(cols: number, rows: number) {
     if (cols === this.cols && rows === this.rows) return
@@ -94,8 +106,8 @@ beforeEach(async () => {
     historyLines: 123,
     touched: () => {},
     retryDelay: () => 5,
-    openLink: (argv, _env, size) => {
-      const link = new FakeLink(argv, size)
+    openLink: (argv, _env, size, options) => {
+      const link = new FakeLink(argv, size, options)
       link.pid = 4242 + links.length
       links.push(link)
       return link as unknown as TerminalLink
@@ -204,6 +216,98 @@ describe('frames', () => {
       deviceLabel('Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0'),
     ).toBe('Firefox on Linux')
     expect(deviceLabel(undefined)).toBe('Browser')
+  })
+})
+
+describe('history and reseed log', () => {
+  it('clamps a history request to what the server carries', () => {
+    expect(historyLinesOf({ history_lines: 2000 }, 20_000)).toBe(2000)
+    expect(historyLinesOf({ history_lines: 1e9 }, 20_000)).toBe(20_000)
+    expect(historyLinesOf({ history_lines: -5 }, 20_000)).toBe(0)
+    expect(historyLinesOf({ history_lines: '2000' }, 20_000)).toBeNull()
+    expect(historyLinesOf({}, 20_000)).toBeNull()
+  })
+
+  it('logs each read of the pane with its cause and size', () => {
+    expect(
+      reseedLogLine(
+        'abc',
+        {
+          reason: 'resize',
+          kind: 'repaint',
+          target: '$1',
+          readMs: 4,
+          seedBytes: 3100,
+          historyLines: 0,
+          historySize: 190_000,
+          sinceInputMs: -1,
+        },
+        true,
+      ),
+    ).toBe(
+      '[aico-web] reseed session=abc wire=deflate reason=resize kind=repaint bytes=3100 history=0/190000 readMs=4 sinceInputMs=-1',
+    )
+  })
+})
+
+describe('terminal history', () => {
+  const report = (kind: 'seed' | 'screen' | 'repaint', lines: number, size: number) => ({
+    reason: 'attach' as const,
+    kind,
+    target: '$1',
+    readMs: 1,
+    seedBytes: 10,
+    historyLines: lines,
+    historySize: size,
+    sinceInputMs: -1,
+  })
+
+  it('carries the history the page asks for and says what each seed held', async () => {
+    const session = tether.add()
+    const view = open(session.id)
+    view.ws.on('open', () =>
+      view.ws.send(ctrl({ resize: { cols: 80, rows: 24 }, history_lines: 50 })),
+    )
+    await until(() => links.length === 1)
+    const link = links[0]
+    expect(link.options.historyLines).toBe(50)
+    // The socket negotiated compression.
+    expect(view.ws.extensions).toContain('permessage-deflate')
+    link.options.onReseed(report('seed', 50, 900))
+    const notice = await view.next((f) => 'history' in f)
+    // Total is what the server could carry, not all tmux holds.
+    expect(notice.history).toEqual({ lines: 50, total: 123 })
+    link.options.onReseed(report('repaint', 0, 900))
+    link.options.onReseed(report('seed', 0, 3))
+    await until(() => view.controls.filter((f) => 'history' in f).length === 2)
+    expect(view.controls.filter((f) => 'history' in f).at(-1)?.history).toEqual({
+      lines: 0,
+      total: 3,
+    })
+  })
+
+  it('a page that asks for nothing gets all the server carries', async () => {
+    const session = tether.add()
+    const view = open(session.id)
+    view.ws.on('open', () => view.ws.send(ctrl({ resize: { cols: 80, rows: 24 } })))
+    await until(() => links.length === 1)
+    expect(links[0].options.historyLines).toBe(123)
+  })
+
+  it('repaints the screen, or reseeds with more history, as the page asks', async () => {
+    const session = tether.add()
+    const view = open(session.id)
+    view.ws.on('open', () =>
+      view.ws.send(ctrl({ resize: { cols: 80, rows: 24 }, history_lines: 20 })),
+    )
+    await until(() => links.length === 1)
+    const link = links[0]
+    view.ws.send(ctrl({ refresh: 'screen' }))
+    await until(() => link.repaints === 1)
+    expect(link.reseeds).toBe(0)
+    view.ws.send(ctrl({ refresh: true, history_lines: 70 }))
+    await until(() => link.reseeds === 1)
+    expect(link.historyLines).toEqual([70])
   })
 })
 
