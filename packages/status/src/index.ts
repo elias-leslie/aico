@@ -17,6 +17,7 @@ export {
   type Intent,
   type MachineIntent,
 } from './intent'
+export { drainOutbox, type OutboxOptions, outboxDir, postOrKeep } from './outbox'
 export {
   ACTION_KINDS,
   type Action,

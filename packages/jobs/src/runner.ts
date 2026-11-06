@@ -17,6 +17,8 @@ export interface LeaseAuthority {
   ): MaybePromise<Lease | null>
   renew(lease: Lease, now: number, ttlMs: number): MaybePromise<boolean>
   complete(lease: Lease, result: JobResult, ranAt: number, nextRun: number): MaybePromise<void>
+  /** Frees the lease without a result (a busy run); the job is due again at `retryAt`. */
+  release(lease: Lease, retryAt: number): MaybePromise<void>
   get(kind: string): MaybePromise<JobState | null>
 }
 
@@ -33,6 +35,11 @@ export interface RunnerOptions {
   act: Act
   /** Writes rows to aico-web's Status (POST /api/status/rows); throws when it cannot. */
   postRows: (rows: StatusRow[]) => Promise<void>
+  /** True when a run of this job already lives outside this process (still going, or finished
+   * with its result not yet recorded), so a restarted scheduler adopts it instead of starting another. */
+  inFlight?: (job: JobDef) => Promise<boolean>
+  /** Sends Status rows an earlier writer could not post; called every tick. */
+  drain?: () => Promise<void>
   now?: () => number
   log?: (line: string) => void
 }
@@ -76,13 +83,15 @@ export class Runner {
       const authority = this.options.authority?.(job) ?? store
       let lease: Lease | null
       try {
-        lease = await authority.claim(
-          job.kind,
-          this.who,
-          this.now(),
-          job.lease_s * 1000,
-          job.home === machine ? 0 : job.lease_s * 1000,
-        )
+        lease =
+          (await this.adopt(job)) ??
+          (await authority.claim(
+            job.kind,
+            this.who,
+            this.now(),
+            job.lease_s * 1000,
+            job.home === machine ? 0 : job.lease_s * 1000,
+          ))
       } catch (error) {
         this.log(`${job.kind}: could not take the lease: ${(error as Error).message}`)
         continue
@@ -92,6 +101,21 @@ export class Runner {
       this.running.set(job.kind, work)
     }
     await this.flush()
+  }
+
+  /**
+   * A lease this machine's earlier scheduler left behind, with its run still alive or finished
+   * unrecorded: take it over now rather than let it expire and start the job a second time.
+   */
+  private async adopt(job: JobDef): Promise<Lease | null> {
+    const { store, machine, holder, inFlight } = this.options
+    if (!inFlight || (job.lease_host ?? job.home) !== machine) return null
+    const state = store.get(job.kind)
+    if (!state?.leaseId || state.holderMachine !== machine || state.holder === holder) return null
+    if (!(await inFlight(job))) return null
+    const lease = store.adopt(job.kind, this.who, this.now(), job.lease_s * 1000)
+    if (lease) this.log(`${job.kind}: adopted the run ${state.holder} left (lease ${lease.fence})`)
+    return lease
   }
 
   /** Resolves once every job started so far has finished (tests, shutdown). */
@@ -130,6 +154,16 @@ export class Runner {
       clearInterval(renewal)
     }
     const finishedAt = this.now()
+    if (result.busy) {
+      // Another run holds this job's lock. Nothing ran, so there is no result to record or alert on.
+      try {
+        await store.release(lease, finishedAt + ttlMs)
+      } catch (error) {
+        this.log(`${job.kind}: could not release lease ${lease.fence}: ${(error as Error).message}`)
+      }
+      this.log(`${job.kind}: already running: ${result.meaning}`)
+      return
+    }
     try {
       await store.complete(
         lease,

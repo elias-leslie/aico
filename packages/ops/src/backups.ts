@@ -1,7 +1,7 @@
 // Aico owns the schedule, run receipts, coverage and scratch-only restore boundary.
 import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
-import { machineId } from '@aico/status'
+import { machineId, outboxDir, postOrKeep, type StatusRow } from '@aico/status'
 import { backupJob, driveBackup, stageSqlite } from './backup-drive'
 import { observeExternal } from './backup-external'
 import { nativeBackup } from './backup-native'
@@ -250,7 +250,19 @@ async function post(cfg: BackupConfig, url: string, rows: unknown[]): Promise<vo
       const code =
         (error as { code?: string; cause?: { code?: string } }).cause?.code ??
         (error as { code?: string }).code
-      if (code !== 'ECONNREFUSED' || attempt >= cfg.statusPublish.attempts) throw error
+      if (code !== 'ECONNREFUSED' || attempt >= cfg.statusPublish.attempts) {
+        // Out of tries (aico-web restarting): keep the rows to send later instead of losing them.
+        const waiting = await postOrKeep(
+          new URL('/api/status/rows', url).toString(),
+          rows as StatusRow[],
+          {
+            dir: outboxDir(process.env.AICO_DATA_DIR || homePath(cfg.sqlite.dataDir)),
+            timeoutMs: cfg.statusPublish.timeoutMs,
+          },
+        )
+        if (waiting !== null) console.error(`Backup Status rows will go out later: ${waiting}`)
+        return
+      }
       await new Promise((resolve) => setTimeout(resolve, cfg.statusPublish.waitMs))
     }
   }
@@ -305,6 +317,9 @@ export async function runBackup(
   }
   return ok
 }
+/** Exit code for "another run of this backup holds the lock": the scheduler records it as busy, not failed. */
+const BUSY_EXIT = 75
+
 const USAGE = `Usage: aico backups list | request native|drive|append
   recover bootstrap --machine workstation|gem --to /srv/scratch/NEW_FOLDER [--plan]
   recover check|snapshots|restore|repair --repository REPO --password-file FILE [--to NEW_FOLDER] [--snapshot ID]
@@ -365,6 +380,15 @@ export async function backups(argv: string[], env = process.env): Promise<number
       'AICO_WEB_DB',
       'XDG_STATE_HOME',
     ].flatMap((key) => (env[key] ? [`--setenv=${key}=${env[key]}`] : []))
+    const unit = `aico-backup-${target}${args.includes('--pressure') ? '-pressure' : ''}`
+    const live = async () =>
+      (await execute(['systemctl', '--user', 'is-active', '--quiet', unit])).code === 0
+    // One run of a backup at a time: a second finds the live unit and says so, it does not fail.
+    const busy = () => {
+      console.log(`Already running: the ${target} backup is in progress, so this run did nothing.`)
+      return BUSY_EXIT
+    }
+    if (await live()) return busy()
     const result = await execute([
       'systemd-run',
       '--user',
@@ -372,7 +396,7 @@ export async function backups(argv: string[], env = process.env): Promise<number
       '--quiet',
       '--collect',
       '--wait',
-      `--unit=aico-backup-${target}${args.includes('--pressure') ? '-pressure' : ''}`,
+      `--unit=${unit}`,
       ...cfg.runProperties.flatMap((p) => ['--property', p]),
       ...kept,
       '--setenv=AICO_BACKUPS_UNIT=1',
@@ -380,8 +404,16 @@ export async function backups(argv: string[], env = process.env): Promise<number
       ...process.execArgv,
       ...process.argv.slice(1),
     ])
+    // Two starters raced for the unit name and the other won: the same answer.
+    if (
+      result.code !== 0 &&
+      /already exists|already loaded/i.test(`${result.out}${result.err}`) &&
+      (await live())
+    )
+      return busy()
     if (result.out) process.stdout.write(result.out)
     if (result.err) process.stderr.write(result.err)
+    if (result.code === BUSY_EXIT) return busy()
     console.log(
       result.code === 0
         ? 'Backup finished.'
@@ -405,7 +437,7 @@ export async function backups(argv: string[], env = process.env): Promise<number
     for (const path of lockFiles) mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
     const chain = lockFiles.flatMap((path) => [
       'flock',
-      ...(args.includes('--scheduled') ? [] : ['-n', '-E', '75']),
+      ...(args.includes('--scheduled') ? [] : ['-n', '-E', String(BUSY_EXIT)]),
       path,
     ])
     const result = await execute(
@@ -414,7 +446,7 @@ export async function backups(argv: string[], env = process.env): Promise<number
     )
     if (result.out) process.stdout.write(result.out)
     if (result.err) process.stderr.write(result.err)
-    if (result.code === 75)
+    if (result.code === BUSY_EXIT)
       console.error(
         'Another backup is running. Its data is left alone; run again after it finishes.',
       )

@@ -2,8 +2,10 @@
 // each repo writes Status directly, with no owner ask and no GitHub Actions wait.
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { machineId, type StatusRow } from '@aico/status'
+import { machineId, outboxDir, postOrKeep, type StatusRow } from '@aico/status'
 import {
   openTasksDb,
   type Project,
@@ -218,13 +220,13 @@ export async function publishRepos(
 async function postPublicationRow(row: StatusRow, env = process.env): Promise<void> {
   const base = webUrl(env)
   if (!base) throw new Error('Publication Status address is unavailable')
-  const response = await fetch(new URL('/api/status/rows', base), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify([row]),
-    signal: AbortSignal.timeout(10_000),
+  // aico-web restarting keeps the row waiting instead of dropping it.
+  await postOrKeep(new URL('/api/status/rows', base).toString(), [row], {
+    dir: outboxDir(
+      env.AICO_DATA_DIR?.trim() ||
+        join(env.XDG_STATE_HOME?.trim() || join(homedir(), '.local', 'state'), 'aico'),
+    ),
   })
-  if (!response.ok) throw new Error(`Publication Status answered ${response.status}`)
 }
 
 const PUBLISH_USAGE = `aico publish [--source ID] [--sha REV] [--dry-run] [--json]

@@ -53,6 +53,8 @@ export interface Lease {
 export interface JobResult {
   state: 'ok' | 'warn' | 'failed'
   meaning: string
+  /** Another run of this job holds its lock: nothing ran here, so nothing is recorded or alerted. */
+  busy?: true
 }
 
 /** A write by a holder that no longer holds the lease (expired and taken over). */
@@ -164,6 +166,52 @@ export class JobStore {
         lease.leaseId,
         lease.fence,
       ).changes
+    if (changes === 0) throw new StaleLease(lease)
+  }
+
+  /**
+   * Takes over a lease its own machine's earlier process left behind (the scheduler restarted
+   * while the run lived on): new fence and lease id for the new holder, so the old holder, if it
+   * ever came back, is refused. Null when no lease is held, or it is held by `who` already or by
+   * another machine.
+   */
+  adopt(
+    kind: string,
+    who: { holder: string; machine: string },
+    now: number,
+    ttlMs: number,
+  ): Lease | null {
+    return transaction(this.db, () => {
+      const job = this.get(kind)
+      if (!job?.leaseId || job.holderMachine !== who.machine || job.holder === who.holder)
+        return null
+      const lease: Lease = {
+        kind,
+        leaseId: randomBytes(8).toString('hex'),
+        fence: job.fence + 1,
+        holder: who.holder,
+        machine: who.machine,
+      }
+      this.db
+        .prepare(
+          `UPDATE jobs SET fence = ?, lease_id = ?, holder = ?, lease_expires = ?
+           WHERE kind = ? AND fence = ?`,
+        )
+        .run(lease.fence, lease.leaseId, lease.holder, now + ttlMs, kind, job.fence)
+      return lease
+    })
+  }
+
+  /** Frees the lease without recording a run (another run held the job's lock): the job is due
+   * again at `retryAt` and its last result stays as it was. StaleLease when not held. */
+  release(lease: Lease, retryAt: number): void {
+    const changes = this.db
+      .prepare(
+        `UPDATE jobs SET next_run = ?, lease_id = NULL, holder = NULL, holder_machine = NULL,
+           lease_expires = NULL
+         WHERE kind = ? AND lease_id = ? AND fence = ?`,
+      )
+      .run(retryAt, lease.kind, lease.leaseId, lease.fence).changes
     if (changes === 0) throw new StaleLease(lease)
   }
 

@@ -1,6 +1,6 @@
 // Fresh-machine recovery stays runnable with Python even when Node or Aico is unavailable.
 import { fileURLToPath } from 'node:url'
-import { machineId, type StatusRow } from '@aico/status'
+import { machineId, outboxDir, postOrKeep, type StatusRow } from '@aico/status'
 import { type BackupConfig, homePath } from './backup-plan'
 import { type Execute, execute } from './backup-runtime'
 
@@ -88,14 +88,16 @@ export async function recovery(
       /* Startup/configuration failures still need a failed Status row. */
     }
     const row = drillRow(receipt, env.AICO_BACKUP_MACHINE || machineId())
-    const response = await fetch(new URL('/api/status/rows', env.AICO_WEB_URL || cfg.webUrl), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify([row]),
-      signal: AbortSignal.timeout(cfg.statusPublish.timeoutMs),
-    })
-    if (!response.ok)
-      throw new Error(`Could not publish restore drill Status (${response.status}).`)
+    // aico-web restarting must not lose the drill's row: it waits and goes out on a later post.
+    const waiting = await postOrKeep(
+      new URL('/api/status/rows', env.AICO_WEB_URL || cfg.webUrl).toString(),
+      [row],
+      {
+        dir: outboxDir(env.AICO_DATA_DIR || homePath(cfg.sqlite.dataDir)),
+        timeoutMs: cfg.statusPublish.timeoutMs,
+      },
+    )
+    if (waiting !== null) console.error(`Restore drill Status will go out later: ${waiting}`)
     if (scheduled)
       console.log(
         receipt.ok && receipt.scratchDestroyed

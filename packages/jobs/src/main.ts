@@ -5,8 +5,8 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { peerDir } from '@aico/fleet/hosts'
-import { machineId, type StatusRow } from '@aico/status'
-import { act } from './act'
+import { drainOutbox, machineId, outboxDir, type StatusRow } from '@aico/status'
+import { act, systemdUnits, unitInFlight } from './act'
 import { remoteAuthority, serveLeases } from './fleet-leases'
 import { type JobDef, readJobs } from './jobs'
 import { type JobState, JobStore, jobsDbPath } from './leases'
@@ -37,6 +37,7 @@ function settings(env: NodeJS.ProcessEnv) {
     webUrl = `http://127.0.0.1:${identity.runtime.backend_port}`
   }
   return {
+    dataDir,
     jobsFile: env.AICO_JOBS_FILE?.trim() || here('../data/jobs.json'),
     dbPath: env.AICO_JOBS_DB?.trim() || jobsDbPath(dataDir),
     webUrl,
@@ -98,7 +99,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     console.error('aico jobs: --machine needs a name')
     return 2
   }
-  const { jobsFile, dbPath, webUrl, socket } = settings(env)
+  const { dataDir, jobsFile, dbPath, webUrl, socket } = settings(env)
   const jobs = readJobs(jobsFile)
   const store = new JobStore(dbPath)
   const authority = (job: JobDef) =>
@@ -157,13 +158,21 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     console.error(`aico jobs: unknown command '${command}'\n${USAGE}`)
     return 2
   }
+  // Each command job runs as its own systemd unit, so a restart here leaves the run going; the
+  // next scheduler adopts it (Runner.adopt) instead of starting a second.
+  const units = { host: systemdUnits(env), dir: join(dataDir, 'job-runs') }
+  const outbox = { dir: outboxDir(dataDir) }
+  const rowsUrl = new URL('/api/status/rows', webUrl).toString()
   const runner = new Runner({
     store,
     jobs,
     machine,
     holder: `${machine}:${process.pid}`,
     authority,
-    act: act(webUrl),
+    act: act(webUrl, units),
+    inFlight: (job) =>
+      'command' in job.run ? unitInFlight(job.kind, units) : Promise.resolve(false),
+    drain: async () => void (await drainOutbox(rowsUrl, outbox)),
     postRows: (rows) => postRows(webUrl, rows),
   })
   runner.start()

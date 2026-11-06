@@ -3,7 +3,7 @@
 // summary the job's Status row shows. `show` prints the spend card as the Status page has it.
 
 import { existsSync, statSync } from 'node:fs'
-import type { StatusRow } from '@aico/status'
+import { outboxDir, postOrKeep, type StatusRow } from '@aico/status'
 import config from '../data/usage.json' with { type: 'json' }
 import { collect } from './collect'
 import { getState, openUsage, plansPath, usageDbPath } from './db'
@@ -61,12 +61,11 @@ function flags(argv: string[], valued: string[], bare: string[]) {
 async function postRows(io: UsageCliIo, rows: StatusRow[]) {
   if (!io.statusUrl) return
   try {
-    const response = await io.fetch(io.statusUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(rows),
+    const waiting = await postOrKeep(io.statusUrl, rows, {
+      dir: outboxDir(io.dataDir),
+      fetch: io.fetch,
     })
-    if (!response.ok) io.err(`Status rows not saved: HTTP ${response.status}\n`)
+    if (waiting) io.err(`Status rows not sent yet, they go out on the next try: ${waiting}\n`)
   } catch (cause) {
     io.err(`Status rows not saved: ${(cause as Error).message}\n`)
   }

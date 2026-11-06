@@ -10,7 +10,7 @@ import { type JobResult, type JobState, type JobStore, type Lease, StaleLease } 
 import type { LeaseAuthority } from './runner'
 
 export interface LeaseCall {
-  op: 'claim' | 'renew' | 'complete' | 'get' | 'run'
+  op: 'claim' | 'renew' | 'complete' | 'release' | 'get' | 'run'
   kind: string
   who?: { holder: string; machine: string }
   lease?: Lease
@@ -56,6 +56,10 @@ export function leaseCall(
   if (!held || held.holder !== lease.holder || held.holderMachine !== lease.machine)
     throw new StaleLease(lease)
   if (call.op === 'renew') return store.renew(lease, now, job.lease_s * 1000)
+  if (call.op === 'release') {
+    store.release(lease, now + job.lease_s * 1000)
+    return null
+  }
   if (call.op !== 'complete') throw new Error('Unknown lease operation')
   const result = call.result
   if (
@@ -215,6 +219,9 @@ export function remoteAuthority(
       (await remoteCall(socket, { op: 'renew', kind: lease.kind, lease })) as boolean,
     complete: async (lease, result, ranAt) => {
       await remoteCall(socket, { op: 'complete', kind: lease.kind, lease, result, ranAt })
+    },
+    release: async (lease) => {
+      await remoteCall(socket, { op: 'release', kind: lease.kind, lease })
     },
     get: async (kind) => (await remoteCall(socket, { op: 'get', kind })) as JobState | null,
     run: async (kind) => (await remoteCall(socket, { op: 'run', kind })) as boolean,
