@@ -14,6 +14,12 @@ it('records the unchanged actual prelude, and marks use from its own messages', 
     'sample',
     '/sample',
   )
+  const file = {
+    id: 'file:/sample/AGENTS.md',
+    title: 'Project instructions',
+    type: 'file' as const,
+    text: '<project_instructions>Keep work.</project_instructions>',
+  }
   const parts = [
     {
       id: 'rule:aico-agent',
@@ -21,12 +27,7 @@ it('records the unchanged actual prelude, and marks use from its own messages', 
       type: 'rule' as const,
       text: 'Work in /sample.',
     },
-    {
-      id: 'file:/sample/AGENTS.md',
-      title: 'Project instructions',
-      type: 'file' as const,
-      text: '<project_instructions>Keep work.</project_instructions>',
-    },
+    file,
   ]
   const before = structuredClone(parts)
   try {
@@ -55,12 +56,12 @@ it('records the unchanged actual prelude, and marks use from its own messages', 
       timestamp: Date.now(),
     } as never)
     record?.finish(true)
-    expect(recentDeliveries(db)[0]!.items.find((i) => i.type === 'rule')?.use).toBe('used')
-    expect(recentDeliveries(db)[0]!.items.find((i) => i.type === 'file')?.use).toBe('used')
+    expect(recentDeliveries(db)[0]?.items.find((i) => i.type === 'rule')?.use).toBe('used')
+    expect(recentDeliveries(db)[0]?.items.find((i) => i.type === 'file')?.use).toBe('used')
     const revised = recordAgentContext(
       path,
       { id: 'new-run', role: 'builder', cwd: '/sample' },
-      [{ ...parts[1]!, text: 'Changed file.' }],
+      [{ ...file, text: 'Changed file.' }],
       () => {},
     )
     revised?.message({
@@ -69,7 +70,7 @@ it('records the unchanged actual prelude, and marks use from its own messages', 
       timestamp: 1000,
     } as never)
     revised?.finish(true)
-    expect(recentDeliveries(db)[0]!.items[0]!.use).toBe('unknown')
+    expect(recentDeliveries(db)[0]?.items[0]?.use).toBe('unknown')
     const errors: string[] = []
     const contested = recordAgentContext(
       path,
@@ -93,7 +94,7 @@ it('records the unchanged actual prelude, and marks use from its own messages', 
     } as never)
     contested?.finish(true)
     expect(errors.some((e) => e.includes('locked'))).toBe(true)
-    expect(recentDeliveries(db)[0]!.observed).toBe(false)
+    expect(recentDeliveries(db)[0]?.observed).toBe(false)
     expect(
       recordAgentContext(
         undefined,
