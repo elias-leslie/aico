@@ -45,7 +45,11 @@ if not target.exists():
     target.chmod(0o600)
 PY
   install -m 0755 "$here/aico-push" "$sbin/aico-push"
-  systemctl --no-ask-password disable --now nightshift-nightwatch.timer nightshift-nightwatch-web.service
-  systemctl --no-ask-password stop nightshift-nightwatch.service
+  # Retire the old producer where it is still installed; later reinstalls find it already gone.
+  for unit in nightshift-nightwatch.timer nightshift-nightwatch-web.service nightshift-nightwatch.service; do
+    if [ -n "$(systemctl list-unit-files --no-legend "$unit")" ]; then
+      systemctl --no-ask-password disable --now "$unit"
+    fi
+  done
 fi
 echo "Aico Proxmox sender installed."

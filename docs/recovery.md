@@ -1,6 +1,6 @@
 # Recover Aico after a machine fails
 
-Backup passwords and the CT 160 SSH keys are in **Hosts → Logins**, marked as backup keys. The owner also keeps them in their offline password manager. If both Aico machines are unavailable, start with that offline copy. Never paste a password into a command, chat or log: save it in a private file (`chmod 600 FILE`). Keep the Drive rclone configuration private too.
+Backup passwords are in Aico's **Logins** page (`/logins`, also linked from Hosts) with kind **password**; the CT 160 SSH keys there have kind **backup key**. The owner also keeps them in their offline password manager. If both Aico machines are unavailable, start with that offline copy. Never paste a password into a command, chat or log: save it in a private file (`chmod 600 FILE`). Keep the Drive rclone configuration private too.
 
 Recovery scripts stage files in a **new folder under `/srv/scratch`**. They never activate restored units or overwrite a running machine. Keep the original disks and all backup copies. Install the OS and disks on the replacement first; transferring the verified staging tree and activating services on that replacement is a separate, deliberate step.
 
@@ -25,6 +25,23 @@ From a working Aico install, the same commands are `aico backups recover …` an
 5. On the fresh replacement, put the reviewed source and state at the configured paths. Review host identity, fleet pins, mount paths and unit paths before reconnecting peers. Install dependencies from the restored lockfile and use the restored repo's `scripts/install.sh` to build/install Aico. Review system units separately; recovery does not start them. Re-run the scratch drill before retiring any original disk.
 
 Other project repos can be restored by adding explicit `path`/`into` items to the workstation machine in the working configuration. Recover only the named project; do not restore the whole projects tree blindly.
+
+## Workstation and T7 both lost
+
+The newest off-site copy of the workstation is the daily Drive repository; CT 160 on gem also holds the workstation's Aico databases. Nothing on the replacement or in scratch is trusted until it is restored and checked.
+
+1. Get the recovery tools from `https://github.com/elias-leslie/aico` (published main), or from CT 190's installed Aico source if gem is up. Either copy works; the Drive snapshot below has the newest source.
+2. Save `restic-drive.password` and `summitflow-drive.conf` from the offline password manager as private files.
+3. List the workstation's Drive snapshots, then restore its Aico data. `aico-davion-sidarli` holds consistent copies of every Aico and Tether database (in `~/.local/state/aico-snapshot`), plus `blobs`, `secrets` (Logins), user units and `~/.config/aico`:
+
+   ```sh
+   python3 packages/ops/scripts/recovery.py recover snapshots --repository rclone:summitflow-drive:SummitFlow-Restic --password-file /PRIVATE/restic-drive.password --rclone-config /PRIVATE/summitflow-drive.conf --source aico-davion-sidarli
+   python3 packages/ops/scripts/recovery.py recover restore --repository rclone:summitflow-drive:SummitFlow-Restic --password-file /PRIVATE/restic-drive.password --rclone-config /PRIVATE/summitflow-drive.conf --snapshot FULL_ID --path /home/kasadis --to /srv/scratch/workstation-aico
+   ```
+
+4. Restore the Aico repo (and any named project) from the `source:workspaces` snapshot with `--path /srv/workspaces/projects/aico`, and system units from `source:root` with `--path /etc/systemd/system`. Use the capture closest to the Aico data's date.
+5. If gem is up, CT 160 also holds `aico-davion-sidarli` (repository in `packages/ops/data/backups.json` under `append`; needs `restic-local.password` and an rclone `aico-append` remote over SSH). List it the same way and use whichever capture is newer.
+6. Check each database with `sqlite3 FILE 'PRAGMA integrity_check'` and count sessions/notes before moving the staged tree onto the replacement. The old T7 snapshots (`native/*`) are gone: rebuild the native backup target and run a fresh `aico backups run native` once the replacement is live.
 
 ## Gem lost, or CT 190 needs rebuilding
 
