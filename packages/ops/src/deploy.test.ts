@@ -466,6 +466,35 @@ describe('deploy', () => {
     expect(existsSync(journal)).toBe(true)
   })
 
+  it('a failed swap recovery is a failed deploy; a hold met before recovery stays a warning', async () => {
+    let guards = 0
+    const held = setup({
+      guard: () => (++guards > 1 ? { code: 1, out: 'hold deploy' } : { code: 0, out: '' }),
+    })
+    mkdirSync(held.deps.releasesDir, { recursive: true })
+    const previous = JSON.stringify({
+      sha: 'a'.repeat(40),
+      previous: { 'demo-web.service': 'old' },
+    })
+    writeFileSync(join(held.deps.releasesDir, '.swap.json'), previous)
+    await expect(deploy(request(), held.root, held.deps)).rejects.toMatchObject({ code: 2 })
+    expect(held.rows.at(-1)?.state).toBe('warn')
+
+    const broken = setup()
+    mkdirSync(broken.deps.releasesDir, { recursive: true })
+    mkdirSync(broken.deps.systemdDir, { recursive: true })
+    writeFileSync(join(broken.deps.releasesDir, '.swap.json'), previous)
+    const original = broken.deps.run
+    broken.deps.run = (cmd, args, opts) =>
+      cmd === 'systemctl' && args[1] === 'restart'
+        ? { code: 1, out: '', err: 'failed' }
+        : original(cmd, args, opts)
+    await expect(deploy(request(), broken.root, broken.deps)).rejects.toThrow(
+      /Putting the previous units back failed/,
+    )
+    expect(broken.rows.at(-1)?.state).toBe('failed')
+  })
+
   it('records the detached deploy failure exit code', async () => {
     const { root, deps } = setup({ accept: () => 2 })
     await deploy(request({ detach: true }), root, deps)

@@ -39,6 +39,8 @@ export class Refusal extends Error {
   constructor(
     message: string,
     readonly code = 1,
+    /** An explicit hold, lock or acceptance refusal: nothing changed, the old release serves. */
+    readonly unchanged = false,
   ) {
     super(message)
   }
@@ -694,12 +696,13 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
       throw new Refusal(
         `Acceptance of ${sha.slice(0, 12)} failed; nothing was deployed.`,
         accepted.code,
+        true,
       )
     }
     return await withLock(deps, async (held) => {
       if (existsSync(journalPath(deps))) {
         const refused = holdRefusal()
-        if (refused) throw new Refusal(refused, 2)
+        if (refused) throw new Refusal(refused, 2, true)
         recoverSwap(deps)
       }
       const selection = selectUnits(project, req, { active, changed })
@@ -787,11 +790,11 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         const refused = holdRefusal()
         if (refused) {
           await finish('failed', `Deploy of ${sha.slice(0, 10)} refused: ${refused}`, [], 2, true)
-          throw new Refusal(refused, 2)
+          throw new Refusal(refused, 2, true)
         }
         if (!held()) {
           await finish('failed', `Deploy of ${sha.slice(0, 10)} lost the deploy lock`)
-          throw new Refusal('Another deploy took the deploy lock; nothing was restarted.')
+          throw new Refusal('Another deploy took the deploy lock; nothing was restarted.', 1, true)
         }
         const failed = await swapUnits(project, restart, release, sha, deps, installOps)
         if (failed) {
@@ -822,7 +825,8 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         (error as Error).message,
         [],
         error instanceof Refusal ? error.code : 1,
-        error instanceof Refusal,
+        // A failed swap recovery or build is a real failure, not a refusal.
+        error instanceof Refusal && error.unchanged,
       )
     throw error
   }
