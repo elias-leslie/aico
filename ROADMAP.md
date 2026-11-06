@@ -4,7 +4,6 @@ Aico is a Linux companion for people working with terminal AI tools. Agent sessi
 ## Now
 - Retire Agent Hub: remove its leftover code from Aico and archive the repo
 - Retire Nightshift: move what is still needed into Aico (host-change declarations, tray, boot and display helpers), drop the rest, archive the repo
-- Frontend-only deploys swap the page build without restarting aico-web
 - Enroll VMs 200 and 201 (Aico fleet and OmniNull agent), CT 190 automatic updates, end the stuck dev test session
 - Projects page: phone fit of the project detail view; Cloudflare Access token check at the origin
 - Codebase cleanup: prune summitflow, agent-hub and nightshift and fold what is needed into Aico (plan: docs/plans/codebase-cleanup/plan.md)
