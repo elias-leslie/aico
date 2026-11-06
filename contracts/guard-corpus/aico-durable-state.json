@@ -1,0 +1,167 @@
+{
+  "description": "Aico durable state (backups, secrets, blobs, archive, databases and keys under ~/.local/state/aico and ~/.local/share/aico, and the live Tether instance) is never deleted by hand, by rm, unlink, shred, find -delete or a python/node one-liner; scratch under the same roots stays deletable.",
+  "version": 1,
+  "env": {
+    "HOME": "/home/guard-fixture"
+  },
+  "source": "aico-durable-state",
+  "cwd": "/tmp",
+  "cases": [
+    {
+      "command": "rm -rf ~/.local/state/aico/backups",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/backups:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm -rf $HOME/.local/state/aico/backups/",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/backups:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm -r ~/.local/state/aico/backups/2026-11-05",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/backups/2026-11-05:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm -rf ~/.local/state/aico/secrets",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/secrets:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm -f ~/.local/state/aico/secrets/drive.key",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/secrets/drive.key:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm ~/.local/state/aico/tasks.db",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/tasks.db:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm -f ~/.local/state/aico/*.db",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/*.db:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "cd ~/.local/state/aico && rm -f notify.db-wal",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/notify.db-wal:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm -rf ~/.local/state/aico",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm -rf ~/.local/state/aico/*",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm -rf ~/.local/state",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "sudo rm -rf /home/guard-fixture/.local/share/aico",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/share/aico:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm -rf ~/.local/state/tether/default",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/tether/default:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "unlink ~/.local/state/aico/fleet-key.pem",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/fleet-key.pem:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "shred -u ~/.local/state/aico/web.db",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/web.db:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "find ~/.local/state/aico/backups -mtime +7 -delete",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/backups:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "find ~/.local/state/aico -delete",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "python3 -c \"import shutil, os; shutil.rmtree(os.path.expanduser('~/.local/state/aico/backups'))\"",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/backups:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "python3 -c \"import os; os.remove('/home/guard-fixture/.local/state/aico/tasks.db')\"",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/tasks.db:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "python -c \"from pathlib import Path; Path.home().joinpath('.local/state/aico/secrets/x').unlink()\"",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/secrets/x:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "python3 -c \"import subprocess; subprocess.run(['rm', '-rf', '/home/guard-fixture/.local/state/aico/archive'])\"",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/archive:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "node -e \"require('fs').rmSync(require('os').homedir() + '/.local/state/aico/backups', {recursive: true})\"",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/backups:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "node -e \"require('fs').unlinkSync('/home/guard-fixture/.local/state/aico/status.db')\"",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/status.db:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "python3 - <<'EOF'\nimport shutil\nshutil.rmtree('/home/guard-fixture/.local/state/aico/blobs')\nEOF",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/blobs:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "rm -rf ~/.local/state/aico/logs/old",
+      "expect": "allow"
+    },
+    {
+      "command": "rm -rf ~/.local/state/aico/deliveries/fa41c0c8",
+      "expect": "allow"
+    },
+    {
+      "command": "rm -rf ~/.local/state/aico/captures ~/.local/state/aico/canary",
+      "expect": "allow"
+    },
+    {
+      "command": "rm -f ~/.local/state/aico/export/report.json",
+      "expect": "allow"
+    },
+    {
+      "command": "rm -rf /tmp/aico-test/state.db /srv/scratch/aico/backups",
+      "expect": "allow"
+    },
+    {
+      "command": "rm -rf ~/.local/state/tether/aicotest",
+      "expect": "allow"
+    },
+    {
+      "command": "find ~/.local/state/aico/logs -mtime +7 -delete",
+      "expect": "allow"
+    },
+    {
+      "command": "find ~/.local -name '*.tmp' -delete",
+      "expect": "allow"
+    },
+    {
+      "command": "ls -la ~/.local/state/aico/backups && du -sh ~/.local/state/aico/secrets",
+      "expect": "allow"
+    },
+    {
+      "command": "python3 -c \"import sqlite3; c = sqlite3.connect('/home/guard-fixture/.local/state/aico/tasks.db'); print(c.execute('select 1').fetchall())\"",
+      "expect": "allow"
+    },
+    {
+      "command": "python3 -c \"import os; os.remove('/tmp/aico-test/tasks.db')\"",
+      "expect": "allow"
+    },
+    {
+      "command": "node -e \"console.log(require('fs').readdirSync('/home/guard-fixture/.local/state/aico/backups'))\"",
+      "expect": "allow"
+    },
+    {
+      "command": "python3 scripts/cleanup.py ~/.local/state/aico/backups",
+      "expect": "allow"
+    },
+    {
+      "command": "truncate -s 0 ~/.local/state/aico/notes.db",
+      "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/notes.db:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
+    },
+    {
+      "command": "truncate -s 0 /tmp/scratch.log",
+      "expect": "allow"
+    }
+  ]
+}

@@ -25,7 +25,7 @@ func (r *Rules) evaluateIrreversible(command, cwd string, depth int) (decision, 
 		}
 		working = wd
 	}
-	command, shellBodies, _ := r.splitHeredocs(command)
+	command, shellBodies, dataBodies := r.splitHeredocs(command)
 	for _, nested := range append(shellBodies, r.substitutions(command)...) {
 		d, err := r.evaluateIrreversible(nested, working, depth+1)
 		if err != nil || d.blocked {
@@ -70,12 +70,106 @@ func (r *Rules) evaluateIrreversible(command, cwd string, depth int) (decision, 
 			}
 			continue
 		}
+		if d, ok := r.scriptDecision(args, dataBodies); ok {
+			return d, nil
+		}
 		if d, ok := r.segmentDecision(args, working); ok {
 			// Do not reflect the command: tool input can include embedded credentials.
 			return d, nil
 		}
 	}
 	return allow(), nil
+}
+
+// --- Aico durable state ------------------------------------------------------
+
+// durableTarget is true when deleting target would destroy Aico durable state: a durable root or an
+// ancestor of one, anything inside a durable directory, or a database or key file anywhere under a root.
+// Other paths under the roots (logs, captures, deliveries) stay scratch.
+func (r *Rules) durableTarget(target string) bool {
+	for _, raw := range append(append([]string{}, r.durableRoots...), r.durableDirs...) {
+		if under(normPath(expandUser(raw)), target) {
+			return true
+		}
+	}
+	if r.insideDurableDir(target) {
+		return true
+	}
+	for _, raw := range r.durableRoots {
+		if under(target, normPath(expandUser(raw))) {
+			name := pathName(target)
+			for _, suffix := range r.durableSuffixes {
+				if strings.HasSuffix(name, suffix) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (r *Rules) insideDurableDir(target string) bool {
+	for _, raw := range r.durableDirs {
+		if under(target, normPath(expandUser(raw))) {
+			return true
+		}
+	}
+	return false
+}
+
+// durableOperands blocks a delete whose operand is durable state.
+func (r *Rules) durableOperands(operands []string, cwd string) (decision, bool) {
+	for _, operand := range operands {
+		if target, ok := deletionTarget(operand, cwd); ok && r.durableTarget(target) {
+			return blocked(r.message("durable_state", "{target}", target))
+		}
+	}
+	return decision{}, false
+}
+
+// scriptDecision blocks an interpreter one-liner (python -c, node -e, or a script on stdin from a heredoc)
+// that both calls a delete function and names Aico durable state in a string literal.
+func (r *Rules) scriptDecision(args, stdinBodies []string) (decision, bool) {
+	if r.scriptInterpreters == nil || !r.scriptInterpreters.MatchString(exeName(args[0])) {
+		return decision{}, false
+	}
+	var code []string
+	stdin := true
+	for i := 1; i < len(args); i++ {
+		if r.scriptCodeOptions.has(args[i]) && i+1 < len(args) {
+			code = append(code, args[i+1])
+			stdin = false
+			i++
+		} else if args[i] != "-" && !strings.HasPrefix(args[i], "-") && !strings.ContainsAny(args[i][:1], "<>") {
+			stdin = false // a script file: its text is not in the command
+			break
+		}
+	}
+	if stdin {
+		code = append(code, stdinBodies...)
+	}
+	for _, text := range code {
+		if !r.scriptDeletes.MatchString(text) {
+			continue
+		}
+		for _, m := range r.scriptLiteral.FindAllStringSubmatch(text, -1) {
+			for _, literal := range m[1:] {
+				if literal == "" || strings.Contains(literal, "$") {
+					continue
+				}
+				// A literal may also be joined or appended to the home directory
+				// (os.path.join(home, '.local/...'), homedir() + '/.local/...').
+				for _, candidate := range []string{literal, "~/" + strings.TrimPrefix(literal, "/")} {
+					if strings.HasPrefix(candidate, "/") || strings.HasPrefix(candidate, "~") {
+						if target := normPath(expandUser(candidate)); r.durableTarget(target) {
+							return blocked(r.message("durable_state", "{target}", target))
+						}
+					}
+				}
+			}
+		}
+	}
+	return decision{}, false
 }
 
 // segmentDecision judges one unwrapped argv against the irreversible set.
@@ -351,15 +445,12 @@ func (r *Rules) rmDecision(tokens []string, cwd string) (decision, bool) {
 			operands = append(operands, token)
 		}
 	}
-	if !recursive {
-		return decision{}, false
-	}
 	for _, operand := range operands {
-		if target, ok := deletionTarget(operand, cwd); ok && r.protectedDeletionRoot(target) {
+		if target, ok := deletionTarget(operand, cwd); ok && recursive && r.protectedDeletionRoot(target) {
 			return blocked(r.message("rm_protected_root", "{target}", target))
 		}
 	}
-	return decision{}, false
+	return r.durableOperands(operands, cwd)
 }
 
 // --- host-level commands: disks, snapshots, backups, Proxmox ------------------
@@ -655,6 +746,10 @@ func (r *Rules) findDecision(tokens []string, cwd string) (decision, bool) {
 		if r.inStorageRoots(target) || (r.protectedDeletionRoot(target) && !selective) {
 			return r.systemBlocked("find_delete", "{target}", target)
 		}
+		// A selective find over a parent (find ~ -name x -delete) stays allowed, as for protected roots.
+		if r.durableTarget(target) && (!selective || r.insideDurableDir(target)) {
+			return r.systemBlocked("durable_state", "{target}", target)
+		}
 	}
 	return decision{}, false
 }
@@ -690,6 +785,8 @@ func (r *Rules) systemDecision(tokens []string, cwd string) (decision, bool) {
 	switch name {
 	case "rm":
 		return r.rmDecision(tokens, cwd)
+	case "unlink", "shred", "truncate":
+		return r.durableOperands(positionals(tokens[1:], nil), cwd)
 	case "find":
 		return r.findDecision(tokens, cwd)
 	case "btrfs":

@@ -76,6 +76,14 @@ type Rules struct {
 	snapshotStore    string
 	snapshotDirs     set
 	snapshotParts    []string
+	durableRoots     []string
+	durableDirs      []string
+	durableSuffixes  []string
+
+	scriptInterpreters *regexp.Regexp
+	scriptCodeOptions  set
+	scriptDeletes      *regexp.Regexp
+	scriptLiteral      *regexp.Regexp
 
 	harmlessDevices  set
 	harmlessPrefixes []string
@@ -205,7 +213,16 @@ type file struct {
 		SnapshotStore    string   `json:"snapshot_store"`
 		SnapshotDirs     []string `json:"snapshot_dir_names"`
 		SnapshotParts    []string `json:"snapshot_name_parts"`
+		DurableRoots     []string `json:"durable_roots"`
+		DurableDirs      []string `json:"durable_dirs"`
+		DurableSuffixes  []string `json:"durable_file_suffixes"`
 	} `json:"paths"`
+	Scripts struct {
+		InterpreterPattern string   `json:"interpreter_pattern"`
+		CodeOptions        []string `json:"code_options"`
+		DeletePattern      string   `json:"delete_pattern"`
+		LiteralPattern     string   `json:"literal_pattern"`
+	} `json:"scripts"`
 	Disk struct {
 		HarmlessDevices  []string            `json:"harmless_devices"`
 		HarmlessPrefixes []string            `json:"harmless_device_prefixes"`
@@ -356,6 +373,14 @@ func build(f *file) (*Rules, error) {
 	r.snapshotStore = pp.SnapshotStore
 	r.snapshotDirs = toSet(pp.SnapshotDirs)
 	r.snapshotParts = pp.SnapshotParts
+	r.durableRoots, r.durableDirs, r.durableSuffixes = pp.DurableRoots, pp.DurableDirs, pp.DurableSuffixes
+	sc := &f.Scripts
+	if sc.InterpreterPattern != "" && sc.DeletePattern != "" && sc.LiteralPattern != "" {
+		r.scriptInterpreters = compile("interpreter_pattern", sc.InterpreterPattern)
+		r.scriptDeletes = compile("delete_pattern", sc.DeletePattern)
+		r.scriptLiteral = compile("literal_pattern", sc.LiteralPattern)
+	}
+	r.scriptCodeOptions = toSet(sc.CodeOptions)
 
 	d := &f.Disk
 	r.harmlessDevices = toSet(d.HarmlessDevices)
@@ -437,7 +462,7 @@ var requiredMessages = []string{
 	"git_stash_drop", "git_stash", "rm_protected_root", "format_device", "wipefs", "dd_device",
 	"parted", "sgdisk", "partitioner", "cryptsetup", "btrfs_subvolume_delete", "restic",
 	"rclone_mirror", "rclone_delete", "btrbk", "dmsetup", "find_delete", "proxmox_guest",
-	"proxmox_volume", "pvesm_free", "pvesh_delete",
+	"proxmox_volume", "pvesm_free", "pvesh_delete", "durable_state",
 }
 
 // message renders messages[key], filling {name}, {action} and {target}.

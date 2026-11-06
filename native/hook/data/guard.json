@@ -104,7 +104,13 @@
     "remote_cwd": "/root",
     "snapshot_store": "/mnt/summitflow-native",
     "snapshot_dir_names": [".btrbk", ".snapshots"],
-    "snapshot_name_parts": ["snap", "btrbk"]
+    "snapshot_name_parts": ["snap", "btrbk"],
+    "durable_roots": ["~/.local/state/aico", "~/.local/share/aico"],
+    "durable_dirs": [
+      "~/.local/state/aico/backups", "~/.local/state/aico/secrets", "~/.local/state/aico/blobs",
+      "~/.local/state/aico/archive", "~/.local/share/aico", "~/.local/state/tether/default"
+    ],
+    "durable_file_suffixes": [".db", ".db-wal", ".db-shm", ".sqlite", ".sqlite3", ".pem"]
   },
   "disk": {
     "harmless_devices": [
@@ -171,6 +177,12 @@
     "deleting_executables": ["rm", "rmdir", "shred", "unlink"],
     "exec_options": ["-exec", "-execdir", "-ok", "-okdir"]
   },
+  "scripts": {
+    "interpreter_pattern": "^(?:python(?:[0-9.]*)|pypy3?|node|nodejs|bun|deno)$",
+    "code_options": ["-c", "-e", "--eval", "-p", "--print"],
+    "delete_pattern": "(?:\\brmtree|\\bos\\.(?:remove|unlink|rmdir|removedirs)|\\.(?:rm|unlink|rmdir)|\\b(?:rmSync|unlinkSync|rmdirSync|send2trash))\\s*\\(|['\"]rm['\"]\\s*,",
+    "literal_pattern": "'([^'\\n]*)'|\"([^\"\\n]*)\"|`([^`\\n]*)`"
+  },
   "proxmox": {
     "guest_tools": ["qm", "pct"],
     "volume_tools": ["lvremove", "vgremove", "pvremove"],
@@ -207,6 +219,7 @@
     "proxmox_guest": "BLOCKED:{name} destroy:This {proxmox_advice}",
     "proxmox_volume": "BLOCKED:{name}:This {proxmox_advice}",
     "pvesm_free": "BLOCKED:pvesm free:This {proxmox_advice}",
-    "pvesh_delete": "BLOCKED:pvesh delete:This API call {proxmox_advice}"
+    "pvesh_delete": "BLOCKED:pvesh delete:This API call {proxmox_advice}",
+    "durable_state": "BLOCKED:delete {target}:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
   }
 }
