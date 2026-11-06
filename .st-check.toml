@@ -45,15 +45,15 @@ id = "python-host-ruff"
 kind = "check"
 coverage = "full"
 quick = true
-quick_paths = ["native/host-steward/**", "native/pve-sender/**", "packages/tether/scripts/**", "scripts/**", "ruff.toml"]
-argv = ["native/host-steward/.venv/bin/ruff", "check", "native/host-steward", "native/pve-sender", "packages/tether/scripts", "scripts"]
+quick_paths = ["native/host-steward/**", "native/pve-sender/**", "native/git-outgoing/**", "packages/tether/scripts/**", "scripts/**", "ruff.toml"]
+argv = ["native/host-steward/.venv/bin/ruff", "check", "native/host-steward", "native/pve-sender", "native/git-outgoing", "packages/tether/scripts", "scripts"]
 
 [[native.stages]]
 id = "python-host-types"
 kind = "check"
 coverage = "full"
 quick = true
-quick_paths = ["native/host-steward/**", "native/pve-sender/**", "packages/tether/scripts/**", "scripts/**", "ty.toml"]
+quick_paths = ["native/host-steward/**", "native/pve-sender/**", "native/git-outgoing/**", "packages/tether/scripts/**", "scripts/**", "ty.toml"]
 argv = ["native/host-steward/.venv/bin/ty", "check"]
 
 [[native.stages]]
@@ -61,8 +61,8 @@ id = "python-host-tests"
 kind = "check"
 coverage = "full"
 quick = true
-quick_paths = ["native/host-steward/**", "native/pve-sender/**", "packages/tether/scripts/**", "scripts/**", "pytest.ini"]
-argv = ["bash", "-c", "set -e; test_tmp=$(mktemp -d /tmp/aico-pytest.XXXXXX); trap 'rm -rf -- \"$test_tmp\"' EXIT; native/host-steward/.venv/bin/pytest --basetemp \"$test_tmp\" -q native/host-steward/tests"]
+quick_paths = ["native/host-steward/**", "native/pve-sender/**", "native/git-outgoing/**", "packages/tether/scripts/**", "scripts/**", "pytest.ini"]
+argv = ["bash", "-c", "set -e; test_tmp=$(mktemp -d /tmp/aico-pytest.XXXXXX); trap 'rm -rf -- \"$test_tmp\"' EXIT; native/host-steward/.venv/bin/pytest --basetemp \"$test_tmp\" -q native/host-steward/tests native/git-outgoing/tests"]
 
 [[native.stages]]
 id = "tsc"
@@ -842,10 +842,11 @@ timeout_seconds = 900
 # Nightly whole-repo build: `tsc -b --force` ignores the incremental cache and the
 # workspace builds produce the tether and aico-web bundles and the static web
 # export, which the commit gate never builds. Writes only dist/, out/ and .tsbuild
-# in the checkout; no service, instance or credential is touched. The live smoke
-# scripts/live/live-smoke.sh stays out: it targets the default Tether instance and
-# sends real prompts to real models.
+# in the checkout; no service, instance or credential is touched. It runs in the main
+# checkout (AICO_MAIN_CHECKOUT): next build cannot resolve the linked node_modules of
+# the nightly's clean worktree. The live-smoke stage above runs on tether@dev and sends
+# one short prompt per agent tool to its real model.
 [[deep.stages]]
 id = "repo-build"
-argv = ["bash", "-c", "set -e; npm run typecheck -- --force; npm run build"]
+argv = ["bash", "-c", "set -e; cd \"$AICO_MAIN_CHECKOUT\"; npm run typecheck -- --force; npm run build"]
 timeout_seconds = 900

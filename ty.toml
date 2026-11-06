@@ -4,7 +4,7 @@
 python = "./native/host-steward/.venv"
 
 [src]
-include = ["native/host-steward", "native/pve-sender", "packages/tether/scripts", "scripts"]
+include = ["native/host-steward", "native/pve-sender", "native/git-outgoing", "packages/tether/scripts", "scripts"]
 
 [rules]
 # Suppress beta-quality rules (ty 0.0.x false positives)

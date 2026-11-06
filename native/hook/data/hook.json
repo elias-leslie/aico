@@ -34,7 +34,7 @@
   "publication": {
     "timeout_seconds": 10,
     "pre_push_hook": "~/.config/git/hooks/pre-push",
-    "pre_push_marker": "scripts/lib/publication-pre-push",
+    "pre_push_marker": "git-outgoing/publication-pre-push",
     "claude_settings": "~/.claude/settings.json",
     "codex_hooks": "~/.codex/hooks.json",
     "hook_marker": "aico-hook"

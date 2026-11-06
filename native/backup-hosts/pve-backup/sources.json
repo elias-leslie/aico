@@ -1,0 +1,92 @@
+{
+ "pve-cluster-config": {
+  "digest": "70544bda62da88a84aab44b690bc7b2c12d1f822709632632fe380b4c1f67653",
+  "files": null,
+  "kind": "config",
+  "vmid": null
+ },
+ "pve-ct-190-aico-data": {
+  "digest": "bae2bd884b0fa7f22ad6154f1ccbdf7551793fe229531e344085b6a0283d0ded",
+  "files": {
+   "excludes": [
+    "aico/*.db",
+    "aico/*.db-wal",
+    "aico/*.db-shm",
+    "aico/logs",
+    "aico/tmux",
+    "aico/tmux.conf"
+   ],
+   "paths": [
+    "/home/kasadis/.local/state/aico-snapshot",
+    "/home/kasadis/.local/state/aico"
+   ],
+   "via": "pct"
+  },
+  "kind": "lxc",
+  "vmid": 190
+ },
+ "pve-host-files": {
+  "digest": "0dfaf52fedefbabc93c6eef19d8390e444635442fd74f60fc7c28eac11512fea",
+  "files": {
+   "excludes": [],
+   "paths": [
+    "/vault/identity",
+    "/vault/meta/recovery-key.json",
+    "/etc/pve/qemu-server/120.conf",
+    "/var/lib/vz/snippets/neri-120-init.yaml",
+    "/var/lib/vz/snippets/neri-120-meta.yaml"
+   ],
+   "via": "host"
+  },
+  "kind": "host",
+  "vmid": null
+ },
+ "pve-vm-100-browser-state": {
+  "digest": "6300548a98838359c9d2a2038d660aa86eb46c2292e6789d50ea210b46aeffb5",
+  "files": {
+   "excludes": [
+    "Cache",
+    "Code Cache",
+    "GPUCache",
+    "CacheStorage",
+    "ScriptCache",
+    "GrShaderCache",
+    "GraphiteDawnCache",
+    "ShaderCache",
+    "Service Worker",
+    "optimization_guide_model_store",
+    "component_crx_cache",
+    "Crashpad",
+    "Singleton*",
+    "Safe Browsing",
+    "BrowserMetrics*",
+    "Dawn*Cache",
+    "*Cache"
+   ],
+   "paths": [
+    "/home/kasadis/.local/share/st-browser/profiles",
+    "/home/kasadis/.config/st-browser"
+   ],
+   "via": "agent"
+  },
+  "kind": "qemu",
+  "vmid": 100
+ },
+ "pve-vm-180-app-recovery": {
+  "digest": "d7c6c0e3652e78892c70ea4fdf275ce78837d6b40457d5573a6b5eccabc4fcf6",
+  "files": {
+   "excludes": [],
+   "paths": [
+    "/var/lib/app-backups",
+    "/etc/app-config",
+    "/srv/workspaces/projects/portfolio-ai/data",
+    "/srv/workspaces/projects/jobinator-4000/data",
+    "/home/kasadis/.config/systemd/user",
+    "/opt/app-stack"
+   ],
+   "via": "agent"
+  },
+  "kind": "qemu",
+  "vmid": 180
+ }
+}
