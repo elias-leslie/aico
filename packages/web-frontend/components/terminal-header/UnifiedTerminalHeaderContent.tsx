@@ -12,6 +12,7 @@ import { CaptureLauncher } from '../capture/CaptureLauncher'
 import { ModeToggle } from '../ModeToggle'
 import { NotesLauncher } from '../notes/NotesLauncher'
 import { PaneOverflowMenu } from '../PaneOverflowMenu'
+import { ContextFillBadge } from './ContextFillBadge'
 import { HeaderIconButton } from './HeaderIconButton'
 import { HeaderNameDisplay } from './HeaderNameDisplay'
 import { NewSessionButton } from './NewSessionButton'
@@ -102,6 +103,10 @@ export const UnifiedTerminalHeaderContent = memo(
         </div>
 
         <PaneStatusBadge status={connectionStatus} compact={isMobile} />
+        <ContextFillBadge
+          sessionId={getSlotSessionId(slot)}
+          mode={slot.type === 'project' ? slot.activeMode : slot.sessionMode}
+        />
 
         <div className="min-w-1 flex-1" />
 

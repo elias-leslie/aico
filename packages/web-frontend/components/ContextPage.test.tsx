@@ -73,7 +73,13 @@ afterEach(() => vi.unstubAllGlobals())
 it('shows partial delivery, unknown use and no budget without inventing zeros', async () => {
   show(vi.fn(async () => Response.json(view)))
   expect(screen.getByRole('status')).toHaveTextContent('Loading')
-  expect(await screen.findByText('Usage unknown')).toBeInTheDocument()
+  // Nothing is known about use: said once, not as a badge on every row.
+  expect(
+    await screen.findByText(
+      'Use is not known yet: 0 of 3 fully observed sessions so far.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.queryByText('Usage unknown')).toBeNull()
   expect(screen.getByText('No token budget set')).toBeInTheDocument()
   expect(screen.getByText(/Partial delivery/)).toHaveTextContent(
     '1 item did not load: Unavailable',
@@ -99,6 +105,53 @@ it('shows the context in use when the provider counted it', async () => {
     await screen.findByText('41,250 tokens in use at last reply'),
   ).toBeInTheDocument()
 })
+it('labels the budget and explains a badge when some use is known', async () => {
+  const mixed = {
+    ...view,
+    deliveries: [
+      {
+        ...view.deliveries[0]!,
+        budget: 60_000,
+        items: [
+          { ...view.deliveries[0]!.items[0]!, use: 'used' as const },
+          {
+            ...view.deliveries[0]!.items[0]!,
+            id: 'memory:a',
+            title: 'A memory',
+            type: 'memory',
+            observedSessions: 2,
+          },
+        ],
+      },
+    ],
+  }
+  show(vi.fn(async () => Response.json(mixed)))
+  expect(
+    await screen.findByText('Loaded-context budget 60,000 tokens'),
+  ).toBeInTheDocument()
+  expect(screen.getByText('Use recorded')).toBeInTheDocument()
+  expect(screen.getByText('Usage unknown')).toHaveAttribute(
+    'title',
+    'Seen in 2 of 3 fully observed sessions needed to say.',
+  )
+})
+it("shows a live session's context in use from its history", async () => {
+  show(
+    vi.fn(async (input) =>
+      String(input).startsWith('/api/history')
+        ? Response.json({
+            items: [
+              { tool: 'codex', startedAt: 1, contextTokens: 5 },
+              { tool: 'codex', startedAt: 2, contextTokens: 88_000 },
+            ],
+          })
+        : Response.json(view),
+    ),
+  )
+  expect(
+    await screen.findByText('88,000 tokens in use at last reply'),
+  ).toBeInTheDocument()
+})
 it('keeps a draft when a stale save is refused', async () => {
   const calls: { url: string; body: unknown }[] = []
   show(
@@ -116,7 +169,7 @@ it('keeps a draft when a stale save is refused', async () => {
       return Response.json(view)
     }),
   )
-  await screen.findByText('Usage unknown')
+  await screen.findByText(/Use is not known yet/)
   fireEvent.click(screen.getByRole('button', { name: 'Prompts' }))
   fireEvent.change(screen.getByLabelText('Prompt text'), {
     target: { value: 'My unsaved change.' },
@@ -138,7 +191,7 @@ it('keeps the last view visible when refresh fails', async () => {
         : Response.json(view),
     ),
   )
-  await screen.findByText('Usage unknown')
+  await screen.findByText(/Use is not known yet/)
   failed = true
   fireEvent.click(screen.getByRole('button', { name: 'Refresh context' }))
   await waitFor(() =>
@@ -146,5 +199,5 @@ it('keeps the last view visible when refresh fails', async () => {
       'Showing the last loaded view',
     ),
   )
-  expect(screen.getByText('Usage unknown')).toBeInTheDocument()
+  expect(screen.getByText(/Use is not known yet/)).toBeInTheDocument()
 })

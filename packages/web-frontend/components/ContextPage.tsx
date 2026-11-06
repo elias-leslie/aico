@@ -11,6 +11,7 @@ import type {
   ContextRole,
   ContextView,
 } from '@/lib/context'
+import { useSessionContext } from '@/lib/hooks/use-session-context'
 import styles from './ContextPage.module.css'
 
 const count = (n: number) => n.toLocaleString('en-US')
@@ -45,6 +46,14 @@ function Costs({ view }: { view: ContextView }) {
   const projects = [
     ...new Set(view.deliveries.flatMap((d) => (d.project ? [d.project] : []))),
   ].sort()
+  // The session's context now, else what the last check read.
+  const liveContext = useSessionContext(current?.session ?? null, current?.tool)
+  const contextInUse = liveContext ?? current?.contextTokens ?? null
+  const counted = current?.items.filter((i) => !i.cut) ?? []
+  // Nothing known about use yet: say so once, not on every row.
+  const useUnknown =
+    counted.length > 0 && counted.every((i) => i.use === 'unknown')
+  const mostObserved = Math.max(0, ...counted.map((i) => i.observedSessions))
   return (
     <section aria-label="Context cost">
       <p className={styles.help}>
@@ -93,12 +102,16 @@ function Costs({ view }: { view: ContextView }) {
                 <span>
                   {current.budget === null
                     ? 'No token budget set'
-                    : `Budget ${count(current.budget)}${current.tokens > current.budget ? ' · Over budget' : ''}`}
+                    : `Loaded-context budget ${count(current.budget)} tokens${current.tokens > current.budget ? ' · Over budget' : ''}`}
                 </span>
                 <span>
-                  {current.contextTokens === null
-                    ? 'Context in use unknown'
-                    : `${count(current.contextTokens)} tokens in use at last reply`}
+                  {contextInUse === null ? (
+                    <span title="No provider count has been read for this session yet.">
+                      Context in use unknown
+                    </span>
+                  ) : (
+                    `${count(contextInUse)} tokens in use at last reply`
+                  )}
                 </span>
                 <time dateTime={current.at}>
                   {new Date(current.at).toLocaleString()}
@@ -124,6 +137,12 @@ function Costs({ view }: { view: ContextView }) {
                   unknown.
                 </p>
               )}
+              {useUnknown && (
+                <p className={styles.help} role="status">
+                  Use is not known yet: {mostObserved} of{' '}
+                  {view.minObservedSessions} fully observed sessions so far.
+                </p>
+              )}
               <label className={styles.toggle}>
                 <input
                   type="checkbox"
@@ -147,11 +166,18 @@ function Costs({ view }: { view: ContextView }) {
                         ~{count(i.tokens)}
                         <small>tokens{i.cut ? ' · Cut' : ''}</small>
                       </span>
-                      <span
-                        className={`${styles.badge} ${i.use === 'unused' ? styles.warning : ''}`}
-                      >
-                        {i.cut ? 'Not loaded' : useText[i.use]}
-                      </span>
+                      {(i.cut || !useUnknown) && (
+                        <span
+                          className={`${styles.badge} ${i.use === 'unused' ? styles.warning : ''}`}
+                          title={
+                            i.use === 'unknown' && !i.cut
+                              ? `Seen in ${i.observedSessions} of ${view.minObservedSessions} fully observed sessions needed to say.`
+                              : undefined
+                          }
+                        >
+                          {i.cut ? 'Not loaded' : useText[i.use]}
+                        </span>
+                      )}
                     </li>
                   ))}
               </ul>

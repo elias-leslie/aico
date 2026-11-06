@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import { ConfirmationDialog } from './ConfirmationDialog'
 import styles from './MemorySection.module.css'
+import { PlainMarkdown } from './PlainMarkdown'
 
 type Tier = 'mandate' | 'guardrail' | 'reference' | 'archive'
 type Scope = 'global' | 'project' | 'agent'
@@ -58,7 +59,7 @@ function Memory({
             <span className={styles.chip}>{scopeText(memory)}</span>
           </span>
         </summary>
-        <p className={styles.body}>{memory.content}</p>
+        <PlainMarkdown className={styles.body} text={memory.content} />
         {memory.tags.length > 0 && (
           <p className={styles.meta}>Tags: {memory.tags.join(', ')}</p>
         )}

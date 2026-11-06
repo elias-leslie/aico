@@ -58,6 +58,8 @@ vi.mock('./HeaderIconButton', () => ({
   ),
 }))
 
+vi.mock('./ContextFillBadge', () => ({ ContextFillBadge: () => null }))
+
 vi.mock('./PaneStatusBadge', () => ({
   PaneStatusBadge: () => null,
   shouldShowPaneStatus: () => false,

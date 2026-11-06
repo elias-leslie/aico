@@ -102,3 +102,26 @@ it('deletes only after confirming, and shows a failed delete', async () => {
   expect(await screen.findByText('No memories saved yet.')).toBeInTheDocument()
   expect(fetcher).toHaveBeenCalledWith('/api/memories/a1', { method: 'DELETE' })
 })
+
+it('shows a memory written in markdown as formatted text', async () => {
+  show(
+    vi.fn(async () =>
+      Response.json({
+        memories: [
+          {
+            ...memory('m1', 'Scrollback logging'),
+            content:
+              '**Scrollback**: use `debug` level.\n\n- first\n- *second*',
+          },
+        ],
+        next: null,
+      }),
+    ),
+  )
+  const bold = await screen.findByText('Scrollback', { selector: 'strong' })
+  expect(bold).toBeInTheDocument()
+  expect(screen.getByText('debug', { selector: 'code' })).toBeInTheDocument()
+  expect(screen.getByText('second', { selector: 'em' })).toBeInTheDocument()
+  expect(screen.getAllByRole('listitem').length).toBeGreaterThanOrEqual(2)
+  expect(document.body.textContent).not.toContain('**')
+})

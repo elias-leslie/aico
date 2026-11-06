@@ -259,7 +259,13 @@ describe('session history', () => {
       status: 200,
       body: { items: [{ id: 'codex:a' }] },
     })
-    expect(tether.callsOf('history')[0]).toEqual([{ limit: 5, tool: 'codex', project: undefined }])
+    expect(tether.callsOf('history')[0]).toEqual([
+      { limit: 5, tool: 'codex', project: undefined, session: undefined },
+    ])
+    await call('GET', '/api/history?session=abc12345')
+    expect(tether.callsOf('history')[1]).toEqual([
+      { limit: undefined, tool: undefined, project: undefined, session: 'abc12345' },
+    ])
     expect((await call('GET', '/api/history/codex%3Aa')).body).toEqual({ id: 'codex:a' })
     await call('GET', '/api/history/codex%3Aa/events?before=40&limit=20')
     expect(tether.callsOf('historyEvents')[0]).toEqual([

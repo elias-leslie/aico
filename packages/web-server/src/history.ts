@@ -21,6 +21,8 @@ export function registerHistoryRoutes(router: Router, tether: TetherClient, chat
         limit: number(ctx.query.get('limit')),
         tool: ctx.query.get('tool') ?? undefined,
         project: ctx.query.get('project') ?? undefined,
+        // The conversations one Tether session owned: its context fill, live.
+        session: ctx.query.get('session') ?? undefined,
       }),
     ),
   )
