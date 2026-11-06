@@ -207,8 +207,8 @@ function accessFrom(identity: Identity): AccessConfig | null {
 
 // The Python backend's settings names and defaults, so its EnvironmentFile keeps
 // working; only the upload dir name is Aico's own.
-/** The host the installed phone app already uses (moves to Aico's own name when its Access gate does). */
-const DEFAULT_PHONE_HOST = 'nightshift.summitflow.dev'
+/** The hosts the phone app uses: the first is the pairing base; the old name stays until the phone has re-paired. */
+const DEFAULT_PHONE_HOSTS = ['app.summitflow.dev', 'nightshift.summitflow.dev']
 const DEFAULT_CAPTURE_MAX_MB = 25
 const DEFAULT_CAPTURE_MAX_FILES = 20
 /** Least time between two kept revisions of one note field while it is being edited. */
@@ -388,11 +388,11 @@ export function loadConfig(
     port,
     publicHost,
     allowedHostnames: ['localhost', '127.0.0.1', ...(publicHost ? [publicHost] : [])],
-    phoneHosts: (list(env.AICO_PHONE_HOSTS) ?? [DEFAULT_PHONE_HOST]).map((h) => h.toLowerCase()),
+    phoneHosts: (list(env.AICO_PHONE_HOSTS) ?? DEFAULT_PHONE_HOSTS).map((h) => h.toLowerCase()),
     access: accessFrom(identity),
     pairing: {
       base:
-        env.AICO_APP_BASE || `https://${(list(env.AICO_PHONE_HOSTS) ?? [DEFAULT_PHONE_HOST])[0]}`,
+        env.AICO_APP_BASE || `https://${(list(env.AICO_PHONE_HOSTS) ?? DEFAULT_PHONE_HOSTS)[0]}`,
       origins: phoneOrigins(env, publicHost),
       gateFile: env.AICO_APP_GATE_FILE || join(dataDirPath(env), 'app-gate.json'),
       optionsFile: env.AICO_APP_OPTIONS_FILE || DEFAULT_APP_OPTIONS_FILE,
