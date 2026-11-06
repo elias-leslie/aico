@@ -2,8 +2,10 @@
 
 Port of the guest sections of ns/checks/pve.py (vms, agents, nics, the segment guard of "failed") and the guest
 metadata read of ns/checks/registry.py. One read-only ssh round trip over the same pinned hop as the pve check
-(collect), shared with the assets check through ctx.cache. Left out: the lab flow check on the segment (ns-24b,
-dropped), honeypot and evidence copies, the dead-man and executor sections (M5b).
+(collect), shared with the assets check through ctx.cache. Of the lab flow check on the segment (ns/checks/labnet.py)
+only its breach rule is kept (lab_flows): a flow the segment filter let through to or from a private address that the
+guard's `allow` list doesn't name. Its volume and novelty hunt, honeypot and evidence copies, the dead-man and executor
+sections (M5b) are left out.
 
 A guest set to start at boot that is not running is "parked" when its latest PVE task is a stop that succeeded since
 PVE booted (someone turned it off on purpose; it starts again at the next boot): a note, not a fault.
@@ -11,6 +13,7 @@ PVE booted (someone turned it off on purpose; it starts again at the next boot):
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
 from typing import Any
@@ -96,7 +99,8 @@ def collect(ctx: Ctx) -> tuple[dict[str, str] | None, str]:
     if "guests" in ctx.cache:
         return ctx.cache["guests"]
     cfg = ctx.site["pve"]
-    result = ctx.run(ssh_command(cfg), timeout=float(cfg["ssh_timeout"]), input_text=SCRIPT)
+    script = SCRIPT.replace('echo "===NS end"', flows_snippet(ctx.site.get("segment_guards", [])) + 'echo "===NS end"')
+    result = ctx.run(ssh_command(cfg), timeout=float(cfg["ssh_timeout"]), input_text=script)
     sections = split_sections(result.out)
     answer: tuple[dict[str, str] | None, str] = (
         (sections, "")
@@ -359,6 +363,96 @@ def segments(text: str, guards: list[dict[str, Any]]) -> list[Signal]:
     return out
 
 
+# Lab flows (the breach rule of ns/checks/labnet.py). Conntrack entries without zone= are zone 0: confirmed only after
+# the segment's forward filter accepted them, so they are flows that really left or entered the segment. awk prints
+# one line per distinct (proto, src, dst, dport) touching the bridge's subnet: "FL <bridge> <proto> <src> <dst> <dport>".
+_FLOW_AWK = (
+    'function n(s,  a) { split(s, a, "."); return ((a[1] * 256 + a[2]) * 256 + a[3]) * 256 + a[4] } '
+    'BEGIN { split(cidr, c, "/"); sz = 2 ^ (32 - c[2]); base = int(n(c[1]) / sz) } '
+    '/zone=/ { next } '
+    '{ s = ""; d = ""; p = "-"; for (i = 2; i <= NF; i++) { f = $i; '
+    'if (f ~ /^src=/) { if (s == "") s = substr(f, 5) } else if (f ~ /^dst=/) { if (d == "") d = substr(f, 5) } '
+    'else if (f ~ /^dport=/) { if (p == "-") p = substr(f, 7) } } '
+    'if (s == "" || d == "") next; if (int(n(s) / sz) != base && int(n(d) / sz) != base) next; '
+    'k = br " " $1 " " s " " d " " p; if (!(k in seen)) { seen[k] = 1; if (m++ < 2000) print "FL " k } }'
+)
+# Never egress: multicast and the limited broadcast are the host receiving guests' chatter, not a breach.
+_LOCAL_ONLY = (ipaddress.ip_network("224.0.0.0/4"), ipaddress.ip_network("255.255.255.255/32"))
+_PRIVATE = tuple(
+    ipaddress.ip_network(n)
+    for n in ("0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16",
+              "198.18.0.0/15", "224.0.0.0/4", "240.0.0.0/4")
+)
+
+
+def flows_snippet(guards: Any) -> str:
+    """Read-only shell for the PVE hop: per guarded bridge its subnet and its zone-0 conntrack flows."""
+    parts = []
+    for g in guards if isinstance(guards, list) else []:
+        bridge = str(g.get("bridge", "")) if isinstance(g, dict) else ""
+        if not _NAME.fullmatch(bridge):
+            continue
+        parts.append(
+            f'net=$(ip -4 -o addr show dev {bridge} 2>/dev/null | awk \'{{print $4; exit}}\'); echo "NET {bridge} $net"; '
+            f'case "$net" in *.*/*) conntrack -L -f ipv4 2>/dev/null | awk -v cidr="$net" -v br={bridge} \'{_FLOW_AWK}\';; esac\n'
+        )
+    return ('echo "===NS labflows"\n' + "".join(parts)) if parts else ""
+
+
+def _ip(text: str) -> ipaddress.IPv4Address | None:
+    try:
+        return ipaddress.IPv4Address(text)
+    except ValueError:
+        return None
+
+
+def _allowed(rule: Any, proto: str, src: str, dst: str, dport: str) -> bool:
+    """A guard `allow` entry: every field it names matches (from, to: address lists; proto; port)."""
+    if not isinstance(rule, dict):
+        return False
+    return (
+        ("from" not in rule or src in [str(a) for a in rule["from"]])
+        and ("to" not in rule or dst in [str(a) for a in rule["to"]])
+        and ("proto" not in rule or proto == str(rule["proto"]))
+        and ("port" not in rule or dport == str(rule["port"]))
+    )
+
+
+def lab_flows(text: str, guards: Any) -> list[Signal]:
+    """A zone-0 flow from a guarded segment to a private address outside it, or into it from outside, that the guard's
+    `allow` list doesn't name: the filter should make it impossible, so it fails (it pages the owner)."""
+    nets: dict[str, ipaddress.IPv4Network] = {}
+    flows: dict[str, list[tuple[str, str, str, str]]] = {}
+    for line in text.splitlines():
+        p = line.split()
+        if len(p) == 3 and p[0] == "NET":
+            try:
+                nets[p[1]] = ipaddress.ip_interface(p[2]).network  # type: ignore[assignment]
+            except ValueError:
+                continue
+        elif len(p) == 6 and p[0] == "FL":
+            flows.setdefault(p[1], []).append((p[2], p[3], p[4], p[5]))
+    out = []
+    for g in guards if isinstance(guards, list) else []:
+        bridge = str(g.get("bridge", "")) if isinstance(g, dict) else ""
+        net = nets.get(bridge)
+        if net is None:
+            continue
+        allow = g.get("allow") or []
+        bad = []
+        for proto, src, dst, dport in flows.get(bridge, []):
+            s, d = _ip(src), _ip(dst)
+            if s is None or d is None:
+                continue
+            leaving = s in net and d not in net and any(d in n for n in _PRIVATE) and not any(d in n for n in _LOCAL_ONLY)
+            entering = d in net and s not in net
+            if (leaving or entering) and not any(_allowed(r, proto, src, dst, dport) for r in allow):
+                bad.append(f"{src} -> {dst}:{dport}/{proto}")
+        fields = {"bridge": bridge, "n": str(len(bad)), "first": bad[0] if bad else "", "flows": ", ".join(bad[:20])}
+        out.append(Signal("guests.labflow", "failed" if bad else "ok", fields, note=not bad))
+    return out
+
+
 def discard_signal(vms: list[dict[str, Any]], pool_storage: str) -> Signal:
     off = [
         {"vmid": v["vmid"], "slot": d["slot"], "pending": bool(d.get("pending_discard"))}
@@ -498,5 +592,6 @@ def run(ctx: Ctx) -> list[Signal]:
         *run_state(text),
         *agents_and_disks(text, sections.get("agents", ""), ctx.cfg, ctx.cache, tiered, ctx.now),
         *segments(sections.get("netiso", ""), ctx.site.get("segment_guards", [])),
+        *lab_flows(sections.get("labflows", ""), ctx.site.get("segment_guards", [])),
     ]
     return out

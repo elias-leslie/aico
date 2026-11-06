@@ -559,6 +559,22 @@ def test_segment_guard_open_is_failed_and_absent_is_idle():
     assert guests.segments("BR vmbr0\n", guard)[0].fields["how"] == "absent"
 
 
+def test_lab_flows_page_only_outside_the_allow_list():
+    guard = [g for g in DATA["site"]["segment_guards"] if g["bridge"] == "labnet"]
+    worker = "NET labnet 10.20.0.1/24\nFL labnet tcp 10.20.0.114 192.168.86.128 7449\n"
+    flows = guests.lab_flows(worker + "FL labnet udp 10.20.0.115 224.0.0.251 5353\n", guard)
+    assert flows[0].state == "ok"
+    for escape in (
+        "FL labnet tcp 10.20.0.114 192.168.86.128 22\n",  # a worker to another workstation port
+        "FL labnet tcp 10.20.0.110 192.168.86.128 7449\n",  # a lab guest that isn't a worker
+        "FL labnet tcp 192.168.86.40 10.20.0.114 22\n",  # into the lab from another LAN machine
+    ):
+        sig = guests.lab_flows(worker + escape, guard)[0]
+        assert sig.state == "failed" and sig.fields["n"] == "1", escape
+    assert guests.lab_flows("FL labnet tcp 10.20.0.110 192.168.86.128 22\n", guard) == []  # no subnet: idle
+    assert "conntrack -L" in guests.flows_snippet(guard) and guests.flows_snippet([]) == ""
+
+
 def test_guest_disk_levels_and_history(store):
     fs = "AGENT 100 ok\nFS 100 ext4 85000000000 100000000000 /\n"
     sigs = guests.agents_and_disks(

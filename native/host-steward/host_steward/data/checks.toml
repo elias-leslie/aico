@@ -742,10 +742,22 @@ lan_bridges = ["vmbr0"]
 lab_vlans = []
 lab_use_files = ["/var/lib/host-steward/agent-hints/lab-use.json", "/var/lib/nightshift/agent-hints/lab-use.json"]
 
-# An isolated lab segment: its bridge must never be up without its nftables filter table.
+# An isolated lab segment: its bridge must never be up without its nftables filter table, and no flow may pass between
+# it and a private address unless `allow` names it (from/to address lists, proto, port; each optional). The list
+# mirrors the accept rules of the PVE table inet lab_isolation.
 [[site.segment_guards]]
 bridge = "labnet"
 nft_table = "inet lab_isolation"
+allow = [
+  # Aico's enrolled lab workers (VM 200 agent-work 10.20.0.114, VM 201 neri-hunters 10.20.0.115) to the full peers'
+  # fleet link (CT 190 and the workstation), and CT 190 back to them.
+  { from = ["10.20.0.114", "10.20.0.115"], to = ["192.168.86.59", "192.168.86.128"], proto = "tcp", port = 7449 },
+  { from = ["192.168.86.59"], to = ["10.20.0.114", "10.20.0.115"], proto = "tcp", port = 7449 },
+  # OmniNull agents to the hub.
+  { to = ["192.168.86.58"], proto = "tcp", port = 9443 },
+  # The workstation into the lab.
+  { from = ["192.168.86.128"] },
+]
 
 [checks.guests]
 what = "PVE guests"

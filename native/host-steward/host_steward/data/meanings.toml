@@ -582,6 +582,14 @@ next = "Load the isolation rules on the PVE host, or take the bridge down"
 [signal."guests.segment:ok"]
 what = "Lab segment {bridge}: {how} (filter table {table})"
 
+[signal."guests.labflow"]
+what = "Lab segment {bridge} reached past its isolation: {n} flows, e.g. {first}"
+impact = "A lab machine reached the home network outside the allowed flows ({flows})"
+next = "Stop the lab machine and check the segment's filter table on the PVE host"
+
+[signal."guests.labflow:ok"]
+what = "Lab segment {bridge}: no flow outside the internet and its allowed hosts"
+
 [signal."assets.config"]
 what = "{n} entries in the asset list were refused (first: {first})"
 impact = "Those machines are not rated"
