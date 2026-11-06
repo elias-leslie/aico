@@ -2,15 +2,15 @@
   "source": "workstation",
   "status_url": "http://127.0.0.1:3002/api/status",
   "post_url": "http://127.0.0.1:3002/api/status/rows",
-  "ssh": ["ssh", "-F", "/dev/null", "-i", "/etc/nightshift/pve-check.key", "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=/etc/nightshift/pve-known_hosts", "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ConnectTimeout=10", "-T", "root@192.168.86.39", "/usr/local/sbin/pve-sender", "heartbeat", "workstation"],
+  "ssh": ["ssh", "-F", "/dev/null", "-i", "/etc/host-steward/pve-check.key", "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=/etc/host-steward/pve-known_hosts", "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ConnectTimeout=10", "-T", "root@192.168.86.39", "/usr/local/sbin/pve-sender", "heartbeat", "workstation"],
   "timeout_s": 30,
   "every_s": 300,
   "slack_s": 120,
   "sender_stale_s": 420,
   "floor_ids": ["davion-sidarli/check-floor", "davion-sidarli/notify-outbox"],
   "route": {
-    "account": "/etc/nightshift/fcm/service-account.json",
-    "token": "/var/lib/nightshift/fcm/token.json",
+    "account": "/etc/host-steward/fcm/service-account.json",
+    "token": "/var/lib/host-steward/fcm/token.json",
     "devices": "/home/kasadis/.local/state/aico/phones.json",
     "base": "https://nightshift.summitflow.dev"
   },

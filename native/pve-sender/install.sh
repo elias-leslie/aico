@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Run as root on gem, from an exported Aico native/ directory. Existing credentials stay in place.
+# The credentials file is /etc/aico/pve-sender-creds.json; it is copied once from the old
+# /etc/nightshift/deadman/creds.json when missing.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 prefix="${PVE_SENDER_PREFIX:-/usr/local/lib/aico-pve-sender}"
@@ -13,6 +15,24 @@ install -m 0644 "$here"/pve_sender/*.py "$prefix/pve_sender/"
 install -m 0755 "$here/pve-sender" "$prefix/pve-sender"
 ln -sfn "$prefix/pve-sender" "$sbin/pve-sender"
 if [ ! -f "$config" ]; then install -m 0644 "$here/config.json" "$config"; fi
+# An installed config that still names the old credential and token paths is pointed at the Aico ones.
+python3 - "$config" <<'PY'
+import json
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+cfg = json.loads(path.read_text())
+new = {"credentials": "/etc/aico/pve-sender-creds.json", "token_cache": "/var/lib/aico/pve-sender/fcm-token.json"}
+if any("nightshift" in str(cfg.get(k, "")) for k in new):
+    cfg.update(new)
+    path.write_text(json.dumps(cfg, indent=2) + "\n")
+PY
+creds="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("credentials", "/etc/aico/pve-sender-creds.json"))' "$config")"
+old_creds="${PVE_SENDER_OLD_CREDS:-/etc/nightshift/deadman/creds.json}"
+if [ ! -f "$creds" ] && [ -f "$old_creds" ]; then
+  install -d -m 0755 "$(dirname "$creds")"
+  install -m 0600 -o root -g root "$old_creds" "$creds"
+fi
 # These are Aico's own host-check evaluators, used locally without enabling workstation controllers on PVE.
 cp -a "$here/../host-steward/host_steward" "$steward/"
 install -m 0644 "$here/../host-steward/aico_status.py" "$steward/aico_status.py"
@@ -45,11 +65,5 @@ if not target.exists():
     target.chmod(0o600)
 PY
   install -m 0755 "$here/aico-push" "$sbin/aico-push"
-  # Retire the old producer where it is still installed; later reinstalls find it already gone.
-  for unit in nightshift-nightwatch.timer nightshift-nightwatch-web.service nightshift-nightwatch.service; do
-    if [ -n "$(systemctl list-unit-files --no-legend "$unit")" ]; then
-      systemctl --no-ask-password disable --now "$unit"
-    fi
-  done
 fi
 echo "Aico Proxmox sender installed."

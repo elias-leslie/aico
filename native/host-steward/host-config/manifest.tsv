@@ -1,0 +1,27 @@
+# source (here)	installed as	older file(s) it replaces; removed after the new one is in place
+# @ETC@ /etc, @SYSTEM@ system unit dir, @USER@ user unit dir, @HOME@ and @UID@ the owner's
+sysctl.d/60-aico-memory.conf	@ETC@/sysctl.d/60-aico-memory.conf	@ETC@/sysctl.d/60-nightshift-vm.swappiness.conf
+oomd.conf.d/50-aico-memory.conf	@ETC@/systemd/oomd.conf.d/50-aico-memory.conf	@ETC@/systemd/oomd.conf.d/50-nightshift.conf
+journald.conf.d/20-storage-guardrails.conf	@ETC@/systemd/journald.conf.d/20-storage-guardrails.conf	
+journald.conf.d/30-aico-retention.conf	@ETC@/systemd/journald.conf.d/30-aico-retention.conf	@ETC@/systemd/journald.conf.d/30-nightshift-retention.conf
+system/user@.service.d/90-aico-oomd.conf	@SYSTEM@/user@.service.d/90-aico-oomd.conf	@SYSTEM@/user@.service.d/90-nightshift-oomd.conf
+system/user@.service.d/91-aico-session-oom.conf	@SYSTEM@/user@.service.d/91-aico-session-oom.conf	@SYSTEM@/user@.service.d/91-nightshift-session-oom.conf
+system/user.slice.d/50-aico-memory.conf	@SYSTEM@/user.slice.d/50-aico-memory.conf	@SYSTEM@/user.slice.d/50-nightshift-memory.conf
+system/user-UID.slice.d/50-aico-memory.conf	@SYSTEM@/user-@UID@.slice.d/50-aico-memory.conf	@SYSTEM@/user-@UID@.slice.d/50-nightshift-memory.conf
+apt.conf.d/52aico-unattended-kernel	@ETC@/apt/apt.conf.d/52aico-unattended-kernel	@ETC@/apt/apt.conf.d/52nightshift-unattended-kernel
+udev/70-aico-uinput.rules	@ETC@/udev/rules.d/70-aico-uinput.rules	@ETC@/udev/rules.d/70-nightshift-uinput.rules @ETC@/udev/rules.d/70-nightshift-app-usb.rules
+tmpfiles.d/host-steward.conf	@ETC@/tmpfiles.d/host-steward.conf	@ETC@/tmpfiles.d/nightshift.conf
+user.conf.d/50-aico-oom.conf	@ETC@/systemd/user.conf.d/50-aico-oom.conf	@HOME@/.config/systemd/user.conf.d/50-nightshift-oom.conf
+user/app.slice.d/50-aico-memory.conf	@USER@/app.slice.d/50-aico-memory.conf	@HOME@/.config/systemd/user/app.slice.d/50-nightshift-memory.conf
+user/at-spi-dbus-bus.service.d/50-aico-session.conf	@USER@/at-spi-dbus-bus.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/at-spi-dbus-bus.service.d/50-nightshift-session.conf
+user/dbus.service.d/50-aico-session.conf	@USER@/dbus.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/dbus.service.d/50-nightshift-session.conf
+user/gnome-session-manager@.service.d/50-aico-session.conf	@USER@/gnome-session-manager@.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/gnome-session-manager@.service.d/50-nightshift-session.conf
+user/org.gnome.Shell@wayland.service.d/50-aico-session.conf	@USER@/org.gnome.Shell@wayland.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/org.gnome.Shell@wayland.service.d/50-nightshift-session.conf
+user/org.gnome.Shell@x11.service.d/50-aico-session.conf	@USER@/org.gnome.Shell@x11.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/org.gnome.Shell@x11.service.d/50-nightshift-session.conf
+user/pipewire-pulse.service.d/50-aico-session.conf	@USER@/pipewire-pulse.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/pipewire-pulse.service.d/50-nightshift-session.conf
+user/pipewire.service.d/50-aico-session.conf	@USER@/pipewire.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/pipewire.service.d/50-nightshift-session.conf
+user/session.slice.d/50-aico-memory.conf	@USER@/session.slice.d/50-aico-memory.conf	@HOME@/.config/systemd/user/session.slice.d/50-nightshift-memory.conf
+user/tether@.service.d/50-aico-oomd.conf	@USER@/tether@.service.d/50-aico-oomd.conf	@HOME@/.config/systemd/user/tether@.service.d/50-nightshift-oomd.conf
+user/wireplumber.service.d/50-aico-session.conf	@USER@/wireplumber.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/wireplumber.service.d/50-nightshift-session.conf
+user/xdg-desktop-portal-gnome.service.d/50-aico-session.conf	@USER@/xdg-desktop-portal-gnome.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/xdg-desktop-portal-gnome.service.d/50-nightshift-session.conf
+user/xdg-desktop-portal.service.d/50-aico-session.conf	@USER@/xdg-desktop-portal.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/xdg-desktop-portal.service.d/50-nightshift-session.conf

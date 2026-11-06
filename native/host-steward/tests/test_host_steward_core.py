@@ -247,8 +247,19 @@ def test_install_script_copies_the_package_data_and_units(tmp_path, monkeypatch)
         "HS_SUDOERS_DIR": str(tmp_path / "sudoers.d"),
         "HS_ETC_DIR": str(tmp_path / "etc"),
         "HS_STATE_DIR": str(tmp_path / "state"),
+        "HS_CONF_ROOT": str(tmp_path / "root"),
+        "HS_OWNER_HOME": str(tmp_path / "home"),
     }
     here = Path(__file__).resolve().parents[1]
+    old_user = tmp_path / "home/.config/systemd/user/dbus.service.d/50-nightshift-session.conf"
+    old_user.parent.mkdir(parents=True)
+    old_user.write_text("[Service]\nOOMScoreAdjust=-500\n")
+    old_sysctl = tmp_path / "root/etc/sysctl.d/60-nightshift-vm.swappiness.conf"
+    old_zswap = tmp_path / "units/nightshift-zswap.service"
+    old_usb = tmp_path / "root/etc/udev/rules.d/70-nightshift-app-usb.rules"
+    for old in (old_sysctl, old_zswap, old_usb):
+        old.parent.mkdir(parents=True, exist_ok=True)
+        old.write_text("old\n")
     subprocess.run([str(here / "install-root.sh")], env=env, check=True, capture_output=True)
     assert (tmp_path / "lib/host_steward/data/checks.toml").is_file()
     assert (tmp_path / "lib/aico_status.py").is_file()
@@ -260,7 +271,25 @@ def test_install_script_copies_the_package_data_and_units(tmp_path, monkeypatch)
     assert "--conf-file=/etc/aico/split-dns.conf" in (tmp_path / "units/aico-split-dns.service").read_text()
     assert "listen-address=127.0.0.1" in (tmp_path / "etc/split-dns.conf").read_text()
     assert (tmp_path / "user-units/host-steward-memctl.service").is_file()
+    assert (tmp_path / "user-units/host-steward-display-guard.service").is_file()
+    for unit in ("zswap", "input-watch", "home-off"):
+        assert (tmp_path / f"units/host-steward-{unit}.service").is_file()
     assert not (tmp_path / "units/host-steward-memctl.service").exists()
+    root = tmp_path / "root/etc"
+    assert "vm.swappiness = 60" in (root / "sysctl.d/60-aico-memory.conf").read_text()
+    assert "/run/host-steward-memctl 0755 " in (root / "tmpfiles.d/host-steward.conf").read_text()
+    assert "@OWNER@" not in (root / "tmpfiles.d/host-steward.conf").read_text()
+    assert (root / "systemd/user.conf.d/50-aico-oom.conf").is_file()
+    assert (tmp_path / "user-units/dbus.service.d/50-aico-session.conf").is_file()
+    assert (root / "udev/rules.d/70-aico-uinput.rules").is_file()
+    # Older Nightshift-named files are gone and archived under their own path; the USB-update rule is dropped.
+    archived = tmp_path / "state/archive/nightshift-retired"
+    for old, rel in ((old_sysctl, "etc/sysctl.d/60-nightshift-vm.swappiness.conf"),
+                     (old_zswap, str(old_zswap).removeprefix("/")),
+                     (old_usb, "etc/udev/rules.d/70-nightshift-app-usb.rules")):
+        assert not old.exists() and (archived / rel).read_text() == "old\n"
+    assert not old_user.exists() and not old_user.parent.exists()
+    assert not any("nightshift" in str(path) for path in (tmp_path / "root").rglob("*"))
     assert "systemctl start host-steward-space-guard.service" in (tmp_path / "sudoers.d/60-host-steward").read_text()
     done = subprocess.run(
         [str(tmp_path / "lib/host-steward"), "check", "--only", "nope"], capture_output=True, text=True, check=False

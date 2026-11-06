@@ -1,6 +1,6 @@
 """host-steward declare: say a change a check watches is yours (so its row shows a note, not a problem).
 
-Port of `nightshift declare`. `host-steward declare --host HOST --what KIND --hours N --reason TEXT [--since H]`
+`host-steward declare --host HOST --what KIND --hours N --reason TEXT [--since H]`
 records the declaration (host_steward/declare.py has the rules); `host-steward declare list` shows them, open ones
 first. Nothing is granted and no row is posted: the checks read the file.
 """

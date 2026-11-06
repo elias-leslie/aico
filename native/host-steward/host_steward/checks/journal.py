@@ -4,11 +4,10 @@ Port of ns/checks/journal.py. Corrupt files: journald removes one when it ages o
 there 35 days after it was first seen is past the retention and warns. First-seen times are kept in this check's
 state. Signatures: the journal's warnings since the last run are clustered into message templates
 (host_steward/journal_miner.py, a Drain-style miner with a cursor); a template first seen in the last 24 hours that
-the known table does not label is "new", which Nightshift showed as an info line and so does this row (a note, never
+the known table does not label is "new", which this row shows as a note (never
 a problem): failed units, memory kills and crashes have their own checks, and container output is not counted. The
 clusters and the report (journal-signatures.json, the top signatures and the new ones) are files beside the state
-file. The first run adopts Nightshift's journal state read-only (clusters, baseline, cursor), so what it already
-knew is not new again. A run that reads a journal it cannot read, or a cursor journald no longer has, falls back to
+file. A run that reads a journal it cannot read, or a cursor journald no longer has, falls back to
 the initial window.
 """
 
@@ -97,9 +96,6 @@ def signatures(ctx: Ctx) -> Signal:
     state_path, report_path = _path(ctx, "cluster_file"), _path(ctx, "signatures_file")
     now = datetime.fromtimestamp(ctx.now, UTC)
     saved = _read_json(state_path)
-    adopted = False
-    if saved is None and cfg.get("adopt_from"):
-        saved, adopted = _read_json(Path(cfg["adopt_from"])), True
     cursor, clusters, baseline_at = journal_miner.load_clusters(saved or {})
     baseline_at = baseline_at or now.isoformat()
     miner = journal_miner.Miner(
@@ -126,7 +122,6 @@ def signatures(ctx: Ctx) -> Signal:
         known = journal_miner.compile_known(cfg["known"])
         rep = journal_miner.report(miner, now, int(cfg["top_n"]), known, baseline_at)
         rep["ingested_this_run"] = n
-        rep["adopted_from_nightshift"] = adopted
         _write_private(report_path, rep)
     except OSError as error:
         return Signal("journal.signatures.unwritable", "warn", {"why": str(error)[:60]})

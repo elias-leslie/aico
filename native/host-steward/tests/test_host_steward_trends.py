@@ -1,14 +1,13 @@
 """Trends, history, storage fill rate, PVE guests and the asset registry (host-steward, ns-01 leftovers and ns-23)."""
 
 import json
-import sqlite3
 import time
 from collections import namedtuple
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from host_steward import assets, core, history, trend
+from host_steward import acts, assets, core, history, trend
 from host_steward.checks import CHECKS, ecc, guests, pve, registry, storage, trends
 
 DATA = core.load_data()
@@ -46,54 +45,7 @@ def fill_days(store, metric, host, values, dim="", end=NOW, kind="gauge"):
         store.record(metric, host, value, dim, end - i * DAY, "last", kind)
 
 
-def nightshift_db(path, rows):
-    db = sqlite3.connect(path)
-    db.executescript(
-        "CREATE TABLE series (metric TEXT, host TEXT, kind TEXT, created REAL, coverage_start REAL);"
-        "CREATE TABLE daily (metric TEXT, host TEXT, dim TEXT, day TEXT, value REAL, ts REAL);"
-    )
-    for metric, host, dim, day, value in rows:
-        db.execute(
-            "INSERT OR IGNORE INTO series VALUES (?,?,?,?,?)",
-            (metric, host, "gauge", NOW - 30 * DAY, NOW - 30 * DAY),
-        )
-        db.execute("INSERT INTO daily VALUES (?,?,?,?,?,?)", (metric, host, dim, day, value, NOW))
-    db.commit()
-    db.close()
-
-
 # ---------------------------------------------------------------- history
-
-
-def test_seed_copies_once_and_existing_rows_win(store, tmp_path):
-    src = tmp_path / "ns.sqlite3"
-    days = [history.day_of(NOW - i * DAY) for i in range(5)]
-    nightshift_db(
-        src,
-        [("pool.data_pct", "davion-gem", "pve/data", d, 50.0 + i) for i, d in enumerate(days)]
-        + [("pool.data_pct", "other-host", "x", days[0], 1.0)]
-        + [("posture.score", "davion-gem", "", days[0], 9.0)],
-    )
-    store.record(
-        "pool.data_pct", "pve", 99.0, "pve/data", NOW, "last"
-    )  # started recording before the seed ran
-    hosts, metrics = {"davion-gem": "pve"}, ["pool.data_pct"]
-    assert (
-        store.seed_once(src, hosts, metrics) == 4
-    )  # the other host, the other metric and today's row are not copied
-    assert store.day_value("pool.data_pct", "pve", days[0], "pve/data") == 99.0
-    assert (
-        store.series("pool.data_pct", "pve")["coverage_start"] == NOW - 30 * DAY
-    )  # the earlier start wins
-    assert store.series("posture.score", "pve") is None
-    assert store.seed_once(src, hosts, metrics) == 0  # once
-
-
-def test_seed_with_unreadable_source_is_tried_again(store, tmp_path):
-    assert store.seed_once(tmp_path / "missing.sqlite3", {"a": "pve"}, ["m"]) == 0
-    src = tmp_path / "later.sqlite3"
-    nightshift_db(src, [("m", "a", "", history.day_of(NOW), 1.0)])
-    assert store.seed_once(src, {"a": "pve"}, ["m"]) == 1
 
 
 def test_record_aggregates_per_day(store):
@@ -248,36 +200,22 @@ def test_a_cleanup_resets_the_disk_projection(store):
     assert trend.evaluate(store, spec_named("storage.disk_trend"), NOW)["verdict"] != "worsening"
 
 
-def test_trends_seeds_once_then_skips_specs_with_nothing_recorded(store, tmp_path):
-    src = tmp_path / "ns.sqlite3"
-    nightshift_db(
-        src,
-        [
-            ("pool.data_pct", "davion-gem", "pve/data", history.day_of(NOW - i * DAY), 65.0)
-            for i in range(3)
-        ],
-    )
-    cfg = {
-        **DATA["checks"]["trends"],
-        "seed": {**DATA["checks"]["trends"]["seed"], "source": str(src)},
-    }
-    first = trends.run(ctx_for("trends", cache={"history": store}, cfg=cfg))
-    assert {s.code for s in first} >= {"pve.thin.trend", "trends.seeded"}
-    assert not any(
-        s.code == "storage.smart_trend" for s in first
-    )  # nothing recorded for the workstation
-    second = trends.run(ctx_for("trends", cache={"history": store}, cfg=cfg))
-    assert not any(s.code == "trends.seeded" for s in second)
+def test_trends_skips_specs_with_nothing_recorded(store):
+    store.record("pool.data_pct", "pve", 65.0, "pve/data", NOW, "last")
+    out = trends.run(ctx_for("trends", cache={"history": store}, cfg=DATA["checks"]["trends"]))
+    assert "pve.thin.trend" in {s.code for s in out}
+    assert not any(s.code == "storage.smart_trend" for s in out)  # nothing recorded for the workstation
 
 
 def test_empty_history_still_makes_a_row(store):
-    cfg = {**DATA["checks"]["trends"], "seed": {}}
+    cfg = DATA["checks"]["trends"]
     assert [s.code for s in trends.run(ctx_for("trends", cache={"history": store}, cfg=cfg))] == [
         "trends.none"
     ]
 
 
 def test_ecc_trend_is_record_only_in_the_row(store):
+    store.record("mem.ce", "pve", 5.0, "", NOW - 30 * DAY, "last", "events")  # the series started a month ago
     fill_days(store, "mem.ce", "pve", [5.0] * 20 + [60.0] * 7, kind="events")
     sig = next(
         s
@@ -377,9 +315,6 @@ SYSTEM = {"name": "System disk", "path": "/", "balance": True}
 def storage_cfg(tmp_path, **over):
     return {
         **DATA["checks"]["storage"],
-        "guard_inherit": [],
-        "growers_inherit": [],
-        "samples_inherit": str(tmp_path / "none.json"),
         **over,
     }
 
@@ -400,9 +335,9 @@ def run_fill(monkeypatch, tmp_path, samples, free_gib, guard=None, cfg_over=None
     )
     cfg = storage_cfg(tmp_path, **(cfg_over or {}))
     if guard is not None:
-        path = tmp_path / "guard.json"
+        path = acts.job_dir() / "space-guard.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(guard))
-        cfg["guard_inherit"] = [str(path)]
     ctx = ctx_for(
         "storage",
         cfg=cfg,
@@ -443,21 +378,6 @@ def test_a_step_the_last_hour_no_longer_shows_is_not_a_trend(monkeypatch, tmp_pa
     assert "storage.fill" not in run_fill(monkeypatch, tmp_path, samples, 60.0)
 
 
-def test_the_first_run_starts_from_nightshifts_samples(monkeypatch, tmp_path):
-    seed = tmp_path / "samples.json"
-    seed.write_text(json.dumps({"/": falling(3.0, 6, 60.0)}))
-    monkeypatch.setattr(
-        storage.shutil, "disk_usage", lambda _p: Usage(500 * GIB, 440 * GIB, 60 * GIB)
-    )
-    ctx = ctx_for(
-        "storage",
-        cfg=storage_cfg(tmp_path, samples_inherit=str(seed)),
-        cache={"history": history.Store(tmp_path / "f.sqlite3")},
-    )
-    assert any(s.code == "storage.fill" for s in storage.disk(ctx, SYSTEM))
-    assert len(ctx.state["samples"]["/"]) > 20 and ctx.state["samples"]["/"][-1][0] == NOW
-
-
 def test_reclaim_that_ran_out_of_tiers_is_failed(monkeypatch, tmp_path):
     guard = {
         "at": datetime.now(UTC).isoformat(),
@@ -477,14 +397,6 @@ def test_reclaim_that_ran_out_of_tiers_is_failed(monkeypatch, tmp_path):
         "storage.reclaim.exhausted"
     ]
     assert sig.state == "failed" and sig.fields["tiers"] == "cleanup, balance"
-
-
-def test_the_newest_guard_state_wins(tmp_path):
-    old, new = tmp_path / "old.json", tmp_path / "new.json"
-    old.write_text(json.dumps({"at": "2026-11-01T00:00:00+00:00", "k": "old"}))
-    new.write_text(json.dumps({"at": "2026-11-02T00:00:00+00:00", "k": "new"}))
-    assert storage.newest_state([str(old), str(new), str(tmp_path / "gone.json")])["k"] == "new"
-    assert storage.newest_state([str(tmp_path / "gone.json")]) == {}
 
 
 def test_storage_smart_counters_for_the_history():

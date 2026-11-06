@@ -1,4 +1,4 @@
-"""M5a review fixes: the guard's time format and cutover switch, one controller acting at a time, unreadable inputs
+"""M5a review fixes: the guard's time format and switch, unreadable inputs
 that must warn, the ECC history, and the run actions a user can really start."""
 
 from __future__ import annotations
@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import copy
 import json
-import os
 import re
 import stat
 import time
@@ -38,19 +37,6 @@ class Fake:
             if all(word in argv for word in words):
                 return result
         return Result(127, "", "not found")
-
-
-class nightshift_on:
-    """systemctl says every listed unit is enabled and active; anything else is off."""
-
-    def __init__(self, *units):
-        self.units, self.calls = units, []
-
-    def __call__(self, argv, timeout=60, input_text=None):
-        self.calls.append(list(argv))
-        if argv[0] == "systemctl" and argv[-1] in self.units:
-            return Result(0, "enabled\n")
-        return Result(4 if argv[0] == "systemctl" else 127, "", "not found")
 
 
 @pytest.fixture(autouse=True)
@@ -140,14 +126,6 @@ def test_a_dry_run_ladder_never_reads_as_exhausted():
     )
 
 
-def test_newest_state_orders_epoch_and_iso_files(tmp_path):
-    older, newer = tmp_path / "older.json", tmp_path / "newer.json"
-    older.write_text(json.dumps({"at": NOW - 100, "k": "older"}))
-    newer.write_text(json.dumps({"at": core.iso_time(NOW), "k": "newer"}))
-    assert storage.newest_state([str(newer), str(older)])["k"] == "newer"
-    assert storage.newest_state([str(older), str(newer)])["k"] == "newer"
-
-
 def test_the_space_guard_writes_iso_time(tmp_path, monkeypatch):
     fake = Fake(
         (["findmnt", "-n"], Result(0, "/dev/nvme0n1p2[/@]\n")),
@@ -178,37 +156,16 @@ def test_the_space_guard_writes_iso_time(tmp_path, monkeypatch):
     assert saved["live"] is False
 
 
-def test_the_storage_check_reads_nightshifts_file_until_space_guard_acts(tmp_path, monkeypatch):
-    theirs, own = tmp_path / "nightshift.json", acts.job_dir() / "space-guard.json"
-    theirs.write_text(
-        json.dumps({"at": core.iso_time(NOW), "ballast": {"/": 6 * GIB}, "who": "nightshift"})
-    )
+def test_the_storage_check_reads_the_space_guards_own_file(tmp_path):
+    own = acts.job_dir() / "space-guard.json"
     own.parent.mkdir(parents=True)
     own.write_text(json.dumps({"at": core.iso_time(NOW + 5), "live": True, "who": "own"}))
-    cfg = {**DATA["checks"]["storage"], "guard_inherit": [str(theirs)]}
-    assert storage.guard_state(cfg, False)["who"] == "nightshift"
-    assert storage.guard_state(cfg, True)["who"] == "own"
-    # the newer file of a dry run is not preferred over Nightshift's real one
-    own.write_text(json.dumps({"at": core.iso_time(NOW + 500), "live": False, "who": "own-dry"}))
-    assert storage.guard_state(cfg, False)["who"] == "nightshift"
+    assert storage.guard_state()["who"] == "own"
 
 
-def test_memctl_reads_the_ballast_record_the_cutover_flag_picks():
+def test_memctl_reads_the_space_guards_own_ballast_record():
     data = copy.deepcopy(DATA)
-    paths = data["memctl"]["paths"]
-    data["acting"]["space_guard"] = False
-    assert memctl.ballast_file(data) == Path(paths["ballast_state"])
-    data["acting"]["space_guard"] = True
-    assert memctl.ballast_file(data) == Path(paths["ballast_state_own"])
-    assert paths["ballast_state_own"] != paths["ballast_state"]
-
-
-def test_a_dry_run_starts_from_nightshifts_ballast_record(tmp_path):
-    cfg = {**DATA["jobs"]["space-guard"], "inherit_state": str(tmp_path / "theirs.json")}
-    (tmp_path / "theirs.json").write_text(json.dumps({"ballast": {"/": 1}}))
-    acts.write_json(acts.job_dir() / "space-guard.json", {"ballast": {"/": 2}})
-    assert space_guard.load_previous(cfg, False)["ballast"] == {"/": 1}
-    assert space_guard.load_previous(cfg, True)["ballast"] == {"/": 2}
+    assert memctl.ballast_file(data) == Path("/var/lib/host-steward/jobs/space-guard.json")
 
 
 # item 3: a failed dry run warns
@@ -229,7 +186,7 @@ def test_a_dry_run_that_failed_warns():
     assert space_guard.row_text(tier, False)[0] == "warn"
 
 
-# item 2: one controller acting at a time
+# item 2: a controller switched on acts
 
 
 def acting_data(name, tmp_path):
@@ -239,62 +196,7 @@ def acting_data(name, tmp_path):
     return data
 
 
-def test_counterparts_are_data_and_cover_every_acting_job():
-    table = DATA["counterparts"]
-    assert set(table) == set(DATA["acting"])
-    assert table["scrub"]["system"] == [
-        "nightshift-btrfs-scrub-native.timer",
-        "nightshift-btrfs-scrub-root.timer",
-    ]
-    assert table["memctl"]["user"] == ["nightshift-memctl.service"]
-    assert "nightshift-space-guard.timer" in table["space_guard"]["system"]
-
-
-def test_counterparts_running_asks_systemctl_for_enabled_and_active():
-    run = nightshift_on("nightshift-btrfs-scrub-root.timer")
-    found = core.counterparts_running(DATA, "scrub", run)
-    assert found == ["nightshift-btrfs-scrub-root.timer (enabled, active)"]
-    first = run.calls[0]
-    assert first[:2] == ["systemctl", "--no-ask-password"] and "--user" not in first
-    assert core.counterparts_running(DATA, "scrub", nightshift_on()) == []
-    assert core.refusal(DATA, "scrub", nightshift_on()) is None
-
-
-def test_the_user_service_is_asked_through_the_owners_manager_when_root(monkeypatch):
-    monkeypatch.setattr(os, "geteuid", lambda: 0)
-    run = nightshift_on("nightshift-memctl.service")
-    assert core.counterparts_running(DATA, "memctl", run)
-    assert run.calls[0] == [
-        "systemctl",
-        "--no-ask-password",
-        "--user",
-        "-M",
-        "kasadis@",
-        "is-enabled",
-        "nightshift-memctl.service",
-    ]
-    monkeypatch.setattr(os, "geteuid", lambda: 1000)
-    plain = nightshift_on("nightshift-memctl.service")
-    core.counterparts_running(DATA, "memctl", plain)
-    assert "-M" not in plain.calls[0] and "--user" in plain.calls[0]
-
-
-def test_housekeeping_refuses_while_nightshifts_timer_runs(tmp_path, monkeypatch):
-    fake = nightshift_on("nightshift-housekeeping.timer")
-    monkeypatch.setattr(core, "run_command", fake)
-    rows = []
-    code = housekeeping.main(
-        argparse.Namespace(no_post=False), acting_data("housekeeping", tmp_path), rows.append
-    )
-    assert code == 0 and rows[0]["state"] == "warn" and rows[0]["id"].endswith("/job-housekeeping")
-    assert (
-        "nightshift-housekeeping.timer" in rows[0]["meaning"]
-        and "did nothing" in rows[0]["meaning"]
-    )
-    assert all(call[0] == "systemctl" for call in fake.calls)  # nothing else ran
-
-
-def test_housekeeping_acts_once_nightshifts_timer_is_off(tmp_path, monkeypatch):
+def test_housekeeping_acts_when_switched_on(tmp_path, monkeypatch):
     fake = Fake(
         (["snap", "list"], Result(0, "Name Version Rev Tracking Publisher Notes\n")),
         (["pgrep"], Result(1)),
@@ -309,46 +211,6 @@ def test_housekeeping_acts_once_nightshifts_timer_is_off(tmp_path, monkeypatch):
     assert ["apt-get", "clean"] in fake.calls and "Nightshift" not in rows[0]["meaning"]
 
 
-def test_space_guard_refuses_while_nightshifts_timer_runs(tmp_path, monkeypatch):
-    fake = nightshift_on("nightshift-space-guard.timer")
-    monkeypatch.setattr(core, "run_command", fake)
-    rows = []
-    code = space_guard.main(
-        argparse.Namespace(no_post=False), acting_data("space_guard", tmp_path), rows.append
-    )
-    assert (
-        code == 0
-        and rows[0]["state"] == "warn"
-        and "nightshift-space-guard.timer" in rows[0]["meaning"]
-    )
-    assert all(call[0] == "systemctl" for call in fake.calls)
-    assert not (acts.job_dir() / "space-guard.json").exists()
-
-
-def test_scrub_refuses_while_either_nightshift_timer_runs(tmp_path, monkeypatch):
-    fake = nightshift_on("nightshift-btrfs-scrub-native.timer")
-    monkeypatch.setattr(core, "run_command", fake)
-    data = acting_data("scrub", tmp_path)
-    data["jobs"]["scrub"]["lock"] = str(tmp_path / "lock")
-    rows = []
-    code = scrub.main(argparse.Namespace(target="root", no_post=False), data, rows.append)
-    assert code == 1 and rows[0]["state"] == "warn" and "scrub-native.timer" in rows[0]["meaning"]
-    assert all(call[0] == "systemctl" for call in fake.calls)  # no scrub started
-
-
-def test_nvme_tests_refuse_while_nightshifts_timers_run(tmp_path, monkeypatch):
-    fake = nightshift_on("nightshift-nvme-long-test.timer")
-    monkeypatch.setattr(core, "run_command", fake)
-    rows = []
-    code = nvme_test.main(
-        argparse.Namespace(kind="short", no_post=False),
-        acting_data("nvme_tests", tmp_path),
-        rows.append,
-    )
-    assert code == 1 and rows[0]["state"] == "warn" and "nvme-long-test.timer" in rows[0]["meaning"]
-    assert not any("-t" in call for call in fake.calls)
-
-
 def test_a_dry_job_never_asks_systemctl(tmp_path, monkeypatch):
     fake = Fake((["smartctl", "-l"], Result(0, "")), (["smartctl", "-A"], Result(0, "")))
     monkeypatch.setattr(core, "run_command", fake)
@@ -357,54 +219,6 @@ def test_a_dry_job_never_asks_systemctl(tmp_path, monkeypatch):
     data["acting"]["nvme_tests"] = False
     nvme_test.main(argparse.Namespace(kind="short", no_post=False), data, rows.append)
     assert rows[0]["state"] == "ok" and not any(call[0] == "systemctl" for call in fake.calls)
-
-
-def test_memctl_stands_down_to_a_dry_run_with_a_warn_row(tmp_path, monkeypatch):
-    built = []
-    monkeypatch.setattr(core, "run_command", nightshift_on("nightshift-memctl.service"))
-    monkeypatch.setattr(os, "geteuid", lambda: 1000)
-    ctl = _controller(tmp_path)
-
-    def fake_build(data, acting, uid, home, runtime):
-        built.append(acting)
-        return ctl
-
-    data = copy.deepcopy(DATA)
-    data["acting"]["memctl"] = True
-    monkeypatch.setattr(memctl, "build", fake_build)
-    rows = []
-    code = memctl.main(argparse.Namespace(once=True, preview=False), data, rows.append)
-    assert code == 0 and built == [False]
-    assert rows[0]["state"] == "warn" and "nightshift-memctl.service" in rows[0]["meaning"]
-    assert "Meanwhile a dry run" in rows[0]["meaning"]
-
-
-def _controller(tmp_path):
-    from test_host_steward_memory import Host
-
-    return Host(tmp_path).controller(now=0)
-
-
-def test_memctl_restarts_to_follow_nightshifts_memctl_going_away(tmp_path, monkeypatch):
-    """Refused at start; Nightshift's memctl is gone by the first row: the loop ends so the unit restarts it live."""
-    on = {"yes": True}
-    monkeypatch.setattr(
-        core,
-        "refusal",
-        lambda data, name, run=None: "Nightshift's memctl is on." if on["yes"] else None,
-    )
-    ctl = _controller(tmp_path)
-    monkeypatch.setattr(memctl, "build", lambda *a: ctl)
-    data = copy.deepcopy(DATA)
-    data["acting"]["memctl"] = True
-    posted = []
-
-    def post(row):
-        posted.append(row)
-        on["yes"] = False
-
-    code = memctl.main(argparse.Namespace(once=False, preview=False), data, post)
-    assert code == 0 and len(posted) == 1 and posted[0]["state"] == "warn"
 
 
 # item 4 and 5: ECC

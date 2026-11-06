@@ -4,12 +4,43 @@ archive_prefix = "native/host-steward/"
 # Written after each signed install: the commit it came from (aico deploy compares it with the commit it deploys).
 receipt = "/usr/local/lib/host-steward/installed.json"
 
-[migration]
-passkey_source = "/var/lib/nightshift-approve/state/credential.json"
-passkey_target = "/var/lib/host-steward/grants/credential.json"
-token_source = "/etc/nightshift/grants"
-token_target = "/etc/host-steward/grants"
-site_source = "/etc/nightshift/site.json"
-site_target = "/etc/host-steward/site.json"
-ledger_source = "/var/lib/nightshift/ledger/chain.jsonl"
-ledger_target = "/var/lib/host-steward/archive/chain.jsonl"
+# Files carried over once from the old Nightshift locations (the grants, passkey and ledger moved on 2026-11-04).
+# Copied only when the target is missing, with this mode, and never printed. group is handed to the file and its
+# directory; dir_mode is the directory's mode.
+[[migration.files]]
+source = "/etc/nightshift/pve-check.key"
+target = "/etc/host-steward/pve-check.key"
+mode = 0o600
+[[migration.files]]
+source = "/etc/nightshift/pve-known_hosts"
+target = "/etc/host-steward/pve-known_hosts"
+mode = 0o644
+[[migration.files]]
+source = "/etc/nightshift/router-status.key"
+target = "/etc/host-steward/router-status.key"
+mode = 0o600
+[[migration.files]]
+source = "/etc/nightshift/router-known_hosts"
+target = "/etc/host-steward/router-known_hosts"
+mode = 0o644
+[[migration.files]]
+source = "/etc/nightshift/fcm/service-account.json"
+target = "/etc/host-steward/fcm/service-account.json"
+mode = 0o600
+[[migration.files]]
+source = "/var/lib/nightshift/fcm/token.json"
+target = "/var/lib/host-steward/fcm/token.json"
+mode = 0o640
+group = "kasadis"
+dir_mode = 0o750
+# Shared readable site data: Aico web and the tray read these.
+[[migration.files]]
+source = "/etc/nightshift/site.json"
+target = "/etc/aico/site.json"
+mode = 0o644
+dir_mode = 0o755
+[[migration.files]]
+source = "/etc/nightshift/fcm-app.json"
+target = "/etc/aico/fcm-app.json"
+mode = 0o644
+dir_mode = 0o755

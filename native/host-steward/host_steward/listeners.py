@@ -542,7 +542,7 @@ def traced_listeners(
     devices: Callable[[], dict[str, str]] | None = None,
 ) -> tuple[str, dict[str, dict[str, Any]]]:
     """('note', {path: actor}) when every listener path is declared, traced live to one of our agent sessions or
-    services (nightshift/attribution.py), or closed; ('', who) otherwise. A closed listener exposes less: it is named
+    services, or closed; ('', who) otherwise. A closed listener exposes less: it is named
     (with whoever opened it, when that was traced) and never asks. An agent's listener on a port a cloudflared ingress
     rule targets (`tunnel`) is public, so it is not traced."""
     try:  # attribution only ever removes an ask: when it fails, the change asks as before

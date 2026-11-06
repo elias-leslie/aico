@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import json
+import grp
+import os
 import re
 import shutil
 import stat
@@ -21,25 +22,30 @@ def policy():
         return tomllib.load(handle)
 
 
+def copy_once(source: Path, target: Path, mode: int, *, group: str | None = None, dir_mode: int = 0o700) -> bool:
+    """Copy `source` to `target` unless the target exists or the source is missing; contents are never read into output."""
+    if target.exists() or not source.exists():
+        return False
+    target.parent.mkdir(parents=True, exist_ok=True, mode=dir_mode)
+    shutil.copyfile(source, target)
+    target.chmod(mode)
+    if group:
+        try:
+            gid = grp.getgrnam(group).gr_gid
+        except KeyError:
+            gid = None
+        if gid is not None:
+            os.chown(target, -1, gid)
+            os.chown(target.parent, -1, gid)
+            target.parent.chmod(dir_mode)
+    return True
+
+
 def migrate() -> None:
-    """Copy valuable private files without displaying them; never replace enrolled material."""
-    cfg = policy()["migration"]
-
-    def copy(source: Path, target: Path, mode: int):
-        if target.exists() or not source.exists():
-            return
-        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        shutil.copyfile(source, target)
-        target.chmod(mode)
-
-    copy(Path(cfg["passkey_source"]), Path(cfg["passkey_target"]), 0o600)
-    for token in Path(cfg["token_source"]).glob("*.token"):
-        copy(token, Path(cfg["token_target"]) / token.name, 0o600)
-    copy(Path(cfg["ledger_source"]), Path(cfg["ledger_target"]), 0o444)
-    site = Path(cfg["site_target"])
-    if not site.exists() and Path(cfg["site_source"]).exists():
-        source = json.loads(Path(cfg["site_source"]).read_text())
-        core.write_json(site, {"approve_host": source["urls"]["approve_host"]}, mode=0o644)
+    """Copy the old locations' keys, site data and phone-sender files once, without displaying them."""
+    for item in policy()["migration"]["files"]:
+        copy_once(Path(item["source"]), Path(item["target"]), item["mode"],
+                  group=item.get("group"), dir_mode=item.get("dir_mode", 0o700))
 
 
 def install(archive: Path, signature: Path, key: Path, prefix: str, *, execute=subprocess.run, owner=0,

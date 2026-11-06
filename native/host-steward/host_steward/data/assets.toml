@@ -1,5 +1,4 @@
-# The asset registry: one entry per host, router, guest or endpoint the checks rate. Copied from Nightshift's
-# deploy/system/site.json (its `assets`); this file is where the owner changes a tier.
+# The asset registry: one entry per host, router, guest or endpoint the checks rate. This file is where the owner changes a tier.
 #
 # tier: critical | standard | lab. kind: host | router | vm | ct | template | endpoint. presence: always_on |
 # intermittent | parked. data: holds data or secrets. isolated: declared isolated (counts only with PVE NIC evidence).
@@ -39,7 +38,7 @@ kind = "router"
 role = "router"
 hosts = ["gl-router"]
 names = ["gl-axt1800", "gl-router"]
-note = "GL.iNet gateway; Nightshift reads status only"
+note = "GL.iNet gateway; status read only"
 
 [[assets]]
 id = "davion-sidarli"

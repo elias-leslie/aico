@@ -1,11 +1,10 @@
 """Btrfs scrubs and NVMe self-tests: what the last real ones found, read-only.
 
-New for host-steward (Nightshift ran the scrub and self-test timers but kept no row of their results beyond the
-storage check's failed-self-test rule). Reads `btrfs scrub status` for each configured disk and `smartctl -l
+Reads `btrfs scrub status` for each configured disk and `smartctl -l
 selftest` for the NVMe drive, so the scheduled jobs have live information even before they run here. The schedule
-follows [acting] (the runner's ctx.acting): while scrub or nvme_tests is off the row says that schedule is still
-Nightshift's; once on, it is host-steward's timers ([checks.disk-tests] timers), and one that is not enabled warns,
-since nothing else would run it. The parsers are shared with the scrub and nvme-test jobs.
+follows [acting] (the runner's ctx.acting): while scrub or nvme_tests is off the row notes that nothing is
+scheduled for it; once on, it is host-steward's timers ([checks.disk-tests] timers), and one that is not enabled
+warns. The parsers are shared with the scrub and nvme-test jobs.
 """
 
 from __future__ import annotations
@@ -139,12 +138,12 @@ def run(ctx: Ctx) -> list[Signal]:
 
 
 def schedule_signals(ctx: Ctx) -> list[Signal]:
-    """Whose schedule runs each kind: Nightshift's while its [acting] switch is off (a note); host-steward's timers
-    once on, each of which must be enabled (systemctl is-enabled) or the row warns."""
-    nightshift = [kind for kind in ctx.cfg["timers"] if not ctx.acting.get(kind)]
+    """A kind whose [acting] switch is off has no schedule (a note); one that is on runs on host-steward's timers,
+    each of which must be enabled (systemctl is-enabled) or the row warns."""
+    switched_off = [kind for kind in ctx.cfg["timers"] if not ctx.acting.get(kind)]
     out = []
-    if nightshift:
-        code = "disk_tests.dry_run" + ("" if len(nightshift) > 1 else f".{nightshift[0]}")
+    if switched_off:
+        code = "disk_tests.dry_run" + ("" if len(switched_off) > 1 else f".{switched_off[0]}")
         out.append(Signal(code, "ok", {}, note=True))
     off = [
         timer

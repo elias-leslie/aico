@@ -495,10 +495,9 @@ def test_measure_children_and_growers(tmp_path):
 
 
 def test_space_guard_job_posts_a_dry_run_row_and_keeps_the_ballast_record(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        space_guard,
-        "load_previous",
-        lambda cfg, live: {"ballast": {"/": 6 * GIB}, "ballast_checked": {"/": NOW}},
+    acts.write_json(
+        acts.job_dir() / "space-guard.json",
+        {"ballast": {"/": 6 * GIB}, "ballast_checked": {"/": NOW}},
     )
     fake = Fake(*BTRFS_OK, (["btrfs", "filesystem", "usage"], Result(0, usage())))
     monkeypatch.setattr(core, "run_command", fake)
@@ -599,8 +598,7 @@ def test_disk_tests_check_reports_last_results_and_dry_run():
 
 
 def test_disk_tests_schedule_follows_the_acting_flags():
-    """Off: Nightshift's schedule (a note per kind still Nightshift's). On: host-steward's timers, and one that is not
-    enabled warns."""
+    """Off: no schedule (a note per kind switched off). On: host-steward's timers, and one that is not enabled warns."""
     timers = DATA["checks"]["disk-tests"]["timers"]
     enabled = Fake((["is-enabled"], Result(0, "enabled\n")))
 
@@ -624,7 +622,7 @@ def test_disk_tests_schedule_follows_the_acting_flags():
     text = core.explain(signals[0].code, signals[0].fields, DATA["meanings"], True, "warn")
     assert "sudo systemctl enable --now host-steward-scrub-root.timer" in text
     assert all(
-        core.explain(code, {}, DATA["meanings"], False, "ok").startswith("Nightshift still runs")
+        core.explain(code, {}, DATA["meanings"], False, "ok").startswith("Dry run:")
         for code in ("disk_tests.dry_run", "disk_tests.dry_run.scrub", "disk_tests.dry_run.nvme_tests")
     )
 

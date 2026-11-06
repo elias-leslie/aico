@@ -2,8 +2,8 @@
 # Install or refresh the Proxmox backup dispatcher on davion-gem (idempotent). Aico's backups reach it over ssh with a
 # forced-command key; sources.json beside this file is the list of paths it may capture (digest = sha256 of the source path).
 #
-#   sudo native/backup-hosts/pve-backup/install.sh      # as root: the authorized_keys change is an install receipt, not a tripwire ask
-#   native/backup-hosts/pve-backup/install.sh           # as the owner: same install, Nightshift then asks about the key change
+#   sudo native/backup-hosts/pve-backup/install.sh      # as root
+#   native/backup-hosts/pve-backup/install.sh           # as the owner: same install
 #   ... install.sh --yes DIGEST             # no terminal: install only the dispatcher and source list a first run
 #                                           # (without --yes) printed as 'Approval digest: DIGEST'
 #
@@ -43,10 +43,7 @@ KEY="$KEYDIR/pve-backup.ed25519"
 KEY_RE='^(ssh-ed25519 [A-Za-z0-9+/]{68})( [^[:cntrl:]]*)?$'
 
 work="$(mktemp -d)"; chmod 700 "$work"  # Root's own when run as root: nothing an agent can swap between show and install.
-rid=""; finished=0
-receipt() { python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from nightshift.installs import main; raise SystemExit(main(sys.argv[2:]))' \
-  /usr/local/lib/nightshift-exec/current "$@"; }
-trap '[ -z "$rid" ] || [ "$finished" = 1 ] || receipt finish "$rid" --failed || true; rm -rf "$work"' EXIT
+trap 'rm -rf "$work"' EXIT
 
 if [ -n "$(as_admin git -C "$ROOT" status --porcelain -- "$REL")" ]; then
   echo "$REL has uncommitted changes; only the committed dispatcher and source list are installed" >&2; exit 1
@@ -109,11 +106,6 @@ public="$(as_admin ssh-keygen -y -f "$private")"
 [[ $public =~ $KEY_RE ]] || { echo "$private does not hold exactly one ed25519 key; nothing installed" >&2; exit 1; }
 line="restrict,from=\"$FROM\",command=\"/usr/local/sbin/summitflow-pve-backup\" ${BASH_REMATCH[1]} summitflow-pve-backup"
 
-if [ "$(id -u)" = 0 ] && [ -d /usr/local/lib/nightshift-exec/current/nightshift ]; then
-  rid=$(receipt begin summitflow-pve-backup --head "$head" \
-    --expect "pve=/usr/local/sbin/summitflow-pve-backup" --expect "pve=/etc/summitflow-pve-backup/*")
-fi
-
 # One session: ssh re-splits remote arguments, so the files and the key line travel base64-encoded.
 dispatcher_b64="$(base64 -w0 < "$work/dispatcher")"
 sources_b64="$(base64 -w0 < "$work/sources.json")"
@@ -132,33 +124,16 @@ install -d -m 0755 -o root -g root /etc/summitflow-pve-backup
 printf '%s' "$2" | base64 -d > "$tmp"
 /usr/bin/python3 -I -c 'import json, sys; assert isinstance(json.load(open(sys.argv[1])), dict)' "$tmp"
 install -m 0644 -o root -g root "$tmp" /etc/summitflow-pve-backup/sources.json
-# Tripwire signature, byte for byte Nightshift's format (deploy/executor/install-pve.sh): the AUTH lines name each
-# auth file transition this session makes, for the install receipt.
-sig() {
-  local f=$1 h t
-  { [ -e "$f" ] || [ -L "$f" ]; } && [ ! -d "$f" ] || { echo MISSING; return; }
-  h=$(sha256sum < "$f" 2>/dev/null | cut -c1-64); [ -n "$h" ] || h=UNREADABLE
-  t=file; [ -L "$f" ] && t="symlink->$(readlink "$f")"; [ -L "$f" ] || [ -f "$f" ] || t=other
-  printf '%s %s %s %s\n' "$h" "$(stat -c %u:%g "$f")" "$(stat -c %a "$f")" "$t"
-}
-auth_paths="/root/.ssh/authorized_keys /etc/pve/priv/authorized_keys"
-declare -A before
-for f in $auth_paths; do before[$f]=$(sig "$f"); done
 ak=/root/.ssh/authorized_keys
 if ! grep -qxF "$line" "$ak"; then
   grep -v ' summitflow-pve-backup$' "$ak" > "$tmp" || true
   printf '%s\n' "$line" >> "$tmp"
   cat "$tmp" > "$ak"
 fi
-for f in $auth_paths; do
-  after=$(sig "$f")
-  [ "$after" = "${before[$f]}" ] || printf 'AUTH\t%s\t%s\t%s\n' "$f" "${before[$f]}" "$after"
-done
 echo "summitflow-pve-backup installed"
 REMOTE
 cat "$work/pve-install.out"
 if [ -f "$KEY.new" ]; then as_admin mv -f "$KEY.new.pub" "$KEY.pub"; as_admin mv -f "$KEY.new" "$KEY"; fi
-if [ -n "$rid" ]; then receipt finish "$rid" --auth "pve=$work/pve-install.out"; finished=1; fi
 # The new key reaches only the dispatcher: a shell command is refused, the guest list answers.
 as_admin "${check[@]}" guests > /dev/null && echo "key answers: guests"
 if as_admin "${check[@]}" id 2>/dev/null; then echo "the key ran a shell command; remove its line from $PVE:/root/.ssh/authorized_keys" >&2; exit 1; fi

@@ -15,8 +15,7 @@ Lines, margins and the balance trigger come from the storage check's table; this
 [jobs.space-guard]. Not ported: the receipts and the SummitFlow ~/.env.local reserve (credentials file).
 
 Every change goes through acts.Actor. With [acting] space_guard off it measures, decides and says what it
-would do ("Dry run: ..."); it mounts nothing, balances nothing, deletes nothing and keeps the ballast record
-it inherited (its own, else Nightshift's read-only).
+would do ("Dry run: ..."); it mounts nothing, balances nothing, deletes nothing and keeps the ballast record.
 """
 
 from __future__ import annotations
@@ -673,17 +672,9 @@ def row_text(result: dict[str, Any], live: bool) -> tuple[str, str]:
     if would:
         return (
             "ok",
-            f"Dry run: {lead}would {acts.say_would(would)}. Nightshift still acts until cutover.",
+            f"Dry run: {lead}would {acts.say_would(would)}.",
         )
     return "ok", f"Dry run: {lead}nothing to do ({where})."
-
-
-def load_previous(cfg: dict[str, Any], live: bool) -> dict[str, Any]:
-    """The ballast record to start from. Acting: this job's own, else Nightshift's (read-only) for the first run.
-    Dry run: Nightshift's, which is the guard that acts and so keeps it current, else this job's own."""
-    own = acts.read_json(acts.job_dir() / "space-guard.json")
-    theirs = acts.read_json(Path(cfg["inherit_state"]))
-    return (own or theirs) if live else (theirs or own)
 
 
 def status_row(cfg: dict[str, Any], state: str, meaning: str, now: float) -> dict[str, Any]:
@@ -707,11 +698,6 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
     cfg = data["jobs"][NAME]
     live = core.acting(data, "space_guard")
     now = time.time()
-    if live and (why := core.refusal(data, "space_guard", core.run_command)):
-        if not args.no_post:
-            post(status_row(cfg, "warn", why, now))
-        print(json.dumps({"live": False, "refused": why}, sort_keys=True))
-        return 0
     with acts.single_run(NAME) as got:
         if not got:
             print("host-steward space-guard: another run is still going")
@@ -723,10 +709,10 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
             data["site"]["owner"]["user"],
             now,
         )
-        prev = load_previous(cfg, live)
+        prev = acts.read_json(acts.job_dir() / "space-guard.json")
         result = space_guard(env, prev)
         saved = {"at": core.iso_time(now), "live": live, **result}
-        if not live:  # a dry run keeps the ballast record it inherited
+        if not live:  # a dry run keeps the ballast record
             saved["ballast"], saved["ballast_checked"] = (
                 prev.get("ballast", {}),
                 prev.get("ballast_checked", {}),

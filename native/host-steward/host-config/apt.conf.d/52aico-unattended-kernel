@@ -1,0 +1,16 @@
+// Kernels arrive only through a full-upgrade that an agent or the owner runs, which moves the kernel, its
+// linux-modules-nvidia module and the NVIDIA userspace in one transaction; never unattended. The host check still
+// flags a boot kernel without its module.
+// This blacklist covers kernel packages only. A lone NVIDIA userspace upgrade is blocked by the version clamp instead:
+// the installed linux-modules-nvidia-* package depends on an exact nvidia-kernel-common version, so apt cannot move
+// userspace past the module. canonical-livepatch covers critical kernel CVEs in between. Entries are Python re.match()
+// prefixes on the package name (unattended-upgrade), so "linux-image-[0-9]" matches linux-image-6.8.0-146-generic but
+// not the linux-image-generic metapackage (own entry).
+Unattended-Upgrade::Package-Blacklist {
+    "linux-generic";
+    "linux-image-generic";
+    "linux-headers-generic";
+    "linux-image-[0-9]";
+    "linux-modules-[0-9]";
+    "linux-headers-[0-9]";
+};

@@ -146,8 +146,7 @@ def journal_run(*lines, rc=0):
 
 
 def sig_ctx(run, tmp_path, **over):
-    base = {"adopt_from": "", **over}
-    return ctx("journal", run, **base)
+    return ctx("journal", run, **over)
 
 
 def test_miner_generalizes_numbers_into_one_cluster_with_a_stable_id():
@@ -173,7 +172,7 @@ def test_signatures_the_first_run_is_the_baseline_then_new_unlabeled_is_a_note_a
         entry("a brand new complaint about frobnicators", ident="frob", ts=NOW + 600),
         entry("pam_systemd(sudo:session): Failed to release session: Access denied", ident="sudo", cursor="c2", ts=NOW + 600),
     )
-    later = core.Ctx(cfg={**DATA["checks"]["journal"], "adopt_from": ""}, site=DATA["site"], now=NOW + 3600, run=run, state={})
+    later = core.Ctx(cfg=DATA["checks"]["journal"], site=DATA["site"], now=NOW + 3600, run=run, state={})
     signal = journal.signatures(later)
     assert (signal.code, signal.state, signal.note) == ("journal.signatures", "ok", True)
     assert signal.fields["new"] == 1 and signal.fields["ingested"] == 2
@@ -184,7 +183,7 @@ def test_signatures_the_first_run_is_the_baseline_then_new_unlabeled_is_a_note_a
 def test_signatures_second_run_continues_from_the_cursor_and_an_old_cluster_is_not_new(tmp_path):
     journal.signatures(sig_ctx(journal_run(entry("a complaint about frobnicators", ident="frob", cursor="c9")), tmp_path))
     run = journal_run()
-    later = core.Ctx(cfg={**DATA["checks"]["journal"], "adopt_from": ""}, site=DATA["site"], now=NOW + 3 * 86400, run=run, state={})
+    later = core.Ctx(cfg=DATA["checks"]["journal"], site=DATA["site"], now=NOW + 3 * 86400, run=run, state={})
     signal = journal.signatures(later)
     assert signal.fields["new"] == 0 and not signal.note and signal.fields["tracked"] == 1
     assert any("--after-cursor" in call and "c9" in call for call in run.calls)
@@ -200,21 +199,6 @@ def test_signatures_a_cursor_journald_lost_falls_back_to_the_initial_window(tmp_
 
     signal = journal.signatures(sig_ctx(run, tmp_path))
     assert signal.fields["ingested"] == 1
-
-
-def test_signatures_first_run_adopts_nightshifts_state(tmp_path):
-    miner = journal_miner.Miner()
-    miner.add("frob", "an old complaint about frobnicators", datetime.fromtimestamp(NOW - 9 * 86400, UTC))
-    theirs = tmp_path / "theirs.json"
-    theirs.write_text(
-        json.dumps(journal_miner.state_dict("cx", miner.clusters(), datetime.fromtimestamp(NOW, UTC), "2026-01-01T00:00:00+00:00", 30, 400))
-    )
-    run = journal_run()
-    signal = journal.signatures(sig_ctx(run, tmp_path, adopt_from=str(theirs)))
-    assert signal.fields["tracked"] == 1 and signal.fields["new"] == 0
-    assert any("--after-cursor" in call and "cx" in call for call in run.calls)  # their cursor carries on
-    report = json.loads((core.STATE_PATH.parent / "journal-signatures.json").read_text())
-    assert report["adopted_from_nightshift"] is True
 
 
 def test_signatures_unreadable_journal_warns(tmp_path):

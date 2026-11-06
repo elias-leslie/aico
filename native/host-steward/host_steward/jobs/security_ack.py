@@ -1,6 +1,6 @@
 """host-steward security-ack: confirm open login-setting, listener and sudo problems (root).
 
-Port of `nightshift security-ack`. Marks every open tripwire and sudo event as confirmed (the owner checked it, it was a
+Marks every open tripwire and sudo event as confirmed (the owner checked it, it was a
 deliberate test, or an agent's own change) with a note; they clear at the next check. `--event ID` confirms one: a
 tripwire event id, or the sudo id a row shows ("sensitive.…" or "failure.…").
 """

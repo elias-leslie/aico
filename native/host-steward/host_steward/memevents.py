@@ -1,4 +1,4 @@
-"""The memory event record (schema v1): ~/.local/state/nightshift/memory-events.jsonl.
+"""The memory event record (schema v1): ~/.local/state/host-steward/memory-events.jsonl.
 
 memctl writes the kernel kills, pane-stopped and outside-hog; Tether's memory guard (packages/tether
 src/lifecycle/job-guard.ts) appends its own tool-job kills, warnings and agent-hog records with killer tether.
@@ -7,7 +7,7 @@ One JSON object per line, appended and rotated at max_bytes (one older file, .1,
   killer tether | memctl | kernel-pane-cap | kernel-cgroup | kernel-global | oomd   (None for warnings and hogs)
   class  tool | agent | container
 plus ts, scope (unit name), tether_session_id, pid, starttime, comm, cmdline_head, bytes, host_state.
-Port of ns/memevents.py; the journal readers go through core.run_command so a test hands them fixture output.
+The journal readers go through core.run_command so a test hands them fixture output.
 """
 
 from __future__ import annotations

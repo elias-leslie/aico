@@ -462,13 +462,13 @@ what = "No NVMe self-test has been recorded on {device} yet"
 what = "Last: {text}"
 
 [signal."disk_tests.dry_run:ok"]
-what = "Nightshift still runs the scrubs and self-tests until cutover"
+what = "Dry run: the scrubs and self-tests are switched off, so none is scheduled"
 
 [signal."disk_tests.dry_run.scrub:ok"]
-what = "Nightshift still runs the scrubs until cutover"
+what = "Dry run: the scrubs are switched off, so none is scheduled"
 
 [signal."disk_tests.dry_run.nvme_tests:ok"]
-what = "Nightshift still runs the NVMe self-tests until cutover"
+what = "Dry run: the NVMe self-tests are switched off, so none is scheduled"
 
 [signal."disk_tests.timer_off"]
 what = "Not scheduled: {timers} is off"
@@ -505,7 +505,7 @@ next = "See what is calling sudo with host-steward check --only sudo --dry-run"
 
 [signal."sudo.new_family"]
 what = "{n} new sudo command{plural}: {families}"
-impact = "Expected if declared (host-steward or nightshift declare) or run by a known agent; they count as normal after a day"
+impact = "Expected if declared (host-steward declare) or run by a known agent; they count as normal after a day"
 next = "Don't know one? journalctl -t sudo --since -1d -g NAME shows who ran it"
 
 [signal."sudo.new_family.auto:ok"]
@@ -671,9 +671,6 @@ next = "Free space in the guest or grow its disk"
 
 [signal."pve.ecc.trend"]
 what = "{line}"
-
-[signal."trends.seeded:ok"]
-what = "Copied {n} daily readings from Nightshift's history"
 
 [signal."trends.none"]
 what = "No readings recorded yet"

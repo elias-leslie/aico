@@ -1,10 +1,9 @@
 """The metric history the trend checks read: one sqlite file with a value per metric, host, dimension and local day.
 
-Port of the daily part of ns/history.py. A check records a reading with record(): agg "last" keeps the day's latest
+A check records a reading with record(): agg "last" keeps the day's latest
 value, "max" its highest. Counts of events (corrected memory errors) are recorded as the day's count with agg "max"
 (the count only grows during a day). Hosts are site roles ("pve", "workstation"), not host names. Daily rows are
-pruned after DAILY_DAYS. seed_once() copies the series the trends use out of Nightshift's history database, once,
-so a trend is not blind for days after the cutover.
+pruned after DAILY_DAYS.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ import logging
 import os
 import sqlite3
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -108,54 +107,6 @@ class Store:
             (metric, host, dim, day),
         ).fetchone()
         return float(row[0]) if row else 0.0
-
-    def seed_once(
-        self,
-        source: str | Path,
-        hosts: Mapping[str, str],
-        metrics: Sequence[str],
-        mark: str = "seed:nightshift",
-    ) -> int:
-        """Copy daily rows and series of `metrics` out of Nightshift's history database (opened read-only), once.
-        `hosts` maps its host names to site roles. Existing rows win. Returns the rows copied (0 when already done or
-        the source is unreadable; an unreadable source is tried again next time)."""
-        if self.db.execute("SELECT 1 FROM meta WHERE key=?", (mark,)).fetchone():
-            return 0
-        try:
-            src = sqlite3.connect(f"file:{source}?mode=ro", uri=True, timeout=10)
-            src_series = src.execute(
-                f"SELECT metric, host, kind, created, coverage_start FROM series WHERE metric IN ({_marks(metrics)})",
-                list(metrics),
-            ).fetchall()
-            src_daily = src.execute(
-                f"SELECT metric, host, dim, day, value, ts FROM daily WHERE metric IN ({_marks(metrics)})",
-                list(metrics),
-            ).fetchall()
-            src.close()
-        except sqlite3.Error as error:
-            log.warning("history seed skipped: %s", error)
-            return 0
-        copied = 0
-        with self.db:
-            for metric, host, kind, created, coverage in src_series:
-                if host in hosts:
-                    # a series this host-steward already started keeps its kind but takes the earlier start
-                    self.db.execute(
-                        "INSERT INTO series VALUES (?,?,?,?,?) ON CONFLICT (metric, host) DO UPDATE SET "
-                        "created=min(created, excluded.created), "
-                        "coverage_start=min(coalesce(coverage_start, excluded.coverage_start), "
-                        "coalesce(excluded.coverage_start, coverage_start))",
-                        (metric, hosts[host], kind, created, coverage),
-                    )
-            for metric, host, dim, day, value, ts in src_daily:
-                if host in hosts:
-                    cur = self.db.execute(
-                        "INSERT OR IGNORE INTO daily VALUES (?,?,?,?,?,?)",
-                        (metric, hosts[host], dim, day, value, ts),
-                    )
-                    copied += cur.rowcount
-            self.db.execute("INSERT INTO meta VALUES (?,?)", (mark, str(time.time())))
-        return copied
 
 
 def _marks(items: Sequence[Any]) -> str:

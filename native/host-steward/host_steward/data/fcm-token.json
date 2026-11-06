@@ -1,6 +1,6 @@
 {
-  "account": "/etc/nightshift/fcm/service-account.json",
-  "token": "/var/lib/nightshift/fcm/token.json",
+  "account": "/etc/host-steward/fcm/service-account.json",
+  "token": "/var/lib/host-steward/fcm/token.json",
   "owner": "kasadis",
   "refresh_before_s": 2400,
   "every_s": 1200,

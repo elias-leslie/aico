@@ -1,7 +1,7 @@
 """Usage evidence: take the cheap process sample on every pass and watch that the nightly collection ran.
 
 Port of ns/checks/usage.py. The full collection (units, process accounting) is the `collect-usage` job; this check
-records the /proc sample Nightshift took on every check pass and warns when the last full collection is older than
+records the /proc sample taken on every check pass and warns when the last full collection is older than
 stale_hours (or none has happened since this check started watching).
 """
 

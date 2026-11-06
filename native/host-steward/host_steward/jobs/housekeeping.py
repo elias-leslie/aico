@@ -207,32 +207,11 @@ def job_actions() -> list[dict[str, str]]:
     ]
 
 
-def refuse(args: argparse.Namespace, cfg: dict[str, Any], why: str, now: float, post: Any) -> int:
-    """Switched on but Nightshift's housekeeping timer still runs: change nothing, say so on the Status board."""
-    row = core.job_row(
-        NAME,
-        cfg["what"],
-        "warn",
-        why,
-        aico_status.machine_id(),
-        now,
-        cfg["every_min"],
-        cfg["slack_min"],
-        actions=job_actions(),
-    )
-    if not args.no_post:
-        post(row)
-    print(json.dumps({"live": False, "refused": why}, sort_keys=True))
-    return 0
-
-
 def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status.report) -> int:
     cfg = data["jobs"][NAME]
     live = core.acting(data, NAME)
     owner = data["site"]["owner"]["user"]
     now = time.time()
-    if live and (why := core.refusal(data, NAME, core.run_command)):
-        return refuse(args, cfg, why, now, post)
     with acts.single_run(NAME) as got:
         if not got:
             print("host-steward housekeeping: another run is still going")

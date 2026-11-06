@@ -1,10 +1,9 @@
 """Trends: the slow changes the point-in-time checks cannot see, one verdict per metric family.
 
-Port of ns/checks/trends.py. The pve, storage and ecc checks record their readings into the history store
+The pve, storage and ecc checks record their readings into the history store
 (history.py) as they run; this check, run after them, evaluates the specs in the data file ([[checks.trends.specs]])
-over the daily values and says each one as a signal (code = Nightshift's finding code, so the tier classes and the
-caps apply unchanged). On its first run it copies the daily history Nightshift kept (its database, opened read-only,
-once: history.Store.seed_once) so projections have their weeks of readings from the start.
+over the daily values and says each one as a signal (code = the finding code, so the tier classes and the
+caps apply).
 
 A worsening verdict speaks at the spec's severity (failed when a rule's limit is within critical_days), then the
 tier step (assets.tier_state) raises it for the host's asset: the PVE thin pool, SMART and ECC trends are data
@@ -24,18 +23,6 @@ ID = "trends"
 
 def specs_of(cfg: dict[str, Any]) -> list[trend.Spec]:
     return [trend.spec_from(raw) for raw in cfg.get("specs", [])]
-
-
-def seed(cfg: dict[str, Any], store: history.Store) -> int:
-    seed_cfg = cfg.get("seed") or {}
-    if not seed_cfg.get("source"):
-        return 0
-    return store.seed_once(
-        seed_cfg["source"],
-        seed_cfg["hosts"],
-        seed_cfg["metrics"],
-        seed_cfg.get("mark", "seed:nightshift"),
-    )
 
 
 def signal_for(
@@ -64,7 +51,6 @@ def signal_for(
 
 def run(ctx: Ctx) -> list[Signal]:
     store = history.store_for(ctx.cache)
-    seeded = seed(ctx.cfg, store)
     data = assets.load_file()
     reg, iso = assets.registry_for_run(
         assets.load_state(), data.get("tiers", {}).get("tag_tiers", {}), data
@@ -76,8 +62,6 @@ def run(ctx: Ctx) -> list[Signal]:
         if not any(store.series(rule.metric, spec.host) for rule in spec.rules):
             continue  # nothing recorded for this host yet (its check is off or has not run)
         out.append(signal_for(spec, trend.evaluate(store, spec, ctx.now), names, reg, iso, classes))
-    if seeded:
-        out.append(Signal("trends.seeded", "ok", {"n": seeded}, note=True))
     if not out:
         out.append(Signal("trends.none", "ok", {}))
     return out

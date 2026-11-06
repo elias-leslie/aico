@@ -6,9 +6,9 @@ memory events (kernel kills, pane-stopped, outside-hog). It signals, freezes and
 from cgroups and /proc, and agent tool jobs are Tether's to stop. Port of ns/memctl.py; the numbers are [memctl] in
 data/checks.toml.
 
-Its only effect on the host is writing those files, so [acting] memctl switches them: off (the default until
-cutover) it computes everything and writes the same files under host-steward's own names, never Nightshift's live
-admission.json, heartbeat or event record; on, it writes the live ones (the paths Tether and SummitFlow read).
+Its only effect on the host is writing those files, so [acting] memctl switches them: off, it computes everything
+and writes the same files under dry/ names, never the live admission.json, heartbeat or event record; on, it writes
+the live ones (the paths Tether and SummitFlow read).
 It posts its Status row (service-memctl) when the state changes and at most every row_every_s.
 """
 
@@ -168,7 +168,7 @@ class Controller:
         self.proc, self.out = proc, out
         self.events, self.heartbeat = events, heartbeat
         self.tether_paths = tether
-        self.share = share  # /run/nightshift: the verdict's second home where Tether also reads it (live only)
+        self.share = share  # /run/host-steward-memctl: the verdict's second home where Tether also reads it (live only)
         self.run, self.read_offload = run, offload
         self.only = frozenset(only_scopes) if only_scopes is not None else None
         self.state = "green"
@@ -858,10 +858,8 @@ def read_offload(state_file: Path, min_bytes: float) -> str | None:
 
 
 def ballast_file(data: dict[str, Any]) -> Path:
-    """The space guard's record that says what ballast it holds. [acting] space_guard is the cutover flag: host-steward's
-    own file once its guard acts, Nightshift's while Nightshift's guard does."""
-    paths = data["memctl"]["paths"]
-    return Path(paths["ballast_state_own" if core.acting(data, "space_guard") else "ballast_state"])
+    """The space guard's record that says what ballast it holds."""
+    return Path(data["memctl"]["paths"]["ballast_state"])
 
 
 def build(data: dict[str, Any], acting: bool, uid: int, home: str, runtime: str) -> Controller:
@@ -907,14 +905,11 @@ def status_row(
     acting: bool,
     machine: str,
     now: float,
-    refused: str | None = None,
 ) -> dict[str, Any]:
     disk = doc["disk"]["state"] if doc.get("disk") else "not guarded"
     facts = f"memory {ctl.state}, disk {disk}"
     state = "ok"
-    if refused:
-        state, text = "warn", f"{refused} Meanwhile a dry run: {facts}."
-    elif acting:
+    if acting:
         text = f"Running: {facts}. Publishing admission and kill records."
     else:
         text = (
@@ -977,9 +972,7 @@ def add_args(parser: argparse.ArgumentParser) -> None:
 def main(
     args: argparse.Namespace, data: dict[str, Any], post: Callable[..., bool] = aico_status.report
 ) -> int:
-    wanted = core.acting(data, "memctl")
-    refused = core.refusal(data, "memctl", core.run_command) if wanted else None
-    acting = wanted and not refused  # stands down (dry run, warn row) while Nightshift's memctl runs
+    acting = core.acting(data, "memctl")
     uid = os.getuid()
     home = str(Path.home())
     runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{uid}"
@@ -990,19 +983,14 @@ def main(
     machine = aico_status.machine_id()
     last_state, last_row = None, float("-inf")
     print(f"memctl: {'acting' if acting else 'dry run'}; writing {ctl.out}", flush=True)
-    if refused:
-        print(f"memctl: {refused}", flush=True)
     while True:
         now = time.time()
         doc = ctl.tick(now)
         if doc["state"] != last_state:
             print(f"memctl: {doc['state']}: {doc['reason']}", flush=True)
         if doc["state"] != last_state or now - last_row >= ctl.tune.row_every_s:
-            post(status_row(ctl, doc, acting, machine, now, refused))
+            post(status_row(ctl, doc, acting, machine, now))
             last_row = now
-            if wanted and bool(core.refusal(data, "memctl", core.run_command)) != bool(refused):
-                print("memctl: Nightshift's memctl changed; restarting to follow it", flush=True)
-                return 0  # the unit restarts it with the right mode
         last_state = doc["state"]
         if args.once:
             return 0

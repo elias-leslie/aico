@@ -1,6 +1,5 @@
-# host-steward: let the owner start the root services the Status board's Run buttons name, on demand (replaces the
-# Nightshift executor's unit.start, which the runner used for the space guard 165 times and agents for the check
-# pass). Exactly these units, nothing else.
+# host-steward: let the owner start the root services the Status board's Run buttons name, on demand.
+# Exactly these units, nothing else.
 Cmnd_Alias HOST_STEWARD_START = /usr/bin/systemctl start host-steward-space-guard.service, \
     /usr/bin/systemctl start host-steward-check.service, \
     /usr/bin/systemctl start host-steward-housekeeping.service, \

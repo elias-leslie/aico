@@ -145,7 +145,7 @@ def run(ctx: Ctx) -> list[Signal]:
     tag_tiers = assets.load_file().get("tiers", {}).get("tag_tiers", {})
     reg = assets.load()
     state = ctx.state
-    if not state:  # the first run starts from assets.json, copied from Nightshift's
+    if not state:  # the first run starts from assets.json
         state.update(assets.load_state())
     out: list[Signal] = []
     if reg.problems:

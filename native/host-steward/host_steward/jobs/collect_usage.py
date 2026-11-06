@@ -1,6 +1,6 @@
 """host-steward collect-usage: the nightly 30-day usage evidence collection (read-only on the host, additive).
 
-Port of `nightshift collect-usage`: system and user unit timestamps, a /proc process sample and process accounting
+System and user unit timestamps, a /proc process sample and process accounting
 go into the usage sqlite file; nothing is ever pruned. Posts the job's Status row.
 """
 

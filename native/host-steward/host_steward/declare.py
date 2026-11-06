@@ -1,7 +1,7 @@
 """Declarations and lab use: an agent session says a change a check watches was its own, or that it is using a parked lab
 machine.
 
-Port of ns/labuse.py. `host-steward declare --host H --what KIND --hours N --reason TEXT [--since H]` says "what
+`host-steward declare --host H --what KIND --hours N --reason TEXT [--since H]` says "what
 changes on host H in this window are mine, and why". KIND is one of KINDS; --since covers a change already made (at
 most SINCE_MAX_H hours back). A check that finds a matching change calls `covering()` and turns it into an ok note that
 names the session and its reason instead of a problem. Nothing is granted or changed by a declaration, and it ends by
@@ -9,9 +9,8 @@ itself (at most MAX_HOURS). The files are writable by the owner, so every name i
 account, never as verified; the reader trusts nothing in them: a regular file of at most MAX_BYTES owned by root, the
 reader or the site owner and not world-writable, with kinds, hosts, times and text validated and capped.
 
-Where the files live is the [site.declarations] table in checks.toml (`cfg` below): the fresh files, the first-seen
-file the root reader keeps, and `legacy_files` / `legacy_lab_use`, Nightshift's own files, which are read too until
-Nightshift stops (a `nightshift declare` made before the cutover still counts).
+Where the files live is the [site.declarations] table in checks.toml (`cfg` below): the declaration and lab-use
+files and the first-seen file the root reader keeps.
 
 For other checks, the small API:
     covering(cfg, host, kind, at, last_at=None, now=None, owner_uid=None) -> declaration dict or None
@@ -106,12 +105,11 @@ def _who() -> str:
 def lab_use(
     cfg: dict[str, Any], now: float | None = None, owner_uid: int | None = None
 ) -> dict[str, dict[str, Any]]:
-    """Valid, unexpired lab-use declarations from the fresh file and Nightshift's: asset id or vmid -> entry."""
+    """Valid, unexpired lab-use declarations: asset id or vmid -> entry."""
     now = time.time() if now is None else now
     uid = owner_uid if owner_uid is not None else _owner_uid(cfg)
     rows: dict[str, Any] = {}
-    for path in [*cfg.get("legacy_lab_use", []), cfg["lab_use_file"]]:  # the fresh file wins
-        rows.update(_read_raw(path, cfg, uid))
+    rows.update(_read_raw(cfg["lab_use_file"], cfg, uid))
     out: dict[str, dict[str, Any]] = {}
     for asset, e in list(rows.items())[: int(cfg["max_entries"])]:
         if not isinstance(asset, str) or not ASSET_RE.fullmatch(asset) or not isinstance(e, dict):
@@ -145,8 +143,7 @@ def start_lab_use(
     if not reason.strip():
         raise ValueError("--reason: say what the machine is used for")
     hours = max(0.1, min(float(hours), _num(cfg, "max_hours")))
-    # only the fresh file is written; entries read from Nightshift's stay where they are
-    data = _own_lab_use(cfg, now)
+    data = lab_use(cfg, now)
     data[asset] = {
         "at": now,
         "until": now + hours * 3600,
@@ -157,14 +154,9 @@ def start_lab_use(
     return data[asset]
 
 
-def _own_lab_use(cfg: dict[str, Any], now: float) -> dict[str, dict[str, Any]]:
-    mine = lab_use({**cfg, "legacy_lab_use": []}, now)
-    return mine
-
-
 def end_lab_use(cfg: dict[str, Any], asset: str, now: float | None = None) -> bool:
     now = time.time() if now is None else now
-    data = _own_lab_use(cfg, now)
+    data = lab_use(cfg, now)
     found = data.pop(asset.strip().lower(), None) is not None
     _write(cfg["lab_use_file"], data)
     return found
@@ -199,14 +191,9 @@ def _entry_id(e: dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(keep, sort_keys=True, default=str).encode()).hexdigest()[:20]
 
 
-def _raw_rows(
-    cfg: dict[str, Any], owner_uid: int | None, own_only: bool = False
-) -> list[dict[str, Any]]:
-    paths = [cfg["file"]] if own_only else [*cfg.get("legacy_files", []), cfg["file"]]
-    rows: list[Any] = []
-    for path in paths:
-        got = _read_raw(path, cfg, owner_uid).get("declarations")
-        rows += got if isinstance(got, list) else []
+def _raw_rows(cfg: dict[str, Any], owner_uid: int | None) -> list[dict[str, Any]]:
+    got = _read_raw(cfg["file"], cfg, owner_uid).get("declarations")
+    rows: list[Any] = got if isinstance(got, list) else []
     return list({_entry_id(e): e for e in rows if isinstance(e, dict)}.values())
 
 
@@ -253,7 +240,7 @@ def declare(
     keep_after = now - _num(cfg, "retain_h") * 3600
     rows = [
         e
-        for e in _raw_rows(cfg, _owner_uid(cfg), own_only=True)
+        for e in _raw_rows(cfg, _owner_uid(cfg))
         if isinstance(e.get("until"), int | float) and e["until"] > keep_after
     ]
     _write(cfg["file"], {"declarations": [*rows, entry][-int(cfg["max_entries"]) :]})

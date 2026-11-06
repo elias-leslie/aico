@@ -1,0 +1,18 @@
+# zswap on at boot: zstd + zsmalloc (kernel 7.0 has only zsmalloc and no zpool knob), pool up to 25% of RAM (memory policy).
+[Unit]
+Description=Host steward: enable zswap (zstd, zsmalloc, max_pool_percent 25)
+DefaultDependencies=no
+# Only the root filesystem and /sys are needed. Not After=local-fs.target: from Ubuntu 26.04 tmp.mount (tmpfs) is
+# After=swap.target, so that closed a cycle and systemd dropped tmp.mount or this unit at random each boot. Without
+# tmp.mount, GDM found a stale on-disk /tmp/.X11-unix owned by the greeter and every login failed.
+After=systemd-remount-fs.service systemd-modules-load.service
+Before=swap.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/sbin/modprobe zstd
+ExecStart=/bin/sh -c 'p=/sys/module/zswap/parameters; echo zstd > $p/compressor; [ ! -e $p/zpool ] || echo zsmalloc > $p/zpool;echo 25 > $p/max_pool_percent; echo Y > $p/enabled'
+
+[Install]
+WantedBy=multi-user.target

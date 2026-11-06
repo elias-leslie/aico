@@ -284,43 +284,9 @@ def make_row(
 
 
 def acting(data: Mapping[str, Any], name: str) -> bool:
-    """Whether a controller that changes the host is switched on. [acting] in checks.toml; every piece starts off
-    (dry run) so only one controller, Nightshift's or this one, acts at a time. Cutover turns them on together."""
+    """Whether a controller that changes the host is switched on. [acting] in checks.toml; a piece that is off is
+    a dry run: it reports what it would do and changes nothing."""
     return bool(data.get("acting", {}).get(name, False))
-
-
-def counterparts_running(
-    data: Mapping[str, Any], name: str, run: Runner = run_command
-) -> list[str]:
-    """Nightshift's units that do the same work as the job `name`, listed in [counterparts.NAME] (system = [...],
-    user = [...] for the owner's user manager), that are enabled or active now: "unit (enabled, active)"."""
-    table = data.get("counterparts", {}).get(name) or {}
-    owner = data["site"]["owner"]["user"]
-    user_scope = ["--user", *(["-M", f"{owner}@"] if os.geteuid() == 0 else [])]
-    found = []
-    for scope, flags in (("system", []), ("user", user_scope)):
-        for unit in table.get(scope) or []:
-            on = [
-                word.removeprefix("is-")
-                for word in ("is-enabled", "is-active")
-                if run(["systemctl", "--no-ask-password", *flags, word, unit], timeout=30).rc == 0
-            ]
-            if on:
-                found.append(f"{unit} ({', '.join(on)})")
-    return found
-
-
-def refusal(data: Mapping[str, Any], name: str, run: Runner = run_command) -> str | None:
-    """Why the controller `name` must not act right now (plain words for its Status row), else None. Two controllers
-    acting on the same host would fight, so one that is switched on still stands down while Nightshift's counterpart
-    is enabled or active."""
-    running = counterparts_running(data, name, run)
-    if not running:
-        return None
-    return (
-        f"Set to act, but Nightshift's {', '.join(running)} is still on, so it did nothing. "
-        "Turn Nightshift's off first; the cutover does both together."
-    )
 
 
 def job_row(

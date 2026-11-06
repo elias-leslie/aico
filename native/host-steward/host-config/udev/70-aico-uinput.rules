@@ -1,0 +1,3 @@
+# ydotool input injection: tag before 73-seat-late.rules runs the uaccess builtin. Only the active seat user
+# (the owner, whose account agents run in) gets an ACL.
+KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", MODE="0660", GROUP="root", TAG+="uaccess"

@@ -109,3 +109,34 @@ def test_drill_always_revokes_even_when_a_use_fails():
     with pytest.raises(ValueError, match="use failed"):
         drill.run(call)
     assert calls[-1] == "revoke"
+
+
+def test_migrate_copies_each_old_file_once_with_its_mode(tmp_path, monkeypatch):
+    old, new = tmp_path / "old", tmp_path / "new"
+    old.mkdir()
+    (old / "key").write_text("secret-key")
+    (old / "site").write_text('{"a": 1}')
+    policy = {"migration": {"files": [
+        {"source": str(old / "key"), "target": str(new / "etc/key"), "mode": 0o600},
+        {"source": str(old / "site"), "target": str(new / "aico/site.json"), "mode": 0o644, "dir_mode": 0o755},
+        {"source": str(old / "missing"), "target": str(new / "etc/missing"), "mode": 0o600},
+    ]}}
+    monkeypatch.setattr(installer, "policy", lambda: policy)
+    installer.migrate()
+    assert (new / "etc/key").read_text() == "secret-key" and (new / "etc/key").stat().st_mode & 0o777 == 0o600
+    assert (new / "etc").stat().st_mode & 0o777 == 0o700
+    assert (new / "aico/site.json").stat().st_mode & 0o777 == 0o644
+    assert not (new / "etc/missing").exists()
+    (old / "key").write_text("changed")
+    installer.migrate()
+    assert (new / "etc/key").read_text() == "secret-key"  # a target that exists is never replaced
+
+
+def test_data_files_name_no_nightshift_locations():
+    data = installer.core.DATA_DIR
+    moved = ("/etc/nightshift", "/var/lib/nightshift", "/run/nightshift", ".local/state/nightshift")
+    for path in sorted(data.iterdir()):
+        if path.name == "installer.toml":
+            continue  # the one-time copy sources
+        text = path.read_text()
+        assert not [place for place in moved if place in text], path.name

@@ -148,7 +148,7 @@ def load(data: Mapping[str, Any] | None = None) -> Registry:
 
 def load_state(path: Path | None = None) -> dict[str, Any]:
     """What the assets check remembers (first-seen tiers, isolation verdicts, discovered guests). The check keeps it in
-    the host-steward state file; until it has run once, assets.json (copied from Nightshift's) is the starting point."""
+    the host-steward state file; until it has run once, assets.json beside it is the starting point."""
     if path is None:
         own = core.load_state().get("checks", {}).get("assets")
         if isinstance(own, dict) and own:
@@ -321,7 +321,7 @@ def tier_signal(sig: core.Signal, cls: str, a: Asset, isolated: bool) -> core.Si
 
 def lab_claims(paths: list[str], now: float) -> dict[str, dict[str, Any]]:
     """Unexpired lab-use declarations (an agent session says it uses a parked machine): asset id or vmid -> who and
-    why. Same rules as Nightshift's reader: a regular file, not world-writable, at most 64 KiB; entries validated."""
+    why. A regular file, not world-writable, at most 64 KiB; entries validated."""
     out: dict[str, dict[str, Any]] = {}
     for path in paths:
         try:

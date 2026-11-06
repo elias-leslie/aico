@@ -1,7 +1,7 @@
 {
   "state_dir": "/var/lib/aico/pve-sender",
-  "credentials": "/etc/nightshift/deadman/creds.json",
-  "token_cache": "/var/lib/nightshift/deadman/fcm-token.json",
+  "credentials": "/etc/aico/pve-sender-creds.json",
+  "token_cache": "/var/lib/aico/pve-sender/fcm-token.json",
   "window_s": 2700,
   "tick_s": 300,
   "status_relay_s": 300,

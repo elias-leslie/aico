@@ -3,7 +3,7 @@
 Port of ns/checks/pve.py's storage, failed-units, smart and host sections. One ssh round trip runs read-only
 shell snippets on the PVE host through the pinned hop key (collect), and the other PVE checks (ecc, thermal)
 share that answer within a run. It also keeps the offload note memctl publishes in the admission file while memory
-is tight (Nightshift's perf check did): the PVE host and its free memory while it answers, none while it does not. Left out: guest (VM and container) state, NIC and segment guards, honeypot and
+is tight: the PVE host and its free memory while it answers, none while it does not. Left out: guest (VM and container) state, NIC and segment guards, honeypot and
 evidence copies, the dead-man heartbeat and the executor manifest (M5b and later), apt (an info line).
 Not installed on gem itself: gem has no Aico web server to take loopback rows yet (needs the fleet link).
 """

@@ -1,6 +1,6 @@
-"""host-steward scrub --target native|root: the monthly Btrfs scrub, as Nightshift's units run it.
+"""host-steward scrub --target native|root: the monthly Btrfs scrub.
 
-Same command and the same lock file as nightshift-btrfs-scrub-*.service: `flock LOCK [wrap...] btrfs scrub
+The command is `flock LOCK [wrap...] btrfs scrub
 start -Bd -c 3 MOUNT`, where the backup disk's scrub runs inside SummitFlow's backup window. The calendars are the
 timers in systemd/ (Sun 01..07 for the system disk, Sun 15..21 for the backup disk, 08:00), which install-root.sh
 enables while [acting] scrub is on. With it off it only says "would run: ..." and posts a "Dry run" row that also
@@ -54,7 +54,7 @@ def run_scrub(
     command = " ".join(argv)
     if not actor.live:
         actor.would.append(f"run: {command}")
-        text = f"Dry run: would scrub {mount}; {last_result(actor, mount)}. Nightshift's timer still runs it."
+        text = f"Dry run: would scrub {mount}; {last_result(actor, mount)}."
         return "ok", text, {"would": list(actor.would)}
     lock = Path(cfg["lock"])
     lock.parent.mkdir(parents=True, exist_ok=True)
@@ -80,10 +80,7 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
         return 2
     target, now = targets[args.target], time.time()
     actor = acts.Actor(core.acting(data, "scrub"), run=core.run_command)
-    if actor.live and (why := core.refusal(data, "scrub", core.run_command)):
-        actor.live = False  # stands down: no scrub, no look at the disk, just the warning
-        state, meaning, detail = "warn", why, {"refused": True}
-    elif getattr(args, "status", False) and actor.live:
+    if getattr(args, "status", False) and actor.live:
         actor.live = False  # the timer runs it; this only says so
         meaning = f"Runs on host-steward's timer; {last_result(actor, target['mount'])}."
         state, detail = "ok", {"status": True}

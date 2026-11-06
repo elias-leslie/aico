@@ -1,12 +1,10 @@
 """Workstation storage: free space per disk against its lines, Btrfs allocation headroom and device errors, SMART.
 
-Port of ns/checks/storage.py. An internal disk is rated against the free-space reserve where SummitFlow starts
-refusing backups: the data file's reserve_gib (Nightshift also read SummitFlow's own setting from ~/.env.local; that
-file holds credentials and is not opened here). Each run also keeps the disk's free space in a 48 hour sample ring
+An internal disk is rated against the free-space reserve where SummitFlow starts
+refusing backups: the data file's reserve_gib (SummitFlow's own setting in ~/.env.local holds credentials and is not opened here). Each run also keeps the disk's free space in a 48 hour sample ring
 (this check's state) for the fill rate: the hours until the reserve at the 6 hour and 24 hour pace, with the pace
 capped at the last hour's (a one-off step is not a trend). The space guard's ballast counts as free for the
-projection and its last reclaim run is a signal; the guard's state file is read from the first of the data file's
-guard_state paths that is newest. Readings go to the trend history (history.py): disk percent used and the SMART
+projection and its last reclaim run is a signal (read from the guard's own file in the jobs directory). Readings go to the trend history (history.py): disk percent used and the SMART
 counters per serial number.
 """
 
@@ -103,28 +101,9 @@ def add_sample(
     return rows
 
 
-def newest_state(paths: list[str]) -> dict[str, Any]:
-    """The space guard's state: the candidate file with the newest `at` (its own file once it has run, else the one it
-    inherited from Nightshift)."""
-    best, best_at = {}, -1.0
-    for raw in paths:
-        data = acts.read_json(Path(raw))
-        at = core.timestamp(data.get("at"))
-        if data and at > best_at:
-            best, best_at = data, at
-    return best
-
-
-def guard_paths(cfg: dict[str, Any], name: str, inherit: str) -> list[str]:
-    return [str(acts.job_dir() / name), *[str(x) for x in cfg.get(inherit, [])]]
-
-
-def guard_state(cfg: dict[str, Any], space_guard_acting: bool) -> dict[str, Any]:
-    """The space guard's record. [acting] space_guard is the cutover flag: while it is off, Nightshift's guard is the one
-    acting and its file is the truth (host-steward's dry run only describes itself); once on, host-steward's own."""
-    if space_guard_acting:
-        return acts.read_json(acts.job_dir() / "space-guard.json")
-    return newest_state([str(x) for x in cfg.get("guard_inherit", [])])
+def guard_state() -> dict[str, Any]:
+    """The space guard's record (its own file in the jobs directory)."""
+    return acts.read_json(acts.job_dir() / "space-guard.json")
 
 
 def snapshot_points(mount: str) -> int:
@@ -253,16 +232,8 @@ def fill(ctx: Ctx, entry: dict[str, Any], free_bytes: int, free: float, level: s
     cfg, now = ctx.cfg, ctx.now
     name, path = entry["name"], entry["path"]
     reserve = float(cfg["reserve_gib"])
-    if (
-        "samples" not in ctx.state
-    ):  # the first run starts from Nightshift's ring so the rate is known at once
-        ctx.state["samples"] = {
-            k: v
-            for k, v in acts.read_json(Path(str(cfg["samples_inherit"]))).items()
-            if isinstance(v, list)
-        }
     samples = add_sample(ctx.state, path, free_bytes, now, 3600 * float(cfg["sample_keep_hours"]))
-    guard = guard_state(cfg, bool(ctx.acting.get("space_guard")))
+    guard = guard_state()
     ballast = int((guard.get("ballast") or {}).get(path) or 0)
     recent_s = 3600 * float(cfg["fill_recent_hours"])
     short = fill_rate(samples, now, 3600 * float(cfg["fill_short_hours"]))
@@ -275,7 +246,7 @@ def fill(ctx: Ctx, entry: dict[str, Any], free_bytes: int, free: float, level: s
     eff = free + ballast / GIB  # the ballast is released before the reserve is reached
     hs, hl = hours_to(eff, reserve, short), hours_to(eff, reserve, long)
     out: list[Signal] = []
-    growers = newest_state(guard_paths(cfg, "growers.json", "growers_inherit"))
+    growers = acts.read_json(acts.job_dir() / "growers.json")
     sev = fill_state(hs, hl, float(cfg["fill_critical_hours"]), float(cfg["fill_warning_hours"]))
     held = space_note(path, growers, snapshot_points(path)) if "ok" != level or sev != "ok" else ""
     held = f"; {held}" if held else ""

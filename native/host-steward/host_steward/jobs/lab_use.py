@@ -1,6 +1,6 @@
 """host-steward lab-use: say an agent session is using a parked lab machine, for how long and why.
 
-Port of `nightshift lab-use`. `start ASSET --hours H --reason TEXT [--by NAME]`, `end ASSET`, `list`. The registry
+`start ASSET --hours H --reason TEXT [--by NAME]`, `end ASSET`, `list`. The registry
 check reads the file as a hint (a parked machine running under a current declaration is a note naming the session
 instead of a warning). Nothing is granted; it ends by itself (at most 24 hours).
 """

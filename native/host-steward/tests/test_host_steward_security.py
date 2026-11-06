@@ -70,8 +70,6 @@ def site_for(tmp_path, **auth):
         "file": str(tmp_path / "decl.json"),
         "lab_use_file": str(tmp_path / "lab.json"),
         "first_seen_file": str(tmp_path / "first.json"),
-        "legacy_files": [],
-        "legacy_lab_use": [],
         "owner_user": "nobody-such-user",
     }
     return {**DATA["site"], "declarations": decl, "auth": {**DATA["site"]["auth"], **auth}}
@@ -531,7 +529,7 @@ def test_new_family_row_lists_three_and_says_what_to_do(tmp_path):
     sig = next(s for s in evaluate(new, tmp_path) if s.code == "sudo.new_family")
     text = core.explain(sig.code, sig.fields, DATA["meanings"], True, sig.state)
     assert text.startswith("5 new sudo commands: alpha, bravo, charlie and 2 more.")
-    assert "delta" not in text and "host-steward or nightshift declare" in text
+    assert "delta" not in text and "host-steward declare" in text
     assert "normal after a day" in text and "journalctl -t sudo" in text
     one = core.explain(sig.code, {**sig.fields, "n": 1, "plural": "", "families": ["alpha"]}, DATA["meanings"], False)
     assert one == "1 new sudo command: alpha."
@@ -842,32 +840,6 @@ def test_untrusted_files_are_ignored(tmp_path):
     assert declare.declarations(cfg, NOW + 10) == []
 
 
-def test_legacy_files_are_read_too(tmp_path):
-    site = site_for(tmp_path)
-    cfg = dict(site["declarations"])
-    legacy = tmp_path / "ns-decl.json"
-    entry = {
-        "host": "workstation",
-        "what": "units",
-        "at": NOW,
-        "made": NOW,
-        "until": NOW + 3600,
-        "reason": "old",
-        "by": "ns",
-    }
-    legacy.write_text(json.dumps({"declarations": [entry]}))
-    legacy_lab = tmp_path / "ns-lab.json"
-    legacy_lab.write_text(
-        json.dumps({"lab-linux-1": {"at": NOW, "until": NOW + 3600, "reason": "r", "by": "ns"}})
-    )
-    cfg.update(legacy_files=[str(legacy)], legacy_lab_use=[str(legacy_lab)])
-    assert declare.covering(cfg, "davion-sidarli", "units", NOW + 60, now=NOW + 120)
-    assert "lab-linux-1" in declare.lab_use(cfg, NOW + 60)
-    # ending only touches the fresh file
-    assert declare.end_lab_use(cfg, "lab-linux-1", NOW + 60) is False
-    assert "lab-linux-1" in declare.lab_use(cfg, NOW + 60)
-
-
 def test_lab_use_start_end_and_vm_declaration(tmp_path):
     site = site_for(tmp_path)
     cfg = site["declarations"]
@@ -888,10 +860,6 @@ def run_cli(monkeypatch, tmp_path, capsys, *argv):
     monkeypatch.setenv("HOST_STEWARD_DECLARATIONS", str(tmp_path / "d.json"))
     monkeypatch.setenv("HOST_STEWARD_LAB_USE", str(tmp_path / "l.json"))
     monkeypatch.setattr(declare, "_owner_uid", lambda _cfg: os.geteuid())
-    real = declare.settings
-    monkeypatch.setattr(
-        declare, "settings", lambda data: {**real(data), "legacy_files": [], "legacy_lab_use": []}
-    )
     rc = host_steward_main(list(argv))
     return rc, capsys.readouterr().out
 

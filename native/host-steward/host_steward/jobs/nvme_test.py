@@ -1,6 +1,6 @@
-"""host-steward nvme-test short|long: start the NVMe SMART self-test, as Nightshift's units do.
+"""host-steward nvme-test short|long: start the NVMe SMART self-test.
 
-Nightshift's nightshift-nvme-{short,long}-test.service run `smartctl -t short|long /dev/nvme0`. The calendars are
+The units run `smartctl -t short|long /dev/nvme0`. The calendars are
 the timers in systemd/ (short Saturdays 03:00, long the first Saturday 00:30), which install-root.sh enables while
 [acting] nvme_tests is on. With it off it only says "would run: ..." and posts a "Dry run" row that also carries the
 latest real self-test result (smartctl -l selftest). --status posts the row for the schedule and last result and
@@ -54,20 +54,17 @@ def main(args: argparse.Namespace, data: dict[str, Any], post: Any = aico_status
     device = cfg["device"]
     actor = acts.Actor(core.acting(data, "nvme_tests"), run=core.run_command)
     argv = [cfg["smartctl"], "-t", args.kind, device]
-    refused = core.refusal(data, "nvme_tests", core.run_command) if actor.live else None
-    status = getattr(args, "status", False) and actor.live and not refused
-    if refused or status:
-        actor.live = False  # stands down, or only says the timer runs it: starts nothing
+    status = getattr(args, "status", False) and actor.live
+    if status:
+        actor.live = False  # only says the timer runs it: starts nothing
     result = None if status else actor.do(argv, label=f"run: {' '.join(argv)}", timeout=60)
     summary = last_result(actor, device)
-    if refused:
-        state, meaning = "warn", refused
-    elif status:
+    if status:
         state, meaning = "ok", f"Runs on host-steward's timer; {summary}."
     elif result is None:
         state, meaning = (
             "ok",
-            f"Dry run: would start a {args.kind} self-test on {device}; {summary}. Nightshift's timer still runs it.",
+            f"Dry run: would start a {args.kind} self-test on {device}; {summary}.",
         )
     elif result.rc == 0:
         state, meaning = "ok", f"Started a {args.kind} self-test on {device}; {summary}."

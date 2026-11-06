@@ -639,20 +639,20 @@ def test_red_disk_closes_admission_and_memory_stays_green(tmp_path):
 
 
 def test_memctl_is_dry_until_acting_is_on(tmp_path):
-    """Off: the admission, heartbeat and event record go to host-steward's own files and nothing is shared; on: the
-    live paths Tether and SummitFlow read, and the shared copy."""
+    """Off: the admission, heartbeat and event record go to the dry/ files and nothing is shared; on: the live paths
+    Tether and SummitFlow read, and the shared copy."""
     data = copy.deepcopy(DATA)
     data["memctl"]["paths"]["shared_dir"] = str(tmp_path / "shared")
     (tmp_path / "shared").mkdir()
     dry = memctl.build(data, False, UID, str(tmp_path / "home"), str(tmp_path / "run"))
-    assert dry.out == tmp_path / "run/host-steward/admission.json"
-    assert dry.heartbeat == tmp_path / "run/host-steward/memctl.json"
-    assert dry.events == tmp_path / "home/.local/state/host-steward/memory-events.jsonl"
+    assert dry.out == tmp_path / "run/host-steward/dry/admission.json"
+    assert dry.heartbeat == tmp_path / "run/host-steward/dry/memctl.json"
+    assert dry.events == tmp_path / "home/.local/state/host-steward/dry/memory-events.jsonl"
     assert dry.share is None
     live = memctl.build(data, True, UID, str(tmp_path / "home"), str(tmp_path / "run"))
-    assert live.out == tmp_path / "run/nightshift/admission.json"
-    assert live.heartbeat == tmp_path / "run/nightshift/memctl.json"
-    assert live.events == tmp_path / "home/.local/state/nightshift/memory-events.jsonl"
+    assert live.out == tmp_path / "run/host-steward/admission.json"
+    assert live.heartbeat == tmp_path / "run/host-steward/memctl.json"
+    assert live.events == tmp_path / "home/.local/state/host-steward/memory-events.jsonl"
     assert live.share == tmp_path / "shared"
 
 
@@ -750,8 +750,9 @@ class CheckHost:
             "cgroup_system": str(tmp / "cg/system"),
             "home": str(tmp / "home"),
             "memctl": {
-                who: {**ctl, "heartbeat": str(tmp / "hb.json"), "admission": str(tmp / "adm.json")}
-                for who, ctl in DATA["checks"]["memory"]["memctl"].items()
+                **DATA["checks"]["memory"]["memctl"],
+                "heartbeat": str(tmp / "hb.json"),
+                "admission": str(tmp / "adm.json"),
             },
             "guard": str(tmp / "guard.json"),
             "events": str(tmp / "events.jsonl"),
@@ -840,30 +841,18 @@ def test_controllers_report_or_go_stale(tmp_path):
     assert memory.controllers(h.ctx({}))[0].fields["ago"] == "has not reported since boot"
 
 
-def test_memctl_alive_reads_and_names_the_acting_controller(tmp_path):
-    """[acting] memctl off: Nightshift's memctl is the one that must report (and the one to restart); on:
-    host-steward's, read at its own configured heartbeat."""
+def test_memctl_alive_names_the_controller_and_its_unit(tmp_path):
     h = CheckHost(tmp_path)
-    h.cfg["memctl"]["host-steward"]["heartbeat"] = str(tmp_path / "hs-hb.json")
-    h.cfg["memctl"]["host-steward"]["admission"] = str(tmp_path / "hs-adm.json")
-    h.fresh(at=NOW - 600)  # Nightshift's heartbeat is stale
-    (tmp_path / "hs-hb.json").write_text(json.dumps({"ts": NOW - 5, "state": "green"}))
-    off = memory.controllers(h.ctx({}))[0]
-    assert (off.state, off.fields["name"], off.fields["unit"]) == (
+    h.fresh(at=NOW - 600)  # the heartbeat is stale
+    stale = memory.controllers(h.ctx({}))[0]
+    assert (stale.state, stale.fields["name"], stale.fields["unit"]) == (
         "warn",
-        "Nightshift",
-        "nightshift-memctl",
+        "host-steward",
+        "host-steward-memctl",
     )
-    text = core.explain(off.code, off.fields, DATA["meanings"], True, off.state)
-    assert text.startswith("Nightshift's memory controller last reported 10 min ago")
-    assert "systemctl --user restart nightshift-memctl" in text
-    on = memory.controllers(h.ctx({}, acting={"memctl": True}))[0]
-    assert (on.state, on.fields["name"]) == ("ok", "host-steward")
-    (tmp_path / "hs-hb.json").unlink()
-    gone = memory.controllers(h.ctx({}, acting={"memctl": True}))[0]
-    assert "systemctl --user restart host-steward-memctl" in core.explain(
-        gone.code, gone.fields, DATA["meanings"], True, gone.state
-    )
+    text = core.explain(stale.code, stale.fields, DATA["meanings"], True, stale.state)
+    assert text.startswith("host-steward's memory controller last reported 10 min ago")
+    assert "systemctl --user restart host-steward-memctl" in text
 
 
 def journal_line(ts, message, **extra):
@@ -1030,5 +1019,5 @@ def test_memory_check_makes_one_row(tmp_path):
         "memory", memory.run(h.ctx({})), h.cfg, DATA["meanings"], "box", NOW, DATA["caps"]
     )
     assert bad["state"] == "warn" and bad["meaning"].startswith(
-        "Nightshift's memory controller last reported 10 min ago"
+        "host-steward's memory controller last reported 10 min ago"
     )
