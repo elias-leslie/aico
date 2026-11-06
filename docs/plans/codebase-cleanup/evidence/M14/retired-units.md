@@ -38,3 +38,10 @@ Before removing, each unit was checked: `is-active` (none active), `is-enabled` 
 | gem `nightshift-boot-mark.service`, `summitflow-cpu-epp.service` | boot marker; CPU EPP |
 
 Not touched: other projects' units (portfolio, vantage, test1-3 drop-ins and so on) and `~/.config/systemd/user/.managed-unit-manifests`.
+
+## CT 190 updates (signed Tether push and full release)
+
+- Cause of "No usable signed release": nothing ever ran `tether fleet sign-update`, so the workstation's Tether lib had no `signed-update.json` to send. `install-release.sh` now signs the installed lib wherever the update signing key is held (aico `2358a4d0`); the hub's failure line now says why.
+- Before: CT 190 on hand-installed `b8c2b31d`, Tether bundle `369d9305…`, stale `tether-link@.service` present; workstation journal last logged the failure 08:32.
+- After the `tether@default` deploy at `94598f7a` (09:43) the lib carried a fresh `signed-update.json`; `tether fleet push-update aico ~/.local/lib/tether` installed through the signed path, and CT 190's bundle matched the workstation's (`b75bad59…`).
+- `scripts/deploy-remote.sh aico-gem` then put the workstation's accepted release `834cd6bb` on CT 190: copy checked, `install.sh --prebuilt --start` ran, ops link = `834cd6bb`, `aico-web`/`aico-jobs`/`tether@default` active, `/health` 200, `tether-link@.service` gone.
