@@ -423,25 +423,42 @@ it('collapses repeated machine reads, keeps explicit reveals, and caps activity 
     now += 3_601_000
     clocked.value('sample', machine, 'VM operation')
   }
-  const kept = JSON.parse(readFileSync(clocked.path, 'utf8')).audit
-  expect(kept.length).toBeLessThanOrEqual(50)
-  expect(kept.every((e: { at: string }) => Date.parse(e.at) >= now - 2 * 86_400_000)).toBe(true)
-  expect(clocked.snapshot(loginMachine(), true).audit.length).toBeLessThanOrEqual(50)
+  const kept: { at: string; action: string }[] = JSON.parse(
+    readFileSync(clocked.path, 'utf8'),
+  ).audit
+  const machineReads = kept.filter((e) => e.action === 'VM operation')
+  expect(machineReads.length).toBeLessThanOrEqual(50)
+  expect(machineReads.every((e) => Date.parse(e.at) >= now - 2 * 86_400_000)).toBe(true)
+  // Changes and explicit reveals are never pushed out by machine reads.
+  expect(kept.filter((e) => e.action !== 'VM operation').map((e) => e.action)).toEqual([
+    'set',
+    'reveal',
+    'reveal',
+  ])
+  expect(clocked.snapshot(loginMachine(), true).audit.length).toBeLessThanOrEqual(53)
 })
 it('trims an oversized existing activity log on the next write', () => {
   store.set('sample', 'fixture-private-value', {}, owner)
   const index = JSON.parse(readFileSync(store.path, 'utf8'))
   const at = new Date().toISOString()
-  index.audit = Array.from({ length: 5000 }, (_, i) => ({
-    id: `old-${i}`,
-    at,
-    action: 'VM operation',
-    name: 'sample',
-    actor: `caller-${i}`,
-  }))
+  index.audit = [
+    ...index.audit,
+    ...Array.from({ length: 5000 }, (_, i) => ({
+      id: `old-${i}`,
+      at,
+      action: 'VM operation',
+      name: 'sample',
+      actor: `caller-${i}`,
+    })),
+  ]
   writeFileSync(store.path, JSON.stringify(index))
   store.grant('sample', 'role', 'coordinator', true, owner)
-  expect(JSON.parse(readFileSync(store.path, 'utf8')).audit.length).toBe(2000)
+  const audit: { action: string }[] = JSON.parse(readFileSync(store.path, 'utf8')).audit
+  expect(audit.filter((e) => e.action === 'VM operation')).toHaveLength(2000)
+  expect(audit.filter((e) => e.action !== 'VM operation').map((e) => e.action)).toEqual([
+    'set',
+    'grant',
+  ])
 })
 it('merges only activity that survives the cap, so trimmed history is not news', () => {
   const now = () => '2026-11-06T00:00:00.000Z'

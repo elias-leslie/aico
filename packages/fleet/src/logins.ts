@@ -199,15 +199,21 @@ export class LoginStore {
     const value = Number(this.env[variable])
     return Number.isFinite(value) && value > 0 ? value : fallback
   }
-  /** Activity is capped by age and count so the index, and each full snapshot, stays small. */
+  /** Machine reads are capped by age and count so the index, and each full snapshot, stays small.
+   * Changes and explicit reveals are kept apart under their own count cap, so reads never push
+   * them out. */
   private trim(audit: LoginAudit[]): LoginAudit[] {
     const since =
       (Date.parse(this.now()) || Date.now()) -
       this.limit('AICO_LOGINS_AUDIT_MAX_DAYS', policy.auditMaxDays) * 86_400_000
-    return audit
-      .filter((event) => !(Date.parse(event.at) < since))
-      .sort((a, b) => a.at.localeCompare(b.at))
-      .slice(-this.limit('AICO_LOGINS_AUDIT_MAX_ENTRIES', policy.auditMaxEntries))
+    const max = this.limit('AICO_LOGINS_AUDIT_MAX_ENTRIES', policy.auditMaxEntries)
+    const sorted = [...audit].sort((a, b) => a.at.localeCompare(b.at))
+    const read = (event: LoginAudit) => policy.auditReadActions.includes(event.action)
+    const kept = new Set([
+      ...sorted.filter((event) => read(event) && !(Date.parse(event.at) < since)).slice(-max),
+      ...sorted.filter((event) => !read(event)).slice(-max),
+    ])
+    return sorted.filter((event) => kept.has(event))
   }
   /** flock(2) on a descriptor this process holds: the kernel drops it if the process dies. */
   private change<T>(fn: (index: Index) => T, persist: () => boolean = () => true): T {

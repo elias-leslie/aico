@@ -10,5 +10,6 @@
   "auditMaxDays": 90,
   "auditCollapseSeconds": 3600,
   "auditExplicitActions": ["reveal"],
+  "auditReadActions": ["use", "tool use", "lab use", "VM operation"],
   "lockWaitSeconds": 5
 }
