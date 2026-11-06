@@ -421,13 +421,13 @@ def _allowed(rule: Any, proto: str, src: str, dst: str, dport: str) -> bool:
 def lab_flows(text: str, guards: Any) -> list[Signal]:
     """A zone-0 flow from a guarded segment to a private address outside it, or into it from outside, that the guard's
     `allow` list doesn't name: the filter should make it impossible, so it fails (it pages the owner)."""
-    nets: dict[str, ipaddress.IPv4Network] = {}
+    nets: dict[str, ipaddress.IPv4Network | ipaddress.IPv6Network] = {}
     flows: dict[str, list[tuple[str, str, str, str]]] = {}
     for line in text.splitlines():
         p = line.split()
         if len(p) == 3 and p[0] == "NET":
             try:
-                nets[p[1]] = ipaddress.ip_interface(p[2]).network  # type: ignore[assignment]
+                nets[p[1]] = ipaddress.ip_interface(p[2]).network
             except ValueError:
                 continue
         elif len(p) == 6 and p[0] == "FL":
