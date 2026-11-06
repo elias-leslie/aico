@@ -507,6 +507,23 @@ def test_heartbeat_does_not_wait_for_slow_watchdog_lock(cfg, monkeypatch):
     assert locks == [Path(cfg["state_dir"]) / "heartbeat-lock"]
 
 
+def test_weekly_trim_does_not_hold_the_watchdog_lock(cfg, monkeypatch):
+    import contextlib
+
+    from pve_sender import cli
+    path = Path(cfg["state_dir"]) / "config.json"
+    write(path, cfg)
+    locks = []
+    @contextlib.contextmanager
+    def lock(directory):
+        locks.append(directory)
+        yield
+    monkeypatch.setattr(cli, "locked", lock)
+    monkeypatch.setattr(cli.trim, "run", lambda _cfg: {"state": "ok"})
+    assert cli.main(["--config", str(path), "trim"]) == 0
+    assert locks == [Path(cfg["state_dir"]) / "trim-lock"]
+
+
 def test_receipt_projection_returns_no_pairing_material(tmp_path):
     from host_steward import heartbeat
     devices = tmp_path / "devices.json"

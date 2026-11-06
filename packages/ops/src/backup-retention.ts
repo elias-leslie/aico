@@ -115,17 +115,34 @@ export function manifests(
         }
   return result
 }
-/** Scheduled retention only. Unknown metadata and active recovery copies always preserve the point. */
-export async function snapshotSweep(rt: Runtime, scheduled: boolean): Promise<void> {
+/**
+ * Scheduled retention only. Unknown metadata and active recovery copies always preserve the point.
+ * Under disk pressure (the space guard) no new point is taken and only the newest pressureKeep
+ * points survive beside held ones, as SummitFlow's `autosnap prune --pressure` did.
+ */
+export async function snapshotSweep(
+  rt: Runtime,
+  scheduled: boolean,
+  pressure = false,
+): Promise<number> {
   const all = manifests()
-  const active = await captureWorkspace(rt, all)
+  const active = pressure ? null : await captureWorkspace(rt, all)
   const released = new Set(
-    all.flatMap((m) => m.entries.map((e) => e.project_id)).filter((id) => !active.has(id)),
+    active
+      ? all.flatMap((m) => m.entries.map((e) => e.project_id)).filter((id) => !active.has(id))
+      : [],
   )
   const points = all.flatMap((m) => m.entries)
-  const allowed = scheduled
-    ? retentionSelection(points, rt.cfg.retention.snapshot, rt.now().getTime(), false, released)
-    : []
+  const allowed =
+    scheduled || pressure
+      ? retentionSelection(
+          points,
+          rt.cfg.retention.snapshot,
+          rt.now().getTime(),
+          pressure,
+          released,
+        )
+      : []
   let deleted = 0
   for (const path of allowed) {
     const permitted = realpathSync(resolve(ops.snapshots.workspacesRoot, '.snapshots'))
@@ -153,6 +170,7 @@ export async function snapshotSweep(rt: Runtime, scheduled: boolean): Promise<vo
       renameSync(temporary, manifest.path)
     }
   }
+  return deleted
 }
 function driveRetentionArgs(cfg: BackupConfig): string[] {
   const p = cfg.retention.drive

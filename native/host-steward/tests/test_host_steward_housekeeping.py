@@ -328,12 +328,12 @@ def test_lines_from_the_storage_table():
     assert lines.pressured(29.9) and lines.pressured(10.0) and not lines.pressured(30.0)
 
 
-def test_retired_reclaim_commands_are_not_scheduled():
+def test_space_guard_thins_work_snapshots_under_pressure_on_the_system_disk():
     cfg = DATA["jobs"]["space-guard"]
-    root = space_guard.reclaim_commands(cfg, "/", 30)
-    assert root == []
-    work = space_guard.reclaim_commands(cfg, "/srv/workspaces", 30)
-    assert work == []
+    assert space_guard.reclaim_commands(cfg, "/", 30) == [
+        ["aico", "backups", "run", "snapshots", "--pressure"]
+    ]
+    assert space_guard.reclaim_commands(cfg, "/mnt/other", 30) == []
 
 
 def test_explicit_reclaim_commands_filter_by_disk():
@@ -371,11 +371,12 @@ def test_space_guard_dry_run_under_pressure_lists_the_ladder_and_changes_nothing
     would = result["would"]
     assert would[0].startswith("release the 6.0 GiB ballast")
     assert not any("st cleanup" in w or "st autosnap" in w for w in would)
+    assert any(w.endswith("aico backups run snapshots --pressure") for w in would)
     assert "vacuum the journal to 1G" in would
     assert any(w.startswith("balance data chunks on / (usage 0%") for w in would)
     assert result["filesystems"][0]["pressured"] and result["filesystems"][0]["ladder"][
         "tiers"
-    ] == ["ballast", "journal"]
+    ] == ["ballast", "reclaim", "journal"]
     state, text = space_guard.row_text(result, False)
     assert state == "ok"
     assert (
@@ -386,7 +387,7 @@ def test_space_guard_dry_run_under_pressure_lists_the_ladder_and_changes_nothing
     )
 
 
-def test_space_guard_live_runs_balance_and_journal_without_retired_commands(tmp_path):
+def test_space_guard_live_thins_snapshots_as_the_owner_then_balances_and_vacuums(tmp_path):
     fake = Fake(
         *BTRFS_OK,
         (["btrfs", "filesystem", "usage"], Result(0, usage(unallocated_gib=3, free_gib=20))),
@@ -399,7 +400,8 @@ def test_space_guard_live_runs_balance_and_journal_without_retired_commands(tmp_
     env.cfg["ballast_gib"] = 0
     result = space_guard.space_guard(env, {})
     calls = fake.calls
-    assert not any(c[0] == "runuser" for c in calls)
+    owner = [c for c in calls if c[0] == "runuser"]
+    assert len(owner) == 1 and owner[0][-5:] == ["aico", "backups", "run", "snapshots", "--pressure"]
     assert any(c[:3] == ["btrfs", "balance", "start"] and "-dusage=0,limit=16" in c for c in calls)
     assert any(c[0] == "journalctl" for c in calls)
     assert result["would"] == []

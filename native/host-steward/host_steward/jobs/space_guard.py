@@ -371,11 +371,11 @@ def reclaim_commands(cfg: dict[str, Any], path: str, target_gib: float) -> list[
     return out
 
 
-def summitflow_reclaim(
+def owner_reclaim(
     env: Env, disk: dict[str, Any], ctx: dict[str, Any], pressured: Callable[[], bool]
 ) -> str | None:
-    """T1: SummitFlow's own reclaim entry points for this disk as the owner, in order while the disk stays
-    pressured, each at most once per run. A command this SummitFlow does not have yet is skipped."""
+    """T1: the configured reclaim commands for this disk as the owner, in order while the disk stays
+    pressured, each at most once per run. A command the owner's tools do not have is skipped."""
     done = ctx.setdefault("reclaim_ran", set())
     notes = []
     for cmd in reclaim_commands(env.cfg, disk["path"], disk["lines"].crit):
@@ -435,7 +435,7 @@ def tiers_for(
     if device and env.cfg.get("ballast_gib"):
         tiers.append(("ballast", lambda: release_ballast(env, disk)))
     if env.cfg.get("reclaim_commands"):
-        tiers.append(("summitflow", lambda: summitflow_reclaim(env, disk, ctx, pressured)))
+        tiers.append(("reclaim", lambda: owner_reclaim(env, disk, ctx, pressured)))
     if device and device == ctx["devices"].get(env.cfg["journal_path"]):
         tiers.append(("journal", lambda: journal_tier(env)))
     return tiers

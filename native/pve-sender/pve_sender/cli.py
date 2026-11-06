@@ -42,6 +42,9 @@ def main(argv=None) -> int:
                 lock_directory = directory / "heartbeat-lock"
             elif args.command == "sync-credentials":
                 lock_directory = directory / "credentials-lock"
+        elif args.command == "trim":
+            # fstrim can run for minutes; the watchdog tick must never wait behind it.
+            lock_directory = directory / "trim-lock"
         with locked(lock_directory):
             if args.command == "trim":
                 result = trim.run(cfg)

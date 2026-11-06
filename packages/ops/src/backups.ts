@@ -272,6 +272,7 @@ const USAGE = `Usage: aico backups list | request native|drive|append
   recover check|snapshots|restore|repair --repository REPO --password-file FILE [--to NEW_FOLDER] [--snapshot ID]
   drill [--plan] [--scheduled]                         monthly scratch restore and live Aico counts
   run native|drive|append|snapshots|guard|verify
+  run snapshots --pressure                             disk pressure: keep only the newest work points
   snapshots SOURCE [--target native|drive|append]       copies available to restore
   browse SOURCE SNAPSHOT PATH [--target native|drive|append]
   restore SOURCE SNAPSHOT PATH --to /srv/scratch/NEW_FOLDER [--target native|drive|append]
@@ -333,7 +334,7 @@ export async function backups(argv: string[], env = process.env): Promise<number
       '--quiet',
       '--collect',
       '--wait',
-      `--unit=aico-backup-${target}`,
+      `--unit=aico-backup-${target}${args.includes('--pressure') ? '-pressure' : ''}`,
       ...cfg.runProperties.flatMap((p) => ['--property', p]),
       ...kept,
       '--setenv=AICO_BACKUPS_UNIT=1',
@@ -399,6 +400,13 @@ export async function backups(argv: string[], env = process.env): Promise<number
       throw new Error(USAGE)
     if (machine !== cfg.workstation && ['native', 'snapshots', 'guard'].includes(target as string))
       throw new Error('Btrfs backup jobs run on the workstation only.')
+    if (args.includes('--pressure')) {
+      if (target !== 'snapshots') throw new Error('Only snapshots thin under --pressure.')
+      // The space guard's reclaim tier: thin now, take no new point, leave the schedule's record alone.
+      const deleted = await snapshotSweep(rt, true, true)
+      console.log(JSON.stringify({ ok: true, target, pressure: true, deleted }))
+      return 0
+    }
     const ok = await runBackup(
       rt,
       state,

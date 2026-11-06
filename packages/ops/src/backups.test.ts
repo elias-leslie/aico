@@ -32,6 +32,7 @@ import {
   deleteWorkPoint,
   type RetentionView,
   retentionSelection,
+  snapshotSweep,
 } from './backup-retention'
 import { copyRootAuth, type Runtime, readState, restic, saveState } from './backup-runtime'
 import {
@@ -213,6 +214,27 @@ it('keeps recent/hourly/daily points, pins, unclassified work, recovery copies, 
       now,
     ),
   ).not.toContain('/points/old')
+})
+it('disk pressure keeps only the newest few points plus held ones, and takes no new point', async () => {
+  const c = config({})
+  const points = [
+    view('latest', 1),
+    view('recent', 2),
+    view('hour', 3),
+    view('day', 30),
+    view('old', 200),
+    view('pin', 300, { pin_reason: 'owner' }),
+  ]
+  expect(c.retention.snapshot.pressureKeep).toBe(3)
+  expect(retentionSelection(points, c.retention.snapshot, now, true)).toEqual([
+    '/points/old',
+    '/points/day',
+  ])
+  vi.stubEnv('HOME', mkdtempSync(join(tmpdir(), 'aico-pressure-')))
+  const run = vi.fn(ok)
+  expect(await snapshotSweep({ cfg: cfg(), run, now: () => new Date(now) }, true, true)).toBe(0)
+  expect(run).not.toHaveBeenCalled()
+  vi.unstubAllEnvs()
 })
 it('retention safeguards keep unexpected large native expiry plans untouched', () => {
   const existing = Array.from({ length: 14 }, (_, i) => `home.${i}`)
