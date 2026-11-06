@@ -86,6 +86,8 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
   /** The receivers' delivery queues: `to|source` while undelivered. */
   const queued = new Set<string>()
   const withdrawn: string[] = []
+  /** handled calls: [lane, receivers]. */
+  const handledCalls: [string, string[]][] = []
   const logs: string[] = []
   /** promoteReplies calls: [lane, receivers]. */
   const promoted: [string, string[]][] = []
@@ -110,7 +112,7 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
       withdrawn.push(`${to}|${source}`)
       return 1
     },
-    handled: () => {},
+    handled: (lane, _host, to) => handledCalls.push([lane, [...to]]),
     acted: (lane, host, by, since) => waits.actedOn(lane, host ?? '', by, since),
     agentGone: (id) => gone.has(id),
     elsewhere: (id) => remote.get(id) ?? null,
@@ -133,6 +135,7 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
     delivered,
     queued,
     withdrawn,
+    handledCalls,
     take,
     logs,
     receivers,
@@ -697,6 +700,22 @@ describe('ended', () => {
         `${WATCHER}|lane:${LANE}:ended`,
       ].sort(),
     )
+  })
+
+  it("a helper ending its lane leaves the root's own wait alone", () => {
+    const { reporter, handledCalls, store } = harness()
+    insertWidget(ROOT, 'claude-code', 1_000)
+    insertWidget(HELPER_PARENT, 'claude-code', 1_000)
+    insertWidget(LANE, 'claude-code', 1_000)
+    adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: HELPER_PARENT })
+    step(reporter, { parentId: HELPER_PARENT, state: 'working', stateAgentAt: 100 })
+    const lanes = new LaneReportStore(store.db)
+    lanes.markEnd(LANE, HELPER_PARENT, Date.now())
+    removeWidget(LANE)
+    lanes.unmarkEnd(LANE)
+    reporter.drainOutbox()
+    // The root is spared the ended line, but only the ender handled the End.
+    expect(handledCalls).toEqual([[LANE, [HELPER_PARENT]]])
   })
 
   it('a line already delivered stays; only the one still queued goes', () => {

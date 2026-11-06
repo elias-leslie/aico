@@ -46,8 +46,9 @@
 //   Those spared sessions also lose the lane's lines still queued for them
 //   (went idle, blocked, an exit's ended): they ended it, so the lines are
 //   stale. A line already delivered (or going out now) stays.
-//   The same receivers also cancel their armed session waits on the lane
-//   and withdraw its queued wait lines; those report the same handled work.
+//   The ender itself also cancels its armed session waits on the lane and
+//   withdraws its queued wait lines; those report the same handled work. A
+//   root spared only because its helper ended the lane keeps its own wait.
 //
 // - A went-idle line the receiver does not need is dropped: the lane told
 //   that receiver with a request (`st sessions send`; never an ack, which may
@@ -1207,7 +1208,9 @@ export class LaneReporter {
    * queued for them: they ended it themselves (or their lane did). */
   private withdrawStale(lane: LaneSnapshot, endedBy: string | null): void {
     const { skip } = this.endSkip(lane, endedBy)
-    this.ops.handled(lane.id, lane.host, [...skip])
+    // Only the ender itself handled the End: a root spared the line because
+    // its helper ended the lane still hears from its own wait on the lane.
+    if (endedBy) this.ops.handled(lane.id, lane.host, [endedBy])
     const where = laneWhere(lane)
     const taken: string[] = []
     for (const receiver of skip)

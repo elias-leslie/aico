@@ -923,8 +923,8 @@ export class WaitService {
     return target !== null && target.id === wait.ref && target.host === wait.host
   }
 
-  /** These receivers already know the session ended (the End's requester
-   * and the root it informs). Other watchers and non-session waits stay. */
+  /** These receivers already know the session ended (the End's requester).
+   * Other watchers, the root, and non-session waits stay. */
   sessionHandled(ref: string, host: string | null, receivers: readonly string[]): void {
     this.store.transaction(() => {
       for (const receiver of receivers)
