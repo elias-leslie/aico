@@ -270,6 +270,21 @@ describe('st status', () => {
     store.close()
   })
 
+  it('folds rows of a machine turned off on purpose into one line, not problems', () => {
+    const store = new StatusStore(':memory:', () => NOW)
+    store.upsert([
+      { ...MACHINE, id: 'apps/machine', machine: 'apps', state: 'off' },
+      { ...ROW, machine: 'apps', id: 'apps/one' },
+      { ...ROW, machine: 'apps', id: 'apps/two' },
+    ])
+    const text = formatStatus(store.read(), false, NOW)
+    expect(text).toContain('No problems: 1 row healthy (1 off).')
+    expect(text).toContain("2 rows on apps aren't reporting: it's turned off on purpose.")
+    expect(text).not.toContain('Unknown  Backup')
+    expect(formatStatus(store.read(), true, NOW)).toContain('Unknown  Backup (backup, apps)')
+    store.close()
+  })
+
   it('says when nothing needs the owner, and when there are no rows yet', () => {
     const empty = { generated_at: '', rows: [], rollup: { problems: 0, healthy: 0, counts: {} } }
     expect(formatStatus(empty as never, false, NOW)).toMatch(/^No status rows yet/)

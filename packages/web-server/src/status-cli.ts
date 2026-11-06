@@ -1,7 +1,7 @@
 // `st status`: this machine's Status rows from aico-web (GET /api/status), problems
 // first with what each means and what to do, healthy rows folded into a count.
 
-import type { ShownRow, StatusView } from '@aico/status'
+import { counted, type ShownRow, type StatusView } from '@aico/status'
 
 const STATUS_USAGE = `Usage: st status [options]
 
@@ -114,15 +114,36 @@ export function formatStatus(
     .filter((state) => rollup.counts[state] > 0)
     .map((state) => `${rollup.counts[state]} ${state}`)
     .join(', ')
+  // Unknown only because their machine is off on purpose (or just back): not a problem, as on the
+  // badge (show.ts counted). Folded into one line per machine unless --all.
+  const quiet = rows.filter((row) => row.shown === 'unknown' && !counted(row))
+  const problems = rollup.problems - quiet.length
   const out: string[] = []
   out.push(
-    rollup.problems === 0
+    problems === 0
       ? `No problems: ${plural(rollup.healthy, 'row')} healthy (${healthyParts}).`
-      : `${plural(rollup.problems, 'problem')}, ${rollup.healthy} healthy.`,
+      : `${plural(problems, 'problem')}, ${rollup.healthy} healthy.`,
   )
-  const shown = all ? rows : rows.filter((row) => row.shown !== 'ok' && row.shown !== 'off')
+  const shown = all
+    ? rows
+    : rows.filter((row) => row.shown !== 'ok' && row.shown !== 'off' && !quiet.includes(row))
   for (const row of shown) out.push('', ...rowLines(row, now))
-  if (!all && rollup.healthy > 0 && rollup.problems > 0)
+  if (!all && quiet.length > 0) {
+    const machines = new Map<string, { n: number; why: string }>()
+    for (const row of quiet) {
+      const entry = machines.get(row.machine) ?? { n: 0, why: row.unknown_why ?? 'off' }
+      entry.n += 1
+      machines.set(row.machine, entry)
+    }
+    out.push('')
+    for (const [machine, { n, why }] of machines)
+      out.push(
+        why === 'back'
+          ? `${plural(n, 'row')} on ${machine} wait for their first report since it came back.`
+          : `${plural(n, 'row')} on ${machine} aren't reporting: it's turned off on purpose.`,
+      )
+  }
+  if (!all && rollup.healthy > 0 && (problems > 0 || quiet.length > 0))
     out.push('', `${rollup.healthy} healthy (${healthyParts}) not listed; --all lists them.`)
   return `${out.join('\n')}\n`
 }
