@@ -14,6 +14,7 @@ import {
   powerActions,
   problemText,
   runStateText,
+  unknownReason,
 } from '@/lib/projects'
 import { AgentsBadge, Beacon, ProblemBadge } from './Badges'
 import { BackIcon, PowerIcon } from './icons'
@@ -39,7 +40,7 @@ function PlaceRow({
     : !place.power
       ? ' · can’t be changed from here'
       : place.state === 'unknown'
-        ? ' · can’t reach the Proxmox host'
+        ? ` · ${unknownReason(place)}`
         : ''
   return (
     <div className={styles.place}>

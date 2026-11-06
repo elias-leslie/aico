@@ -52,7 +52,7 @@ function RoadmapLine({
   const blocked = !!item.blocked
   return (
     <li
-      className={`${styles[lane]} ${blocked ? styles.blocked : ''}`}
+      className={`${styles[lane]} ${blocked ? styles.blocked : ''} ${item.raw ? styles.raw : ''}`}
       title={blocked ? blockedReason(item) : undefined}
     >
       <span className={styles.dot} aria-hidden="true" />
@@ -95,8 +95,14 @@ export function Timeline({
     return () => watcher.disconnect()
   }, [idle, fetchNextPage])
 
-  const noRoadmap =
-    project.now.length + project.next.length + project.later.length === 0
+  const other = project.other ?? []
+  const noRoadmap = project.roadmap
+    ? !project.roadmap.found
+    : project.now.length +
+        project.next.length +
+        project.later.length +
+        other.length ===
+      0
   const days = timeline.data?.pages.flatMap((page) => page.days) ?? []
   const oldest = days.at(-1)?.date
 
@@ -112,6 +118,9 @@ export function Timeline({
         ))}
         {keyed(project.later).map(([key, item]) => (
           <RoadmapLine key={`later-${key}`} item={item} lane="later" />
+        ))}
+        {keyed(other).map(([key, item]) => (
+          <RoadmapLine key={`other-${key}`} item={item} lane="later" />
         ))}
         {days.map((day) => (
           <DayBlock key={day.date} day={day} now={now} />
@@ -169,9 +178,11 @@ export function Timeline({
         )}
         {timeline.data && !hasNextPage && (
           <li className={styles.more}>
-            {days.length === 0
-              ? 'No commits yet'
-              : `Start of history${oldest ? ` · ${dayLabel(oldest, now).replace(/^[A-Za-z]+ · /, '')}` : ''}`}
+            {timeline.data.pages[0]?.available === false
+              ? 'No git history for this project'
+              : days.length === 0
+                ? 'No commits yet'
+                : `Start of history${oldest ? ` · ${dayLabel(oldest, now).replace(/^[A-Za-z]+ · /, '')}` : ''}`}
           </li>
         )}
       </ul>

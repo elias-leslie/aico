@@ -114,6 +114,22 @@ describe('places', () => {
     expect(powerActions({ ...vm, power: false, state: 'running' })).toBeNull()
   })
 
+  it('names why a place is unknown', () => {
+    expect(
+      placeLine(
+        { ...vm, state: 'unknown', note: 'Proxmox did not answer (timeout).' },
+        NOW,
+      ),
+    ).toContain('can’t reach the Proxmox host')
+    expect(
+      placeLine(
+        { ...vm, state: 'unknown', note: 'Proxmox does not list this guest.' },
+        NOW,
+      ),
+    ).toContain('Proxmox does not list this guest · as of')
+    expect(shortAge(null, NOW)).toBe('')
+  })
+
   it('says the state in one line', () => {
     expect(placeLine(vm, NOW)).toBe('stopped at 10:40')
     expect(placeLine({ ...vm, state: 'unknown' }, NOW)).toBe(

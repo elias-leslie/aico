@@ -21,7 +21,7 @@ export interface ProjectSummary {
   runState: RunState | null
   problems: Problem[]
   agents: number
-  lastActivity: string
+  lastActivity: string | null
 }
 
 export interface RoadmapItem {
@@ -30,6 +30,8 @@ export interface RoadmapItem {
   /** The reason, or true when no reason was written. */
   blocked?: string | boolean
   session?: string
+  /** The line did not follow the roadmap format; `text` is the line as written. */
+  raw?: true
 }
 
 export interface Place {
@@ -66,6 +68,10 @@ export interface ProjectDetail {
   now: RoadmapItem[]
   next: RoadmapItem[]
   later: RoadmapItem[]
+  /** found is false when the project has no ROADMAP.md. */
+  roadmap?: { found: boolean }
+  /** Lines of sections other than Now, Next and Later, as written. */
+  other?: RoadmapItem[]
   places: Place[]
   problems: ProblemRows[]
   agents: ProjectAgent[]
@@ -81,6 +87,8 @@ export interface Commit {
 export interface TimelinePage {
   days: { date: string; commits: Commit[] }[]
   end: boolean
+  /** False when the project has no folder or it is not a git repository. */
+  available?: boolean
 }
 
 export const fetchOverview = () =>
@@ -123,8 +131,8 @@ export const postPower = (id: string, index: number, action: PowerAction) =>
 const problemTotal = (project: ProjectSummary) =>
   project.problems.reduce((sum, problem) => sum + problem.count, 0)
 
-const time = (iso: string) => {
-  const ms = Date.parse(iso)
+const time = (iso: string | null) => {
+  const ms = iso ? Date.parse(iso) : Number.NaN
   return Number.isNaN(ms) ? 0 : ms
 }
 
@@ -187,8 +195,8 @@ export const runStateText: Record<RunState, string> = {
 }
 
 /** "9 min", "3 h", "2 d": the list's short age. */
-export function shortAge(iso: string, now: number): string {
-  const ms = Date.parse(iso)
+export function shortAge(iso: string | null, now: number): string {
+  const ms = iso ? Date.parse(iso) : Number.NaN
   if (Number.isNaN(ms)) return ''
   const minutes = Math.max(0, Math.floor((now - ms) / 60_000))
   if (minutes < 1) return 'now'
@@ -241,6 +249,14 @@ const BUSY: Record<PowerAction, string> = {
   restart: 'restarting',
 }
 
+/** Why a place's state is unknown: Proxmox out of reach, or the server's own reason. */
+export function unknownReason(place: Place): string {
+  const note = place.note?.trim()
+  if (!note || /^(Proxmox did not answer|No Proxmox access)/.test(note))
+    return 'can’t reach the Proxmox host'
+  return note.replace(/\.$/, '')
+}
+
 /** The line beside a place: "since Tue · checked 1 min ago", "stopped at 10:40". */
 export function placeLine(place: Place, now: number): string {
   if (place.busy) return BUSY[place.busy]
@@ -267,8 +283,10 @@ export function placeLine(place: Place, now: number): string {
       return hasSince
         ? `starting · ${Math.max(0, Math.round((now - since) / 1000))} s`
         : 'starting'
-    case 'unknown':
-      return `can’t reach the Proxmox host${Number.isNaN(asOf) ? '' : ` · as of ${clock(asOf)}`}`
+    case 'unknown': {
+      const asOfText = Number.isNaN(asOf) ? '' : ` · as of ${clock(asOf)}`
+      return `${unknownReason(place)}${asOfText}`
+    }
   }
 }
 

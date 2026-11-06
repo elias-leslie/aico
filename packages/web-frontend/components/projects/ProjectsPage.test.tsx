@@ -366,4 +366,45 @@ describe('detail', () => {
       screen.queryByRole('button', { name: /Open power options/ }),
     ).toBeNull()
   })
+
+  it('says No roadmap yet when the project has no ROADMAP.md, and keeps raw lines visible', async () => {
+    routes['/api/projects/portfolio'] = () =>
+      Response.json({
+        ...DETAIL,
+        now: [],
+        next: [],
+        later: [],
+        roadmap: { found: false },
+      })
+    show('portfolio')
+    expect(await screen.findByText('No roadmap yet.')).toBeInTheDocument()
+  })
+
+  it('shows lines that did not follow the roadmap format as written', async () => {
+    routes['/api/projects/portfolio'] = () =>
+      Response.json({
+        ...DETAIL,
+        roadmap: { found: true },
+        now: [{ text: 'free text without a dash', raw: true }],
+      })
+    show('portfolio')
+    expect(
+      await screen.findByText('free text without a dash'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('No roadmap yet.')).toBeNull()
+  })
+
+  it('says a project without a git folder has no history, and tolerates no activity time', async () => {
+    routes['/api/projects/portfolio/timeline'] = () =>
+      Response.json({ days: [], end: true, available: false })
+    routes['/api/projects/overview'] = () =>
+      Response.json([
+        summary({ id: 'portfolio', name: 'Portfolio AI', lastActivity: null }),
+      ])
+    show('portfolio')
+    expect(
+      await screen.findByText('No git history for this project'),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText('Portfolio AI').length).toBeGreaterThan(0)
+  })
 })
