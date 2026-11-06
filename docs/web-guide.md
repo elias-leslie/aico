@@ -96,9 +96,6 @@ AICO_CAPTURE_MAX_MB=25
 AICO_CAPTURE_MAX_FILES=20
 # Name stamped on rows this host writes (default: the machine's host name)
 AICO_HOST_NAME=sidarli
-
-# Optional Agent Hub (the web app works without it)
-AGENT_HUB_URL=http://localhost:8003
 ```
 
 
@@ -152,8 +149,6 @@ The web app answers on `localhost`, plus one public hostname through a Cloudflar
 All core features work without any external service.
 
 **SummitFlow project catalog** — Tether reads SummitFlow's projects when SummitFlow is installed, and the web app shows those. Without SummitFlow, Tether uses its local list.
-
-**Agent Hub** (`AGENT_HUB_URL`) — Adds model catalog and prompt cleaning/refinement proxies.
 
 </details>
 
