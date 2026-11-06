@@ -21,8 +21,6 @@ Restart=on-failure
 RestartSec=2
 UMask=0077
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
-# Sibling checkouts (agent-hub, codex-config) live here, not ~/projects.
-Environment=TETHER_PROJECTS_DIR=/srv/workspaces/projects
 # Read the host verdict Nightshift publishes in /run/nightshift, and keep this
 # Tether's memory event record in its state dir, where Nightshift reads it.
 Environment=TETHER_NIGHTSHIFT_ADMISSION=/run/nightshift/admission.json
