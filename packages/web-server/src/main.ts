@@ -18,6 +18,7 @@ import { Background } from './background'
 import { registerBackupRoutes } from './backups'
 import { createCanaryServer, registerCanaryRoutes } from './canary'
 import { CaptureRouter } from './capture-router'
+import { chatStarter } from './chat'
 import { readChatAttachments } from './chat-attachments'
 import { CLI_COMMANDS, runCli } from './cli'
 import { HISTORY_LINES, loadConfig } from './config'
@@ -78,7 +79,11 @@ function serve(): void {
     publicHost: config.publicHost,
     files: { store: notes, blobsDir, hostName: config.hostName },
   })
+    starterOf: (ask) =>
+      ask.session && chatsRef?.has(ask.session) ? chatStarter(chatsRef.summary(ask.session)) : null,
+    answerUrl: `http://${config.host}:${config.port}`,
   const previews = new PreviewJobs(blobsDir, execRunner)
+  let chatsRef: ChatSessions | undefined
   const adapters = new Map<string, OwnerAdapter>([['notes', new NotesOwner(notes)]])
   if (config.portfolio.url) {
     const portfolio = { url: config.portfolio.url, tokenFile: config.portfolio.tokenFile }
@@ -113,6 +118,7 @@ function serve(): void {
       readChatAttachments(ids, { store: notes, blobsDir, limits: config.captures }),
   })
   asks.onChange = () => chats.changed()
+  chatsRef = chats
   const background = new Background({
     tether,
     store,
@@ -123,9 +129,9 @@ function serve(): void {
     maintenance: config.maintenance,
     forward: (event) => terminals.event(event),
     askChanged: async (data) => {
-      await notify.askChanged(data)
       const ask = validateAsk((data as { ask?: unknown })?.ask)
-      if (ask?.session) await chats.question(ask.session, ask.state === 'open')
+      if (!ask || !asks.routed(ask)) await notify.askChanged(data)
+      if (ask?.session && !asks.routed(ask)) await chats.question(ask.session, ask.state === 'open')
       chats.changed()
     },
     tick: () => router.tick(),

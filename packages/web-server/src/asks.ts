@@ -280,7 +280,7 @@ export class Asks {
   /** Event-fed projection for a chat stream; reading it never waits on Tether. */
   snapshot() {
     return {
-      asks: [...this.known.values()],
+      asks: [...this.known.values()].filter((ask) => !this.routed(ask)),
       state: this.loaded
         ? this.listFailed
           ? 'stale'
@@ -305,8 +305,19 @@ export class Asks {
       pendingGrants?: () => Promise<Approval[] | null>
       run?: RunCommand
       files?: AskFileSource
+      /** The session that started the chat this ask came from, when another
+       * session did: its asks go to that session, not the owner's Needs you. */
+      starterOf?: (ask: Ask) => string | null
+      /** Where that session answers (this server's loopback address). */
+      answerUrl?: string
     },
   ) {}
+
+  /** Asks the starting session was told about (or not yet failed to be): the owner never sees them. */
+  routed(ask: Ask): boolean {
+    return !ask.host && !this.undelivered.has(ask.id) && Boolean(this.options.starterOf?.(ask))
+  }
+  private readonly undelivered = new Set<string>()
 
   private get run(): RunCommand {
     return this.options.run ?? runCommand
@@ -317,6 +328,9 @@ export class Asks {
     const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
     const ask = validateAsk(record.ask)
     if (ask) this.remember(ask)
+    if (ask && record.created === true && ask.state === 'open' && this.routed(ask)) {
+      if (await this.tellStarter(ask)) return
+    }
     if (record.created !== true) {
       // A blocking ask that is no longer open stops being a waiting notice.
       if (ask?.blocking && ask.state !== 'open')
@@ -343,6 +357,31 @@ export class Asks {
     await sendNotice(this.run, askNotice(ask, who, this.options.publicHost))
   }
 
+  /** The question as one line for the session that started the chat; false when it could not be told. */
+  private async tellStarter(ask: Ask): Promise<boolean> {
+    const starter = this.options.starterOf?.(ask)
+    if (!starter) return false
+    const choices = ask.options.map((option, i) => `${i}=${option}`).join('; ')
+    const how = this.options.answerUrl
+      ? ` Answer: curl -s -X POST ${this.options.answerUrl}/api/asks/${ask.id}/answer -H 'content-type: application/json' -d '{"option":N}' or '{"text":"..."}'.`
+      : ''
+    const line = `[Chat question ${ask.id} from your test chat ${ask.session}] ${ask.question.replace(/\s+/g, ' ')}${choices ? ` (${choices})` : ''}.${how}`
+    try {
+      await tetherCall(() =>
+        this.options.tether.request('POST', `/v1/sessions/${starter}/deliveries`, {
+          source: `aico:chat-ask-${ask.id}`,
+          line,
+        }),
+      )
+      return true
+    } catch (error) {
+      // The starter is gone or cannot take lines: the owner sees it after all.
+      console.log(`[aico-web] chat ask ${ask.id} not delivered to ${starter}:`, String(error))
+      this.undelivered.add(ask.id)
+      return false
+    }
+  }
+
   /** Open and answered asks plus recently closed ones; any failing the checks are left out. */
   list(): Promise<Ask[]> {
     if (this.listing) return this.listing
@@ -364,7 +403,7 @@ export class Asks {
       this.loaded = true
       this.listFailed = false
       this.onChange?.()
-      return items
+      return items.filter((ask) => !this.routed(ask))
     } catch (error) {
       this.listFailed = true
       this.onChange?.()

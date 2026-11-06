@@ -432,3 +432,53 @@ describe('Aico grant taps', () => {
     expect(await unavailable.approvals()).toBeNull()
   })
 })
+
+describe('asks from a chat another session started', () => {
+  const STARTER = '89abcdef'
+  const starterOf = (ask: Ask) => (ask.session === ASK.session ? STARTER : null)
+  const pushes = () => {
+    const runs: string[][] = []
+    return { runs, run: async (argv: string[]) => (runs.push(argv), '') }
+  }
+
+  it('tells the starting session, keeps it from the owner and sends no push', async () => {
+    const tether = fakeTether({
+      'GET /v1/asks?hosts=all': {
+        items: [ASK, { ...ASK, id: '111111111111', session: '99999999' }],
+      },
+    })
+    const { runs, run } = pushes()
+    const asks = new Asks({
+      tether: tether.client as never,
+      publicHost: 'aico.example',
+      run,
+      starterOf,
+      answerUrl: 'http://127.0.0.1:1',
+    })
+    await asks.receive({ ask: ASK, created: true })
+    expect(runs).toEqual([])
+    const sent = tether.calls.find((call) => call.path === `/v1/sessions/${STARTER}/deliveries`)
+    const body = sent?.body as { source: string; line: string }
+    expect(body.source).toBe(`aico:chat-ask-${ASK.id}`)
+    expect(body.line).toContain(ASK.question)
+    expect(body.line).toContain(`/api/asks/${ASK.id}/answer`)
+    expect(asks.snapshot().asks).toEqual([])
+    // The owner's own chats keep their asks.
+    expect((await asks.list()).map((ask) => ask.id)).toEqual(['111111111111'])
+  })
+
+  it('falls back to the owner when the starting session cannot take the line', async () => {
+    const tether = fakeTether()
+    const failing = {
+      request: async (method: string, path: string) => {
+        if (path.endsWith('/deliveries')) throw new Error('gone')
+        return tether.client.request(method, path)
+      },
+    }
+    const { runs, run } = pushes()
+    const asks = new Asks({ tether: failing as never, publicHost: null, run, starterOf })
+    await asks.receive({ ask: ASK, created: true })
+    expect(runs).toHaveLength(1)
+    expect(asks.snapshot().asks.map((ask) => ask.id)).toEqual([ASK.id])
+  })
+})

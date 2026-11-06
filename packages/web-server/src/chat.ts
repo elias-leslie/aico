@@ -9,6 +9,11 @@ import { objectBody, optionalString, RAW, type Router, requiredString } from './
 import { HttpError } from './tether'
 
 const MAX_CHAT_STREAMS = 24
+/** The session that started a chat, when it is another session (`codex:<id>` or a bare id): where its asks go. */
+export function chatStarter(chat: { startedBy: string | null } | undefined): string | null {
+  const match = /^(?:[a-z][a-z0-9-]*:)?([0-9a-f]{8})$/.exec(chat?.startedBy ?? '')
+  return match?.[1] ?? null
+}
 function chatQuestions(asks: readonly Ask[], id: string) {
   return asks.filter((ask) => !ask.host && ask.session === id && ask.state === 'open')
 }
@@ -191,7 +196,11 @@ export function registerChatRoutes(
         reply = { text: summary, ...(full !== summary && { note: full.slice(0, 1000) }) }
       }
       const attachments = chatAttachmentIds(body.attachments, captures)
-      await asks.answer(question.id, reply)
+      // A question that wants files takes the captures as its answer's files too.
+      await asks.answer(question.id, {
+        ...reply,
+        ...(question.wantsFiles && attachments.length && { files: attachments }),
+      })
       chats.answer(
         ctx.params.id,
         question.id,

@@ -450,6 +450,7 @@ export function buildApi(deps: ApiDeps): Router {
         ask.id,
         ask.question,
         [ask.answer, ask.note].filter(Boolean).join('\n'),
+        ask.files.map((file) => file.id),
       )
   })
   registerCheckInRoutes(router, life, tether)

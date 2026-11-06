@@ -14,6 +14,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildApi } from './api'
 import type { Ask, Asks } from './asks'
+import { chatStarter } from './chat'
 import { readChatAttachments } from './chat-attachments'
 import { WebStore } from './db'
 import { NotesStore } from './notes-db'
@@ -42,6 +43,7 @@ let store: WebStore
 let server: ReturnType<typeof createWebServer>
 let db: ReturnType<typeof openAgentDb>
 let asksStalled = false
+let answered: { id: string; reply: { files?: string[] } }[]
 let questions: Ask[]
 let pushes: unknown[]
 let captures: {
@@ -102,6 +104,7 @@ beforeEach(async () => {
   db = openAgentDb(':memory:')
   pushes = []
   questions = []
+  answered = []
   asksStalled = false
   attachmentFailure = false
   captures = {
@@ -127,7 +130,11 @@ beforeEach(async () => {
   const asks = {
     list: async () => (asksStalled ? new Promise<Ask[]>(() => {}) : questions),
     snapshot: () => ({ asks: questions, state: asksStalled ? 'stale' : 'ready' }),
-    answer: async (id: string, reply: { option?: number; text?: string; note?: string }) => {
+    answer: async (
+      id: string,
+      reply: { option?: number; text?: string; note?: string; files?: string[] },
+    ) => {
+      answered.push({ id, reply })
       if (reply.text && (reply.text.length > 100 || /[\r\n]/.test(reply.text)))
         throw new Error('Tether requires one-line answer text of at most 100 characters')
       if (reply.note && reply.note.length > 1000) throw new Error('Tether note is too long')
@@ -135,6 +142,14 @@ beforeEach(async () => {
       ask.answer =
         reply.option !== undefined ? (ask.options[reply.option] ?? null) : (reply.text ?? null)
       ask.state = 'answered'
+      ask.files = (reply.files ?? []).map((file) => ({
+        id: file,
+        name: 'sync-log.txt',
+        mime: 'text/plain',
+        size: 3,
+        path: null,
+        host: null,
+      }))
       return ask
     },
     act: async () => {
@@ -227,6 +242,48 @@ describe('Aico chat routes', () => {
     })
     await chats.settled(id)
     expect(JSON.stringify(chats.get(id).messages)).toContain('The attachment reached the model.')
+  })
+  it('passes capture ids as files when a chat question wants files', async () => {
+    const id = await start()
+    const file = await attachment()
+    questions = [{ ...question(id), wantsFiles: { min: 1, max: 2, hint: null } }]
+    first.setResponses([fauxAssistantMessage('Got it')])
+    const res = await call('POST', `/api/chat/${id}/answer`, {
+      ask: questions[0]?.id,
+      message: 'Here',
+      attachments: [file],
+    })
+    expect(res.status).toBe(200)
+    expect(answered[0]?.reply.files).toEqual([file])
+  })
+  it('sends no files for a question that does not take them', async () => {
+    const id = await start()
+    const file = await attachment()
+    questions = [question(id)]
+    first.setResponses([fauxAssistantMessage('Got it')])
+    await call('POST', `/api/chat/${id}/answer`, {
+      ask: questions[0]?.id,
+      message: 'Here',
+      attachments: [file],
+    })
+    expect(answered[0]?.reply.files).toBeUndefined()
+  })
+  it('hands the files of a drawer answer to the chat', async () => {
+    const id = await start()
+    const file = await attachment()
+    questions = [{ ...question(id), wantsFiles: { min: 1, max: 2, hint: null } }]
+    const ask = questions[0] as Ask
+    first.setResponses([fauxAssistantMessage('Saw the file')])
+    const res = await call('POST', `/api/asks/${ask.id}/answer`, { text: 'Photo', files: [file] })
+    expect(res.status).toBe(200)
+    await chats.settled(id)
+    expect(JSON.stringify(chats.get(id).messages)).toContain('The attachment reached the model.')
+  })
+  it('names the starting session only for a chat another session started', () => {
+    expect(chatStarter({ startedBy: 'codex:0123abcd' })).toBe('0123abcd')
+    expect(chatStarter({ startedBy: '0123abcd' })).toBe('0123abcd')
+    for (const startedBy of ['owner', null, 'codex:683968', 'codex:not-a-session'])
+      expect(chatStarter({ startedBy })).toBeNull()
   })
   it('starts from role routing, stores two messages and pushes the session state and totals to Tether', async () => {
     const id = await start()
