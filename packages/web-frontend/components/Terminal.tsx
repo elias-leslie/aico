@@ -33,6 +33,7 @@ import {
 import { usableDimensions } from '../lib/terminal/fit'
 import { keepReadingPlace } from '../lib/terminal/reading-place'
 import { isMobileDevice } from '../lib/utils/device'
+import { type ViewSize, viewRefresh } from '../lib/utils/view-refresh'
 import { LoadEarlierPill } from './LoadEarlierPill'
 import { ScrollToBottomPill } from './ScrollToBottomPill'
 import type { TerminalHandle, TerminalProps } from './terminal.types'
@@ -161,6 +162,10 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
         : null,
     )
     const [history, setHistory] = useState<HistoryFrame | null>(null)
+    // The view's size when the last seed came, and the size it last showed
+    // the session at (null: its own fitted size).
+    const seedSizeRef = useRef<ViewSize | null>(null)
+    const shownSizeRef = useRef<ViewSize | null>(null)
     const [loadingEarlier, setLoadingEarlier] = useState(false)
 
     const { status, wsRef, reconnect, sendInput, connect, disconnect } =
@@ -177,6 +182,10 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
         },
         getHistoryLines: () => historyBudgetRef.current,
         onHistory: (frame) => {
+          // A seed just came (the notice follows its data): it is laid out
+          // at this view's size now.
+          const term = terminalRef.current
+          if (term) seedSizeRef.current = { cols: term.cols, rows: term.rows }
           setHistory(frame)
           setLoadingEarlier(false)
         },
@@ -354,13 +363,21 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     reclaimRef.current = claimSize
 
     // Shown at another size than before: the visible screen is read again at
-    // it (xterm reflowed the history itself).
+    // it (xterm reflowed the history itself), or the whole pane when the last
+    // seed was laid out at this view's own size (see viewRefresh).
     const viewCols = viewSize?.cols ?? 0
     const viewRows = viewSize?.rows ?? 0
-    // biome-ignore lint/correctness/useExhaustiveDependencies: repaint when the shown size changes
+    // biome-ignore lint/correctness/useExhaustiveDependencies: refresh when the shown size changes
     useEffect(() => {
-      if (viewCols > 0 && wsRef.current?.readyState === WebSocket.OPEN)
-        wsRef.current.send(JSON.stringify({ __ctrl: true, refresh: 'screen' }))
+      const previous = shownSizeRef.current
+      const next = viewCols > 0 ? { cols: viewCols, rows: viewRows } : null
+      shownSizeRef.current = next
+      if (!next || wsRef.current?.readyState !== WebSocket.OPEN) return
+      const refresh =
+        viewRefresh(previous, next, seedSizeRef.current) === 'seed'
+          ? true
+          : 'screen'
+      wsRef.current.send(JSON.stringify({ __ctrl: true, refresh }))
     }, [viewCols, viewRows])
 
     // Load earlier: the server sends the pane again with more history; the
