@@ -40,6 +40,23 @@ function fixture() {
     calls.push([method, path, body])
     if (path.includes('resources')) return guests
     if (path.includes('/tasks/')) return { status: 'stopped', exitstatus: 'OK' }
+    if (path.endsWith('/agent/network-get-interfaces'))
+      return {
+        result: [
+          {
+            name: 'lo',
+            'ip-addresses': [{ 'ip-address': '127.0.0.1', 'ip-address-type': 'ipv4' }],
+          },
+          {
+            name: 'eth0',
+            'ip-addresses': [
+              { 'ip-address': '192.168.86.234', 'ip-address-type': 'ipv4' },
+              { 'ip-address': 'fe80::1', 'ip-address-type': 'ipv6' },
+              { 'ip-address': '169.254.1.2', 'ip-address-type': 'ipv4' },
+            ],
+          },
+        ],
+      }
     if (path.endsWith('/status/current'))
       return { status: 'running', cpu: 0.123, mem: 2147483648, maxmem: 8589934592, uptime: 42 }
     return 'UPID:task'
@@ -72,6 +89,32 @@ describe('direct scoped PVE operations', () => {
     const h = fixture()
     await h.run('status', '100')
     expect(h.out[0]).toBe('VM 100 (browser): running | CPU: 12% | RAM: 2048MB/8192MB | Uptime: 42s')
+  })
+  it('prints the guest agent IPv4 addresses, one per line', async () => {
+    const h = fixture()
+    expect(await h.run('ip', '100')).toBe(0)
+    expect(h.out).toEqual(['192.168.86.234'])
+    expect(h.calls.at(-1)).toEqual([
+      'GET',
+      '/nodes/pve/qemu/100/agent/network-get-interfaces',
+      undefined,
+    ])
+    await expect(h.run('ip', '150')).rejects.toThrow('container')
+  })
+  it('fails when the guest reports no address', async () => {
+    const api: PveRequest = async (_m, path) =>
+      path.includes('resources') ? guests : { result: [] }
+    const err: string[] = []
+    expect(
+      await vm(
+        ['ip', '100'],
+        routeOp({}, api),
+        () => ({ code: 0, out: '', err: '' }),
+        () => {},
+        (s) => err.push(s),
+      ),
+    ).toBe(1)
+    expect(err[0]).toContain('no IPv4')
   })
   it.each([
     ['start', '100', '/qemu/100/status/start'],

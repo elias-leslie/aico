@@ -130,6 +130,15 @@ export function routeOp(
         vmid: guest.vmid,
         name: guest.name,
       }
+    if (op === 'ip') {
+      if (guest.type !== 'qemu')
+        throw new Refusal(`VM ${guest.vmid} is a container; ip reads the VM guest agent`, 2)
+      // The guest agent reports the addresses the VM actually holds (DHCP or static).
+      const agent = (await call('GET', `${base}/agent/network-get-interfaces`)) as {
+        result?: unknown
+      } | null
+      return guestAddresses(agent?.result)
+    }
     let task: unknown
     if (op === 'start' || op === 'stop' || op === 'shutdown')
       task = await call('POST', `${base}/status/${op}`)
@@ -172,6 +181,26 @@ export function guestRows(rows: unknown): Guest[] {
       maxdisk: Number(row.maxdisk) || 0,
     }))
     .sort((a, b) => a.vmid - b.vmid)
+}
+
+/** IPv4 addresses from the guest agent's interface list, loopback and link-local left out. */
+export function guestAddresses(interfaces: unknown): string[] {
+  const found: string[] = []
+  for (const nic of Array.isArray(interfaces) ? (interfaces as Record<string, unknown>[]) : []) {
+    for (const addr of Array.isArray(nic['ip-addresses'])
+      ? (nic['ip-addresses'] as Record<string, unknown>[])
+      : []) {
+      const ip = String(addr['ip-address'] ?? '')
+      if (
+        addr['ip-address-type'] === 'ipv4' &&
+        !ip.startsWith('127.') &&
+        !ip.startsWith('169.254.') &&
+        !found.includes(ip)
+      )
+        found.push(ip)
+    }
+  }
+  return found
 }
 
 const mb = (bytes: number) => `${Math.floor(bytes / 1024 / 1024)}MB`
@@ -247,6 +276,16 @@ export async function vm(
       )
       return 0
     }
+    case 'ip': {
+      const vmid = vmId(rawId)
+      const addresses = (await call('ip', vmid)) as string[]
+      if (!addresses.length) {
+        err(`VM ${vmid} reports no IPv4 address`)
+        return 1
+      }
+      for (const address of addresses) out(address)
+      return 0
+    }
     case 'start':
     case 'shutdown':
     case 'stop': {
@@ -291,7 +330,7 @@ export async function vm(
     }
     default:
       err(
-        'Usage: aico vm list | status ID | start ID [--hours H --reason R] | shutdown ID | stop ID | snapshot ID [NAME]',
+        'Usage: aico vm list | status ID | ip ID | start ID [--hours H --reason R] | shutdown ID | stop ID | snapshot ID [NAME]',
       )
       return 2
   }
