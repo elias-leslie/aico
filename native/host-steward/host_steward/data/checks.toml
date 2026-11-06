@@ -614,7 +614,6 @@ own_projects = { nightshift = "Nightshift", host-steward = "Host steward" }
 "nightshift-space-guard.service" = "nightshift"
 "nightshift-zswap.service" = "nightshift"
 "summitflow-backup-window-guard.service" = "summitflow"
-"summitflow-dnsmasq.service" = "summitflow"
 "summitflow-host-monitor.service" = "summitflow"
 "host-steward-check.service" = "host-steward"
 "host-steward-collect-usage.service" = "host-steward"
@@ -624,6 +623,7 @@ own_projects = { nightshift = "Nightshift", host-steward = "Host steward" }
 "host-steward-nvme-short-test.service" = "host-steward"
 "host-steward-scrub-native.service" = "host-steward"
 "host-steward-scrub-root.service" = "host-steward"
+"aico-split-dns.service" = "host-steward"
 
 [site.trusted_units.user]
 "host-steward-memctl.service" = "host-steward"

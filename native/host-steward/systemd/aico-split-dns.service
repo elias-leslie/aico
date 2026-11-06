@@ -1,0 +1,13 @@
+[Unit]
+Description=Aico local split-horizon DNS (dnsmasq on 127.0.0.1)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/aico/split-dns.conf --pid-file=/run/aico-split-dns.pid
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

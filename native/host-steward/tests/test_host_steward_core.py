@@ -245,6 +245,7 @@ def test_install_script_copies_the_package_data_and_units(tmp_path, monkeypatch)
         "HS_UNIT_DIR": str(tmp_path / "units"),
         "HS_USER_UNIT_DIR": str(tmp_path / "user-units"),
         "HS_SUDOERS_DIR": str(tmp_path / "sudoers.d"),
+        "HS_ETC_DIR": str(tmp_path / "etc"),
         "HS_STATE_DIR": str(tmp_path / "state"),
     }
     here = Path(__file__).resolve().parents[1]
@@ -256,6 +257,8 @@ def test_install_script_copies_the_package_data_and_units(tmp_path, monkeypatch)
     assert "OnCalendar=*:0/15" in timer
     service = (tmp_path / "units/host-steward-check.service").read_text()
     assert "ExecStart=/usr/local/lib/host-steward/host-steward check" in service
+    assert "--conf-file=/etc/aico/split-dns.conf" in (tmp_path / "units/aico-split-dns.service").read_text()
+    assert "listen-address=127.0.0.1" in (tmp_path / "etc/split-dns.conf").read_text()
     assert (tmp_path / "user-units/host-steward-memctl.service").is_file()
     assert not (tmp_path / "units/host-steward-memctl.service").exists()
     assert "systemctl start host-steward-space-guard.service" in (tmp_path / "sudoers.d/60-host-steward").read_text()

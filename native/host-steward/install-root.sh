@@ -6,7 +6,8 @@
 # and the space guard (dry runs until [acting] is switched on in checks.toml). The scrub and NVMe self-test timers
 # follow [acting] scrub / nvme_tests: enabled while on, disabled while off (Nightshift's run them then), and their
 # Status rows are reposted at once (--status starts nothing). The memory controller is a user unit of $HS_OWNER
-# (installed to $HS_USER_UNIT_DIR, enabled; it acts per [acting] memctl).
+# (installed to $HS_USER_UNIT_DIR, enabled; it acts per [acting] memctl). The split-horizon DNS (dnsmasq on
+# 127.0.0.1, config in $HS_ETC_DIR/split-dns.conf) is installed and started with them.
 # HS_NO_SYSTEMCTL=1 copies files only (tests).
 set -euo pipefail
 if [ "${HS_NO_SYSTEMCTL:-0}" != 1 ] && [ "${HS_SIGNATURE_VERIFIED:-0}" != 1 ]; then
@@ -21,9 +22,10 @@ unit_dir="${HS_UNIT_DIR:-/etc/systemd/system}"
 user_unit_dir="${HS_USER_UNIT_DIR:-/etc/systemd/user}"
 sudoers_dir="${HS_SUDOERS_DIR:-/etc/sudoers.d}"
 owner="${HS_OWNER:-kasadis}"
-enable_timers=(host-steward-grants.service host-steward-rules.timer host-steward-heartbeat.timer host-steward-fcm-token.timer host-steward-check.timer host-steward-collect-usage.timer host-steward-housekeeping.timer host-steward-space-guard.timer)
+etc_dir="${HS_ETC_DIR:-/etc/aico}"
+enable_timers=(host-steward-grants.service host-steward-rules.timer host-steward-heartbeat.timer host-steward-fcm-token.timer host-steward-check.timer host-steward-collect-usage.timer host-steward-housekeeping.timer host-steward-space-guard.timer aico-split-dns.service)
 
-install -d -m 0755 "$prefix" "$bin_dir" "$unit_dir" "$user_unit_dir"
+install -d -m 0755 "$prefix" "$bin_dir" "$unit_dir" "$user_unit_dir" "$etc_dir"
 rm -rf "$prefix/host_steward"
 mkdir -p "$prefix/host_steward"
 (cd "$here/host_steward" && find . -type f \( -name '*.py' -o -name '*.toml' -o -name '*.json' \) -not -path '*/__pycache__/*' \
@@ -33,6 +35,8 @@ install -m 0755 "$here/host-steward" "$prefix/host-steward"
 install -m 0755 "$here/aico-grants" "$prefix/aico-grants"
 install -m 0755 "$here/install-signed.py" "$prefix/install-signed.py"
 ln -sfn "$prefix/host-steward" "$bin_dir/host-steward"
+cmp -s "$here/dnsmasq/aico-split-dns.conf" "$etc_dir/split-dns.conf" && dns_same=1 || dns_same=0
+install -m 0644 "$here/dnsmasq/aico-split-dns.conf" "$etc_dir/split-dns.conf"
 for unit in "$here"/systemd/*.service "$here"/systemd/*.timer; do
   case "$(basename "$unit")" in
     host-steward-memctl.service) install -m 0644 "$unit" "$user_unit_dir/" ;;
@@ -59,6 +63,8 @@ migrate()
 MIGRATE
   systemctl --no-ask-password daemon-reload
   systemctl --no-ask-password enable --now "${enable_timers[@]}"
+  # A running resolver reads its config only at start; restart it just when the config changed.
+  [ "$dns_same" = 1 ] || systemctl --no-ask-password try-restart aico-split-dns.service
   read -r scrub_on nvme_on < <(python3 -c 'import sys, tomllib
 a = tomllib.load(open(sys.argv[1], "rb")).get("acting", {})
 print(int(bool(a.get("scrub"))), int(bool(a.get("nvme_tests"))))' "$here/host_steward/data/checks.toml")
