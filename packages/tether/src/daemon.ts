@@ -302,7 +302,15 @@ export async function startDaemon(
       if (getWidget(sessionId)) notifySessionChanged(sessionId, { force: true })
     },
   }
-  const fleet = new FleetService(env, paths.socket)
+  // The machine has one fleet link, held by the default instance. A test instance (tether@dev) reading
+  // the same fleet.json fights it for the link's sockets and writes failed link rows; it runs a link
+  // only when given its own AICO_FLEET_CONFIG.
+  const fleet = new FleetService(
+    paths.instance === 'default' || env.AICO_FLEET_CONFIG
+      ? env
+      : { ...env, AICO_FLEET_CONFIG: join(paths.runtimeDir, 'no-fleet-link.json') },
+    paths.socket,
+  )
   const hosts = hubEnabled(env)
     ? new Hub({
         env,
