@@ -61,7 +61,7 @@ export interface OwnerAsk {
   peer?: { state: string; since: number; listedAt: number | null }
 }
 
-/** A Nightshift tap waiting for the owner; approved there, never here. */
+/** A host access request waiting for the owner; approved on its page with the security key, never here. */
 export interface Approval {
   id: string
   title: string

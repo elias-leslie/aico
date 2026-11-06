@@ -116,8 +116,8 @@ export function useHostNeedsYou(): void {
  * question opening the drawer). */
 type Variant = 'pill' | 'tool' | 'icon' | 'compact' | 'row' | 'none'
 
-/** The "N need you" pill and its drawer: questions agents asked, Nightshift
- * approvals (links only) and what was answered. */
+/** The "N need you" pill and its drawer: questions agents asked, access
+ * requests waiting for your security key (links only) and what was answered. */
 export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
   const { asks } = useOwnerAsks()
   const { approvals } = useApprovals()
@@ -145,7 +145,7 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
     [me],
   )
 
-  // Agents' questions and Nightshift approvals only; check results
+  // Agents' questions and access requests only; check results
   // count under Status.
   const summary =
     count === 0
@@ -450,11 +450,11 @@ function NeedsYouBody({
       >
         {tab === 'approvals' ? (
           approvalsLoading ? (
-            <Note>Checking Nightshift…</Note>
+            <Note>Checking access requests…</Note>
           ) : approvals?.state !== 'ok' ? (
             <Note>
-              Can’t read Nightshift’s approvals right now. Open Nightshift to
-              see them.
+              Can’t read access requests right now. Open the Aico tray on your
+              computer to see them.
             </Note>
           ) : taps.length === 0 ? (
             <Note>Nothing waiting for your security key.</Note>
@@ -1077,7 +1077,7 @@ function ApprovalCard({ tap }: { tap: Approval }) {
   return (
     <li className="lantern-ask">
       <Meta>
-        <span>Nightshift · security key</span>
+        <span>Access request · security key</span>
         <span aria-hidden="true">·</span>
         <span>
           expires in{' '}
@@ -1096,7 +1096,7 @@ function ApprovalCard({ tap }: { tap: Approval }) {
         className="text-[13.5px]"
         style={{ color: 'var(--lantern)' }}
       >
-        Approve in Nightshift →
+        Review and approve →
       </a>
     </li>
   )

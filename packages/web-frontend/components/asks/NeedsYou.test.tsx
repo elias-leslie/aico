@@ -162,7 +162,7 @@ describe('NeedsYouLauncher', () => {
         {
           id: 'n1',
           title: 'GitHub admin',
-          url: 'https://ns.example/n/n1',
+          url: 'https://aico.example/grants?request=n1',
           expiresInS: 600,
         },
       ],
@@ -376,33 +376,34 @@ describe('NeedsYouDrawer', () => {
     )
   })
 
-  it('lists approvals as links to Nightshift, with no approve button', () => {
+  it('lists access requests as links to their approval page, with no approve button', () => {
     state.approvals = {
       state: 'ok',
       taps: [
         {
           id: 'n1',
           title: 'GitHub admin for 15 min',
-          url: 'https://ns.example/n/n1',
+          url: 'https://aico.example/grants?request=n1',
           expiresInS: 840,
         },
       ],
     }
     render(<NeedsYouDrawer open onOpenChange={() => {}} />)
     fireEvent.click(screen.getByRole('tab', { name: /Approvals/ }))
-    const link = screen.getByRole('link', { name: 'Approve in Nightshift →' })
-    expect(link).toHaveAttribute('href', 'https://ns.example/n/n1')
+    const link = screen.getByRole('link', { name: 'Review and approve →' })
+    expect(link).toHaveAttribute(
+      'href',
+      'https://aico.example/grants?request=n1',
+    )
     expect(screen.getByText(/expires in 14m/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /approve/i })).toBeNull()
   })
 
-  it('says when Nightshift cannot be read instead of showing nothing waiting', () => {
+  it('says when access requests cannot be read instead of showing nothing waiting', () => {
     state.approvals = { state: 'unavailable', taps: [] }
     render(<NeedsYouDrawer open onOpenChange={() => {}} />)
     fireEvent.click(screen.getByRole('tab', { name: /Approvals/ }))
-    expect(
-      screen.getByText(/Can’t read Nightshift’s approvals/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/Can’t read access requests/)).toBeInTheDocument()
   })
 
   it('has its own loading, failed and empty copy', () => {
