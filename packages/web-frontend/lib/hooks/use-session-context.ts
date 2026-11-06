@@ -15,11 +15,21 @@ interface HistorySummary {
 /** The session's current conversation's context fill, or null while unknown:
  * the newest conversation Tether bound to the session, unless it has no
  * reading yet (a missing number is unknown, never zero). */
-export function contextTokensOf(items: HistorySummary[]): number | null {
-  const newest = [...items].sort(
+export function contextTokensOf(
+  items: HistorySummary[],
+  mode?: string,
+): number | null {
+  // A session can also own side runs of other tools (an agent's `codex exec`); prefer its own tool's.
+  const own = mode ? items.filter((i) => sameTool(i.tool, mode)) : []
+  const newest = [...(own.length ? own : items)].sort(
     (a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0),
   )[0]
   return newest?.contextTokens ?? null
+}
+function sameTool(tool: string, mode: string): boolean {
+  return (
+    tool === mode || tool.startsWith(`${mode}-`) || mode.startsWith(`${tool}-`)
+  )
 }
 
 /** How many tokens of context a live agent session holds at its latest reply
@@ -38,6 +48,7 @@ export function useSessionContext(
             `/api/history?session=${encodeURIComponent(sessionId ?? '')}&limit=5`,
           )
         ).items ?? [],
+        mode,
       ),
     enabled,
     staleTime: CONTEXT_REFRESH_MS,

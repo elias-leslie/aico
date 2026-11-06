@@ -17,6 +17,16 @@ it("reads the session's newest conversation, and unknown stays unknown", () => {
   expect(contextTokensOf([])).toBeNull()
 })
 
+it("prefers the session's own tool over a side run it started", () => {
+  const items = [
+    { tool: 'claude-code', startedAt: 1, contextTokens: 233_069 },
+    { tool: 'codex', startedAt: 9, contextTokens: 25_596 },
+  ]
+  expect(contextTokensOf(items, 'claude')).toBe(233_069)
+  expect(contextTokensOf(items, 'claude-code')).toBe(233_069)
+  expect(contextTokensOf(items, 'pi')).toBe(25_596)
+})
+
 it('writes a short label', () => {
   expect(contextLabel(640)).toBe('640')
   expect(contextLabel(1_000)).toBe('1k')
