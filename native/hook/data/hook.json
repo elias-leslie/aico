@@ -17,7 +17,7 @@
     "shell": "^(Bash|bash|exec_command|shell)$",
     "edit": "^(Write|Edit|MultiEdit|NotebookEdit|apply_patch|edit|write)$"
   },
-  "github_pat_hint": "GitHub 403 (gh PAT lacks admin scope): get a 30-min grant (the owner taps once) with nightshift elevate request github-admin --reason '<what, in owner words>' --wait, then nightshift elevate run github-admin -- gh ...; never print the credential.",
+  "github_pat_hint": "GitHub 403 (gh PAT lacks admin scope): get a 30-min grant (the owner taps once) with aico grants request github-admin --reason '<what, in owner words>' --wait, then aico grants run github-admin -- gh ...; never print the credential.",
   "context": {
     "command": ["~/.local/lib/aico/ops/packages/web-server/scripts/aico", "context", "deliver"],
     "timeout_seconds": 8,

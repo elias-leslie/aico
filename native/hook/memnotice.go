@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -16,12 +14,12 @@ import (
 )
 
 // The memory notice: tells an agent, once, when memory pressure killed a process in its pane, stopped the pane
-// or warned about it. Nightshift owns the record (`nightshift memory events --mine --json`, schema v1); this only
-// renders it for the agent. It replaces SummitFlow's coord_memory.py and keeps its per-agent state files
+// or warned about it. host-steward's memctl owns the record (~/.local/state/host-steward/memory-events.jsonl,
+// schema v1); this reads it directly and only renders it for the agent. It replaces SummitFlow's coord_memory.py and keeps its per-agent state files
 // (<runtime>/st-coord-inbox/mem-<agent>.json), so notices already shown stay shown.
 //
 // Hot path (every hook call): /proc/self/cgroup, the pane's memory.events oom_kill counter, a stat of the record
-// file and the agent's small state file. Nightshift is asked only when the counter or the record changed. An agent
+// file and the agent's small state file. The record is read only when the counter or the record changed. An agent
 // starts from what is there at its first hook (SessionStart, SubagentStart); a resumed session hears the last day.
 
 const (
@@ -52,11 +50,9 @@ type memPaths struct {
 	cgroupRoot string
 	events     string
 	heartbeat  string
-	nightshift string        // "" finds it on PATH (or ~/.local/bin) when a record is needed
-	query      time.Duration // bound on the nightshift call
 }
 
-func defaultMemPaths(query time.Duration) memPaths {
+func defaultMemPaths() memPaths {
 	home, _ := os.UserHomeDir()
 	runtime := os.Getenv("XDG_RUNTIME_DIR")
 	if runtime == "" {
@@ -70,9 +66,8 @@ func defaultMemPaths(query time.Duration) memPaths {
 		stateDir:   filepath.Join(runtime, "st-coord-inbox"),
 		procCgroup: "/proc/self/cgroup",
 		cgroupRoot: "/sys/fs/cgroup",
-		events:     filepath.Join(state, "nightshift/memory-events.jsonl"),
-		heartbeat:  filepath.Join(runtime, "nightshift/memctl.json"),
-		query:      query,
+		events:     filepath.Join(state, "host-steward/memory-events.jsonl"),
+		heartbeat:  filepath.Join(runtime, "host-steward/memctl.json"),
 	}
 }
 
@@ -98,11 +93,7 @@ func memoryNotice(cfg *Config, provider string, agentID string, payload map[stri
 	event, _ := payload["hook_event_name"].(string)
 	source, _ := payload["source"].(string)
 	resumed := event == "SessionStart" && source == "resume"
-	query := time.Duration(cfg.Inbox.TimeoutSeconds * float64(time.Second))
-	if query <= 0 {
-		query = 1500 * time.Millisecond
-	}
-	text, _ := memoryCheck(agent, resumed, defaultMemPaths(query), time.Now())
+	text, _ := memoryCheck(agent, resumed, defaultMemPaths(), time.Now())
 	return text
 }
 
@@ -286,7 +277,7 @@ func memCollect(state *memState, scope string, counter *int, sig []int64, resume
 	kills := false
 	toldHere := 0
 	if ask {
-		for _, r := range memRecords(p, since) {
+		for _, r := range memRecords(p, scope, since) {
 			ts := num(r["ts"])
 			key := fmt.Sprintf("%s:%s:%s:%s", memStr(r["kind"]), memNum(r["ts"]), memNum(r["pid"]), memStr(r["scope"]))
 			if _, dup := seen[key]; dup || ts < since {
@@ -318,31 +309,36 @@ func memCollect(state *memState, scope string, counter *int, sig []int64, resume
 	return lines, kills, state
 }
 
-// memRecords is this pane's records (and an earlier pane of the same Tether session) from Nightshift.
-func memRecords(p memPaths, since float64) []map[string]any {
-	exe := p.nightshift
-	if exe == "" {
-		if found, err := exec.LookPath("nightshift"); err == nil {
-			exe = found
-		} else {
-			home, _ := os.UserHomeDir()
-			exe = filepath.Join(home, ".local/bin/nightshift")
+// memRecords is this pane's records (and an earlier pane of the same Tether session) newer than since, oldest
+// first, read from the record file and the one it rotated to.
+func memRecords(p memPaths, scope string, since float64) []map[string]any {
+	var all []map[string]any
+	for _, path := range []string{p.events + ".1", p.events} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(raw), "\n") {
+			var r map[string]any
+			if json.Unmarshal([]byte(line), &r) == nil && num(r["ts"]) > since {
+				all = append(all, r)
+			}
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), p.query)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, exe, "memory", "events", "--mine", "--since", strconv.Itoa(int(since)), "--json")
-	cmd.WaitDelay = 100 * time.Millisecond
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if cmd.Run() != nil {
-		return nil
+	sort.SliceStable(all, func(a, b int) bool { return num(all[a]["ts"]) < num(all[b]["ts"]) })
+	sessions := map[string]bool{} // the Tether sessions that ran in this pane
+	for _, r := range all {
+		if id := memStr(r["tether_session_id"]); memStr(r["scope"]) == scope && id != "" && id != "None" {
+			sessions[id] = true
+		}
 	}
-	var recs []map[string]any
-	if json.Unmarshal(out.Bytes(), &recs) != nil {
-		return nil
+	var mine []map[string]any
+	for _, r := range all {
+		if memStr(r["scope"]) == scope || sessions[memStr(r["tether_session_id"])] {
+			mine = append(mine, r)
+		}
 	}
-	return recs
+	return mine
 }
 
 func memctlAlive(p memPaths, now float64) bool {
@@ -496,20 +492,20 @@ func memLine(r map[string]any, scope string) string {
 func memCounterLine(count int, now float64, alive bool) string {
 	where := fmt.Sprintf("memctl is not running, so details are only in `journalctl -k --since %s`", memClock(now-120))
 	if alive {
-		where = "details: `nightshift memory events --mine` (memctl adds them within a minute)"
+		where = "memctl adds the details to the memory record within a minute"
 	}
 	return fmt.Sprintf("%s the kernel killed %d process%s in this pane for memory; %s.", memClock(now), count, plural(count), where)
 }
 
 func memRender(lines []string, kills bool) string {
 	if len(lines) > memMaxLines {
-		lines = append([]string{fmt.Sprintf("%d earlier events: `nightshift memory events --mine`.", len(lines)-memMaxLines+1)},
+		lines = append([]string{fmt.Sprintf("%d earlier events in the memory record.", len(lines)-memMaxLines+1)},
 			lines[len(lines)-memMaxLines+1:]...)
 	}
 	text := append([]string{"Memory notice for this pane (information only; the process may be yours or a subagent's):"}, lines...)
 	if kills {
 		text = append(text, "A command that ended early (exit 137, or a pipeline with missing output) was killed this way; "+
-			"rerun it smaller or later. All records: `nightshift memory events --mine`.")
+			"rerun it smaller or later.")
 	}
 	return strings.Join(text, "\n")
 }
