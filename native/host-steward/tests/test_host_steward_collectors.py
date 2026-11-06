@@ -164,6 +164,19 @@ def test_telemetry_records_a_run_and_its_steps(tmp_path):
     assert db.execute("SELECT name, note FROM steps").fetchone() == ("a", "note")
 
 
+def test_telemetry_stays_quiet_for_a_user_who_cannot_write_it(tmp_path, capsys):
+    path = tmp_path / "t.sqlite3"
+    sqlite3.connect(path).close()
+    path.chmod(0o444)
+    try:
+        with telemetry.run("declare", path):
+            pass
+    finally:
+        path.chmod(0o644)
+    assert capsys.readouterr().out == ""
+    assert path.stat().st_size == 0
+
+
 def test_telemetry_marks_a_raising_run_as_error(tmp_path):
     path = tmp_path / "t.sqlite3"
     try:

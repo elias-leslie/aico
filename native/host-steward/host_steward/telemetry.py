@@ -2,12 +2,14 @@
 
 Port of ns/telemetry.py's run and step recording (the incident table and the status-page readers are not ported).
 One small sqlite file beside the state file. `with telemetry.run("check") as r:` times a run; r.step("name") times a
-part of it. A telemetry failure is printed and never fails the run. Old rows are pruned about once in 50 runs.
+part of it. A telemetry failure is printed and never fails the run; a run by a user who cannot write the file
+(an agent's declare or lab-use) records nothing and says nothing. Old rows are pruned about once in 50 runs.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import resource
 import sqlite3
 import time
@@ -86,9 +88,18 @@ def run(unit: str, path: Path | None = None) -> Generator[Run]:
     finally:
         rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         try:
-            record(measured, started, time.monotonic() - wall, _cpu() - cpu, rss, path)
+            if _writable(path or db_path()):
+                record(measured, started, time.monotonic() - wall, _cpu() - cpu, rss, path)
         except (sqlite3.Error, OSError) as error:
             print(f"telemetry: run not recorded: {error}")
+
+
+def _writable(target: Path) -> bool:
+    """The file, or for a first run its nearest existing parent, is writable by this process."""
+    probe = target
+    while not probe.exists() and probe != probe.parent:
+        probe = probe.parent
+    return os.access(probe, os.W_OK)
 
 
 def record(
