@@ -223,12 +223,24 @@ interface DeferredLaunch {
   timer: ReturnType<typeof setTimeout>
 }
 
+/** How long a mutation waits for a session that is running but briefly
+ * unavailable (another lifecycle operation holds it, or its pane probe has
+ * not settled), like End waits for the lifecycle token. */
+export const MUTATION_WAIT_MS = 5_000
+const MUTATION_POLL_MS = 50
+
 /**
  * Apply one view mutation only to the exact running widget generation.
  *
  * Every kind requires a dispatched launch and an active managed workload,
  * verified while holding lifecycle ownership, then rereads the catalog before
  * applying. A non-running widget is never renamed or marked.
+ *
+ * With `wait`, a session of the exact generation that is busy (lifecycle
+ * token held), not yet dispatched, or whose pane probe is not yet an active
+ * workload is tried again until `wait.ms` passes, so a caller racing another
+ * lifecycle step does not get a false "no workload". A different or missing
+ * generation answers false at once.
  */
 export async function widgetMutationOperation(
   widgetId: string,
@@ -240,25 +252,33 @@ export async function widgetMutationOperation(
     gateState(row: WidgetRow): Promise<ManagedGateState | null>
     apply(row: WidgetRow): void | Promise<void>
   },
+  wait: { ms: number; pollMs?: number } = { ms: 0 },
 ): Promise<boolean> {
-  const owner = operations.acquire(widgetId)
-  if (!owner) return false
-  try {
-    const exact = (row: WidgetRow | undefined): row is WidgetRow =>
-      Boolean(
-        row &&
-          row.id === widgetId &&
-          sessionGeneration(row) === generation &&
-          row.launchState === 'dispatched',
-      )
-    const row = operations.getWidget(widgetId)
-    if (!exact(row) || (await operations.gateState(row)) !== 'active-workload') return false
-    const latest = operations.getWidget(widgetId)
-    if (!exact(latest)) return false
-    await operations.apply(latest)
-    return true
-  } finally {
-    operations.release(widgetId, owner)
+  const sameGeneration = (row: WidgetRow | undefined): row is WidgetRow =>
+    Boolean(row && row.id === widgetId && sessionGeneration(row) === generation)
+  const exact = (row: WidgetRow | undefined): row is WidgetRow =>
+    sameGeneration(row) && row.launchState === 'dispatched'
+  const attempt = async (): Promise<'applied' | 'gone' | 'not-yet'> => {
+    const owner = operations.acquire(widgetId)
+    if (!owner) return 'not-yet'
+    try {
+      const row = operations.getWidget(widgetId)
+      if (!sameGeneration(row)) return 'gone'
+      if (!exact(row) || (await operations.gateState(row)) !== 'active-workload') return 'not-yet'
+      const latest = operations.getWidget(widgetId)
+      if (!exact(latest)) return 'gone'
+      await operations.apply(latest)
+      return 'applied'
+    } finally {
+      operations.release(widgetId, owner)
+    }
+  }
+  const deadline = Date.now() + wait.ms
+  for (;;) {
+    const outcome = await attempt()
+    if (outcome === 'applied') return true
+    if (outcome === 'gone' || Date.now() >= deadline) return false
+    await new Promise((resolve) => setTimeout(resolve, wait.pollMs ?? MUTATION_POLL_MS))
   }
 }
 

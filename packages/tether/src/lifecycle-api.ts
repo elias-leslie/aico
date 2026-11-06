@@ -83,6 +83,7 @@ import { ForegroundPaneMemory, systemdPaneMemoryHost } from './lifecycle/pane-me
 import {
   createRootHandler,
   isProjectRootPath,
+  MUTATION_WAIT_MS,
   type MutationRejection,
   parseLabel,
   type RootControlOperations,
@@ -461,8 +462,10 @@ function attachArgv(target: TmuxTarget): string[] {
 
 /**
  * Run `apply` only against the exact running generation while holding the one
- * lifecycle lock (Aico `widgetMutationOperation`). Returns the apply outcome,
- * or `false` when the session is not the exact running workload or is busy.
+ * lifecycle lock (Aico `widgetMutationOperation`). A session of that generation
+ * that is briefly busy or still settling is waited for (MUTATION_WAIT_MS).
+ * Returns the apply outcome, or `false` when the session is not the exact
+ * running workload by then.
  */
 async function withRunningSession<T>(
   widgetId: string,
@@ -470,15 +473,20 @@ async function withRunningSession<T>(
   apply: (row: WidgetRow) => Promise<T>,
 ): Promise<T | false> {
   let outcome: T | undefined
-  const ok = await widgetMutationOperation(widgetId, generation, {
-    acquire: (id) => lifecycleOwners.acquire(id),
-    release: (id, owner) => releaseLifecycleOwner(id, owner),
-    getWidget,
-    gateState: rootManagedGateState,
-    apply: async (row) => {
-      outcome = await apply(row)
+  const ok = await widgetMutationOperation(
+    widgetId,
+    generation,
+    {
+      acquire: (id) => lifecycleOwners.acquire(id),
+      release: (id, owner) => releaseLifecycleOwner(id, owner),
+      getWidget,
+      gateState: rootManagedGateState,
+      apply: async (row) => {
+        outcome = await apply(row)
+      },
     },
-  })
+    { ms: MUTATION_WAIT_MS },
+  )
   return ok ? (outcome as T) : false
 }
 

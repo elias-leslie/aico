@@ -402,6 +402,51 @@ describe('private root workload control', () => {
     expect(owners.isHeld(row.id)).toBe(false)
   })
 
+  it('waits briefly for a running session that is busy or still settling, not for a gone one', async () => {
+    const root = present(getRootRequest('target-1'))
+    const row = { ...present(getWidget(root.widgetId)), launchState: 'dispatched' as const }
+    const generation = sessionGeneration(row)
+    const owners = new LifecycleOwnerLock()
+    const states: (ManagedGateState | null)[] = ['ambiguous', 'active-workload']
+    const verify = vi.fn(async () => states.shift() ?? 'active-workload')
+    const apply = vi.fn()
+    const operations = {
+      acquire: (id: string) => owners.acquire(id),
+      release: (_id: string, owner: NonNullable<ReturnType<typeof owners.acquire>>) => {
+        owners.release(owner)
+      },
+      getWidget: () => row,
+      gateState: verify,
+      apply,
+    }
+    // Another lifecycle step holds the token for a moment, then the pane probe
+    // settles: the inject lands instead of answering "no workload".
+    const competing = present(owners.acquire(row.id))
+    setTimeout(() => owners.release(competing), 30)
+    expect(
+      await widgetMutationOperation(row.id, generation, operations, { ms: 2_000, pollMs: 5 }),
+    ).toBe(true)
+    expect(verify).toHaveBeenCalledTimes(2)
+    expect(apply).toHaveBeenCalledExactlyOnceWith(row)
+    // Without a wait the same race is a refusal, as before.
+    const held = present(owners.acquire(row.id))
+    expect(await widgetMutationOperation(row.id, generation, operations)).toBe(false)
+    owners.release(held)
+    // A different generation is gone: no waiting.
+    const started = Date.now()
+    expect(
+      await widgetMutationOperation(row.id, '0'.repeat(64), operations, { ms: 2_000, pollMs: 5 }),
+    ).toBe(false)
+    expect(Date.now() - started).toBeLessThan(500)
+    // A probe that never settles is refused once the wait runs out.
+    verify.mockImplementation(async () => 'inert')
+    expect(
+      await widgetMutationOperation(row.id, generation, operations, { ms: 40, pollMs: 5 }),
+    ).toBe(false)
+    expect(apply).toHaveBeenCalledTimes(1)
+    expect(owners.isHeld(row.id)).toBe(false)
+  })
+
   it('controls one ordinary widget without a root request and returns only exact identity', async () => {
     const row = insertWidget('aabbcc01', 'codex')
     insertWidget('aabbcc02', 'codex')
