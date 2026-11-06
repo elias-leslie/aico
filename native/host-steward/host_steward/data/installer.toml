@@ -1,6 +1,8 @@
 public_key = "/etc/host-steward/update-signing.pub"
 signing_key = "~/.local/state/aico/secrets/update-signing-key"
 archive_prefix = "native/host-steward/"
+# Written after each signed install: the commit it came from (aico deploy compares it with the commit it deploys).
+receipt = "/usr/local/lib/host-steward/installed.json"
 
 [migration]
 passkey_source = "/var/lib/nightshift-approve/state/credential.json"

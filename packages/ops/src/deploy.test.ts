@@ -223,6 +223,7 @@ describe('deploy', () => {
       workers?: string[]
       ops?: boolean
       cli?: boolean
+      hostSteward?: boolean
       kill?: (cmd: string, args: string[]) => boolean
     } = {},
   ) {
@@ -267,6 +268,38 @@ describe('deploy', () => {
       )
       writeFileSync(join(root, 'packages/cli/src/main.ts'), 'cli v1\n')
     }
+    const steward = {
+      installer: join(top, 'lib/install-signed.py'),
+      receipt: join(top, 'lib/installed.json'),
+      dataDir: join(top, 'state'),
+    }
+    if (options.hostSteward) {
+      mkdirSync(join(root, 'native/host-steward'), { recursive: true })
+      writeFileSync(join(root, 'native/host-steward/install-root.sh'), 'v1\n')
+      mkdirSync(join(root, 'packages/ops/data'), { recursive: true })
+      // The commit's own deploy data, not the bundled copy, names where the root install lives.
+      writeFileSync(
+        join(root, 'packages/ops/data/ops.json'),
+        JSON.stringify({
+          deploy: {
+            rootInstall: {
+              sources: ['native/host-steward'],
+              installer: steward.installer,
+              receipt: steward.receipt,
+              signingKey: 'update-signing-key',
+              declareWhat: 'units',
+            },
+          },
+        }),
+      )
+      mkdirSync(join(top, 'lib'), { recursive: true })
+      writeFileSync(steward.installer, '')
+      mkdirSync(join(steward.dataDir, 'secrets'), { recursive: true })
+      const key = join(steward.dataDir, 'secrets/update-signing-key')
+      run('openssl', ['genpkey', '-algorithm', 'ED25519', '-out', key])
+      run('chmod', ['600', key])
+      run('openssl', ['pkey', '-in', key, '-pubout', '-out', join(top, 'lib/update-signing.pub')])
+    }
     const git = (...args: string[]) => run('git', ['-C', root, ...args])
     git('init', '-q', '-b', 'main')
     git('-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A')
@@ -278,6 +311,28 @@ describe('deploy', () => {
       run: (cmd, args, opts) => {
         if (cmd === 'git' || cmd === 'tar' || cmd === 'cp') return run(cmd, args, opts)
         calls.push([cmd, ...args].join(' '))
+        if (cmd === 'sudo' && args[1] === steward.installer) {
+          // The installed installer: verify against the pinned key, record the archive's commit.
+          const [archive, signature] = args.slice(2) as [string, string]
+          const verified = run('openssl', [
+            'pkeyutl',
+            '-verify',
+            '-rawin',
+            '-pubin',
+            '-inkey',
+            join(top, 'lib/update-signing.pub'),
+            '-in',
+            archive,
+            '-sigfile',
+            signature,
+          ])
+          if (verified.code !== 0) return { code: 1, out: '', err: 'signature is invalid' }
+          const commit = spawnSync('git', ['get-tar-commit-id'], {
+            input: readFileSync(archive),
+          }).stdout.toString()
+          writeFileSync(steward.receipt, JSON.stringify({ sha: commit.trim() }))
+          return { code: 0, out: 'host-steward installed\n', err: '' }
+        }
         if (options.kill?.(cmd, args)) throw new Error('killed')
         if (cmd === 'aico-hook')
           return { ...(options.guard?.(args) ?? { code: 0, out: '' }), err: '' }
@@ -297,7 +352,7 @@ describe('deploy', () => {
       },
       out: (line) => lines.push(line),
       err: (line) => lines.push(line),
-      env: { AICO_HOOK_BIN: 'aico-hook', AICO_BIN: 'aico' },
+      env: { AICO_HOOK_BIN: 'aico-hook', AICO_BIN: 'aico', AICO_DATA_DIR: steward.dataDir },
       releasesDir: join(top, 'releases'),
       jobsDir: join(top, 'jobs'),
       systemdDir: join(top, 'systemd'),
@@ -311,7 +366,7 @@ describe('deploy', () => {
       processPaths: () => [],
     }
     const head = git('rev-parse', 'HEAD').out.trim()
-    return { root, git, deps, calls, lines, rows, head }
+    return { root, git, deps, calls, lines, rows, head, steward }
   }
   const request = (extra = {}) => ({
     project: 'demo',
@@ -716,6 +771,61 @@ describe('deploy', () => {
     expect(installedOpsSha(deps)).toBe(changed)
     expect(calls).toContain('nice -n 10 npm run build -w packages/cli')
     expect(calls.filter((call) => call.includes('restart'))).toEqual([])
+  })
+
+  it('installs the host-steward root sources signed, and again only when they changed', async () => {
+    const { root, git, deps, calls, lines, rows, head, steward } = setup({ hostSteward: true })
+    const commit = (file: string, text: string) => {
+      writeFileSync(join(root, file), text)
+      git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', file)
+      return git('rev-parse', 'HEAD').out.trim()
+    }
+    const installs = () => calls.filter((call) => call.startsWith(`sudo -n ${steward.installer} `))
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(calls.some((call) => call.startsWith('nightshift declare --host '))).toBe(true)
+    expect(installs()).toHaveLength(1)
+    expect(JSON.parse(readFileSync(steward.receipt, 'utf8')).sha).toBe(head)
+    expect(rows.at(-1)?.meaning).toContain('the host-steward root install')
+    // No change since the installed commit, then a change elsewhere: no root install.
+    expect(await deploy(request(), root, deps)).toBe(0)
+    commit('packages/web-server/main.ts', 'v2\n')
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(installs()).toHaveLength(1)
+    expect(lines.join('\n')).toContain(`root install skipped: unchanged since ${head.slice(0, 12)}`)
+    // A root source change installs again; a failed Nightshift declaration does not block it.
+    const changed = commit('native/host-steward/install-root.sh', 'v2\n')
+    const original = deps.run
+    deps.run = (cmd, args, opts) =>
+      cmd === 'nightshift'
+        ? { code: 1, out: '', err: 'nightshift down' }
+        : original(cmd, args, opts)
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(installs()).toHaveLength(2)
+    expect(JSON.parse(readFileSync(steward.receipt, 'utf8')).sha).toBe(changed)
+    expect(lines.join('\n')).toContain('could not declare the host change to Nightshift')
+  })
+
+  it('a failed root install fails the deploy and says the units went live', async () => {
+    const { root, deps, rows, steward } = setup({ hostSteward: true })
+    const original = deps.run
+    deps.run = (cmd, args, opts) =>
+      cmd === 'sudo' ? { code: 1, out: '', err: 'installer broke' } : original(cmd, args, opts)
+    await expect(deploy(request(), root, deps)).rejects.toThrow(
+      /root install failed: installer broke/,
+    )
+    expect(rows.at(-1)).toMatchObject({
+      state: 'failed',
+      meaning: expect.stringContaining('demo-web.service deployed'),
+    })
+    expect(existsSync(steward.receipt)).toBe(false)
+  })
+
+  it('skips the root install on a machine without the signed installer', async () => {
+    const { root, deps, calls, lines, steward } = setup({ hostSteward: true })
+    rmSync(steward.installer)
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(calls.some((call) => call.startsWith('sudo'))).toBe(false)
+    expect(lines.join('\n')).toContain('root install skipped: this machine has no signed installer')
   })
 
   it('prunes old releases but keeps the ones a unit still runs', () => {

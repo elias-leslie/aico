@@ -10,4 +10,5 @@ parser.add_argument("archive", type=Path)
 parser.add_argument("signature", type=Path)
 args = parser.parse_args()
 cfg = policy()
-install(args.archive, args.signature, Path(cfg["public_key"]), cfg["archive_prefix"])
+receipt = Path(cfg["receipt"]) if cfg.get("receipt") else None
+install(args.archive, args.signature, Path(cfg["public_key"]), cfg["archive_prefix"], receipt=receipt)

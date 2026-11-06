@@ -82,8 +82,6 @@ export function signRelease(
   apiVersion: number,
   issuedAt = Date.now(),
 ): string {
-  const key = createPrivateKey(privateFile(privateKeyPath))
-  if (key.asymmetricKeyType !== 'ed25519') throw new Error('Update signer must be Ed25519')
   const files = releaseFiles(release)
   const payload = JSON.stringify({
     format: 'aico-update-v1',
@@ -93,7 +91,16 @@ export function signRelease(
     issuedAt,
     files,
   })
-  return JSON.stringify({ payload, signature: sign(null, bytes(payload), key).toString('base64') })
+  return JSON.stringify({
+    payload,
+    signature: signDetached(bytes(payload), privateKeyPath).toString('base64'),
+  })
+}
+/** A raw Ed25519 signature of `data` with the update key (what `openssl pkeyutl -verify -rawin` checks). */
+export function signDetached(data: Buffer, privateKeyPath: string): Buffer {
+  const key = createPrivateKey(privateFile(privateKeyPath))
+  if (key.asymmetricKeyType !== 'ed25519') throw new Error('Update signer must be Ed25519')
+  return sign(null, data, key)
 }
 export function verifyRelease(input: string, keys: KeyObject[]): Release {
   try {

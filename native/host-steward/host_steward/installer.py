@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import stat
 import subprocess
 import tarfile
 import tempfile
+import time
 import tomllib
 from pathlib import Path, PurePosixPath
 
@@ -40,7 +42,8 @@ def migrate() -> None:
         core.write_json(site, {"approve_host": source["urls"]["approve_host"]}, mode=0o644)
 
 
-def install(archive: Path, signature: Path, key: Path, prefix: str, *, execute=subprocess.run, owner=0) -> None:
+def install(archive: Path, signature: Path, key: Path, prefix: str, *, execute=subprocess.run, owner=0,
+            receipt: Path | None = None) -> None:
     st = key.lstat()
     if not stat.S_ISREG(st.st_mode) or st.st_uid != owner or st.st_mode & 0o022:
         raise ValueError("update pin must be a root-owned regular file, not writable by others")
@@ -64,6 +67,8 @@ def install(archive: Path, signature: Path, key: Path, prefix: str, *, execute=s
                     raise ValueError("root update contains an unexpected path")
                 if not (member.isfile() or member.isdir()):
                     raise ValueError("root update contains a link or special file")
+            # git archive of a commit names it in the pax global header; it is inside the signed bytes.
+            commit = bundle.pax_headers.get("comment", "")
             bundle.extractall(root / "source", filter="data")
         script = root / "source" / prefix / "install-root.sh"
         env = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "HS_SIGNATURE_VERIFIED": "1"}
@@ -73,3 +78,7 @@ def install(archive: Path, signature: Path, key: Path, prefix: str, *, execute=s
         result = execute(["systemctl", "--no-ask-password", "try-restart", "host-steward-grants.service"], check=False)
         if result.returncode:
             raise ValueError("the updated grants service could not restart")
+        # The deploy reads this to install again only when the root sources changed since this commit.
+        if receipt is not None:
+            sha = commit if re.fullmatch(r"[0-9a-f]{40}", commit) else None
+            core.write_json(receipt, {"sha": sha, "installed_at": time.time()}, mode=0o644)

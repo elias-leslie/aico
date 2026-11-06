@@ -17,6 +17,7 @@ import { randomBytes } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   readlinkSync,
@@ -27,8 +28,10 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { signDetached } from '@aico/fleet/releases'
+import { secretsDir } from '@aico/fleet/secrets'
 import { machineId, type StatusRow } from '@aico/status'
 import ops from '../data/ops.json' with { type: 'json' }
 import { expandHome, type Runner, run as realRun, tail } from './sh'
@@ -229,6 +232,21 @@ export function selectUnits(project: Project, req: DeployRequest, ctx: SelectCon
 
 // ---- package cones -------------------------------------------------------------------------
 
+export type DeployConfig = typeof ops.deploy
+
+/**
+ * The deploy data (unit sources, root and CLI sources, the root install) of the commit being
+ * deployed: a deploy runs the previously installed bundle, and its selection should follow the
+ * commit's own data, not the data bundled into the older code. Falls back to the bundled copy.
+ */
+export function deployConfig(git: (args: string[]) => string, sha: string): DeployConfig {
+  try {
+    const target = JSON.parse(git(['show', `${sha}:packages/ops/data/ops.json`])).deploy
+    if (target && typeof target === 'object') return { ...ops.deploy, ...target }
+  } catch {}
+  return ops.deploy
+}
+
 export interface Pkg {
   dir: string
   name: string
@@ -281,12 +299,13 @@ export function unitSources(
   unit: string,
   template: string,
   packages: Pkg[],
+  cfg: DeployConfig = ops.deploy,
 ): string[] {
-  const extra: string[] = (ops.deploy.unitSources as Record<string, string[]>)[unit] ?? []
+  const extra: string[] = (cfg.unitSources as Record<string, string[]>)[unit] ?? []
   const pkg = unitPackage(template)
   const sources = [
     `scripts/systemd/${unit}`,
-    ...ops.deploy.rootSources,
+    ...cfg.rootSources,
     ...(pkg ? cone(packages, pkg) : []),
     ...extra.flatMap((path) =>
       path.startsWith('packages/') ? cone(packages, path.slice(9)) : [path],
@@ -300,8 +319,12 @@ export const touches = (paths: string[], sources: string[]) =>
   paths.some((path) => sources.some((source) => path === source || path.startsWith(`${source}/`)))
 
 /** The packages a unit needs built in the release: its own and the extra package sources. */
-export function unitBuilds(unit: string, template: string): string[] {
-  const extra: string[] = (ops.deploy.unitSources as Record<string, string[]>)[unit] ?? []
+export function unitBuilds(
+  unit: string,
+  template: string,
+  cfg: DeployConfig = ops.deploy,
+): string[] {
+  const extra: string[] = (cfg.unitSources as Record<string, string[]>)[unit] ?? []
   const pkg = unitPackage(template)
   return [
     ...(pkg ? [pkg] : []),
@@ -598,6 +621,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
     if (refused) throw new Refusal(refused, 2)
   }
   const packages = readPackages(git, sha)
+  const cfg = deployConfig(git, sha)
   const template = (unit: string) => {
     const result = deps.run('git', ['-C', root, 'show', `${sha}:scripts/systemd/${unit}`])
     return result.code === 0 ? result.out : ''
@@ -613,7 +637,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         diff?.code !== 0 ||
           touches(
             diff.out.split('\n').filter(Boolean),
-            unitSources(project, unit, template(unit), packages),
+            unitSources(project, unit, template(unit), packages, cfg),
           ),
       )
     }
@@ -796,42 +820,44 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
               return (
                 diff.code !== 0 ||
                 touches(diff.out.split('\n').filter(Boolean), [
-                  ...ops.deploy.rootSources,
+                  ...cfg.rootSources,
                   ...cone(packages, 'ops'),
-                  ...ops.deploy.cliSources,
+                  ...cfg.cliSources,
                 ])
               )
             })()))
-      if (!restart.length && !installOps) {
+      const installRoot = rootInstallWanted(root, sha, cfg, req.rollback, deps)
+      if (!restart.length && !installOps && !installRoot) {
         const message = `Nothing to restart at ${sha.slice(0, 10)}: no unit's sources changed`
         deps.out(`[deploy] ${message.toLowerCase()}`)
         await finish('succeeded', message)
         return 0
       }
       if (restart.length) deps.out(`[deploy] restarting ${restart.join(', ')}`)
-      let release: string
-      try {
-        release = prepareRelease(
-          root,
-          sha,
-          [
-            ...new Set([
-              ...restart.flatMap((unit) => unitBuilds(unit, template(unit))),
-              ...(installOps
-                ? ['ops', ...(packages.some((pkg) => pkg.dir === 'cli') ? ['cli'] : [])]
-                : []),
-            ]),
-          ],
-          deps,
-        )
-      } catch (error) {
-        await finish(
-          'failed',
-          `Deploy of ${sha.slice(0, 10)} failed: ${(error as Error).message.split('\n')[0]}`,
-        )
-        throw error
-      }
-      if (restart.length) {
+      let release: string | null = null
+      if (restart.length || installOps)
+        try {
+          release = prepareRelease(
+            root,
+            sha,
+            [
+              ...new Set([
+                ...restart.flatMap((unit) => unitBuilds(unit, template(unit), cfg)),
+                ...(installOps
+                  ? ['ops', ...(packages.some((pkg) => pkg.dir === 'cli') ? ['cli'] : [])]
+                  : []),
+              ]),
+            ],
+            deps,
+          )
+        } catch (error) {
+          await finish(
+            'failed',
+            `Deploy of ${sha.slice(0, 10)} failed: ${(error as Error).message.split('\n')[0]}`,
+          )
+          throw error
+        }
+      if (restart.length || installRoot) {
         // A hold taken while this deploy waited (queued, or behind another deploy) still refuses it.
         const refused = holdRefusal()
         if (refused) {
@@ -842,6 +868,8 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           await finish('failed', `Deploy of ${sha.slice(0, 10)} lost the deploy lock`)
           throw new Refusal('Another deploy took the deploy lock; nothing was restarted.', 1, true)
         }
+      }
+      if (restart.length && release) {
         const failed = await swapUnits(project, restart, release, sha, deps, installOps)
         if (failed) {
           await finish(
@@ -852,12 +880,26 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           throw new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`)
         }
       }
-      if (installOps && !restart.length) installOpsBundle(deps, release)
+      if (installOps && !restart.length && release) installOpsBundle(deps, release)
+      if (installRoot) {
+        const problem = installRootSources(root, sha, cfg, deps)
+        if (problem) {
+          const done = restart.length ? `${restart.join(', ')} deployed; ` : ''
+          await finish(
+            'failed',
+            `Deploy of ${sha.slice(0, 10)}: ${done}the host-steward root install failed (${problem})`,
+            restart,
+          )
+          throw new Refusal(`The host-steward root install failed: ${problem}`)
+        }
+      }
       const seconds = Math.round((Date.now() - started) / 1000)
-      pruneReleases(deps, release)
-      const what = restart.length
-        ? restart.map((unit) => unit.replace(/\.service$/, '')).join(', ')
-        : 'the deploy code only'
+      if (release) pruneReleases(deps, release)
+      const parts = [
+        ...restart.map((unit) => unit.replace(/\.service$/, '')),
+        ...(installRoot ? ['the host-steward root install'] : []),
+      ]
+      const what = parts.length ? parts.join(', ') : 'the deploy code only'
       const message = `Deployed ${sha.slice(0, 10)}: ${what} (${seconds} s)`
       deps.out(`[deploy] ${message}`)
       await finish('succeeded', message, restart)
@@ -1179,6 +1221,138 @@ export function installOpsBundle(deps: DeployDeps, release: string) {
   symlinkSync(release, temporary)
   renameSync(temporary, deps.opsLink)
   deps.out(`[deploy] aico deploy now runs from ${release.split('/').at(-1)?.slice(0, 12)}`)
+}
+
+// ---- the root install (host-steward) ---------------------------------------------------------
+
+/** The commit the installed root sources came from (the signed installer's receipt), or null. */
+export function installedRootSha(receipt: string): string | null {
+  try {
+    const sha = (JSON.parse(readFileSync(receipt, 'utf8')) as { sha?: unknown }).sha
+    return typeof sha === 'string' && /^[0-9a-f]{40}$/.test(sha) ? sha : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Whether this deploy installs the root sources: the machine has the signed installer, the commit
+ * has the sources, and they changed since the installed commit (unknown: install). An installed
+ * commit this one does not contain is left alone, as units are, unless this is a rollback.
+ */
+export function rootInstallWanted(
+  root: string,
+  sha: string,
+  cfg: DeployConfig,
+  rollback: boolean,
+  deps: DeployDeps,
+): boolean {
+  const spec = cfg.rootInstall
+  if (!spec?.sources?.length) return false
+  const listed = deps.run('git', ['-C', root, 'ls-tree', '--name-only', sha, '--', ...spec.sources])
+  if (listed.code !== 0 || !listed.out.trim()) return false
+  if (!existsSync(spec.installer)) {
+    deps.out(
+      `[deploy] host-steward root install skipped: this machine has no signed installer at ${spec.installer}`,
+    )
+    return false
+  }
+  const installed = installedRootSha(spec.receipt)
+  if (!installed) {
+    deps.out('[deploy] host-steward root install: the installed commit is unknown; installing')
+    return true
+  }
+  if (installed === sha) return false
+  const git = (...args: string[]) => deps.run('git', ['-C', root, ...args])
+  if (!rollback && git('merge-base', '--is-ancestor', installed, sha).code !== 0) {
+    if (git('merge-base', '--is-ancestor', sha, installed).code === 0)
+      deps.out(
+        `[deploy] host-steward root install skipped: it runs ${installed.slice(0, 12)}, which contains ${sha.slice(0, 12)}`,
+      )
+    else
+      deps.out(
+        `[deploy] host-steward root install skipped: it runs ${installed.slice(0, 12)}, which ${sha.slice(0, 12)} does not contain; deploy a newer commit or pass --rollback`,
+      )
+    return false
+  }
+  const diff = git('diff', '--name-only', installed, sha, '--', ...spec.sources)
+  if (diff.code === 0 && !diff.out.trim()) {
+    deps.out(
+      `[deploy] host-steward root install skipped: unchanged since ${installed.slice(0, 12)}`,
+    )
+    return false
+  }
+  return true
+}
+
+/**
+ * Install the commit's root sources through the signed-update path: a git archive of them, signed
+ * with the update key, handed to the installed `install-signed.py` as root, which verifies it
+ * against the pinned public key before running anything from it. Null on success, else the problem.
+ */
+export function installRootSources(
+  root: string,
+  sha: string,
+  cfg: DeployConfig,
+  deps: DeployDeps,
+): string | null {
+  const spec = cfg.rootInstall
+  deps.out(`[deploy] installing the host-steward root sources from ${sha.slice(0, 12)}`)
+  const declared = deps.run(
+    'nightshift',
+    [
+      'declare',
+      '--host',
+      hostname(),
+      '--what',
+      spec.declareWhat,
+      '--hours',
+      '1',
+      '--reason',
+      `aico deploy installs host-steward root services and timers from ${sha.slice(0, 12)}`,
+    ],
+    { env: deps.env },
+  )
+  if (declared.code !== 0)
+    deps.err(
+      `[deploy] WARNING could not declare the host change to Nightshift (${tail(declared, 1)}); installing anyway`,
+    )
+  const dir = mkdtempSync(join(tmpdir(), 'aico-root-install-'))
+  try {
+    const archive = join(dir, 'update.tar')
+    const signature = join(dir, 'update.sig')
+    const made = deps.run('git', [
+      '-C',
+      root,
+      'archive',
+      '--format=tar',
+      '-o',
+      archive,
+      sha,
+      '--',
+      ...spec.sources,
+    ])
+    if (made.code !== 0) return `git archive failed: ${tail(made, 1)}`
+    try {
+      writeFileSync(
+        signature,
+        signDetached(readFileSync(archive), join(secretsDir(deps.env), spec.signingKey)),
+      )
+    } catch (error) {
+      return `signing failed: ${(error as Error).message}`
+    }
+    const result = deps.run('sudo', ['-n', spec.installer, archive, signature], { env: deps.env })
+    if (result.code !== 0) return tail(result, 2) || `the installer exited ${result.code}`
+    const recorded = installedRootSha(spec.receipt)
+    deps.out(
+      recorded === sha
+        ? `[deploy] host-steward root sources installed from ${sha.slice(0, 12)}`
+        : `[deploy] host-steward root sources installed; the installer recorded no commit (an older installer), so the next deploy installs again`,
+    )
+    return null
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 /**

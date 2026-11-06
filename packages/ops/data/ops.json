@@ -28,7 +28,14 @@
       "AICO_DEPLOY_ROOT"
     ],
     "installedOps": "~/.local/lib/aico/ops",
-    "cliSources": ["packages", "native/st-sdk", "native/service-tools", "native/host-steward"]
+    "cliSources": ["packages", "native/st-sdk", "native/service-tools", "native/host-steward"],
+    "rootInstall": {
+      "sources": ["native/host-steward"],
+      "installer": "/usr/local/lib/host-steward/install-signed.py",
+      "receipt": "/usr/local/lib/host-steward/installed.json",
+      "signingKey": "update-signing-key",
+      "declareWhat": "units"
+    }
   },
   "vm": {
     "timeoutSeconds": 900,

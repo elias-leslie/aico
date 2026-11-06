@@ -1,6 +1,7 @@
 """Rules, signed root update verification and unattended drill behavior."""
 
 import io
+import json
 import os
 import subprocess
 import tarfile
@@ -46,8 +47,9 @@ def test_rules_never_execute_unknown_or_owner_actions_and_stale_does_not_reset_e
     assert saved and not calls
 
 
-def bundle(path, name="native/host-steward/install-root.sh"):
-    with tarfile.open(path, "w") as archive:
+def bundle(path, name="native/host-steward/install-root.sh", commit=None):
+    headers = {"comment": commit} if commit else {}
+    with tarfile.open(path, "w", format=tarfile.PAX_FORMAT, pax_headers=headers) as archive:
         data = b"#!/bin/sh\nexit 0\n"
         member = tarfile.TarInfo(name)
         member.size = len(data)
@@ -73,8 +75,16 @@ def test_signed_update_accepts_only_the_pinned_signature_and_safe_paths(tmp_path
         return subprocess.run(argv, check=kwargs.pop("check", False), **kwargs)
 
     sign()
-    installer.install(archive, signature, public, "native/host-steward/", execute=execute, owner=os.getuid())
+    receipt = tmp_path / "installed.json"
+    installer.install(archive, signature, public, "native/host-steward/", execute=execute, owner=os.getuid(),
+                      receipt=receipt)
     assert executed[-1] == ["systemctl", "--no-ask-password", "try-restart", "host-steward-grants.service"]
+    assert json.loads(receipt.read_text())["sha"] is None  # no commit named in a hand-made archive
+    bundle(archive, commit="a" * 40)  # as git archive names the commit
+    sign()
+    installer.install(archive, signature, public, "native/host-steward/", execute=execute, owner=os.getuid(),
+                      receipt=receipt)
+    assert json.loads(receipt.read_text())["sha"] == "a" * 40
     archive.write_bytes(archive.read_bytes() + b"changed")
     with pytest.raises(ValueError, match="signature"):
         installer.install(archive, signature, public, "native/host-steward/", execute=execute, owner=os.getuid())
@@ -82,7 +92,7 @@ def test_signed_update_accepts_only_the_pinned_signature_and_safe_paths(tmp_path
     sign()
     with pytest.raises(ValueError, match="unexpected path"):
         installer.install(archive, signature, public, "native/host-steward/", execute=execute, owner=os.getuid())
-    assert len(executed) == 2
+    assert len(executed) == 4
 
 
 def test_drill_always_revokes_even_when_a_use_fails():
