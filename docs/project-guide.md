@@ -112,8 +112,8 @@ tmux-capable client on the same machine can attach: `tether sessions attach <id>
 client with an authenticated WebSocket, so opening its PWA on a phone
 gives live, two-way access to the same sessions.
 
-An agent's question and a new share reach the owner through Nightshift's notice contract v1 (`nightshift push
---json`, see Nightshift's `docs/notify-contract.md`; sender: `packages/web-server/src/notice.ts`): a question offers Answer
+An agent's question and a new share reach the owner as notice v1 (`contracts/notice.schema.json`), handed in process to aico-web's Notifier
+(`packages/web-server/src/notice.ts`): a question offers Answer
 and opens `?ask=<id>`, a share opens `?show=<id>`. A session that waits on the owner for two minutes is a phone notice from Tether, through Aico's notify (`POST /api/notices` on loopback).
 
 ## Architecture

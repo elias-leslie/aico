@@ -126,7 +126,7 @@ Then list each machine in the other's `hosts.json` with `ssh`, `socket` and
 list every host's asks and shares (Tether's hub relays them; an answer goes to the host that owns the ask), and
 only the owning host pushes.
 
-A machine without Nightshift (the gem container) sends its pushes through the Proxmox host: set
+A machine without its own FCM credentials (the gem container) hands its phone pushes to the Proxmox host: set
 `AICO_PUSH_SSH=pve-alerts` in an `aico-web.service.d` drop-in and give the container an ssh alias `pve-alerts` for
 `root@<pve>` with its own key. On the Proxmox host that key is forced to
 [`native/pve-sender/aico-push`](../native/pve-sender/aico-push) (copy it to `/usr/local/sbin/aico-push`, mode 0755):
@@ -147,7 +147,7 @@ Another guest uses the same script with its own key: the forced command carries 
 allowed `source`, key form, link host (`aico.` or `port.` in Nightshift's `open_hosts`), size limits, severities and
 dedupe window, so one caller's key cannot send another's notices. `portfolio` (Portfolio-AI on VM 180, key line
 `restrict,from="<vm ip>",command="/usr/local/sbin/aico-push portfolio" ... portfolio-vm180-push`) takes the notice
-Portfolio-AI builds for `nightshift push --json` as is: kinds alert/todo/info, keys `portfolio-ai:...`, `actions` and
+Portfolio-AI builds as notice v1 (contracts/notice.schema.json): kinds alert/todo/info, keys `portfolio-ai:...`, `actions` and
 `cooldown` ignored, `push: "tray"` sent as a silent info, and a repeat of a key is dropped only within 24 hours.
 The Hosts card shows "different Aico version" when the two bundles differ
 (`hello.build_id` is a fingerprint of the server bundle, `AICO_BUILD_ID` overrides it).
