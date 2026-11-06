@@ -103,7 +103,7 @@
       "when": "triage the postings a scan left in `new` so the scored queues stop coming back empty",
       "why": "one cheap call per posting sorts it into shortlisted or discarded; nothing else moves a posting out of `new`",
       "precautions": [
-        "spends one Agent Hub call per posting and runs serially — 50 takes several minutes",
+        "spends one Aico model call per posting and runs serially — 50 takes several minutes",
         "bounded by JOBINATOR_SCREEN_DAILY_CAP when --limit is omitted",
         "the nightly worker already screens at 07:30 UTC; use this to work down a backlog"
       ],
@@ -117,7 +117,7 @@
       "when": "score a posting for fit before spending a tailoring run on it",
       "why": "persists the full report, subscores, legitimacy signal and skill gap against the posting",
       "precautions": [
-        "spends an Agent Hub call and takes tens of seconds; free-tier quota resets midnight Pacific",
+        "spends an Aico model call and takes tens of seconds; free-tier quota resets midnight Pacific",
         "re-running records another evaluation rather than replacing the last one"
       ],
       "task_types": ["jobs", "career"]
@@ -129,7 +129,7 @@
       "when": "produce the resume and cover letter for a posting you intend to submit",
       "why": "writes both documents against this job description and stores them as versioned artifacts on the application",
       "precautions": [
-        "spends Agent Hub calls and takes up to a minute per document",
+        "spends Aico model calls and takes up to a minute per document",
         "a blocked fact check exits 1 with the invented claims listed — fix the CV facts or regenerate, never hand-edit past it",
         "generating opens an application record if the posting has none"
       ],
@@ -186,7 +186,7 @@
       "when": "an interview is scheduled and the candidate needs a brief for it",
       "why": "reads the posting and the evaluation, then matches the story bank against what this interview will ask",
       "precautions": [
-        "--write spends an Agent Hub call and takes about a minute; without it this only reads existing briefs",
+        "--write spends an Aico model call and takes about a minute; without it this only reads existing briefs",
         "a story the bank does not hold is reported as a suggestion, never as prepared material"
       ],
       "examples": ["st jobs prep 9 --write"],
