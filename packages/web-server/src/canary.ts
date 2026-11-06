@@ -197,6 +197,8 @@ export function registerCanaryRoutes(
         throw new HttpError(403, 'Hook refused.')
     }
     const payload = objectBody(await ctx.body())
+    // canarytokens.org posts this once when a token is saved with a webhook, and wants a 2xx back.
+    if (payload.token === 'a+test+token') return { ok: true, ignored: 'webhook validation' }
     let registry: { tokens?: CanaryEntry[] } | CanaryEntry[]
     try {
       registry = JSON.parse(readFileSync(join(folder, 'registry.json'), 'utf8'))
