@@ -1,7 +1,14 @@
 import { transaction } from '@aico/store'
 import { describe, expect, it } from 'vitest'
 import { openContext } from './db'
-import { addMemory, getMemories, listMemories, putMemory, searchMemories } from './memory'
+import {
+  addMemory,
+  deleteMemory,
+  getMemories,
+  listMemories,
+  putMemory,
+  searchMemories,
+} from './memory'
 
 const NOW = '2026-11-03T12:00:00.000Z'
 
@@ -102,6 +109,28 @@ describe('memories', () => {
     ).toEqual([project.id])
     expect(listMemories(db, { tag: 'safety' }).memories.map((m) => m.id)).toEqual([tmux.id])
     expect(() => addMemory(db, { content: 'x', scope: 'project' }, NOW)).toThrow('--scope-id')
+    db.close()
+  })
+})
+
+describe('deleteMemory', () => {
+  it('removes the memory and its search entry, keeps revisions, lists every scope on request', () => {
+    const db = openContext(':memory:')
+    const keep = addMemory(db, { content: 'Keep this one.' }, NOW)
+    const gone = addMemory(
+      db,
+      { content: 'Throwaway zebra note.', scope: 'project', scopeId: 'aico' },
+      NOW,
+    )
+    expect(listMemories(db, { scope: 'all' }).memories).toHaveLength(2)
+    expect(searchMemories(db, 'zebra', { scope: 'all' })).toHaveLength(1)
+    expect(deleteMemory(db, gone.id)).toBe(true)
+    expect(deleteMemory(db, gone.id)).toBe(false)
+    expect(listMemories(db, { scope: 'all' }).memories.map((m) => m.id)).toEqual([keep.id])
+    expect(searchMemories(db, 'zebra', { scope: 'all' })).toHaveLength(0)
+    expect(
+      db.prepare('SELECT COUNT(*) AS n FROM memory_revisions WHERE memory_id = ?').get(gone.id),
+    ).toEqual({ n: 1 })
     db.close()
   })
 })

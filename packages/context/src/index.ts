@@ -39,6 +39,7 @@ export { type LaunchPolicy, loadPolicy } from './launch'
 export {
   addMemory,
   type Found,
+  deleteMemory,
   getMemories,
   listMemories,
   type Memory,

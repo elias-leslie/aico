@@ -182,8 +182,8 @@ export function getMemories(
 
 export interface Where {
   tier?: Tier
-  /** global: the global memories; project/agent: that scope's own memories. */
-  scope?: Scope
+  /** global: the global memories; project/agent: that scope's own memories; all: every scope. */
+  scope?: Scope | 'all'
   scopeId?: string
   tag?: string
 }
@@ -192,7 +192,8 @@ function whereClause(where: Where, alias: string, withGlobal: boolean) {
   const parts: string[] = []
   const args: string[] = []
   const scope = where.scope ?? 'global'
-  if (scope === 'global') parts.push(`${alias}.scope = 'global'`)
+  if (scope === 'all') parts.push('1 = 1')
+  else if (scope === 'global') parts.push(`${alias}.scope = 'global'`)
   else {
     parts.push(
       `(${alias}.scope = ? AND ${alias}.scope_id = ?${withGlobal ? ` OR ${alias}.scope = 'global'` : ''})`,
@@ -273,4 +274,12 @@ export function searchMemories(
       return { ...fromRow(row), score: strength / (strength + 1) }
     })
     .filter((found) => found.score >= (options.minScore ?? 0))
+}
+
+/**
+ * Removes a memory by its full id. Its revisions stay, so the last text can be
+ * read back. Returns whether a memory was there.
+ */
+export function deleteMemory(db: Database, id: string): boolean {
+  return Number(db.prepare('DELETE FROM memories WHERE id = ?').run(id).changes) > 0
 }

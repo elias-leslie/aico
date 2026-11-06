@@ -27,6 +27,7 @@ import { WebStore } from './db'
 import { ExtractWorker } from './extract-worker'
 import { registerGrantRoutes } from './grants'
 import { registerLoginRoutes } from './logins'
+import { registerMemoryRoutes } from './memory-routes'
 import { registerMockupRoutes } from './mockups'
 import { NotesStore } from './notes-db'
 import { registerExportRoutes } from './notes-export'
@@ -117,6 +118,7 @@ function serve(): void {
     attachments: (ids) =>
       readChatAttachments(ids, { store: notes, blobsDir, limits: config.captures }),
   })
+  asks.onChange = () => chats.changed()
   asks.onChange = () => chats.changed()
   chatsRef = chats
   const background = new Background({

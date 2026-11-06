@@ -1,0 +1,11 @@
+/* One scroll for the whole page: the context page above keeps its own layout but stops
+   being a fixed-height scroller, so the memories below can be reached. */
+.scroll {
+  height: var(--terminal-viewport-height, 100dvh);
+  overflow: auto;
+  background: var(--ink);
+}
+.scroll > :first-child {
+  height: auto;
+  overflow: visible;
+}
