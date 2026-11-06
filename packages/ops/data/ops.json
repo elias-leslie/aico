@@ -8,6 +8,14 @@
       "aico-web.service": ["packages/web-frontend"],
       "aico-jobs.service": ["packages/web-server", "packages/checks", "packages/ops"]
     },
+    "frontends": {
+      "aico-web.service": {
+        "package": "web-frontend",
+        "out": "out",
+        "link": "~/.local/lib/aico/web",
+        "keep": 2
+      }
+    },
     "healthAttempts": 15,
     "jobEnv": [
       "PATH",
@@ -39,7 +47,6 @@
   },
   "vm": {
     "timeoutSeconds": 900,
-    "labRegistry": "/var/lib/nightshift/findings/registry.json",
     "labHours": 4,
     "apiUrl": "https://192.168.86.39:8006",
     "node": "davion-gem",

@@ -229,7 +229,15 @@ function serve(): void {
   })
   app.register(api)
   registerExportRoutes(api, config, sync.loop)
-  const server = createWebServer(config, api, terminals, createStaticSite(config.staticDir))
+  const server = createWebServer(
+    config,
+    api,
+    terminals,
+    createStaticSite(config.staticDir, {
+      // The deploy's link to the frontend build it serves (scripts/systemd/aico-web.service).
+      served: process.env.AICO_WEB_FRONTEND?.trim() || null,
+    }),
+  )
 
   const serviceApps = config.serviceApps.listen
     ? createServiceAppsServer({ status, notify, tether })

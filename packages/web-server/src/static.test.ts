@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { type IncomingMessage, request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -130,8 +130,67 @@ describe('static site', () => {
   })
 })
 
+describe('a build served from the deploy link', () => {
+  /** A build with one page, one hashed chunk and its CSP hash. */
+  const build = (dir: string, page: string, chunk: string, hash: string) => {
+    mkdirSync(join(dir, '_next', 'static', 'chunks'), { recursive: true })
+    writeFileSync(join(dir, 'index.html'), page)
+    writeFileSync(join(dir, '_next', 'static', 'chunks', `${chunk}.js`), chunk)
+    writeFileSync(join(dir, 'csp-hashes.json'), JSON.stringify({ scriptHashes: [hash] }))
+  }
+  const relink = (link: string, target: string) => {
+    symlinkSync(target, `${link}.tmp`)
+    renameSync(`${link}.tmp`, link)
+  }
+
+  it('follows the link without a restart, keeps earlier chunks, and falls back to its own build', async () => {
+    const top = join(root, 'deploy')
+    const web = join(top, 'web')
+    mkdirSync(web, { recursive: true })
+    build(join(top, 'bundled'), 'bundled', 'b0', 'sha256-b0=')
+    build(join(top, 'one'), 'one', 'c1', 'sha256-c1=')
+    build(join(top, 'two'), 'two', 'c2', 'sha256-c2=')
+    const site = createStaticSite(join(top, 'bundled'), { served: join(web, 'current') })
+    const linked = createWebServer(
+      { allowedHostnames: ['127.0.0.1'], allowedOrigins: [], hostName: 'gem' },
+      new Router(),
+      new TerminalHub({ tether: new FakeTether().client, historyLines: 10, touched: () => {} }),
+      site,
+    )
+    await new Promise<void>((resolve) => linked.listen(0, '127.0.0.1', resolve))
+    const at = `http://127.0.0.1:${(linked.address() as AddressInfo).port}`
+    const page = async () => {
+      const response = await fetch(`${at}/`)
+      return [await response.text(), response.headers.get('content-security-policy') ?? '']
+    }
+    try {
+      // No link yet: the server's own build.
+      expect((await page())[0]).toBe('bundled')
+      relink(join(web, 'current'), join(top, 'one'))
+      const [first, firstCsp] = await page()
+      expect(first).toBe('one')
+      expect(firstCsp).toContain("'sha256-c1='")
+      // The deploy swaps the link and keeps the build before as earlier-*.
+      relink(join(web, 'current'), join(top, 'two'))
+      relink(join(web, 'earlier-one'), join(top, 'one'))
+      const [second, secondCsp] = await page()
+      expect(second).toBe('two')
+      expect(secondCsp).toContain("'sha256-c2='")
+      expect(secondCsp).not.toContain('c1')
+      expect(await (await fetch(`${at}/_next/static/chunks/c1.js`)).text()).toBe('c1')
+      expect(await (await fetch(`${at}/_next/static/chunks/c2.js`)).text()).toBe('c2')
+      expect((await fetch(`${at}/_next/static/chunks/b0.js`)).status).toBe(404)
+      // An earlier build answers only for hashed assets, never for pages.
+      expect((await fetch(`${at}/one.html`)).status).toBe(404)
+    } finally {
+      linked.closeAllConnections()
+      await new Promise((resolve) => linked.close(resolve))
+    }
+  })
+})
+
 describe('pageCsp', () => {
-  it('connects only to the same origin after the Agent Hub chat is removed', () => {
+  it('connects only to the same origin', () => {
     const csp = pageCsp({ scriptHashes: [] })
     expect(csp).toContain("connect-src 'self'")
     expect(csp).not.toContain('hub.example')

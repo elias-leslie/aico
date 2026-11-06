@@ -1,8 +1,10 @@
 // `aico deploy [PROJECT]`: puts one commit live. It takes the commit HEAD names when it starts (or
 // --sha), accepts that exact commit (`aico check --acceptance --sha`, in a worktree of it), exports
 // it into ~/.local/lib/aico/releases/<sha>, builds there and restarts only the units whose package
-// cone changed since the commit each one runs. Other builders may commit meanwhile: nothing reads
-// the checkout after the start, so HEAD moving never fails or changes the deploy.
+// cone changed since the commit each one runs. A server that serves its frontend build from a link
+// (`deploy.frontends`) keeps running when only that build changed: the link moves to the new one.
+// Other builders may commit meanwhile: nothing reads the checkout after the start, so HEAD moving
+// never fails or changes the deploy.
 //
 // Units, ports and manual workers come from the project's project.identity.json (the same file
 // SummitFlow's `st service rebuild` reads); a unit's package is the `packages/<dir>` its systemd
@@ -16,6 +18,7 @@ import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -437,6 +440,8 @@ export interface Job {
   queued_at: string
   finished_at?: string
   units?: string[]
+  /** Units whose frontend build this deploy swapped without restarting them. */
+  frontends?: string[]
   message?: string
   /** The exit code the deploy ended with (`st service wait` exits with it). */
   exit_code?: number
@@ -627,22 +632,50 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
     return result.code === 0 ? result.out : ''
   }
   const live = (unit: string) => readFileSafe(join(deps.systemdDir, unit))
+  const changedSince = (from: string | null, sources: string[]) => {
+    const diff = from ? deps.run('git', ['-C', root, 'diff', '--name-only', from, sha]) : null
+    return diff?.code !== 0 || touches(diff.out.split('\n').filter(Boolean), sources)
+  }
+  /** The unit serves its frontend build from the link, now and in this commit: a new build swaps in. */
+  const swappable = (unit: string) => {
+    const spec = frontendSpec(cfg, unit)
+    return !!spec && servesLink(live(unit), spec) && servesLink(template(unit), spec)
+  }
+  /** What the unit runs; a swappable unit's frontend package is served, not run. */
+  const runs = (unit: string) => {
+    const spec = frontendSpec(cfg, unit)
+    if (!spec || !swappable(unit)) return unitSources(project, unit, template(unit), packages, cfg)
+    const sources = cfg.unitSources as Record<string, string[]>
+    const extra = (sources[unit] ?? []).filter((path) => path !== `packages/${spec.package}`)
+    return unitSources(project, unit, template(unit), packages, {
+      ...cfg,
+      unitSources: { ...sources, [unit]: extra } as DeployConfig['unitSources'],
+    })
+  }
   const changedCache = new Map<string, boolean>()
   const changed = (unit: string) => {
-    if (!changedCache.has(unit)) {
-      const from = runningSha(live(unit), deps.releasesDir)
-      const diff = from ? deps.run('git', ['-C', root, 'diff', '--name-only', from, sha]) : null
-      changedCache.set(
-        unit,
-        diff?.code !== 0 ||
-          touches(
-            diff.out.split('\n').filter(Boolean),
-            unitSources(project, unit, template(unit), packages, cfg),
-          ),
-      )
-    }
+    if (!changedCache.has(unit))
+      changedCache.set(unit, changedSince(runningSha(live(unit), deps.releasesDir), runs(unit)))
     return changedCache.get(unit) as boolean
   }
+  /** The release whose frontend build the unit serves: the link's, else the unit's own. */
+  const servedFrom = (unit: string) =>
+    servedFrontendSha(frontendSpec(cfg, unit) as FrontendSpec, deps) ??
+    runningSha(live(unit), deps.releasesDir)
+  const frontendChanged = (unit: string) =>
+    changedSince(servedFrom(unit), [
+      ...cfg.rootSources,
+      ...cone(packages, (frontendSpec(cfg, unit) as FrontendSpec).package),
+    ])
+  const isAncestor = (a: string, b: string) =>
+    deps.run('git', ['-C', root, 'merge-base', '--is-ancestor', a, b]).code === 0
+  /** Whether this commit may replace what runs from `from`: never an older one over a newer one. */
+  const order = (from: string | null) =>
+    !from || from === sha || req.rollback || isAncestor(from, sha)
+      ? 'go'
+      : isAncestor(sha, from)
+        ? 'newer'
+        : 'diverged'
   const active = (unit: string) =>
     deps.run('systemctl', ['--user', 'is-active', unit], { env: deps.env }).out.trim() === 'active'
   const behindCache = new Map<string, boolean>()
@@ -716,6 +749,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
     writeJob(deps, job)
   }
   let finished = false
+  let swapped: string[] = []
   const finish = async (
     state: 'succeeded' | 'failed',
     message: string,
@@ -731,6 +765,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         state,
         message,
         units,
+        ...(swapped.length ? { frontends: swapped } : {}),
         exit_code: code,
         finished_at: new Date().toISOString(),
       })
@@ -781,31 +816,50 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           deps.out(
             `[deploy] ${unit} changed since its release and was left running; deploy it with: aico deploy ${project.id} --worker ${unit.replace(/\.service$/, '')}`,
           )
+      // A frontend-only scope swaps the build of a server that serves it from its link.
+      const frontendOnly = req.scope === 'frontend' && swappable(project.backend)
+      const selected = selection.restart.filter(
+        (unit) => !(frontendOnly && unit === project.backend),
+      )
       // Never put an older commit over a newer one another builder deployed meanwhile.
-      const restart: string[] = []
-      for (const unit of selection.restart) {
-        const from = runningSha(live(unit), deps.releasesDir)
-        if (
-          !from ||
-          from === sha ||
-          req.rollback ||
-          deps.run('git', ['-C', root, 'merge-base', '--is-ancestor', from, sha]).code === 0
-        )
-          restart.push(unit)
-        else if (deps.run('git', ['-C', root, 'merge-base', '--is-ancestor', sha, from]).code === 0)
+      const placed = async (unit: string, from: string | null, what: string) => {
+        const verdict = order(from)
+        if (verdict === 'go') return true
+        if (verdict === 'newer')
           deps.out(
-            `[deploy] ${unit} already runs ${from.slice(0, 12)}, which contains ${sha.slice(0, 12)}; left as is`,
+            `[deploy] ${unit} already ${what} ${from?.slice(0, 12)}, which contains ${sha.slice(0, 12)}; left as is`,
           )
         else {
           await finish(
             'failed',
-            `Deploy of ${sha.slice(0, 10)} refused: ${unit} runs ${from.slice(0, 10)}, not an ancestor`,
+            `Deploy of ${sha.slice(0, 10)} refused: ${unit} ${what} ${from?.slice(0, 10)}, not an ancestor`,
           )
           throw new Refusal(
-            `${unit} runs ${from.slice(0, 12)}, which ${sha.slice(0, 12)} does not contain; deploy a newer commit or pass --rollback.`,
+            `${unit} ${what} ${from?.slice(0, 12)}, which ${sha.slice(0, 12)} does not contain; deploy a newer commit or pass --rollback.`,
           )
         }
+        return false
       }
+      const restart: string[] = []
+      for (const unit of selected)
+        if (await placed(unit, runningSha(live(unit), deps.releasesDir), 'runs')) restart.push(unit)
+      // A server left running whose frontend build changed gets the new build without a restart.
+      const manualDeploy = req.workers.some((unit) =>
+        project.manualWorkers.includes(canonical(unit)),
+      )
+      const swaps: string[] = []
+      if (!manualDeploy && (!req.scope || req.scope === 'full' || req.scope === 'frontend'))
+        for (const unit of [
+          project.backend,
+          ...project.defaultWorkers,
+          ...project.optionalWorkers.filter((unit) => req.includeAllWorkers || active(unit)),
+        ]) {
+          if (!unit || selected.includes(unit) || !swappable(unit)) continue
+          if (selection.restart.includes(unit) && !frontendOnly) continue
+          const from = servedFrom(unit)
+          if (from === sha || !(frontendOnly || frontendChanged(unit))) continue
+          if (await placed(unit, from, 'serves the page from')) swaps.push(unit)
+        }
       // The ops bundle `aico deploy` runs: installed from this commit when its sources changed.
       const installedOps = installedOpsSha(deps)
       const installOps =
@@ -827,15 +881,17 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
               )
             })()))
       const installRoot = rootInstallWanted(root, sha, cfg, req.rollback, deps)
-      if (!restart.length && !installOps && !installRoot) {
+      if (!restart.length && !swaps.length && !installOps && !installRoot) {
         const message = `Nothing to restart at ${sha.slice(0, 10)}: no unit's sources changed`
         deps.out(`[deploy] ${message.toLowerCase()}`)
         await finish('succeeded', message)
         return 0
       }
       if (restart.length) deps.out(`[deploy] restarting ${restart.join(', ')}`)
+      if (swaps.length)
+        deps.out(`[deploy] new page build for ${swaps.join(', ')}, which keep running`)
       let release: string | null = null
-      if (restart.length || installOps)
+      if (restart.length || swaps.length || installOps)
         try {
           release = prepareRelease(
             root,
@@ -843,6 +899,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
             [
               ...new Set([
                 ...restart.flatMap((unit) => unitBuilds(unit, template(unit), cfg)),
+                ...swaps.map((unit) => (frontendSpec(cfg, unit) as FrontendSpec).package),
                 ...(installOps
                   ? ['ops', ...(packages.some((pkg) => pkg.dir === 'cli') ? ['cli'] : [])]
                   : []),
@@ -857,7 +914,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           )
           throw error
         }
-      if (restart.length || installRoot) {
+      if (restart.length || swaps.length || installRoot) {
         // A hold taken while this deploy waited (queued, or behind another deploy) still refuses it.
         const refused = holdRefusal()
         if (refused) {
@@ -870,7 +927,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         }
       }
       if (restart.length && release) {
-        const failed = await swapUnits(project, restart, release, sha, deps, installOps)
+        const failed = await swapUnits(project, restart, release, sha, deps, installOps, cfg)
         if (failed) {
           await finish(
             'failed',
@@ -879,6 +936,18 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           )
           throw new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`)
         }
+      }
+      if (swaps.length && release) {
+        const failed = await swapFrontends(project, swaps, release, cfg, deps)
+        if (failed) {
+          await finish(
+            'failed',
+            `Deploy of ${sha.slice(0, 10)} failed (${failed.failure}); ${failed.outcome}`,
+            restart,
+          )
+          throw new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`)
+        }
+        swapped = swaps
       }
       if (installOps && !restart.length && release) installOpsBundle(deps, release)
       if (installRoot) {
@@ -894,9 +963,10 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         }
       }
       const seconds = Math.round((Date.now() - started) / 1000)
-      if (release) pruneReleases(deps, release)
+      if (release) pruneReleases(deps, release, cfg)
       const parts = [
         ...restart.map((unit) => unit.replace(/\.service$/, '')),
+        ...swaps.map((unit) => `the ${unit.replace(/\.service$/, '')} page (no restart)`),
         ...(installRoot ? ['the host-steward root install'] : []),
       ]
       const what = parts.length ? parts.join(', ') : 'the deploy code only'
@@ -1054,6 +1124,8 @@ interface SwapJournal {
   previous: Record<string, string | null>
   /** CLI bundle used by the previous units; undefined means this swap did not change it. */
   previousOps?: string | null
+  /** Each frontend `current` link's target before the swap (null: there was none). */
+  previousFrontends?: Record<string, string | null>
 }
 
 const journalPath = (deps: DeployDeps) => join(deps.releasesDir, '.swap.json')
@@ -1098,6 +1170,7 @@ export function recoverSwap(deps: DeployDeps) {
     `[deploy] the deploy of ${String(journal.sha).slice(0, 12)} stopped mid-swap; putting back ${units.join(', ')}`,
   )
   restoreOps(journal.previousOps, deps)
+  restoreFrontends(journal.previousFrontends)
   const problem = restoreUnits(journal.previous, deps)
   if (problem) throw new Refusal(`Putting the previous units back failed: ${problem}`)
   rmSync(journalPath(deps), { force: true })
@@ -1114,6 +1187,7 @@ async function swapUnits(
   sha: string,
   deps: DeployDeps,
   installOps: boolean,
+  cfg: DeployConfig = ops.deploy,
 ): Promise<{ failure: string; outcome: string } | null> {
   const systemctl = (...args: string[]) =>
     deps.run('systemctl', ['--user', ...args], { env: deps.env })
@@ -1138,11 +1212,34 @@ async function swapUnits(
       previousOps = null
     }
   }
-  const journal: SwapJournal = { sha, started_at: new Date().toISOString(), previous, previousOps }
+  // A restarted server serves the release's own build from its link, the one before it kept earlier.
+  const frontends = units
+    .map((unit) => [unit, frontendSpec(cfg, unit)] as const)
+    .filter(
+      (pair): pair is readonly [string, FrontendSpec] =>
+        !!pair[1] &&
+        existsSync(join(release, 'packages', pair[1].package, pair[1].out, 'index.html')),
+    )
+  const previousFrontends: Record<string, string | null> = {}
+  for (const [, spec] of frontends) {
+    try {
+      previousFrontends[currentLink(spec)] = readlinkSync(currentLink(spec))
+    } catch {
+      previousFrontends[currentLink(spec)] = null
+    }
+  }
+  const journal: SwapJournal = {
+    sha,
+    started_at: new Date().toISOString(),
+    previous,
+    previousOps,
+    previousFrontends,
+  }
   writeFileSync(`${journalPath(deps)}.tmp`, JSON.stringify(journal))
   renameSync(`${journalPath(deps)}.tmp`, journalPath(deps))
   const fail = (failure: string) => {
     restoreOps(previousOps, deps)
+    restoreFrontends(previousFrontends)
     const problem = restoreUnits(previous, deps)
     if (!problem) rmSync(journalPath(deps), { force: true })
     return {
@@ -1153,6 +1250,8 @@ async function swapUnits(
     }
   }
   if (installOps) installOpsBundle(deps, release)
+  for (const [unit, spec] of frontends)
+    pointFrontend(spec, release, deps, runningSha(previous[unit] ?? null, deps.releasesDir))
   for (const [unit, text] of rendered) writeFileSync(join(deps.systemdDir, unit), text)
   if (systemctl('daemon-reload').code !== 0) return fail('systemctl daemon-reload failed')
   const boot = units.filter(
@@ -1221,6 +1320,162 @@ export function installOpsBundle(deps: DeployDeps, release: string) {
   symlinkSync(release, temporary)
   renameSync(temporary, deps.opsLink)
   deps.out(`[deploy] aico deploy now runs from ${release.split('/').at(-1)?.slice(0, 12)}`)
+}
+
+// ---- the served frontend -------------------------------------------------------------------
+
+/**
+ * A unit that serves a frontend build from a link (data/ops.json deploy.frontends): `<link>/current`
+ * names the build it serves and `<link>/earlier-<sha>` the `keep` builds before it, whose hashed
+ * assets tabs opened earlier still load. A deploy that changes only that build moves the link and
+ * leaves the unit running.
+ */
+export interface FrontendSpec {
+  package: string
+  out: string
+  link: string
+  keep: number
+}
+
+export function frontendSpec(cfg: DeployConfig, unit: string): FrontendSpec | null {
+  const spec = (cfg as { frontends?: Record<string, Partial<FrontendSpec>> }).frontends?.[unit]
+  if (!spec?.package || !spec.link) return null
+  return { package: spec.package, out: spec.out || 'out', link: spec.link, keep: spec.keep ?? 2 }
+}
+
+const currentLink = (spec: FrontendSpec) => join(expandHome(spec.link), 'current')
+
+/** The unit text serves from the link (as written in the template: `~` is systemd's `%h`). */
+export const servesLink = (unitText: string | null, spec: FrontendSpec) =>
+  !!unitText?.includes(`${spec.link.replace(/^~(?=\/)/, '%h')}/current`)
+
+const releaseOf = (path: string, deps: DeployDeps) => {
+  try {
+    return runningSha(`WorkingDirectory=${path}\n`, realpathSync(deps.releasesDir))
+  } catch {
+    return null
+  }
+}
+
+/** The release commit whose build the link serves, or null when it names none. */
+export function servedFrontendSha(spec: FrontendSpec, deps: DeployDeps): string | null {
+  try {
+    return releaseOf(realpathSync(currentLink(spec)), deps)
+  } catch {
+    return null
+  }
+}
+
+/** Replace a link atomically (a new link renamed over the old). */
+function relink(link: string, target: string) {
+  const temporary = `${link}.${process.pid}.tmp`
+  rmSync(temporary, { force: true })
+  symlinkSync(target, temporary)
+  renameSync(temporary, link)
+}
+
+/**
+ * Point `current` at the release's build; the build it served becomes `earlier-<sha>`, and only the
+ * newest `keep` earlier builds stay linked. `answering` is the release the server ran from when the
+ * link named nothing (it served its own build then). Returns the previous target (null: none).
+ */
+export function pointFrontend(
+  spec: FrontendSpec,
+  release: string,
+  deps: DeployDeps,
+  answering: string | null = null,
+): string | null {
+  const build = join(release, 'packages', spec.package, spec.out)
+  if (!existsSync(join(build, 'index.html')))
+    throw new Refusal(`The release has no ${spec.package} build at ${build}`)
+  const dir = expandHome(spec.link)
+  mkdirSync(dir, { recursive: true })
+  let previous: string | null = null
+  try {
+    previous = readlinkSync(currentLink(spec))
+  } catch {}
+  if (previous === build) return previous
+  relink(currentLink(spec), build)
+  const before =
+    previous ??
+    (answering ? join(deps.releasesDir, answering, 'packages', spec.package, spec.out) : null)
+  if (before && before !== build && existsSync(before))
+    relink(join(dir, `earlier-${releaseOf(realpathSync(before), deps) ?? Date.now()}`), before)
+  const earlier = readdirSync(dir)
+    .filter((name) => /^earlier-[^.]+$/.test(name))
+    .map((name) => join(dir, name))
+    .sort((a, b) => lstatSync(b).mtimeMs - lstatSync(a).mtimeMs)
+  for (const [index, link] of earlier.entries())
+    if (index >= spec.keep || !existsSync(link) || readlinkSync(link) === build)
+      rmSync(link, { force: true })
+  deps.out(`[deploy] the page is now served from ${release.split('/').at(-1)?.slice(0, 12)}`)
+  return previous
+}
+
+/** Put `current` links back as they were (null: remove it, so the server answers with its own build). */
+function restoreFrontends(previous: Record<string, string | null> | undefined) {
+  for (const [link, target] of Object.entries(previous ?? {}))
+    if (target === null) rmSync(link, { force: true })
+    else relink(link, target)
+}
+
+/** The builds the frontend links (current and earlier) serve, as real paths. */
+function frontendBuilds(cfg: DeployConfig): string[] {
+  const found: string[] = []
+  for (const unit of Object.keys((cfg as { frontends?: object }).frontends ?? {})) {
+    const spec = frontendSpec(cfg, unit)
+    if (!spec) continue
+    const dir = expandHome(spec.link)
+    let names: string[] = []
+    try {
+      names = readdirSync(dir)
+    } catch {}
+    for (const name of names)
+      try {
+        found.push(realpathSync(join(dir, name)))
+      } catch {}
+  }
+  return found
+}
+
+/**
+ * Serve the release's build from each unit's link without restarting it, then check the page still
+ * answers; on failure the previous builds are linked back.
+ */
+async function swapFrontends(
+  project: Project,
+  units: string[],
+  release: string,
+  cfg: DeployConfig,
+  deps: DeployDeps,
+): Promise<{ failure: string; outcome: string } | null> {
+  const previous: Record<string, string | null> = {}
+  try {
+    for (const unit of units) {
+      const spec = frontendSpec(cfg, unit) as FrontendSpec
+      const own = runningSha(readFileSafe(join(deps.systemdDir, unit)), deps.releasesDir)
+      previous[currentLink(spec)] = pointFrontend(spec, release, deps, own)
+    }
+  } catch (error) {
+    restoreFrontends(previous)
+    return { failure: (error as Error).message, outcome: 'the previous page was linked back' }
+  }
+  if (units.includes(project.backend) && project.port) {
+    let status = 0
+    for (let i = 0; i < ops.deploy.healthAttempts && !(status >= 200 && status < 400); i++) {
+      if (i) await deps.sleep(1_000)
+      status = await deps.probe(`http://127.0.0.1:${project.port}/`)
+    }
+    deps.out(`[deploy] ${project.backend} /: ${status || 'no answer'}`)
+    if (!(status >= 200 && status < 400)) {
+      restoreFrontends(previous)
+      return {
+        failure: `${project.backend} / answered ${status || 'nothing'}`,
+        outcome: 'the previous page was linked back',
+      }
+    }
+  }
+  return null
 }
 
 // ---- the root install (host-steward) ---------------------------------------------------------
@@ -1299,7 +1554,7 @@ export function installRootSources(
   const spec = cfg.rootInstall
   deps.out(`[deploy] installing the host-steward root sources from ${sha.slice(0, 12)}`)
   const declared = deps.run(
-    'nightshift',
+    'host-steward',
     [
       'declare',
       '--host',
@@ -1315,7 +1570,7 @@ export function installRootSources(
   )
   if (declared.code !== 0)
     deps.err(
-      `[deploy] WARNING could not declare the host change to Nightshift (${tail(declared, 1)}); installing anyway`,
+      `[deploy] WARNING could not declare the host change to the host check (${tail(declared, 1)}); installing anyway`,
     )
   const dir = mkdtempSync(join(tmpdir(), 'aico-root-install-'))
   try {
@@ -1356,17 +1611,22 @@ export function installRootSources(
 }
 
 /**
- * Keep the newest releases, every one a unit file still runs and every one a live process runs
- * from (a job started before a deploy keeps reading its release's data files); the rest are
- * rebuildable.
+ * Keep the newest releases, every one a unit file still runs, every one whose frontend build a link
+ * serves (current or kept earlier) and every one a live process runs from (a job started before a
+ * deploy keeps reading its release's data files); the rest are rebuildable.
  */
-export function pruneReleases(deps: DeployDeps, current: string) {
+export function pruneReleases(deps: DeployDeps, current: string, cfg: DeployConfig = ops.deploy) {
   const units = existsSync(deps.systemdDir)
     ? readdirSync(deps.systemdDir)
         .map((name) => readFileSafe(join(deps.systemdDir, name)) ?? '')
         .join('\n')
     : ''
   const live = deps.processPaths().join('\n')
+  const served = frontendBuilds(cfg)
+  let realReleases = deps.releasesDir
+  try {
+    realReleases = realpathSync(deps.releasesDir)
+  } catch {}
   for (const [index, name] of releases(deps).entries()) {
     const path = join(deps.releasesDir, name)
     if (
@@ -1374,6 +1634,7 @@ export function pruneReleases(deps: DeployDeps, current: string) {
       path === current ||
       units.includes(`${path}/`) ||
       live.includes(path) ||
+      served.some((build) => build.startsWith(`${join(realReleases, name)}/`)) ||
       installedOpsSha(deps) === name
     )
       continue

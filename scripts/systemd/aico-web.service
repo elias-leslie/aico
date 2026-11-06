@@ -15,12 +15,16 @@ WorkingDirectory=__PROJECT_ROOT__/packages/web-server
 # from this PATH too (22+ for node:sqlite).
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=%h
-# Agent Hub, upload and maintenance settings; the names are the Python
+# Upload and maintenance settings; the names are the old Python
 # backend's, read unchanged. Shares are accepted only from tether@default's
 # socket, so TETHER_SOCKET is deliberately not set here.
 EnvironmentFile=-%h/.config/credstore/a-term/env
 # LAN app listener address only; service-token hashes live in Aico secrets.
 EnvironmentFile=-%h/.config/aico/service-apps.env
+# The frontend build to serve: `aico deploy` points this link (data/ops.json deploy.frontends)
+# at a release's export, so a frontend-only deploy needs no restart. While it names nothing
+# (source installs, before the first deploy) the server answers with its own release's export.
+Environment=AICO_WEB_FRONTEND=%h/.local/lib/aico/web/current
 # Without the flag node:sqlite logs an ExperimentalWarning at every start.
 ExecStart=/usr/bin/env node --disable-warning=ExperimentalWarning __PROJECT_ROOT__/packages/web-server/dist/aico-web.mjs
 Restart=always

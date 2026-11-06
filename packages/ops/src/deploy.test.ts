@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   utimesSync,
@@ -13,12 +14,14 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import ops from '../data/ops.json' with { type: 'json' }
 import {
   cone,
   configApiVersion,
   type DeployDeps,
   defaultDeps,
   deploy,
+  frontendSpec,
   installedOpsSha,
   jobResult,
   loadProject,
@@ -32,6 +35,7 @@ import {
   recoverSwap,
   runningSha,
   selectUnits,
+  servesLink,
   takeOver,
   touches,
   unitSources,
@@ -224,6 +228,8 @@ describe('deploy', () => {
       ops?: boolean
       cli?: boolean
       hostSteward?: boolean
+      /** demo-web serves packages/web-frontend's build: from its link when 'link', else its own. */
+      frontend?: 'link' | 'bundled'
       kill?: (cmd: string, args: string[]) => boolean
     } = {},
   ) {
@@ -300,6 +306,32 @@ describe('deploy', () => {
       run('chmod', ['600', key])
       run('openssl', ['pkey', '-in', key, '-pubout', '-out', join(top, 'lib/update-signing.pub')])
     }
+    const web = join(top, 'web')
+    if (options.frontend) {
+      mkdirSync(join(root, 'packages/web-frontend/app'), { recursive: true })
+      writeFileSync(
+        join(root, 'packages/web-frontend/package.json'),
+        JSON.stringify({ name: '@demo/web-frontend', scripts: { build: 'x' } }),
+      )
+      writeFileSync(join(root, 'packages/web-frontend/app/page.tsx'), 'page v1\n')
+      mkdirSync(join(root, 'packages/ops/data'), { recursive: true })
+      writeFileSync(
+        join(root, 'packages/ops/data/ops.json'),
+        JSON.stringify({
+          deploy: {
+            unitSources: { 'demo-web.service': ['packages/web-frontend'] },
+            frontends: {
+              'demo-web.service': { package: 'web-frontend', out: 'out', link: web, keep: 1 },
+            },
+          },
+        }),
+      )
+      if (options.frontend === 'link')
+        writeFileSync(
+          join(root, 'scripts/systemd/demo-web.service'),
+          `[Service]\nWorkingDirectory=__PROJECT_ROOT__/packages/web-server\nEnvironment=AICO_WEB_FRONTEND=${web}/current\nExecStart=node x.mjs\n`,
+        )
+    }
     const git = (...args: string[]) => run('git', ['-C', root, ...args])
     git('init', '-q', '-b', 'main')
     git('-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A')
@@ -346,6 +378,14 @@ describe('deploy', () => {
           mkdirSync(join(opts?.cwd as string, 'packages/cli/dist'), { recursive: true })
           writeFileSync(join(opts?.cwd as string, 'packages/cli/dist/aico-cli.mjs'), '// cli\n')
         }
+        if (cmd === 'nice' && args.join(' ') === '-n 10 npm run build -w packages/web-frontend') {
+          const out = join(opts?.cwd as string, 'packages/web-frontend/out')
+          mkdirSync(out, { recursive: true })
+          writeFileSync(
+            join(out, 'index.html'),
+            readFileSync(join(opts?.cwd as string, 'packages/web-frontend/app/page.tsx')),
+          )
+        }
         if (cmd === 'systemctl' && args[1] === 'is-active')
           return { code: 0, out: 'active\n', err: '' }
         return { code: 0, out: '', err: '' }
@@ -366,7 +406,7 @@ describe('deploy', () => {
       processPaths: () => [],
     }
     const head = git('rev-parse', 'HEAD').out.trim()
-    return { root, git, deps, calls, lines, rows, head, steward }
+    return { root, git, deps, calls, lines, rows, head, steward, web }
   }
   const request = (extra = {}) => ({
     project: 'demo',
@@ -782,7 +822,7 @@ describe('deploy', () => {
     }
     const installs = () => calls.filter((call) => call.startsWith(`sudo -n ${steward.installer} `))
     expect(await deploy(request(), root, deps)).toBe(0)
-    expect(calls.some((call) => call.startsWith('nightshift declare --host '))).toBe(true)
+    expect(calls.some((call) => call.startsWith('host-steward declare --host '))).toBe(true)
     expect(installs()).toHaveLength(1)
     expect(JSON.parse(readFileSync(steward.receipt, 'utf8')).sha).toBe(head)
     expect(rows.at(-1)?.meaning).toContain('the host-steward root install')
@@ -792,17 +832,17 @@ describe('deploy', () => {
     expect(await deploy(request(), root, deps)).toBe(0)
     expect(installs()).toHaveLength(1)
     expect(lines.join('\n')).toContain(`root install skipped: unchanged since ${head.slice(0, 12)}`)
-    // A root source change installs again; a failed Nightshift declaration does not block it.
+    // A root source change installs again; a failed host check declaration does not block it.
     const changed = commit('native/host-steward/install-root.sh', 'v2\n')
     const original = deps.run
     deps.run = (cmd, args, opts) =>
-      cmd === 'nightshift'
-        ? { code: 1, out: '', err: 'nightshift down' }
+      cmd === 'host-steward'
+        ? { code: 1, out: '', err: 'host-steward down' }
         : original(cmd, args, opts)
     expect(await deploy(request(), root, deps)).toBe(0)
     expect(installs()).toHaveLength(2)
     expect(JSON.parse(readFileSync(steward.receipt, 'utf8')).sha).toBe(changed)
-    expect(lines.join('\n')).toContain('could not declare the host change to Nightshift')
+    expect(lines.join('\n')).toContain('could not declare the host change to the host check')
   })
 
   it('a failed root install fails the deploy and says the units went live', async () => {
@@ -826,6 +866,133 @@ describe('deploy', () => {
     expect(await deploy(request(), root, deps)).toBe(0)
     expect(calls.some((call) => call.startsWith('sudo'))).toBe(false)
     expect(lines.join('\n')).toContain('root install skipped: this machine has no signed installer')
+  })
+
+  describe('a server that serves its frontend build from a link', () => {
+    const restarts = (calls: string[]) => calls.filter((call) => call.includes(' restart '))
+    const commitIn =
+      (git: (...args: string[]) => { out: string }, root: string) =>
+      (file: string, text: string) => {
+        writeFileSync(join(root, file), text)
+        git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', file)
+        return git('rev-parse', 'HEAD').out.trim()
+      }
+    const served = (web: string) => readFileSync(join(web, 'current/index.html'), 'utf8')
+
+    it('a frontend-only change swaps the build without a restart and keeps the one before', async () => {
+      const { root, git, deps, calls, rows, head, web } = setup({ frontend: 'link' })
+      expect(await deploy(request(), root, deps)).toBe(0)
+      expect(restarts(calls)).toEqual(['systemctl --user restart demo-web.service'])
+      expect(served(web)).toBe('page v1\n')
+      calls.length = 0
+      const commit = commitIn(git, root)
+      const second = commit('packages/web-frontend/app/page.tsx', 'page v2\n')
+      expect(await deploy(request(), root, deps)).toBe(0)
+      expect(restarts(calls)).toEqual([])
+      expect(served(web)).toBe('page v2\n')
+      expect(readFileSync(join(web, `earlier-${head}/index.html`), 'utf8')).toBe('page v1\n')
+      expect(rows.at(-1)?.meaning).toContain('the demo-web page (no restart)')
+      // The unit still runs the first release; the link serves the second.
+      expect(readFileSync(join(deps.systemdDir, 'demo-web.service'), 'utf8')).toContain(head)
+      expect(readFileSync(join(deps.releasesDir, second, '.aico-release.json'), 'utf8')).toContain(
+        'web-frontend',
+      )
+      // keep: 1 holds only the build just replaced.
+      commit('packages/web-frontend/app/page.tsx', 'page v3\n')
+      expect(await deploy(request(), root, deps)).toBe(0)
+      expect(readdirSync(web).sort()).toEqual(['current', `earlier-${second}`])
+      // A server change still restarts it, and the restarted server serves its own build.
+      const fourth = commit('packages/web-server/main.ts', 'v2\n')
+      expect(await deploy(request(), root, deps)).toBe(0)
+      expect(restarts(calls)).toEqual(['systemctl --user restart demo-web.service'])
+      expect(readFileSync(join(deps.systemdDir, 'demo-web.service'), 'utf8')).toContain(fourth)
+      expect(served(web)).toBe('page v3\n')
+      expect(realpathSync(join(web, 'current'))).toContain(fourth)
+    })
+
+    it('a server not yet serving from the link restarts for a frontend change', async () => {
+      const { root, git, deps, calls, web } = setup({ frontend: 'bundled' })
+      expect(await deploy(request(), root, deps)).toBe(0)
+      const commit = commitIn(git, root)
+      calls.length = 0
+      const second = commit('packages/web-frontend/app/page.tsx', 'page v2\n')
+      expect(await deploy(request(), root, deps)).toBe(0)
+      expect(restarts(calls)).toEqual(['systemctl --user restart demo-web.service'])
+      // The template that turns the link on restarts it once; from then on a build swaps in.
+      commit(
+        'scripts/systemd/demo-web.service',
+        `[Service]\nWorkingDirectory=__PROJECT_ROOT__/packages/web-server\nEnvironment=AICO_WEB_FRONTEND=${web}/current\n`,
+      )
+      calls.length = 0
+      expect(await deploy(request(), root, deps)).toBe(0)
+      expect(restarts(calls)).toEqual(['systemctl --user restart demo-web.service'])
+      // The build the server answered with before the link existed stays reachable.
+      expect(readFileSync(join(web, `earlier-${second}/index.html`), 'utf8')).toBe('page v2\n')
+      calls.length = 0
+      commit('packages/web-frontend/app/page.tsx', 'page v3\n')
+      expect(await deploy(request(), root, deps)).toBe(0)
+      expect(restarts(calls)).toEqual([])
+      expect(served(web)).toBe('page v3\n')
+    })
+
+    it('links the previous build back when the page stops answering, and rolls back by swapping', async () => {
+      const { root, git, deps, calls, head, web } = setup({ frontend: 'link' })
+      expect(await deploy(request(), root, deps)).toBe(0)
+      const commit = commitIn(git, root)
+      commit('packages/web-frontend/app/page.tsx', 'page v2\n')
+      deps.probe = async () => 503
+      await expect(deploy(request(), root, deps)).rejects.toThrow(/previous page was linked back/)
+      expect(served(web)).toBe('page v1\n')
+      deps.probe = async () => 200
+      expect(await deploy(request(), root, deps)).toBe(0)
+      expect(served(web)).toBe('page v2\n')
+      // An older build never replaces a newer one, except as a rollback.
+      calls.length = 0
+      expect(await deploy(request({ sha: head }), root, deps)).toBe(0)
+      expect(served(web)).toBe('page v2\n')
+      expect(await deploy(request({ sha: head, rollback: true }), root, deps)).toBe(0)
+      expect(served(web)).toBe('page v1\n')
+      expect(restarts(calls)).toEqual([])
+    })
+
+    it('a frontend scope swaps the build; a backend scope restarts', async () => {
+      const { root, git, deps, calls, web } = setup({ frontend: 'link' })
+      expect(await deploy(request(), root, deps)).toBe(0)
+      commitIn(git, root)('packages/web-frontend/app/page.tsx', 'page v2\n')
+      calls.length = 0
+      expect(await deploy(request({ scope: 'frontend' }), root, deps)).toBe(0)
+      expect(restarts(calls)).toEqual([])
+      expect(served(web)).toBe('page v2\n')
+      expect(await deploy(request({ scope: 'backend' }), root, deps)).toBe(0)
+      expect(restarts(calls)).toEqual(['systemctl --user restart demo-web.service'])
+    })
+
+    it('a release whose build a link serves is never pruned', async () => {
+      const { root, git, deps, head, web } = setup({ frontend: 'link' })
+      expect(await deploy(request(), root, deps)).toBe(0)
+      const commit = commitIn(git, root)
+      commit('packages/web-frontend/app/page.tsx', 'page v2\n')
+      expect(await deploy(request(), root, deps)).toBe(0)
+      const cfg = JSON.parse(readFileSync(join(root, 'packages/ops/data/ops.json'), 'utf8')).deploy
+      // Newer, unrelated releases push the served ones out of the newest kept.
+      const newer = ['7', '8', '9'].map((c) => c.repeat(40))
+      for (const [i, name] of newer.entries()) {
+        mkdirSync(join(deps.releasesDir, name), { recursive: true })
+        utimesSync(join(deps.releasesDir, name), 4e9 + i, 4e9 + i)
+      }
+      rmSync(deps.systemdDir, { recursive: true, force: true })
+      pruneReleases(deps, join(deps.releasesDir, newer[2] as string), { ...ops.deploy, ...cfg })
+      const second = realpathSync(join(web, 'current')).split('/').at(-4)
+      expect(existsSync(join(deps.releasesDir, head))).toBe(true)
+      expect(existsSync(join(deps.releasesDir, second as string))).toBe(true)
+    })
+
+    it('the shipped template serves from the link ops.json names', () => {
+      const spec = frontendSpec(ops.deploy, 'aico-web.service')
+      expect(spec).not.toBeNull()
+      const template = readFileSync(join(repo, 'scripts/systemd/aico-web.service'), 'utf8')
+      expect(servesLink(template, spec as NonNullable<typeof spec>)).toBe(true)
+    })
   })
 
   it('prunes old releases but keeps the ones a unit still runs', () => {
