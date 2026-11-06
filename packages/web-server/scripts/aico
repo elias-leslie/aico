@@ -5,9 +5,9 @@
 # `aico sessions`: the session history, from the running Tether (`tether history`).
 # `aico lease`, `aico sessions send|ack|confirm|inbox`: file leases and the agent handshakes (aico-hook).
 # `aico pulse`: live sessions, claims, leases, open handshakes and Status problems; --brief is the startup brief.
-# `aico tasks | projects`: tasks.db (light tasks, claims, the projects registry; packages/tasks).
+# `aico projects`: the projects registry (tasks.db; packages/tasks).
 # `aico agent run`: Aico's own agent harness (packages/agent, agent.db).
-# `aico check | commit`, `aico tasks done`: the repo gate, path-scoped commits and closeout (packages/checks).
+# `aico check | commit`: the repo gate and path-scoped commits (packages/checks).
 # `aico nightly`: the nightly deep lane (full gate on HEAD plus the live checks; packages/checks).
 # `aico deploy | logs | snapshots | vm`: deploys, unit logs, Btrfs points and Proxmox guests (packages/ops).
 # `aico web search|research|fetch|batch|refocus`: public web search and fetch with a call counter (packages/webtools).
@@ -32,7 +32,7 @@ aico_checks() {
     PATH="$(dirname "$node"):$PATH" npm --prefix "$checks_dir" run --silent build >&2
   fi
   case "$*" in
-    'check --help' | 'check -h' | 'commit --help' | 'commit -h' | 'tasks done --help')
+    'check --help' | 'check -h' | 'commit --help' | 'commit -h')
       exec "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@" ;;
   esac
   # Publication selection and Status are light. The retained outgoing verifier
@@ -41,7 +41,6 @@ aico_checks() {
   exec st tools run --label "aico ${1:-checks}" -- "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
 }
 
-[ "${1:-}" = tasks ] && [ "${2:-}" = done ] && aico_checks "$@"
 
 # Ops runs from the installed release. A first install builds an export of HEAD, never dirty sources.
 aico_ops() {
@@ -111,7 +110,7 @@ case "${1:-}" in
     fi
     exec "$node" --disable-warning=ExperimentalWarning "$jobs_bundle" "$@"
     ;;
-  tasks | projects | pulse)
+  projects | pulse)
     tasks_dir="$AICO_REPO_ROOT/packages/tasks"
     tasks_bundle="$tasks_dir/dist/aico-tasks.mjs"
     node="$(aico_web_node)"
@@ -147,7 +146,7 @@ case "${1:-}" in
   help | -h | --help) echo 'Logins: aico logins --help — private files, scoped command use and assigned lab logins.'; exec_aico_web memory --help ;;
   *)
     [ $# -gt 0 ] && echo "aico: unknown command '$1'" >&2
-    echo "Usage: aico <memory|prompt|models|context|usage|logins|jobs|tasks|projects|pulse|lease|agent|sessions|check|commit|deploy|logs|snapshots|vm|backups|web|ask> ...  (aico help lists every command)" >&2
+    echo "Usage: aico <memory|prompt|models|context|usage|logins|jobs|projects|pulse|lease|agent|sessions|check|commit|deploy|logs|snapshots|vm|backups|web|ask> ...  (aico help lists every command)" >&2
     exit 2
     ;;
 esac
