@@ -216,10 +216,10 @@ describe('registry', () => {
         .map((adapter) => adapter.id)
         .sort(),
     )
-    expect(ROOT_TOOLS).toEqual(['aico-agent', 'claude-code', 'codex', 'pi'])
+    expect(ROOT_TOOLS).toEqual(['agy', 'aico-agent', 'claude-code', 'codex', 'pi'])
     for (const slug of ROOT_TOOLS) expect(isRootTool(slug)).toBe(true)
     // Canonical slugs only: the root digest covers the tool string as sent.
-    for (const slug of ['claude', 'agy', 'shell', 'opencode', 'toString', '__proto__', 7])
+    for (const slug of ['claude', 'shell', 'opencode', 'toString', '__proto__', 7])
       expect(isRootTool(slug)).toBe(false)
   })
 })

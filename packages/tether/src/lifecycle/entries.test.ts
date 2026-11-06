@@ -304,7 +304,7 @@ describe('root create with entry', () => {
       status: 400,
       body: {
         error: 'unsupported_tool',
-        supported: ['aico-agent', 'claude-code', 'codex', 'pi'],
+        supported: ['agy', 'aico-agent', 'claude-code', 'codex', 'pi'],
       },
     })
     expect(

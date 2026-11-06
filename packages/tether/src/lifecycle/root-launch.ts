@@ -186,9 +186,10 @@ export function initialLaunchLine(widgetId: string, tool: TuiSpec): string | nul
   const selected = `${line} "$@"`
   const initial = `${clean}${agentEnv} ${selected}${fresh ? ` ${fresh.join(' ')} "$${AGENT_SESSION_ENV}"` : ''}`
   const resume = resumeLaunchLine(tool)
+  const promptFlag = (tool.resume?.promptArguments ?? ['--']).join(' ')
   const resumed = resume
-    ? `${clean}${agentEnv} ${selected} ${tool.resume?.arguments.join(' ')} "$AICO_ROOT_RESUME_SESSION_ID" -- "$AICO_ROOT_INITIAL_PROMPT"`
+    ? `${clean}${agentEnv} ${selected} ${tool.resume?.arguments.join(' ')} "$AICO_ROOT_RESUME_SESSION_ID" ${promptFlag} "$AICO_ROOT_INITIAL_PROMPT"`
     : 'exit 64'
-  const launch = `if [ -n "$AICO_ROOT_RESUME_SESSION_ID" ]; then ${resumed}; else ${initial} -- "$AICO_ROOT_INITIAL_PROMPT"; fi`
+  const launch = `if [ -n "$AICO_ROOT_RESUME_SESSION_ID" ]; then ${resumed}; else ${initial} ${promptFlag} "$AICO_ROOT_INITIAL_PROMPT"; fi`
   return `if [ "$AICO_ROOT_INITIAL_LAUNCH" = 1 ]; then set --; ${selection}${projectTrust}${chosen}${launch}; else ${relaunchLine(widgetId, tool)}; fi`
 }

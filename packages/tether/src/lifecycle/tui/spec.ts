@@ -69,6 +69,10 @@ export interface TuiSpec {
     /** Fixed arguments that start a fresh conversation under an ID Tether
      * picks, for a tool whose running process names no session (Pi). */
     freshArguments?: string[]
+    /** What introduces the launch prompt: `--` (the default) for a tool that
+     * takes it as a positional argument, else the tool's own flag (agy's `-i`,
+     * which runs the prompt and stays interactive). */
+    promptArguments?: string[]
   }
   /** Fixed CLI flags that add a session's chosen instructions (instructions.ts)
    * to the tool's own prompt: `arguments` then the content, or with `key`,

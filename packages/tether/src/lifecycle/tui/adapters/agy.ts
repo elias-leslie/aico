@@ -1,12 +1,14 @@
 // Antigravity (agy). It keeps its conversation in a SQLite database
 // (~/.gemini/antigravity-cli/conversations/<id>.db) and a presence lock; state
-// is read from the steps' status and the executor runs. It has no resume
-// adapter, no hooks of Tether's and no transcript Tether follows: those are
+// is read from the steps' status and the executor runs. A root resumes with
+// `--conversation <id>`, the id read from the conversation the process holds
+// open; the launch prompt goes in with `-i` (agy takes no positional prompt).
+// It has no hooks of Tether's and no transcript Tether follows: those are
 // capabilities set to false below. Tether delivers to it by the gated paste.
 
 import { DatabaseSync } from 'node:sqlite'
 import type { AgentSignal } from '../../../agent-state'
-import type { ProcFs } from '../../../proc-fs'
+import { type ProcFs, UUID_RE } from '../../../proc-fs'
 import type { ContextStatus } from '../spec'
 import type { AgentProbe, TuiAdapter } from './contract'
 
@@ -335,9 +337,16 @@ export const agy: TuiAdapter = {
   launch: { ensureArgs: [] },
   // agy reads an AGENTS.md in a directory it adds like a workspace's own (checked
   // live with agy 1.5.0 in print mode: the added folder's AGENTS.md was in context).
-  spec: { contextDelivery: { kind: 'agents-md', arguments: ['--add-dir'] } },
+  spec: {
+    resume: {
+      sessionIdPattern: UUID_RE,
+      arguments: ['--conversation'],
+      promptArguments: ['-i'],
+    },
+    contextDelivery: { kind: 'agents-md', arguments: ['--add-dir'] },
+  },
   capabilities: {
-    root: false,
+    root: true,
     blankSlate: false,
     instructions: false,
     entry: false,
@@ -356,6 +365,13 @@ export const agy: TuiAdapter = {
   state: {
     find: (ctx, previous) =>
       agyProbe(ctx.fs, ctx.home, ctx.pids, previous, ctx.seams?.agy as AgyRead | undefined),
+    // Resumable once agy has opened its conversation (it holds the lock from the first prompt).
+    observe: (fs, home, pids) => {
+      const found = findAgyConversation(fs, home, pids)
+      return found?.conversationId
+        ? { pid: found.pid, resumeId: found.conversationId, idle: null, blocked: false }
+        : null
+    },
   },
   context: {
     kind: { kind: 'agy-agents-md' },

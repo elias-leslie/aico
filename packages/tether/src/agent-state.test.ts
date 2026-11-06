@@ -12,6 +12,7 @@ import {
 import {
   AgyConversation,
   type AgySnapshot,
+  agy,
   agySignal,
   findAgyConversation,
   nodeAgyRead,
@@ -796,6 +797,14 @@ describe('agy conversation', () => {
         [40],
       )?.conversationId,
     ).toBe(AGY)
+    // A root resumes the conversation the process holds, once there is one.
+    expect(agy.state.observe?.(procfs(files, lock), '/h', [41, 40])).toEqual({
+      pid: 40,
+      resumeId: AGY,
+      idle: null,
+      blocked: false,
+    })
+    expect(agy.state.observe?.(procfs(files, log), '/h', [41, 40])).toBeNull()
     // A process not named agy is not agy.
     expect(
       findAgyConversation(

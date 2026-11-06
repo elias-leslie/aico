@@ -475,6 +475,10 @@ and detail, and `st aico root status` shows `turnState` (`running`, `idle`, `unk
 and needs no `--project-root`; its project is `agent-hub` unless `--project` names another registered project (Agent Hub refuses an unknown project id, which `blank-slate` is).
 [api-v1.md](../packages/tether/docs/api-v1.md#agent-hub-sessions) has the session behavior.
 
+Antigravity (`agy`) is root-capable: it resumes with `--conversation <id>` (the id read
+from the conversation the process holds open) and takes the launch prompt through `-i`,
+since it has no positional prompt.
+
 A tmux tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`
 reports it as `rootCapable`. Any other tool string, aliases included, returns
 400 `unsupported_tool` with `supported` listing the root-capable slugs. The

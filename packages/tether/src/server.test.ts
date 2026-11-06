@@ -320,7 +320,7 @@ describe('agent tools API', () => {
     ).toEqual([
       ['claude-code', true],
       ['codex', true],
-      ['agy', false],
+      ['agy', true],
       ['pi', true],
       ['aico-agent', true],
       ['shell', false],
