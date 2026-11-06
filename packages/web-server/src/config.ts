@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import type { RouteName, VisionConfig } from '@aico/notes/vision-extract'
 import { defaultTetherSocketPath, hostsFile, tetherSocketPath } from '@aico/tether-client'
 import { DEFAULT_REMOTE_UPLOAD_DIR } from '@aico/tether-client/term'
+import type { AccessConfig } from './access'
 import type { PairingConfig } from './app-pairing'
 import type { ExportConfig } from './notes-export'
 
@@ -25,6 +26,8 @@ export interface WebConfig {
   allowedOrigins: string[]
   /** Public names that reach only the phone app's routes (the host the installed phone app already uses). */
   phoneHosts: string[]
+  /** The Access gate tunnel-forwarded requests must have passed (identity `access`); null refuses them all. */
+  access: AccessConfig | null
   pairing: PairingConfig
   /** packages/web-frontend's static export, served at `/`. */
   staticDir: string
@@ -189,6 +192,19 @@ interface Identity {
   runtime?: { backend_port?: unknown }
   hosts?: { browser_frontend?: unknown }
   artifacts?: { upload_dir_name?: unknown }
+  access?: { team_domain?: unknown; audiences?: unknown }
+}
+
+/** The identity's `access` block: the Access team domain and each public host's audience tag. */
+function accessFrom(identity: Identity): AccessConfig | null {
+  const team = identity.access?.team_domain
+  const audiences = identity.access?.audiences
+  if (typeof team !== 'string' || !/^[a-z0-9-]+\.cloudflareaccess\.com$/.test(team)) return null
+  if (!audiences || typeof audiences !== 'object' || Array.isArray(audiences)) return null
+  const tags: Record<string, string> = {}
+  for (const [host, tag] of Object.entries(audiences))
+    if (typeof tag === 'string' && /^[0-9a-f]{64}$/.test(tag)) tags[host.toLowerCase()] = tag
+  return { teamDomain: team, audiences: tags }
 }
 
 // The Python backend's settings names and defaults, so its EnvironmentFile keeps
@@ -376,6 +392,7 @@ export function loadConfig(
     publicHost,
     allowedHostnames: ['localhost', '127.0.0.1', ...(publicHost ? [publicHost] : [])],
     phoneHosts: (list(env.AICO_PHONE_HOSTS) ?? [DEFAULT_PHONE_HOST]).map((h) => h.toLowerCase()),
+    access: accessFrom(identity),
     pairing: {
       base:
         env.AICO_APP_BASE || `https://${(list(env.AICO_PHONE_HOSTS) ?? [DEFAULT_PHONE_HOST])[0]}`,

@@ -67,6 +67,22 @@ describe('loadConfig', () => {
       'https://app.example',
     ])
     expect(config.dbPath).toBe('/home/u/.local/state/aico/web.db')
+    expect(config.access).toBeNull()
+  })
+
+  it("takes the Access team and each host's audience tag from the identity file", () => {
+    const tag = 'c'.repeat(64)
+    const access = (block: unknown) =>
+      loadConfig({ HOME: '/home/u' }, identity({ runtime: { backend_port: 1 }, access: block }))
+        .access
+    expect(
+      access({
+        team_domain: 'team.cloudflareaccess.com',
+        audiences: { 'App.Example': tag, 'bad.example': 'nope' },
+      }),
+    ).toEqual({ teamDomain: 'team.cloudflareaccess.com', audiences: { 'app.example': tag } })
+    expect(access({ team_domain: 'evil.example', audiences: {} })).toBeNull()
+    expect(access({ team_domain: 'team.cloudflareaccess.com' })).toBeNull()
   })
 
   it('lets the environment override port, origins, paths and Agent Hub', () => {

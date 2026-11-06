@@ -1,9 +1,10 @@
 // One HTTP server for the web app: the guard and headers on every request,
 // the JSON API, the page (static.ts), and the terminal WebSocket upgrade.
 
-import { createServer, type Server } from 'node:http'
+import { createServer, type IncomingMessage, type Server } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer } from 'ws'
+import { AccessVerifier } from './access'
 import {
   applySecurityHeaders,
   checkRequest,
@@ -28,6 +29,7 @@ export function createWebServer(
   router: Router,
   terminals: TerminalHub,
   site?: StaticSite,
+  access: AccessVerifier = new AccessVerifier(guard.access ?? null),
 ): Server {
   // Terminal frames are text, and a seed is a whole screen plus history: deflate
   // shrinks a seed of code about 3.7x (0.74 MB in ~12 ms of zlib's thread
@@ -43,8 +45,14 @@ export function createWebServer(
     const refused = checkRequest(req.method ?? 'GET', req.headers, guard, req.url)
     if (refused) return sendJson(res, 403, { error: refused })
     const url = new URL(req.url ?? '/', 'http://localhost')
-    router
-      .handle(req, res, url)
+    access
+      .check(req.headers)
+      .then((denied) => {
+        if (!denied) return router.handle(req, res, url)
+        console.warn(`[aico-web] refused a tunnel request to ${req.headers.host}: ${denied}`)
+        sendJson(res, 403, { error: denied })
+        return true
+      })
       .then((handled) => {
         if (handled) return
         if (!url.pathname.startsWith('/api/') && site?.handle(req, res, url)) return
@@ -60,6 +68,15 @@ export function createWebServer(
     socket.on('error', () => {})
     const refused = checkUpgrade(req.headers, guard)
     if (refused) return refuseUpgrade(socket, 403, 'Forbidden', refused)
+    access
+      .check(req.headers)
+      .then((denied) => {
+        if (denied) return refuseUpgrade(socket, 403, 'Forbidden', denied)
+        upgrade(req, socket, head)
+      })
+      .catch(() => refuseUpgrade(socket, 500, 'Internal Server Error', 'unexpected'))
+  })
+  function upgrade(req: IncomingMessage, socket: Duplex, head: Buffer) {
     const match = TERMINAL_PATH.exec(new URL(req.url ?? '/', 'http://localhost').pathname)
     if (!match) return refuseUpgrade(socket, 404, 'Not Found', 'not_found')
     let sessionId: string
@@ -74,6 +91,6 @@ export function createWebServer(
         ws.close(1011, 'internal error')
       })
     })
-  })
+  }
   return server
 }

@@ -56,6 +56,13 @@
   "hosts": {
     "browser_frontend": "aico.summitflow.dev"
   },
+  "access": {
+    "team_domain": "summitflow.cloudflareaccess.com",
+    "audiences": {
+      "aico.summitflow.dev": "4d6af2d588089c88703bd03cbfc78b4e43318026cde374a9430f1b5f7788a92a",
+      "nightshift.summitflow.dev": "01f41ca9fc4f61b16b56654f84594c9a1bd85967937bc1572f0830e7d4a2a399"
+    }
+  },
   "artifacts": {
     "cache_dir_name": "aico",
     "upload_dir_name": "aico-uploads",

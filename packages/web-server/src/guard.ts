@@ -14,6 +14,7 @@
 //   service token that opens nothing else, so any other path, and any WebSocket, is refused here.
 
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
+import type { AccessConfig } from './access'
 
 const HOST_PATTERN = /^([a-z0-9.-]+)(:[0-9]{1,5})?$/
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
@@ -27,6 +28,8 @@ export interface GuardConfig {
   phoneHosts?: readonly string[]
   /** Named on every response as `X-Aico-Host`, so the service worker can tell this server from a proxy's error page. */
   hostName?: string
+  /** The Access token a tunnel-forwarded request must carry (access.ts); null refuses every such request. */
+  access?: AccessConfig | null
 }
 
 export function hostAllowed(host: string | undefined, config: GuardConfig): boolean {
