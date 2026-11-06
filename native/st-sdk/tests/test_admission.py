@@ -158,7 +158,7 @@ def test_forged_or_stale_lease_cannot_reenter(lane):
 def test_host_decision_and_psi_fallback_keep_existing_thresholds(monkeypatch, tmp_path):
     decision = tmp_path / 'admission.json'
     pressure = tmp_path / 'memory'
-    monkeypatch.setattr(guard, 'NIGHTSHIFT_ADMISSION', decision)
+    monkeypatch.setattr(guard, 'HOST_ADMISSION', decision)
     monkeypatch.setattr(guard, '_PSI_MEMORY', pressure)
     pressure.write_text('some avg10=0 avg60=0 avg300=0 total=0\nfull avg10=6 avg60=0 avg300=0 total=0\n')
     assert not guard.admission_state(100).admit

@@ -15,5 +15,5 @@ def private_heavy_lane(tmp_path, monkeypatch):
     lane = tmp_path / "heavy-lane"
     monkeypatch.setenv("ST_HEAVY_LOCK_DIR", str(lane))
     monkeypatch.setattr(heavy_work, "_LOCK_DIRECTORY", lane)
-    monkeypatch.setattr(heavy_work, "NIGHTSHIFT_ADMISSION", tmp_path / "nightshift-admission.json")
+    monkeypatch.setattr(heavy_work, "HOST_ADMISSION", tmp_path / "host-admission.json")
     monkeypatch.setattr(heavy_work, "_PSI_MEMORY", tmp_path / "psi-memory")

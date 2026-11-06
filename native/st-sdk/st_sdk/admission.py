@@ -39,10 +39,10 @@ WORKERS = _POLICY["workers"]
 SPARE_MIN_AVAILABLE_BYTES = _POLICY["spare_min_available_bytes"]
 SPARE_MAX_PRESSURE_AVG10 = _POLICY["spare_max_pressure_avg10"]
 _SPARE_LANE = "heavy2"
-# A fresh heavy owner waits before taking any slot while Nightshift closes
-# admission. Without a current Nightshift decision, apply Tether's agent
+# A fresh heavy owner waits before taking any slot while host-steward closes
+# admission. Without a current host decision, apply Tether's agent
 # admission PSI thresholds (src/lifecycle/agent-admission.ts).
-NIGHTSHIFT_ADMISSION = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / _POLICY["host_admission_file"]
+HOST_ADMISSION = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / _POLICY["host_admission_file"]
 PRESSURE_MAX_FULL_AVG60 = _POLICY["pressure_max_full_avg60"]
 PRESSURE_MAX_FULL_AVG10 = _POLICY["pressure_max_full_avg10"]
 _PSI_MEMORY = Path("/proc/pressure/memory")
@@ -121,40 +121,40 @@ class Admission:
     offload: str | None = None
 
 
-def _nightshift_admission(now: float) -> Admission | None:
+def _host_admission(now: float) -> Admission | None:
     try:
-        state = json.loads(NIGHTSHIFT_ADMISSION.read_text())
+        state = json.loads(HOST_ADMISSION.read_text())
         if state.get("v") != 1 or float(state["expires_at"]) <= now or not isinstance(state["admit"], bool):
             return None
         offload = state.get("offload")
-        return Admission(state["admit"], f"nightshift {_public_label(str(state.get('state', '')))}: "
+        return Admission(state["admit"], f"host {_public_label(str(state.get('state', '')))}: "
                          f"{_public_label(str(state.get('reason', '')))}",
                          _public_label(offload) if isinstance(offload, str) and offload else None)
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return None
 
 
-def nightshift_memory(now: float | None = None) -> dict[str, Any] | None:
-    """Nightshift's host memory state (admission.json, contract v1: green, amber or red with its reason), the one
-    memory-pressure source on this host; None when it is missing or stale. A file with memory_state (Nightshift
+def host_memory(now: float | None = None) -> dict[str, Any] | None:
+    """host-steward's host memory state (admission.json, contract v1: green, amber or red with its reason), the one
+    memory-pressure source on this host; None when it is missing or stale. A file with memory_state (host-steward
     since 2026-10-31, whose state also counts the disk) is read by memory_state and memory_reason."""
     now = time.time() if now is None else now
     try:
-        state = json.loads(NIGHTSHIFT_ADMISSION.read_text())
+        state = json.loads(HOST_ADMISSION.read_text())
         mem = "memory_state" if "memory_state" in state else "state"
         if state.get("v") != 1 or float(state["expires_at"]) <= now or state.get(mem) not in ("green", "amber", "red"):
             return None
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return None
     text = state.get("memory_reason" if mem == "memory_state" else "reason", "")
-    reason = re.sub(r"[^a-zA-Z0-9 .,:%()_-]", "", str(text))[:160]  # Nightshift's plain sentence
+    reason = re.sub(r"[^a-zA-Z0-9 .,:%()_-]", "", str(text))[:160]  # host-steward's plain sentence
     return {"state": state[mem], "reason": reason,
             **{k: state[k] for k in ("mem_available_gib", "swap_used_pct", "psi_some_avg60") if isinstance(state.get(k), int | float)}}
 
 
 def admission_state(now: float | None = None) -> Admission:
     """Whether new heavy work may start on this host now (advisory)."""
-    decided = _nightshift_admission(time.time() if now is None else now)
+    decided = _host_admission(time.time() if now is None else now)
     if decided is not None:
         return decided
     try:
