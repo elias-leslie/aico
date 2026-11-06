@@ -197,6 +197,9 @@ export function SessionSidebar({
         <StatusLauncher variant="row" />
         <HistoryLauncher variant="row" />
         <ContextLauncher variant="row" />
+        <Link href="/projects" className="lantern-btn ghost small">
+          Projects
+        </Link>
         <Link href="/backups" className="lantern-btn ghost small">
           Backups
         </Link>
