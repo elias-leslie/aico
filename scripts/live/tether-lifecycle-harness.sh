@@ -240,15 +240,22 @@ pass "respawn moved $a_id to $a_scope2; old scope and its detached child are gon
 # --- 8. pane exit while detached is reconciled -------------------------------------
 api POST "/v1/sessions/$a_id/inject" "{\"generation\":\"$a_gen2\",\"mode\":\"paste\",\"submit\":true,\"text\":\"exit\"}" >/dev/null
 expect_status 200 'inject exit'
+# Tether may End the exited session itself once it reconciles (404); otherwise it shows
+# absent ownership and the harness Ends it.
 reconciled() {
-  local d; d=$(curl -sS --unix-socket "$sock" "http://tether/v1/sessions/$a_id/diagnostics")
+  local d; d=$(api GET "/v1/sessions/$a_id/diagnostics")
+  [[ $(status) == 404 ]] && return 0
   [[ $(jq -r .tmux.state <<<"$d") == absent && $(jq -r .ownership.scopeUnit <<<"$d") == null ]]
 }
 wait_until 'pane-exit reconciliation' reconciled
 wait_until 'exited scope stopped' unit_gone "$a_scope2"
-a_gen3=$(api GET "/v1/sessions/$a_id" | jq -r .generation)
-api POST "/v1/sessions/$a_id/end" "{\"generation\":\"$a_gen3\"}" >/dev/null; expect_status 200 'end exited A'
-pass 'a detached pane exit was reconciled to absent ownership and then ended'
+a_gen3=$(api GET "/v1/sessions/$a_id" | jq -r '.generation // empty')
+if [[ $(status) == 404 ]]; then
+  pass 'a detached pane exit was reconciled and Tether ended the session itself'
+else
+  api POST "/v1/sessions/$a_id/end" "{\"generation\":\"$a_gen3\"}" >/dev/null; expect_status 200 'end exited A'
+  pass 'a detached pane exit was reconciled to absent ownership and then ended'
+fi
 
 # --- 9. End: exact scope retirement --------------------------------------------------
 b_gen_now=$(api GET "/v1/sessions/$b_id" | jq -r .generation)

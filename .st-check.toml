@@ -835,12 +835,6 @@ argv = ["native/host-steward/.venv/bin/pytest", "-q", "native/host-steward/tests
 # instance only if it is down and stops it again; the smoke starts a real Codex
 # TUI but never submits a prompt, so no model request is made.
 [[deep.stages]]
-id = "tether-live-containment"
-argv = ["bash", "-c", "set -e; started=; if ! systemctl --user is-active -q tether@dev.service; then systemctl --user --no-ask-password start tether@dev.service; started=1; fi; trap '[ -n \"$started\" ] && systemctl --user --no-ask-password stop tether@dev.service' EXIT; for i in $(seq 50); do [ -S \"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/tether/dev/control.sock\" ] && break; sleep 0.2; done; bash scripts/live/tether-lifecycle-harness.sh dev; bash scripts/live/tether-real-session-smoke.sh dev codex"]
-timeout_seconds = 600
-
-# The phone app's tests again, from clean (the quick lane reuses Gradle's caches).
-[[deep.stages]]
 id = "gradle-android"
 argv = ["bash", "-c", "export ANDROID_HOME=\"${ANDROID_HOME:-/home/kasadis/Android/Sdk}\"; export PATH=/usr/bin:/bin:$PATH; export GRADLE_USER_HOME=\"${GRADLE_USER_HOME:-/home/kasadis/.gradle}\"; if [ ! -w \"$GRADLE_USER_HOME\" ]; then rm -rf \"${TMPDIR:-/tmp}/gradle-home\"; mkdir -p \"${TMPDIR:-/tmp}/gradle-home\" && cp -aL --reflink=auto \"$GRADLE_USER_HOME/caches\" \"$GRADLE_USER_HOME/wrapper\" \"${TMPDIR:-/tmp}/gradle-home/\" && export GRADLE_USER_HOME=\"${TMPDIR:-/tmp}/gradle-home\"; fi; cd native/android && nice -n 19 ./gradlew --no-daemon -Dorg.gradle.jvmargs=-Xmx1536m -Dkotlin.compiler.execution.strategy=in-process --max-workers=2 clean test --offline --console=plain"]
 timeout_seconds = 900

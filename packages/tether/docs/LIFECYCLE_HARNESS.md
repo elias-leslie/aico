@@ -30,7 +30,7 @@ Both default to the `dev` instance and refuse `default`. They are adapted from A
 8. A real tmux client attaches with the API's exact argv; its resize claim is applied; it is killed by PID and the session survives; a second client reconnects and detaches.
 9. With `TETHER_HARNESS_RESTART=1` (the default) the harness restarts `tether@<instance>` and proves both sessions, scopes, children and generations are unchanged.
 10. Respawn moves the first session to a new scope; the old scope and its detached child are gone; the peer is intact.
-11. A pane exit while detached is reconciled through the pane-exit marker, then the session is Ended.
+11. A pane exit while detached is reconciled through the pane-exit marker, then the session is Ended (Tether may End it itself; the harness Ends it otherwise).
 12. Ending the second session retires its exact scope and its detached child.
 13. No workload PID, scope or session from the run remains, and the server unit exited once empty.
 

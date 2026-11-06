@@ -56,6 +56,22 @@ describe('nightly deep lane', () => {
     expect((await runDeep(root, stages[0], process.env, () => {})).passed).toBe(true)
   })
 
+  it('names a failed stage by its error line, not its trailing output', async () => {
+    const root = repo('')
+    const script =
+      "console.log('src/a.ts(3,1): error TS2304: Cannot find name x'); console.log('Done in 13ms'); process.exit(2)"
+    const result = await runDeep(
+      root,
+      { id: 'build', argv: [process.execPath, '-e', script], timeoutS: 30 },
+      process.env,
+      () => {},
+    )
+    expect(result).toMatchObject({
+      passed: false,
+      last: 'src/a.ts(3,1): error TS2304: Cannot find name x',
+    })
+  })
+
   it('stops a deep stage at its timeout', async () => {
     const root = repo('')
     const result = await runDeep(

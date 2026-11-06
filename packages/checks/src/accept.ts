@@ -132,14 +132,7 @@ export async function accept(config: Config, options: AcceptOptions): Promise<Ac
     return { ...prior, sha, reused: true }
   }
   const started = performance.now()
-  const parent = mkdtempSync(join(tmpdir(), 'aico-accept-'))
-  const work = join(parent, 'tree')
-  git(main, ['worktree', 'add', '--detach', '-q', work, sha])
-  try {
-    const loaded = loadConfig(work)
-    if ('unsupported' in loaded) throw new ConfigError(`acceptance: ${loaded.unsupported}`)
-    const worked: Config = { ...loaded, environmentInputs: config.environmentInputs }
-    linkEnvironment(config, work)
+  return withWorktree(config, sha, async (work, worked, parent) => {
     out(`CHECK:acceptance:${sha.slice(0, 12)} (tree ${tree.slice(0, 12)})`)
     const planned = plan(worked, 'full', null, () => trackedFiles(work))
     const run = (steps: typeof planned, env?: NodeJS.ProcessEnv) =>
@@ -184,6 +177,28 @@ export async function accept(config: Config, options: AcceptOptions): Promise<Ac
     }
     noteLocalCheck(main, sha, { ...report, lane: 'acceptance' }, out)
     return report
+  })
+}
+
+/**
+ * Runs fn in a clean detached worktree of sha with main's runtime inputs linked in (its config
+ * loaded from the worktree), then removes it. parent is a scratch directory beside the tree.
+ */
+export async function withWorktree<T>(
+  config: Config,
+  sha: string,
+  fn: (work: string, worked: Config, parent: string) => Promise<T>,
+): Promise<T> {
+  const main = config.root
+  const parent = mkdtempSync(join(tmpdir(), 'aico-accept-'))
+  const work = join(parent, 'tree')
+  git(main, ['worktree', 'add', '--detach', '-q', work, sha])
+  try {
+    const loaded = loadConfig(work)
+    if ('unsupported' in loaded) throw new ConfigError(`acceptance: ${loaded.unsupported}`)
+    const worked: Config = { ...loaded, environmentInputs: config.environmentInputs }
+    linkEnvironment(config, work)
+    return await fn(work, worked, parent)
   } finally {
     // The links go first so removing the worktree never walks into the main checkout's modules.
     for (const dir of moduleDirs(work, ['node_modules', '.venv', 'venv']))

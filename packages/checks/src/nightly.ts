@@ -1,6 +1,7 @@
 // `aico nightly [--source ID]`: the nightly deep lane (the check-nightly job). The full gate on
 // HEAD in a clean worktree with nothing reused, so its wall time is the real cost, then the repo's
-// `[[deep.stages]]` (live session checks) in the main checkout with the caller's environment.
+// `[[deep.stages]]` (live session checks) in a fresh worktree of the same commit (nobody's
+// uncommitted edits count) with the caller's environment.
 // The last line is the job's Status row: the gate time next to the previous night's, the slowest
 // stages and what failed. Exit 1 when anything failed, so the row turns failed and alerts.
 
@@ -9,7 +10,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { openTasksDb, Registry, tasksDbPathFromEnv } from '@aico/tasks'
-import { accept } from './accept'
+import { accept, withWorktree } from './accept'
+import { git } from './git'
 import { type Coordination, hookCoordination } from './hook'
 import { type Config, ConfigError, loadConfig } from './plan'
 import { receiptStore, type StepResult } from './run'
@@ -25,7 +27,7 @@ export interface DeepResult {
   id: string
   passed: boolean
   ms: number
-  /** The last output line (why it failed). */
+  /** Why it failed: its last FAIL/error line, else its last output line. */
   last: string
 }
 
@@ -55,6 +57,9 @@ export function deepStages(root: string): DeepStage[] {
   })
 }
 
+/** A line that says what went wrong (a FAIL line, a compiler or runtime error). */
+const PROBLEM = /^(FAIL\b|ERROR\b)|\berror\b|\b\w*Error\b/i
+
 /** One deep stage, its output streamed to out. A timeout or a missing tool is a failure. */
 export function runDeep(
   root: string,
@@ -67,13 +72,19 @@ export function runDeep(
     const [file, ...args] = stage.argv as [string, ...string[]]
     const child = spawn(file, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] })
     let last = ''
+    let problem = ''
     let partial = ''
+    const note = (line: string) => {
+      if (!line.trim()) return
+      last = line.trim()
+      if (PROBLEM.test(last)) problem = last
+    }
     const keep = (chunk: Buffer) => {
       const lines = (partial + chunk.toString('utf8')).split('\n')
       partial = lines.pop() ?? ''
       for (const line of lines) {
         out(`  ${stage.id}: ${line}`)
-        if (line.trim()) last = line.trim()
+        note(line)
       }
     }
     child.stdout.on('data', keep)
@@ -89,12 +100,14 @@ export function runDeep(
     }
     child.on('error', (error) => finish(false, `could not start: ${error.message}`))
     child.on('close', (code) => {
-      if (partial.trim()) last = partial.trim()
+      note(partial)
       if (timedOut) finish(false, `stopped after ${stage.timeoutS} s`)
-      else finish(code === 0, last || `exit ${code}`)
+      else finish(code === 0, (code === 0 ? last : problem || last) || `exit ${code}`)
     })
   })
 }
+
+const headSha = (root: string) => git(root, ['rev-parse', 'HEAD^{commit}']).trim()
 
 const seconds = (ms: number) => `${Math.round(ms / 1000)} s`
 
@@ -153,13 +166,19 @@ export async function nightly(options: NightlyOptions): Promise<{ ok: boolean; l
       }
     })
   )()
-  const deep: DeepResult[] = []
-  for (const stage of deepStages(root)) {
-    out(`NIGHTLY:${stage.id}`)
-    const result = await (options.deep ?? ((s) => runDeep(root, s, env, out)))(stage)
-    out(`NIGHTLY:${result.passed ? 'PASS' : 'FAIL'}:${stage.id} ${seconds(result.ms)}`)
-    deep.push(result)
+  const runAll = async (work: string) => {
+    const results: DeepResult[] = []
+    for (const stage of deepStages(work)) {
+      out(`NIGHTLY:${stage.id}`)
+      const result = await (options.deep ?? ((s) => runDeep(work, s, env, out)))(stage)
+      out(`NIGHTLY:${result.passed ? 'PASS' : 'FAIL'}:${stage.id} ${seconds(result.ms)}`)
+      results.push(result)
+    }
+    return results
   }
+  const deep = options.deep
+    ? await runAll(root)
+    : await withWorktree(config, gate.sha ?? headSha(root), (work) => runAll(work))
   const store = receiptStore(root)
   const previous = store.get<{ gate_ms: number }>('nightly-last')
   const line = summary(gate, deep, previous?.gate_ms ?? null)

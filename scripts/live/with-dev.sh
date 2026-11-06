@@ -13,6 +13,7 @@ if ! systemctl --user is-active -q tether@dev.service; then
   started=1
 fi
 trap '[[ -n $started ]] && systemctl --user --no-ask-password stop tether@dev.service' EXIT
+trap 'exit 143' TERM; trap 'exit 130' INT  # a killed run (jobs restart) still stops the instance
 for _ in $(seq 100); do [[ -S $sock ]] && break; sleep 0.2; done
 [[ -S $sock ]] || { echo "tether@dev did not open $sock" >&2; exit 2; }
 "$@"

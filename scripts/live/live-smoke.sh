@@ -208,7 +208,7 @@ run_tool() {
   return 0
 }
 
-declare -a rows=()
+declare -a rows=() failed_tools=() skipped=()
 failed=0
 for tool in "${tools[@]}"; do
   bin=$tool; [[ $tool == claude-code ]] && bin=claude
@@ -221,10 +221,17 @@ for tool in "${tools[@]}"; do
   if run_tool "$tool"; then
     status=PASS; reason=${resent:+first prompt had to be sent twice}
   else
-    status=FAIL; reason=$fail_reason; failed=$((failed + 1))
+    status=FAIL; reason=$fail_reason; screen=
     if [[ -n $current_sid ]]; then
+      screen=$(capture)
       log "$tool: FAIL evidence ---- descriptor"; desc "$current_sid" >&2 || echo "$res_body" >&2
-      log "$tool: pane capture ----"; capture >&2
+      log "$tool: pane capture ----"; printf '%s\n' "$screen" >&2
+    fi
+    # The tool's provider refused for quota (e.g. OpenCode Go used up): nothing Aico can fix tonight.
+    if grep -qiE 'usage limit|rate limit|quota|\b429\b' <<<"$screen"; then
+      status=SKIP; reason="provider usage limit ($fail_reason)"; skipped+=("$tool")
+    else
+      failed=$((failed + 1)); failed_tools+=("$tool")
     fi
   fi
   [[ -z ${current_sid:-} ]] || { end_session "$current_sid"; unset "started[$current_sid]"; }
@@ -251,5 +258,11 @@ if [[ $res_status == 200 ]]; then
     log "LEFTOVER $sid ($root)"; left=$((left + 1))
   done < <(printf '%s' "$res_body" | jq -r '.items[]? | select(.status=="running" and ((.projectRoot // "") | test("/live-smoke-|/tether-live-smoke-proj[.]"))) | "\(.id) \(.projectRoot)"' 2>/dev/null)
 fi
-((left == 0)) && echo "all sessions ended" || { echo "$left session(s) left running"; failed=$((failed + left)); }
+((left == 0)) || { echo "$left session(s) left running"; failed=$((failed + left)); }
+# Last line: the nightly Status row shows it.
+summary="live-smoke: ${#failed_tools[@]} tool(s) failed${failed_tools[*]:+ (${failed_tools[*]})}"
+((${#skipped[@]})) && summary+=", skipped for provider limits: ${skipped[*]}"
+((left == 0)) || summary+=", $left session(s) left running"
+((failed == 0)) && summary="live-smoke passed${skipped[*]:+ (skipped for provider limits: ${skipped[*]})}"
+echo "$summary"
 ((failed == 0))
