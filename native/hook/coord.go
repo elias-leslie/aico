@@ -15,7 +15,7 @@ import (
 // here is said plainly and fails open):
 //
 //	aico-hook lease [GLOB...] [--check P | --list [--all] | --take P | --release [GLOB] | --release-all |
-//	                 --heartbeat | --hold PURPOSE] [--task ID]
+//	                 --heartbeat | --hold PURPOSE]
 //	aico-hook lease --foreign P...     JSON {path: [agent ids]} of the paths other sessions wrote (aico commit)
 //	aico-hook lease --guard OP [--with-ack ID]   exit 1 with the holder line when another agent's hold or a live op
 //	                                             refuses OP (commit, publish, rebuild, acceptance)
@@ -87,7 +87,7 @@ func importLegacy(dir string) int {
 func leaseMain(h *lease.Hook, args []string) int {
 	var (
 		globs                            []string
-		check, take, hold, task          string
+		check, take, hold                string
 		guard, withAck                   string
 		release                          *string
 		list, all, releaseAll, heartbeat bool
@@ -127,8 +127,6 @@ func leaseMain(h *lease.Hook, args []string) int {
 			take, ok = value(&i, a)
 		case "--hold":
 			hold, ok = value(&i, a)
-		case "--task", "-t":
-			task, ok = value(&i, a)
 		case "--release":
 			var v string
 			if v, ok = value(&i, a); ok {
@@ -241,7 +239,7 @@ func leaseMain(h *lease.Hook, args []string) int {
 				}
 			}
 		}
-		l, err := h.Acquire(p.ID, p.Root, globs, task)
+		l, err := h.Acquire(p.ID, p.Root, globs)
 		if err != nil {
 			return fail("%v", err)
 		}

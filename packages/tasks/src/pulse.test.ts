@@ -35,12 +35,6 @@ function setup(findings: Finding[] | null = [finding({})]) {
   const registry = new Registry(db)
   registry.register({ id: 'aico', root: '/srv/aico', name: 'Aico' })
   registry.register({ id: 'other', root: '/srv/other', name: 'Other' })
-  db.prepare(
-    `INSERT INTO tasks (id, project_id, title, status, created_at, updated_at) VALUES ('T1', 'aico', 'Move leases', 'running', 1, 1)`,
-  ).run()
-  db.prepare(
-    `INSERT INTO claims (task_id, subtask, owner, claimed_at) VALUES ('T1', '', 'cc:111111', 1)`,
-  ).run()
   const docs: Record<string, Record<string, unknown>> = {
     aico: {
       leases: [
@@ -48,7 +42,6 @@ function setup(findings: Finding[] | null = [finding({})]) {
           agent_id: 'cc:111111',
           kind: 'file',
           globs: ['/srv/aico/a/**'],
-          task_id: 'T1',
           last_heartbeat: iso(5),
         },
         { agent_id: 'cc:222222', kind: 'file', globs: ['/srv/aico/old'], last_heartbeat: iso(45) },
@@ -85,7 +78,6 @@ function setup(findings: Finding[] | null = [finding({})]) {
     },
   }
   const sources: PulseSources = {
-    db,
     now: () => NOW,
     sessions: async () =>
       [
@@ -117,14 +109,11 @@ describe('aico pulse', () => {
     expect(lines.join('\n')).toContain('Reviewer (child2) vanished; check its session')
   })
 
-  it('shows sessions, claims, fresh leases, open handshakes and Status problems', async () => {
+  it('shows sessions, fresh leases, open handshakes and Status problems', async () => {
     const { sources } = setup()
     const lines = render(await collect(sources))
     expect(lines).toContain('aico: 2 sessions (1 working, 1 idle)')
-    expect(lines).toContain('  claim T1 Move leases (cc:111111)')
-    expect(
-      lines.some((l) => l.startsWith('  lease cc:111111 /srv/aico/a/** task:T1 idle:5m')),
-    ).toBe(true)
+    expect(lines.some((l) => l.startsWith('  lease cc:111111 /srv/aico/a/** idle:5m'))).toBe(true)
     expect(lines.join('\n')).not.toContain('/srv/aico/old')
     // A taken-over lease shows its current holder; an op lease shows while its process runs, however old
     // its heartbeat, and not once the process is gone.

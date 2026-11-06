@@ -1,6 +1,6 @@
-// tasks.db: the projects registry, per-project tasks with subtasks, claims, the task log and
-// task-to-session links. This package owns the file (package.json aico.db); others ask it
-// through this package. Times are epoch milliseconds.
+// tasks.db: the projects registry. This package owns the file (package.json aico.db); others ask it
+// through this package. The task system's tables (tasks, subtasks, claims, task log) were dropped by
+// the second migration; per-project plans live in ROADMAP.md at each repo root. Times are epoch milliseconds.
 
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -107,6 +107,12 @@ const MIGRATIONS: Migration[] = [
      PRIMARY KEY (task_id, session_id)
    ) STRICT;
    CREATE INDEX task_sessions_session ON task_sessions (session_id)`,
+  `DROP TABLE task_sessions;
+   DROP TABLE task_log;
+   DROP TABLE claims;
+   DROP TABLE task_blockers;
+   DROP TABLE subtasks;
+   DROP TABLE tasks`,
 ]
 
 /** The tasks DB file in a data directory. */

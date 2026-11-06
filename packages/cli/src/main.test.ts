@@ -59,29 +59,29 @@ describe('CLI cutover', () => {
     expect(h.calls[0]?.argv).toEqual([leaf, ...args])
     expect(h.calls).toHaveLength(1)
   })
-  it.each(['workflow', 'automations', 'ctx', 'native-sessions', 'note'])(
-    'retires %s without executing Agent Hub',
-    async (verb) => {
-      const h = harness()
-      expect(await h.go([verb, '--help'])).toBe(2)
-      expect(h.calls).toEqual([])
-      expect(h.errors.join(' ')).toContain('dropped')
-      expect(
-        catalog(join(root, 'packages/cli/data'), '/missing', new Set()).some(
-          (entry) => entry.binding.namespace === verb,
-        ),
-      ).toBe(false)
-    },
-  )
   it.each([
-    ['create', 'tasks', 'create'],
-    ['list', 'tasks', 'list'],
-    ['context', 'tasks', 'context'],
-    ['claim', 'tasks', 'claim'],
-    ['done', 'tasks', 'done'],
-    ['abandon', 'tasks', 'abandon'],
-    ['log', 'tasks', 'log'],
-    ['task', 'tasks'],
+    'workflow',
+    'automations',
+    'ctx',
+    'native-sessions',
+    'note',
+    'create',
+    'claim',
+    'done',
+    'context',
+    'tasks',
+  ])('retires %s without executing Agent Hub', async (verb) => {
+    const h = harness()
+    expect(await h.go([verb, '--help'])).toBe(2)
+    expect(h.calls).toEqual([])
+    expect(h.errors.join(' ')).toContain('dropped')
+    expect(
+      catalog(join(root, 'packages/cli/data'), '/missing', new Set()).some(
+        (entry) => entry.binding.namespace === verb,
+      ),
+    ).toBe(false)
+  })
+  it.each([
     ['backup', 'backups'],
     ['snap', 'snapshots', 'take'],
     ['snaps', 'snapshots', 'list'],
@@ -109,7 +109,6 @@ describe('CLI cutover', () => {
     'backups',
     'publish',
     'usage',
-    'tasks',
     'grants',
     'elevate',
     'deploy',
@@ -334,18 +333,6 @@ describe('root command contracts', () => {
     expect(await h.go(['--no-compact', '--human', '-P', 'selected', 'ui', '--help'])).toBe(0)
     expect(h.output.join()).toContain('ui')
   })
-  it('carries root project to native tasks and reads the ST_PROJECT_ID alias', async () => {
-    const outside = temp()
-    const h = harness({}, outside)
-    expect(await h.go(['-P', 'selected', 'tasks', 'list'])).toBe(0)
-    expect(h.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'selected'])
-    const fromEnv = harness({ ST_PROJECT_ID: 'selected' }, outside)
-    await fromEnv.go(['list'])
-    expect(fromEnv.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'selected'])
-    const named = harness({ AICO_PROJECT_ID: 'selected' }, outside)
-    await named.go(['tasks', 'create', 'T', '-P', 'other'])
-    expect(named.calls[0]?.argv.slice(1)).toEqual(['tasks', 'create', 'T', '-P', 'other'])
-  })
   it('picks the project: -P, then the project holding cwd, then the inherited id', async () => {
     const dir = temp(),
       file = join(dir, 'tasks.db'),
@@ -359,15 +346,15 @@ describe('root command contracts', () => {
     db.close()
     const env = { AICO_TASKS_DB: file, AICO_PROJECT_ID: 'a', ST_PROJECT_ID: 'a' }
     const inB = harness(env, nested)
-    await inB.go(['tasks', 'list'])
-    expect(inB.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'b'])
+    await inB.go(['snap', 'x'])
+    expect(inB.calls[0]?.argv.slice(1)).toEqual(['snapshots', 'take', 'x', '--project', 'b'])
     expect(inB.calls[0]?.env).toMatchObject({ AICO_PROJECT_ID: 'b', ST_PROJECT_ID: 'b' })
     const nowhere = harness(env, outside)
-    await nowhere.go(['tasks', 'list'])
-    expect(nowhere.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'a'])
+    await nowhere.go(['snap', 'x'])
+    expect(nowhere.calls[0]?.argv.slice(1)).toEqual(['snapshots', 'take', 'x', '--project', 'a'])
     const flagged = harness(env, nested)
-    await flagged.go(['-P', 'c', 'tasks', 'list'])
-    expect(flagged.calls[0]?.argv.slice(1)).toEqual(['tasks', 'list', '-P', 'c'])
+    await flagged.go(['-P', 'c', 'snap', 'x'])
+    expect(flagged.calls[0]?.argv.slice(1)).toEqual(['snapshots', 'take', 'x', '--project', 'c'])
     expect(flagged.calls[0]?.env).toMatchObject({ AICO_PROJECT_ID: 'c', ST_PROJECT_ID: 'c' })
   })
   it('keeps undeclared help passive unless owner_help is granted', () => {

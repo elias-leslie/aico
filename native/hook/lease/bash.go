@@ -144,9 +144,8 @@ func shellOutputs(payload map[string]any, cwd string) []string {
 	return out
 }
 
-// gateCommand: the shell command only runs the repo gate (`st|aico check`, `st|aico commit`, `st done` or
-// `aico tasks done`), optionally after `cd DIR &&`, env assignments or `time`, with its output sent to
-// `2>&1` and a tail, head, grep or cat. These write only the caller's own files (the formatter and generated
+// gateCommand: the shell command only runs the repo gate (`st|aico check` or `st|aico commit`), optionally after `cd DIR &&`, env assignments or
+// `time`, with its output sent to `2>&1` and a tail, head, grep or cat. These write only the caller's own files (the formatter and generated
 // writes stay within its paths), so any other file that changes while they run is another agent's concurrent
 // edit, never this command's write: no snapshot, so no overlap line and no writer-set entry.
 func gateCommand(payload map[string]any) bool {
@@ -168,12 +167,9 @@ func gateCommand(payload map[string]any) bool {
 	if len(argv) > 0 && argv[0] == "time" {
 		argv = argv[1:]
 	}
-	verb := strings.Join(argv[:min(len(argv), 3)], " ")
 	n := 0
 	switch {
-	case strings.HasPrefix(verb+" ", "aico tasks done "):
-		n = 3
-	case len(argv) >= 2 && (argv[0] == "st" && (argv[1] == "check" || argv[1] == "commit" || argv[1] == "done") ||
+	case len(argv) >= 2 && (argv[0] == "st" && (argv[1] == "check" || argv[1] == "commit") ||
 		argv[0] == "aico" && (argv[1] == "check" || argv[1] == "commit")):
 		n = 2
 	default:

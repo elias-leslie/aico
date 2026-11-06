@@ -50,10 +50,10 @@ func TestLeaseVerbsAndHandshakeFromTheCommandLine(t *testing.T) {
 		return capture(t, func() int { return coordMain(mode, args) })
 	}
 
-	if code, out, _ := run(sessA, "lease", "src/**", "--task", "T1"); code != 0 || !strings.HasPrefix(out, "Acquired lease ") {
+	if code, out, _ := run(sessA, "lease", "src/**"); code != 0 || !strings.HasPrefix(out, "Acquired lease ") {
 		t.Fatalf("acquire: %d %q", code, out)
 	}
-	if code, out, _ := run(sessB, "lease", "--list"); code != 0 || !strings.Contains(out, "cc:111111 · lease:'") || !strings.Contains(out, "task:T1") {
+	if code, out, _ := run(sessB, "lease", "--list"); code != 0 || !strings.Contains(out, "cc:111111 · lease:'") {
 		t.Fatalf("list: %d %q", code, out)
 	}
 	if code, _, errOut := run(sessB, "lease", "--check", "src/a.go"); code != 0 || !strings.HasPrefix(errOut, "WARNING: ") {

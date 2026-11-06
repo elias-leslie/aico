@@ -33,30 +33,6 @@
     "task_types": ["config", "prompt-tuning"]
   },
   {
-    "surface": "st.create",
-    "tier": "mandate",
-    "cmd": "st create \"title\"",
-    "when": "create a task; project from cwd",
-    "precautions": ["bare title creates a pending task; --plan/--type in --help"]
-  },
-  {
-    "surface": "st.context",
-    "tier": "mandate",
-    "cmd": "st context <task-id>",
-    "when": "read task brief, plan, history",
-    "precautions": [
-      "claim before implementing the assigned task; read-only inspection needs no claim",
-      "--subtask X.Y"
-    ]
-  },
-  {
-    "surface": "st.log",
-    "tier": "reference",
-    "cmd": "st log <task-id> \"progress note\"",
-    "when": "record progress, decisions, or blockers on a claimed task",
-    "precautions": ["prefer task-id first form; trailing task-id is a legacy alias"]
-  },
-  {
     "surface": "st.pulse",
     "tier": "reference",
     "cmd": "st pulse",
@@ -81,27 +57,6 @@
     "precautions": [
       "never raw pytest/vitest/biome/tsc/ruff/sqlfluff/squawk",
       "st check codeql: GitHub CodeQL alert state after code-scanning work"
-    ]
-  },
-  {
-    "surface": "st.claim",
-    "tier": "mandate",
-    "cmd": "st claim <task-id>",
-    "when": "before implementing or completing an assigned task",
-    "precautions": [
-      "subtask: dotted ID (1.2) + --task <parent>",
-      "commits go directly to main; conflicts point at st pulse"
-    ]
-  },
-  {
-    "surface": "st.done",
-    "tier": "mandate",
-    "cmd": "st done <task-id> -m \"summary\"",
-    "when": "assigned-task closeout: acceptance, evidence, checkpoint cleanup",
-    "precautions": [
-      "needs an active owned claim",
-      "scope defaults to the task's declared, leased or committed paths; else --paths a b",
-      "--evidence JSON for required deployment/live checks; never claim done while acceptance remains"
     ]
   },
   {

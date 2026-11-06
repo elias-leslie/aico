@@ -1,5 +1,11 @@
-export { type Deps, type Io, runProjects, runTasks } from './cli'
+export { type Deps, type Io, runProjects } from './cli'
 export { openTasksDb, tasksDbPath, tasksDbPathFromEnv } from './db'
-export { callerFromEnv } from './identity'
 export { type Project, type PublicationPolicy, Registry, registryProjects } from './projects'
-export { type Caller, TaskError, TaskStore } from './tasks'
+export {
+  parseRoadmap,
+  ROADMAP_FILE,
+  type Roadmap,
+  type RoadmapItem,
+  type RoadmapProblem,
+  readRoadmap,
+} from './roadmap'

@@ -10,13 +10,11 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { openTasksDb, Registry, runTasks, TaskStore } from '@aico/tasks'
 import { afterEach, describe, expect, it } from 'vitest'
 import { accept } from './accept'
 import { ownChanged, runCheck } from './check'
 import { runCli } from './cli'
 import { commit, refusals, selection, shortSubject } from './commit'
-import { doneWithReceipt } from './done'
 import type { Coordination } from './hook'
 import { type Config, loadConfig, plan } from './plan'
 import { judge, runSteps } from './run'
@@ -493,43 +491,6 @@ describe('receipts', () => {
     const failing = repo(stage('suite', '', 1, log))
     expect((await accept(config(failing), { coordination: coordination() })).passed).toBe(false)
     expect((await accept(config(failing), { coordination: coordination() })).reused).toBeUndefined()
-  })
-
-  it('closes a task with its paths committed and the tree receipt logged; a failing acceptance keeps it open', async () => {
-    const run = async (code: number, edit: string) => {
-      const root = repo(stage('suite', '', code))
-      const db = openTasksDb(':memory:')
-      new Registry(db).register({ id: 'p', root, name: 'P' })
-      const store = new TaskStore(db)
-      const env = { AICO_SESSION_ID: 'one' }
-      const quiet = { out: () => {}, err: () => {} }
-      await runTasks(['create', 'Edit a'], { db, cwd: root, env }, quiet)
-      const task = { id: (db.prepare('SELECT id FROM tasks').get() as { id: string }).id }
-      await runTasks(['claim', task.id], { db, cwd: root, env }, quiet)
-      write(root, 'src/a.ts', edit)
-      write(root, 'src/b.ts', 'someone else\n')
-      const out: string[] = []
-      const err: string[] = []
-      const exit = await doneWithReceipt(
-        [task.id, '-m', 'done', '--paths', 'src/a.ts'],
-        { db, cwd: root, env, coordination: coordination() },
-        { out: (l) => out.push(l), err: (l) => err.push(l) },
-      )
-      return { root, exit, out, err, task: store.get(task.id), log: store.log(task.id) }
-    }
-    const ok = await run(0, 'a2\n')
-    expect(ok.exit).toBe(0)
-    expect(git(ok.root, 'show', '--name-only', '--format=', 'HEAD')).toBe('src/a.ts')
-    expect(git(ok.root, 'status', '--porcelain', '--', 'src')).toBe('M src/b.ts')
-    expect(ok.task?.status).toBe('completed')
-    const tree = git(ok.root, 'rev-parse', 'HEAD^{tree}')
-    expect(ok.log.at(-1)?.message).toMatch(
-      new RegExp(`^receipt: tree ${tree} commit [0-9a-f]{40} check acceptance PASS`),
-    )
-    const failed = await run(1, 'a3\n')
-    expect(failed.exit).toBe(1)
-    expect(failed.err.join('\n')).toContain('acceptance failed')
-    expect(failed.task?.status).not.toBe('completed')
   })
 
   it('reuses a full-gate stage’s pass while its declared inputs are unchanged', async () => {

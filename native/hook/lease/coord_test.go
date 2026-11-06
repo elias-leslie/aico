@@ -104,16 +104,16 @@ func TestLeaseVerbs(t *testing.T) {
 	real, _ := filepath.EvalSymlinks(repo)
 	a, b := agent(sidA, ""), agent(sidB, "")
 
-	l, err := a.Acquire("demo", real, []string{"src/**"}, "T1")
-	if err != nil || l.Globs[0] != filepath.Join(real, "src/**") || l.TaskID == nil || *l.TaskID != "T1" {
+	l, err := a.Acquire("demo", real, []string{"src/**"})
+	if err != nil || l.Globs[0] != filepath.Join(real, "src/**") {
 		t.Fatalf("acquire: %+v %v", l, err)
 	}
-	again, _ := a.Acquire("demo", real, []string{"src/**"}, "")
+	again, _ := a.Acquire("demo", real, []string{"src/**"})
 	if again.LeaseID != l.LeaseID {
 		t.Errorf("the same glob set extends the lease: %s vs %s", again.LeaseID, l.LeaseID)
 	}
 	lines, _ := b.Listed("demo", "file")
-	if len(lines) != 1 || !strings.Contains(lines[0], "cc:111111 · lease:'"+filepath.Join(real, "src/**")+"' · task:T1") {
+	if len(lines) != 1 || !strings.Contains(lines[0], "cc:111111 · lease:'"+filepath.Join(real, "src/**")+"' · idle:") {
 		t.Fatalf("list: %q", lines)
 	}
 	if n, _ := b.Release("demo", real, "", true); n != 0 {

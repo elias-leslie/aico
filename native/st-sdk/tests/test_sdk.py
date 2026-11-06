@@ -165,30 +165,13 @@ def test_explicit_http_client_preserves_request_and_error_contract_without_secre
 
     with STClient(base_url='http://owner.test/api', project_id='chosen',
                   transport=httpx.MockTransport(handler)) as client:
-        assert client.create_task({'title': 'Promoted'}) == {'id': 'new-task'}
-    assert str(seen[0].url) == 'http://owner.test/api/projects/chosen/tasks'
+        assert client.request('POST', '/things', json={'title': 'Promoted'}) == {'id': 'new-task'}
+    assert str(seen[0].url) == 'http://owner.test/api/projects/chosen/things'
     assert not any('token' in key.lower() or key.lower() == 'authorization' for key in seen[0].headers)
     assert token_headers() == {}
     with pytest.raises(APIError) as exc:
         client._handle_response(httpx.Response(400, json={'detail': {'message': 'bad'}}))
     assert exc.value.status_code == 400 and exc.value.detail == {'message': 'bad'}
-
-
-def test_default_task_helper_creates_via_local_cli(monkeypatch):
-    from st_sdk import _cli
-    monkeypatch.setenv('AICO_API_BASE', 'http://aico.test/api')
-    observed = []
-
-    def command(*args):
-        observed.append((args[:3], json.loads(Path(args[3]).read_text()), args[4:]))
-        return subprocess.CompletedProcess(args, 0, 'IMPORT:new-id|SIMPLE|\n', '')
-
-    monkeypatch.setattr(_cli, 'run', command)
-    with STClient(project_id='chosen') as client:
-        assert client.create_task({'title': 'Promoted'}) == {
-            'id': 'new-id', 'title': 'Promoted', 'project_id': 'chosen'}
-    assert observed == [(('tasks', 'create', '--from-file'), {'tasks': [{'title': 'Promoted'}]},
-                         ('-P', 'chosen'))]
 
 
 def test_project_api_registry_reads_metadata_without_service_api(monkeypatch, tmp_path):

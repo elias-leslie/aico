@@ -1,14 +1,13 @@
-// `aico pulse`: who is working where, claims, leases, open handshakes and what Status says is wrong.
+// `aico pulse`: who is working where, leases, open handshakes and what Status says is wrong.
 // `aico pulse --brief` is the startup brief: the Status problems an agent has not been told yet, by
-// role. Sources are Aico's own stores only: Tether's sessions and coordination documents, tasks.db
-// claims, and status.db rows (the Status problems are the host findings).
+// role. Sources are Aico's own stores only: Tether's sessions and coordination documents
+// and status.db rows (the Status problems are the host findings).
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { ChildAgent, SessionDescriptor } from '@aico/tether-client'
 import policy from '../data/pulse-brief.json' with { type: 'json' }
-import type { Database } from './db'
 import type { Registry } from './projects'
 
 export type Policy = typeof policy
@@ -28,7 +27,6 @@ export interface Finding {
 
 export interface PulseSources {
   children?(): Promise<ChildAgent[] | null>
-  db: Database
   now: () => number
   sessions(): Promise<SessionDescriptor[] | null>
   docNames(): Promise<string[] | null>
@@ -55,7 +53,6 @@ export interface Lease {
   project: string
   kind: string
   globs: string[]
-  task: string | null
   idleMinutes: number
 }
 
@@ -67,20 +64,11 @@ export interface Handshake {
   ageMinutes: number
 }
 
-export interface Claim {
-  task: string
-  subtask: string
-  title: string
-  project: string
-  owner: string
-}
-
 export interface Pulse {
   children?: ChildAgent[] | null
   generatedAt: number
   /** Null when the source did not answer: unknown, never zero. */
   sessions: SessionDescriptor[] | null
-  claims: Claim[]
   leases: Lease[] | null
   handshakes: Handshake[] | null
   findings: Finding[] | null
@@ -97,13 +85,6 @@ function minutesSince(stamp: unknown, now: number): number {
 
 export async function collect(src: PulseSources, cfg: Policy = policy): Promise<Pulse> {
   const now = src.now()
-  const claims = src.db
-    .prepare(
-      `SELECT c.task_id, c.subtask, c.owner, t.title, t.project_id
-         FROM claims c JOIN tasks t ON t.id = c.task_id
-        WHERE c.released_at IS NULL ORDER BY t.project_id, c.id`,
-    )
-    .all() as Row[]
   let leases: Lease[] | null = null
   let handshakes: Handshake[] | null = null
   const names = await src.docNames()
@@ -128,7 +109,6 @@ export async function collect(src: PulseSources, cfg: Policy = policy): Promise<
           project: name,
           kind: text(l.kind) || 'file',
           globs: Array.isArray(l.globs) ? l.globs.map(String) : [],
-          task: typeof l.task_id === 'string' ? l.task_id : null,
           idleMinutes: idle,
         })
       }
@@ -150,13 +130,6 @@ export async function collect(src: PulseSources, cfg: Policy = policy): Promise<
     children: src.children ? await src.children() : null,
     generatedAt: now,
     sessions: await src.sessions(),
-    claims: claims.map((c) => ({
-      task: text(c.task_id),
-      subtask: text(c.subtask),
-      title: text(c.title),
-      project: text(c.project_id),
-      owner: text(c.owner),
-    })),
     leases,
     handshakes,
     findings: src.findings(),
@@ -185,7 +158,6 @@ export function render(p: Pulse): string[] {
   const live = p.sessions?.filter((s) => s.status === 'running') ?? null
   const projects = new Set<string>()
   for (const s of live ?? []) projects.add(s.projectId ?? '(no project)')
-  for (const c of p.claims) projects.add(c.project)
   for (const l of p.leases ?? []) projects.add(l.project)
   for (const project of [...projects].sort()) {
     const sessions = (live ?? []).filter((s) => (s.projectId ?? '(no project)') === project)
@@ -194,11 +166,9 @@ export function render(p: Pulse): string[] {
       ? `${sessions.length} sessions (${by('working')} working, ${by('idle')} idle${by('blocked') ? `, ${by('blocked')} blocked` : ''})`
       : 'no live sessions'
     out.push(`${project}: ${parts}`)
-    for (const c of p.claims.filter((x) => x.project === project))
-      out.push(`  claim ${c.task}${c.subtask ? `.${c.subtask}` : ''} ${c.title} (${c.owner})`)
     for (const l of (p.leases ?? []).filter((x) => x.project === project))
       out.push(
-        `  ${l.kind === 'file' ? 'lease' : l.kind} ${l.agent} ${l.globs.join(', ')}${l.task ? ` task:${l.task}` : ''} idle:${age(l.idleMinutes)}`,
+        `  ${l.kind === 'file' ? 'lease' : l.kind} ${l.agent} ${l.globs.join(', ')} idle:${age(l.idleMinutes)}`,
       )
   }
   if (p.sessions === null) out.push('Sessions: Tether did not answer; live sessions are unknown.')

@@ -19,6 +19,7 @@ import {
   render,
   roleOf,
 } from './pulse'
+import { roadmapBrief } from './roadmap-brief'
 
 export interface PulseIo {
   out(line: string): void
@@ -26,8 +27,8 @@ export interface PulseIo {
 }
 
 const USAGE = `Usage: aico pulse [--brief] [--json]
-  (no option)  live sessions per project, claims, leases, open handshakes and what Status says is wrong
-  --brief      the startup brief for this session: the Status problems it concerns, by role
+  (no option)  live sessions per project, leases, open handshakes and what Status says is wrong
+  --brief      the startup brief for this session: the project's roadmap (Now, Next) and the Status problems it concerns, by role
   --json       the same data as JSON`
 
 function dataDir(env: NodeJS.ProcessEnv): string {
@@ -59,7 +60,7 @@ function statusFindings(env: NodeJS.ProcessEnv, now: () => number): Finding[] | 
   }
 }
 
-function liveSources(db: Database, env: NodeJS.ProcessEnv, now = Date.now): PulseSources {
+function liveSources(env: NodeJS.ProcessEnv, now = Date.now): PulseSources {
   const client = new TetherClient(tetherSocketPath(env, process.getuid?.()), 2_000)
   const orNull = async <T>(work: () => Promise<T>): Promise<T | null> => {
     try {
@@ -69,7 +70,6 @@ function liveSources(db: Database, env: NodeJS.ProcessEnv, now = Date.now): Puls
     }
   }
   return {
-    db,
     now,
     sessions: () => orNull(() => client.listSessions()),
     children: () => orNull(() => client.childAgents()),
@@ -107,7 +107,7 @@ export async function runPulse(
     io.out(USAGE)
     return 0
   }
-  const sources = deps.sources ?? liveSources(deps.db, deps.env)
+  const sources = deps.sources ?? liveSources(deps.env)
   if (values.brief || values.start) {
     const registry = new Registry(deps.db)
     let payload: Record<string, unknown> = {}
@@ -119,7 +119,8 @@ export async function runPulse(
       }
     }
     const cwd = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : deps.cwd
-    const project = registry.forCwd(cwd)?.id ?? null
+    const here = registry.forCwd(cwd)
+    const project = here?.id ?? null
     const findings = sources.findings() ?? []
     const widget = deps.env.AICO_WIDGET_ID?.trim() ?? ''
     let descriptor = null
@@ -137,7 +138,7 @@ export async function runPulse(
         ? new BriefLedger(ledgerPath(statusDbPath(dataDir(deps.env))))
         : undefined,
     })
-    for (const line of lines) io.out(line)
+    for (const line of [...roadmapBrief(here?.root_path ?? null), ...lines]) io.out(line)
     return 0
   }
   const pulse: Pulse = await collect(sources)

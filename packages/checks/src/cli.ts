@@ -1,4 +1,4 @@
-// `aico check` and `aico commit` (and `aico tasks done`, which main.ts routes to done.ts).
+// `aico check` and `aico commit`.
 // Exit codes: 0 passed or committed, 1 failed or refused, 2 usage, 3 this repo's checks are not
 // run by aico (no [native] gate, or a tool it does not run): `st check` then keeps the repo.
 
@@ -162,7 +162,7 @@ async function checkCli(argv: string[], io: CliIo): Promise<number> {
     )
     return ok ? 0 : 1
   }
-  const args = parse(argv, ['--sha', '--jobs', '--with-ack', '--scope', '--task'])
+  const args = parse(argv, ['--sha', '--jobs', '--with-ack', '--scope'])
   if (args.flags.has('--help') || args.flags.has('-h')) {
     io.out(CHECK_USAGE)
     return 0
@@ -222,7 +222,7 @@ async function checkCli(argv: string[], io: CliIo): Promise<number> {
 }
 
 async function commitCli(argv: string[], io: CliIo): Promise<number> {
-  const args = parse(argv, ['-m', '--message', '--msg', '--with-ack', '--task', '--jobs'])
+  const args = parse(argv, ['-m', '--message', '--msg', '--with-ack', '--jobs'])
   if (args.flags.has('--help') || args.flags.has('-h')) {
     io.out(COMMIT_USAGE)
     return 0

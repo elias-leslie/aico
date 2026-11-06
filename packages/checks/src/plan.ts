@@ -766,7 +766,15 @@ function legacySteps(
       if (!changed) return [step(tool, 'biome', ['check', '.'])]
       const files = within(root, dir, changed, BIOME)
       return files.length
-        ? [step(tool, 'biome', ['check', ...files])]
+        ? [
+            step(tool, 'biome', [
+              'check',
+              '--no-errors-on-unmatched',
+              '--files-ignore-unknown=true',
+              '--',
+              ...files,
+            ]),
+          ]
         : [{ id: tool, skip: 'no_relevant_changed_paths' }]
     }
     case 'tsc': {

@@ -1,7 +1,7 @@
 {
   "name": "@aico/checks",
   "version": "0.1.0",
-  "description": "The repo gate: aico check (each repo's .st-check.toml stages, quick and full lanes, acceptance on the committed tree), aico commit (path-scoped) and the check, commit and tree receipt behind aico tasks done.",
+  "description": "The repo gate: aico check (each repo's .st-check.toml stages, quick and full lanes, acceptance on the committed tree), aico commit (path-scoped) and the acceptance run.",
   "private": true,
   "license": "Apache-2.0",
   "aico": {

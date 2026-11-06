@@ -1,7 +1,7 @@
 {
   "name": "@aico/tasks",
   "version": "0.1.0",
-  "description": "Light per-project tasks, the projects registry, claims and task-to-session links (tasks.db), with the aico tasks and aico projects commands.",
+  "description": "The projects registry (tasks.db), with the aico projects and aico pulse commands.",
   "private": true,
   "license": "Apache-2.0",
   "aico": {

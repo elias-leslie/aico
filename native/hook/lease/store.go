@@ -82,7 +82,7 @@ type Lease struct {
 	SessionID     string   `json:"session_id"`
 	Provider      string   `json:"provider"`
 	Globs         []string `json:"globs"`
-	TaskID        *string  `json:"task_id"`
+	TaskID        *string  `json:"task_id"` // always null now; the lease document keeps the field
 	AcquiredAt    string   `json:"acquired_at"`
 	LastHeartbeat string   `json:"last_heartbeat"`
 	TakenOverBy   *string  `json:"taken_over_by"`

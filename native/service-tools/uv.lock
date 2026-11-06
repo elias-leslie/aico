@@ -282,7 +282,7 @@ wheels = [
 
 [[package]]
 name = "summitflow-st-sdk"
-version = "0.2.2"
+version = "0.2.3"
 source = { directory = "../st-sdk" }
 dependencies = [
     { name = "httpx" },

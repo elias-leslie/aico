@@ -16,7 +16,7 @@ func TestConcurrentWriterLosesNothing(t *testing.T) {
 	repo := sandbox(t)
 	real, _ := filepath.EvalSymlinks(repo)
 	b := agent(sidB, "")
-	if _, err := b.Acquire("demo", real, []string{"b.txt"}, ""); err != nil {
+	if _, err := b.Acquire("demo", real, []string{"b.txt"}); err != nil {
 		t.Fatal(err)
 	}
 	once := true
@@ -34,7 +34,7 @@ func TestConcurrentWriterLosesNothing(t *testing.T) {
 		doc["leases"] = append(doc["leases"].([]any), other)
 		fake.Put("demo", doc)
 	}
-	if _, err := agent(sidA, "").Acquire("demo", real, []string{"a.txt"}, ""); err != nil {
+	if _, err := agent(sidA, "").Acquire("demo", real, []string{"a.txt"}); err != nil {
 		t.Fatal(err)
 	}
 	if fake.Conflicts != 1 {
@@ -66,7 +66,7 @@ func TestManyLostRacesStillLand(t *testing.T) {
 			fake.Put("demo", fake.Doc("demo"))
 		}
 	}
-	if _, err := agent(sidA, "").Acquire("demo", real, []string{"a.txt"}, ""); err != nil {
+	if _, err := agent(sidA, "").Acquire("demo", real, []string{"a.txt"}); err != nil {
 		t.Fatal(err)
 	}
 	if fake.Conflicts != 12 {

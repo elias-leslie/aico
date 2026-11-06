@@ -291,8 +291,6 @@ func TestGateCommandsTakeNoShellSnapshot(t *testing.T) {
 		`cd /x && st commit -m "Fix (the) thing; again > twice" --paths a.ts b.ts`,
 		`ST_CHECK_CHANGED_FILES=a.ts time st check --quick 2>&1 | tail -20`,
 		`aico check --fix | grep FAIL`,
-		`aico tasks done t-1 -m "done"`,
-		`st done t-1`,
 	}
 	other := []string{
 		`st check --quick && echo hi > made.txt`,
@@ -300,7 +298,7 @@ func TestGateCommandsTakeNoShellSnapshot(t *testing.T) {
 		`st commit -m x; rm a.ts`,
 		`st checkout main`,
 		`npm run lint`,
-		`aico tasks list`,
+		`st done t-1`,
 	}
 	for _, c := range gate {
 		if !gateCommand(map[string]any{"tool_input": map[string]any{"command": c}}) {

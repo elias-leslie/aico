@@ -53,7 +53,7 @@ func (h *Hook) owns(l Lease, mine map[string]bool, anchor string) bool {
 }
 
 // Acquire leases globs to this agent, or extends the lease it already has on that glob set.
-func (h *Hook) Acquire(project, root string, globs []string, task string) (Lease, error) {
+func (h *Hook) Acquire(project, root string, globs []string) (Lease, error) {
 	s, err := h.storeFor(project)
 	if err != nil {
 		return Lease{}, err
@@ -71,18 +71,12 @@ func (h *Hook) Acquire(project, root string, globs []string, task string) (Lease
 			l := &d.leases[i]
 			if l.Kind == "file" && l.AgentID == h.ID.AgentID && sameSet(l.Globs, globs) {
 				l.LastHeartbeat = now
-				if task != "" && l.TaskID == nil {
-					l.TaskID = ptr(task)
-				}
 				out = *l
 				return s.save(d)
 			}
 		}
 		out = Lease{LeaseID: newID(), AgentID: h.ID.AgentID, AgentSlug: h.ID.Slug, SessionID: h.ID.SessionID,
 			Provider: h.ID.Provider, Globs: globs, AcquiredAt: now, LastHeartbeat: now, Kind: "file"}
-		if task != "" {
-			out.TaskID = ptr(task)
-		}
 		if anchor != "" {
 			out.Anchor = ptr(anchor)
 		}
@@ -253,7 +247,7 @@ func (h *Hook) Take(project, root, path string) (Lease, error) {
 	if err != nil {
 		return Lease{}, err
 	}
-	l, err := h.Acquire(project, "", []string{path}, "")
+	l, err := h.Acquire(project, "", []string{path})
 	if err != nil {
 		return l, err
 	}
@@ -289,7 +283,7 @@ func (h *Hook) Listed(project string, kinds ...string) ([]string, error) {
 	return out, nil
 }
 
-// LeaseLine: "agent · lease:'globs' · task:id · idle:2m" for a file lease, else the holder line.
+// LeaseLine: "agent · lease:'globs' · idle:2m" for a file lease, else the holder line.
 func (h *Hook) LeaseLine(project string, l Lease, root string) string {
 	if l.Kind == "hold" {
 		return h.holderLine(project, l, root) + "; release: st lease --release " + l.LeaseID
@@ -297,11 +291,7 @@ func (h *Hook) LeaseLine(project string, l Lease, root string) string {
 	if l.Kind != "file" {
 		return h.holderLine(project, l, root)
 	}
-	task := "--"
-	if l.TaskID != nil && *l.TaskID != "" {
-		task = *l.TaskID
-	}
-	return fmt.Sprintf("%s · lease:'%s' · task:%s · idle:%s", l.AgentID, strings.Join(l.Globs, ", "), task,
+	return fmt.Sprintf("%s · lease:'%s' · idle:%s", l.AgentID, strings.Join(l.Globs, ", "),
 		age(l.LastHeartbeat, time.Now().UTC()))
 }
 

@@ -10,6 +10,7 @@ import { blobIds, changedFiles, git, gitOk } from './git'
 import { type Coordination, CoordinationError, othersClaim } from './hook'
 import { noteLocalCheck } from './local-check'
 import { type Config, type Lane, type Planned, plan, toolBinary } from './plan'
+import { roadmapStep } from './roadmap'
 import { passed, receiptStore, resultLine, runSteps, type StepResult } from './run'
 import type { CheckSummary } from './status'
 
@@ -217,6 +218,12 @@ export async function runCheck(config: Config, options: CheckOptions): Promise<C
       const fixed = spawnSync(argv[0], argv.slice(1), { cwd: root, encoding: 'utf8' })
       out(`CHECK:FIX:${tool}:${files.length} file(s)|exit ${fixed.status}`)
     }
+  }
+  const roadmap = roadmapStep(root, scope)
+  if (roadmap) {
+    out(resultLine(roadmap))
+    out(`CHECK:FAIL ${options.lane}: roadmap`)
+    return { lane: options.lane, passed: false, results: [roadmap], ms: 0, scope }
   }
   const store = receiptStore(root)
   const reuse = options.reuse !== false
