@@ -166,7 +166,7 @@ describe('context inventory and use', () => {
       )
     }
     let d = recentDeliveries(db, now)[0]!
-    expect(d.items.every((i) => i.use === 'unused')).toBe(true)
+    expect(d.items.every((i) => i.use === (i.type === 'rule' ? 'unknown' : 'unused'))).toBe(true)
     observeDelivery(
       db,
       d,
@@ -198,9 +198,21 @@ describe('context inventory and use', () => {
       observeDelivery(db, add(db, `other-${n}`), [], true, 'codex:other', now)
     const changed = add(db, 'changed', 'Edit this skill.') // Same byte length as the prior text.
     expect(changed.items.find((i) => i.type === 'skill')?.use).toBe('unknown')
-    expect(changed.items.find((i) => i.type === 'prompt')?.use).toBe('unknown')
     observeDelivery(db, changed, [], false, 'codex:changed', now)
-    expect(recentDeliveries(db, now)[0]!.items.some((i) => i.use === 'unused')).toBe(false)
+    const latest = recentDeliveries(db, now)[0]!
+    // New content needs its own observed sessions; unchanged content keeps the verdict of
+    // its observed sessions despite this unobserved one.
+    expect(latest.items.find((i) => i.type === 'skill')?.use).toBe('unknown')
+    expect(latest.items.find((i) => i.type === 'prompt')?.use).toBe('unused')
+  })
+  it('never makes an always-on harness rule an unused candidate', () => {
+    const db = seeded()
+    for (let n = 0; n < COST.minObservedSessions; n++)
+      observeDelivery(db, add(db, `rule-${n}`), [], true, `codex:rule-${n}`, now)
+    const items = recentDeliveries(db, now)[0]!.items
+    expect(items.find((i) => i.type === 'rule')?.use).toBe('unknown')
+    expect(items.some((i) => i.use === 'unused')).toBe(true)
+    expect(unusedItems(recentDeliveries(db, now)).some((i) => i.id.startsWith('rule:'))).toBe(false)
   })
   it('separates roles/projects and excludes configured private projects', () => {
     const db = seeded()

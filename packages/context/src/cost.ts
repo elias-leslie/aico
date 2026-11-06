@@ -42,6 +42,8 @@ export interface CostDelivery {
   role: string | null
   project: string | null
   session: string | null
+  /** `launch` (session is Tether's id) or `hook:<tool>` (session is the tool's own id). */
+  channel: string
   bytes: number
   tokens: number
   budget: number | null
@@ -156,14 +158,14 @@ export function recentDeliveries(db: Database, now = new Date()): CostDelivery[]
     }
   })
   // Each session counts once, even if a hook delivered again. Keep role/project/tool
-  // boundaries: use in another role cannot hide a candidate in this one.
-  const groups = new Map<
-    string,
-    { items: InventoryItem[]; sessions: Set<string>; complete: boolean; used: boolean }
-  >()
+  // boundaries: use in another role cannot hide a candidate in this one. Only fully
+  // observed sessions count toward absence; an unobserved one neither proves use nor
+  // blocks the verdict of the others. Always-on harness rules (rule:*) have no use
+  // marker of their own, so they are never candidates.
+  const groups = new Map<string, { items: InventoryItem[]; sessions: Set<string>; used: boolean }>()
   for (const delivery of result)
     for (const item of delivery.items) {
-      if (item.cut || item.type === 'computed' || !item.hash) continue
+      if (item.cut || item.type === 'computed' || item.type === 'rule' || !item.hash) continue
       const key = JSON.stringify([
         delivery.tool,
         delivery.role,
@@ -171,15 +173,9 @@ export function recentDeliveries(db: Database, now = new Date()): CostDelivery[]
         item.id,
         item.hash,
       ])
-      const stats = groups.get(key) ?? {
-        items: [],
-        sessions: new Set<string>(),
-        complete: true,
-        used: false,
-      }
+      const stats = groups.get(key) ?? { items: [], sessions: new Set<string>(), used: false }
       stats.items.push(item)
       if (delivery.observed && delivery.session) stats.sessions.add(delivery.session)
-      stats.complete &&= delivery.observed
       stats.used ||= item.use === 'used'
       groups.set(key, stats)
     }
@@ -188,7 +184,7 @@ export function recentDeliveries(db: Database, now = new Date()): CostDelivery[]
       item.observedSessions = stats.sessions.size
       item.use = stats.used
         ? 'used'
-        : stats.complete && stats.sessions.size >= config.minObservedSessions
+        : stats.sessions.size >= config.minObservedSessions
           ? 'unused'
           : 'unknown'
     }

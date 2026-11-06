@@ -17,7 +17,7 @@
   },
   "github_pat_hint": "GitHub 403 (gh PAT lacks admin scope): get a 30-min grant (the owner taps once) with nightshift elevate request github-admin --reason '<what, in owner words>' --wait, then nightshift elevate run github-admin -- gh ...; never print the credential.",
   "context": {
-    "command": ["~/.summitflow/services/projects/aico/current/source/packages/web-server/scripts/aico", "context", "deliver"],
+    "command": ["~/bin/aico", "context", "deliver"],
     "timeout_seconds": 8,
     "tool": { "claude": "claude-code", "codex": "codex", "pi": "pi" }
   },

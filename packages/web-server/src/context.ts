@@ -33,6 +33,20 @@ export interface ContextDeps {
   now?: () => Date
 }
 
+/** Where a delivery's conversation lives in Tether's history, when that is known.
+ * A hook delivery carries the tool's own id; a launch delivery carries Tether's
+ * session id, linked to the tool's id only by the startup hook's bind or by a live
+ * session's resumeId. Never guess: older passes saved `tool:<Tether id>` (and
+ * `tool:aico-widget-…`, from before ids were normalized) when Tether no longer knew
+ * the session, which matches no transcript; such a saved source is ignored. */
+export function knownSource(d: CostDelivery, saved: string | undefined): string | null {
+  if (d.channel.startsWith('hook:') && d.session) return `${d.tool}:${d.session}`
+  if (!saved) return null
+  const id = saved.slice(saved.indexOf(':') + 1)
+  if (id === d.session || id.startsWith('aico-widget-')) return null
+  return saved
+}
+
 /** Missing, clipped, changing or unfinished evidence leaves absence unknown. */
 export async function observeContext(
   db: Database,
@@ -40,44 +54,41 @@ export async function observeContext(
   now: Date,
 ): Promise<number> {
   const deliveries = recentDeliveries(db, now)
-  const groups = new Map<string, CostDelivery[]>()
+  const saved = db.prepare('SELECT source FROM context_observations WHERE delivery_id = ?')
+  const groups = new Map<string, { source: string | null; deliveries: CostDelivery[] }>()
   for (const d of deliveries)
     if (d.session && d.tool !== 'aico-agent') {
-      const source = (
-        db.prepare('SELECT source FROM context_observations WHERE delivery_id = ?').get(d.id) as
-          | { source: string }
-          | undefined
-      )?.source
+      const source = knownSource(d, (saved.get(d.id) as { source: string } | undefined)?.source)
       const key = JSON.stringify([d.tool, d.session, source])
-      groups.set(key, [...(groups.get(key) ?? []), d])
+      const group = groups.get(key) ?? { source, deliveries: [] }
+      group.deliveries.push(d)
+      groups.set(key, group)
     }
   let unavailable = 0
-  for (const group of groups.values()) {
+  for (const { source, deliveries: group } of groups.values()) {
     const d = group[0] as CostDelivery
-    let historyId = (
-      db.prepare('SELECT source FROM context_observations WHERE delivery_id = ?').get(d.id) as
-        | { source: string }
-        | undefined
-    )?.source
+    let historyId = source
     try {
       if (!historyId) {
-        let native = d.session as string
+        let live: Awaited<ReturnType<ContextDeps['tether']['getSession']>>
         try {
-          const live = await tether.getSession(native)
-          if (live.projectId !== d.project) throw new Error('session project changed')
-          native = live.resumeId ?? ''
+          live = await tether.getSession(d.session as string)
         } catch (error) {
-          if (!(error instanceof Error && 'status' in error && error.status === 404)) throw error
+          if (error instanceof Error && 'status' in error && error.status === 404)
+            throw new Error('session ended before its conversation was linked')
+          throw error
         }
-        if (!native) throw new Error('native conversation unknown')
-        historyId = `${d.tool}:${native}`
+        if (live.projectId !== d.project) throw new Error('session project changed')
+        if (!live.resumeId) throw new Error('native conversation unknown')
+        historyId = `${d.tool}:${live.resumeId}`
       }
       const detail = await tether.historySession(historyId)
       if (detail.project !== d.project || COST.excludedProjects.includes(detail.project ?? ''))
         throw new Error('session project differs')
       let from = 0
       let size: number | null = null
-      let complete = detail.outcome === 'completed'
+      // A finished record: completed, or stopped by an interrupt or error. null: a turn runs.
+      let complete = Boolean(detail.outcome)
       const events: UseEvent[] = []
       for (;;) {
         const page = await tether.historyEvents(historyId, { from, limit: 500 })
@@ -86,7 +97,10 @@ export async function observeContext(
         for (const event of page.items)
           if (event.role === 'assistant') {
             events.push(event)
-            if (event.text.endsWith('…') || event.at === null) complete = false
+            // Tool calls are clipped after their command or path, which is what a load
+            // marker matches; clipped answer text may hide a citation.
+            if ((event.kind !== 'tool_call' && event.text.endsWith('…')) || event.at === null)
+              complete = false
           }
         if (page.newer === null) break
         if (page.newer <= from) throw new Error('transcript cursor did not advance')
@@ -132,10 +146,9 @@ export function nightlyRow(
     kind: 'job',
     machine,
     project: 'aico',
-    state:
-      unused.length || unavailable || observed < deliveries.length || !deliveries.length
-        ? 'warn'
-        : 'ok',
+    // Partial coverage is normal (ended, long or running sessions) and stays in the
+    // meaning; amber is for candidates, or a check that could observe nothing at all.
+    state: unused.length || !deliveries.length || !observed ? 'warn' : 'ok',
     meaning,
     last_run: now.toISOString(),
     ...(nextRun ? { next_run: nextRun } : {}),

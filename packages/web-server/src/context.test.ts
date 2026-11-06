@@ -1,4 +1,5 @@
 import {
+  bindContextSession,
   COST,
   type CostDelivery,
   deliver,
@@ -27,7 +28,7 @@ function seed() {
           { id: 'file:/project/guide.md', title: 'Guide', type: 'file', text: 'Read the guide.' },
         ],
       }),
-      'test',
+      'hook:codex',
       now,
     )
   return db
@@ -166,4 +167,109 @@ it('resolves Tether internal session ids through their public widget ids', async
   } finally {
     db.close()
   }
+})
+function launched(db: ReturnType<typeof openContext>, session = 'aico-widget-1234abcd') {
+  recordDelivery(
+    db,
+    deliver(db, {
+      tool: 'codex',
+      session,
+      sources: [{ id: 'file:/project/guide.md', title: 'Guide', type: 'file', text: 'Guide.' }],
+    }),
+    'launch',
+    now,
+  )
+}
+const source = (db: ReturnType<typeof openContext>) =>
+  (db.prepare('SELECT source FROM context_observations').get() as { source: string } | undefined)
+    ?.source
+it('never saves a guessed history id when Tether no longer knows the session', async () => {
+  const db = openContext(':memory:')
+  const d = deps()
+  const asked: string[] = []
+  d.options.tether.historySession = async (id) => {
+    asked.push(id)
+    return { project: null, outcome: 'completed' } as never
+  }
+  try {
+    launched(db)
+    // A guess an older pass saved, in both shapes it took.
+    for (const guess of ['codex:1234abcd', 'codex:aico-widget-1234abcd']) {
+      db.prepare(
+        'INSERT OR REPLACE INTO context_observations (delivery_id, observed_at, complete, source) SELECT id, at, 0, ? FROM deliveries',
+      ).run(guess)
+      expect(await observeContext(db, d.options.tether, now)).toBe(1)
+      expect(asked).toEqual([])
+      expect(source(db)).toBe('')
+      expect(recentDeliveries(db, now)[0]!.observed).toBe(false)
+    }
+  } finally {
+    db.close()
+  }
+})
+it('reads a launch delivery through the native id its startup hook bound', async () => {
+  const db = openContext(':memory:')
+  const d = deps()
+  let asked = ''
+  d.options.tether.historySession = async (id) => {
+    asked = id
+    return { project: null, outcome: 'completed' } as never
+  }
+  try {
+    launched(db)
+    bindContextSession(db, 'codex', 'aico-widget-1234abcd', 'native-uuid')
+    expect(await observeContext(db, d.options.tether, now)).toBe(0)
+    expect(asked).toBe('codex:native-uuid')
+    expect(source(db)).toBe('codex:native-uuid')
+    expect(recentDeliveries(db, now)[0]!.observed).toBe(true)
+  } finally {
+    db.close()
+  }
+})
+it('counts clipped tool calls and interrupted sessions as complete records', async () => {
+  const db = seed()
+  const d = deps(
+    [
+      { role: 'assistant', kind: 'tool_call', text: `bash ${'x'.repeat(600)}…`, at, tool: 'bash' },
+      { role: 'assistant', kind: 'text', text: 'Stopped here.', at },
+    ],
+    'aborted',
+  )
+  try {
+    await checkContext(db, d.options)
+    expect(recentDeliveries(db, now).every((r) => r.observed)).toBe(true)
+    expect(d.notices).toHaveLength(1)
+  } finally {
+    db.close()
+  }
+})
+it('judges absence from observed sessions; one unobserved session does not hide it', async () => {
+  const db = seed()
+  const d = deps()
+  try {
+    launched(db, 'aico-widget-ended000')
+    const result = await checkContext(db, d.options)
+    expect(recentDeliveries(db, now).filter((r) => r.observed)).toHaveLength(
+      COST.minObservedSessions,
+    )
+    expect(result.state).toBe('warn')
+    expect(d.notices[0]!.body).toContain('Guide')
+    expect(result.message).toContain('1 sessions unavailable')
+  } finally {
+    db.close()
+  }
+})
+it('stays green with partial coverage when nothing qualifies', () => {
+  const used = {
+    observed: true,
+    items: [{ use: 'used' }],
+    tool: 'codex',
+    role: null,
+    project: null,
+    at: now.toISOString(),
+    id: 1,
+  } as unknown as CostDelivery
+  const unseen = { ...used, id: 2, observed: false } as CostDelivery
+  expect(nightlyRow([used, unseen], 1, 'test', now).state).toBe('ok')
+  expect(nightlyRow([unseen], 1, 'test', now).state).toBe('warn')
 })
