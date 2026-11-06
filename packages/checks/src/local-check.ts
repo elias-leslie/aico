@@ -1,5 +1,6 @@
 // The latest local result for one immutable commit. Publication reads this, never Actions.
-import { git } from './git'
+import carry from '../data/carry-forward.json' with { type: 'json' }
+import { git, gitOk, matches } from './git'
 import { receiptStore } from './run'
 import type { CheckSummary } from './status'
 
@@ -51,6 +52,41 @@ export function localCheck(root: string, sha: string): LocalCheck | null {
   )
     return null
   return value
+}
+
+export interface Accepted {
+  check: LocalCheck
+  /** Set when HEAD itself has no record: the ancestor whose acceptance carries forward. */
+  carriedFrom?: string
+}
+
+const whole = (check: LocalCheck | null): boolean =>
+  !!check && check.passed && !check.failed.length && check.lane !== 'quick'
+
+/**
+ * The whole-tree (full or acceptance) pass that covers `sha`: its own record, else the nearest
+ * ancestor's whose tree differs from `sha` only in non-code paths (docs and roadmap edits).
+ * Comparing trees keeps merges honest: a merge that brings in code differs in code.
+ */
+export function acceptedCheck(root: string, sha: string): Accepted | null {
+  const own = localCheck(root, sha)
+  // A recorded pass or failure stands; a missing or quick-only record may borrow an ancestor's.
+  if (own && (whole(own) || !own.passed)) return { check: own }
+  const fallback = own ? { check: own } : null
+  if (!gitOk(root, ['rev-parse', '-q', '--verify', `${sha}^{commit}`])) return fallback
+  const ancestors = git(root, ['rev-list', `--max-count=${carry.maxAncestors + 1}`, sha])
+    .split('\n')
+    .filter((id) => id && id !== sha)
+  for (const ancestor of ancestors) {
+    const check = localCheck(root, ancestor)
+    if (!check || !whole(check)) continue
+    const changed = git(root, ['diff', '--name-only', '--no-renames', '-z', ancestor, sha])
+      .split('\0')
+      .filter(Boolean)
+    if (changed.every((path) => matches(path, carry.nonCode)))
+      return { check, carriedFrom: ancestor }
+  }
+  return fallback
 }
 
 /** Publishing can lose its proof without changing the outcome of a local check or commit. */

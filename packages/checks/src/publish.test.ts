@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { StatusRow } from '@aico/status'
 import { openTasksDb, Registry } from '@aico/tasks'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -291,4 +291,84 @@ it('never calls a selected commit checked when an uncommitted dependency made it
   })
   expect(git(root, 'show', `${committed.sha}:helper`)).toBe('deny')
   expect(localCheck(root, committed.sha)?.passed).not.toBe(true)
+})
+
+const commitFile = (root: string, file: string, text: string) => {
+  mkdirSync(dirname(join(root, file)), { recursive: true })
+  writeFileSync(join(root, file), text)
+  git(root, 'add', '.')
+  git(root, 'commit', '-qm', `edit ${file}`)
+  return git(root, 'rev-parse', 'HEAD')
+}
+const accept1 = (root: string) =>
+  recordLocalCheck(root, git(root, 'rev-parse', 'HEAD'), result(true, 'acceptance'))
+const decide = async (root: string) => (await publishRepos([project(root)], { dryRun: true }))[0]
+
+it('acceptance carries over commits that change docs only, and says where it came from', async () => {
+  const root = repo()
+  accept1(root)
+  const accepted = git(root, 'rev-parse', 'HEAD')
+  commitFile(root, 'ROADMAP.md', 'next')
+  commitFile(root, 'docs/plans/a/notes.txt', 'plan')
+  commitFile(root, 'sub/README.md', 'readme')
+  recordLocalCheck(root, git(root, 'rev-parse', 'HEAD'), result(true, 'quick'))
+  const row = await decide(root)
+  expect(row).toMatchObject({ reason: 'checked_main', state: 'ok' })
+  expect(publicationRow(row).meaning).toContain(
+    `accepted at ${accepted.slice(0, 10)}; later commits change docs only`,
+  )
+})
+
+it('a code file anywhere in the chain leaves the commit unaccepted', async () => {
+  const root = repo()
+  accept1(root)
+  commitFile(root, 'src/app.ts', 'export {}')
+  commitFile(root, 'ROADMAP.md', 'next')
+  expect((await decide(root)).reason).toBe('unchecked_commit')
+  const root2 = repo()
+  accept1(root2)
+  commitFile(root2, 'docs/x.md', 'x')
+  commitFile(root2, 'note', 'changed code')
+  expect((await decide(root2)).reason).toBe('unchecked_commit')
+})
+
+it('a code change undone before HEAD is the accepted tree again', async () => {
+  const root = repo()
+  accept1(root)
+  commitFile(root, 'note', 'other')
+  commitFile(root, 'note', 'initial')
+  expect((await decide(root)).reason).toBe('checked_main')
+})
+
+it('no accepted ancestor, or only a quick or failed one, leaves docs-only commits unaccepted', async () => {
+  const root = repo()
+  recordLocalCheck(root, git(root, 'rev-parse', 'HEAD'), result(true, 'quick'))
+  commitFile(root, 'ROADMAP.md', 'next')
+  expect((await decide(root)).reason).toBe('unchecked_commit')
+  const failed = repo()
+  recordLocalCheck(failed, git(failed, 'rev-parse', 'HEAD'), result(false, 'acceptance'))
+  commitFile(failed, 'ROADMAP.md', 'next')
+  expect((await decide(failed)).reason).toBe('unchecked_commit')
+  const own = repo()
+  accept1(own)
+  commitFile(own, 'ROADMAP.md', 'next')
+  recordLocalCheck(own, git(own, 'rev-parse', 'HEAD'), result(false, 'full'))
+  expect((await decide(own)).reason).toBe('local_check_failed')
+})
+
+it('merges: a docs-only merge carries, a merge that brings code does not', async () => {
+  const root = repo()
+  accept1(root)
+  git(root, 'checkout', '-qb', 'side')
+  commitFile(root, 'docs/side.md', 'side')
+  git(root, 'checkout', '-q', 'main')
+  commitFile(root, 'ROADMAP.md', 'main')
+  git(root, 'merge', '-q', '--no-ff', '-m', 'merge docs', 'side')
+  expect((await decide(root)).reason).toBe('checked_main')
+  git(root, 'checkout', '-qb', 'code')
+  commitFile(root, 'src/new.ts', 'export {}')
+  git(root, 'checkout', '-q', 'main')
+  commitFile(root, 'ROADMAP.md', 'main 2')
+  git(root, 'merge', '-q', '--no-ff', '-m', 'merge code', 'code')
+  expect((await decide(root)).reason).toBe('unchecked_commit')
 })

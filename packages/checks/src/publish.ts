@@ -13,7 +13,7 @@ import {
 } from '@aico/tasks'
 import policy from '../data/publish.json' with { type: 'json' }
 import { git, gitOk, repoRoot } from './git'
-import { type LocalCheck, localCheck } from './local-check'
+import { acceptedCheck, type LocalCheck } from './local-check'
 import { webUrl } from './status'
 
 export type PublishProject = Pick<Project, 'id' | 'root_path' | 'agent_configs'>
@@ -27,6 +27,8 @@ export interface Publication extends Delivery {
   sha: string | null
   failed: string[]
   state: 'ok' | 'failed' | 'skip'
+  /** Why the commit counts as checked when its own record is an earlier acceptance. */
+  accepted_note?: string
   /** Status could not record this result; the publication outcome itself stands. */
   status_unposted?: boolean
 }
@@ -46,8 +48,12 @@ export interface PublishOptions {
  * check covers only one commit's changed files, so it never proves the tree, and a passing tip
  * covers every ancestor it carries: what lands on GitHub is that checked tree.
  */
-export function publishDecision(sha: string, check: LocalCheck | null): string | null {
-  if (!check || check.sha !== sha) return 'unchecked_commit'
+export function publishDecision(
+  sha: string,
+  check: LocalCheck | null,
+  carriedFrom?: string,
+): string | null {
+  if (!check || (check.sha !== sha && check.sha !== carriedFrom)) return 'unchecked_commit'
   if (!check.passed || check.failed.length) return 'local_check_failed'
   if (check.lane === 'quick') return 'unchecked_commit'
   return null
@@ -72,7 +78,7 @@ export function publicationRow(result: Publication, now = new Date()): StatusRow
       ? problem
       : result.state === 'skip'
         ? `Publication skipped: ${result.reason.replaceAll('_', ' ')}.`
-        : `${result.pushed ? 'Published main' : 'Main is on GitHub'}${source}.`
+        : `${result.pushed ? 'Published main' : 'Main is on GitHub'}${source}${result.accepted_note ? ` (${result.accepted_note})` : ''}.`
     ).slice(0, 300),
     last_run: now.toISOString(),
     actions: [{ kind: 'run', ref: `aico publish --source ${result.project}` }],
@@ -158,15 +164,18 @@ export async function publishRepos(
             const sha = through && reachable ? through : main
             const held = !reachable
             result = { ...result, sha, state: held ? 'skip' : 'failed' }
-            const check = held ? null : localCheck(root, sha)
+            const accepted = held ? null : acceptedCheck(root, sha)
+            const check = accepted?.check ?? null
             result.failed = check?.failed ?? []
+            if (accepted?.carriedFrom)
+              result.accepted_note = `accepted at ${accepted.carriedFrom.slice(0, 10)}; later commits change docs only`
             result.reason = held
               ? 'owner_hold'
               : options.sha && git(root, ['rev-parse', `${options.sha}^{commit}`]).trim() !== sha
                 ? through
                   ? 'source_is_not_hold'
                   : 'source_is_not_main'
-                : (publishDecision(sha, check) ?? 'checked_main')
+                : (publishDecision(sha, check, accepted?.carriedFrom) ?? 'checked_main')
             if (result.reason === 'checked_main') {
               if (options.dryRun) result.state = 'ok'
               else {

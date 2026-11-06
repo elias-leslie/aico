@@ -1,0 +1,5 @@
+{
+  "description": "An acceptance carries forward to a later commit whose tree differs from the accepted one only in these paths (.st-check.toml globs, relative to the repo root). Anything else needs its own acceptance.",
+  "nonCode": ["**/*.md", "docs/**"],
+  "maxAncestors": 200
+}
