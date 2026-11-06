@@ -33,8 +33,23 @@ export class FleetService {
         failed: (error) => this.fault(error),
       })
       await this.fleet.start()
+      await this.clearFailure()
     } catch (error) {
       await this.failed(error)
+    }
+  }
+  /** The link is up: the machine-wide failure row an earlier attempt wrote no longer holds. Peer rows
+   * share their ids with the live link's rows, which replace them. */
+  private async clearFailure(): Promise<void> {
+    const settings = this.settings
+    if (!settings) return
+    try {
+      const url = new URL(settings.statusUrl)
+      url.searchParams.set('id', `fleet/${settings.machine}`)
+      const response = await fetch(url, { method: 'DELETE', signal: AbortSignal.timeout(10_000) })
+      if (!response.ok) throw new Error(`Status answered ${response.status}`)
+    } catch (error) {
+      this.log(`Could not clear the link failure row: ${String(error)}`)
     }
   }
   /** Hub reloads use the same failure report and retry as fleet startup. */

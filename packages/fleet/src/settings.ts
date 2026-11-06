@@ -72,12 +72,14 @@ export function readSettings(env: NodeJS.ProcessEnv, controlSocket: string): Fle
     e && lanAddress(e.address) && Number.isInteger(e.port) && e.port > 0 && e.port <= 65535
   if (
     !endpoint(value.listen) ||
-    !localAddress(value.listen.address) ||
     !Array.isArray(value.peers) ||
     value.peers.some((peer) => !endpoint(peer.endpoint))
   )
+    throw new Error('Fleet endpoints must be literal LAN addresses')
+  // At boot the network can come up after the service: a retry fixes this one, unlike the error above.
+  if (!localAddress(value.listen.address))
     throw new Error(
-      'Fleet endpoints must be literal LAN addresses; listener must belong to this machine',
+      `Waiting for this machine's LAN address ${value.listen.address}: it isn't assigned yet`,
     )
   if (value.proxmoxSsh !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value.proxmoxSsh))
     throw new Error('Proxmox SSH host must be a host alias')
