@@ -108,6 +108,34 @@ vi.mock('@/lib/hooks/use-terminal-sessions', () => ({
     ],
   }),
 }))
+const fileReads = vi.hoisted(
+  () => [] as { root: string; path: string | null }[],
+)
+vi.mock('@/lib/hooks/use-pane-files', () => ({
+  useFileTree: () => ({
+    isLoading: false,
+    isError: false,
+    data: { entries: [] },
+  }),
+  useFileContent: (source: { root: string }, path: string | null) => {
+    fileReads.push({ root: source.root, path })
+    return {
+      isLoading: false,
+      isError: false,
+      data: {
+        path,
+        name: path,
+        content: '# The plan',
+        size: 10,
+        lines: 1,
+        language: 'markdown',
+        extension: '.md',
+        is_binary: false,
+        truncated: false,
+      },
+    }
+  },
+}))
 vi.mock('@/lib/hooks/use-media-query', () => ({ useMediaQuery: () => false }))
 vi.mock('@/lib/files-opener', () => ({ openFiles: vi.fn() }))
 const push = vi.fn()
@@ -948,5 +976,53 @@ describe('a card that asks for files', () => {
         hidden: true,
       }),
     ).toBeNull()
+  })
+})
+
+describe('attached files', () => {
+  const attached: OwnerAsk['attached'] = [
+    { path: '/srv/a/plan.md', name: 'plan.md', kind: 'file', size: 2048 },
+    { path: '/srv/a/old.png', name: 'old.png', kind: 'missing', size: null },
+  ]
+
+  it('shows a chip per file, says when one is gone, and opens one in place with a way back', () => {
+    state.asks = [ask({ share: '0123456789ab', attached })]
+    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    const card = screen.getByTestId('ask-card')
+    const chips = within(card).getAllByTestId('ask-attached')
+    expect(chips).toHaveLength(2)
+    expect(chips[0]).toHaveTextContent('plan.md')
+    expect(chips[0]).toHaveTextContent('Markdown · 2 KB')
+    expect(chips[1]).toHaveTextContent('File moved or deleted')
+    expect(chips[1]).toBeDisabled()
+    // The attached files replace the generic share button.
+    expect(within(card).queryByText('Open what it shared')).toBeNull()
+
+    fireEvent.change(
+      within(card).getByPlaceholderText('Optional note to the agent…'),
+      {
+        target: { value: 'half typed' },
+      },
+    )
+    fireEvent.click(chips[0] as HTMLElement)
+    const view = screen.getByTestId('ask-attached-view')
+    expect(view).toHaveTextContent('# The plan')
+    expect(fileReads.at(-1)).toEqual({ root: '/srv/a', path: 'plan.md' })
+    expect(screen.getByRole('tabpanel', { hidden: true })).not.toBeVisible()
+
+    fireEvent.click(
+      within(view).getByRole('button', { name: 'Back to the question' }),
+    )
+    expect(screen.queryByTestId('ask-attached-view')).toBeNull()
+    expect(
+      screen.getByPlaceholderText('Optional note to the agent…'),
+    ).toHaveValue('half typed')
+  })
+
+  it('keeps the share button for a share with no files to list', () => {
+    state.asks = [ask({ share: '0123456789ab' })]
+    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    expect(screen.queryByTestId('ask-attached')).toBeNull()
+    expect(screen.getByText('Open what it shared')).toBeInTheDocument()
   })
 })

@@ -20,6 +20,7 @@ import { openFiles } from '@/lib/files-opener'
 import {
   type Approval,
   type AskReply,
+  type AttachedFile,
   answeredAsks,
   type OwnerAsk,
   openAsks,
@@ -29,6 +30,7 @@ import {
 } from '@/lib/hooks/use-asks'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useTerminalSessions } from '@/lib/hooks/use-terminal-sessions'
+import { AttachedFiles, AttachedFileView } from './AskAttached'
 import {
   AnsweredFiles,
   AskFilesBlock,
@@ -413,6 +415,25 @@ function NeedsYouBody({
     const timer = window.setTimeout(() => setSent(null), 8000)
     return () => window.clearTimeout(timer)
   }, [sent])
+  /** An attached file open in the list's place; the list stays mounted
+   * (hidden) so a half-typed reply and the scroll survive the visit. */
+  const [viewing, setViewing] = useState<{
+    file: AttachedFile
+    question: string
+  } | null>(null)
+  const openAttached = (ask: OwnerAsk) => (file: AttachedFile) =>
+    setViewing({ file, question: askTitle(ask) })
+  const backFromFile = () => {
+    const path = viewing?.file.path
+    setViewing(null)
+    window.requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>(
+          `[data-testid="ask-attached"][title="${CSS.escape(path ?? '')}"]`,
+        )
+        ?.focus(),
+    )
+  }
   const blockedSessions = new Set(
     waiting.filter((ask) => ask.blocking && ask.session).map((a) => a.session),
   ).size
@@ -428,9 +449,17 @@ function NeedsYouBody({
       <div className="flex items-center gap-2 pt-3 pr-2 pb-1 pl-4">
         {header(summary)}
       </div>
+      {viewing && (
+        <AttachedFileView
+          file={viewing.file}
+          question={viewing.question}
+          onBack={backFromFile}
+        />
+      )}
       <div
         role="tablist"
         aria-label="Needs you"
+        hidden={viewing !== null}
         className="flex flex-none gap-1 px-3 pb-2"
         style={{ borderBottom: '1px solid var(--paper-veil)' }}
       >
@@ -446,6 +475,7 @@ function NeedsYouBody({
       </div>
       <div
         role="tabpanel"
+        hidden={viewing !== null}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-4"
       >
         {tab === 'approvals' ? (
@@ -526,6 +556,7 @@ function NeedsYouBody({
                     now={now}
                     onSent={setSent}
                     onOpenSession={onOpenSession}
+                    onOpenFile={openAttached(ask)}
                   />
                 ))}
               </ul>
@@ -708,6 +739,7 @@ export function AskCard({
   now,
   onSent,
   onOpenSession,
+  onOpenFile,
   inSession = false,
 }: {
   ask: OwnerAsk
@@ -715,6 +747,8 @@ export function AskCard({
   /** Called with what was said once the answer is saved. */
   onSent?: (text: string) => void
   onOpenSession?: () => void
+  /** Opens an attached file in place; without it, the session's Files viewer. */
+  onOpenFile?: (file: AttachedFile) => void
   /** Shown in the session that asked: no asker line, no Open session. */
   inSession?: boolean
 }) {
@@ -810,7 +844,13 @@ export function AskCard({
         </p>
       )}
       {ask.command && <CommandBox command={ask.command} />}
-      {ask.share && (
+      <AttachedFiles
+        ask={ask}
+        onOpen={
+          onOpenFile ?? ((file) => openFiles({ kind: 'path', path: file.path }))
+        }
+      />
+      {ask.share && !ask.attached?.length && (
         <button
           type="button"
           className="lantern-btn ghost small mb-2 -ml-2.5"

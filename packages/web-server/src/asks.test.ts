@@ -17,6 +17,7 @@ const ASK: Ask = {
   body: 'Swap becomes a file.\nOne reboot.',
   command: null,
   share: null,
+  attached: [],
   wantsFiles: null,
   files: [],
   blocking: true,
@@ -128,6 +129,27 @@ describe('the push', () => {
       ['aico', 'ask:abcdefabcdef', 'The ask was answered.'],
       ['aico', 'ask:111111111111', 'The ask was withdrawn.'],
     ])
+  })
+
+  it('counts attached files in the push but never names them', () => {
+    const attached = [
+      { path: '/srv/a/plan.md', name: 'plan.md', kind: 'file', size: 120 },
+      { path: '/srv/a/gone.png', name: 'gone.png', kind: 'missing', size: null },
+    ] as Ask['attached']
+    const body = askNotice({ ...ASK, attached }, 'nightly', null).body
+    expect(body).toBe(
+      '“nightly” has a question for you, with 2 files to look at. Open Aico to answer it.',
+    )
+    expect(body).not.toContain('plan.md')
+  })
+
+  it('passes attached files through and refuses malformed ones', () => {
+    const attached = [{ path: '/srv/a/plan.md', name: 'plan.md', kind: 'file', size: 120 }]
+    expect(validateAsk({ ...ASK, attached })?.attached).toEqual(attached)
+    const { attached: _, ...older } = ASK
+    expect(validateAsk(older)?.attached).toEqual([])
+    expect(validateAsk({ ...ASK, attached: [{ ...attached[0], path: 'plan.md' }] })).toBeNull()
+    expect(validateAsk({ ...ASK, attached: [{ ...attached[0], kind: 'link' }] })).toBeNull()
   })
 
   it('names the requester of an ask without a session', () => {

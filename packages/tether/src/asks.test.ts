@@ -1,7 +1,7 @@
 // Owner asks: dedupe, the answer as a check-in note, the routes with a fake
 // delivery, the descriptor overlay, and `tether ask` parsing.
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -225,6 +225,68 @@ describe('POST /v1/asks', () => {
       { session: '0123abcd', question: 'Q?', links: [] },
     ])
       expect((await ask(body)).status, JSON.stringify(body)).toBe(400)
+  })
+})
+
+describe('attached files', () => {
+  it('links --file paths as a share and shows them as they are now', async () => {
+    const plan = join(dir, 'plan.md')
+    writeFileSync(plan, 'hello')
+    mkdirSync(join(dir, 'shots'))
+    const created = await ask({
+      session: '0123abcd',
+      question: 'Ship the plan?',
+      attach: [plan, join(dir, 'shots')],
+    })
+    expect(created.status).toBe(201)
+    const share = store.db
+      .prepare('SELECT * FROM shares WHERE id = ?')
+      .get(created.body.share as string) as {
+      title: string
+      session_id: string
+      paths: string
+    }
+    expect(share).toMatchObject({ title: 'Ship the plan?', session_id: '0123abcd' })
+    expect(JSON.parse(share.paths)).toEqual([plan, `${join(dir, 'shots')}/`])
+    expect(created.body.attached).toEqual([
+      { path: plan, name: 'plan.md', kind: 'file', size: 5 },
+      { path: `${join(dir, 'shots')}/`, name: 'shots', kind: 'folder', size: null },
+    ])
+    // Re-asking with the same files keeps the one share.
+    const again = await ask({
+      session: '0123abcd',
+      question: 'Ship the plan?',
+      attach: [plan, join(dir, 'shots')],
+    })
+    expect(again.body.share).toBe(created.body.share)
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM shares').get()).toEqual({ n: 1 })
+    // Moved or deleted: the ask says so instead of a dead link.
+    rmSync(plan)
+    const read = await call('GET', `/v1/asks/${created.body.id}`)
+    expect((read.body.attached as { kind: string }[])[0]).toMatchObject({
+      name: 'plan.md',
+      kind: 'missing',
+      size: null,
+    })
+    const listed = await call('GET', '/v1/asks')
+    expect((listed.body.items as { attached: unknown[] }[])[0]?.attached).toHaveLength(2)
+  })
+
+  it('refuses a path that is not there, a relative one, or attach with share', async () => {
+    const missing = await ask({
+      session: '0123abcd',
+      question: 'Q?',
+      attach: [join(dir, 'nope.md')],
+    })
+    expect(missing.status).toBe(400)
+    expect(missing.body.error).toBe('invalid_path')
+    for (const body of [
+      { session: '0123abcd', question: 'Q?', attach: ['plan.md'] },
+      { session: '0123abcd', question: 'Q?', attach: [] },
+      { session: '0123abcd', question: 'Q?', attach: [dir], share: '0123456789ab' },
+    ])
+      expect((await ask(body)).status, JSON.stringify(body)).toBe(400)
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM asks').get()).toEqual({ n: 0 })
   })
 })
 

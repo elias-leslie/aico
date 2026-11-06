@@ -1241,6 +1241,66 @@ div.xterm .xterm-viewport {
   height: 32px;
 }
 
+/* Files the agent attached to its question: a chip each, opened in place. */
+.lantern-ask-attached {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 4px 12px 4px 9px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 6px;
+  background: rgb(var(--ink-rgb) / 0.5);
+  color: var(--bone);
+  text-align: left;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.lantern-ask-attached:hover:not(:disabled) {
+  background: var(--paper-veil);
+}
+
+.lantern-ask-attached > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--mist);
+}
+
+.lantern-ask-attached > svg.dir {
+  color: var(--lantern);
+}
+
+.lantern-ask-attached .n,
+.lantern-ask-attached .s {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lantern-ask-attached .n {
+  font-size: 13.5px;
+}
+
+.lantern-ask-attached .s {
+  font: 11.5px var(--font-mono);
+  color: var(--mist);
+}
+
+.lantern-ask-attached:disabled {
+  cursor: default;
+}
+
+.lantern-ask-attached[data-missing="true"] {
+  border-style: dashed;
+}
+
+.lantern-ask-attached[data-missing="true"] .n {
+  color: var(--mist);
+}
+
 /* The open session's own question, between the session and where you type. */
 .lantern-session-ask {
   margin: 0 8px 6px;

@@ -198,59 +198,11 @@ export function FileBrowser({
 }: {
   source: FilesSource
   initialSelected?: FileChoice | null
-  /** Types the path into the session. */
-  onInsertPath: (path: string) => void
+  /** Types the path into the session; without it there is no Insert path. */
+  onInsertPath?: (path: string) => void
 }) {
   const tree = useFileTree(source, '')
   const [selected, setSelected] = useState<FileChoice | null>(initialSelected)
-  const [copiedThing, setCopiedThing] = useState<'path' | 'content' | null>(
-    null,
-  )
-  const content = useFileContent(source, selected?.path ?? null)
-  const root = source.kind === 'location' ? source.root : null
-  const relativePath = content.data?.path ?? selected?.path ?? null
-  const selectedPath =
-    relativePath === null || root === null
-      ? relativePath
-      : joinPath(root, relativePath)
-  const rawUrl =
-    root !== null && relativePath !== null
-      ? rawFileUrl(root, relativePath)
-      : null
-  const image =
-    rawUrl && IMAGE_EXTENSIONS.has(content.data?.extension?.toLowerCase() ?? '')
-      ? rawUrl
-      : null
-
-  const handleCopy = useCallback(
-    async (kind: 'path' | 'content') => {
-      const value = kind === 'path' ? selectedPath : content.data?.content
-      if (!value) return
-      try {
-        await navigator.clipboard.writeText(value)
-        setCopiedThing(kind)
-        window.setTimeout(() => setCopiedThing(null), 1500)
-      } catch {}
-    },
-    [content.data?.content, selectedPath],
-  )
-
-  const handleInsertPath = useCallback(() => {
-    if (selectedPath) onInsertPath(selectedPath)
-  }, [onInsertPath, selectedPath])
-
-  const infoPills = useMemo(() => {
-    if (!content.data) return []
-    return [
-      `${formatSize(content.data.size)}`,
-      image
-        ? 'image'
-        : content.data.is_binary
-          ? 'binary'
-          : `${content.data.lines} lines`,
-      content.data.language,
-    ].filter(Boolean)
-  }, [content.data, image])
 
   return (
     // max-md: keeps a plain `flex` off this element so it cannot beat md:grid.
@@ -294,72 +246,150 @@ export function FileBrowser({
         )}
       </div>
 
-      <section
-        aria-label={selected?.name ?? 'Preview'}
-        className={clsx(
-          'mx-1 mb-1 min-h-0 flex-1 flex-col overflow-hidden rounded',
-          selected ? 'flex' : 'hidden md:flex',
-        )}
-        style={{
-          backgroundColor: 'var(--ink)',
-          boxShadow: 'inset 0 0 0 1px var(--frame-edge)',
-        }}
-      >
-        {!selected ? (
-          <p className="files-state m-auto">Pick a file to preview it.</p>
-        ) : content.isLoading ? (
-          <p className="files-state m-auto">Loading the file</p>
-        ) : content.isError ? (
-          <div className="files-state m-auto">
-            <p>{content.error?.message || 'Couldn’t open this file.'}</p>
-            {isPermanentRefusal(content.error) ? null : (
-              <button
-                type="button"
-                className="lantern-btn mt-3"
-                onClick={() => void content.refetch()}
-              >
-                Try again
-              </button>
-            )}
-          </div>
-        ) : content.data ? (
-          <>
-            <div
-              className="flex flex-none flex-wrap items-center gap-x-2 gap-y-1.5 py-2 pr-2 pl-3"
-              style={{
-                borderBottom: '1px solid rgb(var(--glass-rgb) / 0.06)',
-              }}
+      <FilePreview
+        source={source}
+        selected={selected}
+        onInsertPath={onInsertPath}
+        className={selected ? 'flex' : 'hidden md:flex'}
+      />
+    </div>
+  )
+}
+
+/**
+ * The chosen file of a folder: its name, size and kind, Open / Insert path /
+ * Copy, and its text or image. A folder that is not a tab's opens images
+ * inline and the file by itself.
+ */
+export function FilePreview({
+  source,
+  selected,
+  onInsertPath,
+  className,
+}: {
+  source: FilesSource
+  selected: FileChoice | null
+  /** Types the path into the session; without it there is no Insert path. */
+  onInsertPath?: (path: string) => void
+  className?: string
+}) {
+  const [copiedThing, setCopiedThing] = useState<'path' | 'content' | null>(
+    null,
+  )
+  const content = useFileContent(source, selected?.path ?? null)
+  const root = source.kind === 'location' ? source.root : null
+  const relativePath = content.data?.path ?? selected?.path ?? null
+  const selectedPath =
+    relativePath === null || root === null
+      ? relativePath
+      : joinPath(root, relativePath)
+  const rawUrl =
+    root !== null && relativePath !== null
+      ? rawFileUrl(root, relativePath)
+      : null
+  const image =
+    rawUrl && IMAGE_EXTENSIONS.has(content.data?.extension?.toLowerCase() ?? '')
+      ? rawUrl
+      : null
+
+  const handleCopy = useCallback(
+    async (kind: 'path' | 'content') => {
+      const value = kind === 'path' ? selectedPath : content.data?.content
+      if (!value) return
+      try {
+        await navigator.clipboard.writeText(value)
+        setCopiedThing(kind)
+        window.setTimeout(() => setCopiedThing(null), 1500)
+      } catch {}
+    },
+    [content.data?.content, selectedPath],
+  )
+
+  const handleInsertPath = useCallback(() => {
+    if (selectedPath) onInsertPath?.(selectedPath)
+  }, [onInsertPath, selectedPath])
+
+  const infoPills = useMemo(() => {
+    if (!content.data) return []
+    return [
+      `${formatSize(content.data.size)}`,
+      image
+        ? 'image'
+        : content.data.is_binary
+          ? 'binary'
+          : `${content.data.lines} lines`,
+      content.data.language,
+    ].filter(Boolean)
+  }, [content.data, image])
+
+  return (
+    <section
+      aria-label={selected?.name ?? 'Preview'}
+      className={clsx(
+        'mx-1 mb-1 min-h-0 flex-1 flex-col overflow-hidden rounded',
+        className ?? 'flex',
+      )}
+      style={{
+        backgroundColor: 'var(--ink)',
+        boxShadow: 'inset 0 0 0 1px var(--frame-edge)',
+      }}
+    >
+      {!selected ? (
+        <p className="files-state m-auto">Pick a file to preview it.</p>
+      ) : content.isLoading ? (
+        <p className="files-state m-auto">Loading the file</p>
+      ) : content.isError ? (
+        <div className="files-state m-auto">
+          <p>{content.error?.message || 'Couldn’t open this file.'}</p>
+          {isPermanentRefusal(content.error) ? null : (
+            <button
+              type="button"
+              className="lantern-btn mt-3"
+              onClick={() => void content.refetch()}
             >
-              <div className="min-w-0 flex-[1_1_12rem]">
-                <p
-                  className="m-0 truncate text-[12.5px]"
-                  style={{ fontFamily: 'var(--font-mono)' }}
-                  title={content.data.path}
+              Try again
+            </button>
+          )}
+        </div>
+      ) : content.data ? (
+        <>
+          <div
+            className="flex flex-none flex-wrap items-center gap-x-2 gap-y-1.5 py-2 pr-2 pl-3"
+            style={{
+              borderBottom: '1px solid rgb(var(--glass-rgb) / 0.06)',
+            }}
+          >
+            <div className="min-w-0 flex-[1_1_12rem]">
+              <p
+                className="m-0 truncate text-[12.5px]"
+                style={{ fontFamily: 'var(--font-mono)' }}
+                title={content.data.path}
+              >
+                {content.data.name}
+              </p>
+              <p
+                className="m-0 truncate text-[11.5px]"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--mist)',
+                }}
+              >
+                {infoPills.join(' · ')}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {rawUrl && (
+                <a
+                  href={rawUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="lantern-btn h-8! px-2.5! text-xs!"
                 >
-                  {content.data.name}
-                </p>
-                <p
-                  className="m-0 truncate text-[11.5px]"
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    color: 'var(--mist)',
-                  }}
-                >
-                  {infoPills.join(' · ')}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {rawUrl && (
-                  <a
-                    href={rawUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="lantern-btn h-8! px-2.5! text-xs!"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Open
-                  </a>
-                )}
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open
+                </a>
+              )}
+              {onInsertPath && (
                 <button
                   type="button"
                   onClick={handleInsertPath}
@@ -367,80 +397,80 @@ export function FileBrowser({
                 >
                   Insert path
                 </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleCopy('path')}
+                className="lantern-btn h-8! px-2.5! text-xs!"
+              >
+                {copiedThing === 'path' ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                {copiedThing === 'path' ? 'Copied' : 'Copy path'}
+              </button>
+              {!content.data.is_binary && content.data.content && (
                 <button
                   type="button"
-                  onClick={() => handleCopy('path')}
+                  onClick={() => handleCopy('content')}
                   className="lantern-btn h-8! px-2.5! text-xs!"
                 >
-                  {copiedThing === 'path' ? (
+                  {copiedThing === 'content' ? (
                     <Check className="h-3.5 w-3.5" />
                   ) : (
                     <Copy className="h-3.5 w-3.5" />
                   )}
-                  {copiedThing === 'path' ? 'Copied' : 'Copy path'}
+                  {copiedThing === 'content' ? 'Copied' : 'Copy contents'}
                 </button>
-                {!content.data.is_binary && content.data.content && (
-                  <button
-                    type="button"
-                    onClick={() => handleCopy('content')}
-                    className="lantern-btn h-8! px-2.5! text-xs!"
-                  >
-                    {copiedThing === 'content' ? (
-                      <Check className="h-3.5 w-3.5" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                    {copiedThing === 'content' ? 'Copied' : 'Copy contents'}
-                  </button>
-                )}
-              </div>
+              )}
             </div>
+          </div>
 
-            {content.data.truncated && (
-              <p
-                className="m-0 flex-none px-3 py-1.5 text-xs"
-                style={{
-                  color: 'var(--mist)',
-                  backgroundColor: 'var(--paper)',
-                }}
-              >
-                Showing the first 1 MB
-              </p>
-            )}
+          {content.data.truncated && (
+            <p
+              className="m-0 flex-none px-3 py-1.5 text-xs"
+              style={{
+                color: 'var(--mist)',
+                backgroundColor: 'var(--paper)',
+              }}
+            >
+              Showing the first 1 MB
+            </p>
+          )}
 
-            {image ? (
-              <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-3">
-                {/* biome-ignore lint/performance/noImgElement: a static export has no image optimizer; the file is served as it is */}
-                <img
-                  src={image}
-                  alt={content.data.name}
-                  className="max-h-full max-w-full object-contain"
-                />
-              </div>
-            ) : content.data.is_binary ? (
-              <div className="files-state m-auto">
-                <Binary
-                  aria-hidden="true"
-                  className="mx-auto mb-2 h-8 w-8"
-                  strokeWidth={1.5}
-                />
-                <p>Binary file, {formatSize(content.data.size)}</p>
-              </div>
-            ) : (
-              <pre
-                className="m-0 min-h-0 flex-1 overflow-auto px-3 py-2 text-xs whitespace-pre-wrap"
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  lineHeight: 1.45,
-                  color: 'var(--bone)',
-                }}
-              >
-                {content.data.content}
-              </pre>
-            )}
-          </>
-        ) : null}
-      </section>
-    </div>
+          {image ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-3">
+              {/* biome-ignore lint/performance/noImgElement: a static export has no image optimizer; the file is served as it is */}
+              <img
+                src={image}
+                alt={content.data.name}
+                className="max-h-full max-w-full object-contain"
+              />
+            </div>
+          ) : content.data.is_binary ? (
+            <div className="files-state m-auto">
+              <Binary
+                aria-hidden="true"
+                className="mx-auto mb-2 h-8 w-8"
+                strokeWidth={1.5}
+              />
+              <p>Binary file, {formatSize(content.data.size)}</p>
+            </div>
+          ) : (
+            <pre
+              className="m-0 min-h-0 flex-1 overflow-auto px-3 py-2 text-xs whitespace-pre-wrap"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                lineHeight: 1.45,
+                color: 'var(--bone)',
+              }}
+            >
+              {content.data.content}
+            </pre>
+          )}
+        </>
+      ) : null}
+    </section>
   )
 }

@@ -46,6 +46,15 @@ export interface AnswerFile {
   host: string | null
 }
 
+/** A file or folder the asker attached for the owner to look at, as it is on
+ * disk now (Tether works it out on each read); `missing` once moved or deleted. */
+export interface AttachedFile {
+  path: string
+  name: string
+  kind: 'file' | 'folder' | 'missing'
+  size: number | null
+}
+
 export interface Ask {
   id: string
   session: string | null
@@ -60,6 +69,8 @@ export interface Ask {
   /** Who filed it when an app did (Tether API 31); absent from an older Tether. */
   origin?: 'notice' | 'status' | null
   share: string | null
+  /** What the asker attached (`tether ask create --file`); validateAsk gives [] for an older Tether. */
+  attached?: AttachedFile[]
   /** The files the ask wants; null when none (and from a Tether older than API 26). */
   wantsFiles: WantsFiles | null
   /** The files the owner answered with. */
@@ -145,6 +156,18 @@ function validFile(value: unknown): value is AnswerFile {
   )
 }
 
+function validAttached(value: unknown): value is AttachedFile {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const f = value as Record<string, unknown>
+  return (
+    line(f.path, 4096) &&
+    (f.path as string).startsWith('/') &&
+    line(f.name, 255) &&
+    (f.kind === 'file' || f.kind === 'folder' || f.kind === 'missing') &&
+    (f.size === null || time(f.size))
+  )
+}
+
 function validPeer(value: unknown): value is PeerMark {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const p = value as Record<string, unknown>
@@ -185,6 +208,9 @@ export function validateAsk(data: unknown): Ask | null {
   if (!validWants(wantsFiles)) return null
   const files = a.files ?? []
   if (!Array.isArray(files) || files.length > MAX_FILES || !files.every(validFile)) return null
+  const attached = a.attached ?? []
+  if (!Array.isArray(attached) || attached.length > MAX_FILES || !attached.every(validAttached))
+    return null
   if (typeof a.blocking !== 'boolean') return null
   if (!STATES.includes(a.state as Ask['state'])) return null
   if (a.delivery !== null && a.delivery !== 'wake' && a.delivery !== 'pull') return null
@@ -213,6 +239,7 @@ export function validateAsk(data: unknown): Ask | null {
     ...(typeof a.open === 'string' ? { open: a.open } : {}),
     ...(a.origin === 'notice' || a.origin === 'status' ? { origin: a.origin } : {}),
     share: a.share as string | null,
+    attached: attached as AttachedFile[],
     wantsFiles,
     files: files as AnswerFile[],
     blocking: a.blocking,
@@ -239,7 +266,7 @@ export function askNotice(ask: Ask, who: string | null, publicHost: string | nul
     kind: publicHost ? 'question' : 'info',
     severity: 'warning',
     title: 'An agent is waiting on you',
-    body: `${who ? `“${who}”` : 'A session'} has a question for you. Open Aico to answer it.`,
+    body: `${who ? `“${who}”` : 'A session'} has a question for you${attachedText(ask)}. Open Aico to answer it.`,
     key: askKey(ask.id),
     push: 'phone',
   }
@@ -249,6 +276,13 @@ export function askNotice(ask: Ask, who: string | null, publicHost: string | nul
     notice.primary = 'answer'
   }
   return notice
+}
+
+/** `, with 2 files to look at`: the count only, since the push never carries
+ * what the ask says (file names included). */
+function attachedText(ask: Ask): string {
+  const count = ask.attached?.length ?? 0
+  return count ? `, with ${count} ${count === 1 ? 'file' : 'files'} to look at` : ''
 }
 
 const askKey = (id: string) => `ask:${id}`

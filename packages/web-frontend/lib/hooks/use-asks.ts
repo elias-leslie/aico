@@ -21,6 +21,16 @@ export interface AnswerFile {
   host: string | null
 }
 
+/** A file or folder the asker attached for the owner to look at, as it is on
+ * disk now; `missing` once moved or deleted. */
+export interface AttachedFile {
+  path: string
+  name: string
+  kind: 'file' | 'folder' | 'missing'
+  /** Bytes, for a file; null for a folder or a missing file. */
+  size: number | null
+}
+
 /** A question an agent put to the owner (tether docs/api-v1.md "Asks"). */
 export interface OwnerAsk {
   id: string
@@ -36,6 +46,8 @@ export interface OwnerAsk {
   /** Set when an app filed it (a notice or a failed Status row): nobody to reply to. */
   origin?: 'notice' | 'status' | null
   share: string | null
+  /** What the asker attached to look at (`tether ask create --file`); absent from an older Tether. */
+  attached?: AttachedFile[]
   /** The files it wants; null or absent (an older Tether): none. */
   wantsFiles?: WantsFiles | null
   /** The files the owner answered with. */

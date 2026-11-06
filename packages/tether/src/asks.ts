@@ -8,11 +8,14 @@
 // (the descriptor's `asks`), whatever state the agent reports.
 
 import { createHash, randomBytes } from 'node:crypto'
+import { accessSync, constants, statSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { ShowConfig } from './config'
 import type { EventBus } from './events'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import type { Hub } from './hub/hub'
+import { realPaths, ShareStore } from './show'
 
 const MAX_ASK_OPTIONS = 5
 /** The most files one ask can want or be answered with. */
@@ -37,6 +40,17 @@ export interface WantsFiles {
   min: number
   max: number
   hint: string | null
+}
+
+/** A file or folder the asker attached for the owner to look at (its
+ * share's paths), as it is on disk now: `missing` once moved, deleted or
+ * unreadable. */
+export interface AttachedFile {
+  path: string
+  name: string
+  kind: 'file' | 'folder' | 'missing'
+  /** Bytes, for a file; null for a folder or a missing file. */
+  size: number | null
 }
 
 /** A file the owner answered with: a capture in Aico (`tether capture get ID`).
@@ -67,6 +81,9 @@ export interface Ask {
   origin: AskOrigin | null
   /** A `tether share` id to look at. */
   share: string | null
+  /** The share's files and folders as they are now (API responses only:
+   * worked out on each read, never stored); empty without a files share. */
+  attached?: AttachedFile[]
   /** The files the ask wants, or null. */
   wantsFiles: WantsFiles | null
   /** The files the owner answered with (empty until a files answer). */
@@ -102,6 +119,8 @@ export interface AskRequest {
   open: string | null
   origin: AskOrigin | null
   share: string | null
+  /** Absolute paths to attach (`--file`): the route links them as a share. */
+  attach: string[] | null
   wantsFiles: WantsFiles | null
   blocking: boolean
 }
@@ -247,6 +266,7 @@ function parseAsk(body: Record<string, unknown>): AskRequest {
     'open',
     'origin',
     'share',
+    'attach',
     'files',
     'blocking',
   ])
@@ -283,6 +303,12 @@ function parseAsk(body: Record<string, unknown>): AskRequest {
   const share = body.share ?? null
   if (share !== null && (typeof share !== 'string' || !ID.test(share)))
     throw new HttpError(400, 'invalid_body', { field: 'share' })
+  const attach = parseAttach(body.attach)
+  if (attach && share !== null)
+    throw new HttpError(400, 'invalid_body', {
+      field: 'attach',
+      detail: 'give attach or share, not both',
+    })
   if (body.blocking !== undefined && typeof body.blocking !== 'boolean')
     throw new HttpError(400, 'invalid_body', { field: 'blocking' })
   return {
@@ -296,9 +322,47 @@ function parseAsk(body: Record<string, unknown>): AskRequest {
     open: openLink(body.open),
     origin: parseOrigin(body.origin),
     share: share as string | null,
+    attach,
     wantsFiles: parseWantsFiles(body.files),
     blocking: body.blocking === true,
   }
+}
+
+/** `attach`: 1 to 20 absolute paths (they must exist; the route checks). */
+function parseAttach(value: unknown): string[] | null {
+  if (value === undefined || value === null) return null
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > MAX_ASK_FILES ||
+    !value.every(
+      (path) =>
+        typeof path === 'string' &&
+        isAbsolute(path) &&
+        path.length <= 4096 &&
+        !ONE_LINE_BAD.test(path),
+    )
+  )
+    throw new HttpError(400, 'invalid_body', {
+      field: 'attach',
+      detail: `1 to ${MAX_ASK_FILES} absolute paths`,
+    })
+  return value as string[]
+}
+
+/** A share's paths as they are on disk now. */
+function attachedFiles(paths: readonly string[]): AttachedFile[] {
+  return paths.map((path) => {
+    const trimmed = path.replace(/(?<=.)\/$/, '')
+    const name = trimmed.slice(trimmed.lastIndexOf('/') + 1) || trimmed
+    try {
+      const info = statSync(path)
+      accessSync(path, constants.R_OK)
+      if (info.isDirectory()) return { path, name, kind: 'folder', size: null }
+      if (info.isFile()) return { path, name, kind: 'file', size: info.size }
+    } catch {}
+    return { path, name, kind: 'missing', size: null }
+  })
 }
 
 const ASK_ORIGINS = ['notice', 'status'] as const
@@ -890,9 +954,19 @@ export function registerAskRoutes(
     setInterval(writeFeed, FEED_HEARTBEAT_MS).unref()
   }
 
-  /** An ask as the API shows it: an open one says where its answer would go now. */
-  const present = (ask: Ask): Ask =>
-    ask.state === 'open' ? { ...ask, answerTo: answerTarget(ask, delivery) } : ask
+  const shares = new ShareStore(options.db, options.show)
+  /** The ask's attached files as they are now: its share's paths. */
+  const attachedOf = (ask: Ask): AttachedFile[] => {
+    const share = ask.share ? shares.get(ask.share) : undefined
+    return share?.kind === 'files' ? attachedFiles(share.paths) : []
+  }
+  /** An ask as the API shows it: an open one says where its answer would go
+   * now; each says how its attached files are. */
+  const present = (ask: Ask): Ask => ({
+    ...ask,
+    ...(ask.state === 'open' ? { answerTo: answerTarget(ask, delivery) } : {}),
+    attached: attachedOf(ask),
+  })
   const changed = (ask: Ask, created = false) => {
     events.publish('asks.changed', { ask: present(ask), created })
     if (ask.session) delivery?.sessionChanged(ask.session)
@@ -915,6 +989,16 @@ export function registerAskRoutes(
   router
     .add('POST', '/v1/asks', async (req, res) => {
       const request = parseAsk(await readJsonObject(req))
+      if (request.attach) {
+        // Linked where they are, as `tether share` does: nothing is copied.
+        const paths = await realPaths(request.attach)
+        request.share = shares.filesShare(
+          request.session,
+          clipText(request.question, 120),
+          paths,
+          now(),
+        ).id
+      }
       if (request.share && !shareExists(request.share))
         throw new HttpError(400, 'invalid_body', { field: 'share', detail: 'no such share' })
       const at = now()
@@ -1023,25 +1107,25 @@ export function registerAskRoutes(
       asks.delivered(ask.id, wakeId, to)
       answered = asks.get(ask.id) as Ask
       changed(answered)
-      sendJson(res, 200, answered)
+      sendJson(res, 200, present(answered))
     })
     .add('POST', '/v1/asks/:id/done', (_req, res, params) => {
       const ask = requireAsk(params.id)
-      if (ask.state === 'done') return sendJson(res, 200, ask)
+      if (ask.state === 'done') return sendJson(res, 200, present(ask))
       if (ask.state === 'withdrawn') throw new HttpError(409, 'ask_closed', { state: ask.state })
       cancelWake(ask.id, 'closed as done')
       const closed = asks.close(ask.id, 'done', now()) as Ask
       changed(closed)
-      sendJson(res, 200, closed)
+      sendJson(res, 200, present(closed))
     })
     .add('POST', '/v1/asks/:id/withdraw', (_req, res, params) => {
       const ask = requireAsk(params.id)
-      if (ask.state === 'withdrawn') return sendJson(res, 200, ask)
+      if (ask.state === 'withdrawn') return sendJson(res, 200, present(ask))
       if (ask.state === 'done') throw new HttpError(409, 'ask_closed', { state: ask.state })
       cancelWake(ask.id, 'withdrawn')
       const closed = asks.close(ask.id, 'withdrawn', now()) as Ask
       changed(closed)
-      sendJson(res, 200, closed)
+      sendJson(res, 200, present(closed))
     })
   return asks
 }

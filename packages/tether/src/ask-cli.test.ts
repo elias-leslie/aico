@@ -34,6 +34,46 @@ describe('tether ask create --files', () => {
   })
 })
 
+describe('tether ask create --file', () => {
+  it('sends each file as an absolute path to attach', () => {
+    expect(create('--file', 'plan.md', '--file=/srv/a/shot.png')).toMatchObject({
+      attach: ['/x/plan.md', '/srv/a/shot.png'],
+    })
+    expect(create()).not.toHaveProperty('attach')
+  })
+
+  it('refuses --file with --share, and more than 20', () => {
+    expect(create('--file', 'a', '--share', '0123456789ab')).toMatch(/not both/)
+    const many = Array.from({ length: 21 }, (_, i) => ['--file', `f${i}`]).flat()
+    expect(create(...many)).toMatch(/at most 20/)
+  })
+
+  it('lists attached files in tether ask get, a missing one as moved', () => {
+    const text = formatAsk({
+      id: 'abcdefabcdef',
+      session: '0123abcd',
+      requester: null,
+      question: 'Ship it?',
+      options: [],
+      recommended: null,
+      body: null,
+      command: null,
+      share: '0123456789ab',
+      attached: [
+        { path: '/srv/a/plan.md', name: 'plan.md', kind: 'file', size: 2048 },
+        { path: '/srv/a/gone.png', name: 'gone.png', kind: 'missing', size: null },
+      ],
+      blocking: false,
+      state: 'open',
+      answer: null,
+      note: null,
+      delivery: null,
+    })
+    expect(text).toContain('attached: /srv/a/plan.md  2.0 KB')
+    expect(text).toContain('attached: /srv/a/gone.png  (moved or deleted)')
+  })
+})
+
 describe('formatAsk with files', () => {
   const base = {
     id: 'abcdefabcdef',

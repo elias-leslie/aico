@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import { realpath, stat } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { access, realpath, stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import type { ShowConfig } from './config'
@@ -88,8 +89,8 @@ function parseShow(body: Record<string, unknown>): ShowRequest {
   return { session, title, kind: 'files', paths: paths as string[] }
 }
 
-/** Each path as it really is on disk: it must exist and be a file or a folder; a folder ends in `/`. */
-async function realPaths(paths: string[]): Promise<string[]> {
+/** Each path as it really is on disk: it must exist, be readable and be a file or a folder; a folder ends in `/`. */
+export async function realPaths(paths: string[]): Promise<string[]> {
   const resolved: string[] = []
   for (const path of paths) {
     let real: string
@@ -98,9 +99,10 @@ async function realPaths(paths: string[]): Promise<string[]> {
       const info = await stat(real)
       if (info.isDirectory()) real = real.endsWith('/') ? real : `${real}/`
       else if (!info.isFile()) throw new Error('not a file or folder')
+      await access(real, constants.R_OK)
     } catch {
       throw new HttpError(400, 'invalid_path', {
-        detail: `Not an existing file or folder: ${path}`,
+        detail: `Not an existing, readable file or folder: ${path}`,
       })
     }
     if (!resolved.includes(real)) resolved.push(real)
@@ -155,6 +157,22 @@ export class ShareStore {
       .prepare('DELETE FROM shares WHERE created_at < ?')
       .run(now - this.config.retentionDays * 24 * 60 * 60 * 1000)
     return this.get(id) as Share
+  }
+
+  /** A files share for these paths: the session's newest one naming exactly
+   * them, else a new one (re-asking a question with the same files adds none). */
+  filesShare(
+    session: string | null,
+    title: string | null,
+    paths: string[],
+    now = Date.now(),
+  ): Share {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM shares WHERE paths = ? AND session_id IS ? ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get(JSON.stringify(paths), session) as unknown as ShareRow | undefined
+    return row ? fromRow(row) : this.add({ session, title, kind: 'files', paths }, now)
   }
 
   get(id: string): Share | undefined {

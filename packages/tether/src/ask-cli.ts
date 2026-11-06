@@ -2,13 +2,14 @@
 // (src/asks.ts). Plain shell, so every agent harness can use it.
 
 import { readFileSync } from 'node:fs'
-import { basename } from 'node:path'
+import { basename, isAbsolute, resolve } from 'node:path'
 import { callSocket } from './client'
 import type { TetherPaths } from './config'
 
 export const ASK_USAGE = `Usage:
   tether ask create "<question>" [--option TEXT]... [--recommend N] [--blocking]
-                    [--body TEXT | --body-file PATH] [--command CMD] [--open URL] [--share ID]
+                    [--body TEXT | --body-file PATH] [--command CMD] [--open URL]
+                    [--file PATH]... [--share ID]
                     [--files N|MIN-MAX [--files-hint TEXT]] [--session ID | --from LABEL]
       One line that stands alone. --option up to 5 choices, --recommend N marks
       choice N (from 1). --blocking: you stopped and wait on the answer (the
@@ -18,6 +19,9 @@ export const ASK_USAGE = `Usage:
       characters, on what to send. The answer lists each file (id, path);
       read one with tether capture get ID. Aliases: --photos, --photo-hint.
       --open URL: an https link the card opens (the item the ask is about).
+      --file PATH (up to 20): a file or folder for the owner to look at; the
+      card shows it and opens it in place. Linked where it is, as tether
+      share does (nothing copied). --share ID attaches an earlier share.
   tether ask get <id>          the ask with the owner's answer
   tether ask list [--mine] [--all]
                                open and answered asks (--all: closed ones too);
@@ -55,6 +59,7 @@ const VALUE_FLAGS = [
   'command',
   'open',
   'share',
+  'file',
   'files',
   'photos',
   'files-hint',
@@ -153,6 +158,11 @@ export function askCreateBody(
   const command = last(flags, 'command')
   const open = last(flags, 'open')
   const share = last(flags, 'share')
+  const attach = (flags.values.file ?? []).map((path) =>
+    isAbsolute(path) ? path : resolve(cwd, path),
+  )
+  if (attach.length && share !== undefined) return 'give --file or --share, not both'
+  if (attach.length > MAX_FILES) return `--file at most ${MAX_FILES} times`
   const files = filesWanted(flags)
   if (typeof files === 'string') return files
   return {
@@ -164,6 +174,7 @@ export function askCreateBody(
     ...(command === undefined ? {} : { command }),
     ...(open === undefined ? {} : { open }),
     ...(share === undefined ? {} : { share }),
+    ...(attach.length ? { attach } : {}),
     ...(files === null ? {} : { files }),
     ...(flags.switches.has('blocking') ? { blocking: true } : {}),
   }
@@ -201,6 +212,8 @@ interface AskJson {
   /** Absent from a Tether older than API 31. */
   open?: string | null
   share: string | null
+  /** Absent from a Tether older than API 32. */
+  attached?: AttachedJson[]
   /** Absent from a Tether older than schema 30. */
   wantsFiles?: { min: number; max: number; hint: string | null } | null
   files?: AnswerFileJson[]
@@ -209,6 +222,13 @@ interface AskJson {
   answer: string | null
   note: string | null
   delivery: string | null
+}
+
+interface AttachedJson {
+  path: string
+  name: string
+  kind: 'file' | 'folder' | 'missing'
+  size: number | null
 }
 
 interface AnswerFileJson {
@@ -260,6 +280,10 @@ export function formatAsk(ask: AskJson): string {
   if (ask.command) lines.push(`  command: ${ask.command}`)
   if (ask.open) lines.push(`  open: ${ask.open}`)
   if (ask.share) lines.push(`  share: ${ask.share}`)
+  for (const file of ask.attached ?? [])
+    lines.push(
+      `  attached: ${file.path}  ${file.kind === 'missing' ? '(moved or deleted)' : file.kind === 'folder' ? 'folder' : kb(file.size ?? 0)}`,
+    )
   if (ask.wantsFiles) lines.push(`  ${wantsLine(ask.wantsFiles)}`)
   if (ask.answer !== null) lines.push(`  answer: ${ask.answer}`)
   if (ask.note !== null) lines.push(`  note: ${ask.note}`)
