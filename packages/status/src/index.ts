@@ -11,6 +11,13 @@ export {
   transitions,
 } from './alerts'
 export {
+  expectedOffSince,
+  expectedState,
+  INTENTS,
+  type Intent,
+  type MachineIntent,
+} from './intent'
+export {
   ACTION_KINDS,
   type Action,
   type ActionKind,

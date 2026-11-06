@@ -5,6 +5,7 @@ import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { type Database, type Migration, openDatabase, transaction } from '@aico/store'
 import { type AlertBatch, type AlertHook, transitions } from './alerts'
+import { expectedOffSince, type Intent, type MachineIntent } from './intent'
 import { parseRow, type StatusRow } from './row'
 import {
   type Filter,
@@ -59,6 +60,14 @@ function migrations(now: () => number): Migration[] {
       const put = db.prepare('INSERT INTO status_seen (id, shown) VALUES (?, ?)')
       for (const row of show(readRows(db), now())) put.run(row.id, seenState(row) ?? row.state)
     },
+    // Where each machine is meant to be (intent.ts): declared in the registry, copied here.
+    `CREATE TABLE machine_intent (
+       machine TEXT PRIMARY KEY,
+       intent TEXT NOT NULL CHECK (intent IN ('always', 'on-demand', 'off')),
+       since INTEGER NOT NULL,
+       stopped_at INTEGER,
+       used_since INTEGER
+     ) STRICT`,
   ]
 }
 
@@ -116,6 +125,92 @@ export class StatusStore {
     if (this.alertHook) this.checkAlerts()
   }
 
+  /** The declared intent of each machine and what the owner did since. */
+  intents(): MachineIntent[] {
+    return (
+      this.db
+        .prepare('SELECT machine, intent, since, stopped_at, used_since FROM machine_intent')
+        .all() as {
+        machine: string
+        intent: Intent
+        since: number
+        stopped_at: number | null
+        used_since: number | null
+      }[]
+    ).map((r) => ({
+      machine: r.machine,
+      intent: r.intent,
+      since: r.since,
+      stoppedAt: r.stopped_at,
+      usedSince: r.used_since,
+    }))
+  }
+
+  /** Machines expected to be off, with since when (epoch ms). */
+  expectedOff(): Map<string, number> {
+    const off = new Map<string, number>()
+    for (const m of this.intents()) {
+      const since = expectedOffSince(m)
+      if (since !== null) off.set(m.machine, since)
+    }
+    return off
+  }
+
+  /** Whether `machine` is meant to be off now. */
+  isExpectedOff(machine: string): boolean {
+    return this.expectedOff().has(machine)
+  }
+
+  /**
+   * Makes the table match the registry: new machines are added, a changed intent starts over,
+   * and machines no longer declared are dropped. The owner's stops and starts survive a sync.
+   */
+  syncIntents(declared: readonly { machine: string; intent: Intent }[]): void {
+    const at = this.now()
+    const known = new Map(this.intents().map((m) => [m.machine, m]))
+    transaction(this.db, () => {
+      const names = new Set(declared.map((d) => d.machine))
+      for (const m of known.values())
+        if (!names.has(m.machine))
+          this.db.prepare('DELETE FROM machine_intent WHERE machine = ?').run(m.machine)
+      for (const { machine, intent } of declared) {
+        if (known.get(machine)?.intent === intent) continue
+        this.db
+          .prepare(
+            `INSERT INTO machine_intent (machine, intent, since) VALUES (?, ?, ?)
+             ON CONFLICT (machine) DO UPDATE SET
+               intent = excluded.intent, since = excluded.since, stopped_at = NULL, used_since = NULL`,
+          )
+          .run(machine, intent, at)
+      }
+    })
+    if (this.alertHook) this.checkAlerts()
+  }
+
+  /** The owner shut `machine` down (`at`, default now) or undid that (`null`); a shutdown ends its use. */
+  markStopped(machine: string, at: number | null = this.now()): void {
+    this.db
+      .prepare(
+        at === null
+          ? 'UPDATE machine_intent SET stopped_at = NULL WHERE machine = ?'
+          : 'UPDATE machine_intent SET stopped_at = ?, used_since = NULL WHERE machine = ?',
+      )
+      .run(...(at === null ? [machine] : [at, machine]))
+    if (this.alertHook) this.checkAlerts()
+  }
+
+  /** The owner started `machine` (`at`, default now) for use, which ends a stop; `null` ends the use. */
+  markUsed(machine: string, at: number | null = this.now()): void {
+    this.db
+      .prepare(
+        at === null
+          ? 'UPDATE machine_intent SET used_since = NULL WHERE machine = ?'
+          : 'UPDATE machine_intent SET used_since = ?, stopped_at = NULL WHERE machine = ?',
+      )
+      .run(...(at === null ? [machine] : [at, machine]))
+    if (this.alertHook) this.checkAlerts()
+  }
+
   /** Drops a row (a thing that no longer exists); false when there was none. */
   remove(id: string): boolean {
     this.db.prepare('DELETE FROM status_seen WHERE id = ?').run(id)
@@ -137,7 +232,7 @@ export class StatusStore {
    */
   checkAlerts(): AlertBatch | null {
     const now = this.now()
-    const rows = show(this.rows(), now)
+    const rows = show(this.rows(), now, this.expectedOff())
     const seen = new Map(
       (
         this.db.prepare('SELECT id, shown FROM status_seen').all() as {
@@ -179,7 +274,7 @@ export class StatusStore {
 
   /** The rows as a reader sees them now. */
   read(filter: Filter = {}): StatusView {
-    return view(this.rows(), this.now(), filter)
+    return view(this.rows(), this.now(), filter, this.expectedOff())
   }
 
   close(): void {

@@ -113,8 +113,17 @@ function interval(stored: StoredRow, due: number): number {
   return Math.max(0, due - last)
 }
 
-/** Applies the late, unknown and back rules at `now`. */
-export function show(rows: readonly StoredRow[], now: number): ShownRow[] {
+/**
+ * Applies the late, unknown and back rules at `now`. `expectedOff` (machine to epoch ms, from
+ * StatusStore.expectedOff) names machines meant to be off (parked, on demand and not in use, or
+ * shut down by the owner): they show off since then, and so do their rows, until the machine
+ * reports again after that moment.
+ */
+export function show(
+  rows: readonly StoredRow[],
+  now: number,
+  expectedOff: ReadonlyMap<string, number> = new Map(),
+): ShownRow[] {
   // Per machine with a machine row: since when it says the machine is not reporting (late or
   // off), else null; and when it last came back.
   const silent = new Map<string, { since: number; why: UnknownWhy } | null>()
@@ -126,8 +135,18 @@ export function show(rows: readonly StoredRow[], now: number): ShownRow[] {
     silent.set(stored.row.machine, since === null ? null : { since, why: off ? 'off' : 'late' })
     if (stored.backAt !== undefined) back.set(stored.row.machine, stored.backAt)
   }
+  const stopped = new Map<string, number>()
+  for (const [machine, at] of expectedOff) {
+    if (rows.some((r) => r.row.kind === 'machine' && r.row.machine === machine && r.updatedAt > at))
+      continue
+    stopped.set(machine, at)
+    silent.set(machine, { since: at, why: 'off' })
+  }
   return rows.map((stored) => {
     const base = { ...stored.row, updated_at: iso(stored.updatedAt) }
+    const stoppedAt = stopped.get(stored.row.machine)
+    if (stoppedAt !== undefined && stored.row.kind === 'machine')
+      return { ...base, shown: 'off', shown_since: iso(stoppedAt) }
     if (stored.row.kind !== 'machine') {
       const machine = silent.get(stored.row.machine)
       if (machine === undefined)
@@ -223,8 +242,13 @@ export function summary(rows: readonly ShownRow[]): Summary {
 }
 
 /** `select`, `rollup` and `summary` together: what the API and the CLI read. */
-export function view(rows: readonly StoredRow[], now: number, filter: Filter = {}): StatusView {
-  const shown = show(rows, now)
+export function view(
+  rows: readonly StoredRow[],
+  now: number,
+  filter: Filter = {},
+  expectedOff?: ReadonlyMap<string, number>,
+): StatusView {
+  const shown = show(rows, now, expectedOff)
   const selected = select(shown, filter)
   return {
     generated_at: iso(now),
