@@ -1321,13 +1321,17 @@ CLAUDE_TOOL = "claude-code"  # always Claude
 CLAUDE_MODEL_TOKENS = ("claude", "opus", "sonnet", "haiku")  # Aico's launch_policy name tokens for Claude
 
 
+# Tether's tool slug where Aico's launch table names the tool differently.
+ROUTE_TOOL_NAMES = {"agy": "antigravity"}
+
+
 def launch_row(role: str, tool: str, model: str | None = None, project: str | None = None) -> dict | None:
     """Aico's launch-table row for this work role and tool (GET /api/models/launch-defaults,
     what `st models route --role ROLE --tool TOOL` shows), judged for the explicit model and the
     project: the row carries Aico's `allowed` and `deny_reason`. None when the table can't be
     read. Raises ValueError when Agent Hub has no such work role, so a typo such as `tester` fails
     here instead of launching as an unknown role with the full delivery."""
-    args = ["models", "route", "--role", role, "--tool", tool, "--json"]
+    args = ["models", "route", "--role", role, "--tool", ROUTE_TOOL_NAMES.get(tool, tool), "--json"]
     if model:
         args += ["--model", model]
     if project:
