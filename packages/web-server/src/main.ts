@@ -78,12 +78,12 @@ function serve(): void {
     tether,
     publicHost: config.publicHost,
     files: { store: notes, blobsDir, hostName: config.hostName },
-  })
     starterOf: (ask) =>
       ask.session && chatsRef?.has(ask.session) ? chatStarter(chatsRef.summary(ask.session)) : null,
     answerUrl: `http://${config.host}:${config.port}`,
-  const previews = new PreviewJobs(blobsDir, execRunner)
+  })
   let chatsRef: ChatSessions | undefined
+  const previews = new PreviewJobs(blobsDir, execRunner)
   const adapters = new Map<string, OwnerAdapter>([['notes', new NotesOwner(notes)]])
   if (config.portfolio.url) {
     const portfolio = { url: config.portfolio.url, tokenFile: config.portfolio.tokenFile }
