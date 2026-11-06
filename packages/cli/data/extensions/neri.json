@@ -2,30 +2,67 @@
   "id": "neri.neri",
   "owner": "neri",
   "namespace": "neri",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "st_contract_versions": [1],
   "summary": "Neri bounty case state: orient, open with a frozen start record, gate-checked stage moves (ready also makes the HackerOne draft), owner asks, ranked programs with scope, drift check.",
   "effects": ["read-local", "write-local", "process"],
   "help": {
-    "": "Usage: neri [OPTIONS] COMMAND [ARGS]...\n\n  Neri bug bounty case state\n\nOptions:\n  --help  Show this message and exit.\n\nCommands:\n  next     Holds, asks, open cases, top programs\n  show     Case card or program\n  new      Start a case and freeze its hunt-start record\n  advance  Move a case one stage.\n  log      Log a history line\n  ask      Ask the owner\n  check    Find state/file drift\n  program  Program policy",
-    "next": "Usage: neri next [OPTIONS]\n\n  Holds, asks, open cases, top programs\n\nOptions:\n  --needs HUNT  source|lab|big-lab|live\n  --json\n  --help        Show this message and exit.",
+    "": "Usage: neri [OPTIONS] COMMAND [ARGS]...\n\n  Neri bug bounty case state\n\nOptions:\n  --help  Show this message and exit.\n\nCommands:\n  next     Holds, asks, open cases, top programs.\n  show     Case card or program\n  new      Start a case and freeze its hunt-start record\n  advance  Move a case one stage.\n  log      Log a history line\n  ask      Ask the owner\n  remove   Delete test data: a test-* program with its cases, or one test...\n  check    Find state/file drift; with a case, scope answers or proxy policy\n  program  Program policy\n  hunter   Cases on hunter hosts\n  hunt     Hunts in their sandbox: start, status, transfer, end,...\n  egress   Live-hunt outbound hosts: ask, allow, decline, list, remove\n  tool     What hunters lack: need, needs, set",
+    "next": "Usage: neri next [OPTIONS]\n\n  Holds, asks, open cases, top programs. Why: pay N = payout band, g3/lab/dup\n  = ratings 0-3, ? = unknown, dup/NA = earlier rejects.\n\nOptions:\n  --needs HUNT  measured and booked figures for a hunt: source|lab|big-\n                lab|live\n  --json\n  --help        Show this message and exit.",
     "show": "Usage: neri show [OPTIONS] {subject}\n\n  Case card or program\n\nArguments:\n  subject  [required]\n\nOptions:\n  --events <int range>  [default: 5; x>=1]\n  --json\n  --help                Show this message and exit.",
-    "new": "Usage: neri new [OPTIONS] {PROGRAM} {slug}\n\n  Start a case and freeze its hunt-start record\n\nArguments:\n  PROGRAM  [required]\n  slug     [required]\n\nOptions:\n  --asset <str>     scope row it targets\n  --class <str>     bug class, e.g. CWE-285\n  --hunt KIND       source|lab|big-lab|live\n  --searched <str>  public same-class search and result\n  --version <str>   target version or commit\n  --cost <str>      cost estimate\n  --lineage <str>   earlier case, same finding\n  --label <str>\n  --json\n  --help            Show this message and exit.",
+    "new": "Usage: neri new [OPTIONS] {PROGRAM} {SLUG}\n\n  Start a case and freeze its hunt-start record\n\nArguments:\n  PROGRAM  [required]\n  SLUG     yyyy-mm-dd-name  [required]\n\nOptions:\n  --asset <str>     scope row it targets\n  --class <str>     bug class, e.g. CWE-285\n  --hunt KIND       source|lab|big-lab|live\n  --searched <str>  public same-class search and result\n  --version <str>   target version or commit\n  --cost <str>      cost estimate\n  --lineage <str>   earlier case, same finding\n  --label <str>\n  --json\n  --help            Show this message and exit.",
     "advance": "Usage: neri advance [OPTIONS] {CASE} {STAGE}\n\n  Move a case one stage.\n\n  STAGE: hunting|candidate|replayed|reviewed|ready|submitted|closed|killed\n\nArguments:\n  CASE   [required]\n  STAGE  [required]\n\nOptions:\n  --dry-run\n  --reason <str>\n  --take\n  --outcome OUTCOME   accepted|duplicate|informative|not_applicable|paid\n  --amount <str>\n  --currency <str>    [default: USD]\n  --submission <str>\n  --ack <str>\n  --json\n  --help              Show this message and exit.",
-    "log": "Usage: neri log [OPTIONS] {CASE} {text}\n\n  Log a history line\n\nArguments:\n  CASE  [required]\n  text  [required]\n\nOptions:\n  --next <str>     next step; - clears\n  --program <str>\n  --release\n  --peak <str>     mem=5.2G,cpu=1.5[,hunt=KIND]\n  --take\n  --json\n  --help           Show this message and exit.",
+    "log": "Usage: neri log [OPTIONS] {CASE} {text}\n\n  Log a history line\n\nArguments:\n  CASE  [required]\n  text  [required]\n\nOptions:\n  --next <str>     next step; - clears\n  --program <str>\n  --asset <str>    scope row it targets\n  --release\n  --peak <str>     mem=5.2G,cpu=1.5[,hunt=KIND]\n  --take\n  --json\n  --help           Show this message and exit.",
     "ask": "Usage: neri ask [OPTIONS] {subject} {title}\n\n  Ask the owner\n\nArguments:\n  subject  [required]\n  title    [required]\n\nOptions:\n  --kind KIND     approve|submit|decide|setup  [required]\n  --detail <str>\n  --json\n  --help          Show this message and exit.",
-    "check": "Usage: neri check [OPTIONS] [CASE]\n\n  Find state/file drift\n\nArguments:\n  [CASE]\n\nOptions:\n  --all\n  --json\n  --help  Show this message and exit.",
-    "program": "Usage: neri program [OPTIONS] COMMAND [ARGS]...\n\n  Program policy\n\nOptions:\n  --help  Show this message and exit.\n\nCommands:\n  list     Programs, ranked, with a why line\n  show     One program\n  refresh  Read program records from the platform API\n  set      Record judgment and ratings; identity; observed fields on...",
-    "program list": "Usage: neri program list [OPTIONS]\n\n  Programs, ranked, with a why line\n\nOptions:\n  --json\n  --help  Show this message and exit.",
+    "remove": "Usage: neri remove [OPTIONS] {PROGRAM|CASE}\n\n  Delete test data: a test-* program with its cases, or one test case\n\nArguments:\n  PROGRAM|CASE  [required]\n\nOptions:\n  --json\n  --help  Show this message and exit.",
+    "check": "Usage: neri check [OPTIONS] [CASE]\n\n  Find state/file drift; with a case, scope answers or proxy policy\n\nArguments:\n  [CASE]\n\nOptions:\n  --all\n  --host <str>   host, URL or IP; repeatable. Exit 0 only if all in; out or\n                 unclear exit 1\n  --policy-json  print proxy policy v1\n  --json\n  --help         Show this message and exit.",
+    "program": "Usage: neri program [OPTIONS] COMMAND [ARGS]...\n\n  Program policy\n\nOptions:\n  --help  Show this message and exit.\n\nCommands:\n  list     Programs, ranked, with a why line.\n  show     One program\n  refresh  Read program records from the platform API\n  set      Record judgment, ratings, identity, policy check;...",
+    "program list": "Usage: neri program list [OPTIONS]\n\n  Programs, ranked, with a why line. Why: pay N = payout band, g3/lab/dup =\n  ratings 0-3, ? = unknown, dup/NA = earlier rejects. test-* programs only\n  with --tests.\n\nOptions:\n  --tests  include test-* programs\n  --json\n  --help   Show this message and exit.",
     "program show": "Usage: neri program show [OPTIONS] {PROGRAM}\n\n  One program\n\nArguments:\n  PROGRAM  [required]\n\nOptions:\n  --json\n  --help  Show this message and exit.",
     "program refresh": "Usage: neri program refresh [OPTIONS] [PROGRAM]\n\n  Read program records from the platform API\n\nArguments:\n  [PROGRAM]\n\nOptions:\n  --key <str>\n  --all\n  --json\n  --help       Show this message and exit.",
-    "program set": "Usage: neri program set [OPTIONS] {PROGRAM}\n\n  Record judgment and ratings; identity; observed fields on manual platforms\n\nArguments:\n  PROGRAM  [required]\n\nOptions:\n  --verdict VERDICT  go|open|no-go\n  --evidence <str>\n  --gate GATE        G1|G2|G3\n  --recheck <str>\n  --proof MODE       self-hosted|live|source-only\n  --g3 <int range>   [0<=x<=3]\n  --dup <int range>  [0<=x<=3]\n  --lab <int range>  [0<=x<=3]\n  --platform <str>\n  --name <str>\n  --handle <str>\n  --state <str>      open|paused|suspended|closed\n  --pays <str>       target-class max, e.g. 5000\n  --currency <str>\n  --avg-paid <str>\n  --scope <str>      in|out KIND ASSET\n  --json\n  --help             Show this message and exit."
+    "program set": "Usage: neri program set [OPTIONS] {PROGRAM}\n\n  Record judgment, ratings, identity, policy check; manual-platform fields\n\nArguments:\n  PROGRAM  [required]\n\nOptions:\n  --verdict VERDICT  go|open|no-go\n  --evidence <str>   'URL date: text' or 'provisional: text'\n  --gate GATE        G1|G2|G3; '' or --verdict alone clears\n  --recheck <str>    likewise\n  --proof MODE       self-hosted|live|source-only\n  --g3 <int range>   [0<=x<=3]\n  --dup <int range>  [0<=x<=3]\n  --lab <int range>  [0<=x<=3]\n  --checked          policy read today\n  --platform <str>\n  --name <str>\n  --handle <str>\n  --state <str>      open|paused|suspended|closed\n  --pays <str>       target-class max, e.g. 5000\n  --currency <str>\n  --avg-paid <str>\n  --scope <str>      'in|out KIND ASSET', KIND\n                     domain|wildcard|url|cidr|ip|mobile|source|other; give\n                     every row: replaces all\n  --rule <str>       header:N=V|ua:TEXT|rate:N\n  --json\n  --help             Show this message and exit.",
+    "hunter": "Usage: neri hunter [OPTIONS] COMMAND [ARGS]...\n\n  Cases on hunter hosts\n\nOptions:\n  --help  Show this message and exit.\n\nCommands:\n  start  Let a hunter host work one case\n  end    Collect a hunter host's case files and close its access\n  list   Cases on hunter hosts",
+    "hunter start": "Usage: neri hunter start [OPTIONS] {CASE}\n\n  Let a hunter host work one case\n\nArguments:\n  CASE  [required]\n\nOptions:\n  --host <str>  [required]\n  --json\n  --help        Show this message and exit.",
+    "hunter end": "Usage: neri hunter end [OPTIONS] {CASE}\n\n  Collect a hunter host's case files and close its access\n\nArguments:\n  CASE  [required]\n\nOptions:\n  --abandon\n  --json\n  --help     Show this message and exit.",
+    "hunter list": "Usage: neri hunter list [OPTIONS]\n\n  Cases on hunter hosts\n\nOptions:\n  --json\n  --help  Show this message and exit.",
+    "hunt": "Usage: neri hunt [OPTIONS] COMMAND [ARGS]...\n\n  Hunts in their sandbox: start, status, transfer, end, check-clean, list,\n  clean\n\nOptions:\n  --help  Show this message and exit.\n\nCommands:\n  transfer     Move a running hunt and its reporting to another coordinator\n  start        Start a hunt in its sandbox where there is room\n  end          End a hunt: collect, record its peak, remove everything\n  status       Show a hunt's runtime: container, pause reasons, disk...\n  tools        Commands hunts did not find and packages they installed,...\n  check-clean  List what a hunt left behind\n  list         Every hunt: records, host containers, Tether sessions;...\n  clean        Clean up a hunt with no open record: a labelled orphan or...\n  forget       Remove the record of a test case's hunt or of a hunt on a...",
+    "hunt transfer": "Usage: neri hunt transfer [OPTIONS] {CASE}\n\n  Move a running hunt and its reporting to another coordinator\n\nArguments:\n  CASE  [required]\n\nOptions:\n  --to <str>    new coordinator's eight-character session ID  [required]\n  --from <str>  current coordinator's eight-character session ID  [required]\n  --json\n  --help        Show this message and exit.",
+    "hunt start": "Usage: neri hunt start [OPTIONS] {CASE}\n\n  Start a hunt in its sandbox where there is room\n\nArguments:\n  CASE  [required]\n\nOptions:\n  --brief <str>             file in the case dir\n  --lab <path>              lab spec JSON file\n  --kind KIND               hunt kind to record when the case has no start\n                            record: source|lab|big-lab|live\n  --tool codex|pi           native tool (policy hunts.tools, default\n                            hunts.tool); refused when Aico's model table\n                            denies it for hunting\n  --model <str>             any model Aico's model table (st models route\n                            --role hunting) does not deny; a note when off its\n                            list\n  --reasoning-effort <str>  per-hunt Tether reasoning effort\n  --host VM|local           only this hunt host: a VM, or local for this\n                            computer\n  --dry-run\n  --json\n  --help                    Show this message and exit.",
+    "hunt end": "Usage: neri hunt end [OPTIONS] {CASE}\n\n  End a hunt: collect, record its peak, remove everything\n\nArguments:\n  CASE  [required]\n\nOptions:\n  --abandon\n  --recover-holder-from <path>  Prove an old ended hunt's holder from a read-\n                                only Tether catalog\n  --json\n  --help                        Show this message and exit.",
+    "hunt status": "Usage: neri hunt status [OPTIONS] {CASE}\n\n  Show a hunt's runtime: container, pause reasons, disk admission\n\nArguments:\n  CASE  [required]\n\nOptions:\n  --json\n  --help  Show this message and exit.",
+    "hunt tools": "Usage: neri hunt tools [OPTIONS]\n\n  Commands hunts did not find and packages they installed, by how many hunts\n\nOptions:\n  --json\n  --help  Show this message and exit.",
+    "hunt check-clean": "Usage: neri hunt check-clean [OPTIONS] {CASE}\n\n  List what a hunt left behind\n\nArguments:\n  CASE  [required]\n\nOptions:\n  --json\n  --help  Show this message and exit.",
+    "hunt list": "Usage: neri hunt list [OPTIONS]\n\n  Every hunt: records, host containers, Tether sessions; flags unended ones\n\nOptions:\n  --host <str>  one host: a hunt VM or local\n  --case <str>  only this case's hunts, on the hosts its records name\n  --json\n  --help        Show this message and exit.",
+    "hunt clean": "Usage: neri hunt clean [OPTIONS] {HUNT}\n\n  Clean up a hunt with no open record: a labelled orphan or an ended hunt's\n  leftovers\n\nArguments:\n  HUNT  [required]\n\nOptions:\n  --host <str>  the host hunt list names  [required]\n  --abandon     drop files that cannot be pushed\n  --json\n  --help        Show this message and exit.",
+    "hunt forget": "Usage: neri hunt forget [OPTIONS] [CASE]\n\n  Remove the record of a test case's hunt or of a hunt on a retired host\n\nArguments:\n  CASE\n\nOptions:\n  --stale    every record that qualifies\n  --dry-run\n  --json\n  --help     Show this message and exit.",
+    "egress": "Usage: neri egress [OPTIONS] COMMAND [ARGS]...\n\n  Live-hunt outbound hosts: ask, allow, decline, list, remove\n\nOptions:\n  --help  Show this message and exit.\n\nCommands:\n  ask      Ask for a host a live hunt is blocked from\n  allow    Save an approval for a host live hunts ask for\n  decline  Answer a host ask no\n  list     Unanswered egress asks and saved approvals\n  remove   Remove one saved egress approval",
+    "egress ask": "Usage: neri egress ask [OPTIONS] {CASE} {host}\n\n  Ask for a host a live hunt is blocked from\n\nArguments:\n  CASE  [required]\n  host  [required]\n\nOptions:\n  --reason <str>  what the hunt needs it for  [required]\n  --json\n  --help          Show this message and exit.",
+    "egress allow": "Usage: neri egress allow [OPTIONS] {CASE} {host}\n\n  Save an approval for a host live hunts ask for\n\nArguments:\n  CASE  [required]\n  host  [required]\n\nOptions:\n  --level case|program|global  [default: program]\n  --reason <str>\n  --json\n  --help                       Show this message and exit.",
+    "egress decline": "Usage: neri egress decline [OPTIONS] {CASE} {host}\n\n  Answer a host ask no\n\nArguments:\n  CASE  [required]\n  host  [required]\n\nOptions:\n  --reason <str>\n  --json\n  --help          Show this message and exit.",
+    "egress list": "Usage: neri egress list [OPTIONS]\n\n  Unanswered egress asks and saved approvals\n\nOptions:\n  --case <str>\n  --json\n  --help        Show this message and exit.",
+    "egress remove": "Usage: neri egress remove [OPTIONS] {ID}\n\n  Remove one saved egress approval\n\nArguments:\n  ID  [required]\n\nOptions:\n  --json\n  --help  Show this message and exit.",
+    "tool": "Usage: neri tool [OPTIONS] COMMAND [ARGS]...\n\n  What hunters lack: need, needs, set\n\nOptions:\n  --help  Show this message and exit.\n\nCommands:\n  need   Name a tool, host or setup this hunt lacked\n  needs  What hunts lacked (ready ones); --all adds closed, --unused...\n  set    Close a tool need: --added REV or --declined WHY",
+    "tool need": "Usage: neri tool need [OPTIONS] {name}\n\n  Name a tool, host or setup this hunt lacked\n\nArguments:\n  name  [required]\n\nOptions:\n  --why <str>   missing|slow|broken|better  [required]\n  --tip <str>   when to use it, 80 characters\n  --kind <str>  tool|host|setup  [default: tool]\n  --case CASE   the hunt's case (its host fills it in)\n  --json\n  --help        Show this message and exit.",
+    "tool needs": "Usage: neri tool needs [OPTIONS]\n\n  What hunts lacked (ready ones); --all adds closed, --unused lists idle image\n  packages\n\nOptions:\n  --all     also added and declined ones\n  --unused  image packages no recent hunt ran\n  --json\n  --help    Show this message and exit.",
+    "tool set": "Usage: neri tool set [OPTIONS] {name}\n\n  Close a tool need: --added REV or --declined WHY\n\nArguments:\n  name  [required]\n\nOptions:\n  --added REV\n  --declined WHY\n  --json\n  --help          Show this message and exit."
   },
   "help_options": {
     "": {
       "--help": 0
     },
     "program": {
+      "--help": 0
+    },
+    "hunter": {
+      "--help": 0
+    },
+    "hunt": {
+      "--help": 0
+    },
+    "egress": {
+      "--help": 0
+    },
+    "tool": {
       "--help": 0
     }
   },
@@ -36,7 +73,10 @@
       "cmd": "st neri next [--needs source|lab|big-lab|live]",
       "when": "start of a Neri session, and after an owner answer",
       "why": "one call: cases you hold, answered asks, stale items, top open cases, top ranked programs",
-      "precautions": ["read-only", "--needs prints only the placement needs for that hunt kind"]
+      "precautions": [
+        "read-only",
+        "--needs prints only measured= (what the kind needs) and booked= (what a start reserves) for that hunt kind"
+      ]
     },
     {
       "surface": "st.neri.show",
@@ -78,7 +118,7 @@
       "why": "timestamped history line; keeps your claim alive",
       "precautions": [
         "240 characters max; details stay in notes.md",
-        "--next sets the next step ('-' clears); --program sets the program",
+        "--next sets the next step ('-' clears); --program, --asset re-scope the case",
         "--release drops your hold; killed or closed cases take none",
         "--peak mem=5.2G,cpu=1.5[,hunt=lab] records a measured peak for hunt needs"
       ]
@@ -95,14 +135,23 @@
       ]
     },
     {
+      "surface": "st.neri.remove",
+      "tier": "reference",
+      "cmd": "st neri remove <test-program|test-case>",
+      "when": "test data is done; only test-* programs and their cases (or test-* case names) qualify",
+      "why": "deletes the rows, events, asks, approvals, case folder and ended hunt record; no undo",
+      "precautions": ["refuses real data and cases with a hunt still running; end the hunt first"]
+    },
+    {
       "surface": "st.neri.check",
       "tier": "guardrail",
-      "cmd": "st neri check [case|--all]",
-      "when": "before committing in Neri Hunters, or when a case looks off",
-      "why": "finds stage vs files drift, report edits after the handoff commit, stale holders, failed alerts",
+      "cmd": "st neri check [case|--all] | <case> --host H... | <case> --policy-json",
+      "when": "before committing in Neri Hunters; --host before touching a live host",
+      "why": "drift: stage vs files, stale holders, failed alerts; --host: in/out/unclear with the scope row",
       "precautions": [
-        "read-only; exits 1 on errors only",
-        "no argument: warnings as counts by kind; a case or --all lists each"
+        "drift: no argument counts warnings by kind; a case or --all lists each; exits 1 on errors",
+        "--host exits 1 unless all in; unclear = skip and log it",
+        "--host/--policy-json refresh stale API scope first; stale manual scope refuses"
       ]
     },
     {
@@ -129,19 +178,212 @@
       "why": "the only writer of observed fields and scope rows on API platforms; before/after event",
       "precautions": [
         "signed-out network read through queue_tool.py",
-        "stamps checked only when the policy fingerprint is unchanged; on a change, update programs/<p>.md"
+        "stamps checked only when the policy is unchanged since the last check; else read it, then program set --checked"
       ]
     },
     {
       "surface": "st.neri.program.set",
       "tier": "reference",
-      "cmd": "st neri program set <program> [--verdict V --gate G --recheck T] [--g3 --dup --lab N] --evidence TEXT",
-      "when": "a verdict settles or changes, or ratings (0-3, scale in policy.json) need setting",
-      "why": "judgment, ratings with rater, identity; each change is a before/after event",
+      "cmd": "st neri program set <program> [--verdict V --gate G --recheck T] [--g3 --dup --lab N] --evidence TEXT [--checked]",
+      "when": "a verdict or rating changes, or you read a policy",
+      "why": "judgment, ratings, identity, policy check; each change is an event",
       "precautions": [
-        "evidence: primary-source URL and UTC date, 240 chars",
-        "manual platforms only: --state --pays --currency --avg-paid --scope 'in|out KIND ASSET'"
+        "--evidence 'URL date: text' or 'provisional: text', max 240, for verdict or ratings",
+        "--checked: policy read today (refresh won't count a changed one)",
+        "manual platforms only: --state --pays --currency --scope --rule ..."
       ]
+    },
+    {
+      "surface": "st.neri.hunter.start",
+      "tier": "reference",
+      "cmd": "st neri hunter start <case> --host <ssh alias>",
+      "when": "before starting a hunter session on a hunter host (neri-hunters) for that case",
+      "why": "the host gets this case's token and files; its st neri runs show, check, log, advance, ask, sync for it",
+      "precautions": [
+        "one case per host; rerun after a host rollback",
+        "the host's files come back at each command, every few minutes and at hunter end"
+      ]
+    },
+    {
+      "surface": "st.neri.hunter.end",
+      "tier": "reference",
+      "cmd": "st neri hunter end <case> [--abandon]",
+      "when": "the hunter session on the host has ended, before the host is rolled back",
+      "why": "last push of the host's case files, then the host's client, token and copy are removed",
+      "precautions": ["the host must be up; --abandon withdraws access without collecting files"]
+    },
+    {
+      "surface": "st.neri.hunter.list",
+      "tier": "reference",
+      "cmd": "st neri hunter list",
+      "when": "before placing a hunt on a hunter host, or to find a case to end",
+      "why": "each case a hunter host holds, with the host and when it started",
+      "precautions": ["read-only"]
+    },
+    {
+      "surface": "st.neri.hunt.transfer",
+      "tier": "reference",
+      "cmd": "st neri hunt transfer <case> --to SESSION --from SESSION",
+      "when": "moving an already linked running lane between top-level coordinators",
+      "why": "moves lineage, questions, turn reports and egress routing without restarting the hunt",
+      "precautions": [
+        "both coordinators and the lane must be on the same Tether",
+        "repeat the same command after an uncertain result"
+      ]
+    },
+    {
+      "surface": "st.neri.hunt.start",
+      "tier": "reference",
+      "cmd": "st neri hunt start <case> [--kind KIND] [--tool TOOL] [--model M] [--reasoning-effort E] [--host VM|local] [--brief FILE] [--lab FILE] [--dry-run]",
+      "when": "a coordinator starts a hunt from its frozen kind",
+      "why": "needs, placement, grant, sandbox, session in one step; undone on failure",
+      "precautions": [
+        "at_capacity or tool_unavailable lists each host's reason",
+        "--kind records a missing start record (old case); another kind is refused",
+        "rerun safe: a started hunt is reported, a broken one undone first"
+      ]
+    },
+    {
+      "surface": "st.neri.hunt.end",
+      "tier": "reference",
+      "cmd": "st neri hunt end <case> [--abandon] [--recover-holder-from CATALOG]",
+      "when": "the hunter session is done (or must stop)",
+      "why": "ends the session, pushes the case files back, records the measured peak, revokes access, removes the sandbox",
+      "precautions": [
+        "a failed final push stops before anything is removed; rerun, or --abandon (files not collected)",
+        "exits nonzero while anything is left; the check lists it"
+      ]
+    },
+    {
+      "surface": "st.neri.hunt.status",
+      "tier": "reference",
+      "cmd": "st neri hunt status <case>",
+      "when": "checking a running hunt, e.g. why it is paused",
+      "why": "the helper's live answer: container running/paused/stopped, each pause reason and since when, Nightshift disk admission (unknown when missing or stale)",
+      "precautions": [
+        "read-only; a disk pause lifts itself on fresh green, and hunt end still works while paused"
+      ]
+    },
+    {
+      "surface": "st.neri.hunt.tools",
+      "tier": "reference",
+      "cmd": "st neri hunt tools",
+      "when": "deciding what to add to the hunt image",
+      "why": "each ended hunt's record lists, from its agent's session, the commands its shell did not find and the packages it installed",
+      "precautions": ["read-only; counts hunt records on this computer; no image is rebuilt"]
+    },
+    {
+      "surface": "st.neri.hunt.check-clean",
+      "tier": "reference",
+      "cmd": "st neri hunt check-clean <case>",
+      "when": "after hunt end, or to recheck one that left something",
+      "why": "each item gone or left: Tether session and reservation, grant, container, sandbox, units, files",
+      "precautions": [
+        "the ended record follows this check; a kept proxy store with no stop-time check is verified again; exits 1 while anything is left"
+      ]
+    },
+    {
+      "surface": "st.neri.hunt.list",
+      "tier": "reference",
+      "cmd": "st neri hunt list [--host H] [--case CASE]",
+      "when": "finding hunts nobody ended, or before cleaning a host",
+      "why": "compares hunt records, each host's labelled hunt containers and each hunt's Tether session; each issue has its end or clean line",
+      "precautions": [
+        "read-only; never powers a host on; an unanswered host or session is unknown, not clean; exits 1 on any issue"
+      ]
+    },
+    {
+      "surface": "st.neri.hunt.clean",
+      "tier": "reference",
+      "cmd": "st neri hunt clean <hunt> --host H [--abandon]",
+      "when": "hunt list shows a container with no record or an ended hunt's leftovers",
+      "why": "ends its Tether session, pushes its files, removes only resources labelled with that hunt id and revokes only its grant",
+      "precautions": [
+        "refuses a hunt with an open record (use hunt end), an unanswered host, or unclear ownership; nothing changed",
+        "without a push (container stopped, grant gone, case hunted elsewhere) it needs --abandon; a VM proxy store is kept"
+      ]
+    },
+    {
+      "surface": "st.neri.hunt.forget",
+      "tier": "reference",
+      "cmd": "st neri hunt forget (CASE | --stale) [--dry-run]",
+      "when": "hunt list shows a record of a test case, or of a host that is no longer a hunt host",
+      "why": "ends its Tether session if still there, revokes its grant, removes the hunt record; case history keeps a forgotten event",
+      "precautions": [
+        "only test cases and retired hosts; an open hunt or leftovers on a live host are refused",
+        "an open hunt's session that will not end keeps its record; a Tether reservation left held is reported"
+      ]
+    },
+    {
+      "surface": "st.neri.egress.ask",
+      "tier": "reference",
+      "cmd": "st neri egress ask <case> <host> --reason \"why\"",
+      "when": "the proxy blocked a host the hunt needs (package mirror, docs, source)",
+      "why": "one request to the hunt's coordinator, or the owner; the answer arrives as a message",
+      "precautions": [
+        "ask once, then carry on with other work; no polling",
+        "out-of-scope hosts are refused"
+      ]
+    },
+    {
+      "surface": "st.neri.egress.allow",
+      "tier": "reference",
+      "cmd": "st neri egress allow <case> <host> [--level case|program|global] [--reason R]",
+      "when": "a hunt's egress ask reached you and the host is fine to reach",
+      "why": "saved for later hunts at that level, pushed into running ones; the asking hunt is told",
+      "precautions": [
+        "default program; case for a one-off; global only for hosts no program's scope names"
+      ]
+    },
+    {
+      "surface": "st.neri.egress.decline",
+      "tier": "reference",
+      "cmd": "st neri egress decline <case> <host> [--reason R]",
+      "when": "a hunt's egress ask reached you and the host should not be reached",
+      "why": "the ask leaves the pending counts in next and show; the asking hunt is told; a new ask is pending again",
+      "precautions": [
+        "saves no approval and changes no policy; an approval saved later still applies"
+      ]
+    },
+    {
+      "surface": "st.neri.egress.list",
+      "tier": "reference",
+      "cmd": "st neri egress list [--case CASE]",
+      "when": "checking which extra hosts live hunts may reach",
+      "why": "unanswered asks (state=asked) and every saved approval with its level, or those covering one case"
+    },
+    {
+      "surface": "st.neri.egress.remove",
+      "tier": "reference",
+      "cmd": "st neri egress remove <id>",
+      "when": "an approval should no longer apply",
+      "why": "later hunts lose it; running live hunts it covered get the narrower policy"
+    },
+    {
+      "surface": "st.neri.tool.need",
+      "tier": "reference",
+      "cmd": "st neri tool need <name> --why missing|slow|broken|better [--tip \"when to use it\"]",
+      "when": "the hunt lacked a tool (or one was slow, broken, or a better one exists)",
+      "why": "one line; names asked for go straight to the image's needs list",
+      "precautions": ["the name only, no case details; the tip is 80 characters, generic"]
+    },
+    {
+      "surface": "st.neri.tool.needs",
+      "tier": "reference",
+      "cmd": "st neri tool needs [--all|--unused]",
+      "when": "next says tool needs are ready, or before changing the hunt image",
+      "why": "each name: installed, not_found and asked counts, programs, last seen, status, tip",
+      "precautions": [
+        "read-only apart from recounting from hunt end records; close one with st neri tool set"
+      ]
+    },
+    {
+      "surface": "st.neri.tool.set",
+      "tier": "reference",
+      "cmd": "st neri tool set <name> --added REV | --declined WHY",
+      "when": "after adding a needed tool to the hunt image, or deciding not to",
+      "why": "closes the name in tool needs and next; an added one hunts still install shows again as not fixed",
+      "precautions": ["REV is the image tag or commit that added it"]
     }
   ]
 }
