@@ -4,11 +4,11 @@
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { contextDbPath } from '@aico/context'
+import { contextDbPath, routeFacts } from '@aico/context'
 import type { Database } from '@aico/store'
 import type { Models } from '@earendil-works/pi-ai'
 import { type NextPrompt, promptReader } from './prompt'
-import { loadRoleRules, type Refused, type RoleRules, type RulesRequest } from './rules'
+import { loadRoleRules, type Refused, type RoleRules, type RulesRequest, resetText } from './rules'
 import { type RunOptions, type RunResult, runAgent } from './run'
 import { type PushRun, tetherPush } from './tether'
 import { agentDbPath, findRun, openAgentDb, runReport, type StoredRun } from './transcript'
@@ -108,10 +108,14 @@ export async function main(
       process.stderr.write(`aico agent run: ${error.message}\n${USAGE}\n`)
       return 2
     }
+    // Usage facts only drop used-up models from the chain; none (not collected, unreadable) drops nothing.
+    const now = new Date().toISOString()
+    const found = routeFacts(dir, now)
     const rules = (deps.rules ?? loadRoleRules)(contextDbPath(dir), {
       role: request.role,
       cwd: request.cwd,
       ...(values.model && { model: values.model }),
+      ...('facts' in found && { usage: { facts: found.facts, now } }),
     })
     if ('kind' in rules) {
       process.stdout.write(values.json ? `${JSON.stringify({ outcome: rules })}\n` : '')
@@ -119,6 +123,8 @@ export async function main(
       return EXIT.refused as number
     }
     const log = (line: string) => process.stderr.write(`· ${line}\n`)
+    for (const skip of rules.skipped ?? [])
+      log(`skipped ${skip.id}: ${skip.provider} usage is used up until ${resetText(skip.until)}`)
     const push = deps.push ?? tetherPush(env, log)
     const tell = (runId: string) => push(runReport(db, runId))
     const once = async (task: string | null) => {

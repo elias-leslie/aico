@@ -6,7 +6,15 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
-import { Catalog, type LaunchPolicy, loadPolicy, openContext, route } from '@aico/context'
+import {
+  Catalog,
+  type Facts,
+  type LaunchPolicy,
+  loadPolicy,
+  modelUsage,
+  openContext,
+  route,
+} from '@aico/context'
 import harnessData from '../data/harness.json' with { type: 'json' }
 import type { Contain } from './tools'
 import type { Egress } from './transport'
@@ -21,6 +29,7 @@ export type RefusalReason =
   | 'model_denied'
   | 'provider_not_allowed'
   | 'no_model'
+  | 'used_up'
   | 'unenforceable'
   | 'project_unknown'
   | 'egress_denied'
@@ -42,6 +51,14 @@ export interface ChainModel {
   effort: string | null
 }
 
+/** A chain model left out because its subscription is used up. */
+export interface SkippedModel {
+  id: string
+  provider: string
+  /** ISO time the subscription's used-up windows have all reset, or null when unknown. */
+  until: string | null
+}
+
 export interface RoleRules {
   role: string
   chain: ChainModel[]
@@ -53,6 +70,8 @@ export interface RoleRules {
   egress: string
   /** The hosts models may be reached at, or null for any host. */
   hosts: string[] | null
+  /** Models left out of the chain because their subscription reads used up, with when it frees up. */
+  skipped?: SkippedModel[]
   /** How a contained role's tools run (bash in a sandbox, writes kept to the working folder), or null when they run on the host. */
   contain: Contain | null
 }
@@ -141,6 +160,19 @@ export interface RulesRequest {
   project?: string
   /** The working folder; the project comes from it when `project` is not given. */
   cwd?: string
+  /** Usage facts: models whose subscription reads used up are left out of the chain (not an explicit `model`). */
+  usage?: { facts: Facts; now: string }
+}
+
+/** "Nov 8, 7:00 PM" in the local zone, as `aico usage show` prints reset times. */
+export function resetText(iso: string | null): string {
+  if (!iso) return 'a reset time Aico does not know'
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }
 
 /** Why `model` may not run for this role in this harness, or null. */
@@ -248,7 +280,7 @@ export function roleRules(
     if (gap) return gap
   }
 
-  const wanted: { model: string; effort: string | null }[] = []
+  const wanted: { model: string; effort: string | null; tool?: string }[] = []
   if (request.model) {
     const why = modelRefusal(policy, catalog, harness, request, request.model)
     if (why) return why
@@ -261,19 +293,47 @@ export function roleRules(
       ...(request.project && { project: request.project }),
     }).rows[0]
     if (!row?.model || !row.allowed) continue
-    wanted.push({ model: row.model, effort: row.effort })
+    wanted.push({ model: row.model, effort: row.effort, tool })
     for (const alt of row.alternates)
       if (typeof alt.model === 'string')
-        wanted.push({ model: alt.model, effort: (alt.effort as string) ?? row.effort })
+        wanted.push({ model: alt.model, effort: (alt.effort as string) ?? row.effort, tool })
   }
   const chain: ChainModel[] = []
-  for (const { model, effort } of wanted) {
+  const skipped: SkippedModel[] = []
+  for (const { model, effort, tool } of wanted) {
     if (modelRefusal(policy, catalog, harness, request, model)) continue
     const next = chainModel(catalog, harness, model, effort)
     const same = chain.find((entry) => entry.id === next.id)
-    if (same) same.effort ??= next.effort
-    else chain.push(next)
+    if (same) {
+      same.effort ??= next.effort
+      continue
+    }
+    const usage =
+      tool && request.usage
+        ? modelUsage(policy, request.usage.facts, tool, next.id, request.usage.now)
+        : null
+    if (usage?.status === 'used_up') {
+      if (skipped.some((entry) => entry.id === next.id)) continue
+      const resets = usage.windows
+        .filter((window) => window.state === 'used_up' && window.resets_at)
+        .map((window) => window.resets_at as string)
+        .sort()
+      skipped.push({
+        id: next.id,
+        provider: usage.provider ?? next.id,
+        until: resets.at(-1) ?? null,
+      })
+      continue
+    }
+    chain.push(next)
   }
+  if (!chain.length && skipped.length)
+    return refused(
+      'used_up',
+      `every model role '${request.role}' may run is used up: ${skipped
+        .map((entry) => `${entry.id} until ${resetText(entry.until)}`)
+        .join('; ')}`,
+    )
   if (!chain.length)
     return refused('no_model', `role '${request.role}' has no model this harness may run`)
 
@@ -302,6 +362,7 @@ export function roleRules(
     level: roleData.level,
     tools,
     guardHook: roleData.guard ? harness.guard_hook : null,
+    ...(skipped.length && { skipped }),
     ...egress,
     contain: open
       ? null

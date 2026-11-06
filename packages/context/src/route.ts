@@ -284,6 +284,32 @@ function lastRefusal(catalog: Catalog, model: string | null, refusals: Refusal[]
   return { ...newest, count: mine.reduce((sum, refusal) => sum + refusal.count, 0) }
 }
 
+function usageOf(
+  policy: LaunchPolicy,
+  facts: Facts,
+  windows: Record<string, Window[]>,
+  tool: string,
+  model: string | null,
+): Usage {
+  const provider = usageProvider(policy, tool, model)
+  const unreadable = provider ? facts.unreadable?.[provider] : undefined
+  // Stale or failed facts say nothing: unknown, never zero used and never room.
+  return unreadable
+    ? { provider, status: 'unknown', windows: [], credits: null, unknown_windows: [], unreadable }
+    : optionUsage(provider, windows, facts.credits)
+}
+
+/** What the subscription behind `tool` and `model` has left, as the route rows show it. */
+export function modelUsage(
+  policy: LaunchPolicy,
+  facts: Facts,
+  tool: string,
+  model: string | null,
+  now: string,
+): Usage {
+  return usageOf(policy, facts, windowFacts(facts.readings, now), tool, model)
+}
+
 /** Adds usage and the last refusal to every row; a denied row gets no refusal (the rule already says no). */
 function attachFacts(
   payload: RoutePayload,
@@ -294,12 +320,7 @@ function attachFacts(
 ): void {
   const windows = windowFacts(facts.readings, now)
   for (const row of payload.rows) {
-    const provider = usageProvider(policy, row.tool, row.model)
-    const unreadable = provider ? facts.unreadable?.[provider] : undefined
-    // Stale or failed facts say nothing: unknown, never zero used and never room.
-    row.usage = unreadable
-      ? { provider, status: 'unknown', windows: [], credits: null, unknown_windows: [], unreadable }
-      : optionUsage(provider, windows, facts.credits)
+    row.usage = usageOf(policy, facts, windows, row.tool, row.model)
     row.last_refusal = row.allowed ? lastRefusal(catalog, row.model, facts.refusals) : null
     for (const alt of row.alternates)
       alt.last_refusal = row.allowed

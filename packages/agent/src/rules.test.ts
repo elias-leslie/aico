@@ -4,7 +4,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Catalog, type LaunchPolicy, openContext } from '@aico/context'
+import { Catalog, type Facts, type LaunchPolicy, openContext } from '@aico/context'
 import { describe, expect, it } from 'vitest'
 import policyData from './fixtures/policy.json' with { type: 'json' }
 import {
@@ -231,5 +231,89 @@ describe('fail closed', () => {
     const result = loadRoleRules(path, { role: 'implementation' }, harness) as Refused
     expect(result.reason).toBe('rules_unreadable')
     expect(result.detail).toContain('no launch policy')
+  })
+
+  describe('used-up subscriptions', () => {
+    const now = '2026-11-06T20:00:00.000Z'
+    const reading = (provider: string, usedPercent: number, resetsAt: string) => ({
+      provider,
+      window_minutes: 10080,
+      observed_at: '2026-11-06T19:55:00.000Z',
+      used_percent: usedPercent,
+      resets_at: resetsAt,
+      source: 'test',
+    })
+    const facts = (...readings: ReturnType<typeof reading>[]): Facts => ({
+      readings,
+      credits: {},
+      refusals: [],
+    })
+    const withUsage = (given: Facts) =>
+      roleRules(policy, catalog, harness, {
+        role: 'implementation',
+        usage: { facts: given, now },
+      })
+
+    it('skips the models of a used-up subscription and says which, with when it frees up', () => {
+      const result = withUsage(
+        facts(
+          reading('opencode-go', 100, '2026-11-08T19:00:00.000Z'),
+          reading('codex', 10, '2026-11-11T10:00:00.000Z'),
+        ),
+      ) as RoleRules
+      expect(result.chain.map((entry) => entry.id)).toEqual(['codex/gpt-6.1-sol'])
+      expect(result.skipped).toEqual([
+        {
+          id: 'opencode-go/deepseek-v4.1-flash',
+          provider: 'opencode-go',
+          until: '2026-11-08T19:00:00.000Z',
+        },
+        { id: 'opencode-go/glm-5.3', provider: 'opencode-go', until: '2026-11-08T19:00:00.000Z' },
+      ])
+    })
+
+    it('keeps the whole chain and skips nothing when every subscription has room', () => {
+      const result = withUsage(
+        facts(
+          reading('opencode-go', 20, '2026-11-08T19:00:00.000Z'),
+          reading('codex', 10, '2026-11-11T10:00:00.000Z'),
+        ),
+      ) as RoleRules
+      expect(result.chain).toHaveLength(3)
+      expect(result.skipped).toBeUndefined()
+    })
+
+    it('treats a provider with no readings as unknown, not used up', () => {
+      expect((withUsage(facts()) as RoleRules).chain).toHaveLength(3)
+    })
+
+    it('refuses naming every reset time when all of them are used up', () => {
+      const result = refusal(
+        withUsage(
+          facts(
+            reading('opencode-go', 100, '2026-11-08T19:00:00.000Z'),
+            reading('codex', 100, '2026-11-11T10:35:00.000Z'),
+          ),
+        ),
+      )
+      expect(result.reason).toBe('used_up')
+      expect(result.detail).toMatch(/^every model role 'implementation' may run is used up: /)
+      expect(result.detail).toContain('codex/gpt-6.1-sol until Nov 11')
+      expect(result.detail).toContain('opencode-go/deepseek-v4.1-flash until Nov 8')
+      expect(result.detail).toContain('opencode-go/glm-5.3 until Nov 8')
+    })
+
+    it('keeps an explicit --model even when its subscription is used up', () => {
+      const result = roleRules(policy, catalog, harness, {
+        role: 'implementation',
+        model: 'opencode-go/glm-5.3',
+        usage: { facts: facts(reading('opencode-go', 100, '2026-11-08T19:00:00.000Z')), now },
+      }) as RoleRules
+      expect(result.chain.map((entry) => entry.id)).toEqual([
+        'opencode-go/glm-5.3',
+        'codex/gpt-6.1-sol',
+      ])
+      expect(result.skipped?.map((entry) => entry.id)).toEqual(['opencode-go/deepseek-v4.1-flash'])
+    })
   })
 })
