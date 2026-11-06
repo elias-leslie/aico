@@ -199,7 +199,7 @@
         "-type",
         "f",
         "-printf",
-        "%T@\\n"
+        "%T@,"
       ],
       "jsonGuest": true,
       "statusCommand": ["ssh", "-o", "BatchMode=yes", "proxmox-gem", "qm", "status", "180"]

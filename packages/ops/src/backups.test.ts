@@ -827,7 +827,10 @@ it('shows the stopped external backup owner as off with its last good artifact d
       return artifactOk
         ? {
             code: 0,
-            out: JSON.stringify({ exitcode: 0, 'out-data': `${Date.now() / 1000}` }),
+            out: JSON.stringify({
+              exitcode: 0,
+              'out-data': `1792534517.1564229240,${Date.now() / 1000},1793669323.5744958790,`,
+            }),
             err: '',
           }
         : { code: 1, out: '', err: 'guest unreachable' }

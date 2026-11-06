@@ -40,8 +40,7 @@ export async function observeExternal(
         const guest = JSON.parse(result.out) as { exitcode?: number; 'out-data'?: string }
         if (guest.exitcode !== 0) throw new Error('The owner backup artifact could not be read.')
         const times = (guest['out-data'] ?? '')
-          .trim()
-          .split(/\s+/)
+          .split(/[^0-9.]+/)
           .map(Number)
           .filter((n) => Number.isFinite(n) && n > 0)
         if (times.length) date = new Date(Math.max(...times) * 1000).toISOString()
