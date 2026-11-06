@@ -40,7 +40,7 @@ import { HttpError } from './tether'
 type TetherRequest = Pick<TetherClient, 'request'>
 
 const MAX_PER_PUSH = 50
-const VERDICT_ROUTE = '/api/v1/integrations/nightshift/alerts/verdict'
+const VERDICT_ROUTE = '/api/v1/aico/alerts/verdict'
 const VERDICT_TIMEOUT_MS = 10_000
 const RELAY_KEY = /^nsa_\S{64}$/
 
