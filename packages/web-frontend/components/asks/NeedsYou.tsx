@@ -636,6 +636,27 @@ function answerRoute(
   }
 }
 
+/** An ask an app filed from a notice: no session asked it and nobody is waiting to read the
+ * answer, so the card shows its choices and the link it opens, nothing to say to an agent. */
+function isAppAsk(ask: OwnerAsk): boolean {
+  return ask.session === null && !ask.launcher && openLink(ask) !== null
+}
+
+/** The https link the ask opens, else null. */
+function openLink(ask: OwnerAsk): string | null {
+  return typeof ask.open === 'string' && /^https:\/\//.test(ask.open)
+    ? ask.open
+    : null
+}
+
+/** The question as the owner reads it: a notice's ask ends with a short id that only keeps
+ * two notices from merging in Tether. */
+function askTitle(ask: OwnerAsk): string {
+  return ask.session === null
+    ? ask.question.replace(/\s*\(#[0-9a-f]{6}\)$/, '') || ask.question
+    : ask.question
+}
+
 /** What a down host is, in the owner's words. */
 function awayText(state: string | undefined): string {
   return state === 'powered_off'
@@ -705,7 +726,9 @@ export function AskCard({
     sessions?.some(
       (session) => session.id === ask.session && session.mode === 'aico-chat',
     )
-  const route = answerRoute(ask, nameOf, chat)
+  const app = isAppAsk(ask)
+  const link = openLink(ask)
+  const route = app ? null : answerRoute(ask, nameOf, chat)
   const reply = useAskReply()
   const [choice, setChoice] = useState<number | null>(null)
   const [note, setNote] = useState('')
@@ -773,7 +796,7 @@ export function AskCard({
         </p>
       )}
       <p className="mb-1.5 font-semibold" style={{ overflowWrap: 'anywhere' }}>
-        {ask.question}
+        {askTitle(ask)}
       </p>
       {ask.body && (
         <p
@@ -834,7 +857,7 @@ export function AskCard({
         </p>
       )}
       <form
-        className="flex items-center gap-1.5"
+        className="flex flex-wrap items-center gap-1.5"
         onSubmit={(event) => {
           event.preventDefault()
           if (!canSend) return
@@ -857,63 +880,91 @@ export function AskCard({
           )
         }}
       >
-        <label className="lantern-field lantern-ask-note min-w-0 flex-1 px-2">
-          <span className="sr-only">
-            {hasOptions ? 'Note to the agent' : 'Reply to the agent'}
-          </span>
-          <input
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder={
-              hasOptions ? 'Optional note to the agent…' : 'Reply to the agent…'
-            }
-            maxLength={1000}
-            className="text-[13px]"
-          />
-        </label>
-        <button
-          type="submit"
-          className="lantern-btn primary small"
-          disabled={!canSend}
-        >
-          {sendLabel}
-        </button>
-      </form>
-      <div className="mt-2 flex flex-wrap items-center gap-1">
-        {!hasOptions && !wantsFiles && (
+        {!app && (
+          <label className="lantern-field lantern-ask-note min-w-0 flex-1 px-2">
+            <span className="sr-only">
+              {hasOptions ? 'Note to the agent' : 'Reply to the agent'}
+            </span>
+            <input
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder={
+                hasOptions
+                  ? 'Optional note to the agent…'
+                  : 'Reply to the agent…'
+              }
+              maxLength={1000}
+              className="text-[13px]"
+            />
+          </label>
+        )}
+        {(!app || hasOptions) && (
           <button
-            type="button"
-            className="lantern-btn small"
-            disabled={reply.isPending || away}
-            onClick={() => send({ kind: 'answer', text: 'Done' }, 'Done')}
-            title="Tells the agent: Done"
+            type="submit"
+            className="lantern-btn primary small"
+            disabled={!canSend}
           >
-            Reply “Done”
+            {sendLabel}
           </button>
         )}
-        <button
-          type="button"
-          className="lantern-btn ghost small"
-          disabled={reply.isPending || away}
-          onClick={() =>
-            send(
-              {
-                kind: 'answer',
-                text: 'Not now',
-                // A decline is the one answer a files ask takes without its files.
-                ...(wantsFiles ? { skippedFiles: true } : {}),
-              },
-              'Not now',
-            )
-          }
-          title="Tells the agent: Not now"
-        >
-          Reply “Not now”
-        </button>
-        {!inSession && (
-          <OpenSession sessionId={asker.sessionId} onOpen={onOpenSession} />
+        {app && !hasOptions && (
+          <button
+            type="button"
+            className="lantern-btn primary small"
+            disabled={reply.isPending || away}
+            onClick={() => send({ kind: 'answer', text: 'Done' }, 'Done')}
+          >
+            Done
+          </button>
         )}
-      </div>
+        {app && link && (
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="lantern-btn small"
+          >
+            Open
+          </a>
+        )}
+      </form>
+      {!app && (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {!hasOptions && !wantsFiles && (
+            <button
+              type="button"
+              className="lantern-btn small"
+              disabled={reply.isPending || away}
+              onClick={() => send({ kind: 'answer', text: 'Done' }, 'Done')}
+              title="Tells the agent: Done"
+            >
+              Reply “Done”
+            </button>
+          )}
+          <button
+            type="button"
+            className="lantern-btn ghost small"
+            disabled={reply.isPending || away}
+            onClick={() =>
+              send(
+                {
+                  kind: 'answer',
+                  text: 'Not now',
+                  // A decline is the one answer a files ask takes without its files.
+                  ...(wantsFiles ? { skippedFiles: true } : {}),
+                },
+                'Not now',
+              )
+            }
+            title="Tells the agent: Not now"
+          >
+            Reply “Not now”
+          </button>
+          {!inSession && (
+            <OpenSession sessionId={asker.sessionId} onOpen={onOpenSession} />
+          )}
+        </div>
+      )}
       {reply.isError && (
         <p
           role="alert"
@@ -980,7 +1031,7 @@ function AnsweredCard({ ask, now }: { ask: OwnerAsk; now: number }) {
         </span>
       </Meta>
       <p className="mb-1 font-semibold" style={{ overflowWrap: 'anywhere' }}>
-        {ask.question}
+        {askTitle(ask)}
       </p>
       <p className="text-[13.5px]" style={{ overflowWrap: 'anywhere' }}>
         {ask.answer ? (

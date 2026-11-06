@@ -268,6 +268,7 @@ describe('Needs you', () => {
         options: [],
         body: 'Drive refused the upload.',
         command: 'aico jobs run backup',
+        open: null,
       },
     ])
     await needsYou.rowsWritten([row('ok')])
@@ -363,6 +364,33 @@ describe('Needs you', () => {
     expect(store.get(b.id)?.askId).toBe('ask2')
     await needsYou.askChanged({ id: 'ask2', state: 'answered', answer: THAT_WAS_ME })
     expect(confirmed).toEqual([['b1']])
+  })
+
+  it('carries the item a to-do notice opens into its ask', async () => {
+    const store = new NotifyStore(':memory:')
+    const asks = new FakeAsks()
+    const todo = parseNotice({
+      v: 1,
+      source: 'jobinator',
+      kind: 'todo',
+      title: 'Follow-ups due',
+      body: 'Open Jobinator to see who.',
+      open: 'https://jobinator.example/followups',
+      actions: ['open', 'done'],
+    })
+    const { id } = store.accept(todo, 'local', [], 0)
+    await new NeedsYou({ store, asks }).noticeAccepted(id, todo)
+    expect(asks.created).toEqual([
+      {
+        requester: 'jobinator',
+        question: `Follow-ups due (#${id.slice(0, 6)})`,
+        options: ['Done'],
+        body: 'Open Jobinator to see who.',
+        command: null,
+        open: 'https://jobinator.example/followups',
+      },
+    ])
+    store.close()
   })
 
   it('leaves "Not me" open on the hub and files no ask for a plain alert', async () => {

@@ -15,6 +15,8 @@ export interface AskRequest {
   options: string[]
   body: string | null
   command: string | null
+  /** The https link the card opens: the notice's own item. */
+  open: string | null
 }
 
 /** What Needs you needs of Tether's asks. */
@@ -51,7 +53,8 @@ const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim()
 /**
  * A notice's ask. The question ends with the notice's short id: Tether merges an open ask with
  * the same requester and question into one, and each notice needs its own ask, so that "That was
- * me" confirms that notice's alerts and no other's.
+ * me" confirms that notice's alerts and no other's. The id is for Tether only; the Aico card
+ * hides it (`askTitle`), and `open` is the item the card's Open button goes to.
  */
 function noticeAsk(id: string, notice: Notice): AskRequest {
   const body = [
@@ -69,6 +72,7 @@ function noticeAsk(id: string, notice: Notice): AskRequest {
     options: verdict ? [THAT_WAS_ME, NOT_ME] : notice.kind === 'todo' ? [DONE] : [],
     body: cut(body, 4000),
     command: notice.command ?? null,
+    open: notice.open ?? null,
   }
 }
 
@@ -80,6 +84,7 @@ export function rowAsk(row: StatusRow): AskRequest {
     options: [],
     body: row.meaning,
     command: run?.ref ?? null,
+    open: null,
   }
 }
 

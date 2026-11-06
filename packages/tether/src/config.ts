@@ -35,8 +35,9 @@ import { join } from 'node:path'
  *     and `DELETE /v1/sessions/:id/due?token=` (take ride-along lines once shown).
  * 26: asks that want files: `files` on `POST /v1/asks`, `files` on an answer,
  *     `wantsFiles` and `files` on the ask (schema 30).
- * 27: `GET /v1/history`, `/v1/history/:id`, `/v1/history/:id/events` (schema 31). */
-export const API_VERSION = 30
+ * 27: `GET /v1/history`, `/v1/history/:id`, `/v1/history/:id/events` (schema 31).
+ * 31: `open` on `POST /v1/asks` and on the ask: an https link the ask opens (schema 35). */
+export const API_VERSION = 31
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'

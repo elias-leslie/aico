@@ -8,7 +8,7 @@ import type { TetherPaths } from './config'
 
 export const ASK_USAGE = `Usage:
   tether ask create "<question>" [--option TEXT]... [--recommend N] [--blocking]
-                    [--body TEXT | --body-file PATH] [--command CMD] [--share ID]
+                    [--body TEXT | --body-file PATH] [--command CMD] [--open URL] [--share ID]
                     [--files N|MIN-MAX [--files-hint TEXT]] [--session ID | --from LABEL]
       One line that stands alone. --option up to 5 choices, --recommend N marks
       choice N (from 1). --blocking: you stopped and wait on the answer (the
@@ -17,6 +17,7 @@ export const ASK_USAGE = `Usage:
       photos and files in the card. --files-hint: one line, up to 100
       characters, on what to send. The answer lists each file (id, path);
       read one with tether capture get ID. Aliases: --photos, --photo-hint.
+      --open URL: an https link the card opens (the item the ask is about).
   tether ask get <id>          the ask with the owner's answer
   tether ask list [--mine] [--all]
                                open and answered asks (--all: closed ones too);
@@ -52,6 +53,7 @@ const VALUE_FLAGS = [
   'body',
   'body-file',
   'command',
+  'open',
   'share',
   'files',
   'photos',
@@ -149,6 +151,7 @@ export function askCreateBody(
     }
   }
   const command = last(flags, 'command')
+  const open = last(flags, 'open')
   const share = last(flags, 'share')
   const files = filesWanted(flags)
   if (typeof files === 'string') return files
@@ -159,6 +162,7 @@ export function askCreateBody(
     ...(recommended === undefined ? {} : { recommended }),
     ...(body === undefined ? {} : { body }),
     ...(command === undefined ? {} : { command }),
+    ...(open === undefined ? {} : { open }),
     ...(share === undefined ? {} : { share }),
     ...(files === null ? {} : { files }),
     ...(flags.switches.has('blocking') ? { blocking: true } : {}),
@@ -194,6 +198,8 @@ interface AskJson {
   recommended: number | null
   body: string | null
   command: string | null
+  /** Absent from a Tether older than API 31. */
+  open?: string | null
   share: string | null
   /** Absent from a Tether older than schema 30. */
   wantsFiles?: { min: number; max: number; hint: string | null } | null
@@ -252,6 +258,7 @@ export function formatAsk(ask: AskJson): string {
   })
   if (ask.body) for (const line of ask.body.split('\n')) lines.push(`  | ${line}`)
   if (ask.command) lines.push(`  command: ${ask.command}`)
+  if (ask.open) lines.push(`  open: ${ask.open}`)
   if (ask.share) lines.push(`  share: ${ask.share}`)
   if (ask.wantsFiles) lines.push(`  ${wantsLine(ask.wantsFiles)}`)
   if (ask.answer !== null) lines.push(`  answer: ${ask.answer}`)

@@ -55,6 +55,8 @@ export interface Ask {
   recommended: number | null
   body: string | null
   command: string | null
+  /** An https link the ask opens (Tether API 31); absent from an older Tether. */
+  open?: string | null
   share: string | null
   /** The files the ask wants; null when none (and from a Tether older than API 26). */
   wantsFiles: WantsFiles | null
@@ -166,6 +168,12 @@ export function validateAsk(data: unknown): Ask | null {
   )
     return null
   if (!text(a.body, 4000) || !text(a.command, 2000) || !text(a.note, 1000)) return null
+  if (
+    a.open !== undefined &&
+    a.open !== null &&
+    !(line(a.open, 300) && /^https:\/\//.test(a.open as string))
+  )
+    return null
   if (a.share !== null && (typeof a.share !== 'string' || !ID.test(a.share))) return null
   if (a.answer !== null && !line(a.answer, 100)) return null
   // Absent from a Tether older than API 26: wants none.
@@ -198,6 +206,7 @@ export function validateAsk(data: unknown): Ask | null {
     recommended: a.recommended as number | null,
     body: a.body,
     command: a.command,
+    ...(typeof a.open === 'string' ? { open: a.open } : {}),
     share: a.share as string | null,
     wantsFiles,
     files: files as AnswerFile[],

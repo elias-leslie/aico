@@ -10,6 +10,7 @@ import {
   AGENT_TOOLS_TABLE_SQL,
   ASK_FILES_COLUMNS,
   ASK_HANDOFF_COLUMNS,
+  ASK_OPEN_SQL,
   ASKS_SQL,
   COORDINATOR_SQL,
   DELIVERIES_SQL,
@@ -522,6 +523,16 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(34, now)
+      }
+      if (current < 35) {
+        // v35: an ask that opens something (asks.open_url).
+        const has = this.db
+          .prepare("SELECT 1 FROM pragma_table_info('asks') WHERE name = 'open_url'")
+          .get()
+        if (!has) this.db.exec(ASK_OPEN_SQL)
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(35, now)
       }
     })
   }

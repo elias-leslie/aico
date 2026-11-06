@@ -455,6 +455,53 @@ describe('NeedsYouDrawer', () => {
     expect(routeOf({})).toBeNull()
   })
 
+  it('shows an app notice as its choices and an Open link, with no agent to talk to', async () => {
+    state.asks = [
+      ask({
+        session: null,
+        requester: 'jobinator',
+        question: 'Follow-ups due (#a7234c)',
+        options: ['Done'],
+        recommended: null,
+        body: 'Open Jobinator to see who.',
+        command: null,
+        open: 'https://jobinator.example/followups',
+        blocking: false,
+        answerTo: null,
+      }),
+    ]
+    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    const card = screen.getByTestId('ask-card')
+    expect(within(card).getByText('Follow-ups due')).toBeInTheDocument()
+    expect(card).not.toHaveTextContent('#a7234c')
+    const open = within(card).getByRole('link', { name: 'Open' })
+    expect(open).toHaveAttribute('href', 'https://jobinator.example/followups')
+    expect(open).toHaveAttribute('target', '_blank')
+    expect(screen.queryByTestId('answer-route')).toBeNull()
+    expect(within(card).queryByRole('textbox')).toBeNull()
+    expect(card).not.toHaveTextContent('Not now')
+    expect(card).not.toHaveTextContent('No session will get the answer')
+    fireEvent.click(within(card).getByRole('radio', { name: /Done/ }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Send' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Done')
+  })
+
+  it('keeps the reply box for an ask with no link, and refuses a link that is not https', () => {
+    state.asks = [
+      ask({ session: null, requester: 'cron', answerTo: null }),
+      ask({
+        id: 'bbbbbbbbbbbb',
+        session: null,
+        requester: 'x',
+        open: 'javascript:alert(1)',
+        answerTo: null,
+      }),
+    ]
+    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    expect(screen.getAllByTestId('answer-route')).toHaveLength(2)
+    expect(screen.queryByRole('link', { name: 'Open' })).toBeNull()
+  })
+
   it('names the launcher when the answer went there', async () => {
     state.asks = [ask({ launcher: '89abcdef', answerTo: '89abcdef' })]
     render(<NeedsYouDrawer open onOpenChange={() => {}} />)

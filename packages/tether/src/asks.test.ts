@@ -178,6 +178,18 @@ describe('POST /v1/asks', () => {
     expect(((await call('GET', '/v1/asks')).body.items as unknown[]).length).toBe(2)
   })
 
+  it('keeps the https link an ask opens and refuses any other', async () => {
+    const link = 'https://jobinator.example/followups'
+    const created = await ask({ requester: 'jobinator', question: 'Follow-ups due', open: link })
+    expect(created.body).toMatchObject({ open: link })
+    expect(((await call('GET', `/v1/asks/${created.body.id}`)).body as { open: string }).open).toBe(
+      link,
+    )
+    expect((await ask({ requester: 'jobinator', question: 'No link' })).body.open).toBeNull()
+    for (const open of ['http://x.example/a', 'javascript:alert(1)', 'https://a b', '', 7])
+      expect((await ask({ requester: 'x', question: 'Q?', open })).status, String(open)).toBe(400)
+  })
+
   it('hands back an answered ask instead of asking it again', async () => {
     const first = await ask({ requester: 'nightly', question: 'Run it?', options: ['Yes', 'No'] })
     await call('POST', `/v1/asks/${first.body.id}/answer`, { option: 1 })
@@ -484,6 +496,7 @@ describe('answerNote', () => {
     recommended: null,
     body: null,
     command: null,
+    open: null,
     share: null,
     wantsFiles: null,
     files: [],
@@ -561,6 +574,8 @@ describe('tether ask', () => {
           '/b.md',
           '--command',
           'sudo true',
+          '--open',
+          'https://x.example/a',
         ],
         env,
         '/x',
@@ -573,6 +588,7 @@ describe('tether ask', () => {
       recommended: 0,
       body: 'body text',
       command: 'sudo true',
+      open: 'https://x.example/a',
       blocking: true,
     })
     expect(askCreateBody(['a', 'b'], env, '/x')).toMatch(/one argument/)

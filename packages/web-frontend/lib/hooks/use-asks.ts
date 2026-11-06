@@ -31,6 +31,8 @@ export interface OwnerAsk {
   recommended: number | null
   body: string | null
   command: string | null
+  /** An https link the ask opens (an app notice's item); absent from an older Tether. */
+  open?: string | null
   share: string | null
   /** The files it wants; null or absent (an older Tether): none. */
   wantsFiles?: WantsFiles | null

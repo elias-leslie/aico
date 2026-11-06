@@ -60,6 +60,8 @@ export interface Ask {
   recommended: number | null
   body: string | null
   command: string | null
+  /** An https link the ask opens (an app notice's item), or null. */
+  open: string | null
   /** A `tether share` id to look at. */
   share: string | null
   /** The files the ask wants, or null. */
@@ -94,6 +96,7 @@ export interface AskRequest {
   recommended: number | null
   body: string | null
   command: string | null
+  open: string | null
   share: string | null
   wantsFiles: WantsFiles | null
   blocking: boolean
@@ -109,6 +112,7 @@ interface AskRow {
   recommended: number | null
   body: string | null
   command: string | null
+  open_url?: string | null
   share_id: string | null
   files_min?: number | null
   files_max?: number | null
@@ -156,6 +160,7 @@ function fromRow(row: AskRow): Ask {
     recommended: row.recommended,
     body: row.body,
     command: row.command,
+    open: row.open_url ?? null,
     share: row.share_id,
     wantsFiles,
     files,
@@ -233,6 +238,7 @@ function parseAsk(body: Record<string, unknown>): AskRequest {
     'recommended',
     'body',
     'command',
+    'open',
     'share',
     'files',
     'blocking',
@@ -280,10 +286,20 @@ function parseAsk(body: Record<string, unknown>): AskRequest {
     recommended: recommended as number | null,
     body: multiLine(body.body, 'body', 4000),
     command: multiLine(body.command, 'command', 2000),
+    open: openLink(body.open),
     share: share as string | null,
     wantsFiles: parseWantsFiles(body.files),
     blocking: body.blocking === true,
   }
+}
+
+/** `open`: one https link of at most 300 characters. */
+function openLink(value: unknown): string | null {
+  const link = oneLine(value, 'open', 300, false)
+  if (link === null) return null
+  if (!/^https:\/\/[^\s]+$/.test(link))
+    throw new HttpError(400, 'invalid_body', { field: 'open', detail: 'an https link' })
+  return link
 }
 
 /** `files: {min, max, hint}`: 0 to 20 files, at least one wanted at most. */
@@ -420,6 +436,7 @@ export class AskStore {
       request.recommended,
       request.body,
       request.command,
+      request.open,
       request.share,
       request.blocking ? 1 : 0,
     ]
@@ -432,7 +449,7 @@ export class AskStore {
       this.db
         .prepare(
           `UPDATE asks SET requester = ?, question = ?, options = ?, recommended = ?, body = ?,
-             command = ?, share_id = ?, blocking = ?, files_min = ?, files_max = ?, files_hint = ?,
+             command = ?, open_url = ?, share_id = ?, blocking = ?, files_min = ?, files_max = ?, files_hint = ?,
              updated_at = ? WHERE id = ?`,
         )
         .run(...values, ...wants, now, existing.id)
@@ -442,9 +459,9 @@ export class AskStore {
     this.db
       .prepare(
         `INSERT INTO asks (id, session_id, requester, question, options, recommended, body,
-           command, share_id, blocking, files_min, files_max, files_hint, question_hash,
+           command, open_url, share_id, blocking, files_min, files_max, files_hint, question_hash,
            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(id, request.session, ...values, ...wants, hash, now, now)
     return { ask: this.get(id) as Ask, created: true }

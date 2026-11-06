@@ -45,6 +45,11 @@ function fakeTether(answers: Record<string, unknown> = {}) {
 describe('validateAsk', () => {
   it('takes what Tether sends and refuses anything else', () => {
     expect(validateAsk(ASK)).toEqual(ASK)
+    expect(validateAsk({ ...ASK, open: 'https://x.example/a' })).toMatchObject({
+      open: 'https://x.example/a',
+    })
+    for (const open of ['http://x.example/a', 'javascript:alert(1)', 5])
+      expect(validateAsk({ ...ASK, open }), String(open)).toBeNull()
     for (const patch of [
       { id: 'nope' },
       { question: 'two\nlines' },

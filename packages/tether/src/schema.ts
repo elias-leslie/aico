@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 34
+export const SCHEMA_VERSION = 35
 
 /** Conversations observed in an owned workload survive its retirement and delayed transcript ingestion. */
 export const TRANSCRIPT_OWNERS_SQL = `
@@ -785,6 +785,13 @@ export const ASK_FILES_COLUMNS: readonly { table: string; column: string; sql: s
     sql: 'ALTER TABLE asks ADD COLUMN files TEXT CHECK(files IS NULL OR json_valid(files))',
   },
 ]
+
+/**
+ * v35: an ask that opens something (src/asks.ts). `open_url` is the https link
+ * an app notice's ask opens, null for an ask with nothing to open.
+ */
+export const ASK_OPEN_SQL =
+  "ALTER TABLE asks ADD COLUMN open_url TEXT CHECK(open_url IS NULL OR (length(open_url) <= 300 AND open_url LIKE 'https://%'))"
 
 /**
  * v31: the session history (src/sessions/). One row per conversation a tool
