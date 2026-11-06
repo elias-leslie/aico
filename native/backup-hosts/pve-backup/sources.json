@@ -96,7 +96,6 @@
     "/var/lib/app-backups",
     "/etc/app-config",
     "/srv/workspaces/projects/portfolio-ai/data",
-    "/srv/workspaces/projects/jobinator-4000/data",
     "/home/kasadis/.config/systemd/user",
     "/opt/app-stack"
    ],
