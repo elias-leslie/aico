@@ -207,7 +207,6 @@ const DEFAULT_STATUS_ALERT_COOLDOWN_SECONDS = 6 * 60 * 60
 // Where Nightshift keeps the phone push files today. The FCM access token is still minted there; the paired
 // phones are copied once into Aico's data directory (phones.json), so the phone keeps its pairing.
 const DEFAULT_FCM_TOKEN_FILE = '/var/lib/nightshift/fcm/token.json'
-const DEFAULT_PHONE_DEVICES_SEED_FILE = '/var/lib/nightshift/web/app-devices.json'
 const DEFAULT_NOTIFY_PASS_SECONDS = 30
 const DEFAULT_OMINULL_SITE = '/etc/nightshift/site.json'
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
@@ -370,7 +369,7 @@ export function loadConfig(
       base:
         env.AICO_APP_BASE || `https://${(list(env.AICO_PHONE_HOSTS) ?? [DEFAULT_PHONE_HOST])[0]}`,
       origins: phoneOrigins(env, publicHost),
-      gateFile: env.AICO_APP_GATE_FILE || '/var/lib/nightshift/web/app-gate.json',
+      gateFile: env.AICO_APP_GATE_FILE || join(dataDirPath(env), 'app-gate.json'),
       optionsFile: env.AICO_APP_OPTIONS_FILE || '/etc/nightshift/fcm-app.json',
       codesFile: join(dataDirPath(env), 'app-pair.json'),
       ttlSeconds: positiveInt(env.AICO_APP_PAIR_TTL_SECONDS, 600),
@@ -418,7 +417,7 @@ export function loadConfig(
     notify: {
       fcmTokenFile: env.AICO_FCM_TOKEN_FILE?.trim() || DEFAULT_FCM_TOKEN_FILE,
       devicesFile: env.AICO_PHONE_DEVICES_FILE?.trim() || join(dataDirPath(env), 'phones.json'),
-      devicesSeedFile: env.AICO_PHONE_DEVICES_SEED?.trim() || DEFAULT_PHONE_DEVICES_SEED_FILE,
+      devicesSeedFile: env.AICO_PHONE_DEVICES_SEED?.trim() || undefined,
       passMs: positiveInt(env.AICO_NOTIFY_PASS_SECONDS, DEFAULT_NOTIFY_PASS_SECONDS) * 1000,
       ominull: {
         keysFile: resolve(

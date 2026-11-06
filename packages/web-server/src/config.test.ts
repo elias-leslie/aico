@@ -163,10 +163,11 @@ describe('loadConfig: uploads, shares and maintenance', () => {
     ).toBe(7 * 86400)
   })
 
-  it("keeps the paired phones in Aico's data directory, seeded once from Nightshift's file", () => {
+  it("keeps the paired phones and the pairing gate in Aico's data directory", () => {
     const config = loadConfig({ AICO_DATA_DIR: '/data/aico' }, ID)
     expect(config.notify.devicesFile).toBe('/data/aico/phones.json')
-    expect(config.notify.devicesSeedFile).toBe('/var/lib/nightshift/web/app-devices.json')
+    expect(config.notify.devicesSeedFile).toBeUndefined()
+    expect(config.pairing.gateFile).toBe('/data/aico/app-gate.json')
     const set = loadConfig(
       {
         AICO_DATA_DIR: '/data/aico',
