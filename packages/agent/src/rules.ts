@@ -102,7 +102,7 @@ export function readPolicy(dbPath: string): ContextRules | Refused {
       if (!policy)
         return refused(
           'rules_unreadable',
-          `the context database at ${dbPath} has no launch policy; run aico context import-agent-hub`,
+          `the context database at ${dbPath} has no launch policy; restore context.db from a backup`,
         )
       const projects = (
         db

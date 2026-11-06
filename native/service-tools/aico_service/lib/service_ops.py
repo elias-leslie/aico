@@ -1219,7 +1219,7 @@ def release_cache_options(manager: str, root: Path) -> list[str]:
     uv and pnpm reflink from their cache only within one filesystem. The user
     caches (uv's on /srv/scratch, the pnpm store on /srv/workspaces) sit on
     another disk than the state root, so each release got full private copies
-    (~1.6 GB per agent-hub rebuild). A cache beside the releases fixes that;
+    (~1.6 GB per rebuild). A cache beside the releases fixes that;
     clone, never hardlink, keeps release files independent of the cache. Paths
     elsewhere (cleanroom snapshots, dev checkouts) keep the user's caches.
     """
@@ -1619,7 +1619,7 @@ def _caller_identity_env() -> list[tuple[str, str]]:
     ``--with-ack`` against the requester; outside a harness it would be ``pid:N``.
     """
     names = ("ST_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID",
-             "AGENT_HUB_AGENT_SLUG", "AGENT_HUB_SESSION_ID", "PI_SESSION_ID", "ANTIGRAVITY_CONVERSATION_ID", "TMUX_PANE",
+             "PI_SESSION_ID", "ANTIGRAVITY_CONVERSATION_ID", "TMUX_PANE",
              "AICO_SESSION_ID", "AICO_AGENT_SLUG", "AICO_CLAIM_OWNER", "ST_COORD_ANCHOR", "ST_COORD_HARNESS")
     return [(name, os.environ[name]) for name in names if os.environ.get(name)]
 

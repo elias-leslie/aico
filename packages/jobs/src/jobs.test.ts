@@ -78,11 +78,6 @@ describe('the schedule', () => {
     expect(() => parseJobs({ jobs: [{ ...base, every_min: 0, run }] })).toThrow('every_min')
   })
 
-  it('does not schedule the retired Agent Hub copy import', () => {
-    const shipped = readJobs(new URL('../data/jobs.json', import.meta.url).pathname)
-    expect(shipped.some((job) => job.kind === 'context-import')).toBe(false)
-  })
-
   it('reads the shipped job list and refuses a bad one by field', () => {
     const shipped = readJobs(new URL('../data/jobs.json', import.meta.url).pathname)
     expect(shipped.map((job) => job.kind)).toContain('notes-export')

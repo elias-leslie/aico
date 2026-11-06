@@ -26,8 +26,8 @@ export interface HostEntry {
   status: string[] | null
   /** What in `status`'s output means powered off (a regular expression). */
   statusOff: string
-  /** URLs a create checks on the host before it is sent there (the forwarded
-   * Agent Hub and SummitFlow health routes), e.g. `http://127.0.0.1:8003/health`. */
+  /** URLs a create checks on the host before it is sent there (forwarded
+   * health routes), e.g. `http://127.0.0.1:3002/api/health`. */
   health: string[]
   /** How long a create waits for the host to come up and answer. */
   wakeTimeoutSec: number

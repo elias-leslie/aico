@@ -3,7 +3,7 @@
 
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { collectCodex } from './codex'
 import { collect } from './collect'
@@ -457,10 +457,13 @@ describe('Codex across runs and homes', () => {
 
   it('reads every native home, keeps only numbers from a private one, and says nothing of it', async () => {
     const db = openUsage(':memory:')
-    const hostHomes = join(home, '.local', 'state', 'agent-hub', 'host-homes')
+    const hostHomes = join(home, 'host-homes')
     const open = join(hostHomes, 'agent-work')
     const hidden = join(hostHomes, 'neri-test')
-    const env = { XDG_STATE_HOME: join(home, 'state') }
+    const env = {
+      XDG_STATE_HOME: join(home, 'state'),
+      AICO_NATIVE_HOMES: ['~', `${hostHomes}/*`].join(delimiter),
+    }
     // This home, an ordinary host copy, and a copy whose name marks it private.
     writeCodexLog(lines(1), { root: join(home, '.codex', 'sessions') })
     writeCodexLog(lines(2, 1), { root: join(open, '.codex', 'sessions') })

@@ -1,5 +1,5 @@
 // Subscription plans and credit lots (owner data: a file in the Aico data directory, not
-// the repo; `aico usage import-agent-hub` writes it first from Agent Hub's rows), and the
+// the repo), and the
 // credit math on them: which lot a draw uses up first, what is left, and the last-7-day pace.
 
 import { existsSync, readFileSync } from 'node:fs'

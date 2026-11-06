@@ -109,11 +109,7 @@
       "full scope for shared or uncertain changes; worker scope includes backend consumers",
       "required and active optional workers restart automatically; --include-all-workers also starts inactive optional workers"
     ],
-    "examples": [
-      "st service rebuild aico --detach",
-      "st service rebuild agent-hub --detach",
-      "st -P agent-hub service rebuild agent-hub"
-    ],
+    "examples": ["st service rebuild aico --detach"],
     "task_types": ["devops", "config", "frontend", "backend"]
   },
   {

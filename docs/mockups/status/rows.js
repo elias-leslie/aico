@@ -21,14 +21,6 @@ const A = (kind, ref) => ({ kind, ref })
 window.MOCK_ROWS = [
   // --- real rows (GET /api/status) ---
   {
-    id: 'davion-sidarli/context-import', what: 'Agent Hub import into Aico', kind: 'job',
-    machine: 'davion-sidarli', project: 'aico', state: 'ok',
-    meaning: 'Agent Hub rows copied into Aico: 149 memories, 143 prompts, 17 roles, 4 context budgets, 20 project rows (hashes match).',
-    last_run: t('11-03T20:17:40'),
-    actions: [A('run', 'aico context import-agent-hub')],
-    at: t('11-03T20:17:42'),
-  },
-  {
     id: 'davion-sidarli/aico-web', what: 'Aico web server', kind: 'service',
     machine: 'davion-sidarli', project: 'aico', state: 'ok',
     meaning: 'Serving the app and API on 127.0.0.1:3002.',

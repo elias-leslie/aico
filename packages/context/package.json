@@ -1,7 +1,7 @@
 {
   "name": "@aico/context",
   "version": "0.1.0",
-  "description": "context.db: memories (FTS5 search), prompts, roles and their launch policy, context budgets, project rows; the models data file and route(); the Agent Hub import.",
+  "description": "context.db: memories (FTS5 search), prompts, roles and their launch policy, context budgets, project rows; the models data file and route().",
   "private": true,
   "license": "Apache-2.0",
   "aico": {

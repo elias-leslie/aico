@@ -127,7 +127,7 @@ loss or deadline after sending, `outcome_uncertain`, blocked End cleanup,
 `close_uncertain`, or any unqualified reply. A failure receipt reports
 `status: "uncertain"` because it does not vouch for the workload's current state,
 plus a content-free `reason`. A create the owner refused outright (any `400` or
-`422`, `request_conflict`, `recovery_pending`, `agent_hub_unavailable`) created
+`422`, `request_conflict`, `recovery_pending`) created
 nothing and reports `status: "refused"`, with the owner's words in `detail`. A
 refusal before anything is sent is one `error:` line, without the usage. With
 `--host`, create says the host may be powering on only after 3 s without an answer. No failed request is automatically retried. Exit
@@ -247,7 +247,7 @@ lacks (`openai/gpt-6.1-sol`) fails the first turn with 400 `model_not_found`;
 root, naming the bare slug or the listed models. An API key login, a custom
 `model_provider` or an unreadable catalog skips that check. Omit `--daybreak` to inherit the
 user's setting. A nonempty selection appends
-`{model: string|null, reasoningEffort: string|null, daybreak?: boolean, agentHubContext?: boolean}` after the existing digest
+`{model: string|null, reasoningEffort: string|null, daybreak?: boolean}` after the existing digest
 fields, preserving digests for callers that omit both fields.
 
 Claude Code takes `--model MODEL` (an alias such as `haiku` or a full name such as
@@ -258,15 +258,15 @@ effort from the user's settings (a Blank Slate lane keeps those settings, so the
 still wins). Claude Code has no Daybreak switch.
 
 Launch defaults. A fresh create (not `--resume-session`) that leaves out `--model`
-takes the model for its work role and tool from Agent Hub's launch table (`st models route
---role ROLE --tool TOOL`, owner decisions in `model_selection_policy.json` `launch`), with
+takes the model for its work role and tool from Aico's launch table (`aico models route
+--role ROLE --tool TOOL`, owner decisions in context.db's launch policy), with
 the table's effort and, for Codex, its Daybreak setting unless `--reasoning-effort` or
 `--daybreak` is given. A role whose table context is `blank-slate` (review, verification,
 other) starts Blank Slate when neither `--project`/`--project-root` nor `--blank-slate` is
 given. Explicit flags always win. The output's `launchDefault` names the job, what was
 filled (`applied`) and the table command; a row the owner ruled out (Codex reviews) fills
-nothing and says why in `note`. The same lookup validates `--work-role`: a role Agent Hub
-doesn't know (a typo such as `tester`, or the job name `testing` for `verification`) is
+nothing and says why in `note`. The same lookup validates `--work-role`: a role the launch
+policy doesn't know (a typo such as `tester`, or the job name `testing` for `verification`) is
 refused before Tether is contacted. When the table can't be read, the launch goes ahead on
 the tool's own settings and `launchDefault.note` says so (Pi then still needs `--model`).
 
@@ -280,38 +280,6 @@ reboot continuity know its conversation. Pi efforts are `off`, `minimal`, `low`,
 `medium`, `high`, `xhigh`, and `max`; `none` is refused. Authentication
 failure remains a native error, with no provider or paid-key fallback added here.
 
-Pi's source-linked Agent Hub extension handles explicit Daybreak selection through
-the native OpenAI provider's model metadata, including compaction and nested
-provider calls. `--daybreak on` requests `access_programs.cyber=daybreak_blue`;
-`--daybreak off` requests `standard`. Both require `openai/gpt-6-sol`; omission
-leaves native provider behavior unchanged. The extension preserves native
-authentication and the dynamic provider catalog. Project/model/program access
-still requires a separate harmless authenticated qualification.
-
-`--agent-hub-context on|off` is Pi-only and controls **optional** Agent Hub context
-for this session. Off omits advisory references, reference/project indexes, tool
-guidance and continuity. Required global/project policy, mandates, guardrails,
-Pi's native/project instructions, and session ingestion remain active. Omission
-and `on` keep the existing default. Explicit values are included in create
-idempotency and carried through fresh/resumed launch environment; no persistent
-settings are changed.
-
-For two independent sessions, use distinct request IDs and change only the last
-flag (replace the project ID/path with the intended registered project):
-
-```bash
-st aico create pi-context-on 'Reply OK.' --project PROJECT --project-root /absolute/project \
-  --tool pi --work-role implementation --model openai/gpt-6-sol --reasoning-effort xhigh --daybreak on --agent-hub-context on
-st aico create pi-context-off 'Reply OK.' --project PROJECT --project-root /absolute/project \
-  --tool pi --work-role implementation --model openai/gpt-6-sol --reasoning-effort xhigh --daybreak on --agent-hub-context off
-```
-
-Integrate the Tether and Agent Hub checkpoints together, rebuild/restart Tether
-through its managed service, and verify the source-linked Pi adapter installation
-before starting new sessions. Existing Pi processes must reload extensions (or
-start fresh) to use updated source; a source checkpoint alone does not qualify
-provider access or prove delivery to a live model.
-
 ### Blank Slate
 
 A Blank Slate session starts with the harness's own prompt and the user's
@@ -324,9 +292,8 @@ st aico create review-1 'Read /abs/brief.md and follow it.' --tool claude-code -
 
 Claude Code, Codex and Pi support it; Antigravity does not (its context comes
 from a user-level plugin no launch flag skips), and Aico offers no Blank Slate
-row for it. `--blank-slate` refuses `--project-root`, `--resume-session` and
-`--agent-hub-context`; Pi also refuses `--daybreak` (that comes from the Agent
-Hub extension). `--project` defaults to `blank-slate`. The HTTP form is
+row for it. `--blank-slate` refuses `--project-root` and `--resume-session`; Pi also
+refuses `--daybreak`. `--project` defaults to `blank-slate`. The HTTP form is
 `POST /v1/sessions {"tool", "blankSlate": true, ...}` or a `/v1/roots` create
 whose `projectRoot` is a Blank Slate workspace.
 
@@ -334,7 +301,7 @@ The session's workspace is a new empty directory,
 `~/.local/share/aico/blank-slate/<id>` (the request ID for a root). Tether keys
 the mode on that path, so restarts, tool replacement, crash recovery and reboot
 restore keep it. It launches through `scripts/aico-blank-slate`, which execs the
-native harness, never the Agent Hub launcher. For Claude it also records that
+native harness directly. For Claude it also records that
 one workspace as trusted in `~/.claude.json` (what accepting Claude's folder
 trust prompt records; Claude has no launch option that skips it), so a new
 empty workspace does not stop at that prompt. The file is replaced only when
@@ -342,9 +309,9 @@ no one wrote it since it was read, with its mode kept.
 
 | Tool | Off | Kept |
 | --- | --- | --- |
-| Claude Code | Agent Hub launcher, CLAUDE.md files (user, project, added dirs), auto-memory, user settings (plugins, output style, every hook but PreToolUse), MCP servers, slash commands/skills, Claude in Chrome | PreToolUse guards, model, effort/thinking, the status line and the Bypass Permissions acceptance (`skipDangerousModePermissionPrompt`) from `~/.claude/settings.json` |
-| Codex | Agent Hub launcher and `developer_instructions`, AGENTS.md, skills list, plugins (and their MCP servers), apps, memories, each `config.toml` MCP server, extra sandbox writable roots, every `hooks.json` handler but PreToolUse | PreToolUse guards and their trust |
-| Pi | Agent Hub and st-coord extensions, skills, AGENTS.md/context files, prompt templates, MCP | none (Pi's guards are extension code) |
+| Claude Code | CLAUDE.md files (user, project, added dirs), auto-memory, user settings (plugins, output style, every hook but PreToolUse), MCP servers, slash commands/skills, Claude in Chrome | PreToolUse guards, model, effort/thinking, the status line and the Bypass Permissions acceptance (`skipDangerousModePermissionPrompt`) from `~/.claude/settings.json` |
+| Codex | `developer_instructions`, AGENTS.md, skills list, plugins (and their MCP servers), apps, memories, each `config.toml` MCP server, extra sandbox writable roots, every `hooks.json` handler but PreToolUse | PreToolUse guards and their trust |
+| Pi | Aico extensions, skills, AGENTS.md/context files, prompt templates, MCP | none (Pi's guards are extension code) |
 
 What the model still receives, measured on captured requests (2026-10-26):
 
@@ -357,15 +324,14 @@ What the model still receives, measured on captured requests (2026-10-26):
 - the opening prompt, plus a guard's refusal text if a PreToolUse guard blocks a
   tool call (they are silent otherwise).
 
-Not added: Agent Hub policy or mandates, memory, project or repo files,
-skills, MCP tools, Aico/SummitFlow hook output. Agent Hub does not ingest or
-bind these sessions. The pane environment still carries `AICO_*`/`ST_*`
+Not added: Aico policy or mandates, memory, project or repo files,
+skills, MCP tools, aico-hook output. The pane environment still carries `AICO_*`/`ST_*`
 variables (not in the prompt; a tool call could read them). Aico's context
 column reports `not_applicable` with "Blank Slate: ...".
 
 ### Chosen instructions
 
-Any new session can start with a versioned instruction set: an Agent Hub
+Any new session can start with a versioned instruction set: an Aico
 prompt revision. A Blank Slate session gets only these; any other session gets
 them on top of its usual context.
 
@@ -375,16 +341,15 @@ st aico create review-1 'Read /abs/brief.md and follow it.' --tool codex --work-
 ```
 
 `PROMPT@REVISION` takes a revision ID or a unique prefix of one from the 100
-most recent (`st prompt revisions PROMPT`); bare `PROMPT` takes the revision
+most recent (`aico prompt` revisions); bare `PROMPT` takes the revision
 holding its current content and refuses when there is none. `st aico create`
-reads the revision through `st prompt` and sends Tether an immutable snapshot
+reads the revision through `aico prompt` and sends Tether an immutable snapshot
 (`instructions` on `/v1/roots` or `/v1/sessions`). The root digest covers the
 revision ID. Tether keeps it at `~/.local/share/aico/instructions/<widget>.md`
 (plus `.json` naming the revision), so restarts, resume, crash recovery and
 reboot restore launch with the same text even if the prompt changes later.
 Each launch reads that file: Claude Code and Pi get `--append-system-prompt`,
-Codex `-c developer_instructions='''...'''`; the Agent Hub launchers merge it
-with their own context. Antigravity takes none. Content must be 1 byte to
+Codex `-c developer_instructions='''...'''`. Antigravity takes none. Content must be 1 byte to
 64 KiB, without control characters other than tab and newline, or `'''`.
 
 Only `st aico create --instructions` (or the HTTP form above) picks a revision; Aico web has no
@@ -402,19 +367,19 @@ Pi terminal observation remains `unsupported_profile`, and atomic follow-up subm
 is unavailable. `st aico root send` queues a generation-fenced follow-up in the
 running Pi root; end it and create a new request when the instruction needs fresh context.
 
-New roots require an explicit `workRole` from Agent Hub’s canonical work-role registry:
+New roots require an explicit `workRole` from the launch policy's work roles:
 `coordinator`, `implementation`, `research`, `review`, `recon`, `hunting`,
 `operations`, `selection`, `verification`, `reporting`, or `other`. Use `--work-role implementation`.
 `--work-role-name Builder` optionally
 sets a human display name. The opaque `--role` field keeps its existing meaning.
 Work roles never come from titles, prompts, coordinator membership, or a parent.
-Tether transports safe explicit IDs; Agent Hub owns registry membership validation.
+Tether transports safe explicit IDs; `st aico create` validates membership.
 
 The declaration and optional name are immutable root creation metadata. They
 append `{workRole, workRoleDisplayName}` to the digest after all existing fields.
 The pane receives `ST_WORK_ROLE`, `ST_WORK_ROLE_SOURCE` (the immutable root
 logical identity prefixed by `tether:root:`), and `ST_WORK_ROLE_DISPLAY_NAME`.
-No launch prompt text is added. Agent Hub context delivery reads the same
+No launch prompt text is added. Aico's context delivery reads the same
 variables and selects context for the root with the audience tag
 `work-role:<id>`; Blank Slate roots run no delivery. Same-request retries and tombstones retain the
 original declaration; changing either declaration field conflicts. Legacy
@@ -433,47 +398,15 @@ a fresh lane from about 45K to 23K tokens. Coordinators and sessions nobody
 launched keep the full harness. Codex and Pi are not listed: Neri's Codex lanes
 use computer use, and Blank Slate Codex and Pi already start bare.
 
-Native producers register the declaration against the actual native UUID.
-Resuming a UUID retains its first native-session declaration in Agent Hub;
-choose that same role on resume. A different role requires a new native session
-or a fitting existing one. Tether's logical root ID is provenance, never the
+Choose the same role on resume. Tether's logical root ID is provenance, never the
 native UUID. Existing owner-created sessions and imported roots stay Unknown.
 
 Create accepts exactly `requestId`, `tool` (a root-capable slug, today
-`claude-code`, `codex`, `pi` or `agent-hub`),
+`claude-code`, `codex`, `pi`, `antigravity` or `aico-agent`),
 `projectId`, absolute normalized `projectRoot`, nonempty `initialPrompt`, `role`, `workRole`, optional `workRoleDisplayName`,
 and optional opaque `leadRootReference`, `facetCapsuleRef`, and
-`resumeSessionId`, `model`, `reasoningEffort`, `daybreak` and `agentSlug` (`agent-hub` only). On `/v1` it also accepts `origin`, `aTermSessionId` and
+`resumeSessionId`, `model`, `reasoningEffort` and `daybreak`. On `/v1` it also accepts `origin`, `aTermSessionId` and
 `launchedBy` ([api-v1.md](../packages/tether/docs/api-v1.md#roots)); none of them is part of the digest.
-
-`agent-hub` is the one root kind with no terminal: a chat session on an Agent Hub agent
-(`st aico create REQ PROMPT --tool agent-hub --agent SLUG --project P --project-root PATH
---work-role R [--model M]`). `agentSlug` is required for it and refused for every other tool; its `initialPrompt` may be empty (the chat opens with no first message and the owner types it), while every other root needs one;
-it is appended to the digest (`{agentSlug}`) only when present, so existing digests do not
-change. Tether creates the Agent Hub session under its own id, with the root's ownership id
-as `external_id`, and posts `initialPrompt` as the first turn; `st aico root send` posts a
-follow-up (queued while a turn runs), `st aico roots` reports `busy` while a turn runs and
-`turn_finished` when idle, and `st aico root end` cancels the turn and closes the Agent Hub
-session. It shows as a child of the coordinator that launched it like any other root.
-Aico web shows it as a chat (the shared `@agent-hub/chat-ui`: streaming text,
-thinking and tool blocks, Stop, a follow-up typed during a turn shown as queued) instead of a
-terminal. Tether makes every Agent Hub call; the web server asks Tether over its
-private socket for that session, so the owner token and the Agent Hub address
-never reach the page. `title` and `coordinator` are catalog-only. Resume, reasoning effort, Daybreak and Agent Hub context do not apply.
-
-When Agent Hub refuses to create the session (for example a work role it does not know), the failure carries its field-level reason from the response's `details` (`work_role.id: Value error, Unknown work role ID`), not just "Request validation failed"; it shows in `agentHub.error`, `st aico create` and `st aico root status`, and in the chat.
-
-A turn counts as started only once Agent Hub is running it: Agent Hub stores the prompt and
-sends `connected` first, then an `error` event if it cannot run the turn (a working
-directory outside its known roots and scratch, a model it cannot route). Tether watches the
-stream for a few seconds (`TETHER_AGENT_HUB_SETTLE_MS`) and keeps the failure on the session
-(`agentHub.error`). A create then exits nonzero with `reason: turn_not_started` and `detail`
-(the same request ID posts the prompt again), a `root send` exits nonzero with the reason
-and detail, and `st aico root status` shows `turnState` (`running`, `idle`, `unknown`),
-`queued` and the last `error`. `--blank-slate` gives the chat an empty workspace under
-`/tmp/aico-blank-slate/<request id>` (the scratch Agent Hub accepts as a working directory)
-and needs no `--project-root`; its project is `agent-hub` unless `--project` names another registered project (Agent Hub refuses an unknown project id, which `blank-slate` is).
-[api-v1.md](../packages/tether/docs/api-v1.md#agent-hub-sessions) has the session behavior.
 
 Antigravity (`agy`) is root-capable: it resumes with `--conversation <id>` (the id read
 from the conversation the process holds open) and takes the launch prompt through `-i`,
@@ -489,9 +422,6 @@ Observation is different: `st aico roots` reads each root's terminal through a
 per-tool status profile (codex and claude-code today) and reports a root of any
 other tool as `unsupported_profile`, so a new root tool needs no change to
 `create` but does need a profile before `roots` can observe it.
-An `agent-hub` root needs no profile: `roots` reads its turn state from Tether's session
-descriptor (`terminal: busy` for a running turn, `turn_finished` when idle, `ambiguous` when
-Agent Hub cannot be reached) and reports `backend: "agent-hub"`.
 
 `resumeSessionId` is either absent/null (a fresh launch) or an exact native
 session ID validated by the selected tool's resume adapter. The adapters are

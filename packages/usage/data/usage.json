@@ -17,7 +17,7 @@
   "lookback_days": 8,
   "late_after_min": 15,
   "unknown_after_min": 30,
-  "native_homes": ["~", "~/.local/state/agent-hub/host-homes/*"],
+  "native_homes": ["~"],
   "private_words": ["neri"],
   "claude": {
     "statusline": "claude-usage/rate-limits.json",

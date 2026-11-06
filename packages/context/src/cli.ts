@@ -1,11 +1,10 @@
 // `aico memory | prompt | models | context`: context.db from the command line.
 // Output matches `st memory`, `st prompt` and `st models route` line for line where
-// agents read it; `context import-agent-hub` copies Agent Hub's rows in (M6/M7).
+// agents read it.
 
 import { readFileSync } from 'node:fs'
 import { transaction } from '@aico/store'
 import { routeFacts } from '@aico/usage'
-import importData from '../data/agent-hub-import.json' with { type: 'json' }
 import { startedBy } from './ancestry'
 import { bindContextSession, estimatedTokens } from './cost'
 import { type Database, openContext } from './db'
@@ -29,7 +28,6 @@ import {
   formatPromptList,
   formatSearch,
 } from './format'
-import { type AgentHubSource, type ImportResult, importAgentHub } from './import'
 import { loadPolicy } from './launch'
 import {
   addMemory,
@@ -54,17 +52,7 @@ export interface ContextCliIo {
   err(text: string): void
   /** context.db. */
   dbPath: string
-  /** This host's id on Status rows. */
-  machine: string
-  /** aico-web's POST /api/status/rows on loopback, or null to skip the row. */
-  statusUrl: string | null
-  fetch: typeof fetch
   now(): Date
-  /** Agent Hub, read-only: the import source for a checkout. */
-  agentHub: {
-    checkout: string
-    source(checkout: string): AgentHubSource
-  }
   /** Aico's data directory: usage.db there holds the usage facts `models route` shows. */
   dataDir?: string
   /** `context deliver`: the environment it reads (session, role, already-delivered
@@ -95,7 +83,6 @@ const USAGE = `Usage: aico <memory|prompt|models|context> ...
   aico prompt update SLUG --content-file F [--reason R]
   aico prompt measure [SLUG...]   (none: the global prompts)
   aico models route --role R [--tool T] [--model M] [--project P] [--json]
-  aico context import-agent-hub [--checkout DIR] [--json] [--no-status]
   aico context deliver --tool T [--project P] [--session S] [--role R] [--coordinator]
                        [--event E] [--format text|json|claude|codex|pi] [--force]
   aico context delivery [TOOL on|off]
@@ -305,15 +292,13 @@ function prompt(db: Database, argv: string[], io: ContextCliIo): number {
       return 1
     }
     const content = readFileSync(file, 'utf8')
-    // Kept as a local edit, like one made in Aico's editor: an import never overwrites it.
-    transaction(db, () => {
+    transaction(db, () =>
       putPrompt(
         db,
         { ...found, content, updatedAt: io.now().toISOString() },
         str(parsed, 'reason') ?? 'aico prompt update',
-      )
-      db.prepare('INSERT OR IGNORE INTO context_local_edits VALUES (?, ?)').run('prompt', slug)
-    })
+      ),
+    )
     io.out(`UPDATED:${slug} v${getPrompt(db, slug)?.version}\n`)
     return 0
   }
@@ -393,7 +378,7 @@ function models(db: Database, argv: string[], io: ContextCliIo): number {
   if (!role) throw new UsageError('models route needs --role')
   const policy = loadPolicy(db)
   if (!policy) {
-    io.err('No launch policy yet: run aico context import-agent-hub first.\n')
+    io.err('context.db has no launch policy; restore context.db from a backup.\n')
     return 1
   }
   const tool = str(parsed, 'tool')
@@ -428,54 +413,6 @@ function models(db: Database, argv: string[], io: ContextCliIo): number {
   return 0
 }
 
-function importLines(result: ImportResult): string {
-  const hash = result.projectHash
-  return [
-    `IMPORTED memories=${result.memories} memory_settings=${result.memorySettings} prompts=${result.prompts} jobs=${result.jobs} named_roles=${result.namedRoles} role_prompts=${result.rolePrompts} budgets=${result.budgets} project_rows=${result.projectRows}`,
-    `  removed (archived, disabled or deleted in Agent Hub since): memories=${result.removed.memories} prompts=${result.removed.prompts}`,
-    `  project rows sha256 ${hash.match ? 'match' : 'MISMATCH'}: source=${hash.source} received=${hash.received} stored=${hash.stored}`,
-    ...(result.missingRoles.length
-      ? [`  role names not found in Agent Hub: ${result.missingRoles.join(', ')}`]
-      : []),
-    // Last line: the plain summary a job's Status row shows.
-    `Copied ${result.memories} memories and ${result.prompts} prompts from Agent Hub; ${hash.match ? 'the project list matches' : 'the project list does not match Agent Hub'}.`,
-  ].join('\n')
-}
-
-/** Reports the import as this machine's Status row; a server that does not answer only warns. */
-async function postStatus(
-  io: ContextCliIo,
-  at: string,
-  result: ImportResult | null,
-  error: string | null,
-) {
-  if (!io.statusUrl) return
-  const meaning = result
-    ? `Agent Hub rows copied into Aico: ${result.memories} memories, ${result.prompts} prompts, ${result.jobs + result.namedRoles} roles, ${result.budgets} context budgets, ${result.projectRows} project rows${result.projectHash.match ? ' (hashes match)' : ' (project rows do not match: run it again)'}.`
-    : `Copying Agent Hub's rows into Aico failed: ${error}`
-  const row = {
-    id: 'jobs/context-import',
-    what: 'Agent Hub import into Aico',
-    kind: 'job',
-    machine: io.machine,
-    project: 'aico',
-    state: result?.projectHash.match ? 'ok' : 'failed',
-    meaning: meaning.slice(0, 300),
-    last_run: at,
-    actions: [{ kind: 'run', ref: 'aico context import-agent-hub' }],
-  }
-  try {
-    const response = await io.fetch(io.statusUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(row),
-    })
-    if (!response.ok) io.err(`Status row not saved: HTTP ${response.status}\n`)
-  } catch (cause) {
-    io.err(`Status row not saved: ${(cause as Error).message}\n`)
-  }
-}
-
 const DELIVER_FLAGS = {
   '--tool': 'tool',
   '--project': 'project',
@@ -501,8 +438,7 @@ async function deliverCommand(db: () => Database, rest: string[], io: ContextCli
     if (error instanceof UnknownTool) throw new UsageError(error.message)
     throw error
   }
-  // A hook never adds a second copy of what the launch already delivered, nor of
-  // what Agent Hub's Pi extension adds in process unless it was told to stand down.
+  // A hook never adds a second copy of what the launch already delivered.
   // The launch's marker counts only for the agent it started (AICO_CONTEXT_PID is
   // that agent's pid, a few parents up from a hook): a session that agent starts
   // inherits the variables but not the pid, and gets its own delivery.
@@ -512,8 +448,7 @@ async function deliverCommand(db: () => Database, rest: string[], io: ContextCli
     Number.isInteger(launched) &&
     launched > 0 &&
     startedBy(launched, DELIVERY.markerHops, io.delivery?.pid, io.delivery?.parentOf)
-  const delivered = marked || env.AGENT_HUB_CONTEXT_PREINJECTED_HASH
-  if (HOOK_FORMATS.includes(format) && delivered && !parsed.flags.has('--force')) {
+  if (HOOK_FORMATS.includes(format) && marked && !parsed.flags.has('--force')) {
     // Startup knows both ids while the agent is alive. Keep the link so the
     // nightly pass can observe this exact conversation after its session ends.
     // A subagent's start carries the subagent's id, not the conversation's: never bind it.
@@ -592,32 +527,10 @@ function deliverySwitch(db: Database, rest: string[], io: ContextCliIo): number 
   return 0
 }
 
-async function context(db: Database, argv: string[], io: ContextCliIo): Promise<number> {
+function context(db: Database, argv: string[], io: ContextCliIo): number {
   const [sub, ...rest] = argv
   if (sub === 'delivery') return deliverySwitch(db, rest, io)
-  if (sub !== 'import-agent-hub') throw new UsageError(`unknown context command ${sub ?? '(none)'}`)
-  const parsed = parse(rest, { '--checkout': 'checkout' }, ['--json', '--no-status'])
-  const checkout = str(parsed, 'checkout') ?? io.agentHub.checkout
-  const at = io.now().toISOString()
-  let result: ImportResult
-  try {
-    result = importAgentHub(db, io.agentHub.source(checkout), {
-      agentRoles: importData.agent_roles,
-      now: at,
-    })
-  } catch (error) {
-    const message = (error as Error).message
-    if (!parsed.flags.has('--no-status')) await postStatus(io, at, null, message)
-    io.err(`Import failed: ${message}\n`)
-    return 1
-  }
-  if (!parsed.flags.has('--no-status')) await postStatus(io, at, result, null)
-  io.out(
-    parsed.flags.has('--json')
-      ? `${JSON.stringify(result, null, 2)}\n`
-      : `${importLines(result)}\n`,
-  )
-  return result.projectHash.match ? 0 : 1
+  throw new UsageError(`unknown context command ${sub ?? '(none)'}`)
 }
 
 /** One `aico` command against context.db; its exit status. */
@@ -647,7 +560,7 @@ export async function runContextCli(
     if (command === 'memory') return memory(db, argv, io)
     if (command === 'prompt') return prompt(db, argv, io)
     if (command === 'models') return models(db, argv, io)
-    if (command === 'context') return await context(db, argv, io)
+    if (command === 'context') return context(db, argv, io)
     throw new UsageError(`unknown command ${command}`)
   } catch (error) {
     if (!(error instanceof UsageError)) throw error

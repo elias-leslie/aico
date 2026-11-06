@@ -2,28 +2,6 @@
   "contractVersion": 1,
   "bindings": [
     {
-      "id": "agent-hub.agents",
-      "owner": "agent-hub",
-      "namespace": "agents",
-      "manifest": "extensions/agents.json",
-      "executable": "backend/.venv/bin/agent-hub-st",
-      "arguments": ["agents"],
-      "grant": {
-        "enabled": true,
-        "effects": [
-          "network",
-          "read-remote",
-          "write-remote",
-          "read-local",
-          "write-local",
-          "credentials"
-        ]
-      },
-      "environment": [],
-      "execution_source": "accepted_runtime",
-      "owner_manifest": "st-extensions/agents.json"
-    },
-    {
       "id": "bugout.recon",
       "owner": "bugout",
       "namespace": "bugout",

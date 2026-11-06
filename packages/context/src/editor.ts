@@ -1,5 +1,5 @@
 // Edits take effect on the next delivery. Optimistic versions stop a stale page
-// overwriting another edit; the recurring Agent Hub import preserves local work.
+// overwriting another edit.
 import { transaction } from '@aico/store'
 import type { Database } from './db'
 import { getPrompt, listPrompts, putPrompt } from './prompts'
@@ -81,7 +81,6 @@ export function editPrompt(
       { ...prompt, name, content, contextPolicy: policy, updatedAt: at },
       'Edited in Aico',
     )
-    db.prepare('INSERT OR IGNORE INTO context_local_edits VALUES (?, ?)').run('prompt', slug)
   })
 }
 export function editRole(
@@ -128,36 +127,5 @@ export function editRole(
     ;[...new Set(value.prompts as number[])].forEach((id, index) => {
       db.prepare('INSERT INTO role_prompts VALUES (?, ?, ?)').run(name, id, index)
     })
-    db.prepare('INSERT OR IGNORE INTO context_local_edits VALUES (?, ?)').run('role', name)
   })
-}
-
-/** Apply local role context after refreshing the rest of the launch policy. */
-export function localRoles(db: Database): {
-  name: string
-  label: string
-  description: string
-  context: string | null
-  updated_at: string
-  links: number[]
-}[] {
-  return (
-    db
-      .prepare(`SELECT r.name, r.label, r.description, r.context, r.updated_at FROM roles r
-    JOIN context_local_edits e ON e.kind = 'role' AND e.item = r.name`)
-      .all() as unknown as {
-      name: string
-      label: string
-      description: string
-      context: string | null
-      updated_at: string
-    }[]
-  ).map((r) => ({
-    ...r,
-    links: (
-      db
-        .prepare('SELECT prompt_id FROM role_prompts WHERE role = ? ORDER BY position')
-        .all(r.name) as { prompt_id: number }[]
-    ).map((p) => p.prompt_id),
-  }))
 }

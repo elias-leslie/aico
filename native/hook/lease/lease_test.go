@@ -28,7 +28,7 @@ func sandbox(t *testing.T) (repo string) {
 	t.Setenv("ST_COORD_ANCHOR", "")
 	t.Setenv("ST_COORD_HARNESS", "")
 	t.Setenv("ST_COORD_SENSITIVE", "")
-	for _, k := range append([]string{"ST_SESSION_ID", "AGENT_HUB_SESSION_ID", "TMUX", "TMUX_PANE"}, identityEnv...) {
+	for _, k := range append([]string{"ST_SESSION_ID", "TMUX", "TMUX_PANE"}, identityEnv...) {
 		t.Setenv(k, "")
 	}
 	repo = filepath.Join(tmp, "demo")

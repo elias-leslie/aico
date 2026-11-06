@@ -1,6 +1,5 @@
 // Full extractions kept on this machine so `refocus` can give another view without the
-// network. One 0600 JSON file per fetch, named by a 32-hex id. Agent Hub's older
-// artifacts (same record shape) stay readable from its cache folder.
+// network. One 0600 JSON file per fetch, named by a 32-hex id.
 
 import { randomBytes } from 'node:crypto'
 import {
@@ -24,11 +23,6 @@ const cacheDir = (env: NodeJS.ProcessEnv = process.env) =>
   env.AICO_WEB_CACHE_DIR?.trim()
     ? resolve(env.AICO_WEB_CACHE_DIR.trim())
     : join(cacheHome(env), 'aico', 'web')
-
-const legacyDir = (env: NodeJS.ProcessEnv) =>
-  env.AGENT_HUB_WEB_CACHE_DIR?.trim()
-    ? resolve(env.AGENT_HUB_WEB_CACHE_DIR.trim())
-    : join(cacheHome(env), 'agent-hub', 'web')
 
 export function saveArtifact(
   payload: Record_,
@@ -54,7 +48,7 @@ export function saveArtifact(
 
 /** A stored extraction by id or absolute path; throws a plain reason when it can't be trusted. */
 export function loadArtifact(reference: string, env: NodeJS.ProcessEnv = process.env): Record_ {
-  const roots = [cacheDir(env), legacyDir(env)]
+  const roots = [cacheDir(env)]
   let path: string
   if (/^[a-f0-9]{32}$/.test(reference)) {
     const name = `${reference}.json`

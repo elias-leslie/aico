@@ -3,10 +3,10 @@
 //
 // - memories: the current text of each memory, its scope, tier and counters, with
 //   an FTS5 index over summary, tags and content; memory_revisions keeps every
-//   version written from here on (older Agent Hub revisions stay in its archive).
+//   version written from here on (older revisions stay in the Agent Hub archive).
 // - prompts and prompt_revisions: the same for reusable prompt text.
 // - roles: the jobs agents launch as (with their per-tool launch rows) and the
-//   role names kept from Agent Hub's agent rows; role_prompts links prompts to them.
+//   named roles; role_prompts links prompts to them.
 // - launch_tools, launch_providers, launch_deny: the rest of the launch policy.
 // - context_budgets, project_permissions, settings.
 // - deliveries and delivery_items: what each context delivery loaded into a
@@ -213,6 +213,17 @@ const MIGRATIONS = [
       .get()
     if (!has) db.exec('ALTER TABLE context_observations ADD COLUMN context_tokens INTEGER')
   },
+  // Agent Hub is retired: its import (and the local-edit marks that guarded edits from
+  // it) is gone, and its chat launch row is now the row for Aico's own agent.
+  `DROP TABLE IF EXISTS context_local_edits;
+   UPDATE launch_tools SET name = 'aico-agent', label = 'Aico agent',
+     default_row = json_set(default_row, '$.why', 'Aico''s own agent (aico agent run); pass --model.')
+     WHERE name = 'agent-hub';
+   UPDATE settings SET value = replace(replace(replace(value,
+       'the Agent Hub work roles (session_roles.json)', 'the work roles'),
+       'full = Agent Hub delivery in the project', 'full = Aico''s context delivery in the project'),
+       'Agent Hub agent sessions with a denied work role', 'Aico agent sessions with a denied work role')
+     WHERE key = 'launch';`,
 ]
 
 /** The context DB file in a data directory. */

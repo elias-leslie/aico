@@ -36,7 +36,6 @@ const rootHandlePrefix = "aico-root-"
 
 var (
 	validSession = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
-	validSlug    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 	uuid7        = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
 
@@ -127,9 +126,6 @@ func identify(env map[string]string, harnessProvider string) (string, string, st
 	}
 	if sid := first("CODEX_SESSION_ID", "CODEX_THREAD_ID"); sid != "" {
 		return "codex:" + ShortID(sid), "codex", sid, "codex_cli"
-	}
-	if slug, sid := env["AGENT_HUB_AGENT_SLUG"], session("AGENT_HUB_SESSION_ID"); slug != "" && validSlug.MatchString(slug) && sid != "" {
-		return slug + ":" + ShortID(sid), slug, sid, "agent_hub_specialist"
 	}
 	if sid := session("PI_SESSION_ID"); sid != "" {
 		return "pi:" + ShortID(sid), "pi", sid, "pi"

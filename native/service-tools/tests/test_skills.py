@@ -1,4 +1,4 @@
-"""`st skills` (moved from Agent Hub): links canonical skills into a harness and reports drift."""
+"""`st skills` (moved into Aico): links canonical skills into a harness and reports drift."""
 
 import json
 import os

@@ -17,7 +17,7 @@
     "mapping",
     "other"
   ],
-  "about": "Which model, effort, Daybreak and context each kind of agent gets, by job and tool, and the hard rules on top. st models route --role JOB --tool TOOL reads it; st aico create applies it when --model/--reasoning-effort are not given (explicit flags win). A job's work_roles are the Agent Hub work roles (session_roles.json) whose launches default to it; every registered work role belongs to exactly one job. context: full = Agent Hub delivery in the project; blank-slate = --blank-slate plus a specific brief (create uses it when neither --project nor --blank-slate is given). subagent names the lean Claude Code agent definition (claude-config/agents) to use for this job as a native subagent. deny rows are hard rules: a launch whose job, work role and project match every selector a row names is refused when its tool or model counts as the row's provider (providers says what counts), explicit --model included; Agent Hub agent sessions with a denied work role never fall back or escalate to that provider. Everything else (usage, credits, which tool to pick) is the coordinator's choice from live facts, not an order here. Owner decisions 2026-11-01: /srv/workspaces/handoffs/followups-2026-10-31/token-audit/BRIEF-launch-defaults.md.",
+  "about": "Which model, effort, Daybreak and context each kind of agent gets, by job and tool, and the hard rules on top. st models route --role JOB --tool TOOL reads it; st aico create applies it when --model/--reasoning-effort are not given (explicit flags win). A job's work_roles are the work roles whose launches default to it; every registered work role belongs to exactly one job. context: full = Aico's context delivery in the project; blank-slate = --blank-slate plus a specific brief (create uses it when neither --project nor --blank-slate is given). subagent names the lean Claude Code agent definition (claude-config/agents) to use for this job as a native subagent. deny rows are hard rules: a launch whose job, work role and project match every selector a row names is refused when its tool or model counts as the row's provider (providers says what counts), explicit --model included; Aico agent sessions with a denied work role never fall back or escalate to that provider. Everything else (usage, credits, which tool to pick) is the coordinator's choice from live facts, not an order here. Owner decisions 2026-11-01: /srv/workspaces/handoffs/followups-2026-10-31/token-audit/BRIEF-launch-defaults.md.",
   "rows": [
     {
       "job": "research",
@@ -221,7 +221,7 @@
     {
       "job": "research",
       "label": "Research, selection and reports someone will act on",
-      "tool": "agent-hub",
+      "tool": "aico-agent",
       "model": null,
       "effort": null,
       "daybreak": null,
@@ -231,7 +231,7 @@
       "alternates": [],
       "subagent": null,
       "work_roles": ["research", "selection", "reporting"],
-      "why": "The Agent Hub agent's own row sets model and effort; --model overrides it.",
+      "why": "Aico's own agent (aico agent run); pass --model.",
       "note": null,
       "allowed": true,
       "deny_reason": null,

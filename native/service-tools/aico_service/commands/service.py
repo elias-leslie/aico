@@ -330,9 +330,7 @@ def _verify_and_seed(
         "required and active optional workers restart automatically; --include-all-workers also starts inactive optional workers",
     ),
     examples=(
-        "st service rebuild summitflow",
-        "st service rebuild agent-hub --detach",
-        "st -P agent-hub service rebuild agent-hub",
+        "st service rebuild aico --detach",
     ),
     task_types=("devops", "config", "frontend", "backend"),
     tier="mandate",

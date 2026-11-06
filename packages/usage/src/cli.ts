@@ -1,4 +1,4 @@
-// `aico usage collect | show | import-agent-hub`: usage.db from the command line.
+// `aico usage collect | show`: usage.db from the command line.
 // `collect` is what the scheduler runs every few minutes; its last line is the plain
 // summary the job's Status row shows. `show` prints the spend card as the Status page has it.
 
@@ -8,7 +8,6 @@ import config from '../data/usage.json' with { type: 'json' }
 import { collect } from './collect'
 import { getState, openUsage, plansPath, usageDbPath } from './db'
 import { loadFacts } from './facts'
-import { importAgentHub, type UsageSource } from './migrate'
 import { loadPlans } from './plans'
 import { brief, type SpendInput, spendRows } from './spend'
 import type { Facts } from './windows'
@@ -28,16 +27,12 @@ export interface UsageCliIo {
   statusUrl: string | null
   fetch: typeof fetch
   now(): Date
-  /** Agent Hub, read-only: where its checkout is and how to read its database. */
-  agentHub: { checkout: string; source(checkout: string): UsageSource }
 }
 
 const USAGE = `Usage: aico usage <command>
 
   aico usage collect [--no-status]   read each subscription's usage now and update its Status row
   aico usage show [--json]           what each subscription has left, from the last collection
-  aico usage import-agent-hub [--checkout DIR] [--replace-plans] [--json]
-                                     copy Agent Hub's plans, credit lots, daily rows and refusals in
 `
 
 class UsageError extends Error {}
@@ -137,31 +132,6 @@ function showCommand(argv: string[], io: UsageCliIo): number {
   }
 }
 
-function importCommand(argv: string[], io: UsageCliIo): number {
-  const { set, values } = flags(argv, ['--checkout'], ['--json', '--replace-plans'])
-  const checkout = values.get('--checkout') ?? io.agentHub.checkout
-  const db = openUsage(usageDbPath(io.dataDir))
-  try {
-    const result = importAgentHub(db, io.agentHub.source(checkout), {
-      plansPath: plansPath(io.dataDir),
-      replacePlans: set.has('--replace-plans'),
-      now: io.now().getTime(),
-    })
-    if (set.has('--json')) io.out(`${JSON.stringify(result, null, 2)}\n`)
-    else {
-      const hash = result.dailyHash
-      io.out(
-        `IMPORTED plans=${result.plans} credit_lots=${result.lots} daily_rows=${result.daily} (days before ${result.cutoverDay}) readings=${result.readings} refusals=${result.refusals}\n` +
-          `  plans file ${result.plansFile}\n` +
-          `  daily rows sha256 ${hash.match ? 'match' : 'MISMATCH'}: source=${hash.source} received=${hash.received} stored=${hash.stored}\n`,
-      )
-    }
-    return result.dailyHash.match ? 0 : 1
-  } finally {
-    db.close()
-  }
-}
-
 /** One `aico usage` command; its exit status. */
 export async function runUsageCli(argv: string[], io: UsageCliIo): Promise<number> {
   const [sub, ...rest] = argv
@@ -172,7 +142,6 @@ export async function runUsageCli(argv: string[], io: UsageCliIo): Promise<numbe
   try {
     if (sub === 'collect') return await collectCommand(rest, io)
     if (sub === 'show') return showCommand(rest, io)
-    if (sub === 'import-agent-hub') return importCommand(rest, io)
     throw new UsageError(`unknown usage command ${sub}`)
   } catch (error) {
     if (!(error instanceof UsageError)) throw error

@@ -1,4 +1,4 @@
-"""`st skills` (moved from Agent Hub's st extension in 2026-11) — manage harness-neutral agent skills materialized via symlinks.
+"""`st skills` (moved into Aico in 2026-11) — manage harness-neutral agent skills materialized via symlinks.
 
 Canonical skills live in one repo (default ``~/agent-skills``, override with
 ``ST_AGENT_SKILLS_DIR``). Each harness (Claude Code, Codex, Antigravity/Gemini, future TUIs)
@@ -252,7 +252,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str, list[str]]:
         return {}, parts[2], [f"YAML parsing error in frontmatter: {e}"]
 
 
-# The padding words Agent Hub's context_style flagged (owner directive 2026-10-11).
+# The padding words the old context_style check flagged (owner directive 2026-10-11).
 _PADDING = re.compile(
     r"(?i)\b(please|it is (?:important|essential|crucial) (?:to|that)|make sure (?:to|that)|be sure to|"
     r"in order to|keep in mind|note that|remember to|don't forget|feel free|as mentioned)\b"

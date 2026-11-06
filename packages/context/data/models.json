@@ -1,5 +1,5 @@
 {
-  "about": "The models Aico knows: every model the launch policy names or Agent Hub's model_aliases table names (copied 2026-11-03), so route() can tell which provider a name counts as. provider is whose subscription or CLI serves it; aliases are other names agents use for it. A model not listed here is refused wherever a deny row has to be checked.",
+  "about": "The models Aico knows: every model the launch policy names or that agents call by another name, so route() can tell which provider a name counts as. provider is whose subscription or CLI serves it; aliases are other names agents use for it. A model not listed here is refused wherever a deny row has to be checked.",
   "models": [
     {
       "id": "claude-fable-5-1",

@@ -29,16 +29,7 @@ it('serves prompt JSON and saved revisions for root instruction snapshots', asyn
     const lines: string[] = [],
       io: ContextCliIo = {
         dbPath: join(dir, 'context.db'),
-        machine: 'test',
-        statusUrl: null,
-        fetch,
         now: () => new Date(),
-        agentHub: {
-          checkout: '/missing',
-          source: () => {
-            throw new Error('No Agent Hub calls')
-          },
-        },
         out: (s) => lines.push(s),
         err: (s) => lines.push(s),
       }
@@ -82,21 +73,12 @@ it('updates a prompt and a memory as new revisions, and measures prompts', async
       },
       'first',
     )
-    const memory = addMemory(db, { content: 'Use Agent Hub.' }, '2026-11-05T00:00:00Z')
+    const memory = addMemory(db, { content: 'Use the old service.' }, '2026-11-05T00:00:00Z')
     db.close()
     const out: string[] = []
     const io: ContextCliIo = {
       dbPath: path,
-      machine: 'test',
-      statusUrl: null,
-      fetch,
       now: () => new Date('2026-11-06T00:00:00Z'),
-      agentHub: {
-        checkout: '/missing',
-        source: () => {
-          throw new Error('No Agent Hub calls')
-        },
-      },
       out: (s) => out.push(s),
       err: (s) => out.push(s),
     }
@@ -117,9 +99,6 @@ it('updates a prompt and a memory as new revisions, and measures prompts', async
     ).toBe(0)
     const check = openContext(path)
     expect(getPrompt(check, 'fixture')).toMatchObject({ content: 'new text', version: 2 })
-    expect(
-      check.prepare("SELECT 1 FROM context_local_edits WHERE kind = 'prompt'").get(),
-    ).toBeTruthy()
     expect(getMemories(check, [memory.id]).found[0]).toMatchObject({
       content: 'Use Aico.',
       version: 2,

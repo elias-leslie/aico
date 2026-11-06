@@ -1,6 +1,6 @@
 {
   "about": "What `aico agent run` may do. Models and deny rows come from context.db (route()); this file says which launch-policy rows the harness serves, which providers it may register, and the role rules context.db does not carry yet (tool level, guard, egress profile). Anything not listed here is refused.",
-  "launch_tool": "agent-hub",
+  "launch_tool": "aico-agent",
   "chain_tools": ["codex", "pi"],
   "providers": {
     "codex": "openai",
