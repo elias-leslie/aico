@@ -49,3 +49,6 @@ Effort: S small, M medium, L large (agent time). Nothing changes until the owner
 
 ## Then (already approved)
 Performance and refactor run (Backups load, session open 2.5 s, any page or command over ~1 s), leftover sweep across repos.
+
+## Added by the owner (2026-11-06)
+28. Needs you questions carry the files the agent shares for them: file chips on the card that open in place, so nothing has to be looked up in Files > Shared. (S-M, being built now: owner request)
