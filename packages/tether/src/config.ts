@@ -37,7 +37,11 @@ import { join } from 'node:path'
  *     `wantsFiles` and `files` on the ask (schema 30).
  * 27: `GET /v1/history`, `/v1/history/:id`, `/v1/history/:id/events` (schema 31).
  * 31: `open` and `origin` on `POST /v1/asks` and on the ask: the https link it opens, and who
- *     filed it when an app did (schema 35). */
+ *     filed it when an app did (schema 35).
+ *
+ * A bump also changes EXPECTED_TETHER_API_VERSION in packages/tether-client (config.test.ts keeps
+ * them equal): a deploy restarts Tether when its code changed, and the web server names a daemon
+ * older than that. */
 export const API_VERSION = 31
 
 /** The one instance that keeps Aico's names and adopts historical servers. */
