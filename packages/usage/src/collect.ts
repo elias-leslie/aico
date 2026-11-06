@@ -5,6 +5,7 @@
 import { delimiter, join } from 'node:path'
 import config from '../data/usage.json' with { type: 'json' }
 import { collectClaude, statuslinePaths } from './claude'
+import { collectClaudeTranscripts } from './claude-transcripts'
 import { collectCodex } from './codex'
 import { type Database, getState, putState } from './db'
 import { nativeHomes, privateMatcher } from './homes'
@@ -66,6 +67,29 @@ export async function collect(db: Database, io: CollectIo): Promise<Collected> {
     fail('claude', new Error("Claude Code's usage snapshot is not readable JSON"))
   else if (claudeBroken)
     problems.claude = `${claudeBroken} of ${claudeBroken + claudeRead} usage snapshots are not readable JSON`
+
+  // Per-model and per-project token use comes from the transcripts, not the snapshot; a failure
+  // here says so without making the snapshot's windows unreadable.
+  try {
+    const result = collectClaudeTranscripts(db, {
+      roots: homes.map((h) => join(h, config.claude.transcripts)),
+      homes: homes.map((h) => `${h}/`),
+      isPrivate: privateMatcher(config.private_words),
+      now: io.now,
+      cutoverDay: cutoverDay(db, io.now),
+    })
+    if (result.unreadable)
+      problems.claude = [
+        problems.claude,
+        `${result.unreadable} of ${result.roots} Claude Code transcript folders could not be read`,
+      ]
+        .filter(Boolean)
+        .join('; ')
+  } catch {
+    problems.claude = [problems.claude, "Claude Code's transcripts could not be read"]
+      .filter(Boolean)
+      .join('; ')
+  }
 
   try {
     const lotTimes = [

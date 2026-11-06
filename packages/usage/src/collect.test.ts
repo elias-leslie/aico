@@ -1,7 +1,7 @@
 // The collectors against stand-in sources: Claude's snapshot file, Codex session logs and
 // OpenCode's usage answer. Facts keep their as-of time; what cannot be read says why.
 
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -528,5 +528,165 @@ describe('Codex across runs and homes', () => {
     expect(
       db.prepare("SELECT SUM(requests) AS n FROM daily WHERE project = 'private'").get(),
     ).toEqual({ n: 2 })
+  })
+})
+
+describe('Claude Code transcripts', () => {
+  const assistant = (
+    id: string,
+    model: string,
+    usage: { input?: number; read?: number; write?: number; output?: number },
+    over: { at?: number; cwd?: string } = {},
+  ) =>
+    JSON.stringify({
+      type: 'assistant',
+      isSidechain: false,
+      timestamp: new Date(over.at ?? NOW).toISOString(),
+      cwd: over.cwd ?? '/srv/workspaces/projects/aico',
+      message: {
+        id,
+        model,
+        role: 'assistant',
+        content: [{ type: 'text', text: 'never kept' }],
+        usage: {
+          input_tokens: usage.input ?? 0,
+          cache_read_input_tokens: usage.read ?? 0,
+          cache_creation_input_tokens: usage.write ?? 0,
+          output_tokens: usage.output ?? 0,
+          speed: 'standard',
+        },
+      },
+    })
+  const folder = () => join(home, '.claude', 'projects', '-srv-workspaces-projects-aico')
+  const write = (path: string, lines: string[]) => {
+    mkdirSync(join(path, '..'), { recursive: true })
+    writeFileSync(path, `${lines.join('\n')}\n`)
+    utimesSync(path, NOW / 1000, NOW / 1000)
+  }
+  const rows = (db: ReturnType<typeof openUsage>) =>
+    db
+      .prepare(
+        `SELECT day, model, project, requests, input_tokens AS input, cached_input_tokens AS cached,
+                cache_write_tokens AS written, output_tokens AS output
+         FROM daily WHERE provider = 'claude' AND day >= '2026-11-04' ORDER BY model, project`,
+      )
+      .all()
+  const run = (db: ReturnType<typeof openUsage>) => collect(db, io())
+
+  it('records per-model, per-project tokens from sessions and subagent sidechains', async () => {
+    const db = openUsage(':memory:')
+    write(join(folder(), 's1.jsonl'), [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'never kept' } }),
+      assistant('m1', 'claude-opus-5-5', { input: 2, read: 100, write: 10, output: 50 }),
+      assistant('m2', 'claude-opus-5-5', { input: 3, read: 200, output: 20 }),
+      assistant('x', '<synthetic>', { input: 9, output: 9 }),
+      assistant('old', 'claude-opus-5-5', { input: 9, output: 9 }, { at: NOW - 3 * 24 * HOUR }),
+    ])
+    write(join(folder(), 's1', 'subagents', 'agent-a.jsonl'), [
+      assistant(
+        's1',
+        'claude-haiku-5-5',
+        { input: 1, read: 5, output: 7 },
+        { cwd: '/srv/workspaces/projects/summitflow/x' },
+      ),
+    ])
+    await run(db)
+    expect(rows(db)).toEqual([
+      {
+        day: '2026-11-04',
+        model: 'claude-haiku-5-5',
+        project: 'summitflow',
+        requests: 1,
+        input: 1,
+        cached: 5,
+        written: 0,
+        output: 7,
+      },
+      {
+        day: '2026-11-04',
+        model: 'claude-opus-5-5',
+        project: 'aico',
+        requests: 2,
+        input: 5,
+        cached: 300,
+        written: 10,
+        output: 70,
+      },
+    ])
+  })
+
+  it('counts a streamed message once and reads only what was appended', async () => {
+    const db = openUsage(':memory:')
+    const path = join(folder(), 's2.jsonl')
+    write(path, [
+      assistant('m1', 'claude-sonnet-5-5', { input: 2, read: 100, output: 1 }),
+      assistant('m1', 'claude-sonnet-5-5', { input: 2, read: 100, output: 40 }),
+    ])
+    await run(db)
+    expect(rows(db)).toEqual([
+      {
+        day: '2026-11-04',
+        model: 'claude-sonnet-5-5',
+        project: 'aico',
+        requests: 1,
+        input: 2,
+        cached: 100,
+        written: 0,
+        output: 40,
+      },
+    ])
+    // Nothing new: a second pass changes nothing.
+    await run(db)
+    expect(rows(db)[0]).toMatchObject({ requests: 1, output: 40 })
+    // The same message grows in a later pass, and a new one arrives.
+    appendFileSync(
+      path,
+      `${assistant('m1', 'claude-sonnet-5-5', { input: 2, read: 100, output: 60 })}\n${assistant('m2', 'claude-sonnet-5-5', { input: 1, output: 5 })}\n`,
+    )
+    await run(db)
+    expect(rows(db)).toEqual([
+      {
+        day: '2026-11-04',
+        model: 'claude-sonnet-5-5',
+        project: 'aico',
+        requests: 2,
+        input: 3,
+        cached: 100,
+        written: 0,
+        output: 65,
+      },
+    ])
+    const cursor = db.prepare('SELECT offset FROM cursors WHERE path = ?').get(path) as {
+      offset: number
+    }
+    expect(cursor.offset).toBeGreaterThan(0)
+  })
+
+  it('keeps only numbers from a private working directory', async () => {
+    const db = openUsage(':memory:')
+    write(join(folder(), 's3.jsonl'), [
+      assistant(
+        'm1',
+        'claude-opus-5-5',
+        { input: 1, output: 2 },
+        { cwd: '/srv/workspaces/projects/neri-hunters/case' },
+      ),
+    ])
+    await run(db)
+    expect(rows(db)).toEqual([
+      {
+        day: '2026-11-04',
+        model: 'claude-opus-5-5',
+        project: 'private',
+        requests: 1,
+        input: 1,
+        cached: 0,
+        written: 0,
+        output: 2,
+      },
+    ])
+    const stored = JSON.stringify(db.prepare('SELECT path, state FROM cursors').all())
+    expect(stored).not.toContain('neri')
+    expect(stored).not.toContain('s3')
   })
 })

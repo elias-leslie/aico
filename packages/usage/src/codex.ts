@@ -43,10 +43,11 @@ interface FileState {
   rolls?: Record<string, [number, number, number, number]>
 }
 
-const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16)
+export const sha = (text: string) =>
+  createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16)
 
 /** The first bytes' hash of a file (a rewritten file starts differently), or '' when empty. */
-function headHash(path: string, size: number): string {
+export function headHash(path: string, size: number): string {
   if (size === 0) return ''
   const fd = openSync(path, 'r')
   try {
@@ -94,7 +95,7 @@ export function projectOf(cwd: string | undefined, homes: readonly string[]): st
 }
 
 /** Complete lines appended after `offset` (up to `end`), with the offset after the last one. */
-function* newLines(path: string, offset: number, end: number): Generator<[string, number]> {
+export function* newLines(path: string, offset: number, end: number): Generator<[string, number]> {
   const fd = openSync(path, 'r')
   try {
     let pos = offset
