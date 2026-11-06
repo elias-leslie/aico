@@ -14,6 +14,36 @@ DESCRIPTOR = {"owner": "aico", "widgetId": WIDGET, "sessionId": "aico-widget-" +
               "generation": GENERATION, "status": "running", "available": True}
 
 
+def test_transfer_pins_both_generations_and_uses_the_supported_session_route(monkeypatch):
+    target, previous = "aabbcc02", "aabbcc03"
+    receipt = {"id": WIDGET, "ownershipId": DESCRIPTOR["sessionId"], "generation": GENERATION,
+               "status": "running", "coordinatorId": target, "parentId": target,
+               "launched": True, "transferred": [WIDGET], "prompt": "private"}
+    code, calls, output = invoke(monkeypatch, ["coordinator", "transfer", target, "--from", previous],
+                                [(200, DESCRIPTOR), (200, {**DESCRIPTOR, "widgetId": target}), (200, receipt)])
+    assert code == 0
+    assert calls == [("/fixture/gui.sock", f"/v1/widgets/{WIDGET}", None),
+                     ("/fixture/gui.sock", f"/v1/widgets/{target}", None),
+                     ("/fixture/gui.sock", f"/v1/sessions/{WIDGET}/transfer",
+                      {"generation": GENERATION, "coordinatorId": target,
+                       "coordinatorGeneration": GENERATION, "fromCoordinatorId": previous})]
+    assert output[0]["applied"] is True and output[0]["coordinatorId"] == target
+    assert "private" not in json.dumps(output)
+
+
+@pytest.mark.parametrize("reply,applied", [
+    ((409, {"error": "lineage_changed"}), False),
+    ((409, {"error": "busy"}), False),
+    ((409, {"error": "outcome_uncertain"}), None),
+    ((200, {"id": WIDGET, "generation": "b" * 64}), None),
+])
+def test_transfer_refusal_or_uncertain_receipt_is_never_retried(monkeypatch, reply, applied):
+    target = "aabbcc02"
+    code, calls, output = invoke(monkeypatch, ["coordinator", "transfer", target, "--from", "aabbcc03"],
+                                [(200, DESCRIPTOR), (200, {**DESCRIPTOR, "widgetId": target}), reply])
+    assert code == 1 and len(calls) == 3 and output[0]["applied"] is applied
+
+
 def invoke(monkeypatch, args, responses):
     calls, output = [], []
 
@@ -69,6 +99,8 @@ def test_missing_or_invalid_widget_id_has_no_active_view_fallback(monkeypatch, t
     ["title", ""], ["title", "control\x1b"], ["title", "line\nbreak"],
     ["title", "\u0085"], ["title", "\u2028"], ["title", "界" * 54],
     ["coordinator", "join"], ["coordinator", "join", "D2852144"], ["coordinator", "on", "d2852144"],
+    ["coordinator", "transfer", "d2852144"],
+    ["coordinator", "transfer", "d2852144", "--from", "bad"],
 ])
 def test_invalid_label_or_coordinator_never_contacts_owner(monkeypatch, args):
     monkeypatch.setenv("AICO_WIDGET_ID", WIDGET)

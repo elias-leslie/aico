@@ -335,6 +335,41 @@ A coordinator is a session that launches and steers other sessions (lanes). The 
 - `POST /v1/widgets/:id/coordinator` marks or unmarks one by hand (`st aico widget coordinator on|off`), and publishes `session.updated`. Unmarking frees the colour; lanes keep theirs.
 - `coordinator: "<widgetId>"` (`st aico widget coordinator join <widgetId>`) makes the session a lane of that session's root coordinator, marking it a coordinator if it is not one or a lane already. The session stops being a coordinator and its own lanes move with it. This repairs sessions that predate `launchedBy` and were promoted when they launched helpers.
 
+### Transfer a running lane (API 29)
+
+`POST /v1/sessions/:id/transfer` takes exactly
+`{generation, coordinatorId, coordinatorGeneration, fromCoordinatorId}`. Both generations are
+64-character lowercase hex fences; both coordinator IDs are eight-character session IDs.
+The lane must be running, already linked and `launched`; the destination must be a running,
+top-level coordinator on the same Tether. It never promotes a destination implicitly.
+
+Tether holds lifecycle ownership of the destination, lane and every descendant, verifies the
+two runtimes, then changes the catalog and existing open asks in one transaction. The lane's
+`parentId` and `coordinatorId` become the destination; descendants take its coordinator and
+colour while keeping their parents and `launched` flags. Other lanes and explicit report
+watches keep their routing. Queued automatic reports to a former receiver are withdrawn when
+the new descriptor is observed; a report already delivered or being sent cannot be recalled.
+Report cursors remain intact, so a transfer does not replay old turns. Open questions keep their
+IDs and move their launch/fallback lineage and queued filed notices. Already answered asks keep
+their delivery history; future questions read the new lineage.
+
+The response is the running session descriptor plus `transferred: string[]` (lane first).
+`409 stale_generation`, `workload_unavailable`, `busy`, `lane_not_linked`,
+`not_top_level_coordinator` or `lineage_changed` applies nothing. An unknown session is `404`.
+A repeat against the same running generations and destination is safe after a lost response.
+No root request, entry, launch options, native conversation, tmux identity, container or placement
+booking is replaced; no runtime launch, end, respawn or injection operation is called.
+
+```sh
+st aico widget coordinator transfer NEW_SESSION --widget-id LANE_SESSION --from OLD_COORDINATOR
+```
+
+`join` retains its manual grouping contract, which clears launched reporting. Use `transfer`
+for a linked lane. For a Neri hunt, use `st neri hunt transfer CASE --to NEW_SESSION --from
+OLD_COORDINATOR --json` so Neri updates its stored coordinator and egress route too. Calling
+the Tether operation alone cannot update another application's records. Remote coordinator
+transfers and transferring an entire top-level coordinator are not supported by this operation.
+
 ### Display title and badge
 
 Tether names every session once, and the desktop, the web app and `st` show these fields as they are, without composing their own.

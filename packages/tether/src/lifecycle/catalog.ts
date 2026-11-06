@@ -988,6 +988,34 @@ export function clearLaunched(id: string): void {
   db.prepare('UPDATE sessions SET launched = 0 WHERE id = ?').run(id)
 }
 
+/** The lane and its descendants by parent, including helpers at any depth. */
+export function coordinatorSubtree(id: string): WidgetRow[] {
+  const rows = listWidgets()
+  const ids = new Set([id])
+  let size = 0
+  while (size !== ids.size) {
+    size = ids.size
+    for (const row of rows) if (row.parentId && ids.has(row.parentId)) ids.add(row.id)
+  }
+  return rows
+    .filter((row) => ids.has(row.id))
+    .sort((a, b) => (a.id === id ? -1 : b.id === id ? 1 : a.id.localeCompare(b.id)))
+}
+
+/** Metadata only, called with lifecycle ownership of every member and target.
+ * The caller's transaction also moves open asks. Never changes launch identity. */
+export function transferCoordinator(
+  id: string,
+  lead: WidgetRow,
+  members: readonly WidgetRow[],
+): void {
+  const update = db.prepare(
+    'UPDATE sessions SET coordinator_id = ?, coordinator_color = ?, parent_id = ? WHERE id = ?',
+  )
+  for (const row of members)
+    update.run(lead.id, lead.coordinatorColor, row.id === id ? lead.id : row.parentId, row.id)
+}
+
 /** Record who launched a new session: the launcher is its parent, and its
  * root coordinator is the launcher's coordinator, or the launcher itself,
  * which then becomes a coordinator. Returns the ids whose descriptors

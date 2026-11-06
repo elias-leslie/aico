@@ -1789,14 +1789,19 @@ def widget_main(argv: list[str]) -> int:
         if operation == "title":
             command.add_argument("label")
         elif operation == "coordinator":
-            command.add_argument("state", choices=("on", "off", "join"),
+            command.add_argument("state", choices=("on", "off", "join", "transfer"),
                                  help="on: mark a coordinator; off: an ordinary window; join COORDINATOR_ID: make this "
-                                      "window a lane of that coordinator (its root), moving its own lanes too")
+                                      "window a lane of that coordinator (its root), moving its own lanes too; "
+                                      "transfer COORDINATOR_ID --from OLD_ID: move a running linked lane and its reporting in place")
             command.add_argument("coordinator_id", nargs="?")
+            command.add_argument("--from", dest="from_coordinator",
+                                 help="transfer only: expected current root coordinator's session ID")
     args = parser.parse_args(argv)
     if not isinstance(args.widget_id, str) or not re.fullmatch(WIDGET, args.widget_id):
         parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters")
     payload = view_payload(parser, args)
+    if args.operation == "coordinator" and args.state == "transfer":
+        return widget_transfer(parser, args)
     try:
         endpoint = owner_endpoint(args.root_socket)
     except argparse.ArgumentTypeError as error:
@@ -1872,14 +1877,70 @@ def view_payload(parser: argparse.ArgumentParser, args: argparse.Namespace) -> d
             parser.error("expected a nonempty title of at most 160 UTF-8 bytes without controls")
         return {"label": label}
     if args.operation == "coordinator":
-        if args.state == "join":
+        if args.state in ("join", "transfer"):
             if not isinstance(args.coordinator_id, str) or not re.fullmatch(WIDGET, args.coordinator_id):
-                parser.error("join expects the coordinator's eight-character widget ID")
+                parser.error("join/transfer expects the coordinator's eight-character session ID")
+            if args.state == "transfer":
+                if not isinstance(args.from_coordinator, str) or not re.fullmatch(WIDGET, args.from_coordinator):
+                    parser.error("transfer requires --from with the current coordinator's eight-character session ID")
+                return {}
+            if args.from_coordinator is not None:
+                parser.error("--from goes only with transfer")
             return {"coordinator": args.coordinator_id}
+        if args.from_coordinator is not None:
+            parser.error("--from goes only with transfer")
         if args.coordinator_id is not None:
             parser.error("a coordinator ID goes only with join")
         return {"coordinator": args.state == "on"}
     return {}
+
+
+def widget_transfer(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    """Pin both runtimes, then transfer metadata once through Tether's public API."""
+    try:
+        endpoint = owner_endpoint(args.root_socket)
+    except argparse.ArgumentTypeError as error:
+        parser.error(f"invalid owner transport configuration: {error}")
+    collector = Collector(endpoint, "", "", time.monotonic() + 20, threading.Event())
+    output: dict = {"owner": "aico", "widgetId": args.widget_id, "operation": "transfer"}
+    sent = False
+    try:
+        pinned = []
+        for widget in (args.widget_id, args.coordinator_id):
+            status, data = collector.receipt(endpoint, f"/v1/widgets/{widget}")
+            owner_reply(status, data, "widget_receipt_unqualified")
+            descriptor = widget_descriptor(data, widget)
+            if not descriptor["available"]:
+                raise Refused("workload_unavailable")
+            pinned.append(descriptor)
+        lane, target = pinned
+        output.update(lane)
+        payload = {"generation": lane["generation"], "coordinatorId": args.coordinator_id,
+                   "coordinatorGeneration": target["generation"], "fromCoordinatorId": args.from_coordinator}
+        sent = True
+        status, data = collector.receipt(endpoint, f"/v1/sessions/{args.widget_id}/transfer", payload, timeout=10)
+        if status == 409 and data.get("error") in ("busy", "lineage_changed", "lane_not_linked", "not_top_level_coordinator"):
+            raise Refused(data["error"])
+        owner_reply(status, data, "widget_receipt_unqualified")
+        moved = data.get("transferred")
+        if (data.get("id") != args.widget_id or data.get("ownershipId") != lane["sessionId"]
+                or data.get("generation") != lane["generation"] or data.get("status") != "running"
+                or data.get("coordinatorId") != args.coordinator_id or data.get("parentId") != args.coordinator_id
+                or data.get("launched") is not True or not isinstance(moved, list) or not moved
+                or moved[0] != args.widget_id
+                or not all(isinstance(i, str) and re.fullmatch(WIDGET, i) for i in moved)
+                or len(set(moved)) != len(moved)):
+            raise Unavailable("widget_receipt_unqualified")
+        output.update(applied=True, coordinatorId=args.coordinator_id, parentId=args.coordinator_id,
+                      launched=True, transferred=moved)
+        emit_json(collector, output)
+        return 0
+    except (Unavailable, Stopped) as error:
+        output.update(applied=applied(sent, error), reason=str(error))
+        emit_unless_stopped(collector, output)
+        return 1
+    except BrokenPipeError:
+        return 0
 
 
 ISO_TIME = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z"

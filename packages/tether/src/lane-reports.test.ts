@@ -1390,6 +1390,32 @@ describe('watch and unwatch', () => {
 })
 
 describe('launched flag', () => {
+  it('keeps turn reporting on an in-place transfer and withdraws queued reports to the former lead', () => {
+    const { reporter, delivered, withdrawn, store } = harness({ policy: NO_BACKOFF })
+    step(reporter, { state: 'working', stateAgentAt: 100 })
+    step(reporter, { stateAgentAt: 200 }, SETTLE)
+    expect(delivered.map((d) => d.to)).toEqual([ROOT])
+    step(reporter, {
+      state: 'working',
+      stateAgentAt: 300,
+      coordinatorId: HELPER_PARENT,
+      parentId: HELPER_PARENT,
+    })
+    expect(withdrawn).toContain(`${ROOT}|lane:${LANE}:finished`)
+    step(
+      reporter,
+      { stateAgentAt: 400, coordinatorId: HELPER_PARENT, parentId: HELPER_PARENT },
+      FLOOR + SETTLE,
+    )
+    expect(delivered.map((d) => d.to)).toEqual([ROOT, HELPER_PARENT])
+    expect(new LaneReportStore(store.db).get('', LANE)).toMatchObject({
+      generation: 'g1',
+      launched: true,
+      coordinatorId: HELPER_PARENT,
+      parentId: HELPER_PARENT,
+    })
+  })
+
   it('a launch sets it; a coordinator mark or an owner join clears it', () => {
     harness()
     insertWidget(ROOT, 'claude-code', 1_000)

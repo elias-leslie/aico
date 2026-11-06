@@ -489,6 +489,14 @@ export class AskStore {
       .run(launcher, coordinator, id)
   }
 
+  /** Transfer open questions with their still-running lane. Answered questions
+   * keep their delivery history; future questions read the new catalog lineage. */
+  transferLineage(session: string, launcher: string | null, coordinator: string): Ask[] {
+    const open = this.openFor(session)
+    for (const ask of open) this.setLineage(ask.id, launcher, coordinator)
+    return open.map((ask) => this.get(ask.id) as Ask)
+  }
+
   /** Open asks another session filed that this one holds as launcher. */
   openLaunchedBy(sessionId: string): Ask[] {
     return (
@@ -722,6 +730,19 @@ function askFiledLine(ask: Ask, name: string, max: number): string {
   const head = `[Ask] session ${name} asked the owner (${ask.id}): `
   const room = Math.max(10, max - chars(head) - chars(tail) - 2)
   return `${head}"${clipLine(ask.question, Math.min(room, 120))}"${tail}`
+}
+
+/** Move the undelivered notice of an existing question, without asking again. */
+export function transferAskNotices(asks: readonly Ask[], delivery: AskDelivery): void {
+  for (const ask of asks) {
+    delivery.withdraw?.(`ask:${ask.id}:filed`)
+    if (ask.launcher && delivery.receiver?.(ask.launcher))
+      delivery.wake(
+        ask.launcher,
+        askFiledLine(ask, askerName(ask.session as string, delivery), delivery.noteMaxChars()),
+        `ask:${ask.id}:filed`,
+      )
+  }
 }
 
 /** The one line a launcher gets when a session ends with open asks. */

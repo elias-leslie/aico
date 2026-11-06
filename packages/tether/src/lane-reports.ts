@@ -822,6 +822,16 @@ export class LaneReporter {
       dirty = true
     }
     const snapshot = snapshotOf(view)
+    if (cursor.coordinatorId !== snapshot.coordinatorId || cursor.parentId !== snapshot.parentId) {
+      // An in-place transfer keeps the event cursor, but an undelivered line
+      // must not wake a former coordinator. Explicit watches still count.
+      const current = new Set(this.receivers(snapshot))
+      for (const receiver of this.receivers(cursorSnapshot(cursor))) {
+        if (current.has(receiver)) continue
+        for (const outcome of [...LANE_OUTCOMES, 'model'])
+          this.ops.withdraw(receiver, `lane:${laneWhere(snapshot)}:${outcome}`)
+      }
+    }
     if (
       cursor.title !== snapshot.title ||
       cursor.requestId !== snapshot.requestId ||

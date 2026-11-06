@@ -8,7 +8,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
 import { promisify } from 'node:util'
 import type { AgentStateTracker, HookReport } from './agent-state'
-import { sessionAsks } from './asks'
+import { type AskDelivery, AskStore, sessionAsks, transferAskNotices } from './asks'
 import type { TetherPaths } from './config'
 import type { EventBus } from './events'
 import { HttpError, type Router, readJsonObject, sendError, sendJson } from './http'
@@ -23,11 +23,12 @@ import {
   parsePool,
   UnknownPool,
 } from './hub/placement'
-import { type LaneReporter, registerLaneRoutes } from './lane-reports'
+import { type LaneReporter, laneView, registerLaneRoutes } from './lane-reports'
 import {
   adoptLineage,
   allocateWidgetId,
   clearLaunched,
+  coordinatorSubtree,
   getTmuxServer,
   getWidget,
   insertWidget,
@@ -40,6 +41,7 @@ import {
   setCoordinator,
   setWidgetName,
   setWidgetProject,
+  transferCoordinator,
   type WidgetRow,
 } from './lifecycle/catalog'
 import { badge, displayTitle, rememberProjects } from './lifecycle/display'
@@ -167,6 +169,7 @@ export interface LifecycleApiContext {
   projects: ProjectProvider
   /** Sync project-root cache the engine reads on gate recovery. */
   projectRoots: Map<string, string>
+  asks?: AskDelivery
   /** Reboot continuity; absent when reconciliation is off (test instances). */
   continuity?: Continuity
   /** Crash recovery; absent when reconciliation is off. */
@@ -950,6 +953,106 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       notifySessionChanged(row.id, { force: true })
       const latest = requireSession(row.id)
       sendJson(res, 200, descriptor(latest, cachedSessionStatus(latest)))
+    })
+    .add('POST', '/v1/sessions/:id/transfer', async (req, res, params) => {
+      const body = await readJsonObject(req)
+      only(body, ['generation', 'coordinatorId', 'coordinatorGeneration', 'fromCoordinatorId'])
+      const generation = requireGeneration(body)
+      if (
+        typeof body.coordinatorId !== 'string' ||
+        !/^[0-9a-f]{8}$/.test(body.coordinatorId) ||
+        typeof body.fromCoordinatorId !== 'string' ||
+        !/^[0-9a-f]{8}$/.test(body.fromCoordinatorId) ||
+        typeof body.coordinatorGeneration !== 'string' ||
+        !GENERATION_RE.test(body.coordinatorGeneration)
+      )
+        throw new HttpError(400, 'invalid_body')
+      const lane = requireSession(params.id),
+        lead = requireSession(body.coordinatorId)
+      fence(lane, generation)
+      fence(lead, body.coordinatorGeneration)
+      const members = coordinatorSubtree(lane.id)
+      const locks: {
+        id: string
+        owner: NonNullable<ReturnType<typeof lifecycleOwners.acquire>>
+      }[] = []
+      try {
+        for (const id of [...new Set([lead.id, ...members.map((row) => row.id)])].sort()) {
+          const owner = lifecycleOwners.acquire(id)
+          if (!owner) throw new HttpError(409, 'busy')
+          locks.push({ id, owner })
+        }
+        // Verify both exact runtimes under ownership. A transfer never launches,
+        // injects into, ends, rebooks or replaces either session.
+        for (const row of [lane, lead]) {
+          if (
+            row.launchState !== 'dispatched' ||
+            (await rootManagedGateState(row)) !== 'active-workload'
+          )
+            throw new HttpError(409, 'workload_unavailable')
+          fence(requireSession(row.id), generationOf(row))
+        }
+        const current = requireSession(lane.id),
+          target = requireSession(lead.id)
+        fence(current, generation)
+        fence(target, body.coordinatorGeneration)
+        if (
+          !target.coordinator ||
+          target.coordinatorId !== null ||
+          target.parentId !== null ||
+          target.id === current.id
+        )
+          throw new HttpError(409, 'not_top_level_coordinator')
+        if (current.coordinator || !current.launched || !current.coordinatorId)
+          throw new HttpError(409, 'lane_not_linked')
+        const already = current.coordinatorId === target.id && current.parentId === target.id
+        if (!already && current.coordinatorId !== body.fromCoordinatorId)
+          throw new HttpError(409, 'lineage_changed')
+        const previous = getWidget(body.fromCoordinatorId)
+        if (
+          !already &&
+          (!previous?.coordinator || previous.coordinatorId !== null || previous.parentId !== null)
+        )
+          throw new HttpError(409, 'not_top_level_coordinator')
+        const latest = coordinatorSubtree(current.id)
+        if (
+          latest.length !== members.length ||
+          latest.some(
+            (row, i) =>
+              row.id !== members[i].id ||
+              generationOf(row) !== generationOf(members[i]) ||
+              row.coordinatorId !== current.coordinatorId,
+          )
+        )
+          throw new HttpError(409, 'lineage_changed')
+        const asks = new AskStore(store.db)
+        store.transaction(() => {
+          transferCoordinator(current.id, target, latest)
+          const movedAsks = latest
+            .filter((row) => row.launched)
+            .flatMap((row) =>
+              asks.transferLineage(
+                row.id,
+                row.id === current.id ? target.id : row.parentId,
+                target.id,
+              ),
+            )
+          if (context.asks && !already) transferAskNotices(movedAsks, context.asks)
+        })
+        for (const row of latest) {
+          // Update report routing before yielding to delivery timers, rather
+          // than waiting for the asynchronous descriptor publication.
+          const view = laneView(descriptor(requireSession(row.id), cachedSessionStatus(row)), null)
+          if (view) context.lanes?.observe(view)
+          notifySessionChanged(row.id, { force: true })
+        }
+        sendJson(res, 200, {
+          ...descriptor(requireSession(current.id), 'running'),
+          transferred: latest.map((row) => row.id),
+        })
+      } finally {
+        for (const { id, owner } of locks.reverse()) releaseLifecycleOwner(id, owner)
+      }
     })
     .add('POST', '/v1/sessions/:id/end', async (req, res, params) => {
       const body = await readJsonObject(req)
