@@ -33,7 +33,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aico/agent": "0.1.0",
     "@aico/context": "0.1.0",
+    "@aico/fleet": "0.1.0",
     "@aico/notes": "0.1.0",
     "@aico/notify": "0.1.0",
     "@aico/shared": "0.1.0",
@@ -41,10 +43,9 @@
     "@aico/tether-client": "0.1.0",
     "@aico/ui-kit": "0.1.0",
     "@aico/usage": "0.1.0",
-    "ws": "8.22.0",
-    "@aico/fleet": "0.1.0",
-    "@aico/agent": "0.1.0",
-    "@aico/webtools": "0.1.0"
+    "@aico/webtools": "0.1.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "ws": "8.22.0"
   },
   "devDependencies": {
     "@types/ws": "8.18.2",

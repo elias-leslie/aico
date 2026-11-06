@@ -104,7 +104,6 @@
   ],
   "unused_types": [
     "unused-type:packages/context/src/editor.ts:ContextRole",
-    "unused-type:packages/tasks/src/pulse.ts:BriefItem",
     "unused-type:packages/tether/src/hub/placement.ts:ProxmoxReading",
     "unused-type:packages/tether/src/markers.ts:SessionOrigin",
     "unused-type:packages/usage/src/opencode.ts:OpenCodeWindow",
@@ -112,10 +111,7 @@
     "unused-type:packages/web-frontend/lib/hooks/use-host-admin.ts:HostActionAnswer",
     "unused-type:packages/web-server/src/cli.ts:TsessionArgs",
     "unused-type:packages/web-server/src/grants.ts:GrantRequest",
-    "unused-type:packages/web-server/src/notes.ts:AttachmentJson",
-    "unused-type:packages/web-server/src/notes.ts:ItemJson",
     "unused-type:packages/web-server/src/notes.ts:NoteDetailJson",
-    "unused-type:packages/web-server/src/notes.ts:NoteJson",
     "unused-type:packages/web-server/src/notes.ts:NoteSummaryJson",
     "unused-type:packages/web-server/src/owners/vehicles.ts:VehicleEvent",
     "unused-type:packages/webtools/src/fetch.ts:Backend"
@@ -194,10 +190,7 @@
   "unused_store_members": [],
   "unprovided_injects": [],
   "unrendered_components": [],
-  "unused_component_props": [
-    "unused-component-prop:packages/web-frontend/components/HostsSheet.tsx:HostCard:onOpened",
-    "unused-component-prop:packages/web-frontend/components/LoginsPage.tsx:LoginRow:readOnly"
-  ],
+  "unused_component_props": [],
   "absent_component_props": [],
   "unused_component_emits": [],
   "unused_component_inputs": [],
@@ -210,7 +203,6 @@
   "unused_load_data_keys": [],
   "unresolved_imports": [],
   "unlisted_dependencies": [
-    "unlisted-dependency:@earendil-works/pi-ai",
     "unlisted-dependency:@earendil-works/pi-coding-agent"
   ],
   "duplicate_exports": [

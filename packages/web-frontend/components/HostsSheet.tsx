@@ -245,7 +245,6 @@ export function HostsSheet({
                     key={host.name}
                     host={host}
                     sync={syncing.find((peer) => peer.name === host.name)}
-                    onOpened={() => onOpenChange(false)}
                   />
                 ))}
               </ul>
@@ -257,15 +256,7 @@ export function HostsSheet({
   )
 }
 
-function HostCard({
-  host,
-  sync,
-  onOpened,
-}: {
-  host: HostChoice
-  sync?: PeerSync
-  onOpened: () => void
-}) {
+function HostCard({ host, sync }: { host: HostChoice; sync?: PeerSync }) {
   const queryClient = useQueryClient()
   const status = hostStatus(host)
   const starting = isStarting(host)

@@ -43,7 +43,7 @@ const SNIPPET = 200
 const CREATE_KEYS = ['kind', 'title', 'body', 'pinned', 'labels', 'items']
 const PATCH_KEYS = ['title', 'body', 'pinned', 'archived', 'kind', 'keepRevision']
 
-export interface ItemJson {
+interface ItemJson {
   id: string
   noteId: string
   text: string
@@ -54,7 +54,7 @@ export interface ItemJson {
   updatedAt: number
 }
 
-export interface AttachmentJson {
+interface AttachmentJson {
   id: string
   noteId: string
   captureId: string | null
@@ -66,7 +66,7 @@ export interface AttachmentJson {
   hasThumb: boolean
 }
 
-export interface NoteJson {
+interface NoteJson {
   id: string
   kind: NoteKind
   title: string

@@ -224,7 +224,7 @@ export function render(p: Pulse): string[] {
 
 export type Role = 'coordinator' | 'agent' | 'lane' | 'subagent'
 
-export interface BriefItem {
+interface BriefItem {
   scope: string
   key: string
   firstSeen: string

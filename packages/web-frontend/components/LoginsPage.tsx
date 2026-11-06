@@ -480,6 +480,7 @@ function LoginRow({
               </button>
               <button
                 className="lantern-btn ghost small"
+                disabled={readOnly}
                 onClick={() => {
                   setValue(null)
                   setPanel(panel === 'replace' ? null : 'replace')
@@ -492,6 +493,7 @@ function LoginRow({
           {entry.lab && (
             <button
               className="lantern-btn ghost small"
+              disabled={readOnly}
               onClick={() => {
                 setValue(null)
                 setPanel(panel === 'edit' ? null : 'edit')
@@ -502,6 +504,7 @@ function LoginRow({
           )}
           <button
             className="lantern-btn ghost small"
+            disabled={readOnly}
             onClick={() => {
               setValue(null)
               setPanel(panel === 'grants' ? null : 'grants')
@@ -511,6 +514,7 @@ function LoginRow({
           </button>
           <button
             className="lantern-btn ghost small"
+            disabled={readOnly}
             onClick={() => {
               setValue(null)
               setPanel(panel === 'remove' ? null : 'remove')
