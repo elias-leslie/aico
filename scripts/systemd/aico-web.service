@@ -11,7 +11,7 @@ After=network.target tether@default.service
 [Service]
 Type=simple
 WorkingDirectory=__PROJECT_ROOT__/packages/web-server
-# ~/.local/bin holds nightshift, which agent shares push through. Node comes
+# ~/.local/bin holds user tools the server shells out to. Node comes
 # from this PATH too (22+ for node:sqlite).
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=%h

@@ -1,4 +1,4 @@
-# SummitFlow-managed tether@default, a manual worker of the aico project:
+# Aico-managed tether@default, a manual worker of the aico project:
 # `st service rebuild aico --worker tether@default` renders this (with
 # __PROJECT_ROOT__ set to the release it built) and restarts the unit, so
 # ExecStartPre installs that release into the stable path before the daemon
