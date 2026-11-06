@@ -221,7 +221,7 @@
       "name": "GPT-6 Luna",
       "provider": "codex",
       "family": "gpt",
-      "aliases": ["codex-6-luna"],
+      "aliases": ["codex-6-luna", "gpt-6-luna"],
       "context_window": 272000,
       "max_output_tokens": 128000
     },
