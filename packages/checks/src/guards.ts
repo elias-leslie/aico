@@ -212,6 +212,8 @@ const META = new Set([
   'total_issues',
   'entry_points',
   'summary',
+  'workspace_diagnostics',
+  'next_steps',
 ])
 
 export interface DeadIssue {
@@ -236,9 +238,13 @@ export function describeIssue({ kind, item }: DeadIssue): string {
     (value.path as string | undefined) ??
     (value.files as string[] | undefined)?.join(' -> ') ??
     (value.locations as { path: string }[] | undefined)?.map((l) => l.path).join(', ') ??
+    (value.imported_from as { path: string }[] | undefined)?.map((l) => l.path).join(', ') ??
     ''
   const line = typeof value.line === 'number' ? `:${value.line}` : ''
-  const name = [value.parent_name, value.member_name ?? value.name ?? value.export_name]
+  const name = [
+    value.parent_name,
+    value.member_name ?? value.name ?? value.export_name ?? value.package_name,
+  ]
     .filter((part) => typeof part === 'string')
     .join('.')
   return `${kind}: ${where}${line}${name ? ` ${name}` : ''}`

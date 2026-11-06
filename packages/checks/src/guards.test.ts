@@ -125,6 +125,12 @@ describe('dead-code guard', () => {
     expect(
       describeIssue({ kind: 'circular_dependencies', item: report.circular_dependencies[0] }),
     ).toBe('circular_dependencies: src/x.ts -> src/y.ts:2')
+    expect(
+      describeIssue({
+        kind: 'unlisted_dependencies',
+        item: { package_name: 'left-pad', imported_from: [{ path: 'src/a.ts', line: 1 }] },
+      }),
+    ).toBe('unlisted_dependencies: src/a.ts left-pad')
   })
 
   it('fails on findings beyond the baseline, only those in the scope when there is one', () => {
