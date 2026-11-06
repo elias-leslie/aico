@@ -21,10 +21,11 @@ Restart=on-failure
 RestartSec=2
 UMask=0077
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
-# Read the host verdict Nightshift publishes in /run/nightshift, and keep this
-# Tether's memory event record in its state dir, where Nightshift reads it.
-Environment=TETHER_NIGHTSHIFT_ADMISSION=/run/nightshift/admission.json
-Environment=TETHER_NIGHTSHIFT_EVENTS=%h/.local/state/tether/default/memory-events.jsonl
+# Read the host verdict host-steward's memctl publishes in
+# /run/host-steward-memctl, and keep this Tether's memory event record in its
+# state dir, where host-steward reads it.
+Environment=TETHER_HOST_ADMISSION=/run/host-steward-memctl/admission.json
+Environment=TETHER_MEMORY_EVENTS=%h/.local/state/tether/default/memory-events.jsonl
 # The Aico web app's address, for the ask links in needs-you.json (the tray's
 # Aico row); the same host as hosts.browser_frontend in project.identity.json.
 Environment=TETHER_AICO_URL=https://aico.summitflow.dev
