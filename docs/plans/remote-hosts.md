@@ -20,7 +20,7 @@ intends (Tether owns sessions).
 ```
 Aico desktop ─┐                              ┌─ tether@default on agent-work
 Aico web/PWA ─┼─ local tether@default (hub) ─┼─ (more hosts later)
-st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> ssh
+st aico / SF ─┘   └ peers from hosts.json     └ via the fleet link (TLS, port 7449)
 ```
 
 ### Hosts registry (data, not code): `~/.config/tether/hosts.json`
@@ -37,15 +37,14 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
   Agent Hub ports exposed to that host through `-R`.
 - `wake` is optional. It is the command that powers the host on.
 
-### Link: `tether-link@<host>.service` (a user unit on the workstation)
+### Link: the fleet link (inside the Tether daemon)
 
-- Command: `ssh -N -M -S $XDG_RUNTIME_DIR/tether/peers/<host>/ssh.ctl`, plus
-  `-L .../<host>/control.sock:<socket>` and the
-  `-R 127.0.0.1:<p>:127.0.0.1:<p>` forwards.
-- ssh options: `ExitOnForwardFailure=yes`, `StreamLocalBindUnlink=yes`,
-  `ServerAliveInterval=5`, `ConnectTimeout=5` and `BatchMode=yes`.
-- It restarts quietly with backoff. It never powers a host on.
-- On the VM side, sshd uses `ClientAliveInterval 15`.
+The ssh `tether-link@<host>` unit is gone (2026-11). Tether holds one TLS 1.3
+connection per peer pair on port 7449, configured in `~/.config/aico/fleet.json`
+and pinned by enrollment; its local proxy sockets live in
+`$XDG_RUNTIME_DIR/aico/fleet/<host>`. See [fleet-link.md](../fleet-link.md).
+It retries quietly with backoff and never powers a host on. ssh (the
+`ssh` alias in hosts.json) stays for administration and rescue only.
 
 ### Hub (the local tether daemon)
 
@@ -85,11 +84,12 @@ st aico / SF ─┘   └ peers from hosts.json     └ via tether-link@<host> s
 
 ### Clients (web server)
 
-- **Attach:** when the descriptor has a `host`, the client builds
-  `/usr/bin/ssh -F /dev/null -T -o BatchMode=yes -o ProxyCommand=false -S <ctl> <alias> -- env LANG=C.UTF-8 /usr/bin/tmux -u -C -S '<sock>' attach-session -t '<target>'`.
-  - The inputs come from hosts.json and from Tether's answer. Each remote
-    argument is shell-quoted.
-  - `controlArgv` and `socketArgsOf` know about the ssh prefix. Paste
+- **Attach:** when the descriptor has a `host`, the client runs tmux on the
+  host through the fleet link's exec channel:
+  `tether fleet exec <control> -- env LANG=C.UTF-8 <tmux> -u -S '<sock>' attach-session -t '<target>'`
+  (`remoteAttachArgv` in tether-client `term/remote.ts`).
+  - `<control>` is the link's local proxy for that host, from Tether's answer.
+  - `controlArgv` and `tmuxCommandArgv` know about the fleet prefix. Paste
     (`load-buffer`) uses the same prefix.
   - The tmux socket path is validated against the host's state-dir pattern.
 - **Pid:** after attaching, the client reads `#{client_pid}` in the control

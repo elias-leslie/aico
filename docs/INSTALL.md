@@ -57,22 +57,25 @@ without that file Tether works exactly as before.
    "forwards": ["8001", "8003"] }]
 ```
 
-`ssh` is a Host alias from `~/.ssh/config` that logs in without a prompt.
-`forwards` (optional) lists workstation ports the host may reach on its own
+`ssh` is a Host alias from `~/.ssh/config`, kept for administration and rescue
+only. `forwards` (optional) lists workstation ports the host may reach on its own
 loopback. `sync` (optional) is the path of the other host's notes-sync socket,
-`/run/user/<uid>/aico/sync.sock` (the same path on every host); with it, the
-same link carries notes sync (`-L <peerDir>/sync.sock:<sync>`), and both
-hosts must list each other. Then turn on the link for each host:
+`/run/user/<uid>/aico/sync.sock` (the same path on every host).
+
+The traffic itself goes over the fleet link, not ssh: Tether's own TLS
+connection on port 7449, set up per machine in `~/.config/aico/fleet.json` and
+enrolled once with `tether fleet identity` / `tether fleet enroll`
+([fleet-link.md](fleet-link.md)). Tether starts the link itself; there is no
+per-host unit to enable.
 
 ```bash
-systemctl --user enable --now tether-link@agent-work
 tether hosts        # link state and session count per host
 ```
 
-The link retries quietly while the host is down and never powers it on. Tether
-picks up changes to hosts.json within a few seconds. The remote host runs a
-stock Tether (`TETHER_HEADLESS=1` when it has no desktop); its sshd should set
-`ClientAliveInterval 15`.
+The link retries quietly while the host is down (or while this machine's LAN
+address isn't assigned yet at boot) and never powers it on. Tether picks up
+changes to hosts.json within a few seconds. The remote host runs a stock Tether
+(`TETHER_HEADLESS=1` when it has no desktop).
 
 On a host with SummitFlow, `st service rebuild aico` deploys instead. It also
 restarts `tether@default` on the new release when Tether's source (`tether/`
@@ -119,7 +122,7 @@ Environment=TETHER_HEADLESS=1
 ```
 
 Then list each machine in the other's `hosts.json` with `ssh`, `socket` and
-`sync`, and enable `tether-link@<name>` on both sides. Both doors then
+`sync`, and enroll both on the fleet link ([fleet-link.md](fleet-link.md)). Both doors then
 list every host's asks and shares (Tether's hub relays them; an answer goes to the host that owns the ask), and
 only the owning host pushes.
 
