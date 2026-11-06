@@ -176,6 +176,8 @@ print(int(bool(a.get("scrub"))), int(bool(a.get("nvme_tests"))))' "$here/host_st
     "$prefix/host-steward" nvme-test "$kind" --status >/dev/null || echo "nvme-test $kind row: exit $?"
   done
   owner_systemctl daemon-reload
-  owner_systemctl enable --now "${user_units[@]}"
+  owner_systemctl enable "${user_units[@]}"
+  # Long-running: restart so a new install's code and paths take effect (memctl kept the old ones otherwise).
+  owner_systemctl restart "${user_units[@]}"
 fi
 echo "host-steward installed in $prefix"
