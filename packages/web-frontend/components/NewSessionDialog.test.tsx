@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NewSessionDialog } from './NewSessionDialog'
@@ -80,6 +86,7 @@ function renderDialog(defaultProjectId?: string, onStart = vi.fn<Start>()) {
 
 describe('NewSessionDialog', () => {
   beforeEach(() => {
+    localStorage.clear()
     projectState.projects = [
       { id: 'aico', name: 'Aico', root_path: '/srv/aico' },
       { id: 'neri', name: 'Neri', root_path: '/srv/neri' },
@@ -225,6 +232,40 @@ describe('NewSessionDialog', () => {
     )
     expect(onStart).toHaveBeenCalledWith('neri', '/srv/neri', 'claude-code')
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('starts in the project in view, never in one the search hides', () => {
+    projectState.projects = [
+      { id: 'agent-skills', name: 'Agent Skills', root_path: '/srv/skills' },
+      ...projectState.projects,
+    ]
+    const { onStart } = renderDialog('aico')
+    expect(
+      screen.getByRole('button', { name: 'Start Claude Code in Aico' }),
+    ).toBeEnabled()
+
+    fireEvent.change(
+      screen.getByRole('searchbox', { name: 'Find a project' }),
+      { target: { value: 'ner' } },
+    )
+    const start = screen.getByRole('button', { name: 'Pick a project' })
+    expect(start).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /in Aico/ })).toBeNull()
+    expect(onStart).not.toHaveBeenCalled()
+  })
+
+  it('starts in the last project started when none is in view', () => {
+    const { onStart } = renderDialog()
+    fireEvent.click(screen.getByRole('radio', { name: /Neri/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Start .* in Neri/ }))
+    expect(onStart).toHaveBeenCalledOnce()
+    cleanup()
+
+    renderDialog()
+    expect(screen.getByRole('radio', { name: /Neri/ })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
   })
 
   it('puts the agent picker above the project list, outside its scroll', () => {

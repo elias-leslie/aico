@@ -163,6 +163,15 @@ export function projectLinkSessionId(
   )
 }
 
+/** What a project link starts when the project has no session of the user's
+ * own: only what the project is in (`shell` alone, or its agent), never a
+ * shell plus the default agent beside it. */
+export function projectLinkStartMode(
+  project: { mode: string } | undefined,
+): string | undefined {
+  return project?.mode || undefined
+}
+
 /** A new pane's name: the project's, numbered when it already has panes. */
 export function projectPaneName(
   projectId: string,
@@ -182,11 +191,24 @@ export function newPaneSessionId(pane: TerminalPane): string | undefined {
   )
 }
 
-/** Switching between two agent tools replaces the agent session; shell and
- * agent only toggle the pane's mode. */
-export function switchesAgentTool(pane: TerminalPane, mode: string): boolean {
+/** Choosing an agent the pane doesn't run (another tool, or the first one on
+ * a shell-only pane) starts or replaces its agent session; only going back to
+ * the shell, or to the agent already there, toggles the pane's mode. */
+export function needsAgentSwitch(pane: TerminalPane, mode: string): boolean {
   const agent = pane.sessions.find((session) => session.mode !== 'shell')
-  return mode !== 'shell' && !!agent && agent.mode !== mode
+  return mode !== 'shell' && agent?.mode !== mode
+}
+
+/** What the header says when switching shell/agent fails. */
+export function modeSwitchFailure(
+  toolName: string,
+  error: unknown,
+): { message: string } {
+  const reason =
+    error instanceof Error && error.message
+      ? ` ${error.message.replace(/\.?$/, '.')}`
+      : ''
+  return { message: `Couldn’t switch to ${toolName}.${reason}` }
 }
 
 /** An agent needs starting unless it already runs or is starting. */
@@ -248,7 +270,7 @@ export function useSessionView({
     isCreating: isPaneCreating,
   } = useTerminalPanes()
   const { startAgent } = useAgentPolling()
-  const { switchTool } = useAgentTools()
+  const { switchTool, agentTools } = useAgentTools()
 
   const panes = useMemo(
     () => [...attachedPanes, ...detachedPanes],
@@ -384,17 +406,20 @@ export function useSessionView({
       if (existing !== chosenSessionId) switchToSession(existing)
       return
     }
+    // A failed start is not retried: each retry would start sessions again.
     createDetachedPane(
       projectPaneName(projectId, panes),
       projectId,
       projectPath ?? undefined,
+      projectLinkStartMode(project),
     )
       .then((pane) => {
         const target = newPaneSessionId(pane)
         if (target) switchToSession(target)
       })
-      .catch(() => {
-        startupKeyRef.current = null
+      .catch((error) => {
+        // eslint-disable-next-line no-console -- action error boundary
+        console.error('Failed to start a session for the project link:', error)
       })
   }, [
     chosenSessionId,
@@ -551,10 +576,15 @@ export function useSessionView({
     sessionsRef.current = sessions
   }, [sessions])
   const [isModeSwitching, setIsModeSwitching] = useState(false)
+  const [modeSwitchError, setModeSwitchError] = useState<{
+    message: string
+  } | null>(null)
+  const clearModeSwitchError = useCallback(() => setModeSwitchError(null), [])
   const handleSlotModeSwitch = useCallback(
     async (slot: Slot, mode: TerminalMode) => {
       if (slot.type !== 'project') return
       setIsModeSwitching(true)
+      setModeSwitchError(null)
       try {
         const projectSessions = sessionsRef.current.filter(
           (s) => s.project_id === slot.projectId,
@@ -573,7 +603,7 @@ export function useSessionView({
 
         let target: TerminalSession | undefined
         if (pane) {
-          const updated = switchesAgentTool(pane, mode)
+          const updated = needsAgentSwitch(pane, mode)
             ? await switchTool(pane.id, mode)
             : await setActiveMode(pane.id, mode)
           target = updated.sessions.find((s) => s.mode === mode)
@@ -595,11 +625,15 @@ export function useSessionView({
             await startAgent(target.id)
         }
         switchToSession(target.id)
+      } catch (error) {
+        const name = agentTools.find((tool) => tool.slug === mode)?.name ?? mode
+        setModeSwitchError(modeSwitchFailure(name, error))
       } finally {
         setIsModeSwitching(false)
       }
     },
     [
+      agentTools,
       queryClient,
       panes,
       switchTool,
@@ -664,6 +698,8 @@ export function useSessionView({
     handleSlotCloseSession,
     handleSlotModeSwitch,
     isModeSwitching,
+    modeSwitchError,
+    clearModeSwitchError,
     ...uploads,
   }
 }

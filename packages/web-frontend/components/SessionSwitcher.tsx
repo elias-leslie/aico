@@ -7,7 +7,6 @@ import { createPortal } from 'react-dom'
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import type { SessionAttention } from '@/lib/hooks/use-session-attention'
 import {
-  getSlotName,
   getSlotPanelId,
   type PaneSlot,
   type TerminalSlot,
@@ -22,7 +21,7 @@ import { HostsButton } from './HostsButton'
 import { HostsSheet } from './HostsSheet'
 import { HistoryLauncher } from './history/HistoryLauncher'
 import { NotesLauncher } from './notes/NotesLauncher'
-import { SessionList, sessionsHeading } from './SessionList'
+import { SessionList, sessionLabel, sessionsHeading } from './SessionList'
 import { SessionTitle } from './SessionTitle'
 import { StatusLauncher } from './status/StatusLauncher'
 
@@ -53,7 +52,10 @@ export function SessionSwitcher({
   const [hostsOpen, setHostsOpen] = useState(false)
   const triggerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const currentName = getSlotName(currentSlot)
+  const currentName = useMemo(
+    () => sessionLabel(allSlots, currentSlot),
+    [allSlots, currentSlot],
+  )
   const currentId = getSlotPanelId(currentSlot)
   const needsYouCount = attention?.needsYouCount ?? 0
   /** The open session's state and age, `working 3m`. */

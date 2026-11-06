@@ -5,11 +5,13 @@ import {
   agentNeedsStart,
   buildSessionSlots,
   deriveActiveSessionId,
+  modeSwitchFailure,
+  needsAgentSwitch,
   newPaneSessionId,
   parsePersistedSessionId,
   projectLinkSessionId,
+  projectLinkStartMode,
   projectPaneName,
-  switchesAgentTool,
 } from './use-session-view'
 import type { TerminalPane } from './use-terminal-panes'
 import type { TerminalSession } from './use-terminal-sessions'
@@ -125,6 +127,12 @@ describe('opening a project link', () => {
     ).toBeNull()
   })
 
+  it('starts only what the project is in: a shell alone, or its agent', () => {
+    expect(projectLinkStartMode({ mode: 'shell' })).toBe('shell')
+    expect(projectLinkStartMode({ mode: 'claude-code' })).toBe('claude-code')
+    expect(projectLinkStartMode(undefined)).toBeUndefined()
+  })
+
   it('numbers a new pane after the project panes it already has', () => {
     expect(projectPaneName('aico', [])).toBe('Aico')
     expect(projectPaneName('aico', [pane('a', []), pane('b', [])])).toBe(
@@ -145,12 +153,24 @@ describe('opening a project link', () => {
 })
 
 describe('session actions', () => {
-  it('replaces the agent only when switching between two agent tools', () => {
+  it('starts or replaces the agent unless the pane already runs it; shell only toggles', () => {
     const p = pane('p', [session('s'), session('a', { mode: 'claude' })])
-    expect(switchesAgentTool(p, 'codex')).toBe(true)
-    expect(switchesAgentTool(p, 'claude')).toBe(false)
-    expect(switchesAgentTool(p, 'shell')).toBe(false)
-    expect(switchesAgentTool(pane('p', [session('s')]), 'codex')).toBe(false)
+    expect(needsAgentSwitch(p, 'codex')).toBe(true)
+    expect(needsAgentSwitch(p, 'claude')).toBe(false)
+    expect(needsAgentSwitch(p, 'shell')).toBe(false)
+    // A shell-only pane has no agent session to toggle to: it gets one.
+    expect(needsAgentSwitch(pane('p', [session('s')]), 'codex')).toBe(true)
+  })
+
+  it('says plainly what failed when the shell/agent switch is refused', () => {
+    expect(
+      modeSwitchFailure('Codex', new Error("Mode 'codex' not available.")),
+    ).toEqual({
+      message: "Couldn’t switch to Codex. Mode 'codex' not available.",
+    })
+    expect(modeSwitchFailure('Codex', 'boom')).toEqual({
+      message: 'Couldn’t switch to Codex.',
+    })
   })
 
   it('starts an agent unless it runs or is starting', () => {

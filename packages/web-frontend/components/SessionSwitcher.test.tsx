@@ -103,6 +103,22 @@ describe('SessionSwitcher', () => {
     expect(sheet.getByText('Alpha')).toBeInTheDocument()
     expect(sheet.getByText('Alpha #2')).toBeInTheDocument()
   })
+
+  it('names the open session in the header as the list and End dialog do', () => {
+    const slotA = makeProjectSlot('a', 'Alpha')
+    const slotB = makeProjectSlot('b', 'Alpha')
+
+    render(
+      <SessionSwitcher
+        currentSlot={slotB}
+        allSlots={[slotA, slotB]}
+        onSwitchTo={vi.fn()}
+        isMobile={true}
+      />,
+    )
+
+    expect(screen.getByTestId('session-switcher')).toHaveTextContent('Alpha #2')
+  })
 })
 
 describe('SessionSwitcher attention', () => {

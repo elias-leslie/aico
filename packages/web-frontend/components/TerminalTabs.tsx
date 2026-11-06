@@ -72,6 +72,8 @@ export function TerminalTabs({
     handleSlotCloseSession,
     handleSlotModeSwitch,
     isModeSwitching,
+    modeSwitchError,
+    clearModeSwitchError,
     fileInputRef,
     progress,
     isUploading,
@@ -172,8 +174,12 @@ export function TerminalTabs({
         fileInputRef={fileInputRef}
         progress={progress}
         isUploading={isUploading}
-        uploadError={uploadError}
-        clearUploadError={clearUploadError}
+        // The toast above the session also says a failed shell/agent switch.
+        uploadError={modeSwitchError ?? uploadError}
+        clearUploadError={() => {
+          clearModeSwitchError()
+          clearUploadError()
+        }}
         uploadDone={uploadDone}
         clearUploadDone={clearUploadDone}
         handleFileInputChange={handleFileInputChange}
@@ -212,7 +218,8 @@ export function TerminalTabs({
         isOpen={showTerminalManager}
         onClose={handleCloseTerminalManager}
         defaultProjectId={
-          sessions.find((session) => session.id === activeSessionId)?.project_id
+          sessions.find((session) => session.id === activeSessionId)
+            ?.project_id ?? projectId
         }
         onStart={(projectId, rootPath, mode, host) =>
           handleNewTerminalForProject(projectId, mode, rootPath, host)

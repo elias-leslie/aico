@@ -12,6 +12,7 @@ import {
   useHostProjects,
   useHosts,
 } from '@/lib/hooks/use-hosts'
+import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import {
   type ProjectSetting,
   useProjectSettings,
@@ -19,11 +20,12 @@ import {
 import { AgentIcon, getAgentColor } from './AgentIcon'
 
 const SHELL_MODE = 'shell'
+const LAST_PROJECT_KEY = 'aico:new-session-project'
 
 interface NewSessionDialogProps {
   isOpen: boolean
   onClose: () => void
-  /** Preselected project, e.g. the open session's. */
+  /** Preselected project: the open session's, else the project link's. */
   defaultProjectId?: string | null
   /** `mode` is an agent tool's slug, or `shell`; `host` a Tether peer, or
    * absent for this computer. A rejection keeps the dialog open with its
@@ -63,6 +65,10 @@ export function NewSessionDialog({
   const [kind, setKind] = useState<'agent' | 'shell'>('agent')
   const [pickedToolSlug, setPickedToolSlug] = useState<string | null>(null)
   const [pickedHost, setPickedHost] = useState<string | null>(null)
+  const [lastProjectId, setLastProjectId] = useLocalStorageState<string | null>(
+    LAST_PROJECT_KEY,
+    null,
+  )
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const {
@@ -99,14 +105,18 @@ export function NewSessionDialog({
     () => projects.filter((p) => matchesProject(p, normalizedQuery)),
     [projects, normalizedQuery],
   )
-  // A pick from another host's list falls back to this list's default.
+  // The pick, else the project in view, else the last one started here, else
+  // the first enabled one. A pick from another host's list falls back to
+  // those. A project the search hides is not the choice: nothing names it.
+  const inList = (id: string | null | undefined) =>
+    projects.some((p) => p.id === id) ? id : null
   const projectId =
-    (projects.some((p) => p.id === pickedProjectId) ? pickedProjectId : null) ??
-    (projects.some((p) => p.id === defaultProjectId)
-      ? defaultProjectId
-      : projects[0]?.id) ??
+    inList(pickedProjectId) ??
+    inList(defaultProjectId) ??
+    inList(lastProjectId) ??
+    projects.find((p) => p.enabled !== false)?.id ??
     null
-  const project = projects.find((p) => p.id === projectId)
+  const project = visibleProjects.find((p) => p.id === projectId)
 
   const close = () => {
     setQuery('')
@@ -125,6 +135,7 @@ export function NewSessionDialog({
       ? onStart(project.id, project.root_path, mode, host)
       : onStart(project.id, project.root_path, mode)
     if (!(started instanceof Promise)) {
+      setLastProjectId(project.id)
       close()
       return
     }
@@ -132,6 +143,7 @@ export function NewSessionDialog({
     setStartError(null)
     try {
       await started
+      setLastProjectId(project.id)
       close()
     } catch (error) {
       setStarting(false)
@@ -144,7 +156,9 @@ export function NewSessionDialog({
   }
 
   const startLabel = !project
-    ? 'Start'
+    ? visibleProjects.length > 0
+      ? 'Pick a project'
+      : 'Start'
     : tool
       ? `Start ${tool.name} in ${project.name}`
       : `Start a shell in ${project.name}`
