@@ -10,6 +10,7 @@ import {
   restore,
   type SnapDeps,
   scopeAt,
+  snapshots,
   storeFor,
   take,
 } from './snapshots'
@@ -118,6 +119,30 @@ describe('aico snapshots', () => {
     ).toBe(python)
     expect(find(loadPoints(deps, scope), '-1').id).toBe('elsewhere')
     expect(() => restore(deps, scope, '-1')).toThrow(/belongs to \/other\/root/)
+  })
+
+  it('st rollback previews and issues a single-use token before it restores anything', () => {
+    const { root, deps, scope } = setup()
+    const point = take(deps, scope, 'good')
+    writeFileSync(join(root, 'f.txt'), 'two\n')
+    const out: string[] = []
+    deps.out = (line) => out.push(line)
+    expect(snapshots(['restore', '-1', '--project', 'scratch'], deps, root)).toBe(0)
+    expect(readFileSync(join(root, 'f.txt'), 'utf8')).toBe('two\n')
+    expect(out.join('\n')).toContain(`Snapshot: ${point.id}`)
+    const token = out.at(-1)?.match(/--confirm ([0-9a-f]+)$/)?.[1] as string
+    expect(token).toMatch(/^[0-9a-f]{8}$/)
+    expect(() =>
+      snapshots(['restore', '-1', '--confirm', 'deadbeef', '--project', 'scratch'], deps, root),
+    ).toThrow(/confirm token/)
+    expect(readFileSync(join(root, 'f.txt'), 'utf8')).toBe('two\n')
+    expect(
+      snapshots(['restore', '-1', '--confirm', token, '--project', 'scratch'], deps, root),
+    ).toBe(0)
+    expect(readFileSync(join(root, 'f.txt'), 'utf8')).toBe('one\n')
+    expect(() =>
+      snapshots(['restore', point.id, '--confirm', token, '--project', 'scratch'], deps, root),
+    ).toThrow(/confirm token/)
   })
 
   it('refuses restore inside the production workspace or of a shared-boundary point', () => {

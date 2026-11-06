@@ -8,7 +8,15 @@
 // Both take SummitFlow's physical and per-scope locks (flock), so the two never interleave.
 
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import ops from '../data/ops.json' with { type: 'json' }
 import { Refusal } from './deploy'
@@ -316,8 +324,39 @@ export function snapshots(argv: string[], deps: SnapDeps, cwd = process.cwd()): 
     return 0
   }
   if (verb === 'restore') {
+    const at = args.indexOf('--confirm')
+    const token = at >= 0 ? args.splice(at, 2)[1] : undefined
     if (!args[0]) throw new Refusal('aico snapshots restore needs a snapshot id, name or -N', 2)
-    const { point, saved } = restore(deps, scope, args[0])
+    // Two passes, as SummitFlow's st rollback: a preview that issues a single-use token, then the restore.
+    const target = find(loadPoints(deps, scope), args[0])
+    const tokenFile = join(scopeDir(deps, scope), 'rollback-confirm.json')
+    if (token === undefined) {
+      const issued = randomBytes(4).toString('hex')
+      mkdirSync(dirname(tokenFile), { recursive: true })
+      writeFileSync(tokenFile, JSON.stringify({ token: issued, point: target.id }), { mode: 0o600 })
+      for (const text of [
+        `ROLLBACK would replace the whole project root ${scope.root} (${scope.project})`,
+        `  Snapshot: ${target.id}`,
+        `  Name: ${target.name ?? '-'}`,
+        `  Created: ${target.created_at}`,
+        `  Branch: ${target.branch ?? 'detached'}  HEAD: ${target.head_oid ?? '?'}`,
+        'The current tree is saved as a pre-restore snapshot first. To recover single files instead, copy them out of the snapshot path.',
+        `To restore: st rollback ${args[0]} --confirm ${issued}`,
+      ])
+        deps.out(text)
+      return 0
+    }
+    let issued: { token?: string; point?: string } = {}
+    try {
+      issued = JSON.parse(readFileSync(tokenFile, 'utf8'))
+    } catch {}
+    if (!token || issued.token !== token || issued.point !== target.id)
+      throw new Refusal(
+        'That confirm token is not the one the preview issued for this snapshot; run st rollback without --confirm for a new one.',
+        2,
+      )
+    rmSync(tokenFile, { force: true })
+    const { point, saved } = restore(deps, scope, target.id)
     deps.out(
       `ROLLED_BACK ${point.id}|name:${point.name ?? '-'}|scope:project:${scope.project}|backend:btrfs`,
     )
@@ -327,7 +366,7 @@ export function snapshots(argv: string[], deps: SnapDeps, cwd = process.cwd()): 
     return 0
   }
   throw new Refusal(
-    'Usage: aico snapshots take [NAME] | list | restore ID|NAME|-N   [--root DIR] [--project ID]',
+    'Usage: aico snapshots take [NAME] | list | restore ID|NAME|-N [--confirm TOKEN]   [--root DIR] [--project ID]',
     2,
   )
 }
