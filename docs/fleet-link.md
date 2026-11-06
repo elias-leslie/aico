@@ -108,7 +108,9 @@ result and observe refusal. Local TLS tests do not establish that live drill.
 
 On a full machine with read access to its Proxmox authority, set `proxmoxSsh` in
 `fleet.json` to the existing SSH host alias. Fleet reads `/cluster/resources`
-through `pvesh` at its normal Status interval when peers are disconnected. Guest
+through `pvesh` while peers are disconnected, at most once per `powerCacheMs`
+(default 60000) with an SSH timeout of `powerTimeoutMs` (default 10000). The reading
+runs in the background, so a hung probe never delays link Status. Guest
 names must match fleet machine names. An approved peer whose guest is reported
 `stopped` is `off` and does not count as a late connection. A running guest with no link
 still warns; a failed, missing or ambiguous power reading also keeps the warning.
