@@ -61,9 +61,14 @@ def post_notice(cfg: dict[str, Any], req: dict[str, Any]) -> bool:
         return False
 
 
+# How long a finished (denied, revoked, expired) request keeps its Status row.
+FINISHED_KEEP_S = 86400
+
+
 class Grants:
-    def __init__(self, cfg: dict[str, Any], now=time.time, notify=post_notice, report=aico_status.report):
-        self.cfg, self.now, self.notify, self.report = cfg, now, notify, report
+    def __init__(self, cfg: dict[str, Any], now=time.time, notify=post_notice, report=aico_status.report,
+                 remove=aico_status.remove):
+        self.cfg, self.now, self.notify, self.report, self.remove = cfg, now, notify, report, remove
         self.folder = Path(cfg["state_dir"])
         self.folder.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = self.folder / "state.json"
@@ -87,7 +92,14 @@ class Grants:
                 req["state"] = "expired"
             if req["state"] == "pending" and not req.get("pushed"):
                 req["pushed"] = self.notify(self.cfg, req)
+            if req["state"] not in ("pending", "approved"):
+                req.setdefault("ended", min(now, req["expires"]))
+        # A finished request stays a day for the record, then its row and entry go.
+        old = [r for r in self.state["requests"] if "ended" in r and now - r["ended"] > FINISHED_KEEP_S]
+        self.state["requests"] = [r for r in self.state["requests"] if r not in old]
         self.save()
+        for r in old:
+            self.remove(f"{aico_status.machine_id()}/grant-{r['id']}")
         rows = [{
             "id": f"{aico_status.machine_id()}/grant-{r['id']}", "what": r["title"], "kind": "grant",
             "machine": aico_status.machine_id(), "state": "ok" if r["state"] == "approved" else "off",

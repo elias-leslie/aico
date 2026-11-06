@@ -26,6 +26,7 @@ import os
 import re
 import socket
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -210,3 +211,18 @@ def _post(rows: Mapping[str, Any] | Sequence[Mapping[str, Any]], target: str, ti
     except (OSError, TimeoutError) as error:
         log.error("status row not sent, Aico is not answering at %s: %s", target, error)
     return False
+
+
+def remove(row_id: str, *, url: str | None = None, timeout: float = TIMEOUT_SECONDS) -> bool:
+    """Drops a row whose thing is gone (DELETE /api/status/rows?id=); True when it went. Never raises."""
+    target = url or os.environ.get("AICO_STATUS_URL") or DEFAULT_URL
+    request = urllib.request.Request(
+        target + "?" + urllib.parse.urlencode({"id": row_id}), method="DELETE"
+    )
+    try:
+        with _OPENER.open(request, timeout=timeout) as response:
+            response.read()
+        return True
+    except Exception:
+        log.exception("status row %s not removed at %s", row_id, target)
+        return False

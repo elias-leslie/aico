@@ -117,3 +117,21 @@ def test_request_limits_unknown_kinds_and_check_runs_do_not_elevate(service):
     for fields in ({"kind": "arbitrary"}, {"minutes": -1}, {"minutes": True}, {"kind": "github-admin", "reason": "check-runs 403"}):
         with pytest.raises(ValueError):
             svc.handle({"op": "request", "kind": "test", "reason": "test", **fields}, svc.owner)
+
+
+def test_finished_requests_leave_status_after_a_day(service):
+    svc, _key, clock, _notices, rows = service
+    removed = []
+    svc.remove = removed.append
+    rid = request(svc)
+    clock[0] += svc.cfg["request_seconds"] + 1
+    svc.refresh()
+    assert [r["state"] for r in svc.state["requests"]] == ["expired"]
+    clock[0] += grants.FINISHED_KEEP_S - 10
+    svc.refresh()
+    assert svc.state["requests"] and not removed
+    clock[0] += 20
+    rows.clear()
+    svc.refresh()
+    assert svc.state["requests"] == [] and not rows
+    assert removed and removed[0].endswith(f"/grant-{rid}")

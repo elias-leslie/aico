@@ -122,15 +122,6 @@ presence = "parked"
 isolated = true
 
 [[assets]]
-id = "fydor-lab-win11"
-tier = "lab"
-kind = "vm"
-vmid = 111
-names = ["fydor-lab-win11"]
-presence = "parked"
-isolated = true
-
-[[assets]]
 id = "ominull-target-linux"
 tier = "lab"
 kind = "vm"
