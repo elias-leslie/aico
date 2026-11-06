@@ -29,6 +29,7 @@ const USAGE = `Usage:
       read-only Btrfs points of the project (the catalogue st snap keeps); restore only for a project
       that is its own subvolume outside the production workspace
   aico vm list | status ID | ip ID | start ID [--hours H --reason R] | stop ID | snapshot ID [NAME]
+  aico vm observe ID... --storage NAME | reset ID --name NAME --snapshot SNAPSHOT
       Proxmox guests with Aico Logins' scoped API token (Proxmox enforces its pools)`
 
 /** The repo this launcher belongs to: AICO_REPO_ROOT, else the nearest project.identity.json above cwd. */

@@ -113,6 +113,139 @@ export function pveRequest(
   }
 }
 
+/** Wait for a PVE task (UPID) to stop; a non-OK exit status is a Refusal. */
+async function waitTask(call: PveRequest, node: string, task: string): Promise<void> {
+  const until = Date.now() + ops.vm.timeoutSeconds * 1000
+  for (;;) {
+    const status = (await call(
+      'GET',
+      `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(task)}/status`,
+    )) as { status?: string; exitstatus?: string }
+    if (status.status === 'stopped') {
+      if (status.exitstatus !== 'OK')
+        throw new Refusal(`Proxmox task failed: ${status.exitstatus ?? 'unknown'}`)
+      return
+    }
+    if (Date.now() >= until) throw new Refusal(`Proxmox task did not finish: ${task}`)
+    await delay(1000)
+  }
+}
+
+const isUpid = (task: unknown): task is string =>
+  typeof task === 'string' && task.startsWith('UPID:')
+const STORAGE = /^[a-z0-9][a-z0-9-]{0,62}$/
+const SNAPSHOT = /^[A-Za-z][A-Za-z0-9_-]{1,39}$/
+
+/** Newest start time (epoch seconds) of one task type for a guest, or null when none is recorded. */
+async function latestTask(
+  call: PveRequest,
+  guest: Guest,
+  type: 'qmstart' | 'qmrollback',
+): Promise<number | null> {
+  const rows = (await call(
+    'GET',
+    `/nodes/${encodeURIComponent(guest.node)}/tasks?vmid=${guest.vmid}&typefilter=${type}&limit=100`,
+  )) as { type?: string; starttime?: number }[]
+  const times = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row.type === type && Number.isInteger(row.starttime))
+    .map((row) => row.starttime as number)
+  return times.length ? Math.max(...times) : null
+}
+
+export interface Observation {
+  vms: {
+    vmid: number
+    name: string
+    status: string
+    uptime: number
+    lock: string | null
+    snapshots: string[]
+    latest_tasks: { qmstart: number | null; qmrollback: number | null }
+  }[]
+  storage: { name: string; used: number; total: number }
+}
+
+/** Read-only inventory of the named QEMU guests plus one storage's use. */
+async function observe(
+  call: PveRequest,
+  guests: Guest[],
+  ids: string[],
+  storage: string,
+): Promise<Observation> {
+  if (!STORAGE.test(storage)) throw new Refusal('Invalid Proxmox storage name', 2)
+  const vms: Observation['vms'] = []
+  for (const id of ids) {
+    const guest = guests.find((row) => String(row.vmid) === id)
+    if (!guest || guest.type !== 'qemu') throw new Refusal(`No visible Proxmox VM ${id}`)
+    const base = `/nodes/${encodeURIComponent(guest.node)}/qemu/${guest.vmid}`
+    const current = (await call('GET', `${base}/status/current`)) as Record<string, unknown>
+    const snapshots = (await call('GET', `${base}/snapshot`)) as { name?: string }[]
+    vms.push({
+      vmid: guest.vmid,
+      name: String(current.name ?? guest.name),
+      status: String(current.status ?? guest.status),
+      uptime: Number(current.uptime) || 0,
+      lock: current.lock ? String(current.lock) : null,
+      snapshots: (Array.isArray(snapshots) ? snapshots : [])
+        .map((row) => String(row.name))
+        .filter((name) => name !== 'current'),
+      latest_tasks: {
+        qmstart: await latestTask(call, guest, 'qmstart'),
+        qmrollback: await latestTask(call, guest, 'qmrollback'),
+      },
+    })
+  }
+  const use = (await call(
+    'GET',
+    `/nodes/${encodeURIComponent(ops.vm.node)}/storage/${storage}/status`,
+  )) as { used?: number; total?: number }
+  return {
+    vms,
+    storage: { name: storage, used: Number(use.used) || 0, total: Number(use.total) || 0 },
+  }
+}
+
+/**
+ * Roll a stopped QEMU guest back to a named snapshot and leave it stopped. The caller names the
+ * expected guest name; a mismatch, a running or locked guest, or a missing snapshot refuses before
+ * anything is written.
+ */
+async function resetGuest(
+  call: PveRequest,
+  guest: Guest,
+  name: string,
+  snapshot: string,
+): Promise<{ vmid: number; name: string; snapshot: string; status: string }> {
+  if (guest.type !== 'qemu')
+    throw new Refusal(`VM ${guest.vmid} is a container; reset needs a VM`, 2)
+  if (!SNAPSHOT.test(snapshot) || snapshot === 'current')
+    throw new Refusal('Invalid snapshot name', 2)
+  const base = `/nodes/${encodeURIComponent(guest.node)}/qemu/${guest.vmid}`
+  const current = (await call('GET', `${base}/status/current`)) as Record<string, unknown>
+  if (current.name !== name || guest.name !== name)
+    throw new Refusal(`VM ${guest.vmid} is not named ${name}; nothing was reset`)
+  if (current.status !== 'stopped')
+    throw new Refusal(
+      `VM ${guest.vmid} is ${String(current.status)}; reset only touches stopped guests`,
+    )
+  if (current.lock) throw new Refusal(`VM ${guest.vmid} is locked (${String(current.lock)})`)
+  const snapshots = (await call('GET', `${base}/snapshot`)) as { name?: string }[]
+  if (!(Array.isArray(snapshots) ? snapshots : []).some((row) => row.name === snapshot))
+    throw new Refusal(`VM ${guest.vmid} has no snapshot ${snapshot}`)
+  const task = await call('POST', `${base}/snapshot/${encodeURIComponent(snapshot)}/rollback`)
+  if (isUpid(task)) await waitTask(call, guest.node, task)
+  let after = (await call('GET', `${base}/status/current`)) as Record<string, unknown>
+  if (after.status !== 'stopped') {
+    // A snapshot with saved memory resumes running; the guest must end stopped.
+    const stop = await call('POST', `${base}/status/stop`)
+    if (isUpid(stop)) await waitTask(call, guest.node, stop)
+    after = (await call('GET', `${base}/status/current`)) as Record<string, unknown>
+  }
+  if (after.name !== name || after.status !== 'stopped')
+    throw new Refusal(`VM ${guest.vmid} was not verified stopped as ${name} after reset`)
+  return { vmid: guest.vmid, name, snapshot, status: 'stopped' }
+}
+
 /** A direct PVE API operation. Proxmox continues to enforce the scoped token's pool rights. */
 export function routeOp(
   env: NodeJS.ProcessEnv = process.env,
@@ -121,8 +254,11 @@ export function routeOp(
   return async (op, vmid, args = {}) => {
     const guests = guestRows(await call('GET', '/cluster/resources?type=vm'))
     if (op === 'list_vms') return guests
+    if (op === 'observe')
+      return observe(call, guests, (args.ids as string[]) ?? [], String(args.storage ?? ''))
     const guest = guests.find((row) => String(row.vmid) === vmid)
     if (!guest) throw new Refusal(`No visible Proxmox guest ${vmid}`)
+    if (op === 'reset') return resetGuest(call, guest, String(args.name), String(args.snapshot))
     const base = `/nodes/${encodeURIComponent(guest.node)}/${guest.type}/${guest.vmid}`
     if (op === 'status')
       return {
@@ -148,22 +284,7 @@ export function routeOp(
         description: args.description,
       })
     else throw new Refusal(`Unsupported Proxmox operation ${op}`, 2)
-    if (typeof task === 'string' && task.startsWith('UPID:')) {
-      const until = Date.now() + ops.vm.timeoutSeconds * 1000
-      for (;;) {
-        const status = (await call(
-          'GET',
-          `/nodes/${encodeURIComponent(guest.node)}/tasks/${encodeURIComponent(task)}/status`,
-        )) as { status?: string; exitstatus?: string }
-        if (status.status === 'stopped') {
-          if (status.exitstatus !== 'OK')
-            throw new Refusal(`Proxmox task failed: ${status.exitstatus ?? 'unknown'}`)
-          break
-        }
-        if (Date.now() >= until) throw new Refusal(`Proxmox task did not finish: ${task}`)
-        await delay(1000)
-      }
-    }
+    if (isUpid(task)) await waitTask(call, guest.node, task)
     return null
   }
 }
@@ -312,6 +433,28 @@ export async function vm(
       }
       return 0
     }
+    case 'observe': {
+      // Read-only inventory as one JSON document: aico vm observe ID... --storage NAME
+      const positional = [rawId, ...rest].filter(
+        (v, i, all) => v && !v.startsWith('--') && !all[i - 1]?.startsWith('--'),
+      )
+      const ids = positional.map(vmId)
+      const storage = option(rest, '--storage')
+      if (!ids.length || !storage)
+        throw new Refusal('Usage: aico vm observe ID... --storage NAME', 2)
+      out(JSON.stringify(await call('observe', undefined, { ids, storage })))
+      return 0
+    }
+    case 'reset': {
+      // Roll a stopped VM back to a snapshot, verified by name; leaves it stopped.
+      const vmid = vmId(rawId)
+      const name = option(rest, '--name')
+      const snapshot = option(rest, '--snapshot')
+      if (!name || !snapshot)
+        throw new Refusal('Usage: aico vm reset ID --name NAME --snapshot SNAPSHOT', 2)
+      out(JSON.stringify(await call('reset', vmid, { name, snapshot })))
+      return 0
+    }
     case 'snapshot': {
       const vmid = vmId(rawId)
       const name = rest[0] ?? snapshotName()
@@ -330,7 +473,7 @@ export async function vm(
     }
     default:
       err(
-        'Usage: aico vm list | status ID | ip ID | start ID [--hours H --reason R] | shutdown ID | stop ID | snapshot ID [NAME]',
+        'Usage: aico vm list | status ID | ip ID | start ID [--hours H --reason R] | shutdown ID | stop ID | snapshot ID [NAME] | observe ID... --storage NAME | reset ID --name NAME --snapshot SNAPSHOT',
       )
       return 2
   }

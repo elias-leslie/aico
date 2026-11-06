@@ -155,6 +155,159 @@ describe('direct scoped PVE operations', () => {
   })
 })
 
+describe('lab guest inventory and reset', () => {
+  const lab = [
+    {
+      vmid: 121,
+      name: 'neri-gitlab',
+      type: 'qemu',
+      status: 'stopped',
+      pool: 'lab',
+      node: 'pve',
+      maxmem: 1,
+      maxdisk: 1,
+    },
+    {
+      vmid: 150,
+      name: 'hub',
+      type: 'lxc',
+      status: 'running',
+      pool: 'ops',
+      node: 'pve',
+      maxmem: 1,
+      maxdisk: 1,
+    },
+  ]
+  function labApi(state: { status: string; name?: string; lock?: string; afterRollback?: string }) {
+    const calls: string[] = []
+    let rolled = false
+    const api: PveRequest = async (method, path) => {
+      calls.push(`${method} ${path}`)
+      if (path.includes('resources')) return lab
+      if (path.endsWith('/status/current'))
+        return {
+          name: state.name ?? 'neri-gitlab',
+          status: rolled ? (state.afterRollback ?? 'stopped') : state.status,
+          uptime: 7,
+          lock: state.lock,
+        }
+      if (path.endsWith('/qemu/121/snapshot'))
+        return [{ name: 'clean-neri-gitlab' }, { name: 'current' }]
+      if (path.includes('typefilter=qmstart'))
+        return [
+          { type: 'qmstart', starttime: 100 },
+          { type: 'qmstart', starttime: 300 },
+        ]
+      if (path.includes('typefilter=qmrollback')) return []
+      if (path.includes('/storage/')) return { used: 5, total: 10 }
+      if (path.includes('/tasks/')) return { status: 'stopped', exitstatus: 'OK' }
+      if (path.endsWith('/rollback')) {
+        rolled = true
+        return 'UPID:rollback'
+      }
+      if (path.endsWith('/status/stop')) {
+        state.afterRollback = 'stopped'
+        return 'UPID:stop'
+      }
+      return null
+    }
+    return { api, calls }
+  }
+  const run = (api: PveRequest, ...args: string[]) => {
+    const out: string[] = []
+    return vm(
+      args,
+      routeOp({}, api),
+      () => ({ code: 0, out: '', err: '' }),
+      (s) => out.push(s),
+      () => {},
+    ).then((code) => ({ code, out }))
+  }
+  it('observes names, state, snapshots, lock, last start and storage in one JSON document', async () => {
+    const { api, calls } = labApi({ status: 'stopped' })
+    const { code, out } = await run(api, 'observe', '121', '--storage', 'local-lvm')
+    expect(code).toBe(0)
+    expect(JSON.parse(out[0])).toEqual({
+      vms: [
+        {
+          vmid: 121,
+          name: 'neri-gitlab',
+          status: 'stopped',
+          uptime: 7,
+          lock: null,
+          snapshots: ['clean-neri-gitlab'],
+          latest_tasks: { qmstart: 300, qmrollback: null },
+        },
+      ],
+      storage: { name: 'local-lvm', used: 5, total: 10 },
+    })
+    expect(calls.every((c) => c.startsWith('GET'))).toBe(true)
+  })
+  it('refuses to observe invisible guests, containers and bad storage names', async () => {
+    const { api } = labApi({ status: 'stopped' })
+    await expect(run(api, 'observe', '999', '--storage', 'local-lvm')).rejects.toThrow('No visible')
+    await expect(run(api, 'observe', '150', '--storage', 'local-lvm')).rejects.toThrow('No visible')
+    await expect(run(api, 'observe', '121', '--storage', '../x')).rejects.toThrow('storage')
+    await expect(run(api, 'observe', '121')).rejects.toThrow('Usage')
+  })
+  it('rolls a stopped guest back and verifies the name and stopped state', async () => {
+    const { api, calls } = labApi({ status: 'stopped' })
+    const { code, out } = await run(
+      api,
+      'reset',
+      '121',
+      '--name',
+      'neri-gitlab',
+      '--snapshot',
+      'clean-neri-gitlab',
+    )
+    expect(code).toBe(0)
+    expect(JSON.parse(out[0])).toEqual({
+      vmid: 121,
+      name: 'neri-gitlab',
+      snapshot: 'clean-neri-gitlab',
+      status: 'stopped',
+    })
+    expect(calls).toContain('POST /nodes/pve/qemu/121/snapshot/clean-neri-gitlab/rollback')
+  })
+  it('stops a guest that a memory snapshot resumed', async () => {
+    const { api, calls } = labApi({ status: 'stopped', afterRollback: 'running' })
+    const { code } = await run(
+      api,
+      'reset',
+      '121',
+      '--name',
+      'neri-gitlab',
+      '--snapshot',
+      'clean-neri-gitlab',
+    )
+    expect(code).toBe(0)
+    expect(calls).toContain('POST /nodes/pve/qemu/121/status/stop')
+  })
+  it.each([
+    [{ status: 'running' }, 'stopped guests'],
+    [{ status: 'stopped', lock: 'backup' }, 'locked'],
+    [{ status: 'stopped', name: 'other' }, 'not named'],
+  ])('refuses to reset before any write: %j', async (state, message) => {
+    const { api, calls } = labApi(state)
+    await expect(
+      run(api, 'reset', '121', '--name', 'neri-gitlab', '--snapshot', 'clean-neri-gitlab'),
+    ).rejects.toThrow(message)
+    expect(calls.some((c) => c.startsWith('POST'))).toBe(false)
+  })
+  it('refuses a missing snapshot, a container and missing flags', async () => {
+    const { api, calls } = labApi({ status: 'stopped' })
+    await expect(
+      run(api, 'reset', '121', '--name', 'neri-gitlab', '--snapshot', 'nope'),
+    ).rejects.toThrow('no snapshot')
+    await expect(run(api, 'reset', '150', '--name', 'hub', '--snapshot', 'clean')).rejects.toThrow(
+      'container',
+    )
+    await expect(run(api, 'reset', '121', '--name', 'neri-gitlab')).rejects.toThrow('Usage')
+    expect(calls.some((c) => c.startsWith('POST'))).toBe(false)
+  })
+})
+
 it('preserves lab-use reason and hours defaults and explicit overrides', () => {
   expect(labUse('150', ['--hours', '4.0', '--reason', ''])).toEqual({
     reason: 'aico vm start 150',
