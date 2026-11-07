@@ -11,6 +11,8 @@
 /* Colours, fonts and easing come only from packages/ui-kit tokens.
    The aliases below are strengths of those tokens, not a new palette. */
 :root {
+  scrollbar-color: var(--paper-veil) transparent;
+  scrollbar-width: thin;
   --line: rgb(var(--glass-rgb) / 0.07);
   --line-2: rgb(var(--glass-rgb) / 0.12);
   --wash: rgb(var(--glass-rgb) / 0.035);
@@ -408,6 +410,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
       <span class="qglance" aria-hidden="true"><i style="--h:82%"></i><i class="out" style="--h:0%"></i><i class="out" style="--h:5%"></i></span>
       <span class="lbl">Claude 82% · Codex, OpenCode used up</span>
     </button>
+    <button class="tb-btn tb-notes" data-pop="notes" title="Notes (N): opens in their own window, ready to type"><span data-i="note"></span><span class="lbl">Notes</span></button>
   </header>
 
   <div class="body" id="body">
@@ -940,7 +943,7 @@ function activityChart() {
   ];
   const L = Math.min(150, W * 0.34), R = W - 12, x0 = 6, x1 = 17, X = h => L + (h - x0) / (x1 - x0) * (R - L), rh = 22, H = rows.length * rh + 24;
   let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" role="img" aria-label="Session activity from 6 AM to now">`;
-  for (let h = 6; h <= 16; h += 2) s += `<line x1="${X(h)}" x2="${X(h)}" y1="0" y2="${rows.length * rh}" stroke="rgb(255 255 255 / 0.06)"/><text x="${X(h)}" y="${rows.length * rh + 16}" text-anchor="middle">${h > 12 ? h - 12 + ' PM' : h + (h === 12 ? ' PM' : ' AM')}</text>`;
+  for (let h = 6; h <= 14; h += 2) s += `<line x1="${X(h)}" x2="${X(h)}" y1="0" y2="${rows.length * rh}" stroke="rgb(255 255 255 / 0.06)"/><text x="${X(h)}" y="${rows.length * rh + 16}" text-anchor="middle">${h > 12 ? h - 12 + ' PM' : h + (h === 12 ? ' PM' : ' AM')}</text>`;
   s += `<line x1="${X(16.52)}" x2="${X(16.52)}" y1="0" y2="${rows.length * rh}" stroke="var(--lantern)" stroke-dasharray="2 3"/><text x="${X(16.52)}" y="${rows.length * rh + 16}" text-anchor="middle" fill="var(--lantern)">now</text>`;
   rows.forEach(([n, segs, marks], i) => {
     const y = i * rh + 5;
@@ -1025,7 +1028,7 @@ $('#start-btn').onclick = () => {
   showSession('fresh'); setTimeout(() => { SESS.fresh.sub = 'Live · working · sized here'; if (state.session === 'fresh') $('#cur-sub').textContent = SESS.fresh.sub; }, 900);
 };
 function popNotes() {
-  const html = '<!doctype html><meta charset="utf-8"><title>Notes · Aico</title><style>body{margin:0;background:#1c1f24;color:#e7e2d6;font:14px system-ui}h1{font:600 15px system-ui;padding:12px;margin:0;border-bottom:1px solid #333}.n{padding:10px 12px;border-bottom:1px solid #2a2d33}.n b{display:block}.n span{color:#8b8f94;font-size:12.5px}</style><h1>Notes</h1>' + [...document.querySelectorAll('#notes-win .note')].map(n => '<div class=n><b>' + n.querySelector('.nt').textContent + '</b><span>' + n.querySelector('.np').textContent + '</span></div>').join('');
+  const html = '<!doctype html><meta charset="utf-8"><title>Notes · Aico</title><style>body{margin:0;background:#1c1f24;color:#e7e2d6;font:14px system-ui}h1{font:600 15px system-ui;padding:12px;margin:0;border-bottom:1px solid #333}.n{padding:10px 12px;border-bottom:1px solid #2a2d33}.n b{display:block}.n span{color:#8b8f94;font-size:12.5px}</style><h1>Notes</h1><textarea autofocus placeholder="New note… (saves as you type)" style="display:block;box-sizing:border-box;width:calc(100% - 24px);margin:12px;min-height:96px;background:#0b0d11;color:#e7e2d6;border:1px solid #e5a647;border-radius:8px;padding:10px;font:14px system-ui;resize:vertical;outline:none"></textarea>' + [...document.querySelectorAll('#notes-win .note')].map(n => '<div class=n><b>' + n.querySelector('.nt').textContent + '</b><span>' + n.querySelector('.np').textContent + '</span></div>').join('');
   let w = null; try { w = window.open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), 'aico-notes', 'popup,width=380,height=520'); } catch (e) {}
   if (w) toast('Notes opened in their own window');
   else { $('#notes-win').classList.add('on'); toast('The browser blocked the window, so notes open here'); }
