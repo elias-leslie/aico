@@ -66,9 +66,15 @@ vi.mock('./HeaderIconButton', () => ({
 vi.mock('./ContextFillBadge', () => ({ ContextFillBadge: () => null }))
 
 vi.mock('./PaneStatusBadge', () => ({
-  PaneStatusBadge: () => null,
-  shouldShowPaneStatus: () => false,
+  PaneStatusBadge: ({ status }: { status?: string }) => (
+    <i data-testid="status-mock">{status}</i>
+  ),
 }))
+
+const frameState = vi.hoisted(() => ({
+  value: null as { docked: boolean; tier: string } | null,
+}))
+vi.mock('../frame/FrameContext', () => ({ useFrame: () => frameState.value }))
 
 vi.mock('./PaneSearchControl', () => ({
   PaneSearchControl: () => <div data-testid="pane-search-control" />,
@@ -91,7 +97,10 @@ function makeProjectSlot(
 }
 
 describe('UnifiedTerminalHeaderContent', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    frameState.value = null
+  })
 
   it.each([false, true])(
     'routes a rename by the backend rename flag: can.rename=%s',
@@ -230,6 +239,41 @@ describe('UnifiedTerminalHeaderContent', () => {
     const button = screen.getByRole('button', { name: 'Files' })
     expect(button).toHaveTextContent('Files')
     expect(button).toHaveAttribute('title')
+  })
+
+  it('shows the connection beside the tool switcher', () => {
+    render(
+      <UnifiedTerminalHeaderContent
+        slot={makeProjectSlot('a', 'Alpha')}
+        connectionStatus="connecting"
+      />,
+    )
+    expect(screen.getByTestId('status-mock')).toHaveTextContent('connecting')
+  })
+
+  it.each([
+    ['panel', true, true],
+    ['wide', true, true],
+    ['rail', true, false],
+    ['hidden', true, false],
+    ['panel', false, false],
+  ])(
+    'hides the title only where the list shows its row (%s, docked %s)',
+    (tier, docked, hidden) => {
+      frameState.value = { docked, tier }
+      render(
+        <UnifiedTerminalHeaderContent slot={makeProjectSlot('a', 'Alpha')} />,
+      )
+      const title = screen.getByText('Alpha').closest('.hidden')
+      expect(title !== null).toBe(hidden)
+    },
+  )
+
+  it('shows the title when there is no frame around the bar', () => {
+    render(
+      <UnifiedTerminalHeaderContent slot={makeProjectSlot('a', 'Alpha')} />,
+    )
+    expect(screen.getByText('Alpha').closest('.hidden')).toBeNull()
   })
 
   it('offers Compose only where the compose box can be hidden, showing its state', () => {
