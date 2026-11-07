@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionSidebar } from './SessionSidebar'
 
 vi.mock('@/lib/hooks/use-session-attention', () => ({
@@ -23,130 +23,68 @@ vi.mock('./SessionList', () => ({
   sessionsHeading: () => 'Sessions · 5 · 2 need you',
 }))
 
-// jsdom has no PointerEvent; a mouse event carries what the handle reads.
-beforeAll(() => {
-  window.PointerEvent ??= class extends MouseEvent {} as typeof PointerEvent
-})
-
-function open(width = 320) {
-  const onWidthChange = vi.fn()
-  const onCollapsedChange = vi.fn()
-  render(
-    <SessionSidebar
-      slots={[]}
-      onSelect={vi.fn()}
-      width={width}
-      onWidthChange={onWidthChange}
-      onCollapsedChange={onCollapsedChange}
-    />,
-  )
-  return {
-    handle: screen.getByRole('separator', { name: 'Resize session list' }),
-    onWidthChange,
-    onCollapsedChange,
-  }
-}
-
 beforeEach(() => {
   needsYou.open = false
 })
 
 describe('SessionSidebar', () => {
-  it('puts Capture beside Needs you on the rail and in the full list', () => {
+  it('puts Capture beside Needs you on the rail and in the panel', () => {
     const { unmount } = render(
-      <SessionSidebar slots={[]} onSelect={vi.fn()} width={360} collapsed />,
+      <SessionSidebar slots={[]} onSelect={vi.fn()} variant="rail" />,
     )
     expect(screen.getByTestId('needs-you-mock').nextElementSibling).toBe(
       screen.getByTestId('capture-mock'),
     )
     unmount()
-    render(<SessionSidebar slots={[]} onSelect={vi.fn()} width={360} />)
+    render(<SessionSidebar slots={[]} onSelect={vi.fn()} />)
     expect(screen.getByTestId('needs-you-mock').nextElementSibling).toBe(
       screen.getByTestId('capture-mock'),
     )
   })
 
-  it('shows Needs you in the list’s place at the list’s width, the rail opening out to it', () => {
+  it('shows Needs you in the panel’s place, and the rail opens out to the panel for it', () => {
     needsYou.open = true
-    const { unmount } = render(
-      <SessionSidebar slots={[]} onSelect={vi.fn()} width={360} />,
-    )
+    const { unmount } = render(<SessionSidebar slots={[]} onSelect={vi.fn()} />)
     expect(screen.getByText('Needs you panel')).toBeVisible()
     expect(screen.queryByText('Full list')).toBeNull()
-    expect(screen.getByTestId('session-sidebar').style.width).toBe('360px')
     unmount()
-    render(
-      <SessionSidebar slots={[]} onSelect={vi.fn()} width={360} collapsed />,
-    )
-    expect(screen.getByText('Needs you panel')).toBeVisible()
-    expect(screen.queryByText('Rail marks')).toBeNull()
-    expect(screen.getByTestId('session-sidebar').style.width).toBe('360px')
-  })
-
-  it('folds to a rail that counts who needs you and opens the list again', () => {
-    const onCollapsedChange = vi.fn()
+    const onOpenPanel = vi.fn()
     render(
       <SessionSidebar
         slots={[]}
         onSelect={vi.fn()}
-        onNewSession={vi.fn()}
-        collapsed
-        onCollapsedChange={onCollapsedChange}
+        variant="rail"
+        onOpenPanel={onOpenPanel}
+      />,
+    )
+    expect(onOpenPanel).toHaveBeenCalled()
+  })
+
+  it('folds to a rail that counts who needs you and opens the panel again', () => {
+    const onOpenPanel = vi.fn()
+    render(
+      <SessionSidebar
+        slots={[]}
+        onSelect={vi.fn()}
+        variant="rail"
+        onOpenPanel={onOpenPanel}
       />,
     )
     expect(screen.getByText('Rail marks')).toBeVisible()
     expect(screen.queryByText('Full list')).toBeNull()
-    expect(screen.queryByRole('separator')).toBeNull()
-    expect(screen.getByRole('button', { name: 'New session' })).toBeVisible()
-    const expand = screen.getByRole('button', {
-      name: 'Show session list · Sessions · 5 · 2 need you',
+    const open = screen.getByRole('button', {
+      name: 'Open the panel · Sessions · 5 · 2 need you · Alt+2',
     })
-    expect(expand.textContent).toBe('2')
-    fireEvent.click(expand)
-    expect(onCollapsedChange).toHaveBeenCalledWith(false)
+    expect(open.textContent).toBe('2')
+    fireEvent.click(open)
+    expect(onOpenPanel).toHaveBeenCalled()
   })
 
-  it('collapses from its header', () => {
-    const { onCollapsedChange } = open()
-    expect(screen.getByText('Full list')).toBeVisible()
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Collapse session list' }),
+  it('lists sessions under their heading in the panel', () => {
+    render(<SessionSidebar slots={[]} onSelect={vi.fn()} />)
+    expect(screen.getByTestId('session-list-heading')).toHaveTextContent(
+      'Sessions · 5 · 2 need you',
     )
-    expect(onCollapsedChange).toHaveBeenCalledWith(true)
-  })
-
-  it('resizes from the keyboard within its limits, and double-click resets', () => {
-    const { handle, onWidthChange } = open(552)
-    expect(handle.getAttribute('aria-valuenow')).toBe('552')
-    fireEvent.keyDown(handle, { key: 'ArrowRight' })
-    expect(onWidthChange).toHaveBeenLastCalledWith(560)
-    fireEvent.keyDown(handle, { key: 'ArrowLeft' })
-    expect(onWidthChange).toHaveBeenLastCalledWith(536)
-    fireEvent.keyDown(handle, { key: 'Home' })
-    expect(onWidthChange).toHaveBeenLastCalledWith(240)
-    fireEvent.doubleClick(handle)
-    expect(onWidthChange).toHaveBeenLastCalledWith(320)
-  })
-
-  it('follows a drag and keeps the width where it ends', () => {
-    const { handle, onWidthChange } = open()
-    const aside = screen.getByTestId('session-sidebar')
-    fireEvent.pointerDown(handle, { button: 0, clientX: 320 })
-    fireEvent.pointerMove(handle, { clientX: 420 })
-    expect(aside.style.width).toBe('420px')
-    fireEvent.pointerMove(handle, { clientX: 2000 })
-    expect(aside.style.width).toBe('560px')
-    expect(onWidthChange).not.toHaveBeenCalled()
-    fireEvent.pointerUp(handle, { clientX: 2000 })
-    expect(onWidthChange).toHaveBeenCalledWith(560)
-  })
-
-  it('folds to the rail when dragged nearly shut', () => {
-    const { handle, onWidthChange, onCollapsedChange } = open()
-    fireEvent.pointerDown(handle, { button: 0, clientX: 320 })
-    fireEvent.pointerMove(handle, { clientX: 100 })
-    fireEvent.pointerUp(handle, { clientX: 100 })
-    expect(onCollapsedChange).toHaveBeenCalledWith(true)
-    expect(onWidthChange).not.toHaveBeenCalled()
+    expect(screen.getByText('Full list')).toBeVisible()
   })
 })

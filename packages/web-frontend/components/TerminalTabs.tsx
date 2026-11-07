@@ -2,6 +2,7 @@
 
 import { clsx } from 'clsx'
 import { useEffect, useState } from 'react'
+import { useServerReach } from '@/lib/frame/server-reach'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { timesLabel } from '@/lib/hooks/use-check-ins'
 import { useSignInWatch } from '@/lib/hooks/use-host-admin'
@@ -19,10 +20,10 @@ import {
 } from '@/lib/utils/slot'
 import { ConfirmationDialog } from './ConfirmationDialog'
 import { NewChatDialog } from './chat/NewChatDialog'
+import { SessionWaiting } from './frame/SessionWaiting'
 import { NewSessionDialog } from './NewSessionDialog'
 import { sessionWhoWhere } from './SessionList'
 import { TerminalContent } from './TerminalContent'
-import { TerminalSkeleton } from './TerminalSkeleton'
 
 interface TerminalTabsProps {
   projectId?: string
@@ -37,6 +38,7 @@ export function TerminalTabs({
 }: TerminalTabsProps) {
   useVisualViewportHeight()
   const [showChat, setShowChat] = useState(false)
+  const serverDown = useServerReach().down
   useEffect(() => {
     const open = () => setShowChat(true)
     window.addEventListener('aico:new-chat', open)
@@ -142,11 +144,12 @@ export function TerminalTabs({
     keepText = 'End, keep waits'
   }
 
-  // Loading state - show skeleton
-  if (isLoading) {
+  // Before the first list: say loading, or that the server can't be reached
+  // (a failed first read is not an empty list).
+  if (isLoading || (serverDown && terminalSlots.length === 0)) {
     return (
       <div className={clsx('flex flex-col h-full min-h-0', className)}>
-        <TerminalSkeleton />
+        <SessionWaiting onNewSession={handleOpenTerminalManager} />
       </div>
     )
   }

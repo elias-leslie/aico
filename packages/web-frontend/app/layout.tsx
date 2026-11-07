@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { AppFrame } from '@/components/frame/AppFrame'
 import { LANTERN_RIM } from '@/lib/constants/lantern'
 import {
   PRODUCT_DESCRIPTION,
@@ -53,7 +54,9 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <AppFrame>{children}</AppFrame>
+        </Providers>
       </body>
     </html>
   )

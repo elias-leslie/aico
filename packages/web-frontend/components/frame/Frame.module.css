@@ -1,0 +1,517 @@
+/* The one frame (mockup 2): top bar over a left side and the session.
+   Colours, fonts and easing come only from the Lantern tokens; the washes
+   below are strengths of those tokens, not a new palette. */
+
+.frame {
+  --line: rgb(var(--glass-rgb) / 0.07);
+  --line-2: rgb(var(--glass-rgb) / 0.12);
+  --wash: rgb(var(--glass-rgb) / 0.035);
+  --wash-2: rgb(var(--glass-rgb) / 0.06);
+  --amber-line: rgb(var(--lantern-rgb) / 0.42);
+  --t: 0.18s;
+  display: flex;
+  flex-direction: column;
+  height: var(--terminal-viewport-height, 100dvh);
+  background: var(--ink);
+  color: var(--bone);
+  overflow: hidden;
+}
+
+.body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ---------- top bar: global state only ---------- */
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 52px;
+  padding: 0 6px;
+  background: var(--rim);
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.topbar[data-docked] {
+  height: 48px;
+  gap: 8px;
+  padding: 0 10px 0 14px;
+}
+.brand {
+  font: 600 18px / 1 var(--font-display);
+  letter-spacing: 0.01em;
+  margin-right: 4px;
+  flex: none;
+}
+.current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  text-align: left;
+  transition: background var(--t) var(--ease-arrival);
+}
+.topbar[data-docked] .current {
+  flex: 0 1 auto;
+  min-height: 36px;
+  padding: 5px 8px;
+}
+.current:hover {
+  background: var(--wash);
+}
+.currentMark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wash-2);
+}
+.currentText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+.topbar[data-docked] .currentText {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+.currentName {
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.currentSub {
+  color: var(--mist);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.spacer {
+  flex: 1;
+}
+.topbar[data-docked] .spacer {
+  min-width: 8px;
+}
+.tbBtn,
+.tbIcon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--bone);
+  transition: background var(--t) var(--ease-arrival);
+}
+.topbar[data-docked] .tbBtn {
+  height: 30px;
+  min-width: 0;
+  padding: 0 10px;
+}
+.tbBtn:hover,
+.tbIcon:hover {
+  background: var(--wash-2);
+}
+.tbBtn:focus-visible,
+.tbIcon:focus-visible,
+.current:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: 2px;
+}
+.tbNeed {
+  background: var(--beacon-tint);
+  color: var(--beacon);
+}
+.tbNeed:hover {
+  background: color-mix(in srgb, var(--beacon) 25%, transparent);
+}
+.count {
+  font-weight: 600;
+}
+.wideOnly {
+  display: none;
+}
+.topbar[data-docked] .wideOnly {
+  display: inline;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--mist);
+}
+.dot[data-tone="ok"] {
+  background: var(--jade);
+}
+.dot[data-tone="warn"] {
+  background: var(--lantern);
+}
+.dot[data-tone="bad"] {
+  background: var(--ember);
+}
+.dot[data-tone="need"] {
+  background: var(--beacon);
+}
+.dot[data-tone="quiet"] {
+  background: var(--line-2);
+}
+.menu {
+  position: relative;
+}
+.menuCount {
+  position: absolute;
+  top: 5px;
+  right: 3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 17px;
+  background: var(--beacon);
+  color: rgb(var(--umber-rgb));
+}
+.downGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  font-size: 13px;
+  padding-left: 6px;
+}
+.downText b {
+  font-weight: 600;
+}
+.qglance {
+  display: inline-flex;
+  gap: 3px;
+  align-items: flex-end;
+  height: 14px;
+}
+.qglance i {
+  position: relative;
+  width: 4px;
+  height: 14px;
+  border-radius: 1px;
+  overflow: hidden;
+  background: var(--line-2);
+}
+.qglance i::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: var(--h);
+  background: var(--bone);
+  opacity: 0.75;
+}
+.qglance i[data-out]::after {
+  background: var(--mist);
+  opacity: 0.5;
+}
+.quotaLine {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 1279px) {
+  .quotaLine {
+    display: none;
+  }
+}
+.stale {
+  opacity: 0.62;
+}
+
+/* ---------- the left side ---------- */
+.sideSpacer {
+  position: static;
+  flex: none;
+  height: 100%;
+  transition: width 0.22s var(--ease-arrival);
+}
+.side {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+  background: var(--rim);
+  border-right: 1px solid var(--line);
+  transition: width 0.22s var(--ease-arrival);
+}
+.side[data-tier="full"] {
+  border-right: 0;
+}
+.side.dragging,
+.sideSpacer:has(.dragging) {
+  transition: none;
+}
+.sideHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 46px;
+  padding: 0 8px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+.sheetTitle {
+  font: 500 16px / 1 var(--font-display);
+  padding: 0 4px;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+}
+.wideCols > .col {
+  flex: none;
+  width: 360px;
+  border-right: 1px solid var(--line);
+}
+.col[data-stale] > :not(.downNote) {
+  opacity: 0.62;
+}
+.railBody {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.railBody[data-stale] {
+  opacity: 0.62;
+}
+.wideCols,
+.fullCols {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.pageCol {
+  /* Pages size themselves to the viewport on their own; here they fill the column. */
+  --terminal-viewport-height: 100%;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.loading {
+  padding: 14px 14px;
+  color: var(--mist);
+  font-size: 13px;
+}
+.downNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 10px 4px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ember) 15%, transparent);
+  font-size: 12.5px;
+  flex: none;
+}
+.downNote > span {
+  flex: 1;
+}
+
+/* the edge, with its grip */
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -5px;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 6;
+  touch-action: none;
+}
+.handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: transparent;
+  transition: background var(--t);
+}
+.handle:hover::after,
+.handle:focus-visible::after,
+.dragging .handle::after {
+  background: var(--amber-line);
+}
+.handle:focus-visible {
+  outline: none;
+}
+.grip {
+  position: absolute;
+  top: 50%;
+  left: 1px;
+  width: 8px;
+  height: 36px;
+  margin-top: -18px;
+  border-radius: 4px;
+  background: var(--rim);
+  border: 1px solid var(--line-2);
+}
+.grip::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 2px;
+  width: 2px;
+  height: 14px;
+  border-left: 1px solid var(--mist);
+  border-right: 1px solid var(--mist);
+  opacity: 0.6;
+}
+
+/* snap guides while dragging */
+.snaps {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+}
+.snap {
+  position: absolute;
+  bottom: 14px;
+  transform: translateX(-50%);
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgb(var(--umber-rgb));
+  border: 1px solid var(--line-2);
+  color: var(--mist);
+}
+.snap:last-child {
+  transform: translateX(-100%);
+}
+.snapNear {
+  color: var(--lantern);
+  border-color: var(--amber-line);
+}
+
+/* Full's side list */
+.sideList {
+  flex: none;
+  width: 200px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+.sideGroup + .sideGroup {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+.sideHeading {
+  margin: 2px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+.sideItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--mist);
+  text-align: left;
+  transition:
+    background var(--t),
+    color var(--t);
+}
+.sideItem:hover {
+  background: var(--wash);
+  color: var(--bone);
+}
+.sideItem[aria-current="page"] {
+  background: var(--wash-2);
+  color: var(--bone);
+  font-weight: 600;
+}
+.sideItem:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: -2px;
+}
+.sideGlance {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--mist);
+}
+
+/* ---------- narrow windows: the side slides over the session ---------- */
+.sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--rim);
+  transform: translateX(-102%);
+  visibility: hidden;
+  transition:
+    transform 0.22s var(--ease-departure),
+    visibility 0s linear 0.22s;
+}
+.sheet[data-open] {
+  transform: none;
+  visibility: visible;
+  transition:
+    transform 0.22s var(--ease-arrival),
+    visibility 0s;
+}
+.sheet .sideHead {
+  height: 52px;
+  padding: 0 4px 0 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side,
+  .sideSpacer,
+  .sheet,
+  .sheet[data-open] {
+    transition-duration: 0.01s;
+  }
+}

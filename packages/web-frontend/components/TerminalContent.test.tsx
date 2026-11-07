@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import type { RefObject } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TerminalContent, type TerminalContentProps } from './TerminalContent'
 
@@ -7,29 +7,41 @@ const media = vi.hoisted(() => ({ wide: false }))
 vi.mock('@/lib/hooks/use-media-query', () => ({
   useMediaQuery: () => media.wide,
 }))
+const frame = vi.hoisted(() => ({
+  current: null as null | {
+    docked: boolean
+    tier: string
+    setTier: (tier: string) => void
+    setSheetOpen: (open: boolean) => void
+  },
+}))
+vi.mock('./frame/FrameContext', () => ({ useFrame: () => frame.current }))
+vi.mock('./frame/LeftSide', () => ({
+  LeftSide: ({ rail, panel }: { rail: ReactNode; panel: ReactNode }) =>
+    frame.current?.tier === 'rail' ? rail : panel,
+}))
+vi.mock('./frame/WideOverview', () => ({ WideOverview: () => null }))
+vi.mock('@/lib/hooks/use-session-attention', () => ({
+  useSessionAttention: () => ({ forSlot: () => null, needsYouCount: 0 }),
+}))
+vi.mock('@/lib/hooks/use-agent-tools', () => ({
+  useAgentTools: () => ({ agentTools: [] }),
+}))
 vi.mock('./SessionSidebar', () => ({
-  SIDE_LIST_WIDTH: { initial: 320 },
   SessionSidebar: ({
-    currentId,
-    collapsed,
-    onCollapsedChange,
-    width,
-    onWidthChange,
+    variant = 'panel',
+    onSelect,
   }: {
-    currentId?: string
-    collapsed?: boolean
-    onCollapsedChange?: (collapsed: boolean) => void
-    width?: number
-    onWidthChange?: (width: number) => void
+    variant?: string
+    onSelect: (slot: unknown) => void
   }) => (
     <nav aria-label="Session list">
-      {currentId}
-      <p>{collapsed ? 'Rail' : `List ${width}px`}</p>
-      <button type="button" onClick={() => onCollapsedChange?.(!collapsed)}>
-        {collapsed ? 'Expand' : 'Collapse'}
-      </button>
-      <button type="button" onClick={() => onWidthChange?.(400)}>
-        Widen
+      <p>{variant === 'rail' ? 'Rail' : 'List'}</p>
+      <button
+        type="button"
+        onClick={() => onSelect({ type: 'terminal', sessionId: 'session-b' })}
+      >
+        Pick session b
       </button>
     </nav>
   ),
@@ -83,6 +95,7 @@ describe('TerminalContent compose box', () => {
   beforeEach(() => {
     window.localStorage.clear()
     media.wide = false
+    frame.current = null
   })
   afterEach(() => vi.restoreAllMocks())
 
@@ -145,49 +158,53 @@ describe('TerminalContent compose box', () => {
     expect(screen.getByTestId('phone-key-row')).toBeInTheDocument()
   })
 
-  it('puts the session list beside the session in a wide desktop window', () => {
-    media.wide = true
+  it('puts the panel or rail beside the session and says the bar needs no switcher', () => {
+    frame.current = {
+      docked: true,
+      tier: 'panel',
+      setTier: vi.fn(),
+      setSheetOpen: vi.fn(),
+    }
     const { rerender } = render(<TerminalContent {...props} />)
-    expect(
-      screen.getByRole('navigation', { name: 'Session list' }),
-    ).toBeVisible()
-
-    rerender(<TerminalContent {...props} isMobile />)
-    expect(
-      screen.queryByRole('navigation', { name: 'Session list' }),
-    ).toBeNull()
-
-    media.wide = false
-    rerender(<TerminalContent {...props} />)
-    expect(
-      screen.queryByRole('navigation', { name: 'Session list' }),
-    ).toBeNull()
-  })
-
-  it('folds the list to its rail and keeps its width, remembered on this device', () => {
-    media.wide = true
-    const { unmount } = render(<TerminalContent {...props} />)
-    expect(screen.getByText('List 320px')).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: 'Widen' }))
-    expect(screen.getByText('List 400px')).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse' }))
-    expect(screen.getByText('Rail')).toBeVisible()
-    // The rail switches sessions, so the bar still has no switcher.
+    expect(screen.getByText('List')).toBeVisible()
     expect(screen.getByText('Bar without its own switcher')).toBeVisible()
-    unmount()
-
-    render(<TerminalContent {...props} />)
+    frame.current = { ...frame.current, tier: 'rail' }
+    rerender(<TerminalContent {...props} />)
     expect(screen.getByText('Rail')).toBeVisible()
-    fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
-    expect(screen.getByText('List 400px')).toBeVisible()
   })
 
-  it('shows no list or rail when the window is too narrow, folded or not', () => {
-    window.localStorage.setItem('aico-side-list-hidden', 'true')
+  it('at Full keeps the session out of reach, and picking a session returns to Panel', () => {
+    const setTier = vi.fn()
+    const onSlotSwitch = vi.fn()
+    frame.current = {
+      docked: true,
+      tier: 'full',
+      setTier,
+      setSheetOpen: vi.fn(),
+    }
+    render(<TerminalContent {...props} onSlotSwitch={onSlotSwitch} />)
+    expect(screen.getByTestId('session-side')).toHaveAttribute('inert')
+    fireEvent.click(screen.getByRole('button', { name: 'Pick session b' }))
+    expect(onSlotSwitch).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'session-b' }),
+    )
+    expect(setTier).toHaveBeenCalledWith('panel')
+  })
+
+  it('on a narrow window, picking a session closes the slide-over and keeps the width', () => {
+    const setSheetOpen = vi.fn()
+    const setTier = vi.fn()
+    frame.current = { docked: false, tier: 'panel', setTier, setSheetOpen }
+    render(<TerminalContent {...props} onSlotSwitch={vi.fn()} />)
+    expect(screen.getByTestId('session-side')).not.toHaveAttribute('inert')
+    setSheetOpen.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Pick session b' }))
+    expect(setSheetOpen).toHaveBeenCalledWith(false)
+    expect(setTier).not.toHaveBeenCalled()
+  })
+
+  it('shows no session list without the frame (a page standing alone)', () => {
     render(<TerminalContent {...props} />)
-    expect(
-      screen.queryByRole('navigation', { name: 'Session list' }),
-    ).toBeNull()
     expect(screen.queryByText('Bar without its own switcher')).toBeNull()
   })
 })

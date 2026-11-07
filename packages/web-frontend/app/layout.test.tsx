@@ -2,6 +2,10 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import RootLayout from './layout'
 
+vi.mock('@/components/frame/AppFrame', () => ({
+  AppFrame: ({ children }: { children: React.ReactNode }) => children,
+}))
+
 vi.mock('./providers', () => ({
   Providers: ({ children }: { children: React.ReactNode }) => children,
 }))

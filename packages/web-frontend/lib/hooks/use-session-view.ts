@@ -290,8 +290,12 @@ export function useSessionView({
   const [persistedSessionId, setPersistedSessionId] = useLocalStorageState<
     string | null
   >(LAST_ACTIVE_SESSION_KEY, null)
-  const urlSessionId = searchParams.get('session')
-  const urlProjectId = searchParams.get('project')
+  // The session lives in home's address (`/?session=`). On a page shown in
+  // the left side (/status, /history?session=...) the query is the page's:
+  // the open session is the remembered one, and switching keeps the address.
+  const onHome = (pathname ?? '/') === '/'
+  const urlSessionId = onHome ? searchParams.get('session') : null
+  const urlProjectId = onHome ? searchParams.get('project') : null
   const searchParamsString = searchParams.toString()
   const latestParams = useCallback(
     () =>
@@ -330,11 +334,11 @@ export function useSessionView({
   }, [persistedSessionId, setPersistedSessionId])
 
   useEffect(() => {
-    if (!chosenSessionId || urlSessionId === chosenSessionId) return
+    if (!onHome || !chosenSessionId || urlSessionId === chosenSessionId) return
     const params = new URLSearchParams(searchParamsString)
     params.set('session', chosenSessionId)
     router.replace(`?${params.toString()}`, { scroll: false })
-  }, [chosenSessionId, urlSessionId, searchParamsString, router])
+  }, [onHome, chosenSessionId, urlSessionId, searchParamsString, router])
 
   useEffect(() => {
     setPersistedSessionId(chosenSessionId)
@@ -342,32 +346,35 @@ export function useSessionView({
 
   const switchToSession = useCallback(
     (sessionId: string) => {
+      if (!onHome) return setPersistedSessionId(sessionId)
       const params = latestParams()
       params.set('session', sessionId)
       router.push(`?${params.toString()}`, { scroll: false })
     },
-    [latestParams, router],
+    [onHome, latestParams, router, setPersistedSessionId],
   )
 
   const clearActiveSession = useCallback(() => {
+    if (!onHome) return setPersistedSessionId(null)
     const params = latestParams()
     params.delete('session')
     const query = params.toString()
     router.push(query ? `?${query}` : '?', { scroll: false })
-  }, [latestParams, router])
+  }, [onHome, latestParams, router, setPersistedSessionId])
 
   // The History API, not router.push: it updates the URL at once (Next syncs
   // it into useSearchParams), so the New session dialog closing right after,
   // which rewrites the URL from window.location, keeps it.
   const openNewSession = useCallback(
     (sessionId: string) => {
+      if (!onHome) return setPersistedSessionId(sessionId)
       const params = latestParams()
       params.set('session', sessionId)
       if (typeof window !== 'undefined')
         window.history.pushState(null, '', `?${params.toString()}`)
       else router.push(`?${params.toString()}`, { scroll: false })
     },
-    [latestParams, router],
+    [onHome, latestParams, router, setPersistedSessionId],
   )
 
   // --- Starting sessions ---------------------------------------------------

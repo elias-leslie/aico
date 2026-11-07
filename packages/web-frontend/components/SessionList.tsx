@@ -27,7 +27,8 @@ import { CoordinatorBadge } from './CoordinatorBadge'
 import { HostBadge } from './HostBadge'
 import { KeptCheckIns } from './KeptCheckIns'
 
-function getSlotMode(slot: TerminalSlot | PaneSlot): string {
+/** The agent a session runs (its tool slug), or `shell`. */
+export function slotMode(slot: TerminalSlot | PaneSlot): string {
   if (slot.type === 'project') {
     return slot.activeMode
   }
@@ -49,7 +50,7 @@ function sortSessionEntries(
   attention?: SessionAttention,
 ): SessionListEntry[] {
   const key = (slot: TerminalSlot | PaneSlot) =>
-    `${getSlotName(slot)} [${getSlotMode(slot)}]`
+    `${getSlotName(slot)} [${slotMode(slot)}]`
   // No start time sorts last.
   const created = (slot: TerminalSlot | PaneSlot) => slot.createdAt || '\uffff'
   const sorted = [...slots].sort(
@@ -65,7 +66,7 @@ function sortSessionEntries(
     return {
       id: getSlotPanelId(slot),
       label: count > 1 ? `${name} #${count}` : name,
-      mode: getSlotMode(slot),
+      mode: slotMode(slot),
       slot,
       state: attention?.forSlot(slot) ?? null,
     }
@@ -137,7 +138,7 @@ function rowFacts(item: TeamEntry) {
 }
 
 /** The agent's name for a tool slug. */
-const toolName = (
+export const toolName = (
   tools: readonly { slug: string; name: string }[],
   mode: string,
 ): string =>
@@ -167,7 +168,7 @@ export function sessionWhoWhere(
   tools: readonly { slug: string; name: string }[],
 ): string {
   const label = sessionLabel(slots, slot)
-  return `“${label}” (${toolName(tools, getSlotMode(slot))} on ${slot.host ?? 'this computer'})`
+  return `“${label}” (${toolName(tools, slotMode(slot))} on ${slot.host ?? 'this computer'})`
 }
 
 /** What a row says under its name: its agent and what it is doing. The
