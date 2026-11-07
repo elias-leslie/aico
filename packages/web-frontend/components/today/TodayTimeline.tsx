@@ -15,6 +15,7 @@ import {
 import { openAsks, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useHistory } from '@/lib/hooks/use-history'
+import { useSessionLabels } from '@/lib/hooks/use-session-labels'
 import styles from './TodayTimeline.module.css'
 
 const DAY_MS = 86_400_000
@@ -40,6 +41,7 @@ export function TodayTimeline() {
   const now = useClock(60_000)
   const history = useHistory('')
   const live = useLiveSessions()
+  const labelOf = useSessionLabels()
   const { asks } = useOwnerAsks()
   const day = startOfDay(now)
   const pct = (ms: number) =>
@@ -96,14 +98,13 @@ export function TodayTimeline() {
           const start = session.startedAt ?? session.endedAt ?? day
           const end = here ? now : (session.endedAt ?? start)
           const left = Math.max(start, day)
-          const label =
-            session.project ?? (shortFolder(session.cwd) || 'Session')
+          const label = labelOf(session)
           return (
             <li key={session.id}>
               <Link
                 href={sessionHref(session.id)}
                 className={styles.row}
-                title={`${label} · ${toolName(session.tool)} · ${clock(session.startedAt)} to ${here ? 'now' : clock(session.endedAt)}`}
+                title={`${label} · ${session.project ?? (shortFolder(session.cwd) || 'Unknown project')} · ${toolName(session.tool)} · ${clock(session.startedAt)} to ${here ? 'now' : clock(session.endedAt)}`}
               >
                 <span className={styles.label}>{label}</span>
                 <span className={styles.track}>

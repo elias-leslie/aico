@@ -64,6 +64,21 @@ export function toolName(tool: string): string {
   return TOOLS.find(([id]) => id === tool)?.[1] ?? tool
 }
 
+/**
+ * What a row in Recent or Today is called: the running session's name when one owns the
+ * conversation, else the tool and when it started. Never just the project, which would make
+ * every row of one project read the same.
+ */
+export function sessionLabel(
+  session: Pick<HistorySession, 'tool' | 'startedAt'>,
+  name?: string | null,
+): string {
+  if (name) return name
+  return session.startedAt === null
+    ? toolName(session.tool)
+    : `${toolName(session.tool)} · ${clock(session.startedAt)}`
+}
+
 /** A turn that last wrote this recently is taken to be still running. */
 export const WORKING_MS = 2 * 60_000
 

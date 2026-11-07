@@ -20,6 +20,7 @@ import {
 } from '@/lib/history'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useHistory } from '@/lib/hooks/use-history'
+import { useSessionLabels } from '@/lib/hooks/use-session-labels'
 
 /** The list of recent sessions, newest first, one link each to its transcript. */
 export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
@@ -39,6 +40,7 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
   } = useHistory(tool)
   const now = useClock(30_000)
   const live = useLiveSessions()
+  const labelOf = useSessionLabels()
   // A session a running session owns takes that session's state.
   const liveOf = (id: string) =>
     [...live.bySession.values()].find((item) => item.conversation === id)
@@ -215,12 +217,11 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
                   </span>
                 </div>
                 <div className="main-cell">
-                  <div className="what">
-                    {session.project ??
-                      (shortFolder(session.cwd) || 'Unknown project')}
-                  </div>
+                  <div className="what">{labelOf(session)}</div>
                   <div className="meaning">
-                    {toolName(session.tool)} ·{' '}
+                    {session.project ??
+                      (shortFolder(session.cwd) || 'Unknown project')}{' '}
+                    · {toolName(session.tool)} ·{' '}
                     {session.model ?? 'model not recorded'}
                     {session.cwd && (
                       <span className="mono">

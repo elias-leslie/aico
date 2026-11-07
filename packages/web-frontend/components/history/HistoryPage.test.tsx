@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   events: {} as Record<string, unknown>,
   calls: [] as string[],
   live: { items: [] } as unknown,
+  sessions: { items: [] } as unknown,
 }))
 vi.mock('@/lib/api-fetch', async () => {
   const actual =
@@ -19,6 +20,7 @@ vi.mock('@/lib/api-fetch', async () => {
     apiFetch: vi.fn(async (url: string) => {
       api.calls.push(url)
       if (url === '/api/history/live') return api.live
+      if (url.startsWith('/api/sessions')) return api.sessions
       if (url.startsWith('/api/history?')) {
         if (!api.list) throw new ApiError('Tether is not reachable', 503)
         return api.list
@@ -84,6 +86,7 @@ beforeEach(() => {
   api.events = {}
   api.calls = []
   api.live = { items: [] }
+  api.sessions = { items: [] }
 })
 
 describe('recent sessions list', () => {
@@ -96,7 +99,7 @@ describe('recent sessions list', () => {
     }
     renderPage()
     expect(screen.getByText('Loading recent sessions…')).toBeTruthy()
-    await screen.findByText('demo')
+    await screen.findAllByText(/demo/)
     expect(screen.getByText('Finished')).toBeTruthy()
     expect(screen.getByText('Failed')).toBeTruthy()
     expect(screen.getAllByText(/200 in · 12k cached · 20 out/)).toHaveLength(4)
@@ -125,7 +128,7 @@ describe('recent sessions list', () => {
   it('asks for one tool when it is picked', async () => {
     api.list = { items: [session()] }
     renderPage()
-    await screen.findByText('demo')
+    await screen.findAllByText(/demo/)
     fireEvent.change(screen.getByLabelText('Tool'), { target: { value: 'pi' } })
     await waitFor(() =>
       expect(api.calls.some((c) => c.includes('tool=pi'))).toBe(true),
@@ -141,6 +144,7 @@ describe('Recent and the running sessions', () => {
         session({ id: 'codex:done', project: 'old job' }),
       ],
     }
+    api.sessions = { items: [{ id: 'abcd1234', name: 'Coordinator lane' }] }
     api.live = {
       items: [
         {
@@ -152,7 +156,7 @@ describe('Recent and the running sessions', () => {
       ],
     }
     renderPage()
-    await screen.findByText('coordinator')
+    await screen.findByText('Coordinator lane')
     await waitFor(() => expect(screen.getByText('Working')).toBeTruthy())
     expect(screen.getAllByText('Finished')).toHaveLength(1)
   })
@@ -166,13 +170,64 @@ describe('Recent and the running sessions', () => {
       ],
     }
     renderPage()
-    await screen.findByText('aico')
-    expect(screen.queryByText('commit-try')).toBeNull()
+    await screen.findAllByText(/aico/)
+    expect(screen.queryByText(/commit-try/)).toBeNull()
     fireEvent.click(
       screen.getByRole('button', { name: '2 test runs hidden · Show' }),
     )
-    expect(screen.getByText('commit-try')).toBeTruthy()
-    expect(screen.getByText('aico-m10d2-live')).toBeTruthy()
+    expect(screen.getByText(/commit-try/)).toBeTruthy()
+    expect(screen.getByText(/aico-m10d2-live/)).toBeTruthy()
+  })
+})
+
+describe('row names', () => {
+  it('names a row by its running session, else by the tool and start time, with the project beside it', async () => {
+    api.list = {
+      items: [
+        session({ id: 'codex:a', project: 'aico' }),
+        session({ id: 'codex:b', project: 'aico' }),
+      ],
+    }
+    api.sessions = { items: [{ id: 'abcd1234', name: 'Fix quota' }] }
+    api.live = {
+      items: [
+        {
+          session: 'abcd1234',
+          conversation: 'codex:a',
+          activity: 'idle',
+          lastWriteAt: Date.now(),
+        },
+      ],
+    }
+    renderPage()
+    expect(await screen.findByText('Fix quota')).toBeTruthy()
+    expect(screen.getByText(/^Codex · /)).toBeTruthy()
+    expect(screen.queryByText('aico')).toBeNull()
+  })
+
+  it('lists only failed sessions when asked', async () => {
+    api.list = {
+      items: [
+        session({ id: 'codex:ok' }),
+        session({
+          id: 'codex:bad',
+          outcome: 'error',
+          project: 'broke',
+          cwd: '/work/broke',
+        }),
+      ],
+    }
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <HistoryPage failedOnly />
+      </QueryClientProvider>,
+    )
+    expect(await screen.findAllByText(/broke/)).not.toHaveLength(0)
+    expect(screen.queryByText(/demo/)).toBeNull()
+    expect(screen.getByText('Failed')).toBeTruthy()
   })
 })
 
