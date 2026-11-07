@@ -76,10 +76,12 @@ const failure = (status: number, message: string) => () => ({
 let dir: string
 let out: string[]
 let err: string[]
+let waits: number[]
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'video-test-'))
   out = []
   err = []
+  waits = []
 })
 const go = (
   argv: string[],
@@ -98,6 +100,9 @@ const go = (
         throw new Error('no logins here')
       }),
     now: () => new Date('2026-11-07T15:00:00Z'),
+    sleep: async (ms) => {
+      waits.push(ms)
+    },
   })
 const stdout = () => out.join('\n')
 
@@ -184,6 +189,38 @@ describe('aico video review', () => {
     expect(stdout()).toContain('now with video')
   })
 
+  it('retries a busy Gemini (503) after a pause, then succeeds', async () => {
+    const g = gemini([failure(503, 'high demand'), failure(503, 'high demand'), ok('third time')])
+    expect(await go([ID], { exec: ytdlp().exec, post: g.post })).toBe(0)
+    expect(g.sent).toHaveLength(3)
+    expect(waits).toEqual(config.gemini.retry.waitSeconds.map((n) => n * 1000))
+    expect(stdout()).toContain('third time')
+  })
+
+  it('keeps a video review when a later --refresh can only manage captions', async () => {
+    await go([ID], { exec: ytdlp().exec, post: gemini([ok('the real review')]).post })
+    out.length = 0
+    const g = gemini([failure(400, 'nope'), ok('weaker review')])
+    await go([ID, '--refresh'], { exec: ytdlp().exec, post: g.post })
+    expect(stdout()).toContain(
+      `An earlier answer from the video is still on disk: ${join(dir, ID, 'review.md')}`,
+    )
+    expect(readFileSync(join(dir, ID, 'review.md'), 'utf8')).toBe('the real review\n')
+    expect(readFileSync(join(dir, ID, 'review-captions.md'), 'utf8')).toBe('weaker review\n')
+  })
+
+  it('cuts long output by words without flattening its layout', async () => {
+    const long = `## A\n${Array.from({ length: 800 }, (_, i) => `w${i}`).join(' ')}\n\n## B\nend`
+    await go([ID], { exec: ytdlp().exec, post: gemini([ok(long)]).post })
+    const shown = stdout()
+    expect(shown).toContain('## A\nw0 w1')
+    expect(shown).toContain(
+      `(cut at ${config.output.reviewWords} words; the full text is in ${join(dir, ID, 'review.md')})`,
+    )
+    expect(shown).not.toContain('w799')
+    expect(readFileSync(join(dir, ID, 'review.md'), 'utf8')).toContain('w799')
+  })
+
   it('hands over the transcript path when there is no Gemini at all', async () => {
     expect(await go([ID], { exec: ytdlp().exec }, {})).toBe(0)
     const shown = stdout()
@@ -241,7 +278,7 @@ describe('aico video --ask, --transcript, --range', () => {
   })
 
   it('answers from the captions alone when the video cannot be watched', async () => {
-    const g = gemini([failure(500, 'overloaded'), ok('He says X at 00:03.')])
+    const g = gemini([failure(400, 'cannot process'), ok('He says X at 00:03.')])
     await go(['--ask', 'who?', ID], { exec: ytdlp().exec, post: g.post })
     expect(g.sent[1].body.contents[0].parts[0].text).toContain('from its captions only')
     expect(stdout()).toContain('He says X')

@@ -74,12 +74,19 @@ function* keys(env: NodeJS.ProcessEnv, store?: () => LoginStore): Generator<Key>
   }
 }
 
+const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms))
 const RETRY_WITH_NEXT_KEY = new Set([401, 403, 429])
 
 export async function generate(
   model: string,
   parts: Part[],
-  options: { resolution?: string; env: NodeJS.ProcessEnv; post?: Post; store?: () => LoginStore },
+  options: {
+    resolution?: string
+    env: NodeJS.ProcessEnv
+    post?: Post
+    store?: () => LoginStore
+    sleep?: (ms: number) => Promise<void>
+  },
 ): Promise<Generated> {
   const send = options.post ?? post
   const body = JSON.stringify({
@@ -90,14 +97,19 @@ export async function generate(
   let last: GeminiError | null = null
   for (const key of keys(options.env, options.store)) {
     let answer: { status: number; text: string }
-    try {
-      answer = await send(
-        url,
-        { 'x-goog-api-key': key.value, 'content-type': 'application/json' },
-        body,
-      )
-    } catch (error) {
-      throw new GeminiError(`Gemini connection failed: ${(error as Error).message}`, 'network')
+    for (let attempt = 0; ; attempt++) {
+      try {
+        answer = await send(
+          url,
+          { 'x-goog-api-key': key.value, 'content-type': 'application/json' },
+          body,
+        )
+      } catch (error) {
+        throw new GeminiError(`Gemini connection failed: ${(error as Error).message}`, 'network')
+      }
+      const wait = config.gemini.retry.waitSeconds[attempt]
+      if (wait === undefined || !config.gemini.retry.statuses.includes(answer.status)) break
+      await (options.sleep ?? sleep)(wait * 1000)
     }
     let data: any
     try {
@@ -106,10 +118,10 @@ export async function generate(
       data = null
     }
     if (answer.status !== 200) {
-      const message = String(data?.error?.message ?? answer.text.slice(0, 200)).replaceAll(
-        key.value,
-        '***',
-      )
+      const message = String(data?.error?.message ?? answer.text)
+        .replaceAll(key.value, '***')
+        .split('\n')[0]
+        .slice(0, 240)
       last = new GeminiError(
         `Gemini ${answer.status} (${key.name}): ${message}`,
         'api',

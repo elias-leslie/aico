@@ -11,7 +11,12 @@
       "medium": "MEDIA_RESOLUTION_MEDIUM",
       "high": "MEDIA_RESOLUTION_HIGH"
     },
-    "defaultResolution": "low"
+    "defaultResolution": "low",
+    "retry": {
+      "about": "Seen live: 503 'high demand' on flash. Retried on the same key after these waits; other errors are not retried.",
+      "statuses": [500, 503, 504],
+      "waitSeconds": [15, 45]
+    }
   },
   "ytdlp": {
     "command": "yt-dlp",
@@ -34,24 +39,24 @@
   "prompts": {
     "review": [
       "You are reviewing a YouTube video for an engineer who will not watch it. Watch the video closely, using the captions below only for exact wording and timestamps.",
-      "Write the review in Markdown, at most 600 words, with these sections in order:",
-      "## What it is: title, who is speaking, what kind of video, who it is for (2-3 sentences).",
-      "## Key points: 6-12 bullets, each starting with a [mm:ss] timestamp.",
-      "## On screen: what the video shows that the audio does not carry: UI, code, slides, diagrams, demos, terminal output, with [mm:ss] timestamps. Say plainly when it is only a talking head.",
-      "## Claims and reasoning: the main claims, the evidence or reasoning given, and anything shaky, sponsored or overclaimed.",
-      "## Notable quotes: 2-4 short verbatim quotes from the captions with timestamps.",
-      "Be specific (names, numbers, versions, commands). Do not pad or restate the section instructions. If something is unclear or not shown, say so instead of guessing.",
+      "Write the review in Markdown, at most 600 words, as these five sections in order, each under a heading with exactly this name:",
+      "## What it is - title, who is speaking, what kind of video, who it is for (2-3 sentences).",
+      "## Key points - 6-12 bullets, each starting with a [mm:ss] timestamp.",
+      "## On screen - what the video shows that the audio does not carry: UI, code, slides, diagrams, demos, terminal output, with [mm:ss] timestamps. Say plainly when it is only a talking head.",
+      "## Claims and reasoning - the main claims, the evidence or reasoning given, and anything shaky, sponsored or overclaimed.",
+      "## Notable quotes - 2-4 short verbatim quotes from the captions with timestamps.",
+      "Write the headings alone, as just their name (for example '## Key points'), then the content. Be specific (names, numbers, versions, commands). Do not pad or restate these instructions. If something is unclear or not shown, say so instead of guessing.",
       "Your knowledge of products, models and versions may be older than this video: do not call a name wrong, fake or speculative just because you do not recognise it."
     ],
     "reviewCaptionsOnly": [
-      "You are reviewing a YouTube video for an engineer who will not watch it, from its captions only. You cannot see the video: do not describe visuals, and say so under On screen.",
-      "Write the review in Markdown, at most 500 words, with these sections in order:",
-      "## What it is: title, who is speaking, what kind of video, who it is for (2-3 sentences).",
-      "## Key points: 6-12 bullets, each starting with the [mm:ss] timestamp of the transcript paragraph it comes from.",
-      "## On screen: one line: not seen, review is from captions only; list any places where the speaker refers to something on screen (\"as you can see\", \"this code\") with timestamps.",
-      "## Claims and reasoning: the main claims, the evidence or reasoning given, and anything shaky, sponsored or overclaimed.",
-      "## Notable quotes: 2-4 short verbatim quotes with timestamps.",
-      "Auto-generated captions can mishear names and terms: flag likely errors instead of repeating them.",
+      "You are reviewing a YouTube video for an engineer who will not watch it, from its captions only. You cannot see the video: do not describe visuals.",
+      "Write the review in Markdown, at most 500 words, as these five sections in order, each under a heading with exactly this name:",
+      "## What it is - title, who is speaking, what kind of video, who it is for (2-3 sentences).",
+      "## Key points - 6-12 bullets, each starting with the [mm:ss] timestamp of the transcript paragraph it comes from.",
+      "## On screen - one line saying it was not seen and the review is from captions only, then the places where the speaker refers to something on screen ('as you can see', 'this code') with timestamps.",
+      "## Claims and reasoning - the main claims, the evidence or reasoning given, and anything shaky, sponsored or overclaimed.",
+      "## Notable quotes - 2-4 short verbatim quotes with timestamps.",
+      "Write the headings alone, as just their name (for example '## Key points'), then the content. Auto-generated captions can mishear names and terms: flag likely errors instead of repeating them.",
       "Your knowledge of products, models and versions may be older than this video: do not call a name wrong, fake or speculative just because you do not recognise it."
     ],
     "ask": [

@@ -29,6 +29,7 @@ export interface Deps {
   post?: Post
   store?: () => LoginStore
   now(): Date
+  sleep?: (ms: number) => Promise<void>
 }
 
 interface Stored extends Partial<VideoMeta> {
@@ -67,9 +68,13 @@ const writeJson = (path: string, value: unknown) =>
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
 
 function cap(text: string, limit: number, file: string): string {
-  const all = text.trim().split(/\s+/)
-  if (all.length <= limit) return text.trim()
-  return `${all.slice(0, limit).join(' ')} ...\n(cut at ${limit} words; the full text is in ${file})`
+  const body = text.trim()
+  let seen = 0
+  for (const m of body.matchAll(/\S+/g)) {
+    if (++seen > limit)
+      return `${body.slice(0, m.index).trimEnd()} ...\n(cut at ${limit} words; the full text is in ${file})`
+  }
+  return body
 }
 
 export async function runVideo(req: Request, deps: Deps): Promise<number> {
@@ -169,7 +174,7 @@ export async function runVideo(req: Request, deps: Deps): Promise<number> {
   mkdirSync(join(dir, 'asks'), { recursive: true })
   const prior = readJson<Answer>(`${base}.json`)
   const limit = asking ? config.output.askWords : config.output.reviewWords
-  const show = (text: string, answer: Answer, cached: boolean) => {
+  const show = (text: string, answer: Answer, cached: boolean, at = base) => {
     const sources =
       answer.mode === 'captions'
         ? `captions only, read by ${answer.model} (it did not see the video)`
@@ -179,9 +184,9 @@ export async function runVideo(req: Request, deps: Deps): Promise<number> {
         ...head,
         `Source: ${sources}${cached ? `   [cached ${answer.created.slice(0, 16).replace('T', ' ')}]` : ''}`,
         ...(answer.note ? [`Note: ${answer.note}`] : []),
-        `${cached ? '' : `Cost: ${k(answer.usage.prompt)} tokens in, ${k(answer.usage.output)} out${answer.usage.thoughts ? `, ${k(answer.usage.thoughts)} thinking` : ''}; ${answer.seconds.toFixed(0)} s.   `}Files: ${[`${base}.md`, ...files].join(', ')}`,
+        `${cached ? '' : `Cost: ${k(answer.usage.prompt)} tokens in, ${k(answer.usage.output)} out${answer.usage.thoughts ? `, ${k(answer.usage.thoughts)} thinking` : ''}; ${answer.seconds.toFixed(0)} s.   `}Files: ${[`${at}.md`, ...files].join(', ')}`,
         '---',
-        cap(text, limit, `${base}.md`),
+        cap(text, limit, `${at}.md`),
       ].join('\n'),
     )
   }
@@ -225,7 +230,7 @@ export async function runVideo(req: Request, deps: Deps): Promise<number> {
   }
   const resolution =
     config.gemini.mediaResolution[req.resolution ?? (config.gemini.defaultResolution as Resolution)]
-  const options = { env: deps.env, post: deps.post, store: deps.store }
+  const options = { env: deps.env, post: deps.post, store: deps.store, sleep: deps.sleep }
 
   let result: Generated | null = null
   let mode: Answer['mode'] = 'video+captions'
@@ -291,8 +296,12 @@ export async function runVideo(req: Request, deps: Deps): Promise<number> {
     note,
   }
   const text = asking ? `**Q: ${req.ask}**\n\n${result.text}\n` : `${result.text}\n`
-  writeFileSync(`${base}.md`, text)
-  writeJson(`${base}.json`, { ...answer, ask: req.ask ?? null, range: req.range ?? null })
-  show(text, answer, false)
+  // A captions-only result never replaces a video review: it gets its own files.
+  const at = mode === 'captions' ? `${base}-captions` : base
+  if (mode === 'captions' && prior && prior.mode !== 'captions' && existsSync(`${base}.md`))
+    answer.note = `${answer.note} An earlier answer from the video is still on disk: ${base}.md`
+  writeFileSync(`${at}.md`, text)
+  writeJson(`${at}.json`, { ...answer, ask: req.ask ?? null, range: req.range ?? null })
+  show(text, answer, false, at)
   return 0
 }
