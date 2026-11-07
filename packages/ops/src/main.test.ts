@@ -31,6 +31,16 @@ it('says what is wrong with aico logs once, without a doubled prefix', async () 
   expect(err).toEqual(['aico logs: unknown option --bogus'])
 })
 
+it('bare aico vm prints the grouped usage, one command per line, exit 2', async () => {
+  const err: string[] = []
+  vi.spyOn(console, 'error').mockImplementation((line) => void err.push(String(line)))
+  expect(await main(['vm'], { PATH: process.env.PATH })).toBe(2)
+  const lines = err.join('\n').split('\n')
+  expect(lines[0]).toBe('Usage:')
+  expect(lines.filter((line) => line.startsWith('  aico vm ')).length).toBeGreaterThan(5)
+  expect(lines.every((line) => line.length < 100)).toBe(true)
+})
+
 it('lists backups for a person: problems, one line per target, archived sources folded', () => {
   const now = Date.parse('2026-11-07T02:00:00Z')
   const entry = (over: Record<string, unknown>) => ({

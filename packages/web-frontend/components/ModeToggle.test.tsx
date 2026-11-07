@@ -23,7 +23,7 @@ const mockTool = (overrides: Partial<AgentTool>): AgentTool => ({
 })
 
 describe('ModeToggle', () => {
-  it('is a labelled control saying what runs and that switching restarts it', () => {
+  it('is a labelled control saying what runs, without claiming a restart', () => {
     render(
       <ModeToggle
         value="claude-code"
@@ -35,7 +35,7 @@ describe('ModeToggle', () => {
     expect(button).toHaveTextContent('RunsClaude Code')
     expect(button).toHaveAttribute(
       'aria-label',
-      'Runs Claude Code. Change what runs here: switching restarts the process.',
+      'Runs Claude Code. Change what runs here.',
     )
   })
 
@@ -66,17 +66,31 @@ describe('ModeToggle', () => {
     fireEvent.click(screen.getByTestId('mode-toggle'))
     expect(onChange).not.toHaveBeenCalled()
     expect(screen.getByTestId('mode-explainer')).toHaveTextContent(
-      'stops Claude Code and starts the new one',
+      'ends Claude Code and starts the new one',
     )
     expect(
       screen.getByRole('menuitem', { name: /Claude Code.*Running now/ }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('menuitem', { name: /Antigravity.*restarts it/ }),
+      screen.getByRole('menuitem', { name: /Antigravity.*replaces it/ }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('menuitem', { name: /Shell.*opens the shell/ }),
     ).toBeInTheDocument()
+  })
+
+  it('from a shell, the menu says the shell keeps running beside the agent', () => {
+    render(
+      <ModeToggle
+        value="shell"
+        onChange={vi.fn()}
+        agentTools={[mockTool({ name: 'Claude Code' })]}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('mode-toggle'))
+    expect(screen.getByTestId('mode-explainer')).toHaveTextContent(
+      'starts it beside the shell, which keeps running',
+    )
   })
 
   it('from a shell, an agent row says it starts it', () => {

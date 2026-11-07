@@ -453,9 +453,7 @@ export async function vm(
       return 0
     }
     default:
-      err(
-        'Usage: aico vm list | status ID | ip ID | start ID [--hours H --reason R] | shutdown ID | stop ID | snapshot ID [NAME] | observe ID... --storage NAME | reset ID --name NAME --snapshot SNAPSHOT',
-      )
+      err(`aico vm: unknown command ${verb}; aico vm --help lists them`)
       return 2
   }
 }

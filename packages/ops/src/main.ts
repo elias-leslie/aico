@@ -29,8 +29,13 @@ const USAGE = `Usage:
   aico snapshots take [NAME] | list | restore ID|NAME|-N  [--root DIR] [--project ID]
       read-only Btrfs points of the project (the catalogue st snap keeps); restore only for a project
       that is its own subvolume outside the production workspace
-  aico vm list | status ID | ip ID | start ID [--hours H --reason R] | stop ID | snapshot ID [NAME]
-  aico vm observe ID... --storage NAME | reset ID --name NAME --snapshot SNAPSHOT
+  aico vm list                                       the guests: id, name, state, memory, disk
+  aico vm status ID | ip ID                          one guest's state and load; its address
+  aico vm start ID [--hours H --reason R]            power on, and declare the lab use for H hours
+  aico vm shutdown ID | stop ID                      shut down cleanly | stop at once
+  aico vm snapshot ID [NAME]                         take a snapshot
+  aico vm observe ID... --storage NAME               read-only inventory as one JSON document
+  aico vm reset ID --name NAME --snapshot SNAPSHOT   roll a stopped guest back; it stays stopped
       Proxmox guests with Aico Logins' scoped API token (Proxmox enforces its pools)`
 
 /** One verb's part of USAGE (`aico logs --help` shows logs, not deploy). */
@@ -102,6 +107,10 @@ export async function main(argv: string[], env = process.env): Promise<number> {
         rest,
         snapDeps(run, (line) => console.log(line), env),
       )
+    if (verb === 'vm' && rest.length === 0) {
+      err(verbUsage('vm'))
+      return 2
+    }
     if (verb === 'vm') return await vm(rest, routeOp(env), run, (line) => console.log(line), err)
     if (verb === 'help' || verb === '--help' || verb === '-h' || !verb) {
       console.log(USAGE)

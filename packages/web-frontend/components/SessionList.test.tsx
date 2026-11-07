@@ -3,7 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Attention } from '@/lib/attention'
 import { type AdHocSlot, getSlotPanelId } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
-import { SessionList, SessionRail, sessionsHeading } from './SessionList'
+import {
+  alsoRunningText,
+  endAlongsideNote,
+  SessionList,
+  SessionRail,
+  sessionsHeading,
+} from './SessionList'
 
 vi.mock('@/lib/frame/live', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/frame/live')>()),
@@ -296,5 +302,36 @@ describe('sessionsHeading', () => {
     expect(sessionsHeading(5, 0)).toBe('Sessions · 5')
     expect(sessionsHeading(5, 1)).toBe('Sessions · 5 · 1 needs you')
     expect(sessionsHeading(5, 2)).toBe('Sessions · 5 · 2 need you')
+  })
+})
+
+describe('a pane with two sessions', () => {
+  const tools = [{ slug: 'claude-code', name: 'Claude Code' }]
+  const pane = (activeMode: string, alsoRunning: string[]) =>
+    ({
+      ...slot('p', 'Aico — Switch'),
+      type: 'project',
+      activeMode,
+      alsoRunning,
+    }) as never
+
+  it('its row says the other one is also running', () => {
+    expect(alsoRunningText(pane('claude-code', ['shell']), tools)).toBe(
+      'Shell also running',
+    )
+    expect(alsoRunningText(pane('shell', ['claude-code']), tools)).toBe(
+      'Claude Code also running',
+    )
+    expect(alsoRunningText(pane('shell', []), tools)).toBeNull()
+  })
+
+  it('ending the agent says the shell beside it ends too; ending the shell leaves the agent', () => {
+    expect(endAlongsideNote(pane('claude-code', ['shell']), tools)).toBe(
+      ' This also ends the Shell running beside it.',
+    )
+    expect(endAlongsideNote(pane('shell', ['claude-code']), tools)).toBe(
+      ' Claude Code keeps running.',
+    )
+    expect(endAlongsideNote(pane('shell', []), tools)).toBe('')
   })
 })

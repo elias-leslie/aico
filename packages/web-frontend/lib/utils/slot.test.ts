@@ -330,6 +330,31 @@ describe('paneToSlot', () => {
     })
   })
 
+  it("names the pane's other running session, so switching what runs hides none", () => {
+    const shell = makeSession('tether', { id: 's1', mode: 'shell' })
+    const agent = makeSession('tether', { id: 's2', mode: 'claude' })
+    const both = makePane('project', [agent, shell], { active_mode: 'claude' })
+    expect(paneToSlot(both)).toMatchObject({
+      activeSessionId: 's2',
+      alsoRunning: ['shell'],
+    })
+    // Back on the shell, the agent is the one named.
+    expect(paneToSlot({ ...both, active_mode: 'shell' })).toMatchObject({
+      activeSessionId: 's1',
+      alsoRunning: ['claude'],
+    })
+    // One session, or a dead companion: nothing to name.
+    expect(paneToSlot({ ...both, sessions: [agent] })).not.toHaveProperty(
+      'alsoRunning',
+    )
+    expect(
+      paneToSlot({
+        ...both,
+        sessions: [agent, { ...shell, is_alive: false }],
+      }),
+    ).not.toHaveProperty('alsoRunning')
+  })
+
   it("opens a project pane on its mode's session, else its shell", () => {
     const shell = makeSession('tether', { id: 's1', mode: 'shell' })
     const agent = makeSession('tether', { id: 's2', mode: 'claude' })

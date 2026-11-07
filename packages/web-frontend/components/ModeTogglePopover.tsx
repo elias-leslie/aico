@@ -22,14 +22,14 @@ const WIDTH = 288
 function modeNote(current: TerminalMode, option: TerminalMode): string | null {
   if (option === current) return 'Running now'
   if (option === 'shell') return 'opens the shell'
-  return current === 'shell' ? 'starts it' : 'restarts it'
+  return current === 'shell' ? 'starts it' : 'replaces it'
 }
 
 /** The line under the heading: what switching does to what is running. */
 function modeExplanation(current: TerminalMode, currentLabel: string): string {
   return current === 'shell'
-    ? 'Picking an agent starts it in this project. The shell keeps running; pick Shell to go back to it.'
-    : `Picking another agent stops ${currentLabel} and starts the new one here. Shell opens the shell and leaves ${currentLabel} running.`
+    ? 'Picking an agent starts it beside the shell, which keeps running. Pick Shell to come back to it.'
+    : `Picking another agent ends ${currentLabel} and starts the new one. Shell comes back to the shell and leaves ${currentLabel} running.`
 }
 
 export function ModeTogglePopover({

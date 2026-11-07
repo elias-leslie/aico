@@ -8,6 +8,7 @@
   "aico": {
     "layer": 5,
     "imports": [
+      "@aico/shared",
       "@aico/store",
       "@aico/tasks",
       "@aico/tether-client"
@@ -21,6 +22,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aico/shared": "0.1.0",
     "@aico/store": "0.1.0",
     "@aico/tasks": "0.1.0",
     "@aico/tether-client": "0.1.0"

@@ -30,6 +30,7 @@ import { type BrokerTarget, createBroker, normalizeWorkingDir } from './broker'
 import { dataDirPath, loadConfig, webDbPath } from './config'
 import { WebStore } from './db'
 import { createLifecycle, type Lifecycle } from './lifecycle'
+import { runMachinesCli } from './machines-cli'
 import { runNotesCli } from './notes-import-cli'
 import { runPhonesCli } from './phones-cli'
 import { runStatusCli } from './status-cli'
@@ -44,6 +45,7 @@ export const CLI_COMMANDS = [
   'logins',
   'app',
   'phones',
+  'machines',
   ...CONTEXT_COMMANDS,
   ...USAGE_COMMANDS,
 ]
@@ -561,6 +563,13 @@ function terminalIo(): CliIo {
 export async function runCli(command: string, argv: string[]): Promise<number> {
   if (command === 'phones')
     return runPhonesCli(argv, {
+      out: (text) => process.stdout.write(text),
+      err: (text) => process.stderr.write(text),
+      baseUrl: `http://127.0.0.1:${loadConfig().port}`,
+      fetch,
+    })
+  if (command === 'machines')
+    return runMachinesCli(argv, {
       out: (text) => process.stdout.write(text),
       err: (text) => process.stderr.write(text),
       baseUrl: `http://127.0.0.1:${loadConfig().port}`,

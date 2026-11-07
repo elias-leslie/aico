@@ -4,6 +4,7 @@ import { homedir, hostname, loadavg, uptime } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { nearest } from '@aico/shared/suggest'
 import { readQuery } from '@aico/store'
 import { registryProjects } from '@aico/tasks'
 import { withOwnWidget } from '@aico/tether-client/own-session'
@@ -57,6 +58,7 @@ const NATIVE = new Set([
   'usage',
   'app',
   'phones',
+  'machines',
   'logins',
   'check',
   'commit',
@@ -713,7 +715,17 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     if (NATIVE.has(verb)) return delegate([verb, ...rest])
     const extension = catalog(data, state, CORE).find((e) => e.binding.namespace === verb)
     if (extension) return await extensionCommand(cli, extension, verb, rest)
-    throw new Error(`Unknown command ${verb}; use ${name} --help`)
+    let tools: string[] = []
+    try {
+      tools = catalog(data, state, CORE).map((e) => e.binding.namespace)
+    } catch {}
+    const near = nearest(verb, [
+      ...config.aicoHelp.flatMap((g) => g.commands.map(([c]) => c)),
+      ...tools,
+    ])
+    throw new Error(
+      `Unknown command ${verb}${near ? ` (did you mean ${near}?)` : ''}; use ${name} --help`,
+    )
   } catch (error) {
     err(`${env.AICO_CLI_NAME === 'aico' ? 'aico' : 'st'}: ${(error as Error).message}`)
     return 2

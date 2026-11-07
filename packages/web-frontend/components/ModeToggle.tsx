@@ -23,7 +23,7 @@ interface ModeToggleProps {
 
 /**
  * What runs in this session, as a labelled control ("Runs Claude Code"). It
- * opens the list with a line saying that switching restarts the process.
+ * opens the list saying what each pick does to what is running.
  */
 export const ModeToggle = memo(function ModeToggle({
   value,
@@ -68,7 +68,7 @@ export const ModeToggle = memo(function ModeToggle({
     ? 'Switching what runs here…'
     : noAgents
       ? 'This session runs a shell. No agents are set up to switch to.'
-      : `Runs ${label}. Change what runs here: switching restarts the process.`
+      : `Runs ${label}. Change what runs here.`
 
   return (
     <div className="relative inline-block min-w-0 flex-none">

@@ -20,7 +20,7 @@ it('lists metadata and removes one exact phone through the owning API', async ()
     },
   }
   expect(await runPhonesCli(['list'], io)).toBe(0)
-  expect(output.join('')).toContain('test-phone Test phone')
+  expect(output.join('')).toContain('ID          NAME\ntest-phone  Test phone')
   expect(await runPhonesCli(['remove', 'test-phone'], io)).toBe(0)
   expect(calls[1]).toEqual({ url: 'http://127.0.0.1:1/api/phone-app/test-phone', method: 'DELETE' })
   expect(await runPhonesCli(['remove', '../wrong'], io)).toBe(2)

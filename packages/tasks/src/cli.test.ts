@@ -44,6 +44,12 @@ describe('aico projects', () => {
     expect(await projects('retire', 'other', '--reason', 'x')).toBe(1)
   })
 
+  it('a missing project says how to list the registered ones', async () => {
+    const { projects, err } = setup()
+    expect(await projects('show', 'nope')).toBe(1)
+    expect(err.at(-1)).toBe('ERROR no project nope (aico projects list shows the registered ones)')
+  })
+
   it('renames a project and keeps its id', async () => {
     const { projects, take, err } = setup()
     expect(await projects('rename', 'aico', 'Aico', 'Hub')).toBe(0)

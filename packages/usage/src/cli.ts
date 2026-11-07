@@ -43,6 +43,8 @@ const USAGE = `Usage: aico usage [command]   (no command: show)
 
 class UsageError extends Error {}
 
+const prefix = (command: string) => (command ? `aico usage ${command}` : 'aico usage')
+
 function flags(command: string, argv: string[], valued: string[], bare: string[]) {
   const set = new Set<string>()
   const values = new Map<string, string>()
@@ -51,12 +53,12 @@ function flags(command: string, argv: string[], valued: string[], bare: string[]
     if (bare.includes(arg)) set.add(arg)
     else if (valued.includes(arg)) {
       const value = argv[i + 1]
-      if (value === undefined) throw new UsageError(`aico usage ${command}: ${arg} needs a value`)
+      if (value === undefined) throw new UsageError(`${prefix(command)}: ${arg} needs a value`)
       values.set(arg, value)
       i += 1
     } else
       throw new UsageError(
-        `aico usage ${command}: unknown option ${arg}${bare.length ? ` (${bare.join(', ')})` : ''}`,
+        `${prefix(command)}: unknown option ${arg}${bare.length ? ` (try ${bare.join(', ')})` : ''}`,
       )
   }
   return { set, values }
@@ -160,8 +162,9 @@ export function projectLines(report: ReturnType<typeof usageReport>): string {
   return out
 }
 
-function showCommand(argv: string[], io: UsageCliIo): number {
-  const { set } = flags('show', argv, [], ['--json'])
+/** `typed`: the user wrote `show`; bare `aico usage` must not name a subcommand they did not type. */
+function showCommand(argv: string[], io: UsageCliIo, typed: boolean): number {
+  const { set } = flags(typed ? 'show' : '', argv, [], ['--json'])
   if (!existsSync(usageDbPath(io.dataDir))) {
     io.err('Aico has not collected usage yet: run aico usage collect.\n')
     return 1
@@ -202,7 +205,7 @@ export async function runUsageCli(argv: string[], io: UsageCliIo): Promise<numbe
   }
   try {
     if (sub === 'collect') return await collectCommand(rest, io)
-    if (sub === 'show') return showCommand(rest, io)
+    if (sub === 'show') return showCommand(rest, io, argv[0] === 'show')
     throw new UsageError(`aico usage: unknown command ${sub} (collect or show; aico usage --help)`)
   } catch (error) {
     if (!(error instanceof UsageError)) throw error

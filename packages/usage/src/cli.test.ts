@@ -76,7 +76,9 @@ it('shows by default, with local times that name their zone and no reset for an 
 it('names the command and the problem on a mistake', async () => {
   const option = await run(['show', '--bogus'])
   expect(option.code).toBe(2)
-  expect(option.err).toBe('aico usage show: unknown option --bogus (--json)\n')
+  expect(option.err).toBe('aico usage show: unknown option --bogus (try --json)\n')
+  // Bare `aico usage` does not name a subcommand the user never typed.
+  expect((await run(['--bogus'])).err).toBe('aico usage: unknown option --bogus (try --json)\n')
   const command = await run(['shwo'])
   expect(command.code).toBe(2)
   expect(command.err).toBe(

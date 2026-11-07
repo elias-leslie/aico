@@ -147,6 +147,10 @@ export function getSlotWorkingDir(
 export interface PaneBasedSlot extends ProjectSlot {
   /** Pane ID for DB operations (swap, delete, etc.) */
   paneId: string
+  /** The modes of the pane's other running sessions (the shell beside an
+   * agent, or the agent beside the shell). The row is the pane's one entry,
+   * so it names them; nothing the pane runs is left unlisted. */
+  alsoRunning?: string[]
 }
 
 export interface AdHocPaneSlot extends AdHocSlot {
@@ -304,6 +308,17 @@ export function paneSessionsAsSessions(pane: TerminalPane): TerminalSession[] {
   }))
 }
 
+/** The pane's other running sessions, as the row's `alsoRunning` field. */
+function alsoRunningFields(
+  pane: TerminalPane,
+  shown: TerminalSession | undefined,
+): { alsoRunning?: string[] } {
+  const others = pane.sessions
+    .filter((s) => s.id !== shown?.id && s.is_alive !== false)
+    .map((s) => s.mode)
+  return others.length > 0 ? { alsoRunning: others } : {}
+}
+
 /**
  * Convert a TerminalPane to a TerminalSlot for UI rendering. A pane's title is its
  * session's Tether name or else the pane's own name, so it never needs the
@@ -328,6 +343,7 @@ export function paneToSlot(pane: TerminalPane): PaneSlot {
       rootPath: activeSession?.working_dir ?? null,
       activeMode: activeSession?.mode ?? pane.active_mode,
       activeSessionId: activeSession?.id ?? null,
+      ...alsoRunningFields(pane, activeSession),
       ...slotFields(activeSession, 'project'),
       // The pane's start, so switching agent and shell never moves the row.
       createdAt: pane.created_at,

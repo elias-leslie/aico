@@ -79,6 +79,7 @@
       "commands": [
         ["status", "every check, job, backup, service and machine, problems first"],
         ["monitor", "this machine's load, memory, connections, processes and mounts"],
+        ["machines", "every machine once: Proxmox guest, power, session host, projects"],
         ["vm", "Proxmox guests: list, start, stop, snapshot"],
         ["phones", "paired phones: list, remove"],
         ["app", "the phone app's published version and outage drills"],

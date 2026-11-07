@@ -22,7 +22,7 @@ import { ConfirmationDialog } from './ConfirmationDialog'
 import { NewChatDialog } from './chat/NewChatDialog'
 import { SessionWaiting } from './frame/SessionWaiting'
 import { NewSessionDialog } from './NewSessionDialog'
-import { sessionWhoWhere } from './SessionList'
+import { endAlongsideNote, sessionWhoWhere } from './SessionList'
 import { TerminalContent } from './TerminalContent'
 
 interface TerminalTabsProps {
@@ -209,7 +209,7 @@ export function TerminalTabs({
       <ConfirmationDialog
         isOpen={sessionToEnd !== null}
         title="End session?"
-        message={`End ${pendingSessionName}? This stops its process in every view.${checkInNote}`}
+        message={`End ${pendingSessionName}? This stops its process in every view.${sessionToEnd ? endAlongsideNote(sessionToEnd, agentTools) : ''}${checkInNote}`}
         confirmText="End session"
         secondaryText={keepText}
         onSecondary={() => {

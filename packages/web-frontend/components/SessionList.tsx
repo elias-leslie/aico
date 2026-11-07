@@ -162,6 +162,32 @@ export const toolName = (
   tools.find((tool) => tool.slug === mode)?.name ??
   (mode === 'shell' ? 'Shell' : mode)
 
+/** "Shell also running": the pane's other running session, so a row that
+ * holds two never hides one. */
+export function alsoRunningText(
+  slot: TerminalSlot | PaneSlot | undefined,
+  tools: readonly { slug: string; name: string }[],
+): string | null {
+  const modes = slot && 'alsoRunning' in slot ? slot.alsoRunning : undefined
+  if (!modes?.length) return null
+  return `${modes.map((mode) => toolName(tools, mode)).join(', ')} also running`
+}
+
+/** What ending the shown session does to the pane's other one: ending the
+ * agent takes the shell beside it too; ending the shell leaves the agent. */
+export function endAlongsideNote(
+  slot: TerminalSlot | PaneSlot,
+  tools: readonly { slug: string; name: string }[],
+): string {
+  const others = 'alsoRunning' in slot ? (slot.alsoRunning ?? []) : []
+  if (others.length === 0 || slot.type !== 'project') return ''
+  if (slot.activeMode !== 'shell')
+    return others.every((mode) => mode === 'shell')
+      ? ' This also ends the Shell running beside it.'
+      : ''
+  return ` ${others.map((mode) => toolName(tools, mode)).join(', ')} keeps running.`
+}
+
 /** A session as its list row names it: its name, numbered when another
  * session of the same agent has the same name. The header, the list and the
  * End dialog all say this. */
@@ -289,6 +315,7 @@ export function SessionList({
           agentName(mode),
           shown.state.text,
           shown.asks,
+          alsoRunningText(slot, agentTools),
           slot?.projectLabel,
           // Where it runs: a remote host has its chip beside this.
           slot?.host ? null : sessionHostLabel(null),

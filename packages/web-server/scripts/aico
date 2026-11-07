@@ -109,7 +109,7 @@ aico_video() {
 
 case "${1:-}" in
   grants | elevate) shift; exec /usr/local/lib/host-steward/aico-grants "$@" ;;
-  memory | prompt | models | context | usage | logins | app | status | phones) exec_aico_web "$@" ;;
+  memory | prompt | models | context | usage | logins | app | status | phones | machines) exec_aico_web "$@" ;;
   check | commit | publish | nightly) aico_checks "$@" ;;
   deploy | logs | snapshots | vm | backups) aico_ops "$@" ;;
   web) shift; aico_webtools "$@" ;;

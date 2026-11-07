@@ -54,7 +54,11 @@ export async function runPhonesCli(argv: string[], io: PhonesIo): Promise<number
       })
       if (id === '--json') io.out(`${JSON.stringify({ phones })}\n`)
       else if (!phones.length) io.out('No phones paired yet.\n')
-      else for (const phone of phones) io.out(`${phone.id} ${phone.name}\n`)
+      else {
+        const width = Math.max(2, ...phones.map((phone) => phone.id.length))
+        io.out(`${'ID'.padEnd(width)}  NAME\n`)
+        for (const phone of phones) io.out(`${phone.id.padEnd(width)}  ${phone.name}\n`)
+      }
     }
     return 0
   } catch (error) {

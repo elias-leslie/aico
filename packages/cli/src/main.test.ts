@@ -824,6 +824,26 @@ describe('aico as the owner CLI', () => {
     expect(st.errors).toEqual(['st: Unknown command nonsense; use st --help'])
   })
 
+  it('suggests the nearest command for a typo, as tether does', async () => {
+    const h = aico()
+    expect(await h.go(['sttus'])).toBe(2)
+    expect(h.errors).toEqual([
+      'aico: Unknown command sttus (did you mean status?); use aico --help',
+    ])
+  })
+
+  it('aico machines is a command of its own, listed in help', async () => {
+    const h = aico()
+    expect(await h.go(['machines'])).toBe(0)
+    expect(h.calls[0]?.argv.slice(-2)).toEqual([
+      expect.stringContaining('scripts/aico'),
+      'machines',
+    ])
+    const help = aico()
+    await help.go(['--help'])
+    expect(help.output.join('\n')).toMatch(/\n {2}machines +every machine once/)
+  })
+
   it('names the command and the problem for db and monitor mistakes, as aico or as st', async () => {
     for (const [h, who] of [
       [aico(), 'aico'],

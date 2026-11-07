@@ -181,8 +181,6 @@
                       "@aico/notify/**",
                       "@aico/ops",
                       "@aico/ops/**",
-                      "@aico/shared",
-                      "@aico/shared/**",
                       "@aico/status",
                       "@aico/status/**",
                       "@aico/tether",
@@ -200,7 +198,7 @@
                       "@aico/webtools",
                       "@aico/webtools/**"
                     ],
-                    "message": "@aico/cli (layer 5): import only @aico/store, @aico/tasks, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/cli (layer 5): import only @aico/shared, @aico/store, @aico/tasks, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

@@ -119,12 +119,15 @@ export async function runProjects(argv: string[], deps: Deps, io: Io): Promise<n
     }
     return 0
   } catch (error) {
+    // A missing project says how to see the ones that exist.
+    const hint = (message: string) =>
+      /^no project /.test(message) ? ` (aico projects list shows the registered ones)` : ''
     if (error instanceof UsageError) {
-      io.err(`ERROR ${error.message}`)
+      io.err(`ERROR ${error.message}${hint(error.message)}`)
       return 2
     }
     if (error instanceof ProjectError) {
-      io.err(`ERROR ${error.message}`)
+      io.err(`ERROR ${error.message}${hint(error.message)}`)
       return 1
     }
     throw error
