@@ -113,7 +113,7 @@ describe('MachinesPage', () => {
   it('says what the list is and tags the session hosts', () => {
     renderPage()
     expect(screen.getByRole('status')).toHaveTextContent(
-      '3 machines. Sessions can run on 2;',
+      '3 machines, 3 on. Sessions can run on 2 of them; all of those are on.',
     )
     const work = screen.getByTestId('machine-agent-work')
     expect(within(work).getByText('Runs sessions')).toBeInTheDocument()

@@ -16,15 +16,14 @@ import {
 /** The session host that is this computer: `New session` and the hosts list name it only by omission. */
 
 /** Session hosts whose Tether name is not the machine's own name (data, from the Tether hosts
- * file: the `aico` link reaches the Proxmox host over ssh). */
-const SESSION_HOST_MACHINE: Record<string, string> = {
-  aico: 'davion-gem',
-}
+ * file). None now: the `aico` link reaches CT 190 (the aico-gem ssh alias), which is its own machine. */
+const SESSION_HOST_MACHINE: Record<string, string> = {}
 
 /** What a machine is for, where Aico's data does not already say. */
 const PURPOSE: Record<string, string> = {
   'davion-sidarli': 'Runs Aico, your agents and their projects.',
   'davion-gem': 'Runs the VMs and containers. Its watchdog reports to Aico.',
+  aico: 'A second Aico on its own container (CT 190), always on. It follows the workstation’s release.',
   'neri-hunters': 'The security hunt.',
   'ominull-hub': 'Detection and paging (OmniNull).',
   apps: 'Portfolio and other apps.',
@@ -148,8 +147,15 @@ export function autostartHint(guest: MachineGuest): string {
     return 'Meant to be always on, but won’t start by itself after the Proxmox host reboots.'
   if (guest.intent === 'on-demand' && guest.autostart)
     return 'On demand, yet starts with the Proxmox host.'
-  return guest.autostart ? 'Starts when the Proxmox host boots.' : ''
+  return ''
 }
+
+/** Said once at the top of the page, not on every row. */
+export const MACHINES_LEGEND = [
+  'Autostart: starts the machine when the Proxmox host boots.',
+  'Runs sessions: you can start sessions on it.',
+  'Always on, On demand, Parked: where the project registry says it should be.',
+]
 
 export const INTENT_TAG: Record<NonNullable<MachineGuest['intent']>, string> = {
   always: 'Always on',
@@ -229,7 +235,9 @@ function noteFor(
     const since = row?.shown_since
       ? Date.parse(row.shown_since)
       : (host?.since ?? null)
-    return since ? `Off since ${at(since, now)}.` : ''
+    if (since) return `Off since ${at(since, now)}.`
+    // No time it went off: say when it last reported instead of leaving the line out.
+    return row ? `Off. Last report ${at(Date.parse(row.updated_at), now)}.` : ''
   }
   if (row && !isLink(row))
     return `Reported ${ago(Date.parse(row.updated_at), now)}.`
@@ -349,19 +357,23 @@ export function machineCount(rows: readonly StatusRow[]): number {
   ).size
 }
 
-/** "8 machines. Sessions can run on 4; 2 are on.", from the list as shown. */
+/** "7 machines, 3 on. Sessions can run on 4 of them; 2 of those are on.", from the list as shown. */
 export function machinesLine(list: Machines): string {
   const total = list.machines.length
   const hosts = list.machines.filter((m) => m.sessionHost)
   if (list.partial)
     return `${plural(hosts.length, 'machine')} can run sessions. The other machines couldn’t be read.`
-  const on = hosts.filter((m) => m.up === 'on').length
-  const state = list.hostsUnknown
-    ? ' (the session hosts couldn’t be checked)'
-    : on === hosts.length
-      ? `; ${hosts.length === 1 ? 'it is' : 'all are'} on`
+  const countOn = (items: readonly Machine[]) =>
+    items.filter((m) => m.up === 'on').length
+  const all = `${plural(total, 'machine')}, ${countOn(list.machines)} on.`
+  if (list.hostsUnknown)
+    return `${all} Sessions can run on some of them (the session hosts couldn’t be checked).`
+  const on = countOn(hosts)
+  const state =
+    on === hosts.length
+      ? `${hosts.length === 1 ? 'it is' : 'all of those are'} on`
       : on === 0
-        ? '; none are on'
-        : `; ${on} ${on === 1 ? 'is' : 'are'} on`
-  return `${plural(total, 'machine')}. Sessions can run on ${hosts.length}${state}.`
+        ? 'none of those are on'
+        : `${on} of those ${on === 1 ? 'is' : 'are'} on`
+  return `${all} Sessions can run on ${hosts.length} of them; ${state}.`
 }

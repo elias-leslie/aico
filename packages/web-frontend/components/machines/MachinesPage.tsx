@@ -18,6 +18,7 @@ import {
   autostartHint,
   buildMachines,
   INTENT_TAG,
+  MACHINES_LEGEND,
   type Machine,
   machinesLine,
   UP_CHIP,
@@ -148,6 +149,13 @@ export function MachinesPage() {
               ? 'Not loaded'
               : machinesLine(list)}
         </p>
+        {!loading && !bothFailed && list.machines.length > 0 && (
+          <ul className={mine.legend} aria-label="What the labels mean">
+            {MACHINES_LEGEND.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
         {bothFailed && (
           <div className={`${styles.notice} ${styles.bad}`} role="alert">
             <p>
@@ -380,7 +388,7 @@ function MachineRow({
           {tag && (
             <span
               className={mine.plainTag}
-              title="Where the project registry says this machine should be"
+              title="Where the project registry says this machine should be: Always on, On demand or Parked"
             >
               {tag}
             </span>
@@ -399,7 +407,10 @@ function MachineRow({
               <p className={styles.line}>Autostart: Proxmox didn’t say.</p>
             ) : (
               <>
-                <label className={mine.switch}>
+                <label
+                  className={mine.switch}
+                  title="Autostart: starts when the Proxmox host boots"
+                >
                   <input
                     type="checkbox"
                     role="switch"

@@ -12,6 +12,17 @@
   white-space: nowrap;
 }
 
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+  margin: -6px 0 14px;
+  padding: 0;
+  list-style: none;
+  color: var(--mist);
+  font-size: 12px;
+}
+
 .autostart {
   margin-top: 6px;
 }

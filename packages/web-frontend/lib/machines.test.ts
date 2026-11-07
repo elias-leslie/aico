@@ -54,17 +54,18 @@ const HOSTS: HostChoice[] = [
 ]
 
 describe('buildMachines', () => {
-  it('lists every machine once, the Proxmox host merging its session link', () => {
+  it('lists every machine once, aico (CT 190) with its own session link', () => {
     const list = buildMachines(view(ROWS), HOSTS, NOW)
     expect(list.machines.map((m) => m.name)).toEqual([
       'Workstation',
       'Proxmox host',
       'agent-work',
+      'aico',
       'apps',
       'ominull-hub',
     ])
     expect(machinesLine(list)).toBe(
-      '5 machines. Sessions can run on 3; 2 are on.',
+      '6 machines, 4 on. Sessions can run on 3 of them; 2 of those are on.',
     )
   })
 
@@ -73,8 +74,8 @@ describe('buildMachines', () => {
     const by = Object.fromEntries(list.machines.map((m) => [m.name, m]))
     expect(by.Workstation?.sessionHost).toBe(true)
     expect(by.Workstation?.power).toBeNull()
-    expect(by['Proxmox host']?.sessionHost).toBe(true)
-    expect(by['Proxmox host']?.power).toBeNull()
+    expect(by['Proxmox host']?.sessionHost).toBe(false)
+    expect(by.aico).toMatchObject({ sessionHost: true, power: null, up: 'on' })
     expect(by['agent-work']).toMatchObject({
       up: 'off',
       power: 'on',
@@ -102,8 +103,8 @@ describe('buildMachines', () => {
     expect(list.partial).toBe(true)
     expect(list.machines.map((m) => m.name)).toEqual([
       'Workstation',
-      'Proxmox host',
       'agent-work',
+      'aico',
     ])
     expect(machinesLine(list)).toContain('The other machines couldn’t be read')
   })
@@ -135,7 +136,7 @@ describe('buildMachines', () => {
 describe('sessionHostLabel', () => {
   it('names this computer and the Proxmox link the same as Machines', () => {
     expect(sessionHostLabel(null)).toBe('Workstation')
-    expect(sessionHostLabel('aico')).toBe('Proxmox host')
+    expect(sessionHostLabel('aico')).toBe('aico')
     expect(sessionHostLabel('agent-work')).toBe('agent-work')
   })
 })
@@ -174,6 +175,40 @@ describe('buildMachines with Proxmox guests', () => {
     expect(list.apps?.guest?.vmid).toBe(180)
     expect(list['davion-gem']?.guest).toBeNull()
     expect(list['davion-sidarli']?.guest).toBeNull()
+  })
+
+  it('shows the aico container (CT 190) as a machine that cannot be powered from here', () => {
+    const aico = by([
+      guest({
+        machine: 'aico',
+        vmid: 190,
+        state: 'running',
+        powerable: false,
+        intent: 'always',
+        autostart: true,
+      }),
+    ]).aico
+    expect(aico?.guest).toMatchObject({ vmid: 190, powerable: false })
+    expect(aico?.up).toBe('on')
+    expect(aico?.power).toBeNull()
+  })
+
+  it('says when an off machine last reported when nothing says when it went off', () => {
+    const jobinator = buildMachines(
+      view([
+        ...ROWS,
+        row({
+          id: 'jobinator-4000/machine',
+          machine: 'jobinator',
+          shown: 'off',
+          state: 'off',
+          updated_at: '2026-11-06T09:30:00Z',
+        }),
+      ]),
+      HOSTS,
+      NOW,
+    ).machines.find((m) => m.key === 'jobinator')
+    expect(jobinator?.note).toMatch(/^Off\. Last report /)
   })
 
   it('says size, uptime and projects, and only counts uptime while running', () => {
@@ -248,6 +283,8 @@ describe('autostartHint', () => {
   it('names the two facts when they disagree, and is quiet when autostart is off as expected', () => {
     expect(autostartHint(guest({ autostart: false }))).toBe('')
     expect(autostartHint(guest({ autostart: true }))).toContain('On demand')
+    // On as expected is said once on the page, not on every row.
+    expect(autostartHint(guest({ autostart: true, intent: 'always' }))).toBe('')
     expect(
       autostartHint(guest({ autostart: false, intent: 'always' })),
     ).toContain('Meant to be always on')

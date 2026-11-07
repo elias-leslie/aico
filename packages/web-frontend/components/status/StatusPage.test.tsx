@@ -169,7 +169,7 @@ describe('StatusPage', () => {
     ])
     show()
     await screen.findByText('Nightly backup')
-    expect(screen.getByText(/5 rows from 3 machines/)).toBeVisible()
+    expect(screen.getByText(/5 rows from 4 machines/)).toBeVisible()
     expect(screen.getByRole('button', { name: /3 healthy/ })).toBeVisible()
     fireEvent.click(
       within(screen.getByRole('region', { name: 'Off' })).getByRole('button'),
