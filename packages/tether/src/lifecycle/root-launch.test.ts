@@ -2,10 +2,10 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { TuiSpec } from '@aico/session-engine/tui/spec'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { initialLaunchLine, rootLaunchEnvironment, withRootPrompt } from './root-launch'
 import { initStore } from './testing'
-import type { TuiSpec } from './tui/spec'
 
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
 

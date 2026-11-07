@@ -12,9 +12,10 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Store } from '@aico/session-engine/store'
+import { bindToolSource } from '@aico/session-engine/tui/registry'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DEFAULT_INSTANCE, ownsTmuxServerUnit, resolvePaths, type TetherPaths } from '../config'
-import { Store } from '../store'
 import {
   allocateWidgetId,
   bindCatalog,
@@ -57,7 +58,6 @@ import {
   respawnTargetArgs,
 } from './tmux'
 import { classifyTmuxServerState } from './tmux-server-state'
-import { bindToolSource } from './tui/registry'
 
 const SERVER = 'a'.repeat(32)
 const INVOCATION = 'b'.repeat(32)

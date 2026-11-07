@@ -25,7 +25,6 @@ import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { agentExitMarkerDir } from './config'
 import {
   type ContinuitySnapshot,
   currentBootId,
@@ -33,9 +32,19 @@ import {
   observeAgent,
   readJsonFile,
   writeJsonFile,
-} from './continuity'
+} from '@aico/session-engine/continuity'
+import { entryHomeFiles, findClaudeTranscript } from '@aico/session-engine/entry-files'
+import { nodeProcFs, processTree, UUID_RE } from '@aico/session-engine/proc-fs'
+import {
+  AGENT_EXIT_ENV,
+  type AgentExitMarker,
+  isResumeSessionId,
+  parseAgentExitMarker,
+} from '@aico/session-engine/tui/launch'
+import { adapterOf, getTui } from '@aico/session-engine/tui/registry'
+import type { TuiSpec } from '@aico/session-engine/tui/spec'
+import { agentExitMarkerDir } from './config'
 import { probeEntryAgent } from './entry-agent'
-import { entryHomeFiles } from './entry-files'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { type Needs, parseNeeds } from './hub/placement'
 import {
@@ -66,22 +75,12 @@ import { memoryEventsPath } from './lifecycle/job-guard'
 import { isNamedProcess, processEnvironment } from './lifecycle/procfs'
 import { launchingResume, withRootPrompt } from './lifecycle/root-launch'
 import { paneExitedEventPath } from './lifecycle/tmux'
-import {
-  AGENT_EXIT_ENV,
-  type AgentExitMarker,
-  isResumeSessionId,
-  parseAgentExitMarker,
-} from './lifecycle/tui/launch'
-import { adapterOf, getTui } from './lifecycle/tui/registry'
-import type { TuiSpec } from './lifecycle/tui/spec'
 import type { LifecycleContext } from './lifecycle-context'
-import { nodeProcFs, processTree, UUID_RE } from './proc-fs'
 import {
   CRASH_RESULTS,
   type CrashFacts,
   type CrashKind,
   claudeTranscriptFacts,
-  findClaudeTranscript,
   type GitState,
   kernelOomVictims,
   nodeFileReader,

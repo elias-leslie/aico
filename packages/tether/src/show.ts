@@ -1,7 +1,7 @@
 import { isAbsolute } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import type { EventBus } from '@aico/session-engine/events'
 import type { ShowConfig } from './config'
-import type { EventBus } from './events'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import type { Hub } from './hub/hub'
 import { realPaths, ShareStore, type ShowRequest } from './shares'

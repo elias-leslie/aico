@@ -17,7 +17,10 @@ import {
   restoreCandidates,
   snapshotResumeId,
   writeJsonFile,
-} from './continuity'
+} from '@aico/session-engine/continuity'
+import { nodeProcFs } from '@aico/session-engine/proc-fs'
+import { isResumeSessionId } from '@aico/session-engine/tui/launch'
+import { getTui } from '@aico/session-engine/tui/registry'
 import { probeEntryAgent } from './entry-agent'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { AgentAdmissionDenied } from './lifecycle/agent-admission'
@@ -33,10 +36,7 @@ import {
 } from './lifecycle/engine'
 import { ENTRY_RETRY_EXIT } from './lifecycle/entries'
 import { withRootPrompt } from './lifecycle/root-launch'
-import { isResumeSessionId } from './lifecycle/tui/launch'
-import { getTui } from './lifecycle/tui/registry'
 import type { LifecycleContext } from './lifecycle-context'
-import { nodeProcFs } from './proc-fs'
 import type { Recovery } from './recovery'
 import { restoreSessionReservation } from './recovery-placement'
 import { pasteIntoRunningSession } from './running-session'

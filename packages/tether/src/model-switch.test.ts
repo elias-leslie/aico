@@ -1,15 +1,16 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ModelSource } from '@aico/session-engine/model-record'
+import type { FileTail, ProcFs } from '@aico/session-engine/proc-fs'
 import {
   claudeModelEvents,
   claudeModelSource,
   claudeTranscriptPath,
-} from './lifecycle/tui/adapters/claude-code'
-import { codexModelEvents } from './lifecycle/tui/adapters/codex'
-import { piModelEvents } from './lifecycle/tui/adapters/pi'
+} from '@aico/session-engine/tui/adapters/claude-code'
+import { codexModelEvents } from '@aico/session-engine/tui/adapters/codex'
+import { piModelEvents } from '@aico/session-engine/tui/adapters/pi'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelNotices, readModelNoticeState } from './model-notices'
-import type { ModelSource } from './model-record'
 import {
   bareModel,
   isModelSwitch,
@@ -23,7 +24,6 @@ import {
   type WatchEntry,
   worktreeFacts,
 } from './model-switch'
-import type { FileTail, ProcFs } from './proc-fs'
 
 const FIXTURES = join(__dirname, 'test-fixtures', 'model-switch')
 const fixture = (name: string) => readFileSync(join(FIXTURES, name), 'utf8')

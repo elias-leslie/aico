@@ -44,6 +44,9 @@
       "path": "packages/ui-kit"
     },
     {
+      "path": "packages/session-engine"
+    },
+    {
       "path": "packages/tether"
     },
     {

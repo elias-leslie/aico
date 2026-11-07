@@ -6,6 +6,8 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import type { Store } from '@aico/session-engine/store'
+import { agentProcessNames } from '@aico/session-engine/tui/registry'
 import type { TetherPaths } from './config'
 import { hostAdmissionPath } from './lifecycle/agent-admission'
 import { JobGuard, memoryEventsPath } from './lifecycle/job-guard'
@@ -15,9 +17,7 @@ import {
   type PaneCapResult,
   systemdPaneCapFiles,
 } from './lifecycle/pane-caps'
-import { agentProcessNames } from './lifecycle/tui/registry'
 import { applyMemoryPolicyPatch, type MemoryPolicy, parseStoredMemoryPolicy } from './memory-policy'
-import type { Store } from './store'
 
 const MEMORY_POLICY_KEY = 'memory_policy'
 

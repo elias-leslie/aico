@@ -30,7 +30,6 @@
 // them there.
 
 import { dirname, join } from 'node:path'
-import { ADAPTERS, adapterByHarness, adapterOf } from './lifecycle/tui/registry'
 import {
   KEY,
   type ModelEvent,
@@ -39,8 +38,9 @@ import {
   refusalCategory,
   UNKNOWN_MODEL,
   UUID,
-} from './model-record'
-import type { FileTail } from './proc-fs'
+} from '@aico/session-engine/model-record'
+import type { FileTail } from '@aico/session-engine/proc-fs'
+import { ADAPTERS, adapterByHarness, adapterOf } from '@aico/session-engine/tui/registry'
 
 const SWITCH_KINDS = ['refusal', 'substituted', 'changed', 'paused'] as const
 export type SwitchKind = (typeof SWITCH_KINDS)[number]

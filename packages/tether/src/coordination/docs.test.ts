@@ -1,8 +1,8 @@
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { Store } from '@aico/session-engine/store'
 import { afterEach, describe, expect, it } from 'vitest'
 import { HttpError, Router } from '../http'
-import { Store } from '../store'
 import { CoordinationDocs, registerCoordinationRoutes } from './docs'
 
 describe('CoordinationDocs', () => {

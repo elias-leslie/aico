@@ -1,6 +1,21 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { isAbsolute, normalize } from 'node:path'
+import { isBlankSlateRoot, supportsBlankSlate } from '@aico/session-engine/tui/blank-slate'
+import {
+  type InstructionsSnapshot,
+  parseInstructions,
+  saveInstructions,
+  sessionInstructions,
+} from '@aico/session-engine/tui/instructions'
+import { isResumeSessionId } from '@aico/session-engine/tui/launch'
+import {
+  adapterOf,
+  getTui,
+  isRootCreateTool,
+  ROOT_CREATE_TOOLS,
+  supportsInstructions,
+} from '@aico/session-engine/tui/registry'
 import {
   allocateWidgetId,
   getRootRequest,
@@ -16,21 +31,6 @@ import type { LifecycleOwnerToken, ManagedGateState } from './lifecycle-guard'
 import type { RetirementResult } from './owner-retirement'
 import { sessionGeneration } from './owner-retirement'
 import { isBoundedTerminalText } from './tmux'
-import { isBlankSlateRoot, supportsBlankSlate } from './tui/blank-slate'
-import {
-  type InstructionsSnapshot,
-  parseInstructions,
-  saveInstructions,
-  sessionInstructions,
-} from './tui/instructions'
-import { isResumeSessionId } from './tui/launch'
-import {
-  adapterOf,
-  getTui,
-  isRootCreateTool,
-  ROOT_CREATE_TOOLS,
-  supportsInstructions,
-} from './tui/registry'
 import type { RootLaunchOptions } from './types'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/

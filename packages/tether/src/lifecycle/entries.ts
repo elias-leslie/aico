@@ -20,9 +20,14 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, normalize } from 'node:path'
-import { ENTRY_HOME_ENV, ENTRY_TOOL_ENV, ENTRY_TOOLS, type EntryTool } from '../continuity'
+import {
+  ENTRY_HOME_ENV,
+  ENTRY_TOOL_ENV,
+  ENTRY_TOOLS,
+  type EntryTool,
+} from '@aico/session-engine/continuity'
+import { shellQuote } from '@aico/session-engine/tui/launch'
 import { getSessionEntry, getWidget, type SessionEntry } from './catalog'
-import { shellQuote } from './tui/launch'
 
 /** Set on the entry process only: state readers find it in the pane by this
  * marker and read the agent's files under its home (continuity.ts). */

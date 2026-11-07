@@ -282,7 +282,7 @@
   },
   {
     "type": "dependency",
-    "from": "packages/tether/src/agent-state.test.ts",
+    "from": "packages/session-engine/src/agent-state.test.ts",
     "to": "node:sqlite",
     "unresolvedTo": "node:sqlite",
     "dependencyTypes": [
@@ -426,7 +426,7 @@
   },
   {
     "type": "dependency",
-    "from": "packages/tether/src/lifecycle/tui/adapters/agy.ts",
+    "from": "packages/session-engine/src/lifecycle/tui/adapters/agy.ts",
     "to": "node:sqlite",
     "unresolvedTo": "node:sqlite",
     "dependencyTypes": [
@@ -455,7 +455,7 @@
   },
   {
     "type": "dependency",
-    "from": "packages/tether/src/store.ts",
+    "from": "packages/session-engine/src/store.ts",
     "to": "node:sqlite",
     "unresolvedTo": "node:sqlite",
     "dependencyTypes": [

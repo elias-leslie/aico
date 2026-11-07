@@ -4,8 +4,19 @@ import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { FleetService } from '@aico/fleet/service'
+import {
+  AgentStatePoller,
+  AgentStateTracker,
+  bindAgentStates,
+} from '@aico/session-engine/agent-state'
+import { observeAgent, writeJsonFile } from '@aico/session-engine/continuity'
+import { configureEntryScan } from '@aico/session-engine/entry-files'
+import { parseGraphicalEnvironment } from '@aico/session-engine/env'
+import { EventBus } from '@aico/session-engine/events'
+import { nodeFileTail, nodeProcFs } from '@aico/session-engine/proc-fs'
+import { Store } from '@aico/session-engine/store'
+import { adapterOf, bindToolSource, isDeliveryTool } from '@aico/session-engine/tui/registry'
 import { registryProjects } from '@aico/tasks/registry'
-import { AgentStatePoller, AgentStateTracker, bindAgentStates } from './agent-state'
 import { type AskDelivery, AskStore, aicoOrigin, handOffAsks, type NeedsYouFeed } from './asks'
 import {
   agentExitMarkerDir,
@@ -13,12 +24,8 @@ import {
   resolveShowConfig,
   type TetherPaths,
 } from './config'
-import { observeAgent, writeJsonFile } from './continuity'
 import { CoordinationDocs } from './coordination/docs'
 import { DeadShells } from './dead-shells'
-import { configureEntryScan } from './entry-files'
-import { parseGraphicalEnvironment } from './env'
-import { EventBus } from './events'
 import { listenPrivateSocket } from './http'
 import { HostAdmin } from './hub/host-admin'
 import { Hub } from './hub/hub'
@@ -63,7 +70,6 @@ import {
 import { ENTRY_MISSING_EXIT, ENTRY_RETRY_EXIT } from './lifecycle/entries'
 import { setLifecycleInstance } from './lifecycle/ownership'
 import { configureTmuxPaths } from './lifecycle/tmux'
-import { adapterOf, bindToolSource, isDeliveryTool } from './lifecycle/tui/registry'
 import {
   bindModelWatch,
   foregroundPaneScope,
@@ -73,7 +79,6 @@ import {
 import { startMemoryGuard } from './memory-guard'
 import { ModelNotices, readModelNoticeState } from './model-notices'
 import { ModelWatch, readAlternates, readWatchEntries, worktreeFacts } from './model-switch'
-import { nodeFileTail, nodeProcFs } from './proc-fs'
 import { activeProjectFileFromEnv, ProjectProvider } from './projects'
 import { Continuity } from './reboot'
 import { Recovery, runProcess } from './recovery'
@@ -81,7 +86,6 @@ import { generationOf, pressKeysInRunningSession } from './running-session'
 import { createTetherServer } from './server'
 import { type History, historyFromEnv, startHistoryScan } from './sessions/history'
 import { persistSizeHolders } from './size-holder'
-import { Store } from './store'
 import { VERSION } from './version'
 import type { PullKind } from './wait-kinds'
 import { anchorWidget, PullReaders, systemdCmdUnits, systemdProbe } from './wait-readers'

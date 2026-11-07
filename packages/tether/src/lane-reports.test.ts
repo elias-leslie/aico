@@ -1,3 +1,4 @@
+import { Store } from '@aico/session-engine/store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   LaneReporter,
@@ -19,7 +20,6 @@ import {
   removeWidget,
   setCoordinator,
 } from './lifecycle/catalog'
-import { Store } from './store'
 import { WaitStore } from './waits'
 import {
   composeDelivery,

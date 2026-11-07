@@ -1,8 +1,8 @@
 // What an End does to the coordinator's lanes: running coordinator-role lanes are promoted,
 // unless a kept wake will relaunch the coordinator and rejoin them itself.
 
+import { Store } from '@aico/session-engine/store'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { Store } from '../store'
 import { bindCatalog, getWidget, insertWidget, recordLauncher } from './catalog'
 import { holdPromotion, publishPromotedLanes, releasePromotion } from './engine'
 

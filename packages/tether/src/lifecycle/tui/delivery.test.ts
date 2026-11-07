@@ -11,8 +11,19 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { contextDbPath, DELIVERY, deliver, openContext, setDeliveryTool } from '@aico/context'
 import { DELIVERY_FIXTURE, fixtureDb, fixtureRequest } from '@aico/context/delivery-fixture'
+import { Store } from '@aico/session-engine/store'
+import type { TuiAdapter } from '@aico/session-engine/tui/adapters/contract'
+import {
+  deliveryDir,
+  deliveryLaunch,
+  forgetDelivery,
+  lastDelivery,
+  withContextDelivery,
+} from '@aico/session-engine/tui/delivery'
+import { launchLine } from '@aico/session-engine/tui/launch'
+import { ADAPTERS, adapterOf, toolSpec } from '@aico/session-engine/tui/registry'
+import type { TuiSpec } from '@aico/session-engine/tui/spec'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { Store } from '../../store'
 import {
   bindCatalog,
   getSessionEntry,
@@ -24,17 +35,6 @@ import {
   setWidgetName,
   setWidgetProject,
 } from '../catalog'
-import type { TuiAdapter } from './adapters/contract'
-import {
-  deliveryDir,
-  deliveryLaunch,
-  forgetDelivery,
-  lastDelivery,
-  withContextDelivery,
-} from './delivery'
-import { launchLine } from './launch'
-import { ADAPTERS, adapterOf, toolSpec } from './registry'
-import type { TuiSpec } from './spec'
 
 const root = mkdtempSync(join(tmpdir(), 'tether-delivery-'))
 afterAll(() => rmSync(root, { recursive: true, force: true }))

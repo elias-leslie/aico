@@ -1,5 +1,5 @@
+import { Store } from '@aico/session-engine/store'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { Store } from '../store'
 import {
   bindCatalog,
   COORDINATOR_COLORS,

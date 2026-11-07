@@ -12,8 +12,8 @@
 // caller that gives up or dies leaves nothing behind, and no update is lost. This table is created here, not
 // in a schema version: it is one self-contained table with no migration history.
 
+import type { Store } from '@aico/session-engine/store'
 import { HttpError, type Router, readJsonObject, sendJson } from '../http'
-import type { Store } from '../store'
 
 const DOC_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/
 /** A document may be larger than other API bodies: a busy project's writer sets. */

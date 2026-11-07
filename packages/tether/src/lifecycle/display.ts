@@ -4,9 +4,9 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { instructionsLabel, sessionInstructions } from '@aico/session-engine/tui/instructions'
 import type { Project } from '../projects'
 import { getWidget, rootRequestForWidget, type WidgetRow } from './catalog'
-import { instructionsLabel, sessionInstructions } from './tui/instructions'
 
 const PERSONAL_WORKSPACE_NAME = 'Personal Workspace'
 /** A coordinator or lane from before colours were recorded. */

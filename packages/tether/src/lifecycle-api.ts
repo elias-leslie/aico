@@ -4,11 +4,38 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
-import { agentSessionIdOf, agentStateOf, type HookReport, reportAgentState } from './agent-state'
+import {
+  agentSessionIdOf,
+  agentStateOf,
+  type HookReport,
+  reportAgentState,
+} from '@aico/session-engine/agent-state'
+import type { EventBus } from '@aico/session-engine/events'
+import type { Store } from '@aico/session-engine/store'
+import { agyDoing } from '@aico/session-engine/tui/adapters/agy-doing'
+import {
+  createBlankSlateWorkspace,
+  ensureBlankSlateWorkspace,
+  isBlankSlateRoot,
+  supportsBlankSlate,
+} from '@aico/session-engine/tui/blank-slate'
+import { staticContextStatus } from '@aico/session-engine/tui/context'
+import {
+  parseInstructions,
+  saveInstructions,
+  sessionInstructions,
+} from '@aico/session-engine/tui/instructions'
+import { listsModel } from '@aico/session-engine/tui/models'
+import {
+  ADAPTERS,
+  adapterOf,
+  getTui,
+  supportsInstructions,
+} from '@aico/session-engine/tui/registry'
+import { extractSignInLink, signInToolOf } from '@aico/session-engine/tui/sign-in-link'
 import { type AskDelivery, AskStore, sessionAsks, transferAskNotices } from './asks'
 import type { TetherPaths } from './config'
 import { ContinuationError, continuation } from './continue-from'
-import type { EventBus } from './events'
 import { type Handler, HttpError, type Router, readJsonObject, sendError, sendJson } from './http'
 import type { Hub } from './hub/hub'
 import {
@@ -104,22 +131,6 @@ import {
   sessionName,
   type TmuxTarget,
 } from './lifecycle/tmux'
-import { agyDoing } from './lifecycle/tui/adapters/agy-doing'
-import {
-  createBlankSlateWorkspace,
-  ensureBlankSlateWorkspace,
-  isBlankSlateRoot,
-  supportsBlankSlate,
-} from './lifecycle/tui/blank-slate'
-import { staticContextStatus } from './lifecycle/tui/context'
-import {
-  parseInstructions,
-  saveInstructions,
-  sessionInstructions,
-} from './lifecycle/tui/instructions'
-import { listsModel } from './lifecycle/tui/models'
-import { ADAPTERS, adapterOf, getTui, supportsInstructions } from './lifecycle/tui/registry'
-import { extractSignInLink, signInToolOf } from './lifecycle/tui/sign-in-link'
 import type { ModelSwitch, ModelWatch } from './model-switch'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { Project, ProjectProvider } from './projects'
@@ -129,7 +140,6 @@ import { RewindRefused, rewindClaude } from './rewind'
 import { generationOf, runTmux, TMUX_BIN, withRunningSession } from './running-session'
 import type { History } from './sessions/history'
 import { parseViewerLabel, recordSizeHolder, sizeHolderOf } from './size-holder'
-import type { Store } from './store'
 import { registerWaitRoutes, type WaitService } from './waits'
 import {
   registerWakeRoutes,

@@ -3,11 +3,21 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { createServer, request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { AgentStatePoller, AgentStateTracker } from '@aico/session-engine/agent-state'
+import {
+  ENTRY_HOME_ENV,
+  ENTRY_TOOL_ENV,
+  findEntryProcess,
+  observeAgent,
+} from '@aico/session-engine/continuity'
+import { nodeProcFs, type ProcFs } from '@aico/session-engine/proc-fs'
+import { entryClaudeSession } from '@aico/session-engine/tui/adapters/claude-code'
+import { entryCodexRollout } from '@aico/session-engine/tui/adapters/codex'
+import { entryPiSession } from '@aico/session-engine/tui/adapters/pi'
+import { getTui } from '@aico/session-engine/tui/registry'
+import type { TuiSpec } from '@aico/session-engine/tui/spec'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { AgentStatePoller, AgentStateTracker } from '../agent-state'
-import { ENTRY_HOME_ENV, ENTRY_TOOL_ENV, findEntryProcess, observeAgent } from '../continuity'
 import { listenPrivateSocket } from '../http'
-import { nodeProcFs, type ProcFs } from '../proc-fs'
 import {
   getRootRequest,
   getSessionEntry,
@@ -28,11 +38,6 @@ import {
 import { createRootHandler, parseRootCreate, rootRequestDigest } from './root-control'
 import { initialLaunchLine, rootLaunchEnvironment, withRootPrompt } from './root-launch'
 import { codexTui, initStore, registerBuiltinTuis } from './testing'
-import { entryClaudeSession } from './tui/adapters/claude-code'
-import { entryCodexRollout } from './tui/adapters/codex'
-import { entryPiSession } from './tui/adapters/pi'
-import { getTui } from './tui/registry'
-import type { TuiSpec } from './tui/spec'
 
 const CLAUDE = '5a7741ea-e6b1-4062-853b-0d9d2e03d549'
 const OLD = '6b7741ea-e6b1-4062-853b-0d9d2e03d549'

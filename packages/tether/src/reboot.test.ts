@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { type RestoreReport, readJsonFile, writeJsonFile } from '@aico/session-engine/continuity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { type RestoreReport, readJsonFile, writeJsonFile } from './continuity'
 import { Placement } from './hub/placement'
 import { getWidget, insertWidget, removeWidget, reserveRootRequest } from './lifecycle/catalog'
 import { rootLaunchEnvironment } from './lifecycle/root-launch'
@@ -31,8 +31,8 @@ vi.mock('./lifecycle/engine', () => ({
   agentExitOf: () => (h.agent ? { state: 'started' } : { state: 'exit', status: h.exit }),
   whenReady: async () => {},
 }))
-vi.mock('./continuity', async (original) => ({
-  ...(await original<typeof import('./continuity')>()),
+vi.mock('@aico/session-engine/continuity', async (original) => ({
+  ...(await original<typeof import('@aico/session-engine/continuity')>()),
   observeAgent: () =>
     h.agent
       ? { pid: 7, resumeId: '3e0161b0-9591-4f68-a80a-656951537274', idle: null, blocked: false }

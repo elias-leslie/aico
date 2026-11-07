@@ -387,7 +387,7 @@ requests can still retry with their original body/digest and remain Unknown;
 a new request without a work role returns `400 work_role_required`.
 
 The work role also trims what the session starts with (Blank Slate or not, every
-launch: create, restart, recovery, replacement). `packages/tether/src/lifecycle/tui/lane-tools.json`
+launch: create, restart, recovery, replacement). `packages/session-engine/src/lifecycle/tui/lane-tools.json`
 holds, per tool, the environment every trimmed role gets and each role's extra
 arguments, all documented harness switches. Claude Code roles other than
 `coordinator` start without the Artifact and Workflow tools, Claude-drafted
@@ -429,7 +429,7 @@ other tool as `unsupported_profile`, so a new root tool needs no change to
 
 `resumeSessionId` is either absent/null (a fresh launch) or an exact native
 session ID validated by the selected tool's resume adapter. The adapters are
-code (`src/lifecycle/tui/registry.ts` `RESUME_ADAPTERS`), never editable through
+code (`packages/session-engine/src/lifecycle/tui/registry.ts` `RESUME_ADAPTERS`), never editable through
 the API. Codex and Claude Code each require a canonical lowercase UUID. Resume
 requires a sanitized nonempty `initialPrompt` of at most 2000 UTF-8 bytes,
 allowing only tab/newline controls. A fresh `initialPrompt` may be up to 14 KiB:

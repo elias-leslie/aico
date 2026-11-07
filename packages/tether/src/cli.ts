@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { isAbsolute, resolve } from 'node:path'
 import { runLogins } from '@aico/fleet/logins-cli'
+import { Store } from '@aico/session-engine/store'
 import { nearest } from '@aico/shared/suggest'
 import { localTime } from '@aico/shared/time'
 import { ASK_USAGE, runAsk } from './ask-cli'
@@ -14,7 +15,6 @@ import { applyImport, formatPlan, planImportForPath, summarize } from './importe
 import { NOTE_USAGE, runNote } from './note-cli'
 import { withOwnWidget } from './own-session'
 import { HISTORY_USAGE, runHistory } from './sessions/cli'
-import { Store } from './store'
 import { VERSION } from './version'
 
 const USAGE = `Usage: tether [--instance NAME] [--json] <command>

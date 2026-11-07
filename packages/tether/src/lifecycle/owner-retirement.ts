@@ -1,4 +1,4 @@
-import { sessionGeneration as identityGeneration } from '../generation'
+import { sessionGeneration as identityGeneration } from '@aico/session-engine/generation'
 import {
   clearWidgetPendingScope,
   getWidget,

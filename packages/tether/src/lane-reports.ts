@@ -65,7 +65,7 @@
 // the input line is empty.
 
 import type { DatabaseSync } from 'node:sqlite'
-import { AGENT_STATES, type AgentState } from './agent-state'
+import { AGENT_STATES, type AgentState } from '@aico/session-engine/agent-state'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { type ModelSwitch, modelSwitchOf, modelSwitchText } from './model-switch'
 

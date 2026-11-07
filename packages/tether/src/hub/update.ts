@@ -142,6 +142,7 @@ function updateLine(
   socket: string,
   answerSec: number = UPDATE_ANSWER_SEC,
   stateDir: string | null = null,
+  dbFile: string,
 ): string {
   const keep = [...RELEASE_FILES, SIGNED_RELEASE].join(' ')
   return [
@@ -182,25 +183,25 @@ function updateLine(
     // Taken while Tether is stopped, so the copy is whole. The -shm index is
     // rebuilt from the WAL when the database next opens.
     'save_db() {',
-    '  for name in tether.db tether.db-wal; do',
+    `  for name in ${dbFile} ${dbFile}-wal; do`,
     '    if [ -f "$state/$name" ]; then cp -p "$state/$name" "$stage/db/$name" || return 1; fi',
     '  done',
     '}',
     'restore_db() {',
-    '  for name in tether.db tether.db-wal; do',
+    `  for name in ${dbFile} ${dbFile}-wal; do`,
     '    if [ -f "$stage/db/$name" ]; then cp -p "$stage/db/$name" "$state/$name.rollback" || return 1; fi',
     '  done',
-    '  for name in tether.db tether.db-wal; do',
+    `  for name in ${dbFile} ${dbFile}-wal; do`,
     '    if [ -f "$stage/db/$name" ]; then mv -f "$state/$name.rollback" "$state/$name" || return 1; else rm -f "$state/$name"; fi',
     '  done',
-    '  rm -f "$state/tether.db-shm"',
+    `  rm -f "$state/${dbFile}-shm"`,
     '}',
     'stopped=0',
     'saved=0',
     'why="its install failed"',
     // No database where this script looks means a rollback could not put it
     // back: stop before anything is installed.
-    '[ -f "$state/tether.db" ] || { echo "no Tether database at $state; nothing installed" >&2; exit 1; }',
+    `[ -f "$state/${dbFile}" ] || { echo "no Tether database at $state; nothing installed" >&2; exit 1; }`,
     `echo ${shellQuote(UPDATE_INSTALLING)}`,
     'if TETHER_LIB_DIR="$lib" bash "$stage/new/scripts/install-release.sh" >/dev/null; then',
     '  why="$unit did not stop"',
@@ -224,7 +225,7 @@ function updateLine(
     'back="the previous release is back"',
     'if [ "$saved" = 1 ]; then',
     '  if restore_db; then',
-    '    if [ -f "$stage/db/tether.db" ]; then back="the previous release and its database are back"; fi',
+    `    if [ -f "$stage/db/${dbFile}" ]; then back="the previous release and its database are back"; fi`,
     '  else',
     // The new release may have moved the schema past what the old one reads:
     // never start it on that. The copy stays for whoever repairs the host.
@@ -269,7 +270,7 @@ export function receiveUpdate(
   input: string,
   target: { instance: string; socket: string; stateDir: string | null; id: string },
   env = process.env,
-  ports: Pick<HubPorts, 'apiVersion' | 'isInstanceName'> = tetherHubPorts,
+  ports: Pick<HubPorts, 'apiVersion' | 'isInstanceName' | 'dbFile'> = tetherHubPorts,
 ): RunResult {
   if (!ports.isInstanceName(target.instance) || !target.socket.startsWith('/'))
     throw new Error('Invalid update target')
@@ -295,9 +296,13 @@ export function receiveUpdate(
     throw new Error('Could not stage the signed release')
   const script = join(stage, 'install.sh')
   const log = join(stage, 'install.log')
-  writeFileSync(script, updateLine(target.instance, target.socket, undefined, target.stateDir), {
-    mode: 0o700,
-  })
+  writeFileSync(
+    script,
+    updateLine(target.instance, target.socket, undefined, target.stateDir, ports.dbFile),
+    {
+      mode: 0o700,
+    },
+  )
   mkdirSync(dirname(resultFile), { recursive: true, mode: 0o700 })
   const report = [
     `bash ${shellQuote(script)} < ${shellQuote(archive)} > ${shellQuote(log)} 2>&1`,

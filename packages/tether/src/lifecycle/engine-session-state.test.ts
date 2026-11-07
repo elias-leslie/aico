@@ -6,9 +6,10 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Store } from '@aico/session-engine/store'
+import { bindToolSource } from '@aico/session-engine/tui/registry'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_INSTANCE, resolvePaths } from '../config'
-import { Store } from '../store'
 import { bindCatalog, getWidget, insertWidget, type WidgetRow } from './catalog'
 import {
   configureEngine,
@@ -25,7 +26,6 @@ import {
   serverRosterArgs,
   sessionIdTargetArgs,
 } from './tmux'
-import { bindToolSource } from './tui/registry'
 
 const mocks = vi.hoisted(() => ({
   execFile: vi.fn(),

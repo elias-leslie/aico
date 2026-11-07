@@ -3,10 +3,23 @@ import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
 import { isPeerRequest } from '@aico/fleet/peer-http'
+import type { EventBus, TetherEvent } from '@aico/session-engine/events'
+import type { Store, ToolPatch } from '@aico/session-engine/store'
+import {
+  type AgentTool,
+  parseCommand,
+  type ToolSeed,
+  ToolValidationError,
+} from '@aico/session-engine/tools'
+import { supportsBlankSlate } from '@aico/session-engine/tui/blank-slate'
+import {
+  drawsStatusLine,
+  isRootCreateTool,
+  supportsInstructions,
+} from '@aico/session-engine/tui/registry'
 import { type AskDelivery, type NeedsYouFeed, registerAskRoutes } from './asks'
 import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
 import { CoordinationDocs, registerCoordinationRoutes } from './coordination/docs'
-import type { EventBus, TetherEvent } from './events'
 import { registerFileRoutes } from './files/api'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { HostAdmin, registerHostAdminRoutes } from './hub/host-admin'
@@ -16,8 +29,6 @@ import { installedRelease } from './hub/update'
 import { getWidget } from './lifecycle/catalog'
 import { lifecycleStatus } from './lifecycle/engine'
 import { createRootHandlerState, type RootHandlerState } from './lifecycle/root-control'
-import { supportsBlankSlate } from './lifecycle/tui/blank-slate'
-import { drawsStatusLine, isRootCreateTool, supportsInstructions } from './lifecycle/tui/registry'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
 import type { MemoryPolicyService } from './memory-guard'
 import {
@@ -35,8 +46,6 @@ import {
 import { registerHistoryRoutes } from './sessions/api'
 import type { History } from './sessions/history'
 import { registerShowRoute } from './show'
-import type { Store, ToolPatch } from './store'
-import { type AgentTool, parseCommand, type ToolSeed, ToolValidationError } from './tools'
 import { VERSION } from './version'
 import { registerSeenRoute, type WaitingNotices } from './waiting'
 

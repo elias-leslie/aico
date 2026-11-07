@@ -1,8 +1,9 @@
 // Ported from Aico electron/main/store.test.ts. Aico's additive-migration
 // cases are replaced by seeding Tether's schema directly with the rows the
 // importer copies (a historical `.scope` generation and a v0 widget).
+
+import { Store } from '@aico/session-engine/store'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { Store } from '../store'
 import {
   activateTmuxServer,
   adoptActiveLegacyTmuxServer,

@@ -26,8 +26,6 @@ import { readdir, readFile } from 'node:fs/promises'
 import { homedir, uptime } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import type { SessionStatus } from '@aico/tether-client/client/contracts'
-import { agentExitMarkerDir, ownsTmuxServerUnit, type TetherPaths } from '../config'
 import {
   cleanEnvArgv,
   passthroughFromEnv,
@@ -35,8 +33,32 @@ import {
   shimDirectory,
   tmuxServerEnvironment,
   withShimPath,
-} from '../env'
-import type { EventBus } from '../events'
+} from '@aico/session-engine/env'
+import type { EventBus } from '@aico/session-engine/events'
+import { ensureBlankSlateWorkspace, isBlankSlateRoot } from '@aico/session-engine/tui/blank-slate'
+import { ensureContext } from '@aico/session-engine/tui/context'
+import {
+  type DeliveryDeps,
+  withContextDelivery as deliverContext,
+  deliveryDeps,
+  forgetDelivery,
+  withLastDelivery,
+} from '@aico/session-engine/tui/delivery'
+import {
+  detectTuiFromProcessNames,
+  parseProcessTable,
+  processTreeNames,
+} from '@aico/session-engine/tui/detect'
+import {
+  type AgentExitMarker,
+  paneCommand,
+  paneGatePath,
+  parseAgentExitMarker,
+} from '@aico/session-engine/tui/launch'
+import { agentProcessNames, getTui, listTuis } from '@aico/session-engine/tui/registry'
+import type { ContextStatus, TuiSpec } from '@aico/session-engine/tui/spec'
+import type { SessionStatus } from '@aico/tether-client/client/contracts'
+import { agentExitMarkerDir, ownsTmuxServerUnit, type TetherPaths } from '../config'
 import {
   type AdmissionRequest,
   type AdmissionTicket,
@@ -170,19 +192,6 @@ import {
   type TmuxServerRuntimeState,
   type TmuxServerUnitEvidence,
 } from './tmux-server-state'
-import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './tui/blank-slate'
-import { ensureContext } from './tui/context'
-import {
-  type DeliveryDeps,
-  withContextDelivery as deliverContext,
-  deliveryDeps,
-  forgetDelivery,
-  withLastDelivery,
-} from './tui/delivery'
-import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
-import { type AgentExitMarker, paneCommand, paneGatePath, parseAgentExitMarker } from './tui/launch'
-import { agentProcessNames, getTui, listTuis } from './tui/registry'
-import type { ContextStatus, TuiSpec } from './tui/spec'
 
 const execFileAsync = promisify(execFile)
 const LOGINCTL_BIN = '/usr/bin/loginctl'

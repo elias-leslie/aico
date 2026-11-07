@@ -10,11 +10,9 @@
       "@aico/shared",
       "@aico/context",
       "@aico/fleet",
+      "@aico/session-engine",
       "@aico/tasks",
       "@aico/tether-client"
-    ],
-    "db": [
-      "tether.db"
     ]
   },
   "type": "module",
@@ -32,6 +30,7 @@
     "@aico/shared": "0.1.0",
     "@aico/context": "0.1.0",
     "@aico/fleet": "0.1.0",
+    "@aico/session-engine": "0.1.0",
     "@aico/tasks": "0.1.0",
     "@aico/tether-client": "0.1.0"
   },

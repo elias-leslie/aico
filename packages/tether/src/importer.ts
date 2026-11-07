@@ -17,7 +17,7 @@
 
 import { existsSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
-import type { Store } from './store'
+import type { Store } from '@aico/session-engine/store'
 
 type Row = Record<string, unknown>
 

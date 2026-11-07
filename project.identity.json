@@ -42,6 +42,7 @@
       "tether@default.service": [
         "packages/context",
         "packages/fleet",
+        "packages/session-engine",
         "packages/shared",
         "packages/status",
         "packages/store",

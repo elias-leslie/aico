@@ -5,8 +5,17 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { agentStateOf } from './agent-state'
-import { type ContinuitySnapshot, observeAgent, readJsonFile } from './continuity'
+import { agentStateOf } from '@aico/session-engine/agent-state'
+import {
+  type ContinuitySnapshot,
+  observeAgent,
+  readJsonFile,
+} from '@aico/session-engine/continuity'
+import { nodeProcFs } from '@aico/session-engine/proc-fs'
+import { MAIN_TURN_OVER } from '@aico/session-engine/tui/adapters/contract'
+import { ensureBlankSlateWorkspace, isBlankSlateRoot } from '@aico/session-engine/tui/blank-slate'
+import { isResumeSessionId } from '@aico/session-engine/tui/launch'
+import { getTui, isDeliveryTool } from '@aico/session-engine/tui/registry'
 import { DeliveryLog, registerDeliveryRoutes } from './deliveries'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { AgentAdmissionDenied } from './lifecycle/agent-admission'
@@ -41,12 +50,7 @@ import {
 } from './lifecycle/engine'
 import { withRootPrompt } from './lifecycle/root-launch'
 import { captureVisibleTargetArgs, clientActivityTargetArgs } from './lifecycle/tmux'
-import { MAIN_TURN_OVER } from './lifecycle/tui/adapters/contract'
-import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './lifecycle/tui/blank-slate'
-import { isResumeSessionId } from './lifecycle/tui/launch'
-import { getTui, isDeliveryTool } from './lifecycle/tui/registry'
 import type { LifecycleContext } from './lifecycle-context'
-import { nodeProcFs } from './proc-fs'
 import type { Continuity } from './reboot'
 import { pasteIntoRunningSession, runTmux } from './running-session'
 import {

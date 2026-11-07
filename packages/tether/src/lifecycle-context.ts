@@ -2,11 +2,11 @@
 // runtime read. A type file: they take it without importing lifecycle-api, which
 // imports them (its LifecycleApiContext has every field here, and more).
 
+import type { EventBus } from '@aico/session-engine/events'
+import type { Store } from '@aico/session-engine/store'
 import type { TetherPaths } from './config'
-import type { EventBus } from './events'
 import type { Placement } from './hub/placement'
 import type { LaneReporter } from './lane-reports'
-import type { Store } from './store'
 import type { WaitService } from './waits'
 
 export interface LifecycleContext {

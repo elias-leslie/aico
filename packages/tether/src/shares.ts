@@ -4,9 +4,9 @@
 import { randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
 import { access, realpath, stat } from 'node:fs/promises'
+import type { Store } from '@aico/session-engine/store'
 import type { ShowConfig } from './config'
 import { HttpError } from './http'
-import type { Store } from './store'
 
 /** The most shares listed at once (newest kept). */
 const MAX_LISTED_SHARES = 200

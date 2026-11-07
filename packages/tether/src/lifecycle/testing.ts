@@ -2,11 +2,11 @@
 // (`initStore`) and enumerated TUIs in code (`registerBuiltinTuis`); in Tether
 // src/store.ts owns the schema and the seeded `agent_tools` rows are the
 // registry.
-import { Store } from '../store'
-import { DEFAULT_TOOLS } from '../tools'
+import { Store } from '@aico/session-engine/store'
+import { DEFAULT_TOOLS } from '@aico/session-engine/tools'
+import { bindToolSource, toolSpec } from '@aico/session-engine/tui/registry'
+import type { TuiSpec } from '@aico/session-engine/tui/spec'
 import { bindCatalog } from './catalog'
-import { bindToolSource, toolSpec } from './tui/registry'
-import type { TuiSpec } from './tui/spec'
 
 let current: Store | null = null
 

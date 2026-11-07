@@ -49,7 +49,7 @@ Removed 2026-10-24, once `st aico` and SummitFlow had moved to the Tether socket
 | Contract | Value | Aico source |
 | --- | --- | --- |
 | Session name | `aico-<widgetId>`. `widgetIdFromSession` and web app discovery parse it. | `tmux.ts` `sessionName` |
-| Stable targets | `$<n>` session id and `%<n>` pane id; one pane per session, and extra panes fail closed | `store.ts` |
+| Stable targets | `$<n>` session id and `%<n>` pane id; one pane per session, and extra panes fail closed | `packages/session-engine/src/store.ts` |
 | Server global environment | exactly `AICO_OWNER=aico`, `AICO_WORKLOAD_CLASS=durable-tmux-server`, `AICO_TMUX_SERVER_ID=<id>`. These authenticate a zero-session server. | `tmux.ts` `matchesServerIdentityEnvironment` |
 | Profile | `history-limit 200000`, `mouse off`, `focus-events on`, `status off` (the resize claim requires it), `default-terminal tmux-256color`, `terminal-overrides ,xterm-256color:Tc`, `terminal-features xterm*:sync`, `NO_COLOR` unset, `COLORTERM truecolor`, `CLICOLOR 1` | `tmux.ts` `tmuxConf` |
 
@@ -79,19 +79,19 @@ Correction to the migration plan: `AICO_TMUX_SOCKET` is not a pane marker. Aico 
 ## Environment hygiene
 
 - A tmux server's process environment becomes the tmux global environment, so it reaches every pane.
-- Tether starts each server from an allow-list (`src/env.ts` `tmuxServerEnvironment`): `HOME`, `USER`, `LOGNAME`, `SHELL`, `PATH`, locale, `XDG_*`, display/DBus/SSH-agent variables and `TZ`/editor/pager.
+- Tether starts each server from an allow-list (`packages/session-engine/src/env.ts` `tmuxServerEnvironment`): `HOME`, `USER`, `LOGNAME`, `SHELL`, `PATH`, locale, `XDG_*`, display/DBus/SSH-agent variables and `TZ`/editor/pager.
 - Operators can add exact names with `TETHER_ENV_PASSTHROUGH`.
 - The three server identity markers are always added.
 - The environment is applied through `/usr/bin/env -i` inside the `systemd-run` argv, because a transient service otherwise inherits the whole user-manager environment.
-- The web app's `FILTERED_ENV_VARS` (a superset is kept in `src/env.ts`) is removed from every server and session environment, even when allow-listed.
+- The web app's `FILTERED_ENV_VARS` (a superset is kept in `packages/session-engine/src/env.ts`) is removed from every server and session environment, even when allow-listed.
 - `TMUX`, `TMUX_PANE`, `TMUX_TMPDIR` and `NO_COLOR` are always dropped.
 - No app's `.env` file is ever read.
 
 ## Catalog data
 
-- `tmux_servers` and `root_requests` keep Aico's columns, types, defaults and CHECK constraints (`src/schema.ts`). The widenings: managed `scope_unit` also admits `tether-<i>-tmux-server-<id>.service`, and schema v3 appends `root_requests.origin` (`aico` or `a-term`, default `aico`) after Aico's columns.
+- `tmux_servers` and `root_requests` keep Aico's columns, types, defaults and CHECK constraints (`packages/session-engine/src/schema.ts`). The widenings: managed `scope_unit` also admits `tether-<i>-tmux-server-<id>.service`, and schema v3 appends `root_requests.origin` (`aico` or `a-term`, default `aico`) after Aico's columns.
 - `sessions` keeps the identity columns of Aico's `widgets` table with identical names. View columns (`x`, `y`, `width`, `height`, `display_id`, `open`) stay in Aico. `external_tmux_*` rows are not imported.
-- `generation` is computed exactly as Aico's `sessionGeneration`: the JSON array `[id, sessionId, externalTmuxSocket=null, externalTmuxSession=null, {11 ownership fields in Aico's key order}]`. `src/generation.test.ts` pins a vector computed with Aico's own function. A generation read from Aico before cutover therefore stays valid against the imported row.
+- `generation` is computed exactly as Aico's `sessionGeneration`: the JSON array `[id, sessionId, externalTmuxSocket=null, externalTmuxSession=null, {11 ownership fields in Aico's key order}]`. `packages/session-engine/src/generation.test.ts` pins a vector computed with Aico's own function. A generation read from Aico before cutover therefore stays valid against the imported row.
 - Session ids are never reused: allocation checks `sessions.id` and `root_requests.widget_id`, as Aico does, plus `retired_session_ids` (schema v2), which a trigger fills when a session row is deleted.
 - `tether import-aico --from PATH` (an explicit path is required; there is no default, because the live `aico.db` drops its pre-Tether tables after archiving) copies every `tmux_servers` row, every `root_requests` row (including tombstones) and the identity columns of every internal widget, in one transaction. It skips `external` widgets, opens `aico.db` read-only, is a dry run unless `--apply`, refuses `--apply` while the instance's daemon is listening, and is idempotent: identical rows are `same`, rows Tether has changed since are `kept`, never overwritten.
 

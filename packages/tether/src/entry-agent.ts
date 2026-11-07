@@ -2,10 +2,10 @@
 // agent is running. Entries can supply a read-only control-plane probe instead.
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { isResumeSessionId } from '@aico/session-engine/tui/launch'
+import { getTui } from '@aico/session-engine/tui/registry'
 import { getSessionEntry, getWidget } from './lifecycle/catalog'
 import { ENTRY_RETRY_EXIT, resolveEntry } from './lifecycle/entries'
-import { isResumeSessionId } from './lifecycle/tui/launch'
-import { getTui } from './lifecycle/tui/registry'
 
 const execute = promisify(execFile)
 export type EntryAgent =

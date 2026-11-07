@@ -16,6 +16,9 @@
       "path": "../fleet"
     },
     {
+      "path": "../session-engine"
+    },
+    {
       "path": "../tasks"
     }
   ]

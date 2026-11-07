@@ -6,9 +6,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
+import { UUID_RE as UUID } from '@aico/session-engine/proc-fs'
+import { blankSlateBase } from '@aico/session-engine/tui/blank-slate'
+import { sessionInstructions } from '@aico/session-engine/tui/instructions'
+import { launchLine } from '@aico/session-engine/tui/launch'
+import { getTui } from '@aico/session-engine/tui/registry'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { listenPrivateSocket } from '../http'
-import { UUID_RE as UUID } from '../proc-fs'
 import {
   allocateWidgetId,
   bindCatalog,
@@ -43,10 +47,6 @@ import {
   withRootPrompt,
 } from './root-launch'
 import { codexTui, initStore, registerBuiltinTuis } from './testing'
-import { blankSlateBase } from './tui/blank-slate'
-import { sessionInstructions } from './tui/instructions'
-import { launchLine } from './tui/launch'
-import { getTui } from './tui/registry'
 
 const RETRY_MS = 40
 const ROOT_WATCH = fileURLToPath(

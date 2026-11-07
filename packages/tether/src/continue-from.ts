@@ -4,8 +4,8 @@
 // The old session is only read: nothing is ended, moved or resumed across tools.
 
 import { execFile } from 'node:child_process'
+import { adapterOf } from '@aico/session-engine/tui/registry'
 import RECAP from './continue-recap.json'
-import { adapterOf } from './lifecycle/tui/registry'
 import type { History } from './sessions/history'
 import type { SessionEvent } from './sessions/types'
 

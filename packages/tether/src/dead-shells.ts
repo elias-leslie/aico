@@ -3,9 +3,9 @@
 // recovery and reboot restore; a shell that reboot restore brings back is left
 // alone, and one it cannot bring back is ended once that is known.
 
+import { getTui } from '@aico/session-engine/tui/registry'
 import { getWidget, type WidgetRow } from './lifecycle/catalog'
 import type { AbandonedScope, EndResult } from './lifecycle/engine'
-import { getTui } from './lifecycle/tui/registry'
 
 const END_ATTEMPTS = 10
 const END_RETRY_MS = 2_000

@@ -6,6 +6,8 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { EventBus } from '@aico/session-engine/events'
+import { Store } from '@aico/session-engine/store'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { askCreateBody, askerOf, askListPath, formatAsk } from './ask-cli'
 import {
@@ -21,9 +23,7 @@ import {
   registerAskRoutes,
   sessionAsks,
 } from './asks'
-import { EventBus } from './events'
 import { HttpError, Router, sendError } from './http'
-import { Store } from './store'
 
 let dir: string
 let store: Store

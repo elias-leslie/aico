@@ -1,9 +1,9 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Store } from '@aico/session-engine/store'
 import { afterEach, describe, expect, it } from 'vitest'
 import { bindCatalog, insertWidget, removeWidget } from './lifecycle/catalog'
-import { Store } from './store'
 import {
   applyWakePolicyPatch,
   cleanNote,

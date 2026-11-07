@@ -1,7 +1,7 @@
+import { Store } from '@aico/session-engine/store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LaneReporter, LaneReportStore, type LaneView } from './lane-reports'
 import { adoptLineage, bindCatalog, insertWidget, removeWidget } from './lifecycle/catalog'
-import { Store } from './store'
 import type { PullRead } from './wait-kinds'
 import {
   LONG_POLL_MAX_SECONDS,

@@ -3,11 +3,11 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { Store } from '@aico/session-engine/store'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { applyImport, formatPlan, planImportForPath, summarize } from './importer'
 import { bindCatalog, getWidget } from './lifecycle/catalog'
 import { sessionGeneration } from './lifecycle/owner-retirement'
-import { Store } from './store'
 
 const SERVER = '06e633492f792ad10439f675491801ee'
 const DEAD = '1'.repeat(32)

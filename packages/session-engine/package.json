@@ -1,0 +1,56 @@
+{
+  "name": "@aico/session-engine",
+  "version": "0.1.0",
+  "description": "The session engine under Tether: the tether.db schema and store, the agent-tool adapters and registry, and the foundation they read (paths, events, process facts).",
+  "private": true,
+  "license": "Apache-2.0",
+  "aico": {
+    "layer": 4,
+    "imports": [
+      "@aico/shared",
+      "@aico/context"
+    ],
+    "db": [
+      "tether.db"
+    ]
+  },
+  "type": "module",
+  "exports": {
+    "./agent-state": "./src/agent-state.ts",
+    "./continuity": "./src/continuity.ts",
+    "./entry-files": "./src/entry-files.ts",
+    "./entry-scan": "./src/entry-scan.ts",
+    "./env": "./src/env.ts",
+    "./events": "./src/events.ts",
+    "./generation": "./src/generation.ts",
+    "./model-record": "./src/model-record.ts",
+    "./paths": "./src/paths.ts",
+    "./proc-facts": "./src/proc-facts.ts",
+    "./proc-fs": "./src/proc-fs.ts",
+    "./store": "./src/store.ts",
+    "./tools": "./src/tools.ts",
+    "./tui/adapters/agy-doing": "./src/lifecycle/tui/adapters/agy-doing.ts",
+    "./tui/adapters/claude-code": "./src/lifecycle/tui/adapters/claude-code.ts",
+    "./tui/adapters/codex": "./src/lifecycle/tui/adapters/codex.ts",
+    "./tui/adapters/contract": "./src/lifecycle/tui/adapters/contract.ts",
+    "./tui/adapters/pi": "./src/lifecycle/tui/adapters/pi.ts",
+    "./tui/blank-slate": "./src/lifecycle/tui/blank-slate.ts",
+    "./tui/context": "./src/lifecycle/tui/context.ts",
+    "./tui/delivery": "./src/lifecycle/tui/delivery.ts",
+    "./tui/detect": "./src/lifecycle/tui/detect.ts",
+    "./tui/instructions": "./src/lifecycle/tui/instructions.ts",
+    "./tui/lane-tools": "./src/lifecycle/tui/lane-tools.ts",
+    "./tui/launch": "./src/lifecycle/tui/launch.ts",
+    "./tui/models": "./src/lifecycle/tui/models.ts",
+    "./tui/registry": "./src/lifecycle/tui/registry.ts",
+    "./tui/sign-in-link": "./src/lifecycle/tui/sign-in-link.ts",
+    "./tui/spec": "./src/lifecycle/tui/spec.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aico/shared": "0.1.0",
+    "@aico/context": "0.1.0"
+  }
+}

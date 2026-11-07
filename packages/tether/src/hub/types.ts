@@ -57,5 +57,7 @@ export interface HubPorts {
   apiVersion: number
   /** Whether a name is a valid Tether instance name. */
   isInstanceName(value: string): boolean
+  /** The file name of an instance's database in its state directory (the update rolls it back). */
+  dbFile: string
   tools: HubTools
 }

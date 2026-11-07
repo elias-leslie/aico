@@ -6,11 +6,11 @@
 
 import { closeSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { CHECKPOINT_PROMPT, RESUME_PROMPT } from './continuity'
-import { readFdTail } from './entry-files'
-import type { FileReader } from './proc-facts'
+import { CHECKPOINT_PROMPT, RESUME_PROMPT } from '@aico/session-engine/continuity'
+import { readFdTail } from '@aico/session-engine/entry-files'
+import type { FileReader } from '@aico/session-engine/proc-facts'
 
-export type { FileReader } from './proc-facts'
+export type { FileReader } from '@aico/session-engine/proc-facts'
 
 /** Cause for a tmux server that vanished while its agent was running. tmux
  * runs as a non-main process of an ExitType=cgroup unit, so systemd records no
@@ -323,20 +323,6 @@ export const nodeFileReader: FileReader = {
       return null
     }
   },
-}
-
-/** `~/.claude/projects/<project>/<sessionId>.jsonl` for a session ID. */
-export function findClaudeTranscript(
-  files: FileReader,
-  home: string,
-  sessionId: string,
-): string | null {
-  const root = join(home, '.claude', 'projects')
-  for (const project of files.list(root)) {
-    const path = join(root, project, `${sessionId}.jsonl`)
-    if (files.mtime(path) !== null) return path
-  }
-  return null
 }
 
 interface ToolUse {
