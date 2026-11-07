@@ -20,6 +20,7 @@ import {
   openNeedsYou,
   useNeedsYouRequests,
 } from '@/lib/frame/needs-you-request'
+import { useServerReach } from '@/lib/frame/server-reach'
 import {
   type Approval,
   type AskReply,
@@ -31,7 +32,11 @@ import {
   useAskReply,
   useOwnerAsks,
 } from '@/lib/hooks/use-asks'
+import { useClock } from '@/lib/hooks/use-clock'
+import { useNeedsYouCounts } from '@/lib/hooks/use-needs-you'
 import { useTerminalSessions } from '@/lib/hooks/use-terminal-sessions'
+import { PRODUCT_NAME } from '@/lib/project-branding'
+import { at } from '@/lib/status'
 import { useFrame } from '../frame/FrameContext'
 import { PlainMarkdown } from '../PlainMarkdown'
 import { AttachedFiles, AttachedFileView } from './AskAttached'
@@ -57,34 +62,6 @@ export function takeAskFromUrl(): string | null {
   url.searchParams.delete('ask')
   window.history.replaceState(window.history.state, '', url)
   return /^[0-9a-f]{12}$/.test(id) ? id : null
-}
-
-/** What the count and the label say, in the owner's words. */
-function useNeedsYouCounts(): {
-  questions: number
-  approvals: number
-  count: number
-  summary: string
-} {
-  const { asks } = useOwnerAsks()
-  const { approvals } = useApprovals()
-  const questions = openAsks(asks).length
-  const taps = approvals?.taps.length ?? 0
-  const count = questions + taps
-  return {
-    questions,
-    approvals: taps,
-    count,
-    summary:
-      count === 0
-        ? 'Needs you: no agent questions or approvals waiting'
-        : `Needs you: ${[
-            questions ? plural(questions, 'agent question') : null,
-            taps ? plural(taps, 'approval') : null,
-          ]
-            .filter(Boolean)
-            .join(' and ')} waiting`,
-  }
 }
 
 /** Where the launcher sits: the session bar on a desktop (`pill`), its
@@ -205,8 +182,9 @@ function NeedsYouBody({
   /** Called after a card opens its session (the phone closes the sheet). */
   onOpenSession?: () => void
 }) {
-  const { asks, isLoading, isError, refetch } = useOwnerAsks()
+  const { asks, known, isLoading, isError, refetch } = useOwnerAsks()
   const { approvals, isLoading: approvalsLoading } = useApprovals()
+  const unreachable = useServerReach().down && !known
   const now = Date.now()
   const waiting = openAsks(asks)
   const answered = answeredAsks(asks, now)
@@ -244,12 +222,14 @@ function NeedsYouBody({
   const blockedSessions = new Set(
     waiting.filter((ask) => ask.blocking && ask.session).map((a) => a.session),
   ).size
-  const summary = [
-    plural(waiting.length, 'agent question'),
-    blockedSessions ? plural(blockedSessions, 'waiting session') : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  const summary = known
+    ? [
+        plural(waiting.length, 'agent question'),
+        blockedSessions ? plural(blockedSessions, 'waiting session') : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : 'Not loaded yet'
 
   return (
     <>
@@ -285,6 +265,9 @@ function NeedsYouBody({
         hidden={viewing !== null}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-4"
       >
+        <div className="mb-2.5 empty:hidden">
+          <AsOfNote />
+        </div>
         {tab === 'approvals' ? (
           approvalsLoading ? (
             <Note>Checking access requests…</Note>
@@ -302,6 +285,8 @@ function NeedsYouBody({
               ))}
             </ul>
           )
+        ) : unreachable ? (
+          <Note>Questions show here once it answers.</Note>
         ) : isLoading ? (
           <Note>Loading questions…</Note>
         ) : isError ? (
@@ -622,7 +607,13 @@ export function AskCard({
   const noteText = note.trim()
   const said = choice !== null || noteText.length > 0
   // A linked host that is down cannot take the answer; this is its last copy.
-  const away = ask.peer !== undefined
+  const linkAway = ask.peer !== undefined
+  // The server is down: an answer would be lost, so the buttons wait.
+  const down = useServerReach().down
+  const away = linkAway || down
+  const waitTitle = down
+    ? `Can’t reach ${PRODUCT_NAME}; answer once it is back`
+    : undefined
   const canSend =
     !away &&
     !reply.isPending &&
@@ -660,7 +651,7 @@ export function AskCard({
           </span>
         </Meta>
       )}
-      {away && (
+      {linkAway && (
         <p
           data-testid="ask-away"
           className="mb-1.5 text-[12px]"
@@ -774,6 +765,7 @@ export function AskCard({
             type="submit"
             className="lantern-btn primary small"
             disabled={!canSend}
+            title={waitTitle}
           >
             {sendLabel}
           </button>
@@ -785,6 +777,7 @@ export function AskCard({
             type="button"
             className="lantern-btn primary small"
             disabled={reply.isPending || away}
+            title={waitTitle}
             onClick={() => send({ kind: 'answer', text: 'Done' }, 'Done')}
           >
             Done
@@ -809,7 +802,7 @@ export function AskCard({
             className="lantern-btn small"
             disabled={reply.isPending || away}
             onClick={() => send({ kind: 'answer', text: 'Done' }, 'Done')}
-            title="Tells the agent: Done"
+            title={waitTitle ?? 'Tells the agent: Done'}
           >
             Reply “Done”
           </button>
@@ -830,7 +823,7 @@ export function AskCard({
                 'Not now',
               )
             }
-            title="Tells the agent: Not now"
+            title={waitTitle ?? 'Tells the agent: Not now'}
           >
             Not now
           </button>
@@ -943,6 +936,28 @@ function AnsweredCard({ ask, now }: { ask: OwnerAsk; now: number }) {
   )
 }
 
+/** While the server can't be reached the cards are its last copy: say as of
+ * when, and that answers wait (their buttons are off). */
+function AsOfNote() {
+  const reach = useServerReach()
+  const now = useClock(30_000)
+  if (!reach.down) return null
+  return (
+    <p
+      role="status"
+      data-testid="needs-you-as-of"
+      className="rounded-md px-2.5 py-2 text-[13px]"
+      style={{
+        backgroundColor: 'color-mix(in srgb, var(--ember) 15%, transparent)',
+      }}
+    >
+      {reach.answered
+        ? `As of ${at(reach.since, now)}. Can’t reach ${PRODUCT_NAME}, so answers wait until it is back.`
+        : `Can’t reach ${PRODUCT_NAME} since ${at(reach.since, now)}.`}
+    </p>
+  )
+}
+
 function ApprovalCard({ tap }: { tap: Approval }) {
   const minutes = Math.max(1, Math.round(tap.expiresInS / 60))
   return (
@@ -982,8 +997,9 @@ function ApprovalCard({ tap }: { tap: Approval }) {
  * cards (a push link or a session's own question puts one first), the rest
  * and the answered ones on the Needs you page. */
 export function NeedsYouSection() {
-  const { asks, isLoading, isError, refetch } = useOwnerAsks()
+  const { asks, known, isLoading, isError, refetch } = useOwnerAsks()
   const { approvals } = useApprovals()
+  const unreachable = useServerReach().down && !known
   const router = useRouter()
   const frame = useFrame()
   const ref = useRef<HTMLElement>(null)
@@ -1038,7 +1054,10 @@ export function NeedsYouSection() {
           {sent}
         </p>
       )}
-      {isLoading ? (
+      <AsOfNote />
+      {unreachable ? (
+        <Note>Questions show here once it answers.</Note>
+      ) : isLoading ? (
         <Note>Loading questions…</Note>
       ) : isError ? (
         <Note>

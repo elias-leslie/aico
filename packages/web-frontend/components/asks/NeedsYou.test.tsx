@@ -16,6 +16,11 @@ import type { Capture, CaptureUpload } from '@/lib/api/captures'
 import { ApiError } from '@/lib/api-fetch'
 import { dropAskCaptureQueue, setCaptureLimits } from '@/lib/capture-queue'
 import { useNeedsYouRequests } from '@/lib/frame/needs-you-request'
+import {
+  markAnswered,
+  markFailed,
+  resetServerReachForTest,
+} from '@/lib/frame/server-reach'
 import type { Approvals, OwnerAsk } from '@/lib/hooks/use-asks'
 import { NeedsYouLauncher, NeedsYouPage, NeedsYouSection } from './NeedsYou'
 
@@ -62,12 +67,14 @@ vi.mock('@/lib/hooks/use-asks', async (importOriginal) => {
     ...(await importOriginal<typeof import('@/lib/hooks/use-asks')>()),
     useOwnerAsks: () => ({
       asks: state.asks,
+      known: !state.isLoading && !state.isError,
       isLoading: state.isLoading,
       isError: state.isError,
       refetch: () => {},
     }),
     useApprovals: () => ({
       approvals: state.approvals,
+      known: !state.approvalsLoading,
       isLoading: state.approvalsLoading,
     }),
     useAskReply: () => {
@@ -213,6 +220,15 @@ describe('NeedsYouLauncher', () => {
     expect(screen.queryByTestId('needs-you-pill')).toBeNull()
   })
 
+  it('does not read as none waiting before the lists have loaded', () => {
+    state.isLoading = true
+    state.approvalsLoading = true
+    render(<NeedsYouLauncher />)
+    expect(screen.getByTestId('needs-you-pill')).toHaveAccessibleName(
+      'Needs you: not loaded yet',
+    )
+  })
+
   it('asks the frame to show Needs you, one request per click', () => {
     state.asks = [ask()]
     const heard = vi.fn()
@@ -232,6 +248,47 @@ describe('NeedsYouLauncher', () => {
 })
 
 describe('Needs you in the side', () => {
+  it('when the server is gone, stamps as-of and holds the answer buttons', () => {
+    state.asks = [ask({ options: [] })]
+    act(() => {
+      markAnswered(NOW - 60_000)
+      markFailed()
+    })
+    try {
+      render(<NeedsYouSection />)
+      expect(screen.getByTestId('needs-you-as-of')).toHaveTextContent(
+        /^As of .*Can’t reach Aico, so answers wait until it is back\.$/,
+      )
+      const card = screen.getByTestId('ask-card')
+      expect(
+        within(card).getByRole('button', { name: 'Not now' }),
+      ).toBeDisabled()
+      expect(
+        within(card).getByRole('button', { name: /Reply/ }),
+      ).toHaveAttribute('title', 'Can’t reach Aico; answer once it is back')
+    } finally {
+      resetServerReachForTest()
+    }
+  })
+
+  it('with nothing from the server yet, says so instead of loading forever or none', () => {
+    state.isLoading = true
+    act(() => markFailed(NOW))
+    try {
+      render(<NeedsYouSection />)
+      expect(screen.getByTestId('needs-you-as-of')).toHaveTextContent(
+        /^Can’t reach Aico since /,
+      )
+      expect(
+        screen.getByText('Questions show here once it answers.'),
+      ).toBeVisible()
+      expect(screen.queryByText('Loading questions…')).toBeNull()
+      expect(screen.queryByText('Nothing is waiting for you.')).toBeNull()
+    } finally {
+      resetServerReachForTest()
+    }
+  })
+
   it('shows the question as a card with plain meta, and its markdown formatted', () => {
     state.asks = [ask({ body: 'Swap becomes **a file**.\n\n- one\n- two' })]
     render(<NeedsYouSection />)

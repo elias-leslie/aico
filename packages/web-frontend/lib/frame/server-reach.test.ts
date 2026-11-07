@@ -27,7 +27,7 @@ describe('server reach', () => {
     act(() => markAnswered(1_000))
     expect(result.current.down).toBe(false)
     act(() => markFailed(5_000))
-    expect(result.current).toEqual({ down: true, since: 1_000 })
+    expect(result.current).toEqual({ down: true, since: 1_000, answered: true })
     act(() => markAnswered(9_000))
     expect(result.current.down).toBe(false)
   })
@@ -36,7 +36,11 @@ describe('server reach', () => {
     const { result } = renderHook(() => useServerReach())
     act(() => markFailed(2_000))
     act(() => markFailed(3_000))
-    expect(result.current).toEqual({ down: true, since: 2_000 })
+    expect(result.current).toEqual({
+      down: true,
+      since: 2_000,
+      answered: false,
+    })
   })
 
   it('follows the session list poll: one failed try is a blip, a failed read is down', async () => {

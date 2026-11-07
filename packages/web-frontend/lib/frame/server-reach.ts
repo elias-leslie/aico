@@ -14,6 +14,9 @@ export interface ServerReach {
   down: boolean
   /** When the server last answered, or (never answered) when it first failed; ms. */
   since: number | null
+  /** The server has answered at least once on this load; false means there is
+   * nothing from it to show yet. */
+  answered: boolean
 }
 
 /** The polls that say whether the server is up. Other queries may reach other hosts. */
@@ -21,14 +24,19 @@ const WATCHED = new Set(['terminal-sessions', 'status'])
 /** Failed tries in a row before it counts as down (one blip is not an outage). */
 const FAILED_TRIES = 2
 
-const UP: ServerReach = { down: false, since: null }
+const UP: ServerReach = { down: false, since: null, answered: false }
 let state: ServerReach = UP
 let lastOk: number | null = null
 let firstFail: number | null = null
 const listeners = new Set<() => void>()
 
 function publish(next: ServerReach) {
-  if (next.down === state.down && next.since === state.since) return
+  if (
+    next.down === state.down &&
+    next.since === state.since &&
+    next.answered === state.answered
+  )
+    return
   state = next
   for (const listener of listeners) listener()
 }
@@ -44,12 +52,12 @@ export function isUnreachable(error: unknown): boolean {
 export function markAnswered(at = Date.now()) {
   lastOk = at
   firstFail = null
-  publish(UP)
+  publish({ ...UP, answered: true })
 }
 
 export function markFailed(at = Date.now()) {
   if (firstFail === null) firstFail = at
-  publish({ down: true, since: lastOk ?? firstFail })
+  publish({ down: true, since: lastOk ?? firstFail, answered: lastOk !== null })
 }
 
 /** Follow the watched polls in `client`; returns the stop function. */

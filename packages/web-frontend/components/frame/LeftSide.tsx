@@ -1,15 +1,7 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
-import {
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  RefreshCw,
-  X,
-} from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import { type ReactNode, useRef, useState } from 'react'
 import { useServerReach } from '@/lib/frame/server-reach'
@@ -58,27 +50,30 @@ export function LeftSide(props: LeftSideProps) {
   )
 }
 
-/** The server can't be reached: say since when and offer Retry; what is shown is what it last knew. */
+/** The server can't be reached: say since when, and whether what is shown is
+ * its last answer or nothing yet. Retry is in the top bar, once. */
 function DownNote() {
   const reach = useServerReach()
   const now = useClock(30_000)
-  const queryClient = useQueryClient()
   if (!reach.down) return null
   return (
     <div className={styles.downNote} role="status" data-testid="side-down-note">
       <span>
-        Can’t reach {PRODUCT_NAME} since {at(reach.since, now)}. Showing what it
-        last knew.
+        {reach.answered
+          ? `Showing what ${PRODUCT_NAME} last knew, as of ${at(reach.since, now)}.`
+          : `Can’t reach ${PRODUCT_NAME} since ${at(reach.since, now)}. Nothing to show yet; sessions come back once it answers.`}
       </span>
-      <button
-        type="button"
-        className="lantern-btn small"
-        onClick={() => void queryClient.refetchQueries({ type: 'active' })}
-      >
-        <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.7} />
-        Retry
-      </button>
     </div>
+  )
+}
+
+/** The first read of the session list; while the server is down the note above says why nothing is here. */
+function Loading() {
+  if (useServerReach().down) return null
+  return (
+    <p className={styles.loading} role="status">
+      Loading sessions…
+    </p>
   )
 }
 
@@ -110,13 +105,7 @@ function Body({
   const panelColumn = (
     <div className={styles.col} data-stale={down ? 'true' : undefined}>
       <DownNote />
-      {loading ? (
-        <p className={styles.loading} role="status">
-          Loading sessions…
-        </p>
-      ) : (
-        panel
-      )}
+      {loading ? <Loading /> : panel}
     </div>
   )
   if (frame.tier === 'rail')
@@ -405,13 +394,7 @@ function SheetSide({
         frame.sheetOpen && (
           <div className={styles.col} data-stale={down ? 'true' : undefined}>
             <DownNote />
-            {slots.loading ? (
-              <p className={styles.loading} role="status">
-                Loading sessions…
-              </p>
-            ) : (
-              slots.panel
-            )}
+            {slots.loading ? <Loading /> : slots.panel}
           </div>
         )
       )}

@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   popOut: vi.fn(() => true),
   openNeedsYou: vi.fn(),
   push: vi.fn(),
+  known: true,
 }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: state.push }),
@@ -25,8 +26,14 @@ vi.mock('@tanstack/react-query', async (real) => ({
   useQueryClient: () => ({ refetchQueries: state.refetch }),
 }))
 vi.mock('@/lib/hooks/use-asks', () => ({
-  useOwnerAsks: () => ({ asks: [{ id: 'a' }, { id: 'b' }] }),
-  useApprovals: () => ({ approvals: { taps: [{ id: 't' }] } }),
+  useOwnerAsks: () => ({
+    asks: state.known ? [{ id: 'a' }, { id: 'b' }] : [],
+    known: state.known,
+  }),
+  useApprovals: () => ({
+    approvals: state.known ? { taps: [{ id: 't' }] } : null,
+    known: state.known,
+  }),
   openAsks: (asks: unknown[]) => asks,
 }))
 vi.mock('@/lib/hooks/use-usage', () => ({
@@ -104,6 +111,7 @@ const frame = (patch: Partial<Frame> = {}): Partial<Frame> => ({
 })
 
 beforeEach(() => {
+  state.known = true
   state.frame = frame()
   publishShownSession({
     id: 's1',
@@ -136,6 +144,15 @@ describe('TopBar', () => {
     expect(needs).toHaveAttribute('data-count', '3')
     fireEvent.click(needs)
     expect(state.openNeedsYou).toHaveBeenCalled()
+  })
+
+  it('shows a dash, not 0, while the Needs you lists have not loaded', () => {
+    state.known = false
+    render(<TopBar />)
+    const needs = screen.getByTestId('top-bar-needs-you')
+    expect(needs).toHaveTextContent('—')
+    expect(needs).not.toHaveAttribute('data-count')
+    expect(needs).toHaveAccessibleName('Needs you: not loaded yet')
   })
 
   it('opens health and quota beside the session, and Notes in its own window on a new note', () => {

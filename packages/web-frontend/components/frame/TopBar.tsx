@@ -9,8 +9,8 @@ import { openNeedsYou } from '@/lib/frame/needs-you-request'
 import { quotaGlances, quotaLine, quotaTitle } from '@/lib/frame/quota'
 import { useServerReach } from '@/lib/frame/server-reach'
 import { shownSessionLine, useShownSession } from '@/lib/frame/shown-session'
-import { openAsks, useApprovals, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useClock } from '@/lib/hooks/use-clock'
+import { useNeedsYouCounts } from '@/lib/hooks/use-needs-you'
 import { useStatus } from '@/lib/hooks/use-status'
 import { useUsage } from '@/lib/hooks/use-usage'
 import { popOutNotes } from '@/lib/notes-window'
@@ -34,25 +34,6 @@ function revealCurrentRow() {
   )
 }
 
-/** Needs you: agents' open questions and access requests waiting on the owner. */
-function useNeedsYouCount(): { count: number; title: string } {
-  const { asks } = useOwnerAsks()
-  const { approvals } = useApprovals()
-  const questions = openAsks(asks).length
-  const taps = approvals?.taps.length ?? 0
-  const count = questions + taps
-  const title =
-    count === 0
-      ? 'Needs you: nothing waiting'
-      : `Needs you: ${[
-          questions ? plural(questions, 'question') : null,
-          taps ? plural(taps, 'approval') : null,
-        ]
-          .filter(Boolean)
-          .join(', ')}`
-  return { count, title }
-}
-
 /** The top bar: global state only. The session on screen and its state, Needs
  * you, health, quota and Notes; each opens the right place in one click. */
 export function TopBar() {
@@ -62,7 +43,7 @@ export function TopBar() {
   const now = useClock(30_000)
   const session = useShownSession()
   const reach = useServerReach()
-  const needs = useNeedsYouCount()
+  const needs = useNeedsYouCounts()
   const { view, failed, stale } = useStatus()
   const docked = frame?.docked ?? true
   const summary = view?.summary
@@ -197,18 +178,21 @@ export function TopBar() {
         type="button"
         className={clsx(styles.tbBtn, needs.count > 0 && styles.tbNeed)}
         onClick={showNeedsYou}
-        aria-label={needs.title}
-        title={needs.title}
+        aria-label={needs.summary}
+        title={needs.summary}
         data-testid="top-bar-needs-you"
-        data-count={needs.count}
+        data-count={needs.known ? needs.count : undefined}
+        data-known={needs.known ? 'true' : 'false'}
       >
         <span
           className={styles.dot}
           data-tone={needs.count > 0 ? 'need' : 'quiet'}
           aria-hidden="true"
         />
-        <span className={styles.count}>{needs.count}</span>
-        <span className={styles.wideOnly}>need you</span>
+        <span className={styles.count}>{needs.known ? needs.count : '—'}</span>
+        <span className={styles.wideOnly}>
+          {needs.known ? 'need you' : 'Needs you'}
+        </span>
       </button>
 
       {down ? (

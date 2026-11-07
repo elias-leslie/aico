@@ -147,6 +147,8 @@ export function useOwnerAsks() {
   })
   return {
     asks: query.data ?? [],
+    /** The list has been read at least once (an empty list is a known zero). */
+    known: query.data !== undefined,
     isLoading: query.isLoading,
     isError: query.isError && !query.data,
     refetch: query.refetch,
@@ -163,6 +165,7 @@ export function useApprovals() {
   })
   return {
     approvals: query.data ?? null,
+    known: query.data !== undefined,
     isLoading: query.isLoading,
   }
 }

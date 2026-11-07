@@ -221,7 +221,7 @@ describe('the left side on a phone', () => {
 })
 
 describe('when the server cannot be reached', () => {
-  it('says since when, keeps what it last knew, and offers Retry', () => {
+  it('says as of when, keeps what it last knew, and leaves Retry to the top bar', () => {
     show()
     expect(screen.queryByTestId('side-down-note')).toBeNull()
     act(() => {
@@ -231,10 +231,10 @@ describe('when the server cannot be reached', () => {
       markFailed()
     })
     expect(screen.getByTestId('side-down-note')).toHaveTextContent(
-      /Can’t reach Aico since 4:23\s?PM\. Showing what it last knew\./,
+      /Showing what Aico last knew, as of 4:23\s?PM\./,
     )
     expect(screen.getByText('Session list')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
     act(() => markAnswered())
     expect(screen.queryByTestId('side-down-note')).toBeNull()
   })
