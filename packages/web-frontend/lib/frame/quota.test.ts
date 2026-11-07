@@ -16,7 +16,7 @@ const provider = (over: Partial<UsageProvider>): UsageProvider => ({
   id: 'claude',
   name: 'Claude',
   status: 'ok',
-  summary: null,
+  answer: 'Available now',
   plan: null,
   windows: [win({})],
   credits: null,
@@ -66,18 +66,31 @@ describe('quota glance', () => {
           id: 'codex',
           name: 'Codex',
           status: 'on_credits',
+          answer:
+            'Running on credits until the Nov 11 reset; 4.6K credits left, enough at the recent pace',
           credits: { balance: 4571.7, lasts_days: 2.9, text: '4.6K credits' },
           windows: [
-            win({ state: 'used_up', left_percent: 0, text: 'weekly used up' }),
+            win({
+              state: 'used_up',
+              left_percent: 0,
+              text: 'weekly used up',
+              resets_at: '2026-11-11T10:35:00.000Z',
+            }),
           ],
         }),
         provider({
           id: 'opencode-go',
           name: 'OpenCode Go',
           status: 'used_up',
+          answer: 'Used up until Nov 8, 7:00 PM EST (weekly)',
           windows: [
             win({ label: '5h', left_percent: 100 }),
-            win({ state: 'used_up', left_percent: 0, text: 'weekly used up' }),
+            win({
+              state: 'used_up',
+              left_percent: 0,
+              text: 'weekly used up',
+              resets_at: '2026-11-08T21:00:00.000Z',
+            }),
           ],
         }),
       ),
@@ -87,11 +100,17 @@ describe('quota glance', () => {
       ['Codex', 'credits', 0],
       ['OpenCode Go', 'used_up', 0],
     ])
-    expect(glances[1]?.line).toBe('On credits, 4.6K credits left')
-    expect(quotaLine(glances)).toBe(
-      'Claude 80% · Codex on credits · OpenCode Go used up',
+    // Not used up and credits both lead with the one answer, not a window's 0%.
+    expect(glances[1]?.line).toBe(
+      'Running on credits until the Nov 11 reset; 4.6K credits left, enough at the recent pace',
     )
-    expect(quotaTitle(glances)).toContain('Bar: share left')
+    expect(glances[2]?.line).toBe('Used up until Nov 8, 7:00 PM EST (weekly)')
+    expect(quotaLine(glances)).toBe(
+      'Claude 80% left · Codex on credits until Nov 11 · OpenCode Go used up until Nov 8',
+    )
+    expect(quotaTitle(glances)).toContain('Codex: Running on credits until')
+    expect(quotaTitle(glances)).toContain('Windows: weekly used up')
+    expect(quotaTitle(glances)).toContain('Bar: how much is left')
   })
 
   it('says unknown, not zero, when nothing was read', () => {
@@ -99,6 +118,7 @@ describe('quota glance', () => {
       report(
         provider({
           status: 'unknown',
+          answer: 'Can’t tell yet: no current usage reading',
           windows: [win({ state: 'unknown', left_percent: null })],
         }),
       ),

@@ -48,7 +48,8 @@ export interface UsageProvider {
     | 'on_credits'
     | 'unknown'
     | 'untracked'
-  summary: string | null
+  /** The plain answer to "can I use it now?", ahead of the windows: "Used up until Nov 8, 7:00 PM EST (weekly)". */
+  answer: string
   plan: string | null
   windows: UsageWindow[]
   credits: { balance: number; lasts_days: number | null; text: string } | null

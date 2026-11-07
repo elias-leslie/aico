@@ -244,7 +244,7 @@
   opacity: 0.5;
 }
 .quotaLine {
-  max-width: 440px;
+  max-width: 600px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

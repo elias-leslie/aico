@@ -15,7 +15,7 @@ const provider = (over: object) => ({
   id: 'p',
   name: 'OpenCode Go',
   status: 'used_up',
-  summary: null,
+  answer: 'Available now',
   plan: null,
   windows: [],
   credits: null,
@@ -42,10 +42,11 @@ const show = (providers: object[]) => {
 }
 
 describe('Quota page copy', () => {
-  it('says a used-up window once, not as a summary and again as the window', () => {
+  it('leads with one plain answer, then the windows', () => {
     show([
       provider({
-        summary: 'Weekly used up until Nov 8, 7:00 PM EST',
+        status: 'used_up',
+        answer: 'Used up until Nov 8, 7:00 PM EST (weekly)',
         windows: [
           {
             label: 'weekly',
@@ -59,19 +60,30 @@ describe('Quota page copy', () => {
         ],
       }),
     ])
-    expect(screen.getAllByText(/used up until Nov 8/i)).toHaveLength(1)
+    expect(
+      screen.getByText('Used up until Nov 8, 7:00 PM EST (weekly).'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Weekly used up until Nov 8, 7:00 PM EST'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('left')).toBeInTheDocument()
   })
 
-  it('keeps a summary that says something the windows do not', () => {
+  it('says what running on credits means for today', () => {
     show([
       provider({
         name: 'Codex',
         status: 'on_credits',
-        summary: 'Running on credits',
+        answer:
+          'Running on credits until the Nov 11 reset; 4.5K credits left, enough at the recent pace',
         windows: [],
       }),
     ])
-    expect(screen.getByText('Running on credits.')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Running on credits until the Nov 11 reset; 4.5K credits left, enough at the recent pace.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('splits Claude and Codex use by project and says the others are not tracked', () => {

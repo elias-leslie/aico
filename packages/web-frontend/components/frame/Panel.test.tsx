@@ -22,7 +22,14 @@ const state = vi.hoisted(() => ({
     failed: false,
     stale: false,
   },
-  asks: { asks: [{ id: 'a' }, { id: 'b' }], isLoading: false, isError: false },
+  asks: {
+    asks: [
+      { id: 'a', state: 'open' },
+      { id: 'b', state: 'open' },
+    ],
+    isLoading: false,
+    isError: false,
+  },
   open: vi.fn(),
   push: vi.fn(),
   sessions: {
@@ -54,7 +61,8 @@ vi.mock('@/lib/hooks/use-status-sessions', () => ({
   useStatusSessions: () => state.sessions,
 }))
 vi.mock('@/lib/hooks/use-usage', () => ({ useUsage: () => state.usage }))
-vi.mock('@/lib/hooks/use-asks', () => ({
+vi.mock('@/lib/hooks/use-asks', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/hooks/use-asks')>()),
   useOwnerAsks: () => state.asks,
   openAsks: (asks: unknown[]) => asks,
   useApprovals: () => ({ approvals: { state: 'ok', taps: [{ id: 't' }] } }),
@@ -132,7 +140,10 @@ beforeEach(() => {
     stale: false,
   }
   state.asks = {
-    asks: [{ id: 'a' }, { id: 'b' }],
+    asks: [
+      { id: 'a', state: 'open' },
+      { id: 'b', state: 'open' },
+    ],
     isLoading: false,
     isError: false,
   }
@@ -257,7 +268,7 @@ describe('Panel', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
     expect(
       screen.getByRole('img', {
-        name: 'Claude: 82% left, 60% of the window gone',
+        name: 'Claude: 82% left, 60% of the way through the window',
       }),
     ).toBeVisible()
     expect(

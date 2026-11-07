@@ -1,10 +1,11 @@
 // The quota glance (top bar, Rail and Panel): what each subscription has left
 // in its tightest window, from the same usage report the Quota page reads
-// (GET /api/usage). One meaning everywhere: a bar is the share LEFT, and the
-// tick on it is how much of the window's time is gone.
+// (GET /api/usage). One meaning everywhere: a bar is how much is LEFT, and the
+// tick on it is how far into the window we are. Each provider leads with the
+// report's one plain answer to "can I use it now?".
 
 import type { UsageProvider, UsageReport, UsageWindow } from '../quota-usage'
-import { compact, sentence, windowGone } from '../quota-usage'
+import { sentence, windowGone } from '../quota-usage'
 
 export type QuotaState = 'left' | 'credits' | 'used_up' | 'unknown'
 
@@ -17,7 +18,11 @@ export interface QuotaGlance {
   left: number | null
   /** How much of that window's time is gone (0..100), or null. */
   gone: number | null
-  /** The window in words: "Weekly 79% left, resets Nov 13, 5:00 AM". */
+  /** The plain answer to "can I use it now?": "Running on credits until the Nov 11 reset; 4.5K credits left, enough at the recent pace". */
+  answer: string
+  /** The day it is usable again when used up or on credits ("Nov 8"), or null. */
+  back: string | null
+  /** What a row shows: the window in words while there is room ("Weekly 79% left, resets Nov 13, 5:00 AM"), else the answer. */
   line: string
   /** Everything about it, for a tooltip. */
   meaning: string
@@ -30,6 +35,25 @@ function leftOf(window: UsageWindow): number | null {
   if (window.state === 'used_up') return 0
   if (window.state === 'ok') return window.left_percent
   return null
+}
+
+/** "Nov 8" for a time, in this browser's day. */
+function shortDay(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+/** When the last used-up window resets: the day the provider is usable on its own again. */
+function backOn(windows: readonly UsageWindow[]): string | null {
+  let latest: UsageWindow | null = null
+  for (const window of windows) {
+    if (window.state !== 'used_up' || !window.resets_at) continue
+    if (!latest || (window.resets_at as string) > (latest.resets_at as string))
+      latest = window
+  }
+  return latest?.resets_at ? shortDay(latest.resets_at) : null
 }
 
 /** The window with the least left; a used-up window wins, and the later reset of two. */
@@ -60,18 +84,13 @@ function glanceOf(provider: UsageProvider): QuotaGlance {
   else if (provider.status === 'used_up' || left === 0) state = 'used_up'
   else if (left === null) state = 'unknown'
   else state = 'left'
-  const credits = provider.credits
-    ? `${compact(provider.credits.balance)} credits left`
-    : null
   const line =
-    state === 'credits'
-      ? `On credits${credits ? `, ${credits}` : ''}`
-      : window
-        ? sentence(window.text)
-        : (provider.summary ?? 'Not read yet')
+    state === 'left' && window ? sentence(window.text) : provider.answer
   const meaning = [
-    ...provider.windows.map((item) => sentence(item.text)),
-    provider.credits ? sentence(provider.credits.text) : null,
+    provider.answer,
+    provider.windows.length
+      ? `Windows: ${provider.windows.map((item) => item.text).join('; ')}`
+      : null,
   ]
     .filter(Boolean)
     .join('. ')
@@ -81,6 +100,11 @@ function glanceOf(provider: UsageProvider): QuotaGlance {
     state,
     left,
     gone: gone === null ? null : Math.round(gone * 100),
+    answer: provider.answer,
+    back:
+      state === 'credits' || state === 'used_up'
+        ? backOn(provider.windows)
+        : null,
     line,
     meaning: meaning || line,
     warn: state === 'used_up' || state === 'unknown',
@@ -94,30 +118,23 @@ export function quotaGlances(report: UsageReport | null): QuotaGlance[] {
     .map(glanceOf)
 }
 
-const WORD: Record<Exclude<QuotaState, 'left'>, string> = {
-  credits: 'on credits',
-  used_up: 'used up',
-  unknown: 'unknown',
-}
-
-/** "Claude 82% · Codex on credits · OpenCode Go used up". Same states share one word. */
+/** "Claude 76% left · Codex on credits until Nov 11 · OpenCode Go used up until Nov 8": each one's answer, short. */
 export function quotaLine(glances: readonly QuotaGlance[]): string {
-  const parts: string[] = []
-  for (const glance of glances.filter((item) => item.state === 'left'))
-    parts.push(`${glance.name} ${glance.left}%`)
-  for (const state of ['credits', 'used_up', 'unknown'] as const) {
-    const names = glances
-      .filter((item) => item.state === state)
-      .map((item) => item.name)
-    if (names.length) parts.push(`${names.join(', ')} ${WORD[state]}`)
-  }
-  return parts.join(' · ')
+  return glances
+    .map((glance) => {
+      const until = glance.back ? ` until ${glance.back}` : ''
+      if (glance.state === 'left') return `${glance.name} ${glance.left}% left`
+      if (glance.state === 'credits') return `${glance.name} on credits${until}`
+      if (glance.state === 'used_up') return `${glance.name} used up${until}`
+      return `${glance.name} unknown`
+    })
+    .join(' · ')
 }
 
-/** The tooltip: each subscription's own sentence, and what the bars mean. */
+/** The tooltip: each subscription's own answer and windows, and what the bars mean. */
 export function quotaTitle(glances: readonly QuotaGlance[]): string {
   return [
     ...glances.map((glance) => `${glance.name}: ${glance.meaning}`),
-    'Bar: share left. Tick: how much of the window’s time is gone.',
+    'Bar: how much is left. Tick: how far into the window we are.',
   ].join('\n')
 }

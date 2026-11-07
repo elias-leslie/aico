@@ -257,7 +257,9 @@ describe('OpenCode Go', () => {
     })
     const row = rows.find((r) => r.id === 'usage/opencode-go')
     expect(row).toMatchObject({ state: 'warn', kind: 'check' })
-    expect(row?.meaning).toMatch(/No usage readings yet\. .*No OpenCode Go key yet/)
+    expect(row?.meaning).toMatch(
+      /^Can’t tell yet: no current usage reading\. .*No OpenCode Go key yet/,
+    )
   })
 
   it('stores the three windows and sends the key only to OpenCode', async () => {
@@ -319,9 +321,9 @@ describe('the spend card', () => {
       state: 'ok',
       next_run: new Date(NOW + 15 * 60_000).toISOString(),
     })
-    expect(rows[0]?.meaning).toMatch(/^weekly 7% left, resets Nov \d/)
+    expect(rows[0]?.meaning).toMatch(/^Available now\. Windows: weekly 7% left, resets Nov \d/)
     expect(brief({ id: 'claude', name: 'Claude' }, input)).toBe('Claude 7% weekly left')
-    expect(rows[1]?.meaning).toBe('Unknown. No usage readings yet.')
+    expect(rows[1]?.meaning).toBe('Can’t tell yet: no current usage reading.')
   })
 })
 
@@ -720,7 +722,7 @@ describe('a used-up subscription', () => {
     }
     const [, , row] = spendRows(input)
     expect(row?.meaning).toMatch(
-      /^Weekly used up until Nov \d+, [^.]+ E[SD]T\. 5h 100% left; monthly 5% left, resets Nov \d+, [^.]+ E[SD]T\.$/,
+      /^Used up until Nov \d+, [^.]+ E[SD]T \(weekly\)\. Windows: 5h 100% left; weekly used up until Nov \d+, [^.]+ E[SD]T; monthly 5% left, resets Nov \d+, [^.]+ E[SD]T\.$/,
     )
     expect(row?.meaning).not.toContain('Used up.')
     expect(brief({ id: 'opencode-go', name: 'OpenCode Go' }, input)).toMatch(

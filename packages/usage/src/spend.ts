@@ -61,12 +61,52 @@ export function creditText(
   return text
 }
 
-export const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
-const LEAD: Partial<Record<Usage['status'], string>> = {
-  on_credits: 'Running on credits. ',
-  used_up: 'Used up. ',
-  unknown: 'Unknown. ',
+/** The credits in the answer: the balance and whether it carries to the reset at the recent pace. */
+function creditAnswer(credit: NonNullable<Usage['credits']>, now: string | number): string {
+  const balance = `${count(credit.balance)} credits left`
+  if (credit.lasts_past_reset === true) return `${balance}, enough at the recent pace`
+  if (credit.lasts_past_reset === false && credit.lasts_days !== null && credit.balance > 0) {
+    const nowMs = typeof now === 'string' ? micros(now) / 1000 : now
+    return `${balance}, not enough at the recent pace (runs out about ${day(nowMs + credit.lasts_days * 86_400_000)})`
+  }
+  return balance
+}
+
+/**
+ * The one plain answer to "can I use it now?", ahead of any window: "Available now",
+ * "Used up until Nov 8, 7:00 PM EST (weekly)", "Running on credits until the Nov 11 reset;
+ * 4.5K credits left, enough at the recent pace". The windows follow it as detail.
+ */
+export function answerText(usage: Usage, now: string | number = Date.now()): string {
+  const out = usage.windows.filter((w) => w.state === 'used_up')
+  // Usable again once the last of the used-up windows resets.
+  const last = out.reduce<Window | null>(
+    (best, w) => (!best || (w.resets_in_seconds ?? 0) > (best.resets_in_seconds ?? 0) ? w : best),
+    null,
+  )
+  switch (usage.status) {
+    case 'on_credits': {
+      const reset = usage.credits?.reset_at ?? last?.resets_at
+      const until = reset ? ` until the ${day(reset)} reset` : ''
+      return `Running on credits${until}${usage.credits ? `; ${creditAnswer(usage.credits, now)}` : ''}`
+    }
+    case 'used_up': {
+      const labels = out.map((w) => w.label).join(', ')
+      return `Used up${last?.resets_at ? ` until ${when(last.resets_at)}` : ''}${labels ? ` (${labels})` : ''}`
+    }
+    case 'partly_unknown': {
+      const names = usage.unknown_windows.join(', ')
+      return `Available now; the ${names} window${usage.unknown_windows.length === 1 ? ' was' : 's were'} not reported this time`
+    }
+    case 'unknown':
+      return 'Can’t tell yet: no current usage reading'
+    case 'untracked':
+      return 'Not tracked'
+    default:
+      return 'Available now'
+  }
 }
 
 export interface SpendInput {
@@ -88,17 +128,16 @@ export function spendRow(provider: { id: string; name: string }, input: SpendInp
     input.facts.credits,
   )
   const shown = usage.windows.filter((w) => w.state !== 'not_reported')
-  // Used up: lead with the window that is out and when it comes back, then the others; a bare
-  // "Used up." next to "5h 100% left" reads as a contradiction.
-  const out = usage.status === 'used_up' ? shown.filter((w) => w.state === 'used_up') : []
-  const lead = out.length
-    ? `${capital(out.map(windowText).join('; '))}. `
-    : (LEAD[usage.status] ?? '')
-  const parts = shown.filter((w) => !out.includes(w)).map(windowText)
-  if (usage.credits) parts.push(creditText(usage.credits, input.now))
+  // The answer to "can I use it now?" leads; the windows follow, so "5h 100% left" beside a used-up
+  // week reads as detail, not as a contradiction.
+  const lead = `${answerText(usage, input.now)}.`
+  const parts: string[] = []
+  if (shown.length) parts.push(`Windows: ${shown.map(windowText).join('; ')}.`)
+  // Credits already in the answer when the provider is running on them.
+  if (usage.credits && usage.status !== 'on_credits')
+    parts.push(`${creditText(usage.credits, input.now)}.`)
   const problem = input.problems[provider.id]
-  let meaning =
-    `${lead}${parts.length ? `${parts.join('; ')}.` : out.length ? '' : 'No usage readings yet.'}`.trim()
+  let meaning = [lead, ...parts].join(' ')
   if (problem) meaning += ` ${problem}.`
   const plan = currentPlan(input.plans.plans, provider.id, input.now)
   if (plan && meaning.length + plan.plan.length < 280) meaning += ` Plan: ${plan.plan}.`

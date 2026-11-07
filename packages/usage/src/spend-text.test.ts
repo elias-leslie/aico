@@ -1,7 +1,7 @@
 // The words the spend card, the Quota page and `aico usage` share for windows and credits.
 
 import { expect, it } from 'vitest'
-import { creditText, windowText } from './spend'
+import { answerText, creditText, windowText } from './spend'
 import type { Usage, Window } from './windows'
 
 const NOW = Date.parse('2026-11-07T15:00:00.000Z')
@@ -36,4 +36,69 @@ it('does not promise a runway for an empty balance', () => {
 it('an unreadable window says it was not reported this time, with when it was last known', () => {
   const window = { label: '5h', state: 'unknown', age_seconds: 8 * 3600 } as Window
   expect(windowText(window)).toBe('5h not reported this time; last known 8 h ago')
+})
+
+const usage = (over: Partial<Usage>): Usage => ({
+  provider: 'codex',
+  status: 'ok',
+  windows: [],
+  credits: null,
+  unknown_windows: [],
+  ...over,
+})
+const out = (label: string, resetsAt: string, inSeconds: number) =>
+  ({
+    label,
+    state: 'used_up',
+    resets_at: resetsAt,
+    resets_in_seconds: inSeconds,
+  }) as Window
+
+it('answers can-I-use-it first: credits carry past the reset', () => {
+  const text = answerText(
+    usage({
+      status: 'on_credits',
+      windows: [out('weekly', new Date(NOW + 4 * DAY).toISOString(), 4 * 86400)],
+      credits: credit({ lasts_past_reset: true, lasts_days: 9 }),
+    }),
+    NOW,
+  )
+  expect(text).toBe(
+    'Running on credits until the Nov 11 reset; 4.6K credits left, enough at the recent pace',
+  )
+})
+
+it('answers can-I-use-it first: credits that run out before the reset say when', () => {
+  const text = answerText(
+    usage({
+      status: 'on_credits',
+      windows: [out('weekly', new Date(NOW + 4 * DAY).toISOString(), 4 * 86400)],
+      credits: credit({ lasts_days: 2 }),
+    }),
+    NOW,
+  )
+  expect(text).toBe(
+    'Running on credits until the Nov 11 reset; 4.6K credits left, not enough at the recent pace (runs out about Nov 9)',
+  )
+})
+
+it('answers can-I-use-it first: used up names the window and when it returns', () => {
+  const text = answerText(
+    usage({
+      status: 'used_up',
+      windows: [out('weekly', '2026-11-08T21:00:00.000Z', 86400)],
+    }),
+    NOW,
+  )
+  expect(text).toMatch(/^Used up until Nov 8, [^()]+ E[SD]T \(weekly\)$/)
+})
+
+it('answers can-I-use-it first: open, partly unread, unknown', () => {
+  expect(answerText(usage({}), NOW)).toBe('Available now')
+  expect(answerText(usage({ status: 'partly_unknown', unknown_windows: ['5h'] }), NOW)).toBe(
+    'Available now; the 5h window was not reported this time',
+  )
+  expect(answerText(usage({ status: 'unknown' }), NOW)).toBe(
+    'Can’t tell yet: no current usage reading',
+  )
 })

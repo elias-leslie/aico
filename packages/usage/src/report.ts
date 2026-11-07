@@ -7,7 +7,7 @@ import config from '../data/usage.json' with { type: 'json' }
 import { type Database, getState, openUsage, plansPath, usageDbPath } from './db'
 import { loadFacts } from './facts'
 import { currentPlan, loadPlans, localDay } from './plans'
-import { capital, creditText, windowText } from './spend'
+import { answerText, creditText, windowText } from './spend'
 import { type ProjectRef, type ProjectSplit, projectSplit } from './split'
 import { micros, optionUsage, type Usage, type Window, windowFacts } from './windows'
 
@@ -41,8 +41,8 @@ export interface ReportProvider {
   id: string
   name: string
   status: Usage['status']
-  /** The state in a sentence that names the window that is out; null while there is room. */
-  summary: string | null
+  /** The plain answer to "can I use it now?", ahead of the windows: "Used up until Nov 8, 7:00 PM EST (weekly)". */
+  answer: string
   plan: string | null
   windows: ReportWindow[]
   credits: { balance: number; lasts_days: number | null; text: string } | null
@@ -139,22 +139,12 @@ export function usageReport(
     const providers = config.providers.map((provider): ReportProvider => {
       const usage = optionUsage(provider.id, windows, facts.credits)
       const shown = usage.windows.filter((window) => window.state !== 'not_reported')
-      const out = shown.filter((window) => window.state === 'used_up')
-      // The state leads, naming the window that is out: a bare "Used up" next to "5h 100% left" contradicts.
-      const summary =
-        usage.status === 'used_up' && out.length
-          ? capital(out.map(windowText).join('; '))
-          : usage.status === 'on_credits'
-            ? 'Running on credits'
-            : usage.status === 'unknown'
-              ? 'Unknown'
-              : null
       const spend = spendOf(db as Database, provider.id, days)
       return {
         id: provider.id,
         name: provider.name,
         status: usage.status,
-        summary,
+        answer: answerText(usage, now),
         plan: currentPlan(plans.plans, provider.id, now)?.plan ?? null,
         windows: shown.map((window) => ({
           label: window.label,

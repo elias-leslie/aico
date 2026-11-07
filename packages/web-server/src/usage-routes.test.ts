@@ -102,7 +102,7 @@ it('reports windows, spend per day per provider, and what is not recorded', asyn
   // OpenCode Go: no daily rows, so no days (the page says it is not recorded, not zero).
   expect(go?.spend).toEqual({ unit: null, recorded_since: null, days: [] })
   expect(go?.status).toBe('used_up')
-  expect(go?.summary).toMatch(/^Weekly used up until /)
+  expect(go?.answer).toMatch(/^Used up until .* \(weekly\)$/)
   expect(go?.windows.map((w) => [w.label, w.state])).toEqual([
     ['5h', 'ok'],
     ['weekly', 'used_up'],

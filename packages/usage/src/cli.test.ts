@@ -64,7 +64,7 @@ it('shows by default, with local times that name their zone and no reset for an 
       expect(JSON.parse(result.out).collected_at).toBe('2026-11-07T03:28:50.155Z')
     else {
       expect(result.out).toContain(
-        'OpenCode Go usage: Weekly used up until Nov 8, 2:28 PM EST. 5h 100% left.',
+        'OpenCode Go usage: Used up until Nov 8, 2:28 PM EST (weekly). Windows: 5h 100% left; weekly used up until Nov 8, 2:28 PM EST.',
       )
       expect(result.out).not.toContain('5h 100% left, resets')
       expect(result.out).toContain('Collected Nov 6, 10:28 PM EST.')

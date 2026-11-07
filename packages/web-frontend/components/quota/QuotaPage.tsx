@@ -80,11 +80,11 @@ export function QuotaPage() {
         <p className={styles.legend}>
           <span>
             <i />
-            share left
+            left
           </span>
           <span>
             <i className={styles.legendTick} />
-            time gone in the window
+            how far into the window
           </span>
         </p>
       )}
@@ -153,17 +153,6 @@ function ProviderCard({
       : provider.status === 'unknown'
         ? 'unknown'
         : null
-  // A summary that only repeats a window's own line ("Weekly used up until
-  // Nov 8" over "weekly used up until Nov 8") is said once, in the window.
-  const summary =
-    provider.summary &&
-    !provider.windows.some(
-      (window) =>
-        sentence(window.text).toLowerCase() ===
-        sentence(provider.summary ?? '').toLowerCase(),
-    )
-      ? provider.summary
-      : null
   return (
     <section className={styles.card} aria-label={`${provider.name} usage`}>
       <div className={styles.cardHead}>
@@ -177,7 +166,7 @@ function ProviderCard({
           <span className={styles.muted}>{provider.plan} plan</span>
         )}
       </div>
-      {summary && <p className={styles.summary}>{summary}.</p>}
+      <p className={styles.summary}>{provider.answer}.</p>
       {provider.problem && (
         <p className={styles.problem}>
           Couldn’t read it fully: {provider.problem}.
@@ -217,7 +206,7 @@ function WindowRow({ window }: { window: UsageWindow }) {
         aria-label={
           unknown
             ? `${window.label}: unknown`
-            : `${window.label}: ${left}% left${gone === null ? '' : `, ${Math.round(gone * 100)}% of the window gone`}`
+            : `${window.label}: ${left}% left${gone === null ? '' : `, ${Math.round(gone * 100)}% of the way through the window`}`
         }
       >
         {!unknown && <span style={{ width: `${left}%` }} />}

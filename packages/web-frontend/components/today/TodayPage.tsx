@@ -10,7 +10,7 @@ import {
   useDigest,
   useLastLook,
 } from '@/lib/frame/digest'
-import { openAsks, useOwnerAsks } from '@/lib/hooks/use-asks'
+import { askCounts, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useClock } from '@/lib/hooks/use-clock'
 import { TodayTimeline } from './TodayTimeline'
 
@@ -21,8 +21,8 @@ export function TodayPage() {
   const start = useMemo(() => digestStart(lastLook, Date.now()), [lastLook])
   const { digest, loading, failed, refetch } = useDigest(start)
   const { asks, isLoading: asksLoading, isError: asksFailed } = useOwnerAsks()
-  const waiting = asksLoading || asksFailed ? undefined : openAsks(asks).length
-  const parts = digest ? digestParts(digest, waiting) : null
+  const kinds = asksLoading || asksFailed ? undefined : askCounts(asks)
+  const parts = digest ? digestParts(digest, kinds?.questions, kinds) : null
   const spend = digest ? spendText(digest) : null
   return (
     <main className="status-page">

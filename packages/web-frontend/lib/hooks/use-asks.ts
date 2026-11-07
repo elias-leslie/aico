@@ -121,6 +121,37 @@ export function openAsks(asks: readonly OwnerAsk[]): OwnerAsk[] {
     .sort((a, b) => a.createdAt - b.createdAt)
 }
 
+/** What the open asks are: an agent's question, a notice an app filed (a
+ * follow-up reminder), or a failed Status row. Only the first is a question. */
+export interface AskCounts {
+  questions: number
+  notices: number
+  checks: number
+}
+
+export function askCounts(asks: readonly OwnerAsk[]): AskCounts {
+  const counts: AskCounts = { questions: 0, notices: 0, checks: 0 }
+  for (const ask of asks) {
+    if (ask.state !== 'open') continue
+    if (ask.origin === 'notice') counts.notices += 1
+    else if (ask.origin === 'status') counts.checks += 1
+    else counts.questions += 1
+  }
+  return counts
+}
+
+/** The counts in words, each kind named for what it is: "2 agent questions,
+ * 1 notice". Empty when nothing is open. */
+export function askCountsParts(counts: AskCounts): string[] {
+  const one = (n: number, singular: string, many = `${singular}s`) =>
+    n > 0 ? `${n} ${n === 1 ? singular : many}` : null
+  return [
+    one(counts.questions, 'agent question'),
+    one(counts.notices, 'notice'),
+    one(counts.checks, 'failed check'),
+  ].filter((part): part is string => part !== null)
+}
+
 /** Answered (not yet closed) and recently closed asks, newest first. */
 export function answeredAsks(
   asks: readonly OwnerAsk[],

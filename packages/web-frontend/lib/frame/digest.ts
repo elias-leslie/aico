@@ -192,7 +192,11 @@ const UNREAD_WORD: Record<string, string> = {
 }
 
 /** The digest in the owner's words. A part that couldn't be read is never a zero. */
-export function digestParts(digest: Digest, waiting?: number): DigestParts {
+export function digestParts(
+  digest: Digest,
+  waiting?: number,
+  other?: { notices: number; checks: number },
+): DigestParts {
   const skipped = (name: string) => digest.unavailable.includes(name)
   const unreadHistory = skipped('history')
   const failedPhrase =
@@ -233,6 +237,11 @@ export function digestParts(digest: Digest, waiting?: number): DigestParts {
         `${plural(questions, waiting === undefined ? 'new question' : 'question')} waiting`,
       )
   }
+  // A notice (a follow-up reminder) or a failed check is not a question.
+  const notices = other?.notices ?? 0
+  const checks = other?.checks ?? 0
+  if (notices > 0) rest.push(`${plural(notices, 'notice')} waiting`)
+  if (checks > 0) rest.push(`${plural(checks, 'failed check')} waiting`)
   const unread = digest.unavailable.length
     ? `Couldn’t read ${digest.unavailable.map((name) => UNREAD_WORD[name] ?? name).join(', ')}.`
     : null
@@ -240,7 +249,9 @@ export function digestParts(digest: Digest, waiting?: number): DigestParts {
     digest.unavailable.length === 0 &&
     digest.finished === 0 &&
     stuck === 0 &&
-    questions === 0
+    questions === 0 &&
+    notices === 0 &&
+    checks === 0
   return { finished, finishedLead, failedPhrase, rest, unread, quiet }
 }
 

@@ -30,7 +30,7 @@ import {
   useLastLook,
 } from '@/lib/frame/digest'
 import { type QuotaGlance, quotaGlances, quotaTitle } from '@/lib/frame/quota'
-import { openAsks, useApprovals, useOwnerAsks } from '@/lib/hooks/use-asks'
+import { askCounts, useApprovals, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useHosts } from '@/lib/hooks/use-hosts'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
@@ -146,7 +146,7 @@ function SinceLine({ frame }: { frame: Frame | null }) {
   const { digest, loading, failed, stale, refetch } = useDigest(start)
   const { asks, isLoading: asksLoading, isError: asksFailed } = useOwnerAsks()
   // Questions open now, whatever the digest's window: a reload keeps the one still waiting.
-  const waiting = asksLoading || asksFailed ? undefined : openAsks(asks).length
+  const kinds = asksLoading || asksFailed ? undefined : askCounts(asks)
   const head = sinceText(start, now, lastLook === null)
   if (loading)
     return (
@@ -169,7 +169,7 @@ function SinceLine({ frame }: { frame: Frame | null }) {
         </button>
       </p>
     )
-  const parts = digestParts(digest, waiting)
+  const parts = digestParts(digest, kinds?.questions, kinds)
   const spend = spendText(digest)
   return (
     <div
@@ -346,9 +346,9 @@ export function QuotaBar({ glance }: { glance: QuotaGlance }) {
         data-unknown={unknown ? 'true' : undefined}
         role="img"
         aria-label={
-          unknown
-            ? `${glance.name}: not known`
-            : `${glance.name}: ${glance.left}% left${glance.gone === null ? '' : `, ${glance.gone}% of the window gone`}`
+          glance.state !== 'left'
+            ? `${glance.name}: ${glance.answer}`
+            : `${glance.name}: ${glance.left}% left${glance.gone === null ? '' : `, ${glance.gone}% of the way through the window`}`
         }
       >
         {!unknown && <span style={{ width: `${glance.left}%` }} />}
@@ -393,11 +393,11 @@ function Quota({ frame }: { frame: Frame | null }) {
           <p className={styles.legend}>
             <span>
               <i />
-              share left
+              left
             </span>
             <span>
               <i className={styles.legendTick} />
-              time gone in the window
+              how far into the window
             </span>
           </p>
         </>

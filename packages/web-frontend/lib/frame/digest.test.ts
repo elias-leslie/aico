@@ -53,6 +53,14 @@ describe('digest parts', () => {
     ])
     expect(digestParts(digest(), 0).rest).toEqual([])
   })
+  it('calls a reminder a notice and a failed Status row a failed check', () => {
+    const parts = digestParts(digest({ asks: 0 }), 0, {
+      notices: 1,
+      checks: 2,
+    })
+    expect(parts.rest).toEqual(['1 notice waiting', '2 failed checks waiting'])
+    expect(parts.quiet).toBe(false)
+  })
 })
 
 describe('spend text', () => {
