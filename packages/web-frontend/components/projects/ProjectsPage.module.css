@@ -534,6 +534,11 @@
   overflow-wrap: anywhere;
 }
 
+.scrimDim {
+  z-index: 19;
+  background: var(--scrim);
+}
+
 .pop.sheet {
   position: fixed;
   top: 50%;
@@ -798,7 +803,9 @@
     padding-left: 4px;
   }
 
-  .acts a {
+  .acts a,
+  .sheetHead button,
+  .planPath button {
     min-height: 44px;
   }
 

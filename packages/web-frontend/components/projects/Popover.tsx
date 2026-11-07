@@ -33,7 +33,11 @@ export function Popover({
 
   return (
     <>
-      <div className={styles.scrim} aria-hidden="true" onClick={onClose} />
+      <div
+        className={sheet ? `${styles.scrim} ${styles.scrimDim}` : styles.scrim}
+        aria-hidden="true"
+        onClick={onClose}
+      />
       <div
         ref={ref}
         className={sheet ? `${styles.pop} ${styles.sheet}` : styles.pop}
