@@ -19,6 +19,15 @@ const group = (d: ContextDelivery) =>
   JSON.stringify([d.tool, d.role, d.project])
 const who = (d: ContextDelivery) =>
   `${d.tool} · ${d.role ?? 'No role'} · ${d.project ?? 'No project'}`
+/** A start with no items and no bytes: nothing was recorded as loaded, which is not a size of zero. */
+const nothingLoaded = (d: ContextDelivery) =>
+  d.items.length === 0 && d.tokens === 0
+const sizeText = (d: ContextDelivery) =>
+  nothingLoaded(d) ? 'nothing loaded' : `~${count(d.tokens)} tokens`
+const startText = (d: ContextDelivery) =>
+  nothingLoaded(d)
+    ? 'Nothing loaded at start'
+    : `~${count(d.tokens)} tokens at start`
 const typeText = {
   prompt: 'Prompt',
   memory: 'Memory',
@@ -89,7 +98,7 @@ function Costs({ view }: { view: ContextView }) {
               >
                 {latest.map((d) => (
                   <option key={group(d)} value={group(d)}>
-                    {who(d)} · ~{count(d.tokens)} tokens
+                    {who(d)} · {sizeText(d)}
                   </option>
                 ))}
               </select>
@@ -98,7 +107,7 @@ function Costs({ view }: { view: ContextView }) {
           {current && (
             <>
               <div className={styles.summary}>
-                <strong>~{count(current.tokens)} tokens at start</strong>
+                <strong>{startText(current)}</strong>
                 <span>
                   {current.budget === null
                     ? 'No size limit set'
@@ -117,6 +126,12 @@ function Costs({ view }: { view: ContextView }) {
                   Started {shortWhen(current.at)}
                 </time>
               </div>
+              {nothingLoaded(current) && (
+                <p className={styles.help} role="status">
+                  Nothing was recorded as loaded at start, so there is no size
+                  to show.
+                </p>
+              )}
               {current.missing.length > 0 && (
                 <p role="status">
                   Part of it didn’t load: {current.missing.length} item

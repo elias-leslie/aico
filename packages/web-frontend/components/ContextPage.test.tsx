@@ -116,6 +116,26 @@ it('shows a partial start, unknown use and no limit without inventing zeros', as
     screen.getByText('No items qualify for this view.'),
   ).toBeInTheDocument()
 })
+it('says nothing was loaded for a start with no items, not a size of zero', async () => {
+  const empty = {
+    ...view,
+    deliveries: [
+      {
+        ...view.deliveries[0]!,
+        tokens: 0,
+        items: [],
+        missing: [],
+        observed: false,
+      },
+    ],
+  }
+  show(vi.fn(async () => Response.json(empty)))
+  expect(await screen.findByText('Nothing loaded at start')).toBeInTheDocument()
+  expect(screen.queryByText(/~0 tokens/)).toBeNull()
+  expect(
+    screen.getByRole('option', { name: /nothing loaded/ }),
+  ).toBeInTheDocument()
+})
 it('shows the context in use when the provider counted it', async () => {
   const counted = {
     ...view,
