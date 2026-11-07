@@ -120,7 +120,7 @@ describe('SessionList teams', () => {
     const team = container.querySelector('.lantern-row.lead') as HTMLElement
     expect(team.className).toContain('needs')
     expect(team.textContent).toContain(
-      'Coordinatorcodex · working · Workstation · 1 working, 1 needs you, 1 idle',
+      'Coordinatorcodex · working · 1 working, 1 needs you, 1 idle',
     )
     expect(within(team).getByTestId('check-in-badge').textContent).toContain(
       'Check-in 5:30 PM',
@@ -201,9 +201,10 @@ describe('SessionList teams', () => {
       'Docs — Notes',
       'Aico — Tray',
     ])
+    // Under the Idle heading the row doesn't repeat the state word.
     expect(
       screen.getByRole('button', { name: /Aico — Tray/ }).textContent,
-    ).toContain('codex · idle')
+    ).not.toContain('idle')
   })
 
   it('remembers a folded team per coordinator on a desktop', () => {

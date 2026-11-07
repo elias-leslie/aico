@@ -913,8 +913,9 @@ div.xterm .xterm-viewport {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-height: 32px;
   margin: 0 4px 4px;
-  padding: 4px 4px 4px 12px;
+  padding: 2px 4px 2px 12px;
   border: 1px solid var(--frame-edge);
   border-radius: 8px;
   background: rgb(var(--ink-rgb) / 0.92);

@@ -39,7 +39,7 @@ import { HostBadge } from './HostBadge'
 import { KeptCheckIns } from './KeptCheckIns'
 
 /** The agent a session runs (its tool slug), or `shell`. */
-export function slotMode(slot: TerminalSlot | PaneSlot): string {
+function slotMode(slot: TerminalSlot | PaneSlot): string {
   if (slot.type === 'project') {
     return slot.activeMode
   }
@@ -144,6 +144,21 @@ function foldSessionEntries(
     .map(({ row }) => row)
 }
 
+/** The state word on a row, only where its group heading doesn't say it
+ * already (Needs you, Working, Finished and Idle carry their own words and the
+ * age sits at the right). A working session quiet for a while still says how
+ * long; a lane in another state than the team above it, or a session with no
+ * state to read, says its own. */
+function stateInGroup(
+  state: RowState,
+  group: Attention['group'] | undefined,
+  under: Attention['group'],
+): string | null {
+  if (group === undefined || group === 'no-status' || group !== under)
+    return state.text
+  return state.quiet === null ? null : `quiet ${state.quiet} min`
+}
+
 function rowFacts(item: TeamEntry) {
   return {
     label: item.entry.label,
@@ -155,7 +170,7 @@ function rowFacts(item: TeamEntry) {
 }
 
 /** The agent's name for a tool slug. */
-export const toolName = (
+const toolName = (
   tools: readonly { slug: string; name: string }[],
   mode: string,
 ): string =>
@@ -191,7 +206,7 @@ export function endAlongsideNote(
 /** A session as its list row names it: its name, numbered when another
  * session of the same agent has the same name. The header, the list and the
  * End dialog all say this. */
-export function sessionLabel(
+function sessionLabel(
   slots: Array<TerminalSlot | PaneSlot>,
   slot: TerminalSlot | PaneSlot,
 ): string {
@@ -280,9 +295,12 @@ export function SessionList({
     }
   }
 
+  // Where each runs says something only when sessions run in more than one place.
+  const severalHosts = slots.some((candidate) => candidate.host)
   const renderRow = (
     row: TeamRow<TeamEntry>,
     lead: SessionListEntry | null,
+    under: Attention['group'],
   ): React.ReactNode => {
     const { id } = row.item
     const { label, mode, state, slot } = rowFacts(row.item)
@@ -309,16 +327,18 @@ export function SessionList({
       shown.state.tone === 'work' || shown.state.tone === 'quiet'
         ? slot?.doing
         : null
+    const stateWord = stateInGroup(shown.state, group, under)
     const meta = chat
       ? `${chat.role} · ${chat.model ?? '—'} · ${CHAT_STATE[chat.state] ?? chat.state} · ${chat.cwd.split('/').pop()}`
       : [
           agentName(mode),
-          shown.state.text,
+          stateWord,
           shown.asks,
           alsoRunningText(slot, agentTools),
           slot?.projectLabel,
-          // Where it runs: a remote host has its chip beside this.
-          slot?.host ? null : sessionHostLabel(null),
+          // Where it runs: a remote host has its chip beside this; the local
+          // one is said only where something runs elsewhere.
+          slot?.host || !severalHosts ? null : sessionHostLabel(null),
           // A team row: the coordinator's own state, then its team summary.
           isTeam ? row.summary : null,
           row.orphaned ? 'coordinator ended' : null,
@@ -390,7 +410,9 @@ export function SessionList({
             // A lane's own helpers nest a step further, kept narrow for phone width.
             style={lead ? { marginLeft: 10 } : undefined}
           >
-            {row.children.map((child) => renderRow(child, row.item.entry))}
+            {row.children.map((child) =>
+              renderRow(child, row.item.entry, under),
+            )}
           </div>
         )}
       </div>
@@ -428,7 +450,7 @@ export function SessionList({
                 </span>
               </h3>
             )}
-            {renderRow(row, null)}
+            {renderRow(row, null, row.group)}
           </div>
         )
       })}

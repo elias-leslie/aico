@@ -135,15 +135,16 @@ export const UnifiedTerminalHeaderContent = memo(
               aria-pressed={composeOpen}
               data-testid="compose-toggle"
               title="Compose text (stays open once opened)"
+              aria-label="Compose"
               className="lantern-btn ghost"
               style={{ height: 34, padding: '0 10px' }}
             >
               <Pencil className="h-4 w-4" strokeWidth={1.7} />
-              Compose
+              <span className="hidden min-[1100px]:inline">Compose</span>
             </button>
           )}
 
-          {/* Phone: icon only, so the bar fits with the keyboard open. */}
+          {/* Icon only on a phone and below ~1100px, so the bar fits. */}
           {onFiles &&
             (isMobile ? (
               <HeaderIconButton
@@ -159,11 +160,12 @@ export const UnifiedTerminalHeaderContent = memo(
                 type="button"
                 onClick={onFiles}
                 title="Files: this session's project folder and what agents shared"
+                aria-label="Files"
                 className="lantern-btn ghost"
                 style={{ height: 34, padding: '0 10px' }}
               >
                 <Folder className="h-4 w-4" strokeWidth={1.7} />
-                Files
+                <span className="hidden min-[1100px]:inline">Files</span>
               </button>
             ))}
 
