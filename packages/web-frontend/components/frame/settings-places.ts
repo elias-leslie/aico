@@ -9,7 +9,7 @@ export interface SettingsPlace {
   icon: ComponentType<{ className?: string; strokeWidth?: number }>
 }
 
-/** The setup places, touched a few times a year: the Settings menu, the phone's Settings page and Full's side list all list these, in this order. */
+/** The setup places, touched a few times a year: the Settings menu, the phone's Settings page and the Settings dialog's own list all show these, in this order. */
 export const SETTINGS_PLACES: readonly SettingsPlace[] = [
   { label: 'Logins', href: '/logins', hint: 'agent sign-ins', icon: UserRound },
   {
@@ -37,3 +37,9 @@ export const SETTINGS_PLACES: readonly SettingsPlace[] = [
     icon: Smartphone,
   },
 ]
+
+/** The setup place a path opens (`/logins`, `/logins/`), or undefined for any other page. Settings opens as a dialog over the session, not as a page on the left side. */
+export function settingsPlaceAt(pathname: string): SettingsPlace | undefined {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
+  return SETTINGS_PLACES.find((place) => place.href === path)
+}

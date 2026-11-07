@@ -1,10 +1,21 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import { useHosts } from '@/lib/hooks/use-hosts'
 import { shortWhen } from '@/lib/short-when'
 import { HostSignIn } from './HostsSheet'
-import styles from './LoginsPage.module.css'
+import {
+  Actions,
+  type Chip,
+  Find,
+  Form,
+  Group,
+  Notice,
+  Quiet,
+  Row,
+  SectionHead,
+} from './settings/kit'
+import kit from './settings/kit.module.css'
 
 const kinds = [
   'tool login',
@@ -71,12 +82,45 @@ const title = (kind: Kind) =>
     'lab login': 'Lab logins',
   })[kind]
 const when = (time: string | null) => shortWhen(time)
+/** The long list gets a find box from here. */
+const FIND_FROM = 8
+const CHIP: Record<string, Chip> = {
+  'In use': 'ok',
+  Unused: 'off',
+  Expired: 'failed',
+  'Needs sign-in': 'late',
+  Unavailable: 'failed',
+}
+const chipOf = (state: string): Chip => CHIP[state] ?? 'off'
+const meta = (entry: Entry) =>
+  entry.lab
+    ? `${entry.lab.target} · ${entry.lab.actor} · ${entry.lab.kind}${
+        entry.lab.expires_at ? ` · Expires ${when(entry.lab.expires_at)}` : ''
+      }`
+    : `Last used: ${when(entry.lastUsed)}`
+
+/** A titled block that holds a form or free content, not rows. */
+function Block({
+  title,
+  label,
+  children,
+}: {
+  title: string
+  label?: string
+  children: ReactNode
+}) {
+  return (
+    <section className={kit.group} aria-label={label ?? title}>
+      <h3 className="lantern-sec">{title}</h3>
+      {children}
+    </section>
+  )
+}
 
 export function LoginsPage() {
   const [data, setData] = useState<Data | null>(null),
     [error, setError] = useState(''),
     [message, setMessage] = useState('')
-  const [auditOpen, setAuditOpen] = useState(false)
   const [search, setSearch] = useState(''),
     [adding, setAdding] = useState(false)
   const [sessions, setSessions] = useState<{ id: string; label: string }[]>([]),
@@ -107,51 +151,54 @@ export function LoginsPage() {
       data?.entries.flatMap((e) => (e.lab ? [e.lab.target] : [])) || [],
     ),
   ]
+  const shown = data
+    ? data.entries.filter((e) =>
+        `${e.name} ${e.kind}`.toLowerCase().includes(search.toLowerCase()),
+      )
+    : []
   return (
-    <main className={styles.page}>
-      <header>
-        <h1>Logins</h1>
-        <button className="lantern-btn ghost small" onClick={() => void load()}>
+    <section aria-label="Logins">
+      <SectionHead
+        title="Logins"
+        sub="Saved logins for you and your agents. Choose which machines, roles and lab targets may use them."
+      >
+        <button
+          type="button"
+          className="lantern-btn ghost small"
+          onClick={() => void load()}
+        >
           Refresh
         </button>
         <button
+          type="button"
           className="lantern-btn small"
           disabled={data?.readOnly}
           onClick={() => setAdding(!adding)}
         >
           {adding ? 'Close' : 'Add login'}
         </button>
-      </header>
-      <p className={styles.help}>
-        Saved logins for you and your agents. Choose which machines, roles and
-        lab targets may use them.
-      </p>
+      </SectionHead>
       {error && (
-        <div role="alert" className={styles.notice}>
-          <p>
-            {data
-              ? 'The list could not refresh. Showing the last loaded list.'
-              : error}
-          </p>
-          <button
-            className="lantern-btn ghost small"
-            onClick={() => void load()}
-          >
-            Try again
-          </button>
-        </div>
+        <Notice
+          failed
+          actions={
+            <button
+              type="button"
+              className="lantern-btn ghost small"
+              onClick={() => void load()}
+            >
+              Try again
+            </button>
+          }
+        >
+          {data
+            ? 'The list could not refresh. Showing the last loaded list.'
+            : error}
+        </Notice>
       )}
-      {!data && !error && <p role="status">Loading logins…</p>}
-      {data?.warning && (
-        <p role="status" className={styles.notice}>
-          {data.warning}
-        </p>
-      )}
-      {message && (
-        <p role="status" className={styles.notice}>
-          {message}
-        </p>
-      )}
+      {!data && !error && <Quiet role="status">Loading logins…</Quiet>}
+      {data?.warning && <Notice>{data.warning}</Notice>}
+      {message && <Notice>{message}</Notice>}
       {adding && (
         <AddLogin
           onSaved={(warning) => {
@@ -162,61 +209,52 @@ export function LoginsPage() {
       )}
       {data && (
         <>
-          <label className={styles.search}>
-            Find a login
-            <input
-              type="search"
+          {data.entries.length >= FIND_FROM && (
+            <Find
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
+              label="Find a login"
               placeholder="Name or kind"
             />
-          </label>
-          {data.entries.length === 0 && (
-            <p>No logins saved yet. Add one to get started.</p>
           )}
-          {search &&
-            !data.entries.some((e) =>
-              `${e.name} ${e.kind}`
-                .toLowerCase()
-                .includes(search.toLowerCase()),
-            ) && <p>No logins match your search.</p>}
+          {data.entries.length === 0 && (
+            <Quiet>No logins saved yet. Add one to get started.</Quiet>
+          )}
+          {search && shown.length === 0 && (
+            <Quiet>No logins match your search.</Quiet>
+          )}
           {kinds.map((kind) => {
-            const entries = data.entries.filter(
-              (e) =>
-                e.kind === kind &&
-                `${e.name} ${e.kind}`
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-            )
+            const entries = shown.filter((e) => e.kind === kind)
             return (
               entries.length > 0 && (
-                <section key={kind} aria-label={title(kind)}>
-                  <h2>{title(kind)}</h2>
-                  <ul className={styles.rows}>
-                    {entries.map((entry) => (
-                      <LoginRow
-                        key={entry.name}
-                        entry={entry}
-                        onChanged={changed}
-                        revealSeconds={data.revealSeconds}
-                        readOnly={data.readOnly}
-                      />
-                    ))}
-                  </ul>
-                </section>
+                <Group
+                  key={kind}
+                  title={title(kind)}
+                  count={entries.length}
+                  label={title(kind)}
+                >
+                  {entries.map((entry) => (
+                    <LoginRow
+                      key={entry.name}
+                      entry={entry}
+                      onChanged={changed}
+                      revealSeconds={data.revealSeconds}
+                      readOnly={data.readOnly}
+                    />
+                  ))}
+                </Group>
               )
             )
           })}
-          <section aria-label="Lab assignments">
-            <h2>Lab assignments</h2>
-            <p className={styles.help}>
+          <Block title="Lab assignments">
+            <Quiet>
               A session can add, refresh and use logins only for its assigned
               targets. Removing a target ends that access.
-            </p>
+            </Quiet>
             {sessionError ? (
-              <p role="alert">{sessionError}</p>
+              <Quiet role="alert">{sessionError}</Quiet>
             ) : sessions.length === 0 ? (
-              <p>No sessions are available to assign.</p>
+              <Quiet>No sessions are available to assign.</Quiet>
             ) : (
               <Assignment
                 sessions={sessions}
@@ -227,32 +265,45 @@ export function LoginsPage() {
                 }
               />
             )}
-          </section>
+          </Block>
         </>
       )}
-      <section aria-label="Tool sign-in">
-        <h2>Tool sign-in</h2>
-        {hostState.isLoading ? (
-          <p>Checking machines…</p>
-        ) : hostState.isError ? (
-          <p role="alert">
-            Machines could not load.{' '}
-            <button
-              className="lantern-btn ghost small"
-              onClick={() => void hostState.refetch()}
+      {hostState.isLoading ? (
+        <Block title="Tool sign-in">
+          <Quiet role="status">Checking machines…</Quiet>
+        </Block>
+      ) : hostState.isError ? (
+        <Block title="Tool sign-in">
+          <Notice
+            failed
+            actions={
+              <button
+                type="button"
+                className="lantern-btn ghost small"
+                onClick={() => void hostState.refetch()}
+              >
+                Try again
+              </button>
+            }
+          >
+            Machines could not load.
+          </Notice>
+        </Block>
+      ) : hosts.length === 0 ? (
+        <Block title="Tool sign-in">
+          <Quiet>No linked machines are available.</Quiet>
+        </Block>
+      ) : (
+        <Group title="Tool sign-in" count={hosts.length} label="Tool sign-in">
+          {hosts.map((host) => (
+            <Row
+              key={host.name}
+              name={host.name}
+              chip={host.state === 'connected' ? 'ok' : 'off'}
+              chipText={
+                host.state === 'connected' ? 'Connected' : 'Not connected'
+              }
             >
-              Try again
-            </button>
-          </p>
-        ) : hosts.length === 0 ? (
-          <p>No linked machines are available.</p>
-        ) : (
-          hosts.map((host) => (
-            <details key={host.name}>
-              <summary>
-                {host.name} ·{' '}
-                {host.state === 'connected' ? 'Connected' : 'Not connected'}
-              </summary>
               <HostSignIn
                 host={host.name}
                 connected={host.state === 'connected'}
@@ -260,15 +311,16 @@ export function LoginsPage() {
                   window.location.href = '/'
                 }}
               />
-            </details>
-          ))
-        )}
-      </section>
-      <details>
-        <summary>Recent activity</summary>
-        <Audit />
-      </details>
-    </main>
+            </Row>
+          ))}
+        </Group>
+      )}
+      <Group title="Activity" label="Activity">
+        <Row name="Recent activity" meta="The last 30 changes to logins">
+          <Audit />
+        </Row>
+      </Group>
+    </section>
   )
 }
 function AddLogin({ onSaved }: { onSaved(warning?: string): void }) {
@@ -276,111 +328,115 @@ function AddLogin({ onSaved }: { onSaved(warning?: string): void }) {
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
   return (
-    <form
-      className={styles.form}
-      onSubmit={async (event) => {
-        event.preventDefault()
-        const form = event.currentTarget,
-          f = new FormData(form)
-        setBusy(true)
-        setError('')
-        try {
-          let result: { warning?: string }
-          if (kind === 'lab login')
-            result = await api('/api/logins/lab', {
-              target: f.get('target'),
-              actor: f.get('actor'),
-              kind: f.get('labKind'),
-              expires_at: f.get('expiry') || null,
-              values: JSON.parse(String(f.get('value'))),
-              notes: f.get('notes'),
-            })
-          else
-            result = await api('/api/logins', {
-              name: f.get('name'),
-              kind,
-              value: f.get('value'),
-              notes: f.get('notes'),
-            })
-          form.reset()
-          onSaved(result.warning)
-        } catch (error) {
-          setError(
-            error instanceof SyntaxError
-              ? 'Lab fields need a JSON object.'
-              : (error as Error).message,
-          )
-        } finally {
-          setBusy(false)
-        }
-      }}
-    >
-      <h2>Add login</h2>
-      <label>
-        Kind
-        <select value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-          {kinds.map((k) => (
-            <option key={k}>{k}</option>
-          ))}
-        </select>
-      </label>
-      {kind === 'lab login' ? (
-        <>
+    <div className={kit.panel}>
+      <Form
+        onSubmit={async (event) => {
+          event.preventDefault()
+          const form = event.currentTarget,
+            f = new FormData(form)
+          setBusy(true)
+          setError('')
+          try {
+            let result: { warning?: string }
+            if (kind === 'lab login')
+              result = await api('/api/logins/lab', {
+                target: f.get('target'),
+                actor: f.get('actor'),
+                kind: f.get('labKind'),
+                expires_at: f.get('expiry') || null,
+                values: JSON.parse(String(f.get('value'))),
+                notes: f.get('notes'),
+              })
+            else
+              result = await api('/api/logins', {
+                name: f.get('name'),
+                kind,
+                value: f.get('value'),
+                notes: f.get('notes'),
+              })
+            form.reset()
+            onSaved(result.warning)
+          } catch (error) {
+            setError(
+              error instanceof SyntaxError
+                ? 'Lab fields need a JSON object.'
+                : (error as Error).message,
+            )
+          } finally {
+            setBusy(false)
+          }
+        }}
+      >
+        <h3 className="lantern-sec">Add login</h3>
+        <label>
+          Kind
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as Kind)}
+          >
+            {kinds.map((k) => (
+              <option key={k}>{k}</option>
+            ))}
+          </select>
+        </label>
+        {kind === 'lab login' ? (
+          <>
+            <label>
+              Target
+              <input name="target" required autoComplete="off" />
+            </label>
+            <label>
+              Actor
+              <input
+                name="actor"
+                defaultValue="default"
+                required
+                autoComplete="off"
+              />
+            </label>
+            <label>
+              Lab kind
+              <select name="labKind">
+                <option value="account">Account</option>
+                <option value="synthetic">Synthetic</option>
+                <option value="temporary">Temporary</option>
+              </select>
+            </label>
+            <label>
+              Expires at (optional)
+              <input name="expiry" placeholder="2026-12-01T00:00:00Z" />
+            </label>
+          </>
+        ) : (
           <label>
-            Target
-            <input name="target" required autoComplete="off" />
-          </label>
-          <label>
-            Actor
+            Name
             <input
-              name="actor"
-              defaultValue="default"
+              name="name"
               required
               autoComplete="off"
+              pattern="[a-z0-9_][a-z0-9_.-]*"
             />
           </label>
-          <label>
-            Lab kind
-            <select name="labKind">
-              <option value="account">Account</option>
-              <option value="synthetic">Synthetic</option>
-              <option value="temporary">Temporary</option>
-            </select>
-          </label>
-          <label>
-            Expires at (optional)
-            <input name="expiry" placeholder="2026-12-01T00:00:00Z" />
-          </label>
-        </>
-      ) : (
+        )}
         <label>
-          Name
+          {kind === 'lab login' ? 'Fields (JSON, hidden)' : 'Value (hidden)'}
           <input
-            name="name"
+            name="value"
+            type="password"
             required
-            autoComplete="off"
-            pattern="[a-z0-9_][a-z0-9_.-]*"
+            autoComplete="new-password"
           />
         </label>
-      )}
-      <label>
-        {kind === 'lab login' ? 'Fields (JSON, hidden)' : 'Value (hidden)'}
-        <input
-          name="value"
-          type="password"
-          required
-          autoComplete="new-password"
-        />
-      </label>
-      <label>
-        Notes
-        <input name="notes" autoComplete="off" />
-      </label>
-      {error && <p role="alert">{error}</p>}
-      <button disabled={busy} className="lantern-btn small">
-        {busy ? 'Saving…' : 'Save login'}
-      </button>
-    </form>
+        <label>
+          Notes
+          <input name="notes" autoComplete="off" />
+        </label>
+        {error && <Quiet role="alert">{error}</Quiet>}
+        <button type="submit" disabled={busy} className="lantern-btn small">
+          {busy ? 'Saving…' : 'Save login'}
+        </button>
+      </Form>
+    </div>
   )
 }
 function LoginRow({
@@ -438,99 +494,86 @@ function LoginRow({
       if (result.warning) await onChanged(result.warning)
     }
   }
+  const toggle = (next: NonNullable<typeof panel>) => {
+    setValue(null)
+    setPanel(panel === next ? null : next)
+  }
   return (
-    <li>
-      <div className={styles.row}>
-        <div className={styles.identity}>
-          <strong>{entry.name}</strong>
-          {entry.lab && (
-            <small>
-              {entry.lab.target} · {entry.lab.actor} · {entry.lab.kind}
-              {entry.lab.expires_at
-                ? ` · Expires ${when(entry.lab.expires_at)}`
-                : ''}
-            </small>
-          )}
-          {entry.notes && <p>{entry.notes}</p>}
-          <small>Last used: {when(entry.lastUsed)}</small>
-        </div>
-        <span className={styles.badge}>{entry.state}</span>
-        <div className={styles.actions}>
-          {!entry.verifierOnly && (
-            <>
-              <button
-                className="lantern-btn ghost small"
-                disabled={busy}
-                onClick={() =>
-                  value === null ? void run(() => reveal()) : setValue(null)
-                }
-              >
-                {value === null ? 'Reveal' : 'Hide'}
-              </button>
-              <button
-                className="lantern-btn ghost small"
-                disabled={busy}
-                onClick={() => void run(() => reveal(true))}
-              >
-                Copy
-              </button>
-              <button
-                className="lantern-btn ghost small"
-                disabled={readOnly}
-                onClick={() => {
-                  setValue(null)
-                  setPanel(panel === 'replace' ? null : 'replace')
-                }}
-              >
-                Replace
-              </button>
-            </>
-          )}
-          {entry.lab && (
+    <Row
+      name={entry.name}
+      meta={meta(entry)}
+      chip={chipOf(entry.state)}
+      chipText={entry.state}
+    >
+      {entry.notes && <p>{entry.notes}</p>}
+      <small>Last used: {when(entry.lastUsed)}</small>
+      <Actions>
+        {!entry.verifierOnly && (
+          <>
             <button
+              type="button"
+              className="lantern-btn ghost small"
+              disabled={busy}
+              onClick={() =>
+                value === null ? void run(() => reveal()) : setValue(null)
+              }
+            >
+              {value === null ? 'Reveal' : 'Hide'}
+            </button>
+            <button
+              type="button"
+              className="lantern-btn ghost small"
+              disabled={busy}
+              onClick={() => void run(() => reveal(true))}
+            >
+              Copy
+            </button>
+            <button
+              type="button"
               className="lantern-btn ghost small"
               disabled={readOnly}
-              onClick={() => {
-                setValue(null)
-                setPanel(panel === 'edit' ? null : 'edit')
-              }}
+              onClick={() => toggle('replace')}
             >
-              Edit fields
+              Replace
             </button>
-          )}
+          </>
+        )}
+        {entry.lab && (
           <button
+            type="button"
             className="lantern-btn ghost small"
             disabled={readOnly}
-            onClick={() => {
-              setValue(null)
-              setPanel(panel === 'grants' ? null : 'grants')
-            }}
+            onClick={() => toggle('edit')}
           >
-            Access
+            Edit fields
           </button>
-          <span className={styles.apart} aria-hidden="true" />
-          <button
-            className={`lantern-btn ghost small ${styles.remove}`}
-            disabled={readOnly}
-            onClick={() => {
-              setValue(null)
-              setPanel(panel === 'remove' ? null : 'remove')
-            }}
-          >
-            Remove
-          </button>
-        </div>
-      </div>
+        )}
+        <button
+          type="button"
+          className="lantern-btn ghost small"
+          disabled={readOnly}
+          onClick={() => toggle('grants')}
+        >
+          Access
+        </button>
+        <button
+          type="button"
+          className="lantern-btn danger small"
+          disabled={readOnly}
+          onClick={() => toggle('remove')}
+        >
+          Remove
+        </button>
+      </Actions>
       {value !== null && (
-        <div className={styles.revealed}>
+        <div>
           <small>Hides after {revealSeconds} seconds.</small>
-          <pre>{value}</pre>
+          <pre className={kit.secret}>{value}</pre>
         </div>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && <Quiet role="alert">{error}</Quiet>}
       {panel === 'replace' && (
-        <form
-          className={styles.form}
+        <Form
           onSubmit={(event) => {
             event.preventDefault()
             const form = event.currentTarget,
@@ -554,10 +597,10 @@ function LoginRow({
               autoComplete="new-password"
             />
           </label>
-          <button className="lantern-btn small" disabled={busy}>
+          <button type="submit" className="lantern-btn small" disabled={busy}>
             Replace login
           </button>
-        </form>
+        </Form>
       )}
       {panel === 'edit' && entry.lab && (
         <LabEdit
@@ -577,8 +620,7 @@ function LoginRow({
         />
       )}
       {panel === 'grants' && (
-        <form
-          className={styles.form}
+        <Form
           onSubmit={(event) => {
             event.preventDefault()
             const f = new FormData(event.currentTarget)
@@ -620,14 +662,13 @@ function LoginRow({
               <option value="revoke">Remove access</option>
             </select>
           </label>
-          <button className="lantern-btn small" disabled={busy}>
+          <button type="submit" className="lantern-btn small" disabled={busy}>
             Save access
           </button>
-        </form>
+        </Form>
       )}
       {panel === 'remove' && (
-        <form
-          className={styles.form}
+        <Form
           onSubmit={(event) => {
             event.preventDefault()
             const confirm = new FormData(event.currentTarget).get('confirm')
@@ -642,19 +683,25 @@ function LoginRow({
             Type {entry.name} to remove it
             <input name="confirm" required autoComplete="off" />
           </label>
-          <button className="lantern-btn danger small" disabled={busy}>
-            Remove login
-          </button>
-          <button
-            type="button"
-            className="lantern-btn ghost small"
-            onClick={() => setPanel(null)}
-          >
-            Cancel
-          </button>
-        </form>
+          <Actions>
+            <button
+              type="button"
+              className="lantern-btn ghost small"
+              onClick={() => setPanel(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="lantern-btn danger small"
+              disabled={busy}
+            >
+              Remove login
+            </button>
+          </Actions>
+        </Form>
       )}
-    </li>
+    </Row>
   )
 }
 function LabEdit({
@@ -667,8 +714,7 @@ function LabEdit({
   save(patch: unknown): Promise<void>
 }) {
   return (
-    <form
-      className={styles.form}
+    <Form
       onSubmit={(event) => {
         event.preventDefault()
         const form = event.currentTarget,
@@ -707,10 +753,10 @@ function LabEdit({
           ))}
         </select>
       </label>
-      <button className="lantern-btn small" disabled={busy}>
+      <button type="submit" className="lantern-btn small" disabled={busy}>
         Save fields
       </button>
-    </form>
+    </Form>
   )
 }
 function Assignment({
@@ -731,8 +777,7 @@ function Assignment({
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
   return (
-    <form
-      className={styles.form}
+    <Form
       onSubmit={async (event) => {
         event.preventDefault()
         setBusy(true)
@@ -768,9 +813,11 @@ function Assignment({
       </label>
       <fieldset>
         <legend>Allowed targets</legend>
-        {targets.length === 0 && <p>Add a lab login to assign its target.</p>}
+        {targets.length === 0 && (
+          <Quiet>Add a lab login to assign its target.</Quiet>
+        )}
         {targets.map((t) => (
-          <label className={styles.check} key={t}>
+          <label className={kit.check} key={t}>
             <input
               type="checkbox"
               checked={selected.includes(t)}
@@ -786,11 +833,11 @@ function Assignment({
           </label>
         ))}
       </fieldset>
-      {error && <p role="alert">{error}</p>}
-      <button className="lantern-btn small" disabled={busy}>
+      {error && <Quiet role="alert">{error}</Quiet>}
+      <button type="submit" className="lantern-btn small" disabled={busy}>
         Save targets
       </button>
-    </form>
+    </Form>
   )
 }
 function Audit() {
@@ -804,13 +851,13 @@ function Audit() {
       .catch(() => setError('Activity could not load.'))
   }, [])
   return error ? (
-    <p role="alert">{error}</p>
+    <Quiet role="alert">{error}</Quiet>
   ) : !events ? (
-    <p>Loading activity…</p>
+    <Quiet role="status">Loading activity…</Quiet>
   ) : events.length === 0 ? (
-    <p>No activity recorded yet.</p>
+    <Quiet>No activity recorded yet.</Quiet>
   ) : (
-    <ul className={styles.activity}>
+    <ul className={kit.activity}>
       {events.map((e) => (
         <li key={`${e.at}-${e.action}-${e.name}-${e.actor}`}>
           {when(e.at)} · {e.action} · {e.name} · {e.actor}

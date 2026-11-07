@@ -30,6 +30,7 @@ import {
 } from '@/lib/frame/tiers'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
+import { settingsPlaceAt } from './settings-places'
 
 /** The left side sits beside the session: any window this wide, and a desktop
  * window (fine pointer) down to a snapped part of the screen. Narrower windows
@@ -97,7 +98,8 @@ export function FrameProvider({
 }) {
   const router = useRouter()
   const pathname = usePathname() ?? '/'
-  const onPage = pathname !== '/'
+  // Settings is a dialog over the session (AppFrame), not a page on the left side.
+  const onPage = pathname !== '/' && !settingsPlaceAt(pathname)
   const docked = useMediaQuery(DOCKED_QUERY)
   const roomy = useMediaQuery(ROOMY_QUERY)
   const [roomyStored, setRoomyStored] = useLocalStorageState<DockedTier>(
@@ -150,6 +152,10 @@ export function FrameProvider({
   )
   const open = useCallback(
     (href: string, where: 'wide' | 'full' = 'full') => {
+      if (settingsPlaceAt(href.split('?')[0] ?? href)) {
+        router.push(href)
+        return
+      }
       if (where === 'wide') {
         setFull(false)
         setStored('wide')

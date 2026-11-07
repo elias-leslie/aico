@@ -1,66 +1,22 @@
-.page {
-  container-type: inline-size;
-  height: var(--terminal-viewport-height, 100dvh);
-  overflow: auto;
-  padding: 12px 20px 40px;
-  color: var(--bone);
-  font: 14px / 1.45 var(--font-ui);
-}
-
-.page > * {
-  max-width: 920px;
-  margin-inline: auto;
-}
-
-.page :is(button, a):focus-visible {
-  outline: 2px solid var(--lantern);
-  outline-offset: 3px;
-}
-
-.head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.head h1 {
-  flex: 1;
-  font: 500 20px / 1.4 var(--font-display);
-}
-
+/* Recovery inside the Settings dialog: the rows are the shared Settings rows. Lantern tokens only. */
 .lead {
-  margin-top: 8px;
+  margin-bottom: 10px;
 }
 
 .state {
-  margin: 6px 0;
-  font-size: 15px;
+  margin: 4px 0;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
 .checked,
-.why,
-.where,
-.note {
+.why {
   color: var(--mist);
   font-size: 12.5px;
 }
 
 .checked {
-  margin: 2px 0 10px;
-}
-
-.notice {
-  margin-block: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--paper-veil);
-  border-radius: 6px;
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-
-.notice p {
-  margin: 0 0 8px;
+  margin: 2px 0 0;
 }
 
 .action {
@@ -68,91 +24,20 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  margin-block: 14px 18px;
+  margin-block: 12px;
 }
 
-.rows {
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--paper-veil);
+.lead a,
+.action a {
+  color: var(--lantern);
 }
 
-.row {
-  display: grid;
-  grid-template-columns: minmax(140px, 0.8fr) minmax(0, 1.6fr) auto;
-  gap: 4px 16px;
-  align-items: start;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--paper-veil);
-}
-
-.who,
-.what {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.name {
-  overflow-wrap: anywhere;
-}
-
-.what > span:first-child {
-  font-size: 13.5px;
-}
-
-.end {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.open {
-  text-decoration: none;
-}
-
-/* Narrow (a phone, or the second column): the name, then the facts, then the badge and Open. */
-@container (max-width: 560px) {
-  .row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .what {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
-  .end {
-    grid-column: 2;
-    grid-row: 1;
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .page :is(.open, .action button, .head button, .notice button) {
-    min-height: 44px;
-  }
-
-  .open {
-    padding-inline: 16px;
-  }
-
+@media (max-width: 640px) {
   .action button {
     width: 100%;
+    min-height: 44px;
   }
-
   .why {
     flex-basis: 100%;
-  }
-}
-
-/* Phone and tablet: the link inside a notice is a 44px touch target. */
-@media (max-width: 1023px) {
-  .notice a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
   }
 }

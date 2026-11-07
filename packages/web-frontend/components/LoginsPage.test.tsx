@@ -42,6 +42,7 @@ it('reveals only after a recorded API request and hides again after thirty secon
   render(<LoginsPage />)
   expect(await screen.findByText('scratch')).toBeInTheDocument()
   expect(screen.queryByText('fixture-private-value')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: /scratch/ }))
   vi.useFakeTimers()
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reveal' }))
@@ -89,6 +90,8 @@ it.each(['add', 'replace'])(
     )
     render(<LoginsPage />)
     await screen.findByText('scratch')
+    if (mode === 'replace')
+      fireEvent.click(screen.getByRole('button', { name: /scratch/ }))
     fireEvent.click(
       screen.getByRole('button', {
         name: mode === 'add' ? 'Add login' : 'Replace',

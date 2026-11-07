@@ -1,12 +1,7 @@
 import { ContextPage } from '@/components/ContextPage'
 import { MemorySection } from '@/components/MemorySection'
-import styles from './page.module.css'
 
-/** Context (the address stays /agents): prompts, roles, memory and cost. */
+/** Context (the address stays /agents): prompts, roles, memory and cost. The Settings dialog scrolls it. */
 export default function AgentsPage() {
-  return (
-    <div className={styles.scroll}>
-      <ContextPage memory={<MemorySection />} />
-    </div>
-  )
+  return <ContextPage memory={<MemorySection />} />
 }

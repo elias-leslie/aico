@@ -37,8 +37,7 @@ it('shows loading, then the memories with kind and scope', async () => {
   )
   expect(screen.getByRole('status')).toHaveTextContent('Loading memories')
   expect(await screen.findByText('Use checks')).toBeInTheDocument()
-  expect(screen.getAllByText('Mandate')).toHaveLength(2)
-  expect(screen.getByText('All sessions')).toBeInTheDocument()
+  expect(screen.getByText('Mandate · All sessions')).toBeInTheDocument()
 })
 
 it('says nothing saved versus nothing matching, and a failed load is not empty', async () => {
@@ -75,7 +74,7 @@ it('searches after typing', async () => {
 
 it('deletes only after confirming, and shows a failed delete', async () => {
   let deleted = false
-  const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+  const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === 'DELETE') {
       if (
         !deleted &&
@@ -92,8 +91,9 @@ it('deletes only after confirming, and shows a failed delete', async () => {
     })
   })
   show(fetcher as unknown as typeof fetch)
+  fireEvent.click(await screen.findByRole('button', { name: /Use checks/ }))
   fireEvent.click(
-    await screen.findByRole('button', { name: /Delete memory: Use checks/ }),
+    screen.getByRole('button', { name: /Delete memory: Use checks/ }),
   )
   expect(fetcher.mock.calls.some(([, i]) => i?.method === 'DELETE')).toBe(false)
   fireEvent.click(screen.getByTestId('confirm-dialog-confirm'))
@@ -117,6 +117,9 @@ it('shows a memory written in markdown as formatted text', async () => {
         next: null,
       }),
     ),
+  )
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Scrollback logging/ }),
   )
   const bold = await screen.findByText('Scrollback', { selector: 'strong' })
   expect(bold).toBeInTheDocument()

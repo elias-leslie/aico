@@ -190,6 +190,16 @@ select {
   color: var(--bone);
 }
 
+/* The one destructive action: ember on the edge and the words, never a fill at rest. */
+.lantern-btn.danger {
+  border-color: var(--term-danger-border);
+  color: var(--term-error-text);
+}
+
+.lantern-btn.danger:hover:not(:disabled) {
+  background: var(--term-danger-soft);
+}
+
 .lantern-icon-btn {
   display: inline-grid;
   place-items: center;

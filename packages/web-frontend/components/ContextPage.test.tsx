@@ -77,7 +77,7 @@ it('is called Context, opens on Prompts, and has Roles, Memory and Cost', async 
     'Prompts',
   )
   expect(
-    screen.getByRole('heading', { level: 1, name: 'Context' }),
+    screen.getByRole('heading', { level: 2, name: 'Context' }),
   ).toBeInTheDocument()
   expect(
     screen
@@ -85,7 +85,10 @@ it('is called Context, opens on Prompts, and has Roles, Memory and Cost', async 
       .concat(screen.getAllByRole('button', { pressed: true }))
       .map((b) => b.textContent),
   ).toEqual(expect.arrayContaining(['Prompts', 'Roles', 'Memory', 'Cost']))
-  expect(await screen.findByLabelText('Prompt text')).toBeInTheDocument()
+  // A prompt opens in place from its row.
+  expect(screen.queryByLabelText('Prompt text')).toBeNull()
+  fireEvent.click(await screen.findByRole('button', { name: /Project guide/ }))
+  expect(screen.getByLabelText('Prompt text')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Memory' }))
   expect(screen.getByText('The memory list')).toBeInTheDocument()
   expect(screen.queryByLabelText('Prompt text')).toBeNull()
@@ -110,7 +113,7 @@ it('shows a partial start, unknown use and no limit without inventing zeros', as
   )
   expect(screen.getByText('Conversation size not read yet')).toBeInTheDocument()
   expect(screen.queryByText(/prompt:guide|UTF-8/)).toBeNull()
-  expect(screen.getByText('Prompt')).toBeInTheDocument()
+  expect(screen.getByText('Prompt · ~100 tokens')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('checkbox'))
   expect(
     screen.getByText('No items qualify for this view.'),
@@ -216,6 +219,7 @@ it('keeps a draft when a stale save is refused', async () => {
   )
   await screen.findByText(/Use isn’t known yet/)
   fireEvent.click(screen.getByRole('button', { name: 'Prompts' }))
+  fireEvent.click(screen.getByRole('button', { name: /Project guide/ }))
   fireEvent.change(screen.getByLabelText('Prompt text'), {
     target: { value: 'My unsaved change.' },
   })

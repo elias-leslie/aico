@@ -17,7 +17,6 @@ import { useStatus } from '@/lib/hooks/use-status'
 import { popOutNotes } from '@/lib/notes-window'
 import { plural } from '@/lib/status'
 import styles from './Frame.module.css'
-import { SETTINGS_PLACES } from './settings-places'
 
 const MACHINES_HREF = '/machines'
 
@@ -84,10 +83,6 @@ const PLACES: readonly (readonly Place[])[] = [
         (path === '/status' && query.get('kind') === 'machine'),
     },
   ],
-  SETTINGS_PLACES.map((place) => ({
-    ...place,
-    match: (path: string) => path === place.href,
-  })),
 ]
 
 /** Full's side list: every place to dig, the chosen one marked. Notes opens
@@ -118,9 +113,6 @@ export function SideList({
       {PLACES.map((group, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: fixed groups
         <div key={index} className={styles.sideGroup}>
-          {index === PLACES.length - 1 && (
-            <h3 className={styles.sideHeading}>Settings</h3>
-          )}
           {group.map((place) => {
             const Icon = place.icon
             const current = place.match(pathname, query)

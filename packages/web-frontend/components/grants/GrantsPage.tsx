@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { useState } from 'react'
-import styles from '@/components/pages/FullPage.module.css'
 import { apiFetch } from '@/lib/api-fetch'
 import { formatWhen } from '@/lib/capture-format'
 import {
@@ -13,6 +12,15 @@ import {
   splitGrants,
 } from '@/lib/grants'
 import { useClock } from '@/lib/hooks/use-clock'
+import {
+  Actions,
+  type Chip,
+  Group,
+  Notice,
+  Quiet,
+  Row,
+  SectionHead,
+} from '../settings/kit'
 
 const GRANTS_KEY = ['grants']
 /** A request can arrive or run out while the page is open. */
@@ -80,40 +88,36 @@ export function GrantsPage() {
   const shownUses = allUses ? uses : uses.slice(0, USES_SHOWN)
 
   return (
-    <main className={styles.page} aria-label="Grants">
-      <div className={styles.inner}>
-        <div className={styles.head}>
-          <h1>Grants</h1>
-          <button
-            type="button"
-            className="lantern-btn ghost small"
-            disabled={query.isFetching}
-            onClick={() => void query.refetch()}
-          >
-            <RefreshCw
-              className="h-3.5 w-3.5"
-              strokeWidth={1.7}
-              aria-hidden="true"
-            />
-            {query.isFetching ? 'Refreshing…' : 'Refresh'}
-          </button>
-        </div>
-        <p className={styles.sum} role="status">
-          {query.isPending
+    <section aria-label="Grants">
+      <SectionHead
+        title="Grants"
+        sub={
+          query.isPending
             ? 'Loading grants…'
             : split
               ? grantsLine(split.active)
-              : 'Not loaded'}
-        </p>
+              : 'Not loaded'
+        }
+      >
+        <button
+          type="button"
+          className="lantern-btn ghost small"
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+        >
+          <RefreshCw
+            className="h-3.5 w-3.5"
+            strokeWidth={1.7}
+            aria-hidden="true"
+          />
+          {query.isFetching ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </SectionHead>
 
-        {query.isError && (
-          <div className={`${styles.notice} ${styles.bad}`} role="alert">
-            <p>
-              <b>Couldn’t read grants.</b>{' '}
-              {data
-                ? `Showing the last read from ${formatWhen(query.dataUpdatedAt, now)}.`
-                : 'Nothing below counts as open or closed until it loads.'}
-            </p>
+      {query.isError && (
+        <Notice
+          failed
+          actions={
             <button
               type="button"
               className="lantern-btn small"
@@ -121,111 +125,83 @@ export function GrantsPage() {
             >
               Try again
             </button>
-          </div>
-        )}
-        {revokeError && (
-          <div className={`${styles.notice} ${styles.bad}`} role="alert">
-            <p>{revokeError}</p>
-          </div>
-        )}
+          }
+        >
+          <b>Couldn’t read grants.</b>{' '}
+          {data
+            ? `Showing the last read from ${formatWhen(query.dataUpdatedAt, now)}.`
+            : 'Nothing below counts as open or closed until it loads.'}
+        </Notice>
+      )}
+      {revokeError && <Notice failed>{revokeError}</Notice>}
 
-        {query.isPending && (
-          <div className={styles.list} aria-hidden="true">
-            <div className={styles.skeleton} />
-            <div className={styles.skeleton} />
-          </div>
-        )}
+      {split && (
+        <>
+          <Group title="Active" count={split.active.length}>
+            {split.active.length === 0 ? (
+              <Quiet>
+                A request shows up here when an agent asks for access.
+              </Quiet>
+            ) : (
+              split.active.map((item) => (
+                <GrantRow
+                  key={item.request.id}
+                  item={item}
+                  busy={revoking === item.request.id}
+                  onEnd={() => void end(item)}
+                />
+              ))
+            )}
+          </Group>
 
-        {split && (
-          <>
-            <section className={styles.sec} aria-labelledby="grants-active">
-              <h2 id="grants-active">
-                Active <span className={styles.n}>{split.active.length}</span>
-              </h2>
-              {split.active.length === 0 ? (
-                <p className={styles.empty}>
-                  A request shows up here when an agent asks for access.
-                </p>
-              ) : (
-                <ul className={styles.list}>
-                  {split.active.map((item) => (
-                    <GrantRow
-                      key={item.request.id}
-                      item={item}
-                      busy={revoking === item.request.id}
-                      onEnd={() => void end(item)}
-                    />
-                  ))}
-                </ul>
-              )}
-            </section>
+          <Group title="History" count={split.history.length}>
+            {split.history.length === 0 ? (
+              <Quiet>Nothing has expired or ended yet.</Quiet>
+            ) : (
+              split.history.map((item) => (
+                <GrantRow
+                  key={item.request.id}
+                  item={item}
+                  busy={false}
+                  onEnd={() => undefined}
+                />
+              ))
+            )}
+          </Group>
 
-            <section className={styles.sec} aria-labelledby="grants-history">
-              <h2 id="grants-history">
-                History <span className={styles.n}>{split.history.length}</span>
-              </h2>
-              {split.history.length === 0 ? (
-                <p className={styles.empty}>
-                  Nothing has expired or ended yet.
-                </p>
-              ) : (
-                <ul className={styles.list}>
-                  {split.history.map((item) => (
-                    <GrantRow
-                      key={item.request.id}
-                      item={item}
-                      busy={false}
-                      onEnd={() => undefined}
-                    />
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className={styles.sec} aria-labelledby="grants-uses">
-              <h2 id="grants-uses">
-                Recent use <span className={styles.n}>{uses.length}</span>
-              </h2>
-              {uses.length === 0 ? (
-                <p className={styles.empty}>No access has been used yet.</p>
-              ) : (
-                <ul className={styles.list}>
-                  {shownUses.map((u) => (
-                    <li
-                      key={`${u.at}-${u.id}`}
-                      className={styles.row}
-                      style={{ gridTemplateColumns: 'minmax(0, 1fr) auto' }}
-                    >
-                      <div className={styles.title}>
-                        {data?.labels[u.kind] ?? u.kind}
-                      </div>
-                      <time
-                        className={styles.line}
-                        dateTime={new Date(u.at * 1000).toISOString()}
-                      >
-                        Used {formatWhen(u.at * 1000, now)}
-                      </time>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {uses.length > USES_SHOWN && (
-                <button
-                  type="button"
-                  className={`lantern-btn ghost small ${styles.more}`}
-                  onClick={() => setAllUses((v) => !v)}
-                >
-                  {allUses ? 'Show fewer' : `Show all ${uses.length}`}
-                </button>
-              )}
-            </section>
-          </>
-        )}
-      </div>
-    </main>
+          <Group title="Recent use" count={uses.length}>
+            {uses.length === 0 ? (
+              <Quiet>No access has been used yet.</Quiet>
+            ) : (
+              shownUses.map((u) => (
+                <Row
+                  key={`${u.at}-${u.id}`}
+                  name={data?.labels[u.kind] ?? u.kind}
+                  meta={
+                    <time dateTime={new Date(u.at * 1000).toISOString()}>
+                      Used {formatWhen(u.at * 1000, now)}
+                    </time>
+                  }
+                />
+              ))
+            )}
+          </Group>
+          {uses.length > USES_SHOWN && (
+            <button
+              type="button"
+              className="lantern-btn ghost small"
+              onClick={() => setAllUses((v) => !v)}
+            >
+              {allUses ? 'Show fewer' : `Show all ${uses.length}`}
+            </button>
+          )}
+        </>
+      )}
+    </section>
   )
 }
 
+/** A request: its title, who asked and when, and a state chip. Open ones start open, with their one action. */
 function GrantRow({
   item,
   busy,
@@ -237,19 +213,17 @@ function GrantRow({
 }) {
   const { request } = item
   return (
-    <li className={styles.row} id={request.id}>
-      <div className={styles.chipCol}>
-        <span className={`status-chip ${CHIP[item.kind]}`}>{item.chip}</span>
-      </div>
-      <div className={styles.main}>
-        <div className={styles.title}>{item.title}</div>
-        {request.reason && <p className={styles.line}>{request.reason}</p>}
-        <p className={`${styles.line}${item.live ? ` ${styles.strong}` : ''}`}>
-          {request.agent || 'An agent'} · {item.when}
-        </p>
-      </div>
-      <div className={styles.actions}>
-        {item.live && (
+    <Row
+      id={request.id}
+      name={item.title}
+      meta={`${request.agent || 'An agent'} · ${item.when}`}
+      chip={CHIP[item.kind] as Chip}
+      chipText={item.chip}
+      defaultOpen={item.live}
+    >
+      {request.reason && <p>{request.reason}</p>}
+      {item.live ? (
+        <Actions>
           <button
             type="button"
             className="lantern-btn small"
@@ -262,8 +236,10 @@ function GrantRow({
                 ? 'Withdraw'
                 : 'End access'}
           </button>
-        )}
-      </div>
-    </li>
+        </Actions>
+      ) : (
+        !request.reason && <small>No reason was given.</small>
+      )}
+    </Row>
   )
 }

@@ -1,0 +1,140 @@
+/* The Settings dialog: a large dialog over the session on a desktop, a full-screen sheet on a phone.
+   Lantern tokens only; the washes are strengths of the tokens, as in the side panel. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--scrim);
+}
+
+.dialog {
+  --line: rgb(var(--glass-rgb) / 0.07);
+  --line-2: rgb(var(--glass-rgb) / 0.12);
+  --wash: rgb(var(--glass-rgb) / 0.035);
+  --wash-2: rgb(var(--glass-rgb) / 0.06);
+  position: fixed;
+  z-index: 10001;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  grid-template: "head head" auto "nav pane" minmax(0, 1fr) / 188px minmax(
+      0,
+      1fr
+    );
+  width: min(1040px, calc(100vw - 48px));
+  height: min(820px, calc(100dvh - 48px));
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  overflow: hidden;
+  color: var(--bone);
+  font: 14px / 1.4 var(--font-ui);
+  outline: none;
+}
+
+.head {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 8px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font: 600 13px / 1.2 var(--font-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+
+.nav {
+  grid-area: nav;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--mist);
+  font-size: 13.5px;
+  text-decoration: none;
+  transition:
+    background 0.18s var(--ease-arrival),
+    color 0.18s var(--ease-arrival);
+}
+.item:hover {
+  background: var(--wash);
+  color: var(--bone);
+}
+.item[aria-current="page"] {
+  background: var(--wash-2);
+  color: var(--lantern);
+}
+.item:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: -2px;
+}
+
+.pane {
+  grid-area: pane;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 20px 28px;
+}
+
+/* A phone: the whole screen, the section list a row of tabs under the title. */
+@media (max-width: 640px) {
+  .dialog {
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: var(--terminal-viewport-height, 100dvh);
+    transform: none;
+    border: 0;
+    border-radius: 0;
+    grid-template: "head" auto "nav" auto "pane" minmax(0, 1fr) / minmax(0, 1fr);
+  }
+  .head {
+    min-height: 52px;
+    padding-top: env(safe-area-inset-top);
+  }
+  .nav {
+    flex-direction: row;
+    gap: 4px;
+    padding: 6px 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow: auto hidden;
+  }
+  .item {
+    flex: none;
+    min-height: 44px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+  .pane {
+    padding: 12px 14px calc(24px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item {
+    transition: none;
+  }
+}

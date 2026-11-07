@@ -16,9 +16,20 @@ import {
   tries,
 } from '@/lib/recovery'
 import { at, withSessionNames } from '@/lib/status'
+import {
+  type Chip,
+  Group,
+  Notice,
+  Quiet,
+  Row,
+  SectionHead,
+} from '../settings/kit'
 import styles from './RecoveryPage.module.css'
 
-function Row({
+const CHIP = OUTCOME_CHIP as Record<RecoveryItem['outcome'], Chip>
+
+/** A stopped session: its name and where it ran, and its outcome as a chip. Opens to what happened and, once it is back, Open. */
+function Stopped({
   item,
   now,
   windowHours,
@@ -32,46 +43,39 @@ function Row({
     .join(' · ')
   const left = tries(item, windowHours)
   return (
-    <li className={styles.row} data-outcome={item.outcome}>
-      <div className={styles.who}>
-        <strong className={styles.name}>{item.name}</strong>
-        <span className={styles.where}>{where}</span>
-      </div>
-      <div className={styles.what}>
-        <span>
-          {item.what} ·{' '}
-          <time dateTime={new Date(item.at).toISOString()}>
-            {item.cause === 'restart'
-              ? 'around '
-              : item.atApprox
-                ? 'about '
-                : ''}
-            {at(item.at, now)}
-          </time>
-        </span>
-        <span className={styles.note}>
-          {item.note}
-          {item.outcome === 'resumed' && item.resumedAt !== null
-            ? ` Back at ${at(item.resumedAt, now)}.`
-            : ''}
-        </span>
-        {left && <span className={styles.note}>{left}</span>}
-      </div>
-      <div className={styles.end}>
-        <span className={`status-chip ${OUTCOME_CHIP[item.outcome]}`}>
-          {OUTCOME_WORD[item.outcome]}
-        </span>
-        {item.canOpen && item.outcome === 'resumed' && (
+    <Row
+      name={item.name}
+      meta={where || undefined}
+      chip={CHIP[item.outcome]}
+      chipText={OUTCOME_WORD[item.outcome]}
+      defaultOpen={item.outcome !== 'resumed'}
+    >
+      <p>
+        {item.what} ·{' '}
+        <time dateTime={new Date(item.at).toISOString()}>
+          {item.cause === 'restart' ? 'around ' : item.atApprox ? 'about ' : ''}
+          {at(item.at, now)}
+        </time>
+      </p>
+      <small>
+        {item.note}
+        {item.outcome === 'resumed' && item.resumedAt !== null
+          ? ` Back at ${at(item.resumedAt, now)}.`
+          : ''}
+      </small>
+      {left && <small>{left}</small>}
+      {item.canOpen && item.outcome === 'resumed' && (
+        <div>
           <Link
-            className={`lantern-btn small ${styles.open}`}
+            className="lantern-btn small"
             href={`/?session=${encodeURIComponent(item.id)}`}
             aria-label={`Open ${item.name}`}
           >
             Open
           </Link>
-        )}
-      </div>
-    </li>
+        </div>
+      )}
+    </Row>
   )
 }
 
@@ -87,9 +91,11 @@ export function RecoveryPage() {
   const answer = resume.data ? resumeResult(resume.data) : null
 
   return (
-    <main className={styles.page} data-testid="recovery-page">
-      <header className={styles.head}>
-        <h1>Recovery</h1>
+    <section aria-label="Recovery" data-testid="recovery-page">
+      <SectionHead
+        title="Recovery"
+        sub="Sessions that stopped on their own, and what came back."
+      >
         <button
           className="lantern-btn ghost small"
           type="button"
@@ -98,29 +104,30 @@ export function RecoveryPage() {
         >
           {refreshing ? 'Checking…' : 'Check again'}
         </button>
-      </header>
+      </SectionHead>
 
-      {loading && <p role="status">Checking for stopped sessions…</p>}
+      {loading && <Quiet role="status">Checking for stopped sessions…</Quiet>}
 
       {failed && (
-        <div role="alert" className={styles.notice}>
-          <p>
-            Couldn’t check on stopped sessions, so this can’t say if any need
-            you.
-          </p>
-          <button
-            className="lantern-btn small"
-            type="button"
-            onClick={() => void refetch()}
-          >
-            Try again
-          </button>
-        </div>
+        <Notice
+          failed
+          actions={
+            <button
+              className="lantern-btn small"
+              type="button"
+              onClick={() => void refetch()}
+            >
+              Try again
+            </button>
+          }
+        >
+          Couldn’t check on stopped sessions, so this can’t say if any need you.
+        </Notice>
       )}
 
       {view && button && (
         <>
-          <section className={styles.lead} aria-label="State">
+          <div className={styles.lead} aria-label="State" role="group">
             {lead(view, now).map((line) => (
               <p key={line} className={styles.state}>
                 {line}
@@ -132,21 +139,19 @@ export function RecoveryPage() {
                 ? '. The latest check failed, so this may be out of date.'
                 : ''}
             </p>
-            {lost && (
-              <p role="status" className={styles.notice}>
-                Status reports lost work this page can’t list, because no
-                session stopped:{' '}
-                {withSessionNames(lost.meaning, sessions.names)}{' '}
-                <Link href="/status">Open Status</Link>
-              </p>
-            )}
-            {view.partial && (
-              <p role="status" className={styles.notice}>
-                {view.partial} Sessions stopped by a restart may be missing
-                here.
-              </p>
-            )}
-          </section>
+          </div>
+          {lost && (
+            <Notice>
+              Status reports lost work this page can’t list, because no session
+              stopped: {withSessionNames(lost.meaning, sessions.names)}{' '}
+              <Link href="/status">Open Status</Link>
+            </Notice>
+          )}
+          {view.partial && (
+            <Notice>
+              {view.partial} Sessions stopped by a restart may be missing here.
+            </Notice>
+          )}
 
           {/* Nothing stopped: no Resume to offer, so no off button beside "No stopped sessions". */}
           {(view.items.length > 0 || !button.off) && (
@@ -169,33 +174,30 @@ export function RecoveryPage() {
           )}
 
           {resume.isError && (
-            <p role="alert" className={styles.notice}>
+            <Notice failed>
               Couldn’t resume: {(resume.error as Error).message}
-            </p>
+            </Notice>
           )}
-          {answer && (
-            <p
-              role={answer.failed ? 'alert' : 'status'}
-              className={styles.notice}
-            >
-              {answer.text}
-            </p>
-          )}
+          {answer && <Notice failed={answer.failed}>{answer.text}</Notice>}
 
           {view.items.length > 0 && (
-            <ul className={styles.rows} aria-label="Stopped sessions">
+            <Group
+              title="Stopped sessions"
+              count={view.items.length}
+              label="Stopped sessions"
+            >
               {view.items.map((item) => (
-                <Row
+                <Stopped
                   key={item.id}
                   item={item}
                   now={now}
                   windowHours={view.windowHours}
                 />
               ))}
-            </ul>
+            </Group>
           )}
         </>
       )}
-    </main>
+    </section>
   )
 }

@@ -1,15 +1,16 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppFrame } from './AppFrame'
 
 const nav = vi.hoisted(() => ({
   pathname: '/',
   params: new URLSearchParams(),
+  push: vi.fn(),
 }))
 vi.mock('next/navigation', () => ({
   usePathname: () => nav.pathname,
   useSearchParams: () => nav.params,
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: nav.push, replace: vi.fn() }),
 }))
 vi.mock('@/lib/hooks/use-media-query', () => ({ useMediaQuery: () => true }))
 const asks = vi.hoisted(() => ({ open: vi.fn() }))
@@ -86,6 +87,34 @@ describe('AppFrame', () => {
       'data-project-id',
       '',
     )
+  })
+
+  it('opens a Settings section as a dialog over the session, which stays mounted', () => {
+    show('/logins')
+    const dialog = screen.getByRole('dialog', { name: 'Settings' })
+    expect(dialog).toHaveTextContent('The page')
+    expect(screen.getByTestId('terminal-tabs')).toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' })
+    expect(screen.getByRole('link', { name: 'Logins' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(nav).toHaveTextContent('Phone app')
+  })
+
+  it('Esc and the close button go back to the session', () => {
+    nav.push.mockClear()
+    show('/grants')
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(nav.push).toHaveBeenCalledWith('/')
+    nav.push.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }))
+    expect(nav.push).toHaveBeenCalledWith('/')
+  })
+
+  it('shows no Settings dialog on any other page', () => {
+    show('/status')
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('lets the popped-out notes window stand alone, without the frame', () => {

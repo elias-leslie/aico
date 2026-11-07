@@ -59,6 +59,7 @@ export function SettingsMenu({
         }
         aria-haspopup="menu"
         aria-expanded={open}
+        data-settings-gear=""
         aria-label={icon ? 'Settings' : undefined}
         title={icon ? 'Settings' : undefined}
         onClick={() => setOpen((now) => !now)}

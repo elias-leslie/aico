@@ -12,7 +12,16 @@ import type {
 } from '@/lib/context'
 import { useSessionContext } from '@/lib/hooks/use-session-context'
 import { shortWhen } from '@/lib/short-when'
-import styles from './ContextPage.module.css'
+import {
+  Find,
+  Form,
+  Group,
+  Notice,
+  Quiet,
+  Row,
+  SectionHead,
+} from './settings/kit'
+import kit from './settings/kit.module.css'
 
 const count = (n: number) => n.toLocaleString('en-US')
 const group = (d: ContextDelivery) =>
@@ -36,6 +45,7 @@ const typeText = {
   file: 'File',
   computed: 'Generated',
 } as const
+const USE_CHIP = { used: 'ok', unused: 'late', unknown: 'off' } as const
 const useText = {
   used: 'Use recorded',
   unused: 'No recorded use',
@@ -63,21 +73,23 @@ function Costs({ view }: { view: ContextView }) {
   const useUnknown =
     counted.length > 0 && counted.every((i) => i.use === 'unknown')
   const mostObserved = Math.max(0, ...counted.map((i) => i.observedSessions))
+  const shown =
+    current?.items.filter((i) => !onlyUnused || i.use === 'unused') ?? []
   return (
     <section aria-label="Context cost">
-      <p className={styles.help}>
+      <Quiet>
         What an agent starts with and how much room it takes. Sizes are
         estimates from the text; the conversation itself and your provider’s
         billing add more.
-      </p>
+      </Quiet>
       {!view.deliveries.length ? (
-        <p>
+        <Quiet>
           No agent has started recently, so there is nothing to size yet. Sizes
           and use show up once an agent starts with context.
-        </p>
+        </Quiet>
       ) : (
         <>
-          <div className={styles.filters}>
+          <Form onSubmit={(e) => e.preventDefault()}>
             <label>
               Project
               <select
@@ -90,7 +102,7 @@ function Costs({ view }: { view: ContextView }) {
                 ))}
               </select>
             </label>
-            <label className={styles.grow}>
+            <label>
               Agent and role
               <select
                 value={current ? group(current) : ''}
@@ -103,10 +115,10 @@ function Costs({ view }: { view: ContextView }) {
                 ))}
               </select>
             </label>
-          </div>
+          </Form>
           {current && (
             <>
-              <div className={styles.summary}>
+              <div className={kit.summary}>
                 <strong>{startText(current)}</strong>
                 <span>
                   {current.budget === null
@@ -127,76 +139,74 @@ function Costs({ view }: { view: ContextView }) {
                 </time>
               </div>
               {nothingLoaded(current) && (
-                <p className={styles.help} role="status">
+                <Quiet role="status">
                   Nothing was recorded as loaded at start, so there is no size
                   to show.
-                </p>
+                </Quiet>
               )}
               {current.missing.length > 0 && (
-                <p role="status">
+                <Quiet role="status">
                   Part of it didn’t load: {current.missing.length} item
                   {current.missing.length === 1 ? ' is' : 's are'} missing (
                   {current.missing.map((m) => m.reason).join('; ')})
-                </p>
+                </Quiet>
               )}
-              <p className={styles.help}>
+              <Quiet>
                 Whether the agent used each item in the last {view.recentDays}{' '}
                 days. “No recorded use” needs {view.minObservedSessions} full
                 sessions where it never cited or opened the item. It doesn’t
                 measure how much the item shaped the answer.
-              </p>
+              </Quiet>
               {!current.observed && (
-                <p className={styles.help}>
+                <Quiet>
                   Couldn’t read this session’s full transcript (it is missing,
                   cut short or still running), so use stays unknown.
-                </p>
+                </Quiet>
               )}
               {useUnknown && (
-                <p className={styles.help} role="status">
+                <Quiet role="status">
                   Use isn’t known yet: {mostObserved} of{' '}
                   {view.minObservedSessions} full sessions read so far.
-                </p>
+                </Quiet>
               )}
-              <label className={styles.toggle}>
-                <input
-                  type="checkbox"
-                  checked={onlyUnused}
-                  onChange={(e) => setOnlyUnused(e.target.checked)}
-                />
-                Only items with no recorded use
-              </label>
-              <ul className={styles.items} aria-label="Loaded items">
-                {current.items
-                  .filter((i) => !onlyUnused || i.use === 'unused')
-                  .map((i) => (
-                    <li key={i.id}>
-                      <div className={styles.itemName}>
-                        <span>{i.title}</span>
-                        <small>
-                          {typeText[i.type as keyof typeof typeText] ?? i.type}
-                        </small>
-                      </div>
-                      <span className={styles.size}>
-                        ~{count(i.tokens)}
-                        <small>tokens{i.cut ? ' · cut' : ''}</small>
-                      </span>
-                      {(i.cut || !useUnknown) && (
-                        <span
-                          className={`${styles.badge} ${i.use === 'unused' ? styles.warning : ''}`}
-                          title={
-                            i.use === 'unknown' && !i.cut
-                              ? `Read in ${i.observedSessions} of the ${view.minObservedSessions} full sessions needed to say.`
-                              : undefined
-                          }
-                        >
-                          {i.cut ? 'Not loaded' : useText[i.use]}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-              </ul>
+              <Form onSubmit={(e) => e.preventDefault()}>
+                <label className={`${kit.check} ${kit.wide}`}>
+                  <input
+                    type="checkbox"
+                    checked={onlyUnused}
+                    onChange={(e) => setOnlyUnused(e.target.checked)}
+                  />
+                  Only items with no recorded use
+                </label>
+              </Form>
+              {shown.length > 0 && (
+                <Group
+                  title="Loaded items"
+                  label="Loaded items"
+                  count={shown.length}
+                >
+                  {shown.map((i) => {
+                    const chip = i.cut ? 'off' : USE_CHIP[i.use]
+                    const showChip = i.cut || !useUnknown
+                    return (
+                      <Row
+                        key={i.id}
+                        name={i.title}
+                        meta={`${typeText[i.type as keyof typeof typeText] ?? i.type} · ~${count(i.tokens)} tokens${i.cut ? ' · cut' : ''}`}
+                        chip={showChip ? chip : undefined}
+                        chipText={i.cut ? 'Not loaded' : useText[i.use]}
+                        chipTitle={
+                          i.use === 'unknown' && !i.cut
+                            ? `Read in ${i.observedSessions} of the ${view.minObservedSessions} full sessions needed to say.`
+                            : undefined
+                        }
+                      />
+                    )
+                  })}
+                </Group>
+              )}
               {onlyUnused && !current.items.some((i) => i.use === 'unused') && (
-                <p>No items qualify for this view.</p>
+                <Quiet>No items qualify for this view.</Quiet>
               )}
             </>
           )}
@@ -227,8 +237,7 @@ function PromptEditor({
   )
   const [error, setError] = useState('')
   return (
-    <form
-      className={styles.editor}
+    <Form
       onSubmit={async (e) => {
         e.preventDefault()
         setState('saving')
@@ -260,10 +269,10 @@ function PromptEditor({
         }
       }}
     >
-      <p className={styles.help}>
+      <small>
         Version {prompt.version}. Changes apply to the next session that starts.
-      </p>
-      <label>
+      </small>
+      <label className={kit.wide}>
         Name
         <input
           required
@@ -275,7 +284,7 @@ function PromptEditor({
           }}
         />
       </label>
-      <label>
+      <label className={kit.wide}>
         Prompt text
         <textarea
           required
@@ -289,12 +298,12 @@ function PromptEditor({
       </label>
       <details>
         <summary>When this prompt loads</summary>
-        <p className={styles.help}>
+        <small>
           Rules: scope (global, project or agent), targets (project or role
           names), activation (always, on_demand or triggered) and applicability.
           With no scope it loads only through roles that link it.
-        </p>
-        <label>
+        </small>
+        <label className={kit.field}>
           Loading rules (JSON)
           <textarea
             rows={8}
@@ -311,13 +320,13 @@ function PromptEditor({
         <p role="status">Saved. New sessions will start with this text.</p>
       )}
       <button
-        className="lantern-btn primary"
+        className="lantern-btn primary small"
         type="submit"
         disabled={state === 'saving'}
       >
         {state === 'saving' ? 'Saving…' : 'Save prompt'}
       </button>
-    </form>
+    </Form>
   )
 }
 
@@ -338,8 +347,7 @@ function RoleEditor({
   const [message, setMessage] = useState('')
   const [failed, setFailed] = useState(false)
   return (
-    <form
-      className={styles.editor}
+    <Form
       onSubmit={async (e) => {
         e.preventDefault()
         setSaving(true)
@@ -377,10 +385,10 @@ function RoleEditor({
         }
       }}
     >
-      <p className={styles.help}>
+      <small>
         {role.name}. Which model runs it and when it launches aren’t set here.
-      </p>
-      <label>
+      </small>
+      <label className={kit.wide}>
         Name
         <input
           value={label}
@@ -389,7 +397,7 @@ function RoleEditor({
           onChange={(e) => setLabel(e.target.value)}
         />
       </label>
-      <label>
+      <label className={kit.wide}>
         Description
         <textarea
           rows={3}
@@ -407,9 +415,9 @@ function RoleEditor({
       </label>
       <fieldset>
         <legend>Linked prompts</legend>
-        <div className={styles.promptLinks}>
+        <div className={kit.scroll}>
           {prompts.map((p) => (
-            <label className={styles.toggle} key={p.id}>
+            <label className={kit.check} key={p.id}>
               <input
                 type="checkbox"
                 checked={links.includes(p.id)}
@@ -427,10 +435,14 @@ function RoleEditor({
         </div>
       </fieldset>
       {message && <p role={failed ? 'alert' : 'status'}>{message}</p>}
-      <button className="lantern-btn primary" type="submit" disabled={saving}>
+      <button
+        className="lantern-btn primary small"
+        type="submit"
+        disabled={saving}
+      >
         {saving ? 'Saving…' : 'Save role'}
       </button>
-    </form>
+    </Form>
   )
 }
 
@@ -442,6 +454,8 @@ const TAB_LABEL: Record<Tab, string> = {
   memory: 'Memory',
   cost: 'Cost',
 }
+/** Past this many prompts or roles the list gets a find box. */
+const FIND_FROM = 8
 
 /** Context: what agents start with (prompts, roles, memory) and what it costs. */
 export function ContextPage({ memory }: { memory?: ReactNode }) {
@@ -453,114 +467,138 @@ export function ContextPage({ memory }: { memory?: ReactNode }) {
     retry: false,
   })
   const [tab, setTab] = useState<Tab>('prompts')
-  const [prompt, setPrompt] = useState('')
-  const [role, setRole] = useState('')
+  const [find, setFind] = useState('')
   const view = query.data
-  const currentPrompt =
-    view?.prompts.find((p) => p.slug === prompt) ?? view?.prompts[0]
-  const currentRole = view?.roles.find((r) => r.name === role) ?? view?.roles[0]
+  const matches = (name: string) =>
+    name.toLowerCase().includes(find.trim().toLowerCase())
+  const prompts = view?.prompts.filter((p) => matches(p.name)) ?? []
+  const roles = view?.roles.filter((r) => matches(r.label)) ?? []
+  const loading = tab !== 'memory' && query.isPending
   return (
-    <main className={styles.page}>
-      <header>
-        <h1>Context</h1>
+    <section aria-label="Context">
+      <SectionHead
+        title="Context"
+        sub={
+          loading
+            ? 'Loading prompts, roles and cost…'
+            : 'What agents start with, and what it costs.'
+        }
+      >
         <button
-          className="lantern-icon-btn"
+          className="lantern-icon-btn compact"
           type="button"
           aria-label="Refresh context"
+          title="Refresh context"
           disabled={query.isFetching}
           onClick={() => void query.refetch()}
         >
-          <RefreshCw size={18} />
+          <RefreshCw size={16} />
         </button>
-      </header>
-      <nav aria-label="Context">
+      </SectionHead>
+      <nav className={kit.tabs} aria-label="Context">
         {TABS.map((t) => (
           <button
-            className={`lantern-btn ${tab === t ? 'primary' : 'ghost'}`}
+            className={`lantern-btn small ${tab === t ? 'primary' : 'ghost'}`}
             aria-pressed={tab === t}
             type="button"
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => {
+              setTab(t)
+              setFind('')
+            }}
           >
             {TAB_LABEL[t]}
           </button>
         ))}
       </nav>
       {tab === 'memory' && memory}
-      {tab !== 'memory' && query.isPending && (
-        <p role="status">Loading prompts, roles and cost…</p>
-      )}
       {tab !== 'memory' && query.isError && (
-        <p role="alert">
+        <Notice failed>
           {view
             ? 'Can’t refresh. Showing the last read.'
             : 'Can’t load prompts, roles and cost.'}{' '}
           Use Refresh to try again.
-        </p>
+        </Notice>
       )}
       {view && tab !== 'memory' && (
         <>
-          <p className={styles.asof}>Read {shortWhen(view.at)}</p>
+          <Quiet>Read {shortWhen(view.at)}</Quiet>
           {tab === 'cost' && <Costs view={view} />}
           {tab === 'prompts' && (
             <section aria-label="Prompts">
               {!view.prompts.length ? (
-                <p>No prompts yet.</p>
+                <Quiet>No prompts yet.</Quiet>
               ) : (
-                <label>
-                  Prompt
-                  <select
-                    value={currentPrompt?.slug ?? ''}
-                    onChange={(e) => setPrompt(e.target.value)}
-                  >
-                    {view.prompts.map((p) => (
-                      <option value={p.slug} key={p.slug}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {currentPrompt && (
-                <PromptEditor
-                  key={`${currentPrompt.slug}:${currentPrompt.updatedAt}`}
-                  prompt={currentPrompt}
-                  saved={() => void query.refetch()}
-                />
+                <>
+                  {view.prompts.length > FIND_FROM && (
+                    <Find
+                      value={find}
+                      onChange={setFind}
+                      label="Find a prompt"
+                      placeholder="Prompt name"
+                    />
+                  )}
+                  {prompts.length === 0 ? (
+                    <Quiet>No prompts match your search.</Quiet>
+                  ) : (
+                    <Group title="Prompts" count={prompts.length}>
+                      {prompts.map((p) => (
+                        <Row
+                          key={`${p.slug}:${p.updatedAt}`}
+                          name={p.name}
+                          meta={`Version ${p.version}`}
+                        >
+                          <PromptEditor
+                            prompt={p}
+                            saved={() => void query.refetch()}
+                          />
+                        </Row>
+                      ))}
+                    </Group>
+                  )}
+                </>
               )}
             </section>
           )}
           {tab === 'roles' && (
             <section aria-label="Roles">
               {!view.roles.length ? (
-                <p>No roles yet.</p>
+                <Quiet>No roles yet.</Quiet>
               ) : (
-                <label>
-                  Role
-                  <select
-                    value={currentRole?.name ?? ''}
-                    onChange={(e) => setRole(e.target.value)}
-                  >
-                    {view.roles.map((r) => (
-                      <option value={r.name} key={r.name}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {currentRole && (
-                <RoleEditor
-                  key={`${currentRole.name}:${currentRole.updatedAt}`}
-                  role={currentRole}
-                  prompts={view.prompts}
-                  saved={() => void query.refetch()}
-                />
+                <>
+                  {view.roles.length > FIND_FROM && (
+                    <Find
+                      value={find}
+                      onChange={setFind}
+                      label="Find a role"
+                      placeholder="Role name"
+                    />
+                  )}
+                  {roles.length === 0 ? (
+                    <Quiet>No roles match your search.</Quiet>
+                  ) : (
+                    <Group title="Roles" count={roles.length}>
+                      {roles.map((r) => (
+                        <Row
+                          key={`${r.name}:${r.updatedAt}`}
+                          name={r.label}
+                          meta={r.name}
+                        >
+                          <RoleEditor
+                            role={r}
+                            prompts={view.prompts}
+                            saved={() => void query.refetch()}
+                          />
+                        </Row>
+                      ))}
+                    </Group>
+                  )}
+                </>
               )}
             </section>
           )}
         </>
       )}
-    </main>
+    </section>
   )
 }

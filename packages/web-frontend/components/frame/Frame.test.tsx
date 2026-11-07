@@ -166,11 +166,38 @@ describe('the left side on a desktop', () => {
 
   it('coming back from a page returns to the session that was on screen', () => {
     publishShownSession('s1')
-    nav.pathname = '/grants'
-    show('Grants')
+    nav.pathname = '/status'
+    show('Status')
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(nav.push).toHaveBeenCalledWith('/?session=s1')
     publishShownSession(null)
+  })
+
+  it('a Settings path is a dialog over the session, not a page on the left side', () => {
+    nav.pathname = '/logins'
+    show('Logins')
+    expect(tier()).toBe('panel')
+    expect(screen.queryByText('Logins page')).toBeNull()
+  })
+
+  it('opening a setup place from the side only changes the address', () => {
+    function Opener() {
+      const frame = useFrame()
+      return (
+        <button type="button" onClick={() => frame?.open('/grants?request=n1')}>
+          Open grants
+        </button>
+      )
+    }
+    render(
+      <FrameProvider page={null}>
+        <Opener />
+        <Probe />
+      </FrameProvider>,
+    )
+    fireEvent.click(screen.getByText('Open grants'))
+    expect(nav.push).toHaveBeenCalledWith('/grants?request=n1')
+    expect(tier()).toBe('panel')
   })
 
   it('the narrower and wider buttons step, and double-clicking the edge resets to Panel', () => {

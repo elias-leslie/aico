@@ -196,7 +196,9 @@ describe('Recovery page', () => {
     ).getAllByRole('listitem')
     expect(rows).toHaveLength(3)
     expect(within(rows[0]).getByText('Gave up')).toBeTruthy()
-    // Open only where the session is alive again.
+    // Open only where the session is alive again; a session that came back starts closed.
+    fireEvent.click(within(rows[1]).getByRole('button'))
+    fireEvent.click(within(rows[2]).getByRole('button'))
     expect(
       within(rows[1])
         .getByRole('link', { name: 'Open Security hunt' })

@@ -1,0 +1,386 @@
+/* The Settings sections' shared pieces, in the side panel's language: compact even rows, quiet small
+   labels, a state chip, and the detail opening in place. The washes (--line, --wash) come from
+   the dialog; amber is the only accent, ember marks danger alone. */
+
+.sectionHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.sectionTitle {
+  flex: 1;
+  min-width: 200px;
+}
+.sectionTitle h2 {
+  margin: 0;
+  font: 600 15px / 1.3 var(--font-ui);
+  color: var(--bone);
+}
+.sectionTitle p {
+  margin: 2px 0 0;
+  color: var(--mist);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.group {
+  margin-top: 18px;
+}
+.group > h3 {
+  margin: 0 0 6px;
+  padding-left: 6px;
+}
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.row {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+}
+.row:first-child {
+  border-top: 0;
+}
+.rowHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 8px 4px 6px;
+  border-radius: 8px;
+  color: var(--bone);
+  text-align: left;
+  transition: background 0.18s var(--ease-arrival);
+}
+button.rowHead:hover {
+  background: var(--wash);
+}
+button.rowHead:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: -2px;
+}
+.chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--mist);
+}
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+.name {
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.meta {
+  color: var(--mist);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip {
+  flex: none;
+  min-height: 0;
+}
+
+/* The open row's detail: a quiet wash under the name, indented past the chevron. */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 6px 10px 26px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--wash);
+  font-size: 13px;
+  animation: open 0.18s var(--ease-arrival);
+}
+.detail p {
+  margin: 0;
+}
+.detail a:not(:global(.lantern-btn)) {
+  color: var(--lantern);
+}
+.detail small {
+  color: var(--mist);
+  font-size: 12px;
+  line-height: 1.5;
+}
+@keyframes open {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.actions :global(.lantern-btn.danger) {
+  margin-inline-start: auto;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  min-width: 0;
+}
+.form > :is(p, small, fieldset, h3, button, div) {
+  grid-column: 1 / -1;
+}
+.form > button {
+  justify-self: start;
+}
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--mist);
+  font-size: 12px;
+}
+.form :is(input, select, textarea),
+.find input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: rgb(var(--ink-rgb) / 0.86);
+  color: var(--bone);
+  font-size: 13px;
+  transition: border-color 0.16s var(--ease-arrival);
+}
+.form textarea {
+  font: 13px / 1.5 var(--font-mono);
+  resize: vertical;
+}
+.form :is(input, select, textarea):focus-visible,
+.find input:focus-visible {
+  border-color: var(--lantern);
+  outline: 2px solid var(--lantern);
+  outline-offset: 1px;
+}
+.form input[type="checkbox"] {
+  width: auto;
+  min-height: 0;
+  accent-color: var(--lantern);
+}
+.form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+}
+.form legend {
+  padding: 0 4px;
+  color: var(--mist);
+  font-size: 12px;
+}
+.form .check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--bone);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.find {
+  display: block;
+  margin-bottom: 8px;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.notice[data-failed] {
+  border-color: var(--term-danger-border);
+  background: var(--term-danger-soft);
+}
+.notice a {
+  color: var(--lantern);
+}
+.notice p {
+  flex: 1;
+  min-width: 160px;
+  margin: 0;
+}
+.quiet {
+  margin: 8px 0;
+  padding-left: 6px;
+  color: var(--mist);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* A section's small tab row (Prompts, Roles, Memory, Cost). */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+/* A few quiet lines of numbers, side by side. */
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 4px 0 8px;
+  padding-left: 6px;
+  color: var(--mist);
+  font-size: 12.5px;
+}
+.summary strong {
+  color: var(--bone);
+  font-weight: 600;
+}
+
+/* A field that spans the whole form, and a disclosure inside one. */
+.form > .wide {
+  grid-column: 1 / -1;
+}
+.form > details {
+  grid-column: 1 / -1;
+  padding: 8px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.form summary {
+  cursor: pointer;
+  min-height: 28px;
+}
+.form summary:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: 2px;
+}
+.form details > * + * {
+  margin-top: 8px;
+}
+.scroll {
+  max-height: 240px;
+  overflow: auto;
+}
+
+/* Formatted text from a memory: mono, wrapped. */
+.prose {
+  overflow-wrap: anywhere;
+  font: 12.5px / 1.5 var(--font-mono);
+}
+.prose p {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+}
+.prose ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.prose code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--wash-2);
+}
+
+/* A form or block that stands on its own in a section (Add login). */
+.panel {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--wash);
+}
+
+/* A short list of lines (recent activity). */
+.activity {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--mist);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* The result of a reveal: quiet mono, wrapped. */
+.secret {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+  font: 12.5px / 1.5 var(--font-mono);
+}
+
+@media (max-width: 640px) {
+  .form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .form :is(input, select, textarea),
+  .find input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .form .check,
+  .form summary {
+    min-height: 44px;
+  }
+  .detail {
+    margin-left: 12px;
+  }
+  .actions :global(.lantern-btn),
+  .form :global(.lantern-btn) {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail {
+    animation: none;
+  }
+  .rowHead {
+    transition: none;
+  }
+}

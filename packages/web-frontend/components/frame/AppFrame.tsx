@@ -2,11 +2,13 @@
 
 import { usePathname, useSearchParams } from 'next/navigation'
 import { type ReactNode, Suspense } from 'react'
+import { SettingsDialog } from '../settings/SettingsDialog'
 import { TerminalSkeleton } from '../TerminalSkeleton'
 import { TerminalTabs } from '../TerminalTabs'
 import styles from './Frame.module.css'
 import { FrameProvider } from './FrameContext'
 import { OfflineStrip } from './OfflineStrip'
+import { settingsPlaceAt } from './settings-places'
 
 /** Pages that stand alone: the popped-out notes window and the phone's
  * offline captures and mockups (they work from the saved copy). */
@@ -43,6 +45,7 @@ function Sessions() {
 export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '/'
   if (isStandalone(pathname)) return children
+  const settings = settingsPlaceAt(pathname)
   return (
     <FrameProvider page={children}>
       <div className={styles.frame} data-testid="app-frame">
@@ -55,6 +58,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
           </Suspense>
         </div>
       </div>
+      {/* Settings opens over the session, which stays mounted underneath. */}
+      {settings && <SettingsDialog place={settings}>{children}</SettingsDialog>}
     </FrameProvider>
   )
 }
