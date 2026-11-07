@@ -49,7 +49,20 @@ export function MachinesPage() {
     const timer = setTimeout(() => setSettling(false), SETTLE_MS)
     return () => clearTimeout(timer)
   }, [settling])
-  const proxmox = useMachineGuests(settling || hosts.hosts.some(isStarting))
+  const moving = hosts.hosts.some(
+    (host) =>
+      isStarting(host) ||
+      host.state === 'connecting' ||
+      host.state === 'offline',
+  )
+  const proxmox = useMachineGuests(settling || moving)
+  const refetchHosts = hosts.refetch
+  useEffect(() => {
+    // A link coming up or a machine in the middle of a power move: keep the page current.
+    if (!settling && !moving) return
+    const timer = setInterval(() => void refetchHosts(), 3_000)
+    return () => clearInterval(timer)
+  }, [settling, moving, refetchHosts])
   const now = useClock()
   const queryClient = useQueryClient()
 
