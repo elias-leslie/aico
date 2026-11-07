@@ -92,7 +92,7 @@ export interface TimelinePage {
 }
 
 /** A plan document the roadmap links, as the server hands it over (secrets already hidden). */
-interface PlanDocument {
+export interface PlanDocument {
   path: string
   name: string
   content: string | null

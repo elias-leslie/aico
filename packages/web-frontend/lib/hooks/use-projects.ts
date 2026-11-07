@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  type UseQueryResult,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -12,6 +13,7 @@ import {
   fetchPlan,
   fetchProject,
   fetchTimeline,
+  type PlanDocument,
   type PowerAction,
   postPower,
 } from '../projects'
@@ -54,7 +56,10 @@ export function useProjectTimeline(id: string) {
 }
 
 /** One plan document; read when its sheet opens. */
-export function usePlan(id: string, path: string) {
+export function usePlan(
+  id: string,
+  path: string,
+): UseQueryResult<PlanDocument> {
   return useQuery({
     queryKey: ['projects', 'plan', id, path],
     queryFn: () => fetchPlan(id, path),
