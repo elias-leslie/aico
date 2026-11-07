@@ -68,7 +68,7 @@ export function QuotaPage() {
       {report && query.isError && (
         <Problem
           lead="Can’t refresh usage."
-          detail={`Showing what was read ${ago(query.dataUpdatedAt, now)}.`}
+          detail="Showing the last numbers it read."
           onRetry={() => query.refetch()}
           busy={query.isFetching}
           warn
