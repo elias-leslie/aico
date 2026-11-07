@@ -19,6 +19,8 @@ export default defineConfig({
   test: {
     name: 'web-frontend',
     environment: 'jsdom',
+    // Threads share one process per worker: a quarter of the system time of forked jsdom workers.
+    pool: 'threads',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
   },

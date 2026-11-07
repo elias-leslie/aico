@@ -155,8 +155,14 @@ describe.skipIf(!hasTmux)('ControlTerminal against tmux', () => {
     run('for i in $(seq 1 3000); do echo "row $i ✓"; [ $((i % 300)) -eq 0 ] && sleep 0.05; done')
     await sleep(120)
     const late = view(80, 24)
-    await sleep(2500)
-    await settle(late, 800)
+    // The loop is done once its last row is on tmux's screen and the shell's prompt follows it;
+    // then the viewer must converge on tmux.
+    await vi.waitFor(() => expect(tmuxScreen(24).filter(Boolean).at(-1)).toMatch(/\$$/))
+    await vi.waitFor(async () => {
+      await new Promise<void>((resolve) => late.term.write('', resolve))
+      expect(screenOf(late)).toEqual(tmuxScreen(24))
+      expect(historyOf(late)).toEqual(tmuxHistory())
+    })
     expect(screenOf(late)).toEqual(tmuxScreen(24))
     const history = historyOf(late)
     expect(history).toEqual(tmuxHistory())
