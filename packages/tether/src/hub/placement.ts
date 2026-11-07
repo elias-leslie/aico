@@ -28,6 +28,14 @@ import { readFile } from 'node:fs/promises'
 import { availableParallelism, homedir, loadavg } from 'node:os'
 import { isAbsolute, join, normalize } from 'node:path'
 import type { HostEntry } from '@aico/fleet/hosts'
+import {
+  type Runner,
+  type RunResult,
+  remoteArgv,
+  runCommand,
+  shellQuote,
+} from '@aico/fleet/hub/host-admin'
+import type { PeerView } from '@aico/fleet/hub/types'
 import { peerRequest } from '@aico/fleet/peer-http'
 import {
   nodeStatus,
@@ -36,14 +44,13 @@ import {
   storageStatus,
   vmStatus,
 } from '@aico/fleet/proxmox'
+import { hostAdmissionPath } from '@aico/shared/host-admission'
 import {
   type AgentAdmissionLimits,
   admissionLimitsFromEnv,
-  hostAdmissionPath,
   parseMemAvailable,
   parseMemoryPressure,
 } from '../lifecycle/agent-admission'
-import { type Runner, type RunResult, remoteArgv, runCommand, shellQuote } from './host-admin'
 
 const GIB = 1024 ** 3
 /** The host name `--host auto` asks for; hosts.json cannot use it. */
@@ -497,14 +504,7 @@ export function localRootFate(
   return exitState === 'exit' || exitState === 'signal' ? 'exited' : 'live'
 }
 
-/** A remote host as the hub knows it. */
-export interface PeerView {
-  entry: HostEntry
-  live: boolean
-  state: string
-  socket: string
-  control: string
-}
+export type { PeerView }
 
 export interface HostVerdict {
   host: string

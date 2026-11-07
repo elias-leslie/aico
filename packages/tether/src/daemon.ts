@@ -3,6 +3,10 @@ import { chmodSync, mkdirSync, readFileSync } from 'node:fs'
 import type { Server } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { HostAdmin } from '@aico/fleet/hub/host-admin'
+import { Hub } from '@aico/fleet/hub/hub'
+import { IdleOff, releaseStatusWriter, statusWriter } from '@aico/fleet/hub/idle-off'
+import { installedRelease } from '@aico/fleet/hub/update'
 import { FleetService } from '@aico/fleet/service'
 import {
   AgentStatePoller,
@@ -19,22 +23,19 @@ import { adapterOf, bindToolSource, isDeliveryTool } from '@aico/session-engine/
 import { registryProjects } from '@aico/tasks/registry'
 import { type AskDelivery, AskStore, aicoOrigin, handOffAsks, type NeedsYouFeed } from './asks'
 import {
+  AICO_WEB_DEFAULT_URL,
   agentExitMarkerDir,
   resolveEntryScanConfig,
   resolveShowConfig,
   type TetherPaths,
 } from './config'
 import { CoordinationDocs } from './coordination/docs'
-import { DeadShells } from './dead-shells'
+import { DeadShells } from '@aico/session-engine/dead-shells'
 import { listenPrivateSocket } from './http'
-import { HostAdmin } from './hub/host-admin'
-import { Hub } from './hub/hub'
-import { IdleOff, releaseStatusWriter, statusWriter } from './hub/idle-off'
 import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
 import { tetherHubPorts } from './hub/ports'
-import { installedRelease } from './hub/update'
 import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
-import { hostAdmissionPath, hostAdmissionRed } from './lifecycle/agent-admission'
+import { hostAdmissionPath, hostAdmissionRed } from '@aico/session-engine/agent-admission'
 import {
   bindCatalog,
   claimLauncher,
@@ -44,13 +45,13 @@ import {
   isRetiredSessionId,
   listSessions,
   listWidgets,
-} from './lifecycle/catalog'
+} from '@aico/session-engine/catalog'
 import {
   displayTitle,
   leadName,
   setPersonalWorkspaceRoot,
   useConversationNames,
-} from './lifecycle/display'
+} from '@aico/session-engine/display'
 import {
   agentExitOf,
   cachedSessionStatus,
@@ -66,10 +67,10 @@ import {
   stopLifecycle,
   verifiedCurrentManagedPane,
   verifySessionStatus,
-} from './lifecycle/engine'
-import { ENTRY_MISSING_EXIT, ENTRY_RETRY_EXIT } from './lifecycle/entries'
-import { setLifecycleInstance } from './lifecycle/ownership'
-import { configureTmuxPaths } from './lifecycle/tmux'
+} from '@aico/session-engine/engine'
+import { ENTRY_MISSING_EXIT, ENTRY_RETRY_EXIT } from '@aico/session-engine/entries'
+import { setLifecycleInstance } from '@aico/session-engine/ownership'
+import { configureTmuxPaths } from '@aico/session-engine/tmux'
 import {
   bindModelWatch,
   foregroundPaneScope,
@@ -82,7 +83,7 @@ import { ModelWatch, readAlternates, readWatchEntries, worktreeFacts } from './m
 import { activeProjectFileFromEnv, ProjectProvider } from './projects'
 import { Continuity } from './reboot'
 import { Recovery, runProcess } from './recovery'
-import { generationOf, pressKeysInRunningSession } from './running-session'
+import { generationOf, pressKeysInRunningSession } from '@aico/session-engine/running-session'
 import { createTetherServer } from './server'
 import { type History, historyFromEnv, startHistoryScan } from './sessions/history'
 import { persistSizeHolders } from './size-holder'
@@ -348,7 +349,7 @@ function createHub(
   return hubEnabled(env)
     ? new Hub({
         env,
-        status: releaseStatusWriter(env),
+        status: releaseStatusWriter(env, AICO_WEB_DEFAULT_URL),
         fault: (error) => fleet.fault(error),
         uid: process.getuid?.(),
         ports: tetherHubPorts,
@@ -385,7 +386,7 @@ function startIdleOff(context: DaemonContext, env: NodeJS.ProcessEnv, hosts: Hub
     idleFacts: (name) => hosts.idleFacts(name),
     booked: (host) => context.placement?.list().some((item) => item.host === host) ?? false,
     powerOff: (host) => admin.power(host, 'off', false),
-    status: statusWriter(env),
+    status: statusWriter(env, AICO_WEB_DEFAULT_URL),
     log: (message) => console.log(`[tether:hosts] ${message}`),
     now: Date.now,
   })

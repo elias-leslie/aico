@@ -1,15 +1,16 @@
-// The one place the hub files meet Tether's config and tool registry. Everything else in
-// hub/ takes a HubPorts (daemon.ts passes `tetherHubPorts`); the files default to it only
-// so the hub's tests build a Hub with no ports. Moving hub/ out of Tether drops those defaults.
+// The one place the hub (@aico/fleet/hub/*) meets Tether's config and tool registry: the
+// daemon, the server and the CLI pass `tetherHubPorts` in.
 
+import type { FleetCliPorts } from '@aico/fleet/hub/fleet-cli'
+import type { HubPorts, ToolLogin } from '@aico/fleet/hub/types'
 import { DB_FILE_NAME } from '@aico/session-engine/paths'
 import { ADAPTERS, adapterOf } from '@aico/session-engine/tui/registry'
 import { SIGN_IN_TITLE } from '@aico/session-engine/tui/sign-in-link'
-import { API_VERSION, isInstanceName } from '../config'
-import type { HubPorts, ToolLogin } from './types'
+import { callSocket } from '../client'
+import { API_VERSION, isInstanceName, type TetherPaths } from '../config'
 
 /** The tools' own logins, from their adapters. */
-export const DEFAULT_LOGINS: Record<string, ToolLogin> = Object.fromEntries(
+const DEFAULT_LOGINS: Record<string, ToolLogin> = Object.fromEntries(
   ADAPTERS.map((adapter) => [adapter.id, adapter.login]),
 )
 
@@ -28,4 +29,12 @@ export const tetherHubPorts: HubPorts = {
           : [],
       ),
   },
+}
+
+/** `tether fleet`: the hub's ports plus a request to this Tether's own control socket. */
+export function fleetCliPorts(paths: Pick<TetherPaths, 'socket'>): FleetCliPorts {
+  return {
+    ...tetherHubPorts,
+    callSocket: (method, path, body) => callSocket(paths.socket, method, path, body),
+  }
 }

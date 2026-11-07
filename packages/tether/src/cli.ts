@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { isAbsolute, resolve } from 'node:path'
+import { runFleet } from '@aico/fleet/hub/fleet-cli'
 import { runLogins } from '@aico/fleet/logins-cli'
 import { Store } from '@aico/session-engine/store'
 import { nearest } from '@aico/shared/suggest'
@@ -10,7 +11,7 @@ import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { startDaemon } from './daemon'
 import { runDoctor } from './doctor'
-import { runFleet } from './fleet-cli'
+import { fleetCliPorts } from './hub/ports'
 import { applyImport, formatPlan, planImportForPath, summarize } from './importer'
 import { NOTE_USAGE, runNote } from './note-cli'
 import { withOwnWidget } from './own-session'
@@ -434,7 +435,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
   const end = words.indexOf('--')
   if ((end < 0 ? words : words.slice(0, end)).some((w) => w === '--help' || w === '-h')) {
     if (command === 'logins') return runLogins(['--help'])
-    if (command === 'fleet') return runFleet(['--help'], paths, io)
+    if (command === 'fleet') return runFleet(['--help'], paths, io, fleetCliPorts(paths))
     io.out(OWN_USAGE[command] ?? commandUsage(command, sub))
     return 0
   }
@@ -665,7 +666,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
       case 'logins':
         return runLogins(parsed.args.slice(1))
       case 'fleet':
-        return runFleet([sub ?? '', ...rest], paths, io)
+        return runFleet([sub ?? '', ...rest], paths, io, fleetCliPorts(paths))
       case 'link':
         io.err(
           'The fleet link runs with the daemon. Use tether fleet identity full|worker to enroll this machine.',

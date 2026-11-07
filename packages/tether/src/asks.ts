@@ -11,10 +11,10 @@ import { createHash, randomBytes } from 'node:crypto'
 import { accessSync, constants, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import type { Hub } from '@aico/fleet/hub/hub'
 import type { EventBus } from '@aico/session-engine/events'
 import type { ShowConfig } from './config'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
-import type { Hub } from './hub/hub'
 import { realPaths, ShareStore } from './shares'
 
 const MAX_ASK_OPTIONS = 5

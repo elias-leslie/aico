@@ -2,10 +2,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { HostEntry } from '@aico/fleet/hosts'
+import type { RunResult } from '@aico/fleet/hub/host-admin'
 import { PveError } from '@aico/fleet/proxmox'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DEFAULT_AGENT_ADMISSION_LIMITS } from '../lifecycle/agent-admission'
-import type { RunResult } from './host-admin'
 import {
   GUEST_LINE,
   judgeCapability,

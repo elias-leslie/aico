@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
+import { HostAdmin } from '@aico/fleet/hub/host-admin'
+import type { Hub } from '@aico/fleet/hub/hub'
+import { installedRelease } from '@aico/fleet/hub/update'
 import { isPeerRequest } from '@aico/fleet/peer-http'
 import type { EventBus, TetherEvent } from '@aico/session-engine/events'
 import type { Store, ToolPatch } from '@aico/session-engine/store'
@@ -22,13 +25,11 @@ import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } fro
 import { CoordinationDocs, registerCoordinationRoutes } from './coordination/docs'
 import { registerFileRoutes } from './files/api'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
-import { HostAdmin, registerHostAdminRoutes } from './hub/host-admin'
-import type { Hub } from './hub/hub'
+import { registerHostAdminRoutes } from './hub/host-routes'
 import { tetherHubPorts } from './hub/ports'
-import { installedRelease } from './hub/update'
-import { getWidget } from './lifecycle/catalog'
-import { lifecycleStatus } from './lifecycle/engine'
-import { createRootHandlerState, type RootHandlerState } from './lifecycle/root-control'
+import { getWidget } from '@aico/session-engine/catalog'
+import { lifecycleStatus } from '@aico/session-engine/engine'
+import { createRootHandlerState, type RootHandlerState } from '@aico/session-engine/root-control'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
 import type { MemoryPolicyService } from './memory-guard'
 import {
@@ -36,7 +37,7 @@ import {
   KILL_ORDERS,
   MEMORY_POLICY_BOUNDS,
   MemoryPolicyError,
-} from './memory-policy'
+} from '@aico/session-engine/memory-policy'
 import {
   type ProjectProvider,
   ProjectRegistrationError,

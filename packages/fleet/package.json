@@ -33,7 +33,16 @@
     "./secrets": "./src/secrets.ts",
     "./releases": "./src/releases.ts",
     "./power": "./src/power.ts",
-    "./proxmox": "./src/proxmox.ts"
+    "./proxmox": "./src/proxmox.ts",
+    "./hub/hub": "./src/hub/hub.ts",
+    "./hub/host-admin": "./src/hub/host-admin.ts",
+    "./hub/idle-off": "./src/hub/idle-off.ts",
+    "./hub/peer": "./src/hub/peer.ts",
+    "./hub/update": "./src/hub/update.ts",
+    "./hub/types": "./src/hub/types.ts",
+    "./hub/wake": "./src/hub/wake.ts",
+    "./hub/fleet-cli": "./src/hub/fleet-cli.ts",
+    "./hub/testing": "./src/hub/testing.ts"
   },
   "scripts": {
     "test": "vitest run"
@@ -42,6 +51,7 @@
     "@aico/tether-client": "0.1.0"
   },
   "dependencies": {
+    "@aico/shared": "0.1.0",
     "@aico/status": "0.1.0"
   }
 }
