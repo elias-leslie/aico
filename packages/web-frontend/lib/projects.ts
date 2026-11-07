@@ -7,7 +7,7 @@ export type RunState = 'running' | 'stopped' | 'down' | 'starting' | 'unknown'
 export type ProblemKind = 'fail' | 'quiet' | 'publish' | 'backup'
 export type PowerAction = 'start' | 'shutdown' | 'restart'
 
-export interface Problem {
+interface Problem {
   kind: ProblemKind
   count: number
 }
