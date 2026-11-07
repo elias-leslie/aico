@@ -658,8 +658,10 @@ export async function wip(argv: string[], env = process.env): Promise<number> {
   if (verb === 'link-shell') return linkShell(rest)
   if (verb === 'restore') return restoreWip(rest, realDeps(env))
   if (verb !== 'run') throw new Refusal(`aico wip: unknown command ${verb}\n${USAGE}`, 2)
+  const flag = rest.find((arg) => arg.startsWith('-'))
+  if (flag) throw new Refusal(`aico wip run: unknown option ${flag}\n${USAGE}`, 2)
   const deps = realDeps(env)
-  const only = rest.filter((arg) => !arg.startsWith('-'))
+  const only = rest
   if (only.length) deps.only = only
   const before = readState(deps.state).rows
   const report = await mirror(deps)

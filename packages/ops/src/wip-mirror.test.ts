@@ -13,6 +13,7 @@ import {
   summary,
   type WipConfig,
   type WipDeps,
+  wip,
 } from './wip-mirror'
 
 let dir: string
@@ -237,6 +238,10 @@ describe('wip mirror', () => {
     )
     expect(report).toMatchObject({ off: 'Off: no other full Aico.', problems: [] })
     expect(summary(report, 'home', 0)).toBe('Off: no other full Aico.')
+  })
+
+  it('refuses an unknown option instead of copying', async () => {
+    await expect(wip(['run', '--dry-run'])).rejects.toThrow(/unknown option --dry-run/)
   })
 
   it('stays off without a fleet file', async () => {
